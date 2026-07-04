@@ -29,8 +29,12 @@ import type {
 /** Config for the live JWT contract. The client is injected by the caller. */
 export interface SupabaseAuthConfig {
   readonly mode: 'supabase';
-  /** An already-constructed Supabase client (browser/SSR-appropriate). */
-  readonly client: SupabaseClient;
+  /**
+   * An already-constructed Supabase client (browser/SSR-appropriate). Schema is
+   * intentionally unconstrained (`<any, any>`) so callers may pin any DB schema
+   * (e.g. `core`); auth only uses the schema-independent `.auth` surface.
+   */
+  readonly client: SupabaseClient<any, any>;
   /** Path Supabase redirects to after a reset email (default `/reset-password`). */
   readonly resetRedirectPath?: string;
 }
@@ -54,7 +58,7 @@ export function SessionProvider({
   config: AuthConfig;
 }) {
   const mode: AuthMode = config.mode;
-  const client: SupabaseClient | null =
+  const client: SupabaseClient<any, any> | null =
     config.mode === 'supabase' ? config.client : null;
   const memoryProfiles = useMemo<MemoryProfile[]>(
     () => (config.mode === 'memory' ? [...config.profiles] : []),
