@@ -1,0 +1,1 @@
+# Ordered SQL migrations. `core` schema first, then per-domain (warehouse/procurement/legal).

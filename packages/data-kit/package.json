@@ -1,0 +1,12 @@
+{
+  "name": "@intra/data-kit",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Repository port + adapters + outbox + runAction (Step 1d — port from warehouse data layer).",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "@intra/shell",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Next.js 16 App Router shell: auth, module-gated nav, layout (Step 1f). Hosts all modules as routes.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit"
+  }
+}

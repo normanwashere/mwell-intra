@@ -1,0 +1,12 @@
+{
+  "name": "@intra/warehouse",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Warehouse module: pure domain + Next.js routes, offline PWA (Step 2 — full parity port).",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}
