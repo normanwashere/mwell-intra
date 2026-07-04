@@ -15,7 +15,8 @@ export function LegalApp({ basename = '/legal' }: LegalAppProps) {
   const { userRoles, profile } = useSession();
   const isVendor = profile?.kind === 'vendor';
   const hasInternalAccess = can(userRoles, 'legal', 'view_dashboard');
-  const hasVendorAccess = can(userRoles, 'legal', 'view_own_accreditation');
+  // External vendor tier lives in core (reconciled 2026-07-05, ADR-002 #3).
+  const hasVendorAccess = can(userRoles, 'core', 'view_own_accreditation');
 
   if (isVendor ? !hasVendorAccess : !hasInternalAccess) {
     return (

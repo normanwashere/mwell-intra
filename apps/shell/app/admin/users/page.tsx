@@ -22,7 +22,6 @@
 //     is what a phone user will use to grant/revoke.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   Badge,
   Button,
@@ -111,7 +110,7 @@ function indexAssignments(
 }
 
 /** Compact "core:staff, warehouse:operations" summary for the row footer. */
-function summarizeRoles(held: Set<string> | undefined): string {
+function summarizeRoles(held: ReadonlySet<string> | undefined): string {
   if (!held || held.size === 0) return '—';
   return Array.from(held).sort().join(', ');
 }
@@ -368,7 +367,9 @@ function LiveAdminUsers() {
 
       <Sheet
         open={Boolean(detailUser)}
-        onOpenChange={(open) => !open && setDetailUserId(null)}
+        onOpenChange={(open) => {
+          if (!open) setDetailUserId(null);
+        }}
         title={detailUser?.full_name ?? detailUser?.email ?? 'User'}
         description={detailUser?.email}
         side="right"
@@ -621,7 +622,7 @@ function UserDetail({
         )}
         <p className="mt-2 text-xs text-faint">
           <span className="font-semibold text-muted">Current:</span>{' '}
-          {summarizeRoles(held as Set<string>)}
+          {summarizeRoles(held)}
         </p>
       </div>
 

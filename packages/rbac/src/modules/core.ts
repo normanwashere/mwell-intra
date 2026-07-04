@@ -19,6 +19,8 @@ export type CoreCapability =
   | 'view_documents'
   | 'manage_documents'
   | 'submit_documents'
+  | 'submit_accreditation'
+  | 'view_own_accreditation'
   | 'view_approvals'
   | 'manage_approvals'
   | 'record_approval'
@@ -39,6 +41,8 @@ const CORE_CAPABILITIES = [
   'view_documents',
   'manage_documents',
   'submit_documents',
+  'submit_accreditation',
+  'view_own_accreditation',
   'view_approvals',
   'manage_approvals',
   'record_approval',
@@ -83,8 +87,12 @@ export const coreModule: ModuleDefinition<'core', CoreRole, CoreCapability> = {
     vendor_portal: {
       label: 'Vendor Portal User',
       description:
-        'External vendor tier: submit documents for their own vendor only (RLS-scoped by vendor_id).',
-      capabilities: ['submit_documents'],
+        'External vendor tier: submit accreditation + documents for their own vendor only (RLS-scoped by vendor_id).',
+      capabilities: [
+        'submit_documents',
+        'submit_accreditation',
+        'view_own_accreditation',
+      ],
     },
   },
 };

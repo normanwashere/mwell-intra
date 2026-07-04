@@ -71,7 +71,7 @@ export function AccreditationCasesPage() {
           }
           action={
             isVendor ? (
-              <Guard module="legal" cap="submit_accreditation">
+              <Guard module="core" cap="submit_accreditation">
                 <button type="button" className="btn-primary" disabled>
                   Start accreditation (stub)
                 </button>

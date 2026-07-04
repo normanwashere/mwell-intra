@@ -159,3 +159,71 @@ header of `20260706091000_core_seed_rbac.sql` for the reconciliation checklist.
   quantities cover the PO's line totals — advances the PO to `closed`
   (else `issued`). Warehouse-origin POs continue to use `receive_against_po()`
   unchanged.
+
+## RLS + write-lockdown negative tests
+
+Live in `supabase/tests/`. They exercise the *security posture* end-to-end
+against a real Postgres instance: each assertion attempts a write / read the
+spec forbids and fails the script if the DB allows it.
+
+### Layout
+
+| Path | What it proves |
+|------|----------------|
+| `supabase/tests/rls_negative.sql` | 4 negative assertions: (1) `authenticated` cannot INSERT into `core.vendors` directly, (2) `authenticated` cannot UPDATE `core.role_capabilities`, (3) a vendor-kind session cannot SELECT another vendor's `core.documents`, (4) `authenticated` cannot INSERT into `warehouse.inventory_units` / `warehouse.movements`. |
+
+The script wraps everything in a single `BEGIN … ROLLBACK`, so it never
+mutates the DB — test fixtures (a couple of `auth.users`, `core.profiles`,
+`core.vendors`, `core.documents` rows) are discarded on exit.
+
+### How to run
+
+Bring up a local Supabase stack (this applies every migration under
+`supabase/migrations/` including the RBAC seed and the RLS lockdown):
+
+```bash
+supabase start   # or `supabase db reset` to reapply migrations from scratch
+```
+
+Then run the negative-test script against the local Postgres. The port and
+default password come from `supabase start`'s output; the values below are
+the standard local defaults.
+
+```bash
+psql "postgres://postgres:postgres@127.0.0.1:54322/postgres" \
+     -v ON_ERROR_STOP=1 -f supabase/tests/rls_negative.sql
+```
+
+`ON_ERROR_STOP=1` makes `psql` exit non-zero on the first `raise exception`,
+so the script is CI-friendly. On success you'll see one `PASS[…]` NOTICE per
+assertion followed by:
+
+```
+NOTICE:  ===============================================================
+NOTICE:    RLS negative test suite: ALL ASSERTIONS PASSED (4/4).
+NOTICE:  ===============================================================
+```
+
+Any `FAIL[…]` line means the DB granted a write/read the spec forbids —
+treat it as a **security regression** and fix the failing migration before
+merging (do not weaken the assertion).
+
+### Assertion reference (what each test proves)
+
+1. **`authenticated` cannot INSERT into `core.vendors`.** All vendor writes go
+   through `core.upsert_vendor()` (SECURITY DEFINER, capability-gated on
+   `manage_vendors`). Direct table `INSERT/UPDATE/DELETE` was revoked from
+   `authenticated` in `20260706090700_core_rls_policies.sql`.
+2. **`authenticated` cannot UPDATE `core.role_capabilities`.** The RBAC
+   catalogue is fully locked down: RLS on, no policies, no API-role grants
+   (see `20260706090100_core_rbac.sql`). Only the SECURITY DEFINER helpers
+   `core.has_cap()` / `core.has_any_cap()` may read it.
+3. **Cross-vendor document reads are blocked.** The vendor-tier RLS branch on
+   `core.documents` is scoped to `entity_type = 'vendor' AND entity_id =
+   core.current_vendor_id()`. A vendor A session cannot see any document
+   filed under vendor B.
+4. **Direct writes to `warehouse.inventory_units` and `warehouse.movements`
+   are refused.** The v4 + v6 hardening in
+   `20260706092200_warehouse_rls.sql` revokes `INSERT/UPDATE/DELETE` from
+   `authenticated` on every stock/audit/PO/lots table; all mutations flow
+   through the definer RPCs in `20260706092400_warehouse_rpcs.sql`.

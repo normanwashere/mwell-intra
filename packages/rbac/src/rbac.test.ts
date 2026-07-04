@@ -181,11 +181,12 @@ describe('hasCapInModule()', () => {
     );
   });
 
-  it('respects the external vendor tier in legal', () => {
-    expect(hasCapInModule('legal', 'vendor', 'upload_document')).toBe(true);
-    expect(hasCapInModule('legal', 'vendor', 'approve_accreditation')).toBe(
-      false,
-    );
+  it('external vendor tier lives in core:vendor_portal (reconciled 2026-07-05)', () => {
+    expect(hasCapInModule('core', 'vendor_portal', 'submit_documents')).toBe(true);
+    expect(hasCapInModule('core', 'vendor_portal', 'submit_accreditation')).toBe(true);
+    expect(hasCapInModule('core', 'vendor_portal', 'view_own_accreditation')).toBe(true);
+    // Retired: legal:vendor no longer exists.
+    expect(hasCapInModule('legal', 'vendor', 'approve_accreditation')).toBe(false);
   });
 });
 
@@ -197,11 +198,10 @@ describe('provisional procurement/legal/core matrices', () => {
     expect(MODULES.procurement.provisional).toBe(true);
   });
 
-  it('exposes the chosen legal roles incl. vendor tier', () => {
+  it('exposes the internal legal roles (external tier moved to core:vendor_portal)', () => {
     expect(listModuleRoles('legal').sort()).toEqual(
-      ['admin', 'compliance', 'legal_reviewer', 'vendor'].sort(),
+      ['admin', 'compliance', 'legal_reviewer'].sort(),
     );
-    expect(MODULES.legal.provisional).toBe(true);
   });
 
   it('exposes the core foundation roles', () => {
