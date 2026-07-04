@@ -15,6 +15,7 @@ import {
   type ModuleNav,
 } from '@shell/lib/navigation';
 import { cx } from '@shell/lib/cx';
+import { NotificationBell } from './NotificationBell';
 import { ThemeToggle } from './ThemeToggle';
 import { UserMenu } from './UserMenu';
 
@@ -120,6 +121,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               >
                 {mode === 'supabase' ? 'Live' : 'Demo'}
               </span>
+              <NotificationBell />
               <ThemeToggle />
               <UserMenu />
             </div>

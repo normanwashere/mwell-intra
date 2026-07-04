@@ -9,7 +9,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:smoke": "playwright test tests/smoke"
   },
   "dependencies": {
     "@intra/auth": "workspace:*",
@@ -26,6 +27,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
+    "@playwright/test": "^1.51.1",
     "@serwist/turbopack": "^9.5.11",
     "@intra/config": "workspace:*",
     "esbuild": "^0.25.0",

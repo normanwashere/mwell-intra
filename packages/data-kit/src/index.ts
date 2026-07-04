@@ -32,3 +32,10 @@ export * from './outbox';
 // --- Framework-agnostic mutation pipeline: runAction, replay/sync, applyOverlay,
 //     isNetworkError, and the pure optimistic-overlay builders ---
 export * from './runAction';
+
+// --- Live Supabase adapter (SupabaseRepository, factory, mappers, evidence helpers).
+//     RPCs live in the `warehouse` schema and gate on `core.has_cap('warehouse', ...)`
+//     (spec §4.2 / ADR-004 / `20260706092400_warehouse_rpcs.sql`). Client construction
+//     is the host's responsibility — pass the client to `createRepository` or use
+//     `createSupabaseWarehouseRepository(client)` directly. ---
+export * from './supabase';

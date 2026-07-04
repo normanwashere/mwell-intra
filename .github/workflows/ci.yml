@@ -1,5 +1,11 @@
 name: CI
 
+# Hardened pipeline (spec §6, ADR-003): parallel typecheck/lint/test/build,
+# vitest coverage gate (>= 70% lines/statements overall), Playwright + axe
+# a11y sweep on the built shell, node 20/22 matrix (20 will be dropped once
+# Supabase warns it as EOL — the 22 job proves we are already forward-compat),
+# and a demo-credential leak check against the production `.next` output.
+
 on:
   push:
     branches: [main]
@@ -9,39 +15,249 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # Fail fast on peer-dep drift and honor the pnpm lockfile everywhere.
+  CI: 'true'
+  # `axe-core/playwright` doesn't ship in the repo lockfile yet (spec-declared
+  # dep, not yet added to package.json). CI installs it ephemerally in the
+  # `axe` job; declared once here so both the install + require paths match.
+  AXE_PW_PKG: '@axe-core/playwright@^4.10.1'
+  COVERAGE_PKG: '@vitest/coverage-v8@^2.1.8'
+  # Minimum overall test coverage — see `verify_coverage.mjs`. Bump this only
+  # when we intentionally raise the bar.
+  COVERAGE_MIN: '70'
+
 jobs:
-  verify:
+  # ---------------------------------------------------------------------------
+  # Static checks run in parallel on every push/PR, matrixed on Node 20 + 22.
+  # ---------------------------------------------------------------------------
+  typecheck:
+    name: Typecheck (node ${{ matrix.node }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['20', '22']
     steps:
       - uses: actions/checkout@v4
-
       - uses: pnpm/action-setup@v4
         with:
           version: 9
-
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: ${{ matrix.node }}
           cache: pnpm
-
       - name: Install
         run: pnpm install --frozen-lockfile
-
       - name: Typecheck
         run: pnpm typecheck
 
+  lint:
+    name: Lint (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['20', '22']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
       - name: Lint
         run: pnpm lint
 
-      - name: Test
-        run: pnpm test
+  test:
+    name: Test + coverage (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['20', '22']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
 
+      # `@vitest/coverage-v8` is not in the committed lockfile (CI-only). We
+      # install it into the workspace root so every vitest workspace resolves
+      # it through Node's parent-directory walk. The CI runner is ephemeral;
+      # the resulting package.json / lockfile changes are never committed.
+      - name: Install coverage provider (ephemeral, CI-only)
+        env:
+          CI: 'false'  # allow pnpm add to update the lockfile in-place
+        run: |
+          pnpm add -w -D "$COVERAGE_PKG" --no-frozen-lockfile
+
+      - name: Run tests with coverage
+        # `pnpm exec` forwards everything after its own `--` to turbo, and
+        # turbo forwards everything after ITS `--` to each task script (i.e.
+        # `vitest run`). The double `--` is required.
+        run: |
+          pnpm exec turbo run test -- \
+            --coverage \
+            --coverage.provider=v8 \
+            --coverage.reporter=json-summary \
+            --coverage.reporter=text \
+            --coverage.reportsDirectory=./coverage
+
+      # Coverage gate — walks every `coverage/coverage-summary.json` produced
+      # by the matrixed vitest runs and fails the job if the overall
+      # lines OR statements pct drops below `$COVERAGE_MIN` (default 70).
+      - name: Verify coverage threshold (>= ${{ env.COVERAGE_MIN }}%)
+        env:
+          COVERAGE_MIN: ${{ env.COVERAGE_MIN }}
+        run: node .github/workflows/scripts/verify_coverage.mjs
+
+      - name: Upload coverage artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-node-${{ matrix.node }}
+          path: |
+            **/coverage/coverage-summary.json
+            **/coverage/lcov.info
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
+  # Build in parallel with static checks; every subsequent binary check (demo
+  # credential grep, axe) depends on the built shell.
+  # ---------------------------------------------------------------------------
+  build:
+    name: Build shell (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['20', '22']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
       - name: Build
         run: pnpm build
 
-  e2e:
+      # Guardrail: production build must never carry the demo password/tenant
+      # string. If it does, something in a demo-only migration/module leaked
+      # into a client bundle — hard fail so the PR cannot land.
+      - name: Verify no demo credentials in shell .next output
+        run: |
+          set -e
+          BUILD_DIR="apps/shell/.next"
+          if [ ! -d "$BUILD_DIR" ]; then
+            echo "::error::Expected build output at $BUILD_DIR"; exit 1
+          fi
+          # Look at every artifact that could be served to a browser: static
+          # chunks, server render output, prerendered HTML, cache manifest,
+          # BUILD_ID / trace / route metadata.
+          if grep -R --include='*.js' --include='*.mjs' --include='*.html' \
+                     --include='*.map' --include='*.json' --include='*.txt' \
+                     -l -F 'mWell-Demo' "$BUILD_DIR"; then
+            echo "::error::Demo credential 'mWell-Demo' found in $BUILD_DIR — refusing to ship."
+            grep -R --include='*.js' --include='*.mjs' --include='*.html' \
+                    --include='*.map' --include='*.json' --include='*.txt' \
+                    -Fn 'mWell-Demo' "$BUILD_DIR" || true
+            exit 1
+          fi
+          echo "OK — no demo credentials in $BUILD_DIR."
+
+      # Persist the built shell for the axe job (skip cache; deterministic
+      # rebuild on the runner is < 60s and easier to reason about).
+      - name: Upload built shell
+        if: matrix.node == '20'
+        uses: actions/upload-artifact@v4
+        with:
+          name: shell-build
+          path: |
+            apps/shell/.next
+            apps/shell/public
+            apps/shell/package.json
+            apps/shell/next.config.mjs
+          if-no-files-found: error
+          retention-days: 1
+
+  # ---------------------------------------------------------------------------
+  # Accessibility sweep — Playwright + axe-core/playwright hits the public
+  # routes of the built shell and fails on any serious/critical violation.
+  # ---------------------------------------------------------------------------
+  axe:
+    name: Accessibility (axe + playwright)
     runs-on: ubuntu-latest
-    needs: verify
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+
+      - name: Install (with axe + playwright ephemerals)
+        env:
+          CI: 'false'  # allow pnpm add to update the lockfile in-place
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm add -w -D "$AXE_PW_PKG" "@playwright/test@^1.49.0" --no-frozen-lockfile
+
+      - name: Restore built shell
+        uses: actions/download-artifact@v4
+        with:
+          name: shell-build
+          path: apps/shell
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Start shell (production)
+        run: |
+          pnpm --filter @intra/shell exec next start -p 3000 &
+          echo "SHELL_PID=$!" >> "$GITHUB_ENV"
+          # Wait until the server is answering.
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:3000/ >/dev/null 2>&1; then
+              echo "Shell is up."; exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::Shell did not start on :3000"; exit 1
+
+      - name: Run axe accessibility sweep
+        run: node .github/workflows/scripts/axe_sweep.mjs http://127.0.0.1:3000
+
+      - name: Stop shell
+        if: always()
+        run: |
+          if [ -n "${SHELL_PID:-}" ]; then kill "$SHELL_PID" || true; fi
+
+  # ---------------------------------------------------------------------------
+  # Existing E2E job — kept, but now gated on typecheck/lint/test/build/axe.
+  # ---------------------------------------------------------------------------
+  e2e:
+    name: E2E (playwright)
+    runs-on: ubuntu-latest
+    needs: [typecheck, lint, test, build, axe]
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

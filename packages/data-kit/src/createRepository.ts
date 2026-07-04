@@ -1,5 +1,7 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import type { WarehouseRepository, WarehouseData } from './repository';
 import { InMemoryRepository } from './inMemoryRepository';
+import { createSupabaseWarehouseRepository } from './supabase/SupabaseRepository';
 
 export type DataSource = 'supabase' | 'memory';
 
@@ -11,29 +13,39 @@ export type DataSource = 'supabase' | 'memory';
  * ------------------------------------------------------------------------
  * The source `createRepository.ts` read `import.meta.env.VITE_DATA_SOURCE` and
  * `VITE_SUPABASE_*` directly, which only works under Vite. `@intra/data-kit`
- * must run under Next.js (and Node, tests, edge) too, so it takes ALL env as an
- * injected `DataKitConfig` object instead of reaching for a build-tool global.
- *
- * The host app is responsible for reading its own env and passing it in, e.g.
- *   - Next.js:  `{ dataSource: process.env.NEXT_PUBLIC_DATA_SOURCE, supabase: {
- *                 url: process.env.NEXT_PUBLIC_SUPABASE_URL, ... } }`
- *   - Vite:     `{ dataSource: import.meta.env.VITE_DATA_SOURCE, ... }`
+ * must run under Next.js (and Node, tests, edge) too, so the host app owns
+ * env access and Supabase client construction and passes the client in via
+ * `supabaseClient`. Nothing in this package reads `process.env` or
+ * `import.meta.env`.
  *
  * ------------------------------------------------------------------------
- * SUPABASE ADAPTER STATUS: DEFERRED (Step 1d scope)
+ * SUPABASE ADAPTER
  * ------------------------------------------------------------------------
- * Per the task, the live Supabase adapter port is deferred; this factory focuses
- * on the port + in-memory adapter + outbox. To keep the port/adapter seam intact
- * WITHOUT making data-kit depend on `@supabase/supabase-js`, the Supabase
- * adapter is *injected*: pass `createSupabaseRepository` and the factory will use
- * it when the source resolves to `'supabase'`. The warehouse module (or a later
- * `@intra/data-kit/supabase` entrypoint) supplies that factory, so data-kit stays
- * backend-agnostic. When it is not provided, the factory falls back to memory.
+ * The live Supabase adapter now lives in `./supabase` and is selected when the
+ * caller passes a `SupabaseClient`. When no client is provided the factory
+ * falls back to the seeded in-memory adapter (persisted to localStorage in
+ * the browser, ephemeral in Node/tests/SSR).
+ *
+ * The RPCs the adapter targets live in the `warehouse` Postgres schema; open
+ * with `core.has_cap('warehouse', '<cap>')` (spec §4.2 / ADR-004); and use the
+ * unchanged `{ payload }` envelope (see
+ * `supabase/migrations/20260706092400_warehouse_rpcs.sql`). Configure the
+ * client with `db: { schema: 'warehouse' }` so both `.from(table)` reads and
+ * `.rpc(fn, ...)` calls resolve to the warehouse schema.
+ *
+ * For backward compatibility a caller may still inject a custom
+ * `createSupabaseRepository` factory; when both a client and a custom factory
+ * are supplied the custom factory wins so hosts can override the adapter.
  */
 export interface DataKitConfig {
   /** Force a data source, or `'auto'`/undefined to detect from Supabase config. */
   dataSource?: DataSource | 'auto';
-  /** Supabase connection config (injected from the host's env). */
+  /**
+   * Injected Supabase client (schema must be `warehouse`). When present the
+   * live adapter is used unless `dataSource: 'memory'` forces otherwise.
+   */
+  supabaseClient?: SupabaseClient;
+  /** Supabase connection config (kept for hosts that use the custom factory). */
   supabase?: {
     url?: string;
     anonKey?: string;
@@ -41,16 +53,17 @@ export interface DataKitConfig {
     schema?: string;
   };
   /**
-   * localStorage-like store for the in-memory adapter's persistence. Defaults to
-   * `globalThis.localStorage` when available (browser), otherwise `undefined`
-   * (no persistence — SSR / Node / tests).
+   * localStorage-like store for the in-memory adapter's persistence. Defaults
+   * to `globalThis.localStorage` when available (browser), otherwise
+   * `undefined` (no persistence — SSR / Node / tests).
    */
   storage?: Pick<Storage, 'getItem' | 'setItem'> | null;
   /** Optional initial dataset for the in-memory adapter (defaults to the seed). */
   initialData?: WarehouseData;
   /**
-   * Injected Supabase adapter factory (see class doc above). Keeps data-kit free
-   * of a hard `@supabase/supabase-js` dependency while preserving the seam.
+   * Optional custom Supabase adapter factory. Takes precedence over the
+   * bundled adapter when provided; kept as a seam for hosts that already own
+   * client construction upstream of data-kit.
    */
   createSupabaseRepository?: (
     config: NonNullable<DataKitConfig['supabase']>,
@@ -59,12 +72,13 @@ export interface DataKitConfig {
 
 /** Whether enough Supabase config was supplied to attempt the live backend. */
 export function hasSupabaseConfig(config: DataKitConfig = {}): boolean {
+  if (config.supabaseClient) return true;
   return Boolean(config.supabase?.url && config.supabase?.anonKey);
 }
 
 /**
- * Resolve the effective data source from injected config (replaces the source's
- * `import.meta.env.VITE_DATA_SOURCE` read).
+ * Resolve the effective data source from injected config (replaces the
+ * source's `import.meta.env.VITE_DATA_SOURCE` read).
  */
 export function resolveDataSource(config: DataKitConfig = {}): DataSource {
   const explicit = config.dataSource;
@@ -84,21 +98,32 @@ function defaultStorage(): Pick<Storage, 'getItem' | 'setItem'> | undefined {
 }
 
 /**
- * Builds the active repository. Uses Supabase when configured (or forced) AND an
- * adapter factory was injected, otherwise the seeded in-memory adapter persisted
- * to localStorage. Falls back to in-memory if the Supabase adapter cannot be
- * created.
+ * Builds the active repository. Uses the live Supabase adapter when a client
+ * is supplied (or a custom factory + config is supplied and the source resolves
+ * to `'supabase'`), otherwise the seeded in-memory adapter persisted to
+ * localStorage. Falls back to in-memory if adapter construction throws.
  */
 export function createRepository(config: DataKitConfig = {}): {
   repo: WarehouseRepository;
   source: DataSource;
 } {
   const source = resolveDataSource(config);
-  if (source === 'supabase' && config.createSupabaseRepository && config.supabase) {
+  if (source === 'supabase') {
     try {
-      return { repo: config.createSupabaseRepository(config.supabase), source };
+      if (config.createSupabaseRepository && config.supabase) {
+        return {
+          repo: config.createSupabaseRepository(config.supabase),
+          source,
+        };
+      }
+      if (config.supabaseClient) {
+        return {
+          repo: createSupabaseWarehouseRepository(config.supabaseClient),
+          source,
+        };
+      }
     } catch {
-      // fall through to memory if misconfigured at runtime
+      // fall through to memory if adapter construction misconfigured at runtime
     }
   }
   const storage = config.storage !== undefined ? config.storage : defaultStorage();

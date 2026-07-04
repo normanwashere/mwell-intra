@@ -19,6 +19,11 @@ const eslintConfig = [
       'out/**',
       'build/**',
       'next-env.d.ts',
+      // Playwright smoke suite is linted/typechecked by Playwright itself and
+      // depends on @playwright/test being installed. Keep it out of the Next
+      // ESLint + tsc passes so those stay green even without the E2E deps.
+      'tests/**',
+      'playwright.config.ts',
     ],
   },
 ];

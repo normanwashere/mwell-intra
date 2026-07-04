@@ -5,6 +5,7 @@
     "baseUrl": ".",
     "paths": {
       "@shell/*": ["./*"],
+      "@warehouse/*": ["../../modules/warehouse/src/*"],
       "@/*": ["../../modules/warehouse/src/*"]
     },
     "plugins": [{ "name": "next" }],
@@ -12,9 +13,19 @@
   },
   "include": [
     "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
+    "app/**/*.ts",
+    "app/**/*.tsx",
+    "components/**/*.ts",
+    "components/**/*.tsx",
+    "lib/**/*.ts",
+    "lib/**/*.tsx",
+    "middleware.ts",
     ".next/types/**/*.ts"
   ],
-  "exclude": ["node_modules", ".next"]
+  "exclude": [
+    "node_modules",
+    ".next",
+    "tests/**",
+    "playwright.config.ts"
+  ]
 }

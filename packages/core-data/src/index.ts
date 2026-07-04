@@ -1,4 +1,9 @@
-// @intra/core-data — Step 1e/3: ports + adapters for the shared `core` schema
-// (vendor master, documents, approvals, activity_log). Same port/adapter seam
-// as @intra/data-kit so modules stay backend-agnostic (spec §4, §6).
-export {};
+// @intra/core-data — client-side ports + adapters for the `core` schema.
+// Consumers: modules (procurement, legal) + apps/shell (admin, notifications).
+// UI never calls Supabase directly (spec §6.1).
+
+export * from './types';
+export * from './repository';
+export * from './inMemoryCoreRepository';
+export * from './supabaseCoreRepository';
+export * from './createCoreRepository';

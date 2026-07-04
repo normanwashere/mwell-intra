@@ -96,12 +96,51 @@ header of `20260706091000_core_seed_rbac.sql` for the reconciliation checklist.
 | 19 | `20260706110000_procurement_schema.sql` | `procurement` schema: `requests`, `purchase_orders` (`origin='procurement'`), `purchase_order_lines`, RLS + RPCs |
 | 20 | `20260706120000_legal_schema.sql` | `legal` schema: `accreditation_cases`, `requirement_checklist_items`, vendor-scoped RLS + RPCs |
 | 21 | `20260706130000_cross_module_wiring.sql` | **Step 3d cross-module contracts:** accreditation-gated PO award (trigger + `procurement.approve_purchase_order` RPC) and procurement→warehouse receiving handoff (`procurement.receipts` + `warehouse.receive_against_procurement_po` RPC) |
+| 22 | `20260706140000_scheduled_jobs.sql` | **Phase 4 delivery** (spec §8): enables `pg_cron`; installs `core.job_flip_accreditation_status()` (flips `approved` vendors to `renewal_due` <30d / `expired` past-due and inserts `core.notifications` for vendor-tier users + `manage_accreditation` holders) and `core.job_flag_overdue_approvals()` (fanouts `approval_overdue` notifications to every user holding the pending step's `approver_role`); schedules `nightly-accreditation` @ `0 2 * * *` and `nightly-overdue-approvals` @ `15 2 * * *` (idempotent `unschedule`-then-`schedule`). Notification writes are de-duplicated against unread rows so re-runs never pile up. |
+
+## Migration order — Step 4 hardening
+
+| # | File | Purpose |
+|---|------|---------|
+| 22 | `20260706170000_warehouse_rls_tighten.sql` | Scope the general warehouse read-model (`locations, products, events, storage_areas, inventory_units, stock_levels, movements, receipts, returns, allocations, cycle_counts`) from `using(true)` to `core.has_cap('warehouse','view_dashboard') OR core.has_module_role('warehouse')`. Adds helper `core.has_module_role(module)`. Suppliers/purchase_orders/lots remain on their existing capability-scoped reads; write policies and RPC-only lockdown are untouched. |
+
+### Step 4 notes
+
+- **Read-scope rationale.** The base warehouse RLS opened the general read-model
+  to any authenticated caller because Step 2 shipped as a single-module suite.
+  Once procurement + legal ship (Step 3), the same Supabase project hosts
+  procurement/legal-only staff and the external `legal:vendor` tier — none of
+  whom should read warehouse inventory by default. Every warehouse role grants
+  `view_dashboard`, so gating on that cap admits every warehouse user and locks
+  everyone else out; the `has_module_role` fallback keeps the door open if a
+  future role provisioning drops the dashboard cap.
+- **What is NOT changed.** `suppliers`, `purchase_orders`, and `lots` were
+  already capability-scoped by 20260706092200_warehouse_rls.sql (procurement /
+  finance / pricing / receive_stock) — those policies stay as-is. The v4+v6
+  write lockdown (`revoke insert/update/delete on stock/audit/PO/lots from
+  authenticated`) is likewise unchanged; direct writes still route through the
+  SECURITY DEFINER RPCs in 20260706092400_warehouse_rpcs.sql.
 
 ### Step 3 notes
 
 - **RBAC reconciliation:** procurement roles are now `requester`, `procurement_officer`, `approver`, `finance`, `admin` (9 caps). Legal roles are `legal_reviewer`, `compliance`, `admin`, `vendor` (9 caps). Core external tier remains `core:vendor_portal` / `submit_documents` for shared document RPCs; legal vendor tier uses `legal:vendor` / `upload_document` for module-scoped RLS.
 - **Procurement PO handoff:** procurement-origin POs use the same `origin='procurement'` contract as warehouse ADR-002 #2; the Step 3d handoff RPC wires warehouse receiving to procurement fulfillment.
 - **Legal accreditation:** case status mirrors `core.vendors.accreditation_status`; `approve_accreditation_case` updates the vendor master on approval, which in turn unblocks procurement PO award via the accreditation-gate trigger.
+
+### Phase 4 scheduled jobs (migration #22)
+
+- **`nightly-accreditation` @ `0 2 * * *`** → `core.job_flip_accreditation_status()`.
+  Emits `accreditation_expired` and `accreditation_renewal_due` notifications.
+  Recipients per flipped vendor: users linked via `core.profiles.vendor_id` +
+  every user holding the `manage_accreditation` cap. De-duped against unread
+  rows of the same `(user_id, kind, entity_id)`.
+- **`nightly-overdue-approvals` @ `15 2 * * *`** → `core.job_flag_overdue_approvals()`.
+  Emits `approval_overdue` notifications for every `core.user_roles` row whose
+  `role` matches the pending step's `approver_role`. Same unread-dedupe rule.
+- Both are `SECURITY DEFINER` (pg_cron has no `auth.uid()`); `service_role`
+  may invoke them directly for a catch-up run. `authenticated`/`anon` cannot.
+- `pg_cron.job.jobname` is unique per database; the migration unschedules the
+  job by name before re-scheduling, so it is safe to re-apply.
 
 ### Step 3d cross-module contracts
 

@@ -21,9 +21,15 @@ const nextConfig = {
     '@intra/legal',
   ],
   turbopack: {
-    // Warehouse module keeps Vite-era `@/*` → `src/*`. Shell code uses `@shell/*`.
+    // Warehouse module keeps Vite-era `@/*` → `src/*`; the shell resolves it
+    // to the warehouse `src` so the ported code compiles unmodified. `@warehouse`
+    // is the explicit alias future callers / other modules should prefer so a
+    // second module doesn't collide on the bare `@`.
+    // See modules/warehouse/tsconfig.json (`@/*` → `src/*`) — Turbopack has no
+    // access to that tsconfig so the shell must mirror both aliases here.
     resolveAlias: {
       '@': warehouseSrc,
+      '@warehouse': warehouseSrc,
     },
   },
 };

@@ -2,7 +2,7 @@
   "name": "@intra/data-kit",
   "version": "0.0.0",
   "private": true,
-  "description": "Runtime-agnostic warehouse data layer: repository port + DTOs, in-memory adapter, IndexedDB outbox + optimistic overlay, and a framework-agnostic runAction pipeline (Step 1d — ported from the warehouse data layer).",
+  "description": "Runtime-agnostic warehouse data layer: repository port + DTOs, in-memory adapter, live Supabase adapter (SECURITY DEFINER RPCs in the warehouse schema, RBAC-gated via core.has_cap), IndexedDB outbox + optimistic overlay, and a framework-agnostic runAction pipeline.",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -15,6 +15,9 @@
     "test": "vitest run",
     "test:watch": "vitest"
   },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.4"
+  },
   "devDependencies": {
     "@intra/config": "workspace:*",
     "@types/node": "^22.7.4",
@@ -22,13 +25,5 @@
     "fake-indexeddb": "^6.0.0",
     "typescript": "^5.6.3",
     "vitest": "^3.2.6"
-  },
-  "peerDependencies": {
-    "@supabase/supabase-js": "^2.45.4"
-  },
-  "peerDependenciesMeta": {
-    "@supabase/supabase-js": {
-      "optional": true
-    }
   }
 }
