@@ -95,9 +95,28 @@ header of `20260706091000_core_seed_rbac.sql` for the reconciliation checklist.
 | 18 | `20260706100000_reconcile_provisional_rbac.sql` | Patch procurement/legal caps + roles to match `@intra/rbac` (idempotent for fresh installs that already got the updated seed) |
 | 19 | `20260706110000_procurement_schema.sql` | `procurement` schema: `requests`, `purchase_orders` (`origin='procurement'`), `purchase_order_lines`, RLS + RPCs |
 | 20 | `20260706120000_legal_schema.sql` | `legal` schema: `accreditation_cases`, `requirement_checklist_items`, vendor-scoped RLS + RPCs |
+| 21 | `20260706130000_cross_module_wiring.sql` | **Step 3d cross-module contracts:** accreditation-gated PO award (trigger + `procurement.approve_purchase_order` RPC) and procurement→warehouse receiving handoff (`procurement.receipts` + `warehouse.receive_against_procurement_po` RPC) |
 
 ### Step 3 notes
 
 - **RBAC reconciliation:** procurement roles are now `requester`, `procurement_officer`, `approver`, `finance`, `admin` (9 caps). Legal roles are `legal_reviewer`, `compliance`, `admin`, `vendor` (9 caps). Core external tier remains `core:vendor_portal` / `submit_documents` for shared document RPCs; legal vendor tier uses `legal:vendor` / `upload_document` for module-scoped RLS.
-- **Procurement PO handoff:** procurement-origin POs use the same `origin='procurement'` contract as warehouse ADR-002 #2; warehouse receiving integration lands in Step 3d.
-- **Legal accreditation:** case status mirrors `core.vendors.accreditation_status`; `approve_accreditation_case` updates the vendor master on approval.
+- **Procurement PO handoff:** procurement-origin POs use the same `origin='procurement'` contract as warehouse ADR-002 #2; the Step 3d handoff RPC wires warehouse receiving to procurement fulfillment.
+- **Legal accreditation:** case status mirrors `core.vendors.accreditation_status`; `approve_accreditation_case` updates the vendor master on approval, which in turn unblocks procurement PO award via the accreditation-gate trigger.
+
+### Step 3d cross-module contracts
+
+- **Accreditation gates award.** A `before insert or update` trigger on
+  `procurement.purchase_orders` fires `procurement.assert_vendor_accredited()`
+  whenever `status` transitions **into** `approved`/`issued`. The public
+  `procurement.approve_purchase_order(payload)` RPC gate-checks `approve_award`
+  first, asserts accreditation, then flips the status and logs to
+  `core.activity_log`. Trigger is the backstop: even a service_role update to
+  `status='approved'` will fail without an accredited vendor.
+- **Procurement PO → warehouse receiving.** New `procurement.receipts` links a
+  warehouse-side receipt id to a procurement PO/line. The new
+  `warehouse.receive_against_procurement_po(payload)` RPC (gated on warehouse
+  `receive_stock`) refuses to receive against a PO that isn't
+  `approved`/`issued`, records the line receipt, and — when the summed received
+  quantities cover the PO's line totals — advances the PO to `closed`
+  (else `issued`). Warehouse-origin POs continue to use `receive_against_po()`
+  unchanged.
