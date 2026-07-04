@@ -33,6 +33,11 @@ export * from './outbox';
 //     isNetworkError, and the pure optimistic-overlay builders ---
 export * from './runAction';
 
+// --- Live Supabase adapter (opt-in subpath) ---
+// Kept as a subpath (not re-exported here) so callers that don't need Supabase
+// don't pull the SDK into their bundle:
+//   import { createSupabaseWarehouseRepository } from '@intra/data-kit/supabase';
+
 // --- Live Supabase adapter (SupabaseRepository, factory, mappers, evidence helpers).
 //     RPCs live in the `warehouse` schema and gate on `core.has_cap('warehouse', ...)`
 //     (spec §4.2 / ADR-004 / `20260706092400_warehouse_rpcs.sql`). Client construction

@@ -13,10 +13,7 @@ import type {
   Supplier,
   WarehouseEvent,
 } from '../domain/types';
-import {
-  returnClosesAllocation,
-  validateReservation,
-} from '../domain/allocations';
+import { returnClosesAllocation, validateReservation } from '../domain/allocations';
 import { primaryStockLocation, validateTransfer } from '../domain/transfers';
 import { poStatusAfterReceipt } from '../domain/purchaseOrders';
 import { applyProductPatch, buildNewProduct } from '../domain/products';
@@ -47,6 +44,7 @@ import {
   type WarehouseData,
   type WarehouseRepository,
 } from '../repository';
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import {
   allocationToRow,
   eventToRow,
@@ -82,27 +80,8 @@ function uid(prefix: string): string {
 type Row = Record<string, unknown>;
 
 /**
- * Supabase-backed repository. Mutations mirror the in-memory adapter's logic
- * but persist to Postgres via SECURITY DEFINER RPCs in the `warehouse` schema.
- * Reads hydrate the full warehouse read model from the same schema.
- *
- * ---------------------------------------------------------------------------
- * RBAC REWIRE (spec §4.2 / ADR-004 / monorepo migration `20260706092400`)
- * ---------------------------------------------------------------------------
- * The RPCs still live in `warehouse.*` and the payload envelope is unchanged
- * (`.rpc(fn, { payload })`) — but the capability gate inside every RPC now
- * reads `core.has_cap('warehouse', '<cap>')` against `core.user_roles` +
- * `core.role_capabilities`. The client is agnostic to this: it invokes the
- * same RPCs with the same payload shapes and any authorization failure comes
- * back as a normal RPC error. Nothing here changes.
- *
- * ---------------------------------------------------------------------------
- * CLIENT INJECTION (spec §12 step 2)
- * ---------------------------------------------------------------------------
- * The source file constructed the client from `import.meta.env`. Inside
- * `@intra/data-kit` the client is INJECTED via the constructor so the package
- * runs under Next.js / Vite / Node / edge without a build-tool global. The
- * host app owns env and client construction (schema must be `warehouse`).
+ * Supabase-backed repository. Mutations mirror the in-memory adapter's logic but
+ * persist to Postgres. Reads hydrate the full warehouse read model.
  */
 export class SupabaseRepository implements WarehouseRepository {
   constructor(private readonly db: SupabaseClient) {}
@@ -172,13 +151,10 @@ export class SupabaseRepository implements WarehouseRepository {
   }
 
   /**
-   * Invokes a transactional Postgres RPC (see the `warehouse_rpcs` migration).
-   * The whole multi-step mutation commits or rolls back atomically, so a
-   * mid-operation failure can never leave stock / units / movements /
+   * Invokes a transactional Postgres RPC (see the `transactional_rpcs`
+   * migration). The whole multi-step mutation commits or rolls back atomically,
+   * so a mid-operation failure can never leave stock / units / movements /
    * documents out of sync. Returns the primary row the function emits.
-   *
-   * RBAC: the RPCs open with `core.has_cap('warehouse', '<cap>')` — no
-   * warehouse-local RBAC table is consulted. See class-level docs.
    */
   private async callRpc(
     fn: string,
@@ -302,9 +278,8 @@ export class SupabaseRepository implements WarehouseRepository {
 
   async reserve(input: ReserveInput): Promise<Allocation> {
     // Client-side pre-check keeps the UX error message friendly; the RPC
-    // re-validates ATP inside its transaction (with a per-product advisory
-    // lock) so concurrent reservations can't both pass against a stale
-    // snapshot.
+    // re-validates ATP inside its transaction so concurrent reservations can't
+    // both pass against a stale snapshot.
     const data = await this.getData();
     const result = validateReservation(
       toStockState(data),
@@ -701,8 +676,6 @@ export class SupabaseRepository implements WarehouseRepository {
       actor: input.actor,
       createdAt: new Date().toISOString(),
     };
-    // Server stamps status='ordered' and origin='warehouse' (ADR-002 #2); we
-    // still send the full row so the RPC can INSERT via jsonb_populate_record.
     await this.callRpc('create_purchase_order', {
       purchase_order: poToRow(po),
     });
@@ -1147,15 +1120,10 @@ export class SupabaseRepository implements WarehouseRepository {
   }
 }
 
-/**
- * Factory for the injected Supabase adapter (see `createRepository.ts`). The
- * warehouse module (or Next.js host) constructs a `SupabaseClient` — typically
- * from `@intra/auth` — and hands it to `createRepository` via `supabaseClient`
- * or directly here. Keeping this a plain function makes the adapter trivial to
- * mock in tests.
- */
+/** Factory shape compatible with createRepository (spec ADR-003 seam). */
 export function createSupabaseWarehouseRepository(
-  client: SupabaseClient,
+  client: import('@supabase/supabase-js').SupabaseClient<any, any>,
 ): WarehouseRepository {
   return new SupabaseRepository(client);
 }
+
