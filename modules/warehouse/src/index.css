@@ -1,0 +1,216 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Light theme tokens (RGB channels for Tailwind alpha support) */
+  --c-app: 244 247 251;
+  --c-surface: 255 255 255;
+  --c-inset: 243 246 250;
+  --c-line: 226 232 240;
+  --c-ink: 15 23 42;
+  --c-muted: 71 85 105; /* slate-600 — AA on white & inset */
+  --c-faint: 82 95 115; /* AA on white & inset surfaces */
+
+  --shadow-e1: 0 1px 2px rgba(4, 36, 63, 0.05), 0 2px 6px rgba(4, 36, 63, 0.05);
+  --shadow-e2: 0 1px 2px rgba(4, 36, 63, 0.05), 0 8px 24px rgba(4, 36, 63, 0.08);
+  --shadow-e3: 0 18px 50px rgba(4, 36, 63, 0.16);
+
+  color-scheme: light;
+}
+
+.dark {
+  --c-app: 6 15 27;
+  --c-surface: 14 26 43;
+  --c-inset: 20 34 53;
+  --c-line: 31 47 68;
+  --c-ink: 233 241 250;
+  --c-muted: 158 176 199; /* AA on dark surfaces */
+  --c-faint: 130 146 168; /* AA on dark surfaces */
+
+  --shadow-e1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-e2: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --shadow-e3: 0 18px 50px rgba(0, 0, 0, 0.55);
+
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+/* Lock horizontal scrolling — content stays within the viewport on mobile so an
+   over-wide element can never cause a sideways pan / rubber-band. */
+html,
+body {
+  max-width: 100%;
+  overflow-x: hidden;
+  overscroll-behavior-x: none;
+}
+
+body {
+  @apply bg-app text-ink antialiased;
+  font-family: theme('fontFamily.sans');
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* iOS safe areas */
+.safe-top {
+  padding-top: env(safe-area-inset-top);
+}
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.pb-safe {
+  padding-bottom: calc(env(safe-area-inset-bottom) + 1rem);
+}
+
+@layer base {
+  h1,
+  h2,
+  h3 {
+    font-family: theme('fontFamily.display');
+    letter-spacing: -0.02em;
+  }
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl bg-surface shadow-e2 ring-1 ring-line/70;
+  }
+
+  .surface {
+    @apply rounded-2xl bg-surface/70 ring-1 ring-line/70 backdrop-blur;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5
+      text-sm font-semibold transition-all duration-150 active:scale-[0.97]
+      focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2
+      focus-visible:outline-brand-500 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-primary {
+    @apply btn bg-brand-600 text-white shadow-soft hover:bg-brand-700 hover:shadow-navy;
+  }
+
+  .btn-accent {
+    @apply btn bg-accent-grad text-brand-900 shadow-soft hover:shadow-glow;
+  }
+
+  .btn-ghost {
+    @apply btn bg-inset text-ink hover:bg-line;
+  }
+
+  .btn-outline {
+    @apply btn border border-line bg-surface text-ink hover:border-brand-300 hover:text-brand-600;
+  }
+
+  .btn-sm {
+    @apply px-3 py-1.5 text-xs;
+  }
+
+  .input {
+    @apply w-full rounded-xl border border-line bg-surface px-3.5 py-2.5
+      text-sm text-ink shadow-sm outline-none transition placeholder:text-faint
+      focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20;
+  }
+
+  .input-invalid {
+    @apply border-rose-400 focus:border-rose-400 focus:ring-rose-400/20;
+  }
+
+  /* Premium native select: hide OS chrome, add a branded caret */
+  select.input {
+    @apply cursor-pointer appearance-none bg-no-repeat pr-10;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-position: right 0.7rem center;
+    background-size: 1.1rem;
+  }
+
+  .label {
+    @apply mb-1.5 block text-sm font-medium text-muted;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
+}
+
+/* gradient text matching the mWell wordmark */
+.brand-gradient {
+  background: linear-gradient(90deg, #0a3168 0%, #0b4da2 35%, #22c1f0 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Radix dialog (sheet/drawer/modal) animation hooks */
+[data-radix-dialog-overlay] {
+  @apply animate-overlay-in;
+}
+.sheet-content[data-state='open'] {
+  @apply animate-sheet-up;
+}
+.drawer-content[data-state='open'] {
+  @apply animate-slide-in-right;
+}
+.modal-content[data-state='open'] {
+  @apply animate-scale-in;
+}
+
+/* staggered list/card entrance */
+.stagger > * {
+  animation: pop-in 0.32s ease-out both;
+}
+.stagger > *:nth-child(1) { animation-delay: 0.02s; }
+.stagger > *:nth-child(2) { animation-delay: 0.06s; }
+.stagger > *:nth-child(3) { animation-delay: 0.1s; }
+.stagger > *:nth-child(4) { animation-delay: 0.14s; }
+.stagger > *:nth-child(5) { animation-delay: 0.18s; }
+.stagger > *:nth-child(6) { animation-delay: 0.22s; }
+.stagger > *:nth-child(7) { animation-delay: 0.26s; }
+.stagger > *:nth-child(8) { animation-delay: 0.3s; }
+
+/* skeleton shimmer */
+.skeleton {
+  @apply relative overflow-hidden rounded-lg bg-line/70;
+}
+.skeleton::after {
+  content: '';
+  @apply absolute inset-0 -translate-x-full;
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0,
+    rgba(255, 255, 255, 0.25) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  animation: shimmer 1.4s infinite;
+}
+
+/* hide scrollbars on horizontal nav strips */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+  .stagger > * {
+    animation: none !important;
+  }
+}

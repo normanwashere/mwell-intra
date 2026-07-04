@@ -2,7 +2,7 @@
 // persisted choice (or the OS preference) so there is no light→dark flicker.
 // Rendered in <head>; server component (no interactivity).
 
-import { THEME_STORAGE_KEY } from '@/lib/theme';
+import { THEME_STORAGE_KEY } from '@shell/lib/theme';
 
 export function ThemeScript() {
   const script = `(function(){try{var k=${JSON.stringify(

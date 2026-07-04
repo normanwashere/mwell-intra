@@ -4,9 +4,11 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./*"]
+      "@shell/*": ["./*"],
+      "@/*": ["../../modules/warehouse/src/*"]
     },
-    "plugins": [{ "name": "next" }]
+    "plugins": [{ "name": "next" }],
+    "lib": ["dom", "dom.iterable", "esnext", "webworker"]
   },
   "include": [
     "next-env.d.ts",

@@ -10,8 +10,8 @@ import {
   VENDOR_NAV,
   accessibleModules,
   type ModuleNav,
-} from '@/lib/navigation';
-import { cx } from '@/lib/cx';
+} from '@shell/lib/navigation';
+import { cx } from '@shell/lib/cx';
 
 const TONE_CLASS: Record<ModuleNav['tone'], string> = {
   brand: 'bg-brand-500/10 text-brand-700 dark:text-brand-300',

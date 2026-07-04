@@ -7,10 +7,11 @@
 // app builds and runs with NO live backend.
 
 import { useMemo, type ReactNode } from 'react';
+import { SerwistProvider } from '@serwist/turbopack/react';
 import { SessionProvider, type AuthConfig } from '@intra/auth';
 import { ToastProvider } from '@intra/ui';
-import { createSupabaseBrowserClient } from '@/lib/supabase/client';
-import { DEMO_PROFILES } from '@/lib/demoProfiles';
+import { createSupabaseBrowserClient } from '@shell/lib/supabase/client';
+import { DEMO_PROFILES } from '@shell/lib/demoProfiles';
 
 export function Providers({ children }: { children: ReactNode }) {
   // Build once per mount. `createSupabaseBrowserClient` returns null with no env.
@@ -27,8 +28,10 @@ export function Providers({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <SessionProvider config={config}>
-      <ToastProvider>{children}</ToastProvider>
-    </SessionProvider>
+    <SerwistProvider swUrl="/serwist/sw.js">
+      <SessionProvider config={config}>
+        <ToastProvider>{children}</ToastProvider>
+      </SessionProvider>
+    </SerwistProvider>
   );
 }

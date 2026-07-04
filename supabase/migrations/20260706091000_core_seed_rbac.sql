@@ -15,13 +15,9 @@
 -- ##  * CORE rows match @intra/rbac's `core` module exactly (roles           ##
 -- ##    platform_admin/staff/vendor_portal). These are the cross-cutting     ##
 -- ##    caps this schema's RLS + RPCs gate on via has_any_cap().             ##
--- ##  * PROCUREMENT / LEGAL rows are MINIMAL + PROVISIONAL placeholders.     ##
--- ##    NOTE: they intentionally DIVERGE from @intra/rbac's provisional      ##
--- ##    procurement/legal roles for now (e.g. rbac uses legal:vendor/        ##
--- ##    upload_document; here the external tier is core:vendor_portal/       ##
--- ##    submit_documents, which is what register_document actually gates on). ##
--- ##    >>> RECONCILE procurement/legal in STEP 3 <<< when those modules are ##
--- ##    designed for real; regenerate this block from @intra/rbac then.      ##
+-- ##  * PROCUREMENT / LEGAL rows are an EXACT mirror of @intra/rbac (Step 3). ##
+-- ##    External vendor tier: core:vendor_portal/submit_documents (core RPC   ##
+-- ##    gates) coexists with legal:vendor/upload_document (legal module RLS). ##
 -- ############################################################################
 --
 -- Re-runnable: the three tables are fully rebuilt on every run (delete + insert),
@@ -63,24 +59,26 @@ insert into core.capabilities (module, cap) values
   ('warehouse','view_procurement'),
   ('warehouse','view_pricing'),
   ('warehouse','set_pricing'),
-  -- procurement (provisional — Step 3)
-  ('procurement','view_requests'),
+  -- procurement (mirror of @intra/rbac — Step 3)
+  ('procurement','view_dashboard'),
   ('procurement','create_request'),
+  ('procurement','manage_rfp'),
+  ('procurement','author_po'),
+  ('procurement','approve_request'),
   ('procurement','approve_award'),
-  ('procurement','view_vendors'),
-  ('procurement','view_approvals'),
-  ('procurement','record_approval'),
-  -- legal (provisional — Step 3)
-  ('legal','view_accreditation'),
+  ('procurement','manage_vendors'),
+  ('procurement','view_finance'),
+  ('procurement','admin'),
+  -- legal (mirror of @intra/rbac — Step 3)
+  ('legal','view_dashboard'),
   ('legal','review_accreditation'),
-  ('legal','manage_accreditation'),
-  ('legal','view_vendors'),
-  ('legal','manage_vendors'),
-  ('legal','view_documents'),
+  ('legal','manage_checklist'),
+  ('legal','approve_accreditation'),
   ('legal','manage_documents'),
-  ('legal','view_approvals'),
-  ('legal','manage_approvals'),
-  ('legal','record_approval');
+  ('legal','admin'),
+  ('legal','submit_accreditation'),
+  ('legal','upload_document'),
+  ('legal','view_own_accreditation');
 
 -- ===========================================================================
 -- 2) Roles (module, role, label)
@@ -100,12 +98,17 @@ insert into core.roles (module, role, label) values
   ('warehouse','marketing','Marketing'),
   ('warehouse','procurement','Procurement'),
   ('warehouse','pricing','Pricing'),
-  -- procurement (provisional)
+  -- procurement (mirror of @intra/rbac — Step 3)
   ('procurement','requester','Requester'),
+  ('procurement','procurement_officer','Procurement Officer'),
   ('procurement','approver','Approver'),
-  -- legal (provisional)
+  ('procurement','finance','Finance'),
+  ('procurement','admin','Procurement Admin'),
+  -- legal (mirror of @intra/rbac — Step 3)
   ('legal','legal_reviewer','Legal Reviewer'),
-  ('legal','legal_admin','Legal Administrator');
+  ('legal','compliance','Compliance'),
+  ('legal','admin','Legal Admin'),
+  ('legal','vendor','Vendor (external)');
 
 -- ===========================================================================
 -- 3) Role -> capability matrix
@@ -177,29 +180,44 @@ insert into core.role_capabilities (module, role, cap) values
   ('warehouse','pricing','set_pricing'),
   ('warehouse','pricing','view_finance'),
 
-  -- --- procurement (provisional — Step 3) -----------------------------------
-  ('procurement','requester','view_requests'),
+  -- --- procurement (mirror of @intra/rbac — Step 3) -------------------------
+  ('procurement','requester','view_dashboard'),
   ('procurement','requester','create_request'),
-  ('procurement','requester','view_vendors'),
-  ('procurement','approver','view_requests'),
+  ('procurement','procurement_officer','view_dashboard'),
+  ('procurement','procurement_officer','create_request'),
+  ('procurement','procurement_officer','manage_rfp'),
+  ('procurement','procurement_officer','author_po'),
+  ('procurement','procurement_officer','manage_vendors'),
+  ('procurement','approver','view_dashboard'),
+  ('procurement','approver','approve_request'),
   ('procurement','approver','approve_award'),
-  ('procurement','approver','view_vendors'),
-  ('procurement','approver','view_approvals'),
-  ('procurement','approver','record_approval'),
+  ('procurement','finance','view_dashboard'),
+  ('procurement','finance','view_finance'),
+  ('procurement','admin','view_dashboard'),
+  ('procurement','admin','create_request'),
+  ('procurement','admin','manage_rfp'),
+  ('procurement','admin','author_po'),
+  ('procurement','admin','approve_request'),
+  ('procurement','admin','approve_award'),
+  ('procurement','admin','manage_vendors'),
+  ('procurement','admin','view_finance'),
+  ('procurement','admin','admin'),
 
-  -- --- legal (provisional — Step 3) -----------------------------------------
-  ('legal','legal_reviewer','view_accreditation'),
+  -- --- legal (mirror of @intra/rbac — Step 3) -------------------------------
+  ('legal','legal_reviewer','view_dashboard'),
   ('legal','legal_reviewer','review_accreditation'),
-  ('legal','legal_reviewer','view_vendors'),
-  ('legal','legal_reviewer','view_documents'),
-  ('legal','legal_reviewer','view_approvals'),
-  ('legal','legal_admin','view_accreditation'),
-  ('legal','legal_admin','review_accreditation'),
-  ('legal','legal_admin','manage_accreditation'),
-  ('legal','legal_admin','view_vendors'),
-  ('legal','legal_admin','manage_vendors'),
-  ('legal','legal_admin','view_documents'),
-  ('legal','legal_admin','manage_documents'),
-  ('legal','legal_admin','view_approvals'),
-  ('legal','legal_admin','manage_approvals'),
-  ('legal','legal_admin','record_approval');
+  ('legal','legal_reviewer','manage_checklist'),
+  ('legal','legal_reviewer','manage_documents'),
+  ('legal','compliance','view_dashboard'),
+  ('legal','compliance','review_accreditation'),
+  ('legal','compliance','approve_accreditation'),
+  ('legal','compliance','manage_documents'),
+  ('legal','admin','view_dashboard'),
+  ('legal','admin','review_accreditation'),
+  ('legal','admin','manage_checklist'),
+  ('legal','admin','approve_accreditation'),
+  ('legal','admin','manage_documents'),
+  ('legal','admin','admin'),
+  ('legal','vendor','submit_accreditation'),
+  ('legal','vendor','upload_document'),
+  ('legal','vendor','view_own_accreditation');

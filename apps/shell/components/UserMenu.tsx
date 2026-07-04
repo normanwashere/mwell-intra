@@ -10,7 +10,7 @@ import Link from 'next/link';
 import { Icon } from '@intra/ui';
 import { useSession } from '@intra/auth';
 import { MODULE_LIST } from '@intra/rbac';
-import { cx } from '@/lib/cx';
+import { cx } from '@shell/lib/cx';
 
 function initials(nameOrEmail: string): string {
   const source = nameOrEmail.trim();

@@ -6,7 +6,7 @@
 // bootstrap lives in <ThemeScript> so there is no first-paint flicker.
 
 import { useCallback, useEffect, useState } from 'react';
-import { THEME_STORAGE_KEY, type Theme } from '@/lib/theme';
+import { THEME_STORAGE_KEY, type Theme } from '@shell/lib/theme';
 
 function resolveInitialTheme(): Theme {
   if (typeof document !== 'undefined') {

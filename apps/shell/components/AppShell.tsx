@@ -13,8 +13,8 @@ import {
   accessibleModules,
   VENDOR_NAV,
   type ModuleNav,
-} from '@/lib/navigation';
-import { cx } from '@/lib/cx';
+} from '@shell/lib/navigation';
+import { cx } from '@shell/lib/cx';
 import { ThemeToggle } from './ThemeToggle';
 import { UserMenu } from './UserMenu';
 

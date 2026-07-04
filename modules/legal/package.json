@@ -1,0 +1,37 @@
+{
+  "name": "@intra/legal",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Legal module MVP: vendor accreditation cases and checklist review (Step 3b).",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@intra/auth": "workspace:*",
+    "@intra/rbac": "workspace:*",
+    "@intra/ui": "workspace:*",
+    "clsx": "^2.1.1",
+    "react-router-dom": "^6.26.2"
+  },
+  "peerDependencies": {
+    "react": "^18.2.0 || ^19.0.0",
+    "react-dom": "^18.2.0 || ^19.0.0"
+  },
+  "devDependencies": {
+    "@intra/config": "workspace:*",
+    "@types/node": "^22.7.4",
+    "@types/react": "^18.3.10",
+    "@types/react-dom": "^18.3.0",
+    "eslint": "^9.17.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "typescript": "^5.6.3"
+  }
+}

@@ -1,7 +1,7 @@
 'use client';
 
 import { Icon } from '@intra/ui';
-import { cx } from '@/lib/cx';
+import { cx } from '@shell/lib/cx';
 import { useTheme } from './theme';
 
 export function ThemeToggle({ className }: { className?: string }) {

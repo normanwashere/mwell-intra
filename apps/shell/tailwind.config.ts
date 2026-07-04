@@ -17,6 +17,7 @@ const config: Config = {
     './src/**/*.{ts,tsx}',
     // The consumed design-system package ships raw TSX we must scan for classes.
     '../../packages/ui/src/**/*.{ts,tsx}',
+    '../../modules/warehouse/src/**/*.{ts,tsx}',
   ],
   theme: {
     extend: {

@@ -1,0 +1,3 @@
+# Serwist-generated service worker artifacts (webpack fallback path)
+public/sw*
+public/swe-worker*
