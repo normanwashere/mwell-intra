@@ -47,10 +47,40 @@ export const DEMO_PROFILES: readonly MemoryProfile[] = [
     email: 'approver@mwell.demo',
     kind: 'employee',
     name: 'Marta Ramos',
-    title: 'Procurement Approver',
+    title: 'Department Head — Procurement Approver',
     roles: {
+      // Acts as the Department Head / BU SPOC tier on the procurement
+      // approval ladder (mWell Procurement Policy §3).
       core: ['staff'],
       procurement: ['approver'],
+    },
+  },
+  {
+    id: 'demo-procurement-finance',
+    email: 'finance.procurement@mwell.demo',
+    kind: 'employee',
+    name: 'Elena Torres',
+    title: 'Finance — Procurement Reviewer',
+    roles: {
+      // Dedicated Finance seat on the procurement ladder. High-value or
+      // capex / construction / manpower categories loop this profile in
+      // before the final approver (policy §3, §12).
+      core: ['staff'],
+      procurement: ['finance'],
+    },
+  },
+  {
+    id: 'demo-procurement-cfo',
+    email: 'cfo@mwell.demo',
+    kind: 'employee',
+    name: 'Diego Ang',
+    title: 'CFO / DOA Approver',
+    roles: {
+      // Sits at the Final Approver tier — signs off per the current DOA
+      // (mWell Procurement Policy §9). Also holds procurement admin so the
+      // demo can walk the last step of the ladder from a single seat.
+      core: ['staff'],
+      procurement: ['admin'],
     },
   },
   {

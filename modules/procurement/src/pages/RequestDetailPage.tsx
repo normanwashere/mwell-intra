@@ -20,20 +20,34 @@ import {
   type Column,
 } from '@intra/ui';
 import { Guard, useSession } from '@intra/auth';
-import type { ProcurementRequestLine, RequestStatus } from '../types';
+import type {
+  ApprovalStep,
+  ProcurementRequestLine,
+  RequestAttachment,
+  RequestStatus,
+} from '../types';
 import {
   useApprovalHistory,
   useProcurementRequests,
   usePurchaseOrders,
 } from '../localStore';
+import {
+  categoryMeta,
+  minimumQuotes,
+  requiredDocuments,
+  sourcingMethodLabel,
+  tierLabel,
+} from '../policy';
 
-const STATUS_TONE: Record<RequestStatus, 'slate' | 'cyan' | 'amber' | 'emerald' | 'rose'> = {
-  draft: 'slate',
-  submitted: 'cyan',
-  under_review: 'amber',
-  approved: 'emerald',
-  rejected: 'rose',
-  cancelled: 'slate',
+// Bright dots for status pills placed on the navy hero (badges with tinted
+// backgrounds look faded against the gradient; solid dots read cleanly).
+const STATUS_DOT: Record<RequestStatus, string> = {
+  draft: 'bg-slate-300',
+  submitted: 'bg-cyan-300',
+  under_review: 'bg-amber-300',
+  approved: 'bg-emerald-300',
+  rejected: 'bg-rose-300',
+  cancelled: 'bg-slate-400',
 };
 
 const lineColumns: Column<ProcurementRequestLine>[] = [
@@ -75,7 +89,6 @@ export function RequestDetailPage() {
 
   const req = useMemo(() => rows.find((r) => r.id === id), [rows, id]);
 
-  // Auto-submit when we arrived from CreateRequest with ?submit=1.
   useEffect(() => {
     if (!req) return;
     if (searchParams.get('submit') === '1' && req.status === 'draft') {
@@ -86,7 +99,6 @@ export function RequestDetailPage() {
       searchParams.delete('submit');
       setSearchParams(searchParams, { replace: true });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [req?.id, req?.status]);
 
   const linkedPo = useMemo(
@@ -96,7 +108,7 @@ export function RequestDetailPage() {
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-4xl space-y-4 p-4 md:p-6">
+      <div className="mx-auto max-w-4xl space-y-4">
         <div className="h-40 animate-pulse rounded-3xl bg-inset" />
         <div className="h-32 animate-pulse rounded-2xl bg-inset" />
       </div>
@@ -105,6 +117,7 @@ export function RequestDetailPage() {
   if (!req) return <Navigate to="/" replace />;
 
   const isRequester = profile?.email && req.requesterEmail === profile.email;
+  const cat = categoryMeta(req.category);
 
   function handleSubmit() {
     if (!req) return;
@@ -138,27 +151,48 @@ export function RequestDetailPage() {
     navigate(`/purchase-orders/${po.id}`);
   }
 
+  const reqDocs = req.sourcingMethod
+    ? requiredDocuments({
+        category: req.category,
+        amount: req.estimatedAmount,
+        sourcingMethod: req.sourcingMethod,
+      })
+    : [];
+  const minQuotes = req.sourcingMethod ? minimumQuotes(req.sourcingMethod) : null;
+
   return (
-    <div className="mx-auto max-w-4xl space-y-6 p-4 md:p-6">
+    <div className="mx-auto max-w-4xl space-y-6">
       <ModuleHero
-        eyebrow={req.title}
-        title={req.department ? `${req.department} · ${req.costCenter ?? '—'}` : (req.costCenter ?? 'Request')}
-        description={req.description ?? 'No business justification provided.'}
+        eyebrow={
+          req.department || req.costCenter
+            ? [req.department, req.costCenter].filter(Boolean).join(' \u00b7 ')
+            : 'Purchase request'
+        }
+        title={req.title}
+        description={req.description || undefined}
         icon="cart"
         action={
-          <div className="flex flex-wrap gap-2">
-            <HeroChipButton href="/procurement" icon="arrowRight">
-              Back to list
-            </HeroChipButton>
-          </div>
+          <HeroChipButton href="/procurement" icon="arrowRight">
+            Back to list
+          </HeroChipButton>
         }
         accessory={
-          <>
+          <div className="flex flex-wrap items-end gap-6">
             <div>
               <p className="text-xs uppercase tracking-wide text-brand-100/70">Status</p>
-              <p className="mt-1"><Badge tone={STATUS_TONE[req.status]}>{req.status}</Badge></p>
+              <p className="mt-1">
+                <span
+                  className={`inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-0.5 text-xs font-semibold text-white`}
+                >
+                  <span
+                    aria-hidden
+                    className={`inline-block h-1.5 w-1.5 rounded-full ${STATUS_DOT[req.status]}`}
+                  />
+                  {req.status}
+                </span>
+              </p>
             </div>
-            <div className="text-right">
+            <div>
               <p className="text-xs uppercase tracking-wide text-brand-100/70">Estimated total</p>
               <p className="tnum text-2xl font-extrabold">
                 {req.estimatedAmount != null
@@ -169,21 +203,141 @@ export function RequestDetailPage() {
                   : '—'}
               </p>
             </div>
-          </>
+          </div>
         }
       />
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <MetaTile label="Requester" value={req.requesterName ?? req.requesterEmail ?? '—'} />
+        <MetaTile label="Category" value={cat?.label ?? '—'} />
+        <MetaTile label="Sourcing" value={req.sourcingMethod ? sourcingMethodLabel(req.sourcingMethod) : '—'} />
         <MetaTile label="Vendor" value={req.vendorName ?? 'Open to bids'} />
+        <MetaTile label="Cost center" value={req.costCenter ?? '—'} />
+        <MetaTile label="Project code" value={req.projectCode ?? '—'} />
+        <MetaTile label="Budget / GL" value={req.budgetCode ?? '—'} />
         <MetaTile label="Needed by" value={req.neededBy ? new Date(req.neededBy).toLocaleDateString() : '—'} />
-        <MetaTile label="Created" value={new Date(req.createdAt).toLocaleString()} />
       </div>
+
+      {req.justification && (
+        <div>
+          <SectionTitle title="Business justification" subtitle="Policy §9 — Award Recommendation basis." />
+          <Card>
+            <dl className="space-y-3 text-sm">
+              <div>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-faint">Need</dt>
+                <dd className="mt-0.5 whitespace-pre-line text-ink">{req.justification.need || '—'}</dd>
+              </div>
+              {req.justification.alternatives && (
+                <div>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-faint">Alternatives considered</dt>
+                  <dd className="mt-0.5 whitespace-pre-line text-ink">{req.justification.alternatives}</dd>
+                </div>
+              )}
+              {req.justification.risk && (
+                <div>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-faint">Risk if not procured</dt>
+                  <dd className="mt-0.5 whitespace-pre-line text-ink">{req.justification.risk}</dd>
+                </div>
+              )}
+            </dl>
+          </Card>
+        </div>
+      )}
+
+      {(req.approvalSteps?.length ?? 0) > 0 && (
+        <div>
+          <SectionTitle
+            title="Approval ladder"
+            subtitle="Multi-tier routing derived from category + amount + sourcing (policy §3, §9)."
+          />
+          <Card>
+            <ol className="space-y-3">
+              {(req.approvalSteps ?? []).map((s) => (
+                <ApprovalStepRow key={s.id} step={s} />
+              ))}
+            </ol>
+          </Card>
+        </div>
+      )}
 
       <div>
         <SectionTitle title="Line items" subtitle={`${req.lines.length} line${req.lines.length === 1 ? '' : 's'}`} />
         <DataTable rows={req.lines} columns={lineColumns} keyOf={(r) => r.id} />
       </div>
+
+      {(req.attachments?.length ?? 0) > 0 && (
+        <div>
+          <SectionTitle
+            title="Attachments"
+            subtitle={`${req.attachments!.length} file${req.attachments!.length === 1 ? '' : 's'} — evidence for spec / budget / previous cost.`}
+          />
+          <Card>
+            <ul className="space-y-2">
+              {req.attachments!.map((a) => (
+                <AttachmentRow key={a.id} att={a} />
+              ))}
+            </ul>
+          </Card>
+        </div>
+      )}
+
+      {reqDocs.length > 0 && (
+        <div>
+          <SectionTitle
+            title="Required documents"
+            subtitle={`Checklist for ${sourcingMethodLabel(req.sourcingMethod!)} (policy §6 + Annex B).`}
+          />
+          <Card>
+            <ul className="space-y-2 text-sm">
+              {reqDocs.map((d) => (
+                <li key={d.key} className="flex items-start gap-2">
+                  <Icon name="check" className="mt-0.5 h-4 w-4 text-faint" />
+                  <div>
+                    <p className="font-semibold text-ink">{d.label}</p>
+                    <p className="text-xs text-muted">{d.why}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            {minQuotes != null && (
+              <p className="mt-3 rounded-lg bg-inset px-3 py-2 text-xs text-muted">
+                <Icon name="info" className="mr-1 inline h-3.5 w-3.5" />
+                {minQuotes} comparable {req.sourcingMethod === 'rfp' ? 'proposals' : 'quotations'} required.
+              </p>
+            )}
+          </Card>
+        </div>
+      )}
+
+      {(req.compliance?.directAwardReason ||
+        req.compliance?.philgepsReference ||
+        req.compliance?.priceReasonableness) && (
+        <div>
+          <SectionTitle title="Compliance references" subtitle="Direct-award basis, PhilGEPS, and price reasonableness." />
+          <Card>
+            <dl className="grid gap-3 text-sm sm:grid-cols-2">
+              {req.compliance?.directAwardReason && (
+                <div>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-faint">Direct-award reason</dt>
+                  <dd className="mt-0.5 text-ink">{req.compliance.directAwardReason.replace('_', ' ')}</dd>
+                </div>
+              )}
+              {req.compliance?.philgepsReference && (
+                <div>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-faint">PhilGEPS reference</dt>
+                  <dd className="mt-0.5 text-ink">{req.compliance.philgepsReference}</dd>
+                </div>
+              )}
+              {req.compliance?.priceReasonableness && (
+                <div className="sm:col-span-2">
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-faint">Price reasonableness</dt>
+                  <dd className="mt-0.5 whitespace-pre-line text-ink">{req.compliance.priceReasonableness}</dd>
+                </div>
+              )}
+            </dl>
+          </Card>
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-2">
@@ -198,7 +352,7 @@ export function RequestDetailPage() {
               </button>
             </>
           )}
-          {req.status === 'submitted' && (
+          {(req.status === 'submitted' || req.status === 'under_review') && (
             <Link to="/approvals" className="btn-outline">
               <Icon name="rotate" className="h-4 w-4" />
               Open approval inbox
@@ -240,9 +394,11 @@ export function RequestDetailPage() {
             )}
             {history.map((h) => (
               <TimelineItem
-                key={h.decidedAt}
+                key={`${h.decidedAt}-${h.stepId ?? ''}`}
                 icon={h.decision === 'approved' ? 'check' : 'x'}
-                label={`${h.decision === 'approved' ? 'Approved' : 'Rejected'} by ${h.decidedByEmail ?? 'approver'}${h.note ? ` — ${h.note}` : ''}`}
+                label={`${h.decision === 'approved' ? 'Approved' : 'Rejected'}${
+                  h.tier ? ` by ${tierLabel(h.tier)}` : ''
+                }${h.decidedByEmail ? ` (${h.decidedByEmail})` : ''}${h.note ? ` — ${h.note}` : ''}`}
                 at={h.decidedAt}
                 tone={h.decision === 'approved' ? 'emerald' : 'rose'}
               />
@@ -259,6 +415,73 @@ export function RequestDetailPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+function ApprovalStepRow({ step }: { step: ApprovalStep }) {
+  const label = step.label ?? tierLabel(step.tier);
+  const meta = STEP_STATUS[step.status];
+  return (
+    <li className="flex items-start gap-3">
+      <span
+        className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${meta.tone}`}
+        aria-hidden
+      >
+        <Icon name={meta.icon} className="h-4 w-4" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold text-ink">
+          Step {step.order}. {label}
+        </p>
+        <p className="text-xs text-muted">
+          <Badge tone={meta.badge}>{step.status.replace('_', ' ')}</Badge>
+          {step.decidedByEmail && <> · {step.decidedByEmail}</>}
+          {step.decidedAt && <> · {new Date(step.decidedAt).toLocaleString()}</>}
+        </p>
+        {step.note && (
+          <p className="mt-1 whitespace-pre-line text-xs italic text-muted">&ldquo;{step.note}&rdquo;</p>
+        )}
+      </div>
+    </li>
+  );
+}
+
+const STEP_STATUS: Record<
+  ApprovalStep['status'],
+  { icon: 'rotate' | 'check' | 'x' | 'pin'; tone: string; badge: 'slate' | 'cyan' | 'emerald' | 'rose' | 'amber' }
+> = {
+  pending: { icon: 'rotate', tone: 'bg-cyan-500/15 text-cyan-800 dark:text-cyan-300', badge: 'cyan' },
+  approved: { icon: 'check', tone: 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-300', badge: 'emerald' },
+  rejected: { icon: 'x', tone: 'bg-rose-500/15 text-rose-800 dark:text-rose-300', badge: 'rose' },
+  skipped: { icon: 'pin', tone: 'bg-slate-500/15 text-slate-800 dark:text-slate-300', badge: 'slate' },
+};
+
+function AttachmentRow({ att }: { att: RequestAttachment }) {
+  const sizeKb = (att.sizeBytes / 1024).toFixed(1);
+  return (
+    <li className="flex items-center justify-between gap-3 rounded-xl border border-line bg-surface p-2">
+      <div className="min-w-0">
+        <p className="truncate text-sm font-semibold text-ink" title={att.filename}>
+          {att.filename}
+        </p>
+        <p className="text-xs text-muted">
+          {sizeKb} KB · {att.mimeType}
+          {att.uploadedByEmail ? ` · ${att.uploadedByEmail}` : ''}
+          · {new Date(att.uploadedAt).toLocaleString()}
+        </p>
+      </div>
+      {att.dataUrl && (
+        <a
+          href={att.dataUrl}
+          download={att.filename}
+          className="btn-ghost btn-sm"
+          aria-label={`Download ${att.filename}`}
+        >
+          <Icon name="download" className="h-4 w-4" />
+          Download
+        </a>
+      )}
+    </li>
   );
 }
 

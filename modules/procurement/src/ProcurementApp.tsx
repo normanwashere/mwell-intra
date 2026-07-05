@@ -5,6 +5,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { ToastProvider } from '@intra/ui';
 import { useSession } from '@intra/auth';
 import { can } from '@intra/rbac';
+import { ProcurementTabs } from './components/ProcurementTabs';
 import { RequestsPage } from './pages/RequestsPage';
 import { CreateRequestPage } from './pages/CreateRequestPage';
 import { RequestDetailPage } from './pages/RequestDetailPage';
@@ -32,6 +33,7 @@ export function ProcurementApp({ basename = '/procurement' }: ProcurementAppProp
   useNormalizeBasenamePath(basename);
   const { userRoles, loading } = useSession();
   const hasAccess = can(userRoles, 'procurement', 'view_dashboard');
+  const canApprove = can(userRoles, 'procurement', 'approve_request');
   if (loading) return null;
 
   if (!hasAccess) {
@@ -63,6 +65,7 @@ export function ProcurementApp({ basename = '/procurement' }: ProcurementAppProp
       future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
     >
       <ToastProvider>
+        <ProcurementTabs canApprove={canApprove} />
         <Routes>
           <Route path="/" element={<RequestsPage />} />
           <Route path="/requests/new" element={<CreateRequestPage />} />

@@ -83,12 +83,6 @@ export default function DashboardPage() {
           icon="lock"
           title="Please sign in"
           message="You'll land right back here with the modules your account can use."
-          action={
-            <Link href="/login" className="btn-primary">
-              <Icon name="lock" className="h-4 w-4" />
-              Sign in to Mwell Intra
-            </Link>
-          }
         />
       </div>
     );
@@ -123,8 +117,19 @@ export default function DashboardPage() {
               : 'Pick a module to get started.'
         }
         icon="grid"
+        action={
+          cards.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {cards.slice(0, 2).map((c) => (
+                <HeroChipButton key={c.href} href={c.href} icon={c.icon}>
+                  {c.label.split(/\s+—\s+/)[0]}
+                </HeroChipButton>
+              ))}
+            </div>
+          ) : undefined
+        }
         accessory={
-          <>
+          <div className="flex flex-wrap items-end gap-6">
             <div>
               <p className="text-xs uppercase tracking-wide text-brand-100/70">
                 Access
@@ -136,13 +141,13 @@ export default function DashboardPage() {
                 </span>
               </p>
             </div>
-            <div className="text-right">
+            <div>
               <p className="text-xs uppercase tracking-wide text-brand-100/70">
                 Scoped roles
               </p>
               <p className="tnum text-2xl font-extrabold">{roleCount}</p>
             </div>
-          </>
+          </div>
         }
       />
 
@@ -179,7 +184,18 @@ export default function DashboardPage() {
           }
         />
       ) : (
-        <div className="stagger grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div
+          className={cx(
+            'stagger grid gap-4',
+            // When a user has 1 card, don't leave it stranded in the top-left of
+            // a 3-column grid — center a single tile with a bounded width.
+            cards.length === 1
+              ? 'mx-auto max-w-md grid-cols-1'
+              : cards.length === 2
+                ? 'sm:grid-cols-2'
+                : 'sm:grid-cols-2 lg:grid-cols-3',
+          )}
+        >
           {cards.map((c) => (
             <Link key={c.href} href={c.href} className="block">
               <Card interactive className="group flex h-full flex-col gap-3">

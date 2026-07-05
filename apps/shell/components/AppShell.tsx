@@ -31,6 +31,23 @@ function toEntry(item: ModuleNav): NavEntry {
   return { href: item.href, label: item.label, icon: item.icon };
 }
 
+/**
+ * Derive a human-friendly heading for the top bar based on the active route.
+ * Prevents the static "Intra | Suite" that appeared on every page.
+ */
+function topBarLabel(pathname: string, entries: readonly NavEntry[]): string {
+  if (pathname === '/') return 'Home';
+  if (pathname.startsWith('/admin/users')) return 'Admin \u00b7 Users & Roles';
+  if (pathname.startsWith('/admin')) return 'Admin';
+  const match = entries.find(
+    (e) => e.href !== '/' && pathname.startsWith(e.href),
+  );
+  if (match) return match.label;
+  if (pathname.startsWith('/login')) return 'Sign in';
+  if (pathname.startsWith('/reset-password')) return 'Reset password';
+  return '';
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const { profile, userRoles, mode, loading } = useSession();
   const pathname = usePathname() ?? '/';
@@ -74,7 +91,14 @@ export function AppShell({ children }: { children: ReactNode }) {
           ))}
         </nav>
         <div className="safe-bottom border-t border-white/10 px-5 py-4">
-          {profile ? (
+          {loading ? (
+            // Hydration-safe placeholder \u2014 same shape on server + first client
+            // render so we never flash the "Sign in" link at signed-in users.
+            <div className="space-y-2" aria-hidden>
+              <div className="h-3.5 w-24 rounded bg-white/10" />
+              <div className="h-3 w-32 rounded bg-white/10" />
+            </div>
+          ) : profile ? (
             <>
               <p className="truncate text-sm font-semibold text-white">
                 {profile.name ?? profile.email}
@@ -102,8 +126,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             <div className="flex items-center gap-2 md:hidden">
               <BrandMark compact />
             </div>
-            <h1 className="hidden font-display text-lg font-bold text-ink md:block">
-              Intra <span className="text-faint">|</span> Suite
+            <h1 className="hidden truncate font-display text-lg font-bold text-ink md:block">
+              {topBarLabel(pathname, entries) || 'Home'}
             </h1>
             <div className="flex items-center gap-1.5">
               <span

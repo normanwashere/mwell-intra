@@ -8,6 +8,7 @@ import { can } from '@intra/rbac';
 import { AccreditationCasesPage } from './pages/AccreditationCasesPage';
 import { CaseDetailPage } from './pages/CaseDetailPage';
 import { InviteVendorPage } from './pages/InviteVendorPage';
+import { LegalTabs } from './components/LegalTabs';
 
 export interface LegalAppProps {
   /** Path prefix the shell mounts this module under (default `/legal`). */
@@ -64,7 +65,14 @@ export function LegalApp({ basename = '/legal' }: LegalAppProps) {
       future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
     >
       <ToastProvider>
-        {isVendor && <VendorChrome profileName={profile?.name ?? profile?.email ?? 'Vendor'} onSignOut={signOut} />}
+        {isVendor ? (
+          <VendorChrome
+            profileName={profile?.name ?? profile?.email ?? 'Vendor'}
+            onSignOut={signOut}
+          />
+        ) : (
+          <LegalTabs canInvite={can(userRoles, 'legal', 'manage_checklist')} />
+        )}
         <Routes>
           <Route path="/" element={<AccreditationCasesPage />} />
           <Route path="/cases/:id" element={<CaseDetailPage />} />

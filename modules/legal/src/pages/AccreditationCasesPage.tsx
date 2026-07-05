@@ -86,7 +86,7 @@ export function AccreditationCasesPage() {
   const basePath = isVendor ? '/vendor' : '/legal';
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 p-4 md:p-6">
+    <div className="space-y-6">
       <ModuleHero
         eyebrow={isVendor ? 'Vendor portal,' : 'Welcome back,'}
         title={isVendor ? profile?.name ?? 'Your organization' : firstName}

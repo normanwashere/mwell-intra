@@ -27,16 +27,6 @@ import {
 } from '../localStore';
 import { DocumentUploader } from '../components/DocumentUploader';
 
-const STATUS_TONE: Record<string, 'slate' | 'cyan' | 'amber' | 'emerald' | 'rose'> = {
-  draft: 'slate',
-  submitted: 'cyan',
-  under_review: 'amber',
-  approved: 'emerald',
-  rejected: 'rose',
-  expired: 'rose',
-  renewal_due: 'amber',
-};
-
 const CHECKLIST_TONE: Record<ChecklistDecision, 'slate' | 'emerald' | 'rose' | 'amber'> = {
   pending: 'amber',
   approved: 'emerald',
@@ -125,7 +115,7 @@ export function CaseDetailPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 p-4 md:p-6">
+    <div className="space-y-6">
       <ModuleHero
         eyebrow="Accreditation case"
         title={kase.vendorName}
@@ -141,37 +131,57 @@ export function CaseDetailPage() {
           </HeroChipButton>
         }
         accessory={
-          <>
+          <div className="flex flex-wrap items-end gap-6">
             <div>
               <p className="text-xs uppercase tracking-wide text-brand-100/70">Status</p>
-              <p className="mt-1"><Badge tone={STATUS_TONE[effectiveStatus] ?? 'slate'}>{effectiveStatus}</Badge></p>
+              <p className="mt-1">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-0.5 text-xs font-semibold text-white">
+                  <span
+                    aria-hidden
+                    className={`inline-block h-1.5 w-1.5 rounded-full ${
+                      effectiveStatus === 'approved'
+                        ? 'bg-emerald-300'
+                        : effectiveStatus === 'rejected' || effectiveStatus === 'expired'
+                          ? 'bg-rose-300'
+                          : effectiveStatus === 'renewal_due' || effectiveStatus === 'under_review'
+                            ? 'bg-amber-300'
+                            : effectiveStatus === 'submitted'
+                              ? 'bg-cyan-300'
+                              : 'bg-slate-300'
+                    }`}
+                  />
+                  {effectiveStatus}
+                </span>
+              </p>
             </div>
-            <div className="text-right">
+            <div>
               <p className="text-xs uppercase tracking-wide text-brand-100/70">Checklist</p>
               <p className="tnum text-2xl font-extrabold">
                 {requiredApproved}/{requiredItems.length}
                 <span className="ml-1 text-sm font-medium text-brand-100/70">approved</span>
               </p>
             </div>
-          </>
+          </div>
         }
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <MetaTile label="Vendor" value={kase.vendorName} />
-        <MetaTile
-          label="Opened"
-          value={new Date(kase.openedAt).toLocaleDateString()}
-        />
-        <MetaTile
-          label="Submitted"
-          value={kase.submittedAt ? new Date(kase.submittedAt).toLocaleDateString() : '—'}
-        />
-        <MetaTile
-          label="Expires"
-          value={kase.expiresAt ? new Date(kase.expiresAt).toLocaleDateString() : '—'}
-        />
-      </div>
+      <Card>
+        <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+          <MetaItem label="Vendor" value={kase.vendorName} />
+          <MetaItem
+            label="Opened"
+            value={new Date(kase.openedAt).toLocaleDateString()}
+          />
+          <MetaItem
+            label="Submitted"
+            value={kase.submittedAt ? new Date(kase.submittedAt).toLocaleDateString() : '—'}
+          />
+          <MetaItem
+            label="Expires"
+            value={kase.expiresAt ? new Date(kase.expiresAt).toLocaleDateString() : '—'}
+          />
+        </dl>
+      </Card>
 
       {kase.status === 'draft' && isVendor && (
         <Card className="border-cyan-500/30 bg-cyan-500/5">
@@ -348,37 +358,54 @@ export function CaseDetailPage() {
           {timeline.length === 0 ? (
             <p className="text-sm text-muted">No activity recorded yet.</p>
           ) : (
-            <ol className="space-y-3">
-              {timeline.map((entry) => (
-                <li key={entry.id} className="flex items-start gap-3">
-                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-inset text-muted">
-                    <Icon
-                      name={
-                        entry.action === 'approved'
-                          ? 'check'
-                          : entry.action === 'rejected'
-                            ? 'x'
-                            : entry.action === 'doc_uploaded'
-                              ? 'plus'
-                              : entry.action === 'submitted'
-                                ? 'rotate'
-                                : 'clipboard'
-                      }
-                      className="h-4 w-4"
-                    />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm text-ink">
-                      <span className="font-semibold">{entry.action.replace('_', ' ')}</span>
-                      {entry.detail ? ` — ${entry.detail}` : ''}
-                    </p>
-                    <p className="text-xs text-faint">
-                      {new Date(entry.at).toLocaleString()}
-                      {entry.actorEmail ? ` · ${entry.actorEmail}` : ''}
-                    </p>
-                  </div>
-                </li>
-              ))}
+            <ol className="space-y-2">
+              {timeline.map((entry, i) => {
+                const latest = i === 0;
+                const tone =
+                  entry.action === 'approved'
+                    ? 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-300'
+                    : entry.action === 'rejected'
+                      ? 'bg-rose-500/15 text-rose-800 dark:text-rose-300'
+                      : entry.action === 'submitted'
+                        ? 'bg-cyan-500/15 text-cyan-800 dark:text-cyan-300'
+                        : entry.action === 'doc_uploaded'
+                          ? 'bg-brand-500/15 text-brand-700 dark:text-brand-300'
+                          : 'bg-inset text-muted';
+                return (
+                  <li
+                    key={entry.id}
+                    className={`flex items-start gap-3 rounded-lg px-1 py-1 transition ${latest ? '' : 'opacity-70'}`}
+                  >
+                    <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${tone}`}>
+                      <Icon
+                        name={
+                          entry.action === 'approved'
+                            ? 'check'
+                            : entry.action === 'rejected'
+                              ? 'x'
+                              : entry.action === 'doc_uploaded'
+                                ? 'plus'
+                                : entry.action === 'submitted'
+                                  ? 'rotate'
+                                  : 'clipboard'
+                        }
+                        className="h-4 w-4"
+                      />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className={`text-sm ${latest ? 'font-semibold text-ink' : 'text-ink/85'}`}>
+                        <span className="font-semibold">{entry.action.replace('_', ' ')}</span>
+                        {entry.detail ? ` \u2014 ${entry.detail}` : ''}
+                      </p>
+                      <p className="text-xs text-faint">
+                        {new Date(entry.at).toLocaleString()}
+                        {entry.actorEmail ? ` \u00b7 ${entry.actorEmail}` : ''}
+                        {latest ? ' \u00b7 now' : ''}
+                      </p>
+                    </div>
+                  </li>
+                );
+              })}
             </ol>
           )}
         </Card>
@@ -531,13 +558,15 @@ export function CaseDetailPage() {
   );
 }
 
-function MetaTile({ label, value }: { label: string; value: string }) {
+function MetaItem({ label, value }: { label: string; value: string }) {
   return (
-    <Card>
-      <p className="text-[0.68rem] font-semibold uppercase tracking-wide text-faint">{label}</p>
-      <p className="mt-1 truncate text-sm font-semibold text-ink" title={value}>
+    <div className="min-w-0">
+      <dt className="text-[0.65rem] font-semibold uppercase tracking-wide text-faint">
+        {label}
+      </dt>
+      <dd className="mt-0.5 truncate text-sm font-semibold text-ink" title={value}>
         {value}
-      </p>
-    </Card>
+      </dd>
+    </div>
   );
 }

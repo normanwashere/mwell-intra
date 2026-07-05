@@ -91,7 +91,7 @@ export function RequestsPage() {
   }, [rows]);
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 p-4 md:p-6">
+    <div className="space-y-6">
       <ModuleHero
         eyebrow="Welcome back,"
         title={firstName}
@@ -138,21 +138,6 @@ export function RequestsPage() {
         <SectionTitle
           title="Purchase requests"
           subtitle="Every draft you save appears here (persisted locally in this preview)."
-          action={
-            <div className="flex flex-wrap gap-2">
-              <Link to="/approvals" className="btn-outline">
-                Approval inbox
-              </Link>
-              <Link to="/purchase-orders" className="btn-outline">
-                Purchase orders
-              </Link>
-              <Guard module="procurement" cap="create_request">
-                <Link to="/requests/new" className="btn-primary">
-                  New request
-                </Link>
-              </Guard>
-            </div>
-          }
         />
 
         {loading ? (

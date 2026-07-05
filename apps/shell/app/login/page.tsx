@@ -136,33 +136,49 @@ export default function LoginPage() {
 
       {mode === 'memory' && memoryProfiles.length > 0 && (
         <Card>
-          <p className="mb-2 text-[0.68rem] font-semibold uppercase tracking-wide text-faint">
-            Demo profiles
-          </p>
-          <ul className="grid gap-1.5">
-            {memoryProfiles.map((p) => (
-              <li key={p.id}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEmail(p.email);
-                    setPassword('demo');
-                  }}
-                  className="flex w-full items-center justify-between gap-3 rounded-xl bg-inset px-3 py-2.5 text-left transition hover:bg-line"
-                >
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-semibold text-ink">
-                      {p.name ?? p.email}
+          <details className="group">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="text-[0.68rem] font-semibold uppercase tracking-wide text-faint">
+                  Demo profiles
+                </span>
+                <span className="chip bg-amber-500/15 text-amber-800 dark:text-amber-300">
+                  {memoryProfiles.length}
+                </span>
+              </span>
+              <Icon
+                name="chevron"
+                className="h-4 w-4 shrink-0 text-faint transition group-open:rotate-180"
+              />
+            </summary>
+            <p className="mt-2 text-xs text-muted">
+              Tap a tile to prefill the form. Passwords are ignored in demo mode.
+            </p>
+            <ul className="mt-3 grid gap-1.5">
+              {memoryProfiles.map((p) => (
+                <li key={p.id}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEmail(p.email);
+                      setPassword('demo');
+                    }}
+                    className="flex w-full items-center justify-between gap-3 rounded-xl bg-inset px-3 py-2.5 text-left transition hover:bg-line"
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-semibold text-ink">
+                        {p.name ?? p.email}
+                      </span>
+                      <span className="block truncate text-xs text-muted">
+                        {p.title ?? p.email}
+                      </span>
                     </span>
-                    <span className="block truncate text-xs text-muted">
-                      {p.title ?? p.email}
-                    </span>
-                  </span>
-                  <Icon name="arrowRight" className="h-4 w-4 shrink-0 text-faint" />
-                </button>
-              </li>
-            ))}
-          </ul>
+                    <Icon name="arrowRight" className="h-4 w-4 shrink-0 text-faint" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </details>
         </Card>
       )}
 

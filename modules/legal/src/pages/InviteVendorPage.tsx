@@ -65,7 +65,7 @@ export function InviteVendorPage() {
 
   return (
     <Guard module="legal" cap="manage_checklist">
-      <div className="mx-auto max-w-2xl space-y-6 p-4 md:p-6">
+      <div className="mx-auto max-w-2xl space-y-6">
         <ModuleHero
           eyebrow="Invite vendor"
           title="Onboard a new vendor"

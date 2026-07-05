@@ -6,16 +6,35 @@
 // clickable end-to-end. Keys are namespaced under `intra.procurement.v2.*`
 // (bumped from v1 to accommodate line items) so the switch to real RPCs can
 // migrate cleanly.
+//
+// Step 3b adds policy-aligned multi-tier approvals:
+//   • `submit()` builds the approval ladder from category + amount + sourcing.
+//   • `decide()` advances one tier at a time. Approval on the last tier flips
+//     the request to `approved`; a rejection at any tier terminates.
+//
+// TODO(procurement live): mirror the ladder + attachment persistence in
+// procurement.submit_request / procurement.decide_request RPCs when they land.
 
 import { useCallback, useEffect, useState } from 'react';
 import type {
   ApprovalDecision,
+  ApprovalStep,
+  ApproverTier,
   ProcurementRequest,
   ProcurementRequestLine,
   ProcurementVendor,
   PurchaseOrder,
   PurchaseOrderLine,
+  RequestAttachment,
+  RequestCategory,
+  SourcingMethod,
 } from './types';
+import {
+  applyStepDecision,
+  buildApprovalSteps,
+  nextPendingStep,
+  suggestSourcingMethod,
+} from './policy';
 
 // ---------------------------------------------------------------------------
 // Namespaced storage keys
@@ -145,12 +164,21 @@ export interface NewRequestInput {
   description?: string;
   department?: string;
   costCenter?: string;
+  projectCode?: string;
+  budgetCode?: string;
   neededBy?: string;
   vendorId?: string;
   vendorName?: string;
   requesterName?: string;
   requesterEmail?: string;
   lines: Array<Omit<ProcurementRequestLine, 'id'>>;
+  // Policy-aligned optional fields
+  category?: RequestCategory;
+  sourcingMethod?: SourcingMethod;
+  sourcingOverride?: boolean;
+  justification?: ProcurementRequest['justification'];
+  attachments?: Array<Omit<RequestAttachment, 'id' | 'uploadedAt'>>;
+  compliance?: ProcurementRequest['compliance'];
 }
 
 function totalOf(lines: ProcurementRequestLine[] | PurchaseOrderLine[]): number {
@@ -159,6 +187,14 @@ function totalOf(lines: ProcurementRequestLine[] | PurchaseOrderLine[]): number 
     const qty = typeof l.quantity === 'number' ? l.quantity : 0;
     return sum + price * qty;
   }, 0);
+}
+
+export interface DecideActor {
+  email?: string;
+  note?: string;
+  /** Which tier the actor is deciding on behalf of. When omitted we fall
+   *  back to the next-pending step's tier (single-tier demo fallback). */
+  tier?: ApproverTier;
 }
 
 export interface ProcurementRequestsAPI {
@@ -171,7 +207,7 @@ export interface ProcurementRequestsAPI {
   decide: (
     id: string,
     decision: 'approved' | 'rejected',
-    actor: { email?: string; note?: string },
+    actor: DecideActor,
   ) => ProcurementRequest | null;
   getById: (id: string) => ProcurementRequest | undefined;
 }
@@ -185,6 +221,18 @@ export function useProcurementRequests(): ProcurementRequestsAPI {
         ...l,
         id: newId('rl'),
       }));
+      const estimatedAmount = totalOf(lines);
+      // Auto-suggest a sourcing method if the caller didn't provide one so
+      // even legacy callers (no category picker yet) get policy alignment.
+      const suggested = suggestSourcingMethod({
+        category: input.category,
+        amount: estimatedAmount,
+      });
+      const attachments: RequestAttachment[] | undefined = input.attachments?.map((a) => ({
+        ...a,
+        id: newId('att'),
+        uploadedAt: nowIso(),
+      }));
       const next: ProcurementRequest = {
         id: newId('req'),
         createdAt: nowIso(),
@@ -193,13 +241,23 @@ export function useProcurementRequests(): ProcurementRequestsAPI {
         description: input.description,
         department: input.department,
         costCenter: input.costCenter,
+        projectCode: input.projectCode,
+        budgetCode: input.budgetCode,
         neededBy: input.neededBy,
         vendorId: input.vendorId,
         vendorName: input.vendorName,
         requesterName: input.requesterName,
         requesterEmail: input.requesterEmail,
         lines,
-        estimatedAmount: totalOf(lines),
+        estimatedAmount,
+        category: input.category,
+        sourcingMethod: input.sourcingMethod ?? suggested,
+        sourcingOverride:
+          input.sourcingOverride ??
+          (input.sourcingMethod !== undefined && input.sourcingMethod !== suggested),
+        justification: input.justification,
+        attachments,
+        compliance: input.compliance,
       };
       set([next, ...safeRead<ProcurementRequest>(REQ_KEY)]);
       return next;
@@ -223,11 +281,31 @@ export function useProcurementRequests(): ProcurementRequestsAPI {
   );
 
   const submit = useCallback(
-    (id: string) =>
-      update(id, {
+    (id: string) => {
+      const current = safeRead<ProcurementRequest>(REQ_KEY);
+      const idx = current.findIndex((r) => r.id === id);
+      if (idx < 0) return null;
+      const req = current[idx]!;
+      // Build ladder from the latest category + amount + sourcing method.
+      const steps = buildApprovalSteps(
+        {
+          category: req.category,
+          amount: req.estimatedAmount,
+          sourcingMethod:
+            req.sourcingMethod ??
+            suggestSourcingMethod({
+              category: req.category,
+              amount: req.estimatedAmount,
+            }),
+        },
+        () => newId('step'),
+      );
+      return update(id, {
         status: 'submitted',
         submittedAt: nowIso(),
-      }),
+        approvalSteps: steps,
+      });
+    },
     [update],
   );
 
@@ -237,22 +315,69 @@ export function useProcurementRequests(): ProcurementRequestsAPI {
   );
 
   const decide = useCallback(
-    (id: string, decision: 'approved' | 'rejected', actor: { email?: string; note?: string }) => {
+    (
+      id: string,
+      decision: 'approved' | 'rejected',
+      actor: DecideActor,
+    ) => {
+      const current = safeRead<ProcurementRequest>(REQ_KEY);
+      const idx = current.findIndex((r) => r.id === id);
+      if (idx < 0) return null;
+      const req = current[idx]!;
+      const steps: ApprovalStep[] = req.approvalSteps ?? [];
+
+      // Fallback: legacy rows submitted before the ladder existed still need
+      // to be actionable. Build a single-tier ladder pinned to the actor.
+      const workingSteps =
+        steps.length > 0
+          ? steps
+          : [
+              {
+                id: newId('step'),
+                order: 1,
+                tier: (actor.tier ?? 'final_approver') as ApproverTier,
+                status: 'pending' as const,
+                label: 'Approval',
+              },
+            ];
+      const targetTier = actor.tier ?? nextPendingStep(workingSteps)?.tier;
+      if (!targetTier) return null;
+
+      const decidedAt = nowIso();
+      const result = applyStepDecision(workingSteps, targetTier, decision, {
+        email: actor.email,
+        note: actor.note,
+        at: decidedAt,
+      });
+      if (!result) return null;
+
+      const nextStatus: ProcurementRequest['status'] = result.terminal
+        ? result.outcome === 'approved'
+          ? 'approved'
+          : 'rejected'
+        : 'under_review';
+
       const patch: Partial<ProcurementRequest> = {
-        status: decision === 'approved' ? 'approved' : 'rejected',
-        decidedAt: nowIso(),
-        decisionNote: actor.note,
-        decidedByEmail: actor.email,
+        status: nextStatus,
+        approvalSteps: result.steps,
+        decidedAt: result.terminal ? decidedAt : undefined,
+        decisionNote: result.terminal ? actor.note : undefined,
+        decidedByEmail: result.terminal ? actor.email : undefined,
       };
       const row = update(id, patch);
-      if (row) recordApproval({
-        entityType: 'request',
-        entityId: id,
-        decision,
-        note: actor.note,
-        decidedAt: patch.decidedAt!,
-        decidedByEmail: actor.email,
-      });
+      if (row) {
+        const step = result.steps.find((s) => s.decidedAt === decidedAt);
+        recordApproval({
+          entityType: 'request',
+          entityId: id,
+          decision,
+          note: actor.note,
+          decidedAt,
+          decidedByEmail: actor.email,
+          tier: targetTier,
+          stepId: step?.id,
+        });
+      }
       return row;
     },
     [update],

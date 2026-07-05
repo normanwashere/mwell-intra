@@ -69,7 +69,7 @@ export function PODetailPage() {
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-4xl space-y-4 p-4 md:p-6">
+      <div className="mx-auto max-w-4xl space-y-4">
         <div className="h-40 animate-pulse rounded-3xl bg-inset" />
         <div className="h-32 animate-pulse rounded-2xl bg-inset" />
       </div>
@@ -106,7 +106,7 @@ export function PODetailPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 p-4 md:p-6">
+    <div className="mx-auto max-w-4xl space-y-6">
       <ModuleHero
         eyebrow={`Purchase order · ${po.poNumber}`}
         title={po.vendorName}
