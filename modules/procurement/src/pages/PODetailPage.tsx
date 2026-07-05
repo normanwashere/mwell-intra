@@ -8,17 +8,33 @@ import {
   DataTable,
   HeroChipButton,
   Icon,
+  InfoTip,
   ModuleHero,
+  QuantityStepper,
   SectionTitle,
   Sheet,
   SignaturePad,
+  money,
   useToast,
   type Column,
   type SignaturePayload,
 } from '@intra/ui';
-import { Guard, useSession } from '@intra/auth';
+import { Guard, useCan, useSession } from '@intra/auth';
 import type { PurchaseOrder, PurchaseOrderLine, PurchaseOrderStatus } from '../types';
-import { isAccredited, useProcurementVendors, usePurchaseOrders } from '../localStore';
+import {
+  isAccredited,
+  useProcurementRequests,
+  useProcurementVendors,
+  usePurchaseOrders,
+} from '../localStore';
+import { outstandingOf } from '../receiving';
+import {
+  accreditationLabel,
+  formatDate,
+  formatDateTime,
+  poStatusLabel,
+} from '../labels';
+import { makeTypedSignature } from '../signature';
 
 const PO_TONE: Record<PurchaseOrderStatus, 'slate' | 'cyan' | 'amber' | 'emerald' | 'rose'> = {
   draft: 'slate',
@@ -35,45 +51,52 @@ const lineColumns: Column<PurchaseOrderLine>[] = [
   { key: 'received', header: 'Received', render: (r) => `${r.receivedQuantity} / ${r.quantity}` },
   {
     key: 'unitPrice',
-    header: 'Unit ₱',
-    render: (r) =>
-      r.unitPrice != null
-        ? r.unitPrice.toLocaleString(undefined, {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          })
-        : '—',
+    header: 'Unit price',
+    render: (r) => (r.unitPrice != null ? money(r.unitPrice) : '—'),
   },
   {
     key: 'lineTotal',
-    header: 'Line ₱',
-    render: (r) =>
-      r.unitPrice != null
-        ? (r.unitPrice * r.quantity).toLocaleString(undefined, {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          })
-        : '—',
+    header: 'Line total',
+    render: (r) => (r.unitPrice != null ? money(r.unitPrice * r.quantity) : '—'),
   },
 ];
 
 export function PODetailPage() {
   const { id = '' } = useParams();
   const { rows, approve, issue, cancel, receive, loading } = usePurchaseOrders();
+  const { rows: requests } = useProcurementRequests();
   const vendors = useProcurementVendors();
   const { profile } = useSession();
   const { success, error } = useToast();
+  const canApproveAward = useCan('procurement', 'approve_award');
 
   const po: PurchaseOrder | undefined = useMemo(() => rows.find((r) => r.id === id), [rows, id]);
   const vendor = useMemo(
     () => (po ? vendors.find((v) => v.id === po.vendorId) : undefined),
     [po, vendors],
   );
+  const sourceRequest = useMemo(
+    () => (po?.requestId ? requests.find((r) => r.id === po.requestId) : undefined),
+    [po, requests],
+  );
 
   // Signature-capture sheet state for the award approval flow.
   const [signOpen, setSignOpen] = useState(false);
   const [signature, setSignature] = useState<SignaturePayload | null>(null);
   const [approvalNote, setApprovalNote] = useState('');
+
+  // Receive sheet state (PR-24: confirm + partial quantities).
+  const [receiveOpen, setReceiveOpen] = useState(false);
+  const [receiveQty, setReceiveQty] = useState<Record<string, number>>({});
+  const [receiveNote, setReceiveNote] = useState('');
+
+  // PR-15 parity with the approval inbox: a prefilled signer name arms the
+  // confirm button; the pad can still replace the seeded typed signature.
+  const seededSignature = useMemo(
+    () => (signOpen ? makeTypedSignature(profile?.name) : null),
+    [signOpen, profile?.name],
+  );
+  const effectiveSignature = signature ?? seededSignature;
 
   if (loading) {
     return (
@@ -87,6 +110,7 @@ export function PODetailPage() {
 
   const accreditationOk = vendor ? isAccredited(vendor) : false;
   const fullyReceived = po.lines.every((l) => l.receivedQuantity >= l.quantity);
+  const receipts = po.receipts ?? [];
 
   function openApprovalSheet() {
     if (!accreditationOk) {
@@ -99,11 +123,13 @@ export function PODetailPage() {
   }
 
   function confirmApproval() {
-    if (!po || !signature) return;
+    if (!po) return;
+    const sig = signature ?? makeTypedSignature(profile?.name);
+    if (!sig) return;
     const next = approve(po.id, {
       email: profile?.email,
       note: approvalNote || undefined,
-      signature,
+      signature: sig,
     });
     if (next) {
       success(`PO ${next.poNumber} approved`);
@@ -124,56 +150,129 @@ export function PODetailPage() {
     const next = cancel(po.id);
     if (next) success(`PO ${next.poNumber} cancelled`);
   }
-  function receiveLine(lineId: string, qty: number) {
+
+  function openReceiveSheet() {
     if (!po) return;
-    const next = receive(po.id, lineId, qty);
-    if (next) success(`Recorded ${qty} received`);
+    // Default each line to its full outstanding quantity — one confirm
+    // records a full receipt, but every line can be dialed down for partials.
+    const defaults: Record<string, number> = {};
+    for (const l of po.lines) defaults[l.id] = outstandingOf(l);
+    setReceiveQty(defaults);
+    setReceiveNote('');
+    setReceiveOpen(true);
   }
+
+  const receiveTotals = (() => {
+    const outstanding = po.lines.reduce((s, l) => s + outstandingOf(l), 0);
+    let receiving = 0;
+    let linesTouched = 0;
+    for (const l of po.lines) {
+      const q = Math.min(receiveQty[l.id] ?? 0, outstandingOf(l));
+      if (q > 0) {
+        receiving += q;
+        linesTouched += 1;
+      }
+    }
+    return { outstanding, receiving, linesTouched, closes: receiving >= outstanding && outstanding > 0 };
+  })();
+
+  function confirmReceive() {
+    if (!po) return;
+    const next = receive(po.id, {
+      lines: po.lines.map((l) => ({ lineId: l.id, quantity: receiveQty[l.id] ?? 0 })),
+      actorEmail: profile?.email,
+      note: receiveNote || undefined,
+    });
+    if (next) {
+      const closed = next.status === 'closed';
+      success(
+        closed
+          ? `Receipt recorded — PO ${next.poNumber} fully received and closed.`
+          : `Partial receipt recorded — ${receiveTotals.receiving} unit${receiveTotals.receiving === 1 ? '' : 's'} received.`,
+      );
+      setReceiveOpen(false);
+    } else {
+      error('Nothing to receive — set a quantity on at least one line.');
+    }
+  }
+
+  // PR-27: hero primary action = the PO's current lifecycle action.
+  const heroAction =
+    po.status === 'draft' && canApproveAward ? (
+      <HeroChipButton icon="signature" onClick={openApprovalSheet}>
+        Sign & approve award
+      </HeroChipButton>
+    ) : po.status === 'approved' ? (
+      <HeroChipButton icon="rotate" onClick={handleIssue}>
+        Issue to vendor
+      </HeroChipButton>
+    ) : po.status === 'issued' && !fullyReceived ? (
+      <HeroChipButton icon="box" onClick={openReceiveSheet}>
+        Receive items
+      </HeroChipButton>
+    ) : (
+      <HeroChipButton href="/procurement/purchase-orders" icon="arrowRight">
+        Back to POs
+      </HeroChipButton>
+    );
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <ModuleHero
         eyebrow={`Purchase order · ${po.poNumber}`}
         title={po.vendorName}
-        description={po.notes ?? 'No notes on this PO.'}
+        description={po.notes || undefined}
         icon="cart"
-        action={
-          <HeroChipButton href="/purchase-orders" icon="arrowRight">
-            Back to POs
-          </HeroChipButton>
-        }
+        action={heroAction}
         accessory={
           <>
             <div>
               <p className="text-xs uppercase tracking-wide text-brand-100/70">Status</p>
-              <p className="mt-1"><Badge tone={PO_TONE[po.status]}>{po.status.replace('_', ' ')}</Badge></p>
+              <p className="mt-1"><Badge tone={PO_TONE[po.status]}>{poStatusLabel(po.status)}</Badge></p>
             </div>
             <div className="text-right">
               <p className="text-xs uppercase tracking-wide text-brand-100/70">Total</p>
-              <p className="tnum text-2xl font-extrabold">
-                ₱{po.total.toLocaleString(undefined, {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
-              </p>
+              <p className="tnum text-2xl font-extrabold">{money(po.total)}</p>
             </div>
           </>
         }
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <MetaTile label="Vendor" value={po.vendorName} />
-        <MetaTile
-          label="Accreditation"
-          value={
-            vendor
-              ? `${vendor.accreditationStatus}${vendor.accreditationExpiresAt ? ` · exp ${new Date(vendor.accreditationExpiresAt).toLocaleDateString()}` : ''}`
-              : '—'
+      {/* PR-20 treatment: one muted meta line instead of a tile grid. */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
+        {vendor && (
+          <Badge tone={accreditationOk ? 'emerald' : 'rose'}>
+            {accreditationLabel(vendor.accreditationStatus)}
+            {vendor.accreditationExpiresAt
+              ? ` · expires ${formatDate(vendor.accreditationExpiresAt)}`
+              : ''}
+          </Badge>
+        )}
+        <span>
+          Authored by{' '}
+          <span className="font-medium text-ink">{po.actorEmail ?? '—'}</span>
+          {sourceRequest && (
+            <>
+              {' '}· from a request by{' '}
+              <span className="font-medium text-ink">
+                {sourceRequest.requesterName ?? sourceRequest.requesterEmail ?? '—'}
+              </span>
+            </>
+          )}
+        </span>
+        <InfoTip
+          label="Full PO record"
+          content={
+            <span className="block space-y-0.5">
+              <span className="block">Created {formatDateTime(po.createdAt)}</span>
+              <span className="block">Updated {formatDateTime(po.updatedAt)}</span>
+              {po.expectedDate && (
+                <span className="block">Expected {formatDate(po.expectedDate)}</span>
+              )}
+              <span className="block">Origin: {po.origin === 'procurement' ? 'Procurement' : 'Warehouse'}</span>
+            </span>
           }
-          badgeTone={accreditationOk ? 'emerald' : 'rose'}
         />
-        <MetaTile label="Origin" value={po.origin} />
-        <MetaTile label="Requested by" value={po.actorEmail ?? '—'} />
       </div>
 
       {!accreditationOk && (po.status === 'draft' || po.status === 'pending_approval') && (
@@ -186,7 +285,7 @@ export function PODetailPage() {
               <p className="font-semibold text-ink">Award blocked — vendor accreditation isn&apos;t current.</p>
               <p className="mt-0.5 text-sm text-muted">
                 Ask Legal to close the accreditation case (status must be
-                <span className="mx-1 font-semibold">approved</span>
+                <span className="mx-1 font-semibold">Accredited</span>
                 and not expired) before this PO can be approved.
               </p>
             </div>
@@ -199,43 +298,79 @@ export function PODetailPage() {
         <DataTable rows={po.lines} columns={lineColumns} keyOf={(r) => r.id} />
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-2">
-          {po.status === 'draft' && (
-            <Guard module="procurement" cap="approve_award" fallback={null}>
-              <button
-                type="button"
-                onClick={openApprovalSheet}
-                disabled={!accreditationOk}
-                className="btn-primary"
-              >
-                <Icon name="signature" className="h-4 w-4" />
-                Sign & approve award
-              </button>
-            </Guard>
-          )}
-          {po.status === 'approved' && (
-            <button type="button" onClick={handleIssue} className="btn-primary">
-              <Icon name="rotate" className="h-4 w-4" />
-              Issue to vendor
+      <div className="flex flex-wrap items-center gap-2">
+        {po.status === 'draft' && (
+          <Guard module="procurement" cap="approve_award" fallback={null}>
+            <button
+              type="button"
+              onClick={openApprovalSheet}
+              disabled={!accreditationOk}
+              className="btn-primary"
+            >
+              <Icon name="signature" className="h-4 w-4" />
+              Sign & approve award
             </button>
-          )}
-          {po.status === 'issued' && !fullyReceived && (
-            <ReceiveActions po={po} onReceive={receiveLine} />
-          )}
-          {(po.status === 'draft' || po.status === 'approved' || po.status === 'issued') && (
-            <button type="button" onClick={handleCancel} className="btn-outline">
-              Cancel PO
-            </button>
-          )}
-          {po.requestId && (
-            <Link to={`/requests/${po.requestId}`} className="btn-ghost">
-              <Icon name="clipboard" className="h-4 w-4" />
-              Source request
-            </Link>
-          )}
-        </div>
+          </Guard>
+        )}
+        {po.status === 'approved' && (
+          <button type="button" onClick={handleIssue} className="btn-primary">
+            <Icon name="rotate" className="h-4 w-4" />
+            Issue to vendor
+          </button>
+        )}
+        {po.status === 'issued' && !fullyReceived && (
+          <button type="button" onClick={openReceiveSheet} className="btn-primary">
+            <Icon name="box" className="h-4 w-4" />
+            Receive items
+          </button>
+        )}
+        {(po.status === 'draft' || po.status === 'approved' || po.status === 'issued') && (
+          <button type="button" onClick={handleCancel} className="btn-outline">
+            Cancel PO
+          </button>
+        )}
+        {po.requestId && (
+          <Link to={`/requests/${po.requestId}`} className="btn-ghost">
+            <Icon name="clipboard" className="h-4 w-4" />
+            Source request
+          </Link>
+        )}
       </div>
+
+      {receipts.length > 0 && (
+        <div>
+          <SectionTitle
+            title="Receipts"
+            subtitle={`${receipts.length} receipt${receipts.length === 1 ? '' : 's'} recorded against this PO.`}
+          />
+          <Card>
+            <ol className="space-y-3">
+              {[...receipts].reverse().map((rcpt) => (
+                <li key={rcpt.id} className="flex items-start gap-3">
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-emerald-500/15 text-emerald-800 dark:text-emerald-300">
+                    <Icon name="box" className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm text-ink">
+                      {rcpt.lines
+                        .map((l) => `${l.quantity} × ${l.description}`)
+                        .join(', ')}
+                    </p>
+                    <p className="text-xs text-faint">
+                      {formatDateTime(rcpt.receivedAt)}
+                      {rcpt.receivedByEmail ? ` · ${rcpt.receivedByEmail}` : ''}
+                      {rcpt.note ? ` · “${rcpt.note}”` : ''}
+                    </p>
+                  </div>
+                  <Badge tone={rcpt.closedPo ? 'emerald' : 'cyan'}>
+                    {rcpt.closedPo ? 'Closed PO' : 'Partial'}
+                  </Badge>
+                </li>
+              ))}
+            </ol>
+          </Card>
+        </div>
+      )}
 
       {po.approvalSignature && (
         <div>
@@ -251,12 +386,46 @@ export function PODetailPage() {
         </div>
       )}
 
+      {/* ---------------- Award approval sheet ---------------- */}
       <Sheet
         open={signOpen}
         onOpenChange={setSignOpen}
-        title={`Sign & approve — PO ${po.poNumber}`}
+        title="Sign & approve award"
+        description={`PO ${po.poNumber} — ${po.vendorName}`}
+        footer={
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setSignOpen(false)}
+              className="btn-ghost"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={confirmApproval}
+              disabled={!effectiveSignature}
+              className="btn-primary disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Icon name="signature" className="h-4 w-4" />
+              Sign & approve
+            </button>
+          </div>
+        }
       >
         <div className="space-y-4 p-1">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-surface p-3">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-ink">{po.vendorName}</p>
+              <p className="text-xs text-muted">
+                {po.lines.length} line{po.lines.length === 1 ? '' : 's'}
+                {vendor ? ` · ${accreditationLabel(vendor.accreditationStatus)}` : ''}
+              </p>
+            </div>
+            <p className="tnum shrink-0 font-display text-xl font-extrabold text-ink">
+              {money(po.total)}
+            </p>
+          </div>
           <p className="text-sm text-muted">
             Approving this award authorises PO {po.poNumber} to be issued to{' '}
             <span className="font-semibold text-ink">{po.vendorName}</span>. Your
@@ -286,26 +455,129 @@ export function PODetailPage() {
             <SignaturePad
               defaultSignerName={profile?.name ?? ''}
               onChange={setSignature}
+              consentLabel="Your e-signature is logged on the approval audit trail (RA 8792)."
+            />
+            {!signature && seededSignature && (
+              <p className="rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-xs text-emerald-800 dark:text-emerald-300">
+                <Icon name="check" className="mr-1 inline h-3.5 w-3.5" />
+                Ready to sign as{' '}
+                <span className="font-semibold">{seededSignature.signerName}</span>{' '}
+                (typed signature) — or draw / re-type to replace it.
+              </p>
+            )}
+          </div>
+        </div>
+      </Sheet>
+
+      {/* ---------------- Receive sheet (PR-24) ---------------- */}
+      <Sheet
+        open={receiveOpen}
+        onOpenChange={setReceiveOpen}
+        title="Record a receipt"
+        description={`PO ${po.poNumber} — ${po.vendorName}`}
+        footer={
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-muted">
+              Receiving{' '}
+              <span className="tnum font-semibold text-ink">
+                {receiveTotals.receiving}
+              </span>{' '}
+              of {receiveTotals.outstanding} outstanding unit
+              {receiveTotals.outstanding === 1 ? '' : 's'}
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setReceiveOpen(false)}
+                className="btn-ghost"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmReceive}
+                disabled={receiveTotals.receiving <= 0}
+                className="btn-primary disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Icon name="check" className="h-4 w-4" />
+                Record receipt
+              </button>
+            </div>
+          </div>
+        }
+      >
+        <div className="space-y-4 p-1">
+          <p className="text-sm text-muted">
+            Set how many units arrived per line — partial receipts are fine and
+            can be recorded again later.
+          </p>
+          <ul className="space-y-3">
+            {po.lines.map((l) => {
+              const outstanding = outstandingOf(l);
+              if (outstanding <= 0) {
+                return (
+                  <li
+                    key={l.id}
+                    className="flex items-center justify-between gap-3 rounded-xl border border-line bg-inset/40 p-3 text-sm text-faint"
+                  >
+                    <span className="min-w-0 truncate">{l.description}</span>
+                    <Badge tone="emerald">Fully received</Badge>
+                  </li>
+                );
+              }
+              return (
+                <li key={l.id} className="rounded-xl border border-line bg-surface p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="min-w-0 flex-1 text-sm font-semibold text-ink">
+                      {l.description}
+                    </p>
+                    <p className="text-xs text-muted">
+                      {l.receivedQuantity} / {l.quantity} received · {outstanding}{' '}
+                      outstanding
+                    </p>
+                  </div>
+                  <div className="mt-2 max-w-[12rem]">
+                    <QuantityStepper
+                      aria-label={`Quantity to receive for ${l.description}`}
+                      value={receiveQty[l.id] ?? 0}
+                      min={0}
+                      max={outstanding}
+                      onChange={(v) =>
+                        setReceiveQty((prev) => ({ ...prev, [l.id]: v }))
+                      }
+                    />
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+
+          <div className="space-y-1">
+            <label
+              htmlFor="receive-note"
+              className="text-xs font-semibold uppercase tracking-wide text-faint"
+            >
+              Note (optional)
+            </label>
+            <input
+              id="receive-note"
+              value={receiveNote}
+              onChange={(e) => setReceiveNote(e.target.value)}
+              className="input"
+              placeholder="Delivery reference, condition remarks…"
             />
           </div>
-          <div className="flex justify-end gap-2 pt-1">
-            <button
-              type="button"
-              onClick={() => setSignOpen(false)}
-              className="btn-ghost"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={confirmApproval}
-              disabled={!signature}
-              className="btn-primary disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <Icon name="signature" className="h-4 w-4" />
-              Sign & approve
-            </button>
-          </div>
+
+          {receiveTotals.closes && (
+            <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-300">
+              <Icon name="alert" className="mt-0.5 h-4 w-4 shrink-0" />
+              <p>
+                This receipt completes every line —{' '}
+                <span className="font-semibold">PO {po.poNumber} will close</span>{' '}
+                when you confirm.
+              </p>
+            </div>
+          )}
         </div>
       </Sheet>
     </div>
@@ -328,28 +600,25 @@ function SignatureBlock({
           <p className="text-sm font-semibold text-ink">
             {sig.signerName}
             {approvedByEmail ? (
-              <span className="ml-1 text-xs font-normal text-muted">
+              <span className="ml-1.5 text-xs font-normal text-muted">
                 &lt;{approvedByEmail}&gt;
               </span>
             ) : null}
           </p>
           <p className="text-xs text-muted">
-            Signed{' '}
-            {new Date(sig.signedAt).toLocaleString(undefined, {
-              dateStyle: 'medium',
-              timeStyle: 'short',
-            })}
-            {approvedAt && approvedAt !== sig.signedAt
-              ? ` · Approved ${new Date(approvedAt).toLocaleString(undefined, {
-                  dateStyle: 'medium',
-                  timeStyle: 'short',
-                })}`
-              : ''}
+            Signed {formatDateTime(sig.signedAt)}
             {' · '}
             <span className="uppercase tracking-wide">{sig.method}</span>
-          </p>
-          <p className="line-clamp-2 text-[0.68rem] text-faint" title={sig.userAgent}>
-            {sig.userAgent}
+            {approvedAt && approvedAt !== sig.signedAt
+              ? ` · Approved ${formatDateTime(approvedAt)}`
+              : ''}
+            {/* PR-25: the raw user-agent string stays in the data record —
+                it is never rendered. */}
+            <InfoTip
+              label="Signature evidence"
+              className="ml-0.5 align-middle"
+              content="A browser fingerprint (user agent + timezone offset) was captured at signing time and lives on the audit record — it is intentionally not displayed here."
+            />
           </p>
         </div>
         <div className="shrink-0 rounded-xl border border-line bg-white p-2">
@@ -360,61 +629,6 @@ function SignatureBlock({
           />
         </div>
       </div>
-    </Card>
-  );
-}
-
-function ReceiveActions({
-  po,
-  onReceive,
-}: {
-  po: PurchaseOrder;
-  onReceive: (lineId: string, qty: number) => void;
-}) {
-  return (
-    <details className="rounded-xl border border-line bg-surface p-3">
-      <summary className="cursor-pointer text-sm font-semibold text-ink">
-        Record a receipt (mock)
-      </summary>
-      <ul className="mt-3 space-y-2 text-sm">
-        {po.lines.map((l) => {
-          const outstanding = l.quantity - l.receivedQuantity;
-          if (outstanding <= 0) return null;
-          return (
-            <li key={l.id} className="flex flex-wrap items-center justify-between gap-2">
-              <span className="min-w-0 truncate">{l.description}</span>
-              <span className="text-xs text-muted">outstanding {outstanding}</span>
-              <button
-                type="button"
-                className="btn-outline btn-sm"
-                onClick={() => onReceive(l.id, outstanding)}
-              >
-                Receive {outstanding}
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-    </details>
-  );
-}
-
-function MetaTile({
-  label,
-  value,
-  badgeTone,
-}: {
-  label: string;
-  value: string;
-  badgeTone?: 'emerald' | 'rose' | 'amber' | 'brand' | 'slate' | 'cyan';
-}) {
-  return (
-    <Card>
-      <p className="text-[0.68rem] font-semibold uppercase tracking-wide text-faint">{label}</p>
-      <p className="mt-1 flex items-center gap-2 truncate text-sm font-semibold text-ink" title={value}>
-        {badgeTone && <Badge tone={badgeTone}>{badgeTone === 'emerald' ? 'ok' : 'attention'}</Badge>}
-        <span className="min-w-0 truncate">{value}</span>
-      </p>
     </Card>
   );
 }

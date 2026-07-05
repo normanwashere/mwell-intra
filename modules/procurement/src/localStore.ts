@@ -26,6 +26,7 @@ import type {
   ProcurementVendor,
   PurchaseOrder,
   PurchaseOrderLine,
+  PurchaseOrderReceipt,
   RequestAttachment,
   RequestCategory,
   SourcingMethod,
@@ -36,6 +37,7 @@ import {
   nextPendingStep,
   suggestSourcingMethod,
 } from './policy';
+import { applyReceipt, type ReceiptLineInput } from './receiving';
 
 // ---------------------------------------------------------------------------
 // Namespaced storage keys
@@ -423,6 +425,13 @@ function nextPoNumber(existing: PurchaseOrder[]): string {
   return `${prefix}${next.toString().padStart(4, '0')}`;
 }
 
+export interface ReceiveInput {
+  /** Per-line quantities to accept (clamped to outstanding; ≤0 ignored). */
+  lines: ReceiptLineInput[];
+  actorEmail?: string;
+  note?: string;
+}
+
 export interface PurchaseOrdersAPI {
   rows: PurchaseOrder[];
   loading: boolean;
@@ -433,7 +442,9 @@ export interface PurchaseOrdersAPI {
   ) => PurchaseOrder | null;
   issue: (id: string) => PurchaseOrder | null;
   cancel: (id: string) => PurchaseOrder | null;
-  receive: (id: string, line: string, qty: number) => PurchaseOrder | null;
+  /** Record a (possibly partial) goods receipt. Appends a
+   *  PurchaseOrderReceipt to the PO's `receipts` history (PR-24). */
+  receive: (id: string, input: ReceiveInput) => PurchaseOrder | null;
   getById: (id: string) => PurchaseOrder | undefined;
 }
 
@@ -516,18 +527,26 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
   const cancel = useCallback((id: string) => patch(id, { status: 'cancelled' }), [patch]);
 
   const receive = useCallback(
-    (id: string, lineId: string, qty: number): PurchaseOrder | null => {
+    (id: string, input: ReceiveInput): PurchaseOrder | null => {
       const current = safeRead<PurchaseOrder>(PO_KEY);
       const po = current.find((r) => r.id === id);
       if (!po) return null;
-      const lines = po.lines.map((l) =>
-        l.id === lineId
-          ? { ...l, receivedQuantity: Math.min(l.quantity, l.receivedQuantity + qty) }
-          : l,
-      );
-      const allDone = lines.every((l) => l.receivedQuantity >= l.quantity);
-      const status: PurchaseOrder['status'] = allDone ? 'closed' : 'issued';
-      return patch(id, { lines, status });
+      const result = applyReceipt(po.lines, input.lines);
+      if (!result) return null;
+      const status: PurchaseOrder['status'] = result.closes ? 'closed' : 'issued';
+      const receipt: PurchaseOrderReceipt = {
+        id: newId('rcpt'),
+        receivedAt: nowIso(),
+        receivedByEmail: input.actorEmail,
+        note: input.note?.trim() || undefined,
+        lines: result.accepted,
+        closedPo: result.closes,
+      };
+      return patch(id, {
+        lines: result.lines,
+        status,
+        receipts: [...(po.receipts ?? []), receipt],
+      });
     },
     [patch],
   );

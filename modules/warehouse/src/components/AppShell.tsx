@@ -24,6 +24,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [notifOpen, setNotifOpen] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
   const [conflictsOpen, setConflictsOpen] = useState(false);
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [offline, setOffline] = useState(
     typeof navigator !== 'undefined' && !navigator.onLine,
@@ -57,6 +58,18 @@ export function AppShell({ children }: { children: ReactNode }) {
   const primary = primaryModulesForRole(role);
   const hasMore = modules.length > primary.length;
 
+  // Reset demo data is destructive (wipes + reseeds) — always confirm first
+  // and give explicit feedback before the reload (WH-6).
+  const requestReset = () => {
+    setMoreOpen(false);
+    setResetConfirmOpen(true);
+  };
+  const confirmReset = () => {
+    setResetConfirmOpen(false);
+    toast.success('Demo data reset — reloading fresh seed…');
+    window.setTimeout(() => resetDemo(), 450);
+  };
+
   const handleScan = (code: string) => {
     setScanOpen(false);
     const product = data?.products.find(
@@ -89,7 +102,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           {source === 'memory' && (
             <button
               type="button"
-              onClick={resetDemo}
+              onClick={requestReset}
               className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-brand-100/70 transition hover:text-white"
             >
               <Icon name="rotate" className="h-3.5 w-3.5" /> Reset demo data
@@ -105,9 +118,14 @@ export function AppShell({ children }: { children: ReactNode }) {
             <div className="flex items-center gap-2 md:hidden">
               <Logo className="h-6 w-auto" />
             </div>
-            <h1 className="hidden font-display text-lg font-bold text-ink md:block">
+            {/* Visual brand only — the semantic <h1> belongs to each page's
+                header so documents never carry two level-1 headings (WH-1). */}
+            <p
+              className="hidden font-display text-lg font-bold text-ink md:block"
+              aria-hidden="true"
+            >
               Intra <span className="text-faint">|</span> Warehouse
-            </h1>
+            </p>
             <div className="flex items-center gap-1.5">
               <span
                 className={clsx(
@@ -129,10 +147,13 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <Icon name="scan" />
               </button>
               <ThemeToggle />
+              {/* Branded "Module alerts" (not "Notifications") so it doesn't
+                  contradict the shell's disabled demo bell (SH-7). */}
               <button
                 type="button"
                 onClick={() => setNotifOpen(true)}
-                aria-label={`Notifications (${notifications.length})`}
+                aria-label={`Module alerts (${notifications.length})`}
+                title="Module alerts"
                 className="relative grid h-10 w-10 place-items-center rounded-full text-muted transition hover:bg-inset hover:text-ink"
               >
                 <Icon name="bell" />
@@ -184,21 +205,29 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         )}
 
-        <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-5 pb-[calc(8.5rem+env(safe-area-inset-bottom))] sm:px-6 md:pb-10 xl:max-w-6xl">
+        {/* Clearance matches the shell main (Exec #3): fixed nav height +
+            safe-area + headroom for sticky bars/sheets. */}
+        <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-5 pb-[calc(9rem+env(safe-area-inset-bottom))] sm:px-6 md:pb-10 xl:max-w-6xl">
           <div key={location.pathname} className="animate-fade-in">
             {children}
           </div>
         </main>
 
-        {/* Mobile bottom navigation */}
+        {/* Mobile bottom navigation. Solid background (no translucency-only)
+            + top border so partially covered content clearly sits BENEATH
+            chrome instead of ghosting through it (Exec #3). */}
         <nav
-          className="safe-bottom fixed inset-x-0 bottom-0 z-20 border-t border-line bg-surface/95 backdrop-blur md:hidden"
+          className="safe-bottom fixed inset-x-0 bottom-0 z-20 border-t border-line bg-surface md:hidden"
           aria-label="Primary mobile"
         >
           <ul className="flex">
             {primary.map((m) => (
               <li key={m.id} className="flex-1">
-                <BottomLink to={m.path} icon={m.icon as IconName} label={m.label} />
+                <BottomLink
+                  to={m.path}
+                  icon={m.icon as IconName}
+                  label={m.shortLabel ?? m.label}
+                />
               </li>
             ))}
             {hasMore && (
@@ -238,7 +267,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         side="right"
         footer={
           source === 'memory' ? (
-            <button type="button" className="btn-ghost w-full" onClick={resetDemo}>
+            <button type="button" className="btn-ghost w-full" onClick={requestReset}>
               <Icon name="rotate" className="h-4 w-4" /> Reset demo data
             </button>
           ) : undefined
@@ -328,6 +357,37 @@ export function AppShell({ children }: { children: ReactNode }) {
         )}
       </Sheet>
 
+      {/* Reset demo data — confirm before the destructive wipe (WH-6). */}
+      <Sheet
+        open={resetConfirmOpen}
+        onOpenChange={setResetConfirmOpen}
+        title="Reset demo data?"
+        description="This wipes every local change (receipts, counts, allocations…) and reloads the fresh demo seed. This cannot be undone."
+        footer={
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="btn-ghost flex-1 justify-center"
+              onClick={() => setResetConfirmOpen(false)}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="btn-primary flex-1 justify-center"
+              onClick={confirmReset}
+            >
+              <Icon name="rotate" className="h-4 w-4" /> Reset demo data
+            </button>
+          </div>
+        }
+      >
+        <p className="text-sm text-muted">
+          Use this when you want a clean slate for a walkthrough. Your theme
+          and sign-in are kept.
+        </p>
+      </Sheet>
+
       {/* Sync conflicts */}
       <Sheet
         open={conflictsOpen}
@@ -410,7 +470,7 @@ function BottomLink({ to, icon, label }: { to: string; icon: IconName; label: st
           >
             <Icon name={icon} className="h-5 w-5" />
           </span>
-          <span className="truncate">{label.split(' ')[0]}</span>
+          <span className="truncate">{label}</span>
         </>
       )}
     </NavLink>

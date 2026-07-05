@@ -28,7 +28,9 @@ import {
   useAccreditationCases,
   useChecklist,
   useSignedInstruments,
+  useVendorAliases,
 } from '../localStore';
+import { shouldBlockVendorAccess } from '../vendorAccess';
 
 export function SignInstrumentPage() {
   const { id = '', code = '' } = useParams();
@@ -38,6 +40,7 @@ export function SignInstrumentPage() {
   const { getById, loading: casesLoading } = useAccreditationCases();
   const { forCase: checklistForCase } = useChecklist();
   const { findSigned, sign } = useSignedInstruments();
+  const { rows: aliases } = useVendorAliases();
 
   const kase = getById(id);
   const template = useMemo(() => resolveInstrument(code), [code]);
@@ -66,6 +69,11 @@ export function SignInstrumentPage() {
     );
   }
   if (!kase || !template) return <Navigate to="/" replace />;
+  // Vendor-ownership guard (F1.1): vendors can only open their own case's
+  // instruments — deep links to another vendor's sign page bounce home.
+  if (shouldBlockVendorAccess(profile, kase, aliases)) {
+    return <Navigate to="/" replace />;
+  }
 
   const fields = template.fields ?? [];
   const requiredFieldsOk = fields.every(
@@ -214,7 +222,16 @@ export function SignInstrumentPage() {
                 defaultSignerName={profile?.name ?? ''}
                 onChange={setSignature}
               />
-              <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-line pt-4">
+              {/* Once a signature exists the confirm bar pins to the bottom
+                  of the viewport (§2.4) so it's never below the fold at
+                  390px after signing. */}
+              <div
+                className={`mt-4 flex flex-wrap justify-end gap-2 border-t border-line pt-4 ${
+                  signature
+                    ? 'safe-bottom sticky bottom-0 z-10 -mx-4 rounded-b-2xl bg-surface/95 px-4 pb-3 backdrop-blur sm:-mx-5 sm:px-5'
+                    : ''
+                }`}
+              >
                 <Link to={`/cases/${id}`} className="btn-ghost">
                   Cancel
                 </Link>

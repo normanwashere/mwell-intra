@@ -1,28 +1,52 @@
 'use client';
 
-// Accreditation case workspace (T1.3 / T1.5 / T2).
+// Accreditation case workspace (T1.3 / T1.5 / T2 + UX-REVIEW-VENDOR-LEGAL.md
+// §2.2, F1.1, F2).
 //
-// - Checklist grouped by RequirementGroup with per-group + overall progress.
-// - "Why we need this" inline expand per row; expiring badges via daysUntil.
-// - Instrument rows deep-link to the sign page (vendor) and render the
-//   captured signature once signed.
-// - Vendor: "You still owe N" banner + submit-with-attestation-signature.
-// - Legal: "Waiting on vendor: N" banner, Send reminder, and approve / reject
-//   decisions that REQUIRE an electronic signature (same pattern as
-//   procurement's ApprovalInboxPage).
+// - Vendor-ownership guard: vendors can only render their own case (F1.1).
+// - Sticky progress bar (status + n/m + next action) once the hero scrolls
+//   away (§2.2.1); sits under the shell/vendor chrome (z-10 < header z-20).
+// - Meta tile grid demoted to one muted line + (i) popover (§2.2.4); the hero
+//   eyebrow carries status ("Accreditation case · Under review").
+// - Checklist groups with every required item approved render collapsed as a
+//   ✓ summary row; groups with rejected/open items auto-expand (§2.2.2), and
+//   rows sort rejected-first inside each group (§2.2.5).
+// - Row-as-target: the requirement card itself opens the review sheet
+//   (internal) or upload/sign action (vendor); per-row buttons reduce to
+//   status + chevron (§2.2.3). Keyboard accessible (role=button,
+//   Enter/Space).
+// - Doc version chains: newest doc renders full, older versions collapse
+//   under "N previous versions" (F2.1). Internal reviewers additionally get a
+//   case-level Documents panel (F2.2) and a read-only "Previous cycle
+//   documents" disclosure on renewal cases (F2.3).
+// - Vendors see plain-language status labels everywhere (§3.6).
 
-import { useMemo, useState } from 'react';
-import { Link, Navigate, useParams } from 'react-router-dom';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+  type MouseEvent,
+  type ReactNode,
+  type RefObject,
+} from 'react';
+import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import {
   Badge,
   Card,
+  DataTable,
   HeroChipButton,
   Icon,
+  InfoTip,
   ModuleHero,
   SectionTitle,
   Sheet,
   SignaturePad,
+  relativeTime,
   useToast,
+  type Column,
   type SignaturePayload,
 } from '@intra/ui';
 import { Guard, useCan, useSession } from '@intra/auth';
@@ -34,10 +58,7 @@ import type {
   RequirementChecklistItem,
   SignedInstrument,
 } from '../types';
-import {
-  JURISDICTION_LABEL,
-  RISK_TIER_LABEL,
-} from '../types';
+import { JURISDICTION_LABEL, RISK_TIER_LABEL } from '../types';
 import {
   computeCaseStatus,
   useAccreditationCases,
@@ -45,13 +66,26 @@ import {
   useCaseTimeline,
   useChecklist,
   useSignedInstruments,
+  useVendorAliases,
 } from '../localStore';
 import {
   computeCaseProgress,
+  docVersionChain,
   groupLabel,
   groupOrderIndex,
+  isGroupSolved,
   itemExpiringSoon,
+  sortChecklistRows,
 } from '../caseLogic';
+import {
+  CASE_STATUS_DOT,
+  CASE_STATUS_LABEL,
+  formatDate,
+  formatDateTime,
+  timelineActionLabel,
+  VENDOR_STATUS_LABEL,
+} from '../labels';
+import { shouldBlockVendorAccess } from '../vendorAccess';
 import { daysUntil } from '../requirements/policy';
 import { DocumentUploader } from '../components/DocumentUploader';
 import { SignedRecord } from './SignInstrumentPage';
@@ -61,6 +95,20 @@ const CHECKLIST_TONE: Record<ChecklistDecision, 'slate' | 'emerald' | 'rose' | '
   approved: 'emerald',
   rejected: 'rose',
   na: 'slate',
+};
+
+const CHECKLIST_LABEL: Record<ChecklistDecision, string> = {
+  pending: 'Pending',
+  approved: 'Approved',
+  rejected: 'Rejected',
+  na: 'N/A',
+};
+
+const DOC_STATUS_LABEL: Record<AccreditationDoc['status'], string> = {
+  submitted: 'Submitted',
+  approved: 'Approved',
+  rejected: 'Rejected',
+  expired: 'Expired',
 };
 
 function toCaseSignature(sig: SignaturePayload): CaseSignature {
@@ -75,6 +123,7 @@ function toCaseSignature(sig: SignaturePayload): CaseSignature {
 
 export function CaseDetailPage() {
   const { id = '' } = useParams();
+  const navigate = useNavigate();
   const {
     getById,
     submitCase,
@@ -85,12 +134,15 @@ export function CaseDetailPage() {
   const { forCase: checklistForCase, review, attach } = useChecklist();
   const { forCase: docsForCase, setStatus: setDocStatus } = useAccreditationDocs();
   const { forCase: signedForCase } = useSignedInstruments();
+  const { rows: aliases } = useVendorAliases();
   const { rows: timeline } = useCaseTimeline(id);
   const { success, error } = useToast();
   const { profile } = useSession();
   // NOTE: `Guard fallback={null}` renders the default AccessDenied block
   // (null ?? <AccessDenied/>), so capability-dependent actions use useCan.
   const canApprove = useCan('legal', 'approve_accreditation');
+  const canReview = useCan('legal', 'review_accreditation');
+  const canUpload = useCan('core', 'submit_documents');
 
   const kase: AccreditationCase | undefined = getById(id);
   const items = useMemo(() => checklistForCase(id), [checklistForCase, id]);
@@ -110,11 +162,13 @@ export function CaseDetailPage() {
       if (list) list.push(item);
       else map.set(key, [item]);
     }
-    return [...map.entries()].sort(
-      (a, b) =>
-        groupOrderIndex(a[1][0]?.group) - groupOrderIndex(b[1][0]?.group),
-    );
-  }, [items]);
+    return [...map.entries()]
+      .sort(
+        (a, b) =>
+          groupOrderIndex(a[1][0]?.group) - groupOrderIndex(b[1][0]?.group),
+      )
+      .map(([key, rows]) => [key, sortChecklistRows(rows, evidence)] as const);
+  }, [items, evidence]);
 
   const [decisionOpen, setDecisionOpen] = useState<null | 'approved' | 'rejected'>(null);
   const [decisionNote, setDecisionNote] = useState('');
@@ -128,6 +182,32 @@ export function CaseDetailPage() {
   const [reviewDecision, setReviewDecision] = useState<ChecklistDecision>('approved');
   const [reviewNote, setReviewNote] = useState('');
   const [expandedWhy, setExpandedWhy] = useState<string | null>(null);
+  /** Per-group expand override; default comes from isGroupSolved. */
+  const [groupOverrides, setGroupOverrides] = useState<Record<string, boolean>>({});
+  const [prevCycleOpen, setPrevCycleOpen] = useState(false);
+
+  // Sticky progress bar (§2.2.1): appears once the hero scrolls out of view.
+  const pageRef = useRef<HTMLDivElement>(null);
+  const heroRef = useRef<HTMLDivElement>(null);
+  const [heroVisible, setHeroVisible] = useState(true);
+  useEffect(() => {
+    const el = heroRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const obs = new IntersectionObserver(
+      ([entry]) => setHeroVisible(entry?.isIntersecting ?? true),
+      { threshold: 0 },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [casesLoading]);
+
+  // Renewal continuity (F2.3) — resolved before any early return so hook
+  // order stays stable across renders.
+  const previousCase = getById(kase?.previousCaseId ?? '');
+  const previousDocs = useMemo(
+    () => (kase?.previousCaseId ? docsForCase(kase.previousCaseId) : []),
+    [docsForCase, kase?.previousCaseId],
+  );
 
   if (casesLoading) {
     return (
@@ -140,13 +220,45 @@ export function CaseDetailPage() {
   if (!kase) return <Navigate to="/" replace />;
 
   const isVendor = profile?.kind === 'vendor';
+  // Vendor-ownership guard (F1.1): never render another vendor's case shell.
+  if (shouldBlockVendorAccess(profile, kase, aliases)) {
+    return <Navigate to="/" replace />;
+  }
+
   const effectiveStatus = computeCaseStatus(kase);
+  const statusLabel = isVendor
+    ? VENDOR_STATUS_LABEL[effectiveStatus]
+    : CASE_STATUS_LABEL[effectiveStatus];
   const requiredItems = items.filter((i) => i.required);
   const requiredApproved = requiredItems.filter((i) => i.decision === 'approved').length;
   const readyForDecision =
     requiredItems.length > 0 && requiredApproved === requiredItems.length;
   const outstandingCount = progress.outstanding.length;
   const awaitingReviewCount = progress.awaitingReview.length;
+
+  const nextAction = isVendor
+    ? outstandingCount > 0
+      ? `${outstandingCount} to upload`
+      : kase.status === 'draft'
+        ? 'Ready to submit'
+        : 'Nothing owed'
+    : readyForDecision && kase.status === 'submitted'
+      ? 'Ready to decide'
+      : awaitingReviewCount > 0
+        ? `${awaitingReviewCount} to review`
+        : `Waiting on vendor: ${outstandingCount}`;
+
+  const metaLine = [
+    kase.category,
+    kase.jurisdiction
+      ? kase.jurisdiction === 'OTHER' && kase.originCountry
+        ? kase.originCountry
+        : JURISDICTION_LABEL[kase.jurisdiction]
+      : undefined,
+    kase.submittedAt ? `Submitted ${formatDate(kase.submittedAt)}` : `Opened ${formatDate(kase.openedAt)}`,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   function openReview(item: RequirementChecklistItem) {
     setReviewingItem(item);
@@ -160,7 +272,7 @@ export function CaseDetailPage() {
       note: reviewNote,
     });
     if (ok) {
-      success(`Checklist item ${reviewDecision}`);
+      success(`Checklist item ${CHECKLIST_LABEL[reviewDecision].toLowerCase()}`);
       setReviewingItem(null);
     } else {
       error('Could not save the review.');
@@ -210,100 +322,127 @@ export function CaseDetailPage() {
     else error('Could not record the reminder.');
   }
 
-  return (
-    <div className="space-y-6">
-      <ModuleHero
-        eyebrow="Accreditation case"
-        title={kase.vendorName}
-        description={
-          kase.category
-            ? `Category: ${kase.category}${kase.scope ? ` · Scope: ${kase.scope}` : ''}`
-            : 'Legal accreditation review workspace.'
-        }
-        icon="clipboard"
-        action={
-          <HeroChipButton href={isVendor ? '/vendor' : '/legal'} icon="arrowRight">
-            Back to cases
-          </HeroChipButton>
-        }
-        accessory={
-          <div className="flex flex-wrap items-end gap-6">
-            <div>
-              <p className="text-xs uppercase tracking-wide text-brand-100/70">Status</p>
-              <p className="mt-1">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-0.5 text-xs font-semibold text-white">
-                  <span
-                    aria-hidden
-                    className={`inline-block h-1.5 w-1.5 rounded-full ${
-                      effectiveStatus === 'approved'
-                        ? 'bg-emerald-300'
-                        : effectiveStatus === 'rejected' || effectiveStatus === 'expired'
-                          ? 'bg-rose-300'
-                          : effectiveStatus === 'renewal_due' || effectiveStatus === 'under_review'
-                            ? 'bg-amber-300'
-                            : effectiveStatus === 'submitted'
-                              ? 'bg-cyan-300'
-                              : 'bg-slate-300'
-                    }`}
-                  />
-                  {effectiveStatus.replace('_', ' ')}
-                </span>
-              </p>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-wide text-brand-100/70">Checklist</p>
-              <p className="tnum text-2xl font-extrabold">
-                {requiredApproved}/{requiredItems.length}
-                <span className="ml-1 text-sm font-medium text-brand-100/70">approved</span>
-              </p>
-            </div>
-          </div>
-        }
-      />
+  /** Row-as-target action (§2.2.3): what tapping a requirement card does. */
+  function activateRow(item: RequirementChecklistItem) {
+    if (isVendor) {
+      if (item.instrument) {
+        navigate(`/cases/${kase!.id}/sign/${item.instrumentCode ?? item.code}`);
+      } else if (canUpload) {
+        setUploadingFor(item);
+      }
+    } else if (item.instrument) {
+      navigate(`/cases/${kase!.id}/sign/${item.instrumentCode ?? item.code}`);
+    } else if (canReview) {
+      openReview(item);
+    }
+  }
+  function rowInteractive(item: RequirementChecklistItem): boolean {
+    if (isVendor) return item.instrument ? true : canUpload;
+    return item.instrument ? true : canReview;
+  }
 
-      <Card>
-        <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
-          <MetaItem label="Vendor" value={kase.vendorName} />
-          <MetaItem
-            label="Jurisdiction"
-            value={
-              kase.jurisdiction
-                ? kase.jurisdiction === 'OTHER' && kase.originCountry
-                  ? kase.originCountry
-                  : JURISDICTION_LABEL[kase.jurisdiction]
-                : '—'
-            }
-          />
-          <MetaItem
-            label="Risk tier"
-            value={kase.riskTier ? RISK_TIER_LABEL[kase.riskTier] : '—'}
-          />
-          <MetaItem
-            label="Opened"
-            value={new Date(kase.openedAt).toLocaleDateString()}
-          />
-          <MetaItem
-            label="Submitted"
-            value={kase.submittedAt ? new Date(kase.submittedAt).toLocaleDateString() : '—'}
-          />
-          <MetaItem
-            label="Expires"
-            value={kase.expiresAt ? new Date(kase.expiresAt).toLocaleDateString() : '—'}
-          />
-          <MetaItem
-            label="Contact"
-            value={kase.contactEmail ?? '—'}
-          />
-          <MetaItem
-            label="Last reminder"
-            value={
-              kase.lastReminderAt
-                ? new Date(kase.lastReminderAt).toLocaleDateString()
-                : '—'
-            }
-          />
-        </dl>
-      </Card>
+  return (
+    <div ref={pageRef} className="space-y-6">
+      {/* Compact progress bar once the hero scrolls away (§2.2.1) — fixed
+          below the app chrome (z-10 < the shell/vendor header's z-20), sized
+          to the page column so it never covers the shell sidebar. */}
+      {!heroVisible && (
+        <StickyCaseBar pageRef={pageRef}>
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-line bg-surface/95 px-3 py-2 shadow-e1 backdrop-blur">
+            <span className="flex min-w-0 items-center gap-2">
+              <span
+                aria-hidden
+                className={`h-2 w-2 shrink-0 rounded-full ${CASE_STATUS_DOT[effectiveStatus]}`}
+              />
+              <span className="truncate text-sm font-semibold text-ink">{statusLabel}</span>
+            </span>
+            <span className="flex shrink-0 items-center gap-3 text-sm">
+              <span className="tnum font-semibold text-ink">
+                {requiredApproved}/{requiredItems.length}
+              </span>
+              <span className="hidden text-muted sm:inline" aria-hidden>
+                ·
+              </span>
+              <span className="font-semibold text-brand-700 dark:text-brand-300">
+                {nextAction}
+              </span>
+            </span>
+          </div>
+        </StickyCaseBar>
+      )}
+
+      <div ref={heroRef}>
+        <ModuleHero
+          eyebrow={`Accreditation case · ${statusLabel}`}
+          title={kase.vendorName}
+          icon="clipboard"
+          action={
+            <HeroChipButton href={isVendor ? '/vendor' : '/legal'} icon="arrowRight">
+              Back to cases
+            </HeroChipButton>
+          }
+          accessory={
+            <div className="flex flex-wrap items-end gap-6">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-brand-100/70">Status</p>
+                <p className="mt-1">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-0.5 text-xs font-semibold text-white">
+                    <span
+                      aria-hidden
+                      className={`inline-block h-1.5 w-1.5 rounded-full ${CASE_STATUS_DOT[effectiveStatus].replace('400', '300')}`}
+                    />
+                    {statusLabel}
+                  </span>
+                </p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wide text-brand-100/70">Checklist</p>
+                <p className="tnum text-2xl font-extrabold">
+                  {requiredApproved}/{requiredItems.length}
+                  <span className="ml-1 text-sm font-medium text-brand-100/70">approved</span>
+                </p>
+              </div>
+            </div>
+          }
+        />
+      </div>
+
+      {/* Meta demoted to one muted line; full record behind (i) (§2.2.4). */}
+      <div className="-mt-3 flex items-center gap-1 px-1">
+        <p className="min-w-0 truncate text-sm text-muted">{metaLine}</p>
+        <InfoTip
+          label="Full case record"
+          side="bottom"
+          content={
+            <dl className="grid min-w-[14rem] gap-x-4 gap-y-1.5">
+              <MetaTipItem label="Vendor" value={kase.vendorName} />
+              <MetaTipItem
+                label="Jurisdiction"
+                value={
+                  kase.jurisdiction
+                    ? kase.jurisdiction === 'OTHER' && kase.originCountry
+                      ? kase.originCountry
+                      : JURISDICTION_LABEL[kase.jurisdiction]
+                    : '—'
+                }
+              />
+              <MetaTipItem
+                label="Risk tier"
+                value={kase.riskTier ? RISK_TIER_LABEL[kase.riskTier] : '—'}
+              />
+              <MetaTipItem label="Opened" value={formatDate(kase.openedAt)} />
+              <MetaTipItem label="Submitted" value={formatDate(kase.submittedAt)} />
+              <MetaTipItem label="Expires" value={formatDate(kase.expiresAt)} />
+              <MetaTipItem label="Contact" value={kase.contactEmail ?? '—'} />
+              <MetaTipItem
+                label="Last reminder"
+                value={formatDate(kase.lastReminderAt)}
+              />
+              {kase.scope && <MetaTipItem label="Scope" value={kase.scope} />}
+            </dl>
+          }
+        />
+      </div>
 
       {/* Vendor: you still owe N + submit CTA. Legal: waiting on vendor. */}
       {isVendor && kase.status === 'draft' && (
@@ -332,7 +471,7 @@ export function CaseDetailPage() {
               </p>
               <p className="mt-0.5 text-sm text-muted">
                 {outstandingCount > 0
-                  ? 'Upload evidence or sign the pending instruments below, then submit for legal review.'
+                  ? 'Upload evidence or sign the pending agreements below, then submit for legal review.'
                   : 'Submit for review — you\u2019ll sign a short attestation that the intake is complete and truthful.'}
               </p>
               <div className="mt-3">
@@ -371,7 +510,7 @@ export function CaseDetailPage() {
                       ? `${awaitingReviewCount} submitted item${awaitingReviewCount === 1 ? '' : 's'} awaiting your review meanwhile.`
                       : 'No evidence to review yet.'}
                     {kase.lastReminderAt
-                      ? ` Last reminder ${new Date(kase.lastReminderAt).toLocaleDateString()}.`
+                      ? ` Last reminder ${formatDate(kase.lastReminderAt)}.`
                       : ''}
                   </p>
                 </div>
@@ -450,15 +589,36 @@ export function CaseDetailPage() {
         <div className="space-y-5">
           {groupedItems.map(([key, groupRows]) => {
             const gApproved = groupRows.filter((i) => i.decision === 'approved').length;
+            const solved = isGroupSolved(groupRows);
+            const expanded = groupOverrides[key] ?? !solved;
             return (
               <section key={key} aria-label={groupLabel(groupRows[0]?.group)}>
                 <div className="mb-2 flex items-center justify-between gap-3">
-                  <h3 className="flex items-center gap-2 font-display text-sm font-bold uppercase tracking-wide text-muted">
-                    {groupLabel(groupRows[0]?.group)}
-                    <Badge tone={gApproved === groupRows.length ? 'emerald' : 'slate'}>
-                      {gApproved}/{groupRows.length}
-                    </Badge>
-                  </h3>
+                  <button
+                    type="button"
+                    aria-expanded={expanded}
+                    onClick={() =>
+                      setGroupOverrides((cur) => ({ ...cur, [key]: !expanded }))
+                    }
+                    className="flex min-w-0 items-center gap-2 text-left font-display text-sm font-bold uppercase tracking-wide text-muted transition hover:text-ink"
+                  >
+                    <Icon
+                      name="chevron"
+                      className={`h-3.5 w-3.5 shrink-0 transition ${expanded ? 'rotate-90' : ''}`}
+                      aria-hidden
+                    />
+                    <span className="truncate">{groupLabel(groupRows[0]?.group)}</span>
+                    {solved ? (
+                      <Badge tone="emerald">
+                        <Icon name="check" className="mr-0.5 inline h-3 w-3" aria-hidden />
+                        {gApproved}/{groupRows.length}
+                      </Badge>
+                    ) : (
+                      <Badge tone="slate">
+                        {gApproved}/{groupRows.length}
+                      </Badge>
+                    )}
+                  </button>
                   <div className="h-1.5 w-24 overflow-hidden rounded-full bg-inset sm:w-36" aria-hidden>
                     <div
                       className="h-full rounded-full bg-brand-500/70"
@@ -468,35 +628,134 @@ export function CaseDetailPage() {
                     />
                   </div>
                 </div>
-                <ul className="space-y-3">
-                  {groupRows.map((item) => (
-                    <ChecklistRow
-                      key={item.id}
-                      item={item}
-                      kase={kase}
-                      docs={docs}
-                      signed={signed}
-                      isVendor={isVendor}
-                      whyExpanded={expandedWhy === item.id}
-                      onToggleWhy={() =>
-                        setExpandedWhy((cur) => (cur === item.id ? null : item.id))
-                      }
-                      onUpload={() => setUploadingFor(item)}
-                      onReview={() => openReview(item)}
-                      onDocStatus={(docId, status) =>
-                        setDocStatus(docId, status, profile?.email)
-                      }
-                    />
-                  ))}
-                </ul>
+                {expanded ? (
+                  <ul className="space-y-3">
+                    {groupRows.map((item) => (
+                      <ChecklistRow
+                        key={item.id}
+                        item={item}
+                        docs={docs}
+                        signed={signed}
+                        isVendor={isVendor}
+                        interactive={rowInteractive(item)}
+                        onActivate={() => activateRow(item)}
+                        whyExpanded={expandedWhy === item.id}
+                        onToggleWhy={() =>
+                          setExpandedWhy((cur) => (cur === item.id ? null : item.id))
+                        }
+                        onDocStatus={
+                          !isVendor && canReview
+                            ? (docId, status) => setDocStatus(docId, status, profile?.email)
+                            : undefined
+                        }
+                      />
+                    ))}
+                  </ul>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setGroupOverrides((cur) => ({ ...cur, [key]: true }))
+                    }
+                    className="card flex w-full items-center gap-2.5 p-3 text-left text-sm text-muted transition hover:bg-inset"
+                  >
+                    <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
+                      <Icon name="check" className="h-3.5 w-3.5" aria-hidden />
+                    </span>
+                    All {groupRows.length} item{groupRows.length === 1 ? '' : 's'} done —
+                    tap to expand
+                  </button>
+                )}
               </section>
             );
           })}
         </div>
       </div>
 
+      {/* Case-level Documents panel — internal reviewers only (F2.2). */}
+      {!isVendor && (
+        <div>
+          <SectionTitle
+            title="Documents"
+            subtitle={`${docs.length} file${docs.length === 1 ? '' : 's'} on this case, all versions`}
+            action={
+              <InfoTip
+                label="About this panel"
+                content="Every document the vendor ever uploaded on this case — including superseded and rejected versions — in one auditable table."
+              />
+            }
+          />
+          {docs.length === 0 ? (
+            <Card>
+              <p className="text-sm text-muted">No documents uploaded yet.</p>
+            </Card>
+          ) : (
+            <DataTable
+              ariaLabel="Case documents"
+              rows={[...docs].sort(
+                (a, b) =>
+                  new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime(),
+              )}
+              columns={documentColumns(items)}
+              keyOf={(d) => d.id}
+            />
+          )}
+        </div>
+      )}
+
+      {/* Previous cycle documents — renewal continuity (F2.3). */}
+      {!isVendor && kase.previousCaseId && previousCase && (
+        <div>
+          <button
+            type="button"
+            onClick={() => setPrevCycleOpen((v) => !v)}
+            aria-expanded={prevCycleOpen}
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-muted transition hover:text-ink"
+          >
+            <Icon
+              name="chevron"
+              className={`h-3.5 w-3.5 transition ${prevCycleOpen ? 'rotate-90' : ''}`}
+              aria-hidden
+            />
+            Previous cycle documents ({previousDocs.length})
+            <span className="font-normal text-faint">
+              — {previousCase.vendorName}, opened {formatDate(previousCase.openedAt)}
+            </span>
+          </button>
+          {prevCycleOpen && (
+            <div className="mt-2">
+              {previousDocs.length === 0 ? (
+                <Card>
+                  <p className="text-sm text-muted">
+                    No documents were uploaded on the previous cycle.
+                  </p>
+                </Card>
+              ) : (
+                <DataTable
+                  ariaLabel="Previous cycle documents"
+                  rows={[...previousDocs].sort(
+                    (a, b) =>
+                      new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime(),
+                  )}
+                  columns={documentColumns([])}
+                  keyOf={(d) => d.id}
+                />
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       <div>
-        <SectionTitle title="Activity" subtitle="Every action on this case, newest first." />
+        <SectionTitle
+          title="Activity"
+          action={
+            <InfoTip
+              label="About this feed"
+              content="Every action on this case, newest first, with the captured e-signature artifacts."
+            />
+          }
+        />
         <Card>
           {timeline.length === 0 ? (
             <p className="text-sm text-muted">No activity recorded yet.</p>
@@ -557,13 +816,12 @@ export function CaseDetailPage() {
                     </span>
                     <div className="min-w-0 flex-1">
                       <p className={`text-sm ${latest ? 'font-semibold text-ink' : 'text-ink/85'}`}>
-                        <span className="font-semibold">{entry.action.replace(/_/g, ' ')}</span>
+                        <span className="font-semibold">{timelineActionLabel(entry.action)}</span>
                         {entry.detail ? ` \u2014 ${entry.detail}` : ''}
                       </p>
-                      <p className="text-xs text-faint">
-                        {new Date(entry.at).toLocaleString()}
+                      <p className="text-xs text-faint" title={formatDateTime(entry.at)}>
+                        {relativeTime(entry.at)}
                         {entry.actorEmail ? ` \u00b7 ${entry.actorEmail}` : ''}
-                        {latest ? ' \u00b7 now' : ''}
                       </p>
                       {sig && <SignatureArtifact sig={sig} />}
                       {signedRecord && (
@@ -630,7 +888,7 @@ export function CaseDetailPage() {
                       : 'text-muted hover:text-ink'
                   }`}
                 >
-                  {d}
+                  {CHECKLIST_LABEL[d]}
                 </button>
               ))}
             </div>
@@ -811,35 +1069,163 @@ export function CaseDetailPage() {
 }
 
 // ---------------------------------------------------------------------------
+// Sticky compact bar (§2.2.1)
+// ---------------------------------------------------------------------------
+
+/**
+ * Fixed bar pinned right below the app chrome. Measures the sticky <header>
+ * (shell top bar or vendor chrome) plus the page column, so it aligns with
+ * content at every viewport and never fights the shell sidebar or the
+ * header's z-20.
+ */
+function StickyCaseBar({
+  pageRef,
+  children,
+}: {
+  pageRef: RefObject<HTMLDivElement | null>;
+  children: ReactNode;
+}) {
+  const [style, setStyle] = useState<CSSProperties | null>(null);
+  useEffect(() => {
+    const measure = () => {
+      const header = document.querySelector('header');
+      const top = (header?.getBoundingClientRect().bottom ?? 0) + 8;
+      const rect = pageRef.current?.getBoundingClientRect();
+      setStyle({
+        position: 'fixed',
+        top,
+        left: rect?.left ?? 0,
+        width: rect?.width ?? '100%',
+        zIndex: 10,
+      });
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [pageRef]);
+  if (!style) return null;
+  return <div style={style}>{children}</div>;
+}
+
+// ---------------------------------------------------------------------------
+// Documents panel columns (F2.2)
+// ---------------------------------------------------------------------------
+
+function documentColumns(
+  items: readonly RequirementChecklistItem[],
+): Column<AccreditationDoc>[] {
+  const requirementOf = (d: AccreditationDoc) =>
+    items.find((i) => i.id === d.requirementId || i.documentIds.includes(d.id))
+      ?.requirement ?? d.docType.replace(/_/g, ' ');
+  return [
+    {
+      key: 'filename',
+      header: 'File',
+      primary: true,
+      render: (d) => (
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="min-w-0 truncate font-semibold text-ink">{d.filename}</span>
+          <Badge tone="slate">v{d.version}</Badge>
+        </span>
+      ),
+    },
+    {
+      key: 'requirement',
+      header: 'Requirement',
+      render: (d) => <span className="text-sm text-muted">{requirementOf(d)}</span>,
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (d) => (
+        <Badge
+          tone={
+            d.status === 'approved'
+              ? 'emerald'
+              : d.status === 'rejected'
+                ? 'rose'
+                : d.status === 'expired'
+                  ? 'slate'
+                  : 'amber'
+          }
+        >
+          {DOC_STATUS_LABEL[d.status]}
+        </Badge>
+      ),
+    },
+    {
+      key: 'uploadedBy',
+      header: 'Uploaded by',
+      hideOnMobile: true,
+      render: (d) => (
+        <span className="text-sm text-muted">{d.uploadedByEmail ?? '—'}</span>
+      ),
+    },
+    {
+      key: 'uploadedAt',
+      header: 'Uploaded',
+      render: (d) => formatDate(d.uploadedAt),
+    },
+    {
+      key: 'expiresAt',
+      header: 'Expires',
+      hideOnMobile: true,
+      render: (d) => formatDate(d.expiresAt),
+    },
+    {
+      key: 'open',
+      header: '',
+      align: 'right',
+      render: (d) =>
+        d.dataUrl ? (
+          <a
+            href={d.dataUrl}
+            target="_blank"
+            rel="noreferrer"
+            download={d.filename}
+            className="btn-ghost btn-sm"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Icon name="download" className="h-4 w-4" />
+            Open
+          </a>
+        ) : (
+          <span className="text-xs text-faint">—</span>
+        ),
+    },
+  ];
+}
+
+// ---------------------------------------------------------------------------
 // Row + fragments
 // ---------------------------------------------------------------------------
 
 function ChecklistRow({
   item,
-  kase,
   docs,
   signed,
   isVendor,
+  interactive,
+  onActivate,
   whyExpanded,
   onToggleWhy,
-  onUpload,
-  onReview,
   onDocStatus,
 }: {
   item: RequirementChecklistItem;
-  kase: AccreditationCase;
   docs: AccreditationDoc[];
   signed: SignedInstrument[];
   isVendor: boolean;
+  interactive: boolean;
+  onActivate: () => void;
   whyExpanded: boolean;
   onToggleWhy: () => void;
-  onUpload: () => void;
-  onReview: () => void;
-  onDocStatus: (docId: string, status: 'approved' | 'rejected') => void;
+  onDocStatus?: (docId: string, status: 'approved' | 'rejected') => void;
 }) {
+  const [versionsOpen, setVersionsOpen] = useState(false);
   const itemDocs = docs.filter(
     (d) => item.documentIds.includes(d.id) || d.requirementId === item.id,
   );
+  const chain = docVersionChain(itemDocs);
   const signedRecord = item.instrument
     ? signed.find(
         (s) =>
@@ -853,29 +1239,54 @@ function ChecklistRow({
     .filter((d): d is number => d !== null)
     .sort((a, b) => a - b)[0];
 
+  // Row-as-target (§2.2.3): the whole card opens the one consistent action;
+  // inner links/buttons stop propagation.
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (!interactive) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onActivate();
+    }
+  };
+  const stop = (e: MouseEvent) => e.stopPropagation();
+
   return (
     <li>
-      <Card>
-        <div className="flex flex-wrap items-start justify-between gap-3">
+      <div
+        onClick={interactive ? onActivate : undefined}
+        onKeyDown={interactive ? onKeyDown : undefined}
+        role={interactive ? 'button' : undefined}
+        tabIndex={interactive ? 0 : undefined}
+        aria-label={
+          interactive
+            ? `${item.requirement} — ${isVendor ? (item.instrument ? 'review and sign' : 'upload document') : 'open review'}`
+            : undefined
+        }
+        className={`card p-4 sm:p-5 ${
+          interactive
+            ? 'cursor-pointer transition hover:bg-inset/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500'
+            : ''
+        }`}
+      >
+        <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               {item.instrument && (
                 <Icon
                   name="signature"
                   className="h-4 w-4 shrink-0 text-brand-600 dark:text-brand-300"
-                  aria-label="Signable instrument"
+                  aria-label="Signable agreement"
                 />
               )}
               <h4 className="font-display text-base font-bold text-ink">
                 {item.requirement}
               </h4>
-              {item.required && <Badge tone="brand">required</Badge>}
-              <Badge tone={CHECKLIST_TONE[item.decision]}>{item.decision}</Badge>
+              {item.required && <Badge tone="brand">Required</Badge>}
               {expiring && (
                 <Badge tone="rose">
                   {expiringDays != null && expiringDays < 0
-                    ? 'expired'
-                    : `expires in ${expiringDays}d`}
+                    ? 'Expired'
+                    : `Expires in ${expiringDays}d`}
                 </Badge>
               )}
             </div>
@@ -886,7 +1297,10 @@ function ChecklistRow({
               <div className="mt-1">
                 <button
                   type="button"
-                  onClick={onToggleWhy}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleWhy();
+                  }}
                   aria-expanded={whyExpanded}
                   className="inline-flex items-center gap-1 text-xs font-semibold text-brand-700 hover:underline dark:text-brand-300"
                 >
@@ -894,7 +1308,7 @@ function ChecklistRow({
                   Why we need this
                   <Icon
                     name="chevron"
-                    className={`h-3 w-3 transition ${whyExpanded ? 'rotate-180' : ''}`}
+                    className={`h-3 w-3 transition ${whyExpanded ? 'rotate-90' : ''}`}
                   />
                 </button>
                 {whyExpanded && (
@@ -907,6 +1321,7 @@ function ChecklistRow({
                           href={item.helpUrl}
                           target="_blank"
                           rel="noreferrer"
+                          onClick={stop}
                           className="font-semibold text-brand-700 hover:underline dark:text-brand-300"
                         >
                           Issuer website ↗
@@ -923,44 +1338,13 @@ function ChecklistRow({
               </p>
             )}
           </div>
-          <div className="flex shrink-0 flex-wrap gap-2">
-            {isVendor && item.instrument && !signedRecord && (
-              <Link
-                to={`/cases/${kase.id}/sign/${item.instrumentCode ?? item.code}`}
-                className="btn-primary btn-sm"
-              >
-                <Icon name="signature" className="h-4 w-4" />
-                Review &amp; sign
-              </Link>
-            )}
-            {!isVendor && item.instrument && (
-              <Link
-                to={`/cases/${kase.id}/sign/${item.instrumentCode ?? item.code}`}
-                className="btn-ghost btn-sm"
-              >
-                <Icon name="search" className="h-4 w-4" />
-                {signedRecord ? 'View signed record' : 'View template'}
-              </Link>
-            )}
-            {isVendor && !item.instrument && (
-              <Guard module="core" cap="submit_documents" fallback={null}>
-                <button type="button" onClick={onUpload} className="btn-outline btn-sm">
-                  <Icon name="plus" className="h-4 w-4" />
-                  Upload
-                </button>
-              </Guard>
-            )}
-            {!isVendor && (
-              <Guard module="legal" cap="review_accreditation" fallback={null}>
-                <button
-                  type="button"
-                  onClick={onReview}
-                  className={item.decision === 'pending' ? 'btn-primary btn-sm' : 'btn-outline btn-sm'}
-                >
-                  <Icon name="check" className="h-4 w-4" />
-                  {item.decision === 'pending' ? 'Review' : 'Re-review'}
-                </button>
-              </Guard>
+          {/* Status + chevron — the row itself is the action (§2.2.3). */}
+          <div className="flex shrink-0 items-center gap-2">
+            <Badge tone={CHECKLIST_TONE[item.decision]}>
+              {CHECKLIST_LABEL[item.decision]}
+            </Badge>
+            {interactive && (
+              <Icon name="chevron" className="h-4 w-4 text-faint" aria-hidden />
             )}
           </div>
         </div>
@@ -971,69 +1355,134 @@ function ChecklistRow({
           </div>
         )}
 
-        {itemDocs.length > 0 && (
-          <ul className="mt-3 space-y-2 border-t border-line pt-3">
-            {itemDocs.map((d) => (
-              <li key={d.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                <span className="flex min-w-0 items-center gap-2">
-                  <Icon name="clipboard" className="h-4 w-4 shrink-0 text-faint" />
-                  <span className="min-w-0 truncate">{d.filename}</span>
-                  <Badge
-                    tone={
-                      d.status === 'approved'
-                        ? 'emerald'
-                        : d.status === 'rejected'
-                          ? 'rose'
-                          : d.status === 'expired'
-                            ? 'slate'
-                            : 'amber'
-                    }
-                  >
-                    {d.status}
-                  </Badge>
-                  <span className="text-xs text-muted">
-                    v{d.version} · {Math.round(d.sizeBytes / 1024)} KB
-                    {d.expiresAt ? ` · exp ${new Date(d.expiresAt).toLocaleDateString()}` : ''}
-                  </span>
-                </span>
-                <span className="flex gap-2">
-                  {d.dataUrl && (
-                    <a
-                      href={d.dataUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      download={d.filename}
-                      className="btn-ghost btn-sm"
-                    >
-                      <Icon name="download" className="h-4 w-4" />
-                      Open
-                    </a>
-                  )}
-                  {!isVendor && d.status === 'submitted' && (
-                    <Guard module="legal" cap="review_accreditation" fallback={null}>
-                      <button
-                        type="button"
-                        onClick={() => onDocStatus(d.id, 'approved')}
-                        className="btn-outline btn-sm"
-                      >
-                        Approve
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onDocStatus(d.id, 'rejected')}
-                        className="btn-outline btn-sm"
-                      >
-                        Reject
-                      </button>
-                    </Guard>
-                  )}
-                </span>
-              </li>
-            ))}
-          </ul>
+        {/* Doc version chain (F2.1): current renders full; older versions
+            collapse behind a disclosure. */}
+        {chain && (
+          <div className="mt-3 space-y-2 border-t border-line pt-3">
+            <DocRow
+              doc={chain.current}
+              current
+              onDocStatus={onDocStatus}
+              onStop={stop}
+            />
+            {chain.previous.length > 0 && (
+              <div>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setVersionsOpen((v) => !v);
+                  }}
+                  aria-expanded={versionsOpen}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-muted transition hover:text-ink"
+                >
+                  <Icon
+                    name="chevron"
+                    className={`h-3 w-3 transition ${versionsOpen ? 'rotate-90' : ''}`}
+                    aria-hidden
+                  />
+                  {chain.previous.length} previous version
+                  {chain.previous.length === 1 ? '' : 's'}
+                </button>
+                {versionsOpen && (
+                  <ul className="mt-2 space-y-2 border-l-2 border-line pl-3">
+                    {chain.previous.map((d) => (
+                      <li key={d.id}>
+                        <DocRow doc={d} onDocStatus={onDocStatus} onStop={stop} />
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+          </div>
         )}
-      </Card>
+      </div>
     </li>
+  );
+}
+
+function DocRow({
+  doc,
+  current = false,
+  onDocStatus,
+  onStop,
+}: {
+  doc: AccreditationDoc;
+  current?: boolean;
+  onDocStatus?: (docId: string, status: 'approved' | 'rejected') => void;
+  onStop: (e: MouseEvent) => void;
+}) {
+  return (
+    <div
+      className={`flex flex-wrap items-center justify-between gap-2 text-sm ${
+        current ? '' : 'opacity-75'
+      }`}
+    >
+      <span className="flex min-w-0 items-center gap-2">
+        <Icon name="clipboard" className="h-4 w-4 shrink-0 text-faint" />
+        <span className="min-w-0 truncate">{doc.filename}</span>
+        <Badge
+          tone={
+            doc.status === 'approved'
+              ? 'emerald'
+              : doc.status === 'rejected'
+                ? 'rose'
+                : doc.status === 'expired'
+                  ? 'slate'
+                  : 'amber'
+          }
+        >
+          {DOC_STATUS_LABEL[doc.status]}
+        </Badge>
+        <span className="text-xs text-muted">
+          v{doc.version}
+          {current ? ' · current' : ''}
+          {doc.uploadedByEmail ? ` · ${doc.uploadedByEmail}` : ''}
+          {` · ${formatDate(doc.uploadedAt)}`}
+          {doc.expiresAt ? ` · exp ${formatDate(doc.expiresAt)}` : ''}
+        </span>
+      </span>
+      <span className="flex gap-2">
+        {doc.dataUrl && (
+          <a
+            href={doc.dataUrl}
+            target="_blank"
+            rel="noreferrer"
+            download={doc.filename}
+            onClick={onStop}
+            className="btn-ghost btn-sm"
+          >
+            <Icon name="download" className="h-4 w-4" />
+            Open
+          </a>
+        )}
+        {onDocStatus && doc.status === 'submitted' && (
+          <>
+            <button
+              type="button"
+              onClick={(e) => {
+                onStop(e);
+                onDocStatus(doc.id, 'approved');
+              }}
+              className="btn-outline btn-sm"
+            >
+              Approve
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                onStop(e);
+                onDocStatus(doc.id, 'rejected');
+              }}
+              className="btn-outline btn-sm"
+            >
+              Reject
+            </button>
+          </>
+        )}
+      </span>
+    </div>
   );
 }
 
@@ -1046,10 +1495,7 @@ function SignatureArtifact({ sig }: { sig: CaseSignature }) {
         e-signed by {sig.signerName}
       </span>
       <span className="text-muted">
-        {new Date(sig.signedAt).toLocaleString(undefined, {
-          dateStyle: 'medium',
-          timeStyle: 'short',
-        })}
+        {formatDateTime(sig.signedAt)}
         {' · '}
         <span className="uppercase tracking-wide">{sig.method}</span>
       </span>
@@ -1062,15 +1508,13 @@ function SignatureArtifact({ sig }: { sig: CaseSignature }) {
   );
 }
 
-function MetaItem({ label, value }: { label: string; value: string }) {
+function MetaTipItem({ label, value }: { label: string; value: ReactNode }) {
   return (
-    <div className="min-w-0">
-      <dt className="text-[0.65rem] font-semibold uppercase tracking-wide text-faint">
+    <div className="flex items-baseline justify-between gap-3">
+      <dt className="shrink-0 text-[0.65rem] font-semibold uppercase tracking-wide text-faint">
         {label}
       </dt>
-      <dd className="mt-0.5 truncate text-sm font-semibold text-ink" title={value}>
-        {value}
-      </dd>
+      <dd className="min-w-0 truncate text-right font-semibold text-ink">{value}</dd>
     </div>
   );
 }

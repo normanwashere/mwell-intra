@@ -27,12 +27,24 @@ describe('ThemeToggle', () => {
 
     await user.click(toggle);
     expect(document.documentElement.classList.contains('dark')).toBe(true);
-    expect(window.localStorage.getItem('mwell-intra-warehouse:theme')).toBe('dark');
+    // Unified suite-wide key (SH-8): warehouse writes the shell's 'intra-theme'.
+    expect(window.localStorage.getItem('intra-theme')).toBe('dark');
     expect(toggle).toHaveAttribute('aria-checked', 'true');
 
     await user.click(toggle);
     expect(document.documentElement.classList.contains('dark')).toBe(false);
-    expect(window.localStorage.getItem('mwell-intra-warehouse:theme')).toBe('light');
+    expect(window.localStorage.getItem('intra-theme')).toBe('light');
+  });
+
+  it('migrates a legacy warehouse theme choice to the unified key', async () => {
+    window.localStorage.setItem('mwell-intra-warehouse:theme', 'dark');
+    const user = userEvent.setup();
+    renderToggle();
+    // Legacy 'dark' honored on first paint.
+    expect(document.documentElement.classList.contains('dark')).toBe(true);
+    await user.click(screen.getByRole('switch'));
+    expect(window.localStorage.getItem('intra-theme')).toBe('light');
+    expect(window.localStorage.getItem('mwell-intra-warehouse:theme')).toBeNull();
   });
 
   it('exposes an accessible label that reflects the next action', () => {

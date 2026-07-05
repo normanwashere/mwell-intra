@@ -5,6 +5,10 @@
 @layer base {
   html {
     -webkit-text-size-adjust: 100%;
+    /* Keep scrolled-into-view / focused controls clear of the fixed mobile
+       bottom nav (Exec #3 — tap-intercept fix). Harmless on desktop where
+       the nav is hidden. */
+    scroll-padding-bottom: calc(6rem + env(safe-area-inset-bottom));
   }
 
   body {

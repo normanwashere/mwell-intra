@@ -160,9 +160,14 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        {/* Bottom padding must clear the fixed mobile nav (~4.5rem + safe
-            area) with breathing room so the final list row is never covered. */}
-        <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-5 pb-[calc(7.5rem+env(safe-area-inset-bottom))] sm:px-6 md:pb-10 xl:max-w-6xl">
+        {/* Bottom padding must clear the fixed mobile nav (~4.5rem tall) plus
+            the safe area with generous headroom: module-level Sheets/sticky
+            bars sit close to the viewport bottom, and the review's tap-audit
+            (PR-8/Exec #3) showed 6–7.5rem still let controls land under the
+            nav. 9rem + safe-area keeps every CTA tappable; html gains
+            scroll-padding-bottom (globals.css) so focused controls scroll
+            clear of the chrome. */}
+        <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-5 pb-[calc(9rem+env(safe-area-inset-bottom))] sm:px-6 md:pb-10 xl:max-w-6xl">
           {loading ? (
             <div
               className="grid place-items-center py-24 text-muted"
@@ -179,9 +184,11 @@ export function AppShell({ children }: { children: ReactNode }) {
           )}
         </main>
 
-        {/* Mobile bottom navigation */}
+        {/* Mobile bottom navigation. Solid background + top border so any
+            content that slips underneath is visually clearly BENEATH chrome
+            (no translucent ghosting over tap targets — Exec #3). */}
         <nav
-          className="safe-bottom fixed inset-x-0 bottom-0 z-20 border-t border-line bg-surface/95 backdrop-blur md:hidden"
+          className="safe-bottom fixed inset-x-0 bottom-0 z-20 border-t border-line bg-surface md:hidden"
           aria-label="Primary mobile"
         >
           <ul className="flex">

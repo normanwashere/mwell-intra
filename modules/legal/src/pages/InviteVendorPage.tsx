@@ -19,6 +19,7 @@ import {
   Field,
   HeroChipButton,
   Icon,
+  InfoTip,
   Input,
   ModuleHero,
   useToast,
@@ -68,6 +69,9 @@ export function InviteVendorPage() {
   );
   const [originCountry, setOriginCountry] = useState('');
   const [busy, setBusy] = useState(false);
+  // Step-3 preview groups collapse to their count line by default (§2.4) so
+  // the review step stays a short scroll at 390px.
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
 
   const patch = <K extends keyof TailoringProfile>(
     key: K,
@@ -149,7 +153,7 @@ export function InviteVendorPage() {
         <ModuleHero
           eyebrow="Invite vendor"
           title="Onboard a new vendor"
-          description="Answer a few questions and the accreditation checklist tailors itself — jurisdiction, sector permits, bonds and signable legal instruments included."
+          description="The accreditation checklist tailors itself from your answers."
           icon="building"
           action={
             <HeroChipButton href="/legal" icon="arrowRight">
@@ -370,52 +374,82 @@ export function InviteVendorPage() {
               </p>
             </Card>
 
-            {grouped.map(([group, defs]) => (
-              <Card key={group}>
-                <div className="flex items-center justify-between gap-3">
-                  <h3 className="font-display text-sm font-bold text-ink">
-                    {groupLabel(group as RequirementGroup)}
-                  </h3>
-                  <Badge tone="slate">
-                    {defs.filter((d) => d.required).length}/{defs.length} required
-                  </Badge>
-                </div>
-                <ul className="mt-2 space-y-1.5">
-                  {defs.map((d) => (
-                    <li
-                      key={d.code}
-                      className="flex items-start gap-2 text-sm text-ink"
-                    >
+            {grouped.map(([group, defs]) => {
+              const open = openGroups[group] ?? false;
+              const gRequired = defs.filter((d) => d.required).length;
+              const gInstruments = defs.filter((d) => d.instrument).length;
+              return (
+                <Card key={group}>
+                  <button
+                    type="button"
+                    aria-expanded={open}
+                    onClick={() =>
+                      setOpenGroups((cur) => ({ ...cur, [group]: !open }))
+                    }
+                    className="flex w-full items-center justify-between gap-3 text-left"
+                  >
+                    <span className="flex min-w-0 items-center gap-2">
                       <Icon
-                        name={d.instrument ? 'signature' : 'clipboard'}
-                        className={`mt-0.5 h-4 w-4 shrink-0 ${
-                          d.instrument ? 'text-brand-600 dark:text-brand-300' : 'text-faint'
-                        }`}
+                        name="chevron"
+                        className={`h-3.5 w-3.5 shrink-0 text-faint transition ${open ? 'rotate-90' : ''}`}
+                        aria-hidden
                       />
                       <span className="min-w-0">
-                        {d.label}
-                        {!d.required && (
-                          <>
-                            {' '}
-                            <span className="ml-1 whitespace-nowrap text-xs text-faint">
-                              optional
-                            </span>
-                          </>
-                        )}
-                        {d.instrument && (
-                          <>
-                            {' '}
-                            <span className="ml-1 whitespace-nowrap text-xs font-semibold text-brand-700 dark:text-brand-300">
-                              sign in-browser
-                            </span>
-                          </>
-                        )}
+                        <span className="block truncate font-display text-sm font-bold text-ink">
+                          {groupLabel(group as RequirementGroup)}
+                        </span>
+                        <span className="block text-xs text-muted">
+                          {defs.length} requirement{defs.length === 1 ? '' : 's'},{' '}
+                          {gRequired} required
+                          {gInstruments > 0
+                            ? ` · ${gInstruments} signable`
+                            : ''}
+                        </span>
                       </span>
-                    </li>
-                  ))}
-                </ul>
-              </Card>
-            ))}
+                    </span>
+                    <Badge tone="slate">
+                      {gRequired}/{defs.length} required
+                    </Badge>
+                  </button>
+                  {open && (
+                    <ul className="mt-3 space-y-1.5 border-t border-line pt-3">
+                      {defs.map((d) => (
+                        <li
+                          key={d.code}
+                          className="flex items-start gap-2 text-sm text-ink"
+                        >
+                          <Icon
+                            name={d.instrument ? 'signature' : 'clipboard'}
+                            className={`mt-0.5 h-4 w-4 shrink-0 ${
+                              d.instrument ? 'text-brand-600 dark:text-brand-300' : 'text-faint'
+                            }`}
+                          />
+                          <span className="min-w-0">
+                            {d.label}
+                            {!d.required && (
+                              <>
+                                {' '}
+                                <span className="ml-1 whitespace-nowrap text-xs text-faint">
+                                  optional
+                                </span>
+                              </>
+                            )}
+                            {d.instrument && (
+                              <>
+                                {' '}
+                                <span className="ml-1 whitespace-nowrap text-xs font-semibold text-brand-700 dark:text-brand-300">
+                                  sign in-browser
+                                </span>
+                              </>
+                            )}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </Card>
+              );
+            })}
           </div>
         )}
 
@@ -446,10 +480,15 @@ export function InviteVendorPage() {
           )}
         </div>
 
-        <p className="text-xs text-muted">
-          Preview build: no email is actually sent. In production the invite
-          lands in the vendor&apos;s inbox with a magic-link that spawns their
-          profile + this case.
+        {/* Dev-meta copy demoted behind the Demo chip's (i) (LG-2). */}
+        <p className="flex items-center gap-1 text-xs text-muted">
+          <span className="chip bg-amber-500/15 text-amber-800 dark:text-amber-300">
+            Demo
+          </span>
+          <InfoTip
+            label="About demo invites"
+            content="Preview build: no email is actually sent. In production the invite lands in the vendor's inbox with a magic-link that spawns their profile and this case. In demo mode the invited email can sign in directly and is scoped to this case."
+          />
         </p>
       </div>
     </Guard>

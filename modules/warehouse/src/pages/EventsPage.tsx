@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useWarehouse } from '@/app/store';
 import { can } from '@/auth/roles';
 import { eventCosting, eventSummary } from '@/domain/events';
+import { formatDate } from '@/domain/format';
 import type { EventType } from '@/domain/types';
 import {
   Badge,
@@ -111,7 +112,7 @@ export function EventsPage() {
                     <p className="truncate font-semibold text-ink">{ev.name}</p>
                     <div className="mt-1 flex flex-wrap items-center gap-1.5">
                       <Badge tone={TYPE_TONE[ev.type]}>{typeLabel(ev.type)}</Badge>
-                      <Badge tone="slate">{ev.startDate}</Badge>
+                      <Badge tone="slate">{formatDate(ev.startDate)}</Badge>
                       {summary.reserved > 0 && (
                         <Badge tone="amber">{summary.reserved} reserved</Badge>
                       )}
@@ -125,7 +126,9 @@ export function EventsPage() {
                       <p className="tnum text-base font-extrabold text-ink">
                         {money(costing.consumedValue)}
                       </p>
-                      <p className="text-xs text-faint">consumed</p>
+                      {/* "spent" (money) — "consumed" is reserved for units
+                          on the event detail (WH-16). */}
+                      <p className="text-xs text-faint">spent</p>
                     </div>
                     <Icon name="chevron" className="h-4 w-4 text-faint" />
                   </div>

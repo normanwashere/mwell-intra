@@ -143,9 +143,23 @@ export interface RequestAttachment {
   dataUrl?: string;
   uploadedAt: string;
   uploadedByEmail?: string;
-  /** Optional tag so we can render "budget evidence" vs "brochure" etc. */
-  kind?: 'budget' | 'previous_cost' | 'spec' | 'quote' | 'brochure' | 'other';
+  /** Optional tag so we can render "budget evidence" vs "brochure" etc.
+   *  Widened (PR-19) so the required-documents checklist can match real
+   *  attachments per sourcing path: award recommendation drafts, direct-award
+   *  justifications, and bond/insurance plans get their own kinds. */
+  kind?: RequestAttachmentKind;
 }
+
+export type RequestAttachmentKind =
+  | 'budget'
+  | 'previous_cost'
+  | 'spec'
+  | 'quote'
+  | 'award_recommendation'
+  | 'justification'
+  | 'bond'
+  | 'brochure'
+  | 'other';
 
 /** Vendor / bidding compliance flags surfaced on the request per policy §7
  *  (accreditation) + §5 (RFP quorum) + §11 (direct-award justification). All
@@ -229,6 +243,34 @@ export interface PurchaseOrderLine {
   receivedQuantity: number;
 }
 
+/** One line of a goods receipt against a PO. */
+export interface PurchaseOrderReceiptLine {
+  /** Matches PurchaseOrder.lines[*].id. */
+  lineId: string;
+  /** Denormalized so the receipt renders standalone (activity feeds,
+   *  warehouse bridge) without re-joining the PO lines. */
+  description: string;
+  /** Units accepted in THIS receipt (already clamped to outstanding). */
+  quantity: number;
+}
+
+/**
+ * A (possibly partial) goods receipt recorded against a PO (PR-24 / J2-7).
+ * Receipts are append-only and persisted ON the PurchaseOrder record under
+ * `intra.procurement.v2.purchase_orders` so the warehouse module can read
+ * procurement-side receipt events from a single key.
+ */
+export interface PurchaseOrderReceipt {
+  id: string;
+  /** ISO timestamp the receipt was recorded. */
+  receivedAt: string;
+  receivedByEmail?: string;
+  note?: string;
+  lines: PurchaseOrderReceiptLine[];
+  /** True when this receipt completed the PO (status flipped to `closed`). */
+  closedPo: boolean;
+}
+
 export interface PurchaseOrder {
   id: string;
   poNumber: string; // human-friendly (PO-2026-0001)
@@ -247,6 +289,9 @@ export interface PurchaseOrder {
   approvedByEmail?: string;
   /** Electronic signature captured when the PO award was approved. */
   approvalSignature?: ApprovalSignature;
+  /** Append-only goods receipts (partial receipts supported). Optional so
+   *  legacy localStorage rows keep loading. */
+  receipts?: PurchaseOrderReceipt[];
   /** sum(qty * unitPrice ?? 0). */
   total: number;
 }

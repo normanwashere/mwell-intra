@@ -7,14 +7,19 @@ import {
   DataTable,
   EmptyState,
   HeroChipButton,
+  InfoTip,
   ModuleHero,
   SectionTitle,
   StatCard,
+  money,
   type Column,
+  type IconName,
+  type Tone,
 } from '@intra/ui';
-import { Guard, useSession } from '@intra/auth';
+import { useSession } from '@intra/auth';
 import type { PurchaseOrder, PurchaseOrderStatus } from '../types';
 import { usePurchaseOrders } from '../localStore';
+import { formatDate, poStatusLabel } from '../labels';
 
 const PO_TONE: Record<PurchaseOrderStatus, 'slate' | 'cyan' | 'amber' | 'emerald' | 'rose'> = {
   draft: 'slate',
@@ -25,32 +30,29 @@ const PO_TONE: Record<PurchaseOrderStatus, 'slate' | 'cyan' | 'amber' | 'emerald
   cancelled: 'rose',
 };
 
+// PR-3 treatment applied here too: the row navigates; no nested link.
 const columns: Column<PurchaseOrder>[] = [
   {
     key: 'poNumber',
     header: 'PO #',
     primary: true,
     render: (r) => (
-      <Link to={`/purchase-orders/${r.id}`} className="font-semibold text-ink hover:underline">
+      <span className="font-semibold text-ink">
         {r.poNumber}
         <span className="ml-2 text-xs font-normal text-muted">· {r.vendorName}</span>
-      </Link>
+      </span>
     ),
   },
   { key: 'vendorName', header: 'Vendor', render: (r) => r.vendorName, hideOnMobile: true },
   {
     key: 'status',
     header: 'Status',
-    render: (r) => <Badge tone={PO_TONE[r.status]}>{r.status.replace('_', ' ')}</Badge>,
+    render: (r) => <Badge tone={PO_TONE[r.status]}>{poStatusLabel(r.status)}</Badge>,
   },
   {
     key: 'total',
     header: 'Total',
-    render: (r) =>
-      `\u20b1${r.total.toLocaleString(undefined, {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      })}`,
+    render: (r) => money(r.total),
   },
   {
     key: 'lines',
@@ -60,17 +62,17 @@ const columns: Column<PurchaseOrder>[] = [
   {
     key: 'updatedAt',
     header: 'Updated',
-    render: (r) => new Date(r.updatedAt).toLocaleDateString(),
+    render: (r) => formatDate(r.updatedAt),
   },
 ];
 
 type PoFilter = 'all' | 'authoring' | 'active' | 'closed';
-const PO_FILTERS: readonly { key: PoFilter; label: string }[] = [
-  { key: 'all',       label: 'All' },
-  { key: 'authoring', label: 'In authoring' },
-  { key: 'active',    label: 'Active' },
-  { key: 'closed',    label: 'Closed' },
-];
+const PO_FILTER_LABEL: Record<PoFilter, string> = {
+  all: 'all POs',
+  authoring: 'POs in authoring',
+  active: 'active POs',
+  closed: 'closed POs',
+};
 
 export function PurchaseOrdersPage() {
   const { rows, loading } = usePurchaseOrders();
@@ -107,69 +109,59 @@ export function PurchaseOrdersPage() {
     setParams(params, { replace: false });
   };
 
+  // One KPI surface (PR-1 treatment): StatCards are the counts AND the
+  // filters; hero carries no numbers; the count-tabs row is gone.
+  const filterCards: Array<{
+    key: PoFilter;
+    label: string;
+    value: number;
+    icon: IconName;
+    tone: Tone;
+    hint: string;
+  }> = [
+    { key: 'all',       label: 'Total POs',    value: kpis.total,  icon: 'cart',   tone: 'brand',   hint: 'All statuses' },
+    { key: 'authoring', label: 'In authoring', value: kpis.drafts, icon: 'edit',   tone: 'amber',   hint: 'Draft + pending approval' },
+    { key: 'active',    label: 'Active',       value: kpis.active, icon: 'rotate', tone: 'cyan',    hint: 'Approved or issued' },
+    { key: 'closed',    label: 'Closed',       value: kpis.closed, icon: 'check',  tone: 'emerald', hint: 'Fully received' },
+  ];
+
   return (
     <div className="space-y-6">
       <ModuleHero
         eyebrow="Purchase orders,"
         title={firstName}
-        description="Author, approve, and issue POs to accredited vendors. Warehouse receives against these — closing the request-to-receipt loop."
+        description="Author, approve, and issue POs to accredited vendors."
         icon="cart"
         action={
-          <Guard module="procurement" cap="author_po" fallback={null}>
-            <HeroChipButton href="/procurement/purchase-orders/new" icon="plus">
-              New PO
-            </HeroChipButton>
-          </Guard>
-        }
-        accessory={
-          <>
-            <div>
-              <p className="text-xs uppercase tracking-wide text-brand-100/70">Open POs</p>
-              <p className="tnum text-2xl font-extrabold">{kpis.active + kpis.drafts}</p>
-            </div>
-            <div className="text-right">
-              <p className="text-xs uppercase tracking-wide text-brand-100/70">Open value</p>
-              <p className="tnum text-2xl font-extrabold">
-                ₱{kpis.openValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-              </p>
-            </div>
-          </>
+          <HeroChipButton href="/procurement/?filter=approved" icon="arrowRight">
+            Author from approved request
+          </HeroChipButton>
         }
       />
 
       <div className="stagger grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard
-          label="Total POs"
-          value={kpis.total}
-          icon="cart"
-          tone="brand"
-          hint="All statuses"
-          onClick={() => applyFilter('all')}
-        />
-        <StatCard
-          label="In authoring"
-          value={kpis.drafts}
-          icon="pin"
-          tone="amber"
-          hint="Draft + pending approval"
-          onClick={() => applyFilter('authoring')}
-        />
-        <StatCard
-          label="Active"
-          value={kpis.active}
-          icon="rotate"
-          tone="cyan"
-          hint="Approved or issued"
-          onClick={() => applyFilter('active')}
-        />
-        <StatCard
-          label="Closed"
-          value={kpis.closed}
-          icon="check"
-          tone="emerald"
-          hint="Fully received"
-          onClick={() => applyFilter('closed')}
-        />
+        {filterCards.map((c) => {
+          const active = filter === c.key;
+          return (
+            <div
+              key={c.key}
+              className={
+                active
+                  ? 'rounded-2xl ring-2 ring-brand-500 ring-offset-2 ring-offset-app'
+                  : undefined
+              }
+            >
+              <StatCard
+                label={c.label}
+                value={c.value}
+                icon={c.icon}
+                tone={c.tone}
+                hint={active ? 'Showing below' : c.hint}
+                onClick={() => applyFilter(c.key)}
+              />
+            </div>
+          );
+        })}
       </div>
 
       <div>
@@ -177,43 +169,29 @@ export function PurchaseOrdersPage() {
           title="Purchase orders"
           subtitle={
             filter === 'all'
-              ? 'Every PO drafted from an approved request.'
-              : `Filtered to ${PO_FILTERS.find((f) => f.key === filter)?.label.toLowerCase()}. Switch filters below.`
+              ? kpis.openValue > 0
+                ? `${kpis.drafts + kpis.active} open · ${money(kpis.openValue)} on order`
+                : undefined
+              : `Filtered to ${PO_FILTER_LABEL[filter]} — tap a card above to change scope.`
+          }
+          action={
+            <InfoTip
+              label="About purchase orders"
+              content="POs are authored from approved requests. Awards are gated on vendor accreditation; the warehouse receives against issued POs."
+            />
           }
         />
-
-        <div role="tablist" aria-label="Filter POs" className="mb-3 flex flex-wrap gap-1.5">
-          {PO_FILTERS.map((f) => {
-            const active = filter === f.key;
-            return (
-              <button
-                key={f.key}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => applyFilter(f.key)}
-                className={
-                  active
-                    ? 'chip bg-brand-500/15 text-brand-700 dark:text-brand-300'
-                    : 'chip bg-inset text-muted hover:text-ink'
-                }
-              >
-                {f.label}
-              </button>
-            );
-          })}
-        </div>
 
         {loading ? (
           <div className="h-24 animate-pulse rounded-2xl bg-inset" aria-hidden />
         ) : visibleRows.length === 0 ? (
           <EmptyState
             icon="cart"
-            title={filter === 'all' ? 'No purchase orders yet' : `No ${filter} POs`}
+            title={filter === 'all' ? 'No purchase orders yet' : `No ${PO_FILTER_LABEL[filter]}`}
             message={
               filter === 'all'
                 ? 'Approve a request first — the PO authoring path opens from the request detail page.'
-                : 'Nothing in this bucket right now. Switch filters to see other POs.'
+                : 'Nothing in this bucket right now. Tap a card above to see other POs.'
             }
             action={
               <Link to="/" className="btn-primary">

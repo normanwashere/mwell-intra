@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react';
+import { clsx } from 'clsx';
 import { useWarehouse } from '@/app/store';
+import { actorName, formatWhen } from '@/domain/format';
 import {
   Badge,
   Card,
@@ -11,7 +13,6 @@ import {
   SectionTitle,
   useToast,
 } from '@/components/ui';
-import { relativeTime } from '@/components/ui';
 import { Icon } from '@/components/Icon';
 import { BarcodeScanner } from '@/components/camera/BarcodeScanner';
 import { EvidenceCapture } from '@/components/camera/EvidenceCapture';
@@ -35,6 +36,9 @@ export function ReceivingPage() {
   const [locationId, setLocationId] = useState('');
   const [supplierId, setSupplierId] = useState('');
   const [binId, setBinId] = useState('');
+  // 390px is scan-first (WH-11): context selects collapse into a summary chip
+  // so "Scan to receive" sits above the fold. Desktop always shows them.
+  const [contextOpen, setContextOpen] = useState(false);
   const [selectedProductId, setSelectedProductId] = useState('');
   const [newQty, setNewQty] = useState(1);
   const [lines, setLines] = useState<Line[]>([]);
@@ -147,9 +151,88 @@ export function ReceivingPage() {
       <PageHeader title="Receiving" subtitle="Scan & tag incoming inventory" />
 
       <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
-        {/* Left: capture controls */}
+        {/* Left: capture controls — scan-first (WH-11): the scanner card
+            leads; where/who selects collapse into a summary chip on mobile. */}
         <div className="space-y-4">
-          <Card className="grid gap-3 sm:grid-cols-2">
+          <button
+            type="button"
+            className="flex w-full items-center justify-between gap-2 rounded-xl border border-line bg-surface px-3 py-2.5 text-left text-sm lg:hidden"
+            aria-expanded={contextOpen}
+            onClick={() => setContextOpen((v) => !v)}
+          >
+            <span className="min-w-0 truncate text-muted">
+              Receiving into:{' '}
+              <span className="font-semibold text-ink">
+                {warehouses.find((l) => l.id === activeLocation)?.name ?? '—'}
+                {' · '}
+                {activeBin
+                  ? bins.find((b) => b.id === activeBin)?.code
+                  : 'General area'}
+              </span>
+              {supplierId
+                ? ` · ${data.suppliers.find((s) => s.id === supplierId)?.name ?? ''}`
+                : ''}
+            </span>
+            <Icon
+              name="chevron"
+              className={clsx(
+                'h-4 w-4 shrink-0 text-faint transition',
+                contextOpen ? '-rotate-90' : 'rotate-90',
+              )}
+            />
+          </button>
+
+          <Card className="space-y-3">
+            <Field
+              label="Product"
+              htmlFor="rcv-product"
+              hint="Pick a product and quantity, or scan a barcode. For serialized devices, scan each unit's serial."
+            >
+              <ProductSelect
+                id="rcv-product"
+                products={products}
+                value={selectedProductId}
+                onChange={setSelectedProductId}
+              />
+            </Field>
+
+            {selectedProduct?.serialized ? (
+              <p className="rounded-xl bg-inset px-3 py-2 text-xs text-faint">
+                Serialized device — scan each unit's serial below to add it.
+              </p>
+            ) : (
+              <div className="flex items-end gap-2">
+                <div className="w-32">
+                  <Field label="Quantity" htmlFor="rcv-qty">
+                    <QuantityStepper
+                      id="rcv-qty"
+                      aria-label="Quantity to add"
+                      value={newQty}
+                      onChange={setNewQty}
+                      min={1}
+                    />
+                  </Field>
+                </div>
+                <button
+                  type="button"
+                  className="btn-primary flex-1"
+                  disabled={!selectedProductId}
+                  onClick={addSelected}
+                >
+                  <Icon name="plus" /> Add to receipt
+                </button>
+              </div>
+            )}
+
+            <BarcodeScanner onDetected={handleScan} label="Scan to receive" />
+          </Card>
+
+          <Card
+            className={clsx(
+              'grid gap-3 sm:grid-cols-2',
+              !contextOpen && 'hidden lg:grid',
+            )}
+          >
             <Field label="Receive into" htmlFor="rcv-location">
               <select
                 id="rcv-location"
@@ -206,51 +289,6 @@ export function ReceivingPage() {
                 </select>
               </Field>
             </div>
-          </Card>
-
-          <Card className="space-y-3">
-            <Field
-              label="Item context"
-              htmlFor="rcv-product"
-              hint="Pick a product and quantity, or scan a barcode. For serialized devices, scan each unit's serial."
-            >
-              <ProductSelect
-                id="rcv-product"
-                products={products}
-                value={selectedProductId}
-                onChange={setSelectedProductId}
-              />
-            </Field>
-
-            {selectedProduct?.serialized ? (
-              <p className="rounded-xl bg-inset px-3 py-2 text-xs text-faint">
-                Serialized device — scan each unit's serial below to add it.
-              </p>
-            ) : (
-              <div className="flex items-end gap-2">
-                <div className="w-32">
-                  <Field label="Quantity" htmlFor="rcv-qty">
-                    <QuantityStepper
-                      id="rcv-qty"
-                      aria-label="Quantity to add"
-                      value={newQty}
-                      onChange={setNewQty}
-                      min={1}
-                    />
-                  </Field>
-                </div>
-                <button
-                  type="button"
-                  className="btn-primary flex-1"
-                  disabled={!selectedProductId}
-                  onClick={addSelected}
-                >
-                  <Icon name="plus" /> Add to receipt
-                </button>
-              </div>
-            )}
-
-            <BarcodeScanner onDetected={handleScan} label="Scan to receive" />
           </Card>
         </div>
 
@@ -383,11 +421,11 @@ export function ReceivingPage() {
                         {total} item(s) into {loc?.name ?? r.locationId}
                       </span>
                       <span className="text-xs text-faint">
-                        {relativeTime(r.createdAt)}
+                        {formatWhen(r.createdAt)}
                       </span>
                     </div>
                     <p className="mt-0.5 text-xs text-faint">
-                      {sup ? sup.name : 'No supplier'} · by {r.actor}
+                      {sup ? sup.name : 'No supplier'} · by {actorName(r.actor)}
                     </p>
                     <ul className="mt-2 space-y-1 text-sm text-muted">
                       {r.lines.map((l, i) => {

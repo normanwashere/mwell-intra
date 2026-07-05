@@ -21,7 +21,13 @@ import type {
   SignedInstrument,
   VendorInvite,
 } from './types';
-import { buildTailoredChecklist, migrateChecklist } from './caseLogic';
+import {
+  buildTailoredChecklist,
+  derivePreviousCaseId,
+  migrateChecklist,
+} from './caseLogic';
+import { cleanupCases } from './hygiene';
+import type { VendorLoginAlias } from './vendorAccess';
 import type { TailoringProfile } from './requirements/policy';
 
 const CASES_KEY = 'intra.legal.v1.cases';
@@ -30,6 +36,7 @@ const DOCS_KEY = 'intra.legal.v1.docs';
 const TIMELINE_KEY = 'intra.legal.v1.timeline';
 const INVITES_KEY = 'intra.legal.v1.invites';
 const SIGNED_KEY = 'intra.legal.v1.signed_instruments';
+const ALIASES_KEY = 'intra.legal.v1.vendor_aliases';
 const SEED_KEY = 'intra.legal.v1.seeded';
 const MIGRATED_KEY = 'intra.legal.v2.checklist_migrated';
 const CHANGE_EVT = 'intra.legal.change';
@@ -143,6 +150,30 @@ function migrateOnce(): void {
   window.localStorage.setItem(MIGRATED_KEY, '1');
 }
 
+/**
+ * Demo-data hygiene (F1.2): repair vendorId collisions left behind by E2E
+ * walks that rebound invite-minted cases onto `ven-acme`. `cleanupCases` is
+ * deterministic + idempotent, so re-running on clean data is a no-op; the
+ * module-level flag just keeps the console.warn to once per page load.
+ */
+let hygieneRanThisLoad = false;
+function cleanupOnce(): void {
+  if (typeof window === 'undefined' || hygieneRanThisLoad) return;
+  hygieneRanThisLoad = true;
+  const cases = safeRead<AccreditationCase>(CASES_KEY);
+  const invites = safeRead<VendorInvite>(INVITES_KEY);
+  const result = cleanupCases(cases, invites);
+  if (!result.changed) return;
+  safeWrite(CASES_KEY, result.cases);
+  // Intentionally timeline-free: hygiene is plumbing, not case activity.
+  console.warn(
+    `[legal] demo-data hygiene: repaired ${result.reassigned.length + result.dropped.length} inconsistent case(s) ` +
+      `(${result.reassigned.map((k) => `${k.vendorName} → reassigned`).join(', ')}` +
+      `${result.reassigned.length && result.dropped.length ? ', ' : ''}` +
+      `${result.dropped.map((k) => `${k.vendorName} → dropped`).join(', ')}).`,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Shared hook wiring
 // ---------------------------------------------------------------------------
@@ -154,6 +185,7 @@ function useTrackedRows<T>(key: string): [T[], (rows: T[]) => void, boolean] {
     if (typeof window !== 'undefined') {
       seedOnce();
       migrateOnce();
+      cleanupOnce();
     }
     setRows(safeRead<T>(key));
     setLoading(false);
@@ -238,6 +270,12 @@ export function useAccreditationCases(): CasesAPI {
   const addCase = useCallback<CasesAPI['addCase']>(
     (vendorId, vendorName, category, actor, opts) => {
       const profile = opts?.profile;
+      // Renewal continuity (F2.3): link the vendor's latest prior case so
+      // reviewers can reach last cycle's documents from the new case.
+      const previousCaseId = derivePreviousCaseId(
+        safeRead<AccreditationCase>(CASES_KEY),
+        vendorId,
+      );
       const next: AccreditationCase = {
         id: newId('case'),
         vendorId,
@@ -247,6 +285,7 @@ export function useAccreditationCases(): CasesAPI {
         category,
         invitedByEmail: actor,
         contactEmail: opts?.contactEmail,
+        previousCaseId,
         ...(profile
           ? {
               jurisdiction: profile.jurisdiction,
@@ -680,11 +719,41 @@ export function useVendorInvites(): InvitesAPI {
           : {}),
       };
       set([next, ...safeRead<VendorInvite>(INVITES_KEY)]);
+      // Demo vendor identity provisioning (F1.3): persist a login alias
+      // (contact email → the `ven-<inviteId>` vendor this invite mints) so
+      // the vendor-scoping checks (vendorAccess.matchesVendor) can accept a
+      // memory-mode session signed in with the invited email. Demo-only
+      // bridge — the shell's SessionProvider/demoProfiles are untouched, and
+      // live mode replaces this with real vendor profiles + RLS.
+      const aliases = safeRead<VendorLoginAlias>(ALIASES_KEY);
+      const email = input.email.trim().toLowerCase();
+      if (!aliases.some((a) => a.email === email)) {
+        safeWrite(ALIASES_KEY, [
+          {
+            email,
+            vendorId: `ven-${next.id}`,
+            companyName: input.companyName,
+            createdAt: next.createdAt,
+          },
+          ...aliases,
+        ]);
+      }
       return next;
     },
     [set],
   );
   return { rows, loading, invite };
+}
+
+// ---------------------------------------------------------------------------
+// Vendor login aliases (demo bridge, see useVendorInvites.invite)
+// ---------------------------------------------------------------------------
+export function useVendorAliases(): {
+  rows: VendorLoginAlias[];
+  loading: boolean;
+} {
+  const [rows, , loading] = useTrackedRows<VendorLoginAlias>(ALIASES_KEY);
+  return { rows, loading };
 }
 
 // ---------------------------------------------------------------------------

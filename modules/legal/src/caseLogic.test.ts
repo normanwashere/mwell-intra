@@ -11,14 +11,19 @@ import type {
 import {
   buildTailoredChecklist,
   checklistItemFromDefinition,
+  checklistRowRank,
   computeCaseProgress,
   deriveInboxBucket,
+  derivePreviousCaseId,
+  docVersionChain,
   groupLabel,
   groupOrderIndex,
   hasEvidence,
+  isGroupSolved,
   itemExpiringSoon,
   migrateChecklist,
   migrateChecklistItem,
+  sortChecklistRows,
 } from './caseLogic';
 import { CATALOG_BY_CODE } from './requirements/catalog';
 import {
@@ -367,5 +372,112 @@ describe('deriveInboxBucket', () => {
       signed: [],
     });
     expect(bucket).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Document version chains (F2.1)
+// ---------------------------------------------------------------------------
+
+describe('docVersionChain', () => {
+  it('orders by version desc — newest is current, rest are previous', () => {
+    const v1 = doc({ version: 1, uploadedAt: '2026-07-01T00:00:00.000Z' });
+    const v3 = doc({ version: 3, uploadedAt: '2026-07-03T00:00:00.000Z' });
+    const v2 = doc({ version: 2, uploadedAt: '2026-07-02T00:00:00.000Z' });
+    const chain = docVersionChain([v1, v3, v2])!;
+    expect(chain.current.id).toBe(v3.id);
+    expect(chain.previous.map((d) => d.id)).toEqual([v2.id, v1.id]);
+  });
+
+  it('tie-breaks equal versions on uploadedAt desc', () => {
+    const older = doc({ version: 1, uploadedAt: '2026-07-01T00:00:00.000Z' });
+    const newer = doc({ version: 1, uploadedAt: '2026-07-04T00:00:00.000Z' });
+    const chain = docVersionChain([older, newer])!;
+    expect(chain.current.id).toBe(newer.id);
+    expect(chain.previous.map((d) => d.id)).toEqual([older.id]);
+  });
+
+  it('returns null for an empty list', () => {
+    expect(docVersionChain([])).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Checklist ordering + group collapse (§2.2.2 / §2.2.5)
+// ---------------------------------------------------------------------------
+
+describe('checklist ordering + group collapse', () => {
+  const items = buildTailoredChecklist(DEFAULT_TAILORING_PROFILE, 'case_1', nextId);
+
+  it('ranks rejected → pending → submitted → approved', () => {
+    const plain = items.filter((i) => !i.instrument);
+    const rejected = { ...plain[0]!, decision: 'rejected' as const };
+    const pending = { ...plain[1]!, decision: 'pending' as const };
+    const submitted = { ...plain[2]!, decision: 'pending' as const };
+    const approved = { ...plain[3]!, decision: 'approved' as const };
+    const evidence = { docs: [doc({ requirementId: submitted.id })], signed: [] };
+    const sorted = sortChecklistRows(
+      [approved, submitted, pending, rejected],
+      evidence,
+    );
+    expect(sorted.map((r) => r.id)).toEqual([
+      rejected.id,
+      pending.id,
+      submitted.id,
+      approved.id,
+    ]);
+    expect(checklistRowRank(rejected, evidence)).toBe(0);
+    expect(checklistRowRank(approved, evidence)).toBe(3);
+  });
+
+  it('marks a group solved when all required items are approved / n-a', () => {
+    const group = items.filter((i) => i.group === 'statutory');
+    const solved = group.map((i) =>
+      i.required ? { ...i, decision: 'approved' as const } : { ...i, decision: 'na' as const },
+    );
+    expect(isGroupSolved(solved)).toBe(true);
+  });
+
+  it('keeps a group expanded when anything is rejected or still open', () => {
+    const group = items.filter((i) => i.group === 'statutory');
+    expect(isGroupSolved(group)).toBe(false); // all pending
+    const oneRejected = group.map((i, idx) =>
+      idx === 0
+        ? { ...i, decision: 'rejected' as const }
+        : { ...i, decision: 'approved' as const },
+    );
+    expect(isGroupSolved(oneRejected)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Renewal continuity (F2.3)
+// ---------------------------------------------------------------------------
+
+describe('derivePreviousCaseId', () => {
+  const older = baseCase({
+    id: 'case_2025',
+    openedAt: '2025-06-01T00:00:00.000Z',
+    status: 'approved',
+  });
+  const newer = baseCase({
+    id: 'case_2026',
+    openedAt: '2026-06-01T00:00:00.000Z',
+    status: 'approved',
+  });
+
+  it('links the latest prior case for the same vendor', () => {
+    expect(derivePreviousCaseId([older, newer], 'ven_1')).toBe('case_2026');
+    expect(derivePreviousCaseId([newer, older], 'ven_1')).toBe('case_2026');
+  });
+
+  it('returns undefined for a first-time vendor', () => {
+    expect(derivePreviousCaseId([older, newer], 'ven_other')).toBeUndefined();
+    expect(derivePreviousCaseId([], 'ven_1')).toBeUndefined();
+  });
+
+  it('ignores other vendors\u2019 cases entirely', () => {
+    const foreign = baseCase({ id: 'case_x', vendorId: 'ven_2' });
+    expect(derivePreviousCaseId([foreign, older], 'ven_1')).toBe('case_2025');
   });
 });

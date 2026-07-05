@@ -20,7 +20,7 @@ describe('EventDetailPage', () => {
     renderEvent('finance');
     expect(await screen.findByRole('heading', { name: /Makati Corporate/i })).toBeInTheDocument();
     expect(screen.getByText(/event costing/i)).toBeInTheDocument();
-    expect(screen.getByText('Consumed')).toBeInTheDocument();
+    expect(screen.getByText('Units consumed')).toBeInTheDocument();
     expect(screen.getByLabelText('Event allocations')).toBeInTheDocument();
   });
 

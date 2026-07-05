@@ -34,6 +34,14 @@ cp .env.example .env      # fill Supabase creds (M-Intra project)
 pnpm dev                  # runs the shell (and module dev servers)
 ```
 
+## Deploy (Vercel)
+
+Monorepo root is the repo; the Vercel project **Root Directory** must be `apps/shell`.
+
+1. Import the GitHub repo in Vercel (or `pnpm dlx vercel link` from `apps/shell`).
+2. Set environment variables from `.env.example` (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, optional `NEXT_PUBLIC_DATA_SOURCE=memory` for demo).
+3. Deploy — `apps/shell/vercel.json` runs `pnpm install` and `turbo build --filter=@intra/shell` from the monorepo root.
+
 ## Suite invariants (see spec §6)
 
 1. UI → store → repository port. No direct Supabase calls in pages/components.

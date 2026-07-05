@@ -5,6 +5,7 @@ import { can } from '@/auth/roles';
 import { toStockState } from '@/data/repository';
 import { uncommittedAvailable, validateReservation } from '@/domain/allocations';
 import { eventCosting, eventSummary } from '@/domain/events';
+import { formatDate, statusLabel } from '@/domain/format';
 import { primaryStockLocation, stockByLocation } from '@/domain/transfers';
 import { stockByBin } from '@/domain/storage';
 import {
@@ -240,8 +241,8 @@ export function EventDetailPage() {
           <div className="min-w-0">
             <h1 className="font-display text-xl font-extrabold sm:text-2xl">{event.name}</h1>
             <p className="text-sm text-brand-100/80">
-              {event.type.replace('_', ' ')} · {event.startDate}
-              {event.endDate ? ` – ${event.endDate}` : ''}
+              {statusLabel(event.type)} · {formatDate(event.startDate)}
+              {event.endDate ? ` – ${formatDate(event.endDate)}` : ''}
             </p>
           </div>
           {canReserve && (
@@ -257,10 +258,12 @@ export function EventDetailPage() {
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="Reserved" value={summary.reserved} icon="tag" tone="amber" />
-        <StatCard label="Issued" value={summary.issued} icon="truck" tone="brand" />
-        <StatCard label="Returned" value={summary.returned} icon="rotate" tone="slate" />
-        <StatCard label="Consumed" value={summary.consumed} icon="check" tone="emerald" />
+        <StatCard label="Reserved" value={summary.reserved} icon="tag" tone="amber" hint="Units" />
+        <StatCard label="Issued" value={summary.issued} icon="truck" tone="brand" hint="Units" />
+        <StatCard label="Returned" value={summary.returned} icon="rotate" tone="slate" hint="Units" />
+        {/* "Units consumed" — the events LIST shows ₱ spent; same word must
+            not mean two things (WH-16). */}
+        <StatCard label="Units consumed" value={summary.consumed} icon="check" tone="emerald" hint="Units" />
       </div>
 
       <Card>
@@ -306,7 +309,7 @@ export function EventDetailPage() {
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Badge tone={STATUS_TONE[a.status]}>{a.status}</Badge>
+                  <Badge tone={STATUS_TONE[a.status]}>{statusLabel(a.status)}</Badge>
                   {canIssue && a.status === 'reserved' && (
                     <button
                       type="button"

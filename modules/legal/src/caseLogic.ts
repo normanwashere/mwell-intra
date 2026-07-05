@@ -272,6 +272,103 @@ export function computeCaseProgress(
 }
 
 // ---------------------------------------------------------------------------
+// Document version chains (F2.1)
+// ---------------------------------------------------------------------------
+
+export interface DocVersionChain {
+  /** Newest version — rendered as the full "current" row. */
+  current: AccreditationDoc;
+  /** Older versions, newest first — collapsed behind a disclosure. */
+  previous: AccreditationDoc[];
+}
+
+/**
+ * Order a requirement's documents into a current-vs-superseded chain.
+ * Sorted by `version` desc with `uploadedAt` desc as the tie-break, so a
+ * re-upload always outranks the rejected v1 above it. Returns null when the
+ * list is empty.
+ */
+export function docVersionChain(
+  docs: readonly AccreditationDoc[],
+): DocVersionChain | null {
+  if (docs.length === 0) return null;
+  const sorted = [...docs].sort(
+    (a, b) =>
+      b.version - a.version ||
+      new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime(),
+  );
+  return { current: sorted[0]!, previous: sorted.slice(1) };
+}
+
+// ---------------------------------------------------------------------------
+// Checklist ordering + group collapse (§2.2.2 / §2.2.5)
+// ---------------------------------------------------------------------------
+
+/**
+ * Attention-first sort rank inside a group: rejected → pending (nothing
+ * submitted) → submitted (evidence awaiting review) → approved / n-a.
+ */
+export function checklistRowRank(
+  item: RequirementChecklistItem,
+  evidence: CaseEvidence,
+): number {
+  if (item.decision === 'rejected') return 0;
+  if (item.decision === 'pending') return hasEvidence(item, evidence) ? 2 : 1;
+  return 3; // approved / na
+}
+
+export function sortChecklistRows(
+  rows: readonly RequirementChecklistItem[],
+  evidence: CaseEvidence,
+): RequirementChecklistItem[] {
+  return [...rows].sort(
+    (a, b) => checklistRowRank(a, evidence) - checklistRowRank(b, evidence),
+  );
+}
+
+/**
+ * A group renders collapsed (✓ summary row) when every REQUIRED item is
+ * approved / n-a and nothing in it was rejected; groups with rejected or
+ * open items auto-expand.
+ */
+export function isGroupSolved(
+  rows: readonly RequirementChecklistItem[],
+): boolean {
+  if (rows.length === 0) return true;
+  if (rows.some((r) => r.decision === 'rejected')) return false;
+  const required = rows.filter((r) => r.required);
+  if (required.length === 0) {
+    return rows.every((r) => r.decision !== 'pending');
+  }
+  return required.every(
+    (r) => r.decision === 'approved' || r.decision === 'na',
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Renewal continuity (F2.3)
+// ---------------------------------------------------------------------------
+
+/**
+ * The vendor's latest prior case — linked onto a new case as
+ * `previousCaseId` so renewal reviews can reach last cycle's documents.
+ * Ties on openedAt resolve by id for determinism.
+ */
+export function derivePreviousCaseId(
+  existing: readonly AccreditationCase[],
+  vendorId: string,
+): string | undefined {
+  const prior = existing
+    .filter((k) => k.vendorId === vendorId)
+    .sort(
+      (a, b) =>
+        new Date(b.openedAt).getTime() - new Date(a.openedAt).getTime() ||
+        b.id.localeCompare(a.id),
+    );
+  return prior[0]?.id;
+}
+
+// ---------------------------------------------------------------------------
 // Reviewer inbox buckets
 // ---------------------------------------------------------------------------
 

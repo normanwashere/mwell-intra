@@ -46,7 +46,9 @@ export function BarcodeScanner({
         stop();
       },
       () => {
-        setError('Camera unavailable — enter the code manually below.');
+        setError(
+          'Scanning needs camera access. Allow the camera in your browser settings, or type the code manually below.',
+        );
         setScanning(false);
       },
     );

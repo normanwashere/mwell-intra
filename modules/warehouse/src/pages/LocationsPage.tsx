@@ -27,6 +27,7 @@ export function LocationsPage() {
   const [type, setType] = useState<Location['type']>('warehouse');
   const [id, setId] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const locations = useMemo(
     () => [...(data?.locations ?? [])].sort((a, b) => a.name.localeCompare(b.name)),
@@ -39,6 +40,7 @@ export function LocationsPage() {
     setType('warehouse');
     setId('');
     setError(null);
+    setConfirmDelete(false);
     setOpen(true);
   };
 
@@ -48,6 +50,7 @@ export function LocationsPage() {
     setType(l.type);
     setId(l.id);
     setError(null);
+    setConfirmDelete(false);
     setOpen(true);
   };
 
@@ -76,6 +79,9 @@ export function LocationsPage() {
   const remove = async (l: Location) => {
     const ok = await deleteLocation({ locationId: l.id });
     if (!ok) return;
+    setOpen(false);
+    setEditing(null);
+    setConfirmDelete(false);
     toast.success(`Removed ${l.name}`);
   };
 
@@ -100,32 +106,23 @@ export function LocationsPage() {
           {locations.map((l) => {
             const meta = TYPE_META[l.type] ?? { label: l.type, tone: 'amber' as const };
             return (
-              <Card key={l.id} className="space-y-3 p-4">
+              /* Row = target (WH-21): the card opens the edit sheet; Delete
+                 lives inside it behind a confirm. Type replaces the raw id
+                 as the secondary line (WH-22). */
+              <button
+                key={l.id}
+                type="button"
+                onClick={() => openEdit(l)}
+                className="card block w-full space-y-2 p-4 text-left transition hover:-translate-y-0.5 hover:shadow-e3"
+              >
                 <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="truncate font-semibold text-ink">{l.name}</p>
-                    <p className="font-mono text-xs text-faint">{l.id}</p>
-                  </div>
+                  <p className="min-w-0 truncate font-semibold text-ink">{l.name}</p>
                   <Badge tone={meta.tone}>{meta.label}</Badge>
                 </div>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    className="btn-ghost btn-sm flex-1 justify-center"
-                    onClick={() => openEdit(l)}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-outline btn-sm text-rose-500"
-                    aria-label={`Delete ${l.name}`}
-                    onClick={() => void remove(l)}
-                  >
-                    <Icon name="x" />
-                  </button>
-                </div>
-              </Card>
+                <span className="inline-flex items-center gap-1 text-xs font-medium text-brand-700 dark:text-brand-300">
+                  Edit <Icon name="chevron" className="h-3.5 w-3.5" />
+                </span>
+              </button>
             );
           })}
         </div>
@@ -133,12 +130,45 @@ export function LocationsPage() {
 
       <Sheet
         open={open}
-        onOpenChange={setOpen}
+        onOpenChange={(o) => {
+          setOpen(o);
+          if (!o) setConfirmDelete(false);
+        }}
         title={editing ? 'Edit location' : 'Add location'}
+        description={editing ? `Reference id: ${editing.id}` : undefined}
         footer={
-          <button type="button" className="btn-primary w-full justify-center" onClick={() => void submit()}>
-            {editing ? 'Save' : 'Add'}
-          </button>
+          <div className="space-y-2">
+            <button type="button" className="btn-primary w-full justify-center" onClick={() => void submit()}>
+              {editing ? 'Save' : 'Add'}
+            </button>
+            {editing &&
+              (confirmDelete ? (
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    className="btn-ghost flex-1 justify-center"
+                    onClick={() => setConfirmDelete(false)}
+                  >
+                    Keep location
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-outline flex-1 justify-center text-rose-500"
+                    onClick={() => editing && void remove(editing)}
+                  >
+                    Confirm delete
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="btn-ghost w-full justify-center text-rose-500"
+                  onClick={() => setConfirmDelete(true)}
+                >
+                  <Icon name="x" className="h-4 w-4" /> Delete location…
+                </button>
+              ))}
+          </div>
         }
       >
         <div className="space-y-3">

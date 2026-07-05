@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { SignInPrompt, SkeletonList, SkeletonStats } from '@intra/ui';
 import { useSession } from '@intra/auth';
@@ -12,6 +12,7 @@ import { RequestDetailPage } from './pages/RequestDetailPage';
 import { ApprovalInboxPage } from './pages/ApprovalInboxPage';
 import { PurchaseOrdersPage } from './pages/PurchaseOrdersPage';
 import { PODetailPage } from './pages/PODetailPage';
+import { resolveTiers, type UserRolesShape } from './tiers';
 
 export interface ProcurementAppProps {
   /** Path prefix the shell mounts this module under (default `/procurement`). */
@@ -32,8 +33,19 @@ function useNormalizeBasenamePath(basename: string): void {
 export function ProcurementApp({ basename = '/procurement' }: ProcurementAppProps) {
   useNormalizeBasenamePath(basename);
   const { profile, userRoles, loading } = useSession();
-  const hasAccess = can(userRoles, 'procurement', 'view_dashboard');
-  const canApprove = can(userRoles, 'procurement', 'approve_request');
+  // PR-11 (P0): the module previously gated on procurement.view_dashboard,
+  // which locked out ladder-tier approvers with NO procurement role (the
+  // Legal tier is held by legal:legal_reviewer). Tier-eligible users are now
+  // admitted, but routed to /approvals only — Requests / POs stay hidden.
+  const myTiers = useMemo(
+    () => resolveTiers(userRoles as UserRolesShape),
+    [userRoles],
+  );
+  const canViewDashboard = can(userRoles, 'procurement', 'view_dashboard');
+  const hasAccess = canViewDashboard || myTiers.length > 0;
+  const approvalsOnly = !canViewDashboard && myTiers.length > 0;
+  const canApprove =
+    can(userRoles, 'procurement', 'approve_request') || myTiers.length > 0;
   if (loading) {
     return (
       <div className="mx-auto max-w-5xl space-y-6 p-4 md:p-6" aria-busy="true">
@@ -79,15 +91,33 @@ export function ProcurementApp({ basename = '/procurement' }: ProcurementAppProp
     >
       {/* No nested ToastProvider — the shell's root Providers already mounts
           one; nesting a second rendered a duplicate toast viewport. */}
-      <ProcurementTabs canApprove={canApprove} />
+      <ProcurementTabs
+        canApprove={canApprove}
+        showRequests={!approvalsOnly}
+        showPurchaseOrders={!approvalsOnly}
+      />
       <Routes>
-        <Route path="/" element={<RequestsPage />} />
-        <Route path="/requests/new" element={<CreateRequestPage />} />
-        <Route path="/requests/:id" element={<RequestDetailPage />} />
-        <Route path="/approvals" element={<ApprovalInboxPage />} />
-        <Route path="/purchase-orders" element={<PurchaseOrdersPage />} />
-        <Route path="/purchase-orders/:id" element={<PODetailPage />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        {approvalsOnly ? (
+          <>
+            {/* Tier-only entrants (e.g. Legal) land on the approvals surface.
+                Request detail stays reachable — it's the "Review" step of an
+                approval — but the list/create/PO surfaces are off-limits. */}
+            <Route path="/" element={<Navigate to="/approvals" replace />} />
+            <Route path="/approvals" element={<ApprovalInboxPage />} />
+            <Route path="/requests/:id" element={<RequestDetailPage />} />
+            <Route path="*" element={<Navigate to="/approvals" replace />} />
+          </>
+        ) : (
+          <>
+            <Route path="/" element={<RequestsPage />} />
+            <Route path="/requests/new" element={<CreateRequestPage />} />
+            <Route path="/requests/:id" element={<RequestDetailPage />} />
+            <Route path="/approvals" element={<ApprovalInboxPage />} />
+            <Route path="/purchase-orders" element={<PurchaseOrdersPage />} />
+            <Route path="/purchase-orders/:id" element={<PODetailPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </>
+        )}
       </Routes>
     </BrowserRouter>
   );

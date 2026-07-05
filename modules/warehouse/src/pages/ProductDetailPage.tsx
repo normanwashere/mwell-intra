@@ -6,6 +6,13 @@ import { availableForProduct } from '@/domain/stock';
 import { stockByLocation, validateTransfer } from '@/domain/transfers';
 import { stockByBin } from '@/domain/storage';
 import { productMovementHistory, unitTimeline } from '@/domain/traceability';
+import {
+  actorName,
+  formatWhen,
+  movementTypeLabel,
+  signedQuantity,
+  statusLabel,
+} from '@/domain/format';
 import type { InventoryUnit, UnitStatus } from '@/domain/types';
 import {
   Badge,
@@ -16,7 +23,6 @@ import {
   SectionTitle,
   Sheet,
   money,
-  relativeTime,
   useToast,
   type Tone,
 } from '@/components/ui';
@@ -282,9 +288,11 @@ export function ProductDetailPage() {
             <h1 className="text-xl font-extrabold sm:text-2xl">{product.name}</h1>
             <p className="font-mono text-sm text-brand-100/80">{product.sku}</p>
             <div className="mt-2 flex flex-wrap gap-1.5">
-              <span className="chip bg-white/15 text-white">{product.category}</span>
+              <span className="chip bg-white/15 text-white">
+                {statusLabel(product.category)}
+              </span>
               {product.serialized && (
-                <span className="chip bg-white/15 text-white">serialized</span>
+                <span className="chip bg-white/15 text-white">Serialized</span>
               )}
               {Object.entries(product.attributes).map(([k, v]) => (
                 <span key={k} className="chip bg-white/15 text-white">
@@ -292,7 +300,7 @@ export function ProductDetailPage() {
                 </span>
               ))}
               {product.promotional && (
-                <span className="chip bg-amber-300/90 text-amber-900">promo</span>
+                <span className="chip bg-amber-300/90 text-amber-900">Promo</span>
               )}
             </div>
           </div>
@@ -452,7 +460,7 @@ export function ProductDetailPage() {
                         {u.assignedTo ? ` • ${u.assignedTo}` : ''}
                       </p>
                     </div>
-                    <Badge tone={UNIT_TONE[u.status]}>{u.status}</Badge>
+                    <Badge tone={UNIT_TONE[u.status]}>{statusLabel(u.status)}</Badge>
                   </button>
                 </li>
               ))}
@@ -476,15 +484,17 @@ export function ProductDetailPage() {
                 <span className="absolute -left-[1.32rem] top-1 grid h-3 w-3 place-items-center rounded-full bg-brand-500 ring-4 ring-white" />
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-sm font-medium text-ink">
-                    <span className="uppercase text-brand-700 dark:text-brand-300">{m.type}</span>
+                    <span className="font-semibold text-brand-700 dark:text-brand-300">
+                      {movementTypeLabel(m.type)}
+                    </span>
                     {m.reason ? ` · ${m.reason}` : ''}
                   </p>
                   <span className="tabular-nums text-sm font-semibold text-ink">
-                    {m.quantity > 0 ? `+${m.quantity}` : m.quantity}
+                    {signedQuantity(m.type, m.quantity)}
                   </span>
                 </div>
                 <p className="text-xs text-faint">
-                  {m.actor} • {relativeTime(m.createdAt)}
+                  {actorName(m.actor)} • {formatWhen(m.createdAt)}
                 </p>
                 {m.evidenceUrls && m.evidenceUrls.length > 0 && (
                   <div className="mt-1.5">
@@ -807,10 +817,12 @@ export function ProductDetailPage() {
               <li key={m.id} className="relative">
                 <span className="absolute -left-[1.32rem] top-1 grid h-3 w-3 place-items-center rounded-full bg-accent ring-4 ring-white" />
                 <p className="text-sm font-medium text-ink">
-                  <span className="uppercase text-brand-700 dark:text-brand-300">{m.type}</span>
+                  <span className="font-semibold text-brand-700 dark:text-brand-300">
+                    {movementTypeLabel(m.type)}
+                  </span>
                   {m.reason ? ` · ${m.reason}` : ''}
                 </p>
-                <p className="text-xs text-faint">{relativeTime(m.createdAt)}</p>
+                <p className="text-xs text-faint">{formatWhen(m.createdAt)}</p>
               </li>
             ))}
           </ol>

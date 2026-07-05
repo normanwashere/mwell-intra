@@ -12,6 +12,7 @@ import {
   nextApprover,
   nextPendingStep,
   requiredDocuments,
+  requiredDocumentsStatus,
   suggestSourcingMethod,
   tierLabel,
 } from './policy';
@@ -317,6 +318,57 @@ describe('requiredDocuments', () => {
     expect(
       requiredDocuments({ category: 'manpower', sourcingMethod: 'rfq' }).map((d) => d.key),
     ).toContain('bond');
+  });
+});
+
+describe('requiredDocumentsStatus (PR-19 — checklist reflects real attachments)', () => {
+  it('marks every doc missing when there are no attachments', () => {
+    const docs = requiredDocumentsStatus({ sourcingMethod: 'rfq' }, []);
+    expect(docs.length).toBeGreaterThan(0);
+    expect(docs.every((d) => !d.attached)).toBe(true);
+  });
+
+  it('ticks docs whose matching attachment kind exists', () => {
+    const docs = requiredDocumentsStatus({ sourcingMethod: 'rfq' }, [
+      { kind: 'spec' },
+      { kind: 'budget' },
+    ]);
+    const byKey = Object.fromEntries(docs.map((d) => [d.key, d.attached]));
+    expect(byKey['spec']).toBe(true);
+    expect(byKey['budget']).toBe(true);
+    expect(byKey['previous']).toBe(false);
+    expect(byKey['quotes']).toBe(false);
+  });
+
+  it('matches RFP bids and AR drafts to their dedicated kinds', () => {
+    const docs = requiredDocumentsStatus({ sourcingMethod: 'rfp' }, [
+      { kind: 'quote' },
+      { kind: 'award_recommendation' },
+    ]);
+    const byKey = Object.fromEntries(docs.map((d) => [d.key, d.attached]));
+    expect(byKey['bids']).toBe(true);
+    expect(byKey['ar']).toBe(true);
+  });
+
+  it('treats kind-less attachments as "other" (never satisfies a slot)', () => {
+    const docs = requiredDocumentsStatus({ sourcingMethod: 'small_purchase' }, [
+      {},
+      { kind: undefined },
+    ]);
+    expect(docs.every((d) => !d.attached)).toBe(true);
+  });
+
+  it('matches bond/insurance for construction and DA justification for direct awards', () => {
+    const construction = requiredDocumentsStatus(
+      { category: 'construction', sourcingMethod: 'rfp' },
+      [{ kind: 'bond' }],
+    );
+    expect(construction.find((d) => d.key === 'bond')?.attached).toBe(true);
+
+    const direct = requiredDocumentsStatus({ sourcingMethod: 'direct_award' }, [
+      { kind: 'justification' },
+    ]);
+    expect(direct.find((d) => d.key === 'da_justification')?.attached).toBe(true);
   });
 });
 

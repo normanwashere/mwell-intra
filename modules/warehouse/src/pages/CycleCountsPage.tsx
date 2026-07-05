@@ -21,6 +21,7 @@ export function CycleCountsPage() {
   const [category, setCategory] = useState<ItemCategory>('merchandise');
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [blind, setBlind] = useState(false);
+  const [confirmUncounted, setConfirmUncounted] = useState(false);
   const [search, setSearch] = useState('');
   const [searchParams] = useSearchParams();
   const [variancesOnly, setVariancesOnly] = useState(
@@ -58,10 +59,12 @@ export function CycleCountsPage() {
       return next;
     });
 
+  // Counted quantities NEVER prefill with the expected number — a count must
+  // be an explicit entry, otherwise one tap submits a fake "perfect count"
+  // (WH-18). Clearing the input un-counts the row in every mode.
   const onCountChange = (productId: string, raw: string) => {
     if (raw === '') {
-      if (blind) clearCount(productId);
-      else setCount(productId, 0);
+      clearCount(productId);
       return;
     }
     const n = Number(raw);
@@ -69,7 +72,9 @@ export function CycleCountsPage() {
   };
 
   const isCounted = (id: string) => counts[id] !== undefined;
-  // In blind mode only entered rows are recorded; otherwise the whole sheet is.
+  // Blind mode records only entered rows. In normal mode the whole sheet is
+  // recorded — untouched rows fall back to expected, which the submit flow
+  // makes the operator explicitly confirm below.
   const lines = items
     .filter(({ product }) => !blind || isCounted(product.id))
     .map(({ product, expected }) => ({
@@ -79,6 +84,7 @@ export function CycleCountsPage() {
     }));
   const variances = lines.filter((l) => l.counted !== l.expected);
   const enteredCount = items.filter((i) => isCounted(i.product.id)).length;
+  const uncounted = items.length - enteredCount;
 
   const q = search.trim().toLowerCase();
   const isVisible = (id: string, name: string, sku: string, expected: number) => {
@@ -105,6 +111,17 @@ export function CycleCountsPage() {
         : 'Count recorded · balanced',
     );
     setCounts({});
+    setConfirmUncounted(false);
+  };
+
+  // Submitting with silently-uncounted rows needs an explicit confirmation
+  // ("8 rows not counted — submit anyway?", WH-18).
+  const onSubmitClick = () => {
+    if (!blind && uncounted > 0) {
+      setConfirmUncounted(true);
+      return;
+    }
+    void submit();
   };
 
   return (
@@ -190,10 +207,14 @@ export function CycleCountsPage() {
         <SectionTitle
           title="Count sheet"
           action={
+            // "Balanced" is only earned by real entries — before anyone
+            // counts, the sheet is simply "not started" (WH-18).
             variances.length > 0 ? (
               <Badge tone="amber">{variances.length} variance(s)</Badge>
-            ) : (
+            ) : enteredCount > 0 ? (
               <Badge tone="emerald">balanced</Badge>
+            ) : (
+              <Badge tone="slate">not started</Badge>
             )
           }
         />
@@ -279,7 +300,6 @@ export function CycleCountsPage() {
                       const expected = expectedById.get(product.id) ?? 0;
                       const has = isCounted(product.id);
                       const variance = (counts[product.id] ?? expected) - expected;
-                      const showVar = !blind || has;
                       return (
                         <tr key={product.id}>
                           <td className={grouped ? 'py-2 pl-3 pr-2' : 'py-2 pr-2'}>
@@ -290,30 +310,29 @@ export function CycleCountsPage() {
                               {product.sku}
                             </span>
                           </td>
-                          <td className="py-2 text-right tabular-nums">{expected}</td>
+                          <td className="py-2 text-right tabular-nums">
+                            {blind ? '—' : expected}
+                          </td>
                           <td className="py-2 text-right">
                             <input
                               type="number"
-                              className="input w-20 py-1.5 text-right"
+                              inputMode="numeric"
+                              className="input w-24 py-1.5 text-right"
                               aria-label={`Counted ${product.name}`}
-                              placeholder={blind ? '—' : undefined}
-                              value={
-                                blind
-                                  ? (counts[product.id] ?? '')
-                                  : (counts[product.id] ?? expected)
-                              }
+                              placeholder={blind ? '—' : `Exp. ${expected}`}
+                              value={counts[product.id] ?? ''}
                               min={0}
                               onChange={(e) => onCountChange(product.id, e.target.value)}
                             />
                           </td>
                           <td
                             className={
-                              !showVar || variance === 0
+                              !has || variance === 0
                                 ? 'py-2 text-right tabular-nums text-faint'
                                 : 'py-2 text-right font-semibold tabular-nums text-rose-600 dark:text-rose-300'
                             }
                           >
-                            {!showVar ? '—' : variance > 0 ? `+${variance}` : variance}
+                            {!has ? '—' : variance === 0 ? '±0' : variance > 0 ? `+${variance}` : variance}
                           </td>
                         </tr>
                       );
@@ -345,7 +364,6 @@ export function CycleCountsPage() {
                   const expected = expectedById.get(product.id) ?? 0;
                   const has = isCounted(product.id);
                   const variance = (counts[product.id] ?? expected) - expected;
-                  const showVar = !blind || has;
                   return (
                     <li
                       key={product.id}
@@ -363,34 +381,31 @@ export function CycleCountsPage() {
                         <span
                           className={clsx(
                             'shrink-0 rounded-md px-2 py-1 text-xs font-semibold tabular-nums',
-                            !showVar || variance === 0
+                            !has || variance === 0
                               ? 'bg-inset text-faint'
                               : 'bg-rose-500/15 text-rose-600 dark:text-rose-300',
                           )}
                           aria-label="Variance"
                         >
-                          {!showVar ? '—' : variance > 0 ? `+${variance}` : variance}
+                          {!has ? 'Var —' : variance === 0 ? '±0' : variance > 0 ? `+${variance}` : variance}
                         </span>
                       </div>
                       <div className="flex items-center justify-between gap-3">
                         <span className="text-xs text-faint">
                           Expected{' '}
                           <span className="font-semibold tabular-nums text-muted">
-                            {expected}
+                            {blind ? '—' : expected}
                           </span>
                         </span>
                         <label className="flex items-center gap-2">
                           <span className="text-xs text-faint">Counted</span>
                           <input
                             type="number"
+                            inputMode="numeric"
                             className="input min-h-11 w-24 text-right"
                             aria-label={`${product.name} counted quantity`}
-                            placeholder={blind ? '—' : undefined}
-                            value={
-                              blind
-                                ? (counts[product.id] ?? '')
-                                : (counts[product.id] ?? expected)
-                            }
+                            placeholder={blind ? '—' : `Exp. ${expected}`}
+                            value={counts[product.id] ?? ''}
                             min={0}
                             onChange={(e) =>
                               onCountChange(product.id, e.target.value)
@@ -407,14 +422,44 @@ export function CycleCountsPage() {
         </ul>
       </Card>
 
-      <div className="sticky bottom-36 z-20 md:bottom-4">
+      <div className="sticky bottom-36 z-20 space-y-2 md:bottom-4">
+        {confirmUncounted && (
+          <div
+            role="alertdialog"
+            aria-label="Confirm uncounted rows"
+            className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 shadow-pop backdrop-blur"
+          >
+            <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
+              {uncounted} row{uncounted === 1 ? '' : 's'} not counted — they
+              will be recorded at the expected quantity. Submit anyway?
+            </p>
+            <div className="mt-2 flex gap-2">
+              <button
+                type="button"
+                className="btn-ghost btn-sm flex-1 justify-center"
+                onClick={() => setConfirmUncounted(false)}
+              >
+                Keep counting
+              </button>
+              <button
+                type="button"
+                className="btn-primary btn-sm flex-1 justify-center"
+                onClick={() => void submit()}
+              >
+                Submit anyway
+              </button>
+            </div>
+          </div>
+        )}
         <button
           type="button"
           className="btn-primary w-full shadow-pop"
-          disabled={blind && enteredCount === 0}
-          onClick={() => void submit()}
+          // An explicit entry is always required — no more one-tap "perfect
+          // count" (WH-18).
+          disabled={enteredCount === 0}
+          onClick={onSubmitClick}
         >
-          {blind ? `Submit count (${enteredCount})` : 'Submit count'}
+          Submit count ({enteredCount}/{items.length})
         </button>
       </div>
     </div>

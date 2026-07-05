@@ -55,6 +55,7 @@ export function StorageAreasPage() {
   const [label, setLabel] = useState('');
   const [zone, setZone] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   // contents / scan-lookup sheet
   const [viewing, setViewing] = useState<StorageArea | null>(null);
@@ -66,6 +67,7 @@ export function StorageAreasPage() {
     setLabel('');
     setZone('');
     setError(null);
+    setConfirmDelete(false);
     setOpen(true);
   };
 
@@ -75,6 +77,7 @@ export function StorageAreasPage() {
     setLabel(b.label ?? '');
     setZone(b.zone ?? '');
     setError(null);
+    setConfirmDelete(false);
     setOpen(true);
   };
 
@@ -114,6 +117,9 @@ export function StorageAreasPage() {
   const remove = async (b: StorageArea) => {
     const ok = await deleteStorageArea({ storageAreaId: b.id });
     if (!ok) return;
+    setOpen(false);
+    setEditing(null);
+    setConfirmDelete(false);
     toast.success(`Removed ${b.code}`);
   };
 
@@ -228,23 +234,15 @@ export function StorageAreasPage() {
                   </p>
                 </button>
                 {canManage && (
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      className="btn-ghost btn-sm flex-1 justify-center"
-                      onClick={() => openEdit(b)}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-outline btn-sm text-rose-500"
-                      aria-label={`Delete ${b.code}`}
-                      onClick={() => void remove(b)}
-                    >
-                      <Icon name="x" />
-                    </button>
-                  </div>
+                  /* Delete moved inside the edit sheet behind a confirm —
+                     no permanently visible destructive control (WH-21). */
+                  <button
+                    type="button"
+                    className="btn-ghost btn-sm w-full justify-center"
+                    onClick={() => openEdit(b)}
+                  >
+                    Edit
+                  </button>
                 )}
               </Card>
             );
@@ -255,16 +253,48 @@ export function StorageAreasPage() {
       {/* Add / edit bin */}
       <Sheet
         open={open}
-        onOpenChange={setOpen}
+        onOpenChange={(o) => {
+          setOpen(o);
+          if (!o) setConfirmDelete(false);
+        }}
         title={editing ? 'Edit storage area' : 'Add storage area'}
         footer={
-          <button
-            type="button"
-            className="btn-primary w-full justify-center"
-            onClick={() => void submit()}
-          >
-            {editing ? 'Save' : 'Add bin'}
-          </button>
+          <div className="space-y-2">
+            <button
+              type="button"
+              className="btn-primary w-full justify-center"
+              onClick={() => void submit()}
+            >
+              {editing ? 'Save' : 'Add bin'}
+            </button>
+            {editing &&
+              (confirmDelete ? (
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    className="btn-ghost flex-1 justify-center"
+                    onClick={() => setConfirmDelete(false)}
+                  >
+                    Keep bin
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-outline flex-1 justify-center text-rose-500"
+                    onClick={() => editing && void remove(editing)}
+                  >
+                    Confirm delete
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="btn-ghost w-full justify-center text-rose-500"
+                  onClick={() => setConfirmDelete(true)}
+                >
+                  <Icon name="x" className="h-4 w-4" /> Delete bin…
+                </button>
+              ))}
+          </div>
         }
       >
         <div className="space-y-3">

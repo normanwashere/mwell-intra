@@ -5,6 +5,8 @@ import { can } from '@/auth/roles';
 export interface ModuleDef {
   id: string;
   label: string;
+  /** Bottom-nav label when the full label doesn't fit (e.g. "Counts"). */
+  shortLabel?: string;
   path: string;
   /** Module is shown if the role has ANY of these capabilities. */
   capabilities: Capability[];
@@ -59,6 +61,7 @@ export const MODULES: ModuleDef[] = [
   {
     id: 'cycle-counts',
     label: 'Cycle Counts',
+    shortLabel: 'Counts',
     path: '/cycle-counts',
     capabilities: ['cycle_count'],
     description: 'Count by category and reconcile variances.',
@@ -83,6 +86,7 @@ export const MODULES: ModuleDef[] = [
   {
     id: 'purchase-orders',
     label: 'Purchase Orders',
+    shortLabel: 'POs',
     path: '/purchase-orders',
     // Procurement creates POs; the warehouse (receive_stock) reconciles receipts
     // against them, so both need the module.
@@ -153,8 +157,10 @@ export function modulesForRole(role: Role): ModuleDef[] {
  */
 const MOBILE_PRIMARY: Partial<Record<Role, string[]>> = {
   logistics_supervisor: ['dashboard', 'receiving', 'cycle-counts', 'returns'],
-  operations: ['dashboard', 'inventory', 'allocations', 'returns'],
-  marketing: ['dashboard', 'inventory', 'allocations', 'returns'],
+  // Events is the core noun for ops/marketing (WH-15/J3-2) — it takes the
+  // Inventory slot; Inventory stays reachable via the More sheet.
+  operations: ['dashboard', 'events', 'allocations', 'returns'],
+  marketing: ['dashboard', 'events', 'allocations', 'returns'],
   finance: ['dashboard', 'finance', 'cycle-counts', 'inventory'],
   procurement: ['dashboard', 'procurement', 'purchase-orders', 'inventory'],
 };

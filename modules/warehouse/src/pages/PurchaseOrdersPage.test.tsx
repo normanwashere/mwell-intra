@@ -1,15 +1,23 @@
-import { describe, it, expect } from 'vitest';
+import { beforeEach, describe, it, expect } from 'vitest';
 import { screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { PurchaseOrdersPage } from './PurchaseOrdersPage';
 import { renderWithProviders } from '@/test/renderWithProviders';
+import { PROCUREMENT_PO_KEY } from '@/data/procurementBridge';
 
 describe('PurchaseOrdersPage', () => {
-  it('lists seeded purchase orders with suppliers', async () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  it('lists seeded purchase orders with human PO numbers', async () => {
     renderWithProviders(<PurchaseOrdersPage />, { role: 'procurement' });
     const list = await screen.findByLabelText('Purchase orders');
     expect(within(list).getAllByText(/mWellness Wearables/i).length).toBeGreaterThan(0);
     expect(within(list).getByText(/MetroPrint Apparel/i)).toBeInTheDocument();
+    // No raw ids as labels (WH-26) — stable PO-#### numbers instead.
+    expect(within(list).queryByText(/po-wearables/i)).not.toBeInTheDocument();
+    expect(within(list).getAllByText(/PO-\d{4}/).length).toBeGreaterThan(0);
   });
 
   it('filters purchase orders by status', async () => {
@@ -40,14 +48,18 @@ describe('PurchaseOrdersPage', () => {
     });
   });
 
-  it('receives stock against an open PO', async () => {
+  it('receives stock via the PO detail sheet (row is the target)', async () => {
     const user = userEvent.setup();
     renderWithProviders(<PurchaseOrdersPage />, { role: 'procurement' });
-    await screen.findByLabelText('Purchase orders');
+    const list = await screen.findByLabelText('Purchase orders');
 
-    const receiveBtn = screen.getAllByRole('button', { name: /^receive$/i })[0];
-    expect(receiveBtn).toBeDefined();
-    await user.click(receiveBtn!);
+    // Open the ordered wearables PO from its row.
+    await user.click(
+      within(list).getAllByRole('button', { name: /mWellness Wearables/i })[0]!,
+    );
+    const detail = await screen.findByRole('dialog', { name: /mWellness Wearables/i });
+    await user.click(within(detail).getByRole('button', { name: /^receive$/i }));
+
     const dialog = await screen.findByRole('dialog', { name: /receive against po/i });
     await user.click(within(dialog).getByRole('button', { name: /confirm receipt/i }));
 
@@ -56,16 +68,76 @@ describe('PurchaseOrdersPage', () => {
     });
   });
 
-  it('cancels an open purchase order', async () => {
+  it('does not offer Receive on a draft PO (WH-25)', async () => {
     const user = userEvent.setup();
     renderWithProviders(<PurchaseOrdersPage />, { role: 'procurement' });
-    await screen.findByLabelText('Purchase orders');
+    const list = await screen.findByLabelText('Purchase orders');
 
-    const cancelBtn = screen.getAllByRole('button', { name: /^cancel$/i })[0];
-    expect(cancelBtn).toBeDefined();
-    await user.click(cancelBtn!);
+    // The seeded draft PO (sleep rings + OTG bags from mWellness Wearables).
+    const draftRow = within(list)
+      .getAllByRole('button')
+      .find((b) => /draft/i.test(b.textContent ?? ''));
+    expect(draftRow).toBeDefined();
+    await user.click(draftRow!);
+    const detail = await screen.findByRole('dialog', { name: /mWellness Wearables/i });
+    expect(
+      within(detail).queryByRole('button', { name: /^receive$/i }),
+    ).not.toBeInTheDocument();
+    expect(within(detail).getByText(/not yet ordered/i)).toBeInTheDocument();
+  });
+
+  it('cancels an open purchase order after an explicit confirm', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<PurchaseOrdersPage />, { role: 'procurement' });
+    const list = await screen.findByLabelText('Purchase orders');
+
+    await user.click(
+      within(list).getAllByRole('button', { name: /MetroPrint Apparel/i })[0]!,
+    );
+    const detail = await screen.findByRole('dialog', { name: /MetroPrint Apparel/i });
+    await user.click(within(detail).getByRole('button', { name: /cancel po/i }));
+    await user.click(within(detail).getByRole('button', { name: /confirm cancel/i }));
+
     await waitFor(() => {
       expect(screen.getByText(/purchase order cancelled/i)).toBeInTheDocument();
     });
+  });
+
+  it('surfaces procurement-issued POs with a From Procurement badge and deep link', async () => {
+    window.localStorage.setItem(
+      PROCUREMENT_PO_KEY,
+      JSON.stringify([
+        {
+          id: 'ppo-9',
+          poNumber: 'PO-2026-0003',
+          vendorId: 'ven-acme',
+          vendorName: 'Acme Medical Supplies',
+          status: 'issued',
+          origin: 'request',
+          lines: [
+            {
+              id: 'l1',
+              description: 'Barcode scanners',
+              quantity: 4,
+              unitPrice: 650000,
+              receivedQuantity: 0,
+            },
+          ],
+          createdAt: '2026-07-05T10:00:00.000Z',
+          updatedAt: '2026-07-05T10:00:00.000Z',
+          total: 2600000,
+        },
+      ]),
+    );
+    renderWithProviders(<PurchaseOrdersPage />, { role: 'procurement' });
+    const list = await screen.findByLabelText('Purchase orders');
+
+    expect(within(list).getByText('From Procurement')).toBeInTheDocument();
+    const link = within(list).getByRole('link', { name: 'PO-2026-0003' });
+    expect(link).toHaveAttribute('href', '/procurement/purchase-orders/ppo-9');
+    expect(
+      within(list).getByRole('link', { name: /receive in procurement/i }),
+    ).toHaveAttribute('href', '/procurement/purchase-orders/ppo-9');
+    expect(within(list).getByText(/Acme Medical Supplies/i)).toBeInTheDocument();
   });
 });

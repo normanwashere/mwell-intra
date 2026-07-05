@@ -289,7 +289,8 @@ export function InventoryPage() {
                     <div className="flex items-center gap-2 text-right">
                       <div>
                         <p className="tnum text-lg font-extrabold text-ink">{total}</p>
-                        <p className="text-xs text-faint">in stock</p>
+                        {/* One stock noun module-wide (WH-23). */}
+                        <p className="text-xs text-faint">available</p>
                       </div>
                       <Icon
                         name="chevron"

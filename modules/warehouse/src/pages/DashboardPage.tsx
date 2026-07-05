@@ -28,7 +28,14 @@ import {
   movementsToCsv,
 } from '@/domain/export';
 import { downloadText } from '@/app/download';
+import {
+  PO_STATUS_LABELS,
+  formatWhen,
+  movementTypeLabel,
+  signedQuantity,
+} from '@/domain/format';
 import { ROLES, can } from '@/auth/roles';
+import { useSession } from '@/auth/session';
 import type { Role } from '@/domain/types';
 import { Logo } from '@/components/Logo';
 import { Icon, type IconName } from '@/components/Icon';
@@ -122,6 +129,7 @@ const WINDOWED_ROLES: Role[] = ['bi_analyst', 'marketing'];
 
 export function DashboardPage() {
   const { data, role } = useWarehouse();
+  const { profile } = useSession();
   const navigate = useNavigate();
   const toast = useToast();
   const [exportOpen, setExportOpen] = useState(false);
@@ -229,16 +237,30 @@ export function DashboardPage() {
   const eventName = (id?: string) =>
     id ? (data.events.find((e) => e.id === id)?.name ?? id) : '—';
 
-  // --- per-role hero + KPIs ---
-  const HERO: Record<Role, { label: string; value: string | number }> = {
-    logistics_supervisor: { label: 'Low-stock items', value: low.length },
-    operations: { label: 'Pending reservations', value: reservedCount },
-    finance: { label: 'Inventory value', value: compactMoney(value) },
-    bi_analyst: { label: 'Inventory value', value: compactMoney(value) },
-    business_unit: { label: 'Available SKUs', value: inStockSkus },
-    marketing: { label: 'Promo give-aways', value: compactMoney(promoSpend) },
-    procurement: { label: 'SKUs to reorder', value: low.length },
-    pricing: { label: 'Inventory at landed cost', value: compactMoney(totalLanded) },
+  // --- per-role hero ---
+  // One KPI surface (WH-8): the StatCards below are THE numbers; the hero
+  // carries a live one-line status (WH-9) + the role's primary verb (WH-10)
+  // + the "Issued (10d)" sparkline, which is not duplicated by any StatCard.
+  const HERO_STATUS: Record<Role, string> = {
+    logistics_supervisor: `${low.length} SKU${low.length === 1 ? '' : 's'} need reorder · ${reconciliation.length} variance${reconciliation.length === 1 ? '' : 's'} open`,
+    operations: `${reservedCount} reservation${reservedCount === 1 ? '' : 's'} pending · ${data.events.length} event${data.events.length === 1 ? '' : 's'}`,
+    finance: `${compactMoney(value)} on hand · ${reconciliation.length} variance${reconciliation.length === 1 ? '' : 's'} open`,
+    bi_analyst: `${data.products.length} active SKUs · ${totalIssued} units issued`,
+    business_unit: `${inStockSkus} SKUs in stock · ${reservedCount} reservation${reservedCount === 1 ? '' : 's'} pending`,
+    marketing: `${compactMoney(promoSpend)} promo spend · ${data.events.length} event${data.events.length === 1 ? '' : 's'}`,
+    procurement: `${reorderRows.length} SKU${reorderRows.length === 1 ? '' : 's'} to reorder · ${openPOs.length} open PO${openPOs.length === 1 ? '' : 's'}`,
+    pricing: `${compactMoney(totalLanded)} at landed cost · ${multiSupplier} multi-supplier SKUs`,
+  };
+
+  const HERO_CTA: Record<Role, { label: string; icon: IconName; to: string }> = {
+    logistics_supervisor: { label: 'Receive stock', icon: 'truck', to: '/receiving' },
+    operations: { label: 'Allocations', icon: 'tag', to: '/allocations' },
+    finance: { label: 'Finance workspace', icon: 'coins', to: '/finance' },
+    bi_analyst: { label: 'Data & reports', icon: 'history', to: '/data' },
+    business_unit: { label: 'Browse inventory', icon: 'box', to: '/inventory' },
+    marketing: { label: 'Events', icon: 'calendar', to: '/events' },
+    procurement: { label: 'Reorders & POs', icon: 'cart', to: '/procurement' },
+    pricing: { label: 'Pricing workspace', icon: 'trend', to: '/pricing' },
   };
 
   const KPIS: Record<Role, Kpi[]> = {
@@ -395,13 +417,15 @@ export function DashboardPage() {
               <li key={m.id} className="flex items-center justify-between gap-3 py-2.5">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-ink">
-                    <span className="uppercase text-brand-700 dark:text-brand-300">{m.type}</span>{' '}
+                    <span className="font-semibold text-brand-700 dark:text-brand-300">
+                      {movementTypeLabel(m.type)}
+                    </span>{' '}
                     {productName(m.productId)}
                   </p>
-                  <p className="text-xs text-faint">{relativeTime(m.createdAt)}</p>
+                  <p className="text-xs text-faint">{formatWhen(m.createdAt)}</p>
                 </div>
                 <span className="tnum text-sm font-semibold text-ink">
-                  {m.quantity > 0 ? `+${m.quantity}` : m.quantity}
+                  {signedQuantity(m.type, m.quantity)}
                 </span>
               </li>
             ))}
@@ -631,7 +655,7 @@ export function DashboardPage() {
                     <p className="text-xs text-faint">{po.lines.length} line(s)</p>
                   </div>
                   <Badge tone={po.status === 'partially_received' ? 'amber' : 'brand'}>
-                    {po.status.replace('_', ' ')}
+                    {PO_STATUS_LABELS[po.status]}
                   </Badge>
                 </button>
               </li>
@@ -659,7 +683,10 @@ export function DashboardPage() {
   };
 
   const panels = ROLE_PANELS[role];
-  const hero = HERO[role];
+  // Greet by name like the shell home does (WH-7/J3-3); the role already
+  // shows in the sidebar caption + account menu.
+  const firstName = profile?.name?.split(/\s+/)[0];
+  const heroCta = HERO_CTA[role];
 
   return (
     <div className="space-y-6">
@@ -670,20 +697,20 @@ export function DashboardPage() {
         </div>
         <div className="relative">
           <p className="text-sm text-brand-100/80">Welcome back,</p>
-          <h1 className="font-display text-2xl font-extrabold sm:text-3xl">{ROLES[role].label}</h1>
-          <p className="mt-1 max-w-md text-sm text-brand-100/70">{ROLES[role].description}</p>
+          <h1 className="font-display text-2xl font-extrabold sm:text-3xl">
+            {firstName ?? ROLES[role].label}
+          </h1>
+          <p className="mt-1 max-w-md text-sm text-brand-100/70">
+            {HERO_STATUS[role]}
+          </p>
           <button
             type="button"
-            onClick={() => setExportOpen(true)}
+            onClick={() => navigate(heroCta.to)}
             className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/25"
           >
-            <Icon name="download" className="h-4 w-4" /> Export data
+            <Icon name={heroCta.icon} className="h-4 w-4" /> {heroCta.label}
           </button>
-          <div className="mt-4 flex items-end justify-between gap-4">
-            <div>
-              <p className="text-xs uppercase tracking-wide text-brand-100/70">{hero.label}</p>
-              <p className="tnum text-2xl font-extrabold">{hero.value}</p>
-            </div>
+          <div className="mt-4 flex items-end justify-end gap-4">
             <div className="text-right">
               <p className="text-xs uppercase tracking-wide text-brand-100/70">Issued (10d)</p>
               <Sparkline values={series} className="text-accent-soft" width={120} />
@@ -708,22 +735,33 @@ export function DashboardPage() {
 
       <div className="flex items-center justify-between gap-3">
         <h2 className="font-display text-base font-bold text-ink sm:text-lg">
-          {ROLES[role].label} overview
+          Overview
         </h2>
-        {showWindow && (
-          <div className="w-44">
-            <SegmentedControl<Window>
-              ariaLabel="Analytics window"
-              value={window}
-              onChange={setWindow}
-              options={[
-                { value: '30', label: '30d' },
-                { value: '90', label: '90d' },
-                { value: 'all', label: 'All' },
-              ]}
-            />
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          {showWindow && (
+            <div className="w-44">
+              <SegmentedControl<Window>
+                ariaLabel="Analytics window"
+                value={window}
+                onChange={setWindow}
+                options={[
+                  { value: '30', label: '30d' },
+                  { value: '90', label: '90d' },
+                  { value: 'all', label: 'All' },
+                ]}
+              />
+            </div>
+          )}
+          {/* Export lives with the data it exports, not as the hero's only
+              action (WH-10). */}
+          <button
+            type="button"
+            className="btn-ghost btn-sm shrink-0"
+            onClick={() => setExportOpen(true)}
+          >
+            <Icon name="download" className="h-4 w-4" /> Export data
+          </button>
+        </div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">

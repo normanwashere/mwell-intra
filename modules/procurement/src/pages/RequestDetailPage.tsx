@@ -14,8 +14,10 @@ import {
   DataTable,
   HeroChipButton,
   Icon,
+  InfoTip,
   ModuleHero,
   SectionTitle,
+  money,
   useToast,
   type Column,
 } from '@intra/ui';
@@ -34,10 +36,17 @@ import {
 import {
   categoryMeta,
   minimumQuotes,
-  requiredDocuments,
+  requiredDocumentsStatus,
   sourcingMethodLabel,
   tierLabel,
 } from '../policy';
+import {
+  attachmentKindLabel,
+  formatDate,
+  formatDateTime,
+  statusLabel,
+  stepStatusLabel,
+} from '../labels';
 
 // Bright dots for status pills placed on the navy hero (badges with tinted
 // backgrounds look faded against the gradient; solid dots read cleanly).
@@ -50,32 +59,35 @@ const STATUS_DOT: Record<RequestStatus, string> = {
   cancelled: 'bg-slate-400',
 };
 
+const DIRECT_AWARD_REASON_LABEL: Record<string, string> = {
+  sole_supplier: 'Sole supplier',
+  emergency: 'Emergency',
+  repeat_continuity: 'Repeat / continuity',
+  other: 'Other approved exception',
+};
+
 const lineColumns: Column<ProcurementRequestLine>[] = [
   { key: 'description', header: 'Description', render: (r) => r.description },
   { key: 'quantity', header: 'Qty', render: (r) => `${r.quantity} ${r.uom ?? 'ea'}` },
   {
     key: 'unitPrice',
-    header: 'Unit ₱',
-    render: (r) =>
-      r.unitPrice != null
-        ? r.unitPrice.toLocaleString(undefined, {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          })
-        : '—',
+    header: 'Unit price',
+    render: (r) => (r.unitPrice != null ? money(r.unitPrice) : '—'),
   },
   {
     key: 'lineTotal',
-    header: 'Line ₱',
-    render: (r) =>
-      r.unitPrice != null
-        ? (r.unitPrice * r.quantity).toLocaleString(undefined, {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          })
-        : '—',
+    header: 'Line total',
+    render: (r) => (r.unitPrice != null ? money(r.unitPrice * r.quantity) : '—'),
   },
 ];
+
+interface ActivityEvent {
+  key: string;
+  at: string;
+  icon: 'pin' | 'rotate' | 'check' | 'x' | 'cart' | 'box';
+  tone: 'slate' | 'cyan' | 'emerald' | 'rose' | 'brand';
+  label: string;
+}
 
 export function RequestDetailPage() {
   const { id = '' } = useParams();
@@ -105,6 +117,74 @@ export function RequestDetailPage() {
     () => pos.find((p) => p.requestId === id),
     [pos, id],
   );
+
+  // Single chronological order, newest first (PR-22) — creation, submission,
+  // ladder decisions, and PO lifecycle/receipt events interleaved (J2-6).
+  const activity = useMemo<ActivityEvent[]>(() => {
+    if (!req) return [];
+    const events: ActivityEvent[] = [
+      {
+        key: 'created',
+        at: req.createdAt,
+        icon: 'pin',
+        tone: 'slate',
+        label: `Draft created by ${req.requesterName ?? req.requesterEmail ?? 'requester'}`,
+      },
+    ];
+    if (req.submittedAt) {
+      events.push({
+        key: 'submitted',
+        at: req.submittedAt,
+        icon: 'rotate',
+        tone: 'cyan',
+        label: 'Submitted for approval',
+      });
+    }
+    for (const h of history) {
+      events.push({
+        key: `decision-${h.decidedAt}-${h.stepId ?? ''}`,
+        at: h.decidedAt,
+        icon: h.decision === 'approved' ? 'check' : 'x',
+        tone: h.decision === 'approved' ? 'emerald' : 'rose',
+        label: `${h.decision === 'approved' ? 'Approved' : 'Rejected'}${
+          h.tier ? ` by ${tierLabel(h.tier)}` : ''
+        }${h.decidedByEmail ? ` (${h.decidedByEmail})` : ''}${h.note ? ` — ${h.note}` : ''}`,
+      });
+    }
+    if (linkedPo) {
+      events.push({
+        key: 'po-drafted',
+        at: linkedPo.createdAt,
+        icon: 'cart',
+        tone: 'brand',
+        label: `Purchase order ${linkedPo.poNumber} drafted`,
+      });
+      if (linkedPo.approvedAt) {
+        events.push({
+          key: 'po-approved',
+          at: linkedPo.approvedAt,
+          icon: 'check',
+          tone: 'emerald',
+          label: `PO ${linkedPo.poNumber} award approved${
+            linkedPo.approvedByEmail ? ` (${linkedPo.approvedByEmail})` : ''
+          }`,
+        });
+      }
+      for (const rcpt of linkedPo.receipts ?? []) {
+        const units = rcpt.lines.reduce((s, l) => s + l.quantity, 0);
+        events.push({
+          key: `receipt-${rcpt.id}`,
+          at: rcpt.receivedAt,
+          icon: 'box',
+          tone: 'emerald',
+          label: `${rcpt.closedPo ? 'Final receipt' : 'Partial receipt'} on PO ${linkedPo.poNumber} — ${units} unit${units === 1 ? '' : 's'}${
+            rcpt.receivedByEmail ? ` (${rcpt.receivedByEmail})` : ''
+          }`,
+        });
+      }
+    }
+    return events.sort((a, b) => b.at.localeCompare(a.at));
+  }, [req, history, linkedPo]);
 
   if (loading) {
     return (
@@ -151,14 +231,31 @@ export function RequestDetailPage() {
     navigate(`/purchase-orders/${po.id}`);
   }
 
+  // PR-19: checklist joined against real attachments.
   const reqDocs = req.sourcingMethod
-    ? requiredDocuments({
-        category: req.category,
-        amount: req.estimatedAmount,
-        sourcingMethod: req.sourcingMethod,
-      })
+    ? requiredDocumentsStatus(
+        {
+          category: req.category,
+          amount: req.estimatedAmount,
+          sourcingMethod: req.sourcingMethod,
+        },
+        req.attachments,
+      )
     : [];
+  const missingDocs = reqDocs.filter((d) => !d.attached);
   const minQuotes = req.sourcingMethod ? minimumQuotes(req.sourcingMethod) : null;
+
+  // PR-20: the 10-tile meta grid collapses to one muted line; the full
+  // record lives behind the (i).
+  const metaLine = [
+    req.requesterName ?? req.requesterEmail,
+    cat?.label,
+    req.sourcingMethod ? sourcingMethodLabel(req.sourcingMethod) : undefined,
+    req.vendorName ?? 'Open to bids',
+    req.neededBy ? `needed ${formatDate(req.neededBy)}` : undefined,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -188,39 +285,51 @@ export function RequestDetailPage() {
                     aria-hidden
                     className={`inline-block h-1.5 w-1.5 rounded-full ${STATUS_DOT[req.status]}`}
                   />
-                  {req.status}
+                  {statusLabel(req.status)}
                 </span>
               </p>
             </div>
             <div>
               <p className="text-xs uppercase tracking-wide text-brand-100/70">Estimated total</p>
               <p className="tnum text-2xl font-extrabold">
-                {req.estimatedAmount != null
-                  ? `\u20b1${req.estimatedAmount.toLocaleString(undefined, {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}`
-                  : '—'}
+                {req.estimatedAmount != null ? money(req.estimatedAmount) : '—'}
               </p>
             </div>
           </div>
         }
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <MetaTile label="Requester" value={req.requesterName ?? req.requesterEmail ?? '—'} />
-        <MetaTile label="Category" value={cat?.label ?? '—'} />
-        <MetaTile label="Sourcing" value={req.sourcingMethod ? sourcingMethodLabel(req.sourcingMethod) : '—'} />
-        <MetaTile label="Vendor" value={req.vendorName ?? 'Open to bids'} />
-        <MetaTile label="Cost center" value={req.costCenter ?? '—'} />
-        <MetaTile label="Project code" value={req.projectCode ?? '—'} />
-        <MetaTile label="Budget / GL" value={req.budgetCode ?? '—'} />
-        <MetaTile label="Needed by" value={req.neededBy ? new Date(req.neededBy).toLocaleDateString() : '—'} />
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
+        <span>{metaLine}</span>
+        <InfoTip
+          label="Full request record"
+          content={
+            <span className="block space-y-0.5">
+              <span className="block">Requester: {req.requesterName ?? '—'}{req.requesterEmail ? ` <${req.requesterEmail}>` : ''}</span>
+              <span className="block">Category: {cat?.label ?? '—'}</span>
+              <span className="block">Sourcing: {req.sourcingMethod ? sourcingMethodLabel(req.sourcingMethod) : '—'}{req.sourcingOverride ? ' (override)' : ''}</span>
+              <span className="block">Vendor: {req.vendorName ?? 'Open to bids'}</span>
+              <span className="block">Cost center: {req.costCenter ?? '—'}</span>
+              <span className="block">Project code: {req.projectCode ?? '—'}</span>
+              <span className="block">Budget / GL: {req.budgetCode ?? '—'}</span>
+              <span className="block">Needed by: {req.neededBy ? formatDate(req.neededBy) : '—'}</span>
+              <span className="block">Created: {formatDateTime(req.createdAt)}</span>
+            </span>
+          }
+        />
       </div>
 
       {req.justification && (
         <div>
-          <SectionTitle title="Business justification" subtitle="Policy §9 — Award Recommendation basis." />
+          <SectionTitle
+            title="Business justification"
+            action={
+              <InfoTip
+                label="Why this section exists"
+                content="Policy §9 — the Award Recommendation is assembled from these fields. Approvers read “need” and “risk if not procured” first."
+              />
+            }
+          />
           <Card>
             <dl className="space-y-3 text-sm">
               <div>
@@ -248,7 +357,12 @@ export function RequestDetailPage() {
         <div>
           <SectionTitle
             title="Approval ladder"
-            subtitle="Multi-tier routing derived from category + amount + sourcing (policy §3, §9)."
+            action={
+              <InfoTip
+                label="How the ladder was derived"
+                content="Multi-tier routing derived from category + amount + sourcing method (policy §3, §9). Each tier signs electronically."
+              />
+            }
           />
           <Card>
             <ol className="space-y-3">
@@ -285,20 +399,36 @@ export function RequestDetailPage() {
         <div>
           <SectionTitle
             title="Required documents"
-            subtitle={`Checklist for ${sourcingMethodLabel(req.sourcingMethod!)} (policy §6 + Annex B).`}
+            subtitle={`Checklist for ${sourcingMethodLabel(req.sourcingMethod!)} — matched against the attachments above.`}
           />
           <Card>
             <ul className="space-y-2 text-sm">
               {reqDocs.map((d) => (
                 <li key={d.key} className="flex items-start gap-2">
-                  <Icon name="check" className="mt-0.5 h-4 w-4 text-faint" />
-                  <div>
-                    <p className="font-semibold text-ink">{d.label}</p>
+                  {d.attached ? (
+                    <Icon name="check" className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-300" />
+                  ) : (
+                    <Icon name="alert" className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-300" />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-ink">
+                      {d.label}{' '}
+                      <Badge tone={d.attached ? 'emerald' : 'amber'}>
+                        {d.attached ? 'attached' : 'missing'}
+                      </Badge>
+                    </p>
                     <p className="text-xs text-muted">{d.why}</p>
                   </div>
                 </li>
               ))}
             </ul>
+            {missingDocs.length > 0 && (
+              <p className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
+                <Icon name="alert" className="mr-1 inline h-3.5 w-3.5" />
+                {missingDocs.length} required document{missingDocs.length === 1 ? '' : 's'} missing —
+                attach and tag {missingDocs.length === 1 ? 'it' : 'them'} so approvers see a complete pack.
+              </p>
+            )}
             {minQuotes != null && (
               <p className="mt-3 rounded-lg bg-inset px-3 py-2 text-xs text-muted">
                 <Icon name="info" className="mr-1 inline h-3.5 w-3.5" />
@@ -319,7 +449,10 @@ export function RequestDetailPage() {
               {req.compliance?.directAwardReason && (
                 <div>
                   <dt className="text-xs font-semibold uppercase tracking-wide text-faint">Direct-award reason</dt>
-                  <dd className="mt-0.5 text-ink">{req.compliance.directAwardReason.replace('_', ' ')}</dd>
+                  <dd className="mt-0.5 text-ink">
+                    {DIRECT_AWARD_REASON_LABEL[req.compliance.directAwardReason] ??
+                      req.compliance.directAwardReason}
+                  </dd>
                 </div>
               )}
               {req.compliance?.philgepsReference && (
@@ -376,41 +509,18 @@ export function RequestDetailPage() {
       </div>
 
       <div>
-        <SectionTitle title="Activity" subtitle="Everything that has happened on this request." />
+        <SectionTitle title="Activity" />
         <Card>
           <ol className="space-y-3">
-            <TimelineItem
-              icon="pin"
-              label={`Draft created by ${req.requesterName ?? req.requesterEmail ?? 'requester'}`}
-              at={req.createdAt}
-            />
-            {req.submittedAt && (
+            {activity.map((ev) => (
               <TimelineItem
-                icon="rotate"
-                label="Submitted for approval"
-                at={req.submittedAt}
-                tone="cyan"
-              />
-            )}
-            {history.map((h) => (
-              <TimelineItem
-                key={`${h.decidedAt}-${h.stepId ?? ''}`}
-                icon={h.decision === 'approved' ? 'check' : 'x'}
-                label={`${h.decision === 'approved' ? 'Approved' : 'Rejected'}${
-                  h.tier ? ` by ${tierLabel(h.tier)}` : ''
-                }${h.decidedByEmail ? ` (${h.decidedByEmail})` : ''}${h.note ? ` — ${h.note}` : ''}`}
-                at={h.decidedAt}
-                tone={h.decision === 'approved' ? 'emerald' : 'rose'}
+                key={ev.key}
+                icon={ev.icon}
+                label={ev.label}
+                at={ev.at}
+                tone={ev.tone}
               />
             ))}
-            {linkedPo && (
-              <TimelineItem
-                icon="cart"
-                label={`Purchase order ${linkedPo.poNumber} drafted`}
-                at={linkedPo.createdAt}
-                tone="brand"
-              />
-            )}
           </ol>
         </Card>
       </div>
@@ -431,27 +541,26 @@ function ApprovalStepRow({ step }: { step: ApprovalStep }) {
       </span>
       <div className="min-w-0 flex-1">
         <p className="text-sm font-semibold text-ink">
-          Step {step.order}. {label}
+          Step {step.order} · {label}
         </p>
         <p className="text-xs text-muted">
-          <Badge tone={meta.badge}>{step.status.replace('_', ' ')}</Badge>
+          <Badge tone={meta.badge}>{stepStatusLabel(step.status)}</Badge>
           {step.decidedByEmail && <> · {step.decidedByEmail}</>}
-          {step.decidedAt && <> · {new Date(step.decidedAt).toLocaleString()}</>}
+          {step.decidedAt && <> · {formatDateTime(step.decidedAt)}</>}
         </p>
         {step.note && (
           <p className="mt-1 whitespace-pre-line text-xs italic text-muted">&ldquo;{step.note}&rdquo;</p>
         )}
         {step.signature && (
+          /* Signature artifact — mirrors legal's SignatureArtifact styling
+             (bordered PNG + "e-signed by NAME · date · method" caption). */
           <div className="mt-2 flex flex-wrap items-center gap-3 rounded-xl border border-line bg-surface p-2 text-xs">
             <span className="inline-flex items-center gap-1.5 font-semibold text-ink">
               <Icon name="signature" className="h-3.5 w-3.5" />
               e-signed by {step.signature.signerName}
             </span>
             <span className="text-muted">
-              {new Date(step.signature.signedAt).toLocaleString(undefined, {
-                dateStyle: 'medium',
-                timeStyle: 'short',
-              })}
+              {formatDateTime(step.signature.signedAt)}
               {' · '}
               <span className="uppercase tracking-wide">{step.signature.method}</span>
             </span>
@@ -483,12 +592,14 @@ function AttachmentRow({ att }: { att: RequestAttachment }) {
     <li className="flex items-center justify-between gap-3 rounded-xl border border-line bg-surface p-2">
       <div className="min-w-0">
         <p className="truncate text-sm font-semibold text-ink" title={att.filename}>
-          {att.filename}
+          {att.filename}{' '}
+          <Badge tone="slate">{attachmentKindLabel(att.kind)}</Badge>
         </p>
         <p className="text-xs text-muted">
           {sizeKb} KB · {att.mimeType}
           {att.uploadedByEmail ? ` · ${att.uploadedByEmail}` : ''}
-          · {new Date(att.uploadedAt).toLocaleString()}
+          {' · '}
+          {formatDateTime(att.uploadedAt)}
         </p>
       </div>
       {att.dataUrl && (
@@ -506,26 +617,13 @@ function AttachmentRow({ att }: { att: RequestAttachment }) {
   );
 }
 
-function MetaTile({ label, value }: { label: string; value: string }) {
-  return (
-    <Card>
-      <p className="text-[0.68rem] font-semibold uppercase tracking-wide text-faint">
-        {label}
-      </p>
-      <p className="mt-1 truncate text-sm font-semibold text-ink" title={value}>
-        {value}
-      </p>
-    </Card>
-  );
-}
-
 function TimelineItem({
   icon,
   label,
   at,
   tone = 'slate',
 }: {
-  icon: 'pin' | 'rotate' | 'check' | 'x' | 'cart';
+  icon: 'pin' | 'rotate' | 'check' | 'x' | 'cart' | 'box';
   label: string;
   at: string;
   tone?: 'slate' | 'cyan' | 'emerald' | 'rose' | 'brand';
@@ -544,7 +642,7 @@ function TimelineItem({
       </span>
       <div className="min-w-0 flex-1">
         <p className="text-sm text-ink">{label}</p>
-        <p className="text-xs text-faint">{new Date(at).toLocaleString()}</p>
+        <p className="text-xs text-faint">{formatDateTime(at)}</p>
       </div>
     </li>
   );

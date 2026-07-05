@@ -21,6 +21,8 @@ import type {
   ApprovalSignature,
   ApprovalStep,
   ApproverTier,
+  RequestAttachment,
+  RequestAttachmentKind,
   RequestCategory,
   SourcingMethod,
 } from './types';
@@ -342,4 +344,44 @@ export function requiredDocuments(input: BuildLadderInput): RequiredDoc[] {
     docs.push({ key: 'bond', label: 'Bond / insurance plan', why: 'Financial protection matrix (policy §12).' });
   }
   return docs;
+}
+
+// ---------------------------------------------------------------------------
+// Required-documents ↔ attachments matching (PR-19 / J2-5)
+// ---------------------------------------------------------------------------
+
+/** Which attachment kind(s) satisfy each required-document key. */
+const DOC_KIND_MATCH: Record<string, readonly RequestAttachmentKind[]> = {
+  spec: ['spec'],
+  budget: ['budget'],
+  previous: ['previous_cost'],
+  quotes: ['quote'],
+  bids: ['quote'],
+  ar: ['award_recommendation'],
+  da_justification: ['justification'],
+  bond: ['bond'],
+};
+
+export interface RequiredDocStatus extends RequiredDoc {
+  /** True when at least one attachment of a matching kind exists. */
+  attached: boolean;
+}
+
+/**
+ * Join the required-documents checklist against the request's real
+ * attachments so surfaces render attached / missing instead of a decorative
+ * list. Unknown doc keys (future additions) count as missing until a kind
+ * mapping is added.
+ */
+export function requiredDocumentsStatus(
+  input: BuildLadderInput,
+  attachments: readonly Pick<RequestAttachment, 'kind'>[] | undefined,
+): RequiredDocStatus[] {
+  const kinds = new Set(
+    (attachments ?? []).map((a) => a.kind ?? 'other'),
+  );
+  return requiredDocuments(input).map((doc) => {
+    const accepted = DOC_KIND_MATCH[doc.key] ?? [];
+    return { ...doc, attached: accepted.some((k) => kinds.has(k)) };
+  });
 }

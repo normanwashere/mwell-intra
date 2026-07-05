@@ -240,6 +240,11 @@ export interface AccreditationCase {
   scope?: string;
   /** Freeform label kept for backwards compat with v1 records. */
   category?: string;
+  /**
+   * Renewal continuity (F2.3): the vendor's latest prior case at the time
+   * this one was opened, so reviewers can reach last cycle's documents.
+   */
+  previousCaseId?: string;
 
   // ---- v2 tailoring axes -------------------------------------------------
   jurisdiction?: Jurisdiction;

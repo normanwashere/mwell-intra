@@ -12,7 +12,7 @@ import {
   SectionTitle,
   useToast,
 } from '@/components/ui';
-import { relativeTime } from '@/components/ui';
+import { formatWhen, statusLabel } from '@/domain/format';
 import type { Tone } from '@/components/ui';
 import { EvidenceCapture } from '@/components/camera/EvidenceCapture';
 import { BarcodeScanner } from '@/components/camera/BarcodeScanner';
@@ -27,13 +27,15 @@ const DISPOSITION_META: Record<
   vendor_return: { label: 'To vendor', tone: 'amber' },
 };
 
-const REASONS = [
-  'defective',
-  'wrong size',
-  'unused / surplus',
-  'damaged in transit',
-  'recall',
-  'other',
+// Stored values stay lowercase (existing data); labels render Title Case to
+// match the rest of the module's copy (WH-20).
+const REASONS: { value: string; label: string }[] = [
+  { value: 'defective', label: 'Defective' },
+  { value: 'wrong size', label: 'Wrong size' },
+  { value: 'unused / surplus', label: 'Unused / surplus' },
+  { value: 'damaged in transit', label: 'Damaged in transit' },
+  { value: 'recall', label: 'Recall' },
+  { value: 'other', label: 'Other' },
 ];
 
 const DISPOSITIONS: { value: 'restock' | 'lost' | 'vendor_return'; label: string }[] = [
@@ -49,7 +51,7 @@ export function ReturnsPage() {
   const [eventId, setEventId] = useState('');
   const [productId, setProductId] = useState('');
   const [quantity, setQuantity] = useState(1);
-  const [reason, setReason] = useState(REASONS[0]!);
+  const [reason, setReason] = useState(REASONS[0]!.value);
   const [disposition, setDisposition] = useState<'restock' | 'lost' | 'vendor_return'>(
     'restock',
   );
@@ -157,8 +159,8 @@ export function ReturnsPage() {
               onChange={(e) => setReason(e.target.value)}
             >
               {REASONS.map((r) => (
-                <option key={r} value={r}>
-                  {r}
+                <option key={r.value} value={r.value}>
+                  {r.label}
                 </option>
               ))}
             </select>
@@ -274,10 +276,10 @@ export function ReturnsPage() {
                 <li key={r.id} className="rounded-xl bg-inset p-3">
                   <div className="flex items-center justify-between">
                     <Badge tone={r.source === 'vendor' ? 'brand' : 'cyan'}>
-                      {r.source}
+                      {r.source === 'vendor' ? 'Vendor' : 'Customer'}
                     </Badge>
                     <span className="text-xs text-faint">
-                      {relativeTime(r.createdAt)}
+                      {formatWhen(r.createdAt)}
                     </span>
                   </div>
                   <ul className="mt-2 space-y-1 text-sm text-muted">
@@ -285,7 +287,7 @@ export function ReturnsPage() {
                       <li key={i} className="flex items-center justify-between gap-2">
                         <span className="min-w-0 truncate">
                           {l.quantity}× {productName(l.productId)} —{' '}
-                          <span className="text-faint">{l.reason}</span>
+                          <span className="text-faint">{statusLabel(l.reason)}</span>
                         </span>
                         <Badge tone={DISPOSITION_META[l.disposition ?? 'restock'].tone}>
                           {DISPOSITION_META[l.disposition ?? 'restock'].label}

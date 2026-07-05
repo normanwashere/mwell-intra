@@ -11,6 +11,7 @@ import {
   EmptyState,
   HeroChipButton,
   Icon,
+  InfoTip,
   ModuleHero,
 } from '@intra/ui';
 import { useSession } from '@intra/auth';
@@ -102,23 +103,16 @@ export default function DashboardPage() {
   if (can(userRoles, 'core', 'manage_rbac')) cards.push(ADMIN_CARD);
 
   const firstName = profile.name?.split(/\s+/)[0] ?? 'there';
-  const roleCount = Object.values(userRoles).reduce(
-    (n, arr) => n + (arr?.length ?? 0),
-    0,
-  );
 
   return (
     <div className="space-y-6">
+      {/* One KPI surface (SH-3/AD-2 rule): the hero accessory keeps ONLY the
+          module count; the scoped-roles counter lives in the account menu.
+          Explanatory description copy moved behind the (i) next to "Your
+          workspace" below. */}
       <ModuleHero
         eyebrow="Welcome back,"
         title={firstName}
-        description={
-          profile.title
-            ? profile.title
-            : profile.kind === 'vendor'
-              ? 'Vendor accreditation & document uploads.'
-              : 'Pick a module to get started.'
-        }
         icon="grid"
         action={
           cards.length > 0 ? (
@@ -132,35 +126,37 @@ export default function DashboardPage() {
           ) : undefined
         }
         accessory={
-          <div className="flex flex-wrap items-end gap-6">
-            <div>
-              <p className="text-xs uppercase tracking-wide text-brand-100/70">
-                Access
-              </p>
-              <p className="tnum text-2xl font-extrabold">
-                {cards.length}
-                <span className="ml-1 text-sm font-medium text-brand-100/70">
-                  {cards.length === 1 ? 'module' : 'modules'}
-                </span>
-              </p>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-wide text-brand-100/70">
-                Scoped roles
-              </p>
-              <p className="tnum text-2xl font-extrabold">{roleCount}</p>
-            </div>
+          <div>
+            <p className="text-xs uppercase tracking-wide text-brand-100/70">
+              Access
+            </p>
+            <p className="tnum text-2xl font-extrabold">
+              {cards.length}
+              <span className="ml-1 text-sm font-medium text-brand-100/70">
+                {cards.length === 1 ? 'module' : 'modules'}
+              </span>
+            </p>
           </div>
         }
       />
 
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-faint">
+          <p className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-faint">
             Your workspace
+            <InfoTip
+              label="About your workspace"
+              content={
+                profile.title
+                  ? `Signed in as ${profile.title}. You see only the modules your roles grant; ask an administrator to widen access.`
+                  : profile.kind === 'vendor'
+                    ? 'Vendor accreditation & document uploads for your organization.'
+                    : 'You see only the modules your roles grant; ask an administrator to widen access.'
+              }
+            />
           </p>
           <h2 className="font-display text-lg font-bold text-ink">
-            {cards.length > 0 ? 'Jump into a surface' : 'No modules yet'}
+            {cards.length > 0 ? 'Your modules' : 'No modules yet'}
           </h2>
         </div>
         <Badge tone={profile.kind === 'vendor' ? 'emerald' : 'brand'}>

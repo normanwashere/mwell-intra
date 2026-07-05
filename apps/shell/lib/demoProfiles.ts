@@ -17,7 +17,10 @@ export const DEMO_PROFILES: readonly MemoryProfile[] = [
     title: 'Logistics Supervisor',
     roles: {
       core: ['staff'],
-      warehouse: ['logistics_supervisor'],
+      // + warehouse procurement so /warehouse/procurement, /warehouse/suppliers
+      // and PO authoring are walkable in demo (UX review WH-2). In memory mode
+      // the module's account menu lets Bea switch between the two roles.
+      warehouse: ['logistics_supervisor', 'procurement'],
     },
   },
   {
@@ -125,6 +128,19 @@ export const DEMO_PROFILES: readonly MemoryProfile[] = [
     roles: {
       core: ['staff'],
       warehouse: ['marketing'],
+    },
+  },
+  {
+    id: 'demo-pricing',
+    email: 'pricing@mwell.demo',
+    kind: 'employee',
+    name: 'Pia Salcedo',
+    title: 'Pricing Analyst',
+    roles: {
+      // Covers /warehouse/pricing, which no other persona could reach
+      // (UX review WH-2).
+      core: ['staff'],
+      warehouse: ['pricing'],
     },
   },
   {

@@ -50,13 +50,29 @@ describe('AppShell navigation', () => {
     expect(within(drawer).getAllByText(/returns/i).length).toBeGreaterThan(0);
   });
 
-  it('opens the notifications drawer', async () => {
+  it('opens the module alerts drawer', async () => {
     const user = userEvent.setup();
     renderWithProviders(<AppShell>content</AppShell>);
     await screen.findByRole('navigation', { name: 'Primary' });
 
-    await user.click(screen.getByRole('button', { name: /notifications/i }));
+    await user.click(screen.getByRole('button', { name: /module alerts/i }));
     expect(await screen.findByRole('dialog', { name: /notifications/i })).toBeInTheDocument();
+  });
+
+  it('asks for confirmation before resetting demo data (WH-6)', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<AppShell>content</AppShell>, {
+      role: 'logistics_supervisor',
+    });
+    await screen.findByRole('navigation', { name: 'Primary' });
+
+    await user.click(
+      screen.getAllByRole('button', { name: /reset demo data/i })[0]!,
+    );
+    const dialog = await screen.findByRole('dialog', { name: /reset demo data\?/i });
+    expect(within(dialog).getByText(/cannot be undone/i)).toBeInTheDocument();
+    // Cancel keeps the data (no reload).
+    await user.click(within(dialog).getByRole('button', { name: /cancel/i }));
   });
 
   it('opens the quick-scan sheet', async () => {

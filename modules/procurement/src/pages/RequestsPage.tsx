@@ -7,14 +7,19 @@ import {
   DataTable,
   EmptyState,
   HeroChipButton,
+  InfoTip,
   ModuleHero,
   SectionTitle,
   StatCard,
+  money,
   type Column,
+  type IconName,
+  type Tone,
 } from '@intra/ui';
 import { Guard, useSession } from '@intra/auth';
 import type { ProcurementRequest, RequestStatus } from '../types';
 import { useProcurementRequests } from '../localStore';
+import { formatDate, statusLabel } from '../labels';
 
 const STATUS_TONE: Record<RequestStatus, 'slate' | 'cyan' | 'amber' | 'emerald' | 'rose'> = {
   draft: 'slate',
@@ -25,6 +30,8 @@ const STATUS_TONE: Record<RequestStatus, 'slate' | 'cyan' | 'amber' | 'emerald' 
   cancelled: 'slate',
 };
 
+// PR-3: one interactive element per row — the row itself navigates (via
+// DataTable onRowClick); the title is plain text, not a nested link.
 const columns: Column<ProcurementRequest>[] = [
   {
     key: 'title',
@@ -32,11 +39,7 @@ const columns: Column<ProcurementRequest>[] = [
     primary: true,
     render: (row) => (
       <div className="min-w-0">
-        <p className="truncate font-semibold text-ink">
-          <Link to={`/requests/${row.id}`} className="hover:underline">
-            {row.title}
-          </Link>
-        </p>
+        <p className="truncate font-semibold text-ink">{row.title}</p>
         <p className="text-xs text-muted">
           {row.lines.length} line{row.lines.length === 1 ? '' : 's'}
           {row.department ? ` · ${row.department}` : ''}
@@ -47,7 +50,7 @@ const columns: Column<ProcurementRequest>[] = [
   {
     key: 'status',
     header: 'Status',
-    render: (row) => <Badge tone={STATUS_TONE[row.status]}>{row.status}</Badge>,
+    render: (row) => <Badge tone={STATUS_TONE[row.status]}>{statusLabel(row.status)}</Badge>,
   },
   {
     key: 'vendorName',
@@ -57,34 +60,28 @@ const columns: Column<ProcurementRequest>[] = [
   {
     key: 'estimatedAmount',
     header: 'Est. total',
-    render: (row) =>
-      row.estimatedAmount != null
-        ? `\u20b1${row.estimatedAmount.toLocaleString(undefined, {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          })}`
-        : '—',
+    render: (row) => (row.estimatedAmount != null ? money(row.estimatedAmount) : '—'),
   },
   {
     key: 'neededBy',
     header: 'Needed',
-    render: (row) => (row.neededBy ? new Date(row.neededBy).toLocaleDateString() : '—'),
+    render: (row) => (row.neededBy ? formatDate(row.neededBy) : '—'),
   },
   {
     key: 'createdAt',
     header: 'Created',
-    render: (row) => new Date(row.createdAt).toLocaleDateString(),
+    render: (row) => formatDate(row.createdAt),
   },
 ];
 
 type FilterKey = 'all' | 'draft' | 'submitted' | 'approved' | 'rejected';
-const FILTERS: readonly { key: FilterKey; label: string }[] = [
-  { key: 'all',       label: 'All' },
-  { key: 'draft',     label: 'Drafts' },
-  { key: 'submitted', label: 'In review' },
-  { key: 'approved',  label: 'Approved' },
-  { key: 'rejected',  label: 'Rejected' },
-];
+const FILTER_LABEL: Record<FilterKey, string> = {
+  all: 'all requests',
+  draft: 'drafts',
+  submitted: 'in review',
+  approved: 'approved',
+  rejected: 'rejected',
+};
 
 export function RequestsPage() {
   const { rows, loading } = useProcurementRequests();
@@ -123,12 +120,29 @@ export function RequestsPage() {
     setParams(params, { replace: false });
   };
 
+  // PR-1: ONE KPI surface. The StatCards below are the counts AND the
+  // filters (active card ringed); the hero carries no numbers and the old
+  // count-tabs row is gone.
+  const filterCards: Array<{
+    key: FilterKey;
+    label: string;
+    value: number;
+    icon: IconName;
+    tone: Tone;
+    hint: string;
+  }> = [
+    { key: 'all',       label: 'Total requests',  value: kpis.total,     icon: 'clipboard', tone: 'brand',   hint: 'All statuses' },
+    { key: 'draft',     label: 'Drafts',          value: kpis.drafts,    icon: 'edit',      tone: 'slate',   hint: 'Not yet submitted' },
+    { key: 'submitted', label: 'In review',       value: kpis.submitted, icon: 'rotate',    tone: 'cyan',    hint: 'On the approval ladder' },
+    { key: 'approved',  label: 'Approved',        value: kpis.approved,  icon: 'check',     tone: 'emerald', hint: 'Ready for PO' },
+  ];
+
   return (
     <div className="space-y-6">
       <ModuleHero
         eyebrow="Welcome back,"
         title={firstName}
-        description="Raise, route and track purchase requests before PO authoring. Awards are gated on vendor accreditation."
+        description="Raise, route and track purchase requests."
         icon="cart"
         action={
           <Guard module="procurement" cap="create_request" fallback={null}>
@@ -137,62 +151,31 @@ export function RequestsPage() {
             </HeroChipButton>
           </Guard>
         }
-        accessory={
-          <>
-            <div>
-              <p className="text-xs uppercase tracking-wide text-brand-100/70">
-                Awaiting review
-              </p>
-              <p className="tnum text-2xl font-extrabold">
-                {kpis.submitted}
-                <span className="ml-1 text-sm font-medium text-brand-100/70">
-                  of {kpis.total}
-                </span>
-              </p>
-            </div>
-            <div className="text-right">
-              <p className="text-xs uppercase tracking-wide text-brand-100/70">
-                Approved
-              </p>
-              <p className="tnum text-2xl font-extrabold">{kpis.approved}</p>
-            </div>
-          </>
-        }
       />
 
       <div className="stagger grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard
-          label="Total requests"
-          value={kpis.total}
-          icon="clipboard"
-          tone="brand"
-          hint="All statuses"
-          onClick={() => applyFilter('all')}
-        />
-        <StatCard
-          label="Drafts"
-          value={kpis.drafts}
-          icon="pin"
-          tone="slate"
-          hint="Not yet submitted"
-          onClick={() => applyFilter('draft')}
-        />
-        <StatCard
-          label="Awaiting review"
-          value={kpis.submitted}
-          icon="rotate"
-          tone="cyan"
-          hint="Opens the approval inbox"
-          onClick={() => navigate('/approvals')}
-        />
-        <StatCard
-          label="Approved"
-          value={kpis.approved}
-          icon="check"
-          tone="emerald"
-          hint="Ready for PO"
-          onClick={() => applyFilter('approved')}
-        />
+        {filterCards.map((c) => {
+          const active = filter === c.key;
+          return (
+            <div
+              key={c.key}
+              className={
+                active
+                  ? 'rounded-2xl ring-2 ring-brand-500 ring-offset-2 ring-offset-app'
+                  : undefined
+              }
+            >
+              <StatCard
+                label={c.label}
+                value={c.value}
+                icon={c.icon}
+                tone={c.tone}
+                hint={active ? 'Showing below' : c.hint}
+                onClick={() => applyFilter(c.key)}
+              />
+            </div>
+          );
+        })}
       </div>
 
       <div>
@@ -200,47 +183,27 @@ export function RequestsPage() {
           title="Purchase requests"
           subtitle={
             filter === 'all'
-              ? 'Every draft you save appears here (persisted locally in this preview).'
-              : `Filtered to ${FILTERS.find((f) => f.key === filter)?.label.toLowerCase()}. Tap a KPI or a chip below to change scope.`
+              ? undefined
+              : `Filtered to ${FILTER_LABEL[filter]} — tap a card above to change scope.`
+          }
+          action={
+            <InfoTip
+              label="About purchase requests"
+              content="Requests route through a multi-tier approval ladder before PO authoring. Awards are gated on vendor accreditation."
+            />
           }
         />
-
-        <div
-          role="tablist"
-          aria-label="Filter requests"
-          className="mb-3 flex flex-wrap gap-1.5"
-        >
-          {FILTERS.map((f) => {
-            const active = filter === f.key;
-            return (
-              <button
-                key={f.key}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => applyFilter(f.key)}
-                className={
-                  active
-                    ? 'chip bg-brand-500/15 text-brand-700 dark:text-brand-300'
-                    : 'chip bg-inset text-muted hover:text-ink'
-                }
-              >
-                {f.label}
-              </button>
-            );
-          })}
-        </div>
 
         {loading ? (
           <div className="h-24 animate-pulse rounded-2xl bg-inset" aria-hidden />
         ) : visibleRows.length === 0 ? (
           <EmptyState
             icon="clipboard"
-            title={filter === 'all' ? 'No requests yet' : `No ${filter} requests`}
+            title={filter === 'all' ? 'No requests yet' : `No ${FILTER_LABEL[filter]}`}
             message={
               filter === 'all'
                 ? 'Draft your first request — it will appear right here for the procurement officer to review.'
-                : 'Nothing in this bucket right now. Switch filters to see other requests.'
+                : 'Nothing in this bucket right now. Tap a card above to see other requests.'
             }
             action={
               <Guard module="procurement" cap="create_request" fallback={null}>

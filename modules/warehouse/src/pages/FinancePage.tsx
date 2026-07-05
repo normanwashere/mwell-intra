@@ -4,6 +4,12 @@ import { toStockState } from '@/data/repository';
 import { availableForProduct, inventoryValuation } from '@/domain/stock';
 import { serializedAssetRegister } from '@/domain/assets';
 import { reconciliationRows } from '@/domain/reconciliation';
+import {
+  actorName,
+  formatWhen,
+  movementTypeLabel,
+  signedQuantity,
+} from '@/domain/format';
 import type { Movement } from '@/domain/types';
 import {
   BarRow,
@@ -15,10 +21,10 @@ import {
   SectionTitle,
   StatCard,
   money,
-  relativeTime,
   useToast,
   type Column,
 } from '@/components/ui';
+import { Icon } from '@/components/Icon';
 
 export function FinancePage() {
   const { data, role, adjustStock } = useWarehouse();
@@ -93,20 +99,22 @@ export function FinancePage() {
       primary: true,
       render: (m) => (
         <span>
-          <span className="uppercase text-brand-700 dark:text-brand-300">{m.type}</span>{' '}
+          <span className="font-semibold text-brand-700 dark:text-brand-300">
+            {movementTypeLabel(m.type)}
+          </span>{' '}
           {productName(m.productId)}
         </span>
       ),
     },
-    { key: 'actor', header: 'By', render: (m) => m.actor },
-    { key: 'when', header: 'When', render: (m) => relativeTime(m.createdAt) },
+    { key: 'actor', header: 'By', render: (m) => actorName(m.actor) },
+    { key: 'when', header: 'When', render: (m) => formatWhen(m.createdAt) },
     {
       key: 'qty',
       header: 'Qty',
       align: 'right',
       render: (m) => (
         <span className="tabular-nums font-semibold">
-          {m.quantity > 0 ? `+${m.quantity}` : m.quantity}
+          {signedQuantity(m.type, m.quantity)}
         </span>
       ),
     },
@@ -211,17 +219,51 @@ export function FinancePage() {
         {assets.length === 0 ? (
           <EmptyState icon="tag" title="No serialized devices issued" />
         ) : (
-          <ul className="divide-y divide-line" aria-label="Asset register">
-            {assets.slice(0, 20).map((a) => (
-              <li key={a.serialNumber} className="flex items-center justify-between gap-3 py-2.5">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-ink">{a.productName}</p>
-                  <p className="font-mono text-xs text-faint">{a.serialNumber}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm text-ink">{a.assignedTo ?? 'Unassigned'}</p>
-                  <p className="text-xs text-faint">{eventName(a.eventId)}</p>
-                </div>
+          /* Grouped by product with a per-serial disclosure — 15 identical
+             flat cards were an undifferentiated scroll on mobile (WH-29). */
+          <ul className="space-y-2" aria-label="Asset register">
+            {Array.from(
+              assets.reduce((map, a) => {
+                const group = map.get(a.productId) ?? {
+                  name: a.productName,
+                  rows: [] as typeof assets,
+                };
+                group.rows.push(a);
+                map.set(a.productId, group);
+                return map;
+              }, new Map<string, { name: string; rows: typeof assets }>()),
+            ).map(([productId, group]) => (
+              <li key={productId}>
+                <details className="group rounded-xl bg-inset/60">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-xl px-3 py-2.5">
+                    <span className="min-w-0 truncate text-sm font-medium text-ink">
+                      {group.name}
+                    </span>
+                    <span className="flex shrink-0 items-center gap-2">
+                      <Badge tone="brand">{group.rows.length} in field</Badge>
+                      <Icon
+                        name="chevron"
+                        className="h-4 w-4 text-faint transition group-open:rotate-90"
+                      />
+                    </span>
+                  </summary>
+                  <ul className="divide-y divide-line px-3 pb-2">
+                    {group.rows.map((a) => (
+                      <li
+                        key={a.serialNumber}
+                        className="flex items-center justify-between gap-3 py-2"
+                      >
+                        <p className="min-w-0 truncate font-mono text-xs text-faint">
+                          {a.serialNumber}
+                        </p>
+                        <div className="text-right">
+                          <p className="text-sm text-ink">{a.assignedTo ?? 'Unassigned'}</p>
+                          <p className="text-xs text-faint">{eventName(a.eventId)}</p>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
               </li>
             ))}
           </ul>

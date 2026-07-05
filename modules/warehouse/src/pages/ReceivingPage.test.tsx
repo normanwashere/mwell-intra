@@ -44,7 +44,7 @@ describe('ReceivingPage', () => {
     renderWithProviders(<ReceivingPage />, { repo });
     await screen.findByText(/receipt lines/i);
 
-    await user.selectOptions(screen.getByLabelText('Item context'), 'doctor-token');
+    await user.selectOptions(screen.getByLabelText('Product'), 'doctor-token');
 
     // Bump the "to add" quantity from 1 → 5 via the stepper, then add.
     const addIncrease = screen.getByRole('button', { name: 'Increase' });
