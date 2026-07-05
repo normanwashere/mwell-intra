@@ -1,9 +1,19 @@
 'use client';
 
-import type { FormEvent } from 'react';
-import { useState } from 'react';
+// Invite wizard (T1) — three steps:
+//   1. Vendor identity (company, email, jurisdiction, entity type, category)
+//   2. Risk profile (risk tier, contract type, spend band, personal data)
+//   3. Preview of the auto-tailored requirement checklist + signable
+//      instruments, then send.
+//
+// The preview and the seeded checklist share the same policy engine
+// (requirements/policy.ts), so what Legal sees on step 3 is exactly what the
+// vendor receives.
+
+import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
+  Badge,
   Button,
   Card,
   Field,
@@ -14,24 +24,91 @@ import {
   useToast,
 } from '@intra/ui';
 import { Guard, useSession } from '@intra/auth';
+import {
+  CONTRACT_TYPE_LABEL,
+  ENTITY_TYPE_LABEL,
+  JURISDICTION_LABEL,
+  RISK_TIER_LABEL,
+  SPEND_BAND_LABEL,
+  VENDOR_CATEGORY_LABEL,
+  type ContractType,
+  type EntityType,
+  type Jurisdiction,
+  type RequirementGroup,
+  type RiskTier,
+  type SpendBand,
+  type VendorCategory,
+} from '../types';
+import {
+  DEFAULT_TAILORING_PROFILE,
+  tailorRequirements,
+  type TailoringProfile,
+} from '../requirements/policy';
+import { groupLabel, groupOrderIndex } from '../caseLogic';
 import { useAccreditationCases, useVendorInvites } from '../localStore';
+
+const STEPS = [
+  { n: 1, label: 'Vendor identity' },
+  { n: 2, label: 'Risk profile' },
+  { n: 3, label: 'Review & send' },
+] as const;
 
 export function InviteVendorPage() {
   const navigate = useNavigate();
-  const { profile } = useSession();
+  const { profile: session } = useSession();
   const { success, error } = useToast();
   const { invite } = useVendorInvites();
   const { addCase } = useAccreditationCases();
+
+  const [step, setStep] = useState<1 | 2 | 3>(1);
   const [companyName, setCompanyName] = useState('');
   const [email, setEmail] = useState('');
-  const [category, setCategory] = useState('');
-  const [autoCreate, setAutoCreate] = useState(true);
+  const [tailoring, setTailoring] = useState<TailoringProfile>(
+    DEFAULT_TAILORING_PROFILE,
+  );
+  const [originCountry, setOriginCountry] = useState('');
   const [busy, setBusy] = useState(false);
 
-  function submit(event: FormEvent) {
-    event.preventDefault();
-    if (!companyName.trim() || !email.trim()) {
-      error('Company name and email are required.');
+  const patch = <K extends keyof TailoringProfile>(
+    key: K,
+    value: TailoringProfile[K],
+  ) => setTailoring((p) => ({ ...p, [key]: value }));
+
+  // Live-tailored preview (step 3). Grouped in canonical group order.
+  const tailored = useMemo(() => tailorRequirements(tailoring), [tailoring]);
+  const grouped = useMemo(() => {
+    const map = new Map<string, typeof tailored>();
+    for (const def of tailored) {
+      const list = map.get(def.group);
+      if (list) list.push(def);
+      else map.set(def.group, [def]);
+    }
+    return [...map.entries()].sort(
+      (a, b) =>
+        groupOrderIndex(a[0] as RequirementGroup) -
+        groupOrderIndex(b[0] as RequirementGroup),
+    );
+  }, [tailored]);
+  const requiredCount = tailored.filter((d) => d.required).length;
+  const instruments = tailored.filter((d) => d.instrument);
+
+  const identityValid =
+    companyName.trim().length > 0 &&
+    /\S+@\S+\.\S+/.test(email.trim()) &&
+    (tailoring.jurisdiction !== 'OTHER' || originCountry.trim().length > 0);
+
+  function next() {
+    if (step === 1 && !identityValid) {
+      error('Fill in the company, a valid email, and the jurisdiction first.');
+      return;
+    }
+    setStep((s) => (s < 3 ? ((s + 1) as 2 | 3) : s));
+  }
+
+  function submit() {
+    if (!identityValid) {
+      error('Company name and a valid contact email are required.');
+      setStep(1);
       return;
     }
     setBusy(true);
@@ -39,23 +116,26 @@ export function InviteVendorPage() {
       const inv = invite({
         email: email.trim(),
         companyName: companyName.trim(),
-        category: category.trim() || undefined,
-        actor: profile?.email,
+        category: VENDOR_CATEGORY_LABEL[tailoring.category],
+        actor: session?.email,
+        profile: tailoring,
+        originCountry: originCountry.trim() || undefined,
       });
-      if (autoCreate) {
-        const vendorId = `ven-${inv.id}`;
-        const kase = addCase(
-          vendorId,
-          companyName.trim(),
-          category.trim() || undefined,
-          profile?.email,
-        );
-        success(`Invite sent — draft case opened for ${companyName.trim()}`);
-        navigate(`/cases/${kase.id}`);
-      } else {
-        success(`Invite sent to ${email.trim()}`);
-        navigate('/');
-      }
+      const kase = addCase(
+        `ven-${inv.id}`,
+        companyName.trim(),
+        VENDOR_CATEGORY_LABEL[tailoring.category],
+        session?.email,
+        {
+          profile: tailoring,
+          originCountry: originCountry.trim() || undefined,
+          contactEmail: email.trim(),
+        },
+      );
+      success(
+        `Invite sent — ${tailored.length} tailored requirements opened for ${companyName.trim()}`,
+      );
+      navigate(`/cases/${kase.id}`);
     } catch (e) {
       error(e instanceof Error ? e.message : 'Could not send the invite.');
     } finally {
@@ -69,7 +149,7 @@ export function InviteVendorPage() {
         <ModuleHero
           eyebrow="Invite vendor"
           title="Onboard a new vendor"
-          description="Send an accreditation invite. The vendor gets a signup link and, once they accept, a case appears in the review pipeline."
+          description="Answer a few questions and the accreditation checklist tailors itself — jurisdiction, sector permits, bonds and signable legal instruments included."
           icon="building"
           action={
             <HeroChipButton href="/legal" icon="arrowRight">
@@ -78,67 +158,340 @@ export function InviteVendorPage() {
           }
         />
 
-        <Card>
-          <form className="space-y-4" onSubmit={submit}>
-            <Field label="Company name" htmlFor="companyName">
-              <Input
-                id="companyName"
-                value={companyName}
-                onChange={(e) => setCompanyName(e.target.value)}
-                placeholder="Acme Medical Supplies, Inc."
-                required
-              />
-            </Field>
-            <Field label="Vendor contact email" htmlFor="email">
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="ops@acme.com"
-                required
-              />
-            </Field>
-            <Field label="Primary category (optional)" htmlFor="category">
-              <Input
-                id="category"
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                placeholder="Medical devices, consumables"
-              />
-            </Field>
+        {/* Compact stepper */}
+        <ol className="flex items-center gap-1.5" aria-label="Invite steps">
+          {STEPS.map((s, i) => {
+            const state =
+              s.n === step ? 'current' : s.n < step ? 'done' : 'todo';
+            return (
+              <li key={s.n} className="flex min-w-0 flex-1 items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => s.n < step && setStep(s.n as 1 | 2)}
+                  disabled={s.n >= step}
+                  className={`flex min-w-0 flex-1 items-center gap-2 rounded-xl px-2.5 py-2 text-left transition ${
+                    state === 'current'
+                      ? 'bg-brand-500/10'
+                      : state === 'done'
+                        ? 'hover:bg-inset'
+                        : 'opacity-60'
+                  }`}
+                  aria-current={state === 'current' ? 'step' : undefined}
+                >
+                  <span
+                    className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-bold ${
+                      state === 'done'
+                        ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                        : state === 'current'
+                          ? 'bg-brand-600 text-white'
+                          : 'bg-inset text-faint'
+                    }`}
+                  >
+                    {state === 'done' ? (
+                      <Icon name="check" className="h-3.5 w-3.5" />
+                    ) : (
+                      s.n
+                    )}
+                  </span>
+                  <span
+                    className={`hidden truncate text-xs font-semibold sm:block ${
+                      state === 'current' ? 'text-brand-700 dark:text-brand-300' : 'text-muted'
+                    }`}
+                  >
+                    {s.label}
+                  </span>
+                </button>
+                {i < STEPS.length - 1 && (
+                  <span aria-hidden className="h-px w-3 shrink-0 bg-line" />
+                )}
+              </li>
+            );
+          })}
+        </ol>
+        <p className="-mt-4 text-xs font-semibold text-brand-700 dark:text-brand-300 sm:hidden">
+          Step {step} of 3 — {STEPS[step - 1]!.label}
+        </p>
 
-            <label className="flex items-start gap-2 text-sm text-ink">
-              <input
-                type="checkbox"
-                checked={autoCreate}
-                onChange={(e) => setAutoCreate(e.target.checked)}
-                className="mt-1"
+        {step === 1 && (
+          <Card>
+            <div className="space-y-4">
+              <Field label="Company name" htmlFor="companyName">
+                <Input
+                  id="companyName"
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
+                  placeholder="Acme Medical Supplies, Inc."
+                  required
+                />
+              </Field>
+              <Field label="Vendor contact email" htmlFor="email">
+                <Input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="ops@acme.com"
+                  required
+                />
+              </Field>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <SelectField
+                  id="jurisdiction"
+                  label="Jurisdiction"
+                  value={tailoring.jurisdiction}
+                  onChange={(v) => patch('jurisdiction', v as Jurisdiction)}
+                  options={JURISDICTION_LABEL}
+                />
+                <SelectField
+                  id="entityType"
+                  label="Entity type"
+                  value={tailoring.entityType}
+                  onChange={(v) => patch('entityType', v as EntityType)}
+                  options={ENTITY_TYPE_LABEL}
+                />
+              </div>
+              {tailoring.jurisdiction === 'OTHER' && (
+                <Field label="Country of registration" htmlFor="originCountry">
+                  <Input
+                    id="originCountry"
+                    value={originCountry}
+                    onChange={(e) => setOriginCountry(e.target.value)}
+                    placeholder="e.g. Australia"
+                    required
+                  />
+                </Field>
+              )}
+              <SelectField
+                id="vendorCategory"
+                label="Vendor category"
+                value={tailoring.category}
+                onChange={(v) => patch('category', v as VendorCategory)}
+                options={VENDOR_CATEGORY_LABEL}
+                hint="Drives sector permits (FDA, PCAB, DOLE D.O. 174, ISO)."
               />
-              <span>
-                <span className="font-semibold">Also open an accreditation case now</span>
-                <span className="block text-xs text-muted">
-                  Recommended — a draft case is created with the default requirement checklist ready for review once the vendor uploads.
-                </span>
-              </span>
-            </label>
-
-            <div className="flex flex-wrap items-center justify-end gap-3 pt-2">
-              <Link to="/" className="btn-ghost">
-                Cancel
-              </Link>
-              <Button type="submit" variant="primary" disabled={busy}>
-                <Icon name="plus" className="h-4 w-4" />
-                {busy ? 'Sending…' : 'Send invite'}
-              </Button>
             </div>
+          </Card>
+        )}
 
-            <p className="text-xs text-muted">
-              Preview build: this doesn&apos;t actually send an email. In production the invite lands in the vendor&apos;s inbox with a magic-link that spawns their profile + this case.
-            </p>
-          </form>
-        </Card>
+        {step === 2 && (
+          <Card>
+            <div className="space-y-4">
+              <SelectField
+                id="riskTier"
+                label="Risk tier"
+                value={tailoring.riskTier}
+                onChange={(v) => patch('riskTier', v as RiskTier)}
+                options={RISK_TIER_LABEL}
+                hint="High risk triggers the Enhanced Due Diligence pack (§7)."
+              />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <SelectField
+                  id="contractType"
+                  label="Contract type"
+                  value={tailoring.contractType}
+                  onChange={(v) => patch('contractType', v as ContractType)}
+                  options={CONTRACT_TYPE_LABEL}
+                />
+                <SelectField
+                  id="spendBand"
+                  label="Expected annual spend"
+                  value={tailoring.spendBand}
+                  onChange={(v) => patch('spendBand', v as SpendBand)}
+                  options={SPEND_BAND_LABEL}
+                  hint="Bonds & insurance kick in above ₱1M (§12)."
+                />
+              </div>
+              <label className="flex items-start gap-2.5 rounded-xl border border-line bg-inset/50 p-3 text-sm text-ink">
+                <input
+                  type="checkbox"
+                  checked={tailoring.handlesPersonalData}
+                  onChange={(e) =>
+                    patch('handlesPersonalData', e.target.checked)
+                  }
+                  className="mt-1"
+                />
+                <span>
+                  <span className="font-semibold">
+                    Vendor will handle personal data
+                  </span>
+                  <span className="block text-xs text-muted">
+                    Adds the NPC registration + Data Processing Agreement (RA
+                    10173 / GDPR) to the checklist.
+                  </span>
+                </span>
+              </label>
+            </div>
+          </Card>
+        )}
+
+        {step === 3 && (
+          <div className="space-y-4">
+            <Card>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate font-display text-base font-bold text-ink">
+                    {companyName || 'Vendor'}
+                  </p>
+                  <p className="truncate text-xs text-muted">
+                    {email} · {JURISDICTION_LABEL[tailoring.jurisdiction]}
+                    {tailoring.jurisdiction === 'OTHER' && originCountry
+                      ? ` (${originCountry})`
+                      : ''}{' '}
+                    · {ENTITY_TYPE_LABEL[tailoring.entityType]} ·{' '}
+                    {VENDOR_CATEGORY_LABEL[tailoring.category]}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  <Badge
+                    tone={
+                      tailoring.riskTier === 'high'
+                        ? 'rose'
+                        : tailoring.riskTier === 'medium'
+                          ? 'amber'
+                          : 'emerald'
+                    }
+                  >
+                    {RISK_TIER_LABEL[tailoring.riskTier]} risk
+                  </Badge>
+                  <Badge tone="brand">
+                    {SPEND_BAND_LABEL[tailoring.spendBand]}
+                  </Badge>
+                  {tailoring.handlesPersonalData && (
+                    <Badge tone="cyan">personal data</Badge>
+                  )}
+                </div>
+              </div>
+              <p className="mt-3 rounded-xl bg-inset px-3 py-2 text-sm text-muted">
+                <span className="font-semibold text-ink">
+                  {tailored.length} requirements
+                </span>{' '}
+                will be requested ({requiredCount} required,{' '}
+                {instruments.length} signable instruments).
+              </p>
+            </Card>
+
+            {grouped.map(([group, defs]) => (
+              <Card key={group}>
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="font-display text-sm font-bold text-ink">
+                    {groupLabel(group as RequirementGroup)}
+                  </h3>
+                  <Badge tone="slate">
+                    {defs.filter((d) => d.required).length}/{defs.length} required
+                  </Badge>
+                </div>
+                <ul className="mt-2 space-y-1.5">
+                  {defs.map((d) => (
+                    <li
+                      key={d.code}
+                      className="flex items-start gap-2 text-sm text-ink"
+                    >
+                      <Icon
+                        name={d.instrument ? 'signature' : 'clipboard'}
+                        className={`mt-0.5 h-4 w-4 shrink-0 ${
+                          d.instrument ? 'text-brand-600 dark:text-brand-300' : 'text-faint'
+                        }`}
+                      />
+                      <span className="min-w-0">
+                        {d.label}
+                        {!d.required && (
+                          <>
+                            {' '}
+                            <span className="ml-1 whitespace-nowrap text-xs text-faint">
+                              optional
+                            </span>
+                          </>
+                        )}
+                        {d.instrument && (
+                          <>
+                            {' '}
+                            <span className="ml-1 whitespace-nowrap text-xs font-semibold text-brand-700 dark:text-brand-300">
+                              sign in-browser
+                            </span>
+                          </>
+                        )}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            ))}
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-2">
+          {step > 1 ? (
+            <button
+              type="button"
+              onClick={() => setStep((s) => (s - 1) as 1 | 2)}
+              className="btn-ghost"
+            >
+              Back
+            </button>
+          ) : (
+            <Link to="/" className="btn-ghost">
+              Cancel
+            </Link>
+          )}
+          {step < 3 ? (
+            <Button type="button" variant="primary" onClick={next}>
+              Continue
+              <Icon name="arrowRight" className="h-4 w-4" />
+            </Button>
+          ) : (
+            <Button type="button" variant="primary" onClick={submit} disabled={busy}>
+              <Icon name="plus" className="h-4 w-4" />
+              {busy ? 'Sending…' : 'Send invite & open case'}
+            </Button>
+          )}
+        </div>
+
+        <p className="text-xs text-muted">
+          Preview build: no email is actually sent. In production the invite
+          lands in the vendor&apos;s inbox with a magic-link that spawns their
+          profile + this case.
+        </p>
       </div>
     </Guard>
+  );
+}
+
+function SelectField({
+  id,
+  label,
+  value,
+  onChange,
+  options,
+  hint,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: Readonly<Record<string, string>>;
+  hint?: string;
+}) {
+  return (
+    <div>
+      <label
+        htmlFor={id}
+        className="mb-1 block text-xs font-semibold uppercase tracking-wide text-faint"
+      >
+        {label}
+      </label>
+      <select
+        id={id}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="input"
+      >
+        {Object.entries(options).map(([k, v]) => (
+          <option key={k} value={k}>
+            {v}
+          </option>
+        ))}
+      </select>
+      {hint && <p className="mt-1 text-xs text-muted">{hint}</p>}
+    </div>
   );
 }

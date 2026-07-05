@@ -1,5 +1,11 @@
 'use client';
 
+// Reviewer inbox (T1.6) — cases bucketed by what unblocks them next:
+// Waiting on vendor / Waiting on Legal / Ready for decision / Renewals.
+// Buckets are derived from checklist + document + signed-instrument state
+// (caseLogic.deriveInboxBucket), so a case moves buckets the moment the
+// vendor uploads or Legal reviews.
+
 import { useMemo } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
@@ -13,8 +19,17 @@ import {
   type Column,
 } from '@intra/ui';
 import { Guard, useSession } from '@intra/auth';
-import type { AccreditationCase } from '../types';
-import { computeCaseStatus, isExpiringSoon, useAccreditationCases } from '../localStore';
+import type { AccreditationCase, InboxBucket } from '../types';
+import { JURISDICTION_LABEL } from '../types';
+import {
+  computeCaseStatus,
+  isExpiringSoon,
+  useAccreditationCases,
+  useAccreditationDocs,
+  useChecklist,
+  useSignedInstruments,
+} from '../localStore';
+import { deriveInboxBucket, INBOX_BUCKET_LABEL } from '../caseLogic';
 
 const STATUS_TONE: Record<
   string,
@@ -36,9 +51,18 @@ function columns(basePath: string): Column<AccreditationCase>[] {
       header: 'Vendor',
       primary: true,
       render: (r) => (
-        <Link to={`${basePath}/cases/${r.id}`} className="font-semibold text-ink hover:underline">
-          {r.vendorName}
-        </Link>
+        <div className="min-w-0">
+          <Link to={`${basePath}/cases/${r.id}`} className="font-semibold text-ink hover:underline">
+            {r.vendorName}
+          </Link>
+          {r.jurisdiction && (
+            <span className="ml-2 inline-flex items-center rounded-full bg-inset px-2 py-0.5 text-[0.65rem] font-semibold text-muted">
+              {r.jurisdiction === 'OTHER' && r.originCountry
+                ? r.originCountry
+                : JURISDICTION_LABEL[r.jurisdiction]}
+            </span>
+          )}
+        </div>
       ),
     },
     {
@@ -63,17 +87,21 @@ function columns(basePath: string): Column<AccreditationCase>[] {
   ];
 }
 
-type CaseFilter = 'all' | 'in_review' | 'approved' | 'expiring';
+type CaseFilter = 'all' | InboxBucket;
 const CASE_FILTERS: readonly { key: CaseFilter; label: string }[] = [
-  { key: 'all',       label: 'All cases' },
-  { key: 'in_review', label: 'Under review' },
-  { key: 'approved',  label: 'Approved' },
-  { key: 'expiring',  label: 'Expiring 30d' },
+  { key: 'all', label: 'All cases' },
+  { key: 'waiting_on_vendor', label: INBOX_BUCKET_LABEL.waiting_on_vendor },
+  { key: 'waiting_on_legal', label: INBOX_BUCKET_LABEL.waiting_on_legal },
+  { key: 'ready_for_decision', label: INBOX_BUCKET_LABEL.ready_for_decision },
+  { key: 'renewal_due', label: INBOX_BUCKET_LABEL.renewal_due },
 ];
 
 export function AccreditationCasesPage() {
   const { profile } = useSession();
   const { rows, loading } = useAccreditationCases();
+  const { rows: allChecklist } = useChecklist();
+  const { rows: allDocs } = useAccreditationDocs();
+  const { rows: allSigned } = useSignedInstruments();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const isVendor = profile?.kind === 'vendor';
@@ -87,23 +115,43 @@ export function AccreditationCasesPage() {
     return rows.filter((r) => r.vendorId === profile?.vendorId);
   }, [rows, isVendor, profile?.vendorId]);
 
+  const bucketOf = useMemo(() => {
+    const map = new Map<string, InboxBucket | null>();
+    for (const kase of visible) {
+      const items = allChecklist.filter((i) => i.caseId === kase.id);
+      const evidence = {
+        docs: allDocs.filter((d) => d.caseId === kase.id),
+        signed: allSigned.filter((s) => s.caseId === kase.id),
+      };
+      map.set(kase.id, deriveInboxBucket(kase, items, evidence));
+    }
+    return map;
+  }, [visible, allChecklist, allDocs, allSigned]);
+
+  const bucketCounts = useMemo(() => {
+    const counts: Record<InboxBucket, number> = {
+      waiting_on_vendor: 0,
+      waiting_on_legal: 0,
+      ready_for_decision: 0,
+      renewal_due: 0,
+    };
+    for (const bucket of bucketOf.values()) {
+      if (bucket) counts[bucket] += 1;
+    }
+    return counts;
+  }, [bucketOf]);
+
   const kpis = useMemo(() => {
     const total = visible.length;
-    const inReview = visible.filter((r) => r.status === 'submitted' || r.status === 'under_review').length;
     const approved = visible.filter((r) => r.status === 'approved').length;
     const expiringSoon = visible.filter((r) => isExpiringSoon(r.expiresAt, 30)).length;
-    return { total, inReview, approved, expiringSoon };
+    return { total, approved, expiringSoon };
   }, [visible]);
 
   const filteredVisible = useMemo(() => {
-    switch (filter) {
-      case 'in_review': return visible.filter((r) => r.status === 'submitted' || r.status === 'under_review');
-      case 'approved':  return visible.filter((r) => r.status === 'approved');
-      case 'expiring':  return visible.filter((r) => isExpiringSoon(r.expiresAt, 30));
-      case 'all':
-      default:          return visible;
-    }
-  }, [visible, filter]);
+    if (filter === 'all') return visible;
+    return visible.filter((r) => bucketOf.get(r.id) === filter);
+  }, [visible, filter, bucketOf]);
 
   const basePath = isVendor ? '/vendor' : '/legal';
 
@@ -132,8 +180,10 @@ export function AccreditationCasesPage() {
                 <p className="tnum text-2xl font-extrabold">{kpis.total}</p>
               </div>
               <div className="text-right">
-                <p className="text-xs uppercase tracking-wide text-brand-100/70">Expiring soon</p>
-                <p className="tnum text-2xl font-extrabold">{kpis.expiringSoon}</p>
+                <p className="text-xs uppercase tracking-wide text-brand-100/70">Waiting on you</p>
+                <p className="tnum text-2xl font-extrabold">
+                  {bucketCounts.waiting_on_legal + bucketCounts.ready_for_decision}
+                </p>
               </div>
             </>
           )
@@ -143,36 +193,36 @@ export function AccreditationCasesPage() {
       {!isVendor && (
         <div className="stagger grid grid-cols-2 gap-3 lg:grid-cols-4">
           <StatCard
-            label="Active cases"
-            value={kpis.total}
-            icon="clipboard"
-            tone="brand"
-            hint="Total in pipeline"
-            onClick={() => applyFilter('all')}
+            label="Waiting on vendor"
+            value={bucketCounts.waiting_on_vendor}
+            icon="building"
+            tone="slate"
+            hint="Docs / signatures outstanding"
+            onClick={() => applyFilter('waiting_on_vendor')}
           />
           <StatCard
-            label="Under review"
-            value={kpis.inReview}
+            label="Waiting on Legal"
+            value={bucketCounts.waiting_on_legal}
             icon="rotate"
             tone="amber"
-            hint="Waiting on Legal"
-            onClick={() => applyFilter('in_review')}
+            hint="Evidence needs your review"
+            onClick={() => applyFilter('waiting_on_legal')}
           />
           <StatCard
-            label="Approved"
-            value={kpis.approved}
-            icon="check"
+            label="Ready for decision"
+            value={bucketCounts.ready_for_decision}
+            icon="signature"
             tone="emerald"
-            hint="Vendors awarded"
-            onClick={() => applyFilter('approved')}
+            hint="All required items approved"
+            onClick={() => applyFilter('ready_for_decision')}
           />
           <StatCard
-            label="Expiring 30d"
-            value={kpis.expiringSoon}
+            label="Renewals"
+            value={bucketCounts.renewal_due}
             icon="alert"
             tone="rose"
-            hint="Renewals due"
-            onClick={() => applyFilter('expiring')}
+            hint="Expiring within 30 days"
+            onClick={() => applyFilter('renewal_due')}
           />
         </div>
       )}
@@ -202,6 +252,8 @@ export function AccreditationCasesPage() {
           <div role="tablist" aria-label="Filter cases" className="mb-3 flex flex-wrap gap-1.5">
             {CASE_FILTERS.map((f) => {
               const active = filter === f.key;
+              const count =
+                f.key === 'all' ? visible.length : bucketCounts[f.key];
               return (
                 <button
                   key={f.key}
@@ -216,6 +268,7 @@ export function AccreditationCasesPage() {
                   }
                 >
                   {f.label}
+                  <span className="ml-1 tnum opacity-70">{count}</span>
                 </button>
               );
             })}
@@ -227,13 +280,13 @@ export function AccreditationCasesPage() {
         ) : filteredVisible.length === 0 ? (
           <EmptyState
             icon="building"
-            title={isVendor ? 'No accreditation case yet' : 'No cases match'}
+            title={isVendor ? 'No accreditation case yet' : 'No cases in this bucket'}
             message={
               isVendor
                 ? 'When Legal invites your organization, your case will appear here to fill out.'
                 : filter === 'all'
                   ? 'Invite a vendor to start their onboarding — a case appears here once they submit.'
-                  : 'Nothing in this filter right now. Switch buckets above to see other cases.'
+                  : 'Nothing here right now. Switch buckets above to see other cases.'
             }
             action={
               !isVendor && (

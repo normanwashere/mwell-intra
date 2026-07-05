@@ -205,6 +205,25 @@ export interface RequirementDefinition {
 // Case + checklist
 // ---------------------------------------------------------------------------
 
+/**
+ * Electronic-signature record persisted on case-level events (vendor submit
+ * attestation, Legal approve/reject sign-off). Mirrors `SignaturePayload`
+ * from @intra/ui field-for-field — duplicated here (rather than imported) to
+ * keep the domain types free of UI deps, same pattern as procurement's
+ * `ApprovalSignature`.
+ */
+export interface CaseSignature {
+  method: 'drawn' | 'typed';
+  /** PNG rendering of the signature (data URL). */
+  dataUrl: string;
+  /** Full legal name the signer confirmed at capture. */
+  signerName: string;
+  /** ISO timestamp captured at commit. */
+  signedAt: string;
+  /** Best-effort audit fingerprint (browser + tzOffset). */
+  userAgent: string;
+}
+
 export interface AccreditationCase {
   id: string;
   vendorId: string;
@@ -236,6 +255,12 @@ export interface AccreditationCase {
   lastReminderAt?: string;
   /** Optional invited-by email captured on invite. */
   invitedByEmail?: string;
+  /** Vendor contact email captured at invite time. */
+  contactEmail?: string;
+  /** Vendor's attestation signature captured on "Submit for review". */
+  submissionSignature?: CaseSignature;
+  /** Legal reviewer's sign-off signature captured on approve / reject. */
+  decisionSignature?: CaseSignature;
 }
 
 export type ChecklistDecision = 'pending' | 'approved' | 'rejected' | 'na';
@@ -345,6 +370,8 @@ export interface SignedInstrument {
   signedAt: string;
   /** UA string + tz offset — audit fingerprint. */
   signerUa: string;
+  /** Captured pre-signature disclosure field values (InstrumentField.name → value). */
+  fields?: Record<string, string>;
   revokedAt?: string;
   revokedByEmail?: string;
 }

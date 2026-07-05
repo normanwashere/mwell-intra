@@ -265,6 +265,24 @@ const INSTRUMENT_BY_CODE = new Map<InstrumentCode, InstrumentTemplate>(
   INSTRUMENT_TEMPLATES.map((t) => [t.code, t]),
 );
 
+/**
+ * The requirement catalog references instruments through `SIGN_*` codes while
+ * the templates above carry semantic codes (`nda_mutual`, `dpa_ph`, …). This
+ * alias table bridges the two so `resolveInstrument` accepts either form.
+ */
+export const CATALOG_INSTRUMENT_ALIAS: Readonly<Record<string, InstrumentCode>> = {
+  SIGN_NDA: 'nda_mutual',
+  SIGN_DPA_PH: 'dpa_ph',
+  SIGN_DPA_GDPR: 'dpa_gdpr',
+  SIGN_CODE_ETHICS: 'code_of_conduct',
+  SIGN_ABAC_DECL: 'abac_declaration',
+  SIGN_COI: 'coi_disclosure',
+  SIGN_MSA: 'msa_countersign',
+  SIGN_PEP_SANCTIONS: 'sanctions_pep',
+  SIGN_NO_LITIGATION: 'no_litigation',
+  SIGN_WHISTLEBLOWER: 'whistleblower_ack',
+};
+
 /** Strict lookup by code — throws if the template is unknown. */
 export function requireInstrument(code: InstrumentCode): InstrumentTemplate {
   const t = INSTRUMENT_BY_CODE.get(code);
@@ -275,4 +293,16 @@ export function requireInstrument(code: InstrumentCode): InstrumentTemplate {
 /** Safe lookup — returns undefined if the template is unknown. */
 export function findInstrument(code: string): InstrumentTemplate | undefined {
   return INSTRUMENT_BY_CODE.get(code as InstrumentCode);
+}
+
+/**
+ * Lookup that accepts a template code OR a catalog `SIGN_*` instrument code.
+ * Used by the sign page route (`/cases/:id/sign/:code`) so links can carry
+ * whichever code the checklist row holds.
+ */
+export function resolveInstrument(code: string): InstrumentTemplate | undefined {
+  return (
+    INSTRUMENT_BY_CODE.get(code as InstrumentCode) ??
+    INSTRUMENT_BY_CODE.get(CATALOG_INSTRUMENT_ALIAS[code] ?? '')
+  );
 }

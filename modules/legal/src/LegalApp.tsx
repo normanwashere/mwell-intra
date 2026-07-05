@@ -2,12 +2,13 @@
 
 import { useEffect } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
-import { ToastProvider } from '@intra/ui';
 import { useSession } from '@intra/auth';
 import { can } from '@intra/rbac';
+import { SignInPrompt, SkeletonList, SkeletonStats } from '@intra/ui';
 import { AccreditationCasesPage } from './pages/AccreditationCasesPage';
 import { CaseDetailPage } from './pages/CaseDetailPage';
 import { InviteVendorPage } from './pages/InviteVendorPage';
+import { SignInstrumentPage } from './pages/SignInstrumentPage';
 import { LegalTabs } from './components/LegalTabs';
 
 export interface LegalAppProps {
@@ -33,7 +34,20 @@ export function LegalApp({ basename = '/legal' }: LegalAppProps) {
   const hasInternalAccess = can(userRoles, 'legal', 'view_dashboard');
   // External vendor tier lives in core (reconciled 2026-07-05, ADR-002 #3).
   const hasVendorAccess = can(userRoles, 'core', 'view_own_accreditation');
-  if (loading) return null;
+  if (loading) {
+    return (
+      <div className="mx-auto max-w-5xl space-y-6 p-4 md:p-6" aria-busy="true">
+        <SkeletonStats />
+        <SkeletonList rows={5} />
+      </div>
+    );
+  }
+
+  // Signed out entirely → invite the user to sign in (with a redirect back
+  // here), instead of the misleading "no role" copy meant for signed-in users.
+  if (!profile) {
+    return <SignInPrompt module="Legal" basename={basename} />;
+  }
 
   if (isVendor ? !hasVendorAccess : !hasInternalAccess) {
     return (
@@ -64,22 +78,25 @@ export function LegalApp({ basename = '/legal' }: LegalAppProps) {
       basename={basename}
       future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
     >
-      <ToastProvider>
-        {isVendor ? (
-          <VendorChrome
-            profileName={profile?.name ?? profile?.email ?? 'Vendor'}
-            onSignOut={signOut}
-          />
-        ) : (
-          <LegalTabs canInvite={can(userRoles, 'legal', 'manage_checklist')} />
-        )}
-        <Routes>
-          <Route path="/" element={<AccreditationCasesPage />} />
-          <Route path="/cases/:id" element={<CaseDetailPage />} />
-          <Route path="/invites/new" element={<InviteVendorPage />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </ToastProvider>
+      {/* NOTE: no nested ToastProvider here — the shell's root Providers
+          already mounts one. Nesting a second provider rendered a duplicate
+          fixed toast viewport (two "Notifications" regions) and was the
+          hydration-mismatch surface reported at Toast.tsx on /vendor. */}
+      {isVendor ? (
+        <VendorChrome
+          profileName={profile?.name ?? profile?.email ?? 'Vendor'}
+          onSignOut={signOut}
+        />
+      ) : (
+        <LegalTabs canInvite={can(userRoles, 'legal', 'manage_checklist')} />
+      )}
+      <Routes>
+        <Route path="/" element={<AccreditationCasesPage />} />
+        <Route path="/cases/:id" element={<CaseDetailPage />} />
+        <Route path="/cases/:id/sign/:code" element={<SignInstrumentPage />} />
+        <Route path="/invites/new" element={<InviteVendorPage />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
     </BrowserRouter>
   );
 }

@@ -12,20 +12,26 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type {
   AccreditationCase,
   AccreditationDoc,
+  CaseSignature,
   CaseStatus,
   CaseTimelineEntry,
   ChecklistDecision,
   DocumentStatus,
   RequirementChecklistItem,
+  SignedInstrument,
   VendorInvite,
 } from './types';
+import { buildTailoredChecklist, migrateChecklist } from './caseLogic';
+import type { TailoringProfile } from './requirements/policy';
 
 const CASES_KEY = 'intra.legal.v1.cases';
 const CHECKLIST_KEY = 'intra.legal.v1.checklist';
 const DOCS_KEY = 'intra.legal.v1.docs';
 const TIMELINE_KEY = 'intra.legal.v1.timeline';
 const INVITES_KEY = 'intra.legal.v1.invites';
+const SIGNED_KEY = 'intra.legal.v1.signed_instruments';
 const SEED_KEY = 'intra.legal.v1.seeded';
+const MIGRATED_KEY = 'intra.legal.v2.checklist_migrated';
 const CHANGE_EVT = 'intra.legal.change';
 
 function newId(prefix: string): string {
@@ -122,6 +128,21 @@ function seedOnce(): void {
   window.localStorage.setItem(SEED_KEY, '1');
 }
 
+/**
+ * One-time v1 → v2 checklist upgrade: enrich legacy rows with catalog
+ * metadata (code / group / whyWeNeedIt / instrument fields) while preserving
+ * decisions and attached documents. Runs before the first read so every hook
+ * sees the migrated shape.
+ */
+function migrateOnce(): void {
+  if (typeof window === 'undefined') return;
+  if (window.localStorage.getItem(MIGRATED_KEY)) return;
+  const current = safeRead<RequirementChecklistItem>(CHECKLIST_KEY);
+  const { rows, changed } = migrateChecklist(current);
+  if (changed) safeWrite(CHECKLIST_KEY, rows);
+  window.localStorage.setItem(MIGRATED_KEY, '1');
+}
+
 // ---------------------------------------------------------------------------
 // Shared hook wiring
 // ---------------------------------------------------------------------------
@@ -130,7 +151,10 @@ function useTrackedRows<T>(key: string): [T[], (rows: T[]) => void, boolean] {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') seedOnce();
+    if (typeof window !== 'undefined') {
+      seedOnce();
+      migrateOnce();
+    }
     setRows(safeRead<T>(key));
     setLoading(false);
     if (typeof window === 'undefined') return;
@@ -165,17 +189,45 @@ function appendTimeline(entry: Omit<CaseTimelineEntry, 'id' | 'at'>): void {
 // ---------------------------------------------------------------------------
 // Cases
 // ---------------------------------------------------------------------------
+export interface AddCaseOptions {
+  /** Tailoring axes from the invite wizard. When present the checklist is
+   *  seeded from the requirement catalog instead of the legacy defaults. */
+  profile?: TailoringProfile;
+  /** Free-text country when jurisdiction is OTHER. */
+  originCountry?: string;
+  /** Vendor contact email captured on the invite. */
+  contactEmail?: string;
+}
+
 export interface CasesAPI {
   rows: AccreditationCase[];
   loading: boolean;
   getById: (id: string) => AccreditationCase | undefined;
-  addCase: (vendorId: string, vendorName: string, category?: string, actor?: string) => AccreditationCase;
-  submitCase: (id: string, actor?: string) => AccreditationCase | null;
+  addCase: (
+    vendorId: string,
+    vendorName: string,
+    category?: string,
+    actor?: string,
+    opts?: AddCaseOptions,
+  ) => AccreditationCase;
+  submitCase: (
+    id: string,
+    actor?: string,
+    signature?: CaseSignature,
+  ) => AccreditationCase | null;
   decideCase: (
     id: string,
     decision: 'approved' | 'rejected',
-    opts: { note?: string; expiresAt?: string; scope?: string; actor?: string },
+    opts: {
+      note?: string;
+      expiresAt?: string;
+      scope?: string;
+      actor?: string;
+      signature?: CaseSignature;
+    },
   ) => AccreditationCase | null;
+  /** Reviewer nudge: writes a timeline entry + bumps `lastReminderAt`. */
+  sendReminder: (id: string, actor?: string) => AccreditationCase | null;
 }
 
 export function useAccreditationCases(): CasesAPI {
@@ -183,8 +235,9 @@ export function useAccreditationCases(): CasesAPI {
 
   const getById = useCallback((id: string) => rows.find((r) => r.id === id), [rows]);
 
-  const addCase = useCallback(
-    (vendorId: string, vendorName: string, category?: string, actor?: string) => {
+  const addCase = useCallback<CasesAPI['addCase']>(
+    (vendorId, vendorName, category, actor, opts) => {
+      const profile = opts?.profile;
       const next: AccreditationCase = {
         id: newId('case'),
         vendorId,
@@ -192,22 +245,44 @@ export function useAccreditationCases(): CasesAPI {
         status: 'draft',
         openedAt: nowIso(),
         category,
+        invitedByEmail: actor,
+        contactEmail: opts?.contactEmail,
+        ...(profile
+          ? {
+              jurisdiction: profile.jurisdiction,
+              originCountry: opts?.originCountry,
+              entityType: profile.entityType,
+              vendorCategory: profile.category,
+              riskTier: profile.riskTier,
+              contractType: profile.contractType,
+              expectedAnnualSpend: profile.spendBand,
+              handlesPersonalData: profile.handlesPersonalData,
+            }
+          : {}),
       };
       set([next, ...safeRead<AccreditationCase>(CASES_KEY)]);
+      // Seed the checklist: tailored from the catalog when the wizard sent a
+      // profile, otherwise the legacy defaults (migrated to v2 shape).
+      const items: RequirementChecklistItem[] = profile
+        ? buildTailoredChecklist(profile, next.id, () => newId('rq'))
+        : migrateChecklist(
+            DEFAULT_REQUIREMENTS.map((r) => ({
+              ...r,
+              id: newId('rq'),
+              caseId: next.id,
+              documentIds: [],
+            })),
+          ).rows;
+      safeWrite(CHECKLIST_KEY, [...items, ...safeRead<RequirementChecklistItem>(CHECKLIST_KEY)]);
+      const instrumentCount = items.filter((i) => i.instrument).length;
       appendTimeline({
         caseId: next.id,
         actorEmail: actor,
         action: 'created',
-        detail: `Case opened for ${vendorName}.`,
+        detail: profile
+          ? `Case opened for ${vendorName} — ${items.length} tailored requirements (${instrumentCount} signable instruments).`
+          : `Case opened for ${vendorName}.`,
       });
-      // Seed a default checklist for the new case.
-      const items: RequirementChecklistItem[] = DEFAULT_REQUIREMENTS.map((r) => ({
-        ...r,
-        id: newId('rq'),
-        caseId: next.id,
-        documentIds: [],
-      }));
-      safeWrite(CHECKLIST_KEY, [...items, ...safeRead<RequirementChecklistItem>(CHECKLIST_KEY)]);
       return next;
     },
     [set],
@@ -227,18 +302,21 @@ export function useAccreditationCases(): CasesAPI {
     [set],
   );
 
-  const submitCase = useCallback(
-    (id: string, actor?: string) => {
+  const submitCase = useCallback<CasesAPI['submitCase']>(
+    (id, actor, signature) => {
       const merged = patchCase(id, {
         status: 'submitted',
         submittedAt: nowIso(),
+        submissionSignature: signature,
       });
       if (merged) {
         appendTimeline({
           caseId: id,
           actorEmail: actor,
           action: 'submitted',
-          detail: 'Vendor submitted the intake for legal review.',
+          detail: signature
+            ? `Vendor submitted the intake for legal review — completeness attested and e-signed by ${signature.signerName}.`
+            : 'Vendor submitted the intake for legal review.',
         });
       }
       return merged;
@@ -253,6 +331,7 @@ export function useAccreditationCases(): CasesAPI {
         decidedAt: nowIso(),
         decidedByEmail: opts.actor,
         decisionNote: opts.note,
+        decisionSignature: opts.signature,
       };
       if (decision === 'approved') {
         patch.expiresAt = opts.expiresAt ?? daysAhead(365);
@@ -260,14 +339,17 @@ export function useAccreditationCases(): CasesAPI {
       }
       const merged = patchCase(id, patch);
       if (merged) {
+        const signedBy = opts.signature
+          ? ` E-signed by ${opts.signature.signerName}.`
+          : '';
         appendTimeline({
           caseId: id,
           actorEmail: opts.actor,
           action: decision,
           detail:
             decision === 'approved'
-              ? `Accreditation approved${opts.scope ? ` — scope: ${opts.scope}` : ''}${patch.expiresAt ? `, expires ${patch.expiresAt}` : ''}.`
-              : `Accreditation rejected${opts.note ? ` — ${opts.note}` : ''}.`,
+              ? `Accreditation approved${opts.scope ? ` — scope: ${opts.scope}` : ''}${patch.expiresAt ? `, expires ${patch.expiresAt}` : ''}.${signedBy}`
+              : `Accreditation rejected${opts.note ? ` — ${opts.note}` : ''}.${signedBy}`,
         });
       }
       return merged;
@@ -275,7 +357,23 @@ export function useAccreditationCases(): CasesAPI {
     [patchCase],
   );
 
-  return { rows, loading, getById, addCase, submitCase, decideCase };
+  const sendReminder = useCallback<CasesAPI['sendReminder']>(
+    (id, actor) => {
+      const merged = patchCase(id, { lastReminderAt: nowIso() });
+      if (merged) {
+        appendTimeline({
+          caseId: id,
+          actorEmail: actor,
+          action: 'reminder_sent',
+          detail: `Reminder sent to ${merged.contactEmail ?? merged.vendorName} to complete the outstanding requirements.`,
+        });
+      }
+      return merged;
+    },
+    [patchCase],
+  );
+
+  return { rows, loading, getById, addCase, submitCase, decideCase, sendReminder };
 }
 
 // ---------------------------------------------------------------------------
@@ -449,6 +547,83 @@ export function useAccreditationDocs(): DocsAPI {
 }
 
 // ---------------------------------------------------------------------------
+// Signed instruments (NDA / DPA / declarations — DocuSign-style records)
+// ---------------------------------------------------------------------------
+
+export interface SignInstrumentInput {
+  caseId: string;
+  /** Catalog instrument code (`SIGN_NDA`) or template code (`nda_mutual`). */
+  code: string;
+  /** Template version snapshot so historical signatures stay traceable. */
+  templateVersion: string;
+  signerName: string;
+  signerEmail?: string;
+  signerTitle?: string;
+  /** PNG data URL from @intra/ui SignaturePad. */
+  signaturePng: string;
+  signatureMethod: 'drawn' | 'typed';
+  signerUa: string;
+  /** Captured disclosure field values, when the template declares fields. */
+  fields?: Record<string, string>;
+}
+
+export interface SignedInstrumentsAPI {
+  rows: SignedInstrument[];
+  loading: boolean;
+  forCase: (caseId: string) => SignedInstrument[];
+  /** Latest non-revoked signature for an instrument code on a case. */
+  findSigned: (caseId: string, code: string) => SignedInstrument | undefined;
+  sign: (input: SignInstrumentInput) => SignedInstrument;
+}
+
+/**
+ * Persist a signed instrument + timeline entry. Exported standalone (not just
+ * via the hook) so the sign page can commit synchronously inside an event
+ * handler and tests can exercise persistence without React.
+ */
+export function signInstrument(input: SignInstrumentInput): SignedInstrument {
+  const record: SignedInstrument = {
+    id: newId('sig'),
+    caseId: input.caseId,
+    code: input.code,
+    templateVersion: input.templateVersion,
+    signerName: input.signerName,
+    signerEmail: input.signerEmail,
+    signerTitle: input.signerTitle,
+    signaturePng: input.signaturePng,
+    signatureMethod: input.signatureMethod,
+    signedAt: nowIso(),
+    signerUa: input.signerUa,
+    fields: input.fields,
+  };
+  safeWrite(SIGNED_KEY, [record, ...safeRead<SignedInstrument>(SIGNED_KEY)]);
+  appendTimeline({
+    caseId: input.caseId,
+    actorEmail: input.signerEmail,
+    action: 'instrument_signed',
+    detail: `${input.code} (v${input.templateVersion}) e-signed by ${input.signerName} (${input.signatureMethod}).`,
+  });
+  return record;
+}
+
+export function useSignedInstruments(): SignedInstrumentsAPI {
+  const [rows, , loading] = useTrackedRows<SignedInstrument>(SIGNED_KEY);
+
+  const forCase = useCallback(
+    (caseId: string) => rows.filter((r) => r.caseId === caseId),
+    [rows],
+  );
+  const findSigned = useCallback(
+    (caseId: string, code: string) =>
+      rows.find((r) => r.caseId === caseId && r.code === code && !r.revokedAt),
+    [rows],
+  );
+  const sign = useCallback((input: SignInstrumentInput) => signInstrument(input), []);
+
+  return { rows, loading, forCase, findSigned, sign };
+}
+
+// ---------------------------------------------------------------------------
 // Timeline
 // ---------------------------------------------------------------------------
 export function useCaseTimeline(caseId?: string): { rows: CaseTimelineEntry[]; loading: boolean } {
@@ -463,10 +638,20 @@ export function useCaseTimeline(caseId?: string): { rows: CaseTimelineEntry[]; l
 // ---------------------------------------------------------------------------
 // Vendor invites (Legal → Vendor onboarding)
 // ---------------------------------------------------------------------------
+export interface InviteInput {
+  email: string;
+  companyName: string;
+  category?: string;
+  actor?: string;
+  /** v2: tailoring axes captured by the invite wizard. */
+  profile?: TailoringProfile;
+  originCountry?: string;
+}
+
 export interface InvitesAPI {
   rows: VendorInvite[];
   loading: boolean;
-  invite: (input: { email: string; companyName: string; category?: string; actor?: string }) => VendorInvite;
+  invite: (input: InviteInput) => VendorInvite;
 }
 
 export function useVendorInvites(): InvitesAPI {
@@ -481,6 +666,18 @@ export function useVendorInvites(): InvitesAPI {
         createdAt: nowIso(),
         createdByEmail: input.actor,
         status: 'sent',
+        ...(input.profile
+          ? {
+              jurisdiction: input.profile.jurisdiction,
+              originCountry: input.originCountry,
+              entityType: input.profile.entityType,
+              vendorCategory: input.profile.category,
+              riskTier: input.profile.riskTier,
+              contractType: input.profile.contractType,
+              expectedAnnualSpend: input.profile.spendBand,
+              handlesPersonalData: input.profile.handlesPersonalData,
+            }
+          : {}),
       };
       set([next, ...safeRead<VendorInvite>(INVITES_KEY)]);
       return next;
