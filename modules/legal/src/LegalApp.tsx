@@ -6,6 +6,8 @@ import { ToastProvider } from '@intra/ui';
 import { useSession } from '@intra/auth';
 import { can } from '@intra/rbac';
 import { AccreditationCasesPage } from './pages/AccreditationCasesPage';
+import { CaseDetailPage } from './pages/CaseDetailPage';
+import { InviteVendorPage } from './pages/InviteVendorPage';
 
 export interface LegalAppProps {
   /** Path prefix the shell mounts this module under (default `/legal`). */
@@ -65,6 +67,8 @@ export function LegalApp({ basename = '/legal' }: LegalAppProps) {
         {isVendor && <VendorChrome profileName={profile?.name ?? profile?.email ?? 'Vendor'} onSignOut={signOut} />}
         <Routes>
           <Route path="/" element={<AccreditationCasesPage />} />
+          <Route path="/cases/:id" element={<CaseDetailPage />} />
+          <Route path="/invites/new" element={<InviteVendorPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </ToastProvider>

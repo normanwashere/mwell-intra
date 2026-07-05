@@ -26,20 +26,48 @@ const STATUS_TONE: Record<RequestStatus, 'slate' | 'cyan' | 'amber' | 'emerald' 
 };
 
 const columns: Column<ProcurementRequest>[] = [
-  { key: 'title', header: 'Title', render: (row) => row.title },
+  {
+    key: 'title',
+    header: 'Request',
+    render: (row) => (
+      <div className="min-w-0">
+        <p className="truncate font-semibold text-ink">
+          <Link to={`/requests/${row.id}`} className="hover:underline">
+            {row.title}
+          </Link>
+        </p>
+        <p className="text-xs text-muted">
+          {row.lines.length} line{row.lines.length === 1 ? '' : 's'}
+          {row.department ? ` · ${row.department}` : ''}
+        </p>
+      </div>
+    ),
+  },
   {
     key: 'status',
     header: 'Status',
     render: (row) => <Badge tone={STATUS_TONE[row.status]}>{row.status}</Badge>,
   },
-  { key: 'department', header: 'Department', render: (row) => row.department ?? '—' },
+  {
+    key: 'vendorName',
+    header: 'Vendor',
+    render: (row) => row.vendorName ?? '—',
+  },
   {
     key: 'estimatedAmount',
-    header: 'Est. amount',
+    header: 'Est. total',
     render: (row) =>
       row.estimatedAmount != null
-        ? `\u20b1${row.estimatedAmount.toLocaleString()}`
+        ? `\u20b1${row.estimatedAmount.toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}`
         : '—',
+  },
+  {
+    key: 'neededBy',
+    header: 'Needed',
+    render: (row) => (row.neededBy ? new Date(row.neededBy).toLocaleDateString() : '—'),
   },
   {
     key: 'createdAt',
@@ -56,9 +84,10 @@ export function RequestsPage() {
   const kpis = useMemo(() => {
     const total = rows.length;
     const drafts = rows.filter((r) => r.status === 'draft').length;
-    const submitted = rows.filter((r) => r.status === 'submitted').length;
+    const submitted = rows.filter((r) => r.status === 'submitted' || r.status === 'under_review').length;
     const approved = rows.filter((r) => r.status === 'approved').length;
-    return { total, drafts, submitted, approved };
+    const rejected = rows.filter((r) => r.status === 'rejected').length;
+    return { total, drafts, submitted, approved, rejected };
   }, [rows]);
 
   return (
@@ -79,12 +108,6 @@ export function RequestsPage() {
           <>
             <div>
               <p className="text-xs uppercase tracking-wide text-brand-100/70">
-                Open requests
-              </p>
-              <p className="tnum text-2xl font-extrabold">{kpis.total}</p>
-            </div>
-            <div className="text-right">
-              <p className="text-xs uppercase tracking-wide text-brand-100/70">
                 Awaiting review
               </p>
               <p className="tnum text-2xl font-extrabold">
@@ -94,39 +117,21 @@ export function RequestsPage() {
                 </span>
               </p>
             </div>
+            <div className="text-right">
+              <p className="text-xs uppercase tracking-wide text-brand-100/70">
+                Approved
+              </p>
+              <p className="tnum text-2xl font-extrabold">{kpis.approved}</p>
+            </div>
           </>
         }
       />
 
       <div className="stagger grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard
-          label="Total requests"
-          value={kpis.total}
-          icon="clipboard"
-          tone="brand"
-          hint="All statuses"
-        />
-        <StatCard
-          label="Drafts"
-          value={kpis.drafts}
-          icon="pin"
-          tone="slate"
-          hint="Not yet submitted"
-        />
-        <StatCard
-          label="Submitted"
-          value={kpis.submitted}
-          icon="rotate"
-          tone="cyan"
-          hint="With procurement"
-        />
-        <StatCard
-          label="Approved"
-          value={kpis.approved}
-          icon="check"
-          tone="emerald"
-          hint="Ready for PO"
-        />
+        <StatCard label="Total requests" value={kpis.total} icon="clipboard" tone="brand" hint="All statuses" />
+        <StatCard label="Drafts" value={kpis.drafts} icon="pin" tone="slate" hint="Not yet submitted" />
+        <StatCard label="Awaiting review" value={kpis.submitted} icon="rotate" tone="cyan" hint="With procurement" />
+        <StatCard label="Approved" value={kpis.approved} icon="check" tone="emerald" hint="Ready for PO" />
       </div>
 
       <div>
@@ -134,11 +139,19 @@ export function RequestsPage() {
           title="Purchase requests"
           subtitle="Every draft you save appears here (persisted locally in this preview)."
           action={
-            <Guard module="procurement" cap="create_request">
-              <Link to="/requests/new" className="btn-primary">
-                New request
+            <div className="flex flex-wrap gap-2">
+              <Link to="/approvals" className="btn-outline">
+                Approval inbox
               </Link>
-            </Guard>
+              <Link to="/purchase-orders" className="btn-outline">
+                Purchase orders
+              </Link>
+              <Guard module="procurement" cap="create_request">
+                <Link to="/requests/new" className="btn-primary">
+                  New request
+                </Link>
+              </Guard>
+            </div>
           }
         />
 

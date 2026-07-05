@@ -7,6 +7,10 @@ import { useSession } from '@intra/auth';
 import { can } from '@intra/rbac';
 import { RequestsPage } from './pages/RequestsPage';
 import { CreateRequestPage } from './pages/CreateRequestPage';
+import { RequestDetailPage } from './pages/RequestDetailPage';
+import { ApprovalInboxPage } from './pages/ApprovalInboxPage';
+import { PurchaseOrdersPage } from './pages/PurchaseOrdersPage';
+import { PODetailPage } from './pages/PODetailPage';
 
 export interface ProcurementAppProps {
   /** Path prefix the shell mounts this module under (default `/procurement`). */
@@ -62,6 +66,10 @@ export function ProcurementApp({ basename = '/procurement' }: ProcurementAppProp
         <Routes>
           <Route path="/" element={<RequestsPage />} />
           <Route path="/requests/new" element={<CreateRequestPage />} />
+          <Route path="/requests/:id" element={<RequestDetailPage />} />
+          <Route path="/approvals" element={<ApprovalInboxPage />} />
+          <Route path="/purchase-orders" element={<PurchaseOrdersPage />} />
+          <Route path="/purchase-orders/:id" element={<PODetailPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </ToastProvider>
