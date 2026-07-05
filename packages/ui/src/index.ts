@@ -13,6 +13,8 @@ export {
   EmptyState,
   Field,
   BarRow,
+  ModuleHero,
+  HeroChipButton,
   type Tone,
 } from './primitives';
 

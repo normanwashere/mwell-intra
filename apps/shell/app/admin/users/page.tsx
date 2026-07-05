@@ -28,11 +28,13 @@ import {
   Card,
   DataTable,
   EmptyState,
+  HeroChipButton,
   Icon,
-  PageHeader,
+  ModuleHero,
   SectionTitle,
   Sheet,
   Skeleton,
+  StatCard,
   useToast,
   type Column,
 } from '@intra/ui';
@@ -166,15 +168,42 @@ function MemoryAdminUsers() {
     return map;
   }, []);
 
+  const totalGrants = Array.from(held.values()).reduce((n, s) => n + s.size, 0);
+  const vendors = profiles.filter((p) => p.kind === 'vendor').length;
+
   return (
-    <div>
-      <PageHeader
+    <div className="space-y-6">
+      <ModuleHero
+        eyebrow="Platform admin,"
         title="Users & Roles"
-        subtitle="Assign scoped module roles per user. Writes go through core.assign_user_role / core.revoke_user_role."
-        action={<Badge tone="amber">Demo · read only</Badge>}
+        description="Assign scoped module roles per user. Writes go through core.assign_user_role / core.revoke_user_role."
+        icon="list"
+        accessory={
+          <>
+            <div>
+              <p className="text-xs uppercase tracking-wide text-brand-100/70">
+                Profiles
+              </p>
+              <p className="tnum text-2xl font-extrabold">{profiles.length}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs uppercase tracking-wide text-brand-100/70">
+                Scoped grants
+              </p>
+              <p className="tnum text-2xl font-extrabold">{totalGrants}</p>
+            </div>
+          </>
+        }
       />
 
-      <Card className="mb-5 border-amber-500/30 bg-amber-500/5">
+      <div className="stagger grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatCard label="Profiles" value={profiles.length} icon="list" tone="brand" hint="Employees + vendors" />
+        <StatCard label="Scoped grants" value={totalGrants} icon="check" tone="emerald" hint="Across all modules" />
+        <StatCard label="External vendors" value={vendors} icon="building" tone="cyan" hint="kind = vendor" />
+        <StatCard label="Backend" value="Demo" icon="alert" tone="amber" hint="Read-only preview" />
+      </div>
+
+      <Card className="border-amber-500/30 bg-amber-500/5">
         <div className="flex items-start gap-3">
           <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-amber-500/15 text-amber-800 dark:text-amber-300">
             <Icon name="info" className="h-5 w-5" />
@@ -308,23 +337,45 @@ function LiveAdminUsers() {
     ? profiles.find((p) => p.id === detailUserId)
     : null;
 
+  const totalGrants = Array.from(held.values()).reduce((n, s) => n + s.size, 0);
+  const vendors = profiles.filter((p) => p.kind === 'vendor').length;
+
   return (
-    <div>
-      <PageHeader
+    <div className="space-y-6">
+      <ModuleHero
+        eyebrow="Platform admin,"
         title="Users & Roles"
-        subtitle="Assign scoped module roles per user. Writes go through core.assign_user_role / core.revoke_user_role."
+        description="Assign scoped module roles per user. Writes go through core.assign_user_role / core.revoke_user_role."
+        icon="list"
         action={
-          <Button
-            variant="outline"
-            size="sm"
-            icon="rotate"
-            onClick={() => void refresh()}
-            disabled={loading}
-          >
+          <HeroChipButton icon="rotate" onClick={() => void refresh()}>
             Refresh
-          </Button>
+          </HeroChipButton>
+        }
+        accessory={
+          <>
+            <div>
+              <p className="text-xs uppercase tracking-wide text-brand-100/70">
+                Profiles
+              </p>
+              <p className="tnum text-2xl font-extrabold">{profiles.length}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs uppercase tracking-wide text-brand-100/70">
+                Scoped grants
+              </p>
+              <p className="tnum text-2xl font-extrabold">{totalGrants}</p>
+            </div>
+          </>
         }
       />
+
+      <div className="stagger grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatCard label="Profiles" value={profiles.length} icon="list" tone="brand" hint="Employees + vendors" />
+        <StatCard label="Scoped grants" value={totalGrants} icon="check" tone="emerald" hint="Across all modules" />
+        <StatCard label="External vendors" value={vendors} icon="building" tone="cyan" hint="kind = vendor" />
+        <StatCard label="Backend" value="Live" icon="bell" tone="emerald" hint="Supabase connected" />
+      </div>
 
       {error && (
         <Card className="mb-4 border-rose-500/30 bg-rose-500/5">

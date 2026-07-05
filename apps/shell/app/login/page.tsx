@@ -63,15 +63,23 @@ export default function LoginPage() {
 
   return (
     <div className="mx-auto grid max-w-md gap-4 py-6">
-      <div className="text-center">
-        <h1 className="font-display text-2xl font-extrabold tracking-tight text-ink">
-          Sign in to <span className="brand-gradient">Mwell Intra</span>
-        </h1>
-        <p className="mt-1 text-sm text-muted">
-          {mode === 'supabase'
-            ? 'Use your Mwell email and password.'
-            : 'Demo mode — pick a profile below or use its email.'}
-        </p>
+      <div className="relative overflow-hidden rounded-3xl bg-brand-grad p-5 text-center text-white shadow-navy sm:p-6">
+        <div aria-hidden className="pointer-events-none absolute -right-6 -top-6 text-white/10">
+          <Icon name="lock" className="h-32 w-32" />
+        </div>
+        <div className="relative">
+          <p className="text-xs font-semibold uppercase tracking-wide text-brand-100/80">
+            Mwell Intra
+          </p>
+          <h1 className="mt-1 font-display text-2xl font-extrabold sm:text-3xl">
+            Sign in
+          </h1>
+          <p className="mt-1 text-sm text-brand-100/80">
+            {mode === 'supabase'
+              ? 'Use your Mwell email and password.'
+              : 'Demo mode — pick a profile below or use its email.'}
+          </p>
+        </div>
       </div>
 
       <Card>

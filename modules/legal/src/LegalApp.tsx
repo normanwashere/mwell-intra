@@ -73,10 +73,10 @@ export function LegalApp({ basename = '/legal' }: LegalAppProps) {
 }
 
 /**
- * Minimal vendor-tier chrome: the shell's AppShell is intentionally hidden for
+ * Vendor-tier chrome: the shell's AppShell is intentionally hidden for
  * `/vendor/*` (ChromeGate skips it), so this component gives external vendors
- * an identity banner + sign-out. Without it, vendors are stranded with no way
- * to leave their session or navigate.
+ * a branded identity strip + sign-out. Kept intentionally compact (a strip,
+ * not a full sidebar) so the page's own <ModuleHero> is the visual anchor.
  */
 function VendorChrome({
   profileName,
@@ -85,31 +85,45 @@ function VendorChrome({
   profileName: string;
   onSignOut: () => Promise<void>;
 }) {
+  const initials = profileName
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((s) => s[0]?.toUpperCase() ?? '')
+    .join('') || 'V';
   return (
     <header
-      className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-line bg-surface px-4 py-3 md:px-6"
+      className="safe-top sticky top-0 z-20 border-b border-line bg-surface/85 backdrop-blur"
       aria-label="Vendor portal chrome"
     >
-      <div className="min-w-0">
-        <p className="text-[0.7rem] font-semibold uppercase tracking-wide text-brand-700 dark:text-brand-300">
-          Vendor portal
-        </p>
-        <p className="mt-0.5 truncate text-sm font-semibold text-ink" title={profileName}>
-          {profileName}
-        </p>
-        <p className="mt-0.5 text-xs text-muted">
-          You&apos;re seeing only your organization&apos;s data.
-        </p>
+      <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3 md:px-6">
+        <div className="flex min-w-0 items-center gap-3">
+          <span
+            aria-hidden
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand-grad text-sm font-bold text-white shadow-soft"
+          >
+            {initials}
+          </span>
+          <div className="min-w-0">
+            <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-brand-700 dark:text-brand-300">
+              Mwell Intra · Vendor portal
+            </p>
+            <p className="truncate text-sm font-semibold text-ink" title={profileName}>
+              {profileName}
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() =>
+            void onSignOut().then(() => {
+              if (typeof window !== 'undefined') window.location.assign('/login');
+            })
+          }
+          className="btn-ghost btn-sm"
+        >
+          Sign out
+        </button>
       </div>
-      <button
-        type="button"
-        onClick={() => void onSignOut().then(() => {
-          if (typeof window !== 'undefined') window.location.assign('/login');
-        })}
-        className="rounded-xl border border-line px-3 py-1.5 text-sm font-semibold text-ink transition hover:bg-inset focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-      >
-        Sign out
-      </button>
     </header>
   );
 }

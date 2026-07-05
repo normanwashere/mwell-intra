@@ -71,6 +71,102 @@ export function PageHeader({
 
 export type Tone = 'brand' | 'accent' | 'amber' | 'rose' | 'emerald' | 'slate' | 'cyan';
 
+/**
+ * ModuleHero — the suite-wide hero banner (spec §13 look & feel).
+ * Ported from the warehouse dashboard hero so every module (Procurement,
+ * Legal, Vendor, Admin) reads as the same product. Deep-navy brand gradient
+ * with a subtle watermark, welcome eyebrow, big display title, one-line
+ * description, an optional action button, and an optional right-side
+ * accessory (Sparkline, StatCard mini, etc.).
+ */
+export function ModuleHero({
+  eyebrow = 'Welcome back,',
+  title,
+  description,
+  action,
+  accessory,
+  icon,
+  className,
+}: {
+  eyebrow?: string;
+  title: string;
+  description?: string;
+  action?: ReactNode;
+  accessory?: ReactNode;
+  /** Watermark icon rendered top-right at 10% opacity. */
+  icon?: IconName;
+  className?: string;
+}) {
+  return (
+    <div
+      className={clsx(
+        'relative overflow-hidden rounded-3xl bg-brand-grad p-5 text-white shadow-navy sm:p-6',
+        className,
+      )}
+    >
+      {icon && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -right-6 -top-6 text-white/10"
+        >
+          <Icon name={icon} className="h-40 w-40" />
+        </div>
+      )}
+      <div className="relative">
+        <p className="text-sm text-brand-100/80">{eyebrow}</p>
+        <h1 className="font-display text-2xl font-extrabold sm:text-3xl">
+          {title}
+        </h1>
+        {description && (
+          <p className="mt-1 max-w-md text-sm text-brand-100/70">{description}</p>
+        )}
+        {action && <div className="mt-3">{action}</div>}
+        {accessory && (
+          <div className="mt-4 flex items-end justify-between gap-4">
+            {accessory}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * HeroChipButton — a small pill button styled for use INSIDE ModuleHero
+ * (translucent white on the navy gradient). Use for the hero's primary
+ * action (e.g. "Export", "New request").
+ */
+export function HeroChipButton({
+  onClick,
+  icon,
+  children,
+  href,
+  type = 'button',
+}: {
+  onClick?: () => void;
+  icon?: IconName;
+  children: ReactNode;
+  href?: string;
+  type?: 'button' | 'submit';
+}) {
+  const cls =
+    'inline-flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60';
+  if (href) {
+    return (
+      <a href={href} className={cls}>
+        {icon && <Icon name={icon} className="h-4 w-4" />}
+        {children}
+      </a>
+    );
+  }
+  return (
+    <button type={type} onClick={onClick} className={cls}>
+      {icon && <Icon name={icon} className="h-4 w-4" />}
+      {children}
+    </button>
+  );
+}
+
 const ICON_TONES: Record<string, string> = {
   brand: 'bg-brand-500/10 text-brand-700 dark:text-brand-300',
   accent: 'bg-cyan-500/10 text-cyan-800 dark:text-cyan-300',

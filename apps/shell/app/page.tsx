@@ -1,11 +1,20 @@
 'use client';
 
-// Landing / dashboard (spec §1). Greets the signed-in user and surfaces cards
-// for the modules they can access. Signed out → a friendly sign-in prompt.
+// Landing / dashboard (spec §1). Greets the signed-in user with the suite hero
+// (matching the warehouse brand look), then surfaces cards for every surface
+// they can access — modules, the vendor portal, and admin tools.
 
 import Link from 'next/link';
-import { Badge, Card, EmptyState, Icon, PageHeader } from '@intra/ui';
+import {
+  Badge,
+  Card,
+  EmptyState,
+  HeroChipButton,
+  Icon,
+  ModuleHero,
+} from '@intra/ui';
 import { useSession } from '@intra/auth';
+import { can } from '@intra/rbac';
 import {
   VENDOR_NAV,
   accessibleModules,
@@ -31,37 +40,53 @@ interface CardModel {
   tone: ModuleNav['tone'];
 }
 
-export default function DashboardPage() {
-  const { profile, userRoles, loading } = useSession();
+const ADMIN_CARD: CardModel = {
+  href: '/admin/users',
+  label: 'Admin — Users & Roles',
+  description: 'Provision profiles, assign scoped module roles, review audit trail.',
+  icon: 'list',
+  tone: 'rose',
+};
 
-  // Hydration-safe placeholder while the session restores. Prevents the
-  // "flash of anonymous UI" AND a hydration mismatch (server + first-client
-  // render must agree; sessionStorage isn't readable on the server).
+export default function DashboardPage() {
+  const { profile, userRoles, loading, mode } = useSession();
+
+  // Hydration-safe placeholder while the session restores.
   if (loading) {
     return (
-      <div aria-hidden className="min-h-[40vh]">
-        <div className="mb-6 h-6 w-56 rounded-md bg-inset" />
-        <div className="mb-2 h-4 w-80 max-w-full rounded-md bg-inset" />
-        <div className="h-4 w-72 max-w-full rounded-md bg-inset" />
+      <div aria-hidden className="space-y-6">
+        <div className="h-40 animate-pulse rounded-3xl bg-inset" />
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="h-32 animate-pulse rounded-2xl bg-inset" />
+          <div className="h-32 animate-pulse rounded-2xl bg-inset" />
+          <div className="h-32 animate-pulse rounded-2xl bg-inset" />
+        </div>
       </div>
     );
   }
 
   if (!profile) {
     return (
-      <div>
-        <PageHeader
-          title="Welcome to Mwell Intra"
-          subtitle="One internal operating system for Warehouse, Procurement and Legal."
+      <div className="space-y-6">
+        <ModuleHero
+          eyebrow="Mwell Intra"
+          title="One internal OS for Warehouse, Procurement & Legal"
+          description="Sign in to see the modules and tools available to your account."
+          icon="grid"
+          action={
+            <HeroChipButton href="/login" icon="lock">
+              Sign in
+            </HeroChipButton>
+          }
         />
         <EmptyState
           icon="lock"
           title="Please sign in"
-          message="Sign in to see the modules and tools available to your account."
+          message="You'll land right back here with the modules your account can use."
           action={
             <Link href="/login" className="btn-primary">
               <Icon name="lock" className="h-4 w-4" />
-              Sign in
+              Sign in to Mwell Intra
             </Link>
           }
         />
@@ -76,37 +101,85 @@ export default function DashboardPage() {
     icon: m.icon,
     tone: m.tone,
   }));
-
-  if (profile.kind === 'vendor') {
-    cards.push({ ...VENDOR_NAV });
-  }
+  if (profile.kind === 'vendor') cards.push({ ...VENDOR_NAV });
+  if (can(userRoles, 'core', 'manage_rbac')) cards.push(ADMIN_CARD);
 
   const firstName = profile.name?.split(/\s+/)[0] ?? 'there';
+  const roleCount = Object.values(userRoles).reduce(
+    (n, arr) => n + (arr?.length ?? 0),
+    0,
+  );
 
   return (
-    <div>
-      <PageHeader
-        title={`Hello, ${firstName}`}
-        subtitle={
-          cards.length > 0
-            ? 'Jump into a module below.'
-            : 'Your account is set up. Module access will appear here once assigned.'
+    <div className="space-y-6">
+      <ModuleHero
+        eyebrow="Welcome back,"
+        title={firstName}
+        description={
+          profile.title
+            ? profile.title
+            : profile.kind === 'vendor'
+              ? 'Vendor accreditation & document uploads.'
+              : 'Pick a module to get started.'
         }
-        action={
-          <Badge tone={profile.kind === 'vendor' ? 'emerald' : 'brand'}>
-            {profile.kind === 'vendor' ? 'Vendor' : 'Employee'}
-          </Badge>
+        icon="grid"
+        accessory={
+          <>
+            <div>
+              <p className="text-xs uppercase tracking-wide text-brand-100/70">
+                Access
+              </p>
+              <p className="tnum text-2xl font-extrabold">
+                {cards.length}
+                <span className="ml-1 text-sm font-medium text-brand-100/70">
+                  {cards.length === 1 ? 'module' : 'modules'}
+                </span>
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs uppercase tracking-wide text-brand-100/70">
+                Scoped roles
+              </p>
+              <p className="tnum text-2xl font-extrabold">{roleCount}</p>
+            </div>
+          </>
         }
       />
+
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-faint">
+            Your workspace
+          </p>
+          <h2 className="font-display text-lg font-bold text-ink">
+            {cards.length > 0 ? 'Jump into a surface' : 'No modules yet'}
+          </h2>
+        </div>
+        <Badge tone={profile.kind === 'vendor' ? 'emerald' : 'brand'}>
+          {profile.kind === 'vendor' ? 'External vendor' : 'Employee'}
+        </Badge>
+      </div>
 
       {cards.length === 0 ? (
         <EmptyState
           icon="info"
           title="No modules yet"
           message="You don't have a role in any module. Contact your administrator to get access."
+          action={
+            <span
+              className={cx(
+                'chip',
+                mode === 'supabase'
+                  ? 'bg-inset text-muted'
+                  : 'bg-amber-500/15 text-amber-800 dark:text-amber-300',
+              )}
+            >
+              {mode === 'supabase' ? 'Live backend' : 'Demo mode · no backend'}
+            </span>
+          }
         />
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="stagger grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {cards.map((c) => (
             <Link key={c.href} href={c.href} className="block">
               <Card interactive className="group flex h-full flex-col gap-3">
