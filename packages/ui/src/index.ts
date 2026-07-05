@@ -46,4 +46,5 @@ export {
   type SignaturePayload,
   type SignatureMethod,
 } from './SignaturePad';
+export { InfoTip, type InfoTipProps } from './Tooltip';
 export { SignInPrompt, type SignInPromptProps } from './SignInPrompt';
