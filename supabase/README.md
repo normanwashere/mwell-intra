@@ -160,6 +160,37 @@ header of `20260706091000_core_seed_rbac.sql` for the reconciliation checklist.
   (else `issued`). Warehouse-origin POs continue to use `receive_against_po()`
   unchanged.
 
+## Migration order — Step 5 live-cutover + security hardening
+
+| # | File | Purpose |
+|---|------|---------|
+| 24 | `20260707090000_document_storage_buckets.sql` | Creates the missing PRIVATE `documents` + `procurement-requests` Storage buckets and their `storage.objects` policies (mirrors the `evidence` bucket pattern). READ = uploader OR internal cap (`view_documents` any-module for `documents`; procurement `view_dashboard` for `procurement-requests`) OR vendor self-scope on the `vendor/{vendor_id}/…` path convention. INSERT = `manage_documents`/`submit_documents` (vendor sessions locked to their own folder) resp. procurement `create_request`. **No UPDATE/DELETE for `authenticated`** — documents are immutable evidence; a correction is a new upload/version. Signed-URL TTL guidance: 5–15 min. |
+| 25 | `20260707100000_procurement_approval_rpcs.sql` | The three deferred STEP-3B-RPC-HOOK edits: `create_request` accepts the policy-aligned columns + attachment metadata (validated via `core.assert_document_valid`, mime+size required; status forced to `'draft'` server-side); `submit_request` builds the ladder into `procurement.approval_steps` from the new `procurement.derive_approval_tiers(category, amount, sourcing)` (mirror of `modules/procurement/src/policy.ts` `buildApprovalLadder` — legal on requiresLegal-category / direct_award / emergency / rfp / ≥ PHP 1,000,000; finance on ≥ PHP 200,000 `FINANCE_TIER_MIN` or capex/construction/manpower); NEW `decide_request_step` verifies the caller's role maps to the NEXT pending tier (approver→dept_head, procurement_officer/admin→procurement_head, finance→finance, admin→final_approver, legal→`core.has_module_role('legal')`), REQUIRES an RA 8792 e-signature for approvals (columns `signature_png/signer_name/signature_method/signed_at/signer_ua` + CHECK), rate-limits (60/hr), advances or terminates the request, and logs to `core.activity_log`. |
+| 26 | `20260707110000_warehouse_actor_identity.sql` | Anti-forgery: `CREATE OR REPLACE` of `receive_stock`, `issue`, `transfer`, `record_return`, `record_cycle_count`, `receive_against_po`, `adjust_stock`, `create_purchase_order` with bodies identical to v1→v8 except the `actor` field (top-level record AND nested movement records) is FORCED to `warehouse.authoritative_actor()` (profile email for `auth.uid()`, falling back to `auth.uid()::text`) before `jsonb_populate_record*`. `receive_against_procurement_po` already stamps `actor_id = auth.uid()` and takes no client actor — unchanged. |
+| 27 | `20260707120000_retention_enforcement.sql` | Implements `core.job_purge_expired()` per `docs/RETENTION.md` §1: deletes read notifications >90 d after `read_at` and unread >1 y after creation; **anonymizes** (never deletes) `core.activity_log` actors past the 5-year window so the append-only RA 10173 trail stays intact; best-effort `_rls_test_*` residue sweep; emits an `entity_type='retention_job'` summary row. Scheduled as `nightly-retention-purge` @ `30 2 * * *` (idempotent unschedule-then-schedule; service_role-only). Also wires `core.check_rate_limit('log_activity', 60)` into `core.log_activity` — the one ungated authenticated write path. |
+
+### Step 5 notes
+
+- **Storage self-scope convention.** Vendor-visible objects MUST be uploaded
+  under `vendor/{vendor_id}/…`; both new buckets match the second path segment
+  against `core.current_vendor_id()`. Internal uploads may use any other
+  prefix (e.g. `request/{request_id}/…` for procurement attachments).
+- **Signed-URL TTL.** Signed URLs bypass RLS for their lifetime. Keep
+  `createSignedUrl` expirations at 300–900 s (5–15 min) for `documents` and
+  `procurement-requests`; the `evidence` bucket guidance is unchanged.
+- **Ladder source of truth.** `procurement.derive_approval_tiers()` is a
+  hand-mirror of `modules/procurement/src/policy.ts` (`buildApprovalLadder`,
+  `FINANCE_TIER_MIN = 200000`, `RFP_THRESHOLD = 1000000`). Change BOTH
+  together, exactly like the RBAC seed contract.
+- **decide_request_step gate.** The seeded matrix grants `approve_request`
+  only to procurement `approver`/`admin`; the finance and legal tiers hold
+  module roles instead.   The RPC therefore admits
+  `approve_request ∪ procurement-module-role ∪ legal-module-role` at the door
+  and enforces the tier↔role map per step — a bare `approve_request` gate
+  would lock two tiers out of their own ladder. Vendor-kind sessions are
+  rejected outright (the external `legal:vendor` role is a legal module role
+  and must never satisfy the legal tier).
+
 ## RLS + write-lockdown negative tests
 
 Live in `supabase/tests/`. They exercise the *security posture* end-to-end
@@ -170,7 +201,7 @@ spec forbids and fails the script if the DB allows it.
 
 | Path | What it proves |
 |------|----------------|
-| `supabase/tests/rls_negative.sql` | 4 negative assertions: (1) `authenticated` cannot INSERT into `core.vendors` directly, (2) `authenticated` cannot UPDATE `core.role_capabilities`, (3) a vendor-kind session cannot SELECT another vendor's `core.documents`, (4) `authenticated` cannot INSERT into `warehouse.inventory_units` / `warehouse.movements`. |
+| `supabase/tests/rls_negative.sql` | 10 negative assertions: (1) `authenticated` cannot INSERT into `core.vendors` directly, (2) `authenticated` cannot UPDATE `core.role_capabilities`, (3) a vendor-kind session cannot SELECT another vendor's `core.documents`, (4) `authenticated` cannot INSERT into `warehouse.inventory_units` / `warehouse.movements`, (5) a PO for an un-accredited vendor cannot transition to `approved`/`issued` (trigger backstop, even for a superuser), (6) a caller without `procurement.approve_award` cannot call `procurement.approve_purchase_order`, (7) vendor A cannot read vendor B's `legal.accreditation_cases`/checklist items, (8) a warehouse-only user cannot read `procurement.requests` or `legal.accreditation_cases`, (9) a caller whose role does not map to the next pending tier cannot `procurement.decide_request_step` out of turn, (10) an approval without a signature payload is rejected by `decide_request_step`. |
 
 The script wraps everything in a single `BEGIN … ROLLBACK`, so it never
 mutates the DB — test fixtures (a couple of `auth.users`, `core.profiles`,
@@ -200,7 +231,7 @@ assertion followed by:
 
 ```
 NOTICE:  ===============================================================
-NOTICE:    RLS negative test suite: ALL ASSERTIONS PASSED (4/4).
+NOTICE:    RLS negative test suite: ALL ASSERTIONS PASSED (10/10).
 NOTICE:  ===============================================================
 ```
 
@@ -227,3 +258,29 @@ merging (do not weaken the assertion).
    `20260706092200_warehouse_rls.sql` revokes `INSERT/UPDATE/DELETE` from
    `authenticated` on every stock/audit/PO/lots table; all mutations flow
    through the definer RPCs in `20260706092400_warehouse_rpcs.sql`.
+5. **Un-accredited award is refused at the trigger.** The
+   `purchase_orders_accreditation_gate` trigger
+   (`20260706130000_cross_module_wiring.sql`) raises `check_violation` on any
+   transition into `approved`/`issued` for a vendor whose
+   `accreditation_status` is not `approved` — even when the write comes from
+   a superuser / service_role, i.e. no RPC bypass exists.
+6. **`approve_purchase_order` is capability-gated.** A session without
+   `procurement.approve_award` (the fixture vendor session) is rejected at
+   the gate with `Not authorized`, before any accreditation or status logic
+   runs.
+7. **Cross-vendor legal reads are blocked.** The vendor-tier RLS branches on
+   `legal.accreditation_cases` / `legal.requirement_checklist_items` are
+   scoped to `core.current_vendor_id()`; vendor A (holding `legal:vendor`)
+   sees its own case but zero rows of vendor B's case/checklist.
+8. **Module read isolation holds.** A `warehouse:operations`-only user holds
+   neither procurement nor legal capabilities and owns no requests, so both
+   `procurement.requests` and `legal.accreditation_cases` return zero rows.
+9. **Out-of-turn ladder decisions are refused.** `decide_request_step`
+   (`20260707100000_procurement_approval_rpcs.sql`) maps the caller's scoped
+   roles to the NEXT pending step's tier; a procurement `finance` user cannot
+   decide the pending `dept_head` step even with a complete signature.
+10. **Unsigned approvals are refused.** The same RPC requires
+    `signature_png` + `signer_name` + `signature_method` for
+    `decision='approved'` (RA 8792); the correctly-tiered approver is still
+    rejected without them (backstopped by the
+    `approval_steps_approved_signature_check` CHECK constraint).
