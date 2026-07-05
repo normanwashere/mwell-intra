@@ -43,6 +43,17 @@ export const DEMO_PROFILES: readonly MemoryProfile[] = [
     },
   },
   {
+    id: 'demo-procurement-approver',
+    email: 'approver@mwell.demo',
+    kind: 'employee',
+    name: 'Marta Ramos',
+    title: 'Procurement Approver',
+    roles: {
+      core: ['staff'],
+      procurement: ['approver'],
+    },
+  },
+  {
     id: 'demo-legal',
     email: 'legal@mwell.demo',
     kind: 'employee',
