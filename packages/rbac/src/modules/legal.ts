@@ -33,10 +33,14 @@ export const legalModule: ModuleDefinition<'legal', LegalRole, LegalCapability> 
     legal_reviewer: {
       label: 'Legal Reviewer',
       description: 'Reviews accreditation cases and manages requirement checklists.',
+      // approve_accreditation: reviewers decide cases end-to-end in Release 1
+      // (single legal seat per case). Split decision authority back out to
+      // `compliance` when the team grows past one reviewer.
       capabilities: [
         'view_dashboard',
         'review_accreditation',
         'manage_checklist',
+        'approve_accreditation',
         'manage_documents',
       ],
     },

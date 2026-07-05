@@ -55,12 +55,15 @@ export const procurementModule: ModuleDefinition<
       label: 'Procurement Officer',
       description: 'Runs RFPs, authors POs, coordinates vendors.',
       provisional: true,
+      // approve_request: the officer holds the Procurement Head tier on the
+      // approval ladder (policy §3) — sourcing/AR review before Finance/DOA.
       capabilities: [
         'view_dashboard',
         'create_request',
         'manage_rfp',
         'author_po',
         'manage_vendors',
+        'approve_request',
       ],
     },
     approver: {
@@ -73,7 +76,10 @@ export const procurementModule: ModuleDefinition<
       label: 'Finance',
       description: 'Reviews commercial terms and spend for payment readiness.',
       provisional: true,
-      capabilities: ['view_dashboard', 'view_finance'],
+      // approve_request: Finance sits on the multi-tier approval ladder
+      // (policy §3/§9) and must be able to open the approval inbox and
+      // decide its tier. Mirrored in SQL by 20260707130000.
+      capabilities: ['view_dashboard', 'view_finance', 'approve_request'],
     },
     admin: {
       label: 'Procurement Admin',
