@@ -72,11 +72,25 @@ export function AccreditationCasesPage() {
           action={
             isVendor ? (
               <Guard module="core" cap="submit_accreditation">
-                <button type="button" className="btn-primary" disabled>
-                  Start accreditation (stub)
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={() => alert('Accreditation intake opens in Phase 2. This is a preview build.')}
+                >
+                  Start accreditation
                 </button>
               </Guard>
-            ) : undefined
+            ) : (
+              <Guard module="legal" cap="manage_checklist">
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={() => alert('Open a case from a vendor invite in Phase 2. This is a preview build.')}
+                >
+                  Open a case
+                </button>
+              </Guard>
+            )
           }
         />
       ) : (

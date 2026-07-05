@@ -1,9 +1,15 @@
 import { useEffect } from 'react';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import type { MemoryProfile } from './contracts';
 import { SessionProvider, useSession } from './SessionProvider';
 import { Guard, useCan } from './Guard';
+
+beforeEach(() => {
+  // The provider persists the memory-mode session per tab; make sure each test
+  // starts signed out so the previous test's session doesn't leak in.
+  window.sessionStorage.clear();
+});
 
 // logistics_supervisor grants `receive_stock` (not `reserve_allocate`);
 // business_unit grants `reserve_allocate` (not `receive_stock`).
@@ -41,7 +47,7 @@ function CanProbe({
 }
 
 describe('<Guard>', () => {
-  it('denies (renders accessible fallback) when the session has no roles', () => {
+  it('denies (renders accessible fallback) when the session has no roles', async () => {
     render(
       <SessionProvider config={{ mode: 'memory', profiles: PROFILES }}>
         <Guard module="warehouse" cap="receive_stock">
@@ -49,9 +55,11 @@ describe('<Guard>', () => {
         </Guard>
       </SessionProvider>,
     );
-    expect(screen.queryByText('secret content')).toBeNull();
-    const alert = screen.getByRole('alert');
+    // Guard renders null while the session is restoring; wait for the fallback.
+    const alert = await screen.findByRole('alert');
     expect(alert.textContent).toContain('Access denied');
+    expect(alert.textContent).toContain('Back to dashboard');
+    expect(screen.queryByText('secret content')).toBeNull();
   });
 
   it('renders children once a role granting the capability is present', async () => {
@@ -82,7 +90,7 @@ describe('<Guard>', () => {
     expect(screen.getByRole('alert').textContent).toContain('Access denied');
   });
 
-  it('renders a custom fallback when provided', () => {
+  it('renders a custom fallback when provided', async () => {
     render(
       <SessionProvider config={{ mode: 'memory', profiles: PROFILES }}>
         <Guard
@@ -94,8 +102,8 @@ describe('<Guard>', () => {
         </Guard>
       </SessionProvider>,
     );
+    await screen.findByText('please request access');
     expect(screen.queryByText('secret content')).toBeNull();
-    expect(screen.queryByText('please request access')).not.toBeNull();
     expect(screen.queryByRole('alert')).toBeNull();
   });
 });

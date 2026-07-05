@@ -9,7 +9,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Icon } from '@intra/ui';
 import { useSession } from '@intra/auth';
-import { MODULE_LIST } from '@intra/rbac';
+import { MODULE_LIST, can } from '@intra/rbac';
 import { cx } from '@shell/lib/cx';
 
 function initials(nameOrEmail: string): string {
@@ -25,7 +25,7 @@ function initials(nameOrEmail: string): string {
 }
 
 export function UserMenu() {
-  const { profile, userRoles, signOut } = useSession();
+  const { profile, userRoles, signOut, loading } = useSession();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -41,6 +41,13 @@ export function UserMenu() {
     return () => document.removeEventListener('mousedown', onClick);
   }, [open]);
 
+  // Hydration-safe: while the session restores, render an empty slot on both
+  // server and first client render so React sees identical trees. Once loaded
+  // we swap in either the signed-in avatar or the signed-out Sign-in link.
+  if (loading) {
+    return <div className="h-10 w-10" aria-hidden />;
+  }
+
   if (!profile) {
     return (
       <Link href="/login" className="btn-primary btn-sm">
@@ -54,6 +61,7 @@ export function UserMenu() {
   const activeModules = MODULE_LIST.filter(
     (m) => (userRoles[m]?.length ?? 0) > 0,
   );
+  const isAdmin = can(userRoles, 'core', 'manage_rbac');
 
   const handleSignOut = async () => {
     setOpen(false);
@@ -112,11 +120,23 @@ export function UserMenu() {
             </div>
           </div>
 
+          {isAdmin && (
+            <Link
+              href="/admin/users"
+              role="menuitem"
+              onClick={() => setOpen(false)}
+              className="btn-ghost mt-3 w-full justify-start"
+            >
+              <Icon name="list" className="h-4 w-4" />
+              Manage users
+            </Link>
+          )}
+
           <button
             type="button"
             role="menuitem"
             onClick={() => void handleSignOut()}
-            className="btn-ghost mt-3 w-full justify-start"
+            className={cx('btn-ghost w-full justify-start', isAdmin ? 'mt-1' : 'mt-3')}
           >
             <Icon name="logout" className="h-4 w-4" />
             Sign out

@@ -50,6 +50,9 @@ export type AuthConfig = SupabaseAuthConfig | MemoryAuthConfig;
 
 const SessionContext = createContext<SessionValue | undefined>(undefined);
 
+/** Storage key for the memory-mode session snapshot (tab-scoped). */
+const MEMORY_SESSION_KEY = 'intra.memory-session.v1';
+
 export function SessionProvider({
   children,
   config,
@@ -71,10 +74,47 @@ export function SessionProvider({
 
   const [profile, setProfile] = useState<SessionProfile | null>(null);
   const [userRoles, setUserRoles] = useState<Partial<UserRoles>>({});
-  // Supabase mode restores asynchronously; memory mode is ready immediately.
-  const [loading, setLoading] = useState(mode === 'supabase');
+  // Always start `loading=true` so first server render matches first client
+  // render — hydration-safe. We flip to false after we've consulted
+  // sessionStorage (memory) or the supabase session (live).
+  const [loading, setLoading] = useState(true);
   const [signingIn, setSigningIn] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+
+  // MEMORY-mode session persistence (fixes: hard-nav / F5 / deep-link losing
+  // the session). We keep the actor in sessionStorage so it lives for the tab
+  // (matches "sign-in for this session" UX) without leaking across tabs/users.
+  useEffect(() => {
+    if (mode !== 'memory') return;
+    if (typeof window === 'undefined') {
+      setLoading(false);
+      return;
+    }
+    try {
+      const raw = window.sessionStorage.getItem(MEMORY_SESSION_KEY);
+      if (raw) {
+        const stored = JSON.parse(raw) as {
+          profileId: string;
+          roles: Partial<UserRoles>;
+        };
+        const match = memoryProfiles.find((p) => p.id === stored.profileId);
+        if (match) {
+          setProfile({
+            id: match.id,
+            email: match.email,
+            kind: match.kind,
+            name: match.name,
+            title: match.title,
+            vendorId: match.vendorId,
+          });
+          setUserRoles(stored.roles);
+        }
+      }
+    } catch {
+      // Corrupt entry — ignore; fall through to signed-out.
+    }
+    setLoading(false);
+  }, [mode, memoryProfiles]);
 
   // Project a verified user (or clear). Roles ALWAYS come from the fresh JWT
   // `app_metadata`, so a stale/tampered client value can never elevate access.
@@ -140,6 +180,17 @@ export function SessionProvider({
           vendorId: matched.vendorId,
         });
         setUserRoles(matched.roles);
+        // Persist for the tab so F5 / deep-links keep the demo session.
+        if (typeof window !== 'undefined') {
+          try {
+            window.sessionStorage.setItem(
+              MEMORY_SESSION_KEY,
+              JSON.stringify({ profileId: matched.id, roles: matched.roles }),
+            );
+          } catch {
+            /* storage quota / disabled — best effort */
+          }
+        }
         return;
       }
       setSigningIn(true);
@@ -173,6 +224,13 @@ export function SessionProvider({
     }
     setProfile(null);
     setUserRoles({});
+    if (typeof window !== 'undefined') {
+      try {
+        window.sessionStorage.removeItem(MEMORY_SESSION_KEY);
+      } catch {
+        /* ignore */
+      }
+    }
   }, [client]);
 
   const resetPassword = useCallback(

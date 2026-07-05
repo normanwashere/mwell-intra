@@ -12,6 +12,7 @@
 // them switch among the roles their session carries. Authorization is delegated
 // to @intra/rbac via the local `can()` adapter — one source of truth.
 
+import { useEffect } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 import { ToastProvider } from '@intra/ui';
 import type { Role } from '@intra/data-kit';
@@ -20,6 +21,25 @@ import { ThemeProvider } from '@/app/theme';
 import { WarehouseProvider } from '@/app/store';
 import { App } from '@/app/App';
 import { PwaPrompts } from '@/components/PwaPrompts';
+
+/**
+ * React Router v6 refuses to match "/" against a basename when the URL exactly
+ * equals the basename with no trailing slash (browser normalizes it to "").
+ * Bare visits to `/warehouse` render BLANK with a console warning:
+ *   `<Router basename="/warehouse"> is not able to match the URL "/"`.
+ * We normalize by appending a trailing slash BEFORE the router mounts, which
+ * makes the effective internal URL `/` (the Dashboard route).
+ */
+function useNormalizeBasenamePath(basename: string): void {
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const current = window.location.pathname;
+    if (current === basename) {
+      const next = `${basename}/${window.location.search}${window.location.hash}`;
+      window.history.replaceState(window.history.state, '', next);
+    }
+  }, [basename]);
+}
 
 export interface WarehouseAppProps {
   /** Path prefix the shell mounts this module under (default `/warehouse`). */
@@ -31,6 +51,7 @@ export interface WarehouseAppProps {
  * the shell's `<SessionProvider>` (that is where the identity + roles come from).
  */
 export function WarehouseApp({ basename = '/warehouse' }: WarehouseAppProps) {
+  useNormalizeBasenamePath(basename);
   const { profile, userRoles } = useSession();
   const warehouseRoles = (userRoles.warehouse ?? []) as Role[];
   const initialRole = warehouseRoles[0];
@@ -41,14 +62,20 @@ export function WarehouseApp({ basename = '/warehouse' }: WarehouseAppProps) {
     return (
       <div
         role="alert"
-        className="grid min-h-[40vh] place-items-center p-6 text-center"
+        className="grid min-h-[60vh] place-items-center bg-app p-6 text-center"
       >
-        <div>
+        <div className="max-w-sm space-y-3">
           <h1 className="text-lg font-bold text-ink">No warehouse access</h1>
-          <p className="mt-2 max-w-sm text-sm text-muted">
-            Your account doesn&apos;t include a warehouse role. If you think this is
-            a mistake, contact your administrator.
+          <p className="text-sm text-muted">
+            Your account doesn&apos;t include a warehouse role. If you think this
+            is a mistake, contact your administrator.
           </p>
+          <a
+            href="/"
+            className="inline-flex items-center justify-center rounded-xl bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-app"
+          >
+            Back to dashboard
+          </a>
         </div>
       </div>
     );

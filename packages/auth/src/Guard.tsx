@@ -46,7 +46,11 @@ export function Guard<M extends Module>({
   children,
   fallback,
 }: GuardProps<M>) {
+  const { loading } = useSession();
   const allowed = useCan(module, cap);
+  // While the session is restoring (memory: sessionStorage read; supabase:
+  // getSession) render nothing rather than briefly flashing "Access denied".
+  if (loading) return null;
   if (allowed) return <>{children}</>;
   return <>{fallback ?? <AccessDenied />}</>;
 }
@@ -56,13 +60,19 @@ function AccessDenied() {
     <div
       role="alert"
       aria-live="polite"
-      className="intra-access-denied grid place-items-center gap-2 rounded-2xl border border-black/10 bg-black/[0.02] p-6 text-center dark:border-white/10 dark:bg-white/[0.03]"
+      className="intra-access-denied grid place-items-center gap-3 rounded-2xl border border-black/10 bg-black/[0.02] p-6 text-center dark:border-white/10 dark:bg-white/[0.03]"
     >
       <h2 className="text-base font-semibold">Access denied</h2>
       <p className="max-w-sm text-sm opacity-70">
-        You don&apos;t have permission to view this. If you think this is a
-        mistake, contact your administrator.
+        This isn&apos;t part of your role. Head back to your dashboard to pick
+        something you can access, or contact your administrator.
       </p>
+      <a
+        href="/"
+        className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-black/85 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/40 dark:bg-white/90 dark:text-black dark:hover:bg-white dark:focus-visible:ring-white/40"
+      >
+        Back to dashboard
+      </a>
     </div>
   );
 }

@@ -5,10 +5,17 @@
 // make the demo profiles one tap away. On success we route to the dashboard.
 
 import { useEffect, useState, type FormEvent } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button, Card, Field, Icon, Input } from '@intra/ui';
 import { useSession } from '@intra/auth';
+
+/** Only allow local same-origin paths in ?redirect to prevent open-redirect. */
+function safeRedirect(candidate: string | null): string {
+  if (!candidate) return '/';
+  if (!candidate.startsWith('/') || candidate.startsWith('//')) return '/';
+  return candidate;
+}
 
 export default function LoginPage() {
   const {
@@ -21,14 +28,18 @@ export default function LoginPage() {
     resetPassword,
   } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectTo = safeRedirect(searchParams?.get('redirect') ?? null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
 
-  // Already signed in → leave the login screen.
+  // Already signed in → leave the login screen. Respects ?redirect= so deep
+  // links (e.g. /warehouse/receiving redirect through login) resume where
+  // the user meant to land.
   useEffect(() => {
-    if (profile) router.replace('/');
-  }, [profile, router]);
+    if (profile) router.replace(redirectTo);
+  }, [profile, router, redirectTo]);
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();

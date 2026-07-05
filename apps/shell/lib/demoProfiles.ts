@@ -54,16 +54,50 @@ export const DEMO_PROFILES: readonly MemoryProfile[] = [
     },
   },
   {
+    id: 'demo-finance',
+    email: 'finance@mwell.demo',
+    kind: 'employee',
+    name: 'Rina Domingo',
+    title: 'Finance Manager',
+    roles: {
+      core: ['staff'],
+      warehouse: ['finance'],
+    },
+  },
+  {
+    id: 'demo-bi',
+    email: 'bi@mwell.demo',
+    kind: 'employee',
+    name: 'Jules Aquino',
+    title: 'BI Analyst',
+    roles: {
+      core: ['staff'],
+      warehouse: ['bi_analyst'],
+    },
+  },
+  {
+    id: 'demo-marketing',
+    email: 'marketing@mwell.demo',
+    kind: 'employee',
+    name: 'Kai Mendoza',
+    title: 'Marketing Lead',
+    roles: {
+      core: ['staff'],
+      warehouse: ['marketing'],
+    },
+  },
+  {
     id: 'demo-admin',
     email: 'admin@mwell.demo',
     kind: 'employee',
     name: 'Patricia Lim',
     title: 'Platform Administrator',
     roles: {
+      // Platform admins manage users + shared master data; they do NOT
+      // silently hold every module role. To act inside a module they must be
+      // granted that module's role explicitly (via /admin/users). This matches
+      // the "roles are earned, not inherited" invariant (spec §4.2).
       core: ['platform_admin', 'staff'],
-      warehouse: ['logistics_supervisor'],
-      procurement: ['admin'],
-      legal: ['admin'],
     },
   },
   {
@@ -74,8 +108,9 @@ export const DEMO_PROFILES: readonly MemoryProfile[] = [
     title: 'Vendor Portal',
     vendorId: 'ven-acme',
     roles: {
+      // External vendor tier: single source of truth in core:vendor_portal
+      // (ADR-002 #3; legal:vendor was retired 2026-07-05).
       core: ['vendor_portal'],
-      legal: ['vendor'],
     },
   },
 ];

@@ -32,7 +32,20 @@ interface CardModel {
 }
 
 export default function DashboardPage() {
-  const { profile, userRoles } = useSession();
+  const { profile, userRoles, loading } = useSession();
+
+  // Hydration-safe placeholder while the session restores. Prevents the
+  // "flash of anonymous UI" AND a hydration mismatch (server + first-client
+  // render must agree; sessionStorage isn't readable on the server).
+  if (loading) {
+    return (
+      <div aria-hidden className="min-h-[40vh]">
+        <div className="mb-6 h-6 w-56 rounded-md bg-inset" />
+        <div className="mb-2 h-4 w-80 max-w-full rounded-md bg-inset" />
+        <div className="h-4 w-72 max-w-full rounded-md bg-inset" />
+      </div>
+    );
+  }
 
   if (!profile) {
     return (

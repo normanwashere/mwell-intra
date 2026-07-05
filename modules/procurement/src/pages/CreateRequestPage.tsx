@@ -5,10 +5,12 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button, Field, Input, PageHeader, Textarea, useToast } from '@intra/ui';
 import { Guard } from '@intra/auth';
+import { useProcurementRequests } from '../localStore';
 
 export function CreateRequestPage() {
   const navigate = useNavigate();
   const { success, error } = useToast();
+  const { add } = useProcurementRequests();
   const [title, setTitle] = useState('');
   const [department, setDepartment] = useState('');
   const [description, setDescription] = useState('');
@@ -23,10 +25,24 @@ export function CreateRequestPage() {
     }
     setSubmitting(true);
     try {
-      // Stub: wire to procurement.create_request RPC in Step 3d.
-      await new Promise((resolve) => setTimeout(resolve, 400));
-      success('Request saved (stub)');
+      // Preview build: persists to localStorage so the "save → appears in list"
+      // journey works. The real path (procurement.create_request RPC via
+      // @intra/core-data) lands post-MVP.
+      const parsed = estimatedAmount.trim() === '' ? undefined : Number(estimatedAmount);
+      add({
+        title: title.trim(),
+        department: department.trim() || undefined,
+        description: description.trim() || undefined,
+        estimatedAmount:
+          typeof parsed === 'number' && Number.isFinite(parsed) && parsed >= 0
+            ? parsed
+            : undefined,
+        status: 'draft',
+      });
+      success('Draft request saved');
       navigate('/');
+    } catch (e) {
+      error(e instanceof Error ? e.message : 'Could not save the draft.');
     } finally {
       setSubmitting(false);
     }

@@ -9,17 +9,24 @@ import {
   type Column,
 } from '@intra/ui';
 import { Guard } from '@intra/auth';
-import type { ProcurementRequest } from '../types';
+import type { ProcurementRequest, RequestStatus } from '../types';
+import { useProcurementRequests } from '../localStore';
 
-/** Stub read-model until the repository adapter lands (Step 3d). */
-const STUB_REQUESTS: ProcurementRequest[] = [];
+const STATUS_TONE: Record<RequestStatus, 'slate' | 'cyan' | 'amber' | 'emerald' | 'rose'> = {
+  draft: 'slate',
+  submitted: 'cyan',
+  under_review: 'amber',
+  approved: 'emerald',
+  rejected: 'rose',
+  cancelled: 'slate',
+};
 
 const columns: Column<ProcurementRequest>[] = [
   { key: 'title', header: 'Title', render: (row) => row.title },
   {
     key: 'status',
     header: 'Status',
-    render: (row) => <Badge tone="slate">{row.status}</Badge>,
+    render: (row) => <Badge tone={STATUS_TONE[row.status]}>{row.status}</Badge>,
   },
   { key: 'department', header: 'Department', render: (row) => row.department ?? '—' },
   {
@@ -28,9 +35,16 @@ const columns: Column<ProcurementRequest>[] = [
     render: (row) =>
       row.estimatedAmount != null ? `₱${row.estimatedAmount.toLocaleString()}` : '—',
   },
+  {
+    key: 'createdAt',
+    header: 'Created',
+    render: (row) => new Date(row.createdAt).toLocaleDateString(),
+  },
 ];
 
 export function RequestsPage() {
+  const { rows, loading } = useProcurementRequests();
+
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-4 md:p-6">
       <PageHeader
@@ -45,7 +59,9 @@ export function RequestsPage() {
         }
       />
 
-      {STUB_REQUESTS.length === 0 ? (
+      {loading ? (
+        <div className="h-24 animate-pulse rounded-2xl bg-inset" aria-hidden />
+      ) : rows.length === 0 ? (
         <EmptyState
           title="No requests yet"
           message="Create a purchase request to start the procurement workflow."
@@ -58,7 +74,7 @@ export function RequestsPage() {
           }
         />
       ) : (
-        <DataTable rows={STUB_REQUESTS} columns={columns} keyOf={(row) => row.id} />
+        <DataTable rows={rows} columns={columns} keyOf={(row) => row.id} />
       )}
     </div>
   );
