@@ -20,6 +20,7 @@ import {
   accessibleModules,
   type ModuleNav,
 } from '@shell/lib/navigation';
+import { useModuleBadges } from '@shell/lib/moduleBadges';
 import { cx } from '@shell/lib/cx';
 
 const TONE_CLASS: Record<ModuleNav['tone'], string> = {
@@ -50,6 +51,8 @@ const ADMIN_CARD: CardModel = {
 
 export default function DashboardPage() {
   const { profile, userRoles, loading, mode } = useSession();
+  // Live counts read from the module localStores (guarded; empty in SSR).
+  const badges = useModuleBadges(profile, userRoles);
 
   // Hydration-safe placeholder while the session restores.
   if (loading) {
@@ -196,32 +199,42 @@ export default function DashboardPage() {
                 : 'sm:grid-cols-2 lg:grid-cols-3',
           )}
         >
-          {cards.map((c) => (
-            <Link key={c.href} href={c.href} className="block">
-              <Card interactive className="group flex h-full flex-col gap-3">
-                <span
-                  className={cx(
-                    'grid h-11 w-11 place-items-center rounded-xl',
-                    TONE_CLASS[c.tone],
-                  )}
-                >
-                  <Icon name={c.icon} />
-                </span>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <h2 className="font-display text-base font-bold text-ink">
-                      {c.label}
-                    </h2>
-                    <Icon
-                      name="arrowRight"
-                      className="h-4 w-4 text-faint transition group-hover:translate-x-0.5 group-hover:text-brand-600 dark:group-hover:text-brand-300"
-                    />
+          {cards.map((c) => {
+            const badge = badges[c.href];
+            return (
+              <Link key={c.href} href={c.href} className="block">
+                <Card interactive className="group flex h-full flex-col gap-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <span
+                      className={cx(
+                        'grid h-11 w-11 place-items-center rounded-xl',
+                        TONE_CLASS[c.tone],
+                      )}
+                    >
+                      <Icon name={c.icon} />
+                    </span>
+                    {badge && (
+                      <span className="chip bg-amber-500/15 font-semibold text-amber-800 dark:text-amber-300">
+                        {badge.label}
+                      </span>
+                    )}
                   </div>
-                  <p className="mt-0.5 text-sm text-muted">{c.description}</p>
-                </div>
-              </Card>
-            </Link>
-          ))}
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <h2 className="font-display text-base font-bold text-ink">
+                        {c.label}
+                      </h2>
+                      <Icon
+                        name="arrowRight"
+                        className="h-4 w-4 text-faint transition group-hover:translate-x-0.5 group-hover:text-brand-600 dark:group-hover:text-brand-300"
+                      />
+                    </div>
+                    <p className="mt-0.5 text-sm text-muted">{c.description}</p>
+                  </div>
+                </Card>
+              </Link>
+            );
+          })}
         </div>
       )}
     </div>
