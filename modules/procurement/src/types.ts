@@ -89,6 +89,28 @@ export interface ApprovalStep {
   note?: string;
   decidedAt?: string;
   decidedByEmail?: string;
+  /** DocuSign-equivalent electronic signature captured at commit
+   *  (RA 8792 §6). See @intra/ui `SignaturePayload`. */
+  signature?: ApprovalSignature;
+}
+
+/**
+ * Electronic-signature record persisted alongside an approval / award
+ * decision. Mirrors `SignaturePayload` from @intra/ui — duplicated here
+ * (rather than imported) to keep the domain package free of UI deps.
+ * Any deviation MUST match `SignaturePayload` field-for-field or the
+ * capture → persist round-trip will silently drop fields.
+ */
+export interface ApprovalSignature {
+  method: 'drawn' | 'typed';
+  /** PNG rendering of the signature (data URL). */
+  dataUrl: string;
+  /** Full legal name the signer confirmed at capture. */
+  signerName: string;
+  /** ISO timestamp captured at commit. */
+  signedAt: string;
+  /** Best-effort audit fingerprint (browser + tzOffset). */
+  userAgent: string;
 }
 
 export interface ProcurementRequestLine {
@@ -223,6 +245,8 @@ export interface PurchaseOrder {
   updatedAt: string;
   approvedAt?: string;
   approvedByEmail?: string;
+  /** Electronic signature captured when the PO award was approved. */
+  approvalSignature?: ApprovalSignature;
   /** sum(qty * unitPrice ?? 0). */
   total: number;
 }
@@ -241,6 +265,8 @@ export interface ApprovalDecision {
   tier?: ApproverTier;
   /** Step id (matches ProcurementRequest.approvalSteps[*].id). */
   stepId?: string;
+  /** Electronic signature captured at commit time. */
+  signature?: ApprovalSignature;
 }
 
 /** Very light vendor projection used only by procurement UI. In live mode this

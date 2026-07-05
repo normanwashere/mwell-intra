@@ -18,6 +18,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type {
   ApprovalDecision,
+  ApprovalSignature,
   ApprovalStep,
   ApproverTier,
   ProcurementRequest,
@@ -195,6 +196,10 @@ export interface DecideActor {
   /** Which tier the actor is deciding on behalf of. When omitted we fall
    *  back to the next-pending step's tier (single-tier demo fallback). */
   tier?: ApproverTier;
+  /** Electronic signature captured on the approval sheet before commit.
+   *  Approvals REQUIRE a signature; rejections may omit it (rejection is a
+   *  gate, not a legally binding sign-off). Enforcement lives in the UI. */
+  signature?: ApprovalSignature;
 }
 
 export interface ProcurementRequestsAPI {
@@ -348,6 +353,7 @@ export function useProcurementRequests(): ProcurementRequestsAPI {
         email: actor.email,
         note: actor.note,
         at: decidedAt,
+        signature: actor.signature,
       });
       if (!result) return null;
 
@@ -376,6 +382,7 @@ export function useProcurementRequests(): ProcurementRequestsAPI {
           decidedByEmail: actor.email,
           tier: targetTier,
           stepId: step?.id,
+          signature: actor.signature,
         });
       }
       return row;
@@ -420,7 +427,10 @@ export interface PurchaseOrdersAPI {
   rows: PurchaseOrder[];
   loading: boolean;
   add: (input: NewPOInput) => PurchaseOrder;
-  approve: (id: string, actor: { email?: string }) => PurchaseOrder | null;
+  approve: (
+    id: string,
+    actor: { email?: string; signature?: ApprovalSignature; note?: string },
+  ) => PurchaseOrder | null;
   issue: (id: string) => PurchaseOrder | null;
   cancel: (id: string) => PurchaseOrder | null;
   receive: (id: string, line: string, qty: number) => PurchaseOrder | null;
@@ -475,8 +485,30 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
   );
 
   const approve = useCallback(
-    (id: string, actor: { email?: string }) =>
-      patch(id, { status: 'approved', approvedAt: nowIso(), approvedByEmail: actor.email }),
+    (
+      id: string,
+      actor: { email?: string; signature?: ApprovalSignature; note?: string },
+    ) => {
+      const approvedAt = nowIso();
+      const row = patch(id, {
+        status: 'approved',
+        approvedAt,
+        approvedByEmail: actor.email,
+        approvalSignature: actor.signature,
+      });
+      if (row) {
+        recordApproval({
+          entityType: 'purchase_order',
+          entityId: id,
+          decision: 'approved',
+          note: actor.note,
+          decidedAt: approvedAt,
+          decidedByEmail: actor.email,
+          signature: actor.signature,
+        });
+      }
+      return row;
+    },
     [patch],
   );
 

@@ -213,7 +213,7 @@ export function CaseDetailPage() {
           subtitle={`${requiredApproved} approved · ${requiredRejected} rejected · ${requiredItems.length} required in total`}
           action={
             !isVendor && kase.status === 'submitted' && readyForDecision ? (
-              <Guard module="legal" cap="approve_accreditation">
+              <Guard module="legal" cap="approve_accreditation" fallback={null}>
                 <div className="flex gap-2">
                   <button
                     type="button"
@@ -268,7 +268,7 @@ export function CaseDetailPage() {
                     </div>
                     <div className="flex shrink-0 flex-wrap gap-2">
                       {isVendor && (
-                        <Guard module="core" cap="submit_documents">
+                        <Guard module="core" cap="submit_documents" fallback={null}>
                           <button
                             type="button"
                             onClick={() => setUploadingFor(item)}
@@ -280,7 +280,7 @@ export function CaseDetailPage() {
                         </Guard>
                       )}
                       {!isVendor && (
-                        <Guard module="legal" cap="review_accreditation">
+                        <Guard module="legal" cap="review_accreditation" fallback={null}>
                           <button
                             type="button"
                             onClick={() => openReview(item)}
@@ -323,7 +323,7 @@ export function CaseDetailPage() {
                               </a>
                             )}
                             {!isVendor && d.status === 'submitted' && (
-                              <Guard module="legal" cap="review_accreditation">
+                              <Guard module="legal" cap="review_accreditation" fallback={null}>
                                 <button
                                   type="button"
                                   onClick={() => setDocStatus(d.id, 'approved', profile?.email)}

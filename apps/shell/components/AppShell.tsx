@@ -52,9 +52,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { profile, userRoles, mode, loading } = useSession();
   const pathname = usePathname() ?? '/';
 
-  const modules = accessibleModules(userRoles);
+  // Hydration-safe: while the session is restoring (server render + first
+  // client render), show ONLY the Home entry. Adding module Links post-restore
+  // is a state update, not a mismatch — but we also want no flicker.
+  const modules = loading ? [] : accessibleModules(userRoles);
   const entries: NavEntry[] = [HOME_ENTRY, ...modules.map(toEntry)];
-  if (profile?.kind === 'vendor') {
+  if (!loading && profile?.kind === 'vendor') {
     entries.push({
       href: VENDOR_NAV.href,
       label: VENDOR_NAV.label,
@@ -126,9 +129,14 @@ export function AppShell({ children }: { children: ReactNode }) {
             <div className="flex items-center gap-2 md:hidden">
               <BrandMark compact />
             </div>
-            <h1 className="hidden truncate font-display text-lg font-bold text-ink md:block">
+            {/* Visual heading only; the semantic <h1> lives in each page's
+                hero so we don't emit two level-1 headings per document. */}
+            <p
+              className="hidden truncate font-display text-lg font-bold text-ink md:block"
+              aria-hidden="true"
+            >
               {topBarLabel(pathname, entries) || 'Home'}
-            </h1>
+            </p>
             <div className="flex items-center gap-1.5">
               <span
                 className={cx(

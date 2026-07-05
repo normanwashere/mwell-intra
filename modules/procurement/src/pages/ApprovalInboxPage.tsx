@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Badge,
   Card,
@@ -11,8 +11,10 @@ import {
   ModuleHero,
   SectionTitle,
   Sheet,
+  SignaturePad,
   StatCard,
   useToast,
+  type SignaturePayload,
 } from '@intra/ui';
 import { Guard, useSession } from '@intra/auth';
 import type { ApproverTier, ProcurementRequest } from '../types';
@@ -90,6 +92,10 @@ export function ApprovalInboxPage() {
   const [active, setActive] = useState<ProcurementRequest | null>(null);
   const [decision, setDecision] = useState<'approved' | 'rejected' | null>(null);
   const [note, setNote] = useState('');
+  // Captured signature — REQUIRED for approvals (§9 sign-off), optional for
+  // rejections (a rejection is a gate, not a binding sign-off).
+  const [signature, setSignature] = useState<SignaturePayload | null>(null);
+  const navigate = useNavigate();
 
   const myTiers = useMemo(() => resolveTiers(userRoles as UserRolesShape), [userRoles]);
 
@@ -131,10 +137,22 @@ export function ApprovalInboxPage() {
     setActive(req);
     setDecision(d);
     setNote('');
+    setSignature(null);
+  }
+
+  function closeSheet() {
+    setActive(null);
+    setDecision(null);
+    setNote('');
+    setSignature(null);
   }
 
   function submitDecision() {
     if (!active || !decision) return;
+    if (decision === 'approved' && !signature) {
+      error('An electronic signature is required to approve.');
+      return;
+    }
     const step = nextPendingStep(active.approvalSteps);
     const tier = step?.tier ?? myTiers[0];
     if (!tier) {
@@ -145,7 +163,12 @@ export function ApprovalInboxPage() {
       error(`This step is waiting on ${tierLabel(step.tier)} — not your tier.`);
       return;
     }
-    const ok = decide(active.id, decision, { email: profile?.email, note, tier });
+    const ok = decide(active.id, decision, {
+      email: profile?.email,
+      note,
+      tier,
+      signature: signature ?? undefined,
+    });
     if (ok) {
       const nowStep = nextPendingStep(ok.approvalSteps);
       if (decision === 'approved' && nowStep) {
@@ -153,8 +176,7 @@ export function ApprovalInboxPage() {
       } else {
         success(`Request ${decision}`);
       }
-      setActive(null);
-      setDecision(null);
+      closeSheet();
     } else {
       error('Could not save the decision.');
     }
@@ -192,7 +214,18 @@ export function ApprovalInboxPage() {
         />
 
         <div className="stagger grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <StatCard label="Pending (you)" value={pending.length} icon="rotate" tone="cyan" hint="Awaiting your decision" />
+          <StatCard
+            label="Pending (you)"
+            value={pending.length}
+            icon="rotate"
+            tone="cyan"
+            hint="Scroll to the list below"
+            onClick={() => {
+              document
+                .getElementById('inbox-pending')
+                ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }}
+          />
           <StatCard
             label="Total value"
             value={`₱${pending
@@ -208,6 +241,7 @@ export function ApprovalInboxPage() {
             icon="check"
             tone="emerald"
             hint="Cleared for PO"
+            onClick={() => navigate('/?filter=approved')}
           />
           <StatCard
             label="Rejected"
@@ -215,10 +249,11 @@ export function ApprovalInboxPage() {
             icon="x"
             tone="rose"
             hint="Sent back to requester"
+            onClick={() => navigate('/?filter=rejected')}
           />
         </div>
 
-        <div>
+        <div id="inbox-pending">
           <SectionTitle
             title="Waiting on you"
             subtitle="Requests whose next-step tier matches your role."
@@ -302,53 +337,72 @@ export function ApprovalInboxPage() {
         <Sheet
           open={Boolean(active && decision)}
           onOpenChange={(v) => {
-            if (!v) {
-              setActive(null);
-              setDecision(null);
-            }
+            if (!v) closeSheet();
           }}
           title={
             decision === 'approved'
-              ? `Approve — ${active?.title ?? ''}`
+              ? `Sign & approve — ${active?.title ?? ''}`
               : `Reject — ${active?.title ?? ''}`
           }
         >
-          <div className="space-y-3 p-1">
+          <div className="space-y-4 p-1">
             <p className="text-sm text-muted">
               {decision === 'approved'
                 ? active && nextPendingStep(active.approvalSteps)
-                  ? `Approving as ${tierLabel(nextPendingStep(active.approvalSteps)!.tier)} forwards the request to the next tier.`
-                  : 'Approving unlocks PO authoring against the preferred vendor.'
+                  ? `Signing here approves as ${tierLabel(nextPendingStep(active.approvalSteps)!.tier)} and forwards the request to the next tier.`
+                  : 'Signing here approves the request and unlocks PO authoring against the preferred vendor.'
                 : 'Rejecting sends the request back to the requester with your note.'}
             </p>
-            <label htmlFor="approval-note" className="text-xs font-semibold uppercase tracking-wide text-faint">
-              Note {decision === 'rejected' ? '(recommended)' : '(optional)'}
-            </label>
-            <textarea
-              id="approval-note"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              rows={3}
-              className="input"
-              placeholder="Short reason or context…"
-            />
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setActive(null);
-                  setDecision(null);
-                }}
-                className="btn-ghost"
+            <div className="space-y-1">
+              <label
+                htmlFor="approval-note"
+                className="text-xs font-semibold uppercase tracking-wide text-faint"
               >
+                Note {decision === 'rejected' ? '(recommended)' : '(optional)'}
+              </label>
+              <textarea
+                id="approval-note"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                rows={3}
+                className="input"
+                placeholder="Short reason or context…"
+              />
+            </div>
+            {decision === 'approved' && (
+              <div className="space-y-2 rounded-2xl border border-line bg-inset/60 p-3">
+                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-faint">
+                  <Icon name="signature" className="h-4 w-4" />
+                  Electronic signature (required)
+                </div>
+                <SignaturePad
+                  defaultSignerName={profile?.name ?? ''}
+                  onChange={setSignature}
+                />
+              </div>
+            )}
+            <div className="flex justify-end gap-2 pt-1">
+              <button type="button" onClick={closeSheet} className="btn-ghost">
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={submitDecision}
-                className={decision === 'approved' ? 'btn-primary' : 'btn-outline text-rose-700 dark:text-rose-300'}
+                disabled={decision === 'approved' && !signature}
+                className={
+                  decision === 'approved'
+                    ? 'btn-primary disabled:cursor-not-allowed disabled:opacity-60'
+                    : 'btn-outline text-rose-700 dark:text-rose-300'
+                }
               >
-                Confirm {decision}
+                {decision === 'approved' ? (
+                  <>
+                    <Icon name="signature" className="h-4 w-4" />
+                    Sign & approve
+                  </>
+                ) : (
+                  'Confirm reject'
+                )}
               </button>
             </div>
           </div>

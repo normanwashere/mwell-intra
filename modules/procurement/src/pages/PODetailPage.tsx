@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router-dom';
 import {
   Badge,
@@ -10,8 +10,11 @@ import {
   Icon,
   ModuleHero,
   SectionTitle,
+  Sheet,
+  SignaturePad,
   useToast,
   type Column,
+  type SignaturePayload,
 } from '@intra/ui';
 import { Guard, useSession } from '@intra/auth';
 import type { PurchaseOrder, PurchaseOrderLine, PurchaseOrderStatus } from '../types';
@@ -67,6 +70,11 @@ export function PODetailPage() {
     [po, vendors],
   );
 
+  // Signature-capture sheet state for the award approval flow.
+  const [signOpen, setSignOpen] = useState(false);
+  const [signature, setSignature] = useState<SignaturePayload | null>(null);
+  const [approvalNote, setApprovalNote] = useState('');
+
   if (loading) {
     return (
       <div className="mx-auto max-w-4xl space-y-4">
@@ -80,14 +88,31 @@ export function PODetailPage() {
   const accreditationOk = vendor ? isAccredited(vendor) : false;
   const fullyReceived = po.lines.every((l) => l.receivedQuantity >= l.quantity);
 
-  function handleApprove() {
-    if (!po) return;
+  function openApprovalSheet() {
     if (!accreditationOk) {
       error('Vendor accreditation must be current to approve this PO.');
       return;
     }
-    const next = approve(po.id, { email: profile?.email });
-    if (next) success(`PO ${next.poNumber} approved`);
+    setSignature(null);
+    setApprovalNote('');
+    setSignOpen(true);
+  }
+
+  function confirmApproval() {
+    if (!po || !signature) return;
+    const next = approve(po.id, {
+      email: profile?.email,
+      note: approvalNote || undefined,
+      signature,
+    });
+    if (next) {
+      success(`PO ${next.poNumber} approved`);
+      setSignOpen(false);
+      setSignature(null);
+      setApprovalNote('');
+    } else {
+      error('Could not save the approval.');
+    }
   }
   function handleIssue() {
     if (!po) return;
@@ -177,10 +202,15 @@ export function PODetailPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-2">
           {po.status === 'draft' && (
-            <Guard module="procurement" cap="approve_award">
-              <button type="button" onClick={handleApprove} disabled={!accreditationOk} className="btn-primary">
-                <Icon name="check" className="h-4 w-4" />
-                Approve award
+            <Guard module="procurement" cap="approve_award" fallback={null}>
+              <button
+                type="button"
+                onClick={openApprovalSheet}
+                disabled={!accreditationOk}
+                className="btn-primary"
+              >
+                <Icon name="signature" className="h-4 w-4" />
+                Sign & approve award
               </button>
             </Guard>
           )}
@@ -206,7 +236,131 @@ export function PODetailPage() {
           )}
         </div>
       </div>
+
+      {po.approvalSignature && (
+        <div>
+          <SectionTitle
+            title="Award signature"
+            subtitle="Legally-binding electronic signature captured at approval time (RA 8792)."
+          />
+          <SignatureBlock
+            sig={po.approvalSignature}
+            approvedByEmail={po.approvedByEmail}
+            approvedAt={po.approvedAt}
+          />
+        </div>
+      )}
+
+      <Sheet
+        open={signOpen}
+        onOpenChange={setSignOpen}
+        title={`Sign & approve — PO ${po.poNumber}`}
+      >
+        <div className="space-y-4 p-1">
+          <p className="text-sm text-muted">
+            Approving this award authorises PO {po.poNumber} to be issued to{' '}
+            <span className="font-semibold text-ink">{po.vendorName}</span>. Your
+            signature is stored on the audit trail alongside the approval.
+          </p>
+          <div className="space-y-1">
+            <label
+              htmlFor="po-approval-note"
+              className="text-xs font-semibold uppercase tracking-wide text-faint"
+            >
+              Note (optional)
+            </label>
+            <textarea
+              id="po-approval-note"
+              value={approvalNote}
+              onChange={(e) => setApprovalNote(e.target.value)}
+              rows={3}
+              className="input"
+              placeholder="Add context that should live on the audit trail…"
+            />
+          </div>
+          <div className="space-y-2 rounded-2xl border border-line bg-inset/60 p-3">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-faint">
+              <Icon name="signature" className="h-4 w-4" />
+              Electronic signature (required)
+            </div>
+            <SignaturePad
+              defaultSignerName={profile?.name ?? ''}
+              onChange={setSignature}
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => setSignOpen(false)}
+              className="btn-ghost"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={confirmApproval}
+              disabled={!signature}
+              className="btn-primary disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Icon name="signature" className="h-4 w-4" />
+              Sign & approve
+            </button>
+          </div>
+        </div>
+      </Sheet>
     </div>
+  );
+}
+
+function SignatureBlock({
+  sig,
+  approvedByEmail,
+  approvedAt,
+}: {
+  sig: NonNullable<PurchaseOrder['approvalSignature']>;
+  approvedByEmail?: string;
+  approvedAt?: string;
+}) {
+  return (
+    <Card>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+        <div className="min-w-0 flex-1 space-y-1">
+          <p className="text-sm font-semibold text-ink">
+            {sig.signerName}
+            {approvedByEmail ? (
+              <span className="ml-1 text-xs font-normal text-muted">
+                &lt;{approvedByEmail}&gt;
+              </span>
+            ) : null}
+          </p>
+          <p className="text-xs text-muted">
+            Signed{' '}
+            {new Date(sig.signedAt).toLocaleString(undefined, {
+              dateStyle: 'medium',
+              timeStyle: 'short',
+            })}
+            {approvedAt && approvedAt !== sig.signedAt
+              ? ` · Approved ${new Date(approvedAt).toLocaleString(undefined, {
+                  dateStyle: 'medium',
+                  timeStyle: 'short',
+                })}`
+              : ''}
+            {' · '}
+            <span className="uppercase tracking-wide">{sig.method}</span>
+          </p>
+          <p className="line-clamp-2 text-[0.68rem] text-faint" title={sig.userAgent}>
+            {sig.userAgent}
+          </p>
+        </div>
+        <div className="shrink-0 rounded-xl border border-line bg-white p-2">
+          <img
+            src={sig.dataUrl}
+            alt={`Signature of ${sig.signerName}`}
+            className="h-16 w-56 object-contain"
+          />
+        </div>
+      </div>
+    </Card>
   );
 }
 

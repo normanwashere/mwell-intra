@@ -37,7 +37,9 @@ export type IconName =
   | 'sun'
   | 'moon'
   | 'lock'
-  | 'minus';
+  | 'minus'
+  | 'edit'
+  | 'signature';
 
 const PATHS: Record<IconName, string> = {
   grid: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
@@ -74,6 +76,8 @@ const PATHS: Record<IconName, string> = {
   moon: 'M21 12.8A9 9 0 1111.2 3a7 7 0 109.8 9.8z',
   lock: 'M6 11V8a6 6 0 1112 0v3M5 11h14v10H5zM12 15v3',
   minus: 'M5 12h14',
+  edit: 'M4 20h4l10-10-4-4L4 16v4zM14 6l4 4',
+  signature: 'M3 17c3 0 3-6 6-6s3 6 6 6 3-4 6-4M4 20h16',
 };
 
 export function Icon({ name, className = 'h-5 w-5' }: IconProps) {

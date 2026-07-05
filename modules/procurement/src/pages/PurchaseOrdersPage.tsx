@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Badge,
   DataTable,
@@ -29,13 +29,15 @@ const columns: Column<PurchaseOrder>[] = [
   {
     key: 'poNumber',
     header: 'PO #',
+    primary: true,
     render: (r) => (
       <Link to={`/purchase-orders/${r.id}`} className="font-semibold text-ink hover:underline">
         {r.poNumber}
+        <span className="ml-2 text-xs font-normal text-muted">· {r.vendorName}</span>
       </Link>
     ),
   },
-  { key: 'vendorName', header: 'Vendor', render: (r) => r.vendorName },
+  { key: 'vendorName', header: 'Vendor', render: (r) => r.vendorName, hideOnMobile: true },
   {
     key: 'status',
     header: 'Status',
@@ -62,10 +64,21 @@ const columns: Column<PurchaseOrder>[] = [
   },
 ];
 
+type PoFilter = 'all' | 'authoring' | 'active' | 'closed';
+const PO_FILTERS: readonly { key: PoFilter; label: string }[] = [
+  { key: 'all',       label: 'All' },
+  { key: 'authoring', label: 'In authoring' },
+  { key: 'active',    label: 'Active' },
+  { key: 'closed',    label: 'Closed' },
+];
+
 export function PurchaseOrdersPage() {
   const { rows, loading } = usePurchaseOrders();
   const { profile } = useSession();
   const firstName = profile?.name?.split(/\s+/)[0] ?? 'Procurement';
+  const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+  const filter = (params.get('filter') as PoFilter) ?? 'all';
 
   const kpis = useMemo(() => {
     const total = rows.length;
@@ -78,6 +91,22 @@ export function PurchaseOrdersPage() {
     return { total, drafts, active, closed, openValue };
   }, [rows]);
 
+  const visibleRows = useMemo(() => {
+    switch (filter) {
+      case 'authoring': return rows.filter((r) => r.status === 'draft' || r.status === 'pending_approval');
+      case 'active':    return rows.filter((r) => r.status === 'approved' || r.status === 'issued');
+      case 'closed':    return rows.filter((r) => r.status === 'closed');
+      case 'all':
+      default:          return rows;
+    }
+  }, [rows, filter]);
+
+  const applyFilter = (next: PoFilter) => {
+    if (next === 'all') params.delete('filter');
+    else params.set('filter', next);
+    setParams(params, { replace: false });
+  };
+
   return (
     <div className="space-y-6">
       <ModuleHero
@@ -86,7 +115,7 @@ export function PurchaseOrdersPage() {
         description="Author, approve, and issue POs to accredited vendors. Warehouse receives against these — closing the request-to-receipt loop."
         icon="cart"
         action={
-          <Guard module="procurement" cap="author_po">
+          <Guard module="procurement" cap="author_po" fallback={null}>
             <HeroChipButton href="/procurement/purchase-orders/new" icon="plus">
               New PO
             </HeroChipButton>
@@ -109,21 +138,83 @@ export function PurchaseOrdersPage() {
       />
 
       <div className="stagger grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard label="Total POs" value={kpis.total} icon="cart" tone="brand" hint="All statuses" />
-        <StatCard label="In authoring" value={kpis.drafts} icon="pin" tone="amber" hint="Draft + pending approval" />
-        <StatCard label="Active" value={kpis.active} icon="rotate" tone="cyan" hint="Approved or issued" />
-        <StatCard label="Closed" value={kpis.closed} icon="check" tone="emerald" hint="Fully received" />
+        <StatCard
+          label="Total POs"
+          value={kpis.total}
+          icon="cart"
+          tone="brand"
+          hint="All statuses"
+          onClick={() => applyFilter('all')}
+        />
+        <StatCard
+          label="In authoring"
+          value={kpis.drafts}
+          icon="pin"
+          tone="amber"
+          hint="Draft + pending approval"
+          onClick={() => applyFilter('authoring')}
+        />
+        <StatCard
+          label="Active"
+          value={kpis.active}
+          icon="rotate"
+          tone="cyan"
+          hint="Approved or issued"
+          onClick={() => applyFilter('active')}
+        />
+        <StatCard
+          label="Closed"
+          value={kpis.closed}
+          icon="check"
+          tone="emerald"
+          hint="Fully received"
+          onClick={() => applyFilter('closed')}
+        />
       </div>
 
       <div>
-        <SectionTitle title="Purchase orders" subtitle="Every PO drafted from an approved request." />
+        <SectionTitle
+          title="Purchase orders"
+          subtitle={
+            filter === 'all'
+              ? 'Every PO drafted from an approved request.'
+              : `Filtered to ${PO_FILTERS.find((f) => f.key === filter)?.label.toLowerCase()}. Switch filters below.`
+          }
+        />
+
+        <div role="tablist" aria-label="Filter POs" className="mb-3 flex flex-wrap gap-1.5">
+          {PO_FILTERS.map((f) => {
+            const active = filter === f.key;
+            return (
+              <button
+                key={f.key}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => applyFilter(f.key)}
+                className={
+                  active
+                    ? 'chip bg-brand-500/15 text-brand-700 dark:text-brand-300'
+                    : 'chip bg-inset text-muted hover:text-ink'
+                }
+              >
+                {f.label}
+              </button>
+            );
+          })}
+        </div>
+
         {loading ? (
           <div className="h-24 animate-pulse rounded-2xl bg-inset" aria-hidden />
-        ) : rows.length === 0 ? (
+        ) : visibleRows.length === 0 ? (
           <EmptyState
             icon="cart"
-            title="No purchase orders yet"
-            message="Approve a request first — the PO authoring path opens from the request detail page."
+            title={filter === 'all' ? 'No purchase orders yet' : `No ${filter} POs`}
+            message={
+              filter === 'all'
+                ? 'Approve a request first — the PO authoring path opens from the request detail page.'
+                : 'Nothing in this bucket right now. Switch filters to see other POs.'
+            }
             action={
               <Link to="/" className="btn-primary">
                 See requests
@@ -131,7 +222,12 @@ export function PurchaseOrdersPage() {
             }
           />
         ) : (
-          <DataTable rows={rows} columns={columns} keyOf={(r) => r.id} />
+          <DataTable
+            rows={visibleRows}
+            columns={columns}
+            keyOf={(r) => r.id}
+            onRowClick={(r) => navigate(`/purchase-orders/${r.id}`)}
+          />
         )}
       </div>
     </div>

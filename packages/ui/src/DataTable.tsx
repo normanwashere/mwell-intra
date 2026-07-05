@@ -83,11 +83,25 @@ export function DataTable<T>({
       </div>
 
       {/* Mobile cards (aria-label kept on the table only to avoid duplicate
-          accessible names when both layouts are present in the DOM). */}
+          accessible names when both layouts are present in the DOM).
+          Layout:
+            [ Primary title ....................... chevron ]
+            [ label — value ]
+            [ label — value ]
+          Value column is right-aligned and gets the full width it needs,
+          because on a phone we vertically stack rather than fight a 2-col
+          grid (which was mangling long vendor names). */}
       <ul className="space-y-2 sm:hidden">
         {rows.map((row) => {
-          const primary = columns.find((c) => c.primary);
-          const rest = columns.filter((c) => !c.primary && !c.hideOnMobile);
+          // If no column is explicitly marked `primary`, treat the first
+          // non-hideOnMobile column as the primary line so every table has
+          // a sensible mobile heading without extra callsite work.
+          const primary =
+            columns.find((c) => c.primary) ??
+            columns.find((c) => !c.hideOnMobile);
+          const rest = columns.filter(
+            (c) => c !== primary && !c.hideOnMobile,
+          );
           return (
             <li key={keyOf(row)}>
               <div
@@ -96,21 +110,48 @@ export function DataTable<T>({
                 tabIndex={onRowClick ? 0 : undefined}
                 role={onRowClick ? 'button' : undefined}
                 className={clsx(
-                  'rounded-xl bg-inset p-3.5',
+                  'card p-3.5',
                   onRowClick &&
-                    'cursor-pointer transition active:bg-line focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500',
+                    'cursor-pointer transition active:bg-inset focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500',
                 )}
               >
                 {primary && (
-                  <div className="mb-2 font-semibold text-ink">
-                    {primary.render(row)}
+                  <div className="mb-2 flex items-start gap-2">
+                    <div className="min-w-0 flex-1 font-display text-base font-bold leading-snug text-ink">
+                      {primary.render(row)}
+                    </div>
+                    {onRowClick && (
+                      <span
+                        aria-hidden
+                        className="mt-0.5 shrink-0 text-faint"
+                      >
+                        <svg
+                          className="h-4 w-4"
+                          viewBox="0 0 20 20"
+                          fill="currentColor"
+                        >
+                          <path
+                            fillRule="evenodd"
+                            d="M7.293 4.293a1 1 0 011.414 0l5 5a1 1 0 010 1.414l-5 5a1 1 0 01-1.414-1.414L11.586 10 7.293 5.707a1 1 0 010-1.414z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                      </span>
+                    )}
                   </div>
                 )}
-                <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-sm">
+                <dl className="space-y-1.5 text-sm">
                   {rest.map((c) => (
-                    <div key={c.key} className="flex items-center justify-between gap-2">
-                      <dt className="text-xs text-faint">{c.header}</dt>
-                      <dd className="font-medium text-ink">{c.render(row)}</dd>
+                    <div
+                      key={c.key}
+                      className="flex items-baseline justify-between gap-3"
+                    >
+                      <dt className="shrink-0 text-xs uppercase tracking-wide text-faint">
+                        {c.header}
+                      </dt>
+                      <dd className="min-w-0 text-right font-medium text-ink">
+                        {c.render(row)}
+                      </dd>
                     </div>
                   ))}
                 </dl>

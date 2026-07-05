@@ -185,6 +185,7 @@ export function StatCard({
   tone = 'brand',
   trend,
   onClick,
+  href,
   children,
 }: {
   label: string;
@@ -195,19 +196,21 @@ export function StatCard({
   trend?: { value: string; positive?: boolean };
   /** When provided the whole card becomes a button that drills into details. */
   onClick?: () => void;
+  /** When provided the whole card becomes an anchor to `href` (drill-in). */
+  href?: string;
   children?: ReactNode;
 }) {
-  const interactive = Boolean(onClick);
+  const interactive = Boolean(onClick) || Boolean(href);
   const inner = (
     <>
       <div className="flex items-start justify-between gap-2">
-        <p className="text-[0.68rem] font-semibold uppercase leading-snug tracking-wide text-faint">
+        <p className="text-[0.62rem] font-semibold uppercase leading-snug tracking-wide text-faint sm:text-[0.68rem]">
           {label}
         </p>
         {icon && (
           <span
             className={clsx(
-              'grid h-8 w-8 shrink-0 place-items-center rounded-lg',
+              'grid h-7 w-7 shrink-0 place-items-center rounded-lg sm:h-8 sm:w-8',
               ICON_TONES[tone],
             )}
           >
@@ -216,7 +219,7 @@ export function StatCard({
         )}
       </div>
       <div className="mt-auto flex items-end justify-between gap-2">
-        <p className="tnum font-display text-2xl font-extrabold leading-none text-ink">
+        <p className="tnum font-display text-xl font-extrabold leading-none text-ink sm:text-2xl">
           {value}
         </p>
         {trend ? (
@@ -231,7 +234,10 @@ export function StatCard({
             {trend.value}
           </span>
         ) : interactive ? (
-          <span className="shrink-0 text-faint transition group-hover:text-brand-600 dark:group-hover:text-brand-300">
+          <span
+            aria-hidden
+            className="shrink-0 text-faint transition group-hover:text-brand-600 dark:group-hover:text-brand-300"
+          >
             <Icon name="chevron" className="h-4 w-4" />
           </span>
         ) : null}
@@ -241,20 +247,38 @@ export function StatCard({
     </>
   );
 
-  if (interactive) {
+  // Cramped mobile → tighter padding; roomier from `sm` onwards.
+  const shell =
+    'card group flex flex-col gap-2 p-3 sm:gap-2.5 sm:p-4 text-left transition';
+  const interactiveShell =
+    ' hover:-translate-y-0.5 hover:shadow-e3 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500';
+
+  if (href) {
+    return (
+      <a
+        href={href}
+        aria-label={`${label}: ${value}. View details`}
+        className={clsx(shell, interactiveShell)}
+      >
+        {inner}
+      </a>
+    );
+  }
+
+  if (onClick) {
     return (
       <button
         type="button"
         onClick={onClick}
         aria-label={`${label}: ${value}. View details`}
-        className="card group flex flex-col gap-2.5 p-4 text-left transition hover:-translate-y-0.5 hover:shadow-e3 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+        className={clsx(shell, interactiveShell)}
       >
         {inner}
       </button>
     );
   }
 
-  return <div className="card flex flex-col gap-2.5 p-4">{inner}</div>;
+  return <div className={shell}>{inner}</div>;
 }
 
 const BADGE_TONES: Record<string, string> = {

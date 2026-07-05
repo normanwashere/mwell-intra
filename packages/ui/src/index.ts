@@ -41,3 +41,8 @@ export { QuantityStepper } from './QuantityStepper';
 export { Sparkline } from './Sparkline';
 export { Fab } from './Fab';
 export { DataTable, type Column } from './DataTable';
+export {
+  SignaturePad,
+  type SignaturePayload,
+  type SignatureMethod,
+} from './SignaturePad';

@@ -359,7 +359,7 @@ export function RequestDetailPage() {
             </Link>
           )}
           {req.status === 'approved' && !linkedPo && (
-            <Guard module="procurement" cap="author_po">
+            <Guard module="procurement" cap="author_po" fallback={null}>
               <button type="button" onClick={handleAuthorPO} className="btn-primary">
                 <Icon name="plus" className="h-4 w-4" />
                 Author purchase order
@@ -440,6 +440,27 @@ function ApprovalStepRow({ step }: { step: ApprovalStep }) {
         </p>
         {step.note && (
           <p className="mt-1 whitespace-pre-line text-xs italic text-muted">&ldquo;{step.note}&rdquo;</p>
+        )}
+        {step.signature && (
+          <div className="mt-2 flex flex-wrap items-center gap-3 rounded-xl border border-line bg-surface p-2 text-xs">
+            <span className="inline-flex items-center gap-1.5 font-semibold text-ink">
+              <Icon name="signature" className="h-3.5 w-3.5" />
+              e-signed by {step.signature.signerName}
+            </span>
+            <span className="text-muted">
+              {new Date(step.signature.signedAt).toLocaleString(undefined, {
+                dateStyle: 'medium',
+                timeStyle: 'short',
+              })}
+              {' · '}
+              <span className="uppercase tracking-wide">{step.signature.method}</span>
+            </span>
+            <img
+              src={step.signature.dataUrl}
+              alt={`Signature of ${step.signature.signerName}`}
+              className="ml-auto h-10 w-auto max-w-[9rem] rounded border border-line bg-white object-contain"
+            />
+          </div>
         )}
       </div>
     </li>

@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Badge,
   DataTable,
@@ -29,6 +29,7 @@ const columns: Column<ProcurementRequest>[] = [
   {
     key: 'title',
     header: 'Request',
+    primary: true,
     render: (row) => (
       <div className="min-w-0">
         <p className="truncate font-semibold text-ink">
@@ -76,10 +77,33 @@ const columns: Column<ProcurementRequest>[] = [
   },
 ];
 
+type FilterKey = 'all' | 'draft' | 'submitted' | 'approved' | 'rejected';
+const FILTERS: readonly { key: FilterKey; label: string }[] = [
+  { key: 'all',       label: 'All' },
+  { key: 'draft',     label: 'Drafts' },
+  { key: 'submitted', label: 'In review' },
+  { key: 'approved',  label: 'Approved' },
+  { key: 'rejected',  label: 'Rejected' },
+];
+
 export function RequestsPage() {
   const { rows, loading } = useProcurementRequests();
   const { profile } = useSession();
   const firstName = profile?.name?.split(/\s+/)[0] ?? 'Procurement';
+  const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
+
+  const filter = (params.get('filter') as FilterKey) ?? 'all';
+  const visibleRows = useMemo(() => {
+    switch (filter) {
+      case 'draft':     return rows.filter((r) => r.status === 'draft');
+      case 'submitted': return rows.filter((r) => r.status === 'submitted' || r.status === 'under_review');
+      case 'approved':  return rows.filter((r) => r.status === 'approved');
+      case 'rejected':  return rows.filter((r) => r.status === 'rejected');
+      case 'all':
+      default:          return rows;
+    }
+  }, [rows, filter]);
 
   const kpis = useMemo(() => {
     const total = rows.length;
@@ -90,6 +114,15 @@ export function RequestsPage() {
     return { total, drafts, submitted, approved, rejected };
   }, [rows]);
 
+  const applyFilter = (next: FilterKey) => {
+    if (next === 'all') {
+      params.delete('filter');
+    } else {
+      params.set('filter', next);
+    }
+    setParams(params, { replace: false });
+  };
+
   return (
     <div className="space-y-6">
       <ModuleHero
@@ -98,7 +131,7 @@ export function RequestsPage() {
         description="Raise, route and track purchase requests before PO authoring. Awards are gated on vendor accreditation."
         icon="cart"
         action={
-          <Guard module="procurement" cap="create_request">
+          <Guard module="procurement" cap="create_request" fallback={null}>
             <HeroChipButton href="/procurement/requests/new" icon="plus">
               New request
             </HeroChipButton>
@@ -128,27 +161,89 @@ export function RequestsPage() {
       />
 
       <div className="stagger grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard label="Total requests" value={kpis.total} icon="clipboard" tone="brand" hint="All statuses" />
-        <StatCard label="Drafts" value={kpis.drafts} icon="pin" tone="slate" hint="Not yet submitted" />
-        <StatCard label="Awaiting review" value={kpis.submitted} icon="rotate" tone="cyan" hint="With procurement" />
-        <StatCard label="Approved" value={kpis.approved} icon="check" tone="emerald" hint="Ready for PO" />
+        <StatCard
+          label="Total requests"
+          value={kpis.total}
+          icon="clipboard"
+          tone="brand"
+          hint="All statuses"
+          onClick={() => applyFilter('all')}
+        />
+        <StatCard
+          label="Drafts"
+          value={kpis.drafts}
+          icon="pin"
+          tone="slate"
+          hint="Not yet submitted"
+          onClick={() => applyFilter('draft')}
+        />
+        <StatCard
+          label="Awaiting review"
+          value={kpis.submitted}
+          icon="rotate"
+          tone="cyan"
+          hint="Opens the approval inbox"
+          onClick={() => navigate('/approvals')}
+        />
+        <StatCard
+          label="Approved"
+          value={kpis.approved}
+          icon="check"
+          tone="emerald"
+          hint="Ready for PO"
+          onClick={() => applyFilter('approved')}
+        />
       </div>
 
       <div>
         <SectionTitle
           title="Purchase requests"
-          subtitle="Every draft you save appears here (persisted locally in this preview)."
+          subtitle={
+            filter === 'all'
+              ? 'Every draft you save appears here (persisted locally in this preview).'
+              : `Filtered to ${FILTERS.find((f) => f.key === filter)?.label.toLowerCase()}. Tap a KPI or a chip below to change scope.`
+          }
         />
+
+        <div
+          role="tablist"
+          aria-label="Filter requests"
+          className="mb-3 flex flex-wrap gap-1.5"
+        >
+          {FILTERS.map((f) => {
+            const active = filter === f.key;
+            return (
+              <button
+                key={f.key}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => applyFilter(f.key)}
+                className={
+                  active
+                    ? 'chip bg-brand-500/15 text-brand-700 dark:text-brand-300'
+                    : 'chip bg-inset text-muted hover:text-ink'
+                }
+              >
+                {f.label}
+              </button>
+            );
+          })}
+        </div>
 
         {loading ? (
           <div className="h-24 animate-pulse rounded-2xl bg-inset" aria-hidden />
-        ) : rows.length === 0 ? (
+        ) : visibleRows.length === 0 ? (
           <EmptyState
             icon="clipboard"
-            title="No requests yet"
-            message="Draft your first request — it will appear right here for the procurement officer to review."
+            title={filter === 'all' ? 'No requests yet' : `No ${filter} requests`}
+            message={
+              filter === 'all'
+                ? 'Draft your first request — it will appear right here for the procurement officer to review.'
+                : 'Nothing in this bucket right now. Switch filters to see other requests.'
+            }
             action={
-              <Guard module="procurement" cap="create_request">
+              <Guard module="procurement" cap="create_request" fallback={null}>
                 <Link to="/requests/new" className="btn-primary">
                   Draft a request
                 </Link>
@@ -156,7 +251,12 @@ export function RequestsPage() {
             }
           />
         ) : (
-          <DataTable rows={rows} columns={columns} keyOf={(row) => row.id} />
+          <DataTable
+            rows={visibleRows}
+            columns={columns}
+            keyOf={(row) => row.id}
+            onRowClick={(row) => navigate(`/requests/${row.id}`)}
+          />
         )}
       </div>
     </div>

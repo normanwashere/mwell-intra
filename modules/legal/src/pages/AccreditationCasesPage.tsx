@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Badge,
   DataTable,
@@ -34,6 +34,7 @@ function columns(basePath: string): Column<AccreditationCase>[] {
     {
       key: 'vendorName',
       header: 'Vendor',
+      primary: true,
       render: (r) => (
         <Link to={`${basePath}/cases/${r.id}`} className="font-semibold text-ink hover:underline">
           {r.vendorName}
@@ -62,12 +63,23 @@ function columns(basePath: string): Column<AccreditationCase>[] {
   ];
 }
 
+type CaseFilter = 'all' | 'in_review' | 'approved' | 'expiring';
+const CASE_FILTERS: readonly { key: CaseFilter; label: string }[] = [
+  { key: 'all',       label: 'All cases' },
+  { key: 'in_review', label: 'Under review' },
+  { key: 'approved',  label: 'Approved' },
+  { key: 'expiring',  label: 'Expiring 30d' },
+];
+
 export function AccreditationCasesPage() {
   const { profile } = useSession();
   const { rows, loading } = useAccreditationCases();
+  const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
   const isVendor = profile?.kind === 'vendor';
   const firstName =
     profile?.name?.split(/\s+/)[0] ?? (isVendor ? 'Vendor' : 'Legal');
+  const filter = (params.get('filter') as CaseFilter) ?? 'all';
 
   // Vendors see only their own case(s). Internal users see everything.
   const visible = useMemo(() => {
@@ -83,7 +95,23 @@ export function AccreditationCasesPage() {
     return { total, inReview, approved, expiringSoon };
   }, [visible]);
 
+  const filteredVisible = useMemo(() => {
+    switch (filter) {
+      case 'in_review': return visible.filter((r) => r.status === 'submitted' || r.status === 'under_review');
+      case 'approved':  return visible.filter((r) => r.status === 'approved');
+      case 'expiring':  return visible.filter((r) => isExpiringSoon(r.expiresAt, 30));
+      case 'all':
+      default:          return visible;
+    }
+  }, [visible, filter]);
+
   const basePath = isVendor ? '/vendor' : '/legal';
+
+  const applyFilter = (next: CaseFilter) => {
+    if (next === 'all') params.delete('filter');
+    else params.set('filter', next);
+    setParams(params, { replace: false });
+  };
 
   return (
     <div className="space-y-6">
@@ -114,10 +142,38 @@ export function AccreditationCasesPage() {
 
       {!isVendor && (
         <div className="stagger grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <StatCard label="Active cases" value={kpis.total} icon="clipboard" tone="brand" hint="Total in pipeline" />
-          <StatCard label="Under review" value={kpis.inReview} icon="rotate" tone="amber" hint="Waiting on Legal" />
-          <StatCard label="Approved" value={kpis.approved} icon="check" tone="emerald" hint="Vendors awarded" />
-          <StatCard label="Expiring 30d" value={kpis.expiringSoon} icon="alert" tone="rose" hint="Renewals due" />
+          <StatCard
+            label="Active cases"
+            value={kpis.total}
+            icon="clipboard"
+            tone="brand"
+            hint="Total in pipeline"
+            onClick={() => applyFilter('all')}
+          />
+          <StatCard
+            label="Under review"
+            value={kpis.inReview}
+            icon="rotate"
+            tone="amber"
+            hint="Waiting on Legal"
+            onClick={() => applyFilter('in_review')}
+          />
+          <StatCard
+            label="Approved"
+            value={kpis.approved}
+            icon="check"
+            tone="emerald"
+            hint="Vendors awarded"
+            onClick={() => applyFilter('approved')}
+          />
+          <StatCard
+            label="Expiring 30d"
+            value={kpis.expiringSoon}
+            icon="alert"
+            tone="rose"
+            hint="Renewals due"
+            onClick={() => applyFilter('expiring')}
+          />
         </div>
       )}
 
@@ -127,11 +183,13 @@ export function AccreditationCasesPage() {
           subtitle={
             isVendor
               ? 'Documents and status for your organization only.'
-              : 'All vendor cases across the pipeline. Click a row to review.'
+              : filter === 'all'
+                ? 'All vendor cases across the pipeline. Tap a row to review.'
+                : `Filtered to ${CASE_FILTERS.find((f) => f.key === filter)?.label.toLowerCase()}.`
           }
           action={
             !isVendor && (
-              <Guard module="legal" cap="manage_checklist">
+              <Guard module="legal" cap="manage_checklist" fallback={null}>
                 <HeroChipButton href="/legal/invites/new" icon="plus">
                   Invite vendor
                 </HeroChipButton>
@@ -140,20 +198,46 @@ export function AccreditationCasesPage() {
           }
         />
 
+        {!isVendor && (
+          <div role="tablist" aria-label="Filter cases" className="mb-3 flex flex-wrap gap-1.5">
+            {CASE_FILTERS.map((f) => {
+              const active = filter === f.key;
+              return (
+                <button
+                  key={f.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => applyFilter(f.key)}
+                  className={
+                    active
+                      ? 'chip bg-brand-500/15 text-brand-700 dark:text-brand-300'
+                      : 'chip bg-inset text-muted hover:text-ink'
+                  }
+                >
+                  {f.label}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         {loading ? (
           <div className="h-24 animate-pulse rounded-2xl bg-inset" aria-hidden />
-        ) : visible.length === 0 ? (
+        ) : filteredVisible.length === 0 ? (
           <EmptyState
             icon="building"
-            title={isVendor ? 'No accreditation case yet' : 'No cases yet'}
+            title={isVendor ? 'No accreditation case yet' : 'No cases match'}
             message={
               isVendor
                 ? 'When Legal invites your organization, your case will appear here to fill out.'
-                : 'Invite a vendor to start their onboarding — a case appears here once they submit.'
+                : filter === 'all'
+                  ? 'Invite a vendor to start their onboarding — a case appears here once they submit.'
+                  : 'Nothing in this filter right now. Switch buckets above to see other cases.'
             }
             action={
               !isVendor && (
-                <Guard module="legal" cap="manage_checklist">
+                <Guard module="legal" cap="manage_checklist" fallback={null}>
                   <Link to="/invites/new" className="btn-primary">
                     Invite vendor
                   </Link>
@@ -162,7 +246,12 @@ export function AccreditationCasesPage() {
             }
           />
         ) : (
-          <DataTable rows={visible} columns={columns(basePath)} keyOf={(r) => r.id} />
+          <DataTable
+            rows={filteredVisible}
+            columns={columns(basePath)}
+            keyOf={(r) => r.id}
+            onRowClick={(r) => navigate(`/cases/${r.id}`)}
+          />
         )}
       </div>
     </div>

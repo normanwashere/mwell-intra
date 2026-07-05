@@ -18,6 +18,7 @@
 // the internal amounts here once the Delegation of Authority document lands.
 
 import type {
+  ApprovalSignature,
   ApprovalStep,
   ApproverTier,
   RequestCategory,
@@ -272,7 +273,13 @@ export function applyStepDecision(
   steps: ApprovalStep[],
   actorTier: ApproverTier,
   decision: 'approved' | 'rejected',
-  actor: { email?: string; note?: string; at: string },
+  actor: {
+    email?: string;
+    note?: string;
+    at: string;
+    /** Optional electronic signature captured at commit (DocuSign-style). */
+    signature?: ApprovalSignature;
+  },
 ): ApplyDecisionResult | null {
   const next = nextPendingStep(steps);
   if (!next || next.tier !== actorTier) return null;
@@ -285,6 +292,7 @@ export function applyStepDecision(
           decidedAt: actor.at,
           decidedByEmail: actor.email,
           note: actor.note,
+          signature: actor.signature,
         }
       : s,
   );
