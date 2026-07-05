@@ -6,10 +6,12 @@ It aligns with **Republic Act No. 10173** (Data Privacy Act of 2012) and the
 National Privacy Commission's implementing rules on data minimisation, storage
 limitation, and data-subject rights.
 
-The eventual enforcement mechanism is the scheduled job
-`core.job_purge_expired` (stub — to be implemented in Phase 4, spec §8). Until
-that job ships, the periods below are the **audit-time SLA** we hold
-ourselves to; ad-hoc purge scripts run against Supabase with `service_role`.
+The enforcement mechanism is the scheduled job `core.job_purge_expired`
+(implemented in `supabase/migrations/20260707120000_retention_enforcement.sql`,
+scheduled nightly as `nightly-retention-purge` @ 02:30 — see §2.3). Classes
+not yet wrapped by the job (long 10-year windows, human-reviewed
+anonymisation) remain the **audit-time SLA** we hold ourselves to; ad-hoc
+purge scripts run against Supabase with `service_role`.
 
 Every access to personal / commercial data is recorded in `core.activity_log`
 (migration `20260706090500_core_activity_log.sql`) — that table is the
@@ -27,7 +29,7 @@ is preserved (referential integrity is retained) but PII columns are cleared.
 | # | Data class | Table(s) | Period | End-of-life action | Legal basis |
 |---|---|---|---|---|---|
 | 1 | Identity profiles (employees + vendor contacts) | `core.profiles` | **7 years** after account disabled | Anonymise (email, full_name, title → null; `status='disabled'`) | RA 10173 §11(e); Labor Code recordkeeping |
-| 2 | Cross-module activity / access log | `core.activity_log` | **5 years** rolling | Delete (partition by month; drop oldest) | RA 10173 §16(f) reasonable proof; audit posture |
+| 2 | Cross-module activity / access log | `core.activity_log` | **5 years** rolling | **Anonymise** — clear `actor` (the personal identifier) and stamp `detail.retention_anonymised`; the event row itself is retained so the append-only audit ledger stays intact (see §2.3) | RA 10173 §16(f) reasonable proof; audit posture |
 | 3 | Vendor / commercial documents | `core.documents` | **10 years** after `expires_at` (or upload if no expiry) | Delete row + `storage.objects` blob | BIR / SEC / SRA recordkeeping norms; contract disputes |
 | 4 | User-facing notifications | `core.notifications` | **90 days** after `read_at`; unread rows kept until read or 1 year (whichever is first) | Delete | Transient operational data; minimisation |
 | 5 | Vendor master (accreditation lifecycle) | `core.vendors` | **10 years** after last transaction or accreditation expiry | Anonymise contact fields; retain `id` + audit shell | Same as #3 (linked commercial history) |
@@ -100,30 +102,32 @@ Storage blobs deleted via the Supabase Storage API in the same transaction
 window as the parent row (`core.documents.storage_path` → `evidence` /
 `documents` bucket).
 
-### 2.3 Enforcement — `core.job_purge_expired` (stub)
+### 2.3 Enforcement — `core.job_purge_expired` (implemented)
 
-Phase 4 introduces a `pg_cron` job that wraps rows #2, #4, #7–#12 above:
+Implemented by `supabase/migrations/20260707120000_retention_enforcement.sql`
+and scheduled via `pg_cron` as **`nightly-retention-purge` @ `30 2 * * *`**
+(idempotent unschedule-then-schedule; `service_role` may invoke it on demand
+for a catch-up run; `anon`/`authenticated` cannot execute it). Every run
+emits an `entity_type='retention_job'` row to `core.activity_log` with the
+per-class row counts.
 
-```sql
--- STUB — to be implemented in Phase 4 (spec §8).
-create or replace function core.job_purge_expired()
-returns void language plpgsql security definer set search_path = core, public as $$
-begin
-  -- 1. Activity log (5y)
-  -- 2. Notifications (90d read / 1y unread)
-  -- 3. Warehouse ledger (10y)
-  -- 4. Procurement records (10y)
-  -- 5. Legal cases (10y after closure)
-  -- 6. Documents past expires_at + 10y (also unlink storage blobs)
-  raise notice 'job_purge_expired is a stub — no rows purged';
-end; $$;
-```
+What the job enforces today:
 
-The job runs nightly under `service_role`, emits an
-`entity_type='retention_job'` row to `core.activity_log` with row counts per
-class, and alerts on any purge failure. Identity anonymisation (row #1, #5) is
-NOT auto-purged — it is a human-reviewed workflow triggered by HR offboarding
-or a DSAR (see §3).
+| Matrix row | Action taken nightly |
+|---|---|
+| #4 notifications (read) | `DELETE` where `read_at < now() - 90 days` |
+| #4 notifications (unread) | `DELETE` where unread and `created_at < now() - 1 year` |
+| #2 activity_log (5y) | **Anonymise, not delete**: `actor` is cleared and `detail.retention_anonymised = true` is stamped. Rationale: the table is the RA 10173 access log and is append-only by design — deleting rows would punch holes in audit evidence, while §16(f) storage limitation only requires that the *personal identifier* stop being retained. The event ledger survives with zero PII. |
+| test/demo residue | Best-effort sweep of `_rls_test_*` fixtures (documents / profiles / vendors) in case a test run ever leaked past its rollback; a failure here never aborts the retention pass (flagged as `demo_residue_removed: -1` in the summary row). |
+| `core.rate_limits` | NOT handled here — `core.job_purge_old_rate_limits()` (migration `20260706160000`) already owns that table's 24-hour purge. |
+
+Still **out of scope for the job** (unchanged posture):
+
+- The 10-year classes (#3, #5–#9, #11, #12) — first eligible rows are years
+  away; wire them into the same job before 2036, deleting storage blobs in
+  the same window as the parent rows.
+- Identity anonymisation (row #1, #5) is NOT auto-purged — it is a
+  human-reviewed workflow triggered by HR offboarding or a DSAR (see §3).
 
 ---
 
@@ -204,8 +208,9 @@ The audit column contract per RA 10173:
   non-redundant snapshot of the change (no bulk column dumps).
 - The table is APPEND-ONLY at the RLS layer (no UPDATE/DELETE policies) so
   the trail can't be rewritten by application code.
-- Purge of old activity_log rows (§1 row #2) is an explicit privileged
-  operation attributed to `core.job_purge_expired` (§2.3).
+- End-of-life for old activity_log rows (§1 row #2) is actor ANONYMISATION —
+  never row deletion — performed by `core.job_purge_expired` (§2.3), so the
+  trail itself is permanent.
 
 Any exception (bulk exports, service_role scripts, migrations) MUST also
 write to `core.activity_log` with `module='core'`, `entity_type='ops'`, and
@@ -218,6 +223,7 @@ the operator identity in `detail.operator`.
 | Version | Date | Author | Change |
 |---|---|---|---|
 | 1.0 | 2026-07-05 | Platform Eng | Initial policy — periods, DSAR workflow, purge stub reference |
+| 1.1 | 2026-07-07 | Platform Eng | `core.job_purge_expired` implemented + scheduled (`nightly-retention-purge`); activity_log end-of-life switched from delete to actor-anonymise (append-only audit preserved); §2.3 rewritten to match |
 
 Amendments require Legal + DPO sign-off and a corresponding update to
 `core.job_purge_expired` once implemented.
