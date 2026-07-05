@@ -160,7 +160,9 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-5 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-6 md:pb-10 xl:max-w-6xl">
+        {/* Bottom padding must clear the fixed mobile nav (~4.5rem + safe
+            area) with breathing room so the final list row is never covered. */}
+        <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-5 pb-[calc(7.5rem+env(safe-area-inset-bottom))] sm:px-6 md:pb-10 xl:max-w-6xl">
           {loading ? (
             <div
               className="grid place-items-center py-24 text-muted"

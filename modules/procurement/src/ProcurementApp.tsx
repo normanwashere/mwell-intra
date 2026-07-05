@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
-import { ToastProvider } from '@intra/ui';
+import { SignInPrompt, SkeletonList, SkeletonStats } from '@intra/ui';
 import { useSession } from '@intra/auth';
 import { can } from '@intra/rbac';
 import { ProcurementTabs } from './components/ProcurementTabs';
@@ -31,10 +31,23 @@ function useNormalizeBasenamePath(basename: string): void {
 
 export function ProcurementApp({ basename = '/procurement' }: ProcurementAppProps) {
   useNormalizeBasenamePath(basename);
-  const { userRoles, loading } = useSession();
+  const { profile, userRoles, loading } = useSession();
   const hasAccess = can(userRoles, 'procurement', 'view_dashboard');
   const canApprove = can(userRoles, 'procurement', 'approve_request');
-  if (loading) return null;
+  if (loading) {
+    return (
+      <div className="mx-auto max-w-5xl space-y-6 p-4 md:p-6" aria-busy="true">
+        <SkeletonStats />
+        <SkeletonList rows={5} />
+      </div>
+    );
+  }
+
+  // Signed out entirely → prompt to sign in (deep-links back here) instead of
+  // the "no procurement role" copy meant for signed-in users.
+  if (!profile) {
+    return <SignInPrompt module="Procurement" basename={basename} />;
+  }
 
   if (!hasAccess) {
     return (
@@ -64,18 +77,18 @@ export function ProcurementApp({ basename = '/procurement' }: ProcurementAppProp
       basename={basename}
       future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
     >
-      <ToastProvider>
-        <ProcurementTabs canApprove={canApprove} />
-        <Routes>
-          <Route path="/" element={<RequestsPage />} />
-          <Route path="/requests/new" element={<CreateRequestPage />} />
-          <Route path="/requests/:id" element={<RequestDetailPage />} />
-          <Route path="/approvals" element={<ApprovalInboxPage />} />
-          <Route path="/purchase-orders" element={<PurchaseOrdersPage />} />
-          <Route path="/purchase-orders/:id" element={<PODetailPage />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </ToastProvider>
+      {/* No nested ToastProvider — the shell's root Providers already mounts
+          one; nesting a second rendered a duplicate toast viewport. */}
+      <ProcurementTabs canApprove={canApprove} />
+      <Routes>
+        <Route path="/" element={<RequestsPage />} />
+        <Route path="/requests/new" element={<CreateRequestPage />} />
+        <Route path="/requests/:id" element={<RequestDetailPage />} />
+        <Route path="/approvals" element={<ApprovalInboxPage />} />
+        <Route path="/purchase-orders" element={<PurchaseOrdersPage />} />
+        <Route path="/purchase-orders/:id" element={<PODetailPage />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
     </BrowserRouter>
   );
 }

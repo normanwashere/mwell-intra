@@ -46,3 +46,4 @@ export {
   type SignaturePayload,
   type SignatureMethod,
 } from './SignaturePad';
+export { SignInPrompt, type SignInPromptProps } from './SignInPrompt';
