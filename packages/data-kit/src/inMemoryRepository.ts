@@ -46,7 +46,9 @@ import {
 import type { Product, Profile } from './domain/types';
 import { buildProfiles, buildSeed } from './seed';
 
-export const DATA_STORAGE_KEY = 'mwell-intra-warehouse:data:v1';
+// v2 (2026-07): rich 90-day activity history added to the seed — bumping the
+// key means browsers persisted on v1 pick up the new dataset on next load.
+export const DATA_STORAGE_KEY = 'mwell-intra-warehouse:data:v2';
 const STORAGE_KEY = DATA_STORAGE_KEY;
 
 function clone<T>(value: T): T {

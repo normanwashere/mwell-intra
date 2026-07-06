@@ -89,17 +89,23 @@ describe('DashboardPage', () => {
     expect(screen.getAllByText(/left$/i).length).toBeGreaterThan(0);
   });
 
-  it('renders an overview and interactive panels for every role', async () => {
-    for (const role of ALL_ROLES) {
-      const { unmount } = renderWithProviders(<DashboardPage />, { role });
-      expect(await screen.findByRole('heading', { name: /overview$/i })).toBeInTheDocument();
-      const buttons = screen
-        .getAllByRole('button')
-        .filter((b) => !/export data/i.test(b.textContent ?? ''));
-      buttons.forEach((b) => fireEvent.click(b));
-      unmount();
-    }
-  });
+  it(
+    'renders an overview and interactive panels for every role',
+    async () => {
+      for (const role of ALL_ROLES) {
+        const { unmount } = renderWithProviders(<DashboardPage />, { role });
+        expect(await screen.findByRole('heading', { name: /overview$/i })).toBeInTheDocument();
+        const buttons = screen
+          .getAllByRole('button')
+          .filter((b) => !/export data/i.test(b.textContent ?? ''));
+        buttons.forEach((b) => fireEvent.click(b));
+        unmount();
+      }
+    },
+    // Renders every role against the full 90-day seed history — needs more
+    // headroom than the 5s default.
+    15_000,
+  );
 
   it('has no accessibility violations', async () => {
     const { container } = renderWithProviders(<DashboardPage />, { role: 'bi_analyst' });

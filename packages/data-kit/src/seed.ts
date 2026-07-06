@@ -350,11 +350,249 @@ const purchaseOrders: PurchaseOrder[] = [
   },
 ];
 
+// ---------------------------------------------------------------------------
+// 90-day activity history (relative to `now`) — richer movement curves for
+// sparklines / BI analytics, plus extra cycle counts, returns and receipts.
+// Deterministic: a tiny LCG drives the variation so the same `now` always
+// produces the same history.
+// ---------------------------------------------------------------------------
+
+function lcg(seedValue: number): () => number {
+  let s = seedValue >>> 0;
+  return () => {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    return s / 0xffffffff;
+  };
+}
+
+function isoDaysAgo(now: Date, days: number, hour: number, minute = 0): string {
+  const d = new Date(now);
+  d.setDate(d.getDate() - days);
+  d.setHours(hour, minute, 0, 0);
+  return d.toISOString();
+}
+
+function isoDaysAhead(now: Date, days: number): string {
+  const d = new Date(now);
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+export interface ActivityHistory {
+  movements: Movement[];
+  returns: ReturnRecord[];
+  cycleCounts: CycleCount[];
+  receipts: Receipt[];
+  events: WarehouseEvent[];
+  allocations: Allocation[];
+}
+
+/**
+ * Build ~50 movements over the past 90 days plus supporting records so the
+ * dashboards, sparklines and BI panels show real activity curves out of the
+ * box. Exported standalone so tests can assert on it directly.
+ */
+export function buildActivityHistory(now: Date = new Date()): ActivityHistory {
+  const rand = lcg(20260706);
+  const extraMovements: Movement[] = [];
+
+  const issueTargets = [
+    { productId: 'shirt-m', base: 18 },
+    { productId: 'shirt-l', base: 14 },
+    { productId: 'doctor-token', base: 22 },
+    { productId: 'jacket-m', base: 6 },
+    { productId: 'ecg-ring-10', base: 3 },
+    { productId: 'ecg-ring-8', base: 2 },
+    { productId: 'smart-watch', base: 4 },
+    { productId: 'sleep-ring-8', base: 2 },
+  ];
+  const eventCycle = ['evt-makati', 'evt-lgu', 'evt-smx', 'evt-bgc'];
+  const actorCycle = ['ops@mwell', 'mktg@mwell', 'marco.reyes@mwell.com.ph'];
+
+  let mvSeq = 100;
+  // Issues cluster on weekdays; volume ramps up toward "now" (H2 season).
+  for (let day = 89; day >= 0; day -= 2) {
+    const target = issueTargets[(day / 2) % issueTargets.length | 0]!;
+    const ramp = 1 + (89 - day) / 89; // 1.0 → 2.0
+    const qty = Math.max(1, Math.round(target.base * ramp * (0.6 + rand() * 0.8)));
+    extraMovements.push({
+      id: `mv-h${mvSeq++}`,
+      type: 'issue',
+      productId: target.productId,
+      quantity: qty,
+      eventId: eventCycle[day % eventCycle.length]!,
+      actor: actorCycle[day % actorCycle.length]!,
+      createdAt: isoDaysAgo(now, day, 9 + (day % 6), (day * 7) % 60),
+    });
+    // Roughly every 12 days an issue is followed by a small return.
+    if (day % 12 === 1) {
+      extraMovements.push({
+        id: `mv-h${mvSeq++}`,
+        type: 'return',
+        productId: target.productId,
+        quantity: Math.max(1, Math.round(qty * 0.15)),
+        eventId: eventCycle[day % eventCycle.length]!,
+        reason: day % 24 === 1 ? 'defective' : 'unused',
+        actor: actorCycle[(day + 1) % actorCycle.length]!,
+        createdAt: isoDaysAgo(now, Math.max(0, day - 1), 16),
+      });
+    }
+  }
+  // Weekly receipts + a transfer every ~2 weeks.
+  const receiptRotation = [
+    { productId: 'shirt-m', quantity: 120, supplierId: 'sup-apparel' },
+    { productId: 'doctor-token', quantity: 150, supplierId: 'sup-tokens' },
+    { productId: 'jacket-l', quantity: 60, supplierId: 'sup-apparel' },
+    { productId: 'shirt-xl', quantity: 90, supplierId: 'sup-apparel' },
+  ];
+  for (let week = 12; week >= 1; week--) {
+    const r = receiptRotation[week % receiptRotation.length]!;
+    extraMovements.push({
+      id: `mv-h${mvSeq++}`,
+      type: 'receipt',
+      productId: r.productId,
+      quantity: r.quantity,
+      toLocationId: 'loc-wh',
+      reference: `po-hist-${week}`,
+      actor: 'marco.reyes@mwell.com.ph',
+      createdAt: isoDaysAgo(now, week * 7, 8, 30),
+    });
+    if (week % 2 === 0) {
+      extraMovements.push({
+        id: `mv-h${mvSeq++}`,
+        type: 'transfer',
+        productId: week % 4 === 0 ? 'shirt-l' : 'doctor-token',
+        quantity: 15 + (week % 3) * 5,
+        fromLocationId: 'loc-wh',
+        toLocationId: 'loc-cebu',
+        actor: 'marco.reyes@mwell.com.ph',
+        createdAt: isoDaysAgo(now, week * 7 - 2, 11),
+      });
+    }
+  }
+  // Monthly cycle-count adjustments.
+  for (const day of [75, 45, 15]) {
+    extraMovements.push({
+      id: `mv-h${mvSeq++}`,
+      type: 'cycle_count',
+      productId: day === 45 ? 'shirt-m' : 'doctor-token',
+      quantity: day === 45 ? -8 : day === 75 ? -3 : 2,
+      toLocationId: 'loc-wh',
+      reason: 'cycle count adjustment',
+      actor: 'liza.tan@mwell.com.ph',
+      createdAt: isoDaysAgo(now, day, 15),
+    });
+  }
+
+  const extraReturns: ReturnRecord[] = [
+    // Products avoid shirt-l so freshly-recorded shirt-l returns stay
+    // unambiguous in the list (mirrors the allocations note above).
+    {
+      id: 'ret-h1',
+      source: 'customer',
+      eventId: 'evt-smx',
+      lines: [
+        { productId: 'shirt-xl', quantity: 6, reason: 'wrong size', disposition: 'restock' },
+        { productId: 'shirt-m', quantity: 2, reason: 'print defect', disposition: 'lost' },
+      ],
+      actor: 'ops@mwell',
+      createdAt: isoDaysAgo(now, 6, 14),
+    },
+    {
+      id: 'ret-h2',
+      source: 'customer',
+      eventId: 'evt-bgc',
+      lines: [
+        { productId: 'jacket-m', quantity: 5, reason: 'unused surplus', disposition: 'restock' },
+        { productId: 'doctor-token', quantity: 10, reason: 'unused surplus', disposition: 'restock' },
+      ],
+      actor: 'mktg@mwell',
+      createdAt: isoDaysAgo(now, 2, 17),
+    },
+  ];
+
+  const extraCycleCounts: CycleCount[] = [
+    {
+      id: 'cc-h1',
+      locationId: 'loc-wh',
+      category: 'merchandise',
+      lines: [
+        { productId: 'shirt-m', expected: 232, counted: 224 },
+        { productId: 'shirt-l', expected: 120, counted: 120 },
+        { productId: 'doctor-token', expected: 80, counted: 80 },
+      ],
+      actor: 'liza.tan@mwell.com.ph',
+      createdAt: isoDaysAgo(now, 45, 15),
+    },
+    {
+      id: 'cc-h2',
+      locationId: 'loc-cebu',
+      category: 'merchandise',
+      lines: [
+        { productId: 'shirt-l', expected: 60, counted: 60 },
+        { productId: 'jacket-m', expected: 25, counted: 25 },
+        { productId: 'doctor-token', expected: 50, counted: 52 },
+      ],
+      actor: 'liza.tan@mwell.com.ph',
+      createdAt: isoDaysAgo(now, 15, 15),
+    },
+  ];
+
+  const extraReceipts: Receipt[] = [
+    {
+      id: 'rcpt-h1',
+      supplierId: 'sup-tokens',
+      locationId: 'loc-wh',
+      lines: [{ productId: 'doctor-token', quantity: 150 }],
+      actor: 'marco.reyes@mwell.com.ph',
+      createdAt: isoDaysAgo(now, 21, 8, 30),
+    },
+    {
+      id: 'rcpt-h2',
+      supplierId: 'sup-apparel',
+      locationId: 'loc-wh',
+      lines: [
+        { productId: 'shirt-xl', quantity: 90 },
+        { productId: 'jacket-l', quantity: 60 },
+      ],
+      actor: 'marco.reyes@mwell.com.ph',
+      createdAt: isoDaysAgo(now, 7, 8, 30),
+    },
+  ];
+
+  // Upcoming event with reserved allocations so planning views have a future.
+  const upcomingEvent: WarehouseEvent = {
+    id: 'evt-cebu-mission',
+    name: 'Cebu Provincial Health Mission',
+    type: 'medical_mission',
+    siteLocationId: 'loc-cebu',
+    startDate: isoDaysAhead(now, 12),
+    endDate: isoDaysAhead(now, 14),
+  };
+  // Products chosen to avoid duplicating the base seed's reserved rows
+  // (doctor-token / shirt-l) — keeps status-filter UIs and tests unambiguous.
+  const upcomingAllocations: Allocation[] = [
+    { id: 'alloc-h1', eventId: 'evt-cebu-mission', productId: 'shirt-m', quantity: 80, status: 'reserved', promotional: true, createdAt: isoDaysAgo(now, 3, 10) },
+    { id: 'alloc-h2', eventId: 'evt-cebu-mission', productId: 'jacket-l', quantity: 40, status: 'reserved', promotional: true, createdAt: isoDaysAgo(now, 3, 10, 15) },
+    { id: 'alloc-h3', eventId: 'evt-cebu-mission', productId: 'ecg-ring-9', quantity: 4, status: 'reserved', createdAt: isoDaysAgo(now, 2, 9) },
+  ];
+
+  return {
+    movements: extraMovements,
+    returns: extraReturns,
+    cycleCounts: extraCycleCounts,
+    receipts: extraReceipts,
+    events: [upcomingEvent],
+    allocations: upcomingAllocations,
+  };
+}
+
 export function buildProfiles(): Profile[] {
   return profiles.map((p) => ({ ...p }));
 }
 
 export function buildSeed(): WarehouseData {
+  const history = buildActivityHistory(new Date());
   return {
     products,
     locations,
@@ -363,12 +601,12 @@ export function buildSeed(): WarehouseData {
     lots,
     units,
     stockLevels,
-    movements,
-    allocations,
-    events,
-    returns,
-    cycleCounts,
-    receipts,
+    movements: [...movements, ...history.movements],
+    allocations: [...allocations, ...history.allocations],
+    events: [...events, ...history.events],
+    returns: [...returns, ...history.returns],
+    cycleCounts: [...cycleCounts, ...history.cycleCounts],
+    receipts: [...receipts, ...history.receipts],
     purchaseOrders,
   };
 }

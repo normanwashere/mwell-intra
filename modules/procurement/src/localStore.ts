@@ -38,6 +38,7 @@ import {
   suggestSourcingMethod,
 } from './policy';
 import { applyReceipt, type ReceiptLineInput } from './receiving';
+import { buildProcurementSeed } from './seed';
 
 // ---------------------------------------------------------------------------
 // Namespaced storage keys
@@ -45,6 +46,7 @@ import { applyReceipt, type ReceiptLineInput } from './receiving';
 const REQ_KEY = 'intra.procurement.v2.requests';
 const PO_KEY = 'intra.procurement.v2.purchase_orders';
 const APPR_KEY = 'intra.procurement.v2.approvals';
+const SEED_KEY = 'intra.procurement.v2.seeded';
 const CHANGE_EVT = 'intra.procurement.change';
 
 function newId(prefix: string): string {
@@ -79,11 +81,39 @@ function safeWrite<T>(key: string, rows: T[]): void {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Demo seed — "Mwell operations, last 6 months" (see seed.ts)
+// ---------------------------------------------------------------------------
+
+/**
+ * Seed the demo dataset once per browser. Exported so the shell can call it
+ * on first load (badges light up before the module is ever opened). Existing
+ * user-created rows are preserved: the seed only prepends when the flag is
+ * absent AND the request store is empty.
+ */
+export function ensureProcurementSeed(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    if (window.localStorage.getItem(SEED_KEY)) return;
+    const { requests, purchaseOrders, approvals } = buildProcurementSeed(new Date());
+    const existingReqs = safeRead<ProcurementRequest>(REQ_KEY);
+    const existingPos = safeRead<PurchaseOrder>(PO_KEY);
+    const existingAppr = safeRead<ApprovalDecision>(APPR_KEY);
+    safeWrite(REQ_KEY, [...existingReqs, ...requests]);
+    safeWrite(PO_KEY, [...existingPos, ...purchaseOrders]);
+    safeWrite(APPR_KEY, [...existingAppr, ...approvals]);
+    window.localStorage.setItem(SEED_KEY, '1');
+  } catch {
+    /* storage disabled — demo simply starts empty */
+  }
+}
+
 function useTrackedRows<T>(key: string): [T[], (rows: T[]) => void, boolean] {
   const [rows, setRows] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    ensureProcurementSeed();
     setRows(safeRead<T>(key));
     setLoading(false);
     if (typeof window === 'undefined') return;
@@ -143,6 +173,33 @@ export const DEMO_VENDORS: ProcurementVendor[] = [
     legalName: 'MediConsult Advisory Partners',
     category: 'Consulting',
     accreditationStatus: 'submitted',
+  },
+  {
+    id: 'ven-techbridge',
+    legalName: 'TechBridge IT Solutions, Inc.',
+    category: 'IT & software',
+    accreditationStatus: 'approved',
+    accreditationExpiresAt: '2027-03-31',
+  },
+  {
+    id: 'ven-cornerstone',
+    legalName: 'Cornerstone Builders & Interiors Corp.',
+    category: 'Construction',
+    accreditationStatus: 'approved',
+    accreditationExpiresAt: '2026-12-31',
+  },
+  {
+    id: 'ven-caregrid',
+    legalName: 'CareGrid Staffing Solutions, Inc.',
+    category: 'Manpower',
+    accreditationStatus: 'under_review',
+  },
+  {
+    id: 'ven-eventworks',
+    legalName: 'EventWorks Productions, Inc.',
+    category: 'Events & activations',
+    accreditationStatus: 'approved',
+    accreditationExpiresAt: '2027-02-28',
   },
 ];
 

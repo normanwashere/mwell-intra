@@ -12,6 +12,7 @@ import { SessionProvider, type AuthConfig } from '@intra/auth';
 import { ToastProvider } from '@intra/ui';
 import { createSupabaseBrowserClient } from '@shell/lib/supabase/client';
 import { DEMO_PROFILES } from '@shell/lib/demoProfiles';
+import { DemoSeeder } from '@shell/components/DemoSeeder';
 
 // Prod-safety guard: if a production build somehow ships without Supabase env
 // (spec §9), we render a hard error instead of silently using demo profiles.
@@ -59,6 +60,7 @@ export function Providers({ children }: { children: ReactNode }) {
   return (
     <SerwistProvider swUrl="/serwist/sw.js">
       <SessionProvider config={config}>
+        <DemoSeeder />
         <ToastProvider>{children}</ToastProvider>
       </SessionProvider>
     </SerwistProvider>

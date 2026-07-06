@@ -11,6 +11,7 @@ import { Icon } from '@intra/ui';
 import { useSession } from '@intra/auth';
 import { MODULE_LIST, can } from '@intra/rbac';
 import { cx } from '@shell/lib/cx';
+import { resetDemoData } from '@shell/lib/demoData';
 
 function initials(nameOrEmail: string): string {
   const source = nameOrEmail.trim();
@@ -25,7 +26,7 @@ function initials(nameOrEmail: string): string {
 }
 
 export function UserMenu() {
-  const { profile, userRoles, signOut, loading } = useSession();
+  const { profile, userRoles, signOut, loading, mode } = useSession();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -132,11 +133,35 @@ export function UserMenu() {
             </Link>
           )}
 
+          {mode === 'memory' && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                if (
+                  window.confirm(
+                    'Reset all demo data? Every module goes back to the seeded dataset.',
+                  )
+                ) {
+                  setOpen(false);
+                  resetDemoData();
+                }
+              }}
+              className={cx('btn-ghost w-full justify-start', isAdmin ? 'mt-1' : 'mt-3')}
+            >
+              <Icon name="rotate" className="h-4 w-4" />
+              Reset demo data
+            </button>
+          )}
+
           <button
             type="button"
             role="menuitem"
             onClick={() => void handleSignOut()}
-            className={cx('btn-ghost w-full justify-start', isAdmin ? 'mt-1' : 'mt-3')}
+            className={cx(
+              'btn-ghost w-full justify-start',
+              isAdmin || mode === 'memory' ? 'mt-1' : 'mt-3',
+            )}
           >
             <Icon name="logout" className="h-4 w-4" />
             Sign out

@@ -27,6 +27,7 @@ import {
   migrateChecklist,
 } from './caseLogic';
 import { cleanupCases } from './hygiene';
+import { buildLegalSeed } from './seed';
 import type { VendorLoginAlias } from './vendorAccess';
 import type { TailoringProfile } from './requirements/policy';
 
@@ -37,7 +38,8 @@ const TIMELINE_KEY = 'intra.legal.v1.timeline';
 const INVITES_KEY = 'intra.legal.v1.invites';
 const SIGNED_KEY = 'intra.legal.v1.signed_instruments';
 const ALIASES_KEY = 'intra.legal.v1.vendor_aliases';
-const SEED_KEY = 'intra.legal.v1.seeded';
+const LEGACY_SEED_KEY = 'intra.legal.v1.seeded';
+const SEED_KEY = 'intra.legal.v2.seeded';
 const MIGRATED_KEY = 'intra.legal.v2.checklist_migrated';
 const CHANGE_EVT = 'intra.legal.change';
 
@@ -77,8 +79,9 @@ function safeWrite<T>(key: string, rows: T[]): void {
 }
 
 // ---------------------------------------------------------------------------
-// Seed — a demo case for Acme so the vendor portal + reviewer inbox have
-// something meaningful to walk through on first load.
+// Seed — six-case demo universe (see seed.ts). The legacy v1 single-case seed
+// is superseded: when a browser still carries the v1 flag but not v2, the
+// legal keys are wiped and reseeded so everyone lands on the same rich story.
 // ---------------------------------------------------------------------------
 const DEFAULT_REQUIREMENTS: Array<Omit<RequirementChecklistItem, 'id' | 'caseId' | 'documentIds'>> = [
   { requirement: 'SEC Registration', description: 'Latest SEC certificate of registration.', required: true, decision: 'pending' },
@@ -91,48 +94,42 @@ const DEFAULT_REQUIREMENTS: Array<Omit<RequirementChecklistItem, 'id' | 'caseId'
   { requirement: 'Sample Contract / MSA', description: 'Draft or executed master service agreement.', required: false, decision: 'pending' },
 ];
 
-function seedOnce(): void {
+/**
+ * Seed the demo dataset once per browser. Exported so the shell can call it
+ * on first load (badges light up before the module is ever opened).
+ */
+export function ensureLegalSeed(): void {
   if (typeof window === 'undefined') return;
-  if (window.localStorage.getItem(SEED_KEY)) return;
-  const caseId = newId('case');
-  const now = nowIso();
-  const kase: AccreditationCase = {
-    id: caseId,
-    vendorId: 'ven-acme',
-    vendorName: 'Acme Medical Supplies, Inc.',
-    status: 'submitted',
-    openedAt: now,
-    submittedAt: now,
-    category: 'Medical devices',
-  };
-  const items: RequirementChecklistItem[] = DEFAULT_REQUIREMENTS.map((r) => ({
-    ...r,
-    id: newId('rq'),
-    caseId,
-    documentIds: [],
-  }));
-  const timeline: CaseTimelineEntry[] = [
-    {
-      id: newId('tl'),
-      caseId,
-      at: now,
-      action: 'created',
-      actorEmail: 'legal@mwell.demo',
-      detail: 'Accreditation case opened from vendor onboarding invite.',
-    },
-    {
-      id: newId('tl'),
-      caseId,
-      at: now,
-      action: 'submitted',
-      actorEmail: 'vendor@acme.demo',
-      detail: 'Vendor submitted the intake for legal review.',
-    },
-  ];
-  safeWrite(CASES_KEY, [kase]);
-  safeWrite(CHECKLIST_KEY, items);
-  safeWrite(TIMELINE_KEY, timeline);
-  window.localStorage.setItem(SEED_KEY, '1');
+  try {
+    if (window.localStorage.getItem(SEED_KEY)) return;
+    const hadV1 = Boolean(window.localStorage.getItem(LEGACY_SEED_KEY));
+    if (hadV1) {
+      // v1-seeded browser: wipe the thin single-case dataset so the rich
+      // v2 story replaces it wholesale (demo store — no user data contract).
+      for (const key of [
+        CASES_KEY, CHECKLIST_KEY, DOCS_KEY, TIMELINE_KEY,
+        INVITES_KEY, SIGNED_KEY, ALIASES_KEY,
+      ]) {
+        window.localStorage.removeItem(key);
+      }
+      window.localStorage.removeItem(MIGRATED_KEY);
+    }
+    const seed = buildLegalSeed(new Date());
+    safeWrite(CASES_KEY, [...seed.cases, ...safeRead<AccreditationCase>(CASES_KEY)]);
+    safeWrite(CHECKLIST_KEY, [...seed.checklist, ...safeRead<RequirementChecklistItem>(CHECKLIST_KEY)]);
+    safeWrite(DOCS_KEY, [...seed.docs, ...safeRead<AccreditationDoc>(DOCS_KEY)]);
+    safeWrite(TIMELINE_KEY, [...seed.timeline, ...safeRead<CaseTimelineEntry>(TIMELINE_KEY)]);
+    safeWrite(INVITES_KEY, [...seed.invites, ...safeRead<VendorInvite>(INVITES_KEY)]);
+    safeWrite(SIGNED_KEY, [...seed.signedInstruments, ...safeRead<SignedInstrument>(SIGNED_KEY)]);
+    window.localStorage.setItem(SEED_KEY, '1');
+    window.localStorage.setItem(LEGACY_SEED_KEY, '1');
+  } catch {
+    /* storage disabled — demo simply starts empty */
+  }
+}
+
+function seedOnce(): void {
+  ensureLegalSeed();
 }
 
 /**

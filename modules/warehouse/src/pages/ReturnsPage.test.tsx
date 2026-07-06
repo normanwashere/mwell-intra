@@ -5,7 +5,9 @@ import { ReturnsPage } from './ReturnsPage';
 import { renderWithProviders } from '@/test/renderWithProviders';
 
 describe('ReturnsPage', () => {
-  it('records a customer return and shows it in the list', async () => {
+  // The seeded returns list is larger since the 90-day history landed; give
+  // the record-and-rerender flow more headroom than the 5s default.
+  it('records a customer return and shows it in the list', { timeout: 15_000 }, async () => {
     const user = userEvent.setup();
     renderWithProviders(<ReturnsPage />, { role: 'operations' });
     await screen.findByText(/recent returns/i);
