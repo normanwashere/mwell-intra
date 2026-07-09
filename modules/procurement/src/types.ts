@@ -326,6 +326,7 @@ export interface ProcurementVendor {
     | 'submitted'
     | 'under_review'
     | 'approved'
+    | 'provisional'
     | 'rejected'
     | 'expired'
     | 'renewal_due';

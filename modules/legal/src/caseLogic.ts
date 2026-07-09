@@ -9,6 +9,7 @@ import type {
   AccreditationCase,
   AccreditationDoc,
   CaseProgressSummary,
+  ChecklistDecision,
   InboxBucket,
   RequirementChecklistItem,
   RequirementDefinition,
@@ -142,6 +143,30 @@ export interface CaseEvidence {
   signed: readonly SignedInstrument[];
 }
 
+const CHECKLIST_DECISIONS = new Set<ChecklistDecision>([
+  'pending',
+  'approved',
+  'rejected',
+  'na',
+]);
+
+export function normalizeChecklistDecision(value: unknown): ChecklistDecision {
+  return CHECKLIST_DECISIONS.has(value as ChecklistDecision)
+    ? (value as ChecklistDecision)
+    : 'pending';
+}
+
+export function docsForChecklistItem(
+  item: RequirementChecklistItem,
+  evidence: CaseEvidence,
+): AccreditationDoc[] {
+  return evidence.docs.filter(
+    (d) =>
+      d.requirementId === item.id ||
+      (d.id ? item.documentIds.includes(d.id) : false),
+  );
+}
+
 /** Does this checklist item have vendor-side evidence attached? */
 export function hasEvidence(
   item: RequirementChecklistItem,
@@ -154,10 +179,41 @@ export function hasEvidence(
         (s.code === item.instrumentCode || s.code === item.code),
     );
   }
-  return evidence.docs.some(
-    (d) =>
-      (d.requirementId === item.id || item.documentIds.includes(d.id)) &&
-      d.status !== 'rejected',
+  return docsForChecklistItem(item, evidence).some((d) => d.status !== 'rejected');
+}
+
+export function currentEvidenceApproved(
+  item: RequirementChecklistItem,
+  evidence: CaseEvidence,
+): boolean {
+  if (item.instrument) return hasEvidence(item, evidence);
+  const chain = docVersionChain(
+    docsForChecklistItem(item, evidence).filter((d) => d.status !== 'expired'),
+  );
+  return chain?.current.status === 'approved';
+}
+
+export function reviewDecisionForItem(
+  item: RequirementChecklistItem,
+  evidence: CaseEvidence,
+): ChecklistDecision {
+  const decision = normalizeChecklistDecision(item.decision);
+  if (decision !== 'pending') return decision;
+  return hasEvidence(item, evidence) ? 'approved' : 'pending';
+}
+
+export function requiredItemsReadyForDecision(
+  items: readonly RequirementChecklistItem[],
+  evidence: CaseEvidence,
+): boolean {
+  const required = items.filter((i) => i.required);
+  return (
+    required.length > 0 &&
+    required.every((item) => {
+      const decision = normalizeChecklistDecision(item.decision);
+      if (decision === 'na') return true;
+      return decision === 'approved' && currentEvidenceApproved(item, evidence);
+    })
   );
 }
 
@@ -388,14 +444,19 @@ export function deriveInboxBucket(
     if (days !== null && days <= 30) return 'renewal_due';
     return null;
   }
+  // Provisional clearance is a decided, awardable state — surface renewal when
+  // its short window is nearly up, otherwise it only shows under "All".
+  if (kase.status === 'provisional') {
+    if (kase.expiresAt) {
+      const days = daysUntil(kase.expiresAt);
+      if (days !== null && days <= 30) return 'renewal_due';
+    }
+    return null;
+  }
   if (kase.status === 'approved' || kase.status === 'rejected') return null;
 
   const progress = computeCaseProgress(items, evidence);
-  const required = items.filter((i) => i.required);
-  const requiredDone =
-    required.length > 0 &&
-    required.every((i) => i.decision === 'approved' || i.decision === 'na');
-  if (requiredDone) return 'ready_for_decision';
+  if (requiredItemsReadyForDecision(items, evidence)) return 'ready_for_decision';
   if (kase.status === 'draft') return 'waiting_on_vendor';
   if (progress.awaitingReview.length > 0) return 'waiting_on_legal';
   return 'waiting_on_vendor';

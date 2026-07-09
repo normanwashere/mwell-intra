@@ -38,6 +38,7 @@ import {
   Card,
   DataTable,
   HeroChipButton,
+  HeroStat,
   Icon,
   InfoTip,
   ModuleHero,
@@ -71,15 +72,20 @@ import {
 import {
   computeCaseProgress,
   docVersionChain,
+  docsForChecklistItem,
   groupLabel,
   groupOrderIndex,
   isGroupSolved,
   itemExpiringSoon,
+  normalizeChecklistDecision,
+  requiredItemsReadyForDecision,
+  reviewDecisionForItem,
   sortChecklistRows,
 } from '../caseLogic';
 import {
   CASE_STATUS_DOT,
   CASE_STATUS_LABEL,
+  CASE_STATUS_TONE,
   formatDate,
   formatDateTime,
   timelineActionLabel,
@@ -170,7 +176,9 @@ export function CaseDetailPage() {
       .map(([key, rows]) => [key, sortChecklistRows(rows, evidence)] as const);
   }, [items, evidence]);
 
-  const [decisionOpen, setDecisionOpen] = useState<null | 'approved' | 'rejected'>(null);
+  const [decisionOpen, setDecisionOpen] = useState<
+    null | 'approved' | 'rejected' | 'provisional'
+  >(null);
   const [decisionNote, setDecisionNote] = useState('');
   const [decisionExpiry, setDecisionExpiry] = useState('');
   const [decisionScope, setDecisionScope] = useState('');
@@ -231,8 +239,7 @@ export function CaseDetailPage() {
     : CASE_STATUS_LABEL[effectiveStatus];
   const requiredItems = items.filter((i) => i.required);
   const requiredApproved = requiredItems.filter((i) => i.decision === 'approved').length;
-  const readyForDecision =
-    requiredItems.length > 0 && requiredApproved === requiredItems.length;
+  const readyForDecision = requiredItemsReadyForDecision(requiredItems, evidence);
   const outstandingCount = progress.outstanding.length;
   const awaitingReviewCount = progress.awaitingReview.length;
 
@@ -242,7 +249,8 @@ export function CaseDetailPage() {
       : kase.status === 'draft'
         ? 'Ready to submit'
         : 'Nothing owed'
-    : readyForDecision && kase.status === 'submitted'
+    : readyForDecision &&
+        (kase.status === 'submitted' || kase.status === 'under_review')
       ? 'Ready to decide'
       : awaitingReviewCount > 0
         ? `${awaitingReviewCount} to review`
@@ -262,30 +270,45 @@ export function CaseDetailPage() {
 
   function openReview(item: RequirementChecklistItem) {
     setReviewingItem(item);
-    setReviewDecision(item.decision === 'pending' ? 'approved' : item.decision);
+    setReviewDecision(reviewDecisionForItem(item, evidence));
     setReviewNote(item.reviewerNote ?? '');
   }
-  function submitReview() {
+  async function submitReview() {
     if (!reviewingItem) return;
-    const ok = review(reviewingItem.id, reviewDecision, {
-      email: profile?.email,
-      note: reviewNote,
-    });
-    if (ok) {
-      success(`Checklist item ${CHECKLIST_LABEL[reviewDecision].toLowerCase()}`);
+    const decision = normalizeChecklistDecision(reviewDecision);
+    try {
+      const ok = await review(reviewingItem.id, decision, {
+        email: profile?.email,
+        note: reviewNote,
+      });
+      if (!ok) {
+        error('Could not save the review.');
+        return;
+      }
+      if (decision === 'approved') {
+        const pendingDocs = docsForChecklistItem(reviewingItem, evidence).filter(
+          (doc) => doc.status === 'submitted',
+        );
+        await Promise.all(
+          pendingDocs.map((doc) =>
+            setDocStatus(doc.id, 'approved', profile?.email, reviewNote),
+          ),
+        );
+      }
+      success(`Checklist item ${CHECKLIST_LABEL[decision].toLowerCase()}`);
       setReviewingItem(null);
-    } else {
+    } catch {
       error('Could not save the review.');
     }
   }
 
-  function submitDecision() {
+  async function submitDecision() {
     if (!decisionOpen) return;
     if (!decisionSignature) {
       error('An electronic signature is required to record the decision.');
       return;
     }
-    const ok = decideCase(kase!.id, decisionOpen, {
+    const ok = await decideCase(kase!.id, decisionOpen, {
       note: decisionNote || undefined,
       scope: decisionScope || undefined,
       expiresAt: decisionExpiry || undefined,
@@ -293,7 +316,11 @@ export function CaseDetailPage() {
       signature: toCaseSignature(decisionSignature),
     });
     if (ok) {
-      success(`Accreditation ${decisionOpen}`);
+      success(
+        decisionOpen === 'provisional'
+          ? 'Temporary clearance granted'
+          : `Accreditation ${decisionOpen}`,
+      );
       setDecisionOpen(null);
       setDecisionSignature(null);
     } else {
@@ -301,12 +328,12 @@ export function CaseDetailPage() {
     }
   }
 
-  function confirmSubmit() {
+  async function confirmSubmit() {
     if (!submitSignature) {
       error('Sign the completeness attestation to submit.');
       return;
     }
-    const ok = submitCase(kase!.id, profile?.email, toCaseSignature(submitSignature));
+    const ok = await submitCase(kase!.id, profile?.email, toCaseSignature(submitSignature));
     if (ok) {
       success('Case submitted for legal review');
       setSubmitOpen(false);
@@ -316,8 +343,8 @@ export function CaseDetailPage() {
     }
   }
 
-  function handleReminder() {
-    const ok = sendReminder(kase!.id, profile?.email);
+  async function handleReminder() {
+    const ok = await sendReminder(kase!.id, profile?.email);
     if (ok) success(`Reminder sent to ${ok.contactEmail ?? ok.vendorName}`);
     else error('Could not record the reminder.');
   }
@@ -382,26 +409,16 @@ export function CaseDetailPage() {
             </HeroChipButton>
           }
           accessory={
-            <div className="flex flex-wrap items-end gap-6">
-              <div>
-                <p className="text-xs uppercase tracking-wide text-brand-100/70">Status</p>
-                <p className="mt-1">
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-0.5 text-xs font-semibold text-white">
-                    <span
-                      aria-hidden
-                      className={`inline-block h-1.5 w-1.5 rounded-full ${CASE_STATUS_DOT[effectiveStatus].replace('400', '300')}`}
-                    />
-                    {statusLabel}
-                  </span>
-                </p>
-              </div>
-              <div>
-                <p className="text-xs uppercase tracking-wide text-brand-100/70">Checklist</p>
-                <p className="tnum text-2xl font-extrabold">
+            <div className="flex flex-wrap items-end gap-3">
+              <HeroStat label="Status">
+                <Badge tone={CASE_STATUS_TONE[effectiveStatus]}>{statusLabel}</Badge>
+              </HeroStat>
+              <HeroStat label="Checklist" align="right">
+                <p className="tnum font-display text-2xl font-extrabold text-ink">
                   {requiredApproved}/{requiredItems.length}
-                  <span className="ml-1 text-sm font-medium text-brand-100/70">approved</span>
+                  <span className="ml-1 text-sm font-medium text-muted">approved</span>
                 </p>
-              </div>
+              </HeroStat>
             </div>
           }
         />
@@ -525,6 +542,59 @@ export function CaseDetailPage() {
           </Card>
         )}
 
+      {!isVendor &&
+        (kase.status === 'submitted' || kase.status === 'under_review') &&
+        canApprove && (
+          <Card className="space-y-3 sm:hidden">
+            <p className="text-xs font-semibold uppercase tracking-wide text-faint">
+              Legal decision
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setDecisionOpen('rejected');
+                  setDecisionNote('');
+                  setDecisionSignature(null);
+                }}
+                className="btn-outline"
+              >
+                Reject
+              </button>
+              {!readyForDecision && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDecisionOpen('provisional');
+                    setDecisionExpiry('');
+                    setDecisionScope(kase.category ?? '');
+                    setDecisionSignature(null);
+                  }}
+                  className="btn-ghost"
+                >
+                  <Icon name="rotate" className="h-4 w-4" />
+                  Temporary clearance
+                </button>
+              )}
+              {readyForDecision && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDecisionOpen('approved');
+                    setDecisionExpiry('');
+                    setDecisionScope(kase.category ?? '');
+                    setDecisionSignature(null);
+                  }}
+                  className="btn-primary"
+                >
+                  <Icon name="signature" className="h-4 w-4" />
+                  Approve accreditation
+                </button>
+              )}
+            </div>
+          </Card>
+        )}
+
       {/* Overall progress */}
       <Card>
         <div className="flex items-center justify-between gap-3">
@@ -555,8 +625,10 @@ export function CaseDetailPage() {
           title="Requirement checklist"
           subtitle={`${requiredApproved} of ${requiredItems.length} required approved · ${progress.expiringSoon} expiring soon`}
           action={
-            !isVendor && kase.status === 'submitted' && readyForDecision && canApprove ? (
-              <div className="flex gap-2">
+            !isVendor &&
+            (kase.status === 'submitted' || kase.status === 'under_review') &&
+            canApprove ? (
+              <div className="hidden flex-wrap gap-2 sm:flex">
                 <button
                   type="button"
                   onClick={() => {
@@ -568,19 +640,39 @@ export function CaseDetailPage() {
                 >
                   Reject
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDecisionOpen('approved');
-                    setDecisionExpiry('');
-                    setDecisionScope(kase.category ?? '');
-                    setDecisionSignature(null);
-                  }}
-                  className="btn-primary"
-                >
-                  <Icon name="signature" className="h-4 w-4" />
-                  Approve accreditation
-                </button>
+                {/* Temporary clearance is available before full readiness — it
+                    lets Procurement award under a time-limited, conditional
+                    clearance while the vendor finishes outstanding items. */}
+                {!readyForDecision && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDecisionOpen('provisional');
+                      setDecisionExpiry('');
+                      setDecisionScope(kase.category ?? '');
+                      setDecisionSignature(null);
+                    }}
+                    className="btn-ghost"
+                  >
+                    <Icon name="rotate" className="h-4 w-4" />
+                    Grant temporary clearance
+                  </button>
+                )}
+                {readyForDecision && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDecisionOpen('approved');
+                      setDecisionExpiry('');
+                      setDecisionScope(kase.category ?? '');
+                      setDecisionSignature(null);
+                    }}
+                    className="btn-primary"
+                  >
+                    <Icon name="signature" className="h-4 w-4" />
+                    Approve accreditation
+                  </button>
+                )}
               </div>
             ) : undefined
           }
@@ -929,15 +1021,24 @@ export function CaseDetailPage() {
         title={
           decisionOpen === 'approved'
             ? `Sign & approve — ${kase.vendorName}`
-            : `Sign & reject — ${kase.vendorName}`
+            : decisionOpen === 'provisional'
+              ? `Sign & grant temporary clearance — ${kase.vendorName}`
+              : `Sign & reject — ${kase.vendorName}`
         }
       >
         <div className="space-y-3 p-1">
-          {decisionOpen === 'approved' && (
+          {decisionOpen === 'provisional' && (
+            <p className="rounded-xl bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-200">
+              Temporary clearance lets Procurement award this vendor for a
+              limited window while outstanding requirements are finalized. It
+              is not full accreditation.
+            </p>
+          )}
+          {(decisionOpen === 'approved' || decisionOpen === 'provisional') && (
             <>
               <div>
                 <label htmlFor="scope" className="text-xs font-semibold uppercase tracking-wide text-faint">
-                  Scope of accreditation
+                  Scope of {decisionOpen === 'provisional' ? 'clearance' : 'accreditation'}
                 </label>
                 <input
                   id="scope"
@@ -959,7 +1060,9 @@ export function CaseDetailPage() {
                   className="input"
                 />
                 <p className="mt-1 text-xs text-muted">
-                  Defaults to 1 year from today if left blank.
+                  {decisionOpen === 'provisional'
+                    ? 'Defaults to 60 days from today if left blank.'
+                    : 'Defaults to 1 year from today if left blank.'}
                 </p>
               </div>
             </>
@@ -1003,13 +1106,18 @@ export function CaseDetailPage() {
               onClick={submitDecision}
               disabled={!decisionSignature}
               className={
-                decisionOpen === 'approved'
-                  ? 'btn-primary disabled:cursor-not-allowed disabled:opacity-60'
-                  : 'btn-outline text-rose-700 disabled:cursor-not-allowed disabled:opacity-60 dark:text-rose-300'
+                decisionOpen === 'rejected'
+                  ? 'btn-outline text-rose-700 disabled:cursor-not-allowed disabled:opacity-60 dark:text-rose-300'
+                  : 'btn-primary disabled:cursor-not-allowed disabled:opacity-60'
               }
             >
               <Icon name="signature" className="h-4 w-4" />
-              Sign & {decisionOpen === 'approved' ? 'approve' : 'reject'}
+              Sign &{' '}
+              {decisionOpen === 'approved'
+                ? 'approve'
+                : decisionOpen === 'provisional'
+                  ? 'grant clearance'
+                  : 'reject'}
             </button>
           </div>
         </div>

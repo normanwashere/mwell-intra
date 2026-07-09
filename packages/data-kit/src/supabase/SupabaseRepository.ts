@@ -791,9 +791,8 @@ export class SupabaseRepository implements WarehouseRepository {
       startDate: input.startDate,
       endDate: input.endDate,
     };
-    const { error } = await this.db.from('events').insert(eventToRow(event));
-    if (error) throw new Error(error.message);
-    return event;
+    const row = await this.callRpc('create_event', { event: eventToRow(event) });
+    return rowToEvent(row);
   }
 
   async cancelAllocation(input: CancelAllocationInput): Promise<Allocation> {
@@ -998,13 +997,10 @@ export class SupabaseRepository implements WarehouseRepository {
       zone: input.zone?.trim() || undefined,
       active: true,
     };
-    const { data, error } = await this.db
-      .from('storage_areas')
-      .insert(storageAreaToRow(area))
-      .select('*')
-      .single();
-    if (error) throw new Error(error.message);
-    return rowToStorageArea(data as never);
+    const row = await this.callRpc('create_storage_area', {
+      storage_area: storageAreaToRow(area),
+    });
+    return rowToStorageArea(row);
   }
 
   async updateStorageArea(input: UpdateStorageAreaInput): Promise<StorageArea> {
@@ -1015,14 +1011,11 @@ export class SupabaseRepository implements WarehouseRepository {
       zone: input.zone?.trim() || null,
     };
     if (input.active !== undefined) patch.active = input.active;
-    const { data, error } = await this.db
-      .from('storage_areas')
-      .update(patch)
-      .eq('id', input.storageAreaId)
-      .select('*')
-      .single();
-    if (error) throw new Error(error.message);
-    return rowToStorageArea(data as never);
+    const row = await this.callRpc('update_storage_area', {
+      storage_area_id: input.storageAreaId,
+      patch,
+    });
+    return rowToStorageArea(row);
   }
 
   async deleteStorageArea(input: { storageAreaId: string }): Promise<void> {

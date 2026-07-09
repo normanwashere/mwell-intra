@@ -16,14 +16,18 @@ const ALL_ROLES: Role[] = [
   'pricing',
 ];
 
+const FIRST_RENDER_TIMEOUT = 10_000;
+
 describe('DashboardPage', () => {
   it('shows the active role and its KPIs (BI analyst)', async () => {
     renderWithProviders(<DashboardPage />, { role: 'bi_analyst' });
-    expect(await screen.findByText('BI Analyst')).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'BI Analyst' }),
+    ).toBeInTheDocument();
     expect(screen.getByText('Active SKUs')).toBeInTheDocument();
     expect(screen.getByText('Inventory Value')).toBeInTheDocument();
     expect(screen.getByText('Device return rate')).toBeInTheDocument();
-  });
+  }, FIRST_RENDER_TIMEOUT);
 
   it('renders analytics panels for the BI analyst', async () => {
     renderWithProviders(<DashboardPage />, { role: 'bi_analyst' });

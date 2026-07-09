@@ -64,6 +64,7 @@ export const ACCREDITATION_LABEL: Record<
   submitted: 'Accreditation under review',
   under_review: 'Accreditation under review',
   approved: 'Accredited',
+  provisional: 'Provisional clearance',
   rejected: 'Accreditation rejected',
   expired: 'Accreditation expired',
   renewal_due: 'Accreditation renewal due',

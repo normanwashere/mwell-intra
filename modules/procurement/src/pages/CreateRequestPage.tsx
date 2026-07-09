@@ -295,6 +295,15 @@ export function CreateRequestPage() {
       error('Give the request a title, category, need description, and at least one line item.');
       return;
     }
+    // Explicit quantity guard — a line entered as 0 (or negative) must not
+    // silently coerce to 1 on save.
+    const invalidQtyLine = lines.find(
+      (l) => l.description.trim() && l.quantity.trim() !== '' && !(Number(l.quantity) >= 1),
+    );
+    if (invalidQtyLine) {
+      error('Each line quantity must be a whole number of at least 1.');
+      return;
+    }
     setSubmitting(true);
     try {
       const cleanLines = lines
@@ -322,7 +331,7 @@ export function CreateRequestPage() {
         compliance.directAwardReason = reason;
       }
 
-      const created = add({
+      const created = await add({
         title: title.trim(),
         description: description.trim() || undefined,
         department: department.trim() || undefined,
@@ -518,15 +527,15 @@ export function CreateRequestPage() {
                 </div>
 
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[560px] table-fixed text-sm">
+                  <table className="w-full min-w-[720px] table-fixed text-sm">
                     <thead className="text-left text-xs uppercase tracking-wide text-faint">
                       <tr>
                         <th className="w-2/5 py-2 pr-3">Description</th>
-                        <th className="w-16 py-2 pr-3">Qty</th>
-                        <th className="w-20 py-2 pr-3">UoM</th>
-                        <th className="w-24 py-2 pr-3">Unit ₱</th>
+                        <th className="w-24 py-2 pr-3">Qty</th>
+                        <th className="w-24 py-2 pr-3">UoM</th>
+                        <th className="w-28 py-2 pr-3">Unit ₱</th>
                         <th className="w-24 py-2 pr-3 text-right">Line ₱</th>
-                        <th className="w-8" aria-hidden />
+                        <th className="w-12" aria-hidden />
                       </tr>
                     </thead>
                     <tbody>
@@ -589,7 +598,7 @@ export function CreateRequestPage() {
                                 onClick={() => removeLine(l.key)}
                                 disabled={lines.length === 1}
                                 aria-label={`Remove line ${i + 1}`}
-                                className="grid h-8 w-8 place-items-center rounded-lg text-faint transition hover:bg-inset hover:text-rose-600 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-faint"
+                                className="grid h-11 w-11 place-items-center rounded-lg text-faint transition hover:bg-inset hover:text-rose-600 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-faint"
                               >
                                 <Icon name="x" className="h-4 w-4" />
                               </button>
@@ -994,7 +1003,7 @@ export function CreateRequestPage() {
           )}
 
           {/* Sticky wizard footer — Continue / Back / Save / Submit. */}
-          <div className="sticky bottom-0 z-10 -mx-1 flex flex-wrap items-center justify-between gap-3 border-t border-line bg-app/95 px-1 py-3 backdrop-blur">
+          <div className="sticky bottom-[calc(5.75rem+env(safe-area-inset-bottom))] z-10 -mx-1 flex flex-wrap items-center justify-between gap-3 border-t border-line bg-app/95 px-1 py-3 backdrop-blur md:bottom-0">
             {step > 1 ? (
               <button type="button" onClick={goBack} className="btn-ghost">
                 Back

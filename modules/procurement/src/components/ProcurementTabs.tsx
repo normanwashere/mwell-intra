@@ -57,7 +57,7 @@ export function ProcurementTabs({
             end={t.end}
             className={({ isActive }) =>
               [
-                'group inline-flex items-center gap-2 whitespace-nowrap rounded-t-lg px-3 py-2 text-sm font-semibold transition',
+                'group inline-flex min-h-11 items-center gap-2 whitespace-nowrap rounded-t-lg px-3 py-2.5 text-sm font-semibold transition',
                 isActive
                   ? 'border-b-2 border-brand-600 text-brand-700 dark:border-brand-300 dark:text-brand-300'
                   : 'border-b-2 border-transparent text-muted hover:border-line hover:text-ink',

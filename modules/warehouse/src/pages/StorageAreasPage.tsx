@@ -143,6 +143,7 @@ export function StorageAreasPage() {
     <div className="space-y-4">
       <PageHeader
         title="Storage areas"
+        icon="box"
         subtitle="Scannable bins, shelves & zones"
         action={
           <div className="flex gap-2">

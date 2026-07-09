@@ -52,7 +52,7 @@ export function Guard<M extends Module>({
   // getSession) render nothing rather than briefly flashing "Access denied".
   if (loading) return null;
   if (allowed) return <>{children}</>;
-  return <>{fallback ?? <AccessDenied />}</>;
+  return <>{fallback !== undefined ? fallback : <AccessDenied />}</>;
 }
 
 function AccessDenied() {

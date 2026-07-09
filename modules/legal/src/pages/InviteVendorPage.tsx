@@ -109,7 +109,7 @@ export function InviteVendorPage() {
     setStep((s) => (s < 3 ? ((s + 1) as 2 | 3) : s));
   }
 
-  function submit() {
+  async function submit() {
     if (!identityValid) {
       error('Company name and a valid contact email are required.');
       setStep(1);
@@ -117,7 +117,7 @@ export function InviteVendorPage() {
     }
     setBusy(true);
     try {
-      const inv = invite({
+      const inv = await invite({
         email: email.trim(),
         companyName: companyName.trim(),
         category: VENDOR_CATEGORY_LABEL[tailoring.category],
@@ -125,17 +125,20 @@ export function InviteVendorPage() {
         profile: tailoring,
         originCountry: originCountry.trim() || undefined,
       });
-      const kase = addCase(
-        `ven-${inv.id}`,
-        companyName.trim(),
-        VENDOR_CATEGORY_LABEL[tailoring.category],
-        session?.email,
-        {
-          profile: tailoring,
-          originCountry: originCountry.trim() || undefined,
-          contactEmail: email.trim(),
-        },
-      );
+      const kase =
+        inv.caseId
+          ? { id: inv.caseId }
+          : await addCase(
+              inv.vendorId ?? `ven-${inv.id}`,
+              companyName.trim(),
+              VENDOR_CATEGORY_LABEL[tailoring.category],
+              session?.email,
+              {
+                profile: tailoring,
+                originCountry: originCountry.trim() || undefined,
+                contactEmail: email.trim(),
+              },
+            );
       success(
         `Invite sent — ${tailored.length} tailored requirements opened for ${companyName.trim()}`,
       );
@@ -149,12 +152,13 @@ export function InviteVendorPage() {
 
   return (
     <Guard module="legal" cap="manage_checklist">
-      <div className="mx-auto max-w-2xl space-y-6">
+      <div className="mx-auto max-w-2xl space-y-4 sm:space-y-6">
         <ModuleHero
           eyebrow="Invite vendor"
           title="Onboard a new vendor"
           description="The accreditation checklist tailors itself from your answers."
           icon="building"
+          className="p-4 sm:p-6"
           action={
             <HeroChipButton href="/legal" icon="arrowRight">
               Back to cases
@@ -163,7 +167,7 @@ export function InviteVendorPage() {
         />
 
         {/* Compact stepper */}
-        <ol className="flex items-center gap-1.5" aria-label="Invite steps">
+        <ol className="hidden items-center gap-1.5 sm:flex" aria-label="Invite steps">
           {STEPS.map((s, i) => {
             const state =
               s.n === step ? 'current' : s.n < step ? 'done' : 'todo';
@@ -212,7 +216,7 @@ export function InviteVendorPage() {
             );
           })}
         </ol>
-        <p className="-mt-4 text-xs font-semibold text-brand-700 dark:text-brand-300 sm:hidden">
+        <p className="-mt-2 text-xs font-semibold text-brand-700 dark:text-brand-300 sm:hidden">
           Step {step} of 3 — {STEPS[step - 1]!.label}
         </p>
 
@@ -238,7 +242,7 @@ export function InviteVendorPage() {
                   required
                 />
               </Field>
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-2 gap-3 sm:gap-4">
                 <SelectField
                   id="jurisdiction"
                   label="Jurisdiction"
@@ -453,7 +457,7 @@ export function InviteVendorPage() {
           </div>
         )}
 
-        <div className="flex flex-wrap items-center justify-between gap-3 pb-2">
+        <div className="sticky bottom-[calc(5.75rem+env(safe-area-inset-bottom))] z-10 -mx-1 flex flex-wrap items-center justify-between gap-3 border-t border-line bg-app/95 px-1 py-3 backdrop-blur md:static md:mx-0 md:border-0 md:bg-transparent md:p-0 md:backdrop-blur-none">
           {step > 1 ? (
             <button
               type="button"

@@ -6,6 +6,7 @@
 
 import Link from 'next/link';
 import {
+  AnimatedNumber,
   Badge,
   Card,
   EmptyState,
@@ -13,10 +14,14 @@ import {
   Icon,
   InfoTip,
   ModuleHero,
+  StaggerGrid,
+  StaggerItem,
 } from '@intra/ui';
 import { useSession } from '@intra/auth';
 import { can } from '@intra/rbac';
 import {
+  ADMIN_NAV,
+  FINANCE_NAV,
   VENDOR_NAV,
   accessibleModules,
   type ModuleNav,
@@ -26,7 +31,7 @@ import { cx } from '@shell/lib/cx';
 
 const TONE_CLASS: Record<ModuleNav['tone'], string> = {
   brand: 'bg-brand-500/10 text-brand-700 dark:text-brand-300',
-  accent: 'bg-cyan-500/10 text-cyan-800 dark:text-cyan-300',
+  accent: 'bg-accent/15 text-accent',
   cyan: 'bg-cyan-500/10 text-cyan-800 dark:text-cyan-300',
   amber: 'bg-amber-500/15 text-amber-800 dark:text-amber-300',
   rose: 'bg-rose-500/15 text-rose-800 dark:text-rose-300',
@@ -41,14 +46,6 @@ interface CardModel {
   icon: ModuleNav['icon'];
   tone: ModuleNav['tone'];
 }
-
-const ADMIN_CARD: CardModel = {
-  href: '/admin/users',
-  label: 'Admin — Users & Roles',
-  description: 'Provision profiles, assign scoped module roles, review audit trail.',
-  icon: 'list',
-  tone: 'rose',
-};
 
 export default function DashboardPage() {
   const { profile, userRoles, loading, mode } = useSession();
@@ -100,7 +97,8 @@ export default function DashboardPage() {
     tone: m.tone,
   }));
   if (profile.kind === 'vendor') cards.push({ ...VENDOR_NAV });
-  if (can(userRoles, 'core', 'manage_rbac')) cards.push(ADMIN_CARD);
+  if (can(userRoles, 'warehouse', 'view_finance')) cards.push({ ...FINANCE_NAV });
+  if (can(userRoles, 'core', 'manage_rbac')) cards.push({ ...ADMIN_NAV });
 
   const firstName = profile.name?.split(/\s+/)[0] ?? 'there';
 
@@ -127,12 +125,12 @@ export default function DashboardPage() {
         }
         accessory={
           <div>
-            <p className="text-xs uppercase tracking-wide text-brand-100/70">
+            <p className="text-caption font-semibold uppercase tracking-wide text-faint">
               Access
             </p>
-            <p className="tnum text-2xl font-extrabold">
-              {cards.length}
-              <span className="ml-1 text-sm font-medium text-brand-100/70">
+            <p className="tnum font-display text-2xl font-extrabold text-ink">
+              <AnimatedNumber value={cards.length} />
+              <span className="ml-1 text-sm font-medium text-muted">
                 {cards.length === 1 ? 'module' : 'modules'}
               </span>
             </p>
@@ -183,11 +181,9 @@ export default function DashboardPage() {
           }
         />
       ) : (
-        <div
+        <StaggerGrid
           className={cx(
-            'stagger grid gap-4',
-            // When a user has 1 card, don't leave it stranded in the top-left of
-            // a 3-column grid — center a single tile with a bounded width.
+            'grid gap-4',
             cards.length === 1
               ? 'mx-auto max-w-md grid-cols-1'
               : cards.length === 2
@@ -198,40 +194,42 @@ export default function DashboardPage() {
           {cards.map((c) => {
             const badge = badges[c.href];
             return (
-              <Link key={c.href} href={c.href} className="block">
-                <Card interactive className="group flex h-full flex-col gap-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <span
-                      className={cx(
-                        'grid h-11 w-11 place-items-center rounded-xl',
-                        TONE_CLASS[c.tone],
-                      )}
-                    >
-                      <Icon name={c.icon} />
-                    </span>
-                    {badge && (
-                      <span className="chip bg-amber-500/15 font-semibold text-amber-800 dark:text-amber-300">
-                        {badge.label}
+              <StaggerItem key={c.href}>
+                <Link href={c.href} className="block">
+                  <Card interactive className="group flex h-full flex-col gap-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <span
+                        className={cx(
+                          'grid h-11 w-11 place-items-center rounded-xl',
+                          TONE_CLASS[c.tone],
+                        )}
+                      >
+                        <Icon name={c.icon} />
                       </span>
-                    )}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <h2 className="font-display text-base font-bold text-ink">
-                        {c.label}
-                      </h2>
-                      <Icon
-                        name="arrowRight"
-                        className="h-4 w-4 text-faint transition group-hover:translate-x-0.5 group-hover:text-brand-600 dark:group-hover:text-brand-300"
-                      />
+                      {badge && (
+                        <span className="chip bg-amber-500/15 font-semibold text-amber-800 dark:text-amber-300">
+                          {badge.label}
+                        </span>
+                      )}
                     </div>
-                    <p className="mt-0.5 text-sm text-muted">{c.description}</p>
-                  </div>
-                </Card>
-              </Link>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <h2 className="font-display text-base font-bold text-ink">
+                          {c.label}
+                        </h2>
+                        <Icon
+                          name="arrowRight"
+                          className="h-4 w-4 text-faint transition group-hover:translate-x-0.5 group-hover:text-brand-600 dark:group-hover:text-brand-300"
+                        />
+                      </div>
+                      <p className="mt-0.5 text-sm text-muted">{c.description}</p>
+                    </div>
+                  </Card>
+                </Link>
+              </StaggerItem>
             );
           })}
-        </div>
+        </StaggerGrid>
       )}
     </div>
   );

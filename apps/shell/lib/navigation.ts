@@ -15,6 +15,8 @@ export interface ModuleNav {
   readonly tone: Tone;
 }
 
+export type ShellNavItem = Omit<ModuleNav, 'module'>;
+
 /** Internal, employee-facing module routes (in nav order). */
 export const MODULE_NAV: readonly ModuleNav[] = [
   {
@@ -50,7 +52,25 @@ export const VENDOR_NAV = {
   description: 'Submit accreditation & documents for your organization.',
   icon: 'building',
   tone: 'emerald',
-} as const satisfies { href: string; label: string; description: string; icon: IconName; tone: Tone };
+} as const satisfies ShellNavItem;
+
+/** Cross-module finance landing, hosted by Warehouse until Finance has a shell module. */
+export const FINANCE_NAV = {
+  href: '/warehouse/finance',
+  label: 'Finance',
+  description: 'Inventory valuation, costing, reconciliation & asset register.',
+  icon: 'coins',
+  tone: 'emerald',
+} as const satisfies ShellNavItem;
+
+/** Platform administration route, visible to users with core:manage_rbac. */
+export const ADMIN_NAV = {
+  href: '/admin/users',
+  label: 'Admin — Users & Roles',
+  description: 'Provision profiles, assign scoped module roles, review audit trail.',
+  icon: 'list',
+  tone: 'rose',
+} as const satisfies ShellNavItem;
 
 /** Does the user hold at least one role in `module`? */
 export function hasModuleAccess(

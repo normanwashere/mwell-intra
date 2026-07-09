@@ -91,8 +91,20 @@ export class InMemoryRepository implements WarehouseRepository {
     if (!this.storage) return;
     try {
       this.storage.setItem(STORAGE_KEY, JSON.stringify(this.data));
-    } catch {
-      /* ignore quota / serialization errors in demo mode */
+    } catch (err) {
+      // Surface quota failures so a large evidence photo can't silently drop a
+      // receipt/movement on reload.
+      if (
+        typeof window !== 'undefined' &&
+        err instanceof DOMException &&
+        (err.name === 'QuotaExceededError' ||
+          err.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+          err.code === 22)
+      ) {
+        window.dispatchEvent(
+          new CustomEvent('intra:storage-full', { detail: { key: STORAGE_KEY } }),
+        );
+      }
     }
   }
 

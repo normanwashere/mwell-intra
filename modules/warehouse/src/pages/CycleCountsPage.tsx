@@ -128,6 +128,7 @@ export function CycleCountsPage() {
     <div className="space-y-4">
       <PageHeader
         title="Cycle Counts"
+        icon="clipboard"
         subtitle="Count by category & reconcile variances"
       />
 
@@ -422,7 +423,7 @@ export function CycleCountsPage() {
         </ul>
       </Card>
 
-      <div className="sticky bottom-36 z-20 space-y-2 md:bottom-4">
+      <div className="space-y-2">
         {confirmUncounted && (
           <div
             role="alertdialog"

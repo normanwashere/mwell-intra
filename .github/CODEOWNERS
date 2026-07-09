@@ -1,0 +1,13 @@
+# Launch-critical surfaces require explicit review before merge.
+/.github/workflows/ @mwell-platform
+/apps/shell/lib/supabase/ @mwell-platform
+/apps/shell/proxy.ts @mwell-platform
+/packages/auth/ @mwell-platform
+/packages/rbac/ @mwell-platform
+/packages/core-data/ @mwell-platform
+/packages/data-kit/ @mwell-platform
+/modules/legal/ @mwell-legal @mwell-platform
+/modules/procurement/ @mwell-procurement @mwell-platform
+/modules/warehouse/ @mwell-warehouse @mwell-platform
+/supabase/migrations/ @mwell-platform
+/supabase/tests/ @mwell-platform

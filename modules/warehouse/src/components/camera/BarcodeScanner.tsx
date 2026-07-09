@@ -115,10 +115,13 @@ export function BarcodeScanner({
         </p>
       )}
 
-      <form onSubmit={submitManual} className="flex gap-2">
+      <form
+        onSubmit={submitManual}
+        className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-2"
+      >
         <input
-          className="input"
-          placeholder="Or enter barcode / serial manually"
+          className="input min-w-0"
+          placeholder="Barcode / serial"
           aria-label="Enter barcode manually"
           value={manual}
           onChange={(e) => setManual(e.target.value)}

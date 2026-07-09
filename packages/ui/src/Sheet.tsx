@@ -1,9 +1,17 @@
 'use client';
 
+// Sheet v2 — Radix Dialog + gesture dismiss. Bottom sheets get a drag handle
+// and can be flicked/dragged down to close (mirrors native mobile sheets);
+// pointer-based drag works with mouse too. Falls back to the plain CSS
+// animation path when reduced motion is preferred.
+
 import * as Dialog from '@radix-ui/react-dialog';
 import { clsx } from 'clsx';
-import type { ReactNode } from 'react';
+import { useRef, type ReactNode } from 'react';
+import { useDragControls, useReducedMotion, type PanInfo } from 'framer-motion';
+import * as m from 'framer-motion/m';
 import { Icon } from './Icon';
+import { SPRING_GENTLE } from './motion/tokens';
 
 type SheetSide = 'bottom' | 'right' | 'center';
 
@@ -42,6 +50,63 @@ export function Sheet({
   footer,
   trigger,
 }: SheetProps) {
+  const reduced = useReducedMotion();
+  const dragging = useRef(false);
+  const dragControls = useDragControls();
+  const draggable = side === 'bottom' && !reduced;
+
+  const onDragEnd = (_: unknown, info: PanInfo) => {
+    dragging.current = false;
+    // Dismiss on a decisive flick OR when dragged past a third of the sheet.
+    if (info.velocity.y > 500 || info.offset.y > 140) {
+      onOpenChange(false);
+    }
+  };
+
+  const body = (
+    <>
+      {side === 'bottom' && (
+        <div
+          aria-hidden
+          onPointerDown={
+            draggable ? (e) => dragControls.start(e) : undefined
+          }
+          className={clsx(
+            // Generous hit area around the visual handle for the drag gesture.
+            'shrink-0 pb-1 pt-2.5',
+            draggable && 'cursor-grab touch-none active:cursor-grabbing',
+          )}
+        >
+          <div className="mx-auto h-1.5 w-10 rounded-full bg-line" />
+        </div>
+      )}
+      <div className="flex items-start justify-between gap-3 px-5 pb-3 pt-1.5">
+        <div className="min-w-0">
+          <Dialog.Title className="font-display text-lg font-bold text-ink">
+            {title}
+          </Dialog.Title>
+          {description && (
+            <Dialog.Description className="mt-0.5 text-sm text-muted">
+              {description}
+            </Dialog.Description>
+          )}
+        </div>
+        <Dialog.Close
+          className="grid min-h-11 min-w-11 shrink-0 place-items-center rounded-full bg-inset text-muted transition hover:bg-line hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+          aria-label="Close"
+        >
+          <Icon name="x" />
+        </Dialog.Close>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5">{children}</div>
+      {footer && (
+        <div className="relative z-10 shrink-0 border-t border-line bg-surface px-5 py-3">
+          {footer}
+        </div>
+      )}
+    </>
+  );
+
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       {trigger && <Dialog.Trigger asChild>{trigger}</Dialog.Trigger>}
@@ -50,33 +115,26 @@ export function Sheet({
         <Dialog.Content
           className={clsx(CONTENT_CLASS[side])}
           {...(description ? {} : { 'aria-describedby': undefined })}
+          asChild={draggable}
         >
-          {side === 'bottom' && (
-            <div className="mx-auto mt-2.5 h-1.5 w-10 shrink-0 rounded-full bg-line" />
-          )}
-          <div className="flex items-start justify-between gap-3 px-5 pb-3 pt-4">
-            <div className="min-w-0">
-              <Dialog.Title className="font-display text-lg font-bold text-ink">
-                {title}
-              </Dialog.Title>
-              {description && (
-                <Dialog.Description className="mt-0.5 text-sm text-muted">
-                  {description}
-                </Dialog.Description>
-              )}
-            </div>
-            <Dialog.Close
-              className="grid min-h-11 min-w-11 shrink-0 place-items-center rounded-full bg-inset text-muted transition hover:bg-line hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
-              aria-label="Close"
+          {draggable ? (
+            <m.div
+              drag="y"
+              dragControls={dragControls}
+              dragListener={false}
+              dragConstraints={{ top: 0, bottom: 0 }}
+              dragElastic={{ top: 0, bottom: 0.6 }}
+              dragMomentum={false}
+              onDragStart={() => {
+                dragging.current = true;
+              }}
+              onDragEnd={onDragEnd}
+              transition={SPRING_GENTLE}
             >
-              <Icon name="x" />
-            </Dialog.Close>
-          </div>
-          <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5">{children}</div>
-          {footer && (
-            <div className="relative z-10 shrink-0 border-t border-line bg-surface px-5 py-3">
-              {footer}
-            </div>
+              {body}
+            </m.div>
+          ) : (
+            body
           )}
         </Dialog.Content>
       </Dialog.Portal>

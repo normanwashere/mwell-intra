@@ -75,6 +75,7 @@ export function SuppliersPage() {
     <div className="space-y-4">
       <PageHeader
         title="Suppliers"
+        icon="building"
         subtitle="Supplier information & lead times"
         action={
           <button type="button" className="btn-primary btn-sm" onClick={openAdd}>

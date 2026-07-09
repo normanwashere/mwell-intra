@@ -17,6 +17,7 @@ export type CaseStatus =
   | 'submitted'
   | 'under_review'
   | 'approved'
+  | 'provisional'
   | 'rejected'
   | 'expired'
   | 'renewal_due';
@@ -308,8 +309,10 @@ export interface AccreditationDoc {
   filename: string;
   mimeType: string;
   sizeBytes: number;
-  /** For the demo we inline base64. Live version stores a Storage `path`. */
+  /** Demo/local preview URL. Live mode stores the object in private Storage. */
   dataUrl?: string;
+  /** Private `documents` bucket object path used by live Supabase mode. */
+  storagePath?: string;
   status: DocumentStatus;
   version: number;
   uploadedAt: string;
@@ -355,6 +358,10 @@ export interface VendorInvite {
   contractType?: ContractType;
   expectedAnnualSpend?: SpendBand;
   handlesPersonalData?: boolean;
+  /** Live Supabase invite response links directly to the opened case. */
+  caseId?: string;
+  /** Live Supabase invite response links to the created core vendor. */
+  vendorId?: string;
 }
 
 // ---------------------------------------------------------------------------

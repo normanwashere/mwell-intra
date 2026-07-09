@@ -178,6 +178,7 @@ export function PurchaseOrdersPage() {
     <div className="space-y-4">
       <PageHeader
         title="Purchase Orders"
+        icon="cart"
         subtitle={canManagePOs ? 'Supplier sourcing & receiving' : 'Receive incoming supplier orders'}
         action={
           canManagePOs ? (

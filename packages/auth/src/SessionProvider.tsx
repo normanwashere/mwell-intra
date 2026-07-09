@@ -16,7 +16,7 @@ import {
   useState,
 } from 'react';
 import type { ReactNode } from 'react';
-import type { SupabaseClient, User } from '@supabase/supabase-js';
+import type { Session, SupabaseClient, User } from '@supabase/supabase-js';
 import type { UserRoles } from '@intra/rbac';
 import { parseUserRolesFromClaims, profileFromUser } from './claims';
 import type {
@@ -26,15 +26,17 @@ import type {
   SessionValue,
 } from './contracts';
 
+type SupabaseAuthClient = SupabaseClient<Record<string, unknown>, string>;
+
 /** Config for the live JWT contract. The client is injected by the caller. */
 export interface SupabaseAuthConfig {
   readonly mode: 'supabase';
   /**
    * An already-constructed Supabase client (browser/SSR-appropriate). Schema is
-   * intentionally unconstrained (`<any, any>`) so callers may pin any DB schema
-   * (e.g. `core`); auth only uses the schema-independent `.auth` surface.
+   * intentionally unconstrained so callers may pin any DB schema (e.g. `core`);
+   * auth only uses the schema-independent `.auth` surface.
    */
-  readonly client: SupabaseClient<any, any>;
+  readonly client: SupabaseAuthClient;
   /** Path Supabase redirects to after a reset email (default `/reset-password`). */
   readonly resetRedirectPath?: string;
 }
@@ -61,7 +63,7 @@ export function SessionProvider({
   config: AuthConfig;
 }) {
   const mode: AuthMode = config.mode;
-  const client: SupabaseClient<any, any> | null =
+  const client: SupabaseAuthClient | null =
     config.mode === 'supabase' ? config.client : null;
   const memoryProfiles = useMemo<MemoryProfile[]>(
     () => (config.mode === 'memory' ? [...config.profiles] : []),
@@ -132,23 +134,39 @@ export function SessionProvider({
     if (!client) return;
     let active = true;
 
+    const verifyAndApplyUser = async (session: Session | null) => {
+      if (!session) {
+        applyUser(null);
+        return;
+      }
+      try {
+        const { data, error } = await client.auth.getUser();
+        if (error) throw error;
+        applyUser(data.user ?? null);
+      } catch {
+        applyUser(null);
+      }
+    };
+
     client.auth
       .getSession()
       .then(({ data }) => {
         if (!active) return;
-        applyUser(data.session?.user ?? null);
-        setLoading(false);
+        return verifyAndApplyUser(data.session ?? null);
       })
       .catch(() => {
         // Couldn't confirm a live session — treat as signed out (least privilege).
         if (!active) return;
         applyUser(null);
+      })
+      .finally(() => {
+        if (!active) return;
         setLoading(false);
       });
 
     const { data: sub } = client.auth.onAuthStateChange((_event, session) => {
       if (!active) return;
-      applyUser(session?.user ?? null);
+      void verifyAndApplyUser(session);
     });
 
     return () => {
@@ -169,7 +187,7 @@ export function SessionProvider({
         );
         if (!matched) {
           setAuthError('No demo profile matches that email.');
-          return;
+          return false;
         }
         setProfile({
           id: matched.id,
@@ -191,21 +209,30 @@ export function SessionProvider({
             /* storage quota / disabled — best effort */
           }
         }
-        return;
+        return true;
       }
       setSigningIn(true);
       try {
-        const { data, error } = await client.auth.signInWithPassword({
+        const { error } = await client.auth.signInWithPassword({
           email: email.trim(),
           password,
         });
         if (error) throw error;
-        applyUser(data.user ?? null);
+        const { data: verified, error: verifyError } =
+          await client.auth.getUser();
+        if (verifyError) throw verifyError;
+        const user = verified.user ?? null;
+        if (!user) {
+          throw new Error('Sign-in succeeded, but no session was restored.');
+        }
+        applyUser(user);
+        return true;
       } catch (e) {
         applyUser(null);
         setAuthError(
           e instanceof Error ? e.message : 'Sign-in failed. Please try again.',
         );
+        return false;
       } finally {
         setSigningIn(false);
       }
@@ -273,6 +300,7 @@ export function SessionProvider({
       profile,
       userRoles,
       mode,
+      supabaseClient: client,
       loading,
       signingIn,
       authError,

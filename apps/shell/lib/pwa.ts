@@ -1,5 +1,5 @@
 /** Brand theme color used by the web app manifest and PWA chrome. */
-export const PWA_THEME_COLOR = '#0B4DA2';
+export const PWA_THEME_COLOR = '#004f9d';
 
 /**
  * Install/update banner UX is handled inside the Warehouse module by

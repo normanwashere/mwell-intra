@@ -20,10 +20,13 @@ import {
   DataTable,
   EmptyState,
   Icon,
+  HeroStat,
   InfoTip,
   ModuleHero,
   SectionTitle,
   StatCard,
+  StaggerGrid,
+  StaggerItem,
   type Column,
 } from '@intra/ui';
 import { Guard, useSession } from '@intra/auth';
@@ -206,47 +209,71 @@ export function AccreditationCasesPage() {
         title={firstName}
         icon="clipboard"
         accessory={
-          <div>
-            <p className="text-xs uppercase tracking-wide text-brand-100/70">Waiting on you</p>
-            <p className="tnum text-2xl font-extrabold">{waitingOnYou}</p>
-          </div>
+          <HeroStat label="Waiting on you" align="right">
+            <p className="tnum font-display text-2xl font-extrabold text-ink">{waitingOnYou}</p>
+          </HeroStat>
         }
       />
 
-      <div className="stagger grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard
-          label="Waiting on vendor"
-          value={bucketCounts.waiting_on_vendor}
-          icon="building"
-          tone="slate"
-          hint="Docs / signatures outstanding"
-          onClick={() => applyFilter('waiting_on_vendor')}
-        />
-        <StatCard
-          label="Waiting on Legal"
-          value={bucketCounts.waiting_on_legal}
-          icon="rotate"
-          tone="amber"
-          hint="Evidence needs your review"
-          onClick={() => applyFilter('waiting_on_legal')}
-        />
-        <StatCard
-          label="Ready for decision"
-          value={bucketCounts.ready_for_decision}
-          icon="signature"
-          tone="emerald"
-          hint="All required items approved"
-          onClick={() => applyFilter('ready_for_decision')}
-        />
-        <StatCard
-          label="Renewals"
-          value={bucketCounts.renewal_due}
-          icon="alert"
-          tone="rose"
-          hint="Expiring within 30 days"
-          onClick={() => applyFilter('renewal_due')}
-        />
-      </div>
+      <StaggerGrid className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {(
+          [
+            {
+              key: 'waiting_on_vendor' as const,
+              label: 'Waiting on vendor',
+              value: bucketCounts.waiting_on_vendor,
+              icon: 'building' as const,
+              tone: 'slate' as const,
+              hint: 'Docs / signatures outstanding',
+            },
+            {
+              key: 'waiting_on_legal' as const,
+              label: 'Waiting on Legal',
+              value: bucketCounts.waiting_on_legal,
+              icon: 'rotate' as const,
+              tone: 'amber' as const,
+              hint: 'Evidence needs your review',
+            },
+            {
+              key: 'ready_for_decision' as const,
+              label: 'Ready for decision',
+              value: bucketCounts.ready_for_decision,
+              icon: 'signature' as const,
+              tone: 'emerald' as const,
+              hint: 'All required items approved',
+            },
+            {
+              key: 'renewal_due' as const,
+              label: 'Renewals',
+              value: bucketCounts.renewal_due,
+              icon: 'alert' as const,
+              tone: 'rose' as const,
+              hint: 'Expiring within 30 days',
+            },
+          ] as const
+        ).map((c) => {
+          const active = filter === c.key;
+          return (
+            <StaggerItem
+              key={c.key}
+              className={
+                active
+                  ? 'rounded-2xl ring-2 ring-brand-500 ring-offset-2 ring-offset-app'
+                  : undefined
+              }
+            >
+              <StatCard
+                label={c.label}
+                value={c.value}
+                icon={c.icon}
+                tone={c.tone}
+                hint={active ? 'Showing below' : c.hint}
+                onClick={() => applyFilter(c.key)}
+              />
+            </StaggerItem>
+          );
+        })}
+      </StaggerGrid>
 
       <div>
         <SectionTitle
@@ -320,6 +347,7 @@ const VENDOR_ACTIVE_PRIORITY: Record<CaseStatus, number> = {
   submitted: 1,
   under_review: 1,
   renewal_due: 2,
+  provisional: 2,
   approved: 3,
   rejected: 4,
   expired: 4,

@@ -13,6 +13,7 @@ import {
   Card,
   DataTable,
   HeroChipButton,
+  HeroStat,
   Icon,
   InfoTip,
   ModuleHero,
@@ -35,10 +36,12 @@ import {
 } from '../localStore';
 import {
   categoryMeta,
+  evaluateSubmitReadiness,
   minimumQuotes,
   requiredDocumentsStatus,
   sourcingMethodLabel,
   tierLabel,
+  type SubmitReadiness,
 } from '../policy';
 import {
   attachmentKindLabel,
@@ -48,15 +51,28 @@ import {
   stepStatusLabel,
 } from '../labels';
 
-// Bright dots for status pills placed on the navy hero (badges with tinted
-// backgrounds look faded against the gradient; solid dots read cleanly).
-const STATUS_DOT: Record<RequestStatus, string> = {
-  draft: 'bg-slate-300',
-  submitted: 'bg-cyan-300',
-  under_review: 'bg-amber-300',
-  approved: 'bg-emerald-300',
-  rejected: 'bg-rose-300',
-  cancelled: 'bg-slate-400',
+/** Compose a blocking message from an unmet submit-readiness result. */
+function readinessMessage(r: SubmitReadiness): string {
+  const parts: string[] = [];
+  if (r.missingDocs.length > 0) {
+    parts.push(`attach ${r.missingDocs.join(', ')}`);
+  }
+  if (r.quoteShortfall > 0) {
+    parts.push(
+      `add ${r.quoteShortfall} more comparable quote${r.quoteShortfall === 1 ? '' : 's'}`,
+    );
+  }
+  return `Can't submit yet — ${parts.join('; ')}.`;
+}
+
+// Status tones for badges on the porcelain hero surface.
+const STATUS_TONE: Record<RequestStatus, 'slate' | 'cyan' | 'amber' | 'emerald' | 'rose'> = {
+  draft: 'slate',
+  submitted: 'cyan',
+  under_review: 'amber',
+  approved: 'emerald',
+  rejected: 'rose',
+  cancelled: 'slate',
 };
 
 const DIRECT_AWARD_REASON_LABEL: Record<string, string> = {
@@ -104,10 +120,15 @@ export function RequestDetailPage() {
   useEffect(() => {
     if (!req) return;
     if (searchParams.get('submit') === '1' && req.status === 'draft') {
-      const ok = submit(req.id);
-      if (ok) {
-        success('Request submitted for approval');
-      }
+      void (async () => {
+        const readiness = evaluateSubmitReadiness(req);
+        if (!readiness.ok) {
+          error(readinessMessage(readiness));
+        } else {
+          const ok = await submit(req.id);
+          if (ok) success('Request submitted for approval');
+        }
+      })();
       searchParams.delete('submit');
       setSearchParams(searchParams, { replace: true });
     }
@@ -199,23 +220,28 @@ export function RequestDetailPage() {
   const isRequester = profile?.email && req.requesterEmail === profile.email;
   const cat = categoryMeta(req.category);
 
-  function handleSubmit() {
+  async function handleSubmit() {
     if (!req) return;
-    const ok = submit(req.id);
+    const readiness = evaluateSubmitReadiness(req);
+    if (!readiness.ok) {
+      error(readinessMessage(readiness));
+      return;
+    }
+    const ok = await submit(req.id);
     if (ok) success('Request submitted for approval');
     else error('Could not submit — try again.');
   }
-  function handleCancel() {
+  async function handleCancel() {
     if (!req) return;
-    const ok = cancel(req.id);
+    const ok = await cancel(req.id);
     if (ok) success('Request cancelled');
   }
-  function handleAuthorPO() {
+  async function handleAuthorPO() {
     if (!req || !req.vendorId || !req.vendorName) {
       error('Assign a vendor to this request before authoring a PO.');
       return;
     }
-    const po = addPO({
+    const po = await addPO({
       requestId: req.id,
       vendorId: req.vendorId,
       vendorName: req.vendorName,
@@ -274,27 +300,15 @@ export function RequestDetailPage() {
           </HeroChipButton>
         }
         accessory={
-          <div className="flex flex-wrap items-end gap-6">
-            <div>
-              <p className="text-xs uppercase tracking-wide text-brand-100/70">Status</p>
-              <p className="mt-1">
-                <span
-                  className={`inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-0.5 text-xs font-semibold text-white`}
-                >
-                  <span
-                    aria-hidden
-                    className={`inline-block h-1.5 w-1.5 rounded-full ${STATUS_DOT[req.status]}`}
-                  />
-                  {statusLabel(req.status)}
-                </span>
-              </p>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-wide text-brand-100/70">Estimated total</p>
-              <p className="tnum text-2xl font-extrabold">
+          <div className="flex flex-wrap items-end gap-3">
+            <HeroStat label="Status">
+              <Badge tone={STATUS_TONE[req.status]}>{statusLabel(req.status)}</Badge>
+            </HeroStat>
+            <HeroStat label="Estimated total" align="right">
+              <p className="tnum font-display text-2xl font-extrabold text-ink">
                 {req.estimatedAmount != null ? money(req.estimatedAmount) : '—'}
               </p>
-            </div>
+            </HeroStat>
           </div>
         }
       />
@@ -358,10 +372,12 @@ export function RequestDetailPage() {
           <SectionTitle
             title="Approval ladder"
             action={
-              <InfoTip
-                label="How the ladder was derived"
-                content="Multi-tier routing derived from category + amount + sourcing method (policy §3, §9). Each tier signs electronically."
-              />
+              <span className="hidden sm:inline-flex">
+                <InfoTip
+                  label="How the ladder was derived"
+                  content="Multi-tier routing derived from category + amount + sourcing method (policy §3, §9). Each tier signs electronically."
+                />
+              </span>
             }
           />
           <Card>

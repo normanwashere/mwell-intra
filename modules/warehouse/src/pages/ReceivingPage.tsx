@@ -147,16 +147,21 @@ export function ReceivingPage() {
   };
 
   return (
-    <div className="space-y-4">
-      <PageHeader title="Receiving" subtitle="Scan & tag incoming inventory" />
+    <div
+      className={clsx(
+        'space-y-4 overflow-x-clip',
+        lines.length > 0 && 'pb-24 md:pb-0',
+      )}
+    >
+      <PageHeader title="Receiving" icon="truck" subtitle="Scan & tag incoming inventory" />
 
-      <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+      <div className="grid min-w-0 gap-4 lg:grid-cols-2 lg:items-start">
         {/* Left: capture controls — scan-first (WH-11): the scanner card
             leads; where/who selects collapse into a summary chip on mobile. */}
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           <button
             type="button"
-            className="flex w-full items-center justify-between gap-2 rounded-xl border border-line bg-surface px-3 py-2.5 text-left text-sm lg:hidden"
+            className="flex w-full max-w-full items-center justify-between gap-2 overflow-hidden rounded-xl border border-line bg-surface px-3 py-2.5 text-left text-sm lg:hidden"
             aria-expanded={contextOpen}
             onClick={() => setContextOpen((v) => !v)}
           >
@@ -182,7 +187,7 @@ export function ReceivingPage() {
             />
           </button>
 
-          <Card className="space-y-3">
+          <Card className="min-w-0 space-y-3 overflow-hidden">
             <Field
               label="Product"
               htmlFor="rcv-product"
@@ -201,8 +206,8 @@ export function ReceivingPage() {
                 Serialized device — scan each unit's serial below to add it.
               </p>
             ) : (
-              <div className="flex items-end gap-2">
-                <div className="w-32">
+              <div className="grid min-w-0 gap-2 sm:grid-cols-[8rem_minmax(0,1fr)] sm:items-end">
+                <div className="min-w-0">
                   <Field label="Quantity" htmlFor="rcv-qty">
                     <QuantityStepper
                       id="rcv-qty"
@@ -215,7 +220,7 @@ export function ReceivingPage() {
                 </div>
                 <button
                   type="button"
-                  className="btn-primary flex-1"
+                  className="btn-primary min-w-0 whitespace-nowrap px-3"
                   disabled={!selectedProductId}
                   onClick={addSelected}
                 >
@@ -293,7 +298,7 @@ export function ReceivingPage() {
         </div>
 
         {/* Right: running receipt + evidence */}
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           <Card>
             <SectionTitle
               title="Receipt lines"
@@ -336,7 +341,7 @@ export function ReceivingPage() {
                             ))}
                           </div>
                         )}
-                        <div className="mt-2 grid grid-cols-2 gap-2">
+                          <div className="mt-2 grid gap-2 sm:grid-cols-2">
                           <Field label="Unit cost (₱)" htmlFor={`rcv-cost-${l.productId}`}>
                             <input
                               id={`rcv-cost-${l.productId}`}
@@ -388,16 +393,17 @@ export function ReceivingPage() {
       </div>
 
       {/* Sticky action bar */}
-      <div className="sticky bottom-36 z-20 md:bottom-4">
-        <button
-          type="button"
-          className="btn-primary w-full shadow-pop"
-          disabled={lines.length === 0}
-          onClick={() => void submit()}
-        >
-          Receive {totalItems} item(s)
-        </button>
-      </div>
+      {lines.length > 0 && (
+        <div className="sticky bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-20 rounded-2xl border border-line bg-surface/95 p-2 shadow-e3 backdrop-blur md:bottom-4">
+          <button
+            type="button"
+            className="btn-primary min-h-12 w-full shadow-pop"
+            onClick={() => void submit()}
+          >
+            Receive {totalItems} item(s)
+          </button>
+        </div>
+      )}
 
       {/* Receipt history — parity with the Returns recent list. */}
       <Card>
@@ -416,7 +422,7 @@ export function ReceivingPage() {
                 const total = r.lines.reduce((s, l) => s + l.quantity, 0);
                 return (
                   <li key={r.id} className="rounded-xl bg-inset p-3">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                       <span className="text-sm font-medium text-ink">
                         {total} item(s) into {loc?.name ?? r.locationId}
                       </span>

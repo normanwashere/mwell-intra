@@ -280,43 +280,47 @@ export function ProductDetailPage() {
       </button>
 
       {/* Header */}
-      <div className="overflow-hidden rounded-3xl bg-brand-grad p-5 text-white shadow-navy">
-        <div className="flex items-start justify-between gap-3">
+      <div className="hero-surface relative overflow-hidden rounded-3xl p-5 sm:p-6">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-y-0 left-0 w-1 rounded-l-3xl bg-gradient-to-b from-brand-500 to-brand-700"
+        />
+        <div className="relative flex items-start justify-between gap-3 pl-2">
           <div className="flex min-w-0 items-start gap-3">
-            <ProductThumb product={product} size="lg" className="ring-white/20" />
+            <ProductThumb product={product} size="lg" />
           <div className="min-w-0">
-            <h1 className="text-xl font-extrabold sm:text-2xl">{product.name}</h1>
-            <p className="font-mono text-sm text-brand-100/80">{product.sku}</p>
+            <h1 className="font-display text-xl font-extrabold text-ink sm:text-2xl">{product.name}</h1>
+            <p className="font-mono text-sm text-muted">{product.sku}</p>
             <div className="mt-2 flex flex-wrap gap-1.5">
-              <span className="chip bg-white/15 text-white">
+              <span className="chip bg-brand-500/10 text-brand-700 dark:text-brand-300">
                 {statusLabel(product.category)}
               </span>
               {product.serialized && (
-                <span className="chip bg-white/15 text-white">Serialized</span>
+                <span className="chip bg-inset text-muted">Serialized</span>
               )}
               {Object.entries(product.attributes).map(([k, v]) => (
-                <span key={k} className="chip bg-white/15 text-white">
+                <span key={k} className="chip bg-inset text-muted">
                   {k}: {v}
                 </span>
               ))}
               {product.promotional && (
-                <span className="chip bg-amber-300/90 text-amber-900">Promo</span>
+                <span className="chip bg-amber-500/15 text-amber-800 dark:text-amber-300">Promo</span>
               )}
             </div>
           </div>
           </div>
           <div className="text-right">
-            <p className="text-3xl font-extrabold">{available}</p>
-            <p className="text-xs text-brand-100/80">available</p>
+            <p className="tnum font-display text-3xl font-extrabold text-ink">{available}</p>
+            <p className="text-xs text-faint">available</p>
           </div>
         </div>
-        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+        <div className="relative mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 pl-2">
           {canViewFinancials && (
-            <span className="text-sm text-brand-100/80">
+            <span className="text-sm text-muted">
               Landed {money(product.unitCost)}
             </span>
           )}
-          <span className="text-sm text-brand-100/80">
+          <span className="text-sm text-muted">
             Price {product.price != null ? money(product.price) : '—'}
           </span>
           <div className="flex w-full flex-col gap-2 sm:ml-auto sm:w-auto sm:flex-row sm:items-center">

@@ -4,7 +4,7 @@
   "private": true,
   "packageManager": "pnpm@9.15.9",
   "engines": {
-    "node": ">=20.9.0"
+    "node": ">=22.0.0"
   },
   "scripts": {
     "build": "turbo run build",
@@ -13,17 +13,13 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "test:e2e": "turbo run test:e2e",
+    "test:intra-live": "node .qa/full-intra-live-e2e.mjs",
+    "verify:supabase-cutover": "node scripts/verify-supabase-cutover.mjs",
     "format": "prettier --write \"**/*.{ts,tsx,md,json}\""
   },
   "devDependencies": {
     "prettier": "^3.3.3",
     "turbo": "^2.3.3",
     "typescript": "^5.6.3"
-  },
-  "pnpm": {
-    "overrides": {
-      "@types/react": "^19.2.0",
-      "@types/react-dom": "^19.2.0"
-    }
   }
 }

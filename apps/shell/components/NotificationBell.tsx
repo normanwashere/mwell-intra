@@ -14,17 +14,11 @@
 // an aria-label explaining why.  This preserves the invariant that the shell
 // builds and runs with no live backend (LLD §10, ADR-003).
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
-import type { SupabaseClient } from '@supabase/supabase-js';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from '@intra/ui';
 import { useSession } from '@intra/auth';
-import { createSupabaseBrowserClient } from '@shell/lib/supabase/client';
+import { ENABLE_NOTIFICATIONS } from '@shell/lib/supabase/env';
+import type { ShellSupabaseClient } from '@shell/lib/supabase/types';
 import { cx } from '@shell/lib/cx';
 
 /** How often we re-fetch notifications in supabase mode. */
@@ -68,18 +62,11 @@ function timeAgo(iso: string): string {
 }
 
 export function NotificationBell() {
-  const { profile, mode } = useSession();
-  // The SessionProvider owns the *auth* client; this component wants the *db*
-  // client so it can .from('notifications')/.rpc(...). createBrowserClient
-  // from @supabase/ssr is effectively a singleton per env, so a second call
-  // reuses the underlying session cookies safely.
-  const client = useMemo<SupabaseClient<any, any> | null>(
-    () => createSupabaseBrowserClient(),
-    [],
-  );
+  const { profile, mode, supabaseClient } = useSession();
+  const client = supabaseClient as ShellSupabaseClient | null;
 
   // Memory mode OR no client OR signed-out → no-op (dimmed bell, no popover).
-  const disabled = mode !== 'supabase' || !client || !profile;
+  const disabled = mode !== 'supabase' || !ENABLE_NOTIFICATIONS || !client || !profile;
 
   const [open, setOpen] = useState(false);
   const [rows, setRows] = useState<NotificationRow[]>([]);
@@ -95,16 +82,23 @@ export function NotificationBell() {
     let active = true;
 
     const fetchRows = async () => {
-      const { data, error } = await client
-        .from('notifications')
-        .select('id, kind, entity_type, entity_id, read_at, created_at')
-        .order('created_at', { ascending: false })
-        .limit(MAX_ROWS);
-      if (!active) return;
-      if (!error && Array.isArray(data)) {
-        setRows(data as NotificationRow[]);
+      try {
+        const { data, error } = await client
+          .from('notifications')
+          .select('id, kind, entity_type, entity_id, read_at, created_at')
+          .order('created_at', { ascending: false })
+          .limit(MAX_ROWS);
+        if (!active) return;
+        if (!error && Array.isArray(data)) {
+          setRows(data as NotificationRow[]);
+        }
+      } catch {
+        // Route changes can abort the live fetch. Notifications are secondary,
+        // so keep the shell quiet and leave the last known list in place.
+        if (!active) return;
+      } finally {
+        if (active) setInitialFetch(true);
       }
-      setInitialFetch(true);
     };
 
     void fetchRows();
@@ -147,6 +141,9 @@ export function NotificationBell() {
             ),
           );
         }
+      } catch {
+        // Best-effort UI action. A later poll will restore the authoritative
+        // state; do not surface aborted fetches as global console errors.
       } finally {
         setBusyId(null);
       }
@@ -156,7 +153,9 @@ export function NotificationBell() {
 
   const ariaLabel = disabled
     ? mode === 'supabase'
-      ? 'Notifications (sign in to view)'
+      ? ENABLE_NOTIFICATIONS
+        ? 'Notifications (sign in to view)'
+        : 'Notifications unavailable until core notifications are deployed'
       : 'Notifications unavailable in demo mode'
     : `Notifications${unread > 0 ? `, ${unread} unread` : ''}`;
 

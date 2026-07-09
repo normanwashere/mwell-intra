@@ -13,6 +13,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const DATA_SOURCE = process.env.NEXT_PUBLIC_DATA_SOURCE;
 
 // Paths reachable WITHOUT a session in live mode. Everything else is gated.
 const PUBLIC_PATHS = [
@@ -44,10 +45,11 @@ function sanitizeRedirectPath(pathname: string): string {
   return pathname;
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
 
   // No live backend configured — the shell runs in memory/demo mode.
+  if (DATA_SOURCE === 'memory') return response;
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return response;
 
   const supabase = createServerClient(SUPABASE_URL, SUPABASE_ANON_KEY, {

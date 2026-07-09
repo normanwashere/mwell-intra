@@ -7,6 +7,7 @@ import {
   Card,
   DataTable,
   HeroChipButton,
+  HeroStat,
   Icon,
   InfoTip,
   ModuleHero,
@@ -28,6 +29,7 @@ import {
   usePurchaseOrders,
 } from '../localStore';
 import { outstandingOf } from '../receiving';
+import { ProcurementAccessDenied } from '../components/ProcurementAccessDenied';
 import {
   accreditationLabel,
   formatDate,
@@ -69,6 +71,11 @@ export function PODetailPage() {
   const { profile } = useSession();
   const { success, error } = useToast();
   const canApproveAward = useCan('procurement', 'approve_award');
+  const canAuthorPo = useCan('procurement', 'author_po');
+  const canViewFinance = useCan('procurement', 'view_finance');
+  const canAdmin = useCan('procurement', 'admin');
+  const canViewPurchaseOrders =
+    canAuthorPo || canApproveAward || canViewFinance || canAdmin;
 
   const po: PurchaseOrder | undefined = useMemo(() => rows.find((r) => r.id === id), [rows, id]);
   const vendor = useMemo(
@@ -106,6 +113,14 @@ export function PODetailPage() {
       </div>
     );
   }
+  if (!canViewPurchaseOrders) {
+    return (
+      <ProcurementAccessDenied
+        title="No purchase order access"
+        message="Purchase order details are restricted to procurement officers, approvers, finance, and procurement admins."
+      />
+    );
+  }
   if (!po) return <Navigate to="/purchase-orders" replace />;
 
   const accreditationOk = vendor ? isAccredited(vendor) : false;
@@ -122,11 +137,11 @@ export function PODetailPage() {
     setSignOpen(true);
   }
 
-  function confirmApproval() {
+  async function confirmApproval() {
     if (!po) return;
     const sig = signature ?? makeTypedSignature(profile?.name);
     if (!sig) return;
-    const next = approve(po.id, {
+    const next = await approve(po.id, {
       email: profile?.email,
       note: approvalNote || undefined,
       signature: sig,
@@ -140,14 +155,14 @@ export function PODetailPage() {
       error('Could not save the approval.');
     }
   }
-  function handleIssue() {
+  async function handleIssue() {
     if (!po) return;
-    const next = issue(po.id);
+    const next = await issue(po.id);
     if (next) success(`PO ${next.poNumber} issued`);
   }
-  function handleCancel() {
+  async function handleCancel() {
     if (!po) return;
-    const next = cancel(po.id);
+    const next = await cancel(po.id);
     if (next) success(`PO ${next.poNumber} cancelled`);
   }
 
@@ -176,9 +191,9 @@ export function PODetailPage() {
     return { outstanding, receiving, linesTouched, closes: receiving >= outstanding && outstanding > 0 };
   })();
 
-  function confirmReceive() {
+  async function confirmReceive() {
     if (!po) return;
-    const next = receive(po.id, {
+    const next = await receive(po.id, {
       lines: po.lines.map((l) => ({ lineId: l.id, quantity: receiveQty[l.id] ?? 0 })),
       actorEmail: profile?.email,
       note: receiveNote || undefined,
@@ -225,16 +240,14 @@ export function PODetailPage() {
         icon="cart"
         action={heroAction}
         accessory={
-          <>
-            <div>
-              <p className="text-xs uppercase tracking-wide text-brand-100/70">Status</p>
-              <p className="mt-1"><Badge tone={PO_TONE[po.status]}>{poStatusLabel(po.status)}</Badge></p>
-            </div>
-            <div className="text-right">
-              <p className="text-xs uppercase tracking-wide text-brand-100/70">Total</p>
-              <p className="tnum text-2xl font-extrabold">{money(po.total)}</p>
-            </div>
-          </>
+          <div className="flex flex-wrap items-end gap-3">
+            <HeroStat label="Status">
+              <Badge tone={PO_TONE[po.status]}>{poStatusLabel(po.status)}</Badge>
+            </HeroStat>
+            <HeroStat label="Total" align="right">
+              <p className="tnum font-display text-2xl font-extrabold text-ink">{money(po.total)}</p>
+            </HeroStat>
+          </div>
         }
       />
 

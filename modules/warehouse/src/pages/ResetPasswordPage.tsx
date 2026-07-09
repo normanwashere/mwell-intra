@@ -56,6 +56,7 @@ export function ResetPasswordPage() {
           <Logo className="mb-3 h-8 w-auto" />
           <PageHeader
             title="Set a new password"
+            icon="lock"
             subtitle="Choose a new password for your warehouse account."
           />
         </div>

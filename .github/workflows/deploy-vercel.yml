@@ -21,11 +21,11 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
 
       - name: Install Vercel CLI
-        run: pnpm add -g vercel@latest
+        run: pnpm add -g vercel@55.0.0
 
       - name: Pull Vercel env
         run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}

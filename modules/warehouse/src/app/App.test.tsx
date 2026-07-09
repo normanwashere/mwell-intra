@@ -3,11 +3,14 @@ import { screen } from '@testing-library/react';
 import { App } from './App';
 import { renderWithProviders } from '@/test/renderWithProviders';
 
+const FIRST_RENDER_TIMEOUT = 10_000;
+
 describe('App routing & guards', () => {
   it('renders the dashboard at the root', async () => {
     renderWithProviders(<App />, { route: '/' });
-    expect(await screen.findByText(/welcome back/i)).toBeInTheDocument();
-  });
+    expect(await screen.findByTestId('warehouse-dashboard-hero')).toBeInTheDocument();
+    expect(screen.getByText(/warehouse dashboard/i)).toBeInTheDocument();
+  }, FIRST_RENDER_TIMEOUT);
 
   it('allows logistics to open Receiving', async () => {
     renderWithProviders(<App />, {

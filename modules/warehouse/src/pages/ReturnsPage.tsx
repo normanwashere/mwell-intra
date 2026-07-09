@@ -100,6 +100,7 @@ export function ReturnsPage() {
     <div className="space-y-4">
       <PageHeader
         title="Returns"
+        icon="rotate"
         subtitle="Log customer & vendor returns with reasons"
       />
 

@@ -89,6 +89,7 @@ export function LocationsPage() {
     <div className="space-y-4">
       <PageHeader
         title="Locations"
+        icon="pin"
         subtitle="Warehouses & event sites"
         action={
           <button type="button" className="btn-primary btn-sm" onClick={openAdd}>

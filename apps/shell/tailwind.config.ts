@@ -18,23 +18,12 @@ const config: Config = {
     // The consumed design-system package ships raw TSX we must scan for classes.
     '../../packages/ui/src/**/*.{ts,tsx}',
     '../../modules/warehouse/src/**/*.{ts,tsx}',
+    '../../modules/procurement/src/**/*.{ts,tsx}',
+    '../../modules/legal/src/**/*.{ts,tsx}',
   ],
-  theme: {
-    extend: {
-      // next/font exposes the families as CSS variables; point the preset's
-      // display/sans stacks at them so `font-display`/`font-sans` resolve.
-      fontFamily: {
-        sans: ['var(--font-inter)', 'Inter', 'system-ui', 'sans-serif'],
-        display: [
-          'var(--font-jakarta)',
-          'Plus Jakarta Sans',
-          'Inter',
-          'system-ui',
-          'sans-serif',
-        ],
-      },
-    },
-  },
+  // Font stacks come from the shared preset (var(--font-inter) /
+  // var(--font-grotesk) / var(--font-jbmono)) — layout.tsx loads them via
+  // next/font and exposes the CSS variables on <html>.
 };
 
 export default config;

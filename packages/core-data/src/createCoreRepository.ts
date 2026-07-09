@@ -11,7 +11,7 @@ import type { CoreRepository } from './repository';
 
 export interface CreateCoreRepositoryConfig {
   /** If provided, the live SupabaseCoreRepository is used. */
-  client?: SupabaseClient<any, any> | null;
+  client?: SupabaseClient | null;
   /** Only used when falling back to memory. */
   memory?: Omit<InMemoryCoreOptions, 'matrix'> & { matrix?: RoleCapabilityMatrix };
 }

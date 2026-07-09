@@ -50,6 +50,44 @@ export const FINANCE_TIER_MIN = 200_000;
 export const CONSTRUCTION_BOND_TRIGGER = 5_000_000;
 
 // ---------------------------------------------------------------------------
+// Delegation of Authority (DOA) matrix
+// ---------------------------------------------------------------------------
+
+export interface DoaBand {
+  /** Inclusive upper bound in PHP; `null` = top (unbounded) band. */
+  maxAmount: number | null;
+  /** Authority that must give the final sign-off at this band. */
+  authority: string;
+  /** Short code for programmatic use / future role mapping. */
+  code: 'bu_head' | 'cfo' | 'president' | 'board';
+}
+
+/**
+ * DOA matrix — the FINAL approver's seniority escalates with transaction value.
+ * These are sensible PH-corporate defaults; edit the bounds/authorities to match
+ * your approved Delegation-of-Authority policy. Ordered ascending by amount; the
+ * first band whose `maxAmount` ≥ the request amount wins.
+ *
+ * NOTE: the ladder composition and RBAC are unchanged — this only sets which
+ * authority the `final_approver` step represents, surfaced on the step label.
+ */
+export const DOA_BANDS: readonly DoaBand[] = [
+  { maxAmount: 1_000_000, authority: 'BU / Department Head', code: 'bu_head' },
+  { maxAmount: 5_000_000, authority: 'Chief Financial Officer', code: 'cfo' },
+  { maxAmount: 20_000_000, authority: 'President / COO', code: 'president' },
+  { maxAmount: null, authority: 'Board of Directors', code: 'board' },
+];
+
+/** Resolve the DOA band that governs the final sign-off for an amount. */
+export function resolveDoaBand(amount: number | undefined): DoaBand {
+  const value = typeof amount === 'number' && amount > 0 ? amount : 0;
+  return (
+    DOA_BANDS.find((b) => b.maxAmount === null || value <= b.maxAmount) ??
+    DOA_BANDS[DOA_BANDS.length - 1]!
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Category metadata
 // ---------------------------------------------------------------------------
 
@@ -234,12 +272,17 @@ export function buildApprovalSteps(
   input: BuildLadderInput,
   newStepId: () => string,
 ): ApprovalStep[] {
+  // The final approver's authority is set by the DOA matrix for the amount.
+  const doa = resolveDoaBand(input.amount);
   return buildApprovalLadder(input).map((tier, i) => ({
     id: newStepId(),
     order: i + 1,
     tier,
     status: 'pending',
-    label: tierLabel(tier),
+    label:
+      tier === 'final_approver'
+        ? `Final Approver — ${doa.authority} (DOA)`
+        : tierLabel(tier),
   }));
 }
 
@@ -384,4 +427,56 @@ export function requiredDocumentsStatus(
     const accepted = DOC_KIND_MATCH[doc.key] ?? [];
     return { ...doc, attached: accepted.some((k) => kinds.has(k)) };
   });
+}
+
+// ---------------------------------------------------------------------------
+// Submit readiness gate (policy §5/§9 — enforce, not just display)
+// ---------------------------------------------------------------------------
+
+export interface SubmitReadiness {
+  /** True when all required documents are attached and the quote quorum is met. */
+  ok: boolean;
+  /** Human-readable labels of required documents not yet attached. */
+  missingDocs: string[];
+  /** How many additional comparable quotes are still needed (0 when satisfied). */
+  quoteShortfall: number;
+  /** The quorum for the sourcing method (null when quotes aren't required). */
+  quotesRequired: number | null;
+}
+
+/**
+ * Whether a request satisfies the policy prerequisites to enter the approval
+ * ladder: the required-document set is attached and the sourcing quote quorum
+ * (RFQ ≥2, RFP ≥3) is met. Used to BLOCK submission, so a request can no longer
+ * pass every tier with zero evidence.
+ */
+export function evaluateSubmitReadiness(req: {
+  category?: RequestCategory;
+  estimatedAmount?: number;
+  sourcingMethod?: SourcingMethod;
+  attachments?: readonly Pick<RequestAttachment, 'kind'>[];
+}): SubmitReadiness {
+  const input: BuildLadderInput = {
+    category: req.category,
+    amount: req.estimatedAmount,
+    sourcingMethod: req.sourcingMethod,
+  };
+  const missingDocs = requiredDocumentsStatus(input, req.attachments)
+    .filter((d) => !d.attached)
+    .map((d) => d.label);
+  const quotesRequired = req.sourcingMethod
+    ? minimumQuotes(req.sourcingMethod)
+    : null;
+  const quoteCount = (req.attachments ?? []).filter(
+    (a) => (a.kind ?? 'other') === 'quote',
+  ).length;
+  const quoteShortfall = quotesRequired
+    ? Math.max(0, quotesRequired - quoteCount)
+    : 0;
+  return {
+    ok: missingDocs.length === 0 && quoteShortfall === 0,
+    missingDocs,
+    quoteShortfall,
+    quotesRequired,
+  };
 }

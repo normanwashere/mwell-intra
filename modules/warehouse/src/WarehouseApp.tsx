@@ -12,7 +12,7 @@
 // them switch among the roles their session carries. Authorization is delegated
 // to @intra/rbac via the local `can()` adapter — one source of truth.
 
-import { useEffect } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 import { SignInPrompt, SkeletonList, SkeletonStats } from '@intra/ui';
 import type { Role } from '@intra/data-kit';
@@ -23,22 +23,39 @@ import { App } from '@/app/App';
 import { PwaPrompts } from '@/components/PwaPrompts';
 
 /**
- * React Router v6 refuses to match "/" against a basename when the URL exactly
- * equals the basename with no trailing slash (browser normalizes it to "").
- * Bare visits to `/warehouse` render BLANK with a console warning:
+ * React Router v6 refuses to match an exact basename URL before the trailing
+ * slash exists. Bare visits to `/warehouse` render BLANK with a console warning:
  *   `<Router basename="/warehouse"> is not able to match the URL "/"`.
- * We normalize by appending a trailing slash BEFORE the router mounts, which
- * makes the effective internal URL `/` (the Dashboard route).
+ * Keep BrowserRouter unmounted until the URL is normalized to `/warehouse/`.
  */
-function useNormalizeBasenamePath(basename: string): void {
-  useEffect(() => {
+const useIsomorphicLayoutEffect =
+  typeof window === 'undefined' ? useEffect : useLayoutEffect;
+
+function useNormalizeBasenamePath(basename: string): boolean {
+  const [ready, setReady] = useState(
+    () => typeof window === 'undefined' || window.location.pathname !== basename,
+  );
+
+  useIsomorphicLayoutEffect(() => {
     if (typeof window === 'undefined') return;
     const current = window.location.pathname;
     if (current === basename) {
       const next = `${basename}/${window.location.search}${window.location.hash}`;
       window.history.replaceState(window.history.state, '', next);
     }
+    setReady(true);
   }, [basename]);
+
+  return ready;
+}
+
+function WarehouseBootSkeleton() {
+  return (
+    <main className="mx-auto max-w-5xl space-y-6 p-4 md:p-6" aria-busy="true">
+      <SkeletonStats />
+      <SkeletonList rows={5} />
+    </main>
+  );
 }
 
 export interface WarehouseAppProps {
@@ -51,32 +68,31 @@ export interface WarehouseAppProps {
  * the shell's `<SessionProvider>` (that is where the identity + roles come from).
  */
 export function WarehouseApp({ basename = '/warehouse' }: WarehouseAppProps) {
-  useNormalizeBasenamePath(basename);
+  const basenameReady = useNormalizeBasenamePath(basename);
   const { profile, userRoles, loading } = useSession();
   const warehouseRoles = (userRoles.warehouse ?? []) as Role[];
   const initialRole = warehouseRoles[0];
 
   // Session still restoring → paint a lightweight skeleton instead of a
   // blank frame (or, worse, a flash of the access-denied notice).
-  if (loading) {
-    return (
-      <div className="mx-auto max-w-5xl space-y-6 p-4 md:p-6" aria-busy="true">
-        <SkeletonStats />
-        <SkeletonList rows={5} />
-      </div>
-    );
+  if (!basenameReady || loading) {
+    return <WarehouseBootSkeleton />;
   }
 
   // Signed out entirely → prompt to sign in (deep-links back here).
   if (!profile) {
-    return <SignInPrompt module="Warehouse" basename={basename} />;
+    return (
+      <main>
+        <SignInPrompt module="Warehouse" basename={basename} />
+      </main>
+    );
   }
 
   // No warehouse role on the session → the module isn't part of this user's
   // access. Render a friendly notice rather than a blank screen.
   if (!initialRole) {
     return (
-      <div
+      <main
         role="alert"
         className="grid min-h-[60vh] place-items-center bg-app p-6 text-center"
       >
@@ -88,12 +104,12 @@ export function WarehouseApp({ basename = '/warehouse' }: WarehouseAppProps) {
           </p>
           <a
             href="/"
-            className="inline-flex items-center justify-center rounded-xl bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-app"
+            className="inline-flex min-h-11 items-center justify-center rounded-xl bg-brand-600 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-app"
           >
             Back to dashboard
           </a>
         </div>
-      </div>
+      </main>
     );
   }
 

@@ -15,7 +15,8 @@
 // TODO(procurement live): mirror the ladder + attachment persistence in
 // procurement.submit_request / procurement.decide_request RPCs when they land.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useSession } from '@intra/auth';
 import type {
   ApprovalDecision,
   ApprovalSignature,
@@ -39,6 +40,210 @@ import {
 } from './policy';
 import { applyReceipt, type ReceiptLineInput } from './receiving';
 import { buildProcurementSeed } from './seed';
+import { mergeVendorsWithLegal } from './accreditationBridge';
+
+type MaybePromise<T> = T | Promise<T>;
+type LiveClient = NonNullable<ReturnType<typeof useSession>['supabaseClient']>;
+type LiveRow = Record<string, never> & {
+  readonly id: never;
+  readonly legal_name: never;
+  readonly accreditation_status: never;
+  readonly step_order: never;
+  readonly tier: never;
+  readonly status: never;
+  readonly title: never;
+  readonly created_at: never;
+  readonly po_number: never;
+  readonly core_vendor_id: never;
+  readonly vendor_name: never;
+  readonly updated_at: never;
+  readonly purchase_order_id: never;
+  readonly received_at: never;
+  readonly request_id: never;
+  readonly decided_at: never;
+  readonly decided_by_email: never;
+  readonly note: never;
+  readonly signature: never;
+};
+type LiveQueryError = { readonly message: string };
+
+function useLiveClient(): LiveClient | null {
+  const { mode, supabaseClient } = useSession();
+  return mode === 'supabase' ? (supabaseClient as LiveClient | null) : null;
+}
+
+function isLive(client: LiveClient | null): client is LiveClient {
+  return Boolean(client);
+}
+
+async function liveRpc<T>(
+  client: LiveClient,
+  schema: 'procurement',
+  fn: string,
+  payload: Record<string, unknown>,
+): Promise<T> {
+  const { data, error } = await client.schema(schema).rpc(fn, { payload });
+  if (error) throw new Error(error.message);
+  return data as T;
+}
+
+function useLiveRows<T>(
+  client: LiveClient | null,
+  schema: 'core' | 'procurement',
+  table: string,
+  map: (row: LiveRow) => T,
+  order?: { column: string; ascending?: boolean },
+): [T[], boolean, () => Promise<void>] {
+  const [rows, setRows] = useState<T[]>([]);
+  const [loading, setLoading] = useState(Boolean(client));
+  const mapRef = useRef(map);
+
+  useEffect(() => {
+    mapRef.current = map;
+  }, [map]);
+
+  const refresh = useCallback(async () => {
+    if (!client) {
+      setRows([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    try {
+      let query = client.schema(schema).from(table).select('*');
+      if (order) {
+        query = query.order(order.column, { ascending: order.ascending ?? false });
+      }
+      const { data, error } = await query;
+      if (error) throw new Error(error.message);
+      setRows((data ?? []).map(mapRef.current));
+    } catch {
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [client, schema, table, order?.column, order?.ascending]);
+
+  useEffect(() => {
+    let active = true;
+    if (!client) {
+      setRows([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    let query = client.schema(schema).from(table).select('*');
+    if (order) query = query.order(order.column, { ascending: order.ascending ?? false });
+    Promise.resolve(query)
+      .then(({ data, error }: { data: LiveRow[] | null; error: LiveQueryError | null }) => {
+        if (!active) return;
+        if (error) throw error;
+        setRows((data ?? []).map(mapRef.current));
+        setLoading(false);
+      })
+      .catch(() => {
+        if (!active) return;
+        setRows([]);
+        setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [client, schema, table, order?.column, order?.ascending]);
+
+  return [rows, loading, refresh];
+}
+
+function mapVendor(row: LiveRow): ProcurementVendor {
+  return {
+    id: row.id,
+    legalName: row.legal_name,
+    category: row.category ?? undefined,
+    accreditationStatus: row.accreditation_status,
+    accreditationExpiresAt: row.accreditation_expires_at ?? undefined,
+  };
+}
+
+function mapStep(row: LiveRow): ApprovalStep {
+  return {
+    id: row.id,
+    order: Number(row.step_order),
+    tier: row.tier,
+    status: row.status,
+    label: row.label ?? undefined,
+    note: row.note ?? undefined,
+    decidedAt: row.decided_at ?? undefined,
+    decidedByEmail: row.decided_by_email ?? undefined,
+    signature: row.signature ?? undefined,
+  } as ApprovalStep;
+}
+
+function mapRequest(row: LiveRow, steps: ApprovalStep[] = []): ProcurementRequest {
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description ?? undefined,
+    department: row.department ?? undefined,
+    costCenter: row.cost_center ?? undefined,
+    projectCode: row.project_code ?? undefined,
+    budgetCode: row.budget_code ?? undefined,
+    status: row.status,
+    requesterName: row.requester_name ?? undefined,
+    requesterEmail: row.requester_email ?? undefined,
+    neededBy: row.needed_by ?? undefined,
+    vendorId: row.core_vendor_id ?? undefined,
+    vendorName: row.vendor_name ?? undefined,
+    lines: row.lines ?? [],
+    createdAt: row.created_at,
+    submittedAt: row.submitted_at ?? undefined,
+    decidedAt: row.decided_at ?? undefined,
+    decisionNote: row.decision_note ?? undefined,
+    decidedByEmail: row.decided_by_email ?? undefined,
+    estimatedAmount: row.estimated_amount == null ? undefined : Number(row.estimated_amount),
+    category: row.category ?? undefined,
+    sourcingMethod: row.sourcing_method ?? undefined,
+    sourcingOverride: row.sourcing_override ?? undefined,
+    justification: row.justification ?? undefined,
+    attachments: row.attachments ?? undefined,
+    compliance: row.compliance ?? undefined,
+    approvalSteps: steps,
+  } as ProcurementRequest;
+}
+
+function mapPurchaseOrder(row: LiveRow, receipts: PurchaseOrderReceipt[] = []): PurchaseOrder {
+  return {
+    id: row.id,
+    poNumber: row.po_number,
+    requestId: row.request_id ?? undefined,
+    vendorId: row.core_vendor_id,
+    vendorName: row.vendor_name,
+    status: row.status,
+    actorEmail: row.actor_email ?? undefined,
+    expectedDate: row.expected_date ?? undefined,
+    notes: row.notes ?? undefined,
+    origin: row.origin ?? 'procurement',
+    lines: row.lines ?? [],
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    approvedAt: row.approved_at ?? undefined,
+    approvedByEmail: row.approved_by_email ?? undefined,
+    approvalSignature: row.approval_signature ?? undefined,
+    receipts,
+    total: Number(row.total ?? 0),
+  } as PurchaseOrder;
+}
+
+function mapReceipt(row: LiveRow): PurchaseOrderReceipt & { purchaseOrderId: string } {
+  return {
+    id: row.id,
+    purchaseOrderId: row.purchase_order_id,
+    receivedAt: row.received_at,
+    receivedByEmail: row.received_by_email ?? undefined,
+    note: row.note ?? undefined,
+    lines: row.lines ?? [],
+    closedPo: Boolean(row.closed_po),
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Namespaced storage keys
@@ -71,13 +276,28 @@ function safeRead<T>(key: string): T[] {
   }
 }
 
+function isQuotaError(err: unknown): boolean {
+  return (
+    err instanceof DOMException &&
+    (err.name === 'QuotaExceededError' ||
+      err.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+      err.code === 22)
+  );
+}
+
 function safeWrite<T>(key: string, rows: T[]): void {
   if (typeof window === 'undefined') return;
   try {
     window.localStorage.setItem(key, JSON.stringify(rows));
     window.dispatchEvent(new Event(CHANGE_EVT));
-  } catch {
-    /* quota exceeded / disabled — noop */
+  } catch (err) {
+    // Surface quota failures instead of silently dropping the write (a large
+    // base64 attachment can otherwise vanish on reload with no feedback).
+    if (isQuotaError(err)) {
+      window.dispatchEvent(
+        new CustomEvent('intra:storage-full', { detail: { key } }),
+      );
+    }
   }
 }
 
@@ -108,11 +328,19 @@ export function ensureProcurementSeed(): void {
   }
 }
 
-function useTrackedRows<T>(key: string): [T[], (rows: T[]) => void, boolean] {
+function useTrackedRows<T>(
+  key: string,
+  enabled = true,
+): [T[], (rows: T[]) => void, boolean] {
   const [rows, setRows] = useState<T[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled);
 
   useEffect(() => {
+    if (!enabled) {
+      setRows([]);
+      setLoading(false);
+      return;
+    }
     ensureProcurementSeed();
     setRows(safeRead<T>(key));
     setLoading(false);
@@ -124,14 +352,15 @@ function useTrackedRows<T>(key: string): [T[], (rows: T[]) => void, boolean] {
       window.removeEventListener(CHANGE_EVT, onChange);
       window.removeEventListener('storage', onChange);
     };
-  }, [key]);
+  }, [key, enabled]);
 
   const setPersisted = useCallback(
     (next: T[]) => {
+      if (!enabled) return;
       safeWrite(key, next);
       setRows(next);
     },
-    [key],
+    [key, enabled],
   );
 
   return [rows, setPersisted, loading];
@@ -204,15 +433,40 @@ export const DEMO_VENDORS: ProcurementVendor[] = [
 ];
 
 export function useProcurementVendors(): ProcurementVendor[] {
-  return DEMO_VENDORS;
+  const live = useLiveClient();
+  const [liveRows] = useLiveRows<ProcurementVendor>(
+    live,
+    'core',
+    'vendors',
+    mapVendor,
+    { column: 'legal_name', ascending: true },
+  );
+  if (isLive(live)) return liveRows;
+  // Legal is the source of truth for accreditation. In demo mode we read its
+  // cases from localStorage and merge; in unit tests (no legal data) this is a
+  // no-op and the static catalogue passes through. On Supabase cutover the
+  // bridge is replaced by a shared core.vendors read.
+  return mergeVendorsWithLegal(DEMO_VENDORS);
 }
 
 export function isAccredited(v: ProcurementVendor): boolean {
-  if (v.accreditationStatus !== 'approved') return false;
+  // Full accreditation OR a live provisional (temporary) clearance both permit
+  // award; both honor the expiry date when present.
+  if (
+    v.accreditationStatus !== 'approved' &&
+    v.accreditationStatus !== 'provisional'
+  ) {
+    return false;
+  }
   if (v.accreditationExpiresAt) {
     return new Date(v.accreditationExpiresAt) >= new Date();
   }
   return true;
+}
+
+/** True when award is permitted only under a time-limited provisional clearance. */
+export function isProvisional(v: ProcurementVendor): boolean {
+  return v.accreditationStatus === 'provisional';
 }
 
 // ---------------------------------------------------------------------------
@@ -264,23 +518,54 @@ export interface DecideActor {
 export interface ProcurementRequestsAPI {
   rows: ProcurementRequest[];
   loading: boolean;
-  add: (input: NewRequestInput) => ProcurementRequest;
-  update: (id: string, patch: Partial<ProcurementRequest>) => ProcurementRequest | null;
-  submit: (id: string) => ProcurementRequest | null;
-  cancel: (id: string) => ProcurementRequest | null;
+  add: (input: NewRequestInput) => MaybePromise<ProcurementRequest>;
+  update: (id: string, patch: Partial<ProcurementRequest>) => MaybePromise<ProcurementRequest | null>;
+  submit: (id: string) => MaybePromise<ProcurementRequest | null>;
+  cancel: (id: string) => MaybePromise<ProcurementRequest | null>;
   decide: (
     id: string,
     decision: 'approved' | 'rejected',
     actor: DecideActor,
-  ) => ProcurementRequest | null;
+  ) => MaybePromise<ProcurementRequest | null>;
   getById: (id: string) => ProcurementRequest | undefined;
 }
 
 export function useProcurementRequests(): ProcurementRequestsAPI {
-  const [rows, set, loading] = useTrackedRows<ProcurementRequest>(REQ_KEY);
+  const live = useLiveClient();
+  const [localRows, set, localLoading] = useTrackedRows<ProcurementRequest>(
+    REQ_KEY,
+    !isLive(live),
+  );
+  const [liveBaseRows, liveRowsLoading, refreshRequests] = useLiveRows<LiveRow>(
+    live,
+    'procurement',
+    'requests',
+    (row) => row,
+    { column: 'created_at', ascending: false },
+  );
+  const [liveSteps, liveStepsLoading, refreshSteps] = useLiveRows<ApprovalStep & { requestId: string }>(
+    live,
+    'procurement',
+    'approval_steps',
+    (row) => ({ ...mapStep(row), requestId: row.request_id }),
+    { column: 'step_order', ascending: true },
+  );
+  const liveRows = liveBaseRows.map((row) =>
+    mapRequest(
+      row,
+      liveSteps
+        .filter((s) => s.requestId === row.id)
+        .sort((a, b) => a.order - b.order),
+    ),
+  );
+  const rows = isLive(live) ? liveRows : localRows;
+  const loading = isLive(live) ? liveRowsLoading || liveStepsLoading : localLoading;
+  const refreshLive = useCallback(async () => {
+    await Promise.all([refreshRequests(), refreshSteps()]);
+  }, [refreshRequests, refreshSteps]);
 
   const add = useCallback(
-    (input: NewRequestInput): ProcurementRequest => {
+    (input: NewRequestInput): MaybePromise<ProcurementRequest> => {
       const lines: ProcurementRequestLine[] = input.lines.map((l) => ({
         ...l,
         id: newId('rl'),
@@ -323,14 +608,48 @@ export function useProcurementRequests(): ProcurementRequestsAPI {
         attachments,
         compliance: input.compliance,
       };
+      if (isLive(live)) {
+        return liveRpc<LiveRow>(live, 'procurement', 'create_request', {
+          title: next.title,
+          description: next.description,
+          department: next.department,
+          cost_center: next.costCenter,
+          project_code: next.projectCode,
+          budget_code: next.budgetCode,
+          needed_by: next.neededBy,
+          vendor_id: next.vendorId,
+          vendor_name: next.vendorName,
+          requester_name: next.requesterName,
+          requester_email: next.requesterEmail,
+          lines: next.lines,
+          estimated_amount: next.estimatedAmount,
+          category: next.category,
+          sourcing_method: next.sourcingMethod,
+          sourcing_override: next.sourcingOverride,
+          justification: next.justification,
+          attachments: next.attachments,
+          compliance: next.compliance,
+        }).then((row) => {
+          const mapped = mapRequest(row);
+          return refreshLive().then(() => mapped);
+        }) as MaybePromise<ProcurementRequest>;
+      }
       set([next, ...safeRead<ProcurementRequest>(REQ_KEY)]);
       return next;
     },
-    [set],
+    [set, live, refreshLive],
   );
 
   const update = useCallback(
-    (id: string, patch: Partial<ProcurementRequest>): ProcurementRequest | null => {
+    (
+      id: string,
+      patch: Partial<ProcurementRequest>,
+    ): MaybePromise<ProcurementRequest | null> => {
+      if (isLive(live)) {
+        return Promise.reject(
+          new Error('Live request editing is not available after creation yet.'),
+        );
+      }
       const current = safeRead<ProcurementRequest>(REQ_KEY);
       const idx = current.findIndex((r) => r.id === id);
       if (idx < 0) return null;
@@ -341,11 +660,19 @@ export function useProcurementRequests(): ProcurementRequestsAPI {
       set(nextList);
       return merged;
     },
-    [set],
+    [set, live],
   );
 
   const submit = useCallback(
     (id: string) => {
+      if (isLive(live)) {
+        return liveRpc<LiveRow>(live, 'procurement', 'submit_request', {
+          id,
+        }).then((row) => {
+          const mapped = mapRequest(row);
+          return refreshLive().then(() => mapped);
+        });
+      }
       const current = safeRead<ProcurementRequest>(REQ_KEY);
       const idx = current.findIndex((r) => r.id === id);
       if (idx < 0) return null;
@@ -370,12 +697,22 @@ export function useProcurementRequests(): ProcurementRequestsAPI {
         approvalSteps: steps,
       });
     },
-    [update],
+    [update, live, refreshLive],
   );
 
   const cancel = useCallback(
-    (id: string) => update(id, { status: 'cancelled' }),
-    [update],
+    (id: string) => {
+      if (isLive(live)) {
+        return liveRpc<LiveRow>(live, 'procurement', 'cancel_request', { id }).then(
+          (row) => {
+            const mapped = mapRequest(row);
+            return refreshLive().then(() => mapped);
+          },
+        );
+      }
+      return update(id, { status: 'cancelled' });
+    },
+    [update, live, refreshLive],
   );
 
   const decide = useCallback(
@@ -384,6 +721,22 @@ export function useProcurementRequests(): ProcurementRequestsAPI {
       decision: 'approved' | 'rejected',
       actor: DecideActor,
     ) => {
+      if (isLive(live)) {
+        const req = rows.find((r) => r.id === id);
+        const step = req ? nextPendingStep(req.approvalSteps) : undefined;
+        return liveRpc<LiveRow>(live, 'procurement', 'decide_request_step', {
+          request_id: id,
+          step_id: step?.id,
+          tier: actor.tier ?? step?.tier,
+          decision,
+          decided_by_email: actor.email,
+          note: actor.note,
+          signature: actor.signature,
+        }).then((row) => {
+          const mapped = mapRequest(row);
+          return refreshLive().then(() => mapped);
+        });
+      }
       const current = safeRead<ProcurementRequest>(REQ_KEY);
       const idx = current.findIndex((r) => r.id === id);
       if (idx < 0) return null;
@@ -446,7 +799,7 @@ export function useProcurementRequests(): ProcurementRequestsAPI {
       }
       return row;
     },
-    [update],
+    [update, live, rows, refreshLive],
   );
 
   const getById = useCallback(
@@ -492,24 +845,52 @@ export interface ReceiveInput {
 export interface PurchaseOrdersAPI {
   rows: PurchaseOrder[];
   loading: boolean;
-  add: (input: NewPOInput) => PurchaseOrder;
+  add: (input: NewPOInput) => MaybePromise<PurchaseOrder>;
   approve: (
     id: string,
     actor: { email?: string; signature?: ApprovalSignature; note?: string },
-  ) => PurchaseOrder | null;
-  issue: (id: string) => PurchaseOrder | null;
-  cancel: (id: string) => PurchaseOrder | null;
+  ) => MaybePromise<PurchaseOrder | null>;
+  issue: (id: string) => MaybePromise<PurchaseOrder | null>;
+  cancel: (id: string) => MaybePromise<PurchaseOrder | null>;
   /** Record a (possibly partial) goods receipt. Appends a
    *  PurchaseOrderReceipt to the PO's `receipts` history (PR-24). */
-  receive: (id: string, input: ReceiveInput) => PurchaseOrder | null;
+  receive: (id: string, input: ReceiveInput) => MaybePromise<PurchaseOrder | null>;
   getById: (id: string) => PurchaseOrder | undefined;
 }
 
 export function usePurchaseOrders(): PurchaseOrdersAPI {
-  const [rows, set, loading] = useTrackedRows<PurchaseOrder>(PO_KEY);
+  const live = useLiveClient();
+  const [localRows, set, localLoading] = useTrackedRows<PurchaseOrder>(
+    PO_KEY,
+    !isLive(live),
+  );
+  const [liveBaseRows, liveRowsLoading, refreshPos] = useLiveRows<LiveRow>(
+    live,
+    'procurement',
+    'purchase_orders',
+    (row) => row,
+    { column: 'created_at', ascending: false },
+  );
+  const [liveReceipts, liveReceiptsLoading, refreshReceipts] = useLiveRows<
+    PurchaseOrderReceipt & { purchaseOrderId: string }
+  >(live, 'procurement', 'receipts', mapReceipt, {
+    column: 'received_at',
+    ascending: false,
+  });
+  const liveRows = liveBaseRows.map((row) =>
+    mapPurchaseOrder(
+      row,
+      liveReceipts.filter((r) => r.purchaseOrderId === row.id),
+    ),
+  );
+  const rows = isLive(live) ? liveRows : localRows;
+  const loading = isLive(live) ? liveRowsLoading || liveReceiptsLoading : localLoading;
+  const refreshLive = useCallback(async () => {
+    await Promise.all([refreshPos(), refreshReceipts()]);
+  }, [refreshPos, refreshReceipts]);
 
   const add = useCallback(
-    (input: NewPOInput): PurchaseOrder => {
+    (input: NewPOInput): MaybePromise<PurchaseOrder> => {
       const existing = safeRead<PurchaseOrder>(PO_KEY);
       const lines: PurchaseOrderLine[] = input.lines.map((l) => ({
         ...l,
@@ -532,14 +913,30 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
         updatedAt: nowIso(),
         total: totalOf(lines),
       };
+      if (isLive(live)) {
+        return liveRpc<LiveRow>(live, 'procurement', 'create_purchase_order', {
+          request_id: next.requestId,
+          vendor_id: next.vendorId,
+          vendor_name: next.vendorName,
+          actor_email: next.actorEmail,
+          expected_date: next.expectedDate,
+          notes: next.notes,
+          lines: next.lines,
+          total: next.total,
+        }).then((row) => {
+          const mapped = mapPurchaseOrder(row);
+          return refreshLive().then(() => mapped);
+        });
+      }
       set([next, ...existing]);
       return next;
     },
-    [set],
+    [set, live, refreshLive],
   );
 
   const patch = useCallback(
     (id: string, p: Partial<PurchaseOrder>): PurchaseOrder | null => {
+      if (isLive(live)) return null;
       const current = safeRead<PurchaseOrder>(PO_KEY);
       const idx = current.findIndex((r) => r.id === id);
       if (idx < 0) return null;
@@ -549,7 +946,7 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
       set(nextList);
       return merged;
     },
-    [set],
+    [set, live],
   );
 
   const approve = useCallback(
@@ -557,6 +954,17 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
       id: string,
       actor: { email?: string; signature?: ApprovalSignature; note?: string },
     ) => {
+      if (isLive(live)) {
+        return liveRpc<LiveRow>(live, 'procurement', 'approve_purchase_order', {
+          id,
+          actor_email: actor.email,
+          note: actor.note,
+          signature: actor.signature,
+        }).then((row) => {
+          const mapped = mapPurchaseOrder(row);
+          return refreshLive().then(() => mapped);
+        });
+      }
       const approvedAt = nowIso();
       const row = patch(id, {
         status: 'approved',
@@ -577,14 +985,51 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
       }
       return row;
     },
-    [patch],
+    [patch, live, refreshLive],
   );
 
-  const issue = useCallback((id: string) => patch(id, { status: 'issued' }), [patch]);
-  const cancel = useCallback((id: string) => patch(id, { status: 'cancelled' }), [patch]);
+  const issue = useCallback(
+    (id: string) => {
+      if (isLive(live)) {
+        return liveRpc<LiveRow>(live, 'procurement', 'issue_purchase_order', {
+          id,
+        }).then((row) => {
+          const mapped = mapPurchaseOrder(row);
+          return refreshLive().then(() => mapped);
+        });
+      }
+      return patch(id, { status: 'issued' });
+    },
+    [patch, live, refreshLive],
+  );
+  const cancel = useCallback(
+    (id: string) => {
+      if (isLive(live)) {
+        return liveRpc<LiveRow>(live, 'procurement', 'cancel_purchase_order', {
+          id,
+        }).then((row) => {
+          const mapped = mapPurchaseOrder(row);
+          return refreshLive().then(() => mapped);
+        });
+      }
+      return patch(id, { status: 'cancelled' });
+    },
+    [patch, live, refreshLive],
+  );
 
   const receive = useCallback(
-    (id: string, input: ReceiveInput): PurchaseOrder | null => {
+    (id: string, input: ReceiveInput): MaybePromise<PurchaseOrder | null> => {
+      if (isLive(live)) {
+        return liveRpc<LiveRow>(live, 'procurement', 'receive_purchase_order', {
+          id,
+          lines: input.lines,
+          actor_email: input.actorEmail,
+          note: input.note,
+        }).then((row) => {
+          const mapped = mapPurchaseOrder(row);
+          return refreshLive().then(() => mapped);
+        }) as MaybePromise<PurchaseOrder | null>;
+      }
       const current = safeRead<PurchaseOrder>(PO_KEY);
       const po = current.find((r) => r.id === id);
       if (!po) return null;
@@ -605,7 +1050,7 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
         receipts: [...(po.receipts ?? []), receipt],
       });
     },
-    [patch],
+    [patch, live, refreshLive],
   );
 
   const getById = useCallback((id: string) => rows.find((r) => r.id === id), [rows]);
@@ -624,7 +1069,26 @@ function recordApproval(a: ApprovalDecision): void {
 }
 
 export function useApprovalHistory(entityId?: string): ApprovalDecision[] {
-  const [rows] = useTrackedRows<ApprovalDecision>(APPR_KEY);
+  const live = useLiveClient();
+  const [localRows] = useTrackedRows<ApprovalDecision>(APPR_KEY, !isLive(live));
+  const [liveRows] = useLiveRows<ApprovalDecision>(
+    live,
+    'procurement',
+    'approval_steps',
+    (row) => ({
+      entityType: 'request',
+      entityId: row.request_id,
+      decision: row.status,
+      note: row.note ?? undefined,
+      decidedAt: row.decided_at,
+      decidedByEmail: row.decided_by_email ?? undefined,
+      tier: row.tier,
+      stepId: row.id,
+      signature: row.signature ?? undefined,
+    }) as ApprovalDecision,
+    { column: 'decided_at', ascending: false },
+  );
+  const rows = isLive(live) ? liveRows.filter((r) => r.decidedAt) : localRows;
   if (!entityId) return rows;
   return rows.filter((r) => r.entityId === entityId);
 }

@@ -1,5 +1,5 @@
 import { Route, Routes, useNavigate } from 'react-router-dom';
-import { Suspense, lazy, useEffect } from 'react';
+import { Suspense, lazy, useEffect, useRef } from 'react';
 import { AppShell } from '@/components/AppShell';
 import { useWarehouse } from './store';
 import { can, type Capability } from '@/auth/roles';
@@ -90,9 +90,13 @@ function Guard({
 }) {
   const { role } = useWarehouse();
   const toast = useToast();
+  const toasted = useRef(false);
   const allowed = anyOf.some((c) => can(role, c));
   useEffect(() => {
-    if (!allowed) toast.toast('That tool is not available for your role.', 'info');
+    if (!allowed && !toasted.current) {
+      toasted.current = true;
+      toast.toast('That tool is not available for your role.', 'info');
+    }
   }, [allowed, toast]);
   // Render an explicit, friendly access-denied page rather than silently
   // redirecting (a blank flash) — the user always gets clear feedback.

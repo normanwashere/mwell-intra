@@ -141,7 +141,7 @@ export function InfoTip({
         }}
         className={clsx(
           // ≥44px effective target via padding while the glyph stays small.
-          'inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-faint transition hover:bg-inset hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500',
+          'inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-faint transition hover:bg-inset hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500',
           className,
         )}
       >

@@ -14,6 +14,7 @@ import {
   Badge,
   Card,
   HeroChipButton,
+  HeroStat,
   Icon,
   ModuleHero,
   SectionTitle,
@@ -86,7 +87,7 @@ export function SignInstrumentPage() {
     setFieldValues((prev) => ({ ...prev, [name]: value }));
   }
 
-  function confirm() {
+  async function confirm() {
     if (!signature || !template || !kase) return;
     if (!requiredFieldsOk) {
       error('Answer the required disclosure questions before signing.');
@@ -94,7 +95,7 @@ export function SignInstrumentPage() {
     }
     setBusy(true);
     try {
-      sign({
+      await sign({
         caseId: kase.id,
         code,
         templateVersion: template.version,
@@ -126,20 +127,11 @@ export function SignInstrumentPage() {
           </HeroChipButton>
         }
         accessory={
-          <div>
-            <p className="text-xs uppercase tracking-wide text-brand-100/70">Status</p>
-            <p className="mt-1">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-0.5 text-xs font-semibold text-white">
-                <span
-                  aria-hidden
-                  className={`inline-block h-1.5 w-1.5 rounded-full ${
-                    existing ? 'bg-emerald-300' : 'bg-amber-300'
-                  }`}
-                />
-                {existing ? 'Signed' : 'Awaiting signature'}
-              </span>
-            </p>
-          </div>
+          <HeroStat label="Status">
+            <Badge tone={existing ? 'emerald' : 'amber'}>
+              {existing ? 'Signed' : 'Awaiting signature'}
+            </Badge>
+          </HeroStat>
         }
       />
 

@@ -2,8 +2,7 @@ name: CI
 
 # Hardened pipeline (spec §6, ADR-003): parallel typecheck/lint/test/build,
 # vitest coverage gate (>= 70% lines/statements overall), Playwright + axe
-# a11y sweep on the built shell, node 20/22 matrix (20 will be dropped once
-# Supabase warns it as EOL — the 22 job proves we are already forward-compat),
+# a11y sweep on the built shell, Node 22 launch runtime,
 # and a demo-credential leak check against the production `.next` output.
 
 on:
@@ -29,7 +28,7 @@ env:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Static checks run in parallel on every push/PR, matrixed on Node 20 + 22.
+  # Static checks run in parallel on every push/PR against the launch runtime.
   # ---------------------------------------------------------------------------
   typecheck:
     name: Typecheck (node ${{ matrix.node }})
@@ -37,7 +36,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: ['20', '22']
+        node: ['22']
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -58,7 +57,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: ['20', '22']
+        node: ['22']
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -79,7 +78,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: ['20', '22']
+        node: ['22']
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -142,7 +141,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: ['20', '22']
+        node: ['22']
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -184,7 +183,7 @@ jobs:
       # Persist the built shell for the axe job (skip cache; deterministic
       # rebuild on the runner is < 60s and easier to reason about).
       - name: Upload built shell
-        if: matrix.node == '20'
+        if: matrix.node == '22'
         uses: actions/upload-artifact@v4
         with:
           name: shell-build
@@ -211,7 +210,7 @@ jobs:
           version: 9
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: pnpm
 
       - name: Install (with axe + playwright ephemerals)
@@ -265,7 +264,7 @@ jobs:
           version: 9
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Install Playwright browsers

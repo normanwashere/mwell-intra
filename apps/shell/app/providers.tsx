@@ -6,13 +6,14 @@
 // contract; otherwise we fall back to `memory` mode with demo profiles so the
 // app builds and runs with NO live backend.
 
-import { useMemo, type ReactNode } from 'react';
+import { useEffect, useMemo, type ReactNode } from 'react';
 import { SerwistProvider } from '@serwist/turbopack/react';
 import { SessionProvider, type AuthConfig } from '@intra/auth';
-import { ToastProvider } from '@intra/ui';
+import { ToastProvider, MotionProvider } from '@intra/ui';
 import { createSupabaseBrowserClient } from '@shell/lib/supabase/client';
 import { DEMO_PROFILES } from '@shell/lib/demoProfiles';
 import { DemoSeeder } from '@shell/components/DemoSeeder';
+import { StorageFullToast } from '@shell/components/StorageFullToast';
 
 // Prod-safety guard: if a production build somehow ships without Supabase env
 // (spec §9), we render a hard error instead of silently using demo profiles.
@@ -24,7 +25,7 @@ function isDemoAllowed(): boolean {
 
 function MissingSupabaseConfig() {
   return (
-    <div
+    <main
       role="alert"
       className="grid min-h-screen place-items-center bg-app px-6 text-center"
     >
@@ -36,8 +37,40 @@ function MissingSupabaseConfig() {
           backend. Contact your administrator.
         </p>
       </div>
-    </div>
+    </main>
   );
+}
+
+// The PWA service worker is only safe when explicitly enabled for a deployed
+// build. Local `next start` previews rebuild often, and a stale precache can
+// leave auth pages visually present but non-interactive.
+function isServiceWorkerEnabled(): boolean {
+  return (
+    process.env.NODE_ENV === 'production' &&
+    process.env.NEXT_PUBLIC_ENABLE_SW === 'true'
+  );
+}
+
+function ServiceWorkerDevCleanup() {
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) {
+      return;
+    }
+    navigator.serviceWorker.getRegistrations().then((regs) => {
+      if (regs.length === 0) return;
+      void Promise.all([
+        ...regs.map((r) => r.unregister()),
+        typeof caches !== 'undefined'
+          ? caches.keys().then((ks) => Promise.all(ks.map((k) => caches.delete(k))))
+          : Promise.resolve(),
+      ]).then(() => {
+        // Reload once so the page is served fresh from the dev server instead
+        // of the now-removed SW cache.
+        window.location.reload();
+      });
+    });
+  }, []);
+  return null;
 }
 
 export function Providers({ children }: { children: ReactNode }) {
@@ -57,12 +90,27 @@ export function Providers({ children }: { children: ReactNode }) {
 
   if (config === null) return <MissingSupabaseConfig />;
 
-  return (
-    <SerwistProvider swUrl="/serwist/sw.js">
+  const swEnabled = isServiceWorkerEnabled();
+
+  const tree = (
+    <MotionProvider>
       <SessionProvider config={config}>
         <DemoSeeder />
-        <ToastProvider>{children}</ToastProvider>
+        <ToastProvider>
+          <StorageFullToast />
+          {children}
+        </ToastProvider>
       </SessionProvider>
-    </SerwistProvider>
+    </MotionProvider>
+  );
+
+  // Register only for explicit PWA deployments; otherwise clear stale local SWs.
+  return swEnabled ? (
+    <SerwistProvider swUrl="/serwist/sw.js">{tree}</SerwistProvider>
+  ) : (
+    <>
+      <ServiceWorkerDevCleanup />
+      {tree}
+    </>
   );
 }

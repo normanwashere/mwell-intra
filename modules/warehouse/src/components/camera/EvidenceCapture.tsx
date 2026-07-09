@@ -82,6 +82,9 @@ export function EvidenceCapture({
         persisted = await Promise.all(
           toUpload.map((u, i) => uploadEvidence(u, `${ref}/${i}`)),
         );
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Could not upload evidence.');
+        return;
       } finally {
         setUploading(false);
       }
@@ -91,8 +94,8 @@ export function EvidenceCapture({
     onChange(combined);
   };
 
-  const remove = (url: string) => {
-    const next = urls.filter((u) => u !== url);
+  const removeAt = (index: number) => {
+    const next = urls.filter((_, i) => i !== index);
     setUrls(next);
     onChange(next);
   };
@@ -125,13 +128,13 @@ export function EvidenceCapture({
       )}
       {urls.length > 0 && (
         <ul className="grid grid-cols-3 gap-2" aria-label="Captured evidence">
-          {urls.map((url) => (
-            <li key={url} className="relative">
+          {urls.map((url, index) => (
+            <li key={`${url}-${index}`} className="relative">
               <CapturedThumb url={url} />
               <button
                 type="button"
                 aria-label="Remove photo"
-                onClick={() => remove(url)}
+                onClick={() => removeAt(index)}
                 className="group absolute -right-2 -top-2 grid min-h-11 min-w-11 place-items-center rounded-full text-white focus-visible:outline-none"
               >
                 <span className="grid h-6 w-6 place-items-center rounded-full bg-rose-500 shadow group-focus-visible:ring-2 group-focus-visible:ring-rose-400 group-focus-visible:ring-offset-2 group-focus-visible:ring-offset-surface">

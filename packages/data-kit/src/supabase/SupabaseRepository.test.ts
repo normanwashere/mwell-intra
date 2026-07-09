@@ -130,6 +130,10 @@ function makeMockClient(seed: WarehouseData) {
         from_location_id: null,
         to_location_id: null,
         lot_id: null,
+        code: 'BIN-MOCK',
+        label: null,
+        zone: null,
+        active: true,
         reason: null,
         reference: null,
         sku: 'MOCK',
@@ -396,6 +400,46 @@ describe('SupabaseRepository concurrency-safe payloads (warehouse.* v8 RPCs)', (
     await repo.deleteStorageArea({ storageAreaId: 'bin-pasig-a1' });
     const call = calls.find((c) => c.fn === 'delete_storage_area')!;
     expect(call.payload.storage_area_id).toBe('bin-pasig-a1');
+  });
+
+  it('createEvent routes through the create_event RPC', async () => {
+    const { client, calls } = makeMockClient(seed);
+    const repo = new SupabaseRepository(client);
+    await repo.createEvent({
+      name: 'Audit Pop-up Clinic',
+      type: 'medical_mission',
+      siteLocationId: 'site-makati',
+      startDate: '2026-08-01',
+    });
+    const call = calls.find((c) => c.fn === 'create_event')!;
+    expect(call).toBeDefined();
+    expect((call.payload.event as Record<string, unknown>).name).toBe(
+      'Audit Pop-up Clinic',
+    );
+  });
+
+  it('createStorageArea and updateStorageArea route through bin RPCs', async () => {
+    const { client, calls } = makeMockClient(seed);
+    const repo = new SupabaseRepository(client);
+    await repo.createStorageArea({
+      locationId: 'loc-wh',
+      code: 'A-99',
+      label: 'Audit shelf',
+      zone: 'A',
+    });
+    const create = calls.find((c) => c.fn === 'create_storage_area')!;
+    expect(create).toBeDefined();
+    expect((create.payload.storage_area as Record<string, unknown>).code).toBe('A-99');
+
+    await repo.updateStorageArea({
+      storageAreaId: 'bin-pasig-a1',
+      code: 'A-01',
+      label: 'Updated shelf',
+      active: false,
+    });
+    const update = calls.find((c) => c.fn === 'update_storage_area')!;
+    expect(update.payload.storage_area_id).toBe('bin-pasig-a1');
+    expect((update.payload.patch as Record<string, unknown>).active).toBe(false);
   });
 
   it('relocate reuses the transfer RPC with same-location from/to deltas', async () => {

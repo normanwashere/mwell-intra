@@ -47,6 +47,7 @@ export function DataPage() {
     <div className="space-y-4">
       <PageHeader
         title="Data & Reports"
+        icon="history"
         subtitle="Raw data access, definitions and metric logic"
       />
 

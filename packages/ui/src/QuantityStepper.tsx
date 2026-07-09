@@ -29,7 +29,7 @@ export function QuantityStepper({
   };
 
   return (
-    <div className="flex items-stretch gap-1">
+    <div className="flex min-w-0 items-stretch gap-1">
       <button
         type="button"
         aria-label="Decrease"
@@ -44,7 +44,7 @@ export function QuantityStepper({
         aria-label={ariaLabel}
         type="number"
         inputMode="numeric"
-        className="input text-center"
+        className="input min-w-0 flex-1 text-center"
         min={min}
         max={max}
         value={Number.isNaN(value) ? '' : value}

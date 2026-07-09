@@ -17,22 +17,24 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // mWell brand palette — deep navy "M" wave to bright cyan "well"
+        // mWell brand palette (mwell.com.ph) — deep corporate blue #004F9D
+        // anchoring a sky→cyan gradient.
         brand: {
-          50: "#e9f6ff",
-          100: "#cfecff",
-          200: "#9fd8ff",
-          300: "#63c0ff",
-          400: "#2ea6f7",
-          500: "#1490e6",
-          600: "#0B4DA2",
-          700: "#0a3f86",
-          800: "#0a3168",
-          900: "#04243f",
+          50: "#eaf5fe",
+          100: "#cde8fc",
+          200: "#9fd3f7",
+          300: "#5fbef2",
+          400: "#33c6f4",
+          500: "#1580c1",
+          600: "#0a62b4",
+          700: "#004f9d",
+          800: "#003a73",
+          900: "#002a54",
         },
+        // Bright cyan secondary — highlights / analytics accents.
         accent: {
-          DEFAULT: "#22c1f0",
-          soft: "#5fd2f5",
+          DEFAULT: "#33c6f4",
+          soft: "#8adcf9",
         },
         // Semantic, theme-aware tokens (light + dark via CSS variables)
         app: rgb("--c-app"),
@@ -44,8 +46,18 @@ module.exports = {
         faint: rgb("--c-faint"),
       },
       fontFamily: {
-        display: ["Plus Jakarta Sans", "Inter", "system-ui", "sans-serif"],
+        // Apps load these via next/font and expose CSS variables; the raw
+        // family names keep tests / non-Next consumers rendering sanely.
+        display: [
+          "var(--font-poppins)",
+          "Poppins",
+          "Inter",
+          "system-ui",
+          "sans-serif",
+        ],
         sans: [
+          "var(--font-poppins)",
+          "Poppins",
           "Inter",
           "system-ui",
           "-apple-system",
@@ -53,14 +65,30 @@ module.exports = {
           "Roboto",
           "sans-serif",
         ],
-        mono: ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "monospace"],
+        mono: [
+          "var(--font-jbmono)",
+          "JetBrains Mono",
+          "ui-monospace",
+          "SFMono-Regular",
+          "monospace",
+        ],
+      },
+      // Formal type-scale tokens (display → caption). Line-height + tracking
+      // travel with the size so pages stop hand-rolling combinations.
+      fontSize: {
+        "display": ["2.25rem", { lineHeight: "1.1", letterSpacing: "-0.02em", fontWeight: "800" }],
+        "title": ["1.5rem", { lineHeight: "1.2", letterSpacing: "-0.015em", fontWeight: "800" }],
+        "heading": ["1.125rem", { lineHeight: "1.35", letterSpacing: "-0.01em", fontWeight: "700" }],
+        "body": ["0.875rem", { lineHeight: "1.5" }],
+        "caption": ["0.75rem", { lineHeight: "1.4" }],
+        "overline": ["0.68rem", { lineHeight: "1.3", letterSpacing: "0.08em", fontWeight: "600" }],
       },
       boxShadow: {
-        card: "0 1px 2px rgba(4,36,63,0.05), 0 6px 20px rgba(4,36,63,0.06)",
-        soft: "0 1px 2px rgba(4,36,63,0.04), 0 2px 8px rgba(4,36,63,0.05)",
-        pop: "0 10px 40px rgba(4,36,63,0.16)",
-        glow: "0 8px 30px rgba(34,193,240,0.35)",
-        navy: "0 12px 30px rgba(4,36,63,0.30)",
+        card: "0 1px 2px rgba(11,46,51,0.05), 0 6px 20px rgba(11,46,51,0.06)",
+        soft: "0 1px 2px rgba(11,46,51,0.04), 0 2px 8px rgba(11,46,51,0.05)",
+        pop: "0 10px 40px rgba(11,46,51,0.16)",
+        glow: "0 8px 30px rgba(53,202,191,0.35)",
+        navy: "0 12px 30px rgba(11,46,51,0.30)",
         e1: "var(--shadow-e1)",
         e2: "var(--shadow-e2)",
         e3: "var(--shadow-e3)",
@@ -71,10 +99,10 @@ module.exports = {
       },
       backgroundImage: {
         "brand-grad":
-          "linear-gradient(115deg, #04243f 0%, #0b4da2 55%, #1490e6 100%)",
+          "linear-gradient(115deg, #004f9d 0%, #1580c1 60%, #33c6f4 100%)",
         "brand-grad-soft":
-          "linear-gradient(115deg, #0a3168 0%, #0b4da2 60%, #22c1f0 100%)",
-        "accent-grad": "linear-gradient(120deg, #1490e6 0%, #22c1f0 100%)",
+          "linear-gradient(115deg, #0a62b4 0%, #1580c1 55%, #33c6f4 100%)",
+        "accent-grad": "linear-gradient(120deg, #1580c1 0%, #33c6f4 100%)",
         sheen:
           "linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0))",
       },

@@ -37,3 +37,10 @@ Object.defineProperty(window, 'matchMedia', {
 
 // jsdom lacks scrollTo
 window.scrollTo = vi.fn();
+
+// StaggerGrid / PageTransition skip animation when reduced motion is on —
+// avoids test timeouts waiting for framer-motion entrance variants.
+vi.mock('framer-motion', async (importOriginal) => {
+  const mod = await importOriginal<typeof import('framer-motion')>();
+  return { ...mod, useReducedMotion: () => true };
+});

@@ -11,6 +11,8 @@ import {
   ModuleHero,
   SectionTitle,
   StatCard,
+  StaggerGrid,
+  StaggerItem,
   money,
   type Column,
   type IconName,
@@ -37,6 +39,8 @@ const columns: Column<ProcurementRequest>[] = [
     key: 'title',
     header: 'Request',
     primary: true,
+    sortable: true,
+    sortValue: (row) => row.title,
     render: (row) => (
       <div className="min-w-0">
         <p className="truncate font-semibold text-ink">{row.title}</p>
@@ -60,16 +64,22 @@ const columns: Column<ProcurementRequest>[] = [
   {
     key: 'estimatedAmount',
     header: 'Est. total',
+    sortable: true,
+    sortValue: (row) => row.estimatedAmount ?? 0,
     render: (row) => (row.estimatedAmount != null ? money(row.estimatedAmount) : '—'),
   },
   {
     key: 'neededBy',
     header: 'Needed',
+    sortable: true,
+    sortValue: (row) => row.neededBy ?? '',
     render: (row) => (row.neededBy ? formatDate(row.neededBy) : '—'),
   },
   {
     key: 'createdAt',
     header: 'Created',
+    sortable: true,
+    sortValue: (row) => row.createdAt,
     render: (row) => formatDate(row.createdAt),
   },
 ];
@@ -153,11 +163,11 @@ export function RequestsPage() {
         }
       />
 
-      <div className="stagger grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <StaggerGrid className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {filterCards.map((c) => {
           const active = filter === c.key;
           return (
-            <div
+            <StaggerItem
               key={c.key}
               className={
                 active
@@ -173,10 +183,10 @@ export function RequestsPage() {
                 hint={active ? 'Showing below' : c.hint}
                 onClick={() => applyFilter(c.key)}
               />
-            </div>
+            </StaggerItem>
           );
         })}
-      </div>
+      </StaggerGrid>
 
       <div>
         <SectionTitle

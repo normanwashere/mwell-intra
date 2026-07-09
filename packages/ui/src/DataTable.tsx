@@ -1,5 +1,8 @@
+'use client';
+
 import { clsx } from 'clsx';
-import type { KeyboardEvent, ReactNode } from 'react';
+import { useMemo, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { Icon } from './Icon';
 
 export interface Column<T> {
   key: string;
@@ -10,7 +13,13 @@ export interface Column<T> {
   hideOnMobile?: boolean;
   /** Use as the bold primary line of the mobile card. */
   primary?: boolean;
+  /** Enable client-side sort when the table is not controlled via sortKey. */
+  sortable?: boolean;
+  /** Extract a comparable value for sorting. Defaults to stringifying render output. */
+  sortValue?: (row: T) => string | number;
 }
+
+export type DataTableDensity = 'comfortable' | 'compact';
 
 interface DataTableProps<T> {
   columns: Column<T>[];
@@ -18,6 +27,13 @@ interface DataTableProps<T> {
   keyOf: (row: T) => string;
   onRowClick?: (row: T) => void;
   ariaLabel?: string;
+  density?: DataTableDensity;
+  /** Pin the header row while scrolling (desktop/tablet). */
+  stickyHeader?: boolean;
+  /** Controlled sort column key. */
+  sortKey?: string | null;
+  sortDir?: 'asc' | 'desc';
+  onSortChange?: (key: string, dir: 'asc' | 'desc') => void;
 }
 
 /**
@@ -30,11 +46,57 @@ export function DataTable<T>({
   keyOf,
   onRowClick,
   ariaLabel,
+  density = 'comfortable',
+  stickyHeader = true,
+  sortKey: controlledSortKey,
+  sortDir: controlledSortDir,
+  onSortChange,
 }: DataTableProps<T>) {
+  const [localSortKey, setLocalSortKey] = useState<string | null>(null);
+  const [localSortDir, setLocalSortDir] = useState<'asc' | 'desc'>('asc');
+
+  const sortKey = controlledSortKey !== undefined ? controlledSortKey : localSortKey;
+  const sortDir = controlledSortDir ?? localSortDir;
+
   const alignClass = (a?: string) =>
     a === 'right' ? 'text-right' : a === 'center' ? 'text-center' : 'text-left';
 
-  // Keyboard activation for non-native interactive rows (WCAG 2.1.1).
+  const cellPad = density === 'compact' ? 'py-1.5 pr-2' : 'py-2.5 pr-2';
+  const headPad = density === 'compact' ? 'py-1.5' : 'py-2';
+
+  const sortedRows = useMemo(() => {
+    if (!sortKey) return rows;
+    const col = columns.find((c) => c.key === sortKey);
+    if (!col?.sortable) return rows;
+    const get = col.sortValue ?? ((row: T) => {
+      const v = col.render(row);
+      return typeof v === 'string' || typeof v === 'number' ? v : String(v ?? '');
+    });
+    const copy = [...rows];
+    copy.sort((a, b) => {
+      const av = get(a);
+      const bv = get(b);
+      const cmp =
+        typeof av === 'number' && typeof bv === 'number'
+          ? av - bv
+          : String(av).localeCompare(String(bv), undefined, { numeric: true });
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+    return copy;
+  }, [rows, columns, sortKey, sortDir]);
+
+  const toggleSort = (key: string) => {
+    const col = columns.find((c) => c.key === key);
+    if (!col?.sortable) return;
+    const nextDir = sortKey === key && sortDir === 'asc' ? 'desc' : 'asc';
+    if (onSortChange) {
+      onSortChange(key, nextDir);
+    } else {
+      setLocalSortKey(key);
+      setLocalSortDir(nextDir);
+    }
+  };
+
   const rowKeyDown = (row: T) => (e: KeyboardEvent) => {
     if (!onRowClick) return;
     if (e.key === 'Enter' || e.key === ' ') {
@@ -46,56 +108,88 @@ export function DataTable<T>({
   return (
     <>
       {/* Desktop / tablet table */}
-      <div className="hidden overflow-x-auto sm:block">
-        <table className="w-full text-sm" aria-label={ariaLabel}>
-          <thead>
-            <tr className="border-b border-line text-xs uppercase tracking-wide text-faint">
-              {columns.map((c) => (
-                <th key={c.key} className={clsx('py-2 font-semibold', alignClass(c.align))}>
-                  {c.header}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-line">
-            {rows.map((row) => (
-              <tr
-                key={keyOf(row)}
-                onClick={onRowClick ? () => onRowClick(row) : undefined}
-                onKeyDown={onRowClick ? rowKeyDown(row) : undefined}
-                tabIndex={onRowClick ? 0 : undefined}
-                role={onRowClick ? 'button' : undefined}
-                className={clsx(
-                  'text-ink',
-                  onRowClick &&
-                    'cursor-pointer transition hover:bg-inset focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500',
-                )}
-              >
-                {columns.map((c) => (
-                  <td key={c.key} className={clsx('py-2.5 pr-2', alignClass(c.align))}>
-                    {c.render(row)}
-                  </td>
-                ))}
+      <div className="hidden min-w-0 max-w-full overflow-hidden rounded-2xl border border-line bg-surface sm:block">
+        <div className="max-w-full overflow-x-auto">
+          <table className="w-full min-w-max text-sm" aria-label={ariaLabel}>
+            <thead
+              className={clsx(
+                stickyHeader && 'sticky top-0 z-[1] bg-surface/95 backdrop-blur-sm',
+              )}
+            >
+              <tr className="border-b border-line text-xs uppercase tracking-wide text-faint">
+                {columns.map((c) => {
+                  const active = sortKey === c.key;
+                  return (
+                    <th
+                      key={c.key}
+                      scope="col"
+                      className={clsx(
+                        headPad,
+                        'font-semibold',
+                        alignClass(c.align),
+                        c.sortable && 'select-none',
+                      )}
+                    >
+                      {c.sortable ? (
+                        <button
+                          type="button"
+                          onClick={() => toggleSort(c.key)}
+                          className={clsx(
+                            'inline-flex items-center gap-1 transition hover:text-ink',
+                            active && 'text-ink',
+                          )}
+                          aria-sort={
+                            active ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
+                          }
+                        >
+                          {c.header}
+                          <Icon
+                            name="chevron"
+                            className={clsx(
+                              'h-3 w-3 transition',
+                              active && sortDir === 'desc' && 'rotate-180',
+                              !active && 'opacity-40',
+                            )}
+                          />
+                        </button>
+                      ) : (
+                        c.header
+                      )}
+                    </th>
+                  );
+                })}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-line">
+              {sortedRows.map((row, i) => (
+                <tr
+                  key={keyOf(row)}
+                  onClick={onRowClick ? () => onRowClick(row) : undefined}
+                  onKeyDown={onRowClick ? rowKeyDown(row) : undefined}
+                  tabIndex={onRowClick ? 0 : undefined}
+                  role={onRowClick ? 'button' : undefined}
+                  className={clsx(
+                    'text-ink',
+                    i % 2 === 1 && 'bg-inset/40',
+                    onRowClick &&
+                      'cursor-pointer transition hover:bg-brand-500/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500',
+                  )}
+                >
+                  {columns.map((c) => (
+                    <td key={c.key} className={clsx(cellPad, alignClass(c.align))}>
+                      {c.render(row)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {/* Mobile cards (aria-label kept on the table only to avoid duplicate
-          accessible names when both layouts are present in the DOM).
-          Layout:
-            [ Primary title ....................... chevron ]
-            [ label — value ]
-            [ label — value ]
-          Value column is right-aligned and gets the full width it needs,
-          because on a phone we vertically stack rather than fight a 2-col
-          grid (which was mangling long vendor names). */}
-      <ul className="space-y-2 sm:hidden">
-        {rows.map((row) => {
-          // If no column is explicitly marked `primary`, treat the first
-          // non-hideOnMobile column as the primary line so every table has
-          // a sensible mobile heading without extra callsite work.
+      {/* Mobile cards */}
+      <ul className="min-w-0 max-w-full space-y-2 sm:hidden">
+        {sortedRows.map((row) => {
           const primary =
             columns.find((c) => c.primary) ??
             columns.find((c) => !c.hideOnMobile);
@@ -103,21 +197,21 @@ export function DataTable<T>({
             (c) => c !== primary && !c.hideOnMobile,
           );
           return (
-            <li key={keyOf(row)}>
+            <li key={keyOf(row)} className="min-w-0 max-w-full">
               <div
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
                 onKeyDown={onRowClick ? rowKeyDown(row) : undefined}
                 tabIndex={onRowClick ? 0 : undefined}
                 role={onRowClick ? 'button' : undefined}
                 className={clsx(
-                  'card p-3.5',
+                  'card max-w-full overflow-hidden p-3.5',
                   onRowClick &&
                     'cursor-pointer transition active:bg-inset focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500',
                 )}
               >
                 {primary && (
-                  <div className="mb-2 flex items-start gap-2">
-                    <div className="min-w-0 flex-1 font-display text-base font-bold leading-snug text-ink">
+                  <div className="mb-2 flex min-w-0 items-start gap-2">
+                    <div className="min-w-0 flex-1 break-words font-display text-base font-bold leading-snug text-ink">
                       {primary.render(row)}
                     </div>
                     {onRowClick && (
@@ -144,12 +238,12 @@ export function DataTable<T>({
                   {rest.map((c) => (
                     <div
                       key={c.key}
-                      className="flex items-baseline justify-between gap-3"
+                      className="flex min-w-0 items-baseline justify-between gap-3"
                     >
                       <dt className="shrink-0 text-xs uppercase tracking-wide text-faint">
                         {c.header}
                       </dt>
-                      <dd className="min-w-0 text-right font-medium text-ink">
+                      <dd className="min-w-0 break-words text-right font-medium text-ink">
                         {c.render(row)}
                       </dd>
                     </div>

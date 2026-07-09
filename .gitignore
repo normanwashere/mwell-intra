@@ -16,6 +16,7 @@ build/
 coverage/
 playwright-report/
 test-results/
+.qa/
 
 # env
 .env

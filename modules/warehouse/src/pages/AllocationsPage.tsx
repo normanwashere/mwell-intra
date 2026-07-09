@@ -240,6 +240,7 @@ export function AllocationsPage() {
     <div className="space-y-4">
       <PageHeader
         title="Allocations"
+        icon="tag"
         subtitle="Reserve, issue and track stock for activations"
         action={
           canReserve ? (

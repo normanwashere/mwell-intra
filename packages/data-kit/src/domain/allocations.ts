@@ -15,14 +15,20 @@ export function committedQuantity(
     .reduce((sum, a) => sum + a.quantity, 0);
 }
 
-/** Physical availability minus active commitments (floored at 0). */
+/**
+ * Physical availability minus active commitments (floored at 0).
+ *
+ * Commitments (reserved/allocated) are NOT location-scoped in the current
+ * model, so this figure is intentionally computed across all locations — a
+ * `locationId` cannot be honored correctly here and was therefore removed to
+ * avoid subtracting all-location commitments from location-scoped physical.
+ */
 export function uncommittedAvailable(
   state: StockState,
   allocations: Allocation[],
   productId: string,
-  locationId?: string,
 ): number {
-  const physical = availableForProduct(state, productId, locationId);
+  const physical = availableForProduct(state, productId);
   const committed = committedQuantity(allocations, productId);
   return Math.max(0, physical - committed);
 }

@@ -2,16 +2,11 @@ import { clsx } from 'clsx';
 import type { Product } from '@/domain/types';
 import { Icon } from './Icon';
 
-/** Maps a product to its catalog image by device/merchandise type. */
-const IMAGE_BY_TYPE: Record<string, string> = {
-  smart_watch: '/products/product-smartwatch.png',
-  ecg_ring: '/products/product-ecg-ring.png',
-  sleep_ring: '/products/product-sleep-ring.png',
-  otg_bag: '/products/product-otg-bag.png',
-  shirt: '/products/product-shirt.png',
-  jacket: '/products/product-jacket.png',
-  token: '/products/product-token.png',
-};
+// Catalog product images are optional. No raster assets ship in /public today
+// (the previous /products/*.png references all returned 404), so thumbnails
+// render a clean category icon. To enable real images later, drop files in
+// `public/products/` and return their paths from `productImage` below.
+const IMAGE_BY_TYPE: Record<string, string> = {};
 
 export function productImage(
   product: Pick<Product, 'deviceType' | 'merchandiseType'>,

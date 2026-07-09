@@ -298,7 +298,7 @@ export function buildProcurementSeed(now: Date = new Date()): ProcurementSeed {
     }));
     const approvedAt =
       opts.approvedDaysAgo !== undefined ? daysAgo(now, opts.approvedDaysAgo, 14) : undefined;
-    const receipts: PurchaseOrderReceipt[] | undefined = opts.receipts?.map((r, i) => ({
+    const receipts: PurchaseOrderReceipt[] | undefined = opts.receipts?.map((r) => ({
       id: rcptId(),
       receivedAt: daysAgo(now, r.daysAgo, 15),
       receivedByEmail: r.byEmail,

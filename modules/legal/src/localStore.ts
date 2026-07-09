@@ -8,7 +8,8 @@
 //
 // Namespaced under `intra.legal.v1.*` so a future migration is clean.
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSession } from '@intra/auth';
 import type {
   AccreditationCase,
   AccreditationDoc,
@@ -25,11 +26,318 @@ import {
   buildTailoredChecklist,
   derivePreviousCaseId,
   migrateChecklist,
+  normalizeChecklistDecision,
 } from './caseLogic';
 import { cleanupCases } from './hygiene';
 import { buildLegalSeed } from './seed';
 import type { VendorLoginAlias } from './vendorAccess';
 import type { TailoringProfile } from './requirements/policy';
+
+type MaybePromise<T> = T | Promise<T>;
+type LiveClient = NonNullable<ReturnType<typeof useSession>['supabaseClient']>;
+type UploadDocInput = {
+  caseId: string;
+  vendorId: string;
+  requirementId?: string;
+  docType: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  dataUrl?: string;
+  storagePath?: string;
+  expiresAt?: string;
+  uploadedByEmail?: string;
+};
+type LiveProfile = Record<string, never> & {
+  readonly jurisdiction: never;
+  readonly originCountry: never;
+  readonly entityType: never;
+  readonly category: never;
+  readonly riskTier: never;
+  readonly contractType: never;
+  readonly spendBand: never;
+  readonly handlesPersonalData: never;
+};
+type LiveRow = Record<string, never> & {
+  readonly id: never;
+  readonly vendor_id: never;
+  readonly vendor_name: never;
+  readonly status: never;
+  readonly opened_at: never;
+  readonly case_id: never;
+  readonly requirement: never;
+  readonly required: never;
+  readonly instrument: never;
+  readonly doc_type: never;
+  readonly filename: never;
+  readonly mime_type: never;
+  readonly uploaded_at: never;
+  readonly at: never;
+  readonly action: never;
+  readonly email: never;
+  readonly company_name: never;
+  readonly created_at: never;
+  readonly code: never;
+  readonly template_version: never;
+  readonly signer_name: never;
+  readonly signed_at: never;
+  readonly profile?: LiveProfile;
+};
+type LiveQueryError = { readonly message: string };
+type InviteVendorRpcResult = LiveRow & {
+  readonly invite?: LiveRow;
+  readonly case?: LiveRow;
+  readonly vendor?: LiveRow;
+};
+
+function useLiveClient(): LiveClient | null {
+  const { mode, supabaseClient } = useSession();
+  return mode === 'supabase' ? (supabaseClient as LiveClient | null) : null;
+}
+
+function isLive(client: LiveClient | null): client is LiveClient {
+  return Boolean(client);
+}
+
+async function liveRpc<T>(
+  client: LiveClient,
+  schema: 'legal',
+  fn: string,
+  payload: Record<string, unknown>,
+): Promise<T> {
+  const { data, error } = await client.schema(schema).rpc(fn, { payload });
+  if (error) throw new Error(error.message);
+  return data as T;
+}
+
+function storageSafeSegment(value: string): string {
+  return value
+    .trim()
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 120) || 'document';
+}
+
+async function uploadLiveAccreditationDocument(
+  client: LiveClient,
+  input: UploadDocInput,
+): Promise<string | undefined> {
+  if (!input.dataUrl?.startsWith('data:')) return input.storagePath;
+
+  const objectPath =
+    input.storagePath ??
+    [
+      'vendor',
+      storageSafeSegment(input.vendorId),
+      'legal',
+      'accreditation',
+      storageSafeSegment(input.caseId),
+      `${globalThis.crypto?.randomUUID?.() ?? Date.now()}_${storageSafeSegment(input.filename)}`,
+    ].join('/');
+
+  const blob = await fetch(input.dataUrl).then((res) => res.blob());
+  const { error } = await client.storage.from('documents').upload(objectPath, blob, {
+    contentType: input.mimeType,
+    upsert: false,
+  });
+  if (error) throw new Error(error.message);
+  return objectPath;
+}
+
+function useLiveRows<T>(
+  client: LiveClient | null,
+  table: string,
+  map: (row: LiveRow) => T,
+  order?: { column: string; ascending?: boolean },
+): [T[], boolean, () => Promise<void>] {
+  const [rows, setRows] = useState<T[]>([]);
+  const [loading, setLoading] = useState(Boolean(client));
+  const mapRef = useRef(map);
+
+  useEffect(() => {
+    mapRef.current = map;
+  }, [map]);
+
+  const refresh = useCallback(async () => {
+    if (!client) {
+      setRows([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    try {
+      let query = client.schema('legal').from(table).select('*');
+      if (order) {
+        query = query.order(order.column, { ascending: order.ascending ?? false });
+      }
+      const { data, error } = await query;
+      if (error) throw new Error(error.message);
+      setRows((data ?? []).map(mapRef.current));
+    } catch {
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [client, table, order?.column, order?.ascending]);
+
+  useEffect(() => {
+    let active = true;
+    if (!client) {
+      setRows([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    let query = client.schema('legal').from(table).select('*');
+    if (order) {
+      query = query.order(order.column, { ascending: order.ascending ?? false });
+    }
+    Promise.resolve(query)
+      .then(({ data, error }: { data: LiveRow[] | null; error: LiveQueryError | null }) => {
+        if (!active) return;
+        if (error) throw error;
+        setRows((data ?? []).map(mapRef.current));
+        setLoading(false);
+      })
+      .catch(() => {
+        if (!active) return;
+        setRows([]);
+        setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [client, table, order?.column, order?.ascending]);
+
+  return [rows, loading, refresh];
+}
+
+function mapCase(row: LiveRow): AccreditationCase {
+  return {
+    id: row.id,
+    vendorId: row.vendor_id,
+    vendorName: row.vendor_name,
+    status: row.status,
+    openedAt: row.opened_at,
+    submittedAt: row.submitted_at ?? undefined,
+    decidedAt: row.decided_at ?? undefined,
+    decidedByEmail: row.decided_by_email ?? undefined,
+    decisionNote: row.decision_note ?? undefined,
+    expiresAt: row.expires_at ?? undefined,
+    scope: row.scope ?? undefined,
+    category: row.category ?? undefined,
+    jurisdiction: row.jurisdiction ?? undefined,
+    originCountry: row.origin_country ?? undefined,
+    entityType: row.entity_type ?? undefined,
+    vendorCategory: row.vendor_category ?? undefined,
+    riskTier: row.risk_tier ?? undefined,
+    contractType: row.contract_type ?? undefined,
+    expectedAnnualSpend: row.expected_annual_spend ?? undefined,
+    handlesPersonalData: row.handles_personal_data ?? undefined,
+    lastReminderAt: row.last_reminder_at ?? undefined,
+    invitedByEmail: row.invited_by_email ?? undefined,
+    contactEmail: row.contact_email ?? undefined,
+  } as AccreditationCase;
+}
+
+function mapChecklist(row: LiveRow): RequirementChecklistItem {
+  return {
+    id: row.id,
+    caseId: row.case_id,
+    code: row.code ?? undefined,
+    requirement: row.requirement,
+    description: row.description ?? undefined,
+    whyWeNeedIt: row.why_we_need_it ?? undefined,
+    helpUrl: row.help_url ?? undefined,
+    authority: row.authority ?? undefined,
+    evidenceFormat: row.evidence_format ?? undefined,
+    group: row.requirement_group ?? undefined,
+    required: Boolean(row.required),
+    instrument: Boolean(row.instrument),
+    instrumentCode: row.instrument_code ?? undefined,
+    templateVersion: row.template_version ?? undefined,
+    renewsAfterMonths: row.renews_after_months ?? undefined,
+    decision: normalizeChecklistDecision(row.decision),
+    reviewerEmail: row.reviewer_email ?? undefined,
+    reviewedAt: row.reviewed_at ?? undefined,
+    reviewerNote: row.reviewer_note ?? undefined,
+    documentIds: row.document_ids ?? [],
+  } as RequirementChecklistItem;
+}
+
+function mapDoc(row: LiveRow): AccreditationDoc {
+  return {
+    id: row.id,
+    caseId: row.case_id,
+    vendorId: row.vendor_id,
+    requirementId: row.requirement_id ?? undefined,
+    docType: row.doc_type,
+    filename: row.filename,
+    mimeType: row.mime_type,
+    sizeBytes: Number(row.size_bytes ?? 0),
+    dataUrl: row.data_url ?? undefined,
+    storagePath: row.storage_path ?? undefined,
+    status: row.status,
+    version: Number(row.version ?? 1),
+    uploadedAt: row.uploaded_at,
+    uploadedByEmail: row.uploaded_by_email ?? undefined,
+    expiresAt: row.expires_at ?? undefined,
+    reviewerNote: row.reviewer_note ?? undefined,
+  };
+}
+
+function mapTimeline(row: LiveRow): CaseTimelineEntry {
+  return {
+    id: row.id,
+    caseId: row.case_id,
+    at: row.at,
+    actorEmail: row.actor_email ?? undefined,
+    action: row.action,
+    detail: row.detail ?? undefined,
+  };
+}
+
+function mapInvite(row: LiveRow): VendorInvite {
+  return {
+    id: row.id,
+    email: row.email,
+    companyName: row.company_name,
+    category: row.category ?? undefined,
+    createdAt: row.created_at,
+    createdByEmail: row.created_by_email ?? undefined,
+    acceptedAt: row.accepted_at ?? undefined,
+    status: row.status,
+    vendorId: row.vendor_id ?? undefined,
+    caseId: row.case_id ?? undefined,
+    jurisdiction: row.profile?.jurisdiction ?? undefined,
+    originCountry: row.profile?.originCountry ?? undefined,
+    entityType: row.profile?.entityType ?? undefined,
+    vendorCategory: row.profile?.category ?? undefined,
+    riskTier: row.profile?.riskTier ?? undefined,
+    contractType: row.profile?.contractType ?? undefined,
+    expectedAnnualSpend: row.profile?.spendBand ?? undefined,
+    handlesPersonalData: row.profile?.handlesPersonalData ?? undefined,
+  } as VendorInvite;
+}
+
+function mapSigned(row: LiveRow): SignedInstrument {
+  return {
+    id: row.id,
+    caseId: row.case_id,
+    code: row.code,
+    templateVersion: row.template_version,
+    signerName: row.signer_name,
+    signerEmail: row.signer_email ?? undefined,
+    signerTitle: row.signer_title ?? undefined,
+    signaturePng: row.signature_png ?? '',
+    signatureMethod: row.signature_method ?? 'typed',
+    signedAt: row.signed_at,
+    signerUa: row.signer_ua ?? '',
+    fields: row.fields ?? undefined,
+    revokedAt: row.revoked_at ?? undefined,
+    revokedByEmail: row.revoked_by_email ?? undefined,
+  };
+}
 
 const CASES_KEY = 'intra.legal.v1.cases';
 const CHECKLIST_KEY = 'intra.legal.v1.checklist';
@@ -68,13 +376,26 @@ function safeRead<T>(key: string): T[] {
     return [];
   }
 }
+function isQuotaError(err: unknown): boolean {
+  return (
+    err instanceof DOMException &&
+    (err.name === 'QuotaExceededError' ||
+      err.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+      err.code === 22)
+  );
+}
 function safeWrite<T>(key: string, rows: T[]): void {
   if (typeof window === 'undefined') return;
   try {
     window.localStorage.setItem(key, JSON.stringify(rows));
     window.dispatchEvent(new Event(CHANGE_EVT));
-  } catch {
-    /* noop */
+  } catch (err) {
+    // Surface quota failures instead of silently dropping the write.
+    if (isQuotaError(err)) {
+      window.dispatchEvent(
+        new CustomEvent('intra:storage-full', { detail: { key } }),
+      );
+    }
   }
 }
 
@@ -174,11 +495,19 @@ function cleanupOnce(): void {
 // ---------------------------------------------------------------------------
 // Shared hook wiring
 // ---------------------------------------------------------------------------
-function useTrackedRows<T>(key: string): [T[], (rows: T[]) => void, boolean] {
+function useTrackedRows<T>(
+  key: string,
+  enabled = true,
+): [T[], (rows: T[]) => void, boolean] {
   const [rows, setRows] = useState<T[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled);
 
   useEffect(() => {
+    if (!enabled) {
+      setRows([]);
+      setLoading(false);
+      return;
+    }
     if (typeof window !== 'undefined') {
       seedOnce();
       migrateOnce();
@@ -194,14 +523,15 @@ function useTrackedRows<T>(key: string): [T[], (rows: T[]) => void, boolean] {
       window.removeEventListener(CHANGE_EVT, onChange);
       window.removeEventListener('storage', onChange);
     };
-  }, [key]);
+  }, [key, enabled]);
 
   const setPersisted = useCallback(
     (next: T[]) => {
+      if (!enabled) return;
       safeWrite(key, next);
       setRows(next);
     },
-    [key],
+    [key, enabled],
   );
 
   return [rows, setPersisted, loading];
@@ -238,15 +568,15 @@ export interface CasesAPI {
     category?: string,
     actor?: string,
     opts?: AddCaseOptions,
-  ) => AccreditationCase;
+  ) => MaybePromise<AccreditationCase>;
   submitCase: (
     id: string,
     actor?: string,
     signature?: CaseSignature,
-  ) => AccreditationCase | null;
+  ) => MaybePromise<AccreditationCase | null>;
   decideCase: (
     id: string,
-    decision: 'approved' | 'rejected',
+    decision: 'approved' | 'rejected' | 'provisional',
     opts: {
       note?: string;
       expiresAt?: string;
@@ -254,18 +584,44 @@ export interface CasesAPI {
       actor?: string;
       signature?: CaseSignature;
     },
-  ) => AccreditationCase | null;
+  ) => MaybePromise<AccreditationCase | null>;
   /** Reviewer nudge: writes a timeline entry + bumps `lastReminderAt`. */
-  sendReminder: (id: string, actor?: string) => AccreditationCase | null;
+  sendReminder: (id: string, actor?: string) => MaybePromise<AccreditationCase | null>;
 }
 
 export function useAccreditationCases(): CasesAPI {
-  const [rows, set, loading] = useTrackedRows<AccreditationCase>(CASES_KEY);
+  const live = useLiveClient();
+  const [localRows, set, localLoading] = useTrackedRows<AccreditationCase>(
+    CASES_KEY,
+    !isLive(live),
+  );
+  const [liveRows, liveLoading, refreshLive] = useLiveRows<AccreditationCase>(
+    live,
+    'accreditation_cases',
+    mapCase,
+    { column: 'opened_at', ascending: false },
+  );
+  const rows = isLive(live) ? liveRows : localRows;
+  const loading = isLive(live) ? liveLoading : localLoading;
 
   const getById = useCallback((id: string) => rows.find((r) => r.id === id), [rows]);
 
   const addCase = useCallback<CasesAPI['addCase']>(
     (vendorId, vendorName, category, actor, opts) => {
+      if (isLive(live)) {
+        return liveRpc<LiveRow>(live, 'legal', 'create_accreditation_case', {
+          vendor_id: vendorId,
+          vendor_name: vendorName,
+          category,
+          actor_email: actor,
+          profile: opts?.profile,
+          origin_country: opts?.originCountry,
+          contact_email: opts?.contactEmail,
+        }).then((row) => {
+          const mapped = mapCase(row);
+          return refreshLive().then(() => mapped);
+        });
+      }
       const profile = opts?.profile;
       // Renewal continuity (F2.3): link the vendor's latest prior case so
       // reviewers can reach last cycle's documents from the new case.
@@ -321,7 +677,7 @@ export function useAccreditationCases(): CasesAPI {
       });
       return next;
     },
-    [set],
+    [set, live, refreshLive],
   );
 
   const patchCase = useCallback(
@@ -340,6 +696,16 @@ export function useAccreditationCases(): CasesAPI {
 
   const submitCase = useCallback<CasesAPI['submitCase']>(
     (id, actor, signature) => {
+      if (isLive(live)) {
+        return liveRpc<LiveRow>(live, 'legal', 'submit_accreditation_case', {
+          id,
+          actor_email: actor,
+          signature,
+        }).then((row) => {
+          const mapped = mapCase(row);
+          return refreshLive().then(() => mapped);
+        });
+      }
       const merged = patchCase(id, {
         status: 'submitted',
         submittedAt: nowIso(),
@@ -357,13 +723,46 @@ export function useAccreditationCases(): CasesAPI {
       }
       return merged;
     },
-    [patchCase],
+    [patchCase, live, refreshLive],
   );
 
   const decideCase = useCallback<CasesAPI['decideCase']>(
     (id, decision, opts) => {
+      if (isLive(live)) {
+        return liveRpc<LiveRow>(live, 'legal', 'approve_accreditation_case', {
+          id,
+          decision,
+          note: opts.note,
+          expires_at: opts.expiresAt,
+          scope: opts.scope,
+          actor_email: opts.actor,
+          signature: opts.signature,
+        }).then((row) => {
+          const mapped = mapCase(row);
+          return refreshLive().then(() => mapped);
+        });
+      }
+      // Defense-in-depth (the UI also gates): never approve a case while a
+      // required checklist item is still unresolved. Signing an instrument
+      // marks its item approved (see signInstrument), so this stays reachable.
+      if (decision === 'approved') {
+        const items = safeRead<RequirementChecklistItem>(CHECKLIST_KEY).filter(
+          (i) => i.caseId === id,
+        );
+        const required = items.filter((i) => i.required);
+        const allResolved = required.every(
+          (i) => i.decision === 'approved' || i.decision === 'na',
+        );
+        if (required.length === 0 || !allResolved) return null;
+      }
+      const status: AccreditationCase['status'] =
+        decision === 'approved'
+          ? 'approved'
+          : decision === 'provisional'
+            ? 'provisional'
+            : 'rejected';
       const patch: Partial<AccreditationCase> = {
-        status: decision === 'approved' ? 'approved' : 'rejected',
+        status,
         decidedAt: nowIso(),
         decidedByEmail: opts.actor,
         decisionNote: opts.note,
@@ -372,29 +771,46 @@ export function useAccreditationCases(): CasesAPI {
       if (decision === 'approved') {
         patch.expiresAt = opts.expiresAt ?? daysAhead(365);
         patch.scope = opts.scope;
+      } else if (decision === 'provisional') {
+        // Time-limited clearance — short expiry so the vendor must finish the
+        // outstanding requirements to convert to full accreditation.
+        patch.expiresAt = opts.expiresAt ?? daysAhead(60);
+        patch.scope = opts.scope;
       }
       const merged = patchCase(id, patch);
       if (merged) {
         const signedBy = opts.signature
           ? ` E-signed by ${opts.signature.signerName}.`
           : '';
+        const detail =
+          decision === 'approved'
+            ? `Accreditation approved${opts.scope ? ` — scope: ${opts.scope}` : ''}${patch.expiresAt ? `, expires ${patch.expiresAt}` : ''}.${signedBy}`
+            : decision === 'provisional'
+              ? `Temporary clearance granted${opts.scope ? ` — scope: ${opts.scope}` : ''}${patch.expiresAt ? `, expires ${patch.expiresAt}` : ''}.${signedBy}`
+              : `Accreditation rejected${opts.note ? ` — ${opts.note}` : ''}.${signedBy}`;
         appendTimeline({
           caseId: id,
           actorEmail: opts.actor,
           action: decision,
-          detail:
-            decision === 'approved'
-              ? `Accreditation approved${opts.scope ? ` — scope: ${opts.scope}` : ''}${patch.expiresAt ? `, expires ${patch.expiresAt}` : ''}.${signedBy}`
-              : `Accreditation rejected${opts.note ? ` — ${opts.note}` : ''}.${signedBy}`,
+          detail,
         });
       }
       return merged;
     },
-    [patchCase],
+    [patchCase, live, refreshLive],
   );
 
   const sendReminder = useCallback<CasesAPI['sendReminder']>(
     (id, actor) => {
+      if (isLive(live)) {
+        return liveRpc<LiveRow>(live, 'legal', 'send_accreditation_reminder', {
+          id,
+          actor_email: actor,
+        }).then((row) => {
+          const mapped = mapCase(row);
+          return refreshLive().then(() => mapped);
+        });
+      }
       const merged = patchCase(id, { lastReminderAt: nowIso() });
       if (merged) {
         appendTimeline({
@@ -406,7 +822,7 @@ export function useAccreditationCases(): CasesAPI {
       }
       return merged;
     },
-    [patchCase],
+    [patchCase, live, refreshLive],
   );
 
   return { rows, loading, getById, addCase, submitCase, decideCase, sendReminder };
@@ -423,12 +839,25 @@ export interface ChecklistAPI {
     itemId: string,
     decision: ChecklistDecision,
     reviewer: { email?: string; note?: string },
-  ) => RequirementChecklistItem | null;
-  attach: (itemId: string, docId: string) => void;
+  ) => MaybePromise<RequirementChecklistItem | null>;
+  attach: (itemId: string, docId: string) => MaybePromise<void>;
 }
 
 export function useChecklist(): ChecklistAPI {
-  const [rows, set, loading] = useTrackedRows<RequirementChecklistItem>(CHECKLIST_KEY);
+  const live = useLiveClient();
+  const [localRows, set, localLoading] = useTrackedRows<RequirementChecklistItem>(
+    CHECKLIST_KEY,
+    !isLive(live),
+  );
+  const [liveRows, liveLoading, refreshLive] =
+    useLiveRows<RequirementChecklistItem>(
+      live,
+      'requirement_checklist_items',
+      mapChecklist,
+      { column: 'created_at', ascending: true },
+    );
+  const rows = isLive(live) ? liveRows : localRows;
+  const loading = isLive(live) ? liveLoading : localLoading;
 
   const forCase = useCallback(
     (caseId: string) => rows.filter((r) => r.caseId === caseId),
@@ -451,6 +880,19 @@ export function useChecklist(): ChecklistAPI {
 
   const review = useCallback<ChecklistAPI['review']>(
     (itemId, decision, reviewer) => {
+      if (isLive(live)) {
+        return liveRpc<LiveRow>(live, 'legal', 'review_checklist_item', {
+          id: itemId,
+          item_id: itemId,
+          decision,
+          reviewer_email: reviewer.email,
+          reviewer_note: reviewer.note,
+          note: reviewer.note,
+        }).then((row) => {
+          const mapped = mapChecklist(row);
+          return refreshLive().then(() => mapped);
+        });
+      }
       const merged = patchItem(itemId, {
         decision,
         reviewerEmail: reviewer.email,
@@ -467,11 +909,14 @@ export function useChecklist(): ChecklistAPI {
       }
       return merged;
     },
-    [patchItem],
+    [patchItem, live, refreshLive],
   );
 
   const attach = useCallback(
     (itemId: string, docId: string) => {
+      if (isLive(live)) {
+        return Promise.resolve();
+      }
       const current = safeRead<RequirementChecklistItem>(CHECKLIST_KEY);
       const idx = current.findIndex((r) => r.id === itemId);
       if (idx < 0) return;
@@ -481,7 +926,7 @@ export function useChecklist(): ChecklistAPI {
       nextList[idx] = { ...item, documentIds: [...item.documentIds, docId] };
       set(nextList);
     },
-    [set],
+    [set, live],
   );
 
   return { rows, loading, forCase, review, attach };
@@ -495,23 +940,24 @@ export interface DocsAPI {
   loading: boolean;
   forCase: (caseId: string) => AccreditationDoc[];
   forRequirement: (itemId: string) => AccreditationDoc[];
-  upload: (input: {
-    caseId: string;
-    vendorId: string;
-    requirementId?: string;
-    docType: string;
-    filename: string;
-    mimeType: string;
-    sizeBytes: number;
-    dataUrl?: string;
-    expiresAt?: string;
-    uploadedByEmail?: string;
-  }) => AccreditationDoc;
-  setStatus: (docId: string, status: DocumentStatus, actor?: string, note?: string) => AccreditationDoc | null;
+  upload: (input: UploadDocInput) => MaybePromise<AccreditationDoc>;
+  setStatus: (docId: string, status: DocumentStatus, actor?: string, note?: string) => MaybePromise<AccreditationDoc | null>;
 }
 
 export function useAccreditationDocs(): DocsAPI {
-  const [rows, set, loading] = useTrackedRows<AccreditationDoc>(DOCS_KEY);
+  const live = useLiveClient();
+  const [localRows, set, localLoading] = useTrackedRows<AccreditationDoc>(
+    DOCS_KEY,
+    !isLive(live),
+  );
+  const [liveRows, liveLoading, refreshLive] = useLiveRows<AccreditationDoc>(
+    live,
+    'accreditation_docs',
+    mapDoc,
+    { column: 'uploaded_at', ascending: false },
+  );
+  const rows = isLive(live) ? liveRows : localRows;
+  const loading = isLive(live) ? liveLoading : localLoading;
 
   const forCase = useCallback(
     (caseId: string) => rows.filter((r) => r.caseId === caseId),
@@ -523,7 +969,25 @@ export function useAccreditationDocs(): DocsAPI {
   );
 
   const upload = useCallback<DocsAPI['upload']>(
-    (input) => {
+    async (input) => {
+      if (isLive(live)) {
+        const storagePath = await uploadLiveAccreditationDocument(live, input);
+        return liveRpc<LiveRow>(live, 'legal', 'upload_accreditation_doc', {
+          case_id: input.caseId,
+          vendor_id: input.vendorId,
+          requirement_id: input.requirementId,
+          doc_type: input.docType,
+          filename: input.filename,
+          mime_type: input.mimeType,
+          size_bytes: input.sizeBytes,
+          storage_path: storagePath,
+          expires_at: input.expiresAt,
+          uploaded_by_email: input.uploadedByEmail,
+        }).then((row) => {
+          const mapped = mapDoc(row);
+          return refreshLive().then(() => mapped);
+        });
+      }
       const versionExisting = safeRead<AccreditationDoc>(DOCS_KEY).filter(
         (r) => r.caseId === input.caseId && r.docType === input.docType,
       );
@@ -537,6 +1001,7 @@ export function useAccreditationDocs(): DocsAPI {
         mimeType: input.mimeType,
         sizeBytes: input.sizeBytes,
         dataUrl: input.dataUrl,
+        storagePath: input.storagePath,
         status: 'submitted',
         version: versionExisting.length + 1,
         uploadedAt: nowIso(),
@@ -552,11 +1017,22 @@ export function useAccreditationDocs(): DocsAPI {
       });
       return doc;
     },
-    [set],
+    [set, live, refreshLive],
   );
 
   const setStatus = useCallback<DocsAPI['setStatus']>(
     (docId, status, actor, note) => {
+      if (isLive(live)) {
+        return liveRpc<LiveRow>(live, 'legal', 'update_accreditation_doc_status', {
+          doc_id: docId,
+          status,
+          actor_email: actor,
+          note,
+        }).then((row) => {
+          const mapped = mapDoc(row);
+          return refreshLive().then(() => mapped);
+        });
+      }
       const current = safeRead<AccreditationDoc>(DOCS_KEY);
       const idx = current.findIndex((r) => r.id === docId);
       if (idx < 0) return null;
@@ -576,7 +1052,7 @@ export function useAccreditationDocs(): DocsAPI {
       });
       return merged;
     },
-    [set],
+    [set, live, refreshLive],
   );
 
   return { rows, loading, forCase, forRequirement, upload, setStatus };
@@ -609,7 +1085,7 @@ export interface SignedInstrumentsAPI {
   forCase: (caseId: string) => SignedInstrument[];
   /** Latest non-revoked signature for an instrument code on a case. */
   findSigned: (caseId: string, code: string) => SignedInstrument | undefined;
-  sign: (input: SignInstrumentInput) => SignedInstrument;
+  sign: (input: SignInstrumentInput) => MaybePromise<SignedInstrument>;
 }
 
 /**
@@ -633,6 +1109,29 @@ export function signInstrument(input: SignInstrumentInput): SignedInstrument {
     fields: input.fields,
   };
   safeWrite(SIGNED_KEY, [record, ...safeRead<SignedInstrument>(SIGNED_KEY)]);
+  // Signing a legal instrument IS its fulfillment — there is no separate
+  // reviewer decision path for instrument rows (they route to the sign page).
+  // Mark the matching checklist item(s) approved so `readyForDecision` (all
+  // required items approved) becomes reachable for real, non-seeded cases.
+  const checklist = safeRead<RequirementChecklistItem>(CHECKLIST_KEY);
+  let checklistChanged = false;
+  const nextChecklist = checklist.map((item) => {
+    const matches =
+      item.caseId === input.caseId &&
+      item.instrument &&
+      (item.instrumentCode === input.code || item.code === input.code) &&
+      item.decision !== 'approved';
+    if (!matches) return item;
+    checklistChanged = true;
+    return {
+      ...item,
+      decision: 'approved' as const,
+      reviewedAt: nowIso(),
+      reviewerEmail: input.signerEmail,
+      reviewerNote: `Satisfied by e-signature (${input.code} v${input.templateVersion}).`,
+    };
+  });
+  if (checklistChanged) safeWrite(CHECKLIST_KEY, nextChecklist);
   appendTimeline({
     caseId: input.caseId,
     actorEmail: input.signerEmail,
@@ -643,7 +1142,19 @@ export function signInstrument(input: SignInstrumentInput): SignedInstrument {
 }
 
 export function useSignedInstruments(): SignedInstrumentsAPI {
-  const [rows, , loading] = useTrackedRows<SignedInstrument>(SIGNED_KEY);
+  const live = useLiveClient();
+  const [localRows, , localLoading] = useTrackedRows<SignedInstrument>(
+    SIGNED_KEY,
+    !isLive(live),
+  );
+  const [liveRows, liveLoading, refreshLive] = useLiveRows<SignedInstrument>(
+    live,
+    'signed_instruments',
+    mapSigned,
+    { column: 'signed_at', ascending: false },
+  );
+  const rows = isLive(live) ? liveRows : localRows;
+  const loading = isLive(live) ? liveLoading : localLoading;
 
   const forCase = useCallback(
     (caseId: string) => rows.filter((r) => r.caseId === caseId),
@@ -654,7 +1165,29 @@ export function useSignedInstruments(): SignedInstrumentsAPI {
       rows.find((r) => r.caseId === caseId && r.code === code && !r.revokedAt),
     [rows],
   );
-  const sign = useCallback((input: SignInstrumentInput) => signInstrument(input), []);
+  const sign = useCallback(
+    (input: SignInstrumentInput) => {
+      if (isLive(live)) {
+        return liveRpc<LiveRow>(live, 'legal', 'sign_instrument', {
+          case_id: input.caseId,
+          code: input.code,
+          template_version: input.templateVersion,
+          signer_name: input.signerName,
+          signer_email: input.signerEmail,
+          signer_title: input.signerTitle,
+          signature_png: input.signaturePng,
+          signature_method: input.signatureMethod,
+          signer_ua: input.signerUa,
+          fields: input.fields,
+        }).then((row) => {
+          const mapped = mapSigned(row);
+          return refreshLive().then(() => mapped);
+        });
+      }
+      return signInstrument(input);
+    },
+    [live, refreshLive],
+  );
 
   return { rows, loading, forCase, findSigned, sign };
 }
@@ -663,7 +1196,19 @@ export function useSignedInstruments(): SignedInstrumentsAPI {
 // Timeline
 // ---------------------------------------------------------------------------
 export function useCaseTimeline(caseId?: string): { rows: CaseTimelineEntry[]; loading: boolean } {
-  const [rows, , loading] = useTrackedRows<CaseTimelineEntry>(TIMELINE_KEY);
+  const live = useLiveClient();
+  const [localRows, , localLoading] = useTrackedRows<CaseTimelineEntry>(
+    TIMELINE_KEY,
+    !isLive(live),
+  );
+  const [liveRows, liveLoading] = useLiveRows<CaseTimelineEntry>(
+    live,
+    'case_timeline',
+    mapTimeline,
+    { column: 'at', ascending: false },
+  );
+  const rows = isLive(live) ? liveRows : localRows;
+  const loading = isLive(live) ? liveLoading : localLoading;
   const filtered = useMemo(
     () => (caseId ? rows.filter((r) => r.caseId === caseId) : rows),
     [rows, caseId],
@@ -687,13 +1232,43 @@ export interface InviteInput {
 export interface InvitesAPI {
   rows: VendorInvite[];
   loading: boolean;
-  invite: (input: InviteInput) => VendorInvite;
+  invite: (input: InviteInput) => MaybePromise<VendorInvite>;
 }
 
 export function useVendorInvites(): InvitesAPI {
-  const [rows, set, loading] = useTrackedRows<VendorInvite>(INVITES_KEY);
+  const live = useLiveClient();
+  const [localRows, set, localLoading] = useTrackedRows<VendorInvite>(
+    INVITES_KEY,
+    !isLive(live),
+  );
+  const [liveRows, liveLoading, refreshLive] = useLiveRows<VendorInvite>(
+    live,
+    'vendor_invites',
+    mapInvite,
+    { column: 'created_at', ascending: false },
+  );
+  const rows = isLive(live) ? liveRows : localRows;
+  const loading = isLive(live) ? liveLoading : localLoading;
   const invite = useCallback<InvitesAPI['invite']>(
     (input) => {
+      if (isLive(live)) {
+        return liveRpc<InviteVendorRpcResult>(live, 'legal', 'invite_vendor', {
+          email: input.email.trim(),
+          company_name: input.companyName.trim(),
+          category: input.category,
+          actor_email: input.actor,
+          profile: input.profile,
+          origin_country: input.originCountry,
+        }).then((result) => {
+          const inviteRow = result?.invite ?? result;
+          const mapped = {
+            ...mapInvite(inviteRow),
+            caseId: inviteRow?.case_id ?? result?.case?.id,
+            vendorId: inviteRow?.vendor_id ?? result?.vendor?.id,
+          };
+          return refreshLive().then(() => mapped);
+        });
+      }
       const next: VendorInvite = {
         id: newId('inv'),
         email: input.email,
@@ -737,7 +1312,7 @@ export function useVendorInvites(): InvitesAPI {
       }
       return next;
     },
-    [set],
+    [set, live, refreshLive],
   );
   return { rows, loading, invite };
 }
@@ -749,7 +1324,11 @@ export function useVendorAliases(): {
   rows: VendorLoginAlias[];
   loading: boolean;
 } {
-  const [rows, , loading] = useTrackedRows<VendorLoginAlias>(ALIASES_KEY);
+  const live = useLiveClient();
+  const [rows, , loading] = useTrackedRows<VendorLoginAlias>(
+    ALIASES_KEY,
+    !isLive(live),
+  );
   return { rows, loading };
 }
 
@@ -767,6 +1346,10 @@ export function computeCaseStatus(kase: AccreditationCase): CaseStatus {
     const t = new Date(kase.expiresAt).getTime();
     if (t < Date.now()) return 'expired';
     if (isExpiringSoon(kase.expiresAt, 30)) return 'renewal_due';
+  }
+  // Provisional clearance lapses to expired once its short window passes.
+  if (kase.status === 'provisional' && kase.expiresAt) {
+    if (new Date(kase.expiresAt).getTime() < Date.now()) return 'expired';
   }
   return kase.status;
 }

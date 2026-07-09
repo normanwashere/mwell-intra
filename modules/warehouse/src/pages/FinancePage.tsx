@@ -124,6 +124,7 @@ export function FinancePage() {
     <div className="space-y-4">
       <PageHeader
         title="Finance & Valuation"
+        icon="coins"
         subtitle="Costing, promo spend & audit trail"
       />
 

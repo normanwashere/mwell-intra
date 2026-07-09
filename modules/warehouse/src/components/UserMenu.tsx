@@ -79,7 +79,7 @@ export function UserMenu() {
         aria-label="Account"
         className="flex items-center gap-2 rounded-full py-1 pl-1 pr-2 text-left transition hover:bg-inset sm:pr-3"
       >
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand-grad text-xs font-bold text-white">
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand-600 text-xs font-bold text-white">
           {initials(name)}
         </span>
         <span className="hidden min-w-0 sm:block">
@@ -110,7 +110,7 @@ export function UserMenu() {
       >
         <div className="space-y-4">
           <div className="flex items-center gap-3">
-            <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-brand-grad text-base font-bold text-white">
+            <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-brand-600 text-base font-bold text-white">
               {initials(name)}
             </span>
             <div className="min-w-0">
@@ -143,7 +143,7 @@ export function UserMenu() {
                     aria-pressed={r === role}
                     className={`flex items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition ${
                       r === role
-                        ? 'bg-brand-grad font-semibold text-white'
+                        ? 'bg-brand-600 font-semibold text-white'
                         : 'bg-surface text-ink hover:bg-line/40'
                     }`}
                   >

@@ -7,6 +7,7 @@ import {
   Card,
   EmptyState,
   HeroChipButton,
+  HeroStat,
   Icon,
   InfoTip,
   ModuleHero,
@@ -121,7 +122,7 @@ export function ApprovalInboxPage() {
     setSignature(null);
   }
 
-  function submitDecision() {
+  async function submitDecision() {
     if (!active || !decision) return;
     // Prefer a pad-committed signature; fall back to a freshly-timestamped
     // typed signature from the prefilled name (the seed that armed the CTA).
@@ -143,7 +144,7 @@ export function ApprovalInboxPage() {
       error(`This step is waiting on ${tierLabel(step.tier)} — not your tier.`);
       return;
     }
-    const ok = decide(active.id, decision, {
+    const ok = await decide(active.id, decision, {
       email: profile?.email,
       note,
       tier,
@@ -185,17 +186,12 @@ export function ApprovalInboxPage() {
           </HeroChipButton>
         }
         accessory={
-          <div>
-            <p className="text-xs uppercase tracking-wide text-brand-100/70">
-              Waiting on you
-            </p>
-            <p className="tnum text-2xl font-extrabold">{pending.length}</p>
+          <HeroStat label="Waiting on you" align="right">
+            <p className="tnum font-display text-2xl font-extrabold text-ink">{pending.length}</p>
             {pending.length > 0 && (
-              <p className="tnum text-xs text-brand-100/70">
-                {money(pendingValue)} pending value
-              </p>
+              <p className="tnum text-xs text-muted">{money(pendingValue)} pending value</p>
             )}
-          </div>
+          </HeroStat>
         }
       />
 
