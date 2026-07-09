@@ -2,7 +2,7 @@
   "name": "mwell-intra",
   "version": "0.0.0",
   "private": true,
-  "packageManager": "pnpm@9.15.9",
+  "packageManager": "pnpm@10.23.0",
   "engines": {
     "node": ">=22.0.0"
   },
