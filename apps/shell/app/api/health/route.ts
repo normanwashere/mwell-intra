@@ -23,6 +23,15 @@ interface StaticAssetProbe {
   readonly contentType?: string;
 }
 
+function forwardedSelfFetchHeaders(request: NextRequest): Headers {
+  const headers = new Headers();
+  for (const key of ['authorization', 'cookie', 'x-vercel-protection-bypass']) {
+    const value = request.headers.get(key);
+    if (value) headers.set(key, value);
+  }
+  return headers;
+}
+
 async function pingSupabase(): Promise<SupabaseStatus> {
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return 'not-configured';
   try {
@@ -43,10 +52,12 @@ async function pingSupabase(): Promise<SupabaseStatus> {
 async function probeStaticAssets(request: NextRequest): Promise<StaticAssetProbe> {
   let asset: string | undefined;
   try {
+    const headers = forwardedSelfFetchHeaders(request);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 2000);
     const page = await fetch(new URL('/login', request.url), {
       cache: 'no-store',
+      headers,
       signal: controller.signal,
     });
     if (!page.ok) {
@@ -61,6 +72,7 @@ async function probeStaticAssets(request: NextRequest): Promise<StaticAssetProbe
     }
     const res = await fetch(new URL(asset, request.url), {
       cache: 'no-store',
+      headers,
       signal: controller.signal,
     });
     clearTimeout(timer);
@@ -85,9 +97,10 @@ export async function GET(request: NextRequest) {
     pingSupabase(),
     probeStaticAssets(request),
   ]);
+  const healthy = supabase === 'reachable' && staticAssets.status === 'reachable';
   return NextResponse.json(
     {
-      status: staticAssets.status === 'reachable' ? 'ok' : 'degraded',
+      status: healthy ? 'ok' : 'degraded',
       timestamp: new Date().toISOString(),
       supabase,
       staticAssets,
