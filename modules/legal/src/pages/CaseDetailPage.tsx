@@ -32,7 +32,7 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react';
-import { Navigate, useNavigate, useParams } from 'react-router-dom';
+import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import {
   Badge,
   Card,
@@ -445,6 +445,13 @@ export function CaseDetailPage() {
       {/* Meta demoted to one muted line; full record behind (i) (§2.2.4). */}
       <div className="-mt-3 flex flex-wrap items-center gap-2 px-1">
         <p className="min-w-0 truncate text-sm text-muted">{metaLine}</p>
+        <Link
+          to={`/cases/${kase.id}/application`}
+          className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm font-semibold text-brand-700 hover:bg-brand-500/10 dark:text-brand-300"
+        >
+          <Icon name="clipboard" className="h-4 w-4" />
+          {isVendor ? 'Complete accreditation form' : 'Review accreditation form'}
+        </Link>
         <InfoTip
           label="Full case record"
           side="bottom"

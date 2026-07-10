@@ -33,6 +33,7 @@ create table if not exists legal.vendor_application_snapshots (
   status text not null default 'draft',
   signed_by_name text,
   signed_by_title text,
+  signature jsonb not null,
   signed_at timestamptz,
   submitted_at timestamptz,
   created_by uuid not null default auth.uid() references core.profiles(id) on delete restrict,
@@ -465,10 +466,10 @@ begin
    where case_id = v_case.id and status in ('draft','submitted');
   insert into legal.vendor_application_snapshots(
     case_id,vendor_id,policy_id,policy_version,payload,document_hash,status,
-    signed_by_name,signed_by_title,signed_at,submitted_at,created_by
+    signed_by_name,signed_by_title,signature,signed_at,submitted_at,created_by
   ) values (
     v_case.id,v_case.vendor_id,'vendor-accreditation','2025',payload->'application',v_hash,'submitted',
-    payload#>>'{declaration,signerName}',payload#>>'{declaration,signerTitle}',now(),now(),auth.uid()
+    payload#>>'{declaration,signerName}',payload#>>'{declaration,signerTitle}',payload->'signature',now(),now(),auth.uid()
   ) returning * into v_snapshot;
   update legal.accreditation_cases set status = 'submitted', submitted_at = now(), updated_at = now() where id = v_case.id;
   insert into legal.case_timeline(case_id,actor_email,action,detail)

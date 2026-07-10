@@ -15,6 +15,7 @@ import { AccreditationCasesPage } from './pages/AccreditationCasesPage';
 import { CaseDetailPage } from './pages/CaseDetailPage';
 import { InviteVendorPage } from './pages/InviteVendorPage';
 import { SignInstrumentPage } from './pages/SignInstrumentPage';
+import { VendorApplicationPage } from './pages/VendorApplicationPage';
 import { LegalTabs } from './components/LegalTabs';
 
 export interface LegalAppProps {
@@ -95,6 +96,7 @@ export function LegalApp({ basename = '/legal' }: LegalAppProps) {
     <Routes>
       <Route path="/" element={<AccreditationCasesPage />} />
       <Route path="/cases/:id" element={<CaseDetailPage />} />
+      <Route path="/cases/:id/application" element={<VendorApplicationPage />} />
       <Route path="/cases/:id/sign/:code" element={<SignInstrumentPage />} />
       <Route path="/invites/new" element={<InviteVendorPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
