@@ -36,14 +36,14 @@ export function SectionTitle({
   action?: ReactNode;
 }) {
   return (
-    <div className="mb-3 flex items-start justify-between gap-3">
+    <div className="mb-3 flex flex-col items-start gap-3 sm:flex-row sm:justify-between">
       <div className="min-w-0">
         <h2 className="font-display text-base font-bold text-ink sm:text-lg">
           {title}
         </h2>
         {subtitle && <p className="text-sm text-muted">{subtitle}</p>}
       </div>
-      {action && <div className="shrink-0">{action}</div>}
+      {action && <div className="w-full shrink-0 sm:w-auto">{action}</div>}
     </div>
   );
 }
@@ -61,7 +61,7 @@ export function PageHeader({
   icon?: IconName;
 }) {
   return (
-    <div className="mb-5 flex items-start justify-between gap-3 border-b border-line/80 pb-4">
+    <div className="mb-5 flex flex-col items-start gap-3 border-b border-line/80 pb-4 sm:flex-row sm:justify-between">
       <div className="flex min-w-0 items-start gap-3">
         {icon && (
           <span
@@ -76,7 +76,7 @@ export function PageHeader({
           {subtitle && <p className="mt-0.5 text-sm text-muted">{subtitle}</p>}
         </div>
       </div>
-      {action && <div className="shrink-0">{action}</div>}
+      {action && <div className="w-full shrink-0 sm:w-auto">{action}</div>}
     </div>
   );
 }
@@ -109,35 +109,43 @@ export function ModuleHero({
   return (
     <div
       className={clsx(
-        'hero-surface relative overflow-hidden rounded-3xl p-5 sm:p-6',
+        'hero-surface relative overflow-hidden rounded-2xl p-4 sm:p-5',
         className,
       )}
     >
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-y-0 left-0 w-1 rounded-l-3xl bg-gradient-to-b from-brand-500 to-brand-700"
+        className="pointer-events-none absolute inset-y-0 left-0 w-1 rounded-l-2xl bg-gradient-to-b from-brand-500 to-brand-700"
       />
       {icon && (
         <div
           aria-hidden
-          className="pointer-events-none absolute -right-4 -top-4 text-brand-500/8"
+          data-module-hero-watermark="true"
+          className="pointer-events-none absolute right-3 top-3 z-0 text-brand-500/10 sm:right-4 sm:top-4"
         >
-          <Icon name={icon} className="h-36 w-36 sm:h-40 sm:w-40" />
+          <Icon name={icon} className="h-16 w-16 sm:h-20 sm:w-20" />
         </div>
       )}
-      <div className="relative pl-2">
-        <p className="text-caption font-semibold uppercase tracking-wide text-faint">
+      <div
+        className={clsx(
+          'relative z-10 min-w-0 pl-2',
+          icon && 'pr-14 sm:pr-20',
+        )}
+      >
+        <p className="text-caption font-semibold uppercase tracking-normal text-faint">
           {eyebrow}
         </p>
-        <h1 className="mt-1 font-display text-title text-ink sm:text-display">
+        <h1 className="mt-1 break-words font-display text-title text-ink sm:text-display">
           {title}
         </h1>
         {description && (
           <p className="mt-1.5 max-w-xl text-body text-muted">{description}</p>
         )}
-        {action && <div className="mt-4">{action}</div>}
+        {action && <div className="mt-4 flex flex-wrap items-center gap-2">{action}</div>}
         {accessory && (
-          <div className="mt-4 flex items-end justify-between gap-4">{accessory}</div>
+          <div className="mt-4 flex flex-col items-stretch gap-3 sm:flex-row sm:items-end sm:justify-between">
+            {accessory}
+          </div>
         )}
       </div>
     </div>
@@ -166,7 +174,7 @@ export function HeroStat({
         className,
       )}
     >
-      <p className="text-xs uppercase tracking-wide text-faint">{label}</p>
+      <p className="text-xs uppercase tracking-normal text-faint">{label}</p>
       <div className="mt-1">{children}</div>
     </div>
   );
@@ -189,7 +197,7 @@ export function HeroChipButton({
   type?: 'button' | 'submit';
 }) {
   const cls =
-    'inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-2 text-xs font-semibold text-white shadow-e1 transition hover:bg-brand-700 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40';
+    'inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-2 text-xs font-semibold text-white shadow-e1 transition hover:bg-brand-700 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40';
   if (href) {
     return (
       <a href={href} className={cls}>

@@ -179,7 +179,7 @@ function MemoryAdminUsers() {
       <ModuleHero
         eyebrow="Platform admin,"
         title="Users & Roles"
-        description="Assign scoped module roles per user. Writes go through core.assign_user_role / core.revoke_user_role."
+        description="Assign each person only the access they need across Mwell Intra."
         icon="list"
         accessory={
           <div className="flex flex-wrap items-end gap-3">
@@ -214,13 +214,10 @@ function MemoryAdminUsers() {
             <Icon name="info" className="h-5 w-5" />
           </span>
           <div className="min-w-0">
-            <p className="font-semibold text-ink">Memory mode — no live backend</p>
+            <p className="font-semibold text-ink">Read-only preview</p>
             <p className="mt-0.5 text-sm text-muted">
-              The shell couldn&apos;t find Supabase env, so this screen shows the
-              static demo profiles below and every control is disabled.
-              Configure <code>NEXT_PUBLIC_SUPABASE_URL</code> and{' '}
-              <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> to grant/revoke roles
-              against the real <code>core.user_roles</code> table.
+              Live identity services are not connected in this environment, so
+              the profiles below are examples and access controls are disabled.
             </p>
           </div>
         </div>
@@ -350,7 +347,7 @@ function LiveAdminUsers() {
       <ModuleHero
         eyebrow="Platform admin,"
         title="Users & Roles"
-        description="Assign scoped module roles per user. Writes go through core.assign_user_role / core.revoke_user_role."
+        description="Assign each person only the access they need across Mwell Intra."
         icon="list"
         action={
           <HeroChipButton icon="rotate" onClick={() => void refresh()}>
@@ -408,7 +405,7 @@ function LiveAdminUsers() {
         <EmptyState
           icon="info"
           title="No profiles yet"
-          message="Users appear here after they sign in for the first time (core.profiles gets provisioned on signup)."
+          message="Users appear here after they sign in for the first time."
         />
       ) : (
         <UserRoleTable

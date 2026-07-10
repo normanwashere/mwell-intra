@@ -155,7 +155,7 @@ export function NotificationBell() {
     ? mode === 'supabase'
       ? ENABLE_NOTIFICATIONS
         ? 'Notifications (sign in to view)'
-        : 'Notifications unavailable until core notifications are deployed'
+        : 'Notifications are not available in this environment'
       : 'Notifications unavailable in demo mode'
     : `Notifications${unread > 0 ? `, ${unread} unread` : ''}`;
 

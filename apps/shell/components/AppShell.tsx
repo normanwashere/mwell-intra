@@ -12,6 +12,7 @@ import * as m from 'framer-motion/m';
 import {
   Icon,
   PageTransition,
+  Sheet,
   type IconName,
 } from '@intra/ui';
 import { useSession } from '@intra/auth';
@@ -80,6 +81,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? '/';
   const reduced = useReducedMotion();
   const [scrolled, setScrolled] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
@@ -114,7 +116,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const fab = centerAction(pathname);
   const mobileLeft = entries.slice(0, 2);
-  const mobileRight = entries.slice(2, 4);
+  const hasMobileOverflow = entries.length > 4;
+  const mobileRight = hasMobileOverflow ? entries.slice(2, 3) : entries.slice(2, 4);
 
   return (
     <div className="min-h-screen bg-app md:flex">
@@ -297,8 +300,52 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <MobileTab entry={e} active={isActive(e.href)} reduced={!!reduced} />
               </li>
             ))}
+            {hasMobileOverflow && (
+              <li className="flex-1">
+                <button
+                  type="button"
+                  onClick={() => setMobileMenuOpen(true)}
+                  className="relative flex min-h-16 w-full flex-col items-center justify-center gap-0.5 px-1 py-2.5 text-[0.65rem] font-medium text-faint transition"
+                  aria-haspopup="dialog"
+                  aria-expanded={mobileMenuOpen}
+                >
+                  <Icon name="menu" className="h-5 w-5" />
+                  <span>More</span>
+                </button>
+              </li>
+            )}
           </ul>
         </nav>
+
+        <Sheet
+          open={mobileMenuOpen}
+          onOpenChange={setMobileMenuOpen}
+          title="All areas"
+          description="Open any area available to your account."
+        >
+          <nav aria-label="All accessible areas">
+            <ul className="space-y-1">
+              {entries.map((entry) => (
+                <li key={entry.href}>
+                  <Link
+                    href={entry.href}
+                    onClick={() => setMobileMenuOpen(false)}
+                    aria-current={isActive(entry.href) ? 'page' : undefined}
+                    className={cx(
+                      'flex min-h-12 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition hover:bg-inset',
+                      isActive(entry.href)
+                        ? 'bg-brand-500/10 text-brand-700 dark:text-brand-300'
+                        : 'text-ink',
+                    )}
+                  >
+                    <Icon name={entry.icon} className="h-5 w-5 shrink-0" />
+                    <span>{entry.label}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </nav>
+        </Sheet>
       </div>
     </div>
   );

@@ -42,13 +42,12 @@ function MissingSupabaseConfig() {
   );
 }
 
-// The PWA service worker is only safe when explicitly enabled for a deployed
-// build. Local `next start` previews rebuild often, and a stale precache can
-// leave auth pages visually present but non-interactive.
+// Deployed production builds are installable/offline-capable by default.
+// Operators can explicitly disable registration for incident recovery.
 function isServiceWorkerEnabled(): boolean {
   return (
     process.env.NODE_ENV === 'production' &&
-    process.env.NEXT_PUBLIC_ENABLE_SW === 'true'
+    process.env.NEXT_PUBLIC_ENABLE_SW !== 'false'
   );
 }
 

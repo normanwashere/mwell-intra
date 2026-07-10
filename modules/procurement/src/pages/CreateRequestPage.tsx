@@ -365,7 +365,7 @@ export function CreateRequestPage() {
                   type="button"
                   onClick={() => s.n < step && setStep(s.n)}
                   disabled={s.n >= step}
-                  className={`flex min-w-0 flex-1 items-center gap-2 rounded-xl px-2.5 py-2 text-left transition ${
+                  className={`flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-xl px-2.5 py-2 text-left transition ${
                     state === 'current'
                       ? 'bg-brand-500/10'
                       : state === 'done'
@@ -754,7 +754,7 @@ export function CreateRequestPage() {
                           type="button"
                           onClick={() => removeAttachment(i)}
                           aria-label={`Remove ${a.filename}`}
-                          className="grid h-8 w-8 place-items-center rounded-lg text-faint transition hover:bg-inset hover:text-rose-600"
+                          className="grid h-11 w-11 place-items-center rounded-lg text-faint transition hover:bg-inset hover:text-rose-600"
                         >
                           <Icon name="x" className="h-4 w-4" />
                         </button>
