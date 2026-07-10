@@ -69,7 +69,7 @@ export interface WarehouseAppProps {
  */
 export function WarehouseApp({ basename = '/warehouse' }: WarehouseAppProps) {
   const basenameReady = useNormalizeBasenamePath(basename);
-  const { profile, userRoles, loading } = useSession();
+  const { profile, userRoles, mode, supabaseClient, loading } = useSession();
   const warehouseRoles = (userRoles.warehouse ?? []) as Role[];
   const initialRole = warehouseRoles[0];
 
@@ -125,6 +125,8 @@ export function WarehouseApp({ basename = '/warehouse' }: WarehouseAppProps) {
           key={profile?.id ?? initialRole}
           initialRole={initialRole}
           actor={profile?.email}
+          source={mode}
+          supabaseClient={supabaseClient ?? undefined}
         >
           <App />
           <PwaPrompts />

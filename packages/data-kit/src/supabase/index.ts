@@ -24,5 +24,7 @@ export {
 export function createSupabaseWarehouseRepository(
   client: SupabaseClient,
 ): WarehouseRepository {
-  return new SupabaseRepository(client);
+  return new SupabaseRepository(
+    client.schema('warehouse') as unknown as SupabaseClient,
+  );
 }

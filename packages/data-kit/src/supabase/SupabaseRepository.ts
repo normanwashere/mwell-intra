@@ -1117,6 +1117,8 @@ export class SupabaseRepository implements WarehouseRepository {
 export function createSupabaseWarehouseRepository(
   client: import('@supabase/supabase-js').SupabaseClient<any, any>,
 ): WarehouseRepository {
-  return new SupabaseRepository(client);
+  return new SupabaseRepository(
+    client.schema('warehouse') as unknown as import('@supabase/supabase-js').SupabaseClient,
+  );
 }
 

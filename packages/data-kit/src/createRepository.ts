@@ -4,6 +4,7 @@ import { InMemoryRepository } from './inMemoryRepository';
 import { createSupabaseWarehouseRepository } from './supabase/SupabaseRepository';
 
 export type DataSource = 'supabase' | 'memory';
+type AuthenticatedSupabaseClient = SupabaseClient<Record<string, unknown>, string>;
 
 /**
  * Runtime configuration for the repository factory.
@@ -44,7 +45,7 @@ export interface DataKitConfig {
    * Injected Supabase client (schema must be `warehouse`). When present the
    * live adapter is used unless `dataSource: 'memory'` forces otherwise.
    */
-  supabaseClient?: SupabaseClient;
+  supabaseClient?: AuthenticatedSupabaseClient;
   /** Supabase connection config (kept for hosts that use the custom factory). */
   supabase?: {
     url?: string;
@@ -101,7 +102,8 @@ function defaultStorage(): Pick<Storage, 'getItem' | 'setItem'> | undefined {
  * Builds the active repository. Uses the live Supabase adapter when a client
  * is supplied (or a custom factory + config is supplied and the source resolves
  * to `'supabase'`), otherwise the seeded in-memory adapter persisted to
- * localStorage. Falls back to in-memory if adapter construction throws.
+ * localStorage. Explicit Supabase mode fails closed: a live deployment must
+ * never turn a configuration or adapter error into a convincing demo session.
  */
 export function createRepository(config: DataKitConfig = {}): {
   repo: WarehouseRepository;
@@ -109,22 +111,21 @@ export function createRepository(config: DataKitConfig = {}): {
 } {
   const source = resolveDataSource(config);
   if (source === 'supabase') {
-    try {
-      if (config.createSupabaseRepository && config.supabase) {
-        return {
-          repo: config.createSupabaseRepository(config.supabase),
-          source,
-        };
-      }
-      if (config.supabaseClient) {
-        return {
-          repo: createSupabaseWarehouseRepository(config.supabaseClient),
-          source,
-        };
-      }
-    } catch {
-      // fall through to memory if adapter construction misconfigured at runtime
+    if (config.createSupabaseRepository && config.supabase) {
+      return {
+        repo: config.createSupabaseRepository(config.supabase),
+        source,
+      };
     }
+    if (config.supabaseClient) {
+      return {
+        repo: createSupabaseWarehouseRepository(config.supabaseClient),
+        source,
+      };
+    }
+    throw new Error(
+      'Supabase repository requires an authenticated client or adapter configuration.',
+    );
   }
   const storage = config.storage !== undefined ? config.storage : defaultStorage();
   return {

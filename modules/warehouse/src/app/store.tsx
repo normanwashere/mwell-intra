@@ -39,6 +39,7 @@ import {
   removeEntry as outboxRemove,
   DATA_STORAGE_KEY,
 } from '@intra/data-kit';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import type {
   AdjustStockInput,
   CancelAllocationInput,
@@ -149,12 +150,14 @@ export function WarehouseProvider({
   children,
   repo: injectedRepo,
   source: injectedSource,
+  supabaseClient,
   initialRole = 'logistics_supervisor',
   actor: providedActor,
 }: {
   children: ReactNode;
   repo?: WarehouseRepository;
   source?: DataSource;
+  supabaseClient?: SupabaseClient<Record<string, unknown>, string>;
   initialRole?: Role;
   /** Overrides the default `${role}@mwell` actor (e.g. the signed-in user's email). */
   actor?: string;
@@ -165,7 +168,10 @@ export function WarehouseProvider({
   if (!created.current) {
     created.current = injectedRepo
       ? { repo: injectedRepo, source: injectedSource ?? 'memory' }
-      : createRepository();
+      : createRepository({
+          dataSource: injectedSource,
+          supabaseClient,
+        });
   }
   const repo = created.current.repo;
   const source = created.current.source;
