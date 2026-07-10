@@ -14,6 +14,7 @@ const ALL_ROLES: Role[] = [
   'marketing',
   'procurement',
   'pricing',
+  'warehouse_admin',
 ];
 
 const FIRST_RENDER_TIMEOUT = 10_000;
@@ -85,6 +86,15 @@ describe('DashboardPage', () => {
     renderWithProviders(<DashboardPage />, { role: 'business_unit' });
     expect(await screen.findByText(/low-stock alerts/i)).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /pending reservations/i })).toBeInTheDocument();
+  });
+
+  it('gives the Warehouse Administrator an operational control overview', async () => {
+    renderWithProviders(<DashboardPage />, { role: 'warehouse_admin' });
+    expect(
+      await screen.findByRole('heading', { name: 'Warehouse Administrator' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/low-stock alerts/i)).toBeInTheDocument();
+    expect(screen.getByText(/reconciliation/i)).toBeInTheDocument();
   });
 
   it('lists low-stock items for logistics', async () => {

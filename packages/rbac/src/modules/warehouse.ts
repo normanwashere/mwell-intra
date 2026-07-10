@@ -1,11 +1,11 @@
 import type { ModuleDefinition } from '../contracts';
 
-// Warehouse module RBAC — ported faithfully from the source single-scope model
-// in mwell-intra-warehouse `src/auth/roles.ts` (8 roles, 15 capabilities).
+// Warehouse module RBAC: the source single-scope model plus the W1 control
+// capabilities and explicit Warehouse Administrator role.
 // This is the CANONICAL matrix and must stay in sync with warehouse RPC guards
 // and `core.role_capabilities` (spec §6.6).
 
-/** The 15 warehouse capabilities (verbatim from source `roles.ts`). */
+/** Warehouse capability catalogue mirrored by `core.role_capabilities`. */
 export type WarehouseCapability =
   | 'view_dashboard'
   | 'receive_stock'
@@ -21,9 +21,16 @@ export type WarehouseCapability =
   | 'view_analytics'
   | 'view_procurement'
   | 'view_pricing'
-  | 'set_pricing';
+  | 'set_pricing'
+  | 'manage_operation_routes'
+  | 'inspect_quality'
+  | 'release_quality_hold'
+  | 'approve_stock_adjustment'
+  | 'view_exceptions'
+  | 'resolve_exceptions'
+  | 'import_warehouse_data';
 
-/** The 8 warehouse roles (verbatim from source `roles.ts`). */
+/** Warehouse operating roles, including the explicit configuration role. */
 export type WarehouseRole =
   | 'logistics_supervisor'
   | 'operations'
@@ -32,7 +39,8 @@ export type WarehouseRole =
   | 'business_unit'
   | 'marketing'
   | 'procurement'
-  | 'pricing';
+  | 'pricing'
+  | 'warehouse_admin';
 
 const ALL_INVENTORY = [
   'view_dashboard',
@@ -55,6 +63,13 @@ const WAREHOUSE_CAPABILITIES = [
   'view_procurement',
   'view_pricing',
   'set_pricing',
+  'manage_operation_routes',
+  'inspect_quality',
+  'release_quality_hold',
+  'approve_stock_adjustment',
+  'view_exceptions',
+  'resolve_exceptions',
+  'import_warehouse_data',
 ] as const satisfies readonly WarehouseCapability[];
 
 export const warehouseModule: ModuleDefinition<
@@ -79,6 +94,13 @@ export const warehouseModule: ModuleDefinition<
         'manage_returns',
         'issue_items',
         'transfer_stock',
+        'manage_operation_routes',
+        'inspect_quality',
+        'release_quality_hold',
+        'approve_stock_adjustment',
+        'view_exceptions',
+        'resolve_exceptions',
+        'import_warehouse_data',
       ],
     },
     operations: {
@@ -91,18 +113,26 @@ export const warehouseModule: ModuleDefinition<
         'issue_items',
         'manage_returns',
         'transfer_stock',
+        'inspect_quality',
+        'view_exceptions',
       ],
     },
     finance: {
       label: 'Finance Manager',
       description:
         'Inventory valuation, costing, reconciliation & audit trails.',
-      capabilities: [...ALL_INVENTORY, 'view_finance', 'cycle_count'],
+      capabilities: [
+        ...ALL_INVENTORY,
+        'view_finance',
+        'cycle_count',
+        'approve_stock_adjustment',
+        'view_exceptions',
+      ],
     },
     bi_analyst: {
       label: 'BI Analyst',
       description: 'Utilization, fast-moving SKUs & consumption analytics.',
-      capabilities: [...ALL_INVENTORY, 'view_analytics'],
+      capabilities: [...ALL_INVENTORY, 'view_analytics', 'view_exceptions'],
     },
     business_unit: {
       label: 'Business Unit',
@@ -128,6 +158,12 @@ export const warehouseModule: ModuleDefinition<
         'set_pricing',
         'view_finance',
       ],
+    },
+    warehouse_admin: {
+      label: 'Warehouse Administrator',
+      description:
+        'Warehouse configuration, controls, imports, quality and operational oversight.',
+      capabilities: WAREHOUSE_CAPABILITIES,
     },
   },
 };

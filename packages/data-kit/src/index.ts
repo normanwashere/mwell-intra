@@ -15,6 +15,7 @@ export * from './domain/transfers';
 export * from './domain/purchaseOrders';
 export * from './domain/products';
 export * from './domain/storage';
+export * from './domain/warehouseControls';
 
 // --- Repository PORT + input DTOs + WarehouseData read model + toStockState ---
 export * from './repository';

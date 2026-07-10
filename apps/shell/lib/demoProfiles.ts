@@ -144,6 +144,17 @@ export const DEMO_PROFILES: readonly MemoryProfile[] = [
     },
   },
   {
+    id: 'demo-warehouse-admin',
+    email: 'warehouse.admin@mwell.demo',
+    kind: 'employee',
+    name: 'Alex Rivera',
+    title: 'Warehouse Administrator',
+    roles: {
+      core: ['staff'],
+      warehouse: ['warehouse_admin'],
+    },
+  },
+  {
     id: 'demo-admin',
     email: 'admin@mwell.demo',
     kind: 'employee',

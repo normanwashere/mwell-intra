@@ -21,6 +21,25 @@ import type {
   WarehouseEvent,
 } from './domain/types';
 import type { StockState } from './domain/stock';
+import type {
+  DecideStockChangeInput,
+  InspectQualityInput,
+  InventoryHold,
+  InventoryPosition,
+  OperationRoute,
+  OperationType,
+  PageQuery,
+  PageResult,
+  ProcurementPOHandoff,
+  QualityInspection,
+  ReleaseHoldInput,
+  ResolveExceptionInput,
+  StockChangeRequest,
+  SubmitCycleCountInput,
+  UpdateOperationRouteInput,
+  WarehouseException,
+  WarehouseTask,
+} from './domain/warehouseControls';
 
 /** Full snapshot of the warehouse read model. */
 export interface WarehouseData {
@@ -38,6 +57,8 @@ export interface WarehouseData {
   cycleCounts: CycleCount[];
   receipts: Receipt[];
   purchaseOrders: PurchaseOrder[];
+  operationTypes?: OperationType[];
+  operationRoutes?: OperationRoute[];
 }
 
 export interface ReceiveStockInput {
@@ -284,6 +305,23 @@ export interface WarehouseRepository {
   createProduct(input: CreateProductInput): Promise<Product>;
   updateProduct(input: UpdateProductInput): Promise<Product>;
   adjustStock(input: AdjustStockInput): Promise<Movement>;
+}
+
+/** W1 control extension implemented by live and memory adapters in Task 5. */
+export interface WarehouseControlRepository extends WarehouseRepository {
+  listQualityInspections(query: PageQuery): Promise<PageResult<QualityInspection>>;
+  listHolds(query: PageQuery): Promise<PageResult<InventoryHold>>;
+  listExceptions(query: PageQuery): Promise<PageResult<WarehouseException>>;
+  listStockChangeRequests(query: PageQuery): Promise<PageResult<StockChangeRequest>>;
+  listWarehouseTasks(query: PageQuery): Promise<PageResult<WarehouseTask>>;
+  listInventoryPositions(query: PageQuery): Promise<PageResult<InventoryPosition>>;
+  inspectQuality(input: InspectQualityInput): Promise<QualityInspection>;
+  releaseHold(input: ReleaseHoldInput): Promise<InventoryHold>;
+  updateOperationRoute(input: UpdateOperationRouteInput): Promise<OperationRoute>;
+  submitCycleCount(input: SubmitCycleCountInput): Promise<StockChangeRequest[]>;
+  decideStockChange(input: DecideStockChangeInput): Promise<StockChangeRequest>;
+  resolveException(input: ResolveExceptionInput): Promise<WarehouseException>;
+  getReceivableProcurementPOs(): Promise<ProcurementPOHandoff[]>;
 }
 
 export function toStockState(data: WarehouseData): StockState {

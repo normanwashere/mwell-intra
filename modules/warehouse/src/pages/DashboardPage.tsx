@@ -262,6 +262,7 @@ const ROLE_PANELS: Record<Role, PanelId[]> = {
   marketing: ['consumption', 'events', 'fastMoving'],
   procurement: ['reorder', 'openPOs', 'lowStock'],
   pricing: ['topValue', 'valuation', 'fastMoving'],
+  warehouse_admin: ['lowStock', 'reconciliation', 'recentActivity'],
 };
 
 /** Roles whose dashboard is analytics-driven get the date-window control. */
@@ -424,6 +425,7 @@ export function DashboardPage() {
     marketing: `${compactMoney(promoSpend)} promo spend · ${data.events.length} event${data.events.length === 1 ? '' : 's'}`,
     procurement: `${reorderRows.length} SKU${reorderRows.length === 1 ? '' : 's'} to reorder · ${openPOs.length} open PO${openPOs.length === 1 ? '' : 's'}`,
     pricing: `${compactMoney(totalLanded)} at landed cost · ${multiSupplier} multi-supplier SKUs`,
+    warehouse_admin: `${low.length} SKU${low.length === 1 ? '' : 's'} need reorder · ${reconciliation.length} variance${reconciliation.length === 1 ? '' : 's'} open`,
   };
 
   const HERO_CTA: Record<Role, { label: string; icon: IconName; to: string }> = {
@@ -435,6 +437,7 @@ export function DashboardPage() {
     marketing: { label: 'Events', icon: 'calendar', to: '/events' },
     procurement: { label: 'Reorders & POs', icon: 'cart', to: '/procurement' },
     pricing: { label: 'Pricing workspace', icon: 'trend', to: '/pricing' },
+    warehouse_admin: { label: 'Receive stock', icon: 'truck', to: '/receiving' },
   };
 
   const KPIS: Record<Role, Kpi[]> = {
@@ -485,6 +488,12 @@ export function DashboardPage() {
       { label: 'Avg turnover', value: `${avgTurnover}×`, icon: 'trend', tone: 'accent', to: '/pricing', hint: 'Inventory turns (90d)' },
       { label: 'Multi-supplier SKUs', value: multiSupplier, icon: 'building', tone: 'amber', to: '/pricing', hint: 'Sourced from 2+ suppliers' },
       { label: 'Promo spend', value: compactMoney(promoSpend), icon: 'tag', tone: 'brand', to: '/pricing', hint: 'Promotional cost' },
+    ],
+    warehouse_admin: [
+      { label: 'Low-stock items', value: low.length, icon: 'alert', tone: low.length ? 'amber' : 'emerald', to: '/inventory?filter=low', hint: 'At or below reorder point' },
+      { label: 'Serialized in field', value: assets.length, icon: 'tag', tone: 'brand', to: '/inventory?filter=device', hint: 'Serialized devices issued' },
+      { label: 'Open variances', value: reconciliation.length, icon: 'clipboard', tone: reconciliation.length ? 'rose' : 'emerald', to: '/cycle-counts?filter=variances', hint: 'Variance from last count' },
+      { label: 'Active SKUs', value: data.products.length, icon: 'box', to: '/inventory', hint: 'Products in the catalog' },
     ],
   };
 

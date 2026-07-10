@@ -49,6 +49,10 @@ export interface Product {
   /** Flag for items used as promotional / corporate give-aways. */
   promotional?: boolean;
   barcode?: string;
+  /** Whether receipts may carry an expiry date for this SKU. */
+  expiryTracked?: boolean;
+  /** Days before expiry when the UI starts warning. */
+  shelfLifeWarningDays?: number;
 }
 
 export type LocationType = 'warehouse' | 'event_site' | 'vendor';
@@ -90,6 +94,7 @@ export interface Lot {
   supplierId?: Id;
   unitCost: number;
   receivedAt: string;
+  expiryDate?: string;
 }
 
 export type UnitStatus =
@@ -267,7 +272,7 @@ export interface PurchaseOrder {
   createdAt: string;
 }
 
-/** The 8 user-story roles. */
+/** Warehouse roles exposed by the module. */
 export type Role =
   | 'logistics_supervisor'
   | 'operations'
@@ -276,7 +281,8 @@ export type Role =
   | 'business_unit'
   | 'marketing'
   | 'procurement'
-  | 'pricing';
+  | 'pricing'
+  | 'warehouse_admin';
 
 /** A demo/staff user that signs in by picking their role. */
 export interface Profile {
