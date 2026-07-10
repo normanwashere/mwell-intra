@@ -1080,6 +1080,7 @@ export interface SignInstrumentInput {
   /** Captured disclosure field values, when the template declares fields. */
   fields?: Record<string, string>;
   documentHash?: string;
+  canonicalText?: string;
   signerParty?: 'service_provider' | 'mphtc';
 }
 
@@ -1222,6 +1223,7 @@ export function useSignedInstruments(): SignedInstrumentsAPI {
           signer_ua: input.signerUa,
           fields: input.fields,
           document_hash: input.documentHash,
+          canonical_text: input.canonicalText,
           signer_party: input.signerParty,
         }).then((row) => {
           const mapped = mapSigned(row);

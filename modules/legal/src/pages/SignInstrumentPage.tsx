@@ -147,6 +147,7 @@ export function SignInstrumentPage() {
         signerUa: signature.userAgent,
         fields: fields.length > 0 ? { ...effectiveFieldValues } : undefined,
         documentHash: generated?.sha256,
+        canonicalText: generated?.canonicalText,
         signerParty: governedMnda
           ? isVendor
             ? 'service_provider'

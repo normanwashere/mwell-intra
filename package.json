@@ -21,6 +21,7 @@
     "report:warehouse-w1:visual": "node scripts/qa/build-warehouse-contact-sheet.mjs",
     "provision:test:warehouse-w1": "node scripts/qa/provision-warehouse-w1-test-users.mjs",
     "verify:procurement-contract": "node scripts/verify-effective-procurement-contract.mjs",
+    "verify:policy-alignment-schema": "node scripts/verify-policy-alignment-schema.mjs",
     "verify:warehouse-w1-schema": "node scripts/verify-warehouse-w1-schema.mjs",
     "verify:warehouse-w1-contract": "node scripts/verify-warehouse-w1-contract.mjs",
     "verify:launch-artifacts": "node scripts/verify-launch-artifacts.mjs",
