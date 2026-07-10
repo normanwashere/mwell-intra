@@ -29,7 +29,6 @@ import {
   receiveOverlay,
   issueOverlay,
   returnOverlay,
-  cycleCountOverlay,
   transferOverlay,
   relocateOverlay,
   adjustOverlay,
@@ -98,6 +97,7 @@ interface WarehouseContextValue {
   role: Role;
   setRole: (role: Role) => void;
   actor: string;
+  identityId: string;
   refresh: () => Promise<void>;
   /** Number of floor-op mutations queued offline, awaiting sync. */
   pendingSync: number;
@@ -117,6 +117,10 @@ interface WarehouseContextValue {
   issue: (input: Omit<IssueInput, 'actor'>) => Promise<boolean>;
   recordReturn: (input: Omit<ReturnInput, 'actor'>) => Promise<boolean>;
   recordCycleCount: (input: Omit<CycleCountInput, 'actor'>) => Promise<boolean>;
+  submitNewCycleCount: (
+    input: Omit<CycleCountInput, 'actor'> &
+      Pick<SubmitCycleCountInput, 'reason' | 'evidenceUrls'>,
+  ) => Promise<boolean>;
   transfer: (input: Omit<TransferInput, 'actor'>) => Promise<boolean>;
   createPurchaseOrder: (
     input: Omit<CreatePurchaseOrderInput, 'actor'>,
@@ -187,6 +191,7 @@ export function WarehouseProvider({
   supabaseClient,
   initialRole = 'logistics_supervisor',
   actor: providedActor,
+  identityId: providedIdentityId,
 }: {
   children: ReactNode;
   repo?: WarehouseControlRepository;
@@ -195,6 +200,8 @@ export function WarehouseProvider({
   initialRole?: Role;
   /** Overrides the default `${role}@mwell` actor (e.g. the signed-in user's email). */
   actor?: string;
+  /** Auth profile id used for separation-of-duties comparisons. */
+  identityId?: string;
 }) {
   const created = useRef<{ repo: WarehouseControlRepository; source: DataSource } | null>(
     null,
@@ -222,6 +229,7 @@ export function WarehouseProvider({
     () => providedActor ?? `${role}@mwell`,
     [providedActor, role],
   );
+  const identityId = providedIdentityId ?? actor;
 
   const refreshPending = useCallback(async () => {
     setPendingSync(await outboxPendingCount());
@@ -324,6 +332,7 @@ export function WarehouseProvider({
     role,
     setRole,
     actor,
+    identityId,
     refresh,
     pendingSync,
     conflicts,
@@ -353,12 +362,23 @@ export function WarehouseProvider({
         input as Record<string, unknown>,
       ),
     recordCycleCount: (input) =>
-      runAction(
-        'recordCycleCount',
-        () => repo.recordCycleCount({ ...input, actor }),
-        cycleCountOverlay(input, actor),
-        input as Record<string, unknown>,
-      ),
+      runAction('other', () => repo.recordCycleCount({ ...input, actor })),
+    submitNewCycleCount: (input) =>
+      runAction('other', async () => {
+        const count = await repo.recordCycleCount({
+          locationId: input.locationId,
+          binId: input.binId,
+          category: input.category,
+          lines: input.lines,
+          actor,
+        });
+        await repo.submitCycleCount({
+          idempotencyKey: `submit-count-${count.id}`,
+          cycleCountId: count.id,
+          reason: input.reason,
+          evidenceUrls: input.evidenceUrls,
+        });
+      }),
     transfer: (input) =>
       runAction(
         'transfer',

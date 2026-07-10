@@ -1,6 +1,7 @@
 import type {
   Allocation,
   CycleCount,
+  CycleCountLine,
   DeviceType,
   EventType,
   InventoryUnit,
@@ -125,7 +126,7 @@ export interface CycleCountInput {
   category?: 'device' | 'merchandise';
   /** Storage area being counted (undefined = general area). */
   binId?: string;
-  lines: { productId: string; expected: number; counted: number }[];
+  lines: CycleCountLine[];
   actor: string;
 }
 

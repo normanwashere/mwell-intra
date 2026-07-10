@@ -39,6 +39,8 @@ export const MODULES: ModuleDef[] = [
   { id: 'purchase-orders', label: 'Purchase Orders', shortLabel: 'POs', path: '/purchase-orders', capabilities: ['view_procurement', 'receive_stock'], description: 'Approved supply and receiving.', icon: 'list', group: 'plan' },
   { id: 'cycle-counts', label: 'Cycle Counts', shortLabel: 'Counts', path: '/cycle-counts', capabilities: ['cycle_count'], description: 'Count and reconcile variances.', icon: 'clipboard', group: 'control' },
   { id: 'quality', label: 'Quality Control', shortLabel: 'Quality', path: '/quality', capabilities: ['inspect_quality', 'release_quality_hold'], description: 'Inspect receipts and control held stock.', icon: 'shield', group: 'control' },
+  { id: 'approvals', label: 'Stock Approvals', shortLabel: 'Approvals', path: '/approvals', capabilities: ['approve_stock_adjustment'], description: 'Decide governed inventory changes.', icon: 'check', group: 'control' },
+  { id: 'exceptions', label: 'Exceptions', path: '/exceptions', capabilities: ['view_exceptions'], description: 'Investigate operational risk and resolution.', icon: 'alert', group: 'control' },
   { id: 'finance', label: 'Finance', path: '/finance', capabilities: ['view_finance'], description: 'Valuation and reconciliation.', icon: 'coins', group: 'analyze' },
   { id: 'pricing', label: 'Pricing', path: '/pricing', capabilities: ['view_pricing'], description: 'Cost variance and pricing.', icon: 'trend', group: 'analyze' },
   { id: 'data', label: 'Data & Reports', path: '/data', capabilities: ['view_analytics'], description: 'Exports, definitions and metrics.', icon: 'history', group: 'analyze' },

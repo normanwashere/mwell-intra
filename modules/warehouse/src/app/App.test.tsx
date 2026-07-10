@@ -87,6 +87,21 @@ describe('App routing & guards', () => {
     expect(screen.getByRole('tab', { name: 'Pending' })).toBeInTheDocument();
   });
 
+  it('routes authorized users to stock approvals and exceptions', async () => {
+    const approval = renderWithProviders(<App />, {
+      role: 'finance',
+      route: '/approvals',
+    });
+    expect(await screen.findByRole('heading', { name: 'Stock approvals' })).toBeInTheDocument();
+    approval.unmount();
+
+    renderWithProviders(<App />, {
+      role: 'operations',
+      route: '/exceptions',
+    });
+    expect(await screen.findByRole('heading', { name: 'Warehouse exceptions' })).toBeInTheDocument();
+  });
+
   it('returns false when a guarded control command is denied', async () => {
     renderWithProviders(<ControlFailureProbe />, { repo: new DeniedControlRepository() });
     fireEvent.click(screen.getByRole('button', { name: /run guarded command/i }));

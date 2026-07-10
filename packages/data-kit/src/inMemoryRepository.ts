@@ -533,37 +533,11 @@ export class InMemoryRepository implements WarehouseControlRepository {
       binId: input.binId,
       category: input.category,
       lines: input.lines,
+      status: 'draft',
+      requestedBy: input.actor,
       actor: input.actor,
       createdAt,
     };
-
-    for (const line of input.lines) {
-      const variance = line.counted - line.expected;
-      if (variance === 0) continue;
-      const product = this.data.products.find((p) => p.id === line.productId);
-      if (product && !product.serialized) {
-        const level = this.stockRow(
-          product.id,
-          input.locationId,
-          input.binId,
-          true,
-        )!;
-        level.quantity = line.counted;
-      }
-      const movement: Movement = {
-        id: uid('mv'),
-        type: 'cycle_count',
-        productId: line.productId,
-        quantity: variance,
-        toLocationId: input.locationId,
-        toBinId: input.binId,
-        reference: count.id,
-        reason: 'cycle count adjustment',
-        actor: input.actor,
-        createdAt,
-      };
-      this.data.movements.push(movement);
-    }
 
     this.data.cycleCounts.push(count);
     this.persist();
@@ -1302,11 +1276,24 @@ export class InMemoryRepository implements WarehouseControlRepository {
       count.lines = count.lines.map((line) => {
         const product = this.data.products.find((row) => row.id === line.productId);
         if (!product) throw new Error(`Unknown product: ${line.productId}`);
-        const expected = product.serialized
+        const expectedUnits = product.serialized
           ? this.data.units.filter((unit) =>
               unit.productId === product.id && unit.locationId === count.locationId
               && (unit.binId ?? undefined) === (count.binId ?? undefined)
-              && unit.status === 'in_stock').length
+              && ['in_stock', 'returned'].includes(unit.status))
+          : [];
+        if (product.serialized) {
+          const serials = line.serialNumbers ?? [];
+          if (new Set(serials).size !== serials.length) {
+            throw new Error('Duplicate serial scan in cycle count.');
+          }
+          const expectedSerials = new Set(expectedUnits.map((unit) => unit.serialNumber));
+          if (serials.some((serial) => !expectedSerials.has(serial))) {
+            throw new Error('Unknown serial scan in cycle count.');
+          }
+        }
+        const expected = product.serialized
+          ? expectedUnits.length
           : this.data.stockLevels.filter((level) =>
               level.productId === product.id && level.locationId === count.locationId
               && (level.binId ?? undefined) === (count.binId ?? undefined))
@@ -1320,7 +1307,8 @@ export class InMemoryRepository implements WarehouseControlRepository {
             productId: product.id, locationId: count.locationId, binId: count.binId,
             quantityDelta: delta, unitCost: product.unitCost, financialImpact,
             reason: input.reason, evidenceUrls: input.evidenceUrls ?? [],
-            status: 'pending_supervisor', requestedBy: 'demo-cycle-counter', requestedAt: this.now(),
+            status: 'pending_supervisor', requestedBy: count.requestedBy ?? count.actor,
+            requestedAt: this.now(),
           };
           this.stockChanges.push(request);
           created.push(request);
@@ -1334,7 +1322,7 @@ export class InMemoryRepository implements WarehouseControlRepository {
         return { ...line, expected, counted };
       });
       count.status = created.length ? 'pending_approval' : 'approved';
-      count.requestedBy = 'demo-cycle-counter';
+      count.requestedBy = count.requestedBy ?? count.actor;
       count.submittedAt = this.now();
       this.persist();
       return created;

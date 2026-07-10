@@ -576,18 +576,18 @@ describe('cancelPurchaseOrder', () => {
 });
 
 describe('recordCycleCount', () => {
-  it('adjusts non-serialized stock to the counted value and logs variance', async () => {
-    await repo.recordCycleCount({
+  it('creates a draft without changing stock or logging a movement', async () => {
+    const count = await repo.recordCycleCount({
       locationId: 'loc-wh',
       category: 'merchandise',
       actor: 'finance@mwell',
       lines: [{ productId: 'shirt', expected: 20, counted: 17 }],
     });
     const state = await repo.getStockState();
-    expect(availableForProduct(state, 'shirt')).toBe(17);
+    expect(availableForProduct(state, 'shirt')).toBe(20);
     const data = await repo.getData();
-    const adj = data.movements.find((m) => m.type === 'cycle_count')!;
-    expect(adj.quantity).toBe(-3);
+    expect(data.movements.find((m) => m.type === 'cycle_count')).toBeUndefined();
+    expect(count).toMatchObject({ status: 'draft', requestedBy: 'finance@mwell' });
   });
 });
 
@@ -1117,6 +1117,49 @@ describe('W1 control parity', () => {
     const data = await controlled.getData();
     expect(data.stockLevels[0]!.quantity).toBe(18);
     expect(data.movements.filter((movement) => movement.reference === requests[0]!.id)).toHaveLength(1);
+  });
+
+  it('rejects unexpected or duplicate serialized scans', async () => {
+    const controlled = new InMemoryRepository(miniData(), {
+      now: () => '2026-07-10T01:00:00Z',
+      id: (prefix) => `${prefix}-serialized-invalid`,
+    });
+    const unexpected = await controlled.recordCycleCount({
+      locationId: 'loc-wh', actor: 'counter@mwell',
+      lines: [{ productId: 'ring', expected: 1, counted: 1, serialNumbers: ['UNKNOWN'] }],
+    });
+    await expect(controlled.submitCycleCount({
+      idempotencyKey: 'serialized-unexpected-001', cycleCountId: unexpected.id, reason: 'Device count',
+    })).rejects.toThrow(/unknown serial/i);
+
+    const duplicate = await controlled.recordCycleCount({
+      locationId: 'loc-wh', actor: 'counter@mwell',
+      lines: [{ productId: 'ring', expected: 1, counted: 2, serialNumbers: ['SN1', 'SN1'] }],
+    });
+    await expect(controlled.submitCycleCount({
+      idempotencyKey: 'serialized-duplicate-001', cycleCountId: duplicate.id, reason: 'Device count',
+    })).rejects.toThrow(/duplicate serial/i);
+  });
+
+  it('marks a missing serialized unit lost only after final approval', async () => {
+    const data = miniData();
+    data.units.push({ id: 'u2', productId: 'ring', serialNumber: 'SN2', locationId: 'loc-wh', status: 'in_stock' });
+    const controlled = new InMemoryRepository(data, {
+      now: () => '2026-07-10T01:00:00Z',
+      id: (prefix) => `${prefix}-serialized-missing`,
+    });
+    const count = await controlled.recordCycleCount({
+      locationId: 'loc-wh', actor: 'counter@mwell',
+      lines: [{ productId: 'ring', expected: 2, counted: 1, serialNumbers: ['SN1'] }],
+    });
+    const [request] = await controlled.submitCycleCount({
+      idempotencyKey: 'serialized-missing-submit', cycleCountId: count.id, reason: 'Device count',
+    });
+    expect((await controlled.getData()).units.find((unit) => unit.serialNumber === 'SN2')?.status).toBe('in_stock');
+    await controlled.decideStockChange({
+      idempotencyKey: 'serialized-missing-approve', requestId: request!.id, decision: 'approved',
+    });
+    expect((await controlled.getData()).units.find((unit) => unit.serialNumber === 'SN2')?.status).toBe('lost');
   });
 
   it('moves a vendor-return hold into supplier custody exactly once', async () => {

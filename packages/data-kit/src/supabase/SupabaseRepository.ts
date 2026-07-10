@@ -791,57 +791,26 @@ export class SupabaseRepository implements WarehouseControlRepository {
 
   async recordCycleCount(input: CycleCountInput): Promise<CycleCount> {
     const createdAt = new Date().toISOString();
-    const data = await this.getData();
     const count: CycleCount = {
       id: uid('cc'),
       locationId: input.locationId,
       binId: input.binId,
       category: input.category,
       lines: input.lines,
+      status: 'draft',
+      requestedBy: input.actor,
       actor: input.actor,
       createdAt,
     };
 
-    const stockUpdates: Row[] = [];
-    const movements: Row[] = [];
-    for (const line of input.lines) {
-      const variance = line.counted - line.expected;
-      if (variance === 0) continue;
-      const product = data.products.find((p) => p.id === line.productId);
-      if (product && !product.serialized) {
-        stockUpdates.push({
-          product_id: product.id,
-          location_id: input.locationId,
-          bin_id: input.binId ?? null,
-          quantity: line.counted,
-        });
-      }
-      movements.push(
-        movementToRow({
-          id: uid('mv'),
-          type: 'cycle_count',
-          productId: line.productId,
-          quantity: variance,
-          toLocationId: input.locationId,
-          toBinId: input.binId,
-          reference: count.id,
-          reason: 'cycle count adjustment',
-          actor: input.actor,
-          createdAt,
-        }),
-      );
-    }
-
     const row = await this.callRpc('record_cycle_count', {
-      stock_sets: stockUpdates,
-      movements,
       cycle_count: {
         id: count.id,
         location_id: count.locationId,
         bin_id: count.binId ?? null,
         category: count.category ?? null,
         lines: count.lines,
-        actor: count.actor,
+        status: 'draft',
         created_at: createdAt,
       },
     });

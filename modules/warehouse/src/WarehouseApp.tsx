@@ -125,6 +125,7 @@ export function WarehouseApp({ basename = '/warehouse' }: WarehouseAppProps) {
           key={profile?.id ?? initialRole}
           initialRole={initialRole}
           actor={profile?.email}
+          identityId={profile?.id}
           source={mode}
           supabaseClient={supabaseClient ?? undefined}
         >

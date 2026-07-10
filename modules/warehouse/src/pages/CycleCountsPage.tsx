@@ -10,7 +10,7 @@ import { Badge, Card, Field, PageHeader, SectionTitle, useToast } from '@/compon
 import { Icon } from '@/components/Icon';
 
 export function CycleCountsPage() {
-  const { data, recordCycleCount } = useWarehouse();
+  const { data, submitNewCycleCount } = useWarehouse();
   const toast = useToast();
   const warehouses = useMemo(
     () => data?.locations.filter((l) => l.type === 'warehouse') ?? [],
@@ -20,6 +20,7 @@ export function CycleCountsPage() {
   const [binId, setBinId] = useState('');
   const [category, setCategory] = useState<ItemCategory>('merchandise');
   const [counts, setCounts] = useState<Record<string, number>>({});
+  const [serialInputs, setSerialInputs] = useState<Record<string, string>>({});
   const [blind, setBlind] = useState(false);
   const [confirmUncounted, setConfirmUncounted] = useState(false);
   const [search, setSearch] = useState('');
@@ -39,6 +40,14 @@ export function CycleCountsPage() {
 
   // Expected reflects the selected storage-area scope (bin, or the general area).
   const expectedForScope = (productId: string): number => {
+    const product = data.products.find((row) => row.id === productId);
+    if (product?.serialized) {
+      return data.units.filter((unit) =>
+        unit.productId === productId &&
+        unit.locationId === activeLocation &&
+        (unit.binId ?? undefined) === scope &&
+        ['in_stock', 'returned'].includes(unit.status)).length;
+    }
     const byBin = stockByBin(state, productId, activeLocation);
     return byBin.find((b) => (b.binId ?? undefined) === scope)?.quantity ?? 0;
   };
@@ -70,17 +79,45 @@ export function CycleCountsPage() {
     const n = Number(raw);
     setCount(productId, Number.isNaN(n) ? 0 : Math.max(0, n));
   };
+  const onSerialChange = (productId: string, raw: string) => {
+    setSerialInputs((previous) => ({ ...previous, [productId]: raw.toUpperCase() }));
+  };
 
-  const isCounted = (id: string) => counts[id] !== undefined;
+  const serialTokens = (id: string) => (serialInputs[id] ?? '')
+    .split(/[\s,]+/)
+    .map((serial) => serial.trim())
+    .filter(Boolean);
+  const isSerialized = (id: string) => data.products.find((product) => product.id === id)?.serialized ?? false;
+  const isCounted = (id: string) => isSerialized(id)
+    ? Object.prototype.hasOwnProperty.call(serialInputs, id)
+    : counts[id] !== undefined;
+  const countedFor = (id: string, expected: number) => isSerialized(id)
+    ? (isCounted(id) ? serialTokens(id).length : expected)
+    : (counts[id] ?? expected);
+  const expectedSerials = (id: string) => new Set(data.units
+    .filter((unit) => unit.productId === id && unit.locationId === activeLocation
+      && (unit.binId ?? undefined) === scope && ['in_stock', 'returned'].includes(unit.status))
+    .map((unit) => unit.serialNumber));
+  const serialIssues = items.flatMap(({ product }) => {
+    if (!product.serialized || !isCounted(product.id)) return [];
+    const tokens = serialTokens(product.id);
+    const duplicates = tokens.filter((serial, index) => tokens.indexOf(serial) !== index);
+    const expectedSet = expectedSerials(product.id);
+    const unexpected = tokens.filter((serial) => !expectedSet.has(serial));
+    return [...new Set([...duplicates, ...unexpected])].map((serial) => ({ product: product.name, serial }));
+  });
+  const firstMissing = items.find(({ product, expected }) =>
+    product.serialized && isCounted(product.id) && countedFor(product.id, expected) < expected);
   // Blind mode records only entered rows. In normal mode the whole sheet is
   // recorded — untouched rows fall back to expected, which the submit flow
   // makes the operator explicitly confirm below.
   const lines = items
-    .filter(({ product }) => !blind || isCounted(product.id))
+    .filter(({ product }) => (blind || product.serialized) ? isCounted(product.id) : true)
     .map(({ product, expected }) => ({
       productId: product.id,
       expected,
-      counted: counts[product.id] ?? expected,
+      counted: countedFor(product.id, expected),
+      ...(product.serialized ? { serialNumbers: serialTokens(product.id) } : {}),
     }));
   const variances = lines.filter((l) => l.counted !== l.expected);
   const enteredCount = items.filter((i) => isCounted(i.product.id)).length;
@@ -90,7 +127,7 @@ export function CycleCountsPage() {
   const isVisible = (id: string, name: string, sku: string, expected: number) => {
     if (q && !(name.toLowerCase().includes(q) || sku.toLowerCase().includes(q)))
       return false;
-    if (variancesOnly && (!isCounted(id) || counts[id] === expected)) return false;
+    if (variancesOnly && (!isCounted(id) || countedFor(id, expected) === expected)) return false;
     return true;
   };
 
@@ -98,26 +135,28 @@ export function CycleCountsPage() {
   const families = groupProductsByFamily(items.map((i) => i.product));
 
   const submit = async () => {
-    const ok = await recordCycleCount({
+    const ok = await submitNewCycleCount({
       locationId: activeLocation,
       binId: scope,
       category,
       lines,
+      reason: blind ? 'Blind cycle count' : 'Scheduled cycle count',
     });
     if (!ok) return;
     toast.success(
       variances.length > 0
-        ? `Count recorded · ${variances.length} variance(s)`
-        : 'Count recorded · balanced',
+        ? `${variances.length} variance(s) · Awaiting Warehouse Supervisor`
+        : 'Count completed · balanced',
     );
     setCounts({});
+    setSerialInputs({});
     setConfirmUncounted(false);
   };
 
   // Submitting with silently-uncounted rows needs an explicit confirmation
   // ("8 rows not counted — submit anyway?", WH-18).
   const onSubmitClick = () => {
-    if (!blind && uncounted > 0) {
+    if (!blind && category !== 'device' && uncounted > 0) {
       setConfirmUncounted(true);
       return;
     }
@@ -142,6 +181,7 @@ export function CycleCountsPage() {
               setLocationId(e.target.value);
               setBinId('');
               setCounts({});
+              setSerialInputs({});
             }}
           >
             {warehouses.map((l) => (
@@ -156,7 +196,11 @@ export function CycleCountsPage() {
             id="cc-category"
             className="input"
             value={category}
-            onChange={(e) => setCategory(e.target.value as ItemCategory)}
+            onChange={(e) => {
+              setCategory(e.target.value as ItemCategory);
+              setCounts({});
+              setSerialInputs({});
+            }}
           >
             <option value="merchandise">Merchandise</option>
             <option value="device">Devices</option>
@@ -189,6 +233,7 @@ export function CycleCountsPage() {
                 onChange={(e) => {
                   setBinId(e.target.value);
                   setCounts({});
+                  setSerialInputs({});
                 }}
               >
                 <option value="">General area (unassigned)</option>
@@ -266,6 +311,15 @@ export function CycleCountsPage() {
               {enteredCount}/{items.length} counted
             </p>
           </div>
+          {serialIssues.length > 0 ? (
+            <p role="alert" className="rounded-lg bg-rose-500/10 px-3 py-2 text-sm font-medium text-rose-700 dark:text-rose-300">
+              Unexpected serial {serialIssues[0]!.serial} for {serialIssues[0]!.product}. Receive or relocate it before submitting this count.
+            </p>
+          ) : firstMissing ? (
+            <p className="rounded-lg bg-amber-500/10 px-3 py-2 text-sm font-medium text-amber-800 dark:text-amber-200">
+              {firstMissing.expected - countedFor(firstMissing.product.id, firstMissing.expected)} missing for {firstMissing.product.name}.
+            </p>
+          ) : null}
         </div>
 
         <div className="hidden overflow-x-auto sm:block">
@@ -300,7 +354,7 @@ export function CycleCountsPage() {
                     {visible.map((product) => {
                       const expected = expectedById.get(product.id) ?? 0;
                       const has = isCounted(product.id);
-                      const variance = (counts[product.id] ?? expected) - expected;
+                      const variance = countedFor(product.id, expected) - expected;
                       return (
                         <tr key={product.id}>
                           <td className={grouped ? 'py-2 pl-3 pr-2' : 'py-2 pr-2'}>
@@ -315,16 +369,27 @@ export function CycleCountsPage() {
                             {blind ? '—' : expected}
                           </td>
                           <td className="py-2 text-right">
-                            <input
-                              type="number"
-                              inputMode="numeric"
-                              className="input w-24 py-1.5 text-right"
-                              aria-label={`Counted ${product.name}`}
-                              placeholder={blind ? '—' : `Exp. ${expected}`}
-                              value={counts[product.id] ?? ''}
-                              min={0}
-                              onChange={(e) => onCountChange(product.id, e.target.value)}
-                            />
+                            {product.serialized ? (
+                              <input
+                                type="text"
+                                className="input min-w-52 py-1.5"
+                                aria-label={`Scanned serials ${product.name}`}
+                                placeholder="Scan or enter serials"
+                                value={serialInputs[product.id] ?? ''}
+                                onChange={(e) => onSerialChange(product.id, e.target.value)}
+                              />
+                            ) : (
+                              <input
+                                type="number"
+                                inputMode="numeric"
+                                className="input w-24 py-1.5 text-right"
+                                aria-label={`Counted ${product.name}`}
+                                placeholder={blind ? '—' : `Exp. ${expected}`}
+                                value={counts[product.id] ?? ''}
+                                min={0}
+                                onChange={(e) => onCountChange(product.id, e.target.value)}
+                              />
+                            )}
                           </td>
                           <td
                             className={
@@ -364,7 +429,7 @@ export function CycleCountsPage() {
                 {visible.map((product) => {
                   const expected = expectedById.get(product.id) ?? 0;
                   const has = isCounted(product.id);
-                  const variance = (counts[product.id] ?? expected) - expected;
+                  const variance = countedFor(product.id, expected) - expected;
                   return (
                     <li
                       key={product.id}
@@ -400,18 +465,27 @@ export function CycleCountsPage() {
                         </span>
                         <label className="flex items-center gap-2">
                           <span className="text-xs text-faint">Counted</span>
-                          <input
-                            type="number"
-                            inputMode="numeric"
-                            className="input min-h-11 w-24 text-right"
-                            aria-label={`${product.name} counted quantity`}
-                            placeholder={blind ? '—' : `Exp. ${expected}`}
-                            value={counts[product.id] ?? ''}
-                            min={0}
-                            onChange={(e) =>
-                              onCountChange(product.id, e.target.value)
-                            }
-                          />
+                          {product.serialized ? (
+                            <input
+                              type="text"
+                              className="input min-h-11 min-w-0 flex-1"
+                              aria-label={`${product.name} scanned serials`}
+                              placeholder="Scan serials"
+                              value={serialInputs[product.id] ?? ''}
+                              onChange={(e) => onSerialChange(product.id, e.target.value)}
+                            />
+                          ) : (
+                            <input
+                              type="number"
+                              inputMode="numeric"
+                              className="input min-h-11 w-24 text-right"
+                              aria-label={`${product.name} counted quantity`}
+                              placeholder={blind ? '—' : `Exp. ${expected}`}
+                              value={counts[product.id] ?? ''}
+                              min={0}
+                              onChange={(e) => onCountChange(product.id, e.target.value)}
+                            />
+                          )}
                         </label>
                       </div>
                     </li>
@@ -457,7 +531,7 @@ export function CycleCountsPage() {
           className="btn-primary w-full shadow-pop"
           // An explicit entry is always required — no more one-tap "perfect
           // count" (WH-18).
-          disabled={enteredCount === 0}
+          disabled={enteredCount === 0 || serialIssues.length > 0}
           onClick={onSubmitClick}
         >
           Submit count ({enteredCount}/{items.length})

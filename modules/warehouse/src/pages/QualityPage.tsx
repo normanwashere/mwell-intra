@@ -22,7 +22,7 @@ export function QualityPage() {
   const {
     data,
     role,
-    actor,
+    identityId,
     loadQualityInspections,
     loadHolds,
     loadVendorReturns,
@@ -204,7 +204,7 @@ export function QualityPage() {
       />
       <HoldReleaseSheet
         hold={selectedHold}
-        actor={actor}
+        actor={identityId}
         productName={selectedHold ? productName(selectedHold.productId) : ''}
         mode={inspections.find((inspection) => inspection.id === selectedHold?.inspectionId)?.disposition === 'vendor_return' ? 'vendor_return' : 'release'}
         suppliers={data.suppliers}

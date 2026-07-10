@@ -38,4 +38,13 @@ describe('warehouse navigation metadata', () => {
     expect(quality).toMatchObject({ path: '/quality', group: 'control' });
     expect(modulesForRole('finance').some((module) => module.id === 'quality')).toBe(false);
   });
+
+  it('exposes approvals and exceptions only to their authorized roles', () => {
+    expect(modulesForRole('logistics_supervisor').find((module) => module.id === 'approvals'))
+      .toMatchObject({ path: '/approvals', group: 'control' });
+    expect(modulesForRole('finance').find((module) => module.id === 'approvals')).toBeDefined();
+    expect(modulesForRole('operations').find((module) => module.id === 'approvals')).toBeUndefined();
+    expect(modulesForRole('operations').find((module) => module.id === 'exceptions'))
+      .toMatchObject({ path: '/exceptions', group: 'control' });
+  });
 });

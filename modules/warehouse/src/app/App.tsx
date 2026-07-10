@@ -73,6 +73,12 @@ const TasksPage = lazy(() =>
 const QualityPage = lazy(() =>
   import('@/pages/QualityPage').then((m) => ({ default: m.QualityPage })),
 );
+const ApprovalsPage = lazy(() =>
+  import('@/pages/ApprovalsPage').then((m) => ({ default: m.ApprovalsPage })),
+);
+const ExceptionsPage = lazy(() =>
+  import('@/pages/ExceptionsPage').then((m) => ({ default: m.ExceptionsPage })),
+);
 
 function AccessDenied() {
   const navigate = useNavigate();
@@ -197,6 +203,22 @@ export function App() {
           element={
             <Guard anyOf={['inspect_quality', 'release_quality_hold']}>
               <QualityPage />
+            </Guard>
+          }
+        />
+        <Route
+          path="/approvals"
+          element={
+            <Guard anyOf={['approve_stock_adjustment']}>
+              <ApprovalsPage />
+            </Guard>
+          }
+        />
+        <Route
+          path="/exceptions"
+          element={
+            <Guard anyOf={['view_exceptions']}>
+              <ExceptionsPage />
             </Guard>
           }
         />

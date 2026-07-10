@@ -61,14 +61,14 @@ describe('CycleCountsPage', () => {
     expect(screen.getByRole('button', { name: /submit count/i })).toBeEnabled();
   });
 
-  it('asks for confirmation when rows are left uncounted, then records', async () => {
+  it('asks for confirmation when rows are left uncounted, then routes variances for approval', async () => {
     const user = userEvent.setup();
     renderWithProviders(<CycleCountsPage />, { role: 'finance' });
     await screen.findByText(/count sheet/i);
 
     await user.type(
       screen.getByLabelText(/Counted Event Shirt \(L\)/i),
-      '120',
+      '100',
     );
     await user.click(screen.getByRole('button', { name: /submit count/i }));
 
@@ -80,11 +80,11 @@ describe('CycleCountsPage', () => {
 
     await user.click(screen.getByRole('button', { name: /submit anyway/i }));
     await waitFor(() =>
-      expect(screen.getByText(/count recorded/i)).toBeInTheDocument(),
+      expect(screen.getByText(/awaiting warehouse supervisor/i)).toBeInTheDocument(),
     );
   });
 
-  it('records without confirmation when every row is counted in blind mode', async () => {
+  it('routes a blind-count variance for supervisor approval', async () => {
     const user = userEvent.setup();
     renderWithProviders(<CycleCountsPage />, { role: 'finance' });
     await screen.findByText(/count sheet/i);
@@ -96,7 +96,24 @@ describe('CycleCountsPage', () => {
     );
     await user.click(screen.getByRole('button', { name: /submit count/i }));
     await waitFor(() =>
-      expect(screen.getByText(/count recorded/i)).toBeInTheDocument(),
+      expect(screen.getByText(/awaiting warehouse supervisor/i)).toBeInTheDocument(),
     );
+  });
+
+  it('counts serialized devices by presence and blocks unexpected serials', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<CycleCountsPage />, { role: 'finance' });
+    await screen.findByText(/count sheet/i);
+    await user.selectOptions(screen.getByLabelText('Category'), 'device');
+
+    const serials = screen.getByLabelText(/Scanned serials ECG Ring \(Size 6\)/i);
+    await user.type(serials, 'NOT-IN-THIS-BIN');
+    expect(await screen.findByText(/unexpected serial/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /submit count/i })).toBeDisabled();
+
+    await user.clear(serials);
+    await user.type(serials, 'ECG-RING-6-SN0003');
+    expect(await screen.findByText(/1 missing/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /submit count/i })).toBeEnabled();
   });
 });

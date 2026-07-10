@@ -472,7 +472,7 @@ describe('SupabaseRepository concurrency-safe payloads (warehouse.* v8 RPCs)', (
     expect(alloc.status).toBe('reserved');
   });
 
-  it('recordCycleCount sends absolute stock_sets + variance movements', async () => {
+  it('recordCycleCount creates only a governed draft', async () => {
     const { client, calls } = makeMockClient(seed);
     const repo = new SupabaseRepository(client);
     await repo.recordCycleCount({
@@ -481,12 +481,13 @@ describe('SupabaseRepository concurrency-safe payloads (warehouse.* v8 RPCs)', (
       actor: 'test',
     });
     const call = calls.find((c) => c.fn === 'record_cycle_count')!;
-    const sets = call.payload.stock_sets as { quantity: number }[];
-    expect(sets).toHaveLength(1);
-    // Cycle count SETS the counted quantity (absolute), unlike other mutations.
-    expect(sets[0]!.quantity).toBe(75);
-    const movements = call.payload.movements as { quantity: number }[];
-    expect(movements[0]!.quantity).toBe(-5);
+    expect(call.payload).not.toHaveProperty('stock_sets');
+    expect(call.payload).not.toHaveProperty('movements');
+    expect(call.payload.cycle_count).toMatchObject({
+      status: 'draft',
+    });
+    expect(call.payload.cycle_count).not.toHaveProperty('requested_by');
+    expect(call.payload.cycle_count).not.toHaveProperty('actor');
   });
 
   it('recordReturn accumulates restock deltas + registers evidence-carrying return row', async () => {
