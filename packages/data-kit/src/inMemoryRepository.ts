@@ -41,10 +41,32 @@ import {
   type UpdateStorageAreaInput,
   type UpdateSupplierInput,
   type WarehouseData,
+  type WarehouseControlRepository,
   type WarehouseRepository,
 } from './repository';
 import type { Product, Profile } from './domain/types';
 import { buildProfiles, buildSeed } from './seed';
+import {
+  availableAfterControls,
+  normalizePageQuery,
+  stockChangeStatusAfterDecision,
+  type DecideStockChangeInput,
+  type InspectQualityInput,
+  type InventoryHold,
+  type InventoryPosition,
+  type OperationRoute,
+  type PageQuery,
+  type PageResult,
+  type ProcurementPOHandoff,
+  type QualityInspection,
+  type ReleaseHoldInput,
+  type ResolveExceptionInput,
+  type StockChangeRequest,
+  type SubmitCycleCountInput,
+  type UpdateOperationRouteInput,
+  type WarehouseException,
+  type WarehouseTask,
+} from './domain/warehouseControls';
 
 // v2 (2026-07): rich 90-day activity history added to the seed — bumping the
 // key means browsers persisted on v1 pick up the new dataset on next load.
@@ -65,14 +87,35 @@ function uid(prefix: string): string {
 
 export interface InMemoryOptions {
   storage?: Pick<Storage, 'getItem' | 'setItem'> | null;
+  now?: () => string;
+  id?: (prefix: string) => string;
 }
 
-export class InMemoryRepository implements WarehouseRepository {
+export class InMemoryRepository implements WarehouseControlRepository {
   private data: WarehouseData;
   private storage: InMemoryOptions['storage'];
+  private nowProvider: () => string;
+  private idProvider: (prefix: string) => string;
+  private qualityInspections: QualityInspection[] = [];
+  private holds: InventoryHold[] = [];
+  private exceptions: WarehouseException[] = [];
+  private stockChanges: StockChangeRequest[] = [];
+  private operationRoutes: OperationRoute[] = [{
+    id: 'route-receipt-default',
+    operationTypeId: 'operation-receipt',
+    sourceLocationTypes: ['vendor'],
+    destinationLocationTypes: ['warehouse'],
+    requiresEvidence: true,
+    requiresApproval: false,
+    requiresOnline: true,
+    active: true,
+  }];
+  private commandResponses = new Map<string, { payload: string; response: unknown }>();
 
   constructor(initial?: WarehouseData, options: InMemoryOptions = {}) {
     this.storage = options.storage ?? null;
+    this.nowProvider = options.now ?? (() => new Date().toISOString());
+    this.idProvider = options.id ?? uid;
     const persisted = this.load();
     this.data = persisted ?? clone(initial ?? buildSeed());
   }
@@ -109,7 +152,50 @@ export class InMemoryRepository implements WarehouseRepository {
   }
 
   private now(): string {
-    return new Date().toISOString();
+    return this.nowProvider();
+  }
+
+  private newId(prefix: string): string {
+    return this.idProvider(prefix);
+  }
+
+  private idempotent<T>(command: string, key: string, input: unknown, execute: () => T): T {
+    if (!/^[A-Za-z0-9_-]{12,128}$/.test(key)) {
+      throw new Error('A valid idempotency key is required.');
+    }
+    const cacheKey = `${command}:${key}`;
+    const payload = JSON.stringify(input);
+    const existing = this.commandResponses.get(cacheKey);
+    if (existing) {
+      if (existing.payload !== payload) {
+        throw new Error('Idempotency key was reused with a different payload.');
+      }
+      return clone(existing.response as T);
+    }
+    const response = execute();
+    this.commandResponses.set(cacheKey, { payload, response: clone(response) });
+    return clone(response);
+  }
+
+  private page<T extends { id: string }>(
+    rows: T[],
+    query: PageQuery,
+    status: (row: T) => string | undefined,
+  ): PageResult<T> {
+    const normalized = normalizePageQuery(query);
+    const filtered = rows
+      .filter((row) => !normalized.status || status(row) === normalized.status)
+      .sort((a, b) => b.id.localeCompare(a.id));
+    const offset = normalized.cursor ? Number(normalized.cursor) : 0;
+    if (!Number.isInteger(offset) || offset < 0) throw new Error('Invalid page cursor.');
+    const pageRows = filtered.slice(offset, offset + normalized.limit);
+    return {
+      rows: clone(pageRows),
+      ...(offset + normalized.limit < filtered.length
+        ? { nextCursor: String(offset + normalized.limit) }
+        : {}),
+      total: filtered.length,
+    };
   }
 
   /** Find (or optionally create) the stock row for a product/location/bin. */
@@ -133,7 +219,7 @@ export class InMemoryRepository implements WarehouseRepository {
   }
 
   async getData(): Promise<WarehouseData> {
-    return clone(this.data);
+    return clone({ ...this.data, operationRoutes: this.operationRoutes });
   }
 
   async getStockState() {
@@ -941,5 +1027,331 @@ export class InMemoryRepository implements WarehouseRepository {
     this.data.movements.push(movement);
     this.persist();
     return clone(movement);
+  }
+
+  async listQualityInspections(query: PageQuery): Promise<PageResult<QualityInspection>> {
+    return this.page(this.qualityInspections, query, (row) => row.disposition);
+  }
+
+  async listHolds(query: PageQuery): Promise<PageResult<InventoryHold>> {
+    return this.page(this.holds, query, (row) => row.status);
+  }
+
+  async listExceptions(query: PageQuery): Promise<PageResult<WarehouseException>> {
+    return this.page(this.exceptions, query, (row) => row.status);
+  }
+
+  async listStockChangeRequests(query: PageQuery): Promise<PageResult<StockChangeRequest>> {
+    return this.page(this.stockChanges, query, (row) => row.status);
+  }
+
+  async listWarehouseTasks(query: PageQuery): Promise<PageResult<WarehouseTask>> {
+    const tasks: WarehouseTask[] = [
+      ...this.holds.filter((hold) => hold.status === 'active').map((hold) => ({
+        id: `quality-${hold.id}`,
+        type: 'quality' as const,
+        sourceId: hold.id,
+        title: `Review hold for ${hold.productId}`,
+        status: 'blocked' as const,
+      })),
+      ...this.exceptions
+        .filter((exception) => ['open', 'in_progress'].includes(exception.status))
+        .map((exception) => ({
+          id: `exception-${exception.id}`,
+          type: 'exception' as const,
+          sourceId: exception.id,
+          title: `Resolve ${exception.type.replace('_', ' ')}`,
+          status: 'due' as const,
+          assigneeId: exception.ownerId,
+          dueAt: exception.dueAt,
+        })),
+    ];
+    return this.page(tasks, query, (row) => row.status);
+  }
+
+  async listInventoryPositions(query: PageQuery): Promise<PageResult<InventoryPosition>> {
+    const positions = new Map<string, InventoryPosition>();
+    const position = (productId: string, locationId: string, binId?: string) => {
+      const key = `${productId}|${locationId}|${binId ?? ''}`;
+      let row = positions.get(key);
+      if (!row) {
+        row = { productId, locationId, binId, onHand: 0, committed: 0, held: 0, unavailable: 0, available: 0 };
+        positions.set(key, row);
+      }
+      return row;
+    };
+    for (const level of this.data.stockLevels) {
+      position(level.productId, level.locationId, level.binId).onHand += level.quantity;
+    }
+    for (const unit of this.data.units) {
+      if (unit.status === 'in_stock') {
+        position(unit.productId, unit.locationId, unit.binId).onHand += 1;
+      } else if (unit.status === 'returned') {
+        const row = position(unit.productId, unit.locationId, unit.binId);
+        row.onHand += 1;
+        row.unavailable += 1;
+      }
+    }
+    for (const hold of this.holds.filter((row) => row.status === 'active')) {
+      position(hold.productId, hold.locationId, hold.binId).held += hold.quantity;
+    }
+    const rows = [...positions.entries()]
+      .map(([id, row]) => ({
+        id,
+        ...row,
+        available: availableAfterControls(row),
+      }))
+      .sort((a, b) => a.id.localeCompare(b.id));
+    const normalized = normalizePageQuery(query);
+    const offset = normalized.cursor ? Number(normalized.cursor) : 0;
+    if (!Number.isInteger(offset) || offset < 0) throw new Error('Invalid page cursor.');
+    const selected = rows.slice(offset, offset + normalized.limit);
+    return {
+      rows: clone(selected.map(({ id: _id, ...row }) => row)),
+      ...(offset + normalized.limit < rows.length
+        ? { nextCursor: String(offset + normalized.limit) }
+        : {}),
+      total: rows.length,
+    };
+  }
+
+  async inspectQuality(input: InspectQualityInput): Promise<QualityInspection> {
+    return this.idempotent('inspect_quality', input.idempotencyKey, input, () => {
+      const receipt = input.sourceType === 'receipt'
+        ? this.data.receipts.find((row) => row.id === input.sourceId)
+        : undefined;
+      const returned = input.sourceType === 'return'
+        ? this.data.returns.find((row) => row.id === input.sourceId)
+        : undefined;
+      if (!receipt && !returned) throw new Error('Quality source not found.');
+      const lines = receipt?.lines ?? returned?.lines ?? [];
+      const sourceQuantity = lines
+        .filter((line) => line.productId === input.productId)
+        .reduce((sum, line) => sum + line.quantity, 0);
+      if (input.quantity <= 0 || input.quantity > sourceQuantity) {
+        throw new Error('Inspection quantity exceeds the source quantity.');
+      }
+      if (input.disposition !== 'accepted' && !input.reason?.trim()) {
+        throw new Error('A reason is required for non-accepted stock.');
+      }
+      const locationId = receipt?.locationId
+        ?? returned?.lines.find((line) => line.productId === input.productId)?.locationId;
+      if (!locationId) throw new Error('Inspection location cannot be resolved.');
+      const inspection: QualityInspection = {
+        id: this.newId('qi'),
+        sourceType: input.sourceType,
+        sourceId: input.sourceId,
+        productId: input.productId,
+        binId: input.binId,
+        lotId: input.lotId,
+        serialNumber: input.serialNumber,
+        quantity: input.quantity,
+        disposition: input.disposition,
+        reason: input.reason,
+        evidenceUrls: input.evidenceUrls ?? [],
+        inspectedBy: 'demo-quality-inspector',
+        inspectedAt: this.now(),
+      };
+      this.qualityInspections.push(inspection);
+      if (input.disposition !== 'accepted') {
+        const hold: InventoryHold = {
+          id: this.newId('hold'), inspectionId: inspection.id, productId: input.productId,
+          locationId, binId: input.binId, lotId: input.lotId,
+          serialNumber: input.serialNumber, quantity: input.quantity, status: 'active',
+          reason: input.reason!, createdBy: inspection.inspectedBy, createdAt: inspection.inspectedAt,
+        };
+        this.holds.push(hold);
+        this.exceptions.push({
+          id: this.newId('ex'), type: 'quality', severity: 'P2',
+          sourceType: 'quality_inspection', sourceId: inspection.id, status: 'open',
+          createdAt: inspection.inspectedAt,
+        });
+      }
+      this.persist();
+      return inspection;
+    });
+  }
+
+  async releaseHold(input: ReleaseHoldInput): Promise<InventoryHold> {
+    return this.idempotent('release_hold', input.idempotencyKey, input, () => {
+      if (input.targetDisposition !== 'accepted') {
+        throw new Error('Only accepted stock can be released from a hold.');
+      }
+      if (!input.reason.trim() || !(input.evidenceUrls?.length)) {
+        throw new Error('Release reason and evidence are required.');
+      }
+      const hold = this.holds.find((row) => row.id === input.holdId && row.status === 'active');
+      if (!hold) throw new Error('Active hold not found.');
+      hold.status = 'released';
+      hold.releasedBy = 'demo-logistics-supervisor';
+      hold.releasedAt = this.now();
+      const inspection = this.qualityInspections.find((row) => row.id === hold.inspectionId);
+      if (inspection) inspection.disposition = 'accepted';
+      const exception = this.exceptions.find(
+        (row) => row.sourceType === 'quality_inspection' && row.sourceId === hold.inspectionId,
+      );
+      if (exception) {
+        exception.status = 'resolved';
+        exception.resolution = input.reason;
+      }
+      this.persist();
+      return hold;
+    });
+  }
+
+  async updateOperationRoute(input: UpdateOperationRouteInput): Promise<OperationRoute> {
+    return this.idempotent('update_operation_route', input.idempotencyKey, input, () => {
+      const route = this.operationRoutes.find((row) => row.id === input.routeId);
+      if (!route) throw new Error('Operation route not found.');
+      Object.assign(route, input.patch);
+      return route;
+    });
+  }
+
+  async submitCycleCount(input: SubmitCycleCountInput): Promise<StockChangeRequest[]> {
+    return this.idempotent('submit_cycle_count', input.idempotencyKey, input, () => {
+      const count = this.data.cycleCounts.find(
+        (row) => row.id === input.cycleCountId && (row.status ?? 'draft') === 'draft',
+      );
+      if (!count) throw new Error('Draft cycle count not found.');
+      const created: StockChangeRequest[] = [];
+      count.lines = count.lines.map((line) => {
+        const product = this.data.products.find((row) => row.id === line.productId);
+        if (!product) throw new Error(`Unknown product: ${line.productId}`);
+        const expected = product.serialized
+          ? this.data.units.filter((unit) =>
+              unit.productId === product.id && unit.locationId === count.locationId
+              && (unit.binId ?? undefined) === (count.binId ?? undefined)
+              && unit.status === 'in_stock').length
+          : this.data.stockLevels.filter((level) =>
+              level.productId === product.id && level.locationId === count.locationId
+              && (level.binId ?? undefined) === (count.binId ?? undefined))
+              .reduce((sum, level) => sum + level.quantity, 0);
+        const counted = product.serialized ? (line.serialNumbers?.length ?? line.counted) : line.counted;
+        const delta = counted - expected;
+        if (delta !== 0) {
+          const financialImpact = Math.abs(delta * product.unitCost);
+          const request: StockChangeRequest = {
+            id: this.newId('scr'), sourceType: 'cycle_count', sourceId: count.id,
+            productId: product.id, locationId: count.locationId, binId: count.binId,
+            quantityDelta: delta, unitCost: product.unitCost, financialImpact,
+            reason: input.reason, evidenceUrls: input.evidenceUrls ?? [],
+            status: 'pending_supervisor', requestedBy: 'demo-cycle-counter', requestedAt: this.now(),
+          };
+          this.stockChanges.push(request);
+          created.push(request);
+          this.exceptions.push({
+            id: this.newId('ex'), type: 'count_variance',
+            severity: financialImpact > 10_000 ? 'P1' : 'P2',
+            sourceType: 'stock_change_request', sourceId: request.id,
+            status: 'open', createdAt: this.now(),
+          });
+        }
+        return { ...line, expected, counted };
+      });
+      count.status = created.length ? 'pending_approval' : 'approved';
+      count.requestedBy = 'demo-cycle-counter';
+      count.submittedAt = this.now();
+      this.persist();
+      return created;
+    });
+  }
+
+  async decideStockChange(input: DecideStockChangeInput): Promise<StockChangeRequest> {
+    return this.idempotent('decide_stock_change', input.idempotencyKey, input, () => {
+      const request = this.stockChanges.find((row) => row.id === input.requestId);
+      if (!request || !['pending_supervisor', 'pending_finance'].includes(request.status)) {
+        throw new Error('Pending stock-change request not found.');
+      }
+      request.status = stockChangeStatusAfterDecision({
+        currentStatus: request.status as 'pending_supervisor' | 'pending_finance',
+        decision: input.decision,
+        financialImpact: request.financialImpact,
+        requestedBy: request.requestedBy,
+        actor: request.status === 'pending_finance' ? 'demo-finance-approver' : 'demo-supervisor-approver',
+        note: input.note,
+      });
+      const count = this.data.cycleCounts.find((row) => row.id === request.sourceId);
+      if (request.status === 'rejected') {
+        if (count) count.status = 'rejected';
+      } else if (request.status === 'approved') {
+        const product = this.data.products.find((row) => row.id === request.productId)!;
+        if (product.serialized) {
+          const scanned = count?.lines.find((line) => line.productId === product.id)?.serialNumbers ?? [];
+          const missing = this.data.units.filter((unit) =>
+            unit.productId === product.id && unit.locationId === request.locationId
+            && (unit.binId ?? undefined) === (request.binId ?? undefined)
+            && unit.status === 'in_stock' && !scanned.includes(unit.serialNumber));
+          for (const unit of missing.slice(0, Math.abs(request.quantityDelta))) unit.status = 'lost';
+        } else {
+          const level = this.stockRow(product.id, request.locationId, request.binId, true)!;
+          if (level.quantity + request.quantityDelta < 0) throw new Error('Stock cannot become negative.');
+          level.quantity += request.quantityDelta;
+        }
+        this.data.movements.push({
+          id: this.newId('mv'), type: 'cycle_count', productId: request.productId,
+          quantity: request.quantityDelta, toLocationId: request.locationId,
+          toBinId: request.binId, reason: request.reason, reference: request.id,
+          evidenceUrls: request.evidenceUrls, actor: 'demo-approver', createdAt: this.now(),
+        });
+        const exception = this.exceptions.find(
+          (row) => row.sourceType === 'stock_change_request' && row.sourceId === request.id,
+        );
+        if (exception) {
+          exception.status = 'resolved';
+          exception.resolution = input.note ?? 'Approved stock change posted';
+        }
+        if (count && !this.stockChanges.some(
+          (row) => row.sourceId === count.id && row.status !== 'approved',
+        )) count.status = 'approved';
+      }
+      this.persist();
+      return request;
+    });
+  }
+
+  async resolveException(input: ResolveExceptionInput): Promise<WarehouseException> {
+    return this.idempotent('resolve_exception', input.idempotencyKey, input, () => {
+      const exception = this.exceptions.find(
+        (row) => row.id === input.exceptionId && ['open', 'in_progress'].includes(row.status),
+      );
+      if (!exception) throw new Error('Active exception not found.');
+      if (input.action === 'assign') {
+        if (!input.ownerId) throw new Error('An exception owner is required.');
+        exception.ownerId = input.ownerId;
+      } else if (input.action === 'begin') {
+        exception.status = 'in_progress';
+        exception.ownerId = input.ownerId ?? 'demo-logistics-supervisor';
+      } else {
+        if (!input.resolution?.trim()) throw new Error('Resolution text is required.');
+        if (input.action === 'waive' && exception.severity === 'P1') {
+          throw new Error('P1 exceptions cannot be waived.');
+        }
+        exception.status = input.action === 'resolve' ? 'resolved'
+          : input.action === 'waive' ? 'waived' : 'cancelled';
+        exception.resolution = input.resolution;
+      }
+      return exception;
+    });
+  }
+
+  async getReceivableProcurementPOs(): Promise<ProcurementPOHandoff[]> {
+    return this.data.purchaseOrders
+      .filter((po) => ['ordered', 'partially_received'].includes(po.status))
+      .map((po) => ({
+        id: po.id,
+        poNumber: po.id,
+        vendorName: this.data.suppliers.find((supplier) => supplier.id === po.supplierId)?.name
+          ?? po.supplierId,
+        status: 'issued' as const,
+        expectedDate: po.expectedDate,
+        lines: po.lines.map((line, index) => ({
+          id: `${po.id}-${index}`,
+          description: this.data.products.find((product) => product.id === line.productId)?.name
+            ?? line.productId,
+          quantity: line.quantityOrdered,
+          receivedQuantity: line.quantityReceived,
+        })),
+      }));
   }
 }

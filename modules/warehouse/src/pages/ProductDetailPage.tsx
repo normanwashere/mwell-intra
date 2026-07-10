@@ -38,6 +38,7 @@ const UNIT_TONE: Record<UnitStatus, Tone> = {
   allocated: 'amber',
   issued: 'brand',
   returned: 'slate',
+  vendor_return: 'rose',
   lost: 'rose',
 };
 

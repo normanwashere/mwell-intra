@@ -1,7 +1,32 @@
+import { useState } from 'react';
 import { describe, it, expect } from 'vitest';
-import { screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import { App } from './App';
 import { renderWithProviders } from '@/test/renderWithProviders';
+import { useWarehouse } from './store';
+import { InMemoryRepository } from '@/data/inMemoryRepository';
+
+function ControlFailureProbe() {
+  const { inspectQuality } = useWarehouse();
+  const [result, setResult] = useState('idle');
+  return (
+    <>
+      <button
+        onClick={() => void inspectQuality({
+          idempotencyKey: 'provider-test-001', sourceType: 'receipt', sourceId: 'missing',
+          productId: 'missing', quantity: 1, disposition: 'accepted',
+        }).then((ok) => setResult(String(ok)))}
+      >Run guarded command</button>
+      <output>{result}</output>
+    </>
+  );
+}
+
+class DeniedControlRepository extends InMemoryRepository {
+  override async inspectQuality(): Promise<never> {
+    throw new Error('Not authorized: warehouse.inspect_quality');
+  }
+}
 
 const FIRST_RENDER_TIMEOUT = 10_000;
 
@@ -33,5 +58,12 @@ describe('App routing & guards', () => {
     expect(
       screen.queryByText(/scan & tag incoming inventory/i),
     ).not.toBeInTheDocument();
+  });
+
+  it('returns false when a guarded control command is denied', async () => {
+    renderWithProviders(<ControlFailureProbe />, { repo: new DeniedControlRepository() });
+    fireEvent.click(screen.getByRole('button', { name: /run guarded command/i }));
+    expect(await screen.findByText('false')).toBeInTheDocument();
+    expect(await screen.findByText(/not authorized: warehouse\.inspect_quality/i)).toBeInTheDocument();
   });
 });

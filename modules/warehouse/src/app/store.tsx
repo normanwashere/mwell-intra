@@ -52,11 +52,19 @@ import type {
   CreateSupplierInput,
   CycleCountInput,
   DataSource,
+  DecideStockChangeInput,
+  InspectQualityInput,
+  InventoryHold,
+  InventoryPosition,
   IssueInput,
   OutboxEntry,
   QueueableMethod,
+  PageQuery,
+  PageResult,
   ReceiveAgainstPOInput,
   ReceiveStockInput,
+  ReleaseHoldInput,
+  ResolveExceptionInput,
   RelocateInput,
   ReserveInput,
   ReturnInput,
@@ -64,12 +72,18 @@ import type {
   SetProductPriceInput,
   TransferInput,
   UpdateLocationInput,
+  UpdateOperationRouteInput,
   UpdateProductInput,
   UpdateStorageAreaInput,
   UpdateSupplierInput,
   WarehouseData,
+  WarehouseControlRepository,
+  WarehouseException,
   WarehousePatch,
-  WarehouseRepository,
+  WarehouseTask,
+  QualityInspection,
+  StockChangeRequest,
+  SubmitCycleCountInput,
 } from '@intra/data-kit';
 
 interface WarehouseContextValue {
@@ -128,6 +142,18 @@ interface WarehouseContextValue {
   createProduct: (input: Omit<CreateProductInput, 'actor'>) => Promise<boolean>;
   updateProduct: (input: Omit<UpdateProductInput, 'actor'>) => Promise<boolean>;
   adjustStock: (input: Omit<AdjustStockInput, 'actor'>) => Promise<boolean>;
+  loadQualityInspections: (query: PageQuery) => Promise<PageResult<QualityInspection>>;
+  loadHolds: (query: PageQuery) => Promise<PageResult<InventoryHold>>;
+  loadExceptions: (query: PageQuery) => Promise<PageResult<WarehouseException>>;
+  loadStockChangeRequests: (query: PageQuery) => Promise<PageResult<StockChangeRequest>>;
+  loadWarehouseTasks: (query: PageQuery) => Promise<PageResult<WarehouseTask>>;
+  loadInventoryPositions: (query: PageQuery) => Promise<PageResult<InventoryPosition>>;
+  inspectQuality: (input: InspectQualityInput) => Promise<boolean>;
+  releaseHold: (input: ReleaseHoldInput) => Promise<boolean>;
+  updateOperationRoute: (input: UpdateOperationRouteInput) => Promise<boolean>;
+  submitCycleCount: (input: SubmitCycleCountInput) => Promise<boolean>;
+  decideStockChange: (input: DecideStockChangeInput) => Promise<boolean>;
+  resolveException: (input: ResolveExceptionInput) => Promise<boolean>;
   /** Demo-only: clear the local dataset and reload with the fresh seed. */
   resetDemo: () => void;
 }
@@ -155,14 +181,14 @@ export function WarehouseProvider({
   actor: providedActor,
 }: {
   children: ReactNode;
-  repo?: WarehouseRepository;
+  repo?: WarehouseControlRepository;
   source?: DataSource;
   supabaseClient?: SupabaseClient<Record<string, unknown>, string>;
   initialRole?: Role;
   /** Overrides the default `${role}@mwell` actor (e.g. the signed-in user's email). */
   actor?: string;
 }) {
-  const created = useRef<{ repo: WarehouseRepository; source: DataSource } | null>(
+  const created = useRef<{ repo: WarehouseControlRepository; source: DataSource } | null>(
     null,
   );
   if (!created.current) {
@@ -372,6 +398,22 @@ export function WarehouseProvider({
         adjustOverlay(input, actor),
         input as Record<string, unknown>,
       ),
+    loadQualityInspections: (query) => repo.listQualityInspections(query),
+    loadHolds: (query) => repo.listHolds(query),
+    loadExceptions: (query) => repo.listExceptions(query),
+    loadStockChangeRequests: (query) => repo.listStockChangeRequests(query),
+    loadWarehouseTasks: (query) => repo.listWarehouseTasks(query),
+    loadInventoryPositions: (query) => repo.listInventoryPositions(query),
+    inspectQuality: (input) => runAction('other', () => repo.inspectQuality(input)),
+    releaseHold: (input) => runAction('other', () => repo.releaseHold(input)),
+    updateOperationRoute: (input) =>
+      runAction('other', () => repo.updateOperationRoute(input)),
+    submitCycleCount: (input) =>
+      runAction('other', () => repo.submitCycleCount(input)),
+    decideStockChange: (input) =>
+      runAction('other', () => repo.decideStockChange(input)),
+    resolveException: (input) =>
+      runAction('other', () => repo.resolveException(input)),
     resetDemo,
   };
 

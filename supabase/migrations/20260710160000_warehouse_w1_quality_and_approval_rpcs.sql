@@ -894,7 +894,14 @@ begin
     )
   );
 
-  v_response := to_jsonb(v_count);
+  v_response := jsonb_build_object(
+    'cycle_count', to_jsonb(v_count),
+    'requests', coalesce((
+      select jsonb_agg(to_jsonb(request_row) order by requested_at, id)
+        from warehouse.stock_change_requests request_row
+       where source_type = 'cycle_count' and source_id = v_count.id
+    ), '[]'::jsonb)
+  );
   return private.finish_idempotent_command(v_command_id, v_response);
 end;
 $$;

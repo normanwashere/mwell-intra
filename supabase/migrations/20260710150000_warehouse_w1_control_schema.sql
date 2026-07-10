@@ -295,6 +295,7 @@ create table if not exists warehouse.stock_change_requests (
   status text not null default 'pending_supervisor',
   requested_by uuid not null references core.profiles(id) on delete restrict,
   requested_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
   decided_at timestamptz,
   constraint warehouse_stock_change_source_check check (
     source_type in ('cycle_count', 'adjustment', 'write_off')

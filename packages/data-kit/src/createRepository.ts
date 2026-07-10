@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { WarehouseRepository, WarehouseData } from './repository';
+import type { WarehouseControlRepository, WarehouseData } from './repository';
 import { InMemoryRepository } from './inMemoryRepository';
 import { createSupabaseWarehouseRepository } from './supabase/SupabaseRepository';
 
@@ -68,7 +68,7 @@ export interface DataKitConfig {
    */
   createSupabaseRepository?: (
     config: NonNullable<DataKitConfig['supabase']>,
-  ) => WarehouseRepository;
+  ) => WarehouseControlRepository;
 }
 
 /** Whether enough Supabase config was supplied to attempt the live backend. */
@@ -106,7 +106,7 @@ function defaultStorage(): Pick<Storage, 'getItem' | 'setItem'> | undefined {
  * never turn a configuration or adapter error into a convincing demo session.
  */
 export function createRepository(config: DataKitConfig = {}): {
-  repo: WarehouseRepository;
+  repo: WarehouseControlRepository;
   source: DataSource;
 } {
   const source = resolveDataSource(config);

@@ -1055,3 +1055,67 @@ describe('persistence', () => {
     expect(availableForProduct(state, 'shirt')).toBe(30);
   });
 });
+
+describe('W1 control parity', () => {
+  it('keeps held stock on hand but removes it from available inventory', async () => {
+    const controlled = new InMemoryRepository({
+      ...miniData(),
+      receipts: [{
+        id: 'rcpt-1', locationId: 'loc-wh',
+        lines: [{ productId: 'shirt', quantity: 5 }],
+        actor: 'receiver@mwell', createdAt: '2026-07-10T00:00:00Z',
+      }],
+    }, {
+      now: () => '2026-07-10T01:00:00Z',
+      id: (prefix) => `${prefix}-fixed`,
+    });
+    await controlled.inspectQuality({
+      idempotencyKey: 'quality-memory-01', sourceType: 'receipt', sourceId: 'rcpt-1',
+      productId: 'shirt', quantity: 5, disposition: 'hold', reason: 'Damaged cartons',
+    });
+    const position = (await controlled.listInventoryPositions({})).rows.find(
+      (row) => row.productId === 'shirt' && row.locationId === 'loc-wh' && !row.binId,
+    )!;
+    expect(position).toMatchObject({ onHand: 20, held: 5, available: 15 });
+
+    const hold = (await controlled.listHolds({ status: 'active' })).rows[0]!;
+    await controlled.releaseHold({
+      idempotencyKey: 'release-memory-01', holdId: hold.id,
+      targetDisposition: 'accepted', reason: 'QC retest passed',
+      evidenceUrls: ['memory/retest.jpg'],
+    });
+    const released = (await controlled.listInventoryPositions({})).rows.find(
+      (row) => row.productId === 'shirt' && row.locationId === 'loc-wh' && !row.binId,
+    )!;
+    expect(released).toMatchObject({ onHand: 20, held: 0, available: 20 });
+  });
+
+  it('does not mutate stock until final count approval and posts only once', async () => {
+    const controlled = new InMemoryRepository({
+      ...miniData(),
+      cycleCounts: [{
+        id: 'cc-1', locationId: 'loc-wh',
+        lines: [{ productId: 'shirt', expected: 0, counted: 18 }],
+        status: 'draft', actor: 'counter@mwell', createdAt: '2026-07-10T00:00:00Z',
+      }],
+    }, {
+      now: () => '2026-07-10T01:00:00Z',
+      id: (prefix) => `${prefix}-fixed`,
+    });
+    const requests = await controlled.submitCycleCount({
+      idempotencyKey: 'count-memory-001', cycleCountId: 'cc-1', reason: 'Scheduled count',
+    });
+    expect((await controlled.getData()).stockLevels[0]!.quantity).toBe(20);
+    expect(requests).toHaveLength(1);
+
+    const decision = {
+      idempotencyKey: 'decision-memory1', requestId: requests[0]!.id,
+      decision: 'approved' as const,
+    };
+    await controlled.decideStockChange(decision);
+    await controlled.decideStockChange(decision);
+    const data = await controlled.getData();
+    expect(data.stockLevels[0]!.quantity).toBe(18);
+    expect(data.movements.filter((movement) => movement.reference === requests[0]!.id)).toHaveLength(1);
+  });
+});

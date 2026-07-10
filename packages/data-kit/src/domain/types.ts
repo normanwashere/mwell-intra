@@ -229,6 +229,9 @@ export interface Receipt {
   locationId: Id;
   lines: ReceiptLine[];
   evidenceUrls?: string[];
+  operationRouteId?: string;
+  procurementPoId?: string;
+  qualityStatus?: 'pending' | 'partial' | 'accepted' | 'hold' | 'closed';
   actor: string;
   createdAt: string;
 }
@@ -248,6 +251,9 @@ export interface CycleCount {
   binId?: Id;
   category?: ItemCategory;
   lines: CycleCountLine[];
+  status?: 'draft' | 'submitted' | 'pending_approval' | 'approved' | 'rejected';
+  requestedBy?: string;
+  submittedAt?: string;
   actor: string;
   createdAt: string;
 }

@@ -22,6 +22,16 @@ import type {
   Supplier,
   WarehouseEvent,
 } from '../domain/types';
+import type {
+  InventoryHold,
+  InventoryPosition,
+  OperationRoute,
+  OperationType,
+  QualityInspection,
+  StockChangeRequest,
+  WarehouseException,
+  WarehouseTask,
+} from '../domain/warehouseControls';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Row = Record<string, any>;
@@ -41,6 +51,10 @@ export function rowToProduct(r: Row): Product {
     reorderPoint: r.reorder_point,
     promotional: r.promotional ?? undefined,
     barcode: r.barcode ?? undefined,
+    expiryTracked: r.expiry_tracked ?? undefined,
+    shelfLifeWarningDays: r.shelf_life_warning_days == null
+      ? undefined
+      : Number(r.shelf_life_warning_days),
   };
 }
 
@@ -59,6 +73,8 @@ export function productToRow(p: Product): Row {
     reorder_point: p.reorderPoint,
     promotional: p.promotional ?? null,
     barcode: p.barcode ?? null,
+    expiry_tracked: p.expiryTracked ?? false,
+    shelf_life_warning_days: p.shelfLifeWarningDays ?? 30,
   };
 }
 
@@ -92,6 +108,7 @@ export function rowToLot(r: Row): Lot {
     supplierId: r.supplier_id ?? undefined,
     unitCost: Number(r.unit_cost),
     receivedAt: r.received_at,
+    expiryDate: r.expiry_date ?? undefined,
   };
 }
 
@@ -103,6 +120,7 @@ export function lotToRow(l: Lot): Row {
     supplier_id: l.supplierId ?? null,
     unit_cost: l.unitCost,
     received_at: l.receivedAt,
+    expiry_date: l.expiryDate ?? null,
   };
 }
 
@@ -281,6 +299,9 @@ export function rowToCycleCount(r: Row): CycleCount {
     binId: r.bin_id ?? undefined,
     category: r.category ?? undefined,
     lines: r.lines ?? [],
+    status: r.status ?? undefined,
+    requestedBy: r.requested_by ?? undefined,
+    submittedAt: r.submitted_at ?? undefined,
     actor: r.actor,
     createdAt: r.created_at,
   };
@@ -293,6 +314,9 @@ export function rowToReceipt(r: Row): Receipt {
     locationId: r.location_id,
     lines: r.lines ?? [],
     evidenceUrls: r.evidence_urls ?? [],
+    operationRouteId: r.operation_route_id ?? undefined,
+    procurementPoId: r.procurement_po_id ?? undefined,
+    qualityStatus: r.quality_status ?? undefined,
     actor: r.actor,
     createdAt: r.created_at,
   };
@@ -319,5 +343,119 @@ export function poToRow(po: PurchaseOrder): Row {
     expected_date: po.expectedDate ?? null,
     actor: po.actor,
     created_at: po.createdAt,
+  };
+}
+
+export function rowToOperationRoute(r: Row): OperationRoute {
+  return {
+    id: r.id,
+    operationTypeId: r.operation_type_id,
+    sourceLocationTypes: r.source_location_types ?? [],
+    destinationLocationTypes: r.destination_location_types ?? [],
+    requiresEvidence: Boolean(r.requires_evidence),
+    requiresApproval: Boolean(r.requires_approval),
+    requiresOnline: Boolean(r.requires_online),
+    active: Boolean(r.active),
+  };
+}
+
+export function rowToOperationType(r: Row): OperationType {
+  return { id: r.id, code: r.code, label: r.label, active: Boolean(r.active) };
+}
+
+export function rowToQualityInspection(r: Row): QualityInspection {
+  return {
+    id: r.id,
+    sourceType: r.source_type,
+    sourceId: r.source_id,
+    productId: r.product_id,
+    binId: r.bin_id ?? undefined,
+    lotId: r.lot_id ?? undefined,
+    serialNumber: r.serial_number ?? undefined,
+    quantity: Number(r.quantity),
+    disposition: r.disposition,
+    reason: r.reason ?? undefined,
+    evidenceUrls: r.evidence_urls ?? [],
+    inspectedBy: r.inspected_by,
+    inspectedAt: r.created_at,
+  };
+}
+
+export function rowToHold(r: Row): InventoryHold {
+  return {
+    id: r.id,
+    inspectionId: r.inspection_id,
+    productId: r.product_id,
+    locationId: r.location_id,
+    binId: r.bin_id ?? undefined,
+    lotId: r.lot_id ?? undefined,
+    serialNumber: r.serial_number ?? undefined,
+    quantity: Number(r.quantity),
+    status: r.status,
+    reason: r.reason,
+    createdBy: r.created_by,
+    createdAt: r.created_at,
+    releasedBy: r.released_by ?? undefined,
+    releasedAt: r.released_at ?? undefined,
+  };
+}
+
+export function rowToException(r: Row): WarehouseException {
+  return {
+    id: r.id,
+    type: r.exception_type,
+    severity: r.severity,
+    sourceType: r.source_type,
+    sourceId: r.source_id,
+    status: r.status,
+    ownerId: r.owner_id ?? undefined,
+    dueAt: r.due_at ?? undefined,
+    resolution: r.resolution ?? undefined,
+    createdAt: r.created_at,
+  };
+}
+
+export function rowToStockChangeRequest(r: Row): StockChangeRequest {
+  return {
+    id: r.id,
+    sourceType: r.source_type,
+    sourceId: r.source_id,
+    productId: r.product_id,
+    locationId: r.location_id,
+    binId: r.bin_id ?? undefined,
+    quantityDelta: Number(r.quantity_delta),
+    unitCost: Number(r.unit_cost),
+    financialImpact: Number(r.financial_impact),
+    reason: r.reason,
+    evidenceUrls: r.evidence_urls ?? [],
+    status: r.status,
+    requestedBy: r.requested_by,
+    requestedAt: r.requested_at,
+  };
+}
+
+export function rowToWarehouseTask(r: Row): WarehouseTask {
+  return {
+    id: r.id,
+    type: r.task_type,
+    sourceId: r.source_id,
+    title: r.title,
+    status: r.status,
+    assigneeId: r.assignee_id ?? undefined,
+    dueAt: r.due_at ?? undefined,
+    completedAt: r.completed_at ?? undefined,
+  };
+}
+
+export function rowToInventoryPosition(r: Row): InventoryPosition {
+  return {
+    productId: r.product_id,
+    locationId: r.location_id,
+    binId: r.bin_id ?? undefined,
+    onHand: Number(r.on_hand),
+    committed: Number(r.committed),
+    held: Number(r.held),
+    unavailable: Number(r.unavailable),
+    available: Number(r.available),
   };
 }

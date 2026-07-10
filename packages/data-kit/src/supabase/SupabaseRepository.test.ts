@@ -23,7 +23,7 @@ import {
 //     wire payload envelope is identical — these assertions stay valid.
 function makeMockClient(seed: WarehouseData) {
   const calls: { fn: string; payload: Record<string, unknown> }[] = [];
-  const queries: { table: string; projection: string; limit?: number }[] = [];
+  const queries: { table: string; projection: string; limit?: number; orders: string[] }[] = [];
   const locationRows = seed.locations.map((l) => ({
     id: l.id,
     name: l.name,
@@ -96,15 +96,57 @@ function makeMockClient(seed: WarehouseData) {
     receipts: receiptRows,
     purchase_orders: poRows,
     profiles: [],
+    operation_types: [],
+    operation_routes: [],
+    quality_inspections: [{
+      id: 'qi-1', source_type: 'receipt', source_id: 'rcpt-1', product_id: 'shirt',
+      bin_id: null, lot_id: null, serial_number: null, quantity: 1,
+      disposition: 'accepted', reason: null, evidence_urls: [], inspected_by: 'user-1',
+      created_at: '2026-07-10T00:00:00Z',
+    }],
+    inventory_holds: [{
+      id: 'hold-1', inspection_id: 'qi-1', product_id: 'shirt', location_id: 'loc-wh',
+      bin_id: null, lot_id: null, serial_number: null, quantity: 1, status: 'active',
+      reason: 'Damage', created_by: 'user-1', created_at: '2026-07-10T00:00:00Z',
+      released_by: null, released_at: null,
+    }],
+    exceptions: [{
+      id: 'ex-1', exception_type: 'quality', severity: 'P2', source_type: 'quality_inspection',
+      source_id: 'qi-1', status: 'open', owner_id: null, due_at: null, resolution: null,
+      created_at: '2026-07-10T00:00:00Z',
+    }],
+    stock_change_requests: [{
+      id: 'scr-1', source_type: 'cycle_count', source_id: 'cc-1', product_id: 'shirt',
+      location_id: 'loc-wh', bin_id: null, quantity_delta: -1, unit_cost: 200,
+      financial_impact: 200, reason: 'Variance', evidence_urls: [],
+      status: 'pending_supervisor', requested_by: 'user-1', requested_at: '2026-07-10T00:00:00Z',
+    }],
+    warehouse_tasks: [{
+      id: 'task-1', task_type: 'quality', source_id: 'qi-1', title: 'Inspect receipt',
+      status: 'due', assignee_id: null, due_at: null, completed_at: null,
+      created_at: '2026-07-10T00:00:00Z',
+    }],
+    inventory_positions: [{
+      id: 'shirt|loc-wh|', product_id: 'shirt', location_id: 'loc-wh', bin_id: null,
+      on_hand: 20, committed: 1, held: 1, unavailable: 0, available: 18,
+      created_at: '2026-07-10T00:00:00Z',
+    }],
   };
   const client = {
     from: (table: string) => ({
       select: (projection: string) => {
-        const record = { table, projection } as { table: string; projection: string; limit?: number };
+        const record = { table, projection, orders: [] } as {
+          table: string; projection: string; limit?: number; orders: string[];
+        };
         queries.push(record);
         const result = Promise.resolve({ data: tables[table] ?? [], error: null });
         const query = {
-          order: () => query,
+          order: (column: string) => {
+            record.orders.push(column);
+            return query;
+          },
+          or: () => query,
+          eq: () => query,
           limit: (limit: number) => {
             record.limit = limit;
             return query;
@@ -173,7 +215,23 @@ function makeMockClient(seed: WarehouseData) {
         received_at: null,
         assigned_to: null,
       };
-      return Promise.resolve({ data: row, error: null });
+      const quality = tables.quality_inspections![0] as Record<string, unknown>;
+      const hold = tables.inventory_holds![0] as Record<string, unknown>;
+      const exception = tables.exceptions![0] as Record<string, unknown>;
+      const request = tables.stock_change_requests![0] as Record<string, unknown>;
+      const route = {
+        id: 'route-1', operation_type_id: 'op-1', source_location_types: ['vendor'],
+        destination_location_types: ['warehouse'], requires_evidence: true,
+        requires_approval: false, requires_online: true, active: true,
+      };
+      const response = fn === 'inspect_quality' ? { inspection: quality }
+        : fn === 'release_quality_hold' ? hold
+          : fn === 'update_operation_route' ? route
+            : fn === 'submit_cycle_count' ? { cycle_count: row, requests: [request] }
+              : fn === 'decide_stock_change' ? request
+                : fn === 'resolve_exception' ? exception
+                  : row;
+      return Promise.resolve({ data: response, error: null });
     },
   };
   return { client: client as never, calls, queries };
@@ -183,10 +241,74 @@ describe('SupabaseRepository read model query shape', () => {
   it('uses explicit projections and bounds operational history', async () => {
     const { client, queries } = makeMockClient(buildSeed());
     await new SupabaseRepository(client).getData();
-    expect(queries).toHaveLength(14);
+    expect(queries).toHaveLength(16);
     expect(queries.every((query) => query.projection !== '*')).toBe(true);
     expect(queries.find((query) => query.table === 'movements')?.limit).toBe(5000);
     expect(queries.find((query) => query.table === 'products')?.limit).toBeUndefined();
+  });
+});
+
+describe('SupabaseRepository W1 control boundary', () => {
+  it('uses explicit projections and stable bounded pagination for every control list', async () => {
+    const { client, queries } = makeMockClient(buildSeed());
+    const repo = new SupabaseRepository(client);
+    await Promise.all([
+      repo.listQualityInspections({ limit: 500 }),
+      repo.listHolds({ limit: 500 }),
+      repo.listExceptions({ limit: 500 }),
+      repo.listStockChangeRequests({ limit: 500 }),
+      repo.listWarehouseTasks({ limit: 500 }),
+      repo.listInventoryPositions({ limit: 500 }),
+    ]);
+    const controlTables = [
+      'quality_inspections', 'inventory_holds', 'exceptions',
+      'stock_change_requests', 'warehouse_tasks', 'inventory_positions',
+    ];
+    for (const table of controlTables) {
+      const query = queries.find((item) => item.table === table)!;
+      expect(query.projection).not.toBe('*');
+      expect(query.orders).toEqual(['created_at', 'id']);
+      expect(query.limit).toBe(101);
+    }
+  });
+
+  it('sends idempotent command payloads without trusted actor or role values', async () => {
+    const { client, calls } = makeMockClient(buildSeed());
+    const repo = new SupabaseRepository(client);
+    await repo.inspectQuality({
+      idempotencyKey: 'quality-key-0001', sourceType: 'receipt', sourceId: 'rcpt-1',
+      productId: 'shirt', quantity: 1, disposition: 'accepted',
+    });
+    await repo.releaseHold({
+      idempotencyKey: 'release-key-0001', holdId: 'hold-1', targetDisposition: 'accepted',
+      reason: 'QC cleared', evidenceUrls: ['evidence/release.jpg'],
+    });
+    await repo.updateOperationRoute({
+      idempotencyKey: 'route-key-00001', routeId: 'route-1',
+      patch: {
+        sourceLocationTypes: ['vendor'], destinationLocationTypes: ['warehouse'],
+        requiresEvidence: true, requiresApproval: false, requiresOnline: true, active: true,
+      },
+    });
+    await repo.submitCycleCount({
+      idempotencyKey: 'count-key-00001', cycleCountId: 'cc-1', reason: 'Scheduled count',
+    });
+    await repo.decideStockChange({
+      idempotencyKey: 'decision-key-01', requestId: 'scr-1', decision: 'approved',
+    });
+    await repo.resolveException({
+      idempotencyKey: 'exception-key01', exceptionId: 'ex-1', action: 'begin',
+    });
+
+    for (const call of calls.slice(-6)) {
+      expect(call.payload.idempotency_key).toMatch(/key/);
+      expect(call.payload).not.toHaveProperty('actor');
+      expect(call.payload).not.toHaveProperty('role');
+    }
+    expect(calls.slice(-6).map((call) => call.fn)).toEqual([
+      'inspect_quality', 'release_quality_hold', 'update_operation_route',
+      'submit_cycle_count', 'decide_stock_change', 'resolve_exception',
+    ]);
   });
 });
 
