@@ -109,7 +109,12 @@ export function DataTable<T>({
     <>
       {/* Desktop / tablet table */}
       <div className="hidden min-w-0 max-w-full overflow-hidden rounded-2xl border border-line bg-surface sm:block">
-        <div className="max-w-full overflow-x-auto">
+        <div
+          className="max-w-full overflow-x-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+          role="region"
+          aria-label={`${ariaLabel ?? 'Data table'} horizontal scroll area`}
+          tabIndex={0}
+        >
           <table className="w-full min-w-max text-sm" aria-label={ariaLabel}>
             <thead
               className={clsx(

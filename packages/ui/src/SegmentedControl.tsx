@@ -29,7 +29,7 @@ export function SegmentedControl<T extends string>({
             type="button"
             onClick={() => onChange(o.value)}
             className={clsx(
-              'flex-1 rounded-lg px-3 py-1.5 text-sm font-semibold transition',
+              'min-h-11 flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition',
               active
                 ? 'bg-surface text-brand-600 shadow-e1 dark:text-brand-300'
                 : 'text-muted hover:text-ink',

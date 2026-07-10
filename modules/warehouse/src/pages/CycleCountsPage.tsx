@@ -313,7 +313,7 @@ export function CycleCountsPage() {
                 aria-pressed={blind}
                 onClick={() => setBlind((v) => !v)}
                 className={clsx(
-                  'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition',
+                  'inline-flex min-h-11 items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition',
                   blind
                     ? 'bg-brand-500/20 text-brand-800 dark:text-brand-200'
                     : 'bg-inset text-muted hover:text-ink',
@@ -326,7 +326,7 @@ export function CycleCountsPage() {
                 aria-pressed={variancesOnly}
                 onClick={() => setVariancesOnly((v) => !v)}
                 className={clsx(
-                  'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition',
+                  'inline-flex min-h-11 items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition',
                   variancesOnly
                     ? 'bg-amber-500/20 text-amber-800 dark:text-amber-200'
                     : 'bg-inset text-muted hover:text-ink',

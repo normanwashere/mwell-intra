@@ -6,7 +6,7 @@
 - Database migrations and environment preflight pass.
 - Test identities exist for every role without sharing personal accounts.
 - Seeded test data is tagged and isolated from production reporting.
-- Desktop 1440x900 and mobile 390x844 are tested; 320px width receives a layout smoke test.
+- Desktop 1440x900 and 1280x800, tablet 768x1024, and mobile 390x844, 360x800 and 320x720 are tested three times with automated geometry, target-size and WCAG A/AA checks.
 
 ## Required Role Journeys
 
@@ -23,6 +23,13 @@
 | Warehouse logistics | Create location/bin, receive serialized and bulk stock, receive against PO; reject duplicate serial and invalid bin |
 | Warehouse operations/marketing | Create event, reserve, issue, return, cancel; reject over-allocation and unauthorized issue |
 | Warehouse finance/BI/pricing | Reconcile, cycle count, governed export/review, pricing; deny export to unauthorized roles |
+| Warehouse administrator | Traverse every Warehouse W1 route, review imports/exceptions/routes, and prove Core Platform Admin remains denied without an explicit Warehouse role |
+
+## Warehouse W1 Evidence Record
+
+For every W1 mutation capture the run ID, role, viewport, source record, created command/transaction ID, visible state, canonical database read-back, ledger/activity record, fresh-session persistence result, wrong-role denial and cleanup transaction. Required negative cases include duplicate serial, wrong product/event/bin, already-returned unit, stale approval, self-approval, invalid import row, duplicate submit, offline blocked action and concurrent stock mutation.
+
+The release sign-off must record: visual contact-sheet reviewer and date; zero open P0/P1; each P2 owner/waiver; Warehouse, Finance, Security and Product approvals; release commit; Vercel deployment ID; Supabase project reference; and evidence bundle location.
 
 Each successful mutation records: timestamp, role, input ID, resulting record ID, visible confirmation, database read-back, and cleanup/disposition.
 

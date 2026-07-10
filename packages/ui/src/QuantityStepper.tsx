@@ -33,7 +33,7 @@ export function QuantityStepper({
       <button
         type="button"
         aria-label="Decrease"
-        className="grid w-10 shrink-0 place-items-center rounded-xl border border-line bg-surface text-ink transition hover:bg-inset disabled:opacity-40"
+        className="grid min-h-11 w-11 shrink-0 place-items-center rounded-xl border border-line bg-surface text-ink transition hover:bg-inset disabled:opacity-40"
         disabled={value <= min}
         onClick={() => onChange(clamp(value - 1))}
       >
@@ -53,7 +53,7 @@ export function QuantityStepper({
       <button
         type="button"
         aria-label="Increase"
-        className="grid w-10 shrink-0 place-items-center rounded-xl border border-line bg-surface text-ink transition hover:bg-inset disabled:opacity-40"
+        className="grid min-h-11 w-11 shrink-0 place-items-center rounded-xl border border-line bg-surface text-ink transition hover:bg-inset disabled:opacity-40"
         disabled={max !== undefined && value >= max}
         onClick={() => onChange(clamp(value + 1))}
       >

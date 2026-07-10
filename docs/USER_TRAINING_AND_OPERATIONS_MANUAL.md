@@ -25,6 +25,18 @@ Use a role-specific test account and realistic test data. Each learner completes
 | Finance/BI/pricing | Reconciliation, count variance, governed export evidence, review/correction, valuation and pricing controls |
 | Administrators | Least-privilege role assignment, deprovisioning, test-account handling, audit review and escalation |
 
+## Warehouse W1 Role Drills
+
+- Logistics Supervisor: receive against an approved PO, inspect/hold/release, scan exact-unit putaway, create a bin, transfer stock, resolve an exception and approve another operator's variance.
+- Operations and Marketing: create an event, reserve stock, scan the exact serialized issue, reject a wrong-product serial, record the issued-unit return and route it to inspection.
+- Finance: run quantity and serialized presence counts, identify missing/unexpected units, approve or reject a stock change created by another user, and reconcile the resulting movement.
+- BI Analyst: filter reports and export governed inventory position without seeing mutation controls.
+- Business Unit: reserve valid stock and recognize over-allocation and access-denied states.
+- Procurement and Pricing: review reorder/PO/supplier or landed-cost/pricing views without warehouse-floor mutation access.
+- Warehouse Administrator: execute the complete route checklist while demonstrating that broad Core Platform Admin access alone does not grant Warehouse access.
+
+For scan work, teach camera denial recovery, manual entry, duplicate-read feedback, source location/bin confirmation, serial lifecycle messages and cancellation. A green toast is not proof; reopen or refresh and verify the unit, bin, event and movement history.
+
 ## Support Routing
 
 | Problem | First response | Escalation |
@@ -41,3 +53,4 @@ Use a role-specific test account and realistic test data. Each learner completes
 - Review failed invitations, pending approvals, stale vendor cases, low stock, unresolved count variances, and failed exports.
 - Verify `/api/health` reports Supabase reachable, assets reachable, live auth configured, invite delivery configured, and service worker configured.
 - Reconcile high-risk mutations against activity history and resolve conflicts before end of shift.
+- At shift change, reconcile receiving staging, quality holds, unassigned-bin stock, open count approvals, P1 exceptions, failed imports and queued/offline commands. Do not hand over an unexplained balance variance.

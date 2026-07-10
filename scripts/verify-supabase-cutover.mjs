@@ -40,6 +40,16 @@ const REQUIRED = {
     'stock_levels',
     'inventory_units',
     'movements',
+    'operation_types',
+    'operation_routes',
+    'quality_inspections',
+    'inventory_holds',
+    'vendor_returns',
+    'exceptions',
+    'stock_change_requests',
+    'command_log',
+    'import_jobs',
+    'import_errors',
   ],
 };
 

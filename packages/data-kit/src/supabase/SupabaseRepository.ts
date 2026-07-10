@@ -65,7 +65,6 @@ import {
   type UpdateSupplierInput,
   type WarehouseData,
   type WarehouseControlRepository,
-  type WarehouseRepository,
 } from '../repository';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {

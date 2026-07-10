@@ -186,7 +186,7 @@ export function InventoryPage() {
             aria-pressed={lowOnly}
             onClick={() => setLowOnly((v) => !v)}
             className={clsx(
-              'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition',
+              'inline-flex min-h-11 items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition',
               lowOnly
                 ? 'bg-amber-500/20 text-amber-800 dark:text-amber-200'
                 : 'bg-inset text-muted hover:text-ink',

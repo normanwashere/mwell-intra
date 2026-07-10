@@ -8,6 +8,7 @@ export default [
       '.next/**',
       'out/**',
       'build/**',
+      'test-results/**',
       'next-env.d.ts',
       'tests/**',
       'playwright.config.ts',

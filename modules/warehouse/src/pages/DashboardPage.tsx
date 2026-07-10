@@ -791,7 +791,7 @@ export function DashboardPage() {
           title="Reorder worklist"
           subtitle="At-risk first"
           action={
-            <button type="button" className="text-xs font-semibold text-brand-700 dark:text-brand-300" onClick={() => navigate('/procurement')}>
+            <button type="button" className="min-h-11 rounded-lg px-2 text-xs font-semibold text-brand-700 dark:text-brand-300" onClick={() => navigate('/procurement')}>
               View all
             </button>
           }
@@ -825,7 +825,7 @@ export function DashboardPage() {
           title="Open purchase orders"
           subtitle="In progress"
           action={
-            <button type="button" className="text-xs font-semibold text-brand-700 dark:text-brand-300" onClick={() => navigate('/purchase-orders')}>
+            <button type="button" className="min-h-11 rounded-lg px-2 text-xs font-semibold text-brand-700 dark:text-brand-300" onClick={() => navigate('/purchase-orders')}>
               View all
             </button>
           }

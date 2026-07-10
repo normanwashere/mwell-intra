@@ -10,6 +10,11 @@ This matrix is the release source of truth for roadmap items that were not fully
 | F-087 | Standardized import templates | Versioned templates and contract README under `docs/import-templates` | Header/schema validation in preflight | Data owners approve mappings | Data migration lead | Complete; owner approval pending |
 | F-100 | Role-based training and operations handoff | `USER_TRAINING_AND_OPERATIONS_MANUAL.md` | UAT attendance/evidence checklist | Attendance and competency record | Change manager | Process-ready; delivery pending |
 | F-101 | UAT and issue management | `UAT_AND_ISSUE_MANAGEMENT.md`; severity, SLA, retest, waiver and sign-off rules | CI, live role crawler, issue evidence links | UAT sign-off and open-risk acceptance | Product owner | Process-ready; execution pending |
+| WH-006 to WH-016 | Governed receiving, storage and inventory identity | Receiving, quality, storage, scan and product-detail routes; controlled receipt/relocate/transfer commands | Warehouse component suite; `warehouse-w1-workflows.spec.ts`; `warehouse-w1-visual.spec.ts` | Warehouse lead executes serialized and bulk receipt/putaway UAT | Warehouse lead | Code-complete; live UAT pending |
+| WH-020 | Returns and disposition | Return scan validation, inspection staging, quality hold and vendor-return evidence | `ReturnsPage.test.tsx`; `QualityPage.test.tsx`; W1 workflow negative scan | Operations and Warehouse sign disposition record | Operations lead | Code-complete; live UAT pending |
+| WH-036, WH-038 | Bin and location control | Scannable storage areas, exact-unit putaway and governed transfer | `StorageAreasPage.test.tsx`; `ProductDetailPage.test.tsx`; reload persistence workflow | Warehouse supervisor reconciles source/destination | Warehouse lead | Code-complete; live UAT pending |
+| WH-041 to WH-045 | Cycle count and approval governance | Presence-based serialized counts, blind counts, variance requests, Supervisor/Finance approval | `CycleCountsPage.test.tsx`; `ApprovalsPage.test.tsx`; W1 workflow test | Supervisor and Finance separation-of-duties UAT | Finance controller | Code-complete; live UAT pending |
+| WH-053 to WH-059 | Imports, reports, exceptions and operating routes | Governed import review, inventory-position export, exception queue and route policy | Page/API tests; W1 visual matrix; schema/contract verifiers | Data owner reviews import evidence and report totals | Data migration lead | Code-complete; live UAT pending |
 
 ## Evidence Rules
 
@@ -18,6 +23,8 @@ This matrix is the release source of truth for roadmap items that were not fully
 - A screenshot alone does not prove persistence. Mutation evidence must include the created record ID and an independent database read-back.
 - A waiver must identify the residual risk, compensating control, owner, expiry date, and executive approver.
 - Production launch requires zero open P0/P1 defects and explicit disposition of every P2.
+- Warehouse W1 visual evidence requires six viewports, both themes for each role dashboard, all admin routes, three complete runs, and a named human contact-sheet reviewer.
+- Live Warehouse status remains `pending` until authorized write, wrong-role denial, fresh-session read-back, idempotency and concurrency evidence all pass in the designated Supabase test project.
 
 ## External Decisions
 

@@ -77,12 +77,12 @@ export function UserMenu() {
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Account"
-        className="flex items-center gap-2 rounded-full py-1 pl-1 pr-2 text-left transition hover:bg-inset sm:pr-3"
+        className="flex items-center gap-2 rounded-full py-1 pl-1 pr-2 text-left transition hover:bg-inset lg:pr-3"
       >
         <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand-600 text-xs font-bold text-white">
           {initials(name)}
         </span>
-        <span className="hidden min-w-0 sm:block">
+        <span className="hidden min-w-0 lg:block">
           <span className="block truncate text-sm font-semibold leading-tight text-ink">
             {name}
           </span>
@@ -90,7 +90,7 @@ export function UserMenu() {
             {roleLabel}
           </span>
         </span>
-        <Icon name="chevron" className="hidden h-4 w-4 rotate-90 text-faint sm:block" />
+        <Icon name="chevron" className="hidden h-4 w-4 rotate-90 text-faint lg:block" />
       </button>
 
       <Sheet

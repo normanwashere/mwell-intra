@@ -136,7 +136,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <button
               type="button"
               onClick={requestReset}
-              className="mt-3 inline-flex min-h-8 items-center gap-1.5 rounded-lg px-1.5 text-xs font-medium text-muted transition hover:bg-inset hover:text-ink"
+              className="mt-3 inline-flex min-h-11 items-center gap-1.5 rounded-lg px-1.5 text-xs font-medium text-muted transition hover:bg-inset hover:text-ink"
             >
               <Icon name="rotate" className="h-3.5 w-3.5" /> Reset demo data
             </button>
@@ -172,7 +172,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <div className="flex items-center gap-1.5">
               <span
                 className={clsx(
-                  'chip',
+                  'chip hidden min-[390px]:inline-flex md:inline-flex',
                   source === 'supabase'
                     ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
                     : 'bg-amber-500/15 text-amber-800 dark:text-amber-300',
@@ -485,7 +485,7 @@ function SideLink({ to, icon, label }: { to: string; icon: IconName; label: stri
       end={to === '/'}
       className={({ isActive }) =>
         clsx(
-          'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition',
+          'flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition',
           isActive
             ? 'bg-brand-500/12 text-brand-700 dark:text-brand-300'
             : 'text-muted hover:bg-inset hover:text-ink',

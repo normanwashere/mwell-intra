@@ -26,8 +26,11 @@ const users = [
   { role: "warehouse_operations", email: "intra.test.wh.operations@mwell.com.ph" },
   { role: "warehouse_finance", email: "intra.test.wh.finance@mwell.com.ph" },
   { role: "warehouse_bi_analyst", email: "intra.test.wh.bi@mwell.com.ph" },
+  { role: "warehouse_business_unit", email: "intra.test.wh.business.unit@mwell.com.ph" },
   { role: "warehouse_marketing", email: "intra.test.wh.marketing@mwell.com.ph" },
+  { role: "warehouse_procurement", email: "intra.test.wh.procurement@mwell.com.ph" },
   { role: "warehouse_pricing", email: "intra.test.wh.pricing@mwell.com.ph" },
+  { role: "warehouse_admin", email: "intra.test.wh.warehouse.admin@mwell.com.ph" },
   { role: "procurement_requester", email: "intra.test.proc.requester@mwell.com.ph" },
   { role: "procurement_officer", email: "intra.test.proc.officer@mwell.com.ph" },
   { role: "procurement_approver", email: "intra.test.proc.approver@mwell.com.ph" },
@@ -39,8 +42,12 @@ const users = [
 ];
 
 const viewports = [
-  { name: "desktop", viewport: { width: 1440, height: 900 }, isMobile: false },
-  { name: "mobile", viewport: { width: 390, height: 844 }, isMobile: true },
+  { name: "desktop-1440", viewport: { width: 1440, height: 900 }, isMobile: false },
+  { name: "desktop-1280", viewport: { width: 1280, height: 800 }, isMobile: false },
+  { name: "tablet-768", viewport: { width: 768, height: 1024 }, isMobile: false },
+  { name: "mobile-390", viewport: { width: 390, height: 844 }, isMobile: true },
+  { name: "mobile-360", viewport: { width: 360, height: 800 }, isMobile: true },
+  { name: "mobile-320", viewport: { width: 320, height: 720 }, isMobile: true },
 ];
 
 const commonRoutes = [

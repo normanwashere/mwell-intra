@@ -42,7 +42,6 @@ import {
   type UpdateSupplierInput,
   type WarehouseData,
   type WarehouseControlRepository,
-  type WarehouseRepository,
 } from './repository';
 import type { Product, Profile } from './domain/types';
 import { buildProfiles, buildSeed } from './seed';

@@ -31,21 +31,53 @@ export default defineConfig({
   use: {
     baseURL: BASE_URL,
     trace: 'retain-on-failure',
+    locale: 'en-PH',
+    timezoneId: 'Asia/Manila',
+    reducedMotion: 'reduce',
+    colorScheme: 'light',
   },
 
   projects: [
     {
-      name: 'chromium-desktop',
+      name: 'desktop-1440',
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1440, height: 900 },
       },
     },
     {
-      name: 'chromium-mobile',
+      name: 'desktop-1280',
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1280, height: 800 },
+      },
+    },
+    {
+      name: 'tablet-768',
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 768, height: 1024 },
+      },
+    },
+    {
+      name: 'mobile-390',
       use: {
         ...devices['Pixel 7'],
         viewport: { width: 390, height: 844 },
+      },
+    },
+    {
+      name: 'mobile-360',
+      use: {
+        ...devices['Pixel 7'],
+        viewport: { width: 360, height: 800 },
+      },
+    },
+    {
+      name: 'mobile-320',
+      use: {
+        ...devices['Pixel 7'],
+        viewport: { width: 320, height: 720 },
       },
     },
   ],

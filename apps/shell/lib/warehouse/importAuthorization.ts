@@ -1,4 +1,5 @@
-import type { SupabaseClient, User } from '@supabase/supabase-js';
+import type { User } from '@supabase/supabase-js';
+import type { ShellSupabaseClient } from '@shell/lib/supabase/types';
 
 export class ImportAuthorizationError extends Error {
   constructor(message: string, readonly status: number) {
@@ -7,7 +8,7 @@ export class ImportAuthorizationError extends Error {
 }
 
 export async function authorizeWarehouseImport(
-  client: SupabaseClient<any, any>,
+  client: ShellSupabaseClient,
 ): Promise<User> {
   const { data, error } = await client.auth.getUser();
   if (error || !data.user) {

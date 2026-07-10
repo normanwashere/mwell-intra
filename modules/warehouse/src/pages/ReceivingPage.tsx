@@ -188,11 +188,11 @@ export function ReceivingPage() {
         <div className="min-w-0 space-y-4">
           <button
             type="button"
-            className="flex w-full max-w-full items-center justify-between gap-2 overflow-hidden rounded-xl border border-line bg-surface px-3 py-2.5 text-left text-sm lg:hidden"
+            className="flex min-h-11 w-full max-w-full items-start justify-between gap-2 rounded-xl border border-line bg-surface px-3 py-2.5 text-left text-sm lg:hidden"
             aria-expanded={contextOpen}
             onClick={() => setContextOpen((v) => !v)}
           >
-            <span className="min-w-0 truncate text-muted">
+            <span className="min-w-0 break-words leading-snug text-muted">
               Receiving into:{' '}
               <span className="font-semibold text-ink">
                 {warehouses.find((l) => l.id === activeLocation)?.name ?? '—'}
@@ -233,7 +233,7 @@ export function ReceivingPage() {
                 Serialized device — scan each unit's serial below to add it.
               </p>
             ) : (
-              <div className="grid min-w-0 gap-2 sm:grid-cols-[8rem_minmax(0,1fr)] sm:items-end">
+              <div className="grid min-w-0 gap-2 sm:grid-cols-[10rem_minmax(0,1fr)] sm:items-end">
                 <div className="min-w-0">
                   <Field label="Quantity" htmlFor="rcv-qty">
                     <QuantityStepper
