@@ -49,8 +49,10 @@ interface DraftLine {
 }
 
 export function PurchaseOrdersPage() {
-  const { data, role, createPurchaseOrder, receiveAgainstPO, cancelPurchaseOrder } =
-    useWarehouse();
+  const {
+    data, role, source, createPurchaseOrder, receiveAgainstPO, cancelPurchaseOrder,
+    loadReceivableProcurementPOs, receiveProcurementPO,
+  } = useWarehouse();
   const toast = useToast();
   const navigate = useNavigate();
   // Procurement plans & cancels POs; the warehouse (receive_stock) can receive
@@ -60,7 +62,12 @@ export function PurchaseOrdersPage() {
 
   // Procurement-module POs (issued/approved) read from their localStorage
   // contract — read-only visibility across the module seam (J1-6).
-  const bridgedPOs = useProcurementPOs();
+  const [bridgeReload, setBridgeReload] = useState(0);
+  const bridgedPOs = useProcurementPOs(
+    source,
+    loadReceivableProcurementPOs,
+    bridgeReload,
+  );
 
   const [createOpen, setCreateOpen] = useState(false);
   const [supplierId, setSupplierId] = useState('');
@@ -77,6 +84,12 @@ export function PurchaseOrdersPage() {
   const [receiveLoc, setReceiveLoc] = useState('');
   const [receiveBin, setReceiveBin] = useState('');
   const [filter, setFilter] = useState<POFilter>('all');
+  const [bridgeReceivePO, setBridgeReceivePO] = useState<BridgedPO | null>(null);
+  const [bridgeProducts, setBridgeProducts] = useState<Record<string, string>>({});
+  const [bridgeQty, setBridgeQty] = useState<Record<string, number>>({});
+  const [bridgeLocation, setBridgeLocation] = useState('');
+  const [bridgeBin, setBridgeBin] = useState('');
+  const [bridgeEvidence, setBridgeEvidence] = useState('');
 
   const poNumbers = useMemo(
     () => poNumberMap(data?.purchaseOrders ?? []),
@@ -172,6 +185,41 @@ export function PurchaseOrdersPage() {
     setConfirmCancel(false);
     setDetailPOId(null);
     toast.success('Purchase order cancelled');
+  };
+
+  const openBridgeReceive = (po: BridgedPO) => {
+    setBridgeReceivePO(po);
+    setBridgeLocation(warehouses[0]?.id ?? '');
+    setBridgeBin('');
+    setBridgeEvidence('');
+    setBridgeProducts(Object.fromEntries(po.lines.map((line) => [line.id, line.productId ?? ''])));
+    setBridgeQty(Object.fromEntries(po.lines.map((line) => [
+      line.id, Math.max(0, line.quantity - line.receivedQuantity),
+    ])));
+  };
+
+  const submitBridgeReceive = async () => {
+    if (!bridgeReceivePO || !bridgeLocation || !bridgeEvidence.trim()) return;
+    const lines = bridgeReceivePO.lines
+      .map((line) => ({
+        lineId: line.id,
+        productId: bridgeProducts[line.id] ?? '',
+        quantity: bridgeQty[line.id] ?? 0,
+      }))
+      .filter((line) => line.productId && line.quantity > 0);
+    if (lines.length === 0) return;
+    const ok = await receiveProcurementPO({
+      idempotencyKey: crypto.randomUUID(),
+      poId: bridgeReceivePO.id,
+      locationId: bridgeLocation,
+      binId: bridgeBin || undefined,
+      lines,
+      evidenceUrls: [bridgeEvidence.trim()],
+    });
+    if (!ok) return;
+    toast.success('Procurement PO receipt recorded');
+    setBridgeReceivePO(null);
+    setBridgeReload((value) => value + 1);
   };
 
   return (
@@ -299,7 +347,9 @@ export function PurchaseOrdersPage() {
                         <div className="flex shrink-0 flex-col items-end gap-1">
                           <Badge tone="cyan">From Procurement</Badge>
                           <Badge tone={po.status === 'issued' ? 'brand' : 'emerald'}>
-                            {PO_STATUS_LABELS[po.status as POStatus] ?? po.status}
+                            {po.totalReceived > 0
+                              ? 'Partially received'
+                              : (PO_STATUS_LABELS[po.status as POStatus] ?? po.status)}
                           </Badge>
                         </div>
                       </div>
@@ -315,9 +365,19 @@ export function PurchaseOrdersPage() {
                         </span>
                         {/* Receiving stays in the module that owns the PO —
                             deep link instead of a half-wired local receive. */}
-                        <a href={po.href} className="btn-accent btn-sm shrink-0">
-                          <Icon name="truck" className="h-4 w-4" /> Receive in procurement
-                        </a>
+                        {source === 'supabase' ? (
+                          <button
+                            type="button"
+                            className="btn-accent btn-sm shrink-0"
+                            onClick={() => openBridgeReceive(po)}
+                          >
+                            <Icon name="truck" className="h-4 w-4" /> Receive
+                          </button>
+                        ) : (
+                          <a href={po.href} className="btn-accent btn-sm shrink-0">
+                            <Icon name="truck" className="h-4 w-4" /> Receive in procurement
+                          </a>
+                        )}
                       </div>
                     </Card>
                   </li>
@@ -587,6 +647,94 @@ export function PurchaseOrdersPage() {
                       onChange={(v) =>
                         setReceiveQty((prev) => ({ ...prev, [l.productId]: v }))
                       }
+                    />
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
+      </Sheet>
+
+      <Sheet
+        open={bridgeReceivePO !== null}
+        onOpenChange={(open) => !open && setBridgeReceivePO(null)}
+        title="Receive approved procurement PO"
+        description={bridgeReceivePO?.poNumber}
+        footer={
+          <button
+            type="button"
+            className="btn-primary w-full"
+            disabled={!bridgeLocation || !bridgeEvidence.trim()}
+            onClick={() => void submitBridgeReceive()}
+          >
+            Confirm governed receipt
+          </button>
+        }
+      >
+        {bridgeReceivePO && (
+          <div className="space-y-3">
+            <Field label="Receive into" htmlFor="bridge-receive-location">
+              <select
+                id="bridge-receive-location"
+                className="input"
+                value={bridgeLocation}
+                onChange={(event) => {
+                  setBridgeLocation(event.target.value);
+                  setBridgeBin('');
+                }}
+              >
+                {warehouses.map((location) => (
+                  <option key={location.id} value={location.id}>{location.name}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Put away to" htmlFor="bridge-receive-bin">
+              <select
+                id="bridge-receive-bin"
+                className="input"
+                value={bridgeBin}
+                onChange={(event) => setBridgeBin(event.target.value)}
+              >
+                <option value="">General area</option>
+                {data.storageAreas
+                  .filter((bin) => bin.locationId === bridgeLocation && bin.active !== false)
+                  .map((bin) => <option key={bin.id} value={bin.id}>{bin.code}</option>)}
+              </select>
+            </Field>
+            <Field label="Delivery evidence URL" htmlFor="bridge-receive-evidence">
+              <input
+                id="bridge-receive-evidence"
+                className="input"
+                value={bridgeEvidence}
+                onChange={(event) => setBridgeEvidence(event.target.value)}
+                placeholder="evidence/delivery-note.jpg"
+              />
+            </Field>
+            <ul className="space-y-3" aria-label="Procurement PO receipt lines">
+              {bridgeReceivePO.lines.map((line) => {
+                const remaining = line.quantity - line.receivedQuantity;
+                return (
+                  <li key={line.id} className="space-y-2 rounded-xl bg-inset p-3">
+                    <p className="text-sm font-medium text-ink">{line.description}</p>
+                    <ProductSelect
+                      products={data.products}
+                      value={bridgeProducts[line.id] ?? ''}
+                      onChange={(productId) => setBridgeProducts((current) => ({
+                        ...current,
+                        [line.id]: productId,
+                      }))}
+                      placeholder="Map to Warehouse product"
+                    />
+                    <QuantityStepper
+                      aria-label={`Receive ${line.description}`}
+                      min={0}
+                      max={remaining}
+                      value={bridgeQty[line.id] ?? 0}
+                      onChange={(quantity) => setBridgeQty((current) => ({
+                        ...current,
+                        [line.id]: quantity,
+                      }))}
                     />
                   </li>
                 );

@@ -7,6 +7,7 @@ import { ToastProvider } from '@/components/ui';
 import { SessionProvider } from '@/auth/session';
 import { InMemoryRepository } from '@/data/inMemoryRepository';
 import type { WarehouseData } from '@/data/repository';
+import type { DataSource } from '@intra/data-kit';
 import type { Role } from '@/domain/types';
 
 export function makeRepo(data?: WarehouseData) {
@@ -19,7 +20,8 @@ export function renderWithProviders(
     role = 'logistics_supervisor' as Role,
     repo = makeRepo(),
     route = '/',
-  }: { role?: Role; repo?: InMemoryRepository; route?: string } = {},
+    source = 'memory',
+  }: { role?: Role; repo?: InMemoryRepository; route?: string; source?: DataSource } = {},
 ): RenderResult {
   return render(
     <MemoryRouter
@@ -42,7 +44,7 @@ export function renderWithProviders(
       >
         <ThemeProvider>
           <ToastProvider>
-            <WarehouseProvider repo={repo} source="memory" initialRole={role}>
+            <WarehouseProvider repo={repo} source={source} initialRole={role}>
               {ui}
             </WarehouseProvider>
           </ToastProvider>

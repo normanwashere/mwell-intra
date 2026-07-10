@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { clsx } from 'clsx';
+import { Link } from 'react-router-dom';
 import { useWarehouse } from '@/app/store';
 import { actorName, formatWhen } from '@/domain/format';
 import {
@@ -153,7 +154,16 @@ export function ReceivingPage() {
         lines.length > 0 && 'pb-24 md:pb-0',
       )}
     >
-      <PageHeader title="Receiving" icon="truck" subtitle="Scan & tag incoming inventory" />
+      <PageHeader
+        title="Receiving"
+        icon="truck"
+        subtitle="Scan & tag incoming inventory"
+        action={
+          <Link to="/purchase-orders" className="btn-ghost btn-sm">
+            <Icon name="cart" className="h-4 w-4" /> Approved POs
+          </Link>
+        }
+      />
 
       <div className="grid min-w-0 gap-4 lg:grid-cols-2 lg:items-start">
         {/* Left: capture controls — scan-first (WH-11): the scanner card

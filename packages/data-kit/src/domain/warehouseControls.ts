@@ -200,11 +200,28 @@ export interface ProcurementPOHandoff {
   expectedDate?: string;
   lines: Array<{
     id: string;
+    productId?: string;
     description: string;
     quantity: number;
     receivedQuantity: number;
     uom?: string;
   }>;
+}
+
+export interface ReceiveProcurementPOInput {
+  idempotencyKey: string;
+  poId: string;
+  locationId: string;
+  binId?: string;
+  lines: Array<{
+    lineId: string;
+    productId: string;
+    quantity: number;
+    lotCode?: string;
+    expiryDate?: string;
+    serialNumbers?: string[];
+  }>;
+  evidenceUrls?: string[];
 }
 
 export type ExpiryRisk = 'not_tracked' | 'expired' | 'warning' | 'ok';

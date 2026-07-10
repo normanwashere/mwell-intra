@@ -63,6 +63,8 @@ import type {
   PageResult,
   ReceiveAgainstPOInput,
   ReceiveStockInput,
+  ReceiveProcurementPOInput,
+  ProcurementPOHandoff,
   ReleaseHoldInput,
   ResolveExceptionInput,
   RelocateInput,
@@ -154,6 +156,8 @@ interface WarehouseContextValue {
   submitCycleCount: (input: SubmitCycleCountInput) => Promise<boolean>;
   decideStockChange: (input: DecideStockChangeInput) => Promise<boolean>;
   resolveException: (input: ResolveExceptionInput) => Promise<boolean>;
+  loadReceivableProcurementPOs: () => Promise<ProcurementPOHandoff[]>;
+  receiveProcurementPO: (input: ReceiveProcurementPOInput) => Promise<boolean>;
   /** Demo-only: clear the local dataset and reload with the fresh seed. */
   resetDemo: () => void;
 }
@@ -414,6 +418,9 @@ export function WarehouseProvider({
       runAction('other', () => repo.decideStockChange(input)),
     resolveException: (input) =>
       runAction('other', () => repo.resolveException(input)),
+    loadReceivableProcurementPOs: () => repo.getReceivableProcurementPOs(),
+    receiveProcurementPO: (input) =>
+      runAction('other', () => repo.receiveProcurementPO(input)),
     resetDemo,
   };
 

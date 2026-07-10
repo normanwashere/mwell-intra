@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   PROCUREMENT_PO_KEY,
+  loadProcurementPOs,
   readProcurementPOs,
 } from './procurementBridge';
 
@@ -126,5 +127,21 @@ describe('readProcurementPOs (procurement → warehouse bridge)', () => {
       { ...issuedPO, id: 'new', createdAt: '2026-07-01T00:00:00.000Z' },
     ]);
     expect(readProcurementPOs().map((p) => p.id)).toEqual(['old', 'new'].reverse());
+  });
+
+  it('never reads localStorage in live Supabase mode', async () => {
+    const storage = { getItem: () => { throw new Error('localStorage must not be read'); } };
+    const rows = await loadProcurementPOs(
+      'supabase',
+      async () => [{
+        id: 'live-po-1', poNumber: 'PO-LIVE-001', vendorName: 'Live Vendor',
+        status: 'issued', lines: [{
+          id: 'line-1', description: 'Live stock', quantity: 3, receivedQuantity: 1,
+        }],
+      }],
+      storage,
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ id: 'live-po-1', totalOrdered: 3, totalReceived: 1 });
   });
 });

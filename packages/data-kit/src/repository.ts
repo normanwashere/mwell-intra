@@ -33,6 +33,7 @@ import type {
   ProcurementPOHandoff,
   QualityInspection,
   ReleaseHoldInput,
+  ReceiveProcurementPOInput,
   ResolveExceptionInput,
   StockChangeRequest,
   SubmitCycleCountInput,
@@ -322,6 +323,7 @@ export interface WarehouseControlRepository extends WarehouseRepository {
   decideStockChange(input: DecideStockChangeInput): Promise<StockChangeRequest>;
   resolveException(input: ResolveExceptionInput): Promise<WarehouseException>;
   getReceivableProcurementPOs(): Promise<ProcurementPOHandoff[]>;
+  receiveProcurementPO(input: ReceiveProcurementPOInput): Promise<Receipt>;
 }
 
 export function toStockState(data: WarehouseData): StockState {

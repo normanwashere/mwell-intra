@@ -131,6 +131,11 @@ function makeMockClient(seed: WarehouseData) {
       on_hand: 20, committed: 1, held: 1, unavailable: 0, available: 18,
       created_at: '2026-07-10T00:00:00Z',
     }],
+    procurement_po_handoff: [{
+      id: 'live-po-1', po_number: 'PO-LIVE-001', vendor_name: 'Live Vendor',
+      status: 'issued', expected_date: '2026-07-20',
+      lines: [{ id: 'line-1', productId: 'shirt', description: 'Shirts', quantity: 5, receivedQuantity: 1 }],
+    }],
   };
   const client = {
     from: (table: string) => ({
@@ -230,6 +235,7 @@ function makeMockClient(seed: WarehouseData) {
             : fn === 'submit_cycle_count' ? { cycle_count: row, requests: [request] }
               : fn === 'decide_stock_change' ? request
                 : fn === 'resolve_exception' ? exception
+                  : fn === 'receive_procurement_po' ? { receipt: row, purchase_order: {} }
                   : row;
       return Promise.resolve({ data: response, error: null });
     },
@@ -309,6 +315,35 @@ describe('SupabaseRepository W1 control boundary', () => {
       'inspect_quality', 'release_quality_hold', 'update_operation_route',
       'submit_cycle_count', 'decide_stock_change', 'resolve_exception',
     ]);
+  });
+
+  it('receives a procurement PO through one idempotent RPC without actor claims', async () => {
+    const { client, calls } = makeMockClient(buildSeed());
+    const repo = new SupabaseRepository(client);
+    await repo.receiveProcurementPO({
+      idempotencyKey: 'procurement-receipt-01', poId: 'po-live-1',
+      locationId: 'loc-wh', binId: 'bin-a',
+      lines: [{ lineId: 'line-1', productId: 'shirt', quantity: 2 }],
+      evidenceUrls: ['evidence/delivery.jpg'],
+    });
+    const call = calls.find((item) => item.fn === 'receive_procurement_po')!;
+    expect(call.payload).toMatchObject({
+      idempotency_key: 'procurement-receipt-01', po_id: 'po-live-1',
+      location_id: 'loc-wh', bin_id: 'bin-a',
+    });
+    expect(call.payload).not.toHaveProperty('actor');
+    expect(call.payload).not.toHaveProperty('role');
+  });
+
+  it('reads the explicit RLS-backed procurement handoff projection', async () => {
+    const { client, queries } = makeMockClient(buildSeed());
+    const rows = await new SupabaseRepository(client).getReceivableProcurementPOs();
+    expect(rows).toEqual([expect.objectContaining({
+      id: 'live-po-1', poNumber: 'PO-LIVE-001', status: 'issued',
+    })]);
+    const query = queries.find((item) => item.table === 'procurement_po_handoff')!;
+    expect(query.projection).not.toBe('*');
+    expect(query.limit).toBe(500);
   });
 });
 

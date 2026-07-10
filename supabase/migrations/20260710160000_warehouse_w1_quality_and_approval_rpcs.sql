@@ -364,6 +364,13 @@ begin
     raise exception 'Bulk lot is not available at the source location and bin';
   end if;
 
+  delete from warehouse.quality_inspections
+   where source_type = v_source_type
+     and source_id = v_source_id
+     and product_id = v_product_id
+     and bin_id is not distinct from v_bin_id
+     and disposition = 'pending';
+
   select coalesce(sum(quantity), 0)
     into v_previously_inspected
     from warehouse.quality_inspections
@@ -371,6 +378,7 @@ begin
      and source_id = v_source_id
      and product_id = v_product_id
      and bin_id is not distinct from v_bin_id
+     and disposition <> 'pending'
      and coalesce(serial_number, '') = coalesce(v_serial, '');
   if v_previously_inspected + v_quantity > v_source_quantity then
     raise exception 'Inspection quantity exceeds the remaining source quantity';
@@ -406,8 +414,9 @@ begin
 
   if v_source_type = 'receipt' then
     select coalesce(sum(quantity), 0) into v_total_inspected
-      from warehouse.quality_inspections
-     where source_type = 'receipt' and source_id = v_source_id;
+     from warehouse.quality_inspections
+     where source_type = 'receipt' and source_id = v_source_id
+       and disposition <> 'pending';
     update warehouse.receipts
        set quality_status = case
          when exists (
@@ -519,7 +528,8 @@ begin
     select coalesce(sum(quantity), 0)
       into v_total_inspected
       from warehouse.quality_inspections
-     where source_type = 'receipt' and source_id = v_inspection.source_id;
+     where source_type = 'receipt' and source_id = v_inspection.source_id
+       and disposition <> 'pending';
     update warehouse.receipts
        set quality_status = case
          when exists (
@@ -678,7 +688,8 @@ begin
     select coalesce(sum(quantity), 0)
       into v_total_inspected
       from warehouse.quality_inspections
-     where source_type = 'receipt' and source_id = v_inspection.source_id;
+     where source_type = 'receipt' and source_id = v_inspection.source_id
+       and disposition <> 'pending';
     update warehouse.receipts
        set quality_status = case
          when exists (

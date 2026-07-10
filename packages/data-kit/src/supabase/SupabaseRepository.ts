@@ -24,6 +24,7 @@ import {
   type PageResult,
   type ProcurementPOHandoff,
   type QualityInspection,
+  type ReceiveProcurementPOInput,
   type ReleaseHoldInput,
   type ResolveExceptionInput,
   type StockChangeRequest,
@@ -403,6 +404,25 @@ export class SupabaseRepository implements WarehouseControlRepository {
       expectedDate: row.expected_date == null ? undefined : String(row.expected_date),
       lines: (row.lines ?? []) as ProcurementPOHandoff['lines'],
     }));
+  }
+
+  async receiveProcurementPO(input: ReceiveProcurementPOInput): Promise<Receipt> {
+    const response = await this.callRpc('receive_procurement_po', {
+      idempotency_key: input.idempotencyKey,
+      po_id: input.poId,
+      location_id: input.locationId,
+      bin_id: input.binId ?? null,
+      lines: input.lines.map((line) => ({
+        line_id: line.lineId,
+        product_id: line.productId,
+        quantity: line.quantity,
+        lot_code: line.lotCode ?? null,
+        expiry_date: line.expiryDate ?? null,
+        serial_numbers: line.serialNumbers ?? [],
+      })),
+      evidence_urls: input.evidenceUrls ?? [],
+    });
+    return rowToReceipt(response.receipt as never);
   }
 
   async receiveStock(input: ReceiveStockInput): Promise<Receipt> {

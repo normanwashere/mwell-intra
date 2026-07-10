@@ -17,6 +17,7 @@ const commands = [
   ['submit_cycle_count', 'cycle_count'],
   ['decide_stock_change', 'approve_stock_adjustment'],
   ['resolve_exception', 'resolve_exceptions'],
+  ['receive_procurement_po', 'receive_stock'],
 ];
 
 const failures = [];
@@ -151,6 +152,14 @@ requireMatch(
 requireMatch(
   /private\.warehouse_resolve_exception\(payload jsonb\)[\s\S]*?severity = 'P1'[\s\S]*?cannot be waived/i,
   'P1 exceptions are not protected from waiver',
+);
+requireMatch(
+  /private\.warehouse_receive_procurement_po\(payload jsonb\)[\s\S]*?status not in \('approved', 'issued'\)/i,
+  'procurement receipt does not enforce approved or issued PO state',
+);
+requireMatch(
+  /private\.warehouse_receive_procurement_po\(payload jsonb\)[\s\S]*?for update[\s\S]*?received_quantity \+ v_quantity > v_line\.quantity/i,
+  'procurement receipt does not lock lines and reject over-receipt',
 );
 
 for (const [command] of commands) {

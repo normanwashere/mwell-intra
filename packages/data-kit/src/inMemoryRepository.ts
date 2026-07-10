@@ -59,6 +59,7 @@ import {
   type PageResult,
   type ProcurementPOHandoff,
   type QualityInspection,
+  type ReceiveProcurementPOInput,
   type ReleaseHoldInput,
   type ResolveExceptionInput,
   type StockChangeRequest,
@@ -1353,5 +1354,20 @@ export class InMemoryRepository implements WarehouseControlRepository {
           receivedQuantity: line.quantityReceived,
         })),
       }));
+  }
+
+  async receiveProcurementPO(input: ReceiveProcurementPOInput): Promise<Receipt> {
+    return this.receiveStock({
+      locationId: input.locationId,
+      lines: input.lines.map((line) => ({
+        productId: line.productId,
+        quantity: line.quantity,
+        lotCode: line.lotCode,
+        serialNumbers: line.serialNumbers,
+        binId: input.binId,
+      })),
+      evidenceUrls: input.evidenceUrls,
+      actor: 'demo-procurement-receiver',
+    });
   }
 }
