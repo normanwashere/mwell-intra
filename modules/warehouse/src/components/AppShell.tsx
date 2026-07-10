@@ -5,12 +5,24 @@ import { Logo } from './Logo';
 import { Icon, type IconName } from './Icon';
 import { UserMenu } from './UserMenu';
 import { useWarehouse } from '@/app/store';
-import { modulesForRole, primaryModulesForRole } from '@/app/modules';
+import {
+  MODULE_GROUP_LABELS,
+  modulesForRole,
+  primaryModulesForRole,
+  type ModuleGroup,
+} from '@/app/modules';
 import { ROLES } from '@/auth/roles';
 import { buildNotifications } from '@/app/notifications';
 import { Sheet, useToast, PageTransition } from './ui';
 import { ThemeToggle } from './ThemeToggle';
-import { BarcodeScanner } from './camera/BarcodeScanner';
+
+const MODULE_GROUP_ORDER: ModuleGroup[] = [
+  'operate',
+  'plan',
+  'control',
+  'analyze',
+  'configure',
+];
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { role, source, data, resetDemo, pendingSync, conflicts, syncNow, discardConflict } =
@@ -22,7 +34,6 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const [moreOpen, setMoreOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
-  const [scanOpen, setScanOpen] = useState(false);
   const [conflictsOpen, setConflictsOpen] = useState(false);
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -65,7 +76,13 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
 
   const primary = primaryModulesForRole(role);
-  const hasMore = modules.length > primary.length;
+  const canScan = primary.some((module) => module.id === 'scan');
+  const primaryIds = new Set(primary.map((module) => module.id));
+  const remainingModules = modules.filter((module) => !primaryIds.has(module.id));
+  const groupedModules = MODULE_GROUP_ORDER.map((group) => ({
+    group,
+    modules: modules.filter((module) => module.group === group),
+  })).filter((section) => section.modules.length > 0);
 
   // Reset demo data is destructive (wipes + reseeds) — always confirm first
   // and give explicit feedback before the reload (WH-6).
@@ -79,19 +96,6 @@ export function AppShell({ children }: { children: ReactNode }) {
     window.setTimeout(() => resetDemo(), 450);
   };
 
-  const handleScan = (code: string) => {
-    setScanOpen(false);
-    const product = data?.products.find(
-      (p) => p.barcode === code || code.startsWith(p.sku),
-    );
-    if (product) {
-      navigate(`/inventory/${product.id}`);
-      toast.success(`Opened ${product.name}`);
-    } else {
-      toast.error(`No product matches "${code}"`);
-    }
-  };
-
   return (
     <div className="h-dvh overflow-hidden bg-app md:flex md:h-auto md:min-h-screen md:overflow-visible">
       {/* Desktop sidebar */}
@@ -102,9 +106,27 @@ export function AppShell({ children }: { children: ReactNode }) {
             <span className="text-xs font-semibold text-faint">Warehouse</span>
           </a>
         </div>
-        <nav className="flex-1 space-y-1 px-3" aria-label="Primary">
-          {modules.map((m) => (
-            <SideLink key={m.id} to={m.path} icon={m.icon as IconName} label={m.label} />
+        <nav className="flex-1 space-y-5 overflow-y-auto px-3 pb-4" aria-label="Primary">
+          {groupedModules.map((section) => (
+            <section key={section.group} aria-labelledby={`warehouse-nav-${section.group}`}>
+              <h2
+                id={`warehouse-nav-${section.group}`}
+                tabIndex={0}
+                className="mb-1 px-3 text-[0.65rem] font-bold uppercase text-faint outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+              >
+                {MODULE_GROUP_LABELS[section.group]}
+              </h2>
+              <div className="space-y-1">
+                {section.modules.map((module) => (
+                  <SideLink
+                    key={module.id}
+                    to={module.path}
+                    icon={module.icon as IconName}
+                    label={module.label}
+                  />
+                ))}
+              </div>
+            </section>
           ))}
         </nav>
         <div className="safe-bottom border-t border-line px-5 py-4">
@@ -159,14 +181,16 @@ export function AppShell({ children }: { children: ReactNode }) {
               >
                 {source === 'supabase' ? 'Live' : 'Demo'}
               </span>
-              <button
-                type="button"
-                onClick={() => setScanOpen(true)}
-                aria-label="Quick scan"
-                className="grid h-11 w-11 place-items-center rounded-full text-muted transition hover:bg-inset hover:text-ink"
-              >
-                <Icon name="scan" />
-              </button>
+              {canScan && (
+                <button
+                  type="button"
+                  onClick={() => navigate('/scan')}
+                  aria-label="Quick scan"
+                  className="grid h-11 w-11 place-items-center rounded-full text-muted transition hover:bg-inset hover:text-ink"
+                >
+                  <Icon name="scan" />
+                </button>
+              )}
               <ThemeToggle />
               {/* Branded "Module alerts" (not "Notifications") so it doesn't
                   contradict the shell's disabled demo bell (SH-7). */}
@@ -244,7 +268,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           className="safe-bottom z-30 shrink-0 border-t border-line bg-surface/95 shadow-e2 backdrop-blur-md md:hidden"
           aria-label="Primary mobile"
         >
-          <ul className="flex">
+          <ul
+            className="grid"
+            style={{ gridTemplateColumns: `repeat(${primary.length + 1}, minmax(0, 1fr))` }}
+          >
             {primary.map((m) => (
               <li key={m.id} className="flex-1">
                 <BottomLink
@@ -254,31 +281,19 @@ export function AppShell({ children }: { children: ReactNode }) {
                 />
               </li>
             ))}
-            {hasMore && (
-              <li className="flex-1">
-                <button
-                  type="button"
-                  onClick={() => setMoreOpen(true)}
-                  className="flex min-h-16 w-full flex-col items-center justify-center gap-0.5 px-2 py-2.5 text-[0.65rem] font-medium text-faint"
-                >
-                  <Icon name="dots" className="h-5 w-5" />
-                  More
-                </button>
-              </li>
-            )}
+            <li className="min-w-0">
+              <button
+                type="button"
+                onClick={() => setMoreOpen(true)}
+                className="flex min-h-16 w-full flex-col items-center justify-center gap-0.5 px-1 py-2.5 text-[0.65rem] font-medium text-faint transition hover:bg-inset hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500"
+              >
+                <Icon name="dots" className="h-5 w-5" />
+                <span className="max-w-full truncate">More</span>
+              </button>
+            </li>
           </ul>
         </nav>
       </div>
-
-      {/* Scanner sheet */}
-      <Sheet
-        open={scanOpen}
-        onOpenChange={setScanOpen}
-        title="Quick scan"
-        description="Scan a product barcode to jump to its details."
-      >
-        <BarcodeScanner onDetected={handleScan} label="Start scanning" />
-      </Sheet>
 
       {/* More drawer */}
       <Sheet
@@ -309,7 +324,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               </span>
             </a>
           </li>
-          {modules.map((m) => (
+          {remainingModules.map((m) => (
             <li key={m.id}>
               <button
                 type="button"

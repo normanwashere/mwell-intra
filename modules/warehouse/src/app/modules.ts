@@ -2,189 +2,56 @@ import type { Capability } from '@/auth/roles';
 import type { Role } from '@/domain/types';
 import { can } from '@/auth/roles';
 
+export type ModuleGroup = 'operate' | 'plan' | 'control' | 'analyze' | 'configure';
+export type MobileSlot = 'home' | 'scan' | 'tasks' | 'inventory';
+
 export interface ModuleDef {
   id: string;
   label: string;
-  /** Bottom-nav label when the full label doesn't fit (e.g. "Counts"). */
   shortLabel?: string;
   path: string;
-  /** Module is shown if the role has ANY of these capabilities. */
   capabilities: Capability[];
-  /** Short description for cards/landing. */
   description: string;
   icon: string;
+  group: ModuleGroup;
+  mobile?: MobileSlot;
 }
 
+export const MODULE_GROUP_LABELS: Record<ModuleGroup, string> = {
+  operate: 'Operate',
+  plan: 'Plan',
+  control: 'Control',
+  analyze: 'Analyze',
+  configure: 'Configure',
+};
+
 export const MODULES: ModuleDef[] = [
-  {
-    id: 'dashboard',
-    label: 'Dashboard',
-    path: '/',
-    capabilities: ['view_dashboard'],
-    description: 'KPIs, low-stock alerts and utilization at a glance.',
-    icon: 'grid',
-  },
-  {
-    id: 'inventory',
-    label: 'Inventory',
-    path: '/inventory',
-    capabilities: ['manage_inventory'],
-    description:
-      'Browse SKUs by category, size, serial, batch and location. Create & edit products with the manage-products tools.',
-    icon: 'box',
-  },
-  {
-    id: 'receiving',
-    label: 'Receiving',
-    path: '/receiving',
-    capabilities: ['receive_stock'],
-    description: 'Scan & tag incoming inventory with photo evidence.',
-    icon: 'truck',
-  },
-  {
-    id: 'allocations',
-    label: 'Allocations',
-    path: '/allocations',
-    // reserve_allocate roles create reservations; issue_items roles (logistics) can issue
-    capabilities: ['reserve_allocate', 'issue_items'],
-    description: 'Reserve, issue and track items for activations.',
-    icon: 'tag',
-  },
-  {
-    id: 'events',
-    label: 'Events',
-    path: '/events',
-    capabilities: ['reserve_allocate', 'view_finance'],
-    description: 'Activations with consumption, costing and post-event reporting.',
-    icon: 'calendar',
-  },
-  {
-    id: 'cycle-counts',
-    label: 'Cycle Counts',
-    shortLabel: 'Counts',
-    path: '/cycle-counts',
-    capabilities: ['cycle_count'],
-    description: 'Count by category and reconcile variances.',
-    icon: 'clipboard',
-  },
-  {
-    id: 'returns',
-    label: 'Returns',
-    path: '/returns',
-    capabilities: ['manage_returns'],
-    description: 'Log customer & vendor returns with reasons and disposition.',
-    icon: 'rotate',
-  },
-  {
-    id: 'procurement',
-    label: 'Procurement',
-    path: '/procurement',
-    capabilities: ['view_procurement'],
-    description: 'Reorder, stockout risk and supplier lead times.',
-    icon: 'cart',
-  },
-  {
-    id: 'purchase-orders',
-    label: 'Purchase Orders',
-    shortLabel: 'POs',
-    path: '/purchase-orders',
-    // Procurement creates POs; the warehouse (receive_stock) reconciles receipts
-    // against them, so both need the module.
-    capabilities: ['view_procurement', 'receive_stock'],
-    description: 'Create supplier POs and receive against them.',
-    icon: 'list',
-  },
-  {
-    id: 'suppliers',
-    label: 'Suppliers',
-    path: '/suppliers',
-    capabilities: ['view_procurement'],
-    description: 'Manage supplier information and lead times.',
-    icon: 'building',
-  },
-  {
-    id: 'storage',
-    label: 'Storage areas',
-    path: '/storage',
-    // Anyone who physically handles stock benefits from scan-to-find; only
-    // manage_locations roles can create/edit bins (enforced in-page).
-    capabilities: ['receive_stock', 'manage_locations', 'transfer_stock', 'cycle_count'],
-    description: 'Scannable bins & shelves — find where any order is stored.',
-    icon: 'pin',
-  },
-  {
-    id: 'locations',
-    label: 'Locations',
-    path: '/locations',
-    capabilities: ['manage_locations'],
-    description: 'Manage warehouses and event sites.',
-    icon: 'building',
-  },
-  {
-    id: 'finance',
-    label: 'Finance',
-    path: '/finance',
-    capabilities: ['view_finance'],
-    description: 'Valuation, costing, reconciliation and asset register.',
-    icon: 'coins',
-  },
-  {
-    id: 'pricing',
-    label: 'Pricing',
-    path: '/pricing',
-    capabilities: ['view_pricing'],
-    description: 'Landed cost, cost variance, turnover and bundle pricing.',
-    icon: 'trend',
-  },
-  {
-    id: 'data',
-    label: 'Data & Reports',
-    path: '/data',
-    capabilities: ['view_analytics'],
-    description: 'Raw data export, definitions and metric documentation.',
-    icon: 'history',
-  },
+  { id: 'dashboard', label: 'Dashboard', shortLabel: 'Home', path: '/', capabilities: ['view_dashboard'], description: 'KPIs, alerts and utilization.', icon: 'grid', group: 'analyze', mobile: 'home' },
+  { id: 'scan', label: 'Scan', path: '/scan', capabilities: ['receive_stock', 'issue_items', 'manage_returns', 'cycle_count', 'transfer_stock'], description: 'Scan stock operations and lookup.', icon: 'scan', group: 'operate', mobile: 'scan' },
+  { id: 'tasks', label: 'Tasks', path: '/tasks', capabilities: ['inspect_quality', 'view_exceptions', 'cycle_count'], description: 'Due, blocked and completed control work.', icon: 'clipboard', group: 'control', mobile: 'tasks' },
+  { id: 'inventory', label: 'Inventory', path: '/inventory', capabilities: ['manage_inventory'], description: 'Browse SKUs, serials, batches and locations.', icon: 'box', group: 'operate', mobile: 'inventory' },
+  { id: 'receiving', label: 'Receiving', path: '/receiving', capabilities: ['receive_stock'], description: 'Scan and tag incoming inventory.', icon: 'truck', group: 'operate' },
+  { id: 'allocations', label: 'Allocations', path: '/allocations', capabilities: ['reserve_allocate', 'issue_items'], description: 'Reserve, issue and track event stock.', icon: 'tag', group: 'operate' },
+  { id: 'returns', label: 'Returns', path: '/returns', capabilities: ['manage_returns'], description: 'Record returns and disposition.', icon: 'rotate', group: 'operate' },
+  { id: 'storage', label: 'Storage areas', path: '/storage', capabilities: ['receive_stock', 'manage_locations', 'transfer_stock', 'cycle_count'], description: 'Scannable bins and shelves.', icon: 'pin', group: 'operate' },
+  { id: 'events', label: 'Events', path: '/events', capabilities: ['reserve_allocate', 'view_finance'], description: 'Activation planning and reporting.', icon: 'calendar', group: 'plan' },
+  { id: 'procurement', label: 'Procurement', path: '/procurement', capabilities: ['view_procurement'], description: 'Reorder and supplier planning.', icon: 'cart', group: 'plan' },
+  { id: 'purchase-orders', label: 'Purchase Orders', shortLabel: 'POs', path: '/purchase-orders', capabilities: ['view_procurement', 'receive_stock'], description: 'Approved supply and receiving.', icon: 'list', group: 'plan' },
+  { id: 'cycle-counts', label: 'Cycle Counts', shortLabel: 'Counts', path: '/cycle-counts', capabilities: ['cycle_count'], description: 'Count and reconcile variances.', icon: 'clipboard', group: 'control' },
+  { id: 'finance', label: 'Finance', path: '/finance', capabilities: ['view_finance'], description: 'Valuation and reconciliation.', icon: 'coins', group: 'analyze' },
+  { id: 'pricing', label: 'Pricing', path: '/pricing', capabilities: ['view_pricing'], description: 'Cost variance and pricing.', icon: 'trend', group: 'analyze' },
+  { id: 'data', label: 'Data & Reports', path: '/data', capabilities: ['view_analytics'], description: 'Exports, definitions and metrics.', icon: 'history', group: 'analyze' },
+  { id: 'suppliers', label: 'Suppliers', path: '/suppliers', capabilities: ['view_procurement'], description: 'Supplier master and lead times.', icon: 'building', group: 'configure' },
+  { id: 'locations', label: 'Locations', path: '/locations', capabilities: ['manage_locations'], description: 'Warehouses and event sites.', icon: 'building', group: 'configure' },
 ];
 
 export function modulesForRole(role: Role): ModuleDef[] {
-  return MODULES.filter((m) => m.capabilities.some((c) => can(role, c)));
+  return MODULES.filter((module) => module.capabilities.some((capability) => can(role, capability)));
 }
 
-/**
- * Preferred mobile bottom-nav order per role, so frequent action screens stay
- * one tap away instead of being buried under "More". IDs not visible to a role
- * are skipped; the set is topped up to 4 from the role's remaining modules.
- */
-const MOBILE_PRIMARY: Partial<Record<Role, string[]>> = {
-  logistics_supervisor: ['dashboard', 'receiving', 'cycle-counts', 'returns'],
-  // Events is the core noun for ops/marketing (WH-15/J3-2) — it takes the
-  // Inventory slot; Inventory stays reachable via the More sheet.
-  operations: ['dashboard', 'events', 'allocations', 'returns'],
-  marketing: ['dashboard', 'events', 'allocations', 'returns'],
-  finance: ['dashboard', 'finance', 'cycle-counts', 'inventory'],
-  procurement: ['dashboard', 'procurement', 'purchase-orders', 'inventory'],
-};
-
-const MAX_PRIMARY = 4;
-
-/** The (≤4) modules shown directly in the mobile bottom nav for a role. */
 export function primaryModulesForRole(role: Role): ModuleDef[] {
-  const visible = modulesForRole(role);
-  if (visible.length <= MAX_PRIMARY) return visible;
-
-  const pref = MOBILE_PRIMARY[role];
-  if (!pref) return visible.slice(0, MAX_PRIMARY);
-
-  const byId = new Map(visible.map((m) => [m.id, m]));
-  const picked: ModuleDef[] = [];
-  for (const id of pref) {
-    const m = byId.get(id);
-    if (m && !picked.includes(m)) picked.push(m);
-    if (picked.length >= MAX_PRIMARY) break;
-  }
-  for (const m of visible) {
-    if (picked.length >= MAX_PRIMARY) break;
-    if (!picked.includes(m)) picked.push(m);
-  }
-  return picked.slice(0, MAX_PRIMARY);
+  const order: MobileSlot[] = ['home', 'scan', 'tasks', 'inventory'];
+  return modulesForRole(role)
+    .filter((module): module is ModuleDef & { mobile: MobileSlot } => Boolean(module.mobile))
+    .sort((a, b) => order.indexOf(a.mobile) - order.indexOf(b.mobile));
 }

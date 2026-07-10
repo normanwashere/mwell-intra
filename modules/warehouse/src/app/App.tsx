@@ -64,6 +64,12 @@ const EventDetailPage = lazy(() =>
 const DataPage = lazy(() =>
   import('@/pages/DataPage').then((m) => ({ default: m.DataPage })),
 );
+const ScanPage = lazy(() =>
+  import('@/pages/ScanPage').then((m) => ({ default: m.ScanPage })),
+);
+const TasksPage = lazy(() =>
+  import('@/pages/TasksPage').then((m) => ({ default: m.TasksPage })),
+);
 
 function AccessDenied() {
   const navigate = useNavigate();
@@ -167,6 +173,22 @@ export function App() {
         <Route path="/" element={<DashboardPage />} />
         <Route path="/inventory" element={<InventoryPage />} />
         <Route path="/inventory/:id" element={<ProductDetailPage />} />
+        <Route
+          path="/scan"
+          element={
+            <Guard anyOf={['receive_stock', 'issue_items', 'manage_returns', 'cycle_count', 'transfer_stock']}>
+              <ScanPage />
+            </Guard>
+          }
+        />
+        <Route
+          path="/tasks"
+          element={
+            <Guard anyOf={['inspect_quality', 'view_exceptions', 'cycle_count']}>
+              <TasksPage />
+            </Guard>
+          }
+        />
         <Route
           path="/receiving"
           element={

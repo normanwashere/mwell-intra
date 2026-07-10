@@ -60,6 +60,24 @@ describe('App routing & guards', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('allows logistics to open the dedicated Scan workspace', async () => {
+    renderWithProviders(<App />, {
+      role: 'logistics_supervisor',
+      route: '/scan',
+    });
+    expect(await screen.findByRole('heading', { name: 'Scan' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Scan operations')).toBeInTheDocument();
+  });
+
+  it('allows logistics to open the task queue', async () => {
+    renderWithProviders(<App />, {
+      role: 'logistics_supervisor',
+      route: '/tasks',
+    });
+    expect(await screen.findByRole('heading', { name: 'Tasks' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Due' })).toBeInTheDocument();
+  });
+
   it('returns false when a guarded control command is denied', async () => {
     renderWithProviders(<ControlFailureProbe />, { repo: new DeniedControlRepository() });
     fireEvent.click(screen.getByRole('button', { name: /run guarded command/i }));
