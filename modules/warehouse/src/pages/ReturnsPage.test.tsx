@@ -44,4 +44,20 @@ describe('ReturnsPage', () => {
     await user.type(screen.getByLabelText('Serial number'), 'ECG-RING-10-SN0001');
     expect(screen.getByRole('button', { name: /record return/i })).toBeEnabled();
   });
+
+  it('accepts only an issued serial for the selected return product and event', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ReturnsPage />, { role: 'operations' });
+    await screen.findByText(/recent returns/i);
+    await user.selectOptions(screen.getByLabelText('Product'), 'smart-watch');
+    await user.selectOptions(screen.getByLabelText('Related event (optional)'), 'evt-vip');
+    const manual = screen.getByLabelText('Enter barcode manually');
+    await user.type(manual, 'SMART-WATCH-SN0001');
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+    expect(screen.getByRole('alert')).toHaveTextContent(/cannot be returned/i);
+    await user.type(manual, 'SMART-WATCH-VIP001');
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+    expect(screen.getByRole('status')).toHaveTextContent(/scan accepted/i);
+    expect(screen.getByLabelText('Serial number')).toHaveValue('SMART-WATCH-VIP001');
+  });
 });

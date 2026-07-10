@@ -79,6 +79,35 @@ describe('ProductDetailPage', () => {
     });
   });
 
+  it('transfers the exact serialized unit selected by scan', async () => {
+    const user = userEvent.setup();
+    const repo = makeRepo();
+    renderWithProviders(
+      <Routes><Route path="/inventory/:id" element={<ProductDetailPage />} /></Routes>,
+      { route: '/inventory/smart-watch', role: 'logistics_supervisor', repo },
+    );
+    await screen.findByRole('heading', { name: /mWellness Smart Watch/i });
+    await user.click(screen.getByRole('button', { name: /transfer/i }));
+    const dialog = await screen.findByRole('dialog', { name: /transfer stock/i });
+    const manual = within(dialog).getByLabelText('Enter barcode manually');
+
+    await user.type(manual, 'ECG-RING-6-SN0003');
+    await user.click(within(dialog).getByRole('button', { name: 'Add' }));
+    expect(within(dialog).getByRole('alert')).toHaveTextContent(/does not match/i);
+
+    await user.type(manual, 'SMART-WATCH-SN0001');
+    await user.click(within(dialog).getByRole('button', { name: 'Add' }));
+    await user.selectOptions(within(dialog).getByLabelText('To'), 'loc-cebu');
+    await user.click(within(dialog).getByRole('button', { name: /confirm transfer/i }));
+
+    await waitFor(async () => {
+      const unit = (await repo.getData()).units.find(
+        (row) => row.serialNumber === 'SMART-WATCH-SN0001',
+      );
+      expect(unit?.locationId).toBe('loc-cebu');
+    });
+  });
+
   it('hides the transfer action for finance', async () => {
     renderDetail('shirt-l', 'finance');
     await screen.findByRole('heading', { name: /Event Shirt \(L\)/i });

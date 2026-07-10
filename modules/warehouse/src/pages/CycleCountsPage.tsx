@@ -8,6 +8,7 @@ import { groupProductsByFamily, variantLabel } from '@/domain/inventory';
 import type { ItemCategory } from '@/domain/types';
 import { Badge, Card, Field, PageHeader, SectionTitle, useToast } from '@/components/ui';
 import { Icon } from '@/components/Icon';
+import { WarehouseScanFlow } from '@/components/camera/WarehouseScanFlow';
 
 export function CycleCountsPage() {
   const { data, submitNewCycleCount } = useWarehouse();
@@ -217,6 +218,33 @@ export function CycleCountsPage() {
               serial(s) on reconciliation; extra units found must be
               received/registered individually — they can't be added by a number.
             </span>
+          </div>
+        )}
+        {category === 'device' && (
+          <div className="sm:col-span-2">
+            <WarehouseScanFlow
+              key={`${activeLocation}:${scope ?? 'general'}`}
+              data={data}
+              context="count"
+              expectedLocationId={activeLocation}
+              expectedBinId={scope ?? null}
+              scannedCodes={Object.values(serialInputs).flatMap((value) =>
+                value.split(/[\s,]+/).filter(Boolean),
+              )}
+              label="Scan counted device"
+              onResolved={(resolution) => {
+                if (!resolution.serialNumber) return;
+                setSerialInputs((current) => {
+                  const existing = current[resolution.productId]?.trim();
+                  return {
+                    ...current,
+                    [resolution.productId]: existing
+                      ? `${existing}, ${resolution.serialNumber}`
+                      : resolution.serialNumber!,
+                  };
+                });
+              }}
+            />
           </div>
         )}
         {bins.length > 0 && (

@@ -33,6 +33,7 @@ import { EvidenceGallery } from '@/components/EvidenceGallery';
 import { PriceEditorSheet } from '@/components/PriceEditorSheet';
 import { ProductEditorSheet } from '@/components/ProductEditorSheet';
 import { can } from '@/auth/roles';
+import { WarehouseScanFlow } from '@/components/camera/WarehouseScanFlow';
 
 const UNIT_TONE: Record<UnitStatus, Tone> = {
   in_stock: 'emerald',
@@ -62,6 +63,7 @@ export function ProductDetailPage() {
   const [toBin, setToBin] = useState('');
   const [qty, setQty] = useState(1);
   const [tErr, setTErr] = useState<string | null>(null);
+  const [transferSerials, setTransferSerials] = useState<string[]>([]);
   const [timelineSerial, setTimelineSerial] = useState<string | null>(null);
   const [unitQuery, setUnitQuery] = useState('');
   const [priceOpen, setPriceOpen] = useState(false);
@@ -193,6 +195,7 @@ export function ProductDetailPage() {
     setToLoc('');
     setToBin('');
     setQty(1);
+    setTransferSerials([]);
     setTErr(null);
     setTransferOpen(true);
   };
@@ -261,6 +264,7 @@ export function ProductDetailPage() {
       fromBinId: fromBin || undefined,
       toBinId: toBin || undefined,
       quantity: qty,
+      serialNumbers: product.serialized ? transferSerials : undefined,
     });
     if (!ok) return;
     toast.success(`Transferred ${qty}× to ${locationName(toLoc)}`);
@@ -622,7 +626,12 @@ export function ProductDetailPage() {
         title="Transfer stock"
         description={`Move ${product.name} between sites.`}
         footer={
-          <button type="button" className="btn-primary w-full" onClick={() => void submitTransfer()}>
+          <button
+            type="button"
+            className="btn-primary w-full"
+            disabled={product.serialized && transferSerials.length === 0}
+            onClick={() => void submitTransfer()}
+          >
             Confirm transfer
           </button>
         }
@@ -636,6 +645,8 @@ export function ProductDetailPage() {
               onChange={(e) => {
                 setFromLoc(e.target.value);
                 setFromBin(topBinAt(e.target.value));
+                setTransferSerials([]);
+                setQty(1);
               }}
             >
               {data.locations
@@ -653,7 +664,11 @@ export function ProductDetailPage() {
                 id="tr-from-bin"
                 className="input"
                 value={fromBin}
-                onChange={(e) => setFromBin(e.target.value)}
+                onChange={(e) => {
+                  setFromBin(e.target.value);
+                  setTransferSerials([]);
+                  setQty(1);
+                }}
               >
                 <option value="">General area (unassigned)</option>
                 {binsAt(fromLoc).map((b) => (
@@ -701,15 +716,35 @@ export function ProductDetailPage() {
               </select>
             </Field>
           )}
-          <Field label="Quantity" htmlFor="tr-qty">
-            <QuantityStepper
-              id="tr-qty"
-              aria-label="Transfer quantity"
-              value={qty}
-              onChange={setQty}
-              min={1}
-            />
-          </Field>
+          {product.serialized ? (
+            <Field label="Serialized units" hint={`${transferSerials.length} selected`}>
+              <WarehouseScanFlow
+                key={`${fromLoc}:${fromBin || 'general'}`}
+                data={data}
+                context="transfer"
+                expectedProductId={product.id}
+                expectedLocationId={fromLoc}
+                expectedBinId={fromBin || null}
+                scannedCodes={transferSerials}
+                label="Scan transfer serial"
+                onResolved={(resolution) => {
+                  if (!resolution.serialNumber) return;
+                  setTransferSerials((current) => [...current, resolution.serialNumber!]);
+                  setQty((current) => current + (transferSerials.length === 0 ? 0 : 1));
+                }}
+              />
+            </Field>
+          ) : (
+            <Field label="Quantity" htmlFor="tr-qty">
+              <QuantityStepper
+                id="tr-qty"
+                aria-label="Transfer quantity"
+                value={qty}
+                onChange={setQty}
+                min={1}
+              />
+            </Field>
+          )}
           {tErr && (
             <p role="alert" className="text-sm text-rose-600 dark:text-rose-300">
               {tErr}

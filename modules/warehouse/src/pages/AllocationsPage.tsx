@@ -21,6 +21,7 @@ import {
 } from '@/components/ui';
 import { Icon } from '@/components/Icon';
 import { EvidenceCapture } from '@/components/camera/EvidenceCapture';
+import { WarehouseScanFlow } from '@/components/camera/WarehouseScanFlow';
 import { AllocationReturnSheet } from '@/components/AllocationReturnSheet';
 import { expiryStatusForProduct } from '@/components/ExpiryStatus';
 
@@ -535,6 +536,29 @@ export function AllocationsPage() {
                   ))}
                 </ul>
               )}
+              <div className="mt-3">
+                <WarehouseScanFlow
+                  data={data}
+                  context="issue"
+                  expectedProductId={issuing?.productId}
+                  expectedLocationId={issueLoc || undefined}
+                  expectedBinId={issueBin || undefined}
+                  scannedCodes={selectedSerials}
+                  label="Scan issue serial"
+                  onResolved={(resolution) => {
+                    if (!resolution.serialNumber) return;
+                    setSelectedSerials((current) => {
+                      if (
+                        current.includes(resolution.serialNumber!) ||
+                        current.length >= (issuing?.quantity ?? 0)
+                      ) {
+                        return current;
+                      }
+                      return [...current, resolution.serialNumber!];
+                    });
+                  }}
+                />
+              </div>
             </Field>
           )}
           <Field

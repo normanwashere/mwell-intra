@@ -19,6 +19,7 @@ import {
 } from '@/components/ui';
 import { Icon } from '@/components/Icon';
 import { BarcodeScanner } from '@/components/camera/BarcodeScanner';
+import { WarehouseScanFlow } from '@/components/camera/WarehouseScanFlow';
 
 export function StorageAreasPage() {
   const {
@@ -27,9 +28,11 @@ export function StorageAreasPage() {
     createStorageArea,
     updateStorageArea,
     deleteStorageArea,
+    relocate,
   } = useWarehouse();
   const toast = useToast();
   const canManage = can(role, 'manage_locations');
+  const canPutAway = can(role, 'receive_stock') || can(role, 'transfer_stock');
 
   const warehouses = useMemo(
     () => (data?.locations ?? []).filter((l) => l.type === 'warehouse'),
@@ -60,6 +63,16 @@ export function StorageAreasPage() {
   // contents / scan-lookup sheet
   const [viewing, setViewing] = useState<StorageArea | null>(null);
   const [scanOpen, setScanOpen] = useState(false);
+  const [putawayOpen, setPutawayOpen] = useState(false);
+  const [putawayStock, setPutawayStock] = useState<{
+    code: string;
+    productId: string;
+    serialNumber?: string;
+  } | null>(null);
+  const [putawayBin, setPutawayBin] = useState<StorageArea | null>(null);
+  const [putawayError, setPutawayError] = useState<string | null>(null);
+
+  if (!data) return null;
 
   const openAdd = () => {
     setEditing(null);
@@ -139,6 +152,44 @@ export function StorageAreasPage() {
 
   const contents = viewing ? binContents(state, viewing.id) : [];
 
+  const openPutaway = () => {
+    setPutawayStock(null);
+    setPutawayBin(null);
+    setPutawayError(null);
+    setPutawayOpen(true);
+  };
+
+  const selectPutawayBin = (raw: string) => {
+    const normalized = raw.trim().toLowerCase();
+    const match = bins.find(
+      (bin) =>
+        bin.code.toLowerCase() === normalized || bin.id.toLowerCase() === normalized,
+    );
+    if (!match) {
+      setPutawayError('Scan a destination bin in the selected warehouse.');
+      return;
+    }
+    setPutawayError(null);
+    setPutawayBin(match);
+  };
+
+  const confirmPutaway = async () => {
+    if (!putawayStock || !putawayBin) return;
+    const ok = await relocate({
+      productId: putawayStock.productId,
+      locationId: activeWarehouse,
+      fromBinId: undefined,
+      toBinId: putawayBin.id,
+      quantity: 1,
+      serialNumbers: putawayStock.serialNumber
+        ? [putawayStock.serialNumber]
+        : undefined,
+    });
+    if (!ok) return;
+    toast.success(`Put away into ${putawayBin.code}`);
+    setPutawayOpen(false);
+  };
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -147,6 +198,11 @@ export function StorageAreasPage() {
         subtitle="Scannable bins, shelves & zones"
         action={
           <div className="flex gap-2">
+            {canPutAway && (
+              <button type="button" className="btn-accent btn-sm" onClick={openPutaway}>
+                <Icon name="pin" /> Put away
+              </button>
+            )}
             <button
               type="button"
               className="btn-outline btn-sm"
@@ -392,6 +448,56 @@ export function StorageAreasPage() {
             </div>
           </div>
         )}
+      </Sheet>
+
+      {/* Scan-to-putaway */}
+      <Sheet
+        open={putawayOpen}
+        onOpenChange={setPutawayOpen}
+        title="Put away stock"
+        description="Scan eligible stock from the general receiving area, then scan its destination bin."
+        footer={
+          <button
+            type="button"
+            className="btn-primary w-full"
+            disabled={!putawayStock || !putawayBin}
+            onClick={() => void confirmPutaway()}
+          >
+            Confirm putaway
+          </button>
+        }
+      >
+        <div className="space-y-5">
+          <Field label="1. Stock identity" hint="Serialized devices require the individual serial.">
+            <WarehouseScanFlow
+              data={data}
+              context="putaway"
+              expectedLocationId={activeWarehouse}
+              expectedBinId={null}
+              scannedCodes={putawayStock ? [putawayStock.code] : []}
+              label="Scan stock to put away"
+              manualLabel="Enter stock code manually"
+              manualActionLabel="Add stock"
+              onResolved={setPutawayStock}
+            />
+          </Field>
+          <Field
+            label="2. Destination bin"
+            hint={putawayBin ? `Selected ${putawayBin.code}` : 'Must belong to the selected warehouse.'}
+          >
+            <BarcodeScanner
+              onDetected={selectPutawayBin}
+              label="Scan destination bin"
+              manualLabel="Enter destination bin manually"
+              manualActionLabel="Add bin"
+            />
+          </Field>
+          {putawayError && (
+            <p role="alert" className="text-sm text-rose-600 dark:text-rose-300">
+              {putawayError}
+            </p>
+          )}
+        </div>
       </Sheet>
 
       {/* Scan-to-find */}

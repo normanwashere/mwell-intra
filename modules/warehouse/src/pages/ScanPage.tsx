@@ -1,9 +1,8 @@
-import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useWarehouse } from '@/app/store';
 import { can, type Capability } from '@/auth/roles';
-import { BarcodeScanner } from '@/components/camera/BarcodeScanner';
-import { Field, PageHeader, useToast } from '@/components/ui';
+import { WarehouseScanFlow } from '@/components/camera/WarehouseScanFlow';
+import { PageHeader } from '@/components/ui';
 import { Icon, type IconName } from '@/components/Icon';
 
 const ACTIONS: Array<{ label: string; to: string; icon: IconName; capabilities: Capability[] }> = [
@@ -19,14 +18,7 @@ const ACTIONS: Array<{ label: string; to: string; icon: IconName; capabilities: 
 export function ScanPage() {
   const { data, role } = useWarehouse();
   const navigate = useNavigate();
-  const toast = useToast();
-  const [manual, setManual] = useState('');
   const actions = ACTIONS.filter((action) => action.capabilities.some((capability) => can(role, capability)));
-  const lookup = (code: string) => {
-    const product = data?.products.find((item) => item.barcode === code || item.sku.toLowerCase() === code.toLowerCase());
-    if (!product) return toast.error(`No product matches "${code}"`);
-    navigate(`/inventory/${product.id}`);
-  };
   return (
     <div className="space-y-5">
       <PageHeader title="Scan" icon="scan" subtitle="Choose an operation or find stock" />
@@ -37,13 +29,14 @@ export function ScanPage() {
           </Link>
         ))}
       </div>
-      <BarcodeScanner onDetected={lookup} label="Scan product" />
-      <form className="flex items-end gap-2" onSubmit={(event) => { event.preventDefault(); if (manual.trim()) lookup(manual.trim()); }}>
-        <Field label="Enter barcode or SKU manually" htmlFor="manual-scan">
-          <input id="manual-scan" className="input" value={manual} onChange={(event) => setManual(event.target.value)} />
-        </Field>
-        <button type="submit" className="btn-primary min-h-11">Find</button>
-      </form>
+      {data && (
+        <WarehouseScanFlow
+          data={data}
+          context="lookup"
+          label="Scan product or unit"
+          onResolved={(resolution) => navigate(`/inventory/${resolution.productId}`)}
+        />
+      )}
     </div>
   );
 }

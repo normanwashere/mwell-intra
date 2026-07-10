@@ -16,7 +16,10 @@ import {
 import { formatWhen, statusLabel } from '@/domain/format';
 import type { Tone } from '@/components/ui';
 import { EvidenceCapture } from '@/components/camera/EvidenceCapture';
-import { BarcodeScanner } from '@/components/camera/BarcodeScanner';
+import {
+  resolveWarehouseScan,
+  WarehouseScanFlow,
+} from '@/components/camera/WarehouseScanFlow';
 import { EvidenceGallery } from '@/components/EvidenceGallery';
 
 const DISPOSITION_META: Record<
@@ -69,6 +72,16 @@ export function ReturnsPage() {
   const restockBins = (data.storageAreas ?? []).filter(
     (b) => b.locationId === locationId,
   );
+  const serialValidation =
+    product?.serialized && serial.trim()
+      ? resolveWarehouseScan({
+          data,
+          context: 'return',
+          code: serial,
+          expectedProductId: product.id,
+          expectedEventId: eventId || undefined,
+        })
+      : null;
 
   const submit = async () => {
     if (!productId) return;
@@ -256,8 +269,22 @@ export function ReturnsPage() {
               placeholder="e.g. ECG-RING-10-SN0001"
             />
             <div className="mt-2">
-              <BarcodeScanner onDetected={setSerial} label="Scan serial" />
+              <WarehouseScanFlow
+                data={data}
+                context="return"
+                expectedProductId={product.id}
+                expectedEventId={eventId || undefined}
+                label="Scan return serial"
+                onResolved={(resolution) => {
+                  if (resolution.serialNumber) setSerial(resolution.serialNumber);
+                }}
+              />
             </div>
+            {serialValidation && !serialValidation.ok && (
+              <p role="alert" className="mt-2 text-sm text-rose-600 dark:text-rose-300">
+                {serialValidation.message}
+              </p>
+            )}
           </Field>
         )}
 
@@ -266,7 +293,10 @@ export function ReturnsPage() {
         <button
           type="button"
           className="btn-primary w-full"
-          disabled={!productId || (product?.serialized && !serial.trim())}
+          disabled={
+            !productId ||
+            Boolean(product?.serialized && (!serial.trim() || !serialValidation?.ok))
+          }
           onClick={() => void submit()}
         >
           Record return

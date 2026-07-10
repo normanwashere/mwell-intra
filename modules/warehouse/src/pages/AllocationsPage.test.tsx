@@ -156,6 +156,24 @@ describe('AllocationsPage', () => {
     expect(confirm).toBeEnabled();
   });
 
+  it('validates scanned issue serials against the allocation product', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<AllocationsPage />, { role: 'operations' });
+    await screen.findByLabelText('Allocations');
+    await user.click(issueButtonFor('mWellness Smart Watch'));
+    const dialog = await screen.findByRole('dialog', { name: /issue allocation/i });
+    await user.click(within(dialog).getByText('SMART-WATCH-SN0001'));
+
+    const manual = within(dialog).getByLabelText('Enter barcode manually');
+    await user.type(manual, 'ECG-RING-6-SN0003');
+    await user.click(within(dialog).getByRole('button', { name: 'Add' }));
+    expect(within(dialog).getByRole('alert')).toHaveTextContent(/does not match/i);
+    await user.type(manual, 'SMART-WATCH-SN0009');
+    await user.click(within(dialog).getByRole('button', { name: 'Add' }));
+    expect(within(dialog).getByRole('status')).toHaveTextContent(/scan accepted/i);
+    expect(within(dialog).getByRole('button', { name: /confirm issue/i })).toBeEnabled();
+  });
+
   it('issues a non-serialized allocation without a serial picker', async () => {
     const user = userEvent.setup();
     const repo = makeRepo();

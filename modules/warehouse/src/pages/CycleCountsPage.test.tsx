@@ -116,4 +116,20 @@ describe('CycleCountsPage', () => {
     expect(await screen.findByText(/1 missing/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /submit count/i })).toBeEnabled();
   });
+
+  it('adds an eligible device to the count through the shared scanner', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<CycleCountsPage />, { role: 'finance' });
+    await screen.findByText(/count sheet/i);
+    await user.selectOptions(screen.getByLabelText('Category'), 'device');
+
+    const manual = screen.getByLabelText('Enter barcode manually');
+    await user.type(manual, 'ECG-RING-6-SN0003');
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent(/scan accepted/i);
+    expect(screen.getByLabelText(/Scanned serials ECG Ring \(Size 6\)/i)).toHaveValue(
+      'ECG-RING-6-SN0003',
+    );
+  });
 });
