@@ -22,6 +22,8 @@ import type {
   ApprovalSignature,
   ApprovalStep,
   ApproverTier,
+  AcceptancePack,
+  PaymentReadinessPack,
   ProcurementRequest,
   ProcurementRequestLine,
   ProcurementVendor,
@@ -217,7 +219,54 @@ function mapRequest(row: LiveRow, steps: ApprovalStep[] = []): ProcurementReques
   } as ProcurementRequest;
 }
 
-function mapPurchaseOrder(row: LiveRow, receipts: PurchaseOrderReceipt[] = []): PurchaseOrder {
+function mapAcceptancePack(row: LiveRow): AcceptancePack {
+  const exceptions: unknown = row.exceptions;
+  const acceptedScope: unknown = row.accepted_scope;
+  const acceptedScopeText = typeof acceptedScope === 'string'
+    ? acceptedScope
+    : acceptedScope && typeof acceptedScope === 'object' && 'summary' in acceptedScope
+      ? String((acceptedScope as { summary: unknown }).summary)
+      : JSON.stringify(acceptedScope ?? {});
+  return {
+    id: row.id,
+    purchaseOrderId: row.purchase_order_id,
+    requestId: row.request_id ?? undefined,
+    warehouseReceiptReference: row.warehouse_receipt_reference ?? undefined,
+    acceptanceType: row.acceptance_type as unknown as AcceptancePack['acceptanceType'],
+    acceptedScope: acceptedScopeText,
+    exceptions: Array.isArray(exceptions) ? exceptions.map(String) : [],
+    acceptedByEmail: row.accepted_by_email ?? undefined,
+    acceptedAt: row.accepted_at,
+    documentHash: row.document_hash ?? undefined,
+    status: row.status,
+  } as unknown as AcceptancePack;
+}
+
+function mapPaymentReadinessPack(row: LiveRow): PaymentReadinessPack {
+  return {
+    id: row.id,
+    purchaseOrderId: row.purchase_order_id,
+    acceptancePackId: row.acceptance_pack_id,
+    poMatch: Boolean(row.po_match),
+    invoiceOrSiReference: row.invoice_or_si_storage_path ?? undefined,
+    milestoneSupportReference: row.milestone_support_storage_path ?? undefined,
+    taxWithholdingSupportReference: row.tax_withholding_support_storage_path ?? undefined,
+    status: row.status,
+    preparedByEmail: row.prepared_by_email ?? undefined,
+    preparedAt: row.prepared_at,
+    financeReviewedByEmail: row.finance_reviewed_by_email ?? undefined,
+    financeReviewedAt: row.finance_reviewed_at ?? undefined,
+    financeNote: row.finance_note ?? undefined,
+    correctedFrom: row.corrected_from ?? undefined,
+  } as unknown as PaymentReadinessPack;
+}
+
+function mapPurchaseOrder(
+  row: LiveRow,
+  receipts: PurchaseOrderReceipt[] = [],
+  acceptancePack?: AcceptancePack,
+  paymentReadiness?: PaymentReadinessPack,
+): PurchaseOrder {
   return {
     id: row.id,
     poNumber: row.po_number,
@@ -236,6 +285,8 @@ function mapPurchaseOrder(row: LiveRow, receipts: PurchaseOrderReceipt[] = []): 
     approvedByEmail: row.approved_by_email ?? undefined,
     approvalSignature: row.approval_signature ?? undefined,
     receipts,
+    acceptancePack,
+    paymentReadiness,
     total: Number(row.total ?? 0),
   } as PurchaseOrder;
 }
@@ -867,11 +918,14 @@ export interface PurchaseOrdersAPI {
     id: string,
     actor: { email?: string; signature?: ApprovalSignature; note?: string },
   ) => MaybePromise<PurchaseOrder | null>;
-  issue: (id: string) => MaybePromise<PurchaseOrder | null>;
+  issue: (id: string, readiness: { sourceAwardApproved: boolean; vendorEligible: boolean }) => MaybePromise<PurchaseOrder | null>;
   cancel: (id: string) => MaybePromise<PurchaseOrder | null>;
   /** Record a (possibly partial) goods receipt. Appends a
    *  PurchaseOrderReceipt to the PO's `receipts` history (PR-24). */
   receive: (id: string, input: ReceiveInput) => MaybePromise<PurchaseOrder | null>;
+  recordAcceptance: (id: string, input: { acceptanceType: 'goods' | 'service' | 'milestone'; acceptedScope: string; exceptions: string[]; actorEmail?: string }) => MaybePromise<PurchaseOrder | null>;
+  preparePayment: (id: string, input: { poMatch: boolean; invoiceOrSiReference: string; milestoneSupportReference: string; taxWithholdingSupportReference: string; actorEmail?: string }) => MaybePromise<PurchaseOrder | null>;
+  reviewPayment: (id: string, input: { status: 'returned' | 'accepted'; note?: string; actorEmail?: string }) => MaybePromise<PurchaseOrder | null>;
   getById: (id: string) => PurchaseOrder | undefined;
 }
 
@@ -894,17 +948,29 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
     column: 'received_at',
     ascending: false,
   });
+  const [liveAcceptances, liveAcceptancesLoading, refreshAcceptances] = useLiveRows<AcceptancePack>(
+    live, 'procurement', 'acceptance_packs', mapAcceptancePack,
+    { column: 'accepted_at', ascending: false },
+  );
+  const [livePaymentPacks, livePaymentPacksLoading, refreshPaymentPacks] = useLiveRows<PaymentReadinessPack>(
+    live, 'procurement', 'payment_readiness_packs', mapPaymentReadinessPack,
+    { column: 'prepared_at', ascending: false },
+  );
   const liveRows = liveBaseRows.map((row) =>
     mapPurchaseOrder(
       row,
       liveReceipts.filter((r) => r.purchaseOrderId === row.id),
+      liveAcceptances.find((pack) => pack.purchaseOrderId === row.id && pack.status !== 'superseded'),
+      livePaymentPacks.find((pack) => pack.purchaseOrderId === row.id && pack.status !== 'superseded'),
     ),
   );
   const rows = isLive(live) ? liveRows : localRows;
-  const loading = isLive(live) ? liveRowsLoading || liveReceiptsLoading : localLoading;
+  const loading = isLive(live)
+    ? liveRowsLoading || liveReceiptsLoading || liveAcceptancesLoading || livePaymentPacksLoading
+    : localLoading;
   const refreshLive = useCallback(async () => {
-    await Promise.all([refreshPos(), refreshReceipts()]);
-  }, [refreshPos, refreshReceipts]);
+    await Promise.all([refreshPos(), refreshReceipts(), refreshAcceptances(), refreshPaymentPacks()]);
+  }, [refreshPos, refreshReceipts, refreshAcceptances, refreshPaymentPacks]);
 
   const add = useCallback(
     (input: NewPOInput): MaybePromise<PurchaseOrder> => {
@@ -1006,7 +1072,11 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
   );
 
   const issue = useCallback(
-    (id: string) => {
+    (id: string, readiness: { sourceAwardApproved: boolean; vendorEligible: boolean }) => {
+      const current = rows.find((row) => row.id === id);
+      if (!current || current.status !== 'approved' || !readiness.sourceAwardApproved || !readiness.vendorEligible) {
+        return null;
+      }
       if (isLive(live)) {
         return liveRpc<LiveRow>(live, 'procurement', 'issue_purchase_order', {
           id,
@@ -1017,7 +1087,7 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
       }
       return patch(id, { status: 'issued' });
     },
-    [patch, live, refreshLive],
+    [patch, live, refreshLive, rows],
   );
   const cancel = useCallback(
     (id: string) => {
@@ -1070,9 +1140,74 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
     [patch, live, refreshLive],
   );
 
+  const recordAcceptance = useCallback((id: string, input: { acceptanceType: 'goods' | 'service' | 'milestone'; acceptedScope: string; exceptions: string[]; actorEmail?: string }): MaybePromise<PurchaseOrder | null> => {
+    const current = rows.find((row) => row.id === id);
+    if (!current) return null;
+    if (input.acceptanceType === 'goods' && (current.receipts?.length ?? 0) === 0) return null;
+    if (isLive(live)) {
+      return liveRpc<LiveRow>(live, 'procurement', 'record_acceptance_pack', {
+        purchase_order_id: id,
+        acceptance_type: input.acceptanceType,
+        accepted_scope: input.acceptedScope,
+        exceptions: input.exceptions,
+        warehouse_receipt_reference: current.receipts?.at(-1)?.id,
+      }).then(() => refreshLive().then(() => current));
+    }
+    const acceptancePack: AcceptancePack = {
+      id: newId('accept'), purchaseOrderId: id, requestId: current.requestId,
+      warehouseReceiptReference: current.receipts?.at(-1)?.id,
+      acceptanceType: input.acceptanceType, acceptedScope: input.acceptedScope,
+      exceptions: input.exceptions, acceptedByEmail: input.actorEmail,
+      acceptedAt: nowIso(), status: input.exceptions.length ? 'accepted_with_exceptions' : 'accepted',
+    };
+    return patch(id, { acceptancePack });
+  }, [live, patch, refreshLive, rows]);
+
+  const preparePayment = useCallback((id: string, input: { poMatch: boolean; invoiceOrSiReference: string; milestoneSupportReference: string; taxWithholdingSupportReference: string; actorEmail?: string }): MaybePromise<PurchaseOrder | null> => {
+    const current = rows.find((row) => row.id === id);
+    if (!current?.acceptancePack) return null;
+    if (isLive(live)) {
+      return liveRpc<LiveRow>(live, 'procurement', 'prepare_payment_readiness', {
+        purchase_order_id: id,
+        acceptance_pack_id: current.acceptancePack.id,
+        po_match: input.poMatch,
+        invoice_or_si_storage_path: input.invoiceOrSiReference,
+        milestone_support_storage_path: input.milestoneSupportReference,
+        tax_withholding_support_storage_path: input.taxWithholdingSupportReference,
+        corrected_from: current.paymentReadiness?.status === 'returned'
+          ? current.paymentReadiness.id
+          : undefined,
+      }).then(() => refreshLive().then(() => current));
+    }
+    const paymentReadiness: PaymentReadinessPack = {
+      id: newId('pay'), purchaseOrderId: id, acceptancePackId: current.acceptancePack.id,
+      poMatch: input.poMatch, invoiceOrSiReference: input.invoiceOrSiReference,
+      milestoneSupportReference: input.milestoneSupportReference,
+      taxWithholdingSupportReference: input.taxWithholdingSupportReference,
+      status: 'ready_for_finance', preparedByEmail: input.actorEmail, preparedAt: nowIso(),
+      correctedFrom: current.paymentReadiness?.status === 'returned' ? current.paymentReadiness.id : undefined,
+    };
+    return patch(id, { paymentReadiness });
+  }, [live, patch, refreshLive, rows]);
+
+  const reviewPayment = useCallback((id: string, input: { status: 'returned' | 'accepted'; note?: string; actorEmail?: string }): MaybePromise<PurchaseOrder | null> => {
+    const current = rows.find((row) => row.id === id);
+    if (!current?.paymentReadiness) return null;
+    if (isLive(live)) {
+      return liveRpc<LiveRow>(live, 'procurement', 'review_payment_readiness', {
+        id: current.paymentReadiness.id, status: input.status, note: input.note,
+      }).then(() => refreshLive().then(() => current));
+    }
+    return patch(id, { paymentReadiness: {
+      ...current.paymentReadiness, status: input.status,
+      financeReviewedByEmail: input.actorEmail, financeReviewedAt: nowIso(),
+      financeNote: input.note,
+    } });
+  }, [live, patch, refreshLive, rows]);
+
   const getById = useCallback((id: string) => rows.find((r) => r.id === id), [rows]);
 
-  return { rows, loading, add, approve, issue, cancel, receive, getById };
+  return { rows, loading, add, approve, issue, cancel, receive, recordAcceptance, preparePayment, reviewPayment, getById };
 }
 
 // ---------------------------------------------------------------------------

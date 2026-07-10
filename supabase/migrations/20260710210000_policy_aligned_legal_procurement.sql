@@ -695,6 +695,86 @@ create or replace function procurement.submit_request(payload jsonb)
 returns jsonb language sql security invoker
 as $$ select private.policy_submit_procurement_request(payload) $$;
 
+create or replace function private.policy_assert_po_vendor_eligible(p_vendor_id uuid, p_request_id text)
+returns void language plpgsql security definer set search_path = ''
+as $$
+declare v_status text; v_expires date; v_request procurement.requests;
+begin
+  select accreditation_status, accreditation_expires_at into v_status, v_expires
+  from core.vendors where id=p_vendor_id;
+  if v_status='approved' and (v_expires is null or v_expires>=current_date) then return; end if;
+  select * into v_request from procurement.requests where id=p_request_id;
+  if exists (
+    select 1
+    from legal.accreditation_dispositions d
+    join legal.accreditation_cases c on c.id=d.case_id
+    where c.vendor_id=p_vendor_id and d.disposition='temporary_clearance'
+      and coalesce((d.conditions->>'valid_until')::timestamptz,d.follow_up_due_at)>now()
+      and (d.conditions->>'category' is null or d.conditions->>'category'=v_request.category)
+      and (d.conditions->>'max_amount' is null or coalesce(v_request.estimated_amount,0)<=(d.conditions->>'max_amount')::numeric)
+  ) then return; end if;
+  raise exception 'Vendor is not currently accredited and has no applicable temporary clearance';
+end;
+$$;
+
+create or replace function procurement.enforce_award_accreditation()
+returns trigger language plpgsql security definer set search_path = ''
+as $$
+begin
+  if new.status in ('approved','issued') and (tg_op='INSERT' or old.status is distinct from new.status) then
+    perform private.policy_assert_po_vendor_eligible(new.core_vendor_id,new.request_id);
+  end if;
+  return new;
+end;
+$$;
+
+create or replace function private.policy_approve_purchase_order(payload jsonb)
+returns jsonb language plpgsql security definer set search_path = ''
+as $$
+declare v_po procurement.purchase_orders; v_request procurement.requests;
+begin
+  if not core.has_cap('procurement','approve_award') then raise exception 'Not authorized to approve award'; end if;
+  select * into v_po from procurement.purchase_orders where id=payload->>'id' for update;
+  if v_po.id is null then raise exception 'Purchase order not found'; end if;
+  if v_po.status not in ('draft','pending_approval') then raise exception 'PO cannot be approved from status %',v_po.status; end if;
+  select * into v_request from procurement.requests where id=v_po.request_id for share;
+  if v_request.id is null or v_request.status<>'approved' then raise exception 'Approved source request is required'; end if;
+  perform private.policy_assert_po_vendor_eligible(v_po.core_vendor_id,v_po.request_id);
+  update procurement.purchase_orders set status='approved',approved_at=now(),approved_by_email=auth.jwt()->>'email',
+    approval_signature=payload->'signature',updated_at=now() where id=v_po.id returning * into v_po;
+  insert into core.activity_log(module,entity_type,entity_id,action,actor,detail)
+  values('procurement','purchase_order',v_po.id,'award_approved',auth.uid(),jsonb_build_object('request_id',v_po.request_id));
+  return to_jsonb(v_po);
+end;
+$$;
+
+create or replace function procurement.approve_purchase_order(payload jsonb)
+returns jsonb language sql security invoker
+as $$ select private.policy_approve_purchase_order(payload) $$;
+
+create or replace function private.policy_issue_purchase_order(payload jsonb)
+returns jsonb language plpgsql security definer set search_path = ''
+as $$
+declare v_po procurement.purchase_orders; v_request procurement.requests;
+begin
+  if not core.has_cap('procurement','author_po') and not core.has_cap('procurement','admin') then raise exception 'Not authorized to issue PO'; end if;
+  select * into v_po from procurement.purchase_orders where id=payload->>'id' for update;
+  if v_po.id is null then raise exception 'Purchase order not found'; end if;
+  if v_po.status<>'approved' then raise exception 'Only approved POs can be issued'; end if;
+  select * into v_request from procurement.requests where id=v_po.request_id for share;
+  if v_request.id is null or v_request.status<>'approved' then raise exception 'Approved source request is required'; end if;
+  perform private.policy_assert_po_vendor_eligible(v_po.core_vendor_id,v_po.request_id);
+  update procurement.purchase_orders set status='issued',updated_at=now() where id=v_po.id returning * into v_po;
+  insert into core.activity_log(module,entity_type,entity_id,action,actor,detail)
+  values('procurement','purchase_order',v_po.id,'issued_policy_aligned',auth.uid(),jsonb_build_object('request_id',v_po.request_id));
+  return to_jsonb(v_po);
+end;
+$$;
+
+create or replace function procurement.issue_purchase_order(payload jsonb)
+returns jsonb language sql security invoker
+as $$ select private.policy_issue_purchase_order(payload) $$;
+
 create or replace function private.policy_record_acceptance_pack(payload jsonb)
 returns jsonb language plpgsql security definer set search_path = ''
 as $$
@@ -705,11 +785,19 @@ begin
   if not core.has_module_role('warehouse') and auth.uid() <> (select requester_id from procurement.requests where id=v_po.request_id) then
     raise exception 'Not authorized to record acceptance';
   end if;
-  v_hash := encode(digest(convert_to((payload->'accepted_scope')::text,'UTF8'),'sha256'),'hex');
+  if payload->>'acceptance_type'='goods' and (
+    payload->>'warehouse_receipt_reference' is null or not exists (
+      select 1 from procurement.receipts r where r.purchase_order_id=v_po.id and r.id::text=payload->>'warehouse_receipt_reference'
+    )
+  ) then raise exception 'A governed Warehouse receipt is required for goods acceptance'; end if;
+  if nullif(trim(payload->>'accepted_scope'),'') is null then raise exception 'Accepted scope is required'; end if;
+  v_hash := encode(digest(convert_to((payload->>'accepted_scope')::text,'UTF8'),'sha256'),'hex');
+  update procurement.acceptance_packs set status='superseded'
+    where purchase_order_id=v_po.id and status in ('accepted','accepted_with_exceptions');
   insert into procurement.acceptance_packs(
     purchase_order_id,request_id,warehouse_receipt_reference,acceptance_type,accepted_scope,exceptions,accepted_by,document_hash,status
   ) values (
-    v_po.id,v_po.request_id,payload->>'warehouse_receipt_reference',payload->>'acceptance_type',payload->'accepted_scope',
+    v_po.id,v_po.request_id,payload->>'warehouse_receipt_reference',payload->>'acceptance_type',jsonb_build_object('summary',payload->>'accepted_scope'),
     coalesce(payload->'exceptions','[]'::jsonb),auth.uid(),v_hash,
     case when jsonb_array_length(coalesce(payload->'exceptions','[]'::jsonb))>0 then 'accepted_with_exceptions' else 'accepted' end
   ) returning * into v_pack;
@@ -721,6 +809,40 @@ create or replace function procurement.record_acceptance_pack(payload jsonb)
 returns jsonb language sql security invoker
 as $$ select private.policy_record_acceptance_pack(payload) $$;
 
+create or replace function private.policy_prepare_payment_readiness(payload jsonb)
+returns jsonb language plpgsql security definer set search_path = ''
+as $$
+declare v_po procurement.purchase_orders; v_accept procurement.acceptance_packs; v_pack procurement.payment_readiness_packs;
+begin
+  if not core.has_cap('procurement','author_po') and not core.has_cap('procurement','admin') then raise exception 'Not authorized to prepare payment readiness'; end if;
+  select * into v_po from procurement.purchase_orders where id=payload->>'purchase_order_id' for update;
+  if v_po.id is null then raise exception 'Purchase order not found'; end if;
+  select * into v_accept from procurement.acceptance_packs where id=(payload->>'acceptance_pack_id')::uuid and purchase_order_id=v_po.id and status='accepted' for share;
+  if v_accept.id is null or jsonb_array_length(v_accept.exceptions)>0 then raise exception 'Exception-free acceptance is required'; end if;
+  if coalesce((payload->>'po_match')::boolean,false) is not true
+    or nullif(payload->>'invoice_or_si_storage_path','') is null
+    or nullif(payload->>'milestone_support_storage_path','') is null
+    or nullif(payload->>'tax_withholding_support_storage_path','') is null then
+    raise exception 'Payment readiness evidence is incomplete';
+  end if;
+  update procurement.payment_readiness_packs set status='superseded'
+    where purchase_order_id=v_po.id and status in ('draft','returned','ready_for_finance');
+  insert into procurement.payment_readiness_packs(
+    purchase_order_id,acceptance_pack_id,policy_version,po_match,invoice_or_si_storage_path,
+    milestone_support_storage_path,tax_withholding_support_storage_path,status,corrected_from
+  ) values (
+    v_po.id,v_accept.id,'procurement-policy-revised-2026',true,payload->>'invoice_or_si_storage_path',
+    payload->>'milestone_support_storage_path',payload->>'tax_withholding_support_storage_path','ready_for_finance',
+    nullif(payload->>'corrected_from','')::uuid
+  ) returning * into v_pack;
+  return to_jsonb(v_pack);
+end;
+$$;
+
+create or replace function procurement.prepare_payment_readiness(payload jsonb)
+returns jsonb language sql security invoker
+as $$ select private.policy_prepare_payment_readiness(payload) $$;
+
 create or replace function private.policy_review_payment_readiness(payload jsonb)
 returns jsonb language plpgsql security definer set search_path = ''
 as $$
@@ -731,14 +853,19 @@ begin
   end if;
   v_status := payload->>'status';
   if v_status not in ('returned','accepted','released') then raise exception 'Invalid Finance readiness decision'; end if;
+  select * into v_pack from procurement.payment_readiness_packs where id=(payload->>'id')::uuid for update;
+  if v_pack.id is null then raise exception 'Payment readiness pack not found'; end if;
+  if v_pack.status not in ('ready_for_finance','accepted') then raise exception 'Payment readiness pack cannot transition from %',v_pack.status; end if;
+  if exists (select 1 from procurement.acceptance_packs a where a.id=v_pack.acceptance_pack_id and (a.status<>'accepted' or jsonb_array_length(a.exceptions)>0)) then
+    raise exception 'Acceptance has unresolved exceptions';
+  end if;
+  if v_status in ('accepted','released') and (
+    not v_pack.po_match or v_pack.invoice_or_si_storage_path is null or
+    v_pack.milestone_support_storage_path is null or v_pack.tax_withholding_support_storage_path is null
+  ) then raise exception 'Payment readiness evidence is incomplete'; end if;
   update procurement.payment_readiness_packs set
     status=v_status,finance_reviewed_by=auth.uid(),finance_reviewed_at=now(),finance_note=payload->>'note'
   where id=(payload->>'id')::uuid returning * into v_pack;
-  if v_pack.id is null then raise exception 'Payment readiness pack not found'; end if;
-  if v_status in ('accepted','released') and (
-    not v_pack.po_match or v_pack.invoice_or_si_storage_path is null or
-    v_pack.tax_withholding_support_storage_path is null
-  ) then raise exception 'Payment readiness evidence is incomplete'; end if;
   return to_jsonb(v_pack);
 end;
 $$;
@@ -790,9 +917,19 @@ grant execute on function procurement.confirm_route_decision(jsonb) to authentic
 revoke all on function private.policy_submit_procurement_request(jsonb) from public, anon;
 revoke all on function procurement.submit_request(jsonb) from public, anon;
 grant execute on function procurement.submit_request(jsonb) to authenticated, service_role;
+revoke all on function private.policy_assert_po_vendor_eligible(uuid,text) from public, anon;
+revoke all on function private.policy_approve_purchase_order(jsonb) from public, anon;
+revoke all on function procurement.approve_purchase_order(jsonb) from public, anon;
+grant execute on function procurement.approve_purchase_order(jsonb) to authenticated, service_role;
+revoke all on function private.policy_issue_purchase_order(jsonb) from public, anon;
+revoke all on function procurement.issue_purchase_order(jsonb) from public, anon;
+grant execute on function procurement.issue_purchase_order(jsonb) to authenticated, service_role;
 revoke all on function private.policy_record_acceptance_pack(jsonb) from public, anon;
 revoke all on function procurement.record_acceptance_pack(jsonb) from public, anon;
 grant execute on function procurement.record_acceptance_pack(jsonb) to authenticated, service_role;
+revoke all on function private.policy_prepare_payment_readiness(jsonb) from public, anon;
+revoke all on function procurement.prepare_payment_readiness(jsonb) from public, anon;
+grant execute on function procurement.prepare_payment_readiness(jsonb) to authenticated, service_role;
 revoke all on function private.policy_review_payment_readiness(jsonb) from public, anon;
 revoke all on function procurement.review_payment_readiness(jsonb) from public, anon;
 grant execute on function procurement.review_payment_readiness(jsonb) to authenticated, service_role;

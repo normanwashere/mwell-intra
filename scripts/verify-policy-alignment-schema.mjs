@@ -58,6 +58,14 @@ for (const token of [
   'to authenticated, service_role',
   'auth.uid()',
   'core.has_cap',
+  'private.policy_issue_purchase_order',
+  'private.policy_assert_po_vendor_eligible',
+  'private.policy_record_acceptance_pack',
+  'private.policy_prepare_payment_readiness',
+  'private.policy_review_payment_readiness',
+  "v_request.status<>'approved'",
+  'A governed Warehouse receipt is required for goods acceptance',
+  'Payment readiness evidence is incomplete',
 ]) {
   if (!sql.toLowerCase().includes(token.toLowerCase())) failures.push(`missing control: ${token}`);
 }

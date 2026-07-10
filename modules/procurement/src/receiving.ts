@@ -2,7 +2,35 @@
 // side-effect-free so the receive sheet, the localStore mutation, and the
 // vitest specs all run the same clamping rules.
 
-import type { PurchaseOrderLine } from './types';
+import type { AcceptancePack, PaymentReadinessPack, PurchaseOrderLine } from './types';
+
+export interface IssueReadinessInput {
+  poApproved: boolean;
+  sourceAwardApproved: boolean;
+  vendorEligible: boolean;
+}
+
+export function evaluateIssueReadiness(input: IssueReadinessInput): string[] {
+  const blockers: string[] = [];
+  if (!input.poApproved) blockers.push('PO award approval');
+  if (!input.sourceAwardApproved) blockers.push('approved source request');
+  if (!input.vendorEligible) blockers.push('current vendor accreditation or scoped temporary clearance');
+  return blockers;
+}
+
+export function evaluatePaymentReadiness(
+  acceptance: AcceptancePack | undefined,
+  pack: PaymentReadinessPack | undefined,
+): string[] {
+  const blockers: string[] = [];
+  if (!acceptance || acceptance.status === 'superseded') blockers.push('requester or Warehouse acceptance');
+  if (acceptance?.exceptions.length) blockers.push('unresolved acceptance exceptions');
+  if (!pack?.poMatch) blockers.push('PO/receipt/invoice match');
+  if (!pack?.invoiceOrSiReference) blockers.push('invoice, OR, or SI');
+  if (!pack?.milestoneSupportReference) blockers.push('delivery or milestone evidence');
+  if (!pack?.taxWithholdingSupportReference) blockers.push('tax and withholding support');
+  return blockers;
+}
 
 /** Units still expected on a line (never negative). */
 export function outstandingOf(line: PurchaseOrderLine): number {

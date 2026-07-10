@@ -316,6 +316,37 @@ export interface PurchaseOrderReceipt {
   closedPo: boolean;
 }
 
+export interface AcceptancePack {
+  id: string;
+  purchaseOrderId: string;
+  requestId?: string;
+  warehouseReceiptReference?: string;
+  acceptanceType: 'goods' | 'service' | 'milestone';
+  acceptedScope: string;
+  exceptions: string[];
+  acceptedByEmail?: string;
+  acceptedAt: string;
+  documentHash?: string;
+  status: 'accepted' | 'accepted_with_exceptions' | 'superseded';
+}
+
+export interface PaymentReadinessPack {
+  id: string;
+  purchaseOrderId: string;
+  acceptancePackId: string;
+  poMatch: boolean;
+  invoiceOrSiReference?: string;
+  milestoneSupportReference?: string;
+  taxWithholdingSupportReference?: string;
+  status: 'draft' | 'ready_for_finance' | 'returned' | 'accepted' | 'released' | 'superseded';
+  preparedByEmail?: string;
+  preparedAt: string;
+  financeReviewedByEmail?: string;
+  financeReviewedAt?: string;
+  financeNote?: string;
+  correctedFrom?: string;
+}
+
 export interface PurchaseOrder {
   id: string;
   poNumber: string; // human-friendly (PO-2026-0001)
@@ -337,6 +368,10 @@ export interface PurchaseOrder {
   /** Append-only goods receipts (partial receipts supported). Optional so
    *  legacy localStorage rows keep loading. */
   receipts?: PurchaseOrderReceipt[];
+  /** Latest non-superseded requester/Warehouse acceptance record. */
+  acceptancePack?: AcceptancePack;
+  /** Latest non-superseded Finance readiness record. */
+  paymentReadiness?: PaymentReadinessPack;
   /** sum(qty * unitPrice ?? 0). */
   total: number;
 }
