@@ -14,6 +14,8 @@ This matrix is the release source of truth for roadmap items that were not fully
 | Warehouse/requester acceptance and complete evidence before Finance | Procurement payment controls | Acceptance/payment packs and guarded Finance transitions | `policy-payment-readiness.spec.ts`; Warehouse bridge tests |
 | Open records reviewed without rewriting signed evidence | Cutover control | `migrate-policy-review-records.mjs` and remediation queue | Node fixture tests; dry-run report |
 
+The designated-project live gate is `scripts/qa/policy-aligned-live-e2e.mjs`. It refuses to run without an explicit project reference, HTTPS deployment, run ID, and external audit password; mutation mode requires a second opt-in.
+
 | Roadmap ID | Launch requirement | Implementation or control | Automated evidence | Business evidence | Owner | Status |
 | --- | --- | --- | --- | --- | --- | --- |
 | F-013 | Bulk master-data migration/import | Versioned CSV contracts in `docs/import-templates`; cutover dry-run and reconciliation procedure | Import header validator in release checklist; database count/checksum reconciliation | Signed dry-run reconciliation | Data migration lead | Process-ready; execution pending |

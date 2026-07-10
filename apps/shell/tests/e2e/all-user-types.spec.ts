@@ -348,7 +348,8 @@ test.describe('full Mwell Intra user-type E2E', () => {
     test(`demo login: ${profile.title} (${profile.email})`, async ({ page }, testInfo) => {
       test.setTimeout(60_000);
       const consoleIssues = collectConsoleIssues(page);
-      await page.goto('/login?redirect=%2F', { waitUntil: 'domcontentloaded' });
+      await page.goto('/login?redirect=%2F', { waitUntil: 'load' });
+      await expect(page.getByRole('button', { name: /^sign in$/i })).toBeEnabled();
       await page.getByLabel('Email').fill(profile.email);
       await page.getByLabel('Password').fill(DEMO_PASSWORD);
       await page.getByRole('button', { name: /^sign in$/i }).click();
@@ -373,7 +374,7 @@ test.describe('full Mwell Intra user-type E2E', () => {
       for (const route of expectationsFor(persona)) {
         await page.goto(route.path, { waitUntil: 'domcontentloaded' });
         await page.waitForLoadState('networkidle').catch(() => undefined);
-        await page.waitForTimeout(450);
+        await expect.poll(async () => (await page.locator('main').allInnerTexts()).join(' ').trim().length).toBeGreaterThan(20);
         const audit = await auditPage(page);
         expectUsablePage(audit, route.path, testInfo);
         if (route.finalPath) {
@@ -680,17 +681,6 @@ function procurementTiers(roles: Roles): readonly string[] {
   }
   if (proc.includes('finance') || warehouse.includes('finance')) tiers.add('finance');
   if (legal.includes('legal_reviewer')) tiers.add('legal');
-  if (hasCoreRole(roles, 'platform_admin')) {
-    for (const tier of [
-      'dept_head',
-      'procurement_head',
-      'finance',
-      'legal',
-      'final_approver',
-    ]) {
-      tiers.add(tier);
-    }
-  }
   return [...tiers];
 }
 
