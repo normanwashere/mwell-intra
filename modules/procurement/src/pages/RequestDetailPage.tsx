@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Link,
   Navigate,
@@ -50,6 +50,10 @@ import {
   statusLabel,
   stepStatusLabel,
 } from '../labels';
+import {
+  createGovernedAttachmentUrl,
+  type GovernedAccessClient,
+} from '../attachments';
 
 /** Compose a blocking message from an unmet submit-readiness result. */
 function readinessMessage(r: SubmitReadiness): string {
@@ -604,6 +608,32 @@ const STEP_STATUS: Record<
 
 function AttachmentRow({ att }: { att: RequestAttachment }) {
   const sizeKb = (att.sizeBytes / 1024).toFixed(1);
+  const { mode, supabaseClient } = useSession();
+  const { error } = useToast();
+  const [downloading, setDownloading] = useState(false);
+
+  async function downloadLiveAttachment() {
+    if (mode !== 'supabase' || !supabaseClient || !att.storagePath) return;
+    setDownloading(true);
+    try {
+      const prepared = await createGovernedAttachmentUrl(
+        supabaseClient as unknown as GovernedAccessClient,
+        att.id,
+      );
+      const anchor = document.createElement('a');
+      anchor.href = prepared.url;
+      anchor.download = prepared.filename;
+      anchor.rel = 'noopener';
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+    } catch (cause) {
+      error(cause instanceof Error ? cause.message : 'Could not download the attachment.');
+    } finally {
+      setDownloading(false);
+    }
+  }
+
   return (
     <li className="flex items-center justify-between gap-3 rounded-xl border border-line bg-surface p-2">
       <div className="min-w-0">
@@ -628,6 +658,18 @@ function AttachmentRow({ att }: { att: RequestAttachment }) {
           <Icon name="download" className="h-4 w-4" />
           Download
         </a>
+      )}
+      {!att.dataUrl && att.storagePath && (
+        <button
+          type="button"
+          className="btn-ghost btn-sm min-h-11"
+          aria-label={`Download ${att.filename}`}
+          disabled={downloading}
+          onClick={downloadLiveAttachment}
+        >
+          <Icon name="download" className="h-4 w-4" />
+          {downloading ? 'Preparing...' : 'Download'}
+        </button>
       )}
     </li>
   );

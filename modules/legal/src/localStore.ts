@@ -1252,19 +1252,35 @@ export function useVendorInvites(): InvitesAPI {
   const invite = useCallback<InvitesAPI['invite']>(
     (input) => {
       if (isLive(live)) {
-        return liveRpc<InviteVendorRpcResult>(live, 'legal', 'invite_vendor', {
-          email: input.email.trim(),
-          company_name: input.companyName.trim(),
-          category: input.category,
-          actor_email: input.actor,
-          profile: input.profile,
-          origin_country: input.originCountry,
-        }).then((result) => {
-          const inviteRow = result?.invite ?? result;
+        return fetch('/api/legal/vendor-invites', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: input.email.trim(),
+            company_name: input.companyName.trim(),
+            category: input.category,
+            actor_email: input.actor,
+            profile: input.profile,
+            origin_country: input.originCountry,
+          }),
+        }).then(async (response) => {
+          const result = (await response.json().catch(() => ({}))) as
+            | InviteVendorRpcResult
+            | { error?: string };
+          if (!response.ok) {
+            throw new Error(
+              'error' in result && result.error
+                ? result.error
+                : 'Vendor invitation delivery failed.',
+            );
+          }
+          const delivered = result as InviteVendorRpcResult;
+          const inviteRow = delivered?.invite ?? delivered;
           const mapped = {
             ...mapInvite(inviteRow),
-            caseId: inviteRow?.case_id ?? result?.case?.id,
-            vendorId: inviteRow?.vendor_id ?? result?.vendor?.id,
+            caseId: inviteRow?.case_id ?? delivered?.case?.id,
+            vendorId: inviteRow?.vendor_id ?? delivered?.vendor?.id,
           };
           return refreshLive().then(() => mapped);
         });

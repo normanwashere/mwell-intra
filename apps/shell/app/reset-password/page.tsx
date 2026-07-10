@@ -5,7 +5,7 @@
 // useSession().changePassword. Fuller recovery UX can arrive later.
 
 import { useEffect, useState, type FormEvent } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import * as m from 'framer-motion/m';
 import { Button, Card, Field, HeroStat, Icon, Input } from '@intra/ui';
@@ -15,6 +15,14 @@ import { MwellIntraLogo } from '@shell/components/MwellIntraLogo';
 export default function ResetPasswordPage() {
   const { mode, changePassword } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const requestedNext = searchParams?.get('next');
+  const nextPath =
+    requestedNext?.startsWith('/') &&
+    !requestedNext.startsWith('//') &&
+    !requestedNext.includes('://')
+      ? requestedNext
+      : '/';
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +45,7 @@ export default function ResetPasswordPage() {
     try {
       await changePassword(password);
       setDone(true);
-      setTimeout(() => router.replace('/'), 1200);
+      setTimeout(() => router.replace(nextPath), 1200);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not update password.');
     } finally {

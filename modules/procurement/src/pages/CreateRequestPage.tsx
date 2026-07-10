@@ -30,7 +30,6 @@ import {
 } from '@intra/ui';
 import { Guard, useSession } from '@intra/auth';
 import type {
-  RequestAttachment,
   RequestAttachmentKind,
   RequestCategory,
   SourcingMethod,
@@ -46,6 +45,10 @@ import {
   tierLabel,
 } from '../policy';
 import { ATTACHMENT_KIND_LABEL, accreditationLabel } from '../labels';
+import {
+  validateRequestAttachment,
+  type PendingRequestAttachment,
+} from '../attachments';
 
 interface LineDraft {
   key: string;
@@ -70,14 +73,6 @@ function toNumber(v: string): number | undefined {
   return Number.isFinite(n) && n > 0 ? n : undefined;
 }
 
-const ALLOWED_MIME = new Set([
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-  'application/pdf',
-]);
-const MAX_BYTES = 10 * 1024 * 1024;
-
 const ALL_SOURCING: SourcingMethod[] = [
   'petty_cash',
   'small_purchase',
@@ -99,17 +94,6 @@ const KIND_OPTIONS: RequestAttachmentKind[] = [
   'brochure',
   'other',
 ];
-
-function readAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result ?? ''));
-    reader.onerror = () => reject(reader.error ?? new Error('read failed'));
-    reader.readAsDataURL(file);
-  });
-}
-
-type PendingAttachment = Omit<RequestAttachment, 'id' | 'uploadedAt'>;
 
 type StepN = 1 | 2 | 3;
 const STEPS = [
@@ -155,8 +139,7 @@ export function CreateRequestPage() {
   const [directAwardReason, setDirectAwardReason] = useState('');
   const [priceReasonableness, setPriceReasonableness] = useState('');
 
-  const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
-  const [uploading, setUploading] = useState(false);
+  const [attachments, setAttachments] = useState<PendingRequestAttachment[]>([]);
 
   const total = useMemo(
     () =>
@@ -228,36 +211,25 @@ export function CreateRequestPage() {
     setLines((prev) => (prev.length === 1 ? prev : prev.filter((l) => l.key !== key)));
   }
 
-  async function handleAttachmentPick(e: ChangeEvent<HTMLInputElement>) {
+  function handleAttachmentPick(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = ''; // allow re-picking the same file
     if (!file) return;
-    if (!ALLOWED_MIME.has(file.type)) {
-      error(`Unsupported file type (${file.type || 'unknown'}). Allowed: JPEG, PNG, WebP, PDF.`);
-      return;
-    }
-    if (file.size > MAX_BYTES) {
-      error(`File too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Max 10 MB.`);
-      return;
-    }
-    setUploading(true);
     try {
-      const dataUrl = await readAsDataUrl(file);
+      validateRequestAttachment(file);
       setAttachments((prev) => [
         ...prev,
         {
+          file,
           filename: file.name,
           mimeType: file.type,
           sizeBytes: file.size,
-          dataUrl,
           uploadedByEmail: profile?.email,
           kind: 'other',
         },
       ]);
     } catch (err) {
-      error(err instanceof Error ? err.message : 'Could not read the file.');
-    } finally {
-      setUploading(false);
+      error(err instanceof Error ? err.message : 'Could not use the selected file.');
     }
   }
 
@@ -740,11 +712,10 @@ export function CreateRequestPage() {
                       type="file"
                       accept="image/jpeg,image/png,image/webp,application/pdf"
                       className="sr-only"
-                      disabled={uploading}
                       onChange={handleAttachmentPick}
                     />
                     <Icon name="plus" className="h-4 w-4" />
-                    {uploading ? 'Reading…' : 'Add file'}
+                    Add file
                   </label>
                 </div>
 

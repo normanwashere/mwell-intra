@@ -41,6 +41,13 @@ import {
 import { applyReceipt, type ReceiptLineInput } from './receiving';
 import { buildProcurementSeed } from './seed';
 import { mergeVendorsWithLegal } from './accreditationBridge';
+import {
+  attachmentMetadataForRpc,
+  materializeMemoryAttachments,
+  removeUploadedRequestAttachments,
+  uploadRequestAttachments,
+  type PendingRequestAttachment,
+} from './attachments';
 
 type MaybePromise<T> = T | Promise<T>;
 type LiveClient = NonNullable<ReturnType<typeof useSession>['supabaseClient']>;
@@ -491,7 +498,7 @@ export interface NewRequestInput {
   sourcingMethod?: SourcingMethod;
   sourcingOverride?: boolean;
   justification?: ProcurementRequest['justification'];
-  attachments?: Array<Omit<RequestAttachment, 'id' | 'uploadedAt'>>;
+  attachments?: PendingRequestAttachment[];
   compliance?: ProcurementRequest['compliance'];
 }
 
@@ -565,7 +572,7 @@ export function useProcurementRequests(): ProcurementRequestsAPI {
   }, [refreshRequests, refreshSteps]);
 
   const add = useCallback(
-    (input: NewRequestInput): MaybePromise<ProcurementRequest> => {
+    async (input: NewRequestInput): Promise<ProcurementRequest> => {
       const lines: ProcurementRequestLine[] = input.lines.map((l) => ({
         ...l,
         id: newId('rl'),
@@ -577,13 +584,12 @@ export function useProcurementRequests(): ProcurementRequestsAPI {
         category: input.category,
         amount: estimatedAmount,
       });
-      const attachments: RequestAttachment[] | undefined = input.attachments?.map((a) => ({
-        ...a,
-        id: newId('att'),
-        uploadedAt: nowIso(),
-      }));
+      const requestId = newId('req');
+      const attachments: RequestAttachment[] = isLive(live)
+        ? await uploadRequestAttachments(live, requestId, input.attachments ?? [])
+        : await materializeMemoryAttachments(input.attachments ?? []);
       const next: ProcurementRequest = {
-        id: newId('req'),
+        id: requestId,
         createdAt: nowIso(),
         status: 'draft',
         title: input.title,
@@ -605,34 +611,45 @@ export function useProcurementRequests(): ProcurementRequestsAPI {
           input.sourcingOverride ??
           (input.sourcingMethod !== undefined && input.sourcingMethod !== suggested),
         justification: input.justification,
-        attachments,
+        attachments: attachments.length > 0 ? attachments : undefined,
         compliance: input.compliance,
       };
       if (isLive(live)) {
-        return liveRpc<LiveRow>(live, 'procurement', 'create_request', {
-          title: next.title,
-          description: next.description,
-          department: next.department,
-          cost_center: next.costCenter,
-          project_code: next.projectCode,
-          budget_code: next.budgetCode,
-          needed_by: next.neededBy,
-          vendor_id: next.vendorId,
-          vendor_name: next.vendorName,
-          requester_name: next.requesterName,
-          requester_email: next.requesterEmail,
-          lines: next.lines,
-          estimated_amount: next.estimatedAmount,
-          category: next.category,
-          sourcing_method: next.sourcingMethod,
-          sourcing_override: next.sourcingOverride,
-          justification: next.justification,
-          attachments: next.attachments,
-          compliance: next.compliance,
-        }).then((row) => {
+        try {
+          const row = await liveRpc<LiveRow>(live, 'procurement', 'create_request', {
+            id: next.id,
+            title: next.title,
+            description: next.description,
+            department: next.department,
+            cost_center: next.costCenter,
+            project_code: next.projectCode,
+            budget_code: next.budgetCode,
+            needed_by: next.neededBy,
+            vendor_id: next.vendorId,
+            vendor_name: next.vendorName,
+            requester_name: next.requesterName,
+            requester_email: next.requesterEmail,
+            lines: next.lines,
+            estimated_amount: next.estimatedAmount,
+            category: next.category,
+            sourcing_method: next.sourcingMethod,
+            sourcing_override: next.sourcingOverride,
+            justification: next.justification,
+            attachments: attachments.map(attachmentMetadataForRpc),
+            compliance: next.compliance,
+          });
           const mapped = mapRequest(row);
-          return refreshLive().then(() => mapped);
-        }) as MaybePromise<ProcurementRequest>;
+          await refreshLive();
+          return mapped;
+        } catch (error) {
+          await removeUploadedRequestAttachments(
+            live,
+            attachments.flatMap((attachment) =>
+              attachment.storagePath ? [attachment.storagePath] : [],
+            ),
+          ).catch(() => undefined);
+          throw error;
+        }
       }
       set([next, ...safeRead<ProcurementRequest>(REQ_KEY)]);
       return next;

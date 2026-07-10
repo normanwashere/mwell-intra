@@ -56,7 +56,7 @@ const STEPS = [
 
 export function InviteVendorPage() {
   const navigate = useNavigate();
-  const { profile: session } = useSession();
+  const { profile: session, mode } = useSession();
   const { success, error } = useToast();
   const { invite } = useVendorInvites();
   const { addCase } = useAccreditationCases();
@@ -484,16 +484,17 @@ export function InviteVendorPage() {
           )}
         </div>
 
-        {/* Dev-meta copy demoted behind the Demo chip's (i) (LG-2). */}
-        <p className="flex items-center gap-1 text-xs text-muted">
-          <span className="chip bg-amber-500/15 text-amber-800 dark:text-amber-300">
-            Demo
-          </span>
-          <InfoTip
-            label="About demo invites"
-            content="Preview build: no email is actually sent. In production the invite lands in the vendor's inbox with a magic-link that spawns their profile and this case. In demo mode the invited email can sign in directly and is scoped to this case."
-          />
-        </p>
+        {mode === 'memory' && (
+          <p className="flex items-center gap-1 text-xs text-muted">
+            <span className="chip bg-amber-500/15 text-amber-800 dark:text-amber-300">
+              Demo
+            </span>
+            <InfoTip
+              label="About demo invites"
+              content="No email is sent in local demo mode. The invited address is available only inside this browser session."
+            />
+          </p>
+        )}
       </div>
     </Guard>
   );

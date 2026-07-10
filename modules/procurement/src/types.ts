@@ -138,9 +138,12 @@ export interface RequestAttachment {
   filename: string;
   mimeType: string;
   sizeBytes: number;
-  /** Base64 data-URL captured in preview builds; live builds hand back a
-   *  storage object path via core.register_document instead. */
+  /** Base64 data URL exists only in explicit memory/demo mode. */
   dataUrl?: string;
+  /** Private object path in the procurement-requests Storage bucket. */
+  storagePath?: string;
+  /** SHA-256 digest of the uploaded bytes for evidence integrity checks. */
+  sha256?: string;
   uploadedAt: string;
   uploadedByEmail?: string;
   /** Optional tag so we can render "budget evidence" vs "brochure" etc.
