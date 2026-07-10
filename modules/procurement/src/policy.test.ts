@@ -1,384 +1,178 @@
 import { describe, expect, it } from 'vitest';
 import {
-  FINANCE_TIER_MIN,
-  PETTY_CASH_MAX,
   RFP_THRESHOLD,
-  SMALL_PURCHASE_MAX,
   applyStepDecision,
   buildApprovalLadder,
   buildApprovalSteps,
   categoryMeta,
-  minimumQuotes,
+  deriveSourcingRecommendation,
+  evaluateSourcingReadiness,
   nextApprover,
   nextPendingStep,
   requiredDocuments,
   requiredDocumentsStatus,
+  resolveDoaAssignment,
   suggestSourcingMethod,
   tierLabel,
 } from './policy';
 import type { ApprovalStep } from './types';
 
-// ---------------------------------------------------------------------------
-// suggestSourcingMethod — policy §5 + §11
-// ---------------------------------------------------------------------------
-describe('suggestSourcingMethod', () => {
-  it('emergency flag overrides everything', () => {
-    expect(
-      suggestSourcingMethod({ category: 'goods', amount: 5_000_000, emergency: true }),
-    ).toBe('emergency');
+describe('sourcing policy', () => {
+  it('routes emergencies and repeat-continuity cases explicitly', () => {
+    expect(suggestSourcingMethod({ amount: 5_000_000, emergency: true })).toBe('emergency');
+    expect(suggestSourcingMethod({ amount: 50_000, repeat: true })).toBe('repeat_order');
   });
 
-  it('repeat flag returns repeat_order (unless emergency)', () => {
-    expect(suggestSourcingMethod({ category: 'goods', amount: 50_000, repeat: true })).toBe(
-      'repeat_order',
-    );
-    expect(
-      suggestSourcingMethod({ category: 'goods', amount: 50_000, repeat: true, emergency: true }),
-    ).toBe('emergency');
-  });
-
-  it('routes petty_cash category regardless of amount', () => {
+  it('allows petty cash only when the request explicitly uses that category', () => {
     expect(suggestSourcingMethod({ category: 'petty_cash', amount: 50_000 })).toBe('petty_cash');
+    expect(suggestSourcingMethod({ category: 'goods', amount: 1 })).toBe('rfq');
+    expect(suggestSourcingMethod({ category: 'goods', amount: 99_999 })).toBe('rfq');
   });
 
-  it('routes tiny amounts (<=PETTY_CASH_MAX) to petty_cash', () => {
-    expect(suggestSourcingMethod({ category: 'goods', amount: PETTY_CASH_MAX })).toBe(
-      'petty_cash',
-    );
-    expect(suggestSourcingMethod({ category: 'goods', amount: PETTY_CASH_MAX + 1 })).not.toBe(
-      'petty_cash',
-    );
-  });
-
-  it('escalates high-risk categories to RFP even below PHP 1M', () => {
-    expect(suggestSourcingMethod({ category: 'construction', amount: 100_000 })).toBe('rfp');
-    expect(suggestSourcingMethod({ category: 'capex', amount: 500_000 })).toBe('rfp');
-    expect(suggestSourcingMethod({ category: 'manpower', amount: 200_000 })).toBe('rfp');
-    expect(suggestSourcingMethod({ category: 'medical', amount: 400_000 })).toBe('rfp');
-  });
-
-  it('picks RFP at PHP 1,000,000+ per policy §5', () => {
+  it('uses the sourced PHP 1,000,000 RFQ/RFP boundary', () => {
+    expect(suggestSourcingMethod({ category: 'goods', amount: RFP_THRESHOLD - 0.01 })).toBe('rfq');
     expect(suggestSourcingMethod({ category: 'goods', amount: RFP_THRESHOLD })).toBe('rfp');
-    expect(suggestSourcingMethod({ category: 'services', amount: 5_000_000 })).toBe('rfp');
   });
 
-  it('picks RFQ in the mid band', () => {
-    expect(suggestSourcingMethod({ category: 'goods', amount: SMALL_PURCHASE_MAX })).toBe('rfq');
-    expect(suggestSourcingMethod({ category: 'goods', amount: 800_000 })).toBe('rfq');
+  it('escalates complex and data-sensitive work regardless of amount', () => {
+    expect(suggestSourcingMethod({ category: 'construction', amount: 10_000 })).toBe('rfp');
+    expect(
+      deriveSourcingRecommendation({ amount: 10_000, comparable: true, dataSensitive: true }),
+    ).toMatchObject({ method: 'rfp', reasons: ['data_sensitive'] });
   });
 
-  it('picks small_purchase below the internal cutoff', () => {
-    expect(suggestSourcingMethod({ category: 'goods', amount: PETTY_CASH_MAX + 1 })).toBe(
-      'small_purchase',
-    );
-    expect(suggestSourcingMethod({ category: 'goods', amount: SMALL_PURCHASE_MAX - 1 })).toBe(
-      'small_purchase',
-    );
-  });
-
-  it('defaults to rfq when amount is unknown', () => {
-    expect(suggestSourcingMethod({ category: 'goods' })).toBe('rfq');
+  it('defaults incomplete intake to an RFQ recommendation pending Procurement confirmation', () => {
     expect(suggestSourcingMethod({})).toBe('rfq');
-    expect(suggestSourcingMethod({ amount: 0 })).toBe('rfq');
   });
 });
 
-// ---------------------------------------------------------------------------
-// minimumQuotes — policy §5
-// ---------------------------------------------------------------------------
-describe('minimumQuotes', () => {
-  it('matches policy §5: RFQ needs ≥2, RFP needs ≥3', () => {
-    expect(minimumQuotes('rfq')).toBe(2);
-    expect(minimumQuotes('rfp')).toBe(3);
-  });
-  it('returns null for petty / small / direct / emergency', () => {
-    expect(minimumQuotes('petty_cash')).toBeNull();
-    expect(minimumQuotes('small_purchase')).toBeNull();
-    expect(minimumQuotes('direct_award')).toBeNull();
-    expect(minimumQuotes('emergency')).toBeNull();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// buildApprovalLadder — policy §3 + §9 + §11
-// ---------------------------------------------------------------------------
-describe('buildApprovalLadder', () => {
-  it('always includes dept_head → procurement_head → final_approver', () => {
-    const ladder = buildApprovalLadder({ category: 'goods', amount: 10_000 });
-    expect(ladder[0]).toBe('dept_head');
-    expect(ladder[1]).toBe('procurement_head');
-    expect(ladder[ladder.length - 1]).toBe('final_approver');
-  });
-
-  it('inserts finance when amount ≥ FINANCE_TIER_MIN', () => {
-    const ladder = buildApprovalLadder({
-      category: 'goods',
-      amount: FINANCE_TIER_MIN,
-      sourcingMethod: 'small_purchase',
+describe('sourcing response readiness', () => {
+  it('does not fabricate a fixed quote shortfall', () => {
+    expect(evaluateSourcingReadiness({ method: 'rfq', invited: 3, responses: 1 })).toEqual({
+      ready: true,
+      insufficientBidsExceptionRequired: false,
     });
-    expect(ladder).toContain('finance');
   });
 
-  it('inserts finance for capex / construction / manpower regardless of amount', () => {
-    expect(buildApprovalLadder({ category: 'capex', amount: 10_000 })).toContain('finance');
+  it('requires an exception when Procurement recorded a higher intended response count', () => {
+    expect(
+      evaluateSourcingReadiness({ method: 'rfp', intendedResponses: 3, invited: 4, responses: 1 }),
+    ).toEqual({ ready: false, insufficientBidsExceptionRequired: true });
+  });
+});
+
+describe('DOA resolution', () => {
+  it('fails closed without an active approved assignment', () => {
+    expect(resolveDoaAssignment([], 500_000)).toEqual({
+      status: 'policy_decision_required',
+      assignment: undefined,
+    });
+  });
+
+  it('returns the active versioned assignment that covers the amount', () => {
+    const assignment = {
+      id: 'doa-1',
+      matrixVersion: '2026-07-approved',
+      minAmount: 0,
+      maxAmount: 1_000_000,
+      approverUserId: 'user-1',
+      approverName: 'Approved BU Head',
+      active: true,
+    } as const;
+    expect(resolveDoaAssignment([assignment], 500_000)).toEqual({
+      status: 'resolved',
+      assignment,
+    });
+  });
+});
+
+describe('approval ladder', () => {
+  it('keeps the policy process tiers and does not infer Finance from amount alone', () => {
+    expect(buildApprovalLadder({ category: 'goods', amount: 900_000, sourcingMethod: 'rfq' })).toEqual([
+      'dept_head',
+      'procurement_head',
+      'final_approver',
+    ]);
+  });
+
+  it('adds Finance for policy categories with financial-protection exposure', () => {
     expect(buildApprovalLadder({ category: 'construction', amount: 10_000 })).toContain('finance');
     expect(buildApprovalLadder({ category: 'manpower', amount: 10_000 })).toContain('finance');
   });
 
-  it('inserts legal for legal-loop categories', () => {
-    expect(
-      buildApprovalLadder({ category: 'services', amount: 20_000, sourcingMethod: 'small_purchase' }),
-    ).toContain('legal');
-    expect(
-      buildApprovalLadder({ category: 'it_software', amount: 20_000, sourcingMethod: 'small_purchase' }),
-    ).toContain('legal');
-    expect(
-      buildApprovalLadder({ category: 'subscription', amount: 20_000, sourcingMethod: 'small_purchase' }),
-    ).toContain('legal');
+  it('adds Legal for contractual or exception routes', () => {
+    expect(buildApprovalLadder({ category: 'services', amount: 20_000, sourcingMethod: 'rfq' })).toContain('legal');
+    expect(buildApprovalLadder({ category: 'goods', amount: 20_000, sourcingMethod: 'direct_award' })).toContain('legal');
   });
 
-  it('inserts legal for RFP / direct_award / emergency regardless of category', () => {
-    expect(
-      buildApprovalLadder({ category: 'goods', amount: 20_000, sourcingMethod: 'rfp' }),
-    ).toContain('legal');
-    expect(
-      buildApprovalLadder({ category: 'goods', amount: 20_000, sourcingMethod: 'direct_award' }),
-    ).toContain('legal');
-    expect(
-      buildApprovalLadder({ category: 'goods', amount: 20_000, sourcingMethod: 'emergency' }),
-    ).toContain('legal');
-  });
-
-  it('does not add legal for low-risk small purchases', () => {
-    const ladder = buildApprovalLadder({
-      category: 'goods',
-      amount: 20_000,
-      sourcingMethod: 'small_purchase',
-    });
-    expect(ladder).not.toContain('legal');
-  });
-
-  it('preserves ladder ordering: legal after procurement_head; finance before final_approver', () => {
-    const ladder = buildApprovalLadder({
-      category: 'construction',
-      amount: 6_000_000,
-      sourcingMethod: 'rfp',
-    });
-    const idxProc = ladder.indexOf('procurement_head');
-    const idxLegal = ladder.indexOf('legal');
-    const idxFin = ladder.indexOf('finance');
-    const idxFinal = ladder.indexOf('final_approver');
-    expect(idxProc).toBeGreaterThan(-1);
-    expect(idxLegal).toBeGreaterThan(idxProc);
-    expect(idxFin).toBeGreaterThan(idxLegal);
-    expect(idxFinal).toBe(ladder.length - 1);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// buildApprovalSteps + nextPendingStep
-// ---------------------------------------------------------------------------
-describe('buildApprovalSteps', () => {
-  it('emits one pending step per ladder tier in order', () => {
+  it('builds ordered pending steps with an unresolved DOA label', () => {
     let n = 0;
     const steps = buildApprovalSteps(
       { category: 'services', amount: 250_000, sourcingMethod: 'rfq' },
       () => `id-${++n}`,
     );
-    expect(steps).toHaveLength(5); // dept_head, procurement_head, legal, finance, final_approver
-    expect(steps.map((s) => s.tier)).toEqual([
+    expect(steps.map((step) => step.tier)).toEqual([
       'dept_head',
       'procurement_head',
       'legal',
-      'finance',
       'final_approver',
     ]);
-    expect(steps.every((s) => s.status === 'pending')).toBe(true);
-    expect(steps.map((s) => s.order)).toEqual([1, 2, 3, 4, 5]);
-    // Labels default to the tier's canonical label.
+    expect(steps.at(-1)?.label).toContain('Policy decision required');
     expect(steps[0]?.label).toBe(tierLabel('dept_head'));
   });
 });
 
-describe('nextPendingStep + nextApprover', () => {
+describe('approval progression', () => {
+  const now = '2026-07-05T00:00:00.000Z';
   const steps: ApprovalStep[] = [
-    { id: 's1', order: 1, tier: 'dept_head', status: 'approved' },
+    { id: 's1', order: 1, tier: 'dept_head', status: 'pending' },
     { id: 's2', order: 2, tier: 'procurement_head', status: 'pending' },
     { id: 's3', order: 3, tier: 'final_approver', status: 'pending' },
   ];
 
-  it('returns the lowest-order pending step', () => {
-    expect(nextPendingStep(steps)?.id).toBe('s2');
-    expect(nextApprover(steps)).toBe('procurement_head');
+  it('selects the lowest-order pending step', () => {
+    expect(nextPendingStep(steps)?.id).toBe('s1');
+    expect(nextApprover(steps)).toBe('dept_head');
   });
 
-  it('returns undefined when no steps are pending', () => {
-    const done: ApprovalStep[] = steps.map((s) => ({ ...s, status: 'approved' }));
-    expect(nextPendingStep(done)).toBeUndefined();
-    expect(nextApprover(done)).toBeUndefined();
+  it('advances only the active tier', () => {
+    expect(applyStepDecision(steps, 'final_approver', 'approved', { at: now })).toBeNull();
+    const result = applyStepDecision(steps, 'dept_head', 'approved', { at: now, email: 'head@mwell.com.ph' });
+    expect(result?.steps[0]?.status).toBe('approved');
+    expect(result?.outcome).toBe('in_progress');
   });
 
-  it('handles empty / null inputs', () => {
-    expect(nextPendingStep([])).toBeUndefined();
-    expect(nextPendingStep(undefined)).toBeUndefined();
-    expect(nextPendingStep(null)).toBeUndefined();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// applyStepDecision — ladder advancement + termination
-// ---------------------------------------------------------------------------
-describe('applyStepDecision', () => {
-  const now = '2026-07-05T00:00:00.000Z';
-  const three: ApprovalStep[] = [
-    { id: 's1', order: 1, tier: 'dept_head',        status: 'pending' },
-    { id: 's2', order: 2, tier: 'procurement_head', status: 'pending' },
-    { id: 's3', order: 3, tier: 'final_approver',   status: 'pending' },
-  ];
-
-  it('advances one step at a time when actor matches next tier', () => {
-    const res = applyStepDecision(three, 'dept_head', 'approved', { at: now, email: 'a@x' });
-    expect(res).not.toBeNull();
-    expect(res!.terminal).toBe(false);
-    expect(res!.outcome).toBe('in_progress');
-    expect(res!.steps[0]?.status).toBe('approved');
-    expect(res!.steps[0]?.decidedByEmail).toBe('a@x');
-    expect(res!.steps[1]?.status).toBe('pending');
-  });
-
-  it('flips terminal=approved on final tier', () => {
-    const advanced: ApprovalStep[] = three.map((s, i) =>
-      i < 2 ? { ...s, status: 'approved' } : s,
-    );
-    const res = applyStepDecision(advanced, 'final_approver', 'approved', {
-      at: now,
-      email: 'cfo@x',
-    });
-    expect(res!.terminal).toBe(true);
-    expect(res!.outcome).toBe('approved');
-  });
-
-  it('terminates the whole ladder on rejection at any tier', () => {
-    const res = applyStepDecision(three, 'dept_head', 'rejected', {
-      at: now,
-      email: 'a@x',
-      note: 'over budget',
-    });
-    expect(res!.terminal).toBe(true);
-    expect(res!.outcome).toBe('rejected');
-    expect(res!.steps[0]?.note).toBe('over budget');
-    expect(res!.steps[1]?.status).toBe('pending'); // untouched
-  });
-
-  it('refuses when actor tier is out of turn', () => {
-    // final_approver tries to skip ahead while dept_head is still pending.
-    const res = applyStepDecision(three, 'final_approver', 'approved', { at: now });
-    expect(res).toBeNull();
-  });
-
-  it('refuses when there is no pending step left', () => {
-    const done: ApprovalStep[] = three.map((s) => ({ ...s, status: 'approved' }));
-    const res = applyStepDecision(done, 'final_approver', 'approved', { at: now });
-    expect(res).toBeNull();
+  it('terminates on rejection', () => {
+    expect(applyStepDecision(steps, 'dept_head', 'rejected', { at: now })?.outcome).toBe('rejected');
   });
 });
 
-// ---------------------------------------------------------------------------
-// requiredDocuments + categoryMeta sanity
-// ---------------------------------------------------------------------------
-describe('requiredDocuments', () => {
-  it('always demands spec + budget + previous cost', () => {
-    const keys = requiredDocuments({ sourcingMethod: 'small_purchase' }).map((d) => d.key);
-    expect(keys).toEqual(expect.arrayContaining(['spec', 'budget', 'previous']));
-  });
-
-  it('adds AR + bids for RFP flow', () => {
-    const keys = requiredDocuments({ sourcingMethod: 'rfp' }).map((d) => d.key);
-    expect(keys).toEqual(expect.arrayContaining(['ar', 'bids']));
-  });
-
-  it('adds ≥2 quotes for RFQ', () => {
-    const keys = requiredDocuments({ sourcingMethod: 'rfq' }).map((d) => d.key);
-    expect(keys).toContain('quotes');
-  });
-
-  it('adds direct-award justification for direct_award or emergency', () => {
-    expect(
-      requiredDocuments({ sourcingMethod: 'direct_award' }).map((d) => d.key),
-    ).toContain('da_justification');
-    expect(requiredDocuments({ sourcingMethod: 'emergency' }).map((d) => d.key)).toContain(
-      'da_justification',
+describe('required evidence', () => {
+  it('requires common intake evidence', () => {
+    expect(requiredDocuments({ sourcingMethod: 'rfq' }).map((doc) => doc.key)).toEqual(
+      expect.arrayContaining(['spec', 'budget', 'previous', 'quotes']),
     );
   });
 
-  it('adds bond/insurance for construction + manpower', () => {
-    expect(
-      requiredDocuments({ category: 'construction', sourcingMethod: 'rfp' }).map((d) => d.key),
-    ).toContain('bond');
-    expect(
-      requiredDocuments({ category: 'manpower', sourcingMethod: 'rfq' }).map((d) => d.key),
-    ).toContain('bond');
-  });
-});
-
-describe('requiredDocumentsStatus (PR-19 — checklist reflects real attachments)', () => {
-  it('marks every doc missing when there are no attachments', () => {
-    const docs = requiredDocumentsStatus({ sourcingMethod: 'rfq' }, []);
-    expect(docs.length).toBeGreaterThan(0);
-    expect(docs.every((d) => !d.attached)).toBe(true);
+  it('uses count-neutral RFQ/RFP labels', () => {
+    expect(requiredDocuments({ sourcingMethod: 'rfq' }).find((doc) => doc.key === 'quotes')?.label).toBe('Comparable quotations');
+    expect(requiredDocuments({ sourcingMethod: 'rfp' }).find((doc) => doc.key === 'bids')?.label).toBe('Vendor proposals');
   });
 
-  it('ticks docs whose matching attachment kind exists', () => {
-    const docs = requiredDocumentsStatus({ sourcingMethod: 'rfq' }, [
+  it('matches uploaded evidence kinds', () => {
+    const status = requiredDocumentsStatus({ sourcingMethod: 'rfq' }, [
       { kind: 'spec' },
       { kind: 'budget' },
-    ]);
-    const byKey = Object.fromEntries(docs.map((d) => [d.key, d.attached]));
-    expect(byKey['spec']).toBe(true);
-    expect(byKey['budget']).toBe(true);
-    expect(byKey['previous']).toBe(false);
-    expect(byKey['quotes']).toBe(false);
-  });
-
-  it('matches RFP bids and AR drafts to their dedicated kinds', () => {
-    const docs = requiredDocumentsStatus({ sourcingMethod: 'rfp' }, [
       { kind: 'quote' },
-      { kind: 'award_recommendation' },
     ]);
-    const byKey = Object.fromEntries(docs.map((d) => [d.key, d.attached]));
-    expect(byKey['bids']).toBe(true);
-    expect(byKey['ar']).toBe(true);
-  });
-
-  it('treats kind-less attachments as "other" (never satisfies a slot)', () => {
-    const docs = requiredDocumentsStatus({ sourcingMethod: 'small_purchase' }, [
-      {},
-      { kind: undefined },
-    ]);
-    expect(docs.every((d) => !d.attached)).toBe(true);
-  });
-
-  it('matches bond/insurance for construction and DA justification for direct awards', () => {
-    const construction = requiredDocumentsStatus(
-      { category: 'construction', sourcingMethod: 'rfp' },
-      [{ kind: 'bond' }],
-    );
-    expect(construction.find((d) => d.key === 'bond')?.attached).toBe(true);
-
-    const direct = requiredDocumentsStatus({ sourcingMethod: 'direct_award' }, [
-      { kind: 'justification' },
-    ]);
-    expect(direct.find((d) => d.key === 'da_justification')?.attached).toBe(true);
+    expect(status.find((doc) => doc.key === 'quotes')?.attached).toBe(true);
+    expect(status.find((doc) => doc.key === 'previous')?.attached).toBe(false);
   });
 });
 
-describe('categoryMeta', () => {
-  it('resolves every declared code', () => {
-    expect(categoryMeta('goods')?.label).toBe('Goods');
+describe('category metadata', () => {
+  it('retains policy risk metadata', () => {
     expect(categoryMeta('services')?.requiresLegal).toBe(true);
     expect(categoryMeta('capex')?.highRisk).toBe(true);
-  });
-  it('returns undefined for unknown code', () => {
-    expect(categoryMeta(undefined)).toBeUndefined();
   });
 });

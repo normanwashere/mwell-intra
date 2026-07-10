@@ -37,7 +37,6 @@ import {
 import {
   categoryMeta,
   evaluateSubmitReadiness,
-  minimumQuotes,
   requiredDocumentsStatus,
   sourcingMethodLabel,
   tierLabel,
@@ -60,11 +59,6 @@ function readinessMessage(r: SubmitReadiness): string {
   const parts: string[] = [];
   if (r.missingDocs.length > 0) {
     parts.push(`attach ${r.missingDocs.join(', ')}`);
-  }
-  if (r.quoteShortfall > 0) {
-    parts.push(
-      `add ${r.quoteShortfall} more comparable quote${r.quoteShortfall === 1 ? '' : 's'}`,
-    );
   }
   return `Can't submit yet — ${parts.join('; ')}.`;
 }
@@ -273,8 +267,6 @@ export function RequestDetailPage() {
       )
     : [];
   const missingDocs = reqDocs.filter((d) => !d.attached);
-  const minQuotes = req.sourcingMethod ? minimumQuotes(req.sourcingMethod) : null;
-
   // PR-20: the 10-tile meta grid collapses to one muted line; the full
   // record lives behind the (i).
   const metaLine = [
@@ -449,10 +441,10 @@ export function RequestDetailPage() {
                 attach and tag {missingDocs.length === 1 ? 'it' : 'them'} so approvers see a complete pack.
               </p>
             )}
-            {minQuotes != null && (
+            {(req.sourcingMethod === 'rfp' || req.sourcingMethod === 'rfq') && (
               <p className="mt-3 rounded-lg bg-inset px-3 py-2 text-xs text-muted">
                 <Icon name="info" className="mr-1 inline h-3.5 w-3.5" />
-                {minQuotes} comparable {req.sourcingMethod === 'rfp' ? 'proposals' : 'quotations'} required.
+                Procurement must record invited vendors, responses, and any approved insufficient-bids exception.
               </p>
             )}
           </Card>

@@ -29,7 +29,6 @@ export function resolveTiers(
   const tiers = new Set<ApproverTier>();
   const proc = userRoles.procurement ?? [];
   const legal = userRoles.legal ?? [];
-  const core = userRoles.core ?? [];
   const warehouse = userRoles.warehouse ?? [];
 
   // procurement:approver acts as the Department Head / BU SPOC tier — the
@@ -56,13 +55,6 @@ export function resolveTiers(
   if (legal.includes('legal_reviewer')) {
     tiers.add('legal');
   }
-  // Platform admins act as system-of-last-resort across every tier.
-  if (core.includes('platform_admin')) {
-    (
-      ['dept_head', 'procurement_head', 'finance', 'legal', 'final_approver'] as ApproverTier[]
-    ).forEach((t) => tiers.add(t));
-  }
-
   return Array.from(tiers);
 }
 

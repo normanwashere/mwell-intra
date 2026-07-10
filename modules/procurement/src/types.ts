@@ -165,14 +165,18 @@ export type RequestAttachmentKind =
   | 'other';
 
 /** Vendor / bidding compliance flags surfaced on the request per policy §7
- *  (accreditation) + §5 (RFP quorum) + §11 (direct-award justification). All
+ *  (accreditation) + §5 (sourcing effort) + §11 (direct-award justification). All
  *  optional so drafts stay valid; the RequestDetail page prompts when they're
  *  missing on submit. */
 export interface ComplianceChecks {
   /** True when the request explicitly requires an accredited vendor. */
   vendorAccreditationRequired?: boolean;
-  /** ≥3 comparable quotations gathered for RFP flow (policy §5). */
+  /** Legacy preview field. It cannot authorize a live submission or award. */
   rfpQuorumMet?: boolean;
+  intendedResponses?: number;
+  vendorsInvited?: number;
+  responsesReceived?: number;
+  insufficientBidsExceptionApproved?: boolean;
   /** Free-text reference (e.g. PhilGEPS notice #) captured when applicable. */
   philgepsReference?: string;
   /** Direct-award reason (policy Annex C). Only rendered when sourcing is

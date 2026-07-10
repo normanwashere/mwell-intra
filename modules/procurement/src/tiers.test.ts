@@ -25,8 +25,8 @@ describe('resolveTiers', () => {
     expect(resolveTiers({ warehouse: ['finance'] })).toEqual(['finance']);
   });
 
-  it('core:platform_admin resolves to every tier', () => {
-    expect(resolveTiers({ core: ['platform_admin'] })).toHaveLength(5);
+  it('does not grant department approval authority to platform administrators', () => {
+    expect(resolveTiers({ core: ['platform_admin'] })).toEqual([]);
   });
 
   it('returns [] for empty / null / role-less sessions', () => {
@@ -45,7 +45,7 @@ describe('canEnterProcurement (module gate, PR-11)', () => {
 
   it('admits tier-eligible users without a procurement role (Andre the legal reviewer)', () => {
     expect(canEnterProcurement({ legal: ['legal_reviewer'], core: ['staff'] })).toBe(true);
-    expect(canEnterProcurement({ core: ['platform_admin'] })).toBe(true);
+    expect(canEnterProcurement({ core: ['platform_admin'] })).toBe(false);
     expect(canEnterProcurement({ warehouse: ['finance'] })).toBe(true);
   });
 

@@ -487,7 +487,7 @@ export function buildProcurementSeed(now: Date = new Date()): ProcurementSeed {
     neededByDays: 14,
     createdDaysAgo: 18,
     lines: [{ description: 'Enterprise tier subscription (annual)', quantity: 1, uom: 'yr', unitPrice: 950000 }],
-    ladder: { startDaysAgo: 14, approveCount: 4 },
+    ladder: { startDaysAgo: 14, approveCount: 3 },
   });
 
   // ── Fully approved (feed the POs below) ──────────────────────────────────

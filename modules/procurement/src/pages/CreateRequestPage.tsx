@@ -38,7 +38,6 @@ import { useProcurementRequests, useProcurementVendors } from '../localStore';
 import {
   CATEGORY_META,
   buildApprovalLadder,
-  minimumQuotes,
   requiredDocumentsStatus,
   sourcingMethodLabel,
   suggestSourcingMethod,
@@ -194,8 +193,6 @@ export function CreateRequestPage() {
     [category, total, effectiveSourcing, attachments],
   );
   const missingDocs = docsStatus.filter((d) => !d.attached);
-
-  const minQuotes = minimumQuotes(effectiveSourcing);
 
   const step1Valid =
     title.trim().length > 0 &&
@@ -868,11 +865,10 @@ export function CreateRequestPage() {
                   </Field>
                 )}
 
-                {minQuotes != null && (
+                {(effectiveSourcing === 'rfp' || effectiveSourcing === 'rfq') && (
                   <p className="text-xs text-muted">
                     <Icon name="info" className="mr-1 inline h-3.5 w-3.5" />
-                    Minimum of <strong>{minQuotes}</strong> comparable{' '}
-                    {effectiveSourcing === 'rfp' ? 'proposals' : 'quotations'} required for this path (policy §5).
+                    Record invited vendors, responses, and the basis for proceeding. A shortfall against Procurement's intended response count requires an insufficient-bids exception.
                   </p>
                 )}
               </section>
