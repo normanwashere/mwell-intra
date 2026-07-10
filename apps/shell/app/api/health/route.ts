@@ -13,6 +13,7 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 type SupabaseStatus = 'reachable' | 'unreachable' | 'not-configured';
+type FeatureStatus = 'configured' | 'missing';
 type ClientAuthStatus =
   | 'supabase-configured'
   | 'forced-memory'
@@ -33,11 +34,14 @@ interface StaticAssetProbe {
 }
 
 function clientAuthStatus(): ClientAuthStatus {
-  if (DATA_SOURCE === 'memory') return 'forced-memory';
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return 'missing-public-env';
-  if (process.env.NEXT_PUBLIC_ALLOW_DEMO_IN_PROD === 'true') {
+  if (
+    DATA_SOURCE === 'memory' &&
+    process.env.NEXT_PUBLIC_ALLOW_DEMO_IN_PROD === 'true'
+  ) {
     return 'production-demo-escape-hatch';
   }
+  if (DATA_SOURCE === 'memory') return 'forced-memory';
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return 'missing-public-env';
   return 'supabase-configured';
 }
 
@@ -127,6 +131,14 @@ export async function GET(request: NextRequest) {
       supabase,
       clientAuth,
       staticAssets,
+      features: {
+        vendorInviteDelivery: (
+          process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY
+        ) ? 'configured' as FeatureStatus : 'missing' as FeatureStatus,
+        serviceWorker: process.env.NEXT_PUBLIC_ENABLE_SW === 'false'
+          ? 'missing' as FeatureStatus
+          : 'configured' as FeatureStatus,
+      },
       commit: process.env.VERCEL_GIT_COMMIT_SHA ?? null,
     },
     {

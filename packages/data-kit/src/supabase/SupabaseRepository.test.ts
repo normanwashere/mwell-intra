@@ -23,6 +23,7 @@ import {
 //     wire payload envelope is identical — these assertions stay valid.
 function makeMockClient(seed: WarehouseData) {
   const calls: { fn: string; payload: Record<string, unknown> }[] = [];
+  const queries: { table: string; projection: string; limit?: number }[] = [];
   const locationRows = seed.locations.map((l) => ({
     id: l.id,
     name: l.name,
@@ -98,7 +99,20 @@ function makeMockClient(seed: WarehouseData) {
   };
   const client = {
     from: (table: string) => ({
-      select: () => Promise.resolve({ data: tables[table] ?? [], error: null }),
+      select: (projection: string) => {
+        const record = { table, projection } as { table: string; projection: string; limit?: number };
+        queries.push(record);
+        const result = Promise.resolve({ data: tables[table] ?? [], error: null });
+        const query = {
+          order: () => query,
+          limit: (limit: number) => {
+            record.limit = limit;
+            return query;
+          },
+          then: result.then.bind(result),
+        };
+        return query;
+      },
       insert: () => Promise.resolve({ data: null, error: null }),
       update: () => ({
         eq: () => ({
@@ -162,8 +176,19 @@ function makeMockClient(seed: WarehouseData) {
       return Promise.resolve({ data: row, error: null });
     },
   };
-  return { client: client as never, calls };
+  return { client: client as never, calls, queries };
 }
+
+describe('SupabaseRepository read model query shape', () => {
+  it('uses explicit projections and bounds operational history', async () => {
+    const { client, queries } = makeMockClient(buildSeed());
+    await new SupabaseRepository(client).getData();
+    expect(queries).toHaveLength(14);
+    expect(queries.every((query) => query.projection !== '*')).toBe(true);
+    expect(queries.find((query) => query.table === 'movements')?.limit).toBe(5000);
+    expect(queries.find((query) => query.table === 'products')?.limit).toBeUndefined();
+  });
+});
 
 describe('SupabaseRepository concurrency-safe payloads (warehouse.* v8 RPCs)', () => {
   const seed = buildSeed();

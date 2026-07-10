@@ -20,8 +20,10 @@ import { StorageFullToast } from '@shell/components/StorageFullToast';
 // A forced memory data source is never valid for a production build.
 function isDemoAllowed(): boolean {
   if (process.env.NODE_ENV !== 'production') return true;
-  if (process.env.NEXT_PUBLIC_DATA_SOURCE === 'memory') return false;
-  return process.env.NEXT_PUBLIC_ALLOW_DEMO_IN_PROD === 'true';
+  return (
+    process.env.NEXT_PUBLIC_DATA_SOURCE === 'memory' &&
+    process.env.NEXT_PUBLIC_ALLOW_DEMO_IN_PROD === 'true'
+  );
 }
 
 function MissingSupabaseConfig() {

@@ -79,6 +79,33 @@ function uid(prefix: string): string {
 /** Snake-case row shape passed to / returned from the SQL layer. */
 type Row = Record<string, unknown>;
 
+const TABLE_PROJECTIONS: Record<string, string> = {
+  products: 'id,sku,name,category,device_type,merchandise_type,serialized,attributes,unit_cost,price,reorder_point,promotional,barcode',
+  locations: 'id,name,type',
+  storage_areas: 'id,location_id,code,label,zone,active',
+  suppliers: 'id,name,lead_time_days',
+  lots: 'id,product_id,lot_code,supplier_id,unit_cost,received_at',
+  inventory_units: 'id,product_id,serial_number,lot_id,location_id,bin_id,status,assigned_to,event_id',
+  stock_levels: 'product_id,location_id,bin_id,lot_id,quantity',
+  movements: 'id,type,product_id,quantity,from_location_id,to_location_id,from_bin_id,to_bin_id,lot_id,serial_number,event_id,reason,reference,evidence_urls,actor,created_at',
+  allocations: 'id,event_id,product_id,quantity,status,promotional,created_at',
+  events: 'id,name,type,site_location_id,start_date,end_date',
+  returns: 'id,source,event_id,lines,evidence_urls,actor,created_at',
+  cycle_counts: 'id,location_id,bin_id,category,lines,actor,created_at',
+  receipts: 'id,supplier_id,location_id,lines,evidence_urls,actor,created_at',
+  purchase_orders: 'id,supplier_id,status,lines,expected_date,actor,created_at',
+  profiles: 'id,role,name,email,title',
+};
+
+const BOUNDED_HISTORY = new Set([
+  'movements',
+  'returns',
+  'cycle_counts',
+  'receipts',
+  'purchase_orders',
+]);
+const OPERATIONAL_HISTORY_LIMIT = 5000;
+
 /**
  * Supabase-backed repository. Mutations mirror the in-memory adapter's logic but
  * persist to Postgres. Reads hydrate the full warehouse read model.
@@ -87,9 +114,15 @@ export class SupabaseRepository implements WarehouseRepository {
   constructor(private readonly db: SupabaseClient) {}
 
   private async select<T>(table: string, map: (r: never) => T): Promise<T[]> {
-    const { data, error } = await this.db.from(table).select('*');
+    const projection = TABLE_PROJECTIONS[table];
+    if (!projection) throw new Error(`No safe projection configured for ${table}.`);
+    let query: any = this.db.from(table).select(projection);
+    if (BOUNDED_HISTORY.has(table)) {
+      query = query.order('created_at', { ascending: false }).limit(OPERATIONAL_HISTORY_LIMIT);
+    }
+    const { data, error } = await query;
     if (error) throw new Error(`${table}: ${error.message}`);
-    return (data ?? []).map((r) => map(r as never));
+    return (data ?? []).map((r: unknown) => map(r as never));
   }
 
   async getData(): Promise<WarehouseData> {
@@ -833,7 +866,7 @@ export class SupabaseRepository implements WarehouseRepository {
       .from('suppliers')
       .update(supplierToRow(supplier))
       .eq('id', input.supplierId)
-      .select('*')
+      .select(TABLE_PROJECTIONS.suppliers)
       .single();
     if (error) throw new Error(error.message);
     return rowToSupplier(data as never);
@@ -846,7 +879,7 @@ export class SupabaseRepository implements WarehouseRepository {
     const { data, error } = await this.db
       .from('locations')
       .insert(row)
-      .select('*')
+      .select(TABLE_PROJECTIONS.locations)
       .single();
     if (error) throw new Error(error.message);
     return rowToLocation(data as never);
@@ -858,7 +891,7 @@ export class SupabaseRepository implements WarehouseRepository {
       .from('locations')
       .update({ name: input.name.trim(), type: input.type })
       .eq('id', input.locationId)
-      .select('*')
+      .select(TABLE_PROJECTIONS.locations)
       .single();
     if (error) throw new Error(error.message);
     return rowToLocation(data as never);
@@ -923,7 +956,7 @@ export class SupabaseRepository implements WarehouseRepository {
       .from('products')
       .update(productToRow(next))
       .eq('id', input.productId)
-      .select('*')
+      .select(TABLE_PROJECTIONS.products)
       .single();
     if (error) throw new Error(error.message);
     return rowToProduct(row as never);

@@ -8,6 +8,18 @@ import type {
 
 type CsvValue = string | number;
 export type CsvRow = Record<string, CsvValue>;
+export type WarehouseExportKind = 'inventory' | 'movements' | 'allocations';
+
+export function governedExportFilename(
+  kind: WarehouseExportKind,
+  createdAt = new Date(),
+): string {
+  const stamp = createdAt
+    .toISOString()
+    .replace(/[-:]/g, '')
+    .replace(/\.\d{3}Z$/, 'Z');
+  return `mwell-intra-${kind}-${stamp}.csv`;
+}
 
 function escapeCell(value: CsvValue): string {
   const text = String(value);

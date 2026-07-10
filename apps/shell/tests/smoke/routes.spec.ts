@@ -418,14 +418,23 @@ async function assertControlsAreReachable(
   testInfo: TestInfo,
 ): Promise<void> {
   const minSize = testInfo.project.name.includes('mobile') ? 44 : 32;
-  const originalY = await page.evaluate(() => window.scrollY);
-  const { scrollHeight, viewportHeight } = await page.evaluate(() => ({
-    scrollHeight: Math.max(
-      document.documentElement.scrollHeight,
-      document.body.scrollHeight,
-    ),
-    viewportHeight: window.innerHeight,
-  }));
+  const scrollRegionSelector = '[data-testid="warehouse-scroll-region"]';
+  const scrollRegionCount = await page.locator(scrollRegionSelector).count();
+  const useScrollRegion = scrollRegionCount === 1;
+  const { originalY, scrollHeight, viewportHeight } = await page.evaluate(
+    ({ selector, useRegion }) => {
+      const region = useRegion ? document.querySelector<HTMLElement>(selector) : null;
+      return {
+        originalY: region?.scrollTop ?? window.scrollY,
+        scrollHeight: region?.scrollHeight ?? Math.max(
+          document.documentElement.scrollHeight,
+          document.body.scrollHeight,
+        ),
+        viewportHeight: region?.clientHeight ?? window.innerHeight,
+      };
+    },
+    { selector: scrollRegionSelector, useRegion: useScrollRegion },
+  );
   const step = Math.max(1, Math.floor(viewportHeight * 0.75));
   const maxY = Math.max(0, scrollHeight - viewportHeight);
   const samples = Array.from(
@@ -445,7 +454,14 @@ async function assertControlsAreReachable(
 
   try {
     for (const scrollY of samples) {
-      await page.evaluate((y) => window.scrollTo(0, y), scrollY);
+      await page.evaluate(
+        ({ selector, useRegion, y }) => {
+          const region = useRegion ? document.querySelector<HTMLElement>(selector) : null;
+          if (region) region.scrollTo(0, y);
+          else window.scrollTo(0, y);
+        },
+        { selector: scrollRegionSelector, useRegion: useScrollRegion, y: scrollY },
+      );
       await page.waitForTimeout(50);
       const result = await page.evaluate(
         ({ selector, minSize }) => {
@@ -581,7 +597,14 @@ async function assertControlsAreReachable(
       );
     }
   } finally {
-    await page.evaluate((y) => window.scrollTo(0, y), originalY);
+    await page.evaluate(
+      ({ selector, useRegion, y }) => {
+        const region = useRegion ? document.querySelector<HTMLElement>(selector) : null;
+        if (region) region.scrollTo(0, y);
+        else window.scrollTo(0, y);
+      },
+      { selector: scrollRegionSelector, useRegion: useScrollRegion, y: originalY },
+    );
   }
 
   expect(

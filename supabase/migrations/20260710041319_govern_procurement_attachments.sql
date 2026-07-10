@@ -46,6 +46,9 @@ create table if not exists procurement.request_attachments (
 
 create index if not exists request_attachments_request_idx
   on procurement.request_attachments(request_id);
+create index if not exists request_attachments_uploader_idx
+  on procurement.request_attachments(uploaded_by)
+  where uploaded_by is not null;
 
 alter table procurement.request_attachments enable row level security;
 alter table procurement.request_attachments force row level security;

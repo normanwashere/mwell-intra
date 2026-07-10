@@ -226,7 +226,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         )}
 
-        <main className="mx-auto min-h-0 w-full max-w-5xl flex-1 overflow-y-auto overscroll-contain px-4 py-5 pb-[calc(7.5rem+env(safe-area-inset-bottom))] sm:px-6 md:overflow-visible md:pb-10 xl:max-w-6xl">
+        <main
+          data-testid="warehouse-scroll-region"
+          className="mx-auto min-h-0 w-full max-w-5xl flex-1 scroll-pb-[calc(5rem+env(safe-area-inset-bottom))] overflow-y-auto overscroll-contain px-4 py-5 pb-[calc(7.5rem+env(safe-area-inset-bottom))] sm:px-6 md:overflow-visible md:pb-10 xl:max-w-6xl"
+        >
           <PageTransition
             id={location.pathname}
             className="warehouse-workspace min-w-0 max-w-full"

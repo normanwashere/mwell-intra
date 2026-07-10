@@ -36,6 +36,7 @@ const nextConfig = {
     '@intra/legal',
   ],
   turbopack: {
+    root: path.join(__dirname, '../..'),
     // Warehouse module keeps Vite-era `@/*` → `src/*`; the shell resolves it
     // to the warehouse `src` so the ported code compiles unmodified. `@warehouse`
     // is the explicit alias future callers / other modules should prefer so a

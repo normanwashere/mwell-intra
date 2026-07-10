@@ -3,6 +3,7 @@ import {
   allocationsToCsv,
   inventoryToCsv,
   movementsToCsv,
+  governedExportFilename,
   toCsv,
 } from './export';
 import type { StockState } from './stock';
@@ -48,6 +49,14 @@ describe('toCsv', () => {
   it('escapes commas, quotes and newlines', () => {
     const csv = toCsv([{ name: 'a,b', note: 'say "hi"', multi: 'one\ntwo' }]);
     expect(csv).toBe('name,note,multi\n"a,b","say ""hi""","one\ntwo"');
+  });
+});
+
+describe('governedExportFilename', () => {
+  it('creates a stable, filesystem-safe audit filename', () => {
+    expect(
+      governedExportFilename('inventory', new Date('2026-07-10T04:30:15.000Z')),
+    ).toBe('mwell-intra-inventory-20260710T043015Z.csv');
   });
 });
 

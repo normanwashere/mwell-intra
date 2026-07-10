@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useWarehouse } from '@/app/store';
 import { toStockState } from '@/data/repository';
 import {
@@ -5,7 +6,9 @@ import {
   inventoryToCsv,
   movementsToCsv,
 } from '@/domain/export';
-import { downloadText } from '@/app/download';
+import type { WarehouseExportKind } from '@/domain/export';
+import { downloadText, downloadUrl } from '@/app/download';
+import { prepareWarehouseExport } from '@/app/governedExports';
 import {
   Badge,
   Card,
@@ -33,14 +36,28 @@ const METRICS: { metric: string; formula: string }[] = [
 ];
 
 export function DataPage() {
-  const { data } = useWarehouse();
+  const { data, source } = useWarehouse();
   const toast = useToast();
+  const [exporting, setExporting] = useState<WarehouseExportKind | null>(null);
   if (!data) return null;
   const state = toStockState(data);
 
-  const exportCsv = (name: string, content: string) => {
-    downloadText(name, content);
-    toast.success(`Exported ${name}`);
+  const exportCsv = async (kind: WarehouseExportKind, content: string) => {
+    setExporting(kind);
+    try {
+      const prepared = await prepareWarehouseExport({ source, kind, demoContent: content });
+      if (prepared.downloadUrl) downloadUrl(prepared.filename, prepared.downloadUrl);
+      else downloadText(prepared.filename, prepared.demoContent ?? '');
+      toast.success(
+        source === 'memory'
+          ? `Downloaded demo export ${prepared.filename}`
+          : `Recorded and downloaded ${prepared.filename}`,
+      );
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'Export failed.');
+    } finally {
+      setExporting(null);
+    }
   };
 
   return (
@@ -57,27 +74,35 @@ export function DataPage() {
           <button
             type="button"
             className="btn-outline justify-between"
-            onClick={() => exportCsv('inventory.csv', inventoryToCsv(state))}
+            disabled={exporting !== null}
+            onClick={() => void exportCsv('inventory', inventoryToCsv(state))}
           >
-            Inventory <Icon name="download" className="h-4 w-4" />
+            {exporting === 'inventory' ? 'Preparing...' : 'Inventory'} <Icon name="download" className="h-4 w-4" />
           </button>
           <button
             type="button"
             className="btn-outline justify-between"
-            onClick={() => exportCsv('movements.csv', movementsToCsv(data.movements, data.products))}
+            disabled={exporting !== null}
+            onClick={() => void exportCsv('movements', movementsToCsv(data.movements, data.products))}
           >
-            Movements <Icon name="download" className="h-4 w-4" />
+            {exporting === 'movements' ? 'Preparing...' : 'Movements'} <Icon name="download" className="h-4 w-4" />
           </button>
           <button
             type="button"
             className="btn-outline justify-between"
+            disabled={exporting !== null}
             onClick={() =>
-              exportCsv('allocations.csv', allocationsToCsv(data.allocations, data.products, data.events))
+              void exportCsv('allocations', allocationsToCsv(data.allocations, data.products, data.events))
             }
           >
-            Allocations <Icon name="download" className="h-4 w-4" />
+            {exporting === 'allocations' ? 'Preparing...' : 'Allocations'} <Icon name="download" className="h-4 w-4" />
           </button>
         </div>
+        <p className="mt-3 text-xs text-faint">
+          {source === 'memory'
+            ? 'Demo exports stay on this device and are not audit evidence.'
+            : 'Live exports are checksummed, logged, stored privately, and downloaded with a short-lived link.'}
+        </p>
       </Card>
 
       <div className="grid gap-4 lg:grid-cols-2 lg:items-start">

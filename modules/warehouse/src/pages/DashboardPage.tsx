@@ -27,7 +27,9 @@ import {
   inventoryToCsv,
   movementsToCsv,
 } from '@/domain/export';
-import { downloadText } from '@/app/download';
+import type { WarehouseExportKind } from '@/domain/export';
+import { downloadText, downloadUrl } from '@/app/download';
+import { prepareWarehouseExport } from '@/app/governedExports';
 import {
   PO_STATUS_LABELS,
   formatWhen,
@@ -266,20 +268,35 @@ const ROLE_PANELS: Record<Role, PanelId[]> = {
 const WINDOWED_ROLES: Role[] = ['bi_analyst', 'marketing'];
 
 export function DashboardPage() {
-  const { data, role } = useWarehouse();
+  const { data, role, source } = useWarehouse();
   const { profile } = useSession();
   const navigate = useNavigate();
   const toast = useToast();
   const [exportOpen, setExportOpen] = useState(false);
+  const [exporting, setExporting] = useState<WarehouseExportKind | null>(null);
   const [window, setWindow] = useState<Window>('all');
   if (!data) return null;
   const state = toStockState(data);
   const showWindow = WINDOWED_ROLES.includes(role);
 
-  const exportCsv = (name: string, content: string) => {
-    downloadText(name, content);
-    toast.success(`Exported ${name}`);
-    setExportOpen(false);
+  const canExport = can(role, 'view_analytics') || can(role, 'view_finance');
+  const exportCsv = async (kind: WarehouseExportKind, content: string) => {
+    setExporting(kind);
+    try {
+      const prepared = await prepareWarehouseExport({ source, kind, demoContent: content });
+      if (prepared.downloadUrl) downloadUrl(prepared.filename, prepared.downloadUrl);
+      else downloadText(prepared.filename, prepared.demoContent ?? '');
+      toast.success(
+        source === 'memory'
+          ? `Downloaded demo export ${prepared.filename}`
+          : `Recorded and downloaded ${prepared.filename}`,
+      );
+      setExportOpen(false);
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'Export failed.');
+    } finally {
+      setExporting(null);
+    }
   };
 
   const mv: Movement[] =
@@ -916,13 +933,15 @@ export function DashboardPage() {
           )}
           {/* Export lives with the data it exports, not as the hero's only
               action (WH-10). */}
-          <button
-            type="button"
-            className="btn-ghost btn-sm shrink-0"
-            onClick={() => setExportOpen(true)}
-          >
-            <Icon name="download" className="h-4 w-4" /> Export data
-          </button>
+          {canExport ? (
+            <button
+              type="button"
+              className="btn-ghost btn-sm shrink-0"
+              onClick={() => setExportOpen(true)}
+            >
+              <Icon name="download" className="h-4 w-4" /> Export data
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -937,15 +956,20 @@ export function DashboardPage() {
         description="Download CSVs for offline analysis & reconciliation."
       >
         <div className="space-y-2">
-          <button type="button" className="btn-outline w-full justify-between" onClick={() => exportCsv('inventory.csv', inventoryToCsv(state))}>
-            Inventory snapshot <Icon name="download" className="h-4 w-4" />
+          <button type="button" disabled={exporting !== null} className="btn-outline w-full justify-between" onClick={() => void exportCsv('inventory', inventoryToCsv(state))}>
+            {exporting === 'inventory' ? 'Preparing...' : 'Inventory snapshot'} <Icon name="download" className="h-4 w-4" />
           </button>
-          <button type="button" className="btn-outline w-full justify-between" onClick={() => exportCsv('movements.csv', movementsToCsv(data.movements, data.products))}>
-            Movement ledger <Icon name="download" className="h-4 w-4" />
+          <button type="button" disabled={exporting !== null} className="btn-outline w-full justify-between" onClick={() => void exportCsv('movements', movementsToCsv(data.movements, data.products))}>
+            {exporting === 'movements' ? 'Preparing...' : 'Movement ledger'} <Icon name="download" className="h-4 w-4" />
           </button>
-          <button type="button" className="btn-outline w-full justify-between" onClick={() => exportCsv('allocations.csv', allocationsToCsv(data.allocations, data.products, data.events))}>
-            Allocations <Icon name="download" className="h-4 w-4" />
+          <button type="button" disabled={exporting !== null} className="btn-outline w-full justify-between" onClick={() => void exportCsv('allocations', allocationsToCsv(data.allocations, data.products, data.events))}>
+            {exporting === 'allocations' ? 'Preparing...' : 'Allocations'} <Icon name="download" className="h-4 w-4" />
           </button>
+          <p className="pt-2 text-xs text-faint">
+            {source === 'memory'
+              ? 'Demo exports stay on this device.'
+              : 'Live exports are checksummed and recorded before download.'}
+          </p>
         </div>
       </Sheet>
     </div>

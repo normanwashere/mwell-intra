@@ -95,6 +95,10 @@ import { shouldBlockVendorAccess } from '../vendorAccess';
 import { daysUntil } from '../requirements/policy';
 import { DocumentUploader } from '../components/DocumentUploader';
 import { SignedRecord } from './SignInstrumentPage';
+import {
+  accreditationSummaryCsv,
+  accreditationSummaryFilename,
+} from '../caseSummary';
 
 const CHECKLIST_TONE: Record<ChecklistDecision, 'slate' | 'emerald' | 'rose' | 'amber'> = {
   pending: 'amber',
@@ -349,6 +353,20 @@ export function CaseDetailPage() {
     else error('Could not record the reminder.');
   }
 
+  function downloadSummary() {
+    const content = accreditationSummaryCsv(kase!, items, docs);
+    const blob = new Blob([`\uFEFF${content}`], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = accreditationSummaryFilename(kase!);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    success('Accreditation summary downloaded');
+  }
+
   /** Row-as-target action (§2.2.3): what tapping a requirement card does. */
   function activateRow(item: RequirementChecklistItem) {
     if (isVendor) {
@@ -425,7 +443,7 @@ export function CaseDetailPage() {
       </div>
 
       {/* Meta demoted to one muted line; full record behind (i) (§2.2.4). */}
-      <div className="-mt-3 flex items-center gap-1 px-1">
+      <div className="-mt-3 flex flex-wrap items-center gap-2 px-1">
         <p className="min-w-0 truncate text-sm text-muted">{metaLine}</p>
         <InfoTip
           label="Full case record"
@@ -459,6 +477,12 @@ export function CaseDetailPage() {
             </dl>
           }
         />
+        {!isVendor && (canReview || canApprove) ? (
+          <button type="button" className="btn-ghost btn-sm ml-auto" onClick={downloadSummary}>
+            <Icon name="download" className="h-4 w-4" />
+            Export summary
+          </button>
+        ) : null}
       </div>
 
       {/* Vendor: you still owe N + submit CTA. Legal: waiting on vendor. */}
