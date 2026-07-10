@@ -3,12 +3,21 @@
 
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import { SUPABASE_ANON_KEY, SUPABASE_URL } from '@shell/lib/supabase/env';
+import {
+  DATA_SOURCE,
+  SUPABASE_ANON_KEY,
+  SUPABASE_URL,
+} from '@shell/lib/supabase/env';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 type SupabaseStatus = 'reachable' | 'unreachable' | 'not-configured';
+type ClientAuthStatus =
+  | 'supabase-configured'
+  | 'forced-memory'
+  | 'missing-public-env'
+  | 'production-demo-escape-hatch';
 type StaticAssetsStatus =
   | 'reachable'
   | 'missing-page-assets'
@@ -21,6 +30,15 @@ interface StaticAssetProbe {
   readonly asset?: string;
   readonly statusCode?: number;
   readonly contentType?: string;
+}
+
+function clientAuthStatus(): ClientAuthStatus {
+  if (DATA_SOURCE === 'memory') return 'forced-memory';
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return 'missing-public-env';
+  if (process.env.NEXT_PUBLIC_ALLOW_DEMO_IN_PROD === 'true') {
+    return 'production-demo-escape-hatch';
+  }
+  return 'supabase-configured';
 }
 
 function forwardedSelfFetchHeaders(request: NextRequest): Headers {
@@ -97,12 +115,17 @@ export async function GET(request: NextRequest) {
     pingSupabase(),
     probeStaticAssets(request),
   ]);
-  const healthy = supabase === 'reachable' && staticAssets.status === 'reachable';
+  const clientAuth = clientAuthStatus();
+  const healthy =
+    supabase === 'reachable' &&
+    staticAssets.status === 'reachable' &&
+    clientAuth === 'supabase-configured';
   return NextResponse.json(
     {
       status: healthy ? 'ok' : 'degraded',
       timestamp: new Date().toISOString(),
       supabase,
+      clientAuth,
       staticAssets,
       commit: process.env.VERCEL_GIT_COMMIT_SHA ?? null,
     },

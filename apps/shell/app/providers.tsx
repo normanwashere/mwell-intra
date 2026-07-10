@@ -17,9 +17,10 @@ import { StorageFullToast } from '@shell/components/StorageFullToast';
 
 // Prod-safety guard: if a production build somehow ships without Supabase env
 // (spec §9), we render a hard error instead of silently using demo profiles.
-// Escape hatch: NEXT_PUBLIC_ALLOW_DEMO_IN_PROD=true for staging previews.
+// A forced memory data source is never valid for a production build.
 function isDemoAllowed(): boolean {
   if (process.env.NODE_ENV !== 'production') return true;
+  if (process.env.NEXT_PUBLIC_DATA_SOURCE === 'memory') return false;
   return process.env.NEXT_PUBLIC_ALLOW_DEMO_IN_PROD === 'true';
 }
 
