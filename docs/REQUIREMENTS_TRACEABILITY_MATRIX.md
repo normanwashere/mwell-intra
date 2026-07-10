@@ -2,6 +2,18 @@
 
 This matrix is the release source of truth for roadmap items that were not fully evidenced by the application audit. A row is launch-ready only when implementation, automated evidence, business UAT, and named ownership are all complete.
 
+## Policy Alignment 2026-07-10
+
+| Requirement | Source | Implementation | Verification |
+| --- | --- | --- | --- |
+| Entity-specific vendor accreditation and signed declaration | LGL004 Vendor Accreditation Form v.2025 | `vendorAccreditationV2025.ts`, governed snapshots, Vendor/Legal application pages | Legal unit tests; `policy-vendor-legal.spec.ts` |
+| Two-party Technology Service Provider MNDA on one immutable hash | Technology Service Provider MNDA | Governed instrument documents, signatures, and lifecycle | Legal unit tests; Vendor/Legal E2E |
+| Procurement owns route; exceptions and importation are structured | Revised Procurement Policy | Route decision, exception, sourcing/evaluation, and protection controls | Procurement policy tests; `policy-procurement.spec.ts` |
+| Named matrix-backed approvers; fail closed without active DOA | Revised Procurement Policy and approved DOA prerequisite | DOA matrices/assignments and hardened `submit_request` | Schema/contract verifiers; transaction-wrapped migration compile |
+| Approved award and eligible vendor before PO issue | Procurement and vendor policy | PO approval/issue guards and scoped temporary-clearance check | Receiving policy tests; payment readiness E2E |
+| Warehouse/requester acceptance and complete evidence before Finance | Procurement payment controls | Acceptance/payment packs and guarded Finance transitions | `policy-payment-readiness.spec.ts`; Warehouse bridge tests |
+| Open records reviewed without rewriting signed evidence | Cutover control | `migrate-policy-review-records.mjs` and remediation queue | Node fixture tests; dry-run report |
+
 | Roadmap ID | Launch requirement | Implementation or control | Automated evidence | Business evidence | Owner | Status |
 | --- | --- | --- | --- | --- | --- | --- |
 | F-013 | Bulk master-data migration/import | Versioned CSV contracts in `docs/import-templates`; cutover dry-run and reconciliation procedure | Import header validator in release checklist; database count/checksum reconciliation | Signed dry-run reconciliation | Data migration lead | Process-ready; execution pending |

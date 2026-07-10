@@ -1,0 +1,6 @@
+[
+  { "module": "legal", "entityType": "accreditation_case", "id": "case-open-1", "status": "under_review", "policyVersion": "legacy", "reasonCode": "policy_version_mismatch" },
+  { "module": "procurement", "entityType": "request", "id": "req-draft-1", "status": "draft", "policyVersion": "legacy", "reasonCode": "route_decision_missing" },
+  { "module": "procurement", "entityType": "request", "id": "req-signed-1", "status": "approved", "policyVersion": "legacy", "reasonCode": "policy_version_mismatch", "completedSignedEvidence": true },
+  { "module": "legal", "entityType": "instrument", "id": "mnda-signed-1", "status": "executed", "policyVersion": "legacy", "reasonCode": "template_version_mismatch", "completedSignedEvidence": true }
+]

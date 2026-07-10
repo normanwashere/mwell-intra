@@ -313,6 +313,9 @@ create index if not exists procurement_exception_request_idx on procurement.exce
 create index if not exists procurement_acceptance_po_idx on procurement.acceptance_packs(purchase_order_id, accepted_at desc);
 create index if not exists procurement_payment_readiness_po_idx on procurement.payment_readiness_packs(purchase_order_id, prepared_at desc);
 create index if not exists core_policy_remediation_open_idx on core.policy_remediation_queue(module, status, created_at desc);
+create unique index if not exists core_policy_remediation_open_unique_idx
+  on core.policy_remediation_queue(module,entity_type,entity_id,policy_version,reason_code)
+  where status='open';
 
 -- Seed controlling definitions without activating an unapproved DOA matrix.
 insert into legal.policy_definitions(id, version, source_document, owner, effective_at, definition, active)

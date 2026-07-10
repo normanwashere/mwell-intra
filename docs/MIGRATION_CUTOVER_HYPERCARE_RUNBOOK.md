@@ -1,5 +1,7 @@
 # Migration, Cutover And Hypercare Runbook
 
+Policy-aligned Legal, vendor accreditation, Procurement, PO, Warehouse acceptance, and Finance payment controls additionally follow [the policy alignment cutover runbook](runbooks/POLICY-ALIGNMENT-CUTOVER.md). That runbook is authoritative for signed-evidence immutability, active DOA loading, open-record remediation, and policy-specific go/no-go gates.
+
 ## Ownership
 
 Name the release manager, database operator, application deployer, data migration lead, Security approver, Legal approver, Finance/Warehouse reconciler, business UAT lead, and incident commander before scheduling cutover. A role without a named person is a no-go condition.
