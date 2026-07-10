@@ -71,6 +71,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Verify effective Procurement migration contract
         run: pnpm verify:procurement-contract
+      - name: Verify launch governance and import contracts
+        run: pnpm verify:launch-artifacts
       - name: Lint
         run: pnpm lint
 

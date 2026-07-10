@@ -1,0 +1,2 @@
+template_version,sku,product_name,category,serialized,unit_cost,reorder_point,location_external_id,bin_code,quantity,serial_number
+1,SKU-EXAMPLE,Example Product,merchandise,false,100.00,10,LOC-PASIG,GEN-001,25,
