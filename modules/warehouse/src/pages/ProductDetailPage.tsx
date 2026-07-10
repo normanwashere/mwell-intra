@@ -28,6 +28,7 @@ import {
 } from '@/components/ui';
 import { Icon } from '@/components/Icon';
 import { ProductThumb } from '@/components/ProductThumb';
+import { ExpiryBadge } from '@/components/ExpiryStatus';
 import { EvidenceGallery } from '@/components/EvidenceGallery';
 import { PriceEditorSheet } from '@/components/PriceEditorSheet';
 import { ProductEditorSheet } from '@/components/ProductEditorSheet';
@@ -307,6 +308,7 @@ export function ProductDetailPage() {
               {product.promotional && (
                 <span className="chip bg-amber-500/15 text-amber-800 dark:text-amber-300">Promo</span>
               )}
+              <ExpiryBadge product={product} lots={data.lots} />
             </div>
           </div>
           </div>

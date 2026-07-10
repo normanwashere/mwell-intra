@@ -22,6 +22,7 @@ import {
 import { Icon } from '@/components/Icon';
 import { EvidenceCapture } from '@/components/camera/EvidenceCapture';
 import { AllocationReturnSheet } from '@/components/AllocationReturnSheet';
+import { expiryStatusForProduct } from '@/components/ExpiryStatus';
 
 type StatusFilter = 'all' | 'reserved' | 'issued';
 
@@ -87,6 +88,11 @@ export function AllocationsPage() {
     if (!data || !productId) return 0;
     return uncommittedAvailable(toStockState(data), data.allocations, productId);
   }, [data, productId]);
+
+  const selectedExpiry = expiryStatusForProduct(
+    data?.products.find((product) => product.id === productId),
+    data?.lots ?? [],
+  );
 
   if (!data) return null;
   const eventName = (id: string) => data.events.find((e) => e.id === id)?.name ?? id;
@@ -392,6 +398,16 @@ export function AllocationsPage() {
               min={1}
             />
           </Field>
+          {selectedExpiry?.risk === 'expired' && (
+            <p role="status" className="rounded-xl bg-rose-500/10 px-3 py-2 text-sm font-medium text-rose-700 dark:text-rose-300">
+              Expired lot on hand. Reservation remains available in W1; verify the lot before issue.
+            </p>
+          )}
+          {selectedExpiry?.risk === 'warning' && (
+            <p role="status" className="rounded-xl bg-amber-500/10 px-3 py-2 text-sm font-medium text-amber-800 dark:text-amber-200">
+              Near-expiry lot on hand. Verify the lot before issue.
+            </p>
+          )}
           <label className="flex items-center gap-2">
             <input
               type="checkbox"

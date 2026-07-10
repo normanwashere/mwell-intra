@@ -23,6 +23,7 @@ import type {
 import type { StockState } from './domain/stock';
 import type {
   DecideStockChangeInput,
+  CreateVendorReturnInput,
   InspectQualityInput,
   InventoryHold,
   InventoryPosition,
@@ -40,6 +41,7 @@ import type {
   UpdateOperationRouteInput,
   WarehouseException,
   WarehouseTask,
+  VendorReturn,
 } from './domain/warehouseControls';
 
 /** Full snapshot of the warehouse read model. */
@@ -69,6 +71,7 @@ export interface ReceiveStockInput {
     productId: string;
     quantity: number;
     lotCode?: string;
+    expiryDate?: string;
     serialNumbers?: string[];
     unitCost?: number;
     /** Storage area the stock is put away into (undefined = general area). */
@@ -312,12 +315,14 @@ export interface WarehouseRepository {
 export interface WarehouseControlRepository extends WarehouseRepository {
   listQualityInspections(query: PageQuery): Promise<PageResult<QualityInspection>>;
   listHolds(query: PageQuery): Promise<PageResult<InventoryHold>>;
+  listVendorReturns(query: PageQuery): Promise<PageResult<VendorReturn>>;
   listExceptions(query: PageQuery): Promise<PageResult<WarehouseException>>;
   listStockChangeRequests(query: PageQuery): Promise<PageResult<StockChangeRequest>>;
   listWarehouseTasks(query: PageQuery): Promise<PageResult<WarehouseTask>>;
   listInventoryPositions(query: PageQuery): Promise<PageResult<InventoryPosition>>;
   inspectQuality(input: InspectQualityInput): Promise<QualityInspection>;
   releaseHold(input: ReleaseHoldInput): Promise<InventoryHold>;
+  createVendorReturn(input: CreateVendorReturnInput): Promise<VendorReturn>;
   updateOperationRoute(input: UpdateOperationRouteInput): Promise<OperationRoute>;
   submitCycleCount(input: SubmitCycleCountInput): Promise<StockChangeRequest[]>;
   decideStockChange(input: DecideStockChangeInput): Promise<StockChangeRequest>;

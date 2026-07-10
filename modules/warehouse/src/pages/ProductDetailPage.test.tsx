@@ -4,6 +4,7 @@ import { screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ProductDetailPage } from './ProductDetailPage';
 import { renderWithProviders } from '@/test/renderWithProviders';
+import { makeRepo } from '@/test/renderWithProviders';
 
 import type { Role } from '@/domain/types';
 
@@ -23,6 +24,22 @@ describe('ProductDetailPage', () => {
     expect(screen.getByLabelText('Stock by location')).toBeInTheDocument();
     expect(screen.getByLabelText('Serialized units')).toBeInTheDocument();
     expect(screen.getByLabelText('Movement history')).toBeInTheDocument();
+  });
+
+  it('shows shelf-life risk on the product record', async () => {
+    const seed = await makeRepo().getData();
+    seed.products = seed.products.map((product) => product.id === 'doctor-token'
+      ? { ...product, expiryTracked: true, shelfLifeWarningDays: 30 }
+      : product);
+    seed.lots.push({
+      id: 'lot-expired-detail', productId: 'doctor-token', lotCode: 'EXP-DETAIL',
+      unitCost: 10, receivedAt: '2026-06-01T00:00:00Z', expiryDate: '2026-07-09',
+    });
+    renderWithProviders(
+      <Routes><Route path="/inventory/:id" element={<ProductDetailPage />} /></Routes>,
+      { route: '/inventory/doctor-token', repo: makeRepo(seed) },
+    );
+    expect(await screen.findByText('Expired')).toBeInTheDocument();
   });
 
   it('opens a unit traceability timeline', async () => {

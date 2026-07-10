@@ -83,11 +83,13 @@ describe('PurchaseOrdersPage', () => {
     await user.click(within(detail).getByRole('button', { name: /^receive$/i }));
 
     const dialog = await screen.findByRole('dialog', { name: /receive against po/i });
+    expect(within(dialog).getByText(/inspection required/i)).toBeInTheDocument();
     await user.click(within(dialog).getByRole('button', { name: /confirm receipt/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/received against po/i)).toBeInTheDocument();
+      expect(screen.getByText(/received against po into inspection staging/i)).toBeInTheDocument();
     });
+    expect(screen.getByRole('link', { name: /open quality queue/i })).toBeInTheDocument();
   });
 
   it('does not offer Receive on a draft PO (WH-25)', async () => {

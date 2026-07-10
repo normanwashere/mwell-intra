@@ -45,6 +45,7 @@ import type {
   CancelAllocationInput,
   CancelPurchaseOrderInput,
   CreateEventInput,
+  CreateVendorReturnInput,
   CreateLocationInput,
   CreateProductInput,
   CreatePurchaseOrderInput,
@@ -83,6 +84,7 @@ import type {
   WarehouseException,
   WarehousePatch,
   WarehouseTask,
+  VendorReturn,
   QualityInspection,
   StockChangeRequest,
   SubmitCycleCountInput,
@@ -146,12 +148,14 @@ interface WarehouseContextValue {
   adjustStock: (input: Omit<AdjustStockInput, 'actor'>) => Promise<boolean>;
   loadQualityInspections: (query: PageQuery) => Promise<PageResult<QualityInspection>>;
   loadHolds: (query: PageQuery) => Promise<PageResult<InventoryHold>>;
+  loadVendorReturns: (query: PageQuery) => Promise<PageResult<VendorReturn>>;
   loadExceptions: (query: PageQuery) => Promise<PageResult<WarehouseException>>;
   loadStockChangeRequests: (query: PageQuery) => Promise<PageResult<StockChangeRequest>>;
   loadWarehouseTasks: (query: PageQuery) => Promise<PageResult<WarehouseTask>>;
   loadInventoryPositions: (query: PageQuery) => Promise<PageResult<InventoryPosition>>;
   inspectQuality: (input: InspectQualityInput) => Promise<boolean>;
   releaseHold: (input: ReleaseHoldInput) => Promise<boolean>;
+  createVendorReturn: (input: CreateVendorReturnInput) => Promise<boolean>;
   updateOperationRoute: (input: UpdateOperationRouteInput) => Promise<boolean>;
   submitCycleCount: (input: SubmitCycleCountInput) => Promise<boolean>;
   decideStockChange: (input: DecideStockChangeInput) => Promise<boolean>;
@@ -404,12 +408,15 @@ export function WarehouseProvider({
       ),
     loadQualityInspections: (query) => repo.listQualityInspections(query),
     loadHolds: (query) => repo.listHolds(query),
+    loadVendorReturns: (query) => repo.listVendorReturns(query),
     loadExceptions: (query) => repo.listExceptions(query),
     loadStockChangeRequests: (query) => repo.listStockChangeRequests(query),
     loadWarehouseTasks: (query) => repo.listWarehouseTasks(query),
     loadInventoryPositions: (query) => repo.listInventoryPositions(query),
     inspectQuality: (input) => runAction('other', () => repo.inspectQuality(input)),
     releaseHold: (input) => runAction('other', () => repo.releaseHold(input)),
+    createVendorReturn: (input) =>
+      runAction('other', () => repo.createVendorReturn(input)),
     updateOperationRoute: (input) =>
       runAction('other', () => repo.updateOperationRoute(input)),
     submitCycleCount: (input) =>

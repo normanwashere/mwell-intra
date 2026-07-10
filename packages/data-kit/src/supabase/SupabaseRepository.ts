@@ -15,6 +15,7 @@ import type {
 } from '../domain/types';
 import {
   normalizePageQuery,
+  type CreateVendorReturnInput,
   type DecideStockChangeInput,
   type InspectQualityInput,
   type InventoryHold,
@@ -32,6 +33,7 @@ import {
   type UpdateOperationRouteInput,
   type WarehouseException,
   type WarehouseTask,
+  type VendorReturn,
 } from '../domain/warehouseControls';
 import { returnClosesAllocation, validateReservation } from '../domain/allocations';
 import { primaryStockLocation, validateTransfer } from '../domain/transfers';
@@ -96,6 +98,7 @@ import {
   rowToSupplier,
   rowToUnit,
   rowToWarehouseTask,
+  rowToVendorReturn,
   storageAreaToRow,
   supplierToRow,
   unitToRow,
@@ -128,6 +131,7 @@ const TABLE_PROJECTIONS: Record<string, string> = {
   operation_routes: 'id,operation_type_id,source_location_types,destination_location_types,requires_evidence,requires_approval,requires_online,active',
   quality_inspections: 'id,source_type,source_id,product_id,bin_id,lot_id,serial_number,quantity,disposition,reason,evidence_urls,inspected_by,created_at',
   inventory_holds: 'id,inspection_id,product_id,location_id,bin_id,lot_id,serial_number,quantity,status,reason,created_by,created_at,released_by,released_at',
+  vendor_returns: 'id,hold_id,supplier_id,source_receipt_id,source_return_id,product_id,lot_id,serial_number,quantity,reason,reference,status,evidence_urls,created_by,created_at,handed_off_by,handed_off_at,completed_at',
   exceptions: 'id,exception_type,severity,source_type,source_id,status,owner_id,due_at,resolution,created_at',
   stock_change_requests: 'id,source_type,source_id,product_id,location_id,bin_id,quantity_delta,unit_cost,financial_impact,reason,evidence_urls,status,requested_by,requested_at,created_at',
   warehouse_tasks: 'id,task_type,source_id,title,status,assignee_id,due_at,completed_at,created_at',
@@ -298,6 +302,10 @@ export class SupabaseRepository implements WarehouseControlRepository {
     return this.listControl('inventory_holds', query, rowToHold);
   }
 
+  listVendorReturns(query: PageQuery): Promise<PageResult<VendorReturn>> {
+    return this.listControl('vendor_returns', query, rowToVendorReturn);
+  }
+
   listExceptions(query: PageQuery): Promise<PageResult<WarehouseException>> {
     return this.listControl('exceptions', query, rowToException);
   }
@@ -337,6 +345,17 @@ export class SupabaseRepository implements WarehouseControlRepository {
       hold_id: input.holdId,
       target_disposition: input.targetDisposition,
       reason: input.reason,
+      evidence_urls: input.evidenceUrls ?? [],
+    }) as never);
+  }
+
+  async createVendorReturn(input: CreateVendorReturnInput): Promise<VendorReturn> {
+    return rowToVendorReturn(await this.callRpc('create_vendor_return', {
+      idempotency_key: input.idempotencyKey,
+      hold_id: input.holdId,
+      supplier_id: input.supplierId,
+      reason: input.reason,
+      reference: input.reference,
       evidence_urls: input.evidenceUrls ?? [],
     }) as never);
   }
@@ -452,7 +471,7 @@ export class SupabaseRepository implements WarehouseControlRepository {
       // Capture a lot whenever a unit cost or lot code is supplied so receipts
       // feed landed-cost / pricing analytics.
       let lotId: string | undefined;
-      if (line.unitCost != null || line.lotCode) {
+      if (line.unitCost != null || line.lotCode || line.expiryDate) {
         const lot: Lot = {
           id: uid('lot'),
           productId: product.id,
@@ -460,6 +479,7 @@ export class SupabaseRepository implements WarehouseControlRepository {
           supplierId: input.supplierId,
           unitCost: line.unitCost ?? product.unitCost,
           receivedAt: createdAt,
+          expiryDate: line.expiryDate,
         };
         lots.push(lotToRow(lot));
         lotId = lot.id;

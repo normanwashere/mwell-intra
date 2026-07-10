@@ -64,6 +64,27 @@ export interface InventoryHold {
   releasedAt?: string;
 }
 
+export interface VendorReturn {
+  id: string;
+  holdId: string;
+  supplierId: string;
+  sourceReceiptId?: string;
+  sourceReturnId?: string;
+  productId: string;
+  lotId?: string;
+  serialNumber?: string;
+  quantity: number;
+  reason: string;
+  reference: string;
+  status: 'draft' | 'ready' | 'handed_off' | 'completed' | 'cancelled';
+  evidenceUrls: string[];
+  createdBy: string;
+  createdAt: string;
+  handedOffBy?: string;
+  handedOffAt?: string;
+  completedAt?: string;
+}
+
 export interface WarehouseException {
   id: string;
   type: 'quality' | 'count_variance' | 'po_receipt' | 'scan_mismatch' | 'import';
@@ -152,6 +173,15 @@ export interface ReleaseHoldInput {
   holdId: string;
   targetDisposition: Exclude<QualityDisposition, 'pending' | 'hold'>;
   reason: string;
+  evidenceUrls?: string[];
+}
+
+export interface CreateVendorReturnInput {
+  idempotencyKey: string;
+  holdId: string;
+  supplierId: string;
+  reason: string;
+  reference: string;
   evidenceUrls?: string[];
 }
 

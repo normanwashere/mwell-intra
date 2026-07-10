@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useWarehouse } from '@/app/store';
 import type { ReturnSource } from '@/domain/types';
 import {
@@ -90,7 +91,7 @@ export function ReturnsPage() {
       ],
     });
     if (!ok) return;
-    toast.success('Return logged');
+    toast.success('Return logged in inspection staging');
     setQuantity(1);
     setSerial('');
     setEvidence([]);
@@ -103,6 +104,14 @@ export function ReturnsPage() {
         icon="rotate"
         subtitle="Log customer & vendor returns with reasons"
       />
+
+      <div className="flex flex-col gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="font-semibold">Inspection required before putaway</p>
+          <p className="text-xs opacity-80">Every physical return remains in quality staging until its condition is accepted.</p>
+        </div>
+        <Link to="/quality" className="btn-ghost btn-sm shrink-0 justify-center">Open quality queue</Link>
+      </div>
 
       <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
       <Card className="space-y-3">

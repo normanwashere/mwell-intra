@@ -78,6 +78,15 @@ describe('App routing & guards', () => {
     expect(screen.getByRole('tab', { name: 'Due' })).toBeInTheDocument();
   });
 
+  it('allows inspection roles to open quality control', async () => {
+    renderWithProviders(<App />, {
+      role: 'operations',
+      route: '/quality',
+    });
+    expect(await screen.findByRole('heading', { name: 'Quality control' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Pending' })).toBeInTheDocument();
+  });
+
   it('returns false when a guarded control command is denied', async () => {
     renderWithProviders(<ControlFailureProbe />, { repo: new DeniedControlRepository() });
     fireEvent.click(screen.getByRole('button', { name: /run guarded command/i }));

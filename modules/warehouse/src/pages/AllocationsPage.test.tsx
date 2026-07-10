@@ -51,6 +51,25 @@ describe('AllocationsPage', () => {
     expect(await within(dialog).findByRole('alert')).toHaveTextContent(/available/i);
   });
 
+  it('warns about expired stock without blocking reservation in W1', async () => {
+    const seed = await makeRepo().getData();
+    seed.products = seed.products.map((product) => product.id === 'doctor-token'
+      ? { ...product, expiryTracked: true, shelfLifeWarningDays: 30 }
+      : product);
+    seed.lots.push({
+      id: 'lot-expired-allocation', productId: 'doctor-token', lotCode: 'EXP-ALLOC',
+      unitCost: 10, receivedAt: '2026-06-01T00:00:00Z', expiryDate: '2026-07-09',
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<AllocationsPage />, { role: 'operations', repo: makeRepo(seed) });
+    await screen.findByLabelText('Allocations');
+
+    const dialog = await openReserveSheet(user);
+    await user.selectOptions(within(dialog).getByLabelText('Product'), 'doctor-token');
+    expect(within(dialog).getByText(/expired lot on hand/i)).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: /^reserve$/i })).toBeEnabled();
+  });
+
   it('filters allocations by status', async () => {
     const user = userEvent.setup();
     renderWithProviders(<AllocationsPage />, { role: 'operations' });

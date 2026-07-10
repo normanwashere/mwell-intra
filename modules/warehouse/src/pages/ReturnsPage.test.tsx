@@ -23,7 +23,8 @@ describe('ReturnsPage', () => {
       const list = screen.getByLabelText('Returns');
       expect(within(list).getByText(/Event Shirt \(L\)/i)).toBeInTheDocument();
     });
-    expect(screen.getByText(/return logged/i)).toBeInTheDocument();
+    expect(screen.getByText(/return logged in inspection staging/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /open quality queue/i })).toBeInTheDocument();
     expect(
       within(screen.getByLabelText('Returns')).getAllByText('Restocked').length,
     ).toBeGreaterThan(0);

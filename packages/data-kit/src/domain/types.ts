@@ -172,6 +172,8 @@ export interface ReturnLine {
   serialNumber?: string;
   /** Location the stock is returned into (for non-serialized restock). */
   locationId?: Id;
+  /** Storage area holding the returned stock while it awaits inspection. */
+  binId?: Id;
   /** What happens to returned stock: back to shelf, written off, or sent to vendor. */
   disposition?: ReturnDisposition;
 }
@@ -217,6 +219,8 @@ export interface ReceiptLine {
   productId: Id;
   quantity: number;
   lotCode?: string;
+  /** Expiry date captured for expiry-tracked lots. */
+  expiryDate?: string;
   serialNumbers?: string[];
   unitCost?: number;
   /** Storage area the received stock was put away into. */

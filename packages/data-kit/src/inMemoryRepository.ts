@@ -51,6 +51,7 @@ import {
   normalizePageQuery,
   stockChangeStatusAfterDecision,
   type DecideStockChangeInput,
+  type CreateVendorReturnInput,
   type InspectQualityInput,
   type InventoryHold,
   type InventoryPosition,
@@ -67,6 +68,7 @@ import {
   type UpdateOperationRouteInput,
   type WarehouseException,
   type WarehouseTask,
+  type VendorReturn,
 } from './domain/warehouseControls';
 
 // v2 (2026-07): rich 90-day activity history added to the seed — bumping the
@@ -99,6 +101,7 @@ export class InMemoryRepository implements WarehouseControlRepository {
   private idProvider: (prefix: string) => string;
   private qualityInspections: QualityInspection[] = [];
   private holds: InventoryHold[] = [];
+  private vendorReturns: VendorReturn[] = [];
   private exceptions: WarehouseException[] = [];
   private stockChanges: StockChangeRequest[] = [];
   private operationRoutes: OperationRoute[] = [{
@@ -250,7 +253,7 @@ export class InMemoryRepository implements WarehouseControlRepository {
       // Capture a lot whenever a unit cost or lot code is supplied so receipts
       // feed landed-cost / pricing analytics.
       let lotId: string | undefined;
-      if (line.unitCost != null || line.lotCode) {
+      if (line.unitCost != null || line.lotCode || line.expiryDate) {
         const lot: Lot = {
           id: uid('lot'),
           productId: product.id,
@@ -258,6 +261,7 @@ export class InMemoryRepository implements WarehouseControlRepository {
           supplierId: input.supplierId,
           unitCost: line.unitCost ?? product.unitCost,
           receivedAt: createdAt,
+          expiryDate: line.expiryDate,
         };
         this.data.lots.push(lot);
         lotId = lot.id;
@@ -1038,6 +1042,10 @@ export class InMemoryRepository implements WarehouseControlRepository {
     return this.page(this.holds, query, (row) => row.status);
   }
 
+  async listVendorReturns(query: PageQuery): Promise<PageResult<VendorReturn>> {
+    return this.page(this.vendorReturns, query, (row) => row.status);
+  }
+
   async listExceptions(query: PageQuery): Promise<PageResult<WarehouseException>> {
     return this.page(this.exceptions, query, (row) => row.status);
   }
@@ -1197,6 +1205,81 @@ export class InMemoryRepository implements WarehouseControlRepository {
       }
       this.persist();
       return hold;
+    });
+  }
+
+  async createVendorReturn(input: CreateVendorReturnInput): Promise<VendorReturn> {
+    return this.idempotent('create_vendor_return', input.idempotencyKey, input, () => {
+      if (!input.reason.trim() || !input.reference.trim()) {
+        throw new Error('Vendor return reason and reference are required.');
+      }
+      const hold = this.holds.find((row) => row.id === input.holdId && row.status === 'active');
+      if (!hold) throw new Error('Active hold not found.');
+      const inspection = this.qualityInspections.find((row) => row.id === hold.inspectionId);
+      if (!inspection || inspection.disposition !== 'vendor_return') {
+        throw new Error('The inspection is not marked for vendor return.');
+      }
+      const supplier = this.data.suppliers.find((row) => row.id === input.supplierId);
+      if (!supplier) throw new Error('Supplier not found.');
+      if (inspection.sourceType === 'receipt') {
+        const receipt = this.data.receipts.find((row) => row.id === inspection.sourceId);
+        if (receipt?.supplierId && receipt.supplierId !== input.supplierId) {
+          throw new Error('Vendor return supplier must match the source receipt.');
+        }
+      }
+      if (hold.serialNumber) {
+        const unit = this.data.units.find((row) => row.productId === hold.productId
+          && row.serialNumber === hold.serialNumber && row.locationId === hold.locationId
+          && ['in_stock', 'returned'].includes(row.status));
+        if (!unit) throw new Error('Held serialized unit is not available for vendor return.');
+        unit.status = 'vendor_return';
+        unit.assignedTo = undefined;
+      } else {
+        const level = this.data.stockLevels.find((row) => row.productId === hold.productId
+          && row.locationId === hold.locationId
+          && (row.binId ?? undefined) === (hold.binId ?? undefined)
+          && (row.lotId ?? undefined) === (hold.lotId ?? undefined));
+        if (!level || level.quantity < hold.quantity) {
+          throw new Error('Held quantity is not available for vendor return.');
+        }
+        level.quantity -= hold.quantity;
+      }
+      const createdAt = this.now();
+      const vendorReturn: VendorReturn = {
+        id: this.newId('vr'),
+        holdId: hold.id,
+        supplierId: input.supplierId,
+        ...(inspection.sourceType === 'receipt' ? { sourceReceiptId: inspection.sourceId } : { sourceReturnId: inspection.sourceId }),
+        productId: hold.productId,
+        ...(hold.lotId ? { lotId: hold.lotId } : {}),
+        ...(hold.serialNumber ? { serialNumber: hold.serialNumber } : {}),
+        quantity: hold.quantity,
+        reason: input.reason.trim(),
+        reference: input.reference.trim(),
+        status: 'ready',
+        evidenceUrls: input.evidenceUrls ?? [],
+        createdBy: 'demo-logistics-supervisor',
+        createdAt,
+      };
+      this.vendorReturns.push(vendorReturn);
+      hold.status = 'vendor_return';
+      hold.releasedBy = vendorReturn.createdBy;
+      hold.releasedAt = createdAt;
+      this.data.movements.push({
+        id: this.newId('mv'), type: 'vendor_return', productId: hold.productId,
+        quantity: hold.quantity, fromLocationId: hold.locationId, fromBinId: hold.binId,
+        lotId: hold.lotId, serialNumber: hold.serialNumber, reason: vendorReturn.reason,
+        reference: vendorReturn.id, evidenceUrls: vendorReturn.evidenceUrls,
+        actor: vendorReturn.createdBy, createdAt,
+      });
+      const exception = this.exceptions.find((row) => row.sourceType === 'quality_inspection'
+        && row.sourceId === inspection.id && ['open', 'in_progress'].includes(row.status));
+      if (exception) {
+        exception.status = 'resolved';
+        exception.resolution = `Vendor return ${vendorReturn.reference} created`;
+      }
+      this.persist();
+      return vendorReturn;
     });
   }
 

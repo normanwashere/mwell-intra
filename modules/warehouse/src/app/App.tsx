@@ -70,6 +70,9 @@ const ScanPage = lazy(() =>
 const TasksPage = lazy(() =>
   import('@/pages/TasksPage').then((m) => ({ default: m.TasksPage })),
 );
+const QualityPage = lazy(() =>
+  import('@/pages/QualityPage').then((m) => ({ default: m.QualityPage })),
+);
 
 function AccessDenied() {
   const navigate = useNavigate();
@@ -186,6 +189,14 @@ export function App() {
           element={
             <Guard anyOf={['inspect_quality', 'view_exceptions', 'cycle_count']}>
               <TasksPage />
+            </Guard>
+          }
+        />
+        <Route
+          path="/quality"
+          element={
+            <Guard anyOf={['inspect_quality', 'release_quality_hold']}>
+              <QualityPage />
             </Guard>
           }
         />

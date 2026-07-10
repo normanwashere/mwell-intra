@@ -21,6 +21,7 @@ import {
 } from '@/components/ui';
 import { Icon } from '@/components/Icon';
 import { ProductThumb } from '@/components/ProductThumb';
+import { ExpiryBadge } from '@/components/ExpiryStatus';
 import { clsx } from 'clsx';
 
 type Filter = 'all' | ItemCategory;
@@ -250,6 +251,7 @@ export function InventoryPage() {
                         </Badge>
                         {single.serialized && <Badge tone="slate">serialized</Badge>}
                         {single.promotional && <Badge tone="amber">promo</Badge>}
+                        <ExpiryBadge product={single} lots={data.lots} />
                       </div>
                     </div>
                     <div className="flex shrink-0 items-center gap-1.5 text-right sm:gap-2">

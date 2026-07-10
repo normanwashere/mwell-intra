@@ -31,6 +31,7 @@ import type {
   StockChangeRequest,
   WarehouseException,
   WarehouseTask,
+  VendorReturn,
 } from '../domain/warehouseControls';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -397,6 +398,29 @@ export function rowToHold(r: Row): InventoryHold {
     createdAt: r.created_at,
     releasedBy: r.released_by ?? undefined,
     releasedAt: r.released_at ?? undefined,
+  };
+}
+
+export function rowToVendorReturn(r: Row): VendorReturn {
+  return {
+    id: r.id,
+    holdId: r.hold_id,
+    supplierId: r.supplier_id,
+    sourceReceiptId: r.source_receipt_id ?? undefined,
+    sourceReturnId: r.source_return_id ?? undefined,
+    productId: r.product_id,
+    lotId: r.lot_id ?? undefined,
+    serialNumber: r.serial_number ?? undefined,
+    quantity: Number(r.quantity),
+    reason: r.reason,
+    reference: r.reference,
+    status: r.status,
+    evidenceUrls: r.evidence_urls ?? [],
+    createdBy: r.created_by,
+    createdAt: r.created_at,
+    handedOffBy: r.handed_off_by ?? undefined,
+    handedOffAt: r.handed_off_at ?? undefined,
+    completedAt: r.completed_at ?? undefined,
   };
 }
 

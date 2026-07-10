@@ -32,4 +32,10 @@ describe('warehouse navigation metadata', () => {
     const visible = new Set(modulesForRole('operations').map((module) => module.id));
     for (const module of primaryModulesForRole('operations')) expect(visible.has(module.id)).toBe(true);
   });
+
+  it('places quality control in the Control group for inspection roles', () => {
+    const quality = modulesForRole('operations').find((module) => module.id === 'quality');
+    expect(quality).toMatchObject({ path: '/quality', group: 'control' });
+    expect(modulesForRole('finance').some((module) => module.id === 'quality')).toBe(false);
+  });
 });

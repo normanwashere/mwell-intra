@@ -25,6 +25,7 @@ interface Line {
   serials: string[];
   unitCost: string;
   lotCode: string;
+  expiryDate: string;
 }
 
 export function ReceivingPage() {
@@ -44,6 +45,7 @@ export function ReceivingPage() {
   const [newQty, setNewQty] = useState(1);
   const [lines, setLines] = useState<Line[]>([]);
   const [evidence, setEvidence] = useState<string[]>([]);
+  const [lastReceiptStaged, setLastReceiptStaged] = useState(false);
 
   if (!data) return null;
   const products = data.products;
@@ -65,11 +67,11 @@ export function ReceivingPage() {
           l.productId === productId ? { ...l, quantity: l.quantity + qty } : l,
         );
       }
-      return [...prev, { productId, quantity: qty, serials: [], unitCost: '', lotCode: '' }];
+      return [...prev, { productId, quantity: qty, serials: [], unitCost: '', lotCode: '', expiryDate: '' }];
     });
   };
 
-  const setLineField = (productId: string, field: 'unitCost' | 'lotCode', value: string) => {
+  const setLineField = (productId: string, field: 'unitCost' | 'lotCode' | 'expiryDate', value: string) => {
     setLines((prev) =>
       prev.map((l) => (l.productId === productId ? { ...l, [field]: value } : l)),
     );
@@ -99,7 +101,7 @@ export function ReceivingPage() {
           l.productId === productId ? { ...l, serials, quantity: serials.length } : l,
         );
       }
-      return [...prev, { productId, quantity: 1, serials: [serial], unitCost: '', lotCode: '' }];
+      return [...prev, { productId, quantity: 1, serials: [serial], unitCost: '', lotCode: '', expiryDate: '' }];
     });
   };
 
@@ -138,11 +140,13 @@ export function ReceivingPage() {
             ? Number(l.unitCost)
             : undefined,
         lotCode: l.lotCode.trim() || undefined,
+        expiryDate: l.expiryDate || undefined,
         binId: activeBin || undefined,
       })),
     });
     if (!ok) return;
-    toast.success(`Received ${totalItems} item(s) and tagged stock`);
+    toast.success(`Received ${totalItems} item(s) into inspection staging`);
+    setLastReceiptStaged(true);
     setLines([]);
     setEvidence([]);
   };
@@ -164,6 +168,19 @@ export function ReceivingPage() {
           </Link>
         }
       />
+
+      <div className="flex flex-col gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="font-semibold">Inspection required</p>
+          <p className="text-xs opacity-80">Received stock is staged for quality review before putaway.</p>
+        </div>
+        <Link to="/quality" className="btn-ghost btn-sm shrink-0 justify-center">Open quality queue</Link>
+      </div>
+      {lastReceiptStaged && (
+        <p role="status" className="rounded-xl bg-brand-500/10 px-4 py-3 text-sm font-medium text-brand-800 dark:text-brand-200">
+          Receipt saved in inspection staging and is ready for quality review.
+        </p>
+      )}
 
       <div className="grid min-w-0 gap-4 lg:grid-cols-2 lg:items-start">
         {/* Left: capture controls — scan-first (WH-11): the scanner card
@@ -378,6 +395,19 @@ export function ReceivingPage() {
                               placeholder="optional"
                             />
                           </Field>
+                          {p.expiryTracked && (
+                            <div className="sm:col-span-2">
+                              <Field label={`Expiry date for ${p.name}`} htmlFor={`rcv-expiry-${l.productId}`}>
+                                <input
+                                  id={`rcv-expiry-${l.productId}`}
+                                  type="date"
+                                  className="input"
+                                  value={l.expiryDate}
+                                  onChange={(event) => setLineField(l.productId, 'expiryDate', event.target.value)}
+                                />
+                              </Field>
+                            </div>
+                          )}
                         </div>
                       </div>
                       <button

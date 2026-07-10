@@ -1118,4 +1118,38 @@ describe('W1 control parity', () => {
     expect(data.stockLevels[0]!.quantity).toBe(18);
     expect(data.movements.filter((movement) => movement.reference === requests[0]!.id)).toHaveLength(1);
   });
+
+  it('moves a vendor-return hold into supplier custody exactly once', async () => {
+    const controlled = new InMemoryRepository({
+      ...miniData(),
+      receipts: [{
+        id: 'rcpt-vendor', supplierId: 'sup-1', locationId: 'loc-wh',
+        lines: [{ productId: 'shirt', quantity: 3 }],
+        actor: 'receiver@mwell', createdAt: '2026-07-10T00:00:00Z',
+      }],
+    }, {
+      now: () => '2026-07-10T01:00:00Z',
+      id: (prefix) => `${prefix}-vendor`,
+    });
+    await controlled.inspectQuality({
+      idempotencyKey: 'quality-vendor-001', sourceType: 'receipt', sourceId: 'rcpt-vendor',
+      productId: 'shirt', quantity: 3, disposition: 'vendor_return',
+      reason: 'Supplier packaging failure', evidenceUrls: ['memory/damage.jpg'],
+    });
+    const hold = (await controlled.listHolds({ status: 'active' })).rows[0]!;
+    const input = {
+      idempotencyKey: 'vendor-return-001', holdId: hold.id, supplierId: 'sup-1',
+      reason: 'Rejected at incoming QC', reference: 'RMA-2026-001',
+      evidenceUrls: ['memory/rma.jpg'],
+    };
+    const created = await controlled.createVendorReturn(input);
+    const replayed = await controlled.createVendorReturn(input);
+
+    expect(replayed.id).toBe(created.id);
+    expect((await controlled.listHolds({})).rows[0]).toMatchObject({ status: 'vendor_return' });
+    expect((await controlled.listVendorReturns({})).rows).toEqual([
+      expect.objectContaining({ supplierId: 'sup-1', reference: 'RMA-2026-001', status: 'ready' }),
+    ]);
+    expect((await controlled.getData()).stockLevels[0]!.quantity).toBe(17);
+  });
 });

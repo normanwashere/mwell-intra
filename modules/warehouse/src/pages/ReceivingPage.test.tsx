@@ -13,6 +13,7 @@ describe('ReceivingPage', () => {
     renderWithProviders(<ReceivingPage />, { repo });
 
     await screen.findByText(/receipt lines/i);
+    expect(screen.getByText(/inspection required/i)).toBeInTheDocument();
 
     // Scan a known barcode via the manual fallback
     await user.type(
@@ -35,6 +36,7 @@ describe('ReceivingPage', () => {
       expect(after).toBe(before + 1);
     });
     expect(await screen.findByText(/received .*item/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /open quality queue/i })).toBeInTheDocument();
   });
 
   it('adds a non-serialized product with a chosen quantity and allows editing the line', async () => {
@@ -75,5 +77,26 @@ describe('ReceivingPage', () => {
     await user.click(screen.getByRole('button', { name: /^add$/i }));
 
     expect(await screen.findByText(/unknown barcode/i)).toBeInTheDocument();
+  });
+
+  it('captures an expiry date for expiry-tracked stock', async () => {
+    const seed = await makeRepo().getData();
+    seed.products = seed.products.map((product) => product.id === 'doctor-token'
+      ? { ...product, expiryTracked: true, shelfLifeWarningDays: 30 }
+      : product);
+    const repo = makeRepo(seed);
+    const user = userEvent.setup();
+    renderWithProviders(<ReceivingPage />, { repo });
+    await screen.findByText(/receipt lines/i);
+
+    await user.selectOptions(screen.getByLabelText('Product'), 'doctor-token');
+    await user.click(screen.getByRole('button', { name: /add to receipt/i }));
+    await user.type(screen.getByLabelText('Expiry date for Doctor Token'), '2027-12-31');
+    await user.click(screen.getByRole('button', { name: /receive .*item/i }));
+
+    await waitFor(async () => {
+      const receivedLot = (await repo.getData()).lots.find((lot) => lot.productId === 'doctor-token' && lot.expiryDate === '2027-12-31');
+      expect(receivedLot).toBeDefined();
+    });
   });
 });

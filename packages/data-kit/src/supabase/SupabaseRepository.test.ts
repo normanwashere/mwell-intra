@@ -110,6 +110,13 @@ function makeMockClient(seed: WarehouseData) {
       reason: 'Damage', created_by: 'user-1', created_at: '2026-07-10T00:00:00Z',
       released_by: null, released_at: null,
     }],
+    vendor_returns: [{
+      id: 'vr-1', hold_id: 'hold-1', supplier_id: 'sup-1', source_receipt_id: 'rcpt-1',
+      source_return_id: null, product_id: 'shirt', lot_id: null, serial_number: null,
+      quantity: 1, reason: 'Rejected', reference: 'RMA-001', status: 'ready',
+      evidence_urls: [], created_by: 'user-2', created_at: '2026-07-10T00:00:00Z',
+      handed_off_by: null, handed_off_at: null, completed_at: null,
+    }],
     exceptions: [{
       id: 'ex-1', exception_type: 'quality', severity: 'P2', source_type: 'quality_inspection',
       source_id: 'qi-1', status: 'open', owner_id: null, due_at: null, resolution: null,
@@ -261,13 +268,14 @@ describe('SupabaseRepository W1 control boundary', () => {
     await Promise.all([
       repo.listQualityInspections({ limit: 500 }),
       repo.listHolds({ limit: 500 }),
+      repo.listVendorReturns({ limit: 500 }),
       repo.listExceptions({ limit: 500 }),
       repo.listStockChangeRequests({ limit: 500 }),
       repo.listWarehouseTasks({ limit: 500 }),
       repo.listInventoryPositions({ limit: 500 }),
     ]);
     const controlTables = [
-      'quality_inspections', 'inventory_holds', 'exceptions',
+      'quality_inspections', 'inventory_holds', 'vendor_returns', 'exceptions',
       'stock_change_requests', 'warehouse_tasks', 'inventory_position_v1',
     ];
     for (const table of controlTables) {
@@ -642,5 +650,24 @@ describe('SupabaseRepository concurrency-safe payloads (warehouse.* v8 RPCs)', (
     const to = call.payload.to_stock_delta as { delta: number };
     expect(from.delta).toBe(-2);
     expect(to.delta).toBe(2);
+  });
+
+  it('routes vendor return custody through the controlled RPC', async () => {
+    const { client, calls } = makeMockClient(seed);
+    const repo = new SupabaseRepository(client);
+    await repo.createVendorReturn({
+      idempotencyKey: 'vendor-return-rpc-001',
+      holdId: 'hold-1',
+      supplierId: 'sup-1',
+      reason: 'Incoming quality rejection',
+      reference: 'RMA-001',
+      evidenceUrls: ['evidence/rma.jpg'],
+    });
+    const call = calls.find((entry) => entry.fn === 'create_vendor_return')!;
+    expect(call.payload).toMatchObject({
+      hold_id: 'hold-1',
+      supplier_id: 'sup-1',
+      reference: 'RMA-001',
+    });
   });
 });
