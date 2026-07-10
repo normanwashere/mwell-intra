@@ -244,6 +244,39 @@ export function canActorApproveStockChange(requestedBy: string, actor: string): 
   return requestedBy !== actor;
 }
 
+export function cycleCountSubmissionStatus(
+  lines: ReadonlyArray<{ expected: number; counted: number }>,
+): 'approved' | 'pending_approval' {
+  if (lines.length === 0) {
+    throw new Error('A cycle count must contain at least one line.');
+  }
+  return lines.every((line) => line.expected === line.counted)
+    ? 'approved'
+    : 'pending_approval';
+}
+
+export function stockChangeStatusAfterDecision(input: {
+  currentStatus: Extract<
+    StockChangeRequest['status'],
+    'pending_supervisor' | 'pending_finance'
+  >;
+  decision: 'approved' | 'rejected';
+  financialImpact: number;
+  requestedBy: string;
+  actor: string;
+  note?: string;
+}): StockChangeRequest['status'] {
+  if (!canActorApproveStockChange(input.requestedBy, input.actor)) {
+    throw new Error('The requester cannot approve their own stock change.');
+  }
+  if (input.decision === 'rejected') {
+    if (!input.note?.trim()) throw new Error('A rejection note is required.');
+    return 'rejected';
+  }
+  if (input.currentStatus === 'pending_finance') return 'approved';
+  return input.financialImpact > 10_000 ? 'pending_finance' : 'approved';
+}
+
 export function expiryRisk(
   expiryDate: string | undefined,
   warningDays: number,

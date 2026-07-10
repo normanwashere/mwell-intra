@@ -14,6 +14,9 @@ const commands = [
   ['inspect_quality', 'inspect_quality'],
   ['release_quality_hold', 'release_quality_hold'],
   ['create_vendor_return', 'release_quality_hold'],
+  ['submit_cycle_count', 'cycle_count'],
+  ['decide_stock_change', 'approve_stock_adjustment'],
+  ['resolve_exception', 'resolve_exceptions'],
 ];
 
 const failures = [];
@@ -128,6 +131,26 @@ requireMatch(
 requireMatch(
   /'before', to_jsonb\(v_route\)[\s\S]*?'after', to_jsonb\(v_next_route\)/i,
   'operation route audit does not record before and after policy',
+);
+requireMatch(
+  /private\.warehouse_submit_cycle_count\(payload jsonb\)[\s\S]*?order by product_id\s*,\s*location_id\s*,\s*bin_id[\s\S]*?for update/i,
+  'cycle-count submission does not lock inventory in deterministic order',
+);
+requireMatch(
+  /private\.warehouse_submit_cycle_count\(payload jsonb\)[\s\S]*?duplicate serial[\s\S]*?unknown serial/i,
+  'cycle-count submission does not reject duplicate and unknown serial scans',
+);
+requireMatch(
+  /private\.warehouse_decide_stock_change\(payload jsonb\)[\s\S]*?decision = 'pending'[\s\S]*?order by step[\s\S]*?for update/i,
+  'stock-change decision does not lock the ordered current approval step',
+);
+requireMatch(
+  /private\.warehouse_decide_stock_change\(payload jsonb\)[\s\S]*?if exists[\s\S]*?decision = 'pending'[\s\S]*?pending_finance[\s\S]*?else[\s\S]*?insert into warehouse\.movements/i,
+  'stock movement is not isolated to the final-approval branch',
+);
+requireMatch(
+  /private\.warehouse_resolve_exception\(payload jsonb\)[\s\S]*?severity = 'P1'[\s\S]*?cannot be waived/i,
+  'P1 exceptions are not protected from waiver',
 );
 
 for (const [command] of commands) {

@@ -4,8 +4,10 @@ import {
   availableAfterControls,
   canActorApproveStockChange,
   canTransitionInspection,
+  cycleCountSubmissionStatus,
   expiryRisk,
   normalizePageQuery,
+  stockChangeStatusAfterDecision,
 } from './warehouseControls';
 
 describe('warehouse control calculations', () => {
@@ -64,6 +66,80 @@ describe('warehouse control state transitions', () => {
   it('does not reopen a terminal disposition', () => {
     expect(canTransitionInspection('vendor_return', 'accepted')).toBe(false);
     expect(canTransitionInspection('damaged', 'hold')).toBe(false);
+  });
+
+  it('auto-completes a zero-variance cycle count', () => {
+    expect(cycleCountSubmissionStatus([{ expected: 8, counted: 8 }])).toBe('approved');
+    expect(cycleCountSubmissionStatus([{ expected: 8, counted: 7 }])).toBe(
+      'pending_approval',
+    );
+  });
+
+  it('finishes at Supervisor approval when impact is PHP 10,000', () => {
+    expect(
+      stockChangeStatusAfterDecision({
+        currentStatus: 'pending_supervisor',
+        decision: 'approved',
+        financialImpact: 10_000,
+        requestedBy: 'counter-1',
+        actor: 'supervisor-1',
+      }),
+    ).toBe('approved');
+  });
+
+  it('advances above PHP 10,000 from Supervisor to Finance', () => {
+    expect(
+      stockChangeStatusAfterDecision({
+        currentStatus: 'pending_supervisor',
+        decision: 'approved',
+        financialImpact: 10_001,
+        requestedBy: 'counter-1',
+        actor: 'supervisor-1',
+      }),
+    ).toBe('pending_finance');
+    expect(
+      stockChangeStatusAfterDecision({
+        currentStatus: 'pending_finance',
+        decision: 'approved',
+        financialImpact: 10_001,
+        requestedBy: 'counter-1',
+        actor: 'finance-1',
+      }),
+    ).toBe('approved');
+  });
+
+  it('rejects without changing stock and requires a note', () => {
+    expect(
+      stockChangeStatusAfterDecision({
+        currentStatus: 'pending_supervisor',
+        decision: 'rejected',
+        financialImpact: 500,
+        requestedBy: 'counter-1',
+        actor: 'supervisor-1',
+        note: 'Count evidence is incomplete.',
+      }),
+    ).toBe('rejected');
+    expect(() =>
+      stockChangeStatusAfterDecision({
+        currentStatus: 'pending_supervisor',
+        decision: 'rejected',
+        financialImpact: 500,
+        requestedBy: 'counter-1',
+        actor: 'supervisor-1',
+      }),
+    ).toThrow(/note/i);
+  });
+
+  it('prevents a cycle-count requester from approving the change', () => {
+    expect(() =>
+      stockChangeStatusAfterDecision({
+        currentStatus: 'pending_supervisor',
+        decision: 'approved',
+        financialImpact: 500,
+        requestedBy: 'counter-1',
+        actor: 'counter-1',
+      }),
+    ).toThrow(/requester/i);
   });
 });
 

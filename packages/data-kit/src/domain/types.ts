@@ -237,6 +237,8 @@ export interface CycleCountLine {
   productId: Id;
   expected: number;
   counted: number;
+  /** Required for serialized products; duplicates and unknown serials are rejected. */
+  serialNumbers?: string[];
 }
 
 export interface CycleCount {
