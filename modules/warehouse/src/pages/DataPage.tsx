@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useWarehouse } from '@/app/store';
 import { toStockState } from '@/data/repository';
 import {
@@ -60,6 +61,11 @@ export function DataPage() {
         icon="history"
         subtitle="Raw data access, definitions and metric logic"
       />
+
+      <div className="grid gap-2 sm:grid-cols-2">
+        <Link to="/reports" className="btn-primary justify-center">Open inventory reports</Link>
+        <Link to="/exceptions" className="btn-outline justify-center">Open exception register</Link>
+      </div>
 
       <Card>
         <SectionTitle title="Raw data export" subtitle="CSV for reconciliation & BI tools" />

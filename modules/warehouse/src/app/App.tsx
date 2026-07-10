@@ -79,6 +79,15 @@ const ApprovalsPage = lazy(() =>
 const ExceptionsPage = lazy(() =>
   import('@/pages/ExceptionsPage').then((m) => ({ default: m.ExceptionsPage })),
 );
+const ImportsPage = lazy(() =>
+  import('@/pages/ImportsPage').then((m) => ({ default: m.ImportsPage })),
+);
+const ReportsPage = lazy(() =>
+  import('@/pages/ReportsPage').then((m) => ({ default: m.ReportsPage })),
+);
+const OperationRoutesPage = lazy(() =>
+  import('@/pages/OperationRoutesPage').then((m) => ({ default: m.OperationRoutesPage })),
+);
 
 function AccessDenied() {
   const navigate = useNavigate();
@@ -222,6 +231,9 @@ export function App() {
             </Guard>
           }
         />
+        <Route path="/imports" element={<Guard anyOf={['import_warehouse_data']}><ImportsPage /></Guard>} />
+        <Route path="/reports" element={<Guard anyOf={['view_analytics', 'view_finance']}><ReportsPage /></Guard>} />
+        <Route path="/operation-routes" element={<Guard anyOf={['manage_operation_routes']}><OperationRoutesPage /></Guard>} />
         <Route
           path="/receiving"
           element={

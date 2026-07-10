@@ -1195,4 +1195,24 @@ describe('W1 control parity', () => {
     ]);
     expect((await controlled.getData()).stockLevels[0]!.quantity).toBe(17);
   });
+
+  it('prevents disabling the last active operation route', async () => {
+    const controlled = new InMemoryRepository(miniData(), {
+      now: () => '2026-07-10T01:00:00Z',
+      id: (prefix) => `${prefix}-route-guard`,
+    });
+    const route = (await controlled.getData()).operationRoutes![0]!;
+    await expect(controlled.updateOperationRoute({
+      idempotencyKey: 'operation-route-disable-last',
+      routeId: route.id,
+      patch: {
+        sourceLocationTypes: route.sourceLocationTypes,
+        destinationLocationTypes: route.destinationLocationTypes,
+        requiresEvidence: route.requiresEvidence,
+        requiresApproval: route.requiresApproval,
+        requiresOnline: route.requiresOnline,
+        active: false,
+      },
+    })).rejects.toThrow(/last active route/i);
+  });
 });

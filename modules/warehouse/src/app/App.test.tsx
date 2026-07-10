@@ -102,6 +102,17 @@ describe('App routing & guards', () => {
     expect(await screen.findByRole('heading', { name: 'Warehouse exceptions' })).toBeInTheDocument();
   });
 
+  it('routes authorized users to imports, reports, and operation policies', async () => {
+    const imports = renderWithProviders(<App />, { role: 'warehouse_admin', route: '/imports' });
+    expect(await screen.findByRole('heading', { name: 'Warehouse imports' })).toBeInTheDocument();
+    imports.unmount();
+    const reports = renderWithProviders(<App />, { role: 'bi_analyst', route: '/reports' });
+    expect(await screen.findByRole('heading', { name: 'Inventory position report' })).toBeInTheDocument();
+    reports.unmount();
+    renderWithProviders(<App />, { role: 'logistics_supervisor', route: '/operation-routes' });
+    expect(await screen.findByRole('heading', { name: 'Operation routes' })).toBeInTheDocument();
+  });
+
   it('returns false when a guarded control command is denied', async () => {
     renderWithProviders(<ControlFailureProbe />, { repo: new DeniedControlRepository() });
     fireEvent.click(screen.getByRole('button', { name: /run guarded command/i }));

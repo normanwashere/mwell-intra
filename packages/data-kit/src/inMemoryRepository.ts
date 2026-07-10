@@ -1261,6 +1261,11 @@ export class InMemoryRepository implements WarehouseControlRepository {
     return this.idempotent('update_operation_route', input.idempotencyKey, input, () => {
       const route = this.operationRoutes.find((row) => row.id === input.routeId);
       if (!route) throw new Error('Operation route not found.');
+      if (route.active && input.patch.active === false && !this.operationRoutes.some(
+        (other) => other.id !== route.id && other.operationTypeId === route.operationTypeId && other.active,
+      )) {
+        throw new Error('The last active route for an operation type cannot be disabled.');
+      }
       Object.assign(route, input.patch);
       return route;
     });

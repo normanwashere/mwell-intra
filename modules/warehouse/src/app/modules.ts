@@ -44,8 +44,11 @@ export const MODULES: ModuleDef[] = [
   { id: 'finance', label: 'Finance', path: '/finance', capabilities: ['view_finance'], description: 'Valuation and reconciliation.', icon: 'coins', group: 'analyze' },
   { id: 'pricing', label: 'Pricing', path: '/pricing', capabilities: ['view_pricing'], description: 'Cost variance and pricing.', icon: 'trend', group: 'analyze' },
   { id: 'data', label: 'Data & Reports', path: '/data', capabilities: ['view_analytics'], description: 'Exports, definitions and metrics.', icon: 'history', group: 'analyze' },
+  { id: 'reports', label: 'Inventory Reports', shortLabel: 'Reports', path: '/reports', capabilities: ['view_analytics', 'view_finance'], description: 'Committed inventory positions and governed exports.', icon: 'history', group: 'analyze' },
   { id: 'suppliers', label: 'Suppliers', path: '/suppliers', capabilities: ['view_procurement'], description: 'Supplier master and lead times.', icon: 'building', group: 'configure' },
   { id: 'locations', label: 'Locations', path: '/locations', capabilities: ['manage_locations'], description: 'Warehouses and event sites.', icon: 'building', group: 'configure' },
+  { id: 'imports', label: 'Warehouse Imports', shortLabel: 'Imports', path: '/imports', capabilities: ['import_warehouse_data'], description: 'Controlled master-data and opening-balance imports.', icon: 'download', group: 'configure' },
+  { id: 'operation-routes', label: 'Operation Routes', shortLabel: 'Routes', path: '/operation-routes', capabilities: ['manage_operation_routes'], description: 'Movement path, evidence, approval, and online policy.', icon: 'transfer', group: 'configure' },
 ];
 
 export function modulesForRole(role: Role): ModuleDef[] {

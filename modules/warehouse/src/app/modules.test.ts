@@ -47,4 +47,13 @@ describe('warehouse navigation metadata', () => {
     expect(modulesForRole('operations').find((module) => module.id === 'exceptions'))
       .toMatchObject({ path: '/exceptions', group: 'control' });
   });
+
+  it('places imports, reports, and operation routes in their operating groups', () => {
+    expect(modulesForRole('warehouse_admin').find((module) => module.id === 'imports'))
+      .toMatchObject({ path: '/imports', group: 'configure' });
+    expect(modulesForRole('bi_analyst').find((module) => module.id === 'reports'))
+      .toMatchObject({ path: '/reports', group: 'analyze' });
+    expect(modulesForRole('logistics_supervisor').find((module) => module.id === 'operation-routes'))
+      .toMatchObject({ path: '/operation-routes', group: 'configure' });
+  });
 });

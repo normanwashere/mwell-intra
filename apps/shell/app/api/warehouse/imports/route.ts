@@ -56,6 +56,26 @@ async function validationContext(client: ReturnType<typeof adminClient>) {
   };
 }
 
+export async function GET() {
+  try {
+    const userClient = await createSupabaseServerClient('warehouse');
+    if (!userClient) return errorResponse('Supabase is not configured.', 503);
+    await authorizeWarehouseImport(userClient);
+    const admin = adminClient();
+    const { data: jobs, error } = await admin.schema('warehouse')
+      .from('import_jobs')
+      .select('id,status,source_rows,accepted_rows,rejected_rows,duplicate_rows,filename,checksum_sha256,created_by,created_by_email,corrected_from,created_at')
+      .eq('status', 'ready')
+      .order('created_at', { ascending: false })
+      .limit(50);
+    if (error) throw new Error(error.message);
+    return NextResponse.json({ jobs: jobs ?? [] });
+  } catch (cause) {
+    if (cause instanceof ImportAuthorizationError) return errorResponse(cause.message, cause.status);
+    return errorResponse(cause instanceof Error ? cause.message : 'Import review queue failed.', 400);
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const userClient = await createSupabaseServerClient('warehouse');
@@ -132,7 +152,18 @@ export async function POST(request: NextRequest) {
         );
         if (error) throw new Error(error.message);
       }
-      return NextResponse.json({ job, issues: result.issues, preview: result }, { status: 201 });
+      return NextResponse.json({
+        job,
+        issues: result.issues,
+        preview: result,
+        evidence: {
+          checksumSha256: checksum,
+          sourceFile: file.name,
+          uploaderId: user.id,
+          uploaderEmail: user.email ?? '',
+          correctedFrom: form.get('corrected_from') || null,
+        },
+      }, { status: 201 });
     }
 
     const body = await request.json() as {
@@ -176,7 +207,11 @@ export async function POST(request: NextRequest) {
       },
     });
     if (error) return errorResponse(error.message, 403);
-    return NextResponse.json(data);
+    return NextResponse.json({
+      result: data,
+      reviewer_id: user.id,
+      reviewer_email: user.email ?? '',
+    });
   } catch (cause) {
     if (cause instanceof ImportAuthorizationError) {
       return errorResponse(cause.message, cause.status);
