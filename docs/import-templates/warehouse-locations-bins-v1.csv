@@ -1,2 +1,3 @@
 template_version,location_external_id,location_name,location_type,bin_code,bin_label,zone,active
 1,LOC-PASIG,Pasig Main Warehouse,warehouse,GEN-001,General Storage 1,General,true
+1,LOC-PASIG,Pasig Main Warehouse,warehouse,DEV-001,Serialized Devices,Devices,true

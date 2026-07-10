@@ -26,6 +26,11 @@ alter table procurement.purchase_order_lines
   add column if not exists warehouse_product_id text
   references warehouse.products(id) on delete restrict;
 
+create unique index if not exists warehouse_products_sku_ci_uq
+  on warehouse.products(lower(sku));
+create unique index if not exists warehouse_inventory_units_serial_uq
+  on warehouse.inventory_units(serial_number);
+
 drop policy if exists warehouse_receivable_pos_read on procurement.purchase_orders;
 create policy warehouse_receivable_pos_read on procurement.purchase_orders
   for select to authenticated
@@ -335,5 +340,183 @@ revoke all on function private.warehouse_receive_procurement_po(jsonb) from publ
 revoke all on function warehouse.receive_procurement_po(jsonb) from public, anon;
 grant execute on function private.warehouse_receive_procurement_po(jsonb) to authenticated, service_role;
 grant execute on function warehouse.receive_procurement_po(jsonb) to authenticated, service_role;
+
+create or replace function private.warehouse_apply_import_job(payload jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_started jsonb;
+  v_command_id uuid;
+  v_job warehouse.import_jobs;
+  v_row jsonb;
+  v_product warehouse.products;
+  v_location_id text;
+  v_bin_id text;
+  v_product_id text;
+  v_movement_id text;
+  v_response jsonb;
+begin
+  v_started := private.begin_idempotent_command(
+    'apply_import_job', payload->>'idempotency_key', payload
+  );
+  if (v_started->>'replayed')::boolean then return v_started->'response'; end if;
+  v_command_id := (v_started->>'command_id')::uuid;
+
+  if not core.has_cap('warehouse', 'import_warehouse_data') then
+    raise exception 'Not authorized: warehouse.import_warehouse_data';
+  end if;
+  if jsonb_typeof(payload->'normalized_rows') <> 'array' then
+    raise exception 'Normalized import rows must be an array';
+  end if;
+
+  select * into v_job
+    from warehouse.import_jobs
+   where id = (payload->>'job_id')::uuid
+   for update;
+  if not found then raise exception 'Import job not found'; end if;
+  if v_job.created_by = auth.uid() then
+    raise exception 'Import creator cannot apply their own job';
+  end if;
+  if v_job.status <> 'ready' then raise exception 'Only ready imports can be applied'; end if;
+  if v_job.checksum_sha256 <> payload->>'checksum_sha256' then
+    raise exception 'Import checksum mismatch';
+  end if;
+  if v_job.schema_version <> payload->>'schema_version' then
+    raise exception 'Import schema version mismatch';
+  end if;
+  if v_job.accepted_rows <> jsonb_array_length(payload->'normalized_rows')
+     or v_job.source_rows <> v_job.accepted_rows + v_job.rejected_rows + v_job.duplicate_rows then
+    raise exception 'Import row reconciliation mismatch';
+  end if;
+
+  update warehouse.import_jobs set status = 'applying' where id = v_job.id;
+
+  if v_job.import_kind = 'locations_bins_v1' then
+    for v_row in select value from jsonb_array_elements(payload->'normalized_rows')
+    loop
+      v_location_id := v_row->>'locationExternalId';
+      insert into warehouse.locations(id, name, type)
+      values (v_location_id, v_row->>'locationName', v_row->>'locationType')
+      on conflict (id) do update set name = excluded.name, type = excluded.type;
+
+      v_bin_id := 'bin-' || substr(md5(lower(v_location_id || '|' || (v_row->>'binCode'))), 1, 24);
+      insert into warehouse.storage_areas(id, location_id, code, label, zone, active)
+      values (
+        v_bin_id, v_location_id, v_row->>'binCode', nullif(v_row->>'binLabel', ''),
+        nullif(v_row->>'zone', ''), coalesce((v_row->>'active')::boolean, true)
+      )
+      on conflict (location_id, code) do update set
+        label = excluded.label, zone = excluded.zone, active = excluded.active;
+    end loop;
+  elsif v_job.import_kind = 'products_opening_stock_v1' then
+    for v_row in select value from jsonb_array_elements(payload->'normalized_rows')
+    loop
+      select * into v_product
+        from warehouse.products
+       where lower(sku) = lower(v_row->>'sku')
+       for update;
+      if found then
+        if v_product.serialized <> (v_row->>'serialized')::boolean
+           or v_product.category <> v_row->>'category' then
+          raise exception 'Existing product contract conflicts with SKU %', v_row->>'sku';
+        end if;
+        v_product_id := v_product.id;
+        update warehouse.products
+           set name = v_row->>'productName',
+               unit_cost = (v_row->>'unitCost')::numeric,
+               reorder_point = (v_row->>'reorderPoint')::integer
+         where id = v_product_id;
+      else
+        v_product_id := 'prod-' || replace(gen_random_uuid()::text, '-', '');
+        insert into warehouse.products(
+          id, sku, name, category, serialized, attributes, unit_cost, reorder_point
+        ) values (
+          v_product_id, v_row->>'sku', v_row->>'productName', v_row->>'category',
+          (v_row->>'serialized')::boolean, '{}'::jsonb,
+          (v_row->>'unitCost')::numeric, (v_row->>'reorderPoint')::integer
+        );
+      end if;
+
+      v_location_id := v_row->>'locationExternalId';
+      select id into v_bin_id from warehouse.storage_areas
+       where location_id = v_location_id and code = v_row->>'binCode' and active
+       for update;
+      if v_bin_id is null then raise exception 'Import bin was not found or is inactive'; end if;
+
+      if (v_row->>'quantity')::integer > 0 then
+      if (v_row->>'serialized')::boolean then
+        if exists (
+          select 1 from warehouse.inventory_units
+           where serial_number = v_row->>'serialNumber'
+        ) then
+          raise exception 'Imported serial already exists: %', v_row->>'serialNumber';
+        end if;
+        insert into warehouse.inventory_units(
+          id, product_id, serial_number, location_id, bin_id, status
+        ) values (
+          'unit-' || replace(gen_random_uuid()::text, '-', ''),
+          v_product_id, v_row->>'serialNumber', v_location_id, v_bin_id, 'in_stock'
+        );
+      else
+        insert into warehouse.stock_levels(product_id, location_id, bin_id, lot_id, quantity)
+        values (
+          v_product_id, v_location_id, v_bin_id, null, (v_row->>'quantity')::integer
+        )
+        on conflict (product_id, location_id, bin_id, lot_id)
+        do update set quantity = warehouse.stock_levels.quantity + excluded.quantity;
+      end if;
+
+      v_movement_id := 'mv-' || replace(gen_random_uuid()::text, '-', '');
+      insert into warehouse.movements(
+        id, type, product_id, quantity, to_location_id, to_bin_id,
+        reason, reference, actor, created_at
+      ) values (
+        v_movement_id, 'adjustment', v_product_id, (v_row->>'quantity')::integer,
+        v_location_id, v_bin_id, 'Governed opening balance import', v_job.id::text,
+        coalesce(auth.jwt()->>'email', auth.uid()::text), now()
+      );
+      end if;
+    end loop;
+  else
+    raise exception 'Unsupported import kind';
+  end if;
+
+  update warehouse.import_jobs
+     set status = 'applied', reviewed_by = auth.uid(), reviewed_at = now(), applied_at = now()
+   where id = v_job.id
+   returning * into v_job;
+
+  insert into core.activity_log(module, entity_type, entity_id, action, actor, detail)
+  values (
+    'warehouse', 'import_job', v_job.id, 'applied', auth.uid(),
+    jsonb_build_object(
+      'import_kind', v_job.import_kind,
+      'checksum_sha256', v_job.checksum_sha256,
+      'source_rows', v_job.source_rows,
+      'accepted_rows', v_job.accepted_rows,
+      'rejected_rows', v_job.rejected_rows,
+      'duplicate_rows', v_job.duplicate_rows
+    )
+  );
+
+  v_response := to_jsonb(v_job);
+  return private.finish_idempotent_command(v_command_id, v_response);
+end;
+$$;
+
+create or replace function warehouse.apply_import_job(payload jsonb)
+returns jsonb
+language sql
+security invoker
+set search_path = ''
+as $$ select private.warehouse_apply_import_job(payload) $$;
+
+revoke all on function private.warehouse_apply_import_job(jsonb) from public, anon;
+revoke all on function warehouse.apply_import_job(jsonb) from public, anon;
+grant execute on function private.warehouse_apply_import_job(jsonb) to authenticated, service_role;
+grant execute on function warehouse.apply_import_job(jsonb) to authenticated, service_role;
 
 select pg_notify('pgrst', 'reload schema');

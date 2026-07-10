@@ -18,6 +18,7 @@ const commands = [
   ['decide_stock_change', 'approve_stock_adjustment'],
   ['resolve_exception', 'resolve_exceptions'],
   ['receive_procurement_po', 'receive_stock'],
+  ['apply_import_job', 'import_warehouse_data'],
 ];
 
 const failures = [];
@@ -160,6 +161,14 @@ requireMatch(
 requireMatch(
   /private\.warehouse_receive_procurement_po\(payload jsonb\)[\s\S]*?for update[\s\S]*?received_quantity \+ v_quantity > v_line\.quantity/i,
   'procurement receipt does not lock lines and reject over-receipt',
+);
+requireMatch(
+  /private\.warehouse_apply_import_job\(payload jsonb\)[\s\S]*?created_by = auth\.uid\(\)[\s\S]*?cannot apply/i,
+  'import apply does not enforce creator and reviewer separation',
+);
+requireMatch(
+  /private\.warehouse_apply_import_job\(payload jsonb\)[\s\S]*?for update[\s\S]*?insert into warehouse\.movements/i,
+  'import apply does not lock the job before posting opening movements',
 );
 
 for (const [command] of commands) {

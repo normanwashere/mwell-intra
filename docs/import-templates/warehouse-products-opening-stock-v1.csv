@@ -1,2 +1,3 @@
 template_version,sku,product_name,category,serialized,unit_cost,reorder_point,location_external_id,bin_code,quantity,serial_number
 1,SKU-EXAMPLE,Example Product,merchandise,false,100.00,10,LOC-PASIG,GEN-001,25,
+1,DEVICE-EXAMPLE,Example Serialized Device,device,true,2500.00,2,LOC-PASIG,DEV-001,1,SN-EXAMPLE-001
