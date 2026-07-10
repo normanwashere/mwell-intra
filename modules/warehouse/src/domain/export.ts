@@ -8,7 +8,13 @@ import type {
 
 type CsvValue = string | number;
 export type CsvRow = Record<string, CsvValue>;
-export type WarehouseExportKind = 'inventory' | 'movements' | 'allocations';
+export type WarehouseExportKind =
+  | 'inventory'
+  | 'movements'
+  | 'allocations'
+  | 'inventory_position'
+  | 'quality'
+  | 'cycle_counts';
 
 export function governedExportFilename(
   kind: WarehouseExportKind,
@@ -22,7 +28,8 @@ export function governedExportFilename(
 }
 
 function escapeCell(value: CsvValue): string {
-  const text = String(value);
+  const raw = String(value);
+  const text = typeof value === 'string' && /^[=+\-@]/.test(raw) ? `'${raw}` : raw;
   if (/[",\n\r]/.test(text)) {
     return `"${text.replace(/"/g, '""')}"`;
   }

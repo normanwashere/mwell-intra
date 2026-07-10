@@ -131,7 +131,7 @@ const TABLE_PROJECTIONS: Record<string, string> = {
   exceptions: 'id,exception_type,severity,source_type,source_id,status,owner_id,due_at,resolution,created_at',
   stock_change_requests: 'id,source_type,source_id,product_id,location_id,bin_id,quantity_delta,unit_cost,financial_impact,reason,evidence_urls,status,requested_by,requested_at,created_at',
   warehouse_tasks: 'id,task_type,source_id,title,status,assignee_id,due_at,completed_at,created_at',
-  inventory_positions: 'id,product_id,location_id,bin_id,on_hand,committed,held,unavailable,available,created_at',
+  inventory_position_v1: 'id,product_id,location_id,bin_id,on_hand,committed,held,unavailable,available,created_at',
   procurement_po_handoff: 'id,po_number,vendor_name,status,expected_date,lines',
 };
 
@@ -311,7 +311,7 @@ export class SupabaseRepository implements WarehouseControlRepository {
   }
 
   listInventoryPositions(query: PageQuery): Promise<PageResult<InventoryPosition>> {
-    return this.listControl('inventory_positions', query, rowToInventoryPosition, null);
+    return this.listControl('inventory_position_v1', query, rowToInventoryPosition, null);
   }
 
   async inspectQuality(input: InspectQualityInput): Promise<QualityInspection> {

@@ -44,6 +44,14 @@ const requiredCapabilities = [
   'import_warehouse_data',
 ];
 
+const requiredViews = [
+  'inventory_position_v1',
+  'bi_movements_v1',
+  'bi_quality_v1',
+  'bi_cycle_counts_v1',
+  'warehouse_tasks',
+];
+
 const failures = [];
 function requireMatch(pattern, message) {
   try {
@@ -83,6 +91,17 @@ for (const capability of requiredCapabilities) {
   );
 }
 
+for (const view of requiredViews) {
+  requireMatch(
+    new RegExp(`create or replace view warehouse\\.${view}[\\s\\S]*?with \\(security_invoker = true\\)`, 'i'),
+    `warehouse.${view} is missing or not security-invoker`,
+  );
+  requireMatch(
+    new RegExp(`grant select on warehouse\\.${view} to authenticated`, 'i'),
+    `warehouse.${view} is not granted explicitly`,
+  );
+}
+
 requireMatch(
   /unique\s*\(actor_id\s*,\s*command_name\s*,\s*idempotency_key\s*\)/i,
   'command_log lacks actor/command/idempotency uniqueness',
@@ -102,6 +121,10 @@ requireMatch(
 requireMatch(
   /alter table warehouse\.products\s+add column if not exists shelf_life_warning_days integer/i,
   'products.shelf_life_warning_days is missing',
+);
+requireMatch(
+  /'inventory_position'\s*,\s*'quality'\s*,\s*'cycle_counts'/i,
+  'governed W1 export types are missing',
 );
 
 if (failures.length > 0) {

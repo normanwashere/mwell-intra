@@ -519,4 +519,226 @@ revoke all on function warehouse.apply_import_job(jsonb) from public, anon;
 grant execute on function private.warehouse_apply_import_job(jsonb) to authenticated, service_role;
 grant execute on function warehouse.apply_import_job(jsonb) to authenticated, service_role;
 
+create or replace view warehouse.inventory_position_v1
+with (security_invoker = true)
+as
+with on_hand as (
+  select product_id, location_id, bin_id, sum(quantity)::bigint as on_hand
+    from warehouse.stock_levels
+   group by product_id, location_id, bin_id
+  union all
+  select product_id, location_id, bin_id, count(*)::bigint as on_hand
+    from warehouse.inventory_units
+   where status in ('in_stock', 'returned')
+   group by product_id, location_id, bin_id
+), positions as (
+  select product_id, location_id, bin_id, sum(on_hand)::bigint as on_hand
+    from on_hand group by product_id, location_id, bin_id
+), ranked as (
+  select positions.*,
+         row_number() over (partition by product_id order by location_id, bin_id nulls first) as product_position
+    from positions
+), commitments as (
+  select product_id, sum(quantity)::bigint as committed
+    from warehouse.allocations
+   where status in ('reserved', 'allocated')
+   group by product_id
+), holds as (
+  select product_id, location_id, bin_id, sum(quantity)::bigint as held
+    from warehouse.inventory_holds
+   where status = 'active'
+   group by product_id, location_id, bin_id
+), unavailable as (
+  select product_id, location_id, bin_id, count(*)::bigint as unavailable
+    from warehouse.inventory_units
+   where status = 'returned'
+   group by product_id, location_id, bin_id
+)
+select
+  ranked.product_id || '|' || ranked.location_id || '|' || coalesce(ranked.bin_id, '') as id,
+  ranked.product_id,
+  ranked.location_id,
+  ranked.bin_id,
+  ranked.on_hand,
+  case when ranked.product_position = 1 then coalesce(commitments.committed, 0) else 0 end as committed,
+  coalesce(holds.held, 0) as held,
+  coalesce(unavailable.unavailable, 0) as unavailable,
+  greatest(
+    ranked.on_hand
+      - case when ranked.product_position = 1 then coalesce(commitments.committed, 0) else 0 end
+      - coalesce(holds.held, 0)
+      - coalesce(unavailable.unavailable, 0),
+    0
+  ) as available,
+  timestamptz '1970-01-01 00:00:00+00' as created_at
+from ranked
+left join commitments using (product_id)
+left join holds on holds.product_id = ranked.product_id
+  and holds.location_id = ranked.location_id
+  and holds.bin_id is not distinct from ranked.bin_id
+left join unavailable on unavailable.product_id = ranked.product_id
+  and unavailable.location_id = ranked.location_id
+  and unavailable.bin_id is not distinct from ranked.bin_id;
+
+create or replace view warehouse.warehouse_tasks
+with (security_invoker = true)
+as
+select
+  'quality-' || inspection.id::text as id,
+  'quality'::text as task_type,
+  inspection.id::text as source_id,
+  'Inspect receipt stock'::text as title,
+  'due'::text as status,
+  null::uuid as assignee_id,
+  inspection.created_at + interval '1 day' as due_at,
+  null::timestamptz as completed_at,
+  inspection.created_at
+from warehouse.quality_inspections inspection
+where inspection.disposition = 'pending'
+union all
+select
+  'exception-' || exception.id::text,
+  'exception', exception.id::text,
+  'Resolve ' || replace(exception.exception_type, '_', ' '),
+  case when exception.status = 'in_progress' then 'blocked' else 'due' end,
+  exception.owner_id, exception.due_at, null::timestamptz, exception.created_at
+from warehouse.exceptions exception
+where exception.status in ('open', 'in_progress');
+
+create or replace view warehouse.bi_movements_v1
+with (security_invoker = true)
+as
+select
+  movement.id, movement.created_at, movement.type, movement.product_id,
+  product.sku, movement.quantity, movement.from_location_id, movement.to_location_id,
+  movement.from_bin_id, movement.to_bin_id, movement.lot_id, movement.serial_number,
+  movement.event_id, movement.reason, movement.reference
+from warehouse.movements movement
+join warehouse.products product on product.id = movement.product_id;
+
+create or replace view warehouse.bi_quality_v1
+with (security_invoker = true)
+as
+select
+  inspection.id, inspection.created_at, inspection.source_type, inspection.source_id,
+  inspection.product_id, product.sku, inspection.location_id, inspection.bin_id,
+  inspection.lot_id, inspection.serial_number, inspection.quantity,
+  inspection.disposition, inspection.reason,
+  case when hold.status = 'active' then hold.quantity else 0 end as active_hold_quantity
+from warehouse.quality_inspections inspection
+join warehouse.products product on product.id = inspection.product_id
+left join warehouse.inventory_holds hold on hold.inspection_id = inspection.id;
+
+create or replace view warehouse.bi_cycle_counts_v1
+with (security_invoker = true)
+as
+select
+  count_record.id || '|' || (line.ordinality - 1)::text as id,
+  count_record.id as cycle_count_id,
+  count_record.location_id,
+  count_record.bin_id,
+  count_record.status,
+  count_record.submitted_at,
+  line.value->>'productId' as product_id,
+  (line.value->>'expected')::integer as expected,
+  (line.value->>'counted')::integer as counted,
+  (line.value->>'counted')::integer - (line.value->>'expected')::integer as variance
+from warehouse.cycle_counts count_record
+cross join lateral jsonb_array_elements(count_record.lines) with ordinality as line(value, ordinality)
+where count_record.status <> 'draft';
+
+revoke all on warehouse.inventory_position_v1 from public, anon;
+revoke all on warehouse.warehouse_tasks from public, anon;
+revoke all on warehouse.bi_movements_v1 from public, anon;
+revoke all on warehouse.bi_quality_v1 from public, anon;
+revoke all on warehouse.bi_cycle_counts_v1 from public, anon;
+grant select on warehouse.inventory_position_v1 to authenticated, service_role;
+grant select on warehouse.warehouse_tasks to authenticated, service_role;
+grant select on warehouse.bi_movements_v1 to authenticated, service_role;
+grant select on warehouse.bi_quality_v1 to authenticated, service_role;
+grant select on warehouse.bi_cycle_counts_v1 to authenticated, service_role;
+
+alter table warehouse.export_jobs drop constraint if exists warehouse_export_type_check;
+alter table warehouse.export_jobs add constraint warehouse_export_type_check
+  check (export_type in (
+    'inventory', 'movements', 'allocations',
+    'inventory_position', 'quality', 'cycle_counts'
+  ));
+
+create or replace function warehouse.register_export_job(payload jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_job warehouse.export_jobs;
+  v_id text := nullif(payload->>'id', '');
+  v_kind text := nullif(payload->>'export_type', '');
+  v_filename text := nullif(payload->>'filename', '');
+  v_path text := nullif(payload->>'storage_path', '');
+  v_corrected_from text := nullif(payload->>'corrected_from', '');
+begin
+  if not (
+    core.has_cap('warehouse', 'view_analytics')
+    or core.has_cap('warehouse', 'view_finance')
+  ) then
+    raise exception 'Not authorized: warehouse.register_export_job';
+  end if;
+  if v_id is null or v_id !~ '^exp_[A-Za-z0-9_-]{12,}$' then
+    raise exception 'Invalid export id';
+  end if;
+  if v_kind not in (
+    'inventory', 'movements', 'allocations',
+    'inventory_position', 'quality', 'cycle_counts'
+  ) then
+    raise exception 'Invalid export type';
+  end if;
+  if v_filename is null
+     or v_filename !~ ('^mwell-intra-' || replace(v_kind, '_', '[-_]') || '-[0-9]{8}T[0-9]{6}Z[.]csv$') then
+    raise exception 'Invalid governed export filename';
+  end if;
+  if v_path is null or v_path not like 'exports/' || auth.uid()::text || '/%' then
+    raise exception 'Export path is outside the user scope';
+  end if;
+  if lower(coalesce(payload->>'checksum_sha256', '')) !~ '^[0-9a-f]{64}$' then
+    raise exception 'A valid SHA-256 checksum is required';
+  end if;
+  if v_corrected_from is not null and not exists (
+    select 1 from warehouse.export_jobs source
+     where source.id = v_corrected_from
+       and source.status = 'correction_required'
+       and source.export_type = v_kind
+  ) then
+    raise exception 'Correction source is not eligible or does not match the export type';
+  end if;
+
+  insert into warehouse.export_jobs(
+    id, export_type, filename, storage_path, checksum_sha256, row_count,
+    created_by, created_by_email, corrected_from
+  ) values (
+    v_id, v_kind, v_filename, v_path, lower(payload->>'checksum_sha256'),
+    coalesce(nullif(payload->>'row_count', '')::integer, 0),
+    auth.uid(), coalesce(auth.jwt()->>'email', ''), v_corrected_from
+  ) returning * into v_job;
+
+  if v_job.corrected_from is not null then
+    update warehouse.export_jobs
+       set status = 'superseded',
+           review_note = concat_ws('; ', review_note, 'Superseded by ' || v_job.id)
+     where id = v_job.corrected_from and status = 'correction_required';
+  end if;
+  insert into core.activity_log(module, entity_type, entity_id, action, actor, detail)
+  values (
+    'warehouse', 'export_job', v_job.id, 'created', auth.uid(),
+    jsonb_build_object(
+      'export_type', v_job.export_type,
+      'row_count', v_job.row_count,
+      'checksum_sha256', v_job.checksum_sha256
+    )
+  );
+  return to_jsonb(v_job);
+end;
+$$;
+
 select pg_notify('pgrst', 'reload schema');

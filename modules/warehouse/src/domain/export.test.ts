@@ -58,6 +58,12 @@ describe('governedExportFilename', () => {
       governedExportFilename('inventory', new Date('2026-07-10T04:30:15.000Z')),
     ).toBe('mwell-intra-inventory-20260710T043015Z.csv');
   });
+
+  it('neutralizes formula-leading text cells', () => {
+    expect(toCsv([{ value: '=HYPERLINK("bad")' }])).toContain("'=HYPERLINK");
+    expect(toCsv([{ value: '@SUM(A1)' }])).toContain("'@SUM");
+    expect(toCsv([{ value: '-10' }])).toContain("'-10");
+  });
 });
 
 describe('movementsToCsv', () => {

@@ -14,6 +14,9 @@ const EXPORT_KINDS = new Set<WarehouseExportKind>([
   'inventory',
   'movements',
   'allocations',
+  'inventory_position',
+  'quality',
+  'cycle_counts',
 ]);
 
 type UntypedRow = Record<string, unknown>;
@@ -34,6 +37,31 @@ async function buildExportRows(
   client: NonNullable<Awaited<ReturnType<typeof createSupabaseServerClient>>>,
   kind: WarehouseExportKind,
 ): Promise<CsvRow[]> {
+  const reportingViews: Partial<Record<WarehouseExportKind, { table: string; projection: string }>> = {
+    inventory_position: {
+      table: 'inventory_position_v1',
+      projection: 'product_id,location_id,bin_id,on_hand,committed,held,unavailable,available',
+    },
+    quality: {
+      table: 'bi_quality_v1',
+      projection: 'id,created_at,source_type,source_id,product_id,sku,location_id,bin_id,lot_id,serial_number,quantity,disposition,reason,active_hold_quantity',
+    },
+    cycle_counts: {
+      table: 'bi_cycle_counts_v1',
+      projection: 'id,cycle_count_id,location_id,bin_id,status,submitted_at,product_id,expected,counted,variance',
+    },
+  };
+  const reportingView = reportingViews[kind];
+  if (reportingView) {
+    const { data, error } = await client
+      .from(reportingView.table)
+      .select(reportingView.projection)
+      .limit(100000);
+    if (error) throw new Error(error.message);
+    return asRows(data).map((row) => Object.fromEntries(
+      Object.entries(row).map(([key, value]) => [key, csvValue(value)]),
+    ));
+  }
   if (kind === 'movements') {
     const [movementsResult, productsResult] = await Promise.all([
       client

@@ -126,7 +126,7 @@ function makeMockClient(seed: WarehouseData) {
       status: 'due', assignee_id: null, due_at: null, completed_at: null,
       created_at: '2026-07-10T00:00:00Z',
     }],
-    inventory_positions: [{
+    inventory_position_v1: [{
       id: 'shirt|loc-wh|', product_id: 'shirt', location_id: 'loc-wh', bin_id: null,
       on_hand: 20, committed: 1, held: 1, unavailable: 0, available: 18,
       created_at: '2026-07-10T00:00:00Z',
@@ -268,7 +268,7 @@ describe('SupabaseRepository W1 control boundary', () => {
     ]);
     const controlTables = [
       'quality_inspections', 'inventory_holds', 'exceptions',
-      'stock_change_requests', 'warehouse_tasks', 'inventory_positions',
+      'stock_change_requests', 'warehouse_tasks', 'inventory_position_v1',
     ];
     for (const table of controlTables) {
       const query = queries.find((item) => item.table === table)!;

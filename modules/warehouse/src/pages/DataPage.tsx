@@ -9,6 +9,7 @@ import {
 import type { WarehouseExportKind } from '@/domain/export';
 import { downloadText, downloadUrl } from '@/app/download';
 import { prepareWarehouseExport } from '@/app/governedExports';
+import { warehouseMetrics } from '@intra/data-kit';
 import {
   Badge,
   Card,
@@ -21,18 +22,10 @@ import { Icon } from '@/components/Icon';
 const DICTIONARY: { field: string; type: string; meaning: string }[] = [
   { field: 'product.sku', type: 'string', meaning: 'Unique stock-keeping unit code.' },
   { field: 'product.serialized', type: 'boolean', meaning: 'Whether each unit has a unique serial.' },
-  { field: 'inventory_unit.status', type: 'enum', meaning: 'in_stock | allocated | issued | returned | lost.' },
-  { field: 'movement.type', type: 'enum', meaning: 'receipt | issue | return | transfer | adjustment | cycle_count.' },
+  { field: 'inventory_unit.status', type: 'enum', meaning: 'in_stock | allocated | issued | returned | vendor_return | lost.' },
+  { field: 'movement.type', type: 'enum', meaning: 'receipt | issue | return | vendor_return | transfer | adjustment | cycle_count.' },
   { field: 'allocation.status', type: 'enum', meaning: 'reserved | allocated | issued | returned | cancelled.' },
   { field: 'movement.quantity', type: 'number', meaning: 'Signed quantity for the ledger entry.' },
-];
-
-const METRICS: { metric: string; formula: string }[] = [
-  { metric: 'Available', formula: 'in_stock serialized units, or summed non-serialized stock levels.' },
-  { metric: 'Return rate %', formula: 'round(returned / issued × 100, 1).' },
-  { metric: 'Inventory value', formula: 'Σ on-hand × unit cost (by category).' },
-  { metric: 'Days of cover', formula: 'available ÷ avg daily issued (lookback window).' },
-  { metric: 'Inventory turnover', formula: 'issued in window ÷ average on-hand.' },
 ];
 
 export function DataPage() {
@@ -97,6 +90,34 @@ export function DataPage() {
           >
             {exporting === 'allocations' ? 'Preparing...' : 'Allocations'} <Icon name="download" className="h-4 w-4" />
           </button>
+          {source === 'supabase' && (
+            <>
+              <button
+                type="button"
+                className="btn-outline justify-between"
+                disabled={exporting !== null}
+                onClick={() => void exportCsv('inventory_position', '')}
+              >
+                Inventory position <Icon name="download" className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                className="btn-outline justify-between"
+                disabled={exporting !== null}
+                onClick={() => void exportCsv('quality', '')}
+              >
+                Quality <Icon name="download" className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                className="btn-outline justify-between"
+                disabled={exporting !== null}
+                onClick={() => void exportCsv('cycle_counts', '')}
+              >
+                Cycle counts <Icon name="download" className="h-4 w-4" />
+              </button>
+            </>
+          )}
         </div>
         <p className="mt-3 text-xs text-faint">
           {source === 'memory'
@@ -122,10 +143,21 @@ export function DataPage() {
       <Card>
         <SectionTitle title="Metric definitions" subtitle="Calculation logic for consistency" />
         <ul className="divide-y divide-line" aria-label="Metric definitions">
-          {METRICS.map((m) => (
-            <li key={m.metric} className="py-2.5">
-              <p className="text-sm font-semibold text-ink">{m.metric}</p>
-              <p className="text-sm text-muted">{m.formula}</p>
+          {warehouseMetrics.map((metric) => (
+            <li key={metric.id} className="space-y-1 py-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-ink">{metric.label}</p>
+                <Badge tone="slate">{metric.owner}</Badge>
+              </div>
+              <p className="text-sm text-muted">{metric.formula}</p>
+              <p className="text-xs text-faint">
+                {metric.timeBasis} · {metric.sourceFields.join(', ')}
+              </p>
+              {metric.limitation && (
+                <p className="text-xs text-amber-700 dark:text-amber-300">
+                  {metric.limitation}
+                </p>
+              )}
             </li>
           ))}
         </ul>
