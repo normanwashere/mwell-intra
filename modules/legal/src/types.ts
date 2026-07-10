@@ -200,6 +200,16 @@ export interface RequirementDefinition {
   requiresPersonalData?: boolean;
   /** Free-form tags for filtering ("edd", "bond", "ph-mandatory"). */
   tags?: readonly string[];
+  /** Governing source required before this row may block accreditation. */
+  policySource?: PolicySourceReference;
+}
+
+export interface PolicySourceReference {
+  id: string;
+  version: string;
+  owner: string;
+  sourceDocument: string;
+  section?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -223,6 +233,66 @@ export interface CaseSignature {
   signedAt: string;
   /** Best-effort audit fingerprint (browser + tzOffset). */
   userAgent: string;
+}
+
+export type AccreditationFieldDisposition =
+  | { status: 'not_applicable'; reason: string }
+  | { status: 'foreign_equivalent'; reason: string; reviewerEmail?: string; reviewedAt?: string };
+
+export interface VendorCompanyDetails {
+  tradeName: string;
+  contactNumber: string;
+  businessAddress: string;
+  incorporationDate: string;
+  incorporationPlace: string;
+  tin: string;
+  email: string;
+  website: string;
+  fax?: string;
+  principalName: string;
+  principalEmail: string;
+  principalContactNumber: string;
+  correspondenceName: string;
+  correspondenceEmail: string;
+  correspondenceContactNumber: string;
+  productsOrServices: string;
+  businessType: 'partnership' | 'corporation' | 'sole_prop';
+}
+
+export interface VendorManpowerExperience {
+  countAndExpertise: string;
+  qualifications: string;
+  completedProjects: string;
+}
+
+export type TechnologyVendorPool = 'nodejs' | 'php_laravel' | 'mobile';
+
+export interface TechnologyQualification {
+  pool: TechnologyVendorPool;
+  qualified: boolean;
+  remarks: string;
+}
+
+export interface VendorAccreditationDeclaration {
+  accepted: boolean;
+  noLegalActions: boolean;
+  disclosureDetails: string;
+  verificationAuthorized: boolean;
+  signerName: string;
+  signerTitle: string;
+  signedAt: string;
+}
+
+export interface VendorApplicationSnapshot {
+  policyVersion: 'vendor-accreditation-v2025';
+  entityType: Extract<EntityType, 'corporation' | 'sole_prop' | 'partnership'>;
+  jurisdiction: Jurisdiction;
+  company: VendorCompanyDetails;
+  manpower: VendorManpowerExperience;
+  technologyServiceProvider: boolean;
+  technologyQualifications: TechnologyQualification[];
+  fieldDispositions: Record<string, AccreditationFieldDisposition>;
+  declaration: VendorAccreditationDeclaration;
 }
 
 export interface AccreditationCase {

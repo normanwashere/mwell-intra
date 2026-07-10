@@ -26,6 +26,7 @@ import type {
   RequirementDefinition,
   SpendBand,
 } from '../types';
+import { VENDOR_ACCREDITATION_V2025 } from './vendorAccreditationV2025';
 
 // ---------------------------------------------------------------------------
 // PH — Statutory registration
@@ -1435,6 +1436,25 @@ const INSTRUMENT_ROWS: readonly RequirementDefinition[] = [
 // ---------------------------------------------------------------------------
 // Aggregate export
 // ---------------------------------------------------------------------------
+const V2025_CATALOG_CODES = new Set([
+  'PH_SEC_REG',
+  'PH_DTI_REG',
+  'PH_ARTICLES_INC',
+  'PH_BYLAWS',
+  'PH_GIS',
+  'PH_BIR_2303',
+  'PH_SAMPLE_INVOICE',
+  'PH_MAYORS_PERMIT',
+  'PH_PRIVACY_IMPACT_ASSESSMENT',
+  'PH_AFS',
+  'PH_BANK_CERT',
+  'PH_SEC_CERT',
+  'PH_COMPANY_PROFILE',
+  'PH_MANPOWER_EXPERIENCE',
+  'CYBERSECURITY_POLICIES',
+  'SIGN_NDA',
+]);
+
 export const REQUIREMENT_CATALOG: readonly RequirementDefinition[] = Object.freeze([
   ...PH_STATUTORY,
   ...PH_TAX,
@@ -1449,7 +1469,11 @@ export const REQUIREMENT_CATALOG: readonly RequirementDefinition[] = Object.free
   ...INTL_ROWS,
   ...OWNERSHIP_ROWS,
   ...INSTRUMENT_ROWS,
-] as readonly RequirementDefinition[]);
+].map((definition) =>
+  V2025_CATALOG_CODES.has(definition.code)
+    ? { ...definition, policySource: VENDOR_ACCREDITATION_V2025 }
+    : definition,
+) as readonly RequirementDefinition[]);
 
 /** O(1) lookup by catalog code. */
 export const CATALOG_BY_CODE: Readonly<Record<string, RequirementDefinition>> =
