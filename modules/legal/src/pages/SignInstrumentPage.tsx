@@ -24,7 +24,12 @@ import {
 } from '@intra/ui';
 import { useSession } from '@intra/auth';
 import type { InstrumentField, SignedInstrument } from '../types';
-import { resolveInstrument } from '../requirements/instruments';
+import {
+  generateTechnologyMnda,
+  renderTechnologyMnda,
+  resolveInstrument,
+  type TechnologyMndaFields,
+} from '../requirements/instruments';
 import {
   useAccreditationCases,
   useChecklist,
@@ -40,7 +45,7 @@ export function SignInstrumentPage() {
   const { success, error } = useToast();
   const { getById, loading: casesLoading } = useAccreditationCases();
   const { forCase: checklistForCase } = useChecklist();
-  const { findSigned, sign } = useSignedInstruments();
+  const { findSigned, forCase: signedForCase, sign } = useSignedInstruments();
   const { rows: aliases } = useVendorAliases();
 
   const kase = getById(id);
@@ -52,14 +57,33 @@ export function SignInstrumentPage() {
       ),
     [checklistForCase, id, code],
   );
-  const existing: SignedInstrument | undefined = findSigned(id, code);
-
   const isVendor = profile?.kind === 'vendor';
   const backPath = isVendor ? `/cases/${id}` : `/cases/${id}`;
 
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const [signature, setSignature] = useState<SignaturePayload | null>(null);
   const [busy, setBusy] = useState(false);
+
+  const signatures = useMemo(
+    () => signedForCase(id).filter((row) => row.code === code && !row.revokedAt),
+    [signedForCase, id, code],
+  );
+  const governedMnda =
+    template?.code === 'nda_mutual' &&
+    template.version.startsWith('mnda-tech-service-provider-');
+  const vendorSignature = signatures.find((row) => row.signerParty === 'service_provider');
+  const mwellSignature = signatures.find((row) => row.signerParty === 'mphtc');
+  const countersigned = Boolean(
+    vendorSignature?.documentHash &&
+      vendorSignature.documentHash === mwellSignature?.documentHash,
+  );
+  const existing: SignedInstrument | undefined = governedMnda
+    ? isVendor
+      ? vendorSignature
+      : countersigned
+        ? mwellSignature
+        : undefined
+    : findSigned(id, code);
 
   if (casesLoading) {
     return (
@@ -77,11 +101,23 @@ export function SignInstrumentPage() {
   }
 
   const fields = template.fields ?? [];
+  const effectiveFieldValues =
+    governedMnda && vendorSignature?.fields
+      ? vendorSignature.fields
+      : fieldValues;
   const requiredFieldsOk = fields.every(
-    (f) => !f.required || (fieldValues[f.name] ?? '').trim().length > 0,
+    (f) => !f.required || (effectiveFieldValues[f.name] ?? '').trim().length > 0,
   );
-  const canSign = isVendor && !existing;
+  const canSign = governedMnda
+    ? isVendor
+      ? !vendorSignature
+      : Boolean(vendorSignature) && !mwellSignature
+    : isVendor && !existing;
   const confirmEnabled = Boolean(signature) && requiredFieldsOk && !busy;
+  const renderedBody =
+    governedMnda && requiredFieldsOk
+      ? renderTechnologyMnda(effectiveFieldValues as unknown as TechnologyMndaFields)
+      : template.body;
 
   function setField(name: string, value: string) {
     setFieldValues((prev) => ({ ...prev, [name]: value }));
@@ -95,6 +131,11 @@ export function SignInstrumentPage() {
     }
     setBusy(true);
     try {
+      const generated = governedMnda
+        ? await generateTechnologyMnda(
+            effectiveFieldValues as unknown as TechnologyMndaFields,
+          )
+        : undefined;
       await sign({
         caseId: kase.id,
         code,
@@ -104,7 +145,13 @@ export function SignInstrumentPage() {
         signaturePng: signature.dataUrl,
         signatureMethod: signature.method,
         signerUa: signature.userAgent,
-        fields: fields.length > 0 ? { ...fieldValues } : undefined,
+        fields: fields.length > 0 ? { ...effectiveFieldValues } : undefined,
+        documentHash: generated?.sha256,
+        signerParty: governedMnda
+          ? isVendor
+            ? 'service_provider'
+            : 'mphtc'
+          : undefined,
       });
       success(`${template.label} signed`);
       navigate(backPath);
@@ -128,8 +175,16 @@ export function SignInstrumentPage() {
         }
         accessory={
           <HeroStat label="Status">
-            <Badge tone={existing ? 'emerald' : 'amber'}>
-              {existing ? 'Signed' : 'Awaiting signature'}
+            <Badge tone={countersigned || (!governedMnda && existing) ? 'emerald' : 'amber'}>
+              {governedMnda
+                ? countersigned
+                  ? 'Countersigned'
+                  : vendorSignature
+                    ? 'Awaiting MPHTC countersignature'
+                    : 'Awaiting vendor signature'
+                : existing
+                  ? 'Signed'
+                  : 'Awaiting signature'}
             </Badge>
           </HeroStat>
         }
@@ -142,7 +197,7 @@ export function SignInstrumentPage() {
         />
         <Card>
           <div className="space-y-3 text-sm leading-relaxed text-ink">
-            {template.body.map((paragraph, i) => (
+            {renderedBody.map((paragraph, i) => (
               <p key={i}>{paragraph}</p>
             ))}
           </div>
@@ -178,12 +233,21 @@ export function SignInstrumentPage() {
                 )}
               </dl>
             )}
-            <SignedRecord record={existing} />
+            {governedMnda
+              ? signatures.map((record) => (
+                  <div key={record.id} className="mb-4 last:mb-0">
+                    <p className="mb-2 text-xs font-semibold uppercase text-faint">
+                      {record.signerParty === 'mphtc' ? 'MPHTC' : 'Service provider'} signature
+                    </p>
+                    <SignedRecord record={record} />
+                  </div>
+                ))
+              : <SignedRecord record={existing} />}
           </Card>
         </div>
       ) : canSign ? (
         <>
-          {fields.length > 0 && (
+          {fields.length > 0 && !(governedMnda && !isVendor) && (
             <div>
               <SectionTitle
                 title="Disclosures"

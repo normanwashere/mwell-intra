@@ -173,10 +173,21 @@ export function hasEvidence(
   evidence: CaseEvidence,
 ): boolean {
   if (item.instrument) {
-    return evidence.signed.some(
+    const signatures = evidence.signed.filter(
       (s) =>
         !s.revokedAt &&
         (s.code === item.instrumentCode || s.code === item.code),
+    );
+    const governed = signatures.filter((signature) => signature.documentHash && signature.signerParty);
+    if (governed.length === 0) return signatures.length > 0;
+    return governed.some(
+      (vendor) =>
+        vendor.signerParty === 'service_provider' &&
+        governed.some(
+          (mwell) =>
+            mwell.signerParty === 'mphtc' &&
+            mwell.documentHash === vendor.documentHash,
+        ),
     );
   }
   return docsForChecklistItem(item, evidence).some((d) => d.status !== 'rejected');

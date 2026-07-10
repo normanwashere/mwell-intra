@@ -27,6 +27,7 @@ import type {
   SpendBand,
 } from '../types';
 import { VENDOR_ACCREDITATION_V2025 } from './vendorAccreditationV2025';
+import { TECHNOLOGY_MNDA_TEMPLATE_VERSION } from './instruments';
 
 // ---------------------------------------------------------------------------
 // PH — Statutory registration
@@ -1306,7 +1307,7 @@ const INSTRUMENT_ROWS: readonly RequirementDefinition[] = [
     group: 'legal_instruments',
     instrument: true,
     instrumentCode: 'SIGN_NDA',
-    templateVersion: '2026.07.10',
+    templateVersion: TECHNOLOGY_MNDA_TEMPLATE_VERSION,
   },
   {
     code: 'SIGN_DPA_PH',

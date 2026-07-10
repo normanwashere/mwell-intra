@@ -454,8 +454,33 @@ export interface SignedInstrument {
   signerUa: string;
   /** Captured pre-signature disclosure field values (InstrumentField.name → value). */
   fields?: Record<string, string>;
+  /** Both MNDA signatures must bind this same canonical document hash. */
+  documentHash?: string;
+  signerParty?: 'service_provider' | 'mphtc';
   revokedAt?: string;
   revokedByEmail?: string;
+}
+
+export type InstrumentLifecycleEventType =
+  | 'definitive_agreement_executed'
+  | 'expired'
+  | 'terminated'
+  | 'return_or_destroy_requested'
+  | 'return_or_destroy_completed'
+  | 'retention_exception_recorded';
+
+export interface InstrumentLifecycleEvent {
+  id: string;
+  caseId: string;
+  instrumentCode: InstrumentCode;
+  documentHash: string;
+  eventType: InstrumentLifecycleEventType;
+  occurredAt: string;
+  dueAt?: string;
+  completedAt?: string;
+  evidenceStoragePath?: string;
+  retentionBasis?: string;
+  actorEmail?: string;
 }
 
 // ---------------------------------------------------------------------------

@@ -334,6 +334,8 @@ function mapSigned(row: LiveRow): SignedInstrument {
     signedAt: row.signed_at,
     signerUa: row.signer_ua ?? '',
     fields: row.fields ?? undefined,
+    documentHash: row.document_hash ?? undefined,
+    signerParty: row.signer_party ?? undefined,
     revokedAt: row.revoked_at ?? undefined,
     revokedByEmail: row.revoked_by_email ?? undefined,
   };
@@ -1077,6 +1079,8 @@ export interface SignInstrumentInput {
   signerUa: string;
   /** Captured disclosure field values, when the template declares fields. */
   fields?: Record<string, string>;
+  documentHash?: string;
+  signerParty?: 'service_provider' | 'mphtc';
 }
 
 export interface SignedInstrumentsAPI {
@@ -1094,6 +1098,22 @@ export interface SignedInstrumentsAPI {
  * handler and tests can exercise persistence without React.
  */
 export function signInstrument(input: SignInstrumentInput): SignedInstrument {
+  const existing = safeRead<SignedInstrument>(SIGNED_KEY);
+  const governedMnda = input.templateVersion.startsWith('mnda-tech-service-provider-');
+  if (governedMnda) {
+    if (!input.documentHash?.match(/^[a-f0-9]{64}$/) || !input.signerParty) {
+      throw new Error('Governed MNDA signatures require a SHA-256 document hash and signer party.');
+    }
+    const instrumentRows = existing.filter(
+      (row) => row.caseId === input.caseId && row.code === input.code && !row.revokedAt,
+    );
+    if (instrumentRows.some((row) => row.signerParty === input.signerParty)) {
+      throw new Error('This party has already signed the governed MNDA.');
+    }
+    if (instrumentRows.some((row) => row.documentHash !== input.documentHash)) {
+      throw new Error('Both MNDA parties must sign the same document hash.');
+    }
+  }
   const record: SignedInstrument = {
     id: newId('sig'),
     caseId: input.caseId,
@@ -1107,8 +1127,11 @@ export function signInstrument(input: SignInstrumentInput): SignedInstrument {
     signedAt: nowIso(),
     signerUa: input.signerUa,
     fields: input.fields,
+    documentHash: input.documentHash,
+    signerParty: input.signerParty,
   };
-  safeWrite(SIGNED_KEY, [record, ...safeRead<SignedInstrument>(SIGNED_KEY)]);
+  const nextSigned = [record, ...existing];
+  safeWrite(SIGNED_KEY, nextSigned);
   // Signing a legal instrument IS its fulfillment — there is no separate
   // reviewer decision path for instrument rows (they route to the sign page).
   // Mark the matching checklist item(s) approved so `readyForDecision` (all
@@ -1116,10 +1139,29 @@ export function signInstrument(input: SignInstrumentInput): SignedInstrument {
   const checklist = safeRead<RequirementChecklistItem>(CHECKLIST_KEY);
   let checklistChanged = false;
   const nextChecklist = checklist.map((item) => {
+    const hasBothMndaParties =
+      !governedMnda ||
+      (nextSigned.some(
+        (row) =>
+          row.caseId === input.caseId &&
+          row.code === input.code &&
+          row.documentHash === input.documentHash &&
+          row.signerParty === 'service_provider' &&
+          !row.revokedAt,
+      ) &&
+        nextSigned.some(
+          (row) =>
+            row.caseId === input.caseId &&
+            row.code === input.code &&
+            row.documentHash === input.documentHash &&
+            row.signerParty === 'mphtc' &&
+            !row.revokedAt,
+        ));
     const matches =
       item.caseId === input.caseId &&
       item.instrument &&
       (item.instrumentCode === input.code || item.code === input.code) &&
+      hasBothMndaParties &&
       item.decision !== 'approved';
     if (!matches) return item;
     checklistChanged = true;
@@ -1179,6 +1221,8 @@ export function useSignedInstruments(): SignedInstrumentsAPI {
           signature_method: input.signatureMethod,
           signer_ua: input.signerUa,
           fields: input.fields,
+          document_hash: input.documentHash,
+          signer_party: input.signerParty,
         }).then((row) => {
           const mapped = mapSigned(row);
           return refreshLive().then(() => mapped);

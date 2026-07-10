@@ -106,4 +106,42 @@ describe('signInstrument persistence', () => {
     expect(rows[0]!.id).toBe(record.id);
     expect(rows[0]!.fields).toBeUndefined();
   });
+
+  it('binds both technology MNDA signatures to the same immutable hash', () => {
+    const hash = 'a'.repeat(64);
+    const vendor = signInstrument({
+      ...input,
+      templateVersion: 'mnda-tech-service-provider-2026.06.10-clean-v1',
+      documentHash: hash,
+      signerParty: 'service_provider',
+    });
+    const mwell = signInstrument({
+      ...input,
+      templateVersion: 'mnda-tech-service-provider-2026.06.10-clean-v1',
+      signerName: 'Approved MPHTC Signatory',
+      signerEmail: 'legal@mwell.com.ph',
+      documentHash: hash,
+      signerParty: 'mphtc',
+    });
+    expect(vendor.documentHash).toBe(hash);
+    expect(mwell.documentHash).toBe(hash);
+    expect(readJson<{ documentHash?: string }>(SIGNED_KEY)).toHaveLength(2);
+  });
+
+  it('rejects a countersignature for a different document hash', () => {
+    signInstrument({
+      ...input,
+      templateVersion: 'mnda-tech-service-provider-2026.06.10-clean-v1',
+      documentHash: 'a'.repeat(64),
+      signerParty: 'service_provider',
+    });
+    expect(() =>
+      signInstrument({
+        ...input,
+        templateVersion: 'mnda-tech-service-provider-2026.06.10-clean-v1',
+        documentHash: 'b'.repeat(64),
+        signerParty: 'mphtc',
+      }),
+    ).toThrow('same document hash');
+  });
 });
