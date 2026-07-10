@@ -2,11 +2,37 @@
 
 **Date:** 2026-07-10
 
-**Status:** Approved for implementation planning
+**Status:** Revised for policy-owner review
 
 **Product boundary:** Mwell Intra is the product. Warehouse, Legal, Vendor, Procurement, Finance, and Admin are components of the same protected operating platform.
 
 **Deployment target:** `https://mwell-intra.vercel.app/`
+
+## Authoritative Policy Sources
+
+The following supplied documents are controlling sources for this release:
+
+1. `LGL004-Vendor Accreditation Form 2.0 (3).pdf`, identified in the document as Vendor Accreditation Form v.2025.
+2. `[MNDA]- Tech Service Provider.docx`, the Legal master for mutual confidentiality with technology service providers.
+3. `mWell Procurement Policy and Procedures - Revised Modern Visual Updated.docx`, including its annexes, approval, exception, financial-protection, importation, and payment-readiness controls.
+
+Requirements must be traceable to a source document, source version, section or form field, effective date, and policy owner. The application stores the policy/template version used for each submitted request, accreditation application, declaration, checklist, instrument, award recommendation, and approval. Later policy changes apply prospectively unless Legal or Procurement explicitly starts a governed remediation or renewal.
+
+Where these documents are silent, the application must not invent a monetary threshold, bid quorum, approval authority, legal term, or mandatory document. Such items enter a `policy_decision_required` state and are routed to the policy owner. Current code assumptions are not policy merely because they already exist.
+
+Known source-quality issues must be resolved by Legal before the MNDA is generated in production. The supplied template contains a hard-coded execution date, an `NCS` party reference where `SERVICE PROVIDER` is intended, and an `NCS PHILIPPINES` signature-table label. The system must use a Legal-approved clean master with placeholders; it must not silently alter substantive clauses or reproduce those template defects.
+
+### Current Implementation Remediation Gates
+
+The following known implementation behavior is incompatible with the supplied sources and blocks production promotion:
+
+- The current technology MNDA content uses a five-year survival period and exclusive Metro Manila court jurisdiction. It must be replaced by a generated, versioned instrument that preserves the supplied two-year/definitive-agreement condition, return-or-destroy obligation, and PDRCI arbitration terms.
+- The current Legal catalog includes additional generally useful statutory, tax, labor, governance, and international evidence and marks some of it mandatory. The v.2025 form is the accreditation baseline. An additional requirement may become mandatory only when its own legal/regulatory/policy source, applicability rule, version, and approving owner are recorded; otherwise it remains optional guidance and cannot block submission or approval.
+- The current Procurement engine contains proposed PHP 50,000 petty-cash and PHP 100,000 small-purchase thresholds and fixed two-quote/three-bid rules. They cannot govern live transactions without an approved Finance/Procurement source.
+- The current approval ladder and role resolver contain placeholder monetary bands and allow demo/platform-admin role heuristics to stand in for named DOA assignments. Live approval must resolve from a versioned approved matrix and preserve segregation of duties.
+- Local demo stores and seeded records may support development, but no policy decision, accreditation, award, PO, receiving handoff, or payment-readiness decision may use them in the deployed live mode.
+
+These items require code, migration, data-remediation, and test changes. Existing records created under an incompatible rule are not silently rewritten; the migration identifies affected drafts/cases, assigns a review state, and preserves prior evidence.
 
 ## 1. Objective
 
@@ -84,23 +110,54 @@ Users with no module role receive a clear no-access state and an administrator c
 
 ### 5.1 Vendor And Legal
 
-1. Legal invites a vendor through an authenticated server boundary.
-2. The vendor account is linked to one vendor record.
-3. The vendor completes accreditation fields and uploads private documents.
-4. Legal reviews checklist requirements, requests corrections, and records decisions.
-5. Signed instruments use short-lived governed access and access auditing.
-6. Accreditation state and expiry become the authoritative procurement vendor gate.
+1. The Vendor Management Office owns accreditation when that office exists. Until then, Legal through Atty. Pooja coordinates accreditation and temporary clearance with Procurement.
+2. Legal or the authorized accreditation owner invites a vendor through an authenticated server boundary. The vendor account is linked to one vendor record.
+3. The vendor selects its legal entity type and completes the v.2025 form as structured data: trade name matching BIR Form 2303, contact number, business address, incorporation date and place, TIN, email, website, fax when applicable, principal/owner/partner details, correspondence contact, products/services, business type, manpower count and expertise, qualifications/certifications, and completed projects.
+4. The system derives the exact entity-specific checklist from the v.2025 form and records `N/A` with a reason where the form permits it. Foreign vendors may submit an equivalent document, but the equivalence decision belongs to the accreditation owner and is audited.
+5. Sole proprietorship requirements include DTI trade-name registration, current business permit, three years of audited financial statements, company profile, client history with contact details, applicable privacy and cybersecurity evidence, bank-account proof, official receipt evidence, and NDA.
+6. Partnership requirements include SEC registration, articles of partnership, BIR Form 2303, notarized partnership resolution, three years of audited financial statements, current business permit, company profile, client history with contact details, applicable privacy and cybersecurity evidence, bank-account proof, official receipt evidence, and NDA.
+7. Corporation requirements include SEC registration with articles and by-laws, BIR Form 2303, three years of audited financial statements, notarized Secretary's Certificate or Board Resolution, updated General Information Sheet, current business permit, expertise certifications, company profile, client/project portfolio with contact details, applicable privacy and cybersecurity evidence, bank-account proof, official receipt evidence, and NDA.
+8. Technology-service providers additionally declare applicable expertise against the supplied NodeJS, PHP/Laravel, and mobile-development pools, with reviewer remarks. Qualification review records the relevant stack, full-stack/API/database/cloud/DevOps or mobile capabilities, delivery roles, similar-project track record, technical team, agile practice, QA process, and security standards. A vendor can qualify for one or more pools; a non-technology vendor is not forced through this technology-only section.
+9. Each document is uploaded privately, virus/type/size checked, versioned, reviewed independently, and marked approved, correction required, waived with authority and reason, or not applicable with authority and reason. Replacing a file preserves the prior evidence and review history.
+10. Before submission, an authorized vendor signatory attests that the information and documents are true and correct, declares litigation/foreclosure/bankruptcy/legal-action status, authorizes MPHTC verification, confirms the consequences of false or incomplete disclosure, and signs and dates an immutable application snapshot.
+11. The system replaces the form's email instruction with a governed queue and notifications to the current accreditation owner and Legal mailbox. Email is notification, not the system of record.
+12. Legal reviews checklist requirements, requests corrections, and records decisions. Approval is blocked until every mandatory item for the snapshotted checklist is approved or has an authorized, reasoned disposition.
+13. Procurement may use a non-accredited vendor only through a written justification and approved temporary clearance with follow-up accreditation tasks. A one-time petty-cash vendor follows the separate Finance-controlled exception in Section 5.2.
+14. Accreditation state, scope, effective date, expiry/renewal state, temporary-clearance conditions, and evidence snapshot become the authoritative Procurement vendor gate.
+
+#### Technology-Service MNDA
+
+- The supplied MNDA is mutual and is used for technology service providers. Other vendor categories require the correct Legal-approved instrument rather than reusing the technology template by convenience.
+- Generated fields include execution date, service-provider legal name and registered address, potential-transaction description, notice contact/name/address/fax/email, vendor signatory name/designation, and the approved MPHTC signatory details.
+- The agreement limits use to the potential transaction, restricts disclosure to representatives with a need to know, requires no less than reasonable care, and records that each party remains responsible for its representatives.
+- The Data Privacy Act of the Philippines obligations and necessary-consent warranty remain part of the instrument. Instrument access, download, and signature events are audited and limited to authorized parties.
+- The effective term is the earlier of two years from execution or execution of definitive agreements implementing the potential transaction. The system calculates both conditions and must not substitute the current five-year application text.
+- A written request, expiry, or termination creates a return-or-destroy obligation due within five business days, with a retention exception only where law, regulation, professional standard, or internal retention policy requires it. Completion evidence and any retained-copy basis are recorded.
+- Amendments require a written instrument signed by authorized representatives of both parties. Assignment, notices, public disclosures, and compelled-disclosure notices are tracked as governed Legal events where invoked.
+- Governing law is the Republic of the Philippines. Disputes use PDRCI arbitration, three arbitrators, Makati seat and venue, and English language as stated in the supplied master; the application must not replace this with exclusive court jurisdiction.
+- The instrument is complete only after both authorized parties sign. Each signature binds an exact document hash and template version; the final countersigned file is private, immutable, and retrievable through short-lived audited access.
 
 Required negative paths include wrong-vendor access, unsafe upload, missing requirement, expired accreditation, unauthorized decision, duplicate submission, and signing-link expiry.
 
 ### 5.2 Procurement
 
-1. A requester drafts a purchase request with line items and governed attachments.
-2. Submission derives the approval ladder from policy and locks the submitted version.
-3. Approvers act only on their assigned active step and cannot self-approve where separation is required.
-4. Procurement records sourcing basis, vendor choice, award evidence, and PO details.
-5. PO issuance requires an eligible vendor and one canonical PO handoff.
-6. The issued PO becomes visible to Warehouse receiving without a duplicate local PO record.
+1. A requester owns the business need, budget, technical scope, timeline, previous cost, acceptance criteria, and business justification. The requester supplies facts but cannot select the final sourcing route or waive Procurement controls.
+2. A requester drafts a purchase request with line items and governed attachments. Complete intake includes budget evidence, scope/specifications, target date, acceptance criteria, vendor/market facts, payment terms and documents, and applicable risk/importation answers.
+3. Procurement confirms the route. Use RFQ/canvassing below PHP 1,000,000 when requirements are clear and comparable. Use RFP/bidding at PHP 1,000,000 and above, or at any amount for complex, technical, strategic, high-risk, or data-sensitive work. Importation alone does not force RFP.
+4. The supplied policy does not approve the current application assumptions for PHP 50,000 petty cash, PHP 100,000 small purchase, RFQ two-quote quorum, or RFP three-bid quorum. These controls must be removed from hard-coded launch logic unless Finance/Procurement supplies an approved current matrix. The system instead records vendors invited, responses, deadline compliance, sourcing effort, and an insufficient-bids exception when Procurement proceeds with fewer responses than intended.
+5. Direct Award is limited to a documented sole supplier, emergency, repeat/continuity case with no known vendor issue, or other approved exception. The pack requires requested vendor, exception basis, business justification, supporting evidence, price reasonableness, vendor accreditation or temporary-clearance state, operational/legal/financial/delivery/data risk and mitigation, Procurement Head review, and final DOA approval.
+6. Emergency procurement records the threat to life, safety, environment, operations, patient/service continuity, or serious business disruption; minimizes verbal commitments; captures retrospective documents and approvals; and creates the PO/contract as soon as practicable.
+7. One-time purchase from a non-accredited vendor through petty cash is available only after Finance confirms eligibility. The requester attests that it is not recurring or split, supplies OR/SI or receipt and liquidation support, gives Procurement/Finance visibility, and routes repeat use to accreditation or temporary clearance. No unapproved amount threshold is encoded.
+8. Importation requires Incoterms/shipping terms, importer of record, permits/licenses/registrations, customs broker/logistics, duties/taxes, freight/insurance/storage, foreign exchange and bank charges, total landed cost, vendor export documents, foreign-payment timing, delivery/acceptance point, warranty/defect treatment, and Legal/Finance risk review where applicable.
+9. Submission locks the request, evidence, route decision, policy version, and applicable approval matrix version. Approvers act only on their assigned active step and cannot self-approve where separation is required.
+10. Final monetary and commitment approval comes from the current Delegation of Authority or approved matrix. Placeholder amount ladders or demo-role heuristics cannot authorize a live award. Department/technical review, Procurement Head/commercial review, Finance, Legal, and Final Approver participate only when the policy/matrix and risk facts require them.
+11. Procurement records equivalent RFQ/RFP communications, proposal receipt and deadline compliance, commercial tabulation, technical assessment, accreditation status, recommendation, risks, exceptions, endorsements, and the Award Recommendation. Material clarifications are shared fairly with invited bidders where bidding applies.
+12. Financial-protection review is structured, not a generic attachment prompt: payment bond for labor exposure; down-payment bond equal to the VAT-exclusive advance; performance bond generally 30% for construction, supply/delivery, and specified services; warranty bond generally 10% for construction/build/development warranty exposure; SBLC generally 30% for foreign-vendor cases where approved; CARI/EARI generally at least 100% for applicable works; and other insurance based on policy triggers and approved exceptions.
+13. PO/contract issuance requires an eligible vendor, approved award, matching scope/vendor/price/payment/delivery/warranty/protection terms, and one canonical PO handoff. Vendor work cannot start before the approved PO, contract, or written agreement except under the documented emergency path.
+14. Material post-approval changes to scope, price, vendor, delivery timeline, or terms trigger Procurement review and reapproval under the active DOA; they do not overwrite the approved version.
+15. The issued PO becomes visible to Warehouse receiving without a duplicate local PO record.
+16. The requester records delivery/service completion and technical acceptance. Procurement prepares payment readiness; Finance owns payment processing and release timing. Payment is blocked without the PO/agreement match, invoice or OR/SI, receiving/acceptance evidence, milestone support, tax/withholding support, and Finance handoff.
+17. Closure records payment state, acceptance, warranty/support obligations, open claims/issues, and complete procurement-file evidence. Vendor failure can trigger notice, payment hold, replacement, termination, bond/insurance/warranty claim, or other Legal/Finance-coordinated remedy.
 
 Required negative paths include threshold boundaries, stale approval, skipped tier, self-approval, unaccredited vendor, duplicate PO, unauthorized attachment access, and rejected/resubmitted requests.
 
@@ -152,16 +209,23 @@ The core launch flow is:
 
 ```text
 Vendor invited
-  -> application submitted
-  -> Legal documents complete
-  -> Legal accredited
-  -> Procurement request submitted
-  -> approval ladder completed
+  -> entity-specific application completed
+  -> vendor declaration signed
+  -> accreditation evidence reviewed
+  -> applicable instrument countersigned
+  -> Legal/VMO accredited or temporary clearance approved
+  -> Procurement intake complete
+  -> Procurement route confirmed
+  -> sourcing/evaluation/exception evidence complete
+  -> DOA approval ladder completed
   -> purchase order issued
   -> Warehouse receipt staged
   -> quality accepted or exception routed
   -> stock put away
-  -> Finance export/reconciliation reviewed
+  -> requester acceptance recorded
+  -> payment-readiness pack complete
+  -> Finance payment/reconciliation reviewed
+  -> warranty/claim obligations closed
 ```
 
 Every transition records:
@@ -228,6 +292,10 @@ The shared shell and design system define the visual contract across modules.
 ### Deterministic Local Gates
 
 - Unit/domain/repository tests for every state transition and policy boundary.
+- Policy-fixture tests for v.2025 accreditation requirements by entity type, technology-provider qualification, declarations, temporary clearance, and foreign-equivalent review.
+- Golden-document tests proving generated technology MNDAs use the approved clean master, correct parties, two-year/definitive-agreement term, five-business-day return/destruction obligation, PDRCI clause, and exact document hash.
+- Procurement decision-table tests at PHP 999,999.99 and PHP 1,000,000; complexity/risk overrides; Direct Award; emergency; insufficient bids; petty-cash exception; importation; financial protection; material change; payment readiness; and closure.
+- Tests proving unapproved petty-cash/small-purchase thresholds, fixed bid quorums, and placeholder DOA tiers cannot authorize a live transaction.
 - API route tests for authentication, authorization, validation, and error handling.
 - Static migration checks for RLS, grants, safe search paths, effective function definitions, and migration order.
 - Repository-wide lint, typecheck, dependency audit, and Node 22+ production build.
@@ -246,7 +314,10 @@ Required browser evidence includes:
 - Login, logout, reset, safe redirect, and hard-reload session restoration.
 - Command Center and every accessible/denied module route.
 - Vendor application and Legal review/correction/decision.
+- Entity-specific accreditation checklists, signed declaration, technology-pool review, temporary clearance, and foreign-equivalent decision.
+- MNDA generation, vendor signature, MPHTC countersignature, expiry/definitive-agreement completion, and return-or-destroy task.
 - Procurement request, tier approvals, award, and PO handoff.
+- RFQ/RFP boundary, complexity/risk route override, insufficient bids, Direct Award, emergency, petty-cash exception, importation, bond/insurance review, material change, acceptance, payment readiness, and claim/closure.
 - Warehouse receipt, quality, putaway, issue, return, count, and exception.
 - Finance export, download, review, and correction.
 - Admin role assignment, audit search, and health states.
@@ -305,6 +376,10 @@ Mwell Intra is ready for production promotion only when:
 - All seven product areas are reachable through the authenticated shell according to scoped roles.
 - Finance and Admin are first-class routes and no longer presented as Warehouse appendages.
 - The complete Vendor-to-Finance launch flow progresses through canonical persisted state.
+- Every accreditation application is reproducible from its v.2025 structured-data, checklist, evidence, declaration, review, and policy-version snapshot.
+- Technology-service MNDAs are generated only from a Legal-approved clean master and match the supplied substantive terms; both parties sign the same immutable hash.
+- Procurement route, exception, approval, financial-protection, acceptance, and payment-readiness controls match the supplied policy and current approved DOA matrix.
+- No live authorization depends on the current unapproved small-purchase thresholds, quote quorums, or demo approval-role heuristics.
 - Every high-risk action is server authorized, auditable, and persistent across a fresh session.
 - Private documents and exports have governed access and no public leakage.
 - All local, live test-project, responsive, accessibility, security, and build gates pass.
