@@ -124,6 +124,30 @@ async function probeTable({ url, anonKey, accessToken, schema, table }) {
   return { ok: false, status: response.status, detail };
 }
 
+async function callRpc({ url, anonKey, accessToken, schema, fn, body }) {
+  const response = await fetch(new URL(`/rest/v1/rpc/${fn}`, url), {
+    method: 'POST',
+    headers: {
+      apikey: anonKey,
+      Authorization: `Bearer ${accessToken}`,
+      'Accept-Profile': schema,
+      'Content-Profile': schema,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  if (response.ok) return response.json();
+
+  let detail = `${response.status} ${response.statusText}`;
+  try {
+    const payload = await response.json();
+    detail = [payload.code, payload.message].filter(Boolean).join(' - ') || detail;
+  } catch {
+    // Keep the HTTP status detail.
+  }
+  throw new Error(`${schema}.${fn}: ${detail}`);
+}
+
 async function main() {
   const url = readEnv('NEXT_PUBLIC_SUPABASE_URL');
   const anonKey = readEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY');
@@ -164,6 +188,44 @@ async function main() {
         failures.push({ label, ...result });
         console.error(`FAIL ${label}: ${result.detail}`);
       }
+    }
+  }
+
+  const ladderScenarios = [
+    {
+      label: 'low-value goods',
+      input: { p_category: 'goods', p_amount: 10_000, p_sourcing: 'small_purchase' },
+      expected: ['dept_head', 'procurement_head', 'final_approver'],
+    },
+    {
+      label: 'services at finance threshold',
+      input: { p_category: 'services', p_amount: 200_000, p_sourcing: 'rfq' },
+      expected: ['dept_head', 'procurement_head', 'legal', 'finance', 'final_approver'],
+    },
+    {
+      label: 'high-value RFP',
+      input: { p_category: 'goods', p_amount: 1_000_000, p_sourcing: 'rfp' },
+      expected: ['dept_head', 'procurement_head', 'legal', 'finance', 'final_approver'],
+    },
+  ];
+  for (const scenario of ladderScenarios) {
+    try {
+      const actual = await callRpc({
+        url,
+        anonKey,
+        accessToken,
+        schema: 'procurement',
+        fn: 'derive_approval_tiers',
+        body: scenario.input,
+      });
+      if (JSON.stringify(actual) !== JSON.stringify(scenario.expected)) {
+        throw new Error(`expected ${JSON.stringify(scenario.expected)}, received ${JSON.stringify(actual)}`);
+      }
+      console.log(`PASS procurement approval ladder: ${scenario.label}`);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      failures.push({ label: `procurement ladder: ${scenario.label}`, detail });
+      console.error(`FAIL procurement approval ladder: ${scenario.label}: ${detail}`);
     }
   }
 

@@ -69,6 +69,8 @@ jobs:
           cache: pnpm
       - name: Install
         run: pnpm install --frozen-lockfile
+      - name: Verify effective Procurement migration contract
+        run: pnpm verify:procurement-contract
       - name: Lint
         run: pnpm lint
 

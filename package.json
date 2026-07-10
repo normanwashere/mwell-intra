@@ -14,6 +14,7 @@
     "test": "turbo run test",
     "test:e2e": "turbo run test:e2e",
     "test:intra-live": "node .qa/full-intra-live-e2e.mjs",
+    "verify:procurement-contract": "node scripts/verify-effective-procurement-contract.mjs",
     "verify:supabase-cutover": "node scripts/verify-supabase-cutover.mjs",
     "format": "prettier --write \"**/*.{ts,tsx,md,json}\""
   },
