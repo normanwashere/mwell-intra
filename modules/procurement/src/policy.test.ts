@@ -7,6 +7,7 @@ import {
   categoryMeta,
   deriveSourcingRecommendation,
   evaluateSourcingReadiness,
+  evaluateSubmitReadiness,
   nextApprover,
   nextPendingStep,
   requiredDocuments,
@@ -167,6 +168,20 @@ describe('required evidence', () => {
     ]);
     expect(status.find((doc) => doc.key === 'quotes')?.attached).toBe(true);
     expect(status.find((doc) => doc.key === 'previous')?.attached).toBe(false);
+  });
+
+  it('blocks approval submission until Procurement confirms the route', () => {
+    const input = {
+      sourcingMethod: 'rfq' as const,
+      attachments: [
+        { kind: 'spec' as const },
+        { kind: 'budget' as const },
+        { kind: 'previous_cost' as const },
+        { kind: 'quote' as const },
+      ],
+    };
+    expect(evaluateSubmitReadiness(input).missingDocs).toContain('Procurement-confirmed sourcing route');
+    expect(evaluateSubmitReadiness({ ...input, compliance: { routeConfirmed: true } }).ok).toBe(true);
   });
 });
 

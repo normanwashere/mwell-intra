@@ -28,8 +28,11 @@ import {
   Textarea,
   useToast,
 } from '@intra/ui';
-import { Guard, useSession } from '@intra/auth';
+import { Guard, useCan, useSession } from '@intra/auth';
 import type {
+  ImportationPlan,
+  ProcurementExceptionPack,
+  ProcurementRiskFacts,
   RequestAttachmentKind,
   RequestCategory,
   SourcingMethod,
@@ -38,11 +41,15 @@ import { useProcurementRequests, useProcurementVendors } from '../localStore';
 import {
   CATEGORY_META,
   buildApprovalLadder,
+  deriveSourcingRecommendation,
   requiredDocumentsStatus,
   sourcingMethodLabel,
-  suggestSourcingMethod,
   tierLabel,
 } from '../policy';
+import { SourcingDecisionPanel } from '../components/SourcingDecisionPanel';
+import { ExceptionPack } from '../components/ExceptionPack';
+import { FinancialProtectionPanel } from '../components/FinancialProtectionPanel';
+import { EvaluationMatrix, type EvaluationMatrixValue } from '../components/EvaluationMatrix';
 import { ATTACHMENT_KIND_LABEL, accreditationLabel } from '../labels';
 import {
   validateRequestAttachment,
@@ -72,16 +79,6 @@ function toNumber(v: string): number | undefined {
   return Number.isFinite(n) && n > 0 ? n : undefined;
 }
 
-const ALL_SOURCING: SourcingMethod[] = [
-  'petty_cash',
-  'small_purchase',
-  'rfq',
-  'rfp',
-  'direct_award',
-  'repeat_order',
-  'emergency',
-];
-
 const KIND_OPTIONS: RequestAttachmentKind[] = [
   'spec',
   'budget',
@@ -107,6 +104,7 @@ export function CreateRequestPage() {
   const { add } = useProcurementRequests();
   const vendors = useProcurementVendors();
   const { profile } = useSession();
+  const canConfirmRoute = useCan('procurement', 'manage_rfp');
 
   const [step, setStep] = useState<StepN>(1);
 
@@ -132,11 +130,42 @@ export function CreateRequestPage() {
   const [sourcingOverride, setSourcingOverride] = useState(false);
   const [emergency, setEmergency] = useState(false);
   const [repeat, setRepeat] = useState(false);
+  const [routeConfirmed, setRouteConfirmed] = useState(false);
+  const [riskFacts, setRiskFacts] = useState<ProcurementRiskFacts>({
+    comparable: true,
+    complex: false,
+    technical: false,
+    strategic: false,
+    highRisk: false,
+    dataSensitive: false,
+    importation: false,
+  });
 
   // Compliance flags
   const [philgeps, setPhilgeps] = useState('');
   const [directAwardReason, setDirectAwardReason] = useState('');
   const [priceReasonableness, setPriceReasonableness] = useState('');
+  const [exceptionPack, setExceptionPack] = useState<ProcurementExceptionPack>({
+    type: 'direct_award',
+    justification: '',
+    priceReasonableness: '',
+    risksAndMitigations: '',
+  });
+  const [importationPlan, setImportationPlan] = useState<ImportationPlan>({
+    incoterms: '',
+    importerOfRecord: '',
+    permitsAndRegistrations: '',
+    customsBrokerAndLogistics: '',
+    dutiesTaxesFreightInsurance: '',
+    foreignPaymentTiming: '',
+    deliveryAcceptanceAndWarranty: '',
+  });
+  const [evaluation, setEvaluation] = useState<EvaluationMatrixValue>({
+    intendedResponses: 0,
+    vendorsInvited: 0,
+    responsesReceived: 0,
+    insufficientBidsExceptionApproved: false,
+  });
 
   const [attachments, setAttachments] = useState<PendingRequestAttachment[]>([]);
 
@@ -150,21 +179,24 @@ export function CreateRequestPage() {
     [lines],
   );
 
-  const suggestedMethod = useMemo(
+  const recommendation = useMemo(
     () =>
-      suggestSourcingMethod({
+      deriveSourcingRecommendation({
         category: category || undefined,
         amount: total,
         emergency,
         repeat,
+        ...riskFacts,
       }),
-    [category, total, emergency, repeat],
+    [category, total, emergency, repeat, riskFacts],
   );
+  const suggestedMethod = recommendation.method;
 
   // Keep the sourcing method in sync with the suggestion until the officer
   // explicitly overrides.
   useEffect(() => {
     if (!sourcingOverride) setSourcingMethod(suggestedMethod);
+    setRouteConfirmed(false);
   }, [suggestedMethod, sourcingOverride]);
 
   const effectiveSourcing: SourcingMethod = (sourcingMethod || suggestedMethod) as SourcingMethod;
@@ -200,6 +232,18 @@ export function CreateRequestPage() {
     lines.some((l) => l.description.trim());
   const step2Valid = needDesc.trim().length > 0;
   const canSubmit = step1Valid && step2Valid;
+  const exceptionRequired = ['direct_award', 'emergency', 'repeat_order', 'petty_cash'].includes(effectiveSourcing);
+  const exceptionReady =
+    !exceptionRequired ||
+    (exceptionPack.justification.trim().length > 0 &&
+      (effectiveSourcing === 'petty_cash'
+        ? exceptionPack.financeEligibilityConfirmed === true &&
+          exceptionPack.nonRecurringNonSplitAttested === true
+        : (exceptionPack.priceReasonableness ?? priceReasonableness).trim().length > 0));
+  const importationReady =
+    !riskFacts.importation ||
+    Object.values(importationPlan).every((value) => value.trim().length > 0);
+  const routeEvidenceReady = exceptionReady && importationReady;
 
   function updateLine(key: string, patch: Partial<LineDraft>) {
     setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l)));
@@ -264,6 +308,10 @@ export function CreateRequestPage() {
       error('Give the request a title, category, need description, and at least one line item.');
       return;
     }
+    if (andSubmit && !routeConfirmed) {
+      error('Save the draft for Procurement route confirmation before approval submission.');
+      return;
+    }
     // Explicit quantity guard — a line entered as 0 (or negative) must not
     // silently coerce to 1 on save.
     const invalidQtyLine = lines.find(
@@ -284,12 +332,34 @@ export function CreateRequestPage() {
           unitPrice: toNumber(l.unitPrice),
         }));
       const vendor = vendors.find((v) => v.id === vendorId);
+      const exceptionType: ProcurementExceptionPack['type'] =
+        effectiveSourcing === 'emergency'
+          ? 'emergency'
+          : effectiveSourcing === 'repeat_order'
+            ? 'repeat_continuity'
+            : effectiveSourcing === 'petty_cash'
+              ? 'petty_cash_non_accredited'
+              : 'direct_award';
 
       const compliance: Parameters<typeof add>[0]['compliance'] = {
         philgepsReference: philgeps.trim() || undefined,
         priceReasonableness: priceReasonableness.trim() || undefined,
         vendorAccreditationRequired:
           effectiveSourcing !== 'petty_cash' && effectiveSourcing !== 'emergency',
+        routeConfirmed,
+        routeConfirmedByEmail: routeConfirmed ? profile?.email : undefined,
+        policyVersion: 'procurement-policy-revised-2026',
+        riskFacts,
+        exceptionPack:
+          ['direct_award', 'emergency', 'repeat_order', 'petty_cash'].includes(effectiveSourcing)
+            ? { ...exceptionPack, type: exceptionType, priceReasonableness: priceReasonableness.trim() || exceptionPack.priceReasonableness }
+            : undefined,
+        importationPlan: riskFacts.importation ? importationPlan : undefined,
+        intendedResponses: evaluation.intendedResponses || undefined,
+        vendorsInvited: evaluation.vendorsInvited || undefined,
+        responsesReceived: evaluation.responsesReceived || undefined,
+        insufficientBidsExceptionApproved:
+          evaluation.insufficientBidsExceptionApproved || undefined,
       };
       if (effectiveSourcing === 'direct_award' || effectiveSourcing === 'emergency') {
         const reason = (directAwardReason || 'other') as
@@ -801,24 +871,36 @@ export function CreateRequestPage() {
                   </label>
                 </div>
 
-                <Field label="Sourcing method" htmlFor="sourcing">
-                  <select
-                    id="sourcing"
-                    className="input"
-                    value={sourcingMethod || suggestedMethod}
-                    onChange={(e) => {
-                      const v = e.target.value as SourcingMethod;
-                      setSourcingMethod(v);
-                      setSourcingOverride(v !== suggestedMethod);
-                    }}
+                <SourcingDecisionPanel
+                  riskFacts={riskFacts}
+                  onRiskFactsChange={(value) => {
+                    setRiskFacts(value);
+                    setRouteConfirmed(false);
+                  }}
+                  recommendation={recommendation}
+                  value={effectiveSourcing}
+                  onChange={(method) => {
+                    setSourcingMethod(method);
+                    setSourcingOverride(method !== suggestedMethod);
+                    setRouteConfirmed(false);
+                  }}
+                  canConfirm={canConfirmRoute}
+                  confirmed={routeConfirmed}
+                />
+                {canConfirmRoute && !routeConfirmed && (
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    disabled={!routeEvidenceReady}
+                    onClick={() => setRouteConfirmed(true)}
                   >
-                    {ALL_SOURCING.map((m) => (
-                      <option key={m} value={m}>
-                        {sourcingMethodLabel(m)}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
+                    <Icon name="check" className="h-4 w-4" />
+                    Confirm sourcing route
+                  </button>
+                )}
+                {!routeEvidenceReady && (
+                  <p className="text-xs text-amber-700 dark:text-amber-300">Complete the applicable exception and importation controls before Procurement confirms this route.</p>
+                )}
                 {sourcingOverride && (
                   <p className="text-xs text-amber-700 dark:text-amber-300">
                     <Icon name="alert" className="mr-1 inline h-3.5 w-3.5" />
@@ -854,6 +936,29 @@ export function CreateRequestPage() {
                   </div>
                 )}
 
+                {['direct_award', 'emergency', 'repeat_order', 'petty_cash'].includes(effectiveSourcing) && (
+                  <ExceptionPack method={effectiveSourcing} value={exceptionPack} onChange={setExceptionPack} />
+                )}
+
+                {riskFacts.importation && (
+                  <section className="space-y-3 rounded-lg border border-line p-4">
+                    <div><h3 className="font-semibold text-ink">Importation plan</h3><p className="text-xs text-muted">Importation adds landed-cost, logistics, permit, and payment controls but does not automatically force RFP.</p></div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {([
+                        ['incoterms', 'Incoterms / shipping terms'],
+                        ['importerOfRecord', 'Importer of record'],
+                        ['permitsAndRegistrations', 'Permits, licenses, and registrations'],
+                        ['customsBrokerAndLogistics', 'Customs broker and logistics'],
+                        ['dutiesTaxesFreightInsurance', 'Duties, taxes, freight, insurance, storage, FX, and bank charges'],
+                        ['foreignPaymentTiming', 'Foreign payment timing and protection'],
+                        ['deliveryAcceptanceAndWarranty', 'Delivery, acceptance, commissioning, defects, and warranty'],
+                      ] as const).map(([key, label]) => (
+                        <label key={key} className="text-sm font-semibold text-ink">{label}<textarea rows={3} className="input mt-1.5" value={importationPlan[key]} onChange={(event) => setImportationPlan({ ...importationPlan, [key]: event.target.value })} /></label>
+                      ))}
+                    </div>
+                  </section>
+                )}
+
                 {(effectiveSourcing === 'rfp' || effectiveSourcing === 'rfq') && (
                   <Field label="PhilGEPS reference (if applicable)" htmlFor="philgeps">
                     <Input
@@ -866,11 +971,17 @@ export function CreateRequestPage() {
                 )}
 
                 {(effectiveSourcing === 'rfp' || effectiveSourcing === 'rfq') && (
-                  <p className="text-xs text-muted">
-                    <Icon name="info" className="mr-1 inline h-3.5 w-3.5" />
-                    Record invited vendors, responses, and the basis for proceeding. A shortfall against Procurement's intended response count requires an insufficient-bids exception.
-                  </p>
+                  <EvaluationMatrix
+                    value={evaluation}
+                    onChange={setEvaluation}
+                    readOnly={!canConfirmRoute}
+                  />
                 )}
+              </section>
+
+              <section className="card space-y-3 p-4 sm:p-5">
+                <div><h2 className="font-display text-base font-bold text-ink">Financial protection review</h2><p className="text-xs text-muted">Policy triggers are shown before award so bonds, insurance, or SBLC evidence is not discovered after work starts.</p></div>
+                <FinancialProtectionPanel category={category || undefined} amount={total} importation={riskFacts.importation} />
               </section>
 
               <section className="card space-y-3 p-4 sm:p-5">
@@ -995,10 +1106,14 @@ export function CreateRequestPage() {
                 <Button
                   type="button"
                   variant="primary"
-                  disabled={submitting || !canSubmit}
+                  disabled={submitting || !canSubmit || !routeConfirmed}
                   onClick={(e) => handleSubmit(e as unknown as FormEvent, true)}
                 >
-                  {submitting ? 'Submitting…' : 'Save & submit for approval'}
+                  {submitting
+                    ? 'Submitting…'
+                    : routeConfirmed
+                      ? 'Save & submit for approval'
+                      : 'Awaiting Procurement routing'}
                 </Button>
               </div>
             )}

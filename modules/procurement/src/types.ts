@@ -177,6 +177,12 @@ export interface ComplianceChecks {
   vendorsInvited?: number;
   responsesReceived?: number;
   insufficientBidsExceptionApproved?: boolean;
+  routeConfirmed?: boolean;
+  routeConfirmedByEmail?: string;
+  policyVersion?: string;
+  riskFacts?: ProcurementRiskFacts;
+  exceptionPack?: ProcurementExceptionPack;
+  importationPlan?: ImportationPlan;
   /** Free-text reference (e.g. PhilGEPS notice #) captured when applicable. */
   philgepsReference?: string;
   /** Direct-award reason (policy Annex C). Only rendered when sourcing is
@@ -189,6 +195,35 @@ export interface ComplianceChecks {
   /** Free-text price-reasonableness note; required by Annex C for direct
    *  awards, optional otherwise. */
   priceReasonableness?: string;
+}
+
+export interface ProcurementRiskFacts {
+  comparable: boolean;
+  complex: boolean;
+  technical: boolean;
+  strategic: boolean;
+  highRisk: boolean;
+  dataSensitive: boolean;
+  importation: boolean;
+}
+
+export interface ProcurementExceptionPack {
+  type: 'direct_award' | 'emergency' | 'repeat_continuity' | 'insufficient_bids' | 'petty_cash_non_accredited';
+  justification: string;
+  priceReasonableness?: string;
+  risksAndMitigations?: string;
+  financeEligibilityConfirmed?: boolean;
+  nonRecurringNonSplitAttested?: boolean;
+}
+
+export interface ImportationPlan {
+  incoterms: string;
+  importerOfRecord: string;
+  permitsAndRegistrations: string;
+  customsBrokerAndLogistics: string;
+  dutiesTaxesFreightInsurance: string;
+  foreignPaymentTiming: string;
+  deliveryAcceptanceAndWarranty: string;
 }
 
 export interface ProcurementRequest {
@@ -228,6 +263,9 @@ export interface ProcurementRequest {
   justification?: BusinessJustification;
   attachments?: RequestAttachment[];
   compliance?: ComplianceChecks;
+  riskFacts?: ProcurementRiskFacts;
+  exceptionPack?: ProcurementExceptionPack;
+  importationPlan?: ImportationPlan;
   /** Multi-tier ladder (policy §3 + §9). Absent for drafts, populated on
    *  submit. Approvals advance one step at a time. */
   approvalSteps?: ApprovalStep[];

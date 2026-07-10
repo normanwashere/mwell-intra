@@ -475,6 +475,7 @@ export function evaluateSubmitReadiness(req: {
   estimatedAmount?: number;
   sourcingMethod?: SourcingMethod;
   attachments?: readonly Pick<RequestAttachment, 'kind'>[];
+  compliance?: { routeConfirmed?: boolean };
 }): SubmitReadiness {
   const input: BuildLadderInput = {
     category: req.category,
@@ -484,6 +485,9 @@ export function evaluateSubmitReadiness(req: {
   const missingDocs = requiredDocumentsStatus(input, req.attachments)
     .filter((d) => !d.attached)
     .map((d) => d.label);
+  if (!req.compliance?.routeConfirmed) {
+    missingDocs.unshift('Procurement-confirmed sourcing route');
+  }
   return {
     ok: missingDocs.length === 0,
     missingDocs,

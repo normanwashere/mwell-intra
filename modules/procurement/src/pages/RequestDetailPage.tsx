@@ -22,12 +22,14 @@ import {
   useToast,
   type Column,
 } from '@intra/ui';
-import { Guard, useSession } from '@intra/auth';
+import { Guard, useCan, useSession } from '@intra/auth';
 import type {
   ApprovalStep,
+  ProcurementRiskFacts,
   ProcurementRequestLine,
   RequestAttachment,
   RequestStatus,
+  SourcingMethod,
 } from '../types';
 import {
   useApprovalHistory,
@@ -36,12 +38,14 @@ import {
 } from '../localStore';
 import {
   categoryMeta,
+  deriveSourcingRecommendation,
   evaluateSubmitReadiness,
   requiredDocumentsStatus,
   sourcingMethodLabel,
   tierLabel,
   type SubmitReadiness,
 } from '../policy';
+import { SourcingDecisionPanel } from '../components/SourcingDecisionPanel';
 import {
   attachmentKindLabel,
   formatDate,
@@ -107,13 +111,30 @@ export function RequestDetailPage() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { rows, submit, cancel, loading } = useProcurementRequests();
+  const { rows, submit, cancel, update, loading } = useProcurementRequests();
   const { rows: pos, add: addPO } = usePurchaseOrders();
   const history = useApprovalHistory(id);
   const { success, error } = useToast();
-  const { profile } = useSession();
+  const { profile, mode, supabaseClient } = useSession();
+  const canConfirmRoute = useCan('procurement', 'manage_rfp');
+  const [routeMethod, setRouteMethod] = useState<SourcingMethod>('rfq');
+  const [routeRiskFacts, setRouteRiskFacts] = useState<ProcurementRiskFacts>({
+    comparable: true,
+    complex: false,
+    technical: false,
+    strategic: false,
+    highRisk: false,
+    dataSensitive: false,
+    importation: false,
+  });
 
   const req = useMemo(() => rows.find((r) => r.id === id), [rows, id]);
+
+  useEffect(() => {
+    if (!req) return;
+    setRouteMethod(req.sourcingMethod ?? 'rfq');
+    if (req.compliance?.riskFacts) setRouteRiskFacts(req.compliance.riskFacts);
+  }, [req?.id]);
 
   useEffect(() => {
     if (!req) return;
@@ -217,6 +238,49 @@ export function RequestDetailPage() {
 
   const isRequester = profile?.email && req.requesterEmail === profile.email;
   const cat = categoryMeta(req.category);
+  const routeRecommendation = deriveSourcingRecommendation({
+    category: req.category,
+    amount: req.estimatedAmount,
+    ...routeRiskFacts,
+  });
+
+  async function confirmRoute() {
+    if (!canConfirmRoute || !req) return;
+    const currentRequest = req;
+    try {
+      if (mode === 'supabase' && supabaseClient) {
+        const { error: rpcError } = await supabaseClient.schema('procurement').rpc(
+          'confirm_route_decision',
+          {
+            payload: {
+              request_id: currentRequest.id,
+              request_version: 1,
+              method: routeMethod,
+              reasons: routeRecommendation.reasons,
+              risk_facts: routeRiskFacts,
+            },
+          },
+        );
+        if (rpcError) throw new Error(rpcError.message);
+        window.location.reload();
+        return;
+      }
+      await update(currentRequest.id, {
+        sourcingMethod: routeMethod,
+        sourcingOverride: routeMethod !== routeRecommendation.method,
+        compliance: {
+          ...currentRequest.compliance,
+          routeConfirmed: true,
+          routeConfirmedByEmail: profile?.email,
+          policyVersion: 'procurement-policy-revised-2026',
+          riskFacts: routeRiskFacts,
+        },
+      });
+      success('Sourcing route confirmed');
+    } catch (cause) {
+      error(cause instanceof Error ? cause.message : 'Could not confirm the sourcing route.');
+    }
+  }
 
   async function handleSubmit() {
     if (!req) return;
@@ -328,6 +392,32 @@ export function RequestDetailPage() {
           }
         />
       </div>
+
+      {req.status === 'draft' && !req.compliance?.routeConfirmed && (
+        <div>
+          <SectionTitle
+            title="Sourcing route decision"
+            subtitle="The requester supplies facts; Procurement confirms the route before approval submission."
+          />
+          <Card>
+            <SourcingDecisionPanel
+              riskFacts={routeRiskFacts}
+              onRiskFactsChange={setRouteRiskFacts}
+              recommendation={routeRecommendation}
+              value={routeMethod}
+              onChange={setRouteMethod}
+              canConfirm={canConfirmRoute}
+              confirmed={false}
+            />
+            {canConfirmRoute && (
+              <button type="button" className="btn-primary mt-4" onClick={() => void confirmRoute()}>
+                <Icon name="check" className="h-4 w-4" />
+                Confirm sourcing route
+              </button>
+            )}
+          </Card>
+        </div>
+      )}
 
       {req.justification && (
         <div>

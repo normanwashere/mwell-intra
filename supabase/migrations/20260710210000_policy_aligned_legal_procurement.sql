@@ -225,6 +225,11 @@ create table if not exists procurement.doa_assignments (
   constraint doa_assignment_tier_check check (tier in ('dept_head','procurement_head','finance','legal','final_approver'))
 );
 
+alter table procurement.approval_steps
+  add column if not exists assigned_user_id uuid references core.profiles(id) on delete restrict,
+  add column if not exists matrix_version text,
+  add column if not exists request_version int not null default 1;
+
 create table if not exists procurement.financial_protection_requirements (
   id uuid primary key default gen_random_uuid(),
   request_id text not null references procurement.requests(id) on delete restrict,
@@ -603,6 +608,93 @@ create or replace function procurement.confirm_route_decision(payload jsonb)
 returns jsonb language sql security invoker
 as $$ select private.policy_confirm_route_decision(payload) $$;
 
+create or replace function private.policy_submit_procurement_request(payload jsonb)
+returns jsonb language plpgsql security definer set search_path = ''
+as $$
+declare
+  v_request procurement.requests;
+  v_route procurement.route_decisions;
+  v_matrix procurement.doa_matrices;
+  v_required_tiers text[];
+  v_assigned_count int;
+  v_distinct_assigned_count int;
+  v_final_count int;
+  v_missing text[] := '{}';
+begin
+  if auth.uid() is null then raise exception 'Authentication required'; end if;
+  select * into v_request from procurement.requests where id=payload->>'id' for update;
+  if v_request.id is null then raise exception 'Request not found'; end if;
+  if v_request.status <> 'draft' then raise exception 'Only draft requests can be submitted'; end if;
+  if v_request.requester_id <> auth.uid() and not core.has_cap('procurement','admin') then
+    raise exception 'Not authorized to submit this request';
+  end if;
+  select * into v_route from procurement.route_decisions
+    where request_id=v_request.id and status='confirmed'
+    order by request_version desc, confirmed_at desc limit 1;
+  if v_route.id is null then raise exception 'policy_decision_required: Procurement-confirmed sourcing route'; end if;
+
+  if not exists (select 1 from jsonb_array_elements(coalesce(v_request.attachments,'[]'::jsonb)) a where a->>'kind'='spec') then v_missing := array_append(v_missing,'technical description / spec'); end if;
+  if not exists (select 1 from jsonb_array_elements(coalesce(v_request.attachments,'[]'::jsonb)) a where a->>'kind'='budget') then v_missing := array_append(v_missing,'approved budget evidence'); end if;
+  if not exists (select 1 from jsonb_array_elements(coalesce(v_request.attachments,'[]'::jsonb)) a where a->>'kind'='previous_cost') then v_missing := array_append(v_missing,'previous purchase cost'); end if;
+  if v_route.method in ('rfq','rfp') and not exists (select 1 from jsonb_array_elements(coalesce(v_request.attachments,'[]'::jsonb)) a where a->>'kind'='quote') then v_missing := array_append(v_missing,'vendor quotation or proposal'); end if;
+  if v_route.method='rfp' and not exists (select 1 from jsonb_array_elements(coalesce(v_request.attachments,'[]'::jsonb)) a where a->>'kind'='award_recommendation') then v_missing := array_append(v_missing,'Award Recommendation draft'); end if;
+  if v_route.method in ('direct_award','emergency','repeat_order','petty_cash') and not exists (
+    select 1 from procurement.exception_packs e where e.request_id=v_request.id and e.status='approved'
+  ) then v_missing := array_append(v_missing,'approved exception pack'); end if;
+  if cardinality(v_missing)>0 then raise exception 'Submission evidence incomplete: %', array_to_string(v_missing,', '); end if;
+
+  select * into v_matrix from procurement.doa_matrices
+    where active and effective_at<=now() and (expires_at is null or expires_at>now())
+    order by effective_at desc limit 1;
+  if v_matrix.id is null then raise exception 'policy_decision_required: active approved DOA matrix'; end if;
+
+  v_required_tiers := procurement.derive_approval_tiers(
+    v_request.category,
+    coalesce(v_request.estimated_amount, 0),
+    v_route.method
+  );
+
+  delete from procurement.approval_steps where request_id=v_request.id and status='pending';
+  insert into procurement.approval_steps(
+    request_id,step_order,tier,status,label,assigned_user_id,matrix_version,request_version
+  )
+  select v_request.id,
+    row_number() over(order by case a.tier when 'dept_head' then 1 when 'procurement_head' then 2 when 'legal' then 3 when 'finance' then 4 else 5 end),
+    a.tier,'pending',a.tier || ' - ' || p.name,a.approver_user_id,v_matrix.version,v_route.request_version
+  from procurement.doa_assignments a
+  join core.profiles p on p.id=a.approver_user_id
+  where a.matrix_id=v_matrix.id and a.active
+    and a.tier = any(v_required_tiers)
+    and coalesce(v_request.estimated_amount,0)>=a.min_amount
+    and (a.max_amount is null or coalesce(v_request.estimated_amount,0)<=a.max_amount)
+    and (a.department is null or a.department=v_request.department)
+    and (a.category is null or a.category=v_request.category);
+
+  select count(*), count(distinct tier)
+    into v_assigned_count, v_distinct_assigned_count
+  from procurement.approval_steps
+  where request_id=v_request.id and request_version=v_route.request_version;
+  if v_assigned_count <> cardinality(v_required_tiers)
+     or v_distinct_assigned_count <> cardinality(v_required_tiers) then
+    raise exception 'policy_decision_required: exactly one named approver is required for every derived tier';
+  end if;
+
+  select count(*) into v_final_count from procurement.approval_steps
+    where request_id=v_request.id and tier='final_approver' and assigned_user_id is not null;
+  if v_final_count<>1 then raise exception 'policy_decision_required: exactly one assigned final approver'; end if;
+
+  update procurement.requests set status='submitted',submitted_at=now(),updated_at=now()
+  where id=v_request.id returning * into v_request;
+  insert into core.activity_log(module,entity_type,entity_id,action,actor,detail)
+  values('procurement','request',v_request.id,'submitted_policy_aligned',auth.uid(),jsonb_build_object('route_decision_id',v_route.id,'doa_version',v_matrix.version));
+  return to_jsonb(v_request);
+end;
+$$;
+
+create or replace function procurement.submit_request(payload jsonb)
+returns jsonb language sql security invoker
+as $$ select private.policy_submit_procurement_request(payload) $$;
+
 create or replace function private.policy_record_acceptance_pack(payload jsonb)
 returns jsonb language plpgsql security definer set search_path = ''
 as $$
@@ -695,6 +787,9 @@ grant execute on function legal.sign_instrument(jsonb) to authenticated, service
 revoke all on function private.policy_confirm_route_decision(jsonb) from public, anon;
 revoke all on function procurement.confirm_route_decision(jsonb) from public, anon;
 grant execute on function procurement.confirm_route_decision(jsonb) to authenticated, service_role;
+revoke all on function private.policy_submit_procurement_request(jsonb) from public, anon;
+revoke all on function procurement.submit_request(jsonb) from public, anon;
+grant execute on function procurement.submit_request(jsonb) to authenticated, service_role;
 revoke all on function private.policy_record_acceptance_pack(jsonb) from public, anon;
 revoke all on function procurement.record_acceptance_pack(jsonb) from public, anon;
 grant execute on function procurement.record_acceptance_pack(jsonb) to authenticated, service_role;
