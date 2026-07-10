@@ -102,6 +102,7 @@ export type UnitStatus =
   | 'allocated'
   | 'issued'
   | 'returned'
+  | 'vendor_return'
   | 'lost';
 
 /** A single serialized physical unit (e.g. one ECG ring). */
@@ -134,6 +135,7 @@ export type MovementType =
   | 'allocation'
   | 'issue'
   | 'return'
+  | 'vendor_return'
   | 'transfer'
   | 'adjustment'
   | 'cycle_count';

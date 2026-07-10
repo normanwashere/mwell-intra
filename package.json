@@ -16,6 +16,7 @@
     "test:intra-live": "node scripts/qa/full-intra-live-e2e.mjs",
     "verify:procurement-contract": "node scripts/verify-effective-procurement-contract.mjs",
     "verify:warehouse-w1-schema": "node scripts/verify-warehouse-w1-schema.mjs",
+    "verify:warehouse-w1-contract": "node scripts/verify-warehouse-w1-contract.mjs",
     "verify:launch-artifacts": "node scripts/verify-launch-artifacts.mjs",
     "verify:supabase-cutover": "node scripts/verify-supabase-cutover.mjs",
     "format": "prettier --write \"**/*.{ts,tsx,md,json}\""

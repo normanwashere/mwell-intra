@@ -36,6 +36,7 @@ export interface QualityInspection {
   sourceType: 'receipt' | 'return';
   sourceId: string;
   productId: string;
+  binId?: string;
   lotId?: string;
   serialNumber?: string;
   quantity: number;
@@ -51,6 +52,7 @@ export interface InventoryHold {
   inspectionId: string;
   productId: string;
   locationId: string;
+  binId?: string;
   lotId?: string;
   serialNumber?: string;
   quantity: number;
@@ -136,6 +138,7 @@ export interface InspectQualityInput {
   sourceType: QualityInspection['sourceType'];
   sourceId: string;
   productId: string;
+  binId?: string;
   lotId?: string;
   serialNumber?: string;
   quantity: number;
