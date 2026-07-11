@@ -15,6 +15,67 @@ const moduleRoute: Record<KnowledgeModule, string> = {
   legal: "/legal",
 };
 
+const SCREENSHOTS: Record<
+  string,
+  Array<{ src: string; alt: string; caption: string }>
+> = {
+  "sign-in-and-access": [
+    {
+      src: "/knowledge/screenshots/sign-in-desktop.png",
+      alt: "Mwell Intra sign-in screen",
+      caption: "Enter the assigned Mwell identity, then select Sign in once.",
+    },
+  ],
+  "purchase-request": [
+    {
+      src: "/knowledge/screenshots/procurement-request-mobile.png",
+      alt: "Procurement request form on mobile",
+      caption:
+        "The request wizard captures category, line items, justification, route, and evidence.",
+    },
+  ],
+  "procurement-approval": [
+    {
+      src: "/knowledge/screenshots/procurement-list-desktop.png",
+      alt: "Procurement request queue",
+      caption:
+        "Open the governed request from the queue before making a decision.",
+    },
+  ],
+  "vendor-invitation": [
+    {
+      src: "/knowledge/screenshots/legal-invite-mobile.png",
+      alt: "Legal vendor invitation form",
+      caption:
+        "Legal records company, contact, category, jurisdiction, and risk facts.",
+    },
+  ],
+  "legal-accreditation-review": [
+    {
+      src: "/knowledge/screenshots/legal-cases-desktop.png",
+      alt: "Legal accreditation case queue",
+      caption:
+        "Use the case queue to open evidence, checklist, instruments, and decision history.",
+    },
+  ],
+  "warehouse-configuration": [
+    {
+      src: "/knowledge/screenshots/warehouse-storage-desktop.png",
+      alt: "Warehouse storage areas and bins",
+      caption:
+        "Create storage areas and scannable bins before receiving production stock.",
+    },
+  ],
+  "warehouse-receiving": [
+    {
+      src: "/knowledge/screenshots/warehouse-receiving-desktop.png",
+      alt: "Warehouse receiving workflow",
+      caption:
+        "Select a receivable PO, product, quantity, traceability, and destination.",
+    },
+  ],
+};
+
 const roleArticles: KnowledgeArticle[] = KNOWLEDGE_ROLES.map((role) => ({
   id: `role-${role.id}`,
   slug: `roles/${role.id}`,
@@ -144,6 +205,7 @@ const processArticle = (
     } satisfies Record<KnowledgeModule, string>
   )[module],
   reviewedAt: "2026-07-11",
+  screenshots: SCREENSHOTS[id],
 });
 
 const procedureArticles: KnowledgeArticle[] = [

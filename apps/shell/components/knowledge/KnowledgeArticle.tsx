@@ -39,6 +39,31 @@ export function KnowledgeArticle({
           Owner: {article.owner} | Reviewed {article.reviewedAt}
         </p>
       </header>
+      {article.screenshots && article.screenshots.length > 0 && (
+        <section className="mt-6" aria-labelledby="screen-guide-title">
+          <h2 id="screen-guide-title" className="text-xl font-bold text-ink">
+            Screen guide
+          </h2>
+          <div className="mt-3 grid gap-4 sm:grid-cols-2">
+            {article.screenshots.map((shot) => (
+              <figure
+                key={shot.src}
+                className="min-w-0 overflow-hidden border border-line bg-surface shadow-e1"
+              >
+                <img
+                  src={shot.src}
+                  alt={shot.alt}
+                  className="block max-h-[34rem] w-full object-contain"
+                  loading="lazy"
+                />
+                <figcaption className="border-t border-line p-3 text-sm text-muted">
+                  {shot.caption}
+                </figcaption>
+              </figure>
+            ))}
+          </div>
+        </section>
+      )}
       <div className="mt-6 space-y-8">
         {article.sections.map((section) => (
           <section key={section.id} id={section.id} className="scroll-mt-24">

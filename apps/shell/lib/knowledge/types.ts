@@ -40,6 +40,7 @@ export interface KnowledgeArticle {
   liveRoutes: string[];
   owner: string;
   reviewedAt: string;
+  screenshots?: Array<{ src: string; alt: string; caption: string }>;
 }
 
 export interface KnowledgeFlowNode {

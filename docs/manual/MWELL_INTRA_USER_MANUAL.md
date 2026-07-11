@@ -241,4 +241,20 @@ The standalone searchable handbook is `docs/manual/index.html`.
 
 ![Knowledge Base narrow mobile](assets/knowledge-base/employee-narrow.png)
 
+### Audited Interactive Flows
+
+The live flowcharts show the accountable role before every action, the governed
+sequence through the center lane, and success or exception outcomes beside the
+step that produces them. Select any process node to open its prerequisite,
+owner, expected result, and recovery path.
+
+![Procure-to-pay flowchart on desktop](assets/knowledge-base/flowchart-procure-to-pay-desktop.png)
+
+![Receive-to-putaway flowchart on narrow mobile](assets/knowledge-base/flowchart-receive-to-putaway-mobile.png)
+
+Procedure articles include current screen guides from the live application.
+Warehouse configuration and receiving guides use successful screens only; older
+screens marked as errors remain historical audit evidence and are not training
+instructions.
+
 Historical screenshots remain in `docs/manual/assets/`; screenshots showing retired blockers are evidence only and must not be used as current training guidance.

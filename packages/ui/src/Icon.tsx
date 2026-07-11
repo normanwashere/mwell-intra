@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { ReactNode } from "react";
 
 interface IconProps {
   name: IconName;
@@ -6,42 +6,43 @@ interface IconProps {
 }
 
 export type IconName =
-  | 'grid'
-  | 'box'
-  | 'truck'
-  | 'calendar'
-  | 'clipboard'
-  | 'rotate'
-  | 'cart'
-  | 'coins'
-  | 'camera'
-  | 'scan'
-  | 'alert'
-  | 'check'
-  | 'x'
-  | 'plus'
-  | 'search'
-  | 'menu'
-  | 'chevron'
-  | 'logout'
-  | 'trend'
-  | 'info'
-  | 'bell'
-  | 'transfer'
-  | 'download'
-  | 'history'
-  | 'list'
-  | 'dots'
-  | 'pin'
-  | 'tag'
-  | 'building'
-  | 'arrowRight'
-  | 'sun'
-  | 'moon'
-  | 'lock'
-  | 'minus'
-  | 'edit'
-  | 'signature';
+  | "grid"
+  | "box"
+  | "truck"
+  | "calendar"
+  | "clipboard"
+  | "rotate"
+  | "cart"
+  | "coins"
+  | "camera"
+  | "scan"
+  | "alert"
+  | "check"
+  | "x"
+  | "plus"
+  | "search"
+  | "menu"
+  | "chevron"
+  | "logout"
+  | "trend"
+  | "info"
+  | "bell"
+  | "transfer"
+  | "download"
+  | "history"
+  | "list"
+  | "dots"
+  | "pin"
+  | "tag"
+  | "building"
+  | "arrowRight"
+  | "sun"
+  | "moon"
+  | "lock"
+  | "minus"
+  | "edit"
+  | "signature"
+  | "shield";
 
 // Icon geometry sourced from Lucide (lucide.dev, ISC license) — clean, uniform
 // 24×24 stroke icons rendered with the shared svg wrapper below.
@@ -86,6 +87,12 @@ const ICONS: Record<IconName, ReactNode> = {
       <path d="M12 16h4" />
       <path d="M8 11h.01" />
       <path d="M8 16h.01" />
+    </>
+  ),
+  shield: (
+    <>
+      <path d="M20 13c0 5-3.5 7.5-8 9-4.5-1.5-8-4-8-9V5l8-3 8 3v8Z" />
+      <path d="m9 12 2 2 4-4" />
     </>
   ),
   rotate: (
@@ -291,7 +298,7 @@ const ICONS: Record<IconName, ReactNode> = {
   ),
 };
 
-export function Icon({ name, className = 'h-5 w-5' }: IconProps) {
+export function Icon({ name, className = "h-5 w-5" }: IconProps) {
   return (
     <svg
       className={className}
