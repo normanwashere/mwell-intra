@@ -243,14 +243,29 @@ The standalone searchable handbook is `docs/manual/index.html`.
 
 ### Audited Interactive Flows
 
-The live flowcharts show the accountable role before every action, the governed
-sequence through the center lane, and success or exception outcomes beside the
-step that produces them. Select any process node to open its prerequisite,
-owner, expected result, and recovery path.
+The Knowledge Base begins with end-to-end workflows. Open a workflow to see its
+complete decision tree before reading individual instructions. Branch labels
+show governed outcomes such as Approve, Reject, Accept, Hold, and Return to
+vendor. Select any node to open its role, screenshot, hotspot instructions,
+expected result, database effect, and recovery path.
+
+![Workflow-first Knowledge Base home](assets/knowledge-base/knowledge-home-desktop.png)
 
 ![Procure-to-pay flowchart on desktop](assets/knowledge-base/flowchart-procure-to-pay-desktop.png)
 
 ![Receive-to-putaway flowchart on narrow mobile](assets/knowledge-base/flowchart-receive-to-putaway-mobile.png)
+
+### Screenshot-Guided Steps
+
+Every workflow node resolves to reviewed application evidence. Numbered hotspots
+identify the relevant control while preserving the full screen context. Use the
+zoom controls on desktop; on mobile, pan the screenshot and follow the numbered
+instruction below it. The mobile action dock keeps the next governed outcome and
+live-screen link above the bottom navigation.
+
+![Receiving step workspace on desktop](assets/knowledge-base/step-receiving-desktop.png)
+
+![Receiving step workspace on mobile](assets/knowledge-base/step-receiving-mobile.png)
 
 Procedure articles include current screen guides from the live application.
 Warehouse configuration and receiving guides use successful screens only; older

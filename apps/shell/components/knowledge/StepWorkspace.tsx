@@ -124,6 +124,29 @@ export function StepWorkspace({
           )}
         </div>
       </div>
+      <div className="sticky bottom-20 z-20 mt-4 grid grid-cols-2 gap-2 border border-line bg-surface/95 p-2 shadow-e2 backdrop-blur md:hidden">
+        {branches[0] ? (
+          <button
+            type="button"
+            onClick={() => onSelectNode(branches[0]!.to)}
+            className="btn-outline min-w-0 justify-center"
+          >
+            <span className="truncate">{branches[0].label ?? "Next step"}</span>
+            <Icon name="arrowRight" className="h-4 w-4 shrink-0" />
+          </button>
+        ) : (
+          <span />
+        )}
+        {evidence?.route && (
+          <Link
+            href={evidence.route}
+            className="btn-primary min-w-0 justify-center"
+          >
+            <span className="truncate">Open live screen</span>
+            <Icon name="arrowRight" className="h-4 w-4 shrink-0" />
+          </Link>
+        )}
+      </div>
     </section>
   );
 }

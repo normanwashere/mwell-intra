@@ -64,6 +64,15 @@ const memoryRoles = {
     core: ["staff"],
     warehouse: ["warehouse_admin"],
   },
+  "intra.test.proc.officer@mwell.com.ph": {
+    profileId: "demo-procurement",
+    core: ["staff"],
+    procurement: ["procurement_officer"],
+  },
+  "intra.test.admin@mwell.com.ph": {
+    profileId: "demo-admin",
+    core: ["admin"],
+  },
 };
 
 async function establishSession(page, email) {
@@ -93,6 +102,7 @@ async function capture({
   output = manualOutput,
   fullPage = true,
   verifyFlowInteraction = false,
+  scrollToText,
 }) {
   const context = await browser.newContext({
     viewport,
@@ -152,7 +162,16 @@ async function capture({
   if (verifyFlowInteraction) {
     await page.locator('button[aria-label*=". action."]').first().click();
     await page.waitForURL((url) => url.searchParams.has("step"));
-    await page.getByRole("heading", { name: /complete decision tree/i }).waitFor();
+    await page
+      .getByRole("heading", { name: /complete decision tree/i })
+      .waitFor();
+  }
+  if (scrollToText) {
+    await page
+      .getByText(scrollToText, { exact: false })
+      .last()
+      .scrollIntoViewIfNeeded();
+    await page.waitForTimeout(300);
   }
 
   if (fullPage && viewport.width < 768) {
@@ -186,6 +205,24 @@ await capture({
   verifyFlowInteraction: true,
 });
 await capture({
+  name: "knowledge-home-desktop",
+  route: "/knowledge",
+  viewport: { width: 1440, height: 900 },
+  email: "intra.test.proc.requester@mwell.com.ph",
+  expectedText: "What do you need to complete?",
+  output: manualOutput,
+  fullPage: false,
+});
+await capture({
+  name: "knowledge-home-mobile",
+  route: "/knowledge",
+  viewport: { width: 390, height: 844 },
+  email: "intra.test.proc.requester@mwell.com.ph",
+  expectedText: "What do you need to complete?",
+  output: manualOutput,
+  fullPage: false,
+});
+await capture({
   name: "flowchart-procure-to-pay-mobile",
   route: "/knowledge?flow=procure-to-pay",
   viewport: { width: 390, height: 844 },
@@ -204,12 +241,97 @@ await capture({
   fullPage: false,
 });
 await capture({
+  name: "step-receiving-desktop",
+  route: "/knowledge?flow=receive-to-putaway&step=receive-record",
+  viewport: { width: 1280, height: 800 },
+  email: "intra.test.wh.logistics@mwell.com.ph",
+  expectedText: "Record receipt lines",
+  scrollToText: "Verified 2026-07-11",
+  fullPage: false,
+});
+await capture({
+  name: "step-receiving-mobile",
+  route: "/knowledge?flow=receive-to-putaway&step=receive-record",
+  viewport: { width: 390, height: 844 },
+  email: "intra.test.wh.logistics@mwell.com.ph",
+  expectedText: "Record receipt lines",
+  scrollToText: "Verified 2026-07-11",
+  fullPage: false,
+});
+await capture({
   name: "warehouse-storage-desktop",
   route: "/warehouse/storage",
   viewport: { width: 1440, height: 900 },
   email: "intra.test.wh.warehouse.admin@mwell.com.ph",
   expectedText: "Storage",
   output: publicOutput,
+});
+for (const item of [
+  ["warehouse-inventory-desktop", "/warehouse/inventory", "Inventory"],
+  ["warehouse-allocations-desktop", "/warehouse/allocations", "Allocations"],
+  ["warehouse-returns-desktop", "/warehouse/returns", "Returns"],
+  ["warehouse-events-desktop", "/warehouse/events", "Events"],
+  ["warehouse-cycle-counts-desktop", "/warehouse/cycle-counts", "Cycle Counts"],
+  ["warehouse-quality-desktop", "/warehouse/quality", "Quality Control"],
+  ["warehouse-approvals-desktop", "/warehouse/approvals", "Stock approvals"],
+  ["warehouse-exceptions-desktop", "/warehouse/exceptions", "Exceptions"],
+  ["warehouse-pricing-desktop", "/warehouse/pricing", "Pricing"],
+  [
+    "warehouse-operation-routes-desktop",
+    "/warehouse/operation-routes",
+    "Operation Routes",
+  ],
+  [
+    "warehouse-purchase-orders-desktop",
+    "/warehouse/purchase-orders",
+    "Purchase Orders",
+  ],
+]) {
+  await capture({
+    name: item[0],
+    route: item[1],
+    viewport: { width: 1440, height: 900 },
+    email: "intra.test.wh.warehouse.admin@mwell.com.ph",
+    expectedText: item[2],
+    output: publicOutput,
+    fullPage: false,
+  });
+}
+await capture({
+  name: "procurement-approvals-desktop",
+  route: "/procurement/approvals",
+  viewport: { width: 1440, height: 900 },
+  email: "intra.test.proc.officer@mwell.com.ph",
+  expectedText: "Approvals",
+  output: publicOutput,
+  fullPage: false,
+});
+await capture({
+  name: "procurement-purchase-orders-desktop",
+  route: "/procurement/purchase-orders",
+  viewport: { width: 1440, height: 900 },
+  email: "intra.test.proc.officer@mwell.com.ph",
+  expectedText: "Purchase orders",
+  output: publicOutput,
+  fullPage: false,
+});
+await capture({
+  name: "admin-users-desktop",
+  route: "/admin/users",
+  viewport: { width: 1440, height: 900 },
+  email: "intra.test.admin@mwell.com.ph",
+  expectedText: "Users",
+  output: publicOutput,
+  fullPage: false,
+});
+await capture({
+  name: "admin-doa-desktop",
+  route: "/admin/doa",
+  viewport: { width: 1440, height: 900 },
+  email: "intra.test.admin@mwell.com.ph",
+  expectedText: "Delegation",
+  output: publicOutput,
+  fullPage: false,
 });
 await capture({
   name: "warehouse-receiving-desktop",

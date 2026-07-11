@@ -1,170 +1,218 @@
-import type { KnowledgeEvidence } from "./types";
+import { KNOWLEDGE_FLOWS } from "./workflows";
+import type { KnowledgeEvidence, KnowledgeFlowNode } from "./types";
 
 const date = "2026-07-11";
-const base = {
-  capturedAt: date,
-  reviewedAt: date,
-  provenance: "production" as const,
-  sensitiveDataReviewed: true,
-};
 
-export const KNOWLEDGE_EVIDENCE: KnowledgeEvidence[] = [
-  {
-    ...base,
-    id: "ev-access-start",
-    nodeId: "access-start",
-    desktopSrc: "/knowledge/screenshots/sign-in-desktop.png",
-    route: "/login",
-    roleId: "core_staff_only",
-    alt: "Mwell Intra sign-in screen",
-    expectedLandmark: "Sign in",
-    hotspots: [
-      {
-        id: "credentials",
-        number: 1,
-        x: 0.5,
-        y: 0.58,
-        label: "Enter assigned identity",
-        instruction:
-          "Enter the assigned Mwell email and password, then select Sign in once.",
-      },
-    ],
-  },
-  {
-    ...base,
-    id: "ev-p2p-start",
-    nodeId: "p2p-start",
-    desktopSrc: "/knowledge/screenshots/procurement-list-desktop.png",
-    mobileSrc: "/knowledge/screenshots/procurement-request-mobile.png",
-    route: "/procurement/requests/new",
-    roleId: "procurement_requester",
-    alt: "Procurement request workflow",
-    expectedLandmark: "Purchase request",
-    hotspots: [
-      {
-        id: "request",
-        number: 1,
-        x: 0.33,
-        y: 0.3,
-        label: "Start the request",
-        instruction:
-          "Capture category, line items, justification, dates, cost context, and supporting evidence.",
-      },
-    ],
-  },
-  {
-    ...base,
-    id: "ev-p2p-route",
-    nodeId: "p2p-route",
-    desktopSrc: "/knowledge/screenshots/procurement-list-desktop.png",
-    route: "/procurement",
-    roleId: "procurement_officer",
-    alt: "Procurement governed request queue",
-    expectedLandmark: "Procurement",
-    hotspots: [
-      {
-        id: "queue",
-        number: 1,
-        x: 0.42,
-        y: 0.34,
-        label: "Open the governed request",
-        instruction:
-          "Open the assigned request and confirm the sourcing or policy-exception route.",
-      },
-    ],
-  },
-  {
-    ...base,
-    id: "ev-vendor-start",
-    nodeId: "vendor-start",
-    desktopSrc: "/knowledge/screenshots/legal-cases-desktop.png",
-    mobileSrc: "/knowledge/screenshots/legal-invite-mobile.png",
-    route: "/legal/invites/new",
-    roleId: "legal_admin",
-    alt: "Legal vendor invitation workflow",
-    expectedLandmark: "Invite",
-    hotspots: [
-      {
-        id: "invite",
-        number: 1,
-        x: 0.48,
-        y: 0.38,
-        label: "Record vendor identity",
-        instruction:
-          "Enter verified company, contact, category, jurisdiction, and risk facts before sending the invitation.",
-      },
-    ],
-  },
-  {
-    ...base,
-    id: "ev-vendor-review",
-    nodeId: "vendor-review",
-    desktopSrc: "/knowledge/screenshots/legal-cases-desktop.png",
-    route: "/legal",
-    roleId: "legal_reviewer",
-    alt: "Legal accreditation case queue",
-    expectedLandmark: "Cases",
-    hotspots: [
-      {
-        id: "case",
-        number: 1,
-        x: 0.4,
-        y: 0.35,
-        label: "Open the accreditation case",
-        instruction:
-          "Review submitted evidence, checklist dispositions, instruments, and decision history.",
-      },
-    ],
-  },
-  {
-    ...base,
-    id: "ev-setup-bin",
-    nodeId: "setup-bin",
-    desktopSrc: "/knowledge/screenshots/warehouse-storage-desktop.png",
-    route: "/warehouse/storage",
-    roleId: "warehouse_admin",
-    alt: "Warehouse storage areas and bins",
-    expectedLandmark: "Storage areas",
-    hotspots: [
-      {
-        id: "add-bin",
-        number: 1,
-        x: 0.92,
-        y: 0.08,
-        label: "Add a scannable bin",
-        instruction:
-          "Create a bin under the correct warehouse and storage area before receiving stock.",
-      },
-    ],
-  },
-  {
-    ...base,
-    id: "ev-receive-record",
-    nodeId: "receive-record",
-    desktopSrc: "/knowledge/screenshots/warehouse-receiving-desktop.png",
-    route: "/warehouse/receiving",
-    roleId: "warehouse_logistics_supervisor",
-    alt: "Warehouse receiving screen",
-    expectedLandmark: "Receiving",
-    hotspots: [
-      {
-        id: "product",
-        number: 1,
-        x: 0.35,
-        y: 0.25,
-        label: "Select product and quantity",
-        instruction:
-          "Use a PO-backed product and record delivered quantity, serial or lot details.",
-      },
-      {
-        id: "destination",
-        number: 2,
-        x: 0.38,
-        y: 0.57,
-        label: "Choose destination",
-        instruction:
-          "Select a valid scannable bin and attach required receipt evidence.",
-      },
-    ],
-  },
-];
+interface ScreenSource {
+  src: string;
+  route: string;
+  landmark: string;
+  mobileSrc?: string;
+}
+
+function sourceFor(node: KnowledgeFlowNode): ScreenSource {
+  const id = node.id;
+  if (id === "access-start")
+    return {
+      src: "/knowledge/screenshots/sign-in-desktop.png",
+      route: "/login",
+      landmark: "Sign in",
+    };
+  if (id.startsWith("access-") || id.startsWith("recover-"))
+    return id.includes("fix") || id.includes("escalate")
+      ? {
+          src: "/knowledge/screenshots/admin-users-desktop.png",
+          route: "/admin/users",
+          landmark: "Users",
+        }
+      : {
+          src: "/knowledge/screenshots/intra-home-desktop.png",
+          route: "/",
+          landmark: "Mwell Intra",
+        };
+  if (id.startsWith("p2p-")) {
+    if (id === "p2p-start")
+      return {
+        src: "/knowledge/screenshots/procurement-list-desktop.png",
+        mobileSrc: "/knowledge/screenshots/procurement-request-mobile.png",
+        route: "/procurement/requests/new",
+        landmark: "Purchase request",
+      };
+    if (
+      id.includes("approve") ||
+      id.includes("accept") ||
+      id.includes("outcome")
+    )
+      return {
+        src: "/knowledge/screenshots/procurement-approvals-desktop.png",
+        route: "/procurement/approvals",
+        landmark: "Approvals",
+      };
+    if (id.includes("po") || id.includes("end"))
+      return {
+        src: "/knowledge/screenshots/procurement-purchase-orders-desktop.png",
+        route: "/procurement/purchase-orders",
+        landmark: "Purchase orders",
+      };
+    if (id.includes("receive"))
+      return {
+        src: "/knowledge/screenshots/warehouse-receiving-desktop.png",
+        route: "/warehouse/receiving",
+        landmark: "Receiving",
+      };
+    return {
+      src: "/knowledge/screenshots/procurement-list-desktop.png",
+      route: "/procurement",
+      landmark: "Procurement",
+    };
+  }
+  if (id.startsWith("vendor-"))
+    return id === "vendor-start" || id === "vendor-apply"
+      ? {
+          src: "/knowledge/screenshots/legal-cases-desktop.png",
+          mobileSrc: "/knowledge/screenshots/legal-invite-mobile.png",
+          route: id === "vendor-start" ? "/legal/invites/new" : "/vendor",
+          landmark: id === "vendor-start" ? "Invite" : "Accreditation",
+        }
+      : {
+          src: "/knowledge/screenshots/legal-cases-desktop.png",
+          route: "/legal",
+          landmark: "Cases",
+        };
+  if (id.startsWith("setup-"))
+    return id === "setup-route"
+      ? {
+          src: "/knowledge/screenshots/warehouse-operation-routes-desktop.png",
+          route: "/warehouse/operation-routes",
+          landmark: "Operation Routes",
+        }
+      : {
+          src: "/knowledge/screenshots/warehouse-storage-desktop.png",
+          route: "/warehouse/storage",
+          landmark: "Storage areas",
+        };
+  if (id.startsWith("receive-")) {
+    if (id === "receive-start")
+      return {
+        src: "/knowledge/screenshots/warehouse-purchase-orders-desktop.png",
+        route: "/warehouse/purchase-orders",
+        landmark: "Purchase Orders",
+      };
+    if (id === "receive-record")
+      return {
+        src: "/knowledge/screenshots/warehouse-receiving-desktop.png",
+        route: "/warehouse/receiving",
+        landmark: "Receiving",
+      };
+    if (id.includes("inspect") || id.includes("outcome"))
+      return {
+        src: "/knowledge/screenshots/warehouse-quality-desktop.png",
+        route: "/warehouse/quality",
+        landmark: "Quality Control",
+      };
+    if (id === "receive-putaway")
+      return {
+        src: "/knowledge/screenshots/warehouse-storage-desktop.png",
+        route: "/warehouse/storage",
+        landmark: "Storage areas",
+      };
+    return {
+      src: "/knowledge/screenshots/warehouse-inventory-desktop.png",
+      route: "/warehouse/inventory",
+      landmark: "Inventory",
+    };
+  }
+  if (id.startsWith("event-")) {
+    if (id === "event-start" || id === "event-end")
+      return {
+        src: "/knowledge/screenshots/warehouse-events-desktop.png",
+        route: "/warehouse/events",
+        landmark: "Events",
+      };
+    if (id === "event-reserve" || id === "event-issue")
+      return {
+        src: "/knowledge/screenshots/warehouse-allocations-desktop.png",
+        route: "/warehouse/allocations",
+        landmark: "Allocations",
+      };
+    if (id.includes("outcome"))
+      return {
+        src: "/knowledge/screenshots/warehouse-exceptions-desktop.png",
+        route: "/warehouse/exceptions",
+        landmark: "Exceptions",
+      };
+    return {
+      src: "/knowledge/screenshots/warehouse-returns-desktop.png",
+      route: "/warehouse/returns",
+      landmark: "Returns",
+    };
+  }
+  if (id.startsWith("count-")) {
+    if (id === "count-adjust")
+      return {
+        src: "/knowledge/screenshots/warehouse-approvals-desktop.png",
+        route: "/warehouse/approvals",
+        landmark: "Stock approvals",
+      };
+    if (id === "count-end")
+      return {
+        src: "/knowledge/screenshots/warehouse-inventory-desktop.png",
+        route: "/warehouse/inventory",
+        landmark: "Inventory",
+      };
+    return {
+      src: "/knowledge/screenshots/warehouse-cycle-counts-desktop.png",
+      route: "/warehouse/cycle-counts",
+      landmark: "Cycle Counts",
+    };
+  }
+  if (id.startsWith("price-"))
+    return {
+      src: "/knowledge/screenshots/warehouse-pricing-desktop.png",
+      route: "/warehouse/pricing",
+      landmark: "Pricing",
+    };
+  if (id.startsWith("doa-"))
+    return {
+      src: "/knowledge/screenshots/admin-doa-desktop.png",
+      route: "/admin/doa",
+      landmark: "Delegation",
+    };
+  return {
+    src: "/knowledge/screenshots/intra-home-desktop.png",
+    route: "/",
+    landmark: "Mwell Intra",
+  };
+}
+
+export const KNOWLEDGE_EVIDENCE: KnowledgeEvidence[] = KNOWLEDGE_FLOWS.flatMap(
+  (flow) =>
+    flow.nodes.map((node) => {
+      const source = sourceFor(node);
+      return {
+        id: `ev-${node.id}`,
+        nodeId: node.id,
+        desktopSrc: source.src,
+        mobileSrc: source.mobileSrc,
+        route: source.route,
+        roleId: node.ownerRoleIds[0]!,
+        capturedAt: date,
+        reviewedAt: date,
+        provenance: "documentation" as const,
+        alt: `${source.landmark} screen for ${node.title}`,
+        expectedLandmark: source.landmark,
+        expectedDatabaseEffect: node.databaseEffect,
+        sensitiveDataReviewed: true,
+        hotspots: [
+          {
+            id: "primary",
+            number: 1,
+            x: 0.5,
+            y: 0.35,
+            label: node.title,
+            instruction: node.body,
+          },
+        ],
+      };
+    }),
+);

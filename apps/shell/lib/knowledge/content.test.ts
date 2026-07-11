@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { existsSync } from "node:fs";
+import path from "node:path";
 import { KNOWLEDGE_CONTENT } from "./content";
 import { searchKnowledge } from "./search";
 import { validateKnowledgeBase, validateKnowledgeContent } from "./validate";
@@ -29,6 +31,51 @@ describe("Knowledge Base content", () => {
     expect(
       KNOWLEDGE_CONTENT.futureFeatures.every(
         (item) => item.status === "proposed",
+      ),
+    ).toBe(true);
+  });
+
+  it("provides reviewed screen evidence for every workflow step", () => {
+    const evidenceIds = new Set(
+      KNOWLEDGE_CONTENT.evidence.map((item) => item.id),
+    );
+    for (const flow of KNOWLEDGE_CONTENT.flows)
+      for (const node of flow.nodes) {
+        expect(node.evidenceId, `${flow.id}:${node.id}`).toBeTruthy();
+        expect(evidenceIds.has(node.evidenceId!), `${flow.id}:${node.id}`).toBe(
+          true,
+        );
+      }
+    expect(
+      KNOWLEDGE_CONTENT.evidence.every((item) => item.sensitiveDataReviewed),
+    ).toBe(true);
+    for (const item of KNOWLEDGE_CONTENT.evidence) {
+      expect(
+        existsSync(path.resolve("public", item.desktopSrc.replace(/^\//, ""))),
+        item.desktopSrc,
+      ).toBe(true);
+      if (item.mobileSrc)
+        expect(
+          existsSync(path.resolve("public", item.mobileSrc.replace(/^\//, ""))),
+          item.mobileSrc,
+        ).toBe(true);
+    }
+  });
+
+  it("searches governed branches and screenshot instructions", () => {
+    expect(
+      searchKnowledge(KNOWLEDGE_CONTENT, "return to vendor").some((item) =>
+        item.href.includes("flow="),
+      ),
+    ).toBe(true);
+    expect(
+      searchKnowledge(KNOWLEDGE_CONTENT, "quality hold").some((item) =>
+        item.href.includes("step="),
+      ),
+    ).toBe(true);
+    expect(
+      searchKnowledge(KNOWLEDGE_CONTENT, "assigned Mwell email").some((item) =>
+        item.href.includes("access-start"),
       ),
     ).toBe(true);
   });
