@@ -253,6 +253,7 @@ jobs:
   e2e:
     name: E2E (playwright)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: [typecheck, lint, test, build, axe]
     steps:
       - uses: actions/checkout@v4
