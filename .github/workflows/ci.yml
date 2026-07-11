@@ -190,6 +190,7 @@ jobs:
             apps/shell/package.json
             apps/shell/next.config.mjs
           if-no-files-found: error
+          include-hidden-files: true
           retention-days: 1
 
   # ---------------------------------------------------------------------------
