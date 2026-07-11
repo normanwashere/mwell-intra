@@ -9,16 +9,12 @@ import Link from 'next/link';
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { useReducedMotion } from 'framer-motion';
 import * as m from 'framer-motion/m';
-import {
-  Icon,
-  PageTransition,
-  Sheet,
-  type IconName,
-} from '@intra/ui';
+import { Icon, PageTransition, Sheet, type IconName } from '@intra/ui';
 import { useSession } from '@intra/auth';
 import { can } from '@intra/rbac';
 import {
   ADMIN_NAV,
+  DOA_NAV,
   FINANCE_NAV,
   accessibleModules,
   VENDOR_NAV,
@@ -52,6 +48,8 @@ function topBarLabel(pathname: string, entries: readonly NavEntry[]): string {
   if (pathname === '/') return 'Home';
   if (pathname.startsWith(FINANCE_NAV.href)) return FINANCE_NAV.label;
   if (pathname.startsWith('/admin/users')) return 'Admin · Users & Roles';
+  if (pathname.startsWith('/admin/doa'))
+    return 'Admin · Delegation of Authority';
   if (pathname.startsWith('/admin')) return 'Admin';
   const match = entries.find(
     (e) => e.href !== '/' && pathname.startsWith(e.href),
@@ -65,7 +63,11 @@ function topBarLabel(pathname: string, entries: readonly NavEntry[]): string {
 /** Context-aware primary action for the mobile center FAB. */
 function centerAction(pathname: string): NavEntry | null {
   if (pathname.startsWith('/procurement')) {
-    return { href: '/procurement/requests/new', label: 'New request', icon: 'plus' };
+    return {
+      href: '/procurement/requests/new',
+      label: 'New request',
+      icon: 'plus',
+    };
   }
   if (pathname.startsWith('/legal')) {
     return { href: '/legal/invites/new', label: 'Invite vendor', icon: 'plus' };
@@ -98,6 +100,13 @@ export function AppShell({ children }: { children: ReactNode }) {
   if (!loading && can(userRoles, 'core', 'manage_rbac')) {
     entries.push(navItemToEntry(ADMIN_NAV));
   }
+  if (
+    !loading &&
+    (can(userRoles, 'core', 'manage_rbac') ||
+      can(userRoles, 'legal', 'manage_doa'))
+  ) {
+    entries.push(navItemToEntry(DOA_NAV));
+  }
   if (!loading && profile?.kind === 'vendor') {
     entries.push(navItemToEntry(VENDOR_NAV));
   }
@@ -117,7 +126,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   const fab = centerAction(pathname);
   const mobileLeft = entries.slice(0, 2);
   const hasMobileOverflow = entries.length > 4;
-  const mobileRight = hasMobileOverflow ? entries.slice(2, 3) : entries.slice(2, 4);
+  const mobileRight = hasMobileOverflow
+    ? entries.slice(2, 3)
+    : entries.slice(2, 4);
 
   return (
     <div className="min-h-screen bg-app md:flex">
@@ -136,7 +147,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           <MwellIntraLogo showLabel={false} logoClassName="text-sm" />
         </Link>
 
-        <nav className="flex flex-1 flex-col items-center gap-1" aria-label="Primary">
+        <nav
+          className="flex flex-1 flex-col items-center gap-1"
+          aria-label="Primary"
+        >
           {entries.map((e) => (
             <Link
               key={e.href}
@@ -277,7 +291,11 @@ export function AppShell({ children }: { children: ReactNode }) {
           <ul className="relative flex items-end px-2 pb-1 pt-2">
             {mobileLeft.map((e) => (
               <li key={e.href} className="flex-1">
-                <MobileTab entry={e} active={isActive(e.href)} reduced={!!reduced} />
+                <MobileTab
+                  entry={e}
+                  active={isActive(e.href)}
+                  reduced={!!reduced}
+                />
               </li>
             ))}
 
@@ -297,7 +315,11 @@ export function AppShell({ children }: { children: ReactNode }) {
 
             {mobileRight.map((e) => (
               <li key={e.href} className="flex-1">
-                <MobileTab entry={e} active={isActive(e.href)} reduced={!!reduced} />
+                <MobileTab
+                  entry={e}
+                  active={isActive(e.href)}
+                  reduced={!!reduced}
+                />
               </li>
             ))}
             {hasMobileOverflow && (

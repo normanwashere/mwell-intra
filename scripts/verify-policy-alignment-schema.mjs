@@ -13,6 +13,13 @@ if (!fs.existsSync(migration)) {
 }
 
 const sql = fs.readFileSync(migration, 'utf8');
+const doaMigrationPath = path.resolve(
+  process.cwd(),
+  'supabase/migrations/20260711090000_department_doa_administration.sql',
+);
+const doaSql = fs.existsSync(doaMigrationPath)
+  ? fs.readFileSync(doaMigrationPath, 'utf8')
+  : '';
 const required = [
   'legal.policy_definitions',
   'legal.vendor_application_snapshots',
@@ -67,7 +74,21 @@ for (const token of [
   'A governed Warehouse receipt is required for goods acceptance',
   'Payment readiness evidence is incomplete',
 ]) {
-  if (!sql.toLowerCase().includes(token.toLowerCase())) failures.push(`missing control: ${token}`);
+  if (!sql.toLowerCase().includes(token.toLowerCase()))
+    failures.push(`missing control: ${token}`);
+}
+
+for (const token of [
+  'alter column department set not null',
+  'private.policy_save_doa_matrix',
+  'private.policy_activate_doa_matrix',
+  "core.has_cap('legal','manage_doa')",
+  'm.department = v_request.department',
+  'doa_matrix_activated',
+]) {
+  if (!doaSql.toLowerCase().includes(token.toLowerCase())) {
+    failures.push(`missing department DOA control: ${token}`);
+  }
 }
 
 if (failures.length > 0) {
@@ -75,4 +96,6 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log(`Policy-alignment schema contract verified (${required.length} governed tables).`);
+console.log(
+  `Policy-alignment schema contract verified (${required.length} governed tables).`,
+);

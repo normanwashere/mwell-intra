@@ -12,6 +12,7 @@ export type LegalCapability =
   | 'manage_checklist'
   | 'approve_accreditation'
   | 'manage_documents'
+  | 'manage_doa'
   | 'admin';
 
 export type LegalRole = 'legal_reviewer' | 'compliance' | 'admin';
@@ -22,17 +23,23 @@ const LEGAL_CAPABILITIES = [
   'manage_checklist',
   'approve_accreditation',
   'manage_documents',
+  'manage_doa',
   'admin',
 ] as const satisfies readonly LegalCapability[];
 
-export const legalModule: ModuleDefinition<'legal', LegalRole, LegalCapability> = {
+export const legalModule: ModuleDefinition<
+  'legal',
+  LegalRole,
+  LegalCapability
+> = {
   module: 'legal',
   label: 'Legal',
   capabilities: LEGAL_CAPABILITIES,
   roles: {
     legal_reviewer: {
       label: 'Legal Reviewer',
-      description: 'Reviews accreditation cases and manages requirement checklists.',
+      description:
+        'Reviews accreditation cases and manages requirement checklists.',
       // approve_accreditation: reviewers decide cases end-to-end in Release 1
       // (single legal seat per case). Split decision authority back out to
       // `compliance` when the team grows past one reviewer.
@@ -46,7 +53,8 @@ export const legalModule: ModuleDefinition<'legal', LegalRole, LegalCapability> 
     },
     compliance: {
       label: 'Compliance',
-      description: 'Approves accreditation status and owns the vendor lifecycle.',
+      description:
+        'Approves accreditation status and owns the vendor lifecycle.',
       capabilities: [
         'view_dashboard',
         'review_accreditation',
@@ -63,6 +71,7 @@ export const legalModule: ModuleDefinition<'legal', LegalRole, LegalCapability> 
         'manage_checklist',
         'approve_accreditation',
         'manage_documents',
+        'manage_doa',
         'admin',
       ],
     },

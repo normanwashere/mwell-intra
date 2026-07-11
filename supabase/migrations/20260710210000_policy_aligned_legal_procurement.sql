@@ -202,6 +202,7 @@ create table if not exists procurement.exception_packs (
 create table if not exists procurement.doa_matrices (
   id uuid primary key default gen_random_uuid(),
   version text not null unique,
+  department text not null,
   source_document text not null,
   approved_by_name text not null,
   approved_at timestamptz not null,
@@ -487,7 +488,7 @@ end;
 $$;
 
 create or replace function legal.submit_vendor_application(payload jsonb)
-returns jsonb language sql security invoker
+returns jsonb language sql security invoker set search_path = ''
 as $$ select private.policy_submit_vendor_application(payload) $$;
 
 create or replace function private.policy_record_instrument_signature(payload jsonb)
@@ -646,8 +647,9 @@ begin
   ) then v_missing := array_append(v_missing,'approved exception pack'); end if;
   if cardinality(v_missing)>0 then raise exception 'Submission evidence incomplete: %', array_to_string(v_missing,', '); end if;
 
-  select * into v_matrix from procurement.doa_matrices
-    where active and effective_at<=now() and (expires_at is null or expires_at>now())
+  select m.* into v_matrix from procurement.doa_matrices m
+    where m.active and m.department = v_request.department
+      and m.effective_at<=now() and (m.expires_at is null or m.expires_at>now())
     order by effective_at desc limit 1;
   if v_matrix.id is null then raise exception 'policy_decision_required: active approved DOA matrix'; end if;
 
@@ -663,14 +665,14 @@ begin
   )
   select v_request.id,
     row_number() over(order by case a.tier when 'dept_head' then 1 when 'procurement_head' then 2 when 'legal' then 3 when 'finance' then 4 else 5 end),
-    a.tier,'pending',a.tier || ' - ' || p.name,a.approver_user_id,v_matrix.version,v_route.request_version
+    a.tier,'pending',a.tier || ' - ' || coalesce(p.full_name,p.email),a.approver_user_id,v_matrix.version,v_route.request_version
   from procurement.doa_assignments a
   join core.profiles p on p.id=a.approver_user_id
   where a.matrix_id=v_matrix.id and a.active
     and a.tier = any(v_required_tiers)
     and coalesce(v_request.estimated_amount,0)>=a.min_amount
     and (a.max_amount is null or coalesce(v_request.estimated_amount,0)<=a.max_amount)
-    and (a.department is null or a.department=v_request.department)
+    and a.department=v_request.department
     and (a.category is null or a.category=v_request.category);
 
   select count(*), count(distinct tier)

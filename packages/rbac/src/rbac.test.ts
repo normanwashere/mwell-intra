@@ -133,7 +133,9 @@ describe('warehouse parity vs source roles.ts', () => {
         ([name]) => name === role,
       )?.[1];
       expect(roleDef).toBeDefined();
-      expect([...(roleDef?.capabilities ?? [])].sort()).toEqual([...caps].sort());
+      expect([...(roleDef?.capabilities ?? [])].sort()).toEqual(
+        [...caps].sort(),
+      );
     },
   );
 });
@@ -212,18 +214,32 @@ describe('hasCapInModule()', () => {
   });
 
   it('external vendor tier lives in core:vendor_portal (reconciled 2026-07-05)', () => {
-    expect(hasCapInModule('core', 'vendor_portal', 'submit_documents')).toBe(true);
-    expect(hasCapInModule('core', 'vendor_portal', 'submit_accreditation')).toBe(true);
-    expect(hasCapInModule('core', 'vendor_portal', 'view_own_accreditation')).toBe(true);
+    expect(hasCapInModule('core', 'vendor_portal', 'submit_documents')).toBe(
+      true,
+    );
+    expect(
+      hasCapInModule('core', 'vendor_portal', 'submit_accreditation'),
+    ).toBe(true);
+    expect(
+      hasCapInModule('core', 'vendor_portal', 'view_own_accreditation'),
+    ).toBe(true);
     // Retired: legal:vendor no longer exists.
-    expect(hasCapInModule('legal', 'vendor', 'approve_accreditation')).toBe(false);
+    expect(hasCapInModule('legal', 'vendor', 'approve_accreditation')).toBe(
+      false,
+    );
   });
 });
 
 describe('provisional procurement/legal/core matrices', () => {
   it('exposes the chosen procurement roles', () => {
     expect(listModuleRoles('procurement').sort()).toEqual(
-      ['admin', 'approver', 'finance', 'procurement_officer', 'requester'].sort(),
+      [
+        'admin',
+        'approver',
+        'finance',
+        'procurement_officer',
+        'requester',
+      ].sort(),
     );
     expect(MODULES.procurement.provisional).toBe(true);
   });
@@ -288,5 +304,24 @@ describe('toRoleCapabilityRows() — DB seed shape', () => {
       role: 'logistics_supervisor',
       cap: 'receive_stock',
     });
+  });
+});
+
+describe('department DOA administration', () => {
+  it('grants DOA configuration only to Legal Admin', () => {
+    expect(can({ legal: ['admin'] }, 'legal', 'manage_doa')).toBe(true);
+    expect(can({ legal: ['legal_reviewer'] }, 'legal', 'manage_doa')).toBe(
+      false,
+    );
+    expect(can({ legal: ['compliance'] }, 'legal', 'manage_doa')).toBe(false);
+  });
+
+  it('does not turn DOA configuration into procurement approval authority', () => {
+    expect(can({ legal: ['admin'] }, 'procurement', 'approve_request')).toBe(
+      false,
+    );
+    expect(
+      can({ core: ['platform_admin'] }, 'procurement', 'approve_request'),
+    ).toBe(false);
   });
 });

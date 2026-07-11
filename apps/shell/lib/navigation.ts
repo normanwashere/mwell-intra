@@ -67,9 +67,18 @@ export const FINANCE_NAV = {
 export const ADMIN_NAV = {
   href: '/admin/users',
   label: 'Admin — Users & Roles',
-  description: 'Provision profiles, assign scoped module roles, review audit trail.',
+  description:
+    'Provision profiles, assign scoped module roles, review audit trail.',
   icon: 'list',
   tone: 'rose',
+} as const satisfies ShellNavItem;
+
+export const DOA_NAV = {
+  href: '/admin/doa',
+  label: 'Delegation of Authority',
+  description: 'Configure department approval matrices and named approvers.',
+  icon: 'clipboard',
+  tone: 'amber',
 } as const satisfies ShellNavItem;
 
 /** Does the user hold at least one role in `module`? */
