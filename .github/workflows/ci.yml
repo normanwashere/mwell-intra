@@ -251,10 +251,14 @@ jobs:
   # Existing E2E job — kept, but now gated on typecheck/lint/test/build/axe.
   # ---------------------------------------------------------------------------
   e2e:
-    name: E2E (playwright)
+    name: E2E (playwright shard ${{ matrix.shard }}/3)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: [typecheck, lint, test, build, axe]
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -266,4 +270,4 @@ jobs:
       - name: Install Playwright browsers
         run: pnpm --filter @intra/shell exec playwright install --with-deps
       - name: E2E
-        run: pnpm test:e2e
+        run: pnpm --filter @intra/shell exec playwright test tests/smoke tests/e2e --shard=${{ matrix.shard }}/3

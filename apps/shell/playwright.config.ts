@@ -23,7 +23,7 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: IS_CI,
   retries: IS_CI ? 1 : 0,
-  workers: IS_CI ? 3 : undefined,
+  workers: IS_CI ? 2 : undefined,
   reporter: IS_CI ? [['github'], ['list']] : 'list',
   timeout: 30_000,
   expect: { timeout: 10_000 },
