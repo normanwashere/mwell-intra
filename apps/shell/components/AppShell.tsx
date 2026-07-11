@@ -245,7 +245,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               </button>
               <span
                 className={cx(
-                  "chip",
+                  "chip hidden min-[360px]:inline-flex",
                   mode === "supabase"
                     ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
                     : "bg-amber-500/15 text-amber-800 dark:text-amber-300",
