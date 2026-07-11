@@ -233,4 +233,12 @@ All items below are **proposed**, not current capabilities:
 
 ## Documentation Assets
 
-The standalone searchable handbook is `docs/manual/index.html`. Historical screenshots remain in `docs/manual/assets/`; screenshots showing retired blockers are evidence only and must not be used as current training guidance.
+The standalone searchable handbook is `docs/manual/index.html`.
+
+![Knowledge Base desktop flow](assets/knowledge-base/employee-desktop.png)
+
+![Knowledge Base vendor mobile](assets/knowledge-base/vendor-mobile.png)
+
+![Knowledge Base narrow mobile](assets/knowledge-base/employee-narrow.png)
+
+Historical screenshots remain in `docs/manual/assets/`; screenshots showing retired blockers are evidence only and must not be used as current training guidance.

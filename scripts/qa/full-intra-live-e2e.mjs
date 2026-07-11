@@ -12,39 +12,88 @@ const viewFilter = process.env.AUDIT_VIEWPORT;
 const roleFilter = process.env.AUDIT_ROLE;
 
 if (!baseUrl || !/^https:\/\//.test(baseUrl)) {
-  throw new Error("AUDIT_BASE_URL must be the HTTPS URL of the live deployment.");
+  throw new Error(
+    "AUDIT_BASE_URL must be the HTTPS URL of the live deployment.",
+  );
 }
 if (!password) {
-  throw new Error("AUDIT_PASSWORD is required; shared credentials are never embedded in the release gate.");
+  throw new Error(
+    "AUDIT_PASSWORD is required; shared credentials are never embedded in the release gate.",
+  );
 }
 
 const users = [
   { role: "core_staff_only", email: "intra.test.staff@mwell.com.ph" },
   { role: "platform_admin", email: "intra.test.admin@mwell.com.ph" },
   { role: "vendor_portal", email: "intra.test.vendor@mwell.com.ph" },
-  { role: "warehouse_logistics_supervisor", email: "intra.test.wh.logistics@mwell.com.ph" },
-  { role: "warehouse_operations", email: "intra.test.wh.operations@mwell.com.ph" },
+  {
+    role: "warehouse_logistics_supervisor",
+    email: "intra.test.wh.logistics@mwell.com.ph",
+  },
+  {
+    role: "warehouse_operations",
+    email: "intra.test.wh.operations@mwell.com.ph",
+  },
   { role: "warehouse_finance", email: "intra.test.wh.finance@mwell.com.ph" },
   { role: "warehouse_bi_analyst", email: "intra.test.wh.bi@mwell.com.ph" },
-  { role: "warehouse_business_unit", email: "intra.test.wh.business.unit@mwell.com.ph" },
-  { role: "warehouse_marketing", email: "intra.test.wh.marketing@mwell.com.ph" },
-  { role: "warehouse_procurement", email: "intra.test.wh.procurement@mwell.com.ph" },
+  {
+    role: "warehouse_business_unit",
+    email: "intra.test.wh.business.unit@mwell.com.ph",
+  },
+  {
+    role: "warehouse_marketing",
+    email: "intra.test.wh.marketing@mwell.com.ph",
+  },
+  {
+    role: "warehouse_procurement",
+    email: "intra.test.wh.procurement@mwell.com.ph",
+  },
   { role: "warehouse_pricing", email: "intra.test.wh.pricing@mwell.com.ph" },
-  { role: "warehouse_admin", email: "intra.test.wh.warehouse.admin@mwell.com.ph" },
-  { role: "procurement_requester", email: "intra.test.proc.requester@mwell.com.ph" },
-  { role: "procurement_officer", email: "intra.test.proc.officer@mwell.com.ph" },
-  { role: "procurement_approver", email: "intra.test.proc.approver@mwell.com.ph" },
-  { role: "procurement_finance", email: "intra.test.proc.finance@mwell.com.ph" },
+  {
+    role: "warehouse_admin",
+    email: "intra.test.wh.warehouse.admin@mwell.com.ph",
+  },
+  {
+    role: "procurement_requester",
+    email: "intra.test.proc.requester@mwell.com.ph",
+  },
+  {
+    role: "procurement_officer",
+    email: "intra.test.proc.officer@mwell.com.ph",
+  },
+  {
+    role: "procurement_approver",
+    email: "intra.test.proc.approver@mwell.com.ph",
+  },
+  {
+    role: "procurement_finance",
+    email: "intra.test.proc.finance@mwell.com.ph",
+  },
   { role: "procurement_admin", email: "intra.test.proc.admin@mwell.com.ph" },
   { role: "legal_reviewer", email: "intra.test.legal.reviewer@mwell.com.ph" },
-  { role: "legal_compliance", email: "intra.test.legal.compliance@mwell.com.ph" },
+  {
+    role: "legal_compliance",
+    email: "intra.test.legal.compliance@mwell.com.ph",
+  },
   { role: "legal_admin", email: "intra.test.legal.admin@mwell.com.ph" },
 ];
 
 const viewports = [
-  { name: "desktop-1440", viewport: { width: 1440, height: 900 }, isMobile: false },
-  { name: "desktop-1280", viewport: { width: 1280, height: 800 }, isMobile: false },
-  { name: "tablet-768", viewport: { width: 768, height: 1024 }, isMobile: false },
+  {
+    name: "desktop-1440",
+    viewport: { width: 1440, height: 900 },
+    isMobile: false,
+  },
+  {
+    name: "desktop-1280",
+    viewport: { width: 1280, height: 800 },
+    isMobile: false,
+  },
+  {
+    name: "tablet-768",
+    viewport: { width: 768, height: 1024 },
+    isMobile: false,
+  },
   { name: "mobile-390", viewport: { width: 390, height: 844 }, isMobile: true },
   { name: "mobile-360", viewport: { width: 360, height: 800 }, isMobile: true },
   { name: "mobile-320", viewport: { width: 320, height: 720 }, isMobile: true },
@@ -52,11 +101,30 @@ const viewports = [
 
 const commonRoutes = [
   { path: "/", text: /Your modules|No modules yet|Vendor Portal|Admin/i },
-  { path: "/warehouse", text: /Warehouse|Dashboard|No warehouse access|Access denied/i },
-  { path: "/procurement", text: /Procurement|No procurement access|Approval inbox|Purchase request|Access denied/i },
-  { path: "/legal", text: /Legal|Accreditation|No legal access|Access denied/i },
-  { path: "/vendor", text: /Vendor|accreditation|No legal access|enrolled vendor|Access denied/i },
-  { path: "/admin/users", text: /Users & Roles|Access matrix|No admin access|don't have access|No modules|Access denied/i },
+  {
+    path: "/warehouse",
+    text: /Warehouse|Dashboard|No warehouse access|Access denied/i,
+  },
+  {
+    path: "/procurement",
+    text: /Procurement|No procurement access|Approval inbox|Purchase request|Access denied/i,
+  },
+  {
+    path: "/legal",
+    text: /Legal|Accreditation|No legal access|Access denied/i,
+  },
+  {
+    path: "/vendor",
+    text: /Vendor|accreditation|No legal access|enrolled vendor|Access denied/i,
+  },
+  {
+    path: "/admin/users",
+    text: /Users & Roles|Access matrix|No admin access|don't have access|No modules|Access denied/i,
+  },
+  {
+    path: "/knowledge",
+    text: /Knowledge Base|Search functions and workflows/i,
+  },
 ];
 
 const roleRoutes = {
@@ -65,7 +133,10 @@ const roleRoutes = {
   ],
   vendor_portal: [
     { path: "/vendor", text: /Vendor|accreditation|Acme/i },
-    { path: "/vendor/cases/case_seed_001", text: /Accreditation|Checklist|Documents|requirements/i },
+    {
+      path: "/vendor/cases/case_seed_001",
+      text: /Accreditation|Checklist|Documents|requirements/i,
+    },
   ],
   warehouse_logistics_supervisor: [
     { path: "/warehouse/receiving", text: /Receiving|Receive/i },
@@ -93,31 +164,52 @@ const roleRoutes = {
     { path: "/warehouse/finance", text: /Finance|Valuation|Reconciliation/i },
   ],
   procurement_requester: [
-    { path: "/procurement/requests/new", text: /Draft a purchase request|New request/i },
-    { path: "/procurement/requests/req_seed_001", text: /Purchase request|Line items|Activity/i },
+    {
+      path: "/procurement/requests/new",
+      text: /Draft a purchase request|New request/i,
+    },
+    {
+      path: "/procurement/requests/req_seed_001",
+      text: /Purchase request|Line items|Activity/i,
+    },
   ],
   procurement_officer: [
     { path: "/procurement", text: /Purchase requests|Procurement/i },
     { path: "/procurement/purchase-orders", text: /Purchase orders|POs/i },
   ],
   procurement_approver: [
-    { path: "/procurement/approvals", text: /Approval inbox|Waiting on you|Inbox zero/i },
+    {
+      path: "/procurement/approvals",
+      text: /Approval inbox|Waiting on you|Inbox zero/i,
+    },
   ],
   procurement_finance: [
-    { path: "/procurement/approvals", text: /Approval inbox|Waiting on you|Inbox zero/i },
+    {
+      path: "/procurement/approvals",
+      text: /Approval inbox|Waiting on you|Inbox zero/i,
+    },
   ],
   procurement_admin: [
     { path: "/procurement/purchase-orders", text: /Purchase orders|POs/i },
-    { path: "/procurement/approvals", text: /Approval inbox|Waiting on you|Inbox zero/i },
+    {
+      path: "/procurement/approvals",
+      text: /Approval inbox|Waiting on you|Inbox zero/i,
+    },
   ],
   legal_reviewer: [
     { path: "/legal", text: /Accreditation cases|Legal/i },
-    { path: "/legal/cases/case_seed_001", text: /Accreditation|Checklist|Documents|Activity/i },
+    {
+      path: "/legal/cases/case_seed_001",
+      text: /Accreditation|Checklist|Documents|Activity/i,
+    },
     { path: "/legal/invites/new", text: /Invite vendor|Onboard a new vendor/i },
   ],
   legal_compliance: [
     { path: "/legal", text: /Accreditation cases|Legal/i },
-    { path: "/legal/cases/case_seed_001", text: /Accreditation|Checklist|Documents|Activity/i },
+    {
+      path: "/legal/cases/case_seed_001",
+      text: /Accreditation|Checklist|Documents|Activity/i,
+    },
   ],
   legal_admin: [
     { path: "/legal", text: /Accreditation cases|Legal/i },
@@ -154,7 +246,9 @@ function classify(text, url) {
 }
 
 async function waitForMeaningfulRoute(page) {
-  await page.waitForLoadState("domcontentloaded", { timeout: 20_000 }).catch(() => {});
+  await page
+    .waitForLoadState("domcontentloaded", { timeout: 20_000 })
+    .catch(() => {});
   await page
     .waitForFunction(
       () => {
@@ -196,10 +290,18 @@ async function pageAudit(page) {
 
     function centerIsInsideVisibleClip(el, x, y) {
       let node = el.parentElement;
-      while (node && node !== document.body && node !== document.documentElement) {
+      while (
+        node &&
+        node !== document.body &&
+        node !== document.documentElement
+      ) {
         const style = getComputedStyle(node);
-        const clipsX = ["hidden", "clip", "auto", "scroll"].includes(style.overflowX);
-        const clipsY = ["hidden", "clip", "auto", "scroll"].includes(style.overflowY);
+        const clipsX = ["hidden", "clip", "auto", "scroll"].includes(
+          style.overflowX,
+        );
+        const clipsY = ["hidden", "clip", "auto", "scroll"].includes(
+          style.overflowY,
+        );
         if (clipsX || clipsY) {
           const rect = node.getBoundingClientRect();
           if (clipsX && (x < rect.left || x > rect.right)) return false;
@@ -244,7 +346,9 @@ async function pageAudit(page) {
       });
 
     const overlapExamples = [];
-    const visibleControls = Array.from(document.querySelectorAll(controlSelector))
+    const visibleControls = Array.from(
+      document.querySelectorAll(controlSelector),
+    )
       .filter((el) => !el.classList.contains("sr-only"))
       .filter((el) => el.type !== "file")
       .filter(isVisible);
@@ -253,15 +357,24 @@ async function pageAudit(page) {
       const rect = el.getBoundingClientRect();
       const x = rect.left + rect.width / 2;
       const y = rect.top + rect.height / 2;
-      if (x < 0 || x > window.innerWidth || y < 0 || y > window.innerHeight) continue;
+      if (x < 0 || x > window.innerWidth || y < 0 || y > window.innerHeight)
+        continue;
       if (!centerIsInsideVisibleClip(el, x, y)) continue;
       const blocker = document.elementFromPoint(x, y);
       if (!blocker || blocker === el || el.contains(blocker)) continue;
-      if (blocker.tagName.toLowerCase() === "nextjs-portal" || blocker.closest("nextjs-portal")) {
+      if (
+        blocker.tagName.toLowerCase() === "nextjs-portal" ||
+        blocker.closest("nextjs-portal")
+      ) {
         continue;
       }
       const blockerControl = blocker.closest(controlSelector);
-      if (!blockerControl || blockerControl === el || el.contains(blockerControl)) continue;
+      if (
+        !blockerControl ||
+        blockerControl === el ||
+        el.contains(blockerControl)
+      )
+        continue;
       overlapExamples.push({
         a: controls[i]?.text || controls[i]?.tag || "control",
         b:
@@ -280,7 +393,11 @@ async function pageAudit(page) {
     );
     function clippedByBoundedAncestor(el) {
       let node = el.parentElement;
-      while (node && node !== document.body && node !== document.documentElement) {
+      while (
+        node &&
+        node !== document.body &&
+        node !== document.documentElement
+      ) {
         const style = getComputedStyle(node);
         const overflowX = style.overflowX;
         if (["hidden", "clip", "auto", "scroll"].includes(overflowX)) {
@@ -309,7 +426,11 @@ async function pageAudit(page) {
           },
         };
       })
-      .filter((item) => item.rect.w > 0 && (item.rect.x < -2 || item.rect.right > layoutWidth + 2))
+      .filter(
+        (item) =>
+          item.rect.w > 0 &&
+          (item.rect.x < -2 || item.rect.right > layoutWidth + 2),
+      )
       .slice(0, 8);
 
     const horizontalOverflow =
@@ -335,11 +456,15 @@ async function pageAudit(page) {
         .filter(
           (control) =>
             control.tag === "a" &&
-            (!control.href || control.href === "#" || control.href.startsWith("javascript:")),
+            (!control.href ||
+              control.href === "#" ||
+              control.href.startsWith("javascript:")),
         )
         .slice(0, 10),
       unlabeledControls: controls
-        .filter((control) => !control.text && ["button", "a"].includes(control.tag))
+        .filter(
+          (control) => !control.text && ["button", "a"].includes(control.tag),
+        )
         .slice(0, 10),
     };
   });
@@ -405,18 +530,29 @@ async function auditRoute(page, route) {
 }
 
 async function procurementCreateRequestWorkflow(page) {
-  await page.goto(`${baseUrl}/procurement/requests/new?workflow=${Date.now()}`, {
-    waitUntil: "domcontentloaded",
-    timeout: 20_000,
-  });
+  await page.goto(
+    `${baseUrl}/procurement/requests/new?workflow=${Date.now()}`,
+    {
+      waitUntil: "domcontentloaded",
+      timeout: 20_000,
+    },
+  );
   await waitForMeaningfulRoute(page);
-  await page.locator("label").filter({ hasText: /^Petty cash/i }).first().click();
+  await page
+    .locator("label")
+    .filter({ hasText: /^Petty cash/i })
+    .first()
+    .click();
   await page.getByLabel("Title").fill(`Audit petty cash ${Date.now()}`);
   await page.getByLabel("Line 1 description").fill("Audit workflow supplies");
   await page.getByLabel("Line 1 unit price").fill("1250");
   await page.getByRole("button", { name: /continue/i }).click();
-  await page.getByLabel(/Need description/i).fill("Operational test purchase for full Intra audit coverage.");
-  await page.getByLabel(/Risk if not procured/i).fill("Testing would not cover procurement draft creation.");
+  await page
+    .getByLabel(/Need description/i)
+    .fill("Operational test purchase for full Intra audit coverage.");
+  await page
+    .getByLabel(/Risk if not procured/i)
+    .fill("Testing would not cover procurement draft creation.");
   await page.getByRole("button", { name: /continue/i }).click();
   await page.getByRole("button", { name: /save draft/i }).click();
   await page
@@ -433,7 +569,9 @@ async function procurementCreateRequestWorkflow(page) {
   return {
     name: "procurement request draft",
     ok:
-      /Purchase request|Line items|Activity|Business justification/i.test(audit.text) &&
+      /Purchase request|Line items|Activity|Business justification/i.test(
+        audit.text,
+      ) &&
       path.startsWith("/procurement/requests/") &&
       !path.endsWith("/new"),
     finalUrl: page.url().replace(baseUrl, ""),
@@ -449,7 +587,9 @@ async function legalInviteVendorWorkflow(page) {
   });
   await waitForMeaningfulRoute(page);
   await page.getByLabel("Company name").fill(`Audit Vendor ${unique}`);
-  await page.getByLabel("Vendor contact email").fill(`audit.vendor.${unique}@example.com`);
+  await page
+    .getByLabel("Vendor contact email")
+    .fill(`audit.vendor.${unique}@example.com`);
   await page.getByRole("button", { name: /continue/i }).click();
   await page.getByRole("button", { name: /continue/i }).click();
   await page.getByRole("button", { name: /send invite & open case/i }).click();
@@ -462,7 +602,9 @@ async function legalInviteVendorWorkflow(page) {
   const audit = await pageAudit(page);
   return {
     name: "legal vendor invite",
-    ok: audit.text.includes(`Audit Vendor ${unique}`) && /\/legal\/cases\//.test(page.url()),
+    ok:
+      audit.text.includes(`Audit Vendor ${unique}`) &&
+      /\/legal\/cases\//.test(page.url()),
     finalUrl: page.url().replace(baseUrl, ""),
     text: audit.text.slice(0, 260),
   };
@@ -482,13 +624,20 @@ async function runWorkflow(browser, viewport, user, workflow) {
       const where = loc?.url
         ? ` (${loc.url.split("/").slice(-2).join("/")}:${loc.lineNumber}:${loc.columnNumber})`
         : "";
-      consoleErrors.push(`${message.type()}${where}: ${message.text()}`.slice(0, 320));
+      consoleErrors.push(
+        `${message.type()}${where}: ${message.text()}`.slice(0, 320),
+      );
     }
   });
-  page.on("pageerror", (error) => consoleErrors.push(`pageerror: ${error.message}`.slice(0, 240)));
+  page.on("pageerror", (error) =>
+    consoleErrors.push(`pageerror: ${error.message}`.slice(0, 240)),
+  );
   page.on("response", (response) => {
     const url = response.url();
-    if ((url.includes("supabase.co") || url.includes("/_next/")) && response.status() >= 400) {
+    if (
+      (url.includes("supabase.co") || url.includes("/_next/")) &&
+      response.status() >= 400
+    ) {
       networkErrors.push({ status: response.status(), url: url.slice(0, 220) });
     }
   });
@@ -496,7 +645,13 @@ async function runWorkflow(browser, viewport, user, workflow) {
   try {
     const loginResult = await login(page, user);
     if (loginResult.status !== "signed-in") {
-      return { viewport: viewport.name, user: user.email, workflow: workflow.name, ok: false, login: loginResult };
+      return {
+        viewport: viewport.name,
+        user: user.email,
+        workflow: workflow.name,
+        ok: false,
+        login: loginResult,
+      };
     }
     const result = await workflow.run(page);
     return {
@@ -525,8 +680,12 @@ async function runWorkflow(browser, viewport, user, workflow) {
 const browser = await chromium.launch({ headless: true });
 const results = [];
 
-for (const viewport of viewports.filter((item) => !viewFilter || item.name === viewFilter)) {
-  for (const user of users.filter((item) => !roleFilter || item.role === roleFilter)) {
+for (const viewport of viewports.filter(
+  (item) => !viewFilter || item.name === viewFilter,
+)) {
+  for (const user of users.filter(
+    (item) => !roleFilter || item.role === roleFilter,
+  )) {
     const context = await browser.newContext({
       viewport: viewport.viewport,
       isMobile: viewport.isMobile,
@@ -541,7 +700,9 @@ for (const viewport of viewports.filter((item) => !viewFilter || item.name === v
         const where = loc?.url
           ? ` (${loc.url.split("/").slice(-2).join("/")}:${loc.lineNumber}:${loc.columnNumber})`
           : "";
-        consoleErrors.push(`${message.type()}${where}: ${message.text()}`.slice(0, 320));
+        consoleErrors.push(
+          `${message.type()}${where}: ${message.text()}`.slice(0, 320),
+        );
       }
     });
     page.on("pageerror", (error) => {
@@ -549,7 +710,10 @@ for (const viewport of viewports.filter((item) => !viewFilter || item.name === v
     });
     page.on("response", (response) => {
       const url = response.url();
-      if ((url.includes("supabase.co") || url.includes("/_next/")) && response.status() >= 400) {
+      if (
+        (url.includes("supabase.co") || url.includes("/_next/")) &&
+        response.status() >= 400
+      ) {
         networkErrors.push({
           status: response.status(),
           url: url.replace(/apikey=[^&]+/g, "apikey=[redacted]").slice(0, 220),
@@ -590,7 +754,9 @@ for (const viewport of viewports.filter((item) => !viewFilter || item.name === v
       login: loginResult,
       routes: routeResults,
       networkErrors: Array.from(
-        new Map(networkErrors.map((entry) => [`${entry.status}:${entry.url}`, entry])).values(),
+        new Map(
+          networkErrors.map((entry) => [`${entry.status}:${entry.url}`, entry]),
+        ).values(),
       ).slice(0, 24),
       consoleErrors: Array.from(new Set(consoleErrors)).slice(0, 24),
     };
@@ -600,16 +766,22 @@ for (const viewport of viewports.filter((item) => !viewFilter || item.name === v
         viewport: item.viewport,
         role: item.role,
         login: item.login.status,
-        rendered: routeResults.filter((route) => route.class === "rendered").length,
-        denied: routeResults.filter((route) => route.class === "access-denied").length,
+        rendered: routeResults.filter((route) => route.class === "rendered")
+          .length,
+        denied: routeResults.filter((route) => route.class === "access-denied")
+          .length,
         problems: routeResults.filter(
           (route) =>
             route.class !== "rendered" &&
             route.class !== "access-denied" &&
             route.class !== "redirected-login",
         ).length,
-        expectationMisses: routeResults.filter((route) => route.expectationMet === false).length,
-        overflow: routeResults.filter((route) => route.overflow).map((route) => route.route),
+        expectationMisses: routeResults.filter(
+          (route) => route.expectationMet === false,
+        ).length,
+        overflow: routeResults
+          .filter((route) => route.overflow)
+          .map((route) => route.route),
         overlaps: routeResults.filter((route) => route.overlaps?.length).length,
         networkErrors: item.networkErrors.length,
         consoleErrors: item.consoleErrors.length,
@@ -621,22 +793,36 @@ for (const viewport of viewports.filter((item) => !viewFilter || item.name === v
 
 const workflows = [];
 if (allowMutations) {
-  for (const viewport of viewports.filter((item) => !viewFilter || item.name === viewFilter)) {
+  for (const viewport of viewports.filter(
+    (item) => !viewFilter || item.name === viewFilter,
+  )) {
     workflows.push(
-      await runWorkflow(browser, viewport, { email: "intra.test.proc.requester@mwell.com.ph" }, {
-        name: "procurement request draft",
-        run: procurementCreateRequestWorkflow,
-      }),
+      await runWorkflow(
+        browser,
+        viewport,
+        { email: "intra.test.proc.requester@mwell.com.ph" },
+        {
+          name: "procurement request draft",
+          run: procurementCreateRequestWorkflow,
+        },
+      ),
     );
     workflows.push(
-      await runWorkflow(browser, viewport, { email: "intra.test.legal.reviewer@mwell.com.ph" }, {
-        name: "legal vendor invite",
-        run: legalInviteVendorWorkflow,
-      }),
+      await runWorkflow(
+        browser,
+        viewport,
+        { email: "intra.test.legal.reviewer@mwell.com.ph" },
+        {
+          name: "legal vendor invite",
+          run: legalInviteVendorWorkflow,
+        },
+      ),
     );
   }
 } else {
-  console.warn("AUDIT_MUTATIONS is not true; write/read-back workflows were skipped.");
+  console.warn(
+    "AUDIT_MUTATIONS is not true; write/read-back workflows were skipped.",
+  );
 }
 
 await browser.close();
@@ -647,29 +833,55 @@ const aggregate = results.map((item) => ({
   email: item.email,
   loginStatus: item.login.status,
   loginUrl: item.login.url,
-  rendered: item.routes.filter((route) => route.class === "rendered").map((route) => route.route),
-  denied: item.routes.filter((route) => route.class === "access-denied").map((route) => route.route),
+  rendered: item.routes
+    .filter((route) => route.class === "rendered")
+    .map((route) => route.route),
+  denied: item.routes
+    .filter((route) => route.class === "access-denied")
+    .map((route) => route.route),
   expectationMisses: item.routes
     .filter((route) => route.expectationMet === false)
-    .map((route) => ({ route: route.route, class: route.class, text: route.text, error: route.error })),
+    .map((route) => ({
+      route: route.route,
+      class: route.class,
+      text: route.text,
+      error: route.error,
+    })),
   blankOrErrors: item.routes
-    .filter((route) => ["blank-or-nearblank", "error", "navigation-error"].includes(route.class))
-    .map((route) => ({ route: route.route, class: route.class, error: route.error })),
-  overflowRoutes: item.routes.filter((route) => route.overflow).map((route) => route.route),
+    .filter((route) =>
+      ["blank-or-nearblank", "error", "navigation-error"].includes(route.class),
+    )
+    .map((route) => ({
+      route: route.route,
+      class: route.class,
+      error: route.error,
+    })),
+  overflowRoutes: item.routes
+    .filter((route) => route.overflow)
+    .map((route) => route.route),
   overlapRoutes: item.routes
     .filter((route) => route.overlaps?.length)
-    .map((route) => ({ route: route.route, examples: route.overlaps.slice(0, 2) })),
+    .map((route) => ({
+      route: route.route,
+      examples: route.overlaps.slice(0, 2),
+    })),
   deadLinkRoutes: item.routes
     .filter((route) => route.deadLinks?.length)
     .map((route) => ({ route: route.route, count: route.deadLinks.length })),
   unlabeledControlRoutes: item.routes
     .filter((route) => route.unlabeledControls?.length)
-    .map((route) => ({ route: route.route, count: route.unlabeledControls.length })),
+    .map((route) => ({
+      route: route.route,
+      count: route.unlabeledControls.length,
+    })),
   networkErrors: item.networkErrors,
   consoleErrors: item.consoleErrors,
 }));
 
-const outputPath = path.resolve("test-results", "full-intra-live-e2e-results.json");
+const outputPath = path.resolve(
+  "test-results",
+  "full-intra-live-e2e-results.json",
+);
 await mkdir(path.dirname(outputPath), { recursive: true });
 await writeFile(
   outputPath,
@@ -677,18 +889,42 @@ await writeFile(
 );
 
 const routeFailures = aggregate.flatMap((item) => [
-  ...item.expectationMisses.map((entry) => `${item.viewport}/${item.role}${entry.route}: expectation miss`),
-  ...item.blankOrErrors.map((entry) => `${item.viewport}/${item.role}${entry.route}: ${entry.class}`),
-  ...item.overflowRoutes.map((route) => `${item.viewport}/${item.role}${route}: overflow`),
-  ...item.overlapRoutes.map((entry) => `${item.viewport}/${item.role}${entry.route}: overlap`),
-  ...item.deadLinkRoutes.map((entry) => `${item.viewport}/${item.role}${entry.route}: dead link`),
-  ...item.unlabeledControlRoutes.map((entry) => `${item.viewport}/${item.role}${entry.route}: unlabeled control`),
-  ...item.networkErrors.map((entry) => `${item.viewport}/${item.role}: network ${entry.status}`),
-  ...item.consoleErrors.map(() => `${item.viewport}/${item.role}: console error`),
+  ...item.expectationMisses.map(
+    (entry) => `${item.viewport}/${item.role}${entry.route}: expectation miss`,
+  ),
+  ...item.blankOrErrors.map(
+    (entry) => `${item.viewport}/${item.role}${entry.route}: ${entry.class}`,
+  ),
+  ...item.overflowRoutes.map(
+    (route) => `${item.viewport}/${item.role}${route}: overflow`,
+  ),
+  ...item.overlapRoutes.map(
+    (entry) => `${item.viewport}/${item.role}${entry.route}: overlap`,
+  ),
+  ...item.deadLinkRoutes.map(
+    (entry) => `${item.viewport}/${item.role}${entry.route}: dead link`,
+  ),
+  ...item.unlabeledControlRoutes.map(
+    (entry) => `${item.viewport}/${item.role}${entry.route}: unlabeled control`,
+  ),
+  ...item.networkErrors.map(
+    (entry) => `${item.viewport}/${item.role}: network ${entry.status}`,
+  ),
+  ...item.consoleErrors.map(
+    () => `${item.viewport}/${item.role}: console error`,
+  ),
 ]);
 const workflowFailures = workflows
-  .filter((workflow) => !workflow.ok || workflow.networkErrors?.length || workflow.consoleErrors?.length)
-  .map((workflow) => `${workflow.viewport}/${workflow.workflow}: ${workflow.error ?? "failed"}`);
+  .filter(
+    (workflow) =>
+      !workflow.ok ||
+      workflow.networkErrors?.length ||
+      workflow.consoleErrors?.length,
+  )
+  .map(
+    (workflow) =>
+      `${workflow.viewport}/${workflow.workflow}: ${workflow.error ?? "failed"}`,
+  );
 
 console.log(`Wrote ${outputPath}`);
 if (routeFailures.length || workflowFailures.length) {
