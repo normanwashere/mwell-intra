@@ -605,7 +605,7 @@ export function CreateRequestPage() {
                 </Field>
               </section>
 
-              <section className="card space-y-3 p-4 sm:p-5">
+              <section className="card min-w-0 space-y-3 p-4 sm:p-5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <h2 className="font-display text-base font-bold text-ink">
@@ -626,7 +626,7 @@ export function CreateRequestPage() {
                   </button>
                 </div>
 
-                <div className="overflow-x-auto">
+                <div className="w-0 min-w-full max-w-full overflow-x-auto overscroll-x-contain">
                   <table className="w-full min-w-[720px] table-fixed text-sm">
                     <thead className="text-left text-xs uppercase tracking-wide text-faint">
                       <tr>
