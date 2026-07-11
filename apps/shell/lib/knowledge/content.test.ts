@@ -80,6 +80,13 @@ describe("Knowledge Base content", () => {
     ).toBe(true);
   });
 
+  it("opens glossary terms as detail pages instead of self-filtering cards", () => {
+    const accreditation = searchKnowledge(KNOWLEDGE_CONTENT, "Accreditation", {
+      type: "glossary",
+    })[0];
+    expect(accreditation?.href).toBe("/knowledge?glossary=Accreditation");
+  });
+
   it("contains no credential-like documentation content", () => {
     const rendered = JSON.stringify(KNOWLEDGE_CONTENT);
     expect(rendered).not.toMatch(

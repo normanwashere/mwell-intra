@@ -10,6 +10,82 @@ interface ScreenSource {
   mobileSrc?: string;
 }
 
+function interactionFor(node: KnowledgeFlowNode, source: ScreenSource) {
+  const id = node.id;
+  if (id === "vendor-start")
+    return {
+      x: 0.2,
+      y: 0.026,
+      mobileX: 0.5,
+      mobileY: 0.22,
+      label: "Invite vendor",
+      instruction: "Select Invite vendor to create the governed invitation.",
+    };
+  if (id === "vendor-apply")
+    return {
+      x: 0.5,
+      y: 0.57,
+      label: "Continue application",
+      instruction:
+        "Select Continue application to open the vendor checklist and upload the outstanding requirements.",
+    };
+  if (id === "vendor-end")
+    return {
+      x: 0.5,
+      y: 0.38,
+      label: "Accreditation status",
+      instruction:
+        "Review the status, expiry, outstanding documents, and signature actions from the vendor portal.",
+    };
+  if (id.startsWith("vendor-"))
+    return {
+      x: 0.24,
+      y: 0.16,
+      mobileX: 0.5,
+      mobileY: 0.38,
+      label: "Accreditation case",
+      instruction:
+        "Open the vendor's case row to review its checklist and next required action.",
+    };
+  if (id === "p2p-start")
+    return {
+      x: 0.16,
+      y: 0.045,
+      mobileX: 0.5,
+      mobileY: 0.2,
+      label: "New request",
+      instruction: "Select New request to begin the purchase request wizard.",
+    };
+  if (id === "receive-record")
+    return {
+      x: 0.36,
+      y: 0.18,
+      label: "Product and quantity",
+      instruction:
+        "Select the delivered product, enter its quantity, then add it to the receipt.",
+    };
+  if (id.includes("inspect") || id.includes("outcome"))
+    return {
+      x: 0.48,
+      y: 0.25,
+      label: source.landmark,
+      instruction: `Use the highlighted ${source.landmark} control to record the decision and required evidence.`,
+    };
+  if (id === "receive-putaway" || id.startsWith("setup-"))
+    return {
+      x: 0.36,
+      y: 0.38,
+      label: source.landmark,
+      instruction: `Select the highlighted ${source.landmark} control to continue this step.`,
+    };
+  return {
+    x: 0.25,
+    y: 0.16,
+    label: source.landmark,
+    instruction: `Open the highlighted ${source.landmark} area, then complete: ${node.body}`,
+  };
+}
+
 function sourceFor(node: KnowledgeFlowNode): ScreenSource {
   const id = node.id;
   if (id === "access-start")
@@ -67,18 +143,24 @@ function sourceFor(node: KnowledgeFlowNode): ScreenSource {
     };
   }
   if (id.startsWith("vendor-"))
-    return id === "vendor-start" || id === "vendor-apply"
+    return id === "vendor-start"
       ? {
           src: "/knowledge/screenshots/legal-cases-desktop.png",
           mobileSrc: "/knowledge/screenshots/legal-invite-mobile.png",
-          route: id === "vendor-start" ? "/legal/invites/new" : "/vendor",
-          landmark: id === "vendor-start" ? "Invite" : "Accreditation",
+          route: "/legal/invites/new",
+          landmark: "Invite",
         }
-      : {
-          src: "/knowledge/screenshots/legal-cases-desktop.png",
-          route: "/legal",
-          landmark: "Cases",
-        };
+      : id === "vendor-apply" || id === "vendor-end"
+        ? {
+            src: "/knowledge/screenshots/vendor-portal-desktop.png",
+            route: "/vendor",
+            landmark: "Continue application",
+          }
+        : {
+            src: "/knowledge/screenshots/legal-cases-desktop.png",
+            route: "/legal",
+            landmark: "Cases",
+          };
   if (id.startsWith("setup-"))
     return id === "setup-route"
       ? {
@@ -189,6 +271,7 @@ export const KNOWLEDGE_EVIDENCE: KnowledgeEvidence[] = KNOWLEDGE_FLOWS.flatMap(
   (flow) =>
     flow.nodes.map((node) => {
       const source = sourceFor(node);
+      const interaction = interactionFor(node, source);
       return {
         id: `ev-${node.id}`,
         nodeId: node.id,
@@ -207,10 +290,7 @@ export const KNOWLEDGE_EVIDENCE: KnowledgeEvidence[] = KNOWLEDGE_FLOWS.flatMap(
           {
             id: "primary",
             number: 1,
-            x: 0.5,
-            y: 0.35,
-            label: node.title,
-            instruction: node.body,
+            ...interaction,
           },
         ],
       };

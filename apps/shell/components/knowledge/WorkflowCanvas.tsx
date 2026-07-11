@@ -8,10 +8,12 @@ export function WorkflowCanvas({
   flow,
   selectedNodeId,
   rolesById,
+  onSelectNode,
 }: {
   flow: KnowledgeFlow;
   selectedNodeId: string;
   rolesById: Map<string, KnowledgeRole>;
+  onSelectNode: (nodeId: string) => void;
 }) {
   const layout = layoutFlow(flow);
   return (
@@ -79,9 +81,10 @@ export function WorkflowCanvas({
           const position = layout.nodes.get(node.id)!;
           const selected = node.id === selectedNodeId;
           return (
-            <a
+            <button
+              type="button"
               key={node.id}
-              href={`/knowledge?flow=${encodeURIComponent(flow.id)}&step=${encodeURIComponent(node.id)}`}
+              onClick={() => onSelectNode(node.id)}
               style={{ left: position.x, top: position.y }}
               aria-current={selected ? "step" : undefined}
               aria-label={`${index + 1}. ${node.title}. ${node.type}. ${node.ownerRoleIds.map((id) => rolesById.get(id)?.label ?? id).join(", ")}`}
@@ -106,7 +109,7 @@ export function WorkflowCanvas({
               <span className="mt-2 line-clamp-2 text-sm font-bold text-ink">
                 {node.title}
               </span>
-            </a>
+            </button>
           );
         })}
       </div>

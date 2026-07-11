@@ -1,12 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Icon } from "@intra/ui";
 import type { KnowledgeEvidence } from "@shell/lib/knowledge/types";
 
 export function EvidenceViewer({ evidence }: { evidence?: KnowledgeEvidence }) {
   const [zoom, setZoom] = useState(1);
   const [active, setActive] = useState(evidence?.hotspots[0]?.id ?? "");
+  const [mobile, setMobile] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 639px)");
+    const update = () => setMobile(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+  useEffect(() => {
+    setActive(evidence?.hotspots[0]?.id ?? "");
+    setZoom(1);
+  }, [evidence?.id]);
   if (!evidence)
     return (
       <div className="grid min-h-72 place-items-center border border-dashed border-line bg-inset p-8 text-center">
@@ -79,8 +91,8 @@ export function EvidenceViewer({ evidence }: { evidence?: KnowledgeEvidence }) {
               aria-label={`${hotspot.number}. ${hotspot.label}`}
               aria-pressed={active === hotspot.id}
               style={{
-                left: `${hotspot.x * 100}%`,
-                top: `${hotspot.y * 100}%`,
+                left: `${(mobile ? (hotspot.mobileX ?? hotspot.x) : hotspot.x) * 100}%`,
+                top: `${(mobile ? (hotspot.mobileY ?? hotspot.y) : hotspot.y) * 100}%`,
               }}
               className={`absolute grid h-8 w-8 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full text-xs font-bold text-white shadow-e2 ring-4 ring-white ${active === hotspot.id ? "bg-brand-700" : "bg-brand-500"}`}
             >
@@ -91,6 +103,9 @@ export function EvidenceViewer({ evidence }: { evidence?: KnowledgeEvidence }) {
       </div>
       {activeHotspot && (
         <div className="border-x border-b border-line bg-brand-50 p-3 text-sm">
+          <p className="mb-1 text-xs font-semibold uppercase text-brand-700">
+            Where to interact
+          </p>
           <span className="font-semibold text-ink">
             {activeHotspot.number}. {activeHotspot.label}
           </span>

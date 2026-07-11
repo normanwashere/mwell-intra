@@ -38,6 +38,20 @@ export function validateKnowledgeContent(content: KnowledgeContent): string[] {
         errors.push(
           `${evidence.id}:${hotspot.id} hotspot coordinates must be between 0 and 1`,
         );
+      if (
+        hotspot.mobileX !== undefined &&
+        (hotspot.mobileX < 0 || hotspot.mobileX > 1)
+      )
+        errors.push(
+          `${evidence.id}:${hotspot.id} mobile hotspot coordinates must be between 0 and 1`,
+        );
+      if (
+        hotspot.mobileY !== undefined &&
+        (hotspot.mobileY < 0 || hotspot.mobileY > 1)
+      )
+        errors.push(
+          `${evidence.id}:${hotspot.id} mobile hotspot coordinates must be between 0 and 1`,
+        );
     }
   }
 

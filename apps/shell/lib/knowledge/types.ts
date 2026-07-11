@@ -75,6 +75,8 @@ export interface KnowledgeHotspot {
   number: number;
   x: number;
   y: number;
+  mobileX?: number;
+  mobileY?: number;
   label: string;
   instruction: string;
 }

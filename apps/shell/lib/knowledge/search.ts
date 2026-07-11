@@ -125,7 +125,7 @@ export function searchKnowledge(
       title: item.term,
       summary: item.definition,
       roleIds: [],
-      href: `/knowledge?q=${encodeURIComponent(item.term)}&type=glossary`,
+      href: `/knowledge?glossary=${encodeURIComponent(item.term)}`,
       score: score(item.term, item.aliases, [], item.definition),
     });
   for (const item of content.futureFeatures)

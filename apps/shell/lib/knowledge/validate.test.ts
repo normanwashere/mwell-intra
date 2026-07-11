@@ -122,4 +122,12 @@ describe("validateKnowledgeContent", () => {
       ]),
     );
   });
+
+  it("rejects invalid mobile hotspot coordinates", () => {
+    const content = valid();
+    content.evidence[0]!.hotspots[0]!.mobileY = 1.2;
+    expect(validateKnowledgeContent(content)).toContain(
+      "ev-start:open mobile hotspot coordinates must be between 0 and 1",
+    );
+  });
 });
