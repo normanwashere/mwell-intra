@@ -97,7 +97,7 @@ jobs:
         env:
           CI: 'false'  # allow pnpm add to update the lockfile in-place
         run: |
-          pnpm add -w -D "$COVERAGE_PKG" --no-frozen-lockfile
+          pnpm add -w -D "$COVERAGE_PKG"
 
       - name: Run tests with coverage
         # `pnpm exec` forwards everything after its own `--` to turbo, and
@@ -212,7 +212,7 @@ jobs:
           CI: 'false'  # allow pnpm add to update the lockfile in-place
         run: |
           pnpm install --frozen-lockfile
-          pnpm add -w -D "$AXE_PW_PKG" "@playwright/test@^1.49.0" --no-frozen-lockfile
+          pnpm add -w -D "$AXE_PW_PKG" "@playwright/test@^1.49.0"
 
       - name: Restore built shell
         uses: actions/download-artifact@v4

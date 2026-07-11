@@ -52,8 +52,10 @@ export function KnowledgeBase() {
 
   const setParams = (changes: Record<string, string | null>) => {
     const next = new URLSearchParams(params.toString());
-    for (const [key, value] of Object.entries(changes))
-      value ? next.set(key, value) : next.delete(key);
+    for (const [key, value] of Object.entries(changes)) {
+      if (value) next.set(key, value);
+      else next.delete(key);
+    }
     router.push(`/knowledge${next.size ? `?${next}` : ""}`);
   };
   if (loading)
