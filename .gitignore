@@ -40,4 +40,5 @@ pnpm-debug.log*
 .playwright-cli/
 .pwcli/
 .review-shots/
+.superpowers/
 .vercel/
