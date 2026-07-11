@@ -180,7 +180,13 @@ export function App() {
     <AppShell>
       <Suspense
         fallback={
-          <div className="space-y-6">
+          <div
+            className="space-y-6"
+            role="status"
+            aria-live="polite"
+            aria-label="Loading warehouse page"
+            aria-busy="true"
+          >
             <Skeleton className="h-28 rounded-3xl sm:h-32" />
             <SkeletonStats />
             <SkeletonList rows={5} />
