@@ -1,5 +1,6 @@
 import { KNOWLEDGE_ROLES } from "./roles";
 import { KNOWLEDGE_FLOWS } from "./workflows";
+import { KNOWLEDGE_EVIDENCE } from "./evidence";
 import type {
   KnowledgeArticle,
   KnowledgeContent,
@@ -663,5 +664,5 @@ export const KNOWLEDGE_CONTENT: KnowledgeContent = {
     value,
     status: "proposed" as const,
   })),
-  evidence: [],
+  evidence: KNOWLEDGE_EVIDENCE,
 };

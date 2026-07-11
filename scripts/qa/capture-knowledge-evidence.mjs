@@ -150,13 +150,9 @@ async function capture({
   }
 
   if (verifyFlowInteraction) {
-    await page
-      .getByRole("button", { name: /open details/i })
-      .first()
-      .click();
-    await page.getByRole("dialog").waitFor();
-    await page.keyboard.press("Escape");
-    await page.getByRole("dialog").waitFor({ state: "hidden" });
+    await page.locator('button[aria-label*=". action."]').first().click();
+    await page.waitForURL((url) => url.searchParams.has("step"));
+    await page.getByRole("heading", { name: /complete decision tree/i }).waitFor();
   }
 
   if (fullPage && viewport.width < 768) {
@@ -186,7 +182,7 @@ await capture({
   route: "/knowledge?flow=procure-to-pay",
   viewport: { width: 1440, height: 900 },
   email: "intra.test.proc.requester@mwell.com.ph",
-  expectedText: "Responsible role",
+  expectedText: "Complete decision tree",
   verifyFlowInteraction: true,
 });
 await capture({
@@ -194,7 +190,7 @@ await capture({
   route: "/knowledge?flow=procure-to-pay",
   viewport: { width: 390, height: 844 },
   email: "intra.test.proc.requester@mwell.com.ph",
-  expectedText: "Interactive flow",
+  expectedText: "Guided workflow",
   verifyFlowInteraction: true,
   fullPage: false,
 });
@@ -203,7 +199,7 @@ await capture({
   route: "/knowledge?flow=receive-to-putaway",
   viewport: { width: 320, height: 720 },
   email: "intra.test.wh.logistics@mwell.com.ph",
-  expectedText: "Interactive flow",
+  expectedText: "Guided workflow",
   verifyFlowInteraction: true,
   fullPage: false,
 });

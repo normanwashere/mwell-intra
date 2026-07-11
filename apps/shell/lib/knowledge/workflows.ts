@@ -136,6 +136,16 @@ const DECISION_ROUTES: Record<string, DecisionRoute> = {
   },
 };
 
+const EVIDENCE_BY_NODE: Record<string, string> = {
+  "access-start": "ev-access-start",
+  "p2p-start": "ev-p2p-start",
+  "p2p-route": "ev-p2p-route",
+  "vendor-start": "ev-vendor-start",
+  "vendor-review": "ev-vendor-review",
+  "setup-bin": "ev-setup-bin",
+  "receive-record": "ev-receive-record",
+};
+
 const governed = (
   id: string,
   title: string,
@@ -143,7 +153,10 @@ const governed = (
   roles: string[],
   nodes: KnowledgeFlowNode[],
 ): KnowledgeFlow => {
-  const expandedNodes = [...nodes];
+  const expandedNodes: KnowledgeFlowNode[] = nodes.map((item) => ({
+    ...item,
+    evidenceId: EVIDENCE_BY_NODE[item.id] ?? item.evidenceId,
+  }));
   const edges: KnowledgeFlow["edges"] = [];
   for (const [index, item] of nodes.entries()) {
     if (item.type === "terminal") continue;

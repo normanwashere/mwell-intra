@@ -12,6 +12,7 @@ import type {
 } from "@shell/lib/knowledge/types";
 import { KnowledgeArticle } from "./KnowledgeArticle";
 import { KnowledgeFlow } from "./KnowledgeFlow";
+import { WorkflowLibrary } from "./WorkflowLibrary";
 
 const MODULES = [
   "all",
@@ -25,7 +26,7 @@ const MODULES = [
 const TYPES = ["all", "article", "flow", "glossary", "future"] as const;
 
 export function KnowledgeBase() {
-  const { profile, loading } = useSession();
+  const { profile, loading, userRoles } = useSession();
   const params = useSearchParams();
   const router = useRouter();
   const query = params.get("q") ?? "";
@@ -34,6 +35,7 @@ export function KnowledgeBase() {
   const type = (params.get("type") ?? "all") as KnowledgeResultType | "all";
   const articleId = params.get("article");
   const flowId = params.get("flow");
+  const stepId = params.get("step");
   const rolesById = useMemo(
     () => new Map(KNOWLEDGE_CONTENT.roles.map((role) => [role.id, role])),
     [],
@@ -88,15 +90,27 @@ export function KnowledgeBase() {
           <Icon name="chevron" className="h-4 w-4 rotate-90" />
           Back to Knowledge Base
         </button>
-        <KnowledgeFlow flow={flow} rolesById={rolesById} />
+        <KnowledgeFlow
+          flow={flow}
+          selectedNodeId={
+            flow.nodes.some((node) => node.id === stepId)
+              ? stepId!
+              : flow.startNodeId
+          }
+          evidence={KNOWLEDGE_CONTENT.evidence}
+          rolesById={rolesById}
+          onSelectNode={(id) => setParams({ flow: flow.id, step: id })}
+        />
       </div>
     );
 
+  const assignedRoleIds = Object.values(userRoles).flat();
   const recommendedRoleIds = KNOWLEDGE_CONTENT.roles
     .filter(
       (role) =>
         role.module === "core" ||
-        (profile.kind === "vendor" && role.module === "vendor"),
+        (profile.kind === "vendor" && role.module === "vendor") ||
+        assignedRoleIds.includes(role.id.replace(/^warehouse_/, "")),
     )
     .map((role) => role.id);
   return (
@@ -107,6 +121,14 @@ export function KnowledgeBase() {
         description="Search functions, role guides, workflows, troubleshooting, policies, and future recommendations."
         icon="search"
       />
+      {!query && !roleId && type === "all" && (
+        <WorkflowLibrary
+          flows={KNOWLEDGE_CONTENT.flows}
+          rolesById={rolesById}
+          recommendedRoleIds={recommendedRoleIds}
+          onOpenFlow={(id) => setParams({ flow: id, article: null })}
+        />
+      )}
       <section
         aria-label="Knowledge search"
         className="border-y border-line py-5"
@@ -197,22 +219,6 @@ export function KnowledgeBase() {
           </label>
         </div>
       </section>
-      {!query && !roleId && type === "all" && (
-        <section>
-          <h2 className="text-lg font-bold text-ink">Recommended for you</h2>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {recommendedRoleIds.map((id) => (
-              <button
-                key={id}
-                className="btn-outline btn-sm"
-                onClick={() => setParams({ role: id })}
-              >
-                {rolesById.get(id)?.label}
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
       <section aria-label="Knowledge results">
         {results.length === 0 ? (
           <EmptyState
@@ -225,13 +231,7 @@ export function KnowledgeBase() {
             {results.map((result) => (
               <button
                 key={`${result.type}-${result.id}`}
-                onClick={() =>
-                  result.type === "article"
-                    ? setParams({ article: result.id, flow: null })
-                    : result.type === "flow"
-                      ? setParams({ flow: result.id, article: null })
-                      : setParams({ q: result.title, type: result.type })
-                }
+                onClick={() => router.push(result.href)}
                 className="min-w-0 border border-line bg-surface p-4 text-left shadow-e1 transition hover:border-brand-500 hover:bg-inset focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
               >
                 <div className="flex items-center justify-between gap-2">

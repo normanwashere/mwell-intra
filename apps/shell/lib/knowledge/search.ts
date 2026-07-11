@@ -80,9 +80,44 @@ export function searchKnowledge(
         flow.title,
         [],
         ["flowchart", "workflow"],
-        flow.nodes.map((n) => `${n.title} ${n.body}`).join(" "),
+        [
+          ...flow.nodes.map(
+            (n) =>
+              `${n.title} ${n.body} ${n.outcome ?? ""} ${n.exception ?? ""} ${n.databaseEffect ?? ""}`,
+          ),
+          ...flow.edges.map((edge) => edge.label ?? ""),
+          ...content.evidence
+            .filter((item) =>
+              flow.nodes.some((node) => node.id === item.nodeId),
+            )
+            .flatMap((item) =>
+              item.hotspots.map(
+                (hotspot) => `${hotspot.label} ${hotspot.instruction}`,
+              ),
+            ),
+        ].join(" "),
       ),
     });
+  for (const flow of content.flows)
+    for (const node of flow.nodes) {
+      const evidence = content.evidence.find((item) => item.nodeId === node.id);
+      results.push({
+        id: `${flow.id}-${node.id}`,
+        type: "flow",
+        title: node.title,
+        summary: node.body,
+        roleIds: node.ownerRoleIds,
+        href: `/knowledge?flow=${encodeURIComponent(flow.id)}&step=${encodeURIComponent(node.id)}`,
+        score: score(
+          node.title,
+          flow.edges
+            .filter((edge) => edge.from === node.id)
+            .map((edge) => edge.label ?? ""),
+          [node.type],
+          `${node.body} ${node.outcome ?? ""} ${node.exception ?? ""} ${node.databaseEffect ?? ""} ${evidence?.hotspots.map((hotspot) => `${hotspot.label} ${hotspot.instruction}`).join(" ") ?? ""}`,
+        ),
+      });
+    }
   for (const item of content.glossary)
     results.push({
       id: `glossary-${item.term}`,
