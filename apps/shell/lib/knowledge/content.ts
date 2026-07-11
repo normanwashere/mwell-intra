@@ -663,4 +663,5 @@ export const KNOWLEDGE_CONTENT: KnowledgeContent = {
     value,
     status: "proposed" as const,
   })),
+  evidence: [],
 };

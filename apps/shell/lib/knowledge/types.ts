@@ -2,7 +2,13 @@ export type KnowledgeModule =
   "core" | "warehouse" | "procurement" | "legal" | "vendor" | "admin";
 
 export type FlowNodeType =
-  "start" | "action" | "decision" | "handoff" | "system" | "terminal";
+  | "start"
+  | "action"
+  | "decision"
+  | "handoff"
+  | "system"
+  | "exception"
+  | "terminal";
 
 export interface KnowledgeRole {
   id: string;
@@ -53,12 +59,41 @@ export interface KnowledgeFlowNode {
   outcome?: string;
   exception?: string;
   articleId?: string;
+  evidenceId?: string;
+  databaseEffect?: string;
 }
 
 export interface KnowledgeFlowEdge {
   from: string;
   to: string;
   label?: string;
+  outcome?: "success" | "exception" | "neutral";
+}
+
+export interface KnowledgeHotspot {
+  id: string;
+  number: number;
+  x: number;
+  y: number;
+  label: string;
+  instruction: string;
+}
+
+export interface KnowledgeEvidence {
+  id: string;
+  nodeId: string;
+  desktopSrc: string;
+  mobileSrc?: string;
+  route: string;
+  roleId: string;
+  capturedAt: string;
+  reviewedAt: string;
+  provenance: "production" | "documentation";
+  alt: string;
+  expectedLandmark: string;
+  expectedDatabaseEffect?: string;
+  sensitiveDataReviewed: boolean;
+  hotspots: KnowledgeHotspot[];
 }
 
 export interface KnowledgeFlow {
@@ -90,6 +125,7 @@ export interface KnowledgeContent {
   flows: KnowledgeFlow[];
   glossary: GlossaryEntry[];
   futureFeatures: FutureFeature[];
+  evidence: KnowledgeEvidence[];
 }
 
 export type KnowledgeResultType = "article" | "flow" | "glossary" | "future";
