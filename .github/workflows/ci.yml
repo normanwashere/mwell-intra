@@ -21,7 +21,7 @@ env:
   # dep, not yet added to package.json). CI installs it ephemerally in the
   # `axe` job; declared once here so both the install + require paths match.
   AXE_PW_PKG: '@axe-core/playwright@^4.10.1'
-  COVERAGE_PKG: '@vitest/coverage-v8@^2.1.8'
+  COVERAGE_PKG: '@vitest/coverage-v8@3.2.6'
   # Minimum overall test coverage — see `verify_coverage.mjs`. Bump this only
   # when we intentionally raise the bar.
   COVERAGE_MIN: '70'
