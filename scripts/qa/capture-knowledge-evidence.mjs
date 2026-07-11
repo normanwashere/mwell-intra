@@ -96,7 +96,7 @@ async function capture({
 }) {
   const context = await browser.newContext({
     viewport,
-    serviceWorkers: "block",
+    serviceWorkers: "allow",
   });
   const page = await context.newPage();
   const errors = [];
@@ -112,6 +112,12 @@ async function capture({
     .getByText(expectedText, { exact: false })
     .first()
     .waitFor({ timeout: 20_000 });
+  await page.waitForFunction(
+    () =>
+      !document.querySelector('main [aria-busy="true"], main .animate-pulse'),
+    null,
+    { timeout: 20_000 },
+  );
 
   const dimensions = await page.evaluate(() => ({
     viewport: document.documentElement.clientWidth,
@@ -167,7 +173,11 @@ async function capture({
     });
   }
 
-  await page.screenshot({ path: path.join(output, `${name}.png`), fullPage });
+  await page.screenshot({
+    path: path.join(output, `${name}.png`),
+    fullPage,
+    animations: "disabled",
+  });
   await context.close();
 }
 
@@ -186,6 +196,7 @@ await capture({
   email: "intra.test.proc.requester@mwell.com.ph",
   expectedText: "Interactive flow",
   verifyFlowInteraction: true,
+  fullPage: false,
 });
 await capture({
   name: "flowchart-receive-to-putaway-mobile",
@@ -194,6 +205,7 @@ await capture({
   email: "intra.test.wh.logistics@mwell.com.ph",
   expectedText: "Interactive flow",
   verifyFlowInteraction: true,
+  fullPage: false,
 });
 await capture({
   name: "warehouse-storage-desktop",
