@@ -1,17 +1,17 @@
-'use client';
+"use client";
 
 // Suite chrome v2 — clinical-modern workspace.
 // Desktop: compact icon rail with flyout labels + dense content column.
 // Mobile: bottom tab bar with raised context-aware center action + spring pill.
 
-import { usePathname } from 'next/navigation';
-import Link from 'next/link';
-import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
-import { useReducedMotion } from 'framer-motion';
-import * as m from 'framer-motion/m';
-import { Icon, PageTransition, Sheet, type IconName } from '@intra/ui';
-import { useSession } from '@intra/auth';
-import { can } from '@intra/rbac';
+import { usePathname } from "next/navigation";
+import Link from "next/link";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { useReducedMotion } from "framer-motion";
+import * as m from "framer-motion/m";
+import { Icon, PageTransition, Sheet, type IconName } from "@intra/ui";
+import { useSession } from "@intra/auth";
+import { can } from "@intra/rbac";
 import {
   ADMIN_NAV,
   DOA_NAV,
@@ -20,13 +20,13 @@ import {
   VENDOR_NAV,
   type ModuleNav,
   type ShellNavItem,
-} from '@shell/lib/navigation';
-import { cx } from '@shell/lib/cx';
-import { NotificationBell } from './NotificationBell';
-import { ThemeToggle } from './ThemeToggle';
-import { UserMenu } from './UserMenu';
-import { CommandPalette } from './CommandPalette';
-import { MwellIntraLogo } from './MwellIntraLogo';
+} from "@shell/lib/navigation";
+import { cx } from "@shell/lib/cx";
+import { NotificationBell } from "./NotificationBell";
+import { ThemeToggle } from "./ThemeToggle";
+import { UserMenu } from "./UserMenu";
+import { CommandPalette } from "./CommandPalette";
+import { MwellIntraLogo } from "./MwellIntraLogo";
 
 interface NavEntry {
   readonly href: string;
@@ -34,7 +34,7 @@ interface NavEntry {
   readonly icon: IconName;
 }
 
-const HOME_ENTRY: NavEntry = { href: '/', label: 'Home', icon: 'grid' };
+const HOME_ENTRY: NavEntry = { href: "/", label: "Home", icon: "grid" };
 
 function toEntry(item: ModuleNav): NavEntry {
   return { href: item.href, label: item.label, icon: item.icon };
@@ -45,42 +45,42 @@ function navItemToEntry(item: ShellNavItem): NavEntry {
 }
 
 function topBarLabel(pathname: string, entries: readonly NavEntry[]): string {
-  if (pathname === '/') return 'Home';
+  if (pathname === "/") return "Home";
   if (pathname.startsWith(FINANCE_NAV.href)) return FINANCE_NAV.label;
-  if (pathname.startsWith('/admin/users')) return 'Admin · Users & Roles';
-  if (pathname.startsWith('/admin/doa'))
-    return 'Admin · Delegation of Authority';
-  if (pathname.startsWith('/admin')) return 'Admin';
+  if (pathname.startsWith("/admin/users")) return "Admin · Users & Roles";
+  if (pathname.startsWith("/admin/doa"))
+    return "Admin · Delegation of Authority";
+  if (pathname.startsWith("/admin")) return "Admin";
   const match = entries.find(
-    (e) => e.href !== '/' && pathname.startsWith(e.href),
+    (e) => e.href !== "/" && pathname.startsWith(e.href),
   );
   if (match) return match.label;
-  if (pathname.startsWith('/login')) return 'Sign in';
-  if (pathname.startsWith('/reset-password')) return 'Reset password';
-  return '';
+  if (pathname.startsWith("/login")) return "Sign in";
+  if (pathname.startsWith("/reset-password")) return "Reset password";
+  return "";
 }
 
 /** Context-aware primary action for the mobile center FAB. */
 function centerAction(pathname: string): NavEntry | null {
-  if (pathname.startsWith('/procurement')) {
+  if (pathname.startsWith("/procurement")) {
     return {
-      href: '/procurement/requests/new',
-      label: 'New request',
-      icon: 'plus',
+      href: "/procurement/requests/new",
+      label: "New request",
+      icon: "plus",
     };
   }
-  if (pathname.startsWith('/legal')) {
-    return { href: '/legal/invites/new', label: 'Invite vendor', icon: 'plus' };
+  if (pathname.startsWith("/legal")) {
+    return { href: "/legal/invites/new", label: "Invite vendor", icon: "plus" };
   }
-  if (pathname.startsWith('/admin')) {
-    return { href: '/admin/users', label: 'Users', icon: 'list' };
+  if (pathname.startsWith("/admin")) {
+    return { href: "/admin/users", label: "Users", icon: "list" };
   }
   return null;
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { profile, userRoles, mode, loading } = useSession();
-  const pathname = usePathname() ?? '/';
+  const pathname = usePathname() ?? "/";
   const reduced = useReducedMotion();
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -88,35 +88,35 @@ export function AppShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
     onScroll();
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
   }, [pathname]);
 
   const modules = loading ? [] : accessibleModules(userRoles);
   const entries: NavEntry[] = [HOME_ENTRY, ...modules.map(toEntry)];
-  if (!loading && can(userRoles, 'warehouse', 'view_finance')) {
+  if (!loading && can(userRoles, "warehouse", "view_finance")) {
     entries.push(navItemToEntry(FINANCE_NAV));
   }
-  if (!loading && can(userRoles, 'core', 'manage_rbac')) {
+  if (!loading && can(userRoles, "core", "manage_rbac")) {
     entries.push(navItemToEntry(ADMIN_NAV));
   }
   if (
     !loading &&
-    (can(userRoles, 'core', 'manage_rbac') ||
-      can(userRoles, 'legal', 'manage_doa'))
+    (can(userRoles, "core", "manage_rbac") ||
+      can(userRoles, "legal", "manage_doa"))
   ) {
     entries.push(navItemToEntry(DOA_NAV));
   }
-  if (!loading && profile?.kind === 'vendor') {
+  if (!loading && profile?.kind === "vendor") {
     entries.push(navItemToEntry(VENDOR_NAV));
   }
 
   const isActive = (href: string) => {
-    if (href === '/') return pathname === '/';
+    if (href === "/") return pathname === "/";
     if (href === FINANCE_NAV.href) return pathname.startsWith(FINANCE_NAV.href);
-    if (href === '/warehouse') {
+    if (href === "/warehouse") {
       return (
-        pathname.startsWith('/warehouse') &&
+        pathname.startsWith("/warehouse") &&
         !pathname.startsWith(FINANCE_NAV.href)
       );
     }
@@ -155,17 +155,17 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Link
               key={e.href}
               href={e.href}
-              aria-current={isActive(e.href) ? 'page' : undefined}
+              aria-current={isActive(e.href) ? "page" : undefined}
               className={cx(
-                'group relative grid h-11 w-11 place-items-center rounded-xl text-faint transition hover:bg-inset hover:text-ink',
-                isActive(e.href) && 'text-brand-700 dark:text-brand-300',
+                "group relative grid h-11 w-11 place-items-center rounded-xl text-faint transition hover:bg-inset hover:text-ink",
+                isActive(e.href) && "text-brand-700 dark:text-brand-300",
               )}
             >
               {isActive(e.href) && !reduced && (
                 <m.span
                   layoutId="nav-rail-pill"
                   className="absolute inset-0 rounded-xl bg-brand-500/12"
-                  transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+                  transition={{ type: "spring", stiffness: 380, damping: 32 }}
                 />
               )}
               {isActive(e.href) && reduced && (
@@ -187,7 +187,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             type="button"
             onClick={() => {
               window.dispatchEvent(
-                new KeyboardEvent('keydown', { key: 'k', metaKey: true }),
+                new KeyboardEvent("keydown", { key: "k", metaKey: true }),
               );
             }}
             className="grid h-10 w-10 place-items-center rounded-xl border border-line bg-inset text-faint transition hover:text-ink"
@@ -202,21 +202,21 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="flex min-w-0 flex-1 flex-col">
         <header
           className={cx(
-            'safe-top sticky top-0 z-20 border-b border-line/80 bg-surface/80 backdrop-blur-md transition-[padding,box-shadow]',
-            scrolled && 'shadow-e1 md:shadow-none',
+            "safe-top sticky top-0 z-20 border-b border-line/80 bg-surface/80 backdrop-blur-md transition-[padding,box-shadow]",
+            scrolled && "shadow-e1 md:shadow-none",
           )}
         >
           <div
             className={cx(
-              'flex items-center justify-between gap-3 px-4 sm:px-6 transition-[padding]',
-              scrolled ? 'py-2 md:py-3' : 'py-3',
+              "flex items-center justify-between gap-3 px-4 sm:px-6 transition-[padding]",
+              scrolled ? "py-2 md:py-3" : "py-3",
             )}
           >
             <div className="flex min-w-0 flex-1 items-center gap-2 md:hidden">
               <BrandMark compact />
               {scrolled && (
                 <p className="truncate font-display text-sm font-semibold text-ink">
-                  {topBarLabel(pathname, entries) || 'Home'}
+                  {topBarLabel(pathname, entries) || "Home"}
                 </p>
               )}
             </div>
@@ -224,14 +224,14 @@ export function AppShell({ children }: { children: ReactNode }) {
               className="hidden truncate font-display text-title text-ink md:block"
               aria-hidden="true"
             >
-              {topBarLabel(pathname, entries) || 'Home'}
+              {topBarLabel(pathname, entries) || "Home"}
             </p>
             <div className="flex items-center gap-1.5">
               <button
                 type="button"
                 onClick={() => {
                   window.dispatchEvent(
-                    new KeyboardEvent('keydown', { key: 'k', metaKey: true }),
+                    new KeyboardEvent("keydown", { key: "k", metaKey: true }),
                   );
                 }}
                 className="hidden items-center gap-2 rounded-xl border border-line bg-inset px-2.5 py-1.5 text-xs text-faint transition hover:text-muted md:inline-flex"
@@ -245,18 +245,18 @@ export function AppShell({ children }: { children: ReactNode }) {
               </button>
               <span
                 className={cx(
-                  'chip',
-                  mode === 'supabase'
-                    ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
-                    : 'bg-amber-500/15 text-amber-800 dark:text-amber-300',
+                  "chip",
+                  mode === "supabase"
+                    ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                    : "bg-amber-500/15 text-amber-800 dark:text-amber-300",
                 )}
                 title={
-                  mode === 'supabase'
-                    ? 'Connected to Supabase'
-                    : 'Demo data (no backend configured)'
+                  mode === "supabase"
+                    ? "Connected to Supabase"
+                    : "Demo data (no backend configured)"
                 }
               >
-                {mode === 'supabase' ? 'Live' : 'Demo'}
+                {mode === "supabase" ? "Live" : "Demo"}
               </span>
               <NotificationBell />
               <ThemeToggle />
@@ -267,7 +267,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         <main
           className="mx-auto w-full max-w-6xl flex-1 px-4 py-5 pb-[calc(11rem+env(safe-area-inset-bottom))] sm:px-6 md:pb-10 xl:max-w-7xl"
-          style={{ '--shell-header': '4.5rem' } as CSSProperties}
+          style={{ "--shell-header": "4.5rem" } as CSSProperties}
         >
           {loading ? (
             <div
@@ -290,7 +290,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         >
           <ul className="relative flex items-end px-2 pb-1 pt-2">
             {mobileLeft.map((e) => (
-              <li key={e.href} className="flex-1">
+              <li key={e.href} className="min-w-0 flex-1">
                 <MobileTab
                   entry={e}
                   active={isActive(e.href)}
@@ -299,7 +299,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               </li>
             ))}
 
-            <li className="flex w-16 shrink-0 justify-center">
+            <li className="flex w-16 min-w-0 shrink-0 justify-center">
               {fab ? (
                 <Link
                   href={fab.href}
@@ -314,7 +314,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </li>
 
             {mobileRight.map((e) => (
-              <li key={e.href} className="flex-1">
+              <li key={e.href} className="min-w-0 flex-1">
                 <MobileTab
                   entry={e}
                   active={isActive(e.href)}
@@ -323,7 +323,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               </li>
             ))}
             {hasMobileOverflow && (
-              <li className="flex-1">
+              <li className="min-w-0 flex-1">
                 <button
                   type="button"
                   onClick={() => setMobileMenuOpen(true)}
@@ -352,12 +352,12 @@ export function AppShell({ children }: { children: ReactNode }) {
                   <Link
                     href={entry.href}
                     onClick={() => setMobileMenuOpen(false)}
-                    aria-current={isActive(entry.href) ? 'page' : undefined}
+                    aria-current={isActive(entry.href) ? "page" : undefined}
                     className={cx(
-                      'flex min-h-12 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition hover:bg-inset',
+                      "flex min-h-12 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition hover:bg-inset",
                       isActive(entry.href)
-                        ? 'bg-brand-500/10 text-brand-700 dark:text-brand-300'
-                        : 'text-ink',
+                        ? "bg-brand-500/10 text-brand-700 dark:text-brand-300"
+                        : "text-ink",
                     )}
                   >
                     <Icon name={entry.icon} className="h-5 w-5 shrink-0" />
@@ -385,24 +385,24 @@ function MobileTab({
   return (
     <Link
       href={entry.href}
-      aria-current={active ? 'page' : undefined}
+      aria-current={active ? "page" : undefined}
       className={cx(
-        'relative flex min-h-16 flex-col items-center justify-center gap-0.5 px-1 py-2.5 text-[0.65rem] font-medium transition',
-        active ? 'text-brand-700 dark:text-brand-300' : 'text-faint',
+        "relative flex min-h-16 min-w-0 flex-col items-center justify-center gap-0.5 px-1 py-2.5 text-[0.65rem] font-medium transition",
+        active ? "text-brand-700 dark:text-brand-300" : "text-faint",
       )}
     >
       {active && !reduced && (
         <m.span
           layoutId="nav-mobile-pill"
           className="absolute inset-x-1 inset-y-0.5 rounded-2xl bg-brand-500/10"
-          transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+          transition={{ type: "spring", stiffness: 380, damping: 32 }}
         />
       )}
       {active && reduced && (
         <span className="absolute inset-x-1 inset-y-0.5 rounded-2xl bg-brand-500/10" />
       )}
       <Icon name={entry.icon} className="relative h-5 w-5" />
-      <span className="relative truncate">{entry.label}</span>
+      <span className="relative block max-w-full truncate">{entry.label}</span>
     </Link>
   );
 }
@@ -410,8 +410,8 @@ function MobileTab({
 function BrandMark({ compact = false }: { compact?: boolean }) {
   return (
     <MwellIntraLogo
-      logoClassName={compact ? 'text-lg' : 'text-xl'}
-      labelClassName={compact ? 'text-[0.65rem]' : 'text-xs'}
+      logoClassName={compact ? "text-lg" : "text-xl"}
+      labelClassName={compact ? "text-[0.65rem]" : "text-xs"}
     />
   );
 }

@@ -590,9 +590,9 @@ select
   'Inspect receipt stock'::text as title,
   'due'::text as status,
   null::uuid as assignee_id,
-  inspection.created_at + interval '1 day' as due_at,
+  inspection.inspected_at + interval '1 day' as due_at,
   null::timestamptz as completed_at,
-  inspection.created_at
+  inspection.inspected_at as created_at
 from warehouse.quality_inspections inspection
 where inspection.disposition = 'pending'
 union all
@@ -620,7 +620,7 @@ create or replace view warehouse.bi_quality_v1
 with (security_invoker = true)
 as
 select
-  inspection.id, inspection.created_at, inspection.source_type, inspection.source_id,
+  inspection.id, inspection.inspected_at as created_at, inspection.source_type, inspection.source_id,
   inspection.product_id, product.sku, inspection.location_id, inspection.bin_id,
   inspection.lot_id, inspection.serial_number, inspection.quantity,
   inspection.disposition, inspection.reason,

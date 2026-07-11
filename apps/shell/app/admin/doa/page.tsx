@@ -23,6 +23,7 @@ interface MatrixRow {
   status: "draft" | "active" | "superseded" | "expired";
   effective_at: string;
   active: boolean;
+  source_document: string | null;
 }
 interface ProfileRow {
   id: string;
@@ -98,6 +99,7 @@ function DoaWorkspace() {
     assignment("final_approver"),
   ]);
   const [saving, setSaving] = useState(false);
+  const [loadingRevision, setLoadingRevision] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (mode !== "supabase" || !procurement || !core) {
@@ -109,6 +111,7 @@ function DoaWorkspace() {
           status: "draft",
           effective_at: effectiveAt,
           active: false,
+          source_document: "Preview source",
         },
       ]);
       return;
@@ -116,7 +119,9 @@ function DoaWorkspace() {
     const [matrixResult, profileResult] = await Promise.all([
       procurement
         .from("doa_matrices")
-        .select("id,department,version,status,effective_at,active")
+        .select(
+          "id,department,version,status,effective_at,active,source_document",
+        )
         .order("department"),
       core
         .from("profiles")
@@ -195,6 +200,43 @@ function DoaWorkspace() {
     await load();
   };
 
+  const createRevision = async (matrix: MatrixRow) => {
+    if (!procurement || mode !== "supabase") return;
+    setLoadingRevision(matrix.id);
+    const { data, error } = await procurement
+      .from("doa_assignments")
+      .select("tier,category,min_amount,max_amount,approver_user_id")
+      .eq("matrix_id", matrix.id)
+      .eq("active", true)
+      .order("created_at");
+    setLoadingRevision(null);
+    if (error) return toast.error(error.message);
+    if (!data?.length)
+      return toast.error("This matrix has no active assignments to revise.");
+
+    setDepartment(matrix.department);
+    setVersion(`${matrix.version}-REV`);
+    setSourceDocument(matrix.source_document ?? "Mwell approved DOA schedule");
+    setEffectiveAt(new Date().toISOString().slice(0, 10));
+    setAssignments(
+      data.map((row) => ({
+        key: crypto.randomUUID(),
+        tier: row.tier as Tier,
+        category: typeof row.category === "string" ? row.category : "",
+        minAmount: String(row.min_amount ?? 0),
+        maxAmount: row.max_amount == null ? "" : String(row.max_amount),
+        approverUserId:
+          typeof row.approver_user_id === "string" ? row.approver_user_id : "",
+      })),
+    );
+    document
+      .getElementById("doa-editor")
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    toast.toast(
+      `Loaded ${matrix.department}. Update the version and assignments, then save a new draft.`,
+    );
+  };
+
   return (
     <div className="space-y-6 pb-24 md:pb-8">
       <ModuleHero
@@ -227,15 +269,30 @@ function DoaWorkspace() {
                   {matrix.status}
                 </Badge>
               </div>
-              {matrix.status === "draft" && matrix.id !== "preview" && (
-                <Button
-                  className="mt-4 w-full sm:w-auto"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => void activate(matrix)}
-                >
-                  Activate
-                </Button>
+              {matrix.id !== "preview" && (
+                <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                  <Button
+                    className="w-full sm:w-auto"
+                    size="sm"
+                    variant="outline"
+                    disabled={loadingRevision === matrix.id}
+                    onClick={() => void createRevision(matrix)}
+                  >
+                    {loadingRevision === matrix.id
+                      ? "Loading..."
+                      : "Create revision"}
+                  </Button>
+                  {matrix.status === "draft" && (
+                    <Button
+                      className="w-full sm:w-auto"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void activate(matrix)}
+                    >
+                      Activate
+                    </Button>
+                  )}
+                </div>
               )}
             </Card>
           ))}
@@ -246,147 +303,154 @@ function DoaWorkspace() {
           )}
         </div>
       </section>
-      <Card className="p-4 sm:p-5">
-        <h2 className="text-lg font-semibold text-ink">
-          Create department matrix
-        </h2>
-        <p className="mt-1 text-sm text-muted">
-          Save as draft, resolve validation issues, then activate deliberately.
-        </p>
-        <div className="mt-5 grid gap-4 md:grid-cols-2">
-          <Field label="Department">
-            <Input
-              value={department}
-              onChange={(e) => setDepartment(e.target.value)}
-              placeholder="e.g. Operations"
-            />
-          </Field>
-          <Field label="Version">
-            <Input
-              value={version}
-              onChange={(e) => setVersion(e.target.value)}
-              placeholder="e.g. OPS-DOA-2026.1"
-            />
-          </Field>
-          <Field label="Source document">
-            <Input
-              value={sourceDocument}
-              onChange={(e) => setSourceDocument(e.target.value)}
-            />
-          </Field>
-          <Field label="Effective date">
-            <Input
-              type="date"
-              value={effectiveAt}
-              onChange={(e) => setEffectiveAt(e.target.value)}
-            />
-          </Field>
-        </div>
-        <div className="mt-6 space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <h3 className="font-semibold text-ink">Named assignments</h3>
-            <Button
-              size="sm"
-              variant="outline"
-              icon="plus"
-              onClick={() => setAssignments((rows) => [...rows, assignment()])}
-            >
-              Add tier
-            </Button>
+      <div id="doa-editor" className="scroll-mt-24">
+        <Card className="p-4 sm:p-5">
+          <h2 className="text-lg font-semibold text-ink">
+            Create department matrix
+          </h2>
+          <p className="mt-1 text-sm text-muted">
+            Save as draft, resolve validation issues, then activate
+            deliberately.
+          </p>
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
+            <Field label="Department">
+              <Input
+                value={department}
+                onChange={(e) => setDepartment(e.target.value)}
+                placeholder="e.g. Operations"
+              />
+            </Field>
+            <Field label="Version">
+              <Input
+                value={version}
+                onChange={(e) => setVersion(e.target.value)}
+                placeholder="e.g. OPS-DOA-2026.1"
+              />
+            </Field>
+            <Field label="Source document">
+              <Input
+                value={sourceDocument}
+                onChange={(e) => setSourceDocument(e.target.value)}
+              />
+            </Field>
+            <Field label="Effective date">
+              <Input
+                type="date"
+                value={effectiveAt}
+                onChange={(e) => setEffectiveAt(e.target.value)}
+              />
+            </Field>
           </div>
-          {assignments.map((row, index) => (
-            <div
-              key={row.key}
-              className="grid gap-3 rounded-lg border border-line bg-inset p-3 md:grid-cols-[1.1fr_1fr_.7fr_.7fr_1.4fr_auto] md:items-end"
-            >
-              <Field label={`Tier ${index + 1}`}>
-                <select
-                  className="input-base w-full"
-                  value={row.tier}
-                  onChange={(e) =>
-                    updateAssignment(row.key, { tier: e.target.value as Tier })
-                  }
-                >
-                  {TIERS.map((tier) => (
-                    <option key={tier} value={tier}>
-                      {tier.replaceAll("_", " ")}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Category (optional)">
-                <Input
-                  value={row.category}
-                  onChange={(e) =>
-                    updateAssignment(row.key, { category: e.target.value })
-                  }
-                />
-              </Field>
-              <Field label="Minimum">
-                <Input
-                  type="number"
-                  min="0"
-                  value={row.minAmount}
-                  onChange={(e) =>
-                    updateAssignment(row.key, { minAmount: e.target.value })
-                  }
-                />
-              </Field>
-              <Field label="Maximum">
-                <Input
-                  type="number"
-                  min="0"
-                  value={row.maxAmount}
-                  onChange={(e) =>
-                    updateAssignment(row.key, { maxAmount: e.target.value })
-                  }
-                  placeholder="No limit"
-                />
-              </Field>
-              <Field label="Named approver">
-                <select
-                  className="input-base w-full"
-                  value={row.approverUserId}
-                  onChange={(e) =>
-                    updateAssignment(row.key, {
-                      approverUserId: e.target.value,
-                    })
-                  }
-                >
-                  <option value="">Select employee</option>
-                  {profiles.map((profile) => (
-                    <option key={profile.id} value={profile.id}>
-                      {profile.full_name ?? "Unnamed employee"}
-                      {profile.title ? ` · ${profile.title}` : ""}
-                    </option>
-                  ))}
-                </select>
-              </Field>
+          <div className="mt-6 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="font-semibold text-ink">Named assignments</h3>
               <Button
-                variant="ghost"
                 size="sm"
-                disabled={assignments.length <= 1}
+                variant="outline"
+                icon="plus"
                 onClick={() =>
-                  setAssignments((rows) =>
-                    rows.filter((item) => item.key !== row.key),
-                  )
+                  setAssignments((rows) => [...rows, assignment()])
                 }
               >
-                Remove
+                Add tier
               </Button>
             </div>
-          ))}
-        </div>
-        <div className="mt-5 flex justify-end">
-          <Button
-            className="w-full sm:w-auto"
-            disabled={saving}
-            onClick={() => void save()}
-          >
-            {saving ? "Saving..." : "Save draft"}
-          </Button>
-        </div>
-      </Card>
+            {assignments.map((row, index) => (
+              <div
+                key={row.key}
+                className="grid gap-3 rounded-lg border border-line bg-inset p-3 md:grid-cols-[1.1fr_1fr_.7fr_.7fr_1.4fr_auto] md:items-end"
+              >
+                <Field label={`Tier ${index + 1}`}>
+                  <select
+                    className="input-base w-full"
+                    value={row.tier}
+                    onChange={(e) =>
+                      updateAssignment(row.key, {
+                        tier: e.target.value as Tier,
+                      })
+                    }
+                  >
+                    {TIERS.map((tier) => (
+                      <option key={tier} value={tier}>
+                        {tier.replaceAll("_", " ")}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Category (optional)">
+                  <Input
+                    value={row.category}
+                    onChange={(e) =>
+                      updateAssignment(row.key, { category: e.target.value })
+                    }
+                  />
+                </Field>
+                <Field label="Minimum">
+                  <Input
+                    type="number"
+                    min="0"
+                    value={row.minAmount}
+                    onChange={(e) =>
+                      updateAssignment(row.key, { minAmount: e.target.value })
+                    }
+                  />
+                </Field>
+                <Field label="Maximum">
+                  <Input
+                    type="number"
+                    min="0"
+                    value={row.maxAmount}
+                    onChange={(e) =>
+                      updateAssignment(row.key, { maxAmount: e.target.value })
+                    }
+                    placeholder="No limit"
+                  />
+                </Field>
+                <Field label="Named approver">
+                  <select
+                    className="input-base w-full"
+                    value={row.approverUserId}
+                    onChange={(e) =>
+                      updateAssignment(row.key, {
+                        approverUserId: e.target.value,
+                      })
+                    }
+                  >
+                    <option value="">Select employee</option>
+                    {profiles.map((profile) => (
+                      <option key={profile.id} value={profile.id}>
+                        {profile.full_name ?? "Unnamed employee"}
+                        {profile.title ? ` · ${profile.title}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={assignments.length <= 1}
+                  onClick={() =>
+                    setAssignments((rows) =>
+                      rows.filter((item) => item.key !== row.key),
+                    )
+                  }
+                >
+                  Remove
+                </Button>
+              </div>
+            ))}
+          </div>
+          <div className="mt-5 flex justify-end">
+            <Button
+              className="w-full sm:w-auto"
+              disabled={saving}
+              onClick={() => void save()}
+            >
+              {saving ? "Saving..." : "Save draft"}
+            </Button>
+          </div>
+        </Card>
+      </div>
     </div>
   );
 }
