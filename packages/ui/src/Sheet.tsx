@@ -17,7 +17,7 @@ type SheetSide = 'adaptive' | 'bottom' | 'right' | 'center';
 
 const CONTENT_CLASS: Record<SheetSide, string> = {
   adaptive:
-    'sheet-content fixed inset-x-0 bottom-0 z-50 max-h-[92dvh] rounded-t-2xl bg-surface shadow-e3 ring-1 ring-line ' +
+    'adaptive-content fixed inset-x-0 bottom-0 z-50 max-h-[92dvh] rounded-t-2xl bg-surface shadow-e3 ring-1 ring-line ' +
     'flex flex-col pb-safe md:inset-x-auto md:bottom-auto md:left-1/2 md:top-1/2 md:w-[min(92vw,36rem)] ' +
     'md:max-h-[min(46rem,88dvh)] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-xl md:pb-0',
   bottom:

@@ -391,6 +391,14 @@ select.input {
 .sheet-content[data-state='open'] {
   animation: sheet-up 0.28s cubic-bezier(0.32, 0.72, 0, 1);
 }
+.adaptive-content[data-state='open'] {
+  animation: sheet-up 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+}
+@media (min-width: 768px) {
+  .adaptive-content[data-state='open'] {
+    animation: scale-in 0.2s ease-out;
+  }
+}
 .drawer-content[data-state='open'] {
   animation: slide-in-right 0.28s cubic-bezier(0.32, 0.72, 0, 1);
 }
