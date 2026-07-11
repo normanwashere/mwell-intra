@@ -226,7 +226,7 @@ jobs:
 
       - name: Start shell (production)
         run: |
-          pnpm --filter @intra/shell exec next start -p 3000 &
+          nohup pnpm --filter @intra/shell exec next start -p 3000 > /tmp/mwell-shell.log 2>&1 &
           echo "SHELL_PID=$!" >> "$GITHUB_ENV"
           # Wait until the server is answering.
           for i in $(seq 1 40); do
@@ -235,6 +235,7 @@ jobs:
             fi
             sleep 1
           done
+          cat /tmp/mwell-shell.log
           echo "::error::Shell did not start on :3000"; exit 1
 
       - name: Run axe accessibility sweep
