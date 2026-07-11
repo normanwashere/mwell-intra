@@ -99,7 +99,6 @@ export function KnowledgeBase() {
           }
           evidence={KNOWLEDGE_CONTENT.evidence}
           rolesById={rolesById}
-          onSelectNode={(id) => setParams({ flow: flow.id, step: id })}
         />
       </div>
     );

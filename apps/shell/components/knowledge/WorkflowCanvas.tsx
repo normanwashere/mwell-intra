@@ -1,6 +1,7 @@
 "use client";
 
 import { Badge } from "@intra/ui";
+import Link from "next/link";
 import { layoutFlow } from "@shell/lib/knowledge/graph";
 import type { KnowledgeFlow, KnowledgeRole } from "@shell/lib/knowledge/types";
 
@@ -8,12 +9,10 @@ export function WorkflowCanvas({
   flow,
   selectedNodeId,
   rolesById,
-  onSelectNode,
 }: {
   flow: KnowledgeFlow;
   selectedNodeId: string;
   rolesById: Map<string, KnowledgeRole>;
-  onSelectNode: (nodeId: string) => void;
 }) {
   const layout = layoutFlow(flow);
   return (
@@ -81,12 +80,11 @@ export function WorkflowCanvas({
           const position = layout.nodes.get(node.id)!;
           const selected = node.id === selectedNodeId;
           return (
-            <button
+            <Link
               key={node.id}
-              type="button"
-              onClick={() => onSelectNode(node.id)}
+              href={`/knowledge?flow=${encodeURIComponent(flow.id)}&step=${encodeURIComponent(node.id)}`}
               style={{ left: position.x, top: position.y }}
-              aria-pressed={selected}
+              aria-current={selected ? "step" : undefined}
               aria-label={`${index + 1}. ${node.title}. ${node.type}. ${node.ownerRoleIds.map((id) => rolesById.get(id)?.label ?? id).join(", ")}`}
               className={`absolute z-10 flex h-[108px] w-[200px] flex-col justify-center border-2 bg-surface px-3 text-left shadow-e1 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${selected ? "border-brand-600 shadow-e2" : node.type === "decision" ? "border-amber-500" : node.type === "terminal" ? "rounded-[3rem] border-emerald-500" : node.type === "start" ? "rounded-[3rem] border-brand-500" : node.type === "system" ? "border-cyan-500" : "border-line hover:border-brand-400"}`}
             >
@@ -109,7 +107,7 @@ export function WorkflowCanvas({
               <span className="mt-2 line-clamp-2 text-sm font-bold text-ink">
                 {node.title}
               </span>
-            </button>
+            </Link>
           );
         })}
       </div>

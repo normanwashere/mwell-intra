@@ -15,13 +15,11 @@ export function KnowledgeFlow({
   selectedNodeId,
   evidence,
   rolesById,
-  onSelectNode,
 }: {
   flow: Flow;
   selectedNodeId: string;
   evidence: KnowledgeEvidence[];
   rolesById: Map<string, KnowledgeRole>;
-  onSelectNode: (nodeId: string) => void;
 }) {
   const selected =
     flow.nodes.find((node) => node.id === selectedNodeId) ??
@@ -69,21 +67,15 @@ export function KnowledgeFlow({
           flow={flow}
           selectedNodeId={selected.id}
           rolesById={rolesById}
-          onSelectNode={onSelectNode}
         />
       </div>
       <div className="grid gap-5 md:grid-cols-[13rem_minmax(0,1fr)]">
-        <WorkflowNavigator
-          flow={flow}
-          selectedNodeId={selected.id}
-          onSelectNode={onSelectNode}
-        />
+        <WorkflowNavigator flow={flow} selectedNodeId={selected.id} />
         <StepWorkspace
           flow={flow}
           node={selected}
           evidence={selectedEvidence}
           rolesById={rolesById}
-          onSelectNode={onSelectNode}
         />
       </div>
     </section>

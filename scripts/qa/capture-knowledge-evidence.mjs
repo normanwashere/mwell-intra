@@ -160,8 +160,19 @@ async function capture({
   }
 
   if (verifyFlowInteraction) {
-    await page.locator('button[aria-label*=". action."]').first().click();
-    await page.waitForURL((url) => url.searchParams.has("step"));
+    const actionNode = page.locator('a[aria-label*=". action."]').first();
+    await actionNode.click();
+    await page.waitForTimeout(800);
+    const selectedStep = await page.evaluate(() =>
+      new URL(window.location.href).searchParams.get("step"),
+    );
+    if (!selectedStep) {
+      const state = await actionNode.getAttribute("aria-current");
+      throw new Error(
+        `${name} did not deep-link the selected action node (aria-current=${state ?? "missing"}).`,
+      );
+    }
+    await actionNode.waitFor({ state: "visible" });
     await page
       .getByRole("heading", { name: /complete decision tree/i })
       .waitFor();

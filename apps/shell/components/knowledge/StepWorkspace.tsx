@@ -16,13 +16,11 @@ export function StepWorkspace({
   node,
   evidence,
   rolesById,
-  onSelectNode,
 }: {
   flow: KnowledgeFlow;
   node: KnowledgeFlowNode;
   evidence?: KnowledgeEvidence;
   rolesById: Map<string, KnowledgeRole>;
-  onSelectNode: (id: string) => void;
 }) {
   const branches = outgoingEdges(flow, node.id);
   return (
@@ -101,15 +99,14 @@ export function StepWorkspace({
               </p>
               <div className="mt-2 grid gap-2">
                 {branches.map((edge) => (
-                  <button
+                  <Link
                     key={`${edge.from}-${edge.to}`}
-                    type="button"
-                    onClick={() => onSelectNode(edge.to)}
+                    href={`/knowledge?flow=${encodeURIComponent(flow.id)}&step=${encodeURIComponent(edge.to)}`}
                     className={`flex min-h-11 items-center justify-between gap-3 border px-3 py-2 text-left text-sm font-semibold ${edge.outcome === "exception" ? "border-rose-300 bg-rose-50 text-rose-800" : "border-line bg-surface text-ink hover:border-brand-400"}`}
                   >
                     <span>{edge.label ?? "Next step"}</span>
                     <Icon name="arrowRight" className="h-4 w-4" />
-                  </button>
+                  </Link>
                 ))}
               </div>
             </div>
@@ -126,14 +123,13 @@ export function StepWorkspace({
       </div>
       <div className="sticky bottom-20 z-20 mt-4 grid grid-cols-2 gap-2 border border-line bg-surface/95 p-2 shadow-e2 backdrop-blur md:hidden">
         {branches[0] ? (
-          <button
-            type="button"
-            onClick={() => onSelectNode(branches[0]!.to)}
+          <Link
+            href={`/knowledge?flow=${encodeURIComponent(flow.id)}&step=${encodeURIComponent(branches[0]!.to)}`}
             className="btn-outline min-w-0 justify-center"
           >
             <span className="truncate">{branches[0].label ?? "Next step"}</span>
             <Icon name="arrowRight" className="h-4 w-4 shrink-0" />
-          </button>
+          </Link>
         ) : (
           <span />
         )}
