@@ -13,18 +13,22 @@ import * as m from 'framer-motion/m';
 import { Icon } from './Icon';
 import { SPRING_GENTLE } from './motion/tokens';
 
-type SheetSide = 'bottom' | 'right' | 'center';
+type SheetSide = 'adaptive' | 'bottom' | 'right' | 'center';
 
 const CONTENT_CLASS: Record<SheetSide, string> = {
+  adaptive:
+    'sheet-content fixed inset-x-0 bottom-0 z-50 max-h-[92dvh] rounded-t-2xl bg-surface shadow-e3 ring-1 ring-line ' +
+    'flex flex-col pb-safe md:inset-x-auto md:bottom-auto md:left-1/2 md:top-1/2 md:w-[min(92vw,36rem)] ' +
+    'md:max-h-[min(46rem,88dvh)] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-xl md:pb-0',
   bottom:
-    'sheet-content fixed inset-x-0 bottom-0 z-50 max-h-[92vh] rounded-t-3xl bg-surface shadow-e3 ring-1 ring-line ' +
+    'sheet-content fixed inset-x-0 bottom-0 z-50 max-h-[92dvh] rounded-t-2xl bg-surface shadow-e3 ring-1 ring-line ' +
     'flex flex-col pb-safe',
   right:
     'drawer-content fixed inset-y-0 right-0 z-50 w-full max-w-sm bg-surface shadow-e3 ring-1 ring-line ' +
     'flex flex-col safe-top',
   center:
     'modal-content fixed left-1/2 top-1/2 z-50 w-[min(92vw,32rem)] max-h-[90vh] -translate-x-1/2 ' +
-    '-translate-y-1/2 rounded-3xl bg-surface shadow-e3 ring-1 ring-line flex flex-col',
+    '-translate-y-1/2 rounded-xl bg-surface shadow-e3 ring-1 ring-line flex flex-col',
 };
 
 interface SheetProps {
@@ -45,7 +49,7 @@ export function Sheet({
   onOpenChange,
   title,
   description,
-  side = 'bottom',
+  side = 'adaptive',
   children,
   footer,
   trigger,
@@ -65,7 +69,7 @@ export function Sheet({
 
   const body = (
     <>
-      {side === 'bottom' && (
+      {(side === 'bottom' || side === 'adaptive') && (
         <div
           aria-hidden
           onPointerDown={
@@ -73,14 +77,14 @@ export function Sheet({
           }
           className={clsx(
             // Generous hit area around the visual handle for the drag gesture.
-            'shrink-0 pb-1 pt-2.5',
+            'shrink-0 pb-1 pt-2.5 md:hidden',
             draggable && 'cursor-grab touch-none active:cursor-grabbing',
           )}
         >
           <div className="mx-auto h-1.5 w-10 rounded-full bg-line" />
         </div>
       )}
-      <div className="flex items-start justify-between gap-3 px-5 pb-3 pt-1.5">
+      <div className="flex items-start justify-between gap-3 px-5 pb-3 pt-1.5 md:px-6 md:pb-4 md:pt-5">
         <div className="min-w-0">
           <Dialog.Title className="font-display text-lg font-bold text-ink">
             {title}
@@ -92,16 +96,18 @@ export function Sheet({
           )}
         </div>
         <Dialog.Close
-          className="grid min-h-11 min-w-11 shrink-0 place-items-center rounded-full bg-inset text-muted transition hover:bg-line hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+          className="grid min-h-11 min-w-11 shrink-0 place-items-center rounded-lg bg-inset text-muted transition hover:bg-line hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
           aria-label="Close"
         >
           <Icon name="x" />
         </Dialog.Close>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5">{children}</div>
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5 md:px-6 md:pb-6">{children}</div>
       {footer && (
-        <div className="relative z-10 shrink-0 border-t border-line bg-surface px-5 py-3">
-          {footer}
+        <div className="relative z-10 shrink-0 border-t border-line bg-surface px-5 py-3 md:px-6 md:py-4">
+          <div className="md:flex md:justify-end [&>button]:md:min-w-36 [&>button]:md:w-auto">
+            {footer}
+          </div>
         </div>
       )}
     </>
