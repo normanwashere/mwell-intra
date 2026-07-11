@@ -132,9 +132,9 @@ export async function GET(request: NextRequest) {
       clientAuth,
       staticAssets,
       features: {
-        vendorInviteDelivery: (
-          process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY
-        ) ? 'configured' as FeatureStatus : 'missing' as FeatureStatus,
+        vendorInviteDelivery: SUPABASE_URL && SUPABASE_ANON_KEY
+          ? 'configured' as FeatureStatus
+          : 'missing' as FeatureStatus,
         serviceWorker: process.env.NEXT_PUBLIC_ENABLE_SW === 'false'
           ? 'missing' as FeatureStatus
           : 'configured' as FeatureStatus,
