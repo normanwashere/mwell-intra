@@ -1,7 +1,6 @@
 "use client";
 
 import { Badge } from "@intra/ui";
-import Link from "next/link";
 import { layoutFlow } from "@shell/lib/knowledge/graph";
 import type { KnowledgeFlow, KnowledgeRole } from "@shell/lib/knowledge/types";
 
@@ -80,7 +79,7 @@ export function WorkflowCanvas({
           const position = layout.nodes.get(node.id)!;
           const selected = node.id === selectedNodeId;
           return (
-            <Link
+            <a
               key={node.id}
               href={`/knowledge?flow=${encodeURIComponent(flow.id)}&step=${encodeURIComponent(node.id)}`}
               style={{ left: position.x, top: position.y }}
@@ -107,7 +106,7 @@ export function WorkflowCanvas({
               <span className="mt-2 line-clamp-2 text-sm font-bold text-ink">
                 {node.title}
               </span>
-            </Link>
+            </a>
           );
         })}
       </div>

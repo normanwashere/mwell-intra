@@ -162,14 +162,21 @@ async function capture({
   if (verifyFlowInteraction) {
     const actionNode = page.locator('a[aria-label*=". action."]').first();
     await actionNode.click();
-    await page.waitForTimeout(800);
+    await page
+      .waitForFunction(
+        () => new URL(window.location.href).searchParams.has("step"),
+        null,
+        { timeout: 5_000 },
+      )
+      .catch(() => {});
     const selectedStep = await page.evaluate(() =>
       new URL(window.location.href).searchParams.get("step"),
     );
     if (!selectedStep) {
       const state = await actionNode.getAttribute("aria-current");
+      const href = await actionNode.getAttribute("href");
       throw new Error(
-        `${name} did not deep-link the selected action node (aria-current=${state ?? "missing"}).`,
+        `${name} did not deep-link ${href ?? "missing href"} from ${page.url()} (aria-current=${state ?? "missing"}).`,
       );
     }
     await actionNode.waitFor({ state: "visible" });
