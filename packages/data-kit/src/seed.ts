@@ -369,7 +369,7 @@ function isoDaysAgo(now: Date, days: number, hour: number, minute = 0): string {
   const d = new Date(now);
   d.setDate(d.getDate() - days);
   d.setHours(hour, minute, 0, 0);
-  return d.toISOString();
+  return new Date(Math.min(d.getTime(), now.getTime())).toISOString();
 }
 
 function isoDaysAhead(now: Date, days: number): string {

@@ -26,6 +26,16 @@ describe('buildActivityHistory', () => {
     expect(nowMs - oldest).toBeGreaterThan(ninetyDaysMs * 0.8);
   });
 
+  it('clamps same-day activity to the supplied time across timezones', () => {
+    const boundaryNow = new Date('2026-07-06T00:30:00.000Z');
+    const latest = Math.max(
+      ...buildActivityHistory(boundaryNow).movements.map((movement) =>
+        new Date(movement.createdAt).getTime(),
+      ),
+    );
+    expect(latest).toBeLessThanOrEqual(boundaryNow.getTime());
+  });
+
   it('adds an upcoming event with reserved allocations', () => {
     expect(history.events).toHaveLength(1);
     const evt = history.events[0]!;
