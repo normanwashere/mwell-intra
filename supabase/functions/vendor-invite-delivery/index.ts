@@ -32,10 +32,13 @@ Deno.serve(async (request) => {
     auth: { persistSession: false, autoRefreshToken: false },
   });
   const accessToken = authorization.replace(/^Bearer\s+/i, "");
-  const { data: verified, error: authError } =
-    await userClient.auth.getUser(accessToken);
-  if (authError || !verified.user)
-    return json({ error: "Authentication required." }, 401);
+  const verifiedResponse = await fetch(`${url}/auth/v1/user`, {
+    headers: { apikey: anon, authorization: `Bearer ${accessToken}` },
+  });
+  const verifiedUser = verifiedResponse.ok
+    ? ((await verifiedResponse.json()) as User)
+    : null;
+  if (!verifiedUser) return json({ error: "Authentication required." }, 401);
 
   const body = (await request.json().catch(() => null)) as InviteBody | null;
   const email = body?.email?.trim().toLowerCase();
@@ -71,7 +74,7 @@ Deno.serve(async (request) => {
         email,
         company_name: companyName,
         category: body?.category,
-        actor: verified.user.email,
+        actor: verifiedUser.email,
         profile: body?.profile,
         origin_country: body?.origin_country,
       },
