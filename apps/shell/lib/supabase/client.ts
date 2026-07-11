@@ -3,18 +3,19 @@
 // one session. Schema is pinned per-call (`core` for shell-level reads; modules
 // pass their own domain schema later).
 
-import { createBrowserClient } from '@supabase/ssr';
+import { createBrowserClient } from "@supabase/ssr";
 import {
   DEFAULT_SCHEMA,
   SUPABASE_ANON_KEY,
   SUPABASE_URL,
   forceMemoryMode,
-} from './env';
-import type { ShellDatabase, ShellSupabaseClient } from './types';
+} from "./env";
+import type { ShellDatabase, ShellSupabaseClient } from "./types";
 
 const NETWORK_ERROR_RESPONSE = JSON.stringify({
-  message: 'Network request failed. Please check your connection and try again.',
-  error: 'network_error',
+  message:
+    "Network request failed. Please check your connection and try again.",
+  error: "network_error",
 });
 
 async function supabaseFetch(
@@ -24,12 +25,12 @@ async function supabaseFetch(
   try {
     return await fetch(input, init);
   } catch (error) {
-    const name = error instanceof Error ? error.name : '';
-    if (name === 'AbortError' || error instanceof TypeError) {
+    const name = error instanceof Error ? error.name : "";
+    if (name === "AbortError" || error instanceof TypeError) {
       return new Response(NETWORK_ERROR_RESPONSE, {
         status: 503,
-        statusText: 'Supabase network unavailable',
-        headers: { 'Content-Type': 'application/json' },
+        statusText: "Supabase network unavailable",
+        headers: { "Content-Type": "application/json" },
       });
     }
     throw error;
@@ -46,8 +47,16 @@ export function createSupabaseBrowserClient(
 ): ShellSupabaseClient | null {
   if (forceMemoryMode()) return null;
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
-  return createBrowserClient<ShellDatabase, string>(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    db: { schema },
-    global: { fetch: supabaseFetch },
-  });
+  return createBrowserClient<ShellDatabase, string>(
+    SUPABASE_URL,
+    SUPABASE_ANON_KEY,
+    {
+      // Schema-scoped clients must not reuse the first browser singleton. Reuse
+      // silently preserves its Accept-Profile header (usually `core`) for later
+      // procurement, legal, and warehouse clients.
+      isSingleton: false,
+      db: { schema },
+      global: { fetch: supabaseFetch },
+    },
+  );
 }

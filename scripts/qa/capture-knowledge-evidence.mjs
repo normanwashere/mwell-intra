@@ -8,6 +8,7 @@ const { chromium } = require("@playwright/test");
 const baseUrl = process.env.AUDIT_BASE_URL?.replace(/\/$/, "");
 const password = process.env.AUDIT_PASSWORD;
 const authMode = process.env.EVIDENCE_AUTH_MODE ?? "live";
+const evidenceOnly = process.env.EVIDENCE_ONLY;
 if (!baseUrl || (authMode === "live" && !password)) {
   throw new Error(
     "AUDIT_BASE_URL and, for live mode, AUDIT_PASSWORD are required.",
@@ -104,6 +105,7 @@ async function capture({
   verifyFlowInteraction = false,
   scrollToText,
 }) {
+  if (evidenceOnly && name !== evidenceOnly) return;
   const context = await browser.newContext({
     viewport,
     serviceWorkers: "allow",
@@ -112,7 +114,18 @@ async function capture({
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("console", (message) => {
-    if (message.type() === "error") errors.push(message.text());
+    if (message.type() === "error") {
+      const location = message.location().url;
+      errors.push(`${message.text()}${location ? ` @ ${location}` : ""}`);
+    }
+  });
+  page.on("response", (response) => {
+    if (response.status() >= 400) {
+      const headers = response.request().headers();
+      errors.push(
+        `${response.status()} ${response.url()} profile=${headers["accept-profile"] ?? "missing"}`,
+      );
+    }
   });
 
   if (email) await establishSession(page, email);
