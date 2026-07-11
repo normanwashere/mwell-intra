@@ -82,7 +82,7 @@ Deno.serve(async (request) => {
   );
   if (inviteError) return json({ error: inviteError.message }, 403);
 
-  const inviteId = (invite as { invite: { id: string } }).invite.id;
+  const inviteId = (invite as { id: string }).id;
   const markDelivery = async (payload: Record<string, unknown>) => {
     const { error } = await admin
       .schema("legal")
