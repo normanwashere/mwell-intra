@@ -18,26 +18,187 @@ const node = (
   exception,
 });
 
-const linear = (
+interface DecisionRoute {
+  primaryLabel: string;
+  primaryTo?: string;
+  alternatives: Array<{
+    label: string;
+    to?: string;
+    title?: string;
+    outcome: "success" | "exception" | "neutral";
+  }>;
+}
+
+const DECISION_ROUTES: Record<string, DecisionRoute> = {
+  "access-decision": {
+    primaryLabel: "Access correct",
+    primaryTo: "access-end",
+    alternatives: [
+      { label: "Access incorrect", to: "access-fix", outcome: "neutral" },
+    ],
+  },
+  "p2p-approve": {
+    primaryLabel: "Approved",
+    alternatives: [
+      {
+        label: "Rejected or returned",
+        title: "Request stopped for correction",
+        outcome: "exception",
+      },
+    ],
+  },
+  "vendor-review": {
+    primaryLabel: "Evidence complete",
+    alternatives: [
+      {
+        label: "Correction required",
+        title: "Application returned to vendor",
+        outcome: "exception",
+      },
+    ],
+  },
+  "vendor-decide": {
+    primaryLabel: "Approved",
+    alternatives: [
+      {
+        label: "Conditional",
+        title: "Conditional accreditation recorded",
+        outcome: "neutral",
+      },
+      {
+        label: "Rejected",
+        title: "Accreditation rejected",
+        outcome: "exception",
+      },
+    ],
+  },
+  "receive-inspect": {
+    primaryLabel: "Accept",
+    alternatives: [
+      {
+        label: "Hold",
+        title: "Stock placed on quality hold",
+        outcome: "exception",
+      },
+      {
+        label: "Damaged or unavailable",
+        title: "Stock recorded as non-available",
+        outcome: "exception",
+      },
+      {
+        label: "Return to vendor",
+        title: "Return disposition recorded",
+        outcome: "exception",
+      },
+    ],
+  },
+  "event-return": {
+    primaryLabel: "Fully reconciled",
+    alternatives: [
+      {
+        label: "Variance found",
+        title: "Inventory exception opened",
+        outcome: "exception",
+      },
+    ],
+  },
+  "count-review": {
+    primaryLabel: "Approval required",
+    alternatives: [
+      { label: "No variance", to: "count-end", outcome: "success" },
+    ],
+  },
+  "price-review": {
+    primaryLabel: "Approved",
+    alternatives: [
+      {
+        label: "Rejected",
+        title: "Price proposal rejected",
+        outcome: "exception",
+      },
+    ],
+  },
+  "doa-validate": {
+    primaryLabel: "Valid",
+    alternatives: [
+      {
+        label: "Invalid",
+        title: "DOA draft returned for correction",
+        outcome: "exception",
+      },
+    ],
+  },
+  "recover-check": {
+    primaryLabel: "Not saved",
+    alternatives: [
+      { label: "Already saved", to: "recover-end", outcome: "success" },
+    ],
+  },
+};
+
+const governed = (
   id: string,
   title: string,
   summary: string,
   roles: string[],
   nodes: KnowledgeFlowNode[],
-): KnowledgeFlow => ({
-  id,
-  title,
-  summary,
-  roles,
-  startNodeId: nodes[0]!.id,
-  nodes,
-  edges: nodes
-    .slice(0, -1)
-    .map((item, index) => ({ from: item.id, to: nodes[index + 1]!.id })),
-});
+): KnowledgeFlow => {
+  const expandedNodes = [...nodes];
+  const edges: KnowledgeFlow["edges"] = [];
+  for (const [index, item] of nodes.entries()) {
+    if (item.type === "terminal") continue;
+    const next = nodes[index + 1];
+    const decision = DECISION_ROUTES[item.id];
+    if (!decision) {
+      if (next) edges.push({ from: item.id, to: next.id });
+      continue;
+    }
+    const primaryTo = decision.primaryTo ?? next?.id;
+    if (primaryTo)
+      edges.push({
+        from: item.id,
+        to: primaryTo,
+        label: decision.primaryLabel,
+        outcome: "success",
+      });
+    for (const [
+      alternativeIndex,
+      alternative,
+    ] of decision.alternatives.entries()) {
+      let target = alternative.to;
+      if (!target) {
+        target = `${item.id}-outcome-${alternativeIndex + 1}`;
+        expandedNodes.push({
+          id: target,
+          type: "terminal",
+          title: alternative.title ?? alternative.label,
+          ownerRoleIds: item.ownerRoleIds,
+          body:
+            item.exception ??
+            `The ${alternative.label.toLowerCase()} outcome is recorded with its reason and evidence.`,
+        });
+      }
+      edges.push({
+        from: item.id,
+        to: target,
+        label: alternative.label,
+        outcome: alternative.outcome,
+      });
+    }
+  }
+  return {
+    id,
+    title,
+    summary,
+    roles,
+    startNodeId: nodes[0]!.id,
+    nodes: expandedNodes,
+    edges,
+  };
+};
 
 export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
-  linear(
+  governed(
     "identity-and-access",
     "Identity and access",
     "From sign-in through role resolution, denied access, and administrator correction.",
@@ -84,7 +245,7 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
       ),
     ],
   ),
-  linear(
+  governed(
     "procure-to-pay",
     "Procure to pay",
     "Request, sourcing, approval, PO, receiving, acceptance, and payment readiness.",
@@ -154,7 +315,7 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
       ),
     ],
   ),
-  linear(
+  governed(
     "vendor-accreditation",
     "Vendor accreditation",
     "Invitation through application, evidence, instruments, decision, and renewal.",
@@ -214,7 +375,7 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
       ),
     ],
   ),
-  linear(
+  governed(
     "warehouse-setup",
     "Warehouse setup",
     "Create locations, storage areas, bins, and permitted operation routes.",
@@ -257,7 +418,7 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
       ),
     ],
   ),
-  linear(
+  governed(
     "receive-to-putaway",
     "Receive to putaway",
     "PO matching, receipt, inspection, hold, putaway, and inventory availability.",
@@ -314,7 +475,7 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
       ),
     ],
   ),
-  linear(
+  governed(
     "allocation-event-return",
     "Allocation, event, and return",
     "Request, reserve, issue, consume, return, inspect, and reconcile stock.",
@@ -371,7 +532,7 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
       ),
     ],
   ),
-  linear(
+  governed(
     "cycle-count-adjustment",
     "Cycle count and adjustment",
     "Count, variance, approval, and controlled stock correction.",
@@ -414,7 +575,7 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
       ),
     ],
   ),
-  linear(
+  governed(
     "pricing-and-costing",
     "Pricing and costing",
     "Landed-cost review, controlled price proposal, approval, and reporting.",
@@ -457,7 +618,7 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
       ),
     ],
   ),
-  linear(
+  governed(
     "doa-governance",
     "DOA governance",
     "Draft, validate, activate, supersede, and use department approval matrices.",
@@ -505,7 +666,7 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
       ),
     ],
   ),
-  linear(
+  governed(
     "exception-and-recovery",
     "Exception and recovery",
     "Detect failures, preserve data, retry safely, and escalate with evidence.",

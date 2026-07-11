@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { KNOWLEDGE_CONTENT } from "./content";
 import { searchKnowledge } from "./search";
-import { validateKnowledgeBase } from "./validate";
+import { validateKnowledgeBase, validateKnowledgeContent } from "./validate";
 
 describe("Knowledge Base content", () => {
   it("covers every production persona with valid articles and flows", () => {
     expect(KNOWLEDGE_CONTENT.roles).toHaveLength(20);
     expect(validateKnowledgeBase(KNOWLEDGE_CONTENT)).toEqual([]);
+    expect(validateKnowledgeContent(KNOWLEDGE_CONTENT)).toEqual([]);
   });
 
   it("resolves task language and common aliases", () => {
