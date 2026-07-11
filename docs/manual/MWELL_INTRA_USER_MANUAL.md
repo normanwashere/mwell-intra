@@ -1,7 +1,7 @@
 # Mwell Intra User Manual
 
-**Audience:** Employees and vendors. Administrator procedures are in the final section.  
-**Live app:** https://mwell-intra.vercel.app  
+**Audience:** Employees and vendors. Administrator procedures are in the final section.
+**Live app:** https://mwell-intra.vercel.app
 **Evidence date:** July 11, 2026
 
 > Launch status: Procurement draft creation and read workflows, Legal case review, Vendor Portal, and role isolation are available. Warehouse transactions, vendor invitation delivery, governed request submission, and several narrow-mobile flows remain blocked. See the production audit before training users on those tasks.
@@ -91,4 +91,3 @@ Platform Admin or Legal Admin can open **Delegation of Authority**, create a dep
 ## Documentation Gallery
 
 All validated screenshots are in `docs/manual/assets/live-20260711/`. The interactive handbook is `docs/manual/index.html`.
-

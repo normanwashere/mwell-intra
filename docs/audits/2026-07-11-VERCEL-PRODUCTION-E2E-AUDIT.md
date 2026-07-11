@@ -1,8 +1,8 @@
 # Mwell Intra Vercel Production E2E Audit
 
-**Environment:** https://mwell-intra.vercel.app  
-**Deployment:** `dpl_BorKsVN2zgMoAzHWpP6Z8Yj1pSt9`  
-**Audit evidence:** `test-results/full-intra-live-e2e-results.json`  
+**Environment:** https://mwell-intra.vercel.app
+**Deployment:** `dpl_BorKsVN2zgMoAzHWpP6Z8Yj1pSt9`
+**Audit evidence:** `test-results/full-intra-live-e2e-results.json`
 **Executed:** July 11, 2026 (Asia/Singapore)
 
 ## Verdict
@@ -113,4 +113,3 @@ The shared audit password appeared in a screenshot. A short-lived Vercel OIDC to
 7. Archive or hide QA records and introduce run-scoped cleanup.
 8. Rerun the full matrix and one complete cross-department transaction.
 9. Promote only after security/performance advisors and the authenticated canary are clean.
-
