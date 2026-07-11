@@ -31,7 +31,9 @@ Deno.serve(async (request) => {
     db: { schema: "legal" },
     auth: { persistSession: false, autoRefreshToken: false },
   });
-  const { data: verified, error: authError } = await userClient.auth.getUser();
+  const accessToken = authorization.replace(/^Bearer\s+/i, "");
+  const { data: verified, error: authError } =
+    await userClient.auth.getUser(accessToken);
   if (authError || !verified.user)
     return json({ error: "Authentication required." }, 401);
 
