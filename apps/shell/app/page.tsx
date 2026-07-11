@@ -1,10 +1,10 @@
-'use client';
+"use client";
 
 // Landing / dashboard (spec §1). Greets the signed-in user with the suite hero
 // (matching the warehouse brand look), then surfaces cards for every surface
 // they can access — modules, the vendor portal, and admin tools.
 
-import Link from 'next/link';
+import Link from "next/link";
 import {
   AnimatedNumber,
   Badge,
@@ -16,35 +16,36 @@ import {
   ModuleHero,
   StaggerGrid,
   StaggerItem,
-} from '@intra/ui';
-import { useSession } from '@intra/auth';
-import { can } from '@intra/rbac';
+} from "@intra/ui";
+import { useSession } from "@intra/auth";
+import { can } from "@intra/rbac";
 import {
   ADMIN_NAV,
   FINANCE_NAV,
+  KNOWLEDGE_NAV,
   VENDOR_NAV,
   accessibleModules,
   type ModuleNav,
-} from '@shell/lib/navigation';
-import { useModuleBadges } from '@shell/lib/moduleBadges';
-import { cx } from '@shell/lib/cx';
+} from "@shell/lib/navigation";
+import { useModuleBadges } from "@shell/lib/moduleBadges";
+import { cx } from "@shell/lib/cx";
 
-const TONE_CLASS: Record<ModuleNav['tone'], string> = {
-  brand: 'bg-brand-500/10 text-brand-700 dark:text-brand-300',
-  accent: 'bg-accent/15 text-accent',
-  cyan: 'bg-cyan-500/10 text-cyan-800 dark:text-cyan-300',
-  amber: 'bg-amber-500/15 text-amber-800 dark:text-amber-300',
-  rose: 'bg-rose-500/15 text-rose-800 dark:text-rose-300',
-  emerald: 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-300',
-  slate: 'bg-inset text-muted',
+const TONE_CLASS: Record<ModuleNav["tone"], string> = {
+  brand: "bg-brand-500/10 text-brand-700 dark:text-brand-300",
+  accent: "bg-accent/15 text-accent",
+  cyan: "bg-cyan-500/10 text-cyan-800 dark:text-cyan-300",
+  amber: "bg-amber-500/15 text-amber-800 dark:text-amber-300",
+  rose: "bg-rose-500/15 text-rose-800 dark:text-rose-300",
+  emerald: "bg-emerald-500/15 text-emerald-800 dark:text-emerald-300",
+  slate: "bg-inset text-muted",
 };
 
 interface CardModel {
   href: string;
   label: string;
   description: string;
-  icon: ModuleNav['icon'];
-  tone: ModuleNav['tone'];
+  icon: ModuleNav["icon"];
+  tone: ModuleNav["tone"];
 }
 
 export default function DashboardPage() {
@@ -96,11 +97,13 @@ export default function DashboardPage() {
     icon: m.icon,
     tone: m.tone,
   }));
-  if (profile.kind === 'vendor') cards.push({ ...VENDOR_NAV });
-  if (can(userRoles, 'warehouse', 'view_finance')) cards.push({ ...FINANCE_NAV });
-  if (can(userRoles, 'core', 'manage_rbac')) cards.push({ ...ADMIN_NAV });
+  if (profile.kind === "vendor") cards.push({ ...VENDOR_NAV });
+  if (can(userRoles, "warehouse", "view_finance"))
+    cards.push({ ...FINANCE_NAV });
+  if (can(userRoles, "core", "manage_rbac")) cards.push({ ...ADMIN_NAV });
+  cards.push({ ...KNOWLEDGE_NAV });
 
-  const firstName = profile.name?.split(/\s+/)[0] ?? 'there';
+  const firstName = profile.name?.split(/\s+/)[0] ?? "there";
 
   return (
     <div className="space-y-6">
@@ -131,7 +134,7 @@ export default function DashboardPage() {
             <p className="tnum font-display text-2xl font-extrabold text-ink">
               <AnimatedNumber value={cards.length} />
               <span className="ml-1 text-sm font-medium text-muted">
-                {cards.length === 1 ? 'module' : 'modules'}
+                {cards.length === 1 ? "module" : "modules"}
               </span>
             </p>
           </div>
@@ -147,18 +150,18 @@ export default function DashboardPage() {
               content={
                 profile.title
                   ? `Signed in as ${profile.title}. You see only the modules your roles grant; ask an administrator to widen access.`
-                  : profile.kind === 'vendor'
-                    ? 'Vendor accreditation & document uploads for your organization.'
-                    : 'You see only the modules your roles grant; ask an administrator to widen access.'
+                  : profile.kind === "vendor"
+                    ? "Vendor accreditation & document uploads for your organization."
+                    : "You see only the modules your roles grant; ask an administrator to widen access."
               }
             />
           </p>
           <h2 className="font-display text-lg font-bold text-ink">
-            {cards.length > 0 ? 'Your modules' : 'No modules yet'}
+            {cards.length > 0 ? "Your modules" : "No modules yet"}
           </h2>
         </div>
-        <Badge tone={profile.kind === 'vendor' ? 'emerald' : 'brand'}>
-          {profile.kind === 'vendor' ? 'External vendor' : 'Employee'}
+        <Badge tone={profile.kind === "vendor" ? "emerald" : "brand"}>
+          {profile.kind === "vendor" ? "External vendor" : "Employee"}
         </Badge>
       </div>
 
@@ -170,25 +173,25 @@ export default function DashboardPage() {
           action={
             <span
               className={cx(
-                'chip',
-                mode === 'supabase'
-                  ? 'bg-inset text-muted'
-                  : 'bg-amber-500/15 text-amber-800 dark:text-amber-300',
+                "chip",
+                mode === "supabase"
+                  ? "bg-inset text-muted"
+                  : "bg-amber-500/15 text-amber-800 dark:text-amber-300",
               )}
             >
-              {mode === 'supabase' ? 'Live backend' : 'Demo mode · no backend'}
+              {mode === "supabase" ? "Live backend" : "Demo mode · no backend"}
             </span>
           }
         />
       ) : (
         <StaggerGrid
           className={cx(
-            'grid gap-4',
+            "grid gap-4",
             cards.length === 1
-              ? 'mx-auto max-w-md grid-cols-1'
+              ? "mx-auto max-w-md grid-cols-1"
               : cards.length === 2
-                ? 'sm:grid-cols-2'
-                : 'sm:grid-cols-2 lg:grid-cols-3',
+                ? "sm:grid-cols-2"
+                : "sm:grid-cols-2 lg:grid-cols-3",
           )}
         >
           {cards.map((c) => {
@@ -196,11 +199,14 @@ export default function DashboardPage() {
             return (
               <StaggerItem key={c.href}>
                 <Link href={c.href} className="block">
-                  <Card interactive className="group flex h-full flex-col gap-3">
+                  <Card
+                    interactive
+                    className="group flex h-full flex-col gap-3"
+                  >
                     <div className="flex items-start justify-between gap-2">
                       <span
                         className={cx(
-                          'grid h-11 w-11 place-items-center rounded-xl',
+                          "grid h-11 w-11 place-items-center rounded-xl",
                           TONE_CLASS[c.tone],
                         )}
                       >
@@ -222,7 +228,9 @@ export default function DashboardPage() {
                           className="h-4 w-4 text-faint transition group-hover:translate-x-0.5 group-hover:text-brand-600 dark:group-hover:text-brand-300"
                         />
                       </div>
-                      <p className="mt-0.5 text-sm text-muted">{c.description}</p>
+                      <p className="mt-0.5 text-sm text-muted">
+                        {c.description}
+                      </p>
                     </div>
                   </Card>
                 </Link>

@@ -1,13 +1,13 @@
-import { defineConfig } from 'vitest/config';
-import path from 'node:path';
+import { defineConfig } from "vitest/config";
+import path from "node:path";
 
 export default defineConfig({
   resolve: {
-    alias: { '@shell': path.resolve(__dirname) },
+    alias: { "@shell": path.resolve(__dirname) },
   },
   test: {
-    environment: 'node',
-    include: ['tests/api/**/*.test.ts'],
+    environment: "node",
+    include: ["tests/api/**/*.test.ts", "lib/**/*.test.ts"],
     clearMocks: true,
   },
 });

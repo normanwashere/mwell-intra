@@ -1,93 +1,236 @@
-# Mwell Intra User Manual
+# Mwell Intra User Manual and Knowledge Base
 
-**Audience:** Employees and vendors. Administrator procedures are in the final section.
+**Audience:** All authenticated employees and vendors
+
 **Live app:** https://mwell-intra.vercel.app
-**Evidence date:** July 11, 2026
 
-> Launch status: Procurement draft creation and read workflows, Legal case review, Vendor Portal, and role isolation are available. Warehouse transactions, vendor invitation delivery, governed request submission, and several narrow-mobile flows remain blocked. See the production audit before training users on those tasks.
+**Interactive Knowledge Base:** https://mwell-intra.vercel.app/knowledge
 
-## Sign In
+**Reviewed:** July 11, 2026
 
-1. Open the live app.
-2. Enter your assigned Mwell email and password.
-3. Select **Sign in** once and wait for your workspace.
-4. If the page remains on Sign in, verify the account exists and request a password reset. Do not repeatedly retry a shared account.
+**Content owners:** Platform, Procurement, Legal, Warehouse
 
-![Desktop sign in](assets/live-20260711/01-sign-in-desktop.png)
+The live Knowledge Base is the primary manual. Search by task, role, module, acronym, error, or workflow. Documentation is visible to every authenticated user; live operational routes still enforce role-based access.
+
+## Start Here
+
+1. Sign in with your assigned Mwell identity.
+2. Open **Knowledge Base** from the desktop rail, mobile **More** menu, Home workspace, or command palette.
+3. Search the outcome you need, such as `receive stock`, `PR`, `vendor renewal`, `bins`, or `DOA`.
+4. Filter by role, module, or content type.
+5. Open a procedure or interactive flow. Use live-route links only when your assigned role permits the operation.
+
+Never share passwords, tokens, private keys, or confidential documents in support messages or screenshots.
 
 ## Navigation
 
-- Desktop uses the left rail. Hover an icon to identify it.
-- Mobile uses the bottom navigation. **Home** returns to your module list; the raised center action starts the current module's primary task.
-- Search opens records and destinations you are permitted to view.
-- The **Live** badge means the app is connected to Supabase.
-- Access denied is expected when your role does not include a module. Ask an administrator for a role review rather than borrowing another account.
+- **Desktop:** left icon rail; hover an icon for its label.
+- **Mobile:** bottom navigation; additional modules and Knowledge Base are under **More**.
+- **Command palette:** `Ctrl+K` or `Cmd+K` opens task and destination search.
+- **Live badge:** the session is connected to Supabase.
+- **Access denied:** the documentation remains available, but the operational route requires a role review.
 
-## Employee Workflows
+## User Types and Responsibilities
 
-### Procurement Requester
+| User type                      | Primary responsibility                                       | Main handoff              |
+| ------------------------------ | ------------------------------------------------------------ | ------------------------- |
+| Core staff                     | Find the correct governed workflow and complete shared tasks | Platform Admin for access |
+| Platform Admin                 | Identities, scoped roles, audit review, DOA access           | Department owner          |
+| Vendor portal                  | Application, evidence, instruments, corrections, renewal     | Legal                     |
+| Warehouse Logistics Supervisor | Receiving, inspection, tagging, putaway                      | Operations / Finance      |
+| Warehouse Operations           | Allocation, issue, transfer, return, reconciliation          | Business unit / Finance   |
+| Warehouse Finance              | Valuation, variance, reconciliation, approvals               | Warehouse Admin           |
+| Warehouse BI Analyst           | Governed analysis and reports                                | Operational owners        |
+| Warehouse Business Unit        | Inventory demand and outcome confirmation                    | Operations                |
+| Warehouse Marketing            | Event demand, custody, usage, return                         | Operations                |
+| Warehouse Procurement          | Receivable PO and supplier coordination                      | Logistics Supervisor      |
+| Warehouse Pricing              | Landed cost and controlled price proposals                   | Finance                   |
+| Warehouse Admin                | Locations, areas, bins, routes, imports                      | Logistics Supervisor      |
+| Procurement Requester          | Need, justification, line items, evidence                    | Procurement Officer       |
+| Procurement Officer            | Sourcing route, competition, vendor readiness, PO            | Approver / Warehouse      |
+| Procurement Approver           | Named DOA decision                                           | Next approval tier        |
+| Procurement Finance            | Financial approval, acceptance, payment readiness            | Finance processing        |
+| Procurement Admin              | Procurement controls and exception oversight                 | Platform / Legal          |
+| Legal Reviewer                 | Evidence, instruments, risk, accreditation decision          | Vendor / Procurement      |
+| Legal Compliance               | Compliance disposition, expiry, renewal                      | Legal Admin               |
+| Legal Admin                    | Invitations, Legal workflow, department DOA                  | Vendor / Legal Reviewer   |
 
-**Create a draft:** Procurement -> New request -> choose a request type -> enter title/context -> add line items -> continue through justification -> Save draft.
+## Comprehensive Launch Flow
 
-Check the generated request page for title, requester, estimated total, sourcing route, line items, and activity. Draft creation has been verified at 360px and above. At 320px, use desktop until the mobile action-bar defect is fixed.
+```mermaid
+flowchart LR
+  Staff[Employee or Vendor] --> Auth[Supabase sign-in and role resolution]
+  Auth -->|correct access| Work[Assigned workspace]
+  Auth -->|incorrect access| Admin[Platform Admin role review]
+  Admin --> Work
+  Work --> PR[Requester creates purchase request]
+  PR --> POps[Procurement Officer confirms sourcing route]
+  POps --> DOA{Named DOA approvals complete?}
+  DOA -->|no| Return[Return or reject with reason]
+  Return --> PR
+  DOA -->|yes| PO[Procurement authors and issues PO]
+  Invite[Legal Admin invites vendor] --> Apply[Vendor application and evidence]
+  Apply --> Review[Legal and Compliance review]
+  Review -->|correction| Apply
+  Review --> Instruments[Required instruments]
+  Instruments --> Accredited{Accredited?}
+  Accredited -->|no| Block[PO award remains blocked]
+  Accredited -->|yes| PO
+  PO --> Receive[Warehouse receives against PO]
+  Receive --> Inspect{Quality disposition}
+  Inspect -->|accepted| Putaway[Putaway into valid bin]
+  Inspect -->|hold or damage| Hold[Evidence-backed hold or vendor return]
+  Putaway --> Allocate[Operations allocates and issues]
+  Allocate --> Event[Business or marketing use]
+  Event --> ReturnStock[Return, consume, lose, or damage]
+  ReturnStock --> Reconcile[Inspect and reconcile]
+  Reconcile --> Accept[Business acceptance]
+  Accept --> Pay[Finance payment readiness]
+```
 
-![Procurement request form on mobile](assets/live-20260711/06-procurement-request-mobile-320.png)
+## Procurement Flow
 
-### Procurement Officer
+```mermaid
+flowchart TD
+  A[Requester drafts need and line items] --> B[Justification, budget context, evidence]
+  B --> C[Procurement confirms policy and sourcing route]
+  C --> D{Competition or exception evidence sufficient?}
+  D -->|no| B
+  D -->|yes| E[Resolve effective department DOA]
+  E --> F[Named approvers act in sequence]
+  F -->|return or reject| B
+  F -->|approved| G[Author and approve PO]
+  G --> H[Issue to accredited vendor]
+  H --> I[Receipt, inspection, and acceptance]
+  I --> J[Payment readiness]
+```
 
-Review purchase requests, validate sourcing method and evidence, and prepare purchase orders only from eligible approved requests. Do not bypass vendor accreditation or DOA requirements. Mobile list controls currently overlap the bottom navigation at some narrow widths; use desktop for PO work until corrected.
+### Requester
+
+Use **Procurement -> New request**. Choose category, enter complete line items, explain need and alternatives, attach evidence, review the sourcing preview, save the draft, and submit only after route confirmation.
+
+### Officer and Administrator
+
+Confirm policy route, competition or exception pack, accreditation, and request completeness. Author a PO only from an approved eligible request. Preserve request, PO, receipt, and acceptance links.
 
 ### Approver and Finance
 
-Open **Approval inbox**, verify the request version, amount, department, evidence, and named DOA assignment, then approve or reject with a useful note. Never approve a step assigned to another person. Governed submission remains unavailable until department DOA matrices are activated.
+Act only on the step assigned to your identity. Review the current request version, amount, route, evidence, and comments. Approve, reject, or return with a specific reason.
 
-### Legal Reviewer
+## Vendor Accreditation Flow
 
-Open **Legal -> Cases**, select a vendor, review the requirement checklist and documents, record corrections, and make a disposition only when the evidence supports it. Vendor invitation delivery is currently blocked by missing server configuration; do not promise that an invite email was sent until the screen confirms delivery.
+```mermaid
+flowchart TD
+  Invite[Legal Admin creates invitation] --> Identity[Secure vendor Auth identity]
+  Identity --> Profile[Vendor profile and declarations]
+  Profile --> Evidence[LGL004-aligned evidence]
+  Evidence --> Legal[Legal and Compliance review]
+  Legal -->|correction required| Evidence
+  Legal --> Tech[Technology qualification when applicable]
+  Tech --> Sign[MNDA and required instruments]
+  Sign --> Decision{Accreditation decision}
+  Decision -->|approved| Eligible[Eligible for governed procurement award]
+  Decision -->|conditional| Remedy[Complete remediation]
+  Decision -->|rejected| Closed[Closed with reason]
+  Eligible --> Renewal[Expiry and renewal monitoring]
+```
 
-![Legal case queue](assets/live-20260711/08-legal-cases-desktop.png)
+Vendors can see only their organization. Legal must not approve incomplete, expired, inconsistent, or unsupported evidence. Procurement must verify active accreditation before award.
 
-### Vendor
+## Warehouse Flow
 
-Open **Vendor Portal**, review accreditation status, select **View accreditation**, complete required fields, upload current evidence, and respond to correction requests. Submit only when every required item is complete. Vendors can see only their own organization.
+```mermaid
+flowchart TD
+  Setup[Admin creates warehouse, areas, bins, routes] --> PO[Receivable PO]
+  PO --> Receipt[Logistics records product, quantity, lot or serial]
+  Receipt --> Inspection{Inspect stock}
+  Inspection -->|accepted| Bin[Putaway to valid bin]
+  Inspection -->|hold| Hold[Controlled hold with evidence]
+  Inspection -->|vendor return| VR[Vendor return and custody]
+  Bin --> Available[Available inventory]
+  Available --> Reserve[Operations reserves allocation]
+  Reserve --> Issue[Scan and issue custody]
+  Issue --> Outcome{Final outcome}
+  Outcome -->|returned| ReturnInspect[Inspect return and restock]
+  Outcome -->|consumed| Consume[Record consumption]
+  Outcome -->|lost or damaged| Exception[Exception and stock-change approval]
+  ReturnInspect --> Reconcile[Reconcile issued totals]
+  Consume --> Reconcile
+  Exception --> Reconcile
+  Reconcile --> Count[Cycle count and variance review]
+  Count --> Finance[Valuation and reporting]
+```
 
-![Vendor portal](assets/live-20260711/10-vendor-portal-mobile.png)
+### Setup and Bins
 
-### Warehouse and Finance Operations
+Warehouse Admin creates the site, storage areas, scannable bins, and allowed operation routes. Verify destinations before receiving production stock.
 
-Warehouse live transactions are temporarily blocked by a database contract mismatch. Do not use Receiving, Storage/Bins, Allocation, Returns, Cycle Count, Warehouse Finance, BI, Pricing, or Events for production work until the P0 fix is deployed and re-certified.
+### Receiving and Inspection
 
-![Warehouse live error](assets/live-20260711/11-warehouse-live-error-desktop.png)
+Select the PO and destination, record each line, scan serial/lot details, and attach evidence. Inspection supports accepted, hold, damaged, unavailable, and vendor-return outcomes. Non-accepted outcomes require a reason and evidence.
 
-## Common Recovery
+### Allocation, Events, and Returns
 
-| Situation | What to do |
-|---|---|
-| Sign in stays on the login page | Confirm the account exists; request reset or provisioning |
-| Access denied | Return Home and use an assigned module; request role review if needed |
-| Could not load data | Capture route, time, role, and reference; do not repeatedly submit |
-| Button hidden on mobile | Rotate to a wider device or use desktop; report viewport and screenshot |
-| Duplicate-looking transaction | Search before retrying; include the original reference in the incident |
-| Vendor email not received | Check delivery status; Legal/Admin must verify server configuration |
+Reserve only available non-held stock. Scan custody on issue. Record consumed, returned, lost, and damaged quantities. Close the event only after all issued quantity reconciles.
 
-## Administrator Appendix
+### Counts and Adjustments
 
-### Users and Roles
+Create a count draft, record physical quantity and evidence, review variance, and post only an approved stock-change request. Never edit stock levels directly.
 
-Use **Admin -> Users & Roles** to inspect a profile and assign the minimum module role needed. Keep Platform Admin separate from operational approval roles. At 320-360px the page overflows; use desktop until corrected.
+## DOA Administration
 
-### Delegation of Authority
+Platform Admin or Legal Admin opens **Admin -> Delegation of Authority**. Select **Create revision** on the current department matrix, update version and named assignments, save a draft, validate gaps/overlaps/final approval, and activate deliberately. Active records are immutable; activation supersedes the prior revision and preserves history.
 
-Platform Admin or Legal Admin can open **Delegation of Authority**, create a department matrix, add named approvers and amount bands, save it as draft, validate it, and activate it. Configuration permission does not make the configurator an approver. Exactly one active matrix is required for every launch department.
+## Troubleshooting and Recovery
 
-### Production Support
+| Situation                      | Action                                                                                  |
+| ------------------------------ | --------------------------------------------------------------------------------------- |
+| Sign-in remains on login       | Verify identity, request reset, or ask Platform Admin to confirm provisioning           |
+| Access denied                  | Use Knowledge Base; request minimum-role review for the operational route               |
+| Loading skeleton remains       | Check connection, wait once, refresh, then capture route/time/role                      |
+| Validation prevents submit     | Correct every labeled field and required evidence; do not bypass the gate               |
+| Possible duplicate transaction | Refresh and search the record before retrying                                           |
+| Stale-state message            | Reload the current record and re-evaluate before acting                                 |
+| Vendor invitation not received | Legal checks delivery status and contact address before retrying                        |
+| Receipt variance or damage     | Use inspection/hold/vendor-return workflow with evidence                                |
+| Mobile control is obscured     | Scroll into the reserved safe area; report viewport and screenshot if still unreachable |
 
-- Record time, user, role, route, transaction ID, and visible error.
-- Never collect passwords, tokens, or full private documents in tickets.
-- Use Vercel logs for app/API failures and Supabase logs/advisors for Auth, REST, RLS, and database failures.
-- Tag QA transactions with a run ID and archive them after review.
-- Rotate any credential that appears in chat, screenshots, logs, or documentation.
+Support evidence should contain route, time, role, safe record ID, expected outcome, visible error, and a redacted screenshot. Never include credentials or private document contents.
 
-## Documentation Gallery
+## Security and Data Handling
 
-All validated screenshots are in `docs/manual/assets/live-20260711/`. The interactive handbook is `docs/manual/index.html`.
+- Use individual accounts; never share QA or production passwords.
+- Grant minimum scoped roles.
+- Treat access denied as a control, not an obstacle to bypass.
+- Keep evidence and decisions in the governed workflow.
+- Verify saved state before retrying writes.
+- Rotate any credential exposed in chat, logs, screenshots, or documentation.
+
+## Glossary
+
+- **DOA:** Delegation of Authority approval matrix.
+- **PR:** Purchase request.
+- **PO:** Purchase order.
+- **Putaway:** controlled movement of accepted stock into a valid bin.
+- **Cycle count:** physical count used to govern stock variance.
+- **Idempotency:** duplicate-effect prevention for retried commands.
+- **RLS:** database row-level security.
+
+## Future Recommended Features
+
+All items below are **proposed**, not current capabilities:
+
+1. Admin article drafting, approval, effective dating, and version history.
+2. Contextual help launched from operational controls.
+3. Search analytics and unsuccessful-query reporting.
+4. Article feedback and correction requests.
+5. Policy-to-procedure traceability.
+6. Guided sandbox walkthroughs.
+7. Multilingual governed documentation.
+8. Offline Knowledge Base precaching.
+9. Role onboarding curricula and completion tracking.
+10. Workflow-linked release notes.
+
+## Documentation Assets
+
+The standalone searchable handbook is `docs/manual/index.html`. Historical screenshots remain in `docs/manual/assets/`; screenshots showing retired blockers are evidence only and must not be used as current training guidance.

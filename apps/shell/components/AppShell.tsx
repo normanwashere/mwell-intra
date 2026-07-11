@@ -16,6 +16,7 @@ import {
   ADMIN_NAV,
   DOA_NAV,
   FINANCE_NAV,
+  KNOWLEDGE_NAV,
   accessibleModules,
   VENDOR_NAV,
   type ModuleNav,
@@ -47,6 +48,7 @@ function navItemToEntry(item: ShellNavItem): NavEntry {
 function topBarLabel(pathname: string, entries: readonly NavEntry[]): string {
   if (pathname === "/") return "Home";
   if (pathname.startsWith(FINANCE_NAV.href)) return FINANCE_NAV.label;
+  if (pathname.startsWith(KNOWLEDGE_NAV.href)) return KNOWLEDGE_NAV.label;
   if (pathname.startsWith("/admin/users")) return "Admin · Users & Roles";
   if (pathname.startsWith("/admin/doa"))
     return "Admin · Delegation of Authority";
@@ -109,6 +111,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
   if (!loading && profile?.kind === "vendor") {
     entries.push(navItemToEntry(VENDOR_NAV));
+  }
+  if (!loading && profile) {
+    entries.push(navItemToEntry(KNOWLEDGE_NAV));
   }
 
   const isActive = (href: string) => {
