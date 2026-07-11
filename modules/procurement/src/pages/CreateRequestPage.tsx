@@ -558,8 +558,8 @@ export function CreateRequestPage() {
                             onChange={() => setCategory(c.code)}
                             className="sr-only"
                           />
-                          <div className="flex items-center justify-between gap-1.5">
-                            <span className="text-sm font-semibold leading-snug text-ink">
+                          <div className="flex min-w-0 flex-wrap items-center justify-between gap-1.5">
+                            <span className="min-w-0 text-sm font-semibold leading-snug text-ink">
                               {c.label}
                             </span>
                             {c.highRisk && (
