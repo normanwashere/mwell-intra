@@ -267,7 +267,19 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Verify Knowledge Base coverage
+        run: pnpm verify:knowledge-base
       - name: Install Playwright browsers
         run: pnpm --filter @intra/shell exec playwright install --with-deps
       - name: E2E
         run: pnpm --filter @intra/shell exec playwright test tests/smoke tests/e2e --shard=${{ matrix.shard }}/3
+      - name: Upload Playwright failures and traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-failures-${{ matrix.shard }}
+          path: |
+            apps/shell/test-results/**
+            apps/shell/playwright-report/**
+          if-no-files-found: ignore
+          retention-days: 7
