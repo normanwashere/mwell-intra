@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { layoutFlow, outgoingEdges } from "./graph";
+import {
+  branchOptions,
+  exceptionNodes,
+  layoutFlow,
+  outgoingEdges,
+  roleNodes,
+  traceBranch,
+} from "./graph";
 import { KNOWLEDGE_FLOWS } from "./workflows";
 import type { KnowledgeFlow } from "./types";
 
@@ -42,6 +49,70 @@ const flow: KnowledgeFlow = {
   ],
 };
 
+const mergingFlow: KnowledgeFlow = {
+  id: "merge",
+  title: "Merge",
+  summary: "Branches merge before completion",
+  roles: ["requester", "approver"],
+  startNodeId: "start",
+  nodes: [
+    {
+      id: "start",
+      type: "decision",
+      title: "Choose route",
+      ownerRoleIds: ["approver"],
+      body: "Choose",
+      authorityRoleId: "approver",
+      policyBasis: "Routing policy.",
+    },
+    {
+      id: "standard",
+      type: "action",
+      title: "Standard review",
+      ownerRoleIds: ["requester"],
+      body: "Review",
+      evidenceId: "standard-pack",
+    },
+    {
+      id: "exception",
+      type: "exception",
+      title: "Document exception",
+      ownerRoleIds: ["approver"],
+      body: "Document",
+      exception: "Escalate an incomplete request.",
+    },
+    {
+      id: "merge",
+      type: "system",
+      title: "Record decision",
+      ownerRoleIds: ["approver"],
+      body: "Record",
+    },
+    {
+      id: "complete",
+      type: "terminal",
+      title: "Complete",
+      ownerRoleIds: ["requester"],
+      body: "Done",
+      outcome: "Approval and evidence are recorded.",
+      evidenceId: "completion-record",
+      terminalOutcome: "complete",
+    },
+  ],
+  edges: [
+    { from: "start", to: "standard", label: "Standard", outcome: "success" },
+    {
+      from: "start",
+      to: "exception",
+      label: "Exception",
+      outcome: "exception",
+    },
+    { from: "standard", to: "merge" },
+    { from: "exception", to: "merge" },
+    { from: "merge", to: "complete" },
+  ],
+};
+
 describe("knowledge graph layout", () => {
   it("places alternate outcomes in separate lanes at the same depth", () => {
     const layout = layoutFlow(flow);
@@ -57,6 +128,48 @@ describe("knowledge graph layout", () => {
       "Yes",
       "No",
     ]);
+  });
+});
+
+describe("guided branch traversal", () => {
+  it("selects a decision edge and follows its path through a merge", () => {
+    expect(traceBranch(mergingFlow, ["standard"]).map((node) => node.id)).toEqual([
+      "start",
+      "standard",
+      "merge",
+      "complete",
+    ]);
+  });
+
+  it("restores the decision node when the latest choice is backtracked", () => {
+    expect(traceBranch(mergingFlow, ["exception"]).at(-1)?.id).toBe("complete");
+    expect(traceBranch(mergingFlow, []).map((node) => node.id)).toEqual([
+      "start",
+    ]);
+  });
+
+  it("returns stable branch, role, and exception collections", () => {
+    expect(branchOptions(mergingFlow, "start").map((edge) => edge.to)).toEqual([
+      "standard",
+      "exception",
+    ]);
+    expect(roleNodes(mergingFlow, "requester").map((node) => node.id)).toEqual([
+      "standard",
+      "complete",
+    ]);
+    expect(exceptionNodes(mergingFlow).map((node) => node.id)).toEqual([
+      "exception",
+    ]);
+  });
+
+  it("retains terminal completion evidence in the traced outcome", () => {
+    const terminal = traceBranch(mergingFlow, ["standard"]).at(-1);
+    expect(terminal).toMatchObject({
+      type: "terminal",
+      terminalOutcome: "complete",
+      evidenceId: "completion-record",
+      outcome: "Approval and evidence are recorded.",
+    });
   });
 });
 

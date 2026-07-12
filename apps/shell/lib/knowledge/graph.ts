@@ -1,4 +1,8 @@
-import type { KnowledgeFlow } from "./types";
+import type {
+  KnowledgeFlow,
+  KnowledgeFlowEdge,
+  KnowledgeFlowNode,
+} from "./types";
 
 export interface FlowLayoutNode {
   id: string;
@@ -66,4 +70,75 @@ export function layoutFlow(flow: KnowledgeFlow): FlowLayout {
 
 export function outgoingEdges(flow: KnowledgeFlow, nodeId: string) {
   return flow.edges.filter((edge) => edge.from === nodeId);
+}
+
+export function branchOptions(
+  flow: KnowledgeFlow,
+  nodeId: string,
+): KnowledgeFlowEdge[] {
+  return outgoingEdges(flow, nodeId);
+}
+
+export function traceBranch(
+  flow: KnowledgeFlow,
+  choices: readonly string[],
+): KnowledgeFlowNode[] {
+  const nodesById = new Map(flow.nodes.map((node) => [node.id, node]));
+  const path: KnowledgeFlowNode[] = [];
+  const visited = new Set<string>();
+  let currentId: string | undefined = flow.startNodeId;
+  let choiceIndex = 0;
+
+  while (currentId && !visited.has(currentId)) {
+    const current = nodesById.get(currentId);
+    if (!current) break;
+    path.push(current);
+    visited.add(currentId);
+
+    const options = branchOptions(flow, currentId);
+    if (options.length === 0) break;
+    if (options.length === 1) {
+      currentId = options[0]!.to;
+      continue;
+    }
+
+    const choice = choices[choiceIndex];
+    if (!choice) break;
+    const selected = options.find(
+      (edge) =>
+        edge.to === choice ||
+        edge.label === choice ||
+        `${edge.from}:${edge.to}` === choice,
+    );
+    if (!selected) break;
+    choiceIndex += 1;
+    currentId = selected.to;
+  }
+
+  return path;
+}
+
+export function roleNodes(
+  flow: KnowledgeFlow,
+  roleId: string,
+): KnowledgeFlowNode[] {
+  return flow.nodes.filter(
+    (node) =>
+      node.ownerRoleIds.includes(roleId) ||
+      (node.type === "decision" && node.authorityRoleId === roleId),
+  );
+}
+
+export function exceptionNodes(flow: KnowledgeFlow): KnowledgeFlowNode[] {
+  const exceptionDestinations = new Set(
+    flow.edges
+      .filter((edge) => edge.outcome === "exception")
+      .map((edge) => edge.to),
+  );
+  return flow.nodes.filter(
+    (node) =>
+      node.type === "exception" ||
+      Boolean(node.exception) ||
+      exceptionDestinations.has(node.id),
+  );
 }

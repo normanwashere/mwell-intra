@@ -55,7 +55,8 @@ export function StepWorkspace({
           </div>
           <h2
             id="step-workspace-title"
-            className="mt-3 text-2xl font-bold text-ink"
+            tabIndex={-1}
+            className="mt-3 text-2xl font-bold text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
           >
             {node.title}
           </h2>
