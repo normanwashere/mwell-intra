@@ -1,4 +1,4 @@
-import type { KnowledgeContent } from "./types";
+import type { KnowledgeContent, KnowledgeFeature } from "./types";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const AVAILABILITY = new Set(["live", "limited", "coming_soon"]);
@@ -31,6 +31,163 @@ function normalizeDecisionLabel(value: string): string {
 
 function hasProhibition(value: string): boolean {
   return /\b(do not|never|must not)\b/i.test(value);
+}
+
+interface FeatureSemanticMappingRule {
+  id: string;
+  signal?: RegExp;
+  featureIds?: string[];
+  requiredPolicy?: { id: string; signal: RegExp };
+  requiredPolicies?: Array<{ id: string; signal: RegExp }>;
+  requiredFlowIds: string[];
+}
+
+export const FEATURE_SEMANTIC_MAPPING_RULES: FeatureSemanticMappingRule[] = [
+  {
+    id: "pricing",
+    signal:
+      /\b(price revision|pricing|product price|current and prior prices|effective price|landed cost|margin context)\b/i,
+    requiredPolicy: {
+      id: "pricing-and-valuation",
+      signal: /Pricing and valuation policy/i,
+    },
+    requiredFlowIds: ["pricing-and-costing"],
+  },
+  {
+    id: "receiving",
+    signal:
+      /\b(warehouse receiving|goods receipt|linked receipts|source receipts|receipt evidence|receipt costing|receipt performance|receipt context|purchase order receipt|received quantities|partially received)\b/i,
+    requiredFlowIds: ["receive-to-putaway"],
+  },
+  {
+    id: "event-custody",
+    signal:
+      /\b(stock reservation|stock reservations|reservations and issues|event demand|event header|event inventory|event location|event-location|allocated stock|allocation return|stock allocation|reserved allocations|event fulfillment|event stock)\b/i,
+    requiredPolicy: {
+      id: "warehouse-custody",
+      signal: /Warehouse custody policy/i,
+    },
+    requiredFlowIds: ["event-fulfillment"],
+  },
+  {
+    id: "vendor-accreditation",
+    signal:
+      /\b(accreditation|vendor eligibility|accreditation case|vendor application|accreditation lifecycle|accreditation requirement|accreditation status|accreditation data|legal instrument)\b/i,
+    requiredPolicy: {
+      id: "vendor-accreditation",
+      signal: /Vendor accreditation policy/i,
+    },
+    requiredFlowIds: ["vendor-accreditation"],
+  },
+  {
+    id: "inventory-adjustment",
+    signal:
+      /\b(cycle count|physical count|stock adjustment|stock adjustments|count variance|variance records)\b/i,
+    requiredPolicy: {
+      id: "inventory-integrity",
+      signal: /Inventory integrity policy/i,
+    },
+    requiredFlowIds: ["cycle-count-adjustment"],
+  },
+  {
+    id: "warehouse-returns",
+    signal:
+      /\b(returned stock|warehouse returns|return context|return disposition|returns and outcomes|returned quantities)\b/i,
+    requiredPolicy: {
+      id: "inventory-integrity",
+      signal: /Inventory integrity policy/i,
+    },
+    requiredFlowIds: ["returns-reconciliation"],
+  },
+  {
+    id: "operational-exceptions",
+    signal:
+      /\b(warehouse exceptions|exception records|failed commands|blocked routes|idempotent command|operational failures)\b/i,
+    requiredPolicy: {
+      id: "operational-resilience",
+      signal: /Operational resilience/i,
+    },
+    requiredFlowIds: ["exception-and-recovery"],
+  },
+  {
+    id: "warehouse-data-comprehensive",
+    featureIds: ["warehouse-data", "warehouse-reports"],
+    requiredPolicies: [
+      { id: "warehouse-control", signal: /Warehouse control policy/i },
+      { id: "warehouse-custody", signal: /Warehouse custody policy/i },
+      { id: "operational-resilience", signal: /Operational resilience/i },
+      { id: "inventory-integrity", signal: /Inventory integrity policy/i },
+      {
+        id: "pricing-and-valuation",
+        signal: /Pricing and valuation policy/i,
+      },
+    ],
+    requiredFlowIds: [
+      "receive-to-putaway",
+      "event-fulfillment",
+      "exception-and-recovery",
+      "cycle-count-adjustment",
+      "returns-reconciliation",
+      "pricing-and-costing",
+    ],
+  },
+];
+
+function featureSemanticText(feature: KnowledgeFeature): string {
+  return [
+    feature.title,
+    feature.purpose,
+    ...feature.routes,
+    ...feature.capabilityIds,
+    ...feature.controls.flatMap((control) => [
+      control.name,
+      control.behavior,
+      control.validation,
+      control.result,
+    ]),
+    ...(feature.fields ?? []).flatMap((field) => [
+      field.name,
+      field.purpose,
+      field.validation,
+    ]),
+    ...feature.reads,
+    ...feature.writes,
+    ...feature.statuses,
+    ...(feature.notifications ?? []),
+    ...feature.exceptions,
+    ...(feature.completionEvidence ?? []),
+  ].join(" ");
+}
+
+export function validateFeatureSemanticMappings(
+  features: KnowledgeFeature[],
+): string[] {
+  const errors = new Set<string>();
+  for (const feature of features) {
+    const semanticText = featureSemanticText(feature);
+    const policyText = (feature.policyBasis ?? []).join(" ");
+    for (const rule of FEATURE_SEMANTIC_MAPPING_RULES) {
+      const applies =
+        Boolean(rule.featureIds?.includes(feature.id)) ||
+        Boolean(rule.signal?.test(semanticText));
+      if (!applies) continue;
+      const requiredPolicies = [
+        ...(rule.requiredPolicy ? [rule.requiredPolicy] : []),
+        ...(rule.requiredPolicies ?? []),
+      ];
+      for (const policy of requiredPolicies)
+        if (!policy.signal.test(policyText))
+          errors.add(
+            `feature ${feature.id} semantic mapping requires policy ${policy.id}`,
+          );
+      for (const flowId of rule.requiredFlowIds)
+        if (!(feature.relatedFlowIds ?? []).includes(flowId))
+          errors.add(
+            `feature ${feature.id} semantic mapping requires flow ${flowId}`,
+          );
+    }
+  }
+  return [...errors];
 }
 
 export interface KnowledgeValidationOptions {
@@ -141,6 +298,8 @@ export function validateKnowledgeContent(
             `feature ${feature.id} is coming soon but covers live route ${route}`,
           );
   }
+
+  errors.push(...validateFeatureSemanticMappings(content.features));
 
   for (const evidence of content.evidence) {
     if (evidenceIds.has(evidence.id))

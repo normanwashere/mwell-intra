@@ -123,12 +123,13 @@ const FEATURE_RELATIONSHIPS: Record<string, FeatureRelationship> = {
     ],
   },
   "warehouse-product-detail": {
-    policyBasis: [POLICY.warehouse, POLICY.inventory],
+    policyBasis: [POLICY.warehouse, POLICY.inventory, POLICY.pricing],
     relatedFlowIds: [
       "receive-to-putaway",
       "quality-disposition",
       "returns-reconciliation",
       "cycle-count-adjustment",
+      "pricing-and-costing",
     ],
   },
   "warehouse-receiving": {
@@ -136,8 +137,12 @@ const FEATURE_RELATIONSHIPS: Record<string, FeatureRelationship> = {
     relatedFlowIds: ["receive-to-putaway", "quality-disposition"],
   },
   "warehouse-allocations": {
-    policyBasis: [POLICY.event],
-    relatedFlowIds: ["event-fulfillment", "allocation-event-return"],
+    policyBasis: [POLICY.event, POLICY.inventory],
+    relatedFlowIds: [
+      "event-fulfillment",
+      "returns-reconciliation",
+      "allocation-event-return",
+    ],
   },
   "warehouse-returns": {
     policyBasis: [POLICY.event, POLICY.inventory],
@@ -152,8 +157,12 @@ const FEATURE_RELATIONSHIPS: Record<string, FeatureRelationship> = {
     relatedFlowIds: ["event-fulfillment", "allocation-event-return"],
   },
   "warehouse-event-detail": {
-    policyBasis: [POLICY.event],
-    relatedFlowIds: ["event-fulfillment", "allocation-event-return"],
+    policyBasis: [POLICY.event, POLICY.inventory],
+    relatedFlowIds: [
+      "event-fulfillment",
+      "returns-reconciliation",
+      "allocation-event-return",
+    ],
   },
   "warehouse-procurement-planning": {
     policyBasis: [POLICY.procurement, POLICY.warehouse],
@@ -168,8 +177,12 @@ const FEATURE_RELATIONSHIPS: Record<string, FeatureRelationship> = {
     relatedFlowIds: ["cycle-count-adjustment"],
   },
   "warehouse-quality": {
-    policyBasis: [POLICY.quality],
-    relatedFlowIds: ["quality-disposition", "receive-to-putaway"],
+    policyBasis: [POLICY.quality, POLICY.inventory],
+    relatedFlowIds: [
+      "quality-disposition",
+      "receive-to-putaway",
+      "returns-reconciliation",
+    ],
   },
   "warehouse-approvals": {
     policyBasis: [POLICY.inventory, POLICY.quality, POLICY.pricing],
@@ -192,6 +205,7 @@ const FEATURE_RELATIONSHIPS: Record<string, FeatureRelationship> = {
   "warehouse-finance": {
     policyBasis: [POLICY.inventory, POLICY.pricing],
     relatedFlowIds: [
+      "receive-to-putaway",
       "returns-reconciliation",
       "cycle-count-adjustment",
       "pricing-and-costing",
@@ -202,28 +216,55 @@ const FEATURE_RELATIONSHIPS: Record<string, FeatureRelationship> = {
     relatedFlowIds: ["pricing-and-costing"],
   },
   "warehouse-data": {
-    policyBasis: [POLICY.inventory],
+    policyBasis: [
+      POLICY.warehouse,
+      POLICY.event,
+      POLICY.resilience,
+      POLICY.inventory,
+      POLICY.pricing,
+    ],
     relatedFlowIds: [
+      "receive-to-putaway",
+      "event-fulfillment",
+      "exception-and-recovery",
       "returns-reconciliation",
       "cycle-count-adjustment",
       "pricing-and-costing",
     ],
   },
   "warehouse-reports": {
-    policyBasis: [POLICY.inventory],
+    policyBasis: [
+      POLICY.warehouse,
+      POLICY.event,
+      POLICY.resilience,
+      POLICY.inventory,
+      POLICY.pricing,
+    ],
     relatedFlowIds: [
+      "receive-to-putaway",
+      "event-fulfillment",
+      "exception-and-recovery",
       "returns-reconciliation",
       "cycle-count-adjustment",
       "pricing-and-costing",
     ],
   },
   "warehouse-suppliers": {
-    policyBasis: [POLICY.procurement, POLICY.warehouse],
-    relatedFlowIds: ["procure-to-pay", "warehouse-setup"],
+    policyBasis: [POLICY.procurement, POLICY.warehouse, POLICY.accreditation],
+    relatedFlowIds: [
+      "procure-to-pay",
+      "vendor-accreditation",
+      "warehouse-setup",
+      "receive-to-putaway",
+    ],
   },
   "warehouse-locations": {
-    policyBasis: [POLICY.warehouse],
-    relatedFlowIds: ["warehouse-setup", "receive-to-putaway"],
+    policyBasis: [POLICY.warehouse, POLICY.event],
+    relatedFlowIds: [
+      "warehouse-setup",
+      "receive-to-putaway",
+      "event-fulfillment",
+    ],
   },
   "warehouse-imports": {
     policyBasis: [POLICY.warehouse, POLICY.resilience],
@@ -238,24 +279,36 @@ const FEATURE_RELATIONSHIPS: Record<string, FeatureRelationship> = {
     relatedFlowIds: ["procure-to-pay"],
   },
   "procurement-request-create": {
-    policyBasis: [POLICY.procurement, POLICY.doa],
-    relatedFlowIds: ["procure-to-pay"],
+    policyBasis: [POLICY.procurement, POLICY.doa, POLICY.accreditation],
+    relatedFlowIds: ["procure-to-pay", "vendor-accreditation"],
   },
   "procurement-request-detail": {
     policyBasis: [POLICY.procurement, POLICY.doa, POLICY.accreditation],
     relatedFlowIds: ["procure-to-pay", "vendor-accreditation"],
   },
   "procurement-approvals": {
-    policyBasis: [POLICY.procurement, POLICY.doa],
-    relatedFlowIds: ["procure-to-pay", "doa-governance"],
+    policyBasis: [POLICY.procurement, POLICY.doa, POLICY.accreditation],
+    relatedFlowIds: [
+      "procure-to-pay",
+      "doa-governance",
+      "vendor-accreditation",
+    ],
   },
   "procurement-purchase-orders": {
-    policyBasis: [POLICY.procurement, POLICY.payment],
-    relatedFlowIds: ["procure-to-pay", "receive-to-putaway"],
+    policyBasis: [POLICY.procurement, POLICY.payment, POLICY.accreditation],
+    relatedFlowIds: [
+      "procure-to-pay",
+      "vendor-accreditation",
+      "receive-to-putaway",
+    ],
   },
   "procurement-po-detail": {
-    policyBasis: [POLICY.procurement, POLICY.payment],
-    relatedFlowIds: ["procure-to-pay", "receive-to-putaway"],
+    policyBasis: [POLICY.procurement, POLICY.payment, POLICY.accreditation],
+    relatedFlowIds: [
+      "procure-to-pay",
+      "vendor-accreditation",
+      "receive-to-putaway",
+    ],
   },
   "legal-cases": {
     policyBasis: [POLICY.accreditation],
@@ -347,7 +400,7 @@ const auditedNotification = (definition: FeatureDefinition): string => {
   if (definition.id === "legal-invite-vendor")
     return "The page shows a success or error toast, while the protected invitation API invokes the delivery Edge Function; it does not write core.notifications directly.";
   if (definition.module === "warehouse")
-    return `${definition.title} uses page-level toast or inline feedback where its controls mutate data; it does not write core.notifications, and warehouse bell alerts are derived separately only from low-stock products and reserved allocations.`;
+    return `${definition.title} uses page-level toast or inline feedback where its controls mutate data; it does not write core.notifications.`;
   if (definition.module === "procurement")
     return `${definition.title} uses local success or error feedback for implemented actions; procurement localStore and page RPC calls do not write core.notifications.`;
   if (definition.module === "legal" || definition.module === "vendor")

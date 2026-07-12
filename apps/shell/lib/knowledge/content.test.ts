@@ -5,7 +5,11 @@ import { KNOWLEDGE_CONTENT } from "./content";
 import { KNOWLEDGE_GUIDE_CONTENT } from "@shell/components/knowledge/KnowledgeBase";
 import { ROLE_ROUTE_PARENT_PATHS } from "./roles";
 import { searchKnowledge } from "./search";
-import { validateKnowledgeBase, validateKnowledgeContent } from "./validate";
+import {
+  validateFeatureSemanticMappings,
+  validateKnowledgeBase,
+  validateKnowledgeContent,
+} from "./validate";
 
 describe("Knowledge Base content", () => {
   it("defines explicit operating data for all 26 role profiles", () => {
@@ -52,6 +56,89 @@ describe("Knowledge Base content", () => {
         expect(flowIds.has(flowId), `${feature.id}:${flowId}`).toBe(true);
     }
   });
+
+  it("satisfies semantic policy and workflow mapping rules across all features", () => {
+    expect(validateFeatureSemanticMappings(KNOWLEDGE_CONTENT.features)).toEqual(
+      [],
+    );
+  });
+
+  it.each([
+    ["warehouse-product-detail", "pricing-and-costing"],
+    ["warehouse-finance", "receive-to-putaway"],
+    ["warehouse-locations", "event-fulfillment"],
+    ["procurement-request-create", "vendor-accreditation"],
+    ["warehouse-cycle-counts", "cycle-count-adjustment"],
+    ["warehouse-quality", "returns-reconciliation"],
+    ["warehouse-exceptions", "exception-and-recovery"],
+    ["warehouse-data", "receive-to-putaway"],
+    ["warehouse-data", "event-fulfillment"],
+    ["warehouse-data", "exception-and-recovery"],
+    ["warehouse-data", "returns-reconciliation"],
+    ["warehouse-reports", "receive-to-putaway"],
+    ["warehouse-reports", "event-fulfillment"],
+    ["warehouse-reports", "exception-and-recovery"],
+    ["warehouse-reports", "returns-reconciliation"],
+  ])("rejects %s when semantic flow %s is omitted", (featureId, flowId) => {
+    const feature = structuredClone(
+      KNOWLEDGE_CONTENT.features.find((item) => item.id === featureId)!,
+    );
+    feature.relatedFlowIds = feature.relatedFlowIds.filter(
+      (item) => item !== flowId,
+    );
+
+    expect(validateFeatureSemanticMappings([feature])).toContain(
+      `feature ${featureId} semantic mapping requires flow ${flowId}`,
+    );
+  });
+
+  it("rejects a governed price revision without pricing policy", () => {
+    const feature = structuredClone(
+      KNOWLEDGE_CONTENT.features.find(
+        (item) => item.id === "warehouse-product-detail",
+      )!,
+    );
+    feature.policyBasis = feature.policyBasis.filter(
+      (policy) => !policy.includes("Pricing and valuation policy"),
+    );
+
+    expect(validateFeatureSemanticMappings([feature])).toContain(
+      "feature warehouse-product-detail semantic mapping requires policy pricing-and-valuation",
+    );
+  });
+
+  it.each([
+    ["warehouse-locations", "Warehouse custody policy", "warehouse-custody"],
+    [
+      "procurement-request-create",
+      "Vendor accreditation policy",
+      "vendor-accreditation",
+    ],
+    [
+      "warehouse-cycle-counts",
+      "Inventory integrity policy",
+      "inventory-integrity",
+    ],
+    [
+      "warehouse-exceptions",
+      "Operational resilience",
+      "operational-resilience",
+    ],
+  ])(
+    "rejects %s when semantic policy %s is omitted",
+    (featureId, policySignal, policyId) => {
+      const feature = structuredClone(
+        KNOWLEDGE_CONTENT.features.find((item) => item.id === featureId)!,
+      );
+      feature.policyBasis = feature.policyBasis.filter(
+        (policy) => !policy.includes(policySignal),
+      );
+
+      expect(validateFeatureSemanticMappings([feature])).toContain(
+        `feature ${featureId} semantic mapping requires policy ${policyId}`,
+      );
+    },
+  );
 
   it("maps every parameterized role route to an explicit concrete parent", () => {
     const parameterizedRoutes = KNOWLEDGE_GUIDE_CONTENT.roles.flatMap((role) =>
