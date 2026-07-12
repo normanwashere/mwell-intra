@@ -246,6 +246,46 @@ describe("validateKnowledgeContent", () => {
     expect(validateKnowledgeContent(valid())).toEqual([]);
   });
 
+  it("requires screenshot evidence for every executable article step", () => {
+    const content = valid();
+    content.articles.push({
+      id: "article",
+      slug: "procedures/article",
+      title: "Article",
+      summary: "Summary",
+      module: "core",
+      roles: ["owner"],
+      keywords: [],
+      sections: [
+        {
+          id: "procedure",
+          title: "Procedure",
+          body: "Follow the governed procedure.",
+          steps: [
+            {
+              title: "Complete action",
+              ownerRoleIds: ["owner"],
+              instruction: "Complete the action.",
+              expectedOutcome: "The action is complete.",
+            },
+          ],
+        },
+      ],
+      relatedArticleIds: [],
+      flowIds: ["flow"],
+      liveRoutes: ["/"],
+      owner: "Platform",
+      reviewedAt: "2026-07-11",
+    });
+
+    expect(validateKnowledgeContent(content)).toContain(
+      "article:Complete action requires screenshot evidence",
+    );
+
+    content.articles[0]!.sections[0]!.steps![0]!.evidenceId = "ev-start";
+    expect(validateKnowledgeContent(content)).toEqual([]);
+  });
+
   it("rejects unlabeled decision branches", () => {
     const content = valid();
     content.flows[0]!.edges[0]!.label = undefined;

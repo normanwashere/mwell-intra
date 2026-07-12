@@ -553,6 +553,7 @@ const procedureArticles: KnowledgeArticle[] = [
 
 export const KNOWLEDGE_CONTENT: KnowledgeContent = {
   roles: KNOWLEDGE_ROLES,
+  features: [],
   articles: [...roleArticles, ...procedureArticles],
   flows: KNOWLEDGE_FLOWS,
   glossary: [

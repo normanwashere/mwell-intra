@@ -150,6 +150,11 @@ export function validateKnowledgeContent(content: KnowledgeContent): string[] {
         errors.push(`${article.id} has invalid route ${route}`);
     for (const section of article.sections)
       for (const step of section.steps ?? []) {
+        // KnowledgeStep has no informational discriminator, so each step is executable.
+        if (!step.evidenceId)
+          errors.push(
+            `${article.id}:${step.title} requires screenshot evidence`,
+          );
         for (const roleId of step.ownerRoleIds)
           if (!roleIds.has(roleId))
             errors.push(

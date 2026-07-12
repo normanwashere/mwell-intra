@@ -1,6 +1,8 @@
 import type { KnowledgeRole } from "./types";
 
-export const KNOWLEDGE_ROLES: KnowledgeRole[] = [
+const ROLE_DEFINITIONS: Array<
+  Omit<KnowledgeRole, "availability" | "authority">
+> = [
   {
     id: "core_staff_only",
     label: "Core staff",
@@ -136,3 +138,20 @@ export const KNOWLEDGE_ROLES: KnowledgeRole[] = [
       "Invite vendors, administer Legal workflow, and maintain department DOA.",
   },
 ];
+
+export const KNOWLEDGE_ROLES: KnowledgeRole[] = ROLE_DEFINITIONS.map(
+  (role) => ({
+    ...role,
+    availability: "live",
+    authority: {
+      capabilities: [`knowledge.${role.id}.view`],
+      accessibleRoutes: ["/knowledge"],
+      canDo: ["Access the governed Knowledge Base."],
+      cannotDo: ["Do not bypass governed workflow controls."],
+      decisions: [],
+      upstreamRoleIds: [],
+      downstreamRoleIds: [],
+      escalation: "Escalate through the owning department.",
+    },
+  }),
+);
