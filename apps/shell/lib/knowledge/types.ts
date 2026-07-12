@@ -1,6 +1,11 @@
 export type KnowledgeModule =
   "core" | "warehouse" | "procurement" | "legal" | "vendor" | "admin";
 
+export type KnowledgeAvailability = "live" | "limited" | "coming_soon";
+
+export type KnowledgeOutcome =
+  "complete" | "revision" | "rejected" | "cancelled" | "escalated";
+
 export type FlowNodeType =
   | "start"
   | "action"
@@ -10,11 +15,57 @@ export type FlowNodeType =
   | "exception"
   | "terminal";
 
+export interface KnowledgeAuthority {
+  capabilities: string[];
+  accessibleRoutes: string[];
+  canDo: string[];
+  cannotDo: string[];
+  decisions: string[];
+  upstreamRoleIds: string[];
+  downstreamRoleIds: string[];
+  escalation: string;
+}
+
 export interface KnowledgeRole {
   id: string;
+  rbacModule?: "core" | "warehouse" | "procurement" | "legal";
+  rbacRole?: string;
   label: string;
   module: KnowledgeModule;
+  availability: KnowledgeAvailability;
   purpose: string;
+  authority: KnowledgeAuthority;
+}
+
+export interface KnowledgeFeatureControl {
+  name: string;
+  behavior: string;
+  validation: string;
+  result: string;
+}
+
+export interface KnowledgeFeature {
+  id: string;
+  title: string;
+  module: KnowledgeModule;
+  availability: KnowledgeAvailability;
+  routes: string[];
+  roleIds: string[];
+  capabilityIds: string[];
+  purpose: string;
+  controls: KnowledgeFeatureControl[];
+  reads: string[];
+  writes: string[];
+  statuses: string[];
+  exceptions: string[];
+  owner: string;
+  reviewedAt: string;
+}
+
+export interface KnowledgeDecision {
+  authorityRoleId: string;
+  policyBasis: string;
+  terminalOutcome?: KnowledgeOutcome;
 }
 
 export interface KnowledgeStep {
@@ -23,6 +74,11 @@ export interface KnowledgeStep {
   instruction: string;
   expectedOutcome: string;
   exception?: string;
+  evidenceId?: string;
+  prerequisites?: string[];
+  databaseEffect?: string;
+  handoff?: string;
+  prohibitedActions?: string[];
 }
 
 export interface KnowledgeSection {
@@ -60,6 +116,9 @@ export interface KnowledgeFlowNode {
   exception?: string;
   articleId?: string;
   evidenceId?: string;
+  authorityRoleId?: string;
+  policyBasis?: string;
+  terminalOutcome?: KnowledgeOutcome;
   databaseEffect?: string;
 }
 
@@ -123,6 +182,7 @@ export interface FutureFeature {
 
 export interface KnowledgeContent {
   roles: KnowledgeRole[];
+  features: KnowledgeFeature[];
   articles: KnowledgeArticle[];
   flows: KnowledgeFlow[];
   glossary: GlossaryEntry[];

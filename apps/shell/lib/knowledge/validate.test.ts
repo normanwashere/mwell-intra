@@ -3,7 +3,51 @@ import type { KnowledgeContent } from "./types";
 import { validateKnowledgeContent } from "./validate";
 
 const valid = (): KnowledgeContent => ({
-  roles: [{ id: "owner", label: "Owner", module: "core", purpose: "Acts" }],
+  roles: [
+    {
+      id: "owner",
+      label: "Owner",
+      module: "core",
+      availability: "live",
+      purpose: "Acts",
+      authority: {
+        capabilities: ["flow.manage"],
+        accessibleRoutes: ["/"],
+        canDo: ["Manage the flow"],
+        cannotDo: ["Bypass the flow"],
+        decisions: ["Approve the flow"],
+        upstreamRoleIds: [],
+        downstreamRoleIds: [],
+        escalation: "Contact the platform administrator.",
+      },
+    },
+  ],
+  features: [
+    {
+      id: "flow-management",
+      title: "Flow management",
+      module: "core",
+      availability: "live",
+      routes: ["/"],
+      roleIds: ["owner"],
+      capabilityIds: ["flow.manage"],
+      purpose: "Manage the flow.",
+      controls: [
+        {
+          name: "Governed branch",
+          behavior: "Records each branch.",
+          validation: "Requires a decision label.",
+          result: "The flow reaches a terminal state.",
+        },
+      ],
+      reads: ["flow"],
+      writes: ["flow"],
+      statuses: ["active"],
+      exceptions: [],
+      owner: "Platform",
+      reviewedAt: "2026-07-11",
+    },
+  ],
   articles: [],
   glossary: [],
   futureFeatures: [],
@@ -47,6 +91,8 @@ const valid = (): KnowledgeContent => ({
           ownerRoleIds: ["owner"],
           body: "Decide",
           evidenceId: "ev-start",
+          authorityRoleId: "owner",
+          policyBasis: "Flow policy.",
         },
         {
           id: "yes",
@@ -54,6 +100,7 @@ const valid = (): KnowledgeContent => ({
           title: "Done",
           ownerRoleIds: ["owner"],
           body: "Complete",
+          terminalOutcome: "complete",
         },
         {
           id: "no",
@@ -61,6 +108,7 @@ const valid = (): KnowledgeContent => ({
           title: "Stopped",
           ownerRoleIds: ["owner"],
           body: "Stopped",
+          terminalOutcome: "rejected",
         },
       ],
       edges: [
@@ -72,6 +120,128 @@ const valid = (): KnowledgeContent => ({
 });
 
 describe("validateKnowledgeContent", () => {
+  it("rejects incomplete live content contracts", () => {
+    const invalid = {
+      roles: [
+        {
+          id: "procurement_requester",
+          label: "Procurement requester",
+          module: "procurement",
+          availability: "live",
+          purpose: "Create governed requests.",
+          authority: {
+            capabilities: [],
+            accessibleRoutes: ["/procurement/requests/new"],
+            canDo: ["Create a request"],
+            cannotDo: ["Approve a request"],
+            decisions: [],
+            upstreamRoleIds: [],
+            downstreamRoleIds: [],
+            escalation: "Contact Procurement.",
+          },
+        },
+      ],
+      articles: [
+        {
+          id: "purchase-request",
+          slug: "procedures/purchase-request",
+          title: "Create a purchase request",
+          summary: "Create a governed purchase request.",
+          module: "procurement",
+          roles: ["procurement_requester"],
+          keywords: [],
+          sections: [],
+          relatedArticleIds: [],
+          flowIds: ["p2p"],
+          liveRoutes: ["/procurement/requests/new"],
+          owner: "Procurement",
+          reviewedAt: "2026-07-11",
+        },
+      ],
+      features: [
+        {
+          id: "purchase-request",
+          title: "Purchase request",
+          module: "procurement",
+          availability: "coming_soon",
+          routes: ["/procurement/requests/new"],
+          roleIds: ["procurement_requester"],
+          capabilityIds: ["request.create"],
+          purpose: "Create requests.",
+          controls: [
+            {
+              name: "Required evidence",
+              behavior: "Requires evidence before submission.",
+              validation: "Rejects missing evidence.",
+              result: "The request remains a draft.",
+            },
+          ],
+          reads: ["purchase requests"],
+          writes: ["purchase requests"],
+          statuses: ["draft"],
+          exceptions: [],
+          owner: "Procurement",
+          reviewedAt: "2026-07-11",
+        },
+      ],
+      glossary: [],
+      futureFeatures: [],
+      evidence: [],
+      flows: [
+        {
+          id: "p2p",
+          title: "Procure to pay",
+          summary: "Request and approve procurement.",
+          roles: ["procurement_requester"],
+          startNodeId: "create-request",
+          nodes: [
+            {
+              id: "create-request",
+              type: "action",
+              title: "Create request",
+              ownerRoleIds: ["procurement_requester"],
+              body: "Create the governed request.",
+            },
+            {
+              id: "threshold-decision",
+              type: "decision",
+              title: "Is approval required?",
+              ownerRoleIds: ["procurement_requester"],
+              body: "Determine the approval route.",
+              policyBasis: "Procurement policy threshold.",
+            },
+            {
+              id: "complete",
+              type: "terminal",
+              title: "Request complete",
+              ownerRoleIds: ["procurement_requester"],
+              body: "The request is complete.",
+              terminalOutcome: "complete",
+            },
+          ],
+          edges: [
+            { from: "create-request", to: "threshold-decision" },
+            {
+              from: "threshold-decision",
+              to: "complete",
+              label: "Yes",
+              outcome: "success",
+            },
+          ],
+        },
+      ],
+    } as unknown as KnowledgeContent;
+
+    expect(validateKnowledgeContent(invalid)).toEqual(
+      expect.arrayContaining([
+        "role procurement_requester has no capability profile",
+        "flow p2p:threshold-decision has no authority",
+        "flow p2p:create-request requires screenshot evidence",
+        "feature purchase-request is coming soon but covers live route /procurement/requests/new",
+      ]),
+    );
+  });
+
   it("accepts an explicit governed branch", () => {
     expect(validateKnowledgeContent(valid())).toEqual([]);
   });

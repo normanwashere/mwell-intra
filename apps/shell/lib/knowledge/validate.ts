@@ -1,11 +1,101 @@
 import type { KnowledgeContent } from "./types";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const AVAILABILITY = new Set(["live", "limited", "coming_soon"]);
+const OUTCOMES = new Set([
+  "complete",
+  "revision",
+  "rejected",
+  "cancelled",
+  "escalated",
+]);
+
+function isISODate(value: string): boolean {
+  if (!ISO_DATE.test(value)) return false;
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year!, month! - 1, day!));
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month! - 1 &&
+    date.getUTCDate() === day
+  );
+}
+
+function hasText(value: string | undefined): value is string {
+  return Boolean(value?.trim());
+}
+
+function hasProhibition(value: string): boolean {
+  return /\b(do not|never|must not)\b/i.test(value);
+}
 
 export function validateKnowledgeContent(content: KnowledgeContent): string[] {
   const errors: string[] = [];
   const roleIds = new Set(content.roles.map((role) => role.id));
   const evidenceIds = new Set<string>();
+
+  for (const role of content.roles) {
+    if (!AVAILABILITY.has(role.availability))
+      errors.push(`role ${role.id} has invalid availability`);
+    if (Boolean(role.rbacModule) !== Boolean(role.rbacRole))
+      errors.push(`role ${role.id} has incomplete RBAC coordinates`);
+
+    const authority = role.authority;
+    if (!authority) {
+      errors.push(`role ${role.id} has no authority profile`);
+      continue;
+    }
+    if (role.availability === "live" && !authority.capabilities.length)
+      errors.push(`role ${role.id} has no capability profile`);
+    for (const route of authority.accessibleRoutes)
+      if (!route.startsWith("/"))
+        errors.push(`role ${role.id} has invalid accessible route ${route}`);
+    for (const relatedRoleId of [
+      ...authority.upstreamRoleIds,
+      ...authority.downstreamRoleIds,
+    ])
+      if (!roleIds.has(relatedRoleId))
+        errors.push(
+          `role ${role.id} references unknown authority role ${relatedRoleId}`,
+        );
+    if (!hasText(authority.escalation))
+      errors.push(`role ${role.id} has no escalation path`);
+  }
+
+  const liveRoutes = new Set(
+    content.articles.flatMap((article) => article.liveRoutes),
+  );
+  const featureIds = new Set<string>();
+  for (const feature of content.features) {
+    if (featureIds.has(feature.id))
+      errors.push(`duplicate feature id ${feature.id}`);
+    featureIds.add(feature.id);
+    if (!AVAILABILITY.has(feature.availability))
+      errors.push(`feature ${feature.id} has invalid availability`);
+    if (!isISODate(feature.reviewedAt))
+      errors.push(`feature ${feature.id} has invalid review date`);
+    for (const route of feature.routes)
+      if (!route.startsWith("/"))
+        errors.push(`feature ${feature.id} has invalid route ${route}`);
+    for (const roleId of feature.roleIds)
+      if (!roleIds.has(roleId))
+        errors.push(`feature ${feature.id} references unknown role ${roleId}`);
+    if (!feature.controls.length)
+      errors.push(`feature ${feature.id} has no controls`);
+    for (const control of feature.controls)
+      for (const [name, value] of Object.entries(control))
+        if (!hasText(value))
+          errors.push(`feature ${feature.id} control has no ${name}`);
+    if (
+      feature.availability === "coming_soon" &&
+      feature.routes.some((route) => liveRoutes.has(route))
+    )
+      for (const route of feature.routes)
+        if (liveRoutes.has(route))
+          errors.push(
+            `feature ${feature.id} is coming soon but covers live route ${route}`,
+          );
+  }
 
   for (const evidence of content.evidence) {
     if (evidenceIds.has(evidence.id))
@@ -17,10 +107,7 @@ export function validateKnowledgeContent(content: KnowledgeContent): string[] {
       errors.push(`${evidence.id} has invalid desktop screenshot path`);
     if (evidence.mobileSrc && !evidence.mobileSrc.startsWith("/knowledge/"))
       errors.push(`${evidence.id} has invalid mobile screenshot path`);
-    if (
-      !ISO_DATE.test(evidence.capturedAt) ||
-      !ISO_DATE.test(evidence.reviewedAt)
-    )
+    if (!isISODate(evidence.capturedAt) || !isISODate(evidence.reviewedAt))
       errors.push(`${evidence.id} has invalid evidence date`);
 
     const hotspotNumbers = new Set<number>();
@@ -55,6 +142,31 @@ export function validateKnowledgeContent(content: KnowledgeContent): string[] {
     }
   }
 
+  for (const article of content.articles) {
+    if (!isISODate(article.reviewedAt))
+      errors.push(`${article.id} has invalid article review date`);
+    for (const route of article.liveRoutes)
+      if (!route.startsWith("/"))
+        errors.push(`${article.id} has invalid route ${route}`);
+    for (const section of article.sections)
+      for (const step of section.steps ?? []) {
+        for (const roleId of step.ownerRoleIds)
+          if (!roleIds.has(roleId))
+            errors.push(
+              `${article.id}:${step.title} references unknown role ${roleId}`,
+            );
+        if (step.evidenceId && !evidenceIds.has(step.evidenceId))
+          errors.push(
+            `${article.id}:${step.title} references missing evidence ${step.evidenceId}`,
+          );
+        for (const prohibitedAction of step.prohibitedActions ?? [])
+          if (!hasProhibition(prohibitedAction))
+            errors.push(
+              `${article.id}:${step.title} prohibited action must state a prohibition`,
+            );
+      }
+  }
+
   for (const flow of content.flows) {
     const nodeIds = new Set<string>();
     for (const item of flow.nodes) {
@@ -70,6 +182,36 @@ export function validateKnowledgeContent(content: KnowledgeContent): string[] {
         errors.push(
           `${flow.id}:${item.id} references missing evidence ${item.evidenceId}`,
         );
+      if (
+        ["start", "action", "handoff"].includes(item.type) &&
+        item.ownerRoleIds.some(
+          (roleId) =>
+            content.roles.find((role) => role.id === roleId)?.availability ===
+            "live",
+        ) &&
+        !item.evidenceId
+      )
+        errors.push(`flow ${flow.id}:${item.id} requires screenshot evidence`);
+      if (item.type === "decision") {
+        if (!hasText(item.authorityRoleId))
+          errors.push(`flow ${flow.id}:${item.id} has no authority`);
+        else if (!roleIds.has(item.authorityRoleId))
+          errors.push(
+            `flow ${flow.id}:${item.id} references unknown authority ${item.authorityRoleId}`,
+          );
+        else if (!item.ownerRoleIds.includes(item.authorityRoleId))
+          errors.push(
+            `flow ${flow.id}:${item.id} authority must own the decision`,
+          );
+        if (!hasText(item.policyBasis))
+          errors.push(`flow ${flow.id}:${item.id} has no policy basis`);
+      }
+      if (item.type === "terminal") {
+        if (!item.terminalOutcome || !OUTCOMES.has(item.terminalOutcome))
+          errors.push(
+            `flow ${flow.id}:${item.id} has invalid terminal outcome`,
+          );
+      }
     }
 
     if (!nodeIds.has(flow.startNodeId)) {
