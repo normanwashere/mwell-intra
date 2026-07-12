@@ -1,7 +1,14 @@
+import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { inflateSync } from "node:zlib";
 import type { KnowledgeContent, KnowledgeFeature } from "./types";
 import { edgeChoiceId } from "./graph";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const GIT_COMMIT = /^[0-9a-f]{40}$/;
+const EXECUTABLE_NODE_TYPES = new Set(["start", "action", "handoff"]);
+const PUBLIC_ROUTES = new Set(["/login", "/forgot-password", "/reset-password"]);
 const AVAILABILITY = new Set(["live", "limited", "coming_soon"]);
 const OUTCOMES = new Set([
   "complete",
@@ -32,6 +39,31 @@ function normalizeDecisionLabel(value: string): string {
 
 function hasProhibition(value: string): boolean {
   return /\b(do not|never|must not)\b/i.test(value);
+}
+
+function routeMatches(pattern: string, route: string): boolean {
+  if (pattern === route) return true;
+  if (pattern !== "/" && route.startsWith(`${pattern}/`)) return true;
+  const patternSegments = pattern.split("/").filter(Boolean);
+  const routeSegments = route.split("/").filter(Boolean);
+  return (
+    patternSegments.length === routeSegments.length &&
+    patternSegments.every(
+      (segment, index) => segment.startsWith(":") || segment === routeSegments[index],
+    )
+  );
+}
+
+function roleCanAccessRoute(
+  content: KnowledgeContent,
+  roleId: string,
+  route: string,
+): boolean {
+  if (PUBLIC_ROUTES.has(route)) return true;
+  const role = content.roles.find((candidate) => candidate.id === roleId);
+  return Boolean(
+    role?.authority.accessibleRoutes.some((pattern) => routeMatches(pattern, route)),
+  );
 }
 
 interface FeatureSemanticMappingRule {
@@ -207,6 +239,12 @@ export function validateKnowledgeContent(
   const roleIds = new Set(content.roles.map((role) => role.id));
   const flowIds = new Set(content.flows.map((flow) => flow.id));
   const evidenceIds = new Set<string>();
+  const nodeContexts = new Map(
+    content.flows.flatMap((flow) =>
+      flow.nodes.map((node) => [node.id, { flow, node }] as const),
+    ),
+  );
+  const imageContexts = new Map<string, string>();
 
   for (const role of content.roles) {
     if (!AVAILABILITY.has(role.availability))
@@ -310,10 +348,53 @@ export function validateKnowledgeContent(
       errors.push(`${evidence.id} references unknown role ${evidence.roleId}`);
     if (!evidence.desktopSrc.startsWith("/knowledge/"))
       errors.push(`${evidence.id} has invalid desktop screenshot path`);
-    if (evidence.mobileSrc && !evidence.mobileSrc.startsWith("/knowledge/"))
+    if (!evidence.mobileSrc)
+      errors.push(`${evidence.id} requires a mobile screenshot`);
+    else if (!evidence.mobileSrc.startsWith("/knowledge/"))
       errors.push(`${evidence.id} has invalid mobile screenshot path`);
     if (!isISODate(evidence.capturedAt) || !isISODate(evidence.reviewedAt))
       errors.push(`${evidence.id} has invalid evidence date`);
+    if (!GIT_COMMIT.test(evidence.appCommit))
+      errors.push(`${evidence.id} has invalid app commit provenance`);
+    if (!hasText(evidence.state))
+      errors.push(`${evidence.id} has no deterministic capture state`);
+    if (!hasText(evidence.expectedLandmark))
+      errors.push(`${evidence.id} has no expected landmark`);
+    if (!evidence.sensitiveDataReviewed)
+      errors.push(`${evidence.id} has not completed sensitive-data review`);
+
+    const nodeContext = nodeContexts.get(evidence.nodeId);
+    if (!nodeContext)
+      errors.push(`${evidence.id} references unknown node ${evidence.nodeId}`);
+    else {
+      if (!nodeContext.node.ownerRoleIds.includes(evidence.roleId))
+        errors.push(
+          `${evidence.id} role ${evidence.roleId} does not own ${nodeContext.flow.id}:${evidence.nodeId}`,
+        );
+      if (
+        nodeContext.node.databaseEffect &&
+        evidence.expectedDatabaseEffect !== nodeContext.node.databaseEffect
+      )
+        errors.push(`${evidence.id} does not match its expected database effect`);
+    }
+    if (!roleCanAccessRoute(content, evidence.roleId, evidence.route))
+      errors.push(
+        `${evidence.id} route ${evidence.route} is not accessible to role ${evidence.roleId}`,
+      );
+
+    const sharingContext = [
+      evidence.roleId,
+      evidence.route,
+      evidence.state,
+      evidence.expectedLandmark,
+      evidence.hotspots.map((hotspot) => hotspot.label).join("|"),
+    ].join("\u0000");
+    for (const source of [evidence.desktopSrc, evidence.mobileSrc].filter(Boolean)) {
+      const existingContext = imageContexts.get(source);
+      if (existingContext && existingContext !== sharingContext)
+        errors.push(`${evidence.id} reuses ${source} for a different capture context`);
+      else imageContexts.set(source, sharingContext);
+    }
 
     const hotspotNumbers = new Set<number>();
     const hotspotIds = new Set<string>();
@@ -330,17 +411,11 @@ export function validateKnowledgeContent(
         errors.push(
           `${evidence.id}:${hotspot.id} hotspot coordinates must be between 0 and 1`,
         );
-      if (
-        hotspot.mobileX !== undefined &&
-        (hotspot.mobileX < 0 || hotspot.mobileX > 1)
-      )
+      if (hotspot.mobileX < 0 || hotspot.mobileX > 1)
         errors.push(
           `${evidence.id}:${hotspot.id} mobile hotspot coordinates must be between 0 and 1`,
         );
-      if (
-        hotspot.mobileY !== undefined &&
-        (hotspot.mobileY < 0 || hotspot.mobileY > 1)
-      )
+      if (hotspot.mobileY < 0 || hotspot.mobileY > 1)
         errors.push(
           `${evidence.id}:${hotspot.id} mobile hotspot coordinates must be between 0 and 1`,
         );
@@ -355,11 +430,6 @@ export function validateKnowledgeContent(
         errors.push(`${article.id} has invalid route ${route}`);
     for (const section of article.sections)
       for (const step of section.steps ?? []) {
-        // KnowledgeStep has no informational discriminator, so each step is executable.
-        if (enforceEvidence && !step.evidenceId)
-          errors.push(
-            `${article.id}:${step.title} requires screenshot evidence`,
-          );
         for (const roleId of step.ownerRoleIds)
           if (!roleIds.has(roleId))
             errors.push(
@@ -394,7 +464,7 @@ export function validateKnowledgeContent(
         );
       if (
         enforceEvidence &&
-        ["start", "action", "handoff"].includes(item.type) &&
+        EXECUTABLE_NODE_TYPES.has(item.type) &&
         item.ownerRoleIds.some(
           (roleId) =>
             content.roles.find((role) => role.id === roleId)?.availability ===
@@ -550,6 +620,109 @@ export function validateKnowledgeContent(
         errors.push(`${flow.id}:${item.id} cannot reach a terminal outcome`);
   }
 
+  return errors;
+}
+
+interface EvidenceArtifactValidationOptions {
+  publicRoot: string;
+  repositoryRoot: string;
+}
+
+function decodePng(file: string): { width: number; height: number } {
+  const bytes = readFileSync(file);
+  const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  if (bytes.length < 33 || !bytes.subarray(0, 8).equals(signature))
+    throw new Error("invalid PNG signature");
+
+  let offset = 8;
+  let width = 0;
+  let height = 0;
+  let bitDepth = 0;
+  let colorType = -1;
+  let interlace = -1;
+  const imageData: Buffer[] = [];
+  let ended = false;
+  while (offset + 12 <= bytes.length) {
+    const length = bytes.readUInt32BE(offset);
+    const type = bytes.toString("ascii", offset + 4, offset + 8);
+    const dataStart = offset + 8;
+    const dataEnd = dataStart + length;
+    if (dataEnd + 4 > bytes.length) throw new Error("truncated PNG chunk");
+    const data = bytes.subarray(dataStart, dataEnd);
+    if (type === "IHDR") {
+      if (length !== 13) throw new Error("invalid PNG header");
+      width = data.readUInt32BE(0);
+      height = data.readUInt32BE(4);
+      bitDepth = data[8]!;
+      colorType = data[9]!;
+      interlace = data[12]!;
+    } else if (type === "IDAT") imageData.push(data);
+    else if (type === "IEND") {
+      ended = true;
+      break;
+    }
+    offset = dataEnd + 4;
+  }
+  if (!width || !height || !imageData.length || !ended || interlace !== 0)
+    throw new Error("incomplete or unsupported PNG");
+  const channels = new Map([
+    [0, 1],
+    [2, 3],
+    [3, 1],
+    [4, 2],
+    [6, 4],
+  ]).get(colorType);
+  if (!channels) throw new Error("unsupported PNG color type");
+  const decoded = inflateSync(Buffer.concat(imageData));
+  const rowBytes = Math.ceil((width * channels * bitDepth) / 8) + 1;
+  if (decoded.length !== rowBytes * height) throw new Error("invalid PNG raster");
+  return { width, height };
+}
+
+export function validateKnowledgeEvidenceArtifacts(
+  content: KnowledgeContent,
+  { publicRoot, repositoryRoot }: EvidenceArtifactValidationOptions,
+): string[] {
+  const errors: string[] = [];
+  const commits = new Set(content.evidence.map((evidence) => evidence.appCommit));
+  for (const commit of commits) {
+    if (!GIT_COMMIT.test(commit)) continue;
+    try {
+      execFileSync("git", ["cat-file", "-e", `${commit}^{commit}`], {
+        cwd: repositoryRoot,
+        stdio: "ignore",
+      });
+    } catch {
+      errors.push(`evidence app commit ${commit} is not valid in this repository`);
+    }
+  }
+
+  for (const evidence of content.evidence) {
+    for (const [kind, source, expected] of [
+      ["desktop", evidence.desktopSrc, { width: 1440, height: 900 }],
+      ["mobile", evidence.mobileSrc, { width: 390, height: 844 }],
+    ] as const) {
+      const root = path.resolve(publicRoot);
+      const file = path.resolve(root, `.${source}`);
+      if (!file.startsWith(`${root}${path.sep}`)) {
+        errors.push(`${evidence.id} has an unsafe ${kind} screenshot path`);
+        continue;
+      }
+      try {
+        const dimensions = decodePng(file);
+        if (
+          dimensions.width !== expected.width ||
+          dimensions.height !== expected.height
+        )
+          errors.push(
+            `${evidence.id} ${kind} screenshot must be ${expected.width}x${expected.height}, received ${dimensions.width}x${dimensions.height}`,
+          );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        errors.push(`${evidence.id} cannot decode ${kind} screenshot: ${message}`);
+      }
+    }
+  }
   return errors;
 }
 

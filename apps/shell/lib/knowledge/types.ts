@@ -179,8 +179,8 @@ export interface KnowledgeHotspot {
   number: number;
   x: number;
   y: number;
-  mobileX?: number;
-  mobileY?: number;
+  mobileX: number;
+  mobileY: number;
   label: string;
   instruction: string;
 }
@@ -189,11 +189,13 @@ export interface KnowledgeEvidence {
   id: string;
   nodeId: string;
   desktopSrc: string;
-  mobileSrc?: string;
+  mobileSrc: string;
   route: string;
   roleId: string;
+  state: string;
   capturedAt: string;
   reviewedAt: string;
+  appCommit: string;
   provenance: "production" | "documentation";
   alt: string;
   expectedLandmark: string;

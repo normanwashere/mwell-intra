@@ -85,7 +85,9 @@ const flow = (
   startNodeId: nodes[0]!.id,
   nodes: nodes.map((item) => ({
     ...item,
-    evidenceId: `ev-${item.id}`,
+    ...(["start", "action", "handoff"].includes(item.type)
+      ? { evidenceId: `ev-${item.id}` }
+      : {}),
   })) as KnowledgeFlowNode[],
   edges,
 });

@@ -1,10 +1,17 @@
 import { describe, expect, it } from "vitest";
+import path from "node:path";
 import type {
   KnowledgeContent,
   KnowledgeDecisionNode,
   KnowledgeTerminalNode,
 } from "./types";
-import { validateKnowledgeContent } from "./validate";
+import { KNOWLEDGE_CONTENT } from "./content";
+import {
+  validateKnowledgeContent,
+  validateKnowledgeEvidenceArtifacts,
+} from "./validate";
+
+const APP_COMMIT = "11e1fec866c6537ed340111550b9a1ce341a0a58";
 
 const valid = (): KnowledgeContent => ({
   roles: [
@@ -70,10 +77,13 @@ const valid = (): KnowledgeContent => ({
       id: "ev-start",
       nodeId: "start",
       desktopSrc: "/knowledge/screenshots/start.png",
+      mobileSrc: "/knowledge/screenshots/start-mobile.png",
       route: "/",
       roleId: "owner",
+      state: "Authenticated owner can open the governed record.",
       capturedAt: "2026-07-11",
       reviewedAt: "2026-07-11",
+      appCommit: APP_COMMIT,
       provenance: "production",
       alt: "Start screen",
       expectedLandmark: "Start",
@@ -84,6 +94,8 @@ const valid = (): KnowledgeContent => ({
           number: 1,
           x: 0.5,
           y: 0.5,
+          mobileX: 0.5,
+          mobileY: 0.5,
           label: "Open",
           instruction: "Open the record.",
         },
@@ -281,7 +293,7 @@ describe("validateKnowledgeContent", () => {
     expect(validateKnowledgeContent(valid())).toEqual([]);
   });
 
-  it("keeps strict evidence and decision governance as the default while allowing staged aggregate validation", () => {
+  it("keeps strict principal-flow evidence and decision governance as the default while allowing staged validation", () => {
     const content = valid();
     const flow = content.flows[0]!;
     const decision = flow.nodes[0]! as KnowledgeDecisionNode;
@@ -323,7 +335,6 @@ describe("validateKnowledgeContent", () => {
 
     expect(validateKnowledgeContent(content)).toEqual(
       expect.arrayContaining([
-        "article:Complete action requires screenshot evidence",
         "flow flow:start has no authority",
         "flow flow:start has no policy basis",
         "flow flow:yes has invalid terminal outcome",
@@ -337,7 +348,7 @@ describe("validateKnowledgeContent", () => {
     ).toEqual([]);
   });
 
-  it("requires screenshot evidence for every executable article step", () => {
+  it("does not treat generated article control descriptions as executable flow steps", () => {
     const content = valid();
     content.articles.push({
       id: "article",
@@ -369,11 +380,6 @@ describe("validateKnowledgeContent", () => {
       reviewedAt: "2026-07-11",
     });
 
-    expect(validateKnowledgeContent(content)).toContain(
-      "article:Complete action requires screenshot evidence",
-    );
-
-    content.articles[0]!.sections[0]!.steps![0]!.evidenceId = "ev-start";
     expect(validateKnowledgeContent(content)).toEqual([]);
   });
 
@@ -556,5 +562,59 @@ describe("validateKnowledgeContent", () => {
     expect(validateKnowledgeContent(content)).toContain(
       "ev-start:open mobile hotspot coordinates must be between 0 and 1",
     );
+  });
+
+  it("requires a reviewed mobile pair, capture state, and valid app commit provenance", () => {
+    const content = valid();
+    const evidence = content.evidence[0]! as typeof content.evidence[number] & {
+      appCommit?: string;
+      state?: string;
+    };
+    delete (evidence as { mobileSrc?: string }).mobileSrc;
+    evidence.capturedAt = "2026/07/13";
+    evidence.reviewedAt = "";
+    evidence.appCommit = "working-tree";
+    evidence.state = "";
+    evidence.sensitiveDataReviewed = false;
+
+    expect(validateKnowledgeContent(content)).toEqual(
+      expect.arrayContaining([
+        "ev-start requires a mobile screenshot",
+        "ev-start has invalid evidence date",
+        "ev-start has invalid app commit provenance",
+        "ev-start has no deterministic capture state",
+        "ev-start has not completed sensitive-data review",
+      ]),
+    );
+  });
+
+  it("requires evidence role and route to match its executable flow node", () => {
+    const content = valid();
+    content.roles.push({
+      ...content.roles[0]!,
+      id: "other",
+      authority: {
+        ...content.roles[0]!.authority,
+        accessibleRoutes: ["/other"],
+      },
+    });
+    content.evidence[0]!.roleId = "other";
+    content.evidence[0]!.route = "/unowned";
+
+    expect(validateKnowledgeContent(content)).toEqual(
+      expect.arrayContaining([
+        "ev-start role other does not own flow:start",
+        "ev-start route /unowned is not accessible to role other",
+      ]),
+    );
+  });
+
+  it("validates every real evidence file, decoded viewport, and provenance commit", () => {
+    expect(
+      validateKnowledgeEvidenceArtifacts(KNOWLEDGE_CONTENT, {
+        publicRoot: path.resolve(process.cwd(), "public"),
+        repositoryRoot: path.resolve(process.cwd(), "../.."),
+      }),
+    ).toEqual([]);
   });
 });

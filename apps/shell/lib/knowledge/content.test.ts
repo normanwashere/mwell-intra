@@ -153,13 +153,7 @@ describe("Knowledge Base content", () => {
   it("covers every production persona with valid articles and flows", () => {
     expect(KNOWLEDGE_CONTENT.roles).toHaveLength(20);
     expect(validateKnowledgeBase(KNOWLEDGE_CONTENT)).toEqual([]);
-    // Tasks 4 and 8 restore strict aggregate validation after workflows and
-    // application evidence have been migrated to the Task 1 contracts.
-    expect(
-      validateKnowledgeContent(KNOWLEDGE_CONTENT, {
-        enforceEvidence: false,
-      }),
-    ).toEqual([]);
+    expect(validateKnowledgeContent(KNOWLEDGE_CONTENT)).toEqual([]);
   });
 
   it("resolves task language and common aliases", () => {
@@ -297,12 +291,14 @@ describe("Knowledge Base content", () => {
     ).toBe(true);
   });
 
-  it("provides reviewed screen evidence for every workflow step", () => {
+  it("provides reviewed screen evidence for every executable workflow step", () => {
     const evidenceIds = new Set(
       KNOWLEDGE_CONTENT.evidence.map((item) => item.id),
     );
     for (const flow of KNOWLEDGE_CONTENT.flows)
-      for (const node of flow.nodes) {
+      for (const node of flow.nodes.filter((item) =>
+        ["start", "action", "handoff"].includes(item.type),
+      )) {
         expect(node.evidenceId, `${flow.id}:${node.id}`).toBeTruthy();
         expect(evidenceIds.has(node.evidenceId!), `${flow.id}:${node.id}`).toBe(
           true,
