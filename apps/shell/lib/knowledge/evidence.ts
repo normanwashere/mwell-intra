@@ -2,7 +2,7 @@ import { KNOWLEDGE_FLOWS } from "./workflows";
 import type { KnowledgeEvidence, KnowledgeFlowNode } from "./types";
 
 const reviewDate = "2026-07-13";
-const appCommit = "6837e0f9e053afd22ee87894b32bab0b236542fa";
+const appCommit = "229a42ddc08c1672451c806b27baba1e61cc20e8";
 const executableTypes = new Set(["start", "action", "handoff"]);
 
 interface EvidenceScenario {
@@ -36,10 +36,10 @@ export const KNOWLEDGE_EVIDENCE_SCENARIOS: Record<string, EvidenceScenario> = {
     landmark: "warehouse:business_unit for ops@mwell.demo",
     label: "Grant scoped warehouse access",
     instruction: "Select only the approved scoped role for Marco Reyes, then verify the resulting access with a new session.",
-    x: 0.025,
-    y: 0.1622,
-    mobileX: 0.5,
-    mobileY: 0.9621,
+    x: 0.9597,
+    y: 0.9289,
+    mobileX: 0.959,
+    mobileY: 0.5,
   },
   "p2p-start": {
     route: "/procurement/requests/new",

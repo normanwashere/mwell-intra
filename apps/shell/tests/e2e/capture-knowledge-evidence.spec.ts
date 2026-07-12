@@ -233,8 +233,7 @@ async function attachInspectionEvidence(page: Page): Promise<void> {
 }
 
 async function manageMarcoReyes(page: Page): Promise<Locator> {
-  const row = page.getByRole("row").filter({ hasText: "ops@mwell.demo" });
-  const manage = row.getByRole("button", { name: "Manage", exact: true });
+  const manage = page.getByRole("button", { name: "Manage", exact: true }).nth(1);
   await expect(manage).toBeVisible();
   return manage;
 }
@@ -444,6 +443,18 @@ async function frameTarget(
   if (nodeId === "doa-start" && viewport.width < 640)
     await target.evaluate((element) => {
       document.body.style.zoom = "0.65";
+    });
+  if (nodeId === "access-fix" && viewport.width < 640)
+    await target.evaluate((element) => {
+      let parent = element.parentElement;
+      while (parent) {
+        const overflow = getComputedStyle(parent).overflowY;
+        if (overflow === "auto" || overflow === "scroll") {
+          parent.style.paddingBottom = "18rem";
+          break;
+        }
+        parent = parent.parentElement;
+      }
     });
   if (contextAnchor) {
     await contextAnchor.scrollIntoViewIfNeeded();
