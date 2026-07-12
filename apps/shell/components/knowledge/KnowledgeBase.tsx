@@ -129,21 +129,29 @@ export function KnowledgeBase() {
     const key = `knowledge-scroll:${window.location.pathname}${window.location.search}`;
     const restore = sessionStorage.getItem(key);
     const target = restore === null ? 0 : Number(restore);
+    const previousScrollRestoration = window.history.scrollRestoration;
+    window.history.scrollRestoration = "manual";
     let frame = 0;
     let animationFrame = 0;
+    let restorationComplete = false;
     const restorePosition = () => {
       window.scrollTo({ top: target });
       frame += 1;
       if (Math.abs(window.scrollY - target) > 2 && frame < 60)
         animationFrame = requestAnimationFrame(restorePosition);
+      else restorationComplete = true;
     };
     animationFrame = requestAnimationFrame(restorePosition);
-    const save = () => sessionStorage.setItem(key, String(window.scrollY));
+    const save = () => {
+      if (restorationComplete)
+        sessionStorage.setItem(key, String(window.scrollY));
+    };
     window.addEventListener("scroll", save, { passive: true });
     window.addEventListener("pagehide", save);
     return () => {
       cancelAnimationFrame(animationFrame);
       save();
+      window.history.scrollRestoration = previousScrollRestoration;
       window.removeEventListener("scroll", save);
       window.removeEventListener("pagehide", save);
     };

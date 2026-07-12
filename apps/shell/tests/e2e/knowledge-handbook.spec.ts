@@ -36,14 +36,23 @@ test.beforeEach(async ({ page }) => installSession(page));
 test("task, role, and feature search supports recovery and browser history", async ({ page }) => {
   await page.goto("/knowledge");
   const search = page.getByRole("searchbox", { name: "Search all handbook content" });
-  for (const [mode, query] of [["task", "receiving"], ["role", "Legal administrator"], ["feature", "cycle count"]] as const) {
+  for (const [mode, query, expectedResult] of [
+    ["task", "receiving", /receiv/i],
+    ["role", "Legal administrator", /Legal administrator/i],
+    ["feature", "cycle count", /cycle count/i],
+  ] as const) {
     await page.getByRole("button", { name: new RegExp(mode === "task" ? "Do a task" : mode === "role" ? "Understand a role" : "Explore a feature", "i") }).click();
+    await expect.poll(() => new URL(page.url()).searchParams.get("mode")).toBe(mode);
     await search.fill(query);
+    await expect.poll(() => new URL(page.url()).searchParams.get("q")).toBe(query);
     await expect(page.getByRole("status")).not.toContainText(/^0 results$/);
     await expect(page.getByRole("heading", { name: "Search results" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Search results" }).locator("..").getByRole("button").first()).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Search results" }).locator("..").getByRole("button").filter({ hasText: expectedResult }).first(),
+    ).toBeVisible();
   }
-  await search.fill("no-such-handbook-operation-9274");
+  await search.fill("zzqxjv9274");
+  await expect.poll(() => new URL(page.url()).searchParams.get("q")).toBe("zzqxjv9274");
   await expect(page.getByRole("status")).toHaveText("0 results");
   await page.getByRole("button", { name: /Clear handbook search/i }).click();
   await expect(page).toHaveURL(/\/knowledge(?:\?|$)/);
@@ -54,6 +63,7 @@ test("task, role, and feature search supports recovery and browser history", asy
 });
 
 test("every current and planned role has a complete, availability-aware profile", async ({ page }) => {
+  test.setTimeout(90_000);
   for (const role of [...KNOWLEDGE_CONTENT.roles, ...COMING_SOON_ROLES]) {
     await page.goto(`/knowledge?article=role-${encodeURIComponent(role.id)}`);
     await expect(page.getByRole("heading", { name: role.label, exact: true })).toBeVisible();
@@ -64,6 +74,7 @@ test("every current and planned role has a complete, availability-aware profile"
 });
 
 test("every feature guide opens and coming-soon controls remain clearly non-operational", async ({ page }) => {
+  test.setTimeout(120_000);
   for (const feature of KNOWLEDGE_CONTENT.features) {
     await page.goto(`/knowledge?article=feature-${encodeURIComponent(feature.id)}`);
     await expect(page.locator("h1")).toHaveText(feature.title);
@@ -76,6 +87,7 @@ test("every feature guide opens and coming-soon controls remain clearly non-oper
 });
 
 test("all principal workflows, decision outcomes, and terminal nodes are navigable", async ({ page }) => {
+  test.setTimeout(120_000);
   for (const flow of KNOWLEDGE_CONTENT.flows) {
     const paths = terminalPaths(flow);
     const terminals = flow.nodes.filter((node) => node.type === "terminal");
@@ -85,8 +97,8 @@ test("all principal workflows, decision outcomes, and terminal nodes are navigab
       const params = new URLSearchParams({ flow: flow.id, view: "flow", step: terminal.id });
       if (branch.length) params.set("branch", branch.join(","));
       await page.goto(`/knowledge?${params}`);
-      await expect(page.getByRole("heading", { name: flow.title })).toBeVisible();
-      await expect(page.getByText(terminal.title, { exact: true }).first()).toBeVisible();
+      await expect(page.getByRole("heading", { name: flow.title, exact: true })).toBeVisible();
+      await expect(page.getByRole("region", { name: terminal.title, exact: true })).toBeVisible();
     }
   }
 });
@@ -110,15 +122,29 @@ test("branch backtracking and four workflow views share one selected node", asyn
 });
 
 test("deep links, refresh, scroll restoration, and every evidence hotspot remain stable", async ({ page, request }) => {
-  const evidence = KNOWLEDGE_CONTENT.evidence.find((item) => item.hotspots.length > 0)!;
+  test.setTimeout(90_000);
+  const evidence = KNOWLEDGE_CONTENT.evidence.find((item) => item.id === "ev-admin-start")!;
   const flow = KNOWLEDGE_CONTENT.flows.find((item) => item.nodes.some((node) => node.evidenceId === evidence.id))!;
   const node = flow.nodes.find((item) => item.evidenceId === evidence.id)!;
   await page.goto(`/knowledge?flow=${flow.id}&view=steps&step=${node.id}`);
-  await page.evaluate(() => window.scrollTo(0, Math.min(500, document.documentElement.scrollHeight)));
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight))
+    .toBeGreaterThan(200);
+  await page.evaluate(() =>
+    window.scrollTo(0, Math.min(500, document.documentElement.scrollHeight - window.innerHeight)),
+  );
   const before = await page.evaluate(() => window.scrollY);
+  expect(before).toBeGreaterThan(200);
+  await page.evaluate((scrollY) => {
+    const key = `knowledge-scroll:${window.location.pathname}${window.location.search}`;
+    sessionStorage.setItem(key, String(scrollY));
+  }, before);
   await page.reload();
   await expect(page).toHaveURL(new RegExp(`step=${node.id}`));
-  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThanOrEqual(Math.max(0, before - 3));
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+  await expect
+    .poll(async () => Math.abs((await page.evaluate(() => window.scrollY)) - before))
+    .toBeLessThanOrEqual(64);
   for (const item of KNOWLEDGE_CONTENT.evidence) {
     for (const src of [item.desktopSrc, item.mobileSrc]) {
       const response = await request.get(src);

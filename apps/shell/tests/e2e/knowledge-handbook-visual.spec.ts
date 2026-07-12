@@ -13,7 +13,7 @@ const PAGES = [
   ["flow", `/knowledge?flow=${KNOWLEDGE_CONTENT.flows[0]!.id}&view=flow`],
   ["decision", `/knowledge?flow=${KNOWLEDGE_CONTENT.flows[0]!.id}&view=steps&step=${KNOWLEDGE_CONTENT.flows[0]!.nodes.find((n) => n.type === "decision")!.id}`],
   ["exception", `/knowledge?flow=${KNOWLEDGE_CONTENT.flows[0]!.id}&view=exceptions`],
-  ["admin", "/knowledge?article=admin-doa"], ["no-result", "/knowledge?q=no-such-operation-9274"],
+  ["admin", "/knowledge?article=admin-doa"], ["no-result", "/knowledge?q=zzqxjv9274"],
   ["coming-soon", "/knowledge?type=future"],
 ] as const;
 
@@ -65,7 +65,10 @@ for (const [name, route] of PAGES) {
   test(`${name} passes responsive, interaction, pixel, and accessibility gates`, async ({ page }, testInfo) => {
     const expected = EXPECTED_VIEWPORTS[testInfo.project.name]; expect(expected, `unapproved project ${testInfo.project.name}`).toBeTruthy();
     expect(page.viewportSize()).toEqual({ width: expected![0], height: expected![1] });
-    await page.goto(route); await expect(page.getByRole("main")).toBeVisible(); await expect(page.locator("body")).not.toContainText("Restoring your session");
+    await page.goto(route);
+    await expect(page.locator("body")).not.toContainText("Restoring your session");
+    await expect(page.locator("main")).toHaveCount(1);
+    await expect(page.getByRole("main")).toBeVisible();
     await assertVisualIntegrity(page);
   });
 }
