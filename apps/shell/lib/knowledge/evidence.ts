@@ -7,6 +7,7 @@ const executableTypes = new Set(["start", "action", "handoff"]);
 
 interface EvidenceScenario {
   route: string;
+  roleId?: string;
   state: string;
   landmark: string;
   label: string;
@@ -31,10 +32,10 @@ export const KNOWLEDGE_EVIDENCE_SCENARIOS: Record<string, EvidenceScenario> = {
   },
   "access-fix": {
     route: "/admin/users",
-    state: "The platform administrator has opened the seeded scoped-role access matrix for least-privilege review.",
-    landmark: "Admin — Users & Roles",
-    label: "Open users and roles",
-    instruction: "Open Users & Roles and review the account's scoped grants before applying the minimum approved role.",
+    state: "The platform administrator has opened Marco Reyes's scoped-role sheet to apply the minimum approved warehouse grant.",
+    landmark: "warehouse:business_unit for ops@mwell.demo",
+    label: "Grant scoped warehouse access",
+    instruction: "Select only the approved scoped role for Marco Reyes, then verify the resulting access with a new session.",
     x: 0.025,
     y: 0.1622,
     mobileX: 0.5,
@@ -350,21 +351,22 @@ export const KNOWLEDGE_EVIDENCE_SCENARIOS: Record<string, EvidenceScenario> = {
   },
   "admin-start": {
     route: "/admin/users",
-    state: "The platform administrator is reviewing the governed access matrix and seeded request context.",
-    landmark: "Admin — Users & Roles",
-    label: "Open administration request",
-    instruction: "Open Users & Roles and match the request owner, scope, and approval evidence to the access matrix.",
+    state: "The platform administrator is reviewing the seeded user register before opening a named access request.",
+    landmark: "Manage Marco Reyes",
+    label: "Manage named user",
+    instruction: "Open Marco Reyes's record and compare the requested scope with current assignments before making a change.",
     x: 0.025,
     y: 0.1622,
     mobileX: 0.5,
     mobileY: 0.9621,
   },
   "admin-activate": {
-    route: "/admin/doa",
-    state: "The platform administrator is reviewing a deterministic approved DOA draft at the controlled activation command.",
-    landmark: "Activate",
-    label: "Activate approved configuration",
-    instruction: "Activate the approved configuration so the prior matrix is superseded with audit history retained.",
+    route: "/warehouse/operation-routes",
+    roleId: "warehouse_admin",
+    state: "The warehouse administrator has enabled the seeded controlled alternate receiving route and is ready to save it.",
+    landmark: "Save route",
+    label: "Activate warehouse operation route",
+    instruction: "After deliberately enabling Active, save the validated warehouse route so it becomes available for governed receiving.",
     x: 0.2335,
     y: 0.4027,
     mobileX: 0.5,
@@ -463,7 +465,7 @@ function buildEvidence(node: KnowledgeFlowNode): KnowledgeEvidence {
     desktopSrc: `${prefix}-desktop.png`,
     mobileSrc: `${prefix}-mobile.png`,
     route: scenario.route,
-    roleId: node.ownerRoleIds[0]!,
+    roleId: scenario.roleId ?? node.ownerRoleIds[0]!,
     state: scenario.state,
     capturedAt: reviewDate,
     reviewedAt: reviewDate,

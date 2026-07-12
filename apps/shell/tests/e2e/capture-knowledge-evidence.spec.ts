@@ -232,17 +232,11 @@ async function attachInspectionEvidence(page: Page): Promise<void> {
   await expect(page.getByRole("list", { name: "Captured evidence" })).toBeVisible();
 }
 
-async function usersAndRolesTarget(page: Page): Promise<Locator> {
-  if ((page.viewportSize()?.width ?? 0) < 640)
-    return page.getByRole("link", { name: "Users", exact: true });
-  return page.locator('a[href="/admin/users"]:visible').first();
-}
-
-async function openAccountContext(page: Page): Promise<void> {
-  const account = page.getByRole("button", { name: "Account menu", exact: true });
-  await expect(account).toBeVisible();
-  await account.click();
-  await expect(page.getByRole("menuitem", { name: "Manage users", exact: true })).toBeVisible();
+async function manageMarcoReyes(page: Page): Promise<Locator> {
+  const row = page.getByRole("row").filter({ hasText: "ops@mwell.demo" });
+  const manage = row.getByRole("button", { name: "Manage", exact: true });
+  await expect(manage).toBeVisible();
+  return manage;
 }
 
 async function targetFor(page: Page, nodeId: string): Promise<Locator> {
@@ -251,9 +245,10 @@ async function targetFor(page: Page, nodeId: string): Promise<Locator> {
     case "recover-retry":
       return page.getByRole("button", { name: "Sign in", exact: true });
     case "access-fix": {
-      await openAccountContext(page);
-      const target = await usersAndRolesTarget(page);
-      return target;
+      const manage = await manageMarcoReyes(page);
+      await manage.click();
+      await expect(page.getByRole("dialog", { name: "Marco Reyes" })).toBeVisible();
+      return page.getByLabel("warehouse:business_unit for ops@mwell.demo", { exact: true });
     }
     case "p2p-start":
     case "vendor-start":
@@ -382,10 +377,17 @@ async function targetFor(page: Page, nodeId: string): Promise<Locator> {
       return decided;
     }
     case "admin-start":
-      return usersAndRolesTarget(page);
-    case "admin-activate":
-      await openAccountContext(page);
-      return page.getByRole("button", { name: "Activate", exact: true });
+      return manageMarcoReyes(page);
+    case "admin-activate": {
+      const alternate = page.getByRole("listitem").filter({ hasText: "Inactive" });
+      await alternate.getByRole("button", { name: "Edit route" }).click();
+      await expect(page.getByRole("dialog", { name: "Edit operation route" })).toBeVisible();
+      const active = page.getByLabel("Active", { exact: true });
+      await expect(active).toBeEnabled();
+      await active.check();
+      await expect(active).toBeChecked();
+      return page.getByRole("button", { name: "Save route" });
+    }
     case "doa-activate":
       return page.getByRole("button", { name: "Activate", exact: true });
     case "allocation-start":
@@ -588,9 +590,12 @@ test("captures reviewed desktop and mobile principal-flow evidence", async ({ br
         {
           key: SESSION_KEY,
           scenarioKey: SCENARIO_KEY,
-          scenario: ["admin-activate", "doa-activate"].includes(evidence.nodeId)
-            ? "doa-activation"
-            : null,
+          scenario:
+            evidence.nodeId === "doa-activate"
+              ? "doa-activation"
+              : ["access-fix", "admin-start"].includes(evidence.nodeId)
+                ? "admin-role-correction"
+                : null,
           value: evidence.route === "/login" ? null : session,
         },
       );
