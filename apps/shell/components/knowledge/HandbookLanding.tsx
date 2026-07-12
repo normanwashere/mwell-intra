@@ -478,7 +478,12 @@ function ResultSection({
                   </Badge>
                 </span>
                 {result.module && (
-                  <span className="text-xs text-faint">{result.module}</span>
+                  <span
+                    className="text-xs text-faint"
+                    aria-hidden={result.type === "roadmap" ? "true" : undefined}
+                  >
+                    {result.module}
+                  </span>
                 )}
               </span>
               <span className="mt-3 block font-semibold text-ink">

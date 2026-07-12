@@ -19,6 +19,15 @@ vi.mock("@intra/ui", () => ({
   ),
   EmptyState: () => null,
 }));
+
+const plainText = (markup: string) =>
+  markup
+    .replace(/<[^>]+>/g, "")
+    .replaceAll("&#x27;", "'")
+    .replaceAll("&quot;", '"')
+    .replaceAll("&amp;", "&")
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">");
 import { FeatureGuide } from "@shell/components/knowledge/FeatureGuide";
 import { KnowledgeRoleGuide } from "@shell/components/knowledge/KnowledgeRoleGuide";
 import {
@@ -26,6 +35,7 @@ import {
   resolveKnowledgeGuide,
 } from "@shell/components/knowledge/KnowledgeBase";
 import { KNOWLEDGE_CONTENT } from "./content";
+import { ROLE_ROUTE_PARENT_PATHS } from "./roles";
 import { searchKnowledge } from "./search";
 import type {
   KnowledgeArticle,
@@ -40,6 +50,23 @@ const liveRole: KnowledgeRole = {
   module: "admin",
   availability: "live",
   purpose: "Own governed production release readiness and final handoff.",
+  dailyTasks: [
+    "Review the release evidence queue.",
+    "Record the approved or rejected disposition.",
+  ],
+  responsibilityStages: [
+    {
+      title: "Evidence review",
+      responsibility: "Confirm the release pack is current and complete.",
+      outcome: "A disposition-ready evidence pack is recorded.",
+    },
+    {
+      title: "Independent decision",
+      responsibility:
+        "Approve, reject, or return the release within authority.",
+      outcome: "The decision has actor, reason, and time.",
+    },
+  ],
   authority: {
     capabilities: ["review_release", "record_release"],
     accessibleRoutes: ["/admin/releases", "/admin/audit"],
@@ -98,6 +125,8 @@ const feature: KnowledgeFeature = {
   roleIds: [liveRole.id],
   capabilityIds: ["review_release"],
   purpose: "Review one governed release before production handoff.",
+  policyBasis: ["Release policy section 4 and segregation of duties."],
+  relatedFlowIds: ["release-flow"],
   controls: [
     {
       name: "Approve release",
@@ -168,7 +197,53 @@ const relatedFlow: KnowledgeFlow = {
   edges: [{ from: "review", to: "complete", label: "Complete" }],
 };
 
+const unrelatedFlow: KnowledgeFlow = {
+  ...relatedFlow,
+  id: "unrelated-flow",
+  title: "Unrelated workflow",
+  nodes: [
+    {
+      id: "unrelated-review",
+      type: "decision",
+      title: "Unrelated decision",
+      ownerRoleIds: [liveRole.id],
+      body: "Review unrelated evidence.",
+      authorityRoleId: liveRole.id,
+      policyBasis: "Unrelated policy.",
+    },
+  ],
+  startNodeId: "unrelated-review",
+  edges: [],
+};
+
 describe("KnowledgeRoleGuide", () => {
+  it("never executes parameterized routes and links only an explicitly mapped parent", () => {
+    const role = KNOWLEDGE_GUIDE_CONTENT.roles.find(
+      (item) =>
+        item.availability === "live" &&
+        item.authority.accessibleRoutes.includes("/warehouse/inventory/:id"),
+    )!;
+    const markup = renderToStaticMarkup(
+      <KnowledgeRoleGuide
+        role={role}
+        rolesById={
+          new Map(KNOWLEDGE_GUIDE_CONTENT.roles.map((item) => [item.id, item]))
+        }
+        relatedFeatures={[]}
+        relatedArticles={[]}
+        relatedFlows={[]}
+        onBack={() => undefined}
+        onOpenArticle={() => undefined}
+        onOpenFlow={() => undefined}
+      />,
+    );
+
+    expect(markup).toContain("/warehouse/inventory/:id");
+    expect(markup).not.toContain('href="/warehouse/inventory/:id"');
+    expect(markup).toContain('href="/warehouse/inventory"');
+    expect(markup).toContain("Open inventory list");
+  });
+
   it("renders exact live authority, pages, handoffs, tasks, escalation, and related content semantically", () => {
     const markup = renderToStaticMarkup(
       <KnowledgeRoleGuide
@@ -197,9 +272,15 @@ describe("KnowledgeRoleGuide", () => {
     );
     expect(markup).toContain("Change author");
     expect(markup).toContain("Platform administrator");
-    expect(markup).toContain("Is release evidence complete?");
     expect(markup).toContain("Escalate failed controls");
     expect(markup).toContain("Run a governed release");
+    for (const task of liveRole.dailyTasks) expect(markup).toContain(task);
+    for (const stage of liveRole.responsibilityStages) {
+      expect(markup).toContain(stage.title);
+      expect(markup).toContain(stage.responsibility);
+      expect(markup).toContain(stage.outcome);
+    }
+    expect(markup).not.toContain("Receive and verify");
     expect(markup).toMatch(/<h2[^>]*>Accessible pages<\/h2>/);
     expect(markup).toMatch(/<h2[^>]*>Capability matrix<\/h2>/);
     expect(markup).toMatch(/<h2[^>]*>Can do and cannot do<\/h2>/);
@@ -250,7 +331,7 @@ describe("FeatureGuide", () => {
         feature={feature}
         rolesById={rolesById}
         relatedArticles={[relatedArticle]}
-        relatedFlows={[relatedFlow]}
+        relatedFlows={[relatedFlow, unrelatedFlow]}
         onBack={() => undefined}
         onOpenArticle={() => undefined}
         onOpenFlow={() => undefined}
@@ -280,6 +361,8 @@ describe("FeatureGuide", () => {
       "Release policy section 4 and segregation of duties.",
     );
     expect(markup).toContain("Release to production");
+    expect(markup).not.toContain("Unrelated workflow");
+    expect(markup).not.toContain("Unrelated policy.");
     expect(markup).toMatch(/<h2[^>]*>Controls<\/h2>/);
     expect(markup).toMatch(/<h2[^>]*>Fields<\/h2>/);
     expect(markup).toMatch(/<h2[^>]*>Reads and writes<\/h2>/);
@@ -359,5 +442,79 @@ describe("guide search integration and accessibility", () => {
     expect(markup).not.toMatch(/<section(?![^>]*aria-labelledby)/);
     expect(markup).toContain("<ul");
     expect(markup).toContain("min-h-11");
+  });
+});
+
+describe("production guide rendering contracts", () => {
+  const productionRolesById = new Map(
+    KNOWLEDGE_GUIDE_CONTENT.roles.map((role) => [role.id, role]),
+  );
+
+  it("renders every task and responsibility stage for all 26 roles", () => {
+    for (const role of KNOWLEDGE_GUIDE_CONTENT.roles) {
+      const markup = renderToStaticMarkup(
+        <KnowledgeRoleGuide
+          role={role}
+          rolesById={productionRolesById}
+          relatedFeatures={[]}
+          relatedArticles={[]}
+          relatedFlows={[]}
+          onBack={() => undefined}
+          onOpenArticle={() => undefined}
+          onOpenFlow={() => undefined}
+        />,
+      );
+      const text = plainText(markup);
+
+      for (const task of role.dailyTasks) expect(text).toContain(task);
+      for (const stage of role.responsibilityStages) {
+        expect(text).toContain(stage.title);
+        expect(text).toContain(stage.responsibility);
+        expect(text).toContain(stage.outcome);
+      }
+      for (const route of role.authority.accessibleRoutes) {
+        if (!route.includes(":")) continue;
+        expect(markup).not.toContain(`href="${route}"`);
+        const parent = ROLE_ROUTE_PARENT_PATHS[route];
+        if (parent) expect(markup).toContain(`href="${parent}"`);
+      }
+    }
+  });
+
+  it("renders exact policies, controls, fields, and flows for all 58 features", () => {
+    for (const feature of KNOWLEDGE_CONTENT.features) {
+      const markup = renderToStaticMarkup(
+        <FeatureGuide
+          feature={feature}
+          rolesById={productionRolesById}
+          relatedArticles={[]}
+          relatedFlows={KNOWLEDGE_CONTENT.flows}
+          onBack={() => undefined}
+          onOpenArticle={() => undefined}
+          onOpenFlow={() => undefined}
+        />,
+      );
+      const text = plainText(markup);
+
+      for (const policy of feature.policyBasis) expect(text).toContain(policy);
+      for (const control of feature.controls) {
+        expect(text).toContain(control.name);
+        expect(text).toContain(control.validation);
+        expect(text).toContain(control.result);
+      }
+      for (const field of feature.fields ?? []) {
+        expect(text).toContain(field.name);
+        expect(text).toContain(field.validation);
+      }
+      for (const flowId of feature.relatedFlowIds) {
+        const flow = KNOWLEDGE_CONTENT.flows.find(
+          (item) => item.id === flowId,
+        )!;
+        expect(text).toContain(flow.title);
+      }
+      for (const route of feature.routes)
+        if (route.includes(":"))
+          expect(markup).not.toContain(`href="${route}"`);
+    }
   });
 });

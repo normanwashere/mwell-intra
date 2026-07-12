@@ -2,10 +2,67 @@ import { describe, expect, it } from "vitest";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { KNOWLEDGE_CONTENT } from "./content";
+import { KNOWLEDGE_GUIDE_CONTENT } from "@shell/components/knowledge/KnowledgeBase";
+import { ROLE_ROUTE_PARENT_PATHS } from "./roles";
 import { searchKnowledge } from "./search";
 import { validateKnowledgeBase, validateKnowledgeContent } from "./validate";
 
 describe("Knowledge Base content", () => {
+  it("defines explicit operating data for all 26 role profiles", () => {
+    expect(KNOWLEDGE_GUIDE_CONTENT.roles).toHaveLength(26);
+    for (const role of KNOWLEDGE_GUIDE_CONTENT.roles) {
+      expect(role.dailyTasks.length, `${role.id} daily tasks`).toBeGreaterThan(
+        0,
+      );
+      expect(
+        role.responsibilityStages.length,
+        `${role.id} responsibility stages`,
+      ).toBeGreaterThan(0);
+      for (const task of role.dailyTasks) expect(task.trim()).not.toBe("");
+      for (const stage of role.responsibilityStages) {
+        expect(stage.title.trim(), `${role.id} stage title`).not.toBe("");
+        expect(
+          stage.responsibility.trim(),
+          `${role.id} stage responsibility`,
+        ).not.toBe("");
+        expect(stage.outcome.trim(), `${role.id} stage outcome`).not.toBe("");
+      }
+    }
+    expect(
+      new Set(
+        KNOWLEDGE_GUIDE_CONTENT.roles.map((role) =>
+          JSON.stringify([role.dailyTasks, role.responsibilityStages]),
+        ),
+      ).size,
+    ).toBe(26);
+  });
+
+  it("defines exact policy and flow relationships for all 58 feature profiles", () => {
+    expect(KNOWLEDGE_CONTENT.features).toHaveLength(58);
+    const flowIds = new Set(KNOWLEDGE_CONTENT.flows.map((flow) => flow.id));
+    for (const feature of KNOWLEDGE_CONTENT.features) {
+      expect(
+        feature.policyBasis.length,
+        `${feature.id} policy`,
+      ).toBeGreaterThan(0);
+      expect(new Set(feature.relatedFlowIds).size).toBe(
+        feature.relatedFlowIds.length,
+      );
+      for (const flowId of feature.relatedFlowIds)
+        expect(flowIds.has(flowId), `${feature.id}:${flowId}`).toBe(true);
+    }
+  });
+
+  it("maps every parameterized role route to an explicit concrete parent", () => {
+    const parameterizedRoutes = KNOWLEDGE_GUIDE_CONTENT.roles.flatMap((role) =>
+      role.authority.accessibleRoutes.filter((route) => route.includes(":")),
+    );
+    expect(parameterizedRoutes.length).toBeGreaterThan(0);
+    for (const route of parameterizedRoutes) {
+      expect(ROLE_ROUTE_PARENT_PATHS[route], route).toMatch(/^\/(?!.*:)/);
+      expect(ROLE_ROUTE_PARENT_PATHS[route]).not.toBe(route);
+    }
+  });
   it("covers every production persona with valid articles and flows", () => {
     expect(KNOWLEDGE_CONTENT.roles).toHaveLength(20);
     expect(validateKnowledgeBase(KNOWLEDGE_CONTENT)).toEqual([]);

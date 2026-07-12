@@ -9,6 +9,10 @@ import type {
   KnowledgeFlow,
   KnowledgeRole,
 } from "@shell/lib/knowledge/types";
+import {
+  ROLE_ROUTE_PARENT_LABELS,
+  ROLE_ROUTE_PARENT_PATHS,
+} from "@shell/lib/knowledge/roles";
 
 const availabilityLabel = {
   live: "Live",
@@ -22,8 +26,6 @@ const availabilityTone = (availability: KnowledgeRole["availability"]) =>
     : availability === "limited"
       ? ("amber" as const)
       : ("slate" as const);
-
-const unique = (values: string[]) => [...new Set(values)];
 
 export function KnowledgeRoleGuide({
   role,
@@ -45,18 +47,6 @@ export function KnowledgeRoleGuide({
   onOpenFlow: (id: string) => void;
 }) {
   const isRoadmap = role.availability === "coming_soon";
-  const taskNames = unique([
-    ...relatedFlows.flatMap((flow) =>
-      flow.nodes
-        .filter((node) => node.ownerRoleIds.includes(role.id))
-        .filter((node) => node.type !== "terminal")
-        .map((node) => node.title),
-    ),
-    ...relatedFeatures.flatMap((feature) =>
-      feature.controls.map((control) => control.name),
-    ),
-  ]).slice(0, 12);
-  const commonTasks = taskNames.length > 0 ? taskNames : role.authority.canDo;
 
   return (
     <article className="mx-auto max-w-5xl">
@@ -93,28 +83,7 @@ export function KnowledgeRoleGuide({
           {role.authority.accessibleRoutes.length > 0 ? (
             <ul className="mt-3 divide-y divide-line border-y border-line">
               {role.authority.accessibleRoutes.map((route) => (
-                <li
-                  key={route}
-                  className="flex min-h-14 items-center justify-between gap-3 py-2"
-                >
-                  <code className="break-all text-sm text-ink">{route}</code>
-                  {isRoadmap ? (
-                    <span
-                      aria-disabled="true"
-                      className="shrink-0 text-xs font-semibold text-faint"
-                    >
-                      Planned route
-                    </span>
-                  ) : (
-                    <Link
-                      href={route}
-                      className="btn-outline btn-sm min-h-11 shrink-0"
-                    >
-                      Open page
-                      <Icon name="arrowRight" className="h-4 w-4" />
-                    </Link>
-                  )}
-                </li>
+                <RoleRoute key={route} route={route} isRoadmap={isRoadmap} />
               ))}
             </ul>
           ) : (
@@ -195,18 +164,16 @@ export function KnowledgeRoleGuide({
 
         <GuideSection id="role-timeline" title="Responsibility timeline">
           <ol className="mt-3 divide-y divide-line border-y border-line">
-            <TimelineItem number="1" title="Receive and verify">
-              Confirm the record, status, evidence, ownership, and authority
-              before acting.
-            </TimelineItem>
-            <TimelineItem number="2" title="Act or decide">
-              Complete only the recorded capabilities and decisions listed in
-              this guide.
-            </TimelineItem>
-            <TimelineItem number="3" title="Record and hand off">
-              Preserve evidence, reason, actor, and status so the downstream
-              owner can continue.
-            </TimelineItem>
+            {role.responsibilityStages.map((item, index) => (
+              <TimelineItem
+                key={`${item.title}-${index}`}
+                number={String(index + 1)}
+                title={item.title}
+                outcome={item.outcome}
+              >
+                {item.responsibility}
+              </TimelineItem>
+            ))}
           </ol>
         </GuideSection>
 
@@ -231,7 +198,7 @@ export function KnowledgeRoleGuide({
         </GuideSection>
 
         <GuideSection id="role-tasks" title="Common tasks">
-          <BulletList items={commonTasks} />
+          <BulletList items={role.dailyTasks} />
         </GuideSection>
 
         <GuideSection id="role-sod" title="Segregation of duties">
@@ -327,10 +294,12 @@ function BulletList({ items }: { items: string[] }) {
 function TimelineItem({
   number,
   title,
+  outcome,
   children,
 }: {
   number: string;
   title: string;
+  outcome: string;
   children: React.ReactNode;
 }) {
   return (
@@ -341,7 +310,56 @@ function TimelineItem({
       <div>
         <h3 className="font-semibold text-ink">{title}</h3>
         <p className="mt-1 text-sm leading-6 text-muted">{children}</p>
+        <p className="mt-2 text-xs font-semibold uppercase text-faint">
+          Outcome
+        </p>
+        <p className="mt-1 text-sm leading-6 text-muted">{outcome}</p>
       </div>
+    </li>
+  );
+}
+
+function RoleRoute({
+  route,
+  isRoadmap,
+}: {
+  route: string;
+  isRoadmap: boolean;
+}) {
+  const isParameterized = route.includes(":");
+  const parentHref = ROLE_ROUTE_PARENT_PATHS[route];
+  const parentLabel = ROLE_ROUTE_PARENT_LABELS[route];
+  return (
+    <li className="flex min-h-14 items-center justify-between gap-3 py-2">
+      <code className="break-all text-sm text-ink">{route}</code>
+      {isRoadmap ? (
+        <span
+          aria-disabled="true"
+          className="shrink-0 text-xs font-semibold text-faint"
+        >
+          Planned route
+        </span>
+      ) : isParameterized && parentHref && parentLabel ? (
+        <Link
+          href={parentHref}
+          className="btn-outline btn-sm min-h-11 shrink-0"
+        >
+          {parentLabel}
+          <Icon name="arrowRight" className="h-4 w-4" />
+        </Link>
+      ) : isParameterized ? (
+        <span
+          aria-disabled="true"
+          className="shrink-0 text-xs font-semibold text-faint"
+        >
+          Open from a record list
+        </span>
+      ) : (
+        <Link href={route} className="btn-outline btn-sm min-h-11 shrink-0">
+          Open page
+          <Icon name="arrowRight" className="h-4 w-4" />
+        </Link>
+      )}
     </li>
   );
 }

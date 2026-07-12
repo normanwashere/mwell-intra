@@ -203,9 +203,7 @@ const featureArticles: KnowledgeArticle[] = KNOWLEDGE_FEATURES.map(
       },
     ],
     relatedArticleIds: feature.roleIds.map((roleId) => `role-${roleId}`),
-    flowIds: KNOWLEDGE_FLOWS.filter((flow) =>
-      flow.roles.some((roleId) => feature.roleIds.includes(roleId)),
-    ).map((flow) => flow.id),
+    flowIds: [...feature.relatedFlowIds],
     liveRoutes:
       feature.availability === "coming_soon" ? [] : [...feature.routes],
     owner: feature.owner,
@@ -674,63 +672,12 @@ export const KNOWLEDGE_CONTENT: KnowledgeContent = {
       aliases: ["row security"],
     },
   ],
-  futureFeatures: (
-    [
-      [
-        "cms",
-        "Admin article drafting and publishing",
-        "Department-owned review, approval, effective dating, and version history.",
-      ],
-      [
-        "context",
-        "Contextual in-screen help",
-        "Open the exact procedure from the operational control being used.",
-      ],
-      [
-        "analytics",
-        "Knowledge search analytics",
-        "Identify unsuccessful searches and documentation gaps without storing sensitive query data.",
-      ],
-      [
-        "feedback",
-        "Article correction requests",
-        "Let authenticated users report unclear or outdated guidance to its owner.",
-      ],
-      [
-        "traceability",
-        "Policy-to-procedure traceability",
-        "Show which policy clause governs each workflow control.",
-      ],
-      [
-        "walkthrough",
-        "Guided sandbox walkthroughs",
-        "Practice workflows with disposable data and progress checks.",
-      ],
-      [
-        "language",
-        "Multilingual documentation",
-        "Publish governed translations with the same effective version.",
-      ],
-      [
-        "offline",
-        "Offline Knowledge Base",
-        "Precache approved guidance for resilient warehouse access.",
-      ],
-      [
-        "learning",
-        "Role onboarding curricula",
-        "Assign role-specific learning paths and completion records.",
-      ],
-      [
-        "release",
-        "Workflow-linked release notes",
-        "Explain changed screens and procedures after each release.",
-      ],
-    ] satisfies Array<[string, string, string]>
-  ).map(([id, title, value]) => ({
-    id,
-    title,
-    value,
+  futureFeatures: KNOWLEDGE_FEATURES.filter(
+    (feature) => feature.availability === "coming_soon",
+  ).map((feature) => ({
+    id: feature.id,
+    title: feature.title,
+    value: feature.purpose,
     status: "proposed" as const,
   })),
   evidence: KNOWLEDGE_EVIDENCE,

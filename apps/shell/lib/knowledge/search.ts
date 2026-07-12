@@ -167,7 +167,7 @@ export function searchKnowledge(
   for (const feature of content.features) {
     results.push({
       id: feature.id,
-      type: "feature",
+      type: feature.availability === "coming_soon" ? "roadmap" : "feature",
       title: feature.title,
       summary: feature.purpose,
       module: feature.module,
@@ -202,6 +202,7 @@ export function searchKnowledge(
           ...feature.exceptions,
           ...feature.reads,
           ...feature.writes,
+          ...feature.policyBasis,
         ].join(" "),
       },
     });
@@ -364,7 +365,11 @@ export function searchKnowledge(
     });
   }
 
+  const indexedFeatureIds = new Set(
+    content.features.map((feature) => feature.id),
+  );
   for (const item of content.futureFeatures) {
+    if (indexedFeatureIds.has(item.id)) continue;
     results.push({
       id: `future-${item.id}`,
       type: "roadmap",

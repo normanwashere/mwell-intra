@@ -6,6 +6,492 @@ import {
 import { MODULES as WAREHOUSE_MODULES } from "@intra/warehouse";
 import type { KnowledgeAuthority, KnowledgeRole } from "./types";
 
+type RoleOperatingDetails = Pick<
+  KnowledgeRole,
+  "dailyTasks" | "responsibilityStages"
+>;
+
+const stage = (
+  title: string,
+  responsibility: string,
+  outcome: string,
+): KnowledgeRole["responsibilityStages"][number] => ({
+  title,
+  responsibility,
+  outcome,
+});
+
+const ROLE_OPERATING_DETAILS: Record<string, RoleOperatingDetails> = {
+  core_staff_only: {
+    dailyTasks: [
+      "Locate assigned work from the Intra home and department queues.",
+      "Verify the owning department before handing off a shared record.",
+    ],
+    responsibilityStages: [
+      stage(
+        "Find accountable work",
+        "Open the shared record and identify its owning module and current status.",
+        "The responsible queue and next owner are known.",
+      ),
+      stage(
+        "Route without overreach",
+        "Hand the record to the accountable department without changing or approving it.",
+        "The handoff remains attributable and within baseline staff authority.",
+      ),
+    ],
+  },
+  platform_admin: {
+    dailyTasks: [
+      "Review identity, role-scope, and access-correction requests.",
+      "Inspect audit history and maintain shared platform controls.",
+    ],
+    responsibilityStages: [
+      stage(
+        "Authorize the change",
+        "Confirm the requester, department owner, minimum role, and supporting evidence.",
+        "An authorized least-privilege change is ready to apply.",
+      ),
+      stage(
+        "Apply and audit",
+        "Provision or revoke access and verify the resulting audit record.",
+        "Identity and access state match the approved responsibility.",
+      ),
+    ],
+  },
+  vendor_portal: {
+    dailyTasks: [
+      "Complete outstanding company, risk, and declaration sections for the vendor's own case.",
+      "Upload requested evidence and respond to Legal correction notices.",
+    ],
+    responsibilityStages: [
+      stage(
+        "Prepare own-case evidence",
+        "Enter truthful vendor facts and attach applicable current documents.",
+        "Every applicable checklist requirement has an answer or evidence item.",
+      ),
+      stage(
+        "Submit and remediate",
+        "Submit the governed snapshot, monitor status, and correct only returned items.",
+        "Legal receives a complete attributable submission or correction response.",
+      ),
+    ],
+  },
+  warehouse_logistics_supervisor: {
+    dailyTasks: [
+      "Review inbound receipts, quality holds, count variances, and warehouse exceptions.",
+      "Approve supported stock adjustments and coordinate putaway or return disposition.",
+    ],
+    responsibilityStages: [
+      stage(
+        "Control inbound execution",
+        "Verify PO eligibility, traceability, inspection, quantity, and destination controls.",
+        "Accepted stock proceeds to a valid bin and exceptions remain controlled.",
+      ),
+      stage(
+        "Resolve inventory variance",
+        "Review counts, returns, and exception evidence before approving a stock change.",
+        "Physical stock and the ledger reconcile with an attributable decision.",
+      ),
+    ],
+  },
+  warehouse_operations: {
+    dailyTasks: [
+      "Execute assigned receiving, putaway, allocation, return, and count tasks.",
+      "Capture scans, quantities, traceability, photos, and exception reasons at the point of work.",
+    ],
+    responsibilityStages: [
+      stage(
+        "Verify the physical task",
+        "Match the item, source record, quantity, lot or serial, and destination before movement.",
+        "The task is safe to execute against the current record.",
+      ),
+      stage(
+        "Execute and evidence",
+        "Record the physical movement or count once and attach required evidence.",
+        "The next owner sees current stock state and any controlled exception.",
+      ),
+    ],
+  },
+  warehouse_finance: {
+    dailyTasks: [
+      "Review valuation, landed-cost, reconciliation, and material variance queues.",
+      "Confirm finance evidence before certifying an adjustment or reconciliation outcome.",
+    ],
+    responsibilityStages: [
+      stage(
+        "Reconcile financial evidence",
+        "Compare stock events, PO cost, receipt, return, and valuation records.",
+        "The financial effect and unresolved differences are identified.",
+      ),
+      stage(
+        "Certify or return",
+        "Approve supported finance treatment or return the record with a reason.",
+        "Finance status is attributable and ready for the next governed step.",
+      ),
+    ],
+  },
+  warehouse_bi_analyst: {
+    dailyTasks: [
+      "Validate inventory, service-level, exception, and movement datasets before analysis.",
+      "Publish governed reports with filters, freshness, and source context intact.",
+    ],
+    responsibilityStages: [
+      stage(
+        "Validate analytical inputs",
+        "Check report scope, data freshness, exclusions, and reconciliation status.",
+        "The dataset is fit for the stated analytical purpose.",
+      ),
+      stage(
+        "Communicate governed insight",
+        "Present trends and anomalies without changing operational records.",
+        "Decision owners receive traceable analysis and its limitations.",
+      ),
+    ],
+  },
+  warehouse_business_unit: {
+    dailyTasks: [
+      "Request and reserve stock for approved business needs.",
+      "Confirm receipt, consumption, return, or discrepancy for issued items.",
+    ],
+    responsibilityStages: [
+      stage(
+        "State the business need",
+        "Select the event or purpose, item, quantity, date, and accountable recipient.",
+        "Warehouse receives a complete attributable demand request.",
+      ),
+      stage(
+        "Confirm the outcome",
+        "Acknowledge issued stock and record use, return, loss, or discrepancy.",
+        "The allocation can be reconciled and closed.",
+      ),
+    ],
+  },
+  warehouse_marketing: {
+    dailyTasks: [
+      "Plan campaign and event inventory demand with dates and responsible recipients.",
+      "Reconcile event consumption, returns, damage, and supporting evidence.",
+    ],
+    responsibilityStages: [
+      stage(
+        "Plan event stock",
+        "Create demand with campaign, venue, schedule, item, and quantity context.",
+        "Warehouse can reserve and prepare the correct event stock.",
+      ),
+      stage(
+        "Close event custody",
+        "Record consumed, returned, damaged, or missing quantities after the event.",
+        "Event stock and custody evidence reconcile.",
+      ),
+    ],
+  },
+  warehouse_procurement: {
+    dailyTasks: [
+      "Review replenishment needs, supplier context, and receivable purchase orders.",
+      "Coordinate shortages and inbound timing with Procurement and warehouse supervisors.",
+    ],
+    responsibilityStages: [
+      stage(
+        "Assess replenishment need",
+        "Review available, reserved, inbound, and forecast quantities before sourcing.",
+        "A supported replenishment requirement is ready for Procurement.",
+      ),
+      stage(
+        "Coordinate inbound readiness",
+        "Track approved order status and communicate expected receipt constraints.",
+        "Warehouse has an eligible source record and receiving plan.",
+      ),
+    ],
+  },
+  warehouse_pricing: {
+    dailyTasks: [
+      "Review landed-cost inputs and pending price proposals.",
+      "Record effective price changes with basis, date, and approval evidence.",
+    ],
+    responsibilityStages: [
+      stage(
+        "Establish cost basis",
+        "Verify purchase, freight, duty, allocation, and current-price inputs.",
+        "The proposal uses a complete attributable cost basis.",
+      ),
+      stage(
+        "Propose and activate price",
+        "Record the value, reason, effective date, and required approval.",
+        "The governed price history shows the approved change.",
+      ),
+    ],
+  },
+  warehouse_admin: {
+    dailyTasks: [
+      "Maintain warehouse master data, locations, operation routes, and import controls.",
+      "Review warehouse access, configuration exceptions, and audit history.",
+    ],
+    responsibilityStages: [
+      stage(
+        "Validate configuration change",
+        "Confirm owner, scope, dependency, and evidence for the proposed master-data change.",
+        "The change is authorized and will not strand active stock or tasks.",
+      ),
+      stage(
+        "Apply and verify configuration",
+        "Update the governed record and inspect dependent routes and audit events.",
+        "Warehouse configuration is usable, traceable, and correctly scoped.",
+      ),
+    ],
+  },
+  procurement_requester: {
+    dailyTasks: [
+      "Prepare purchase requests with complete need, value, budget, sourcing, and evidence facts.",
+      "Respond to returned requests and confirm business acceptance after delivery.",
+    ],
+    responsibilityStages: [
+      stage(
+        "Document the business need",
+        "Create line, quantity, budget, justification, timing, and supporting evidence.",
+        "A complete draft can be routed under the correct sourcing policy.",
+      ),
+      stage(
+        "Submit and accept",
+        "Submit the governed snapshot, answer revisions, and record receipt acceptance.",
+        "Procurement and Finance have attributable requester evidence.",
+      ),
+    ],
+  },
+  procurement_officer: {
+    dailyTasks: [
+      "Review submitted requests, sourcing routes, vendor eligibility, and competition evidence.",
+      "Prepare awards and purchase orders only after required approvals and policy gates pass.",
+    ],
+    responsibilityStages: [
+      stage(
+        "Run the sourcing route",
+        "Validate threshold, risk, competition, bids, exceptions, budget, and accreditation.",
+        "A policy-complete recommendation is ready for approval.",
+      ),
+      stage(
+        "Convert approved demand",
+        "Record the award and author the PO from the approved request snapshot.",
+        "The supplier commitment is traceable to approved demand and evidence.",
+      ),
+    ],
+  },
+  procurement_approver: {
+    dailyTasks: [
+      "Review assigned purchase-request and award decisions within delegated authority.",
+      "Approve, reject, return, or abstain with an attributable reason.",
+    ],
+    responsibilityStages: [
+      stage(
+        "Confirm decision authority",
+        "Verify assignment, amount tier, category, conflict status, and evidence completeness.",
+        "The decision is within active delegation and independent authority.",
+      ),
+      stage(
+        "Record the decision",
+        "Approve, reject, return, or abstain with a clear governed reason.",
+        "The request advances or stops with complete decision history.",
+      ),
+    ],
+  },
+  procurement_finance: {
+    dailyTasks: [
+      "Review budget evidence, financial approval steps, and payment-readiness packs.",
+      "Return mismatched amounts, receipts, acceptance, or invoice evidence with a reason.",
+    ],
+    responsibilityStages: [
+      stage(
+        "Validate financial readiness",
+        "Confirm budget, amount, approval, receipt, acceptance, invoice, and matching evidence.",
+        "The financial package is complete or has a named blocking exception.",
+      ),
+      stage(
+        "Record finance outcome",
+        "Approve the assigned finance step or return the package for correction.",
+        "Payment readiness is attributable and does not bypass Treasury execution.",
+      ),
+    ],
+  },
+  procurement_admin: {
+    dailyTasks: [
+      "Maintain procurement governance, route configuration, and Delegation of Authority coverage.",
+      "Review procurement access, stale workflows, and policy exceptions.",
+    ],
+    responsibilityStages: [
+      stage(
+        "Govern procurement configuration",
+        "Validate policy owner, effective date, approver coverage, and affected workflows.",
+        "A complete configuration revision is ready for activation.",
+      ),
+      stage(
+        "Activate and monitor",
+        "Publish the approved revision and inspect route and audit behavior.",
+        "Procurement decisions use current governed configuration.",
+      ),
+    ],
+  },
+  legal_reviewer: {
+    dailyTasks: [
+      "Review assigned accreditation checklist evidence and vendor corrections.",
+      "Record item-level approval or correction reasons without making unauthorized final dispositions.",
+    ],
+    responsibilityStages: [
+      stage(
+        "Inspect requirement evidence",
+        "Compare submitted facts and documents with the applicable requirement and policy version.",
+        "Each checklist item has a supported review finding.",
+      ),
+      stage(
+        "Record review outcome",
+        "Approve sufficient evidence or request a specific vendor correction.",
+        "Compliance or Legal administration receives a traceable reviewed case.",
+      ),
+    ],
+  },
+  legal_compliance: {
+    dailyTasks: [
+      "Assess accreditation residual risk, required instruments, and compliance exceptions.",
+      "Record compliance recommendations and monitor remediation or renewal obligations.",
+    ],
+    responsibilityStages: [
+      stage(
+        "Assess residual risk",
+        "Review evidence sufficiency, risk facts, instruments, exceptions, and mitigations.",
+        "The case has a supported compliance position.",
+      ),
+      stage(
+        "Set compliance conditions",
+        "Recommend approval, conditional remediation, renewal, suspension, or rejection.",
+        "Final Legal authority receives explicit conditions and policy basis.",
+      ),
+    ],
+  },
+  legal_admin: {
+    dailyTasks: [
+      "Invite vendors, oversee case queues, and make authorized final accreditation dispositions.",
+      "Maintain Legal workflow, instrument, and requirement governance with audit history.",
+    ],
+    responsibilityStages: [
+      stage(
+        "Establish the governed case",
+        "Verify vendor identity, category, jurisdiction, risk, and applicable requirements.",
+        "The vendor receives a correctly scoped attributable invitation.",
+      ),
+      stage(
+        "Make final disposition",
+        "Review checklist, residual risk, instruments, conditions, and independent findings.",
+        "Approval, conditional action, suspension, or rejection is fully evidenced.",
+      ),
+    ],
+  },
+  strategic_sourcing_lead: {
+    dailyTasks: [
+      "Define the planned category-strategy and complex-sourcing governance model.",
+      "Document proposed award-oversight boundaries for Procurement approval.",
+    ],
+    responsibilityStages: [
+      stage(
+        "Design planned sourcing governance",
+        "Document future category, competition, and complex-sourcing responsibilities.",
+        "Procurement has a reviewable roadmap scope without live authority.",
+      ),
+      stage(
+        "Escalate current needs",
+        "Route live strategic-sourcing work to Procurement Administration.",
+        "No roadmap role is used to execute a current decision.",
+      ),
+    ],
+  },
+  vendor_relationship_manager: {
+    dailyTasks: [
+      "Define the planned supplier-performance and relationship-governance model.",
+      "Route current supplier relationship issues to Procurement and Legal owners.",
+    ],
+    responsibilityStages: [
+      stage(
+        "Design planned relationship controls",
+        "Document future performance, review, and non-transactional coordination responsibilities.",
+        "A bounded roadmap role is ready for governance review.",
+      ),
+      stage(
+        "Protect live supplier decisions",
+        "Escalate current records to authorized Procurement or Legal roles.",
+        "No live vendor record is changed through planned authority.",
+      ),
+    ],
+  },
+  inventory_planner: {
+    dailyTasks: [
+      "Define the planned demand, replenishment, and inventory-policy analysis process.",
+      "Route current replenishment recommendations to Warehouse Procurement.",
+    ],
+    responsibilityStages: [
+      stage(
+        "Design planned inventory analysis",
+        "Document future demand inputs, recommendation controls, and review ownership.",
+        "The roadmap separates analysis from stock execution.",
+      ),
+      stage(
+        "Escalate current planning",
+        "Send live planning needs to Warehouse Procurement and administration.",
+        "Current inventory remains unchanged by the planned role.",
+      ),
+    ],
+  },
+  internal_auditor: {
+    dailyTasks: [
+      "Define the planned read-only audit scope and evidence-access controls.",
+      "Route current audit inquiries to department owners and Platform administration.",
+    ],
+    responsibilityStages: [
+      stage(
+        "Design planned audit access",
+        "Document future read-only evidence, sampling, and finding responsibilities.",
+        "The roadmap preserves independence and prohibits operational writes.",
+      ),
+      stage(
+        "Escalate current findings",
+        "Send live audit concerns to the accountable owner without altering records.",
+        "Current evidence and decision ownership remain intact.",
+      ),
+    ],
+  },
+  department_budget_owner: {
+    dailyTasks: [
+      "Define the planned departmental funding-confirmation and spend-oversight model.",
+      "Route current budget questions to assigned Finance and Procurement approvers.",
+    ],
+    responsibilityStages: [
+      stage(
+        "Design planned budget accountability",
+        "Document future funding evidence, limits, and departmental ownership.",
+        "The roadmap role has clear separation from procurement approval and payment.",
+      ),
+      stage(
+        "Escalate current budget decisions",
+        "Send live funding questions to authorized Finance and Procurement roles.",
+        "No current financial evidence or approval is changed by the planned role.",
+      ),
+    ],
+  },
+  security_reviewer: {
+    dailyTasks: [
+      "Define the planned security due-diligence evidence and review model.",
+      "Route current material security concerns to Platform and Legal authorities.",
+    ],
+    responsibilityStages: [
+      stage(
+        "Design planned security review",
+        "Document future control evidence, risk assessment, and recommendation boundaries.",
+        "The roadmap separates security advice from access and vendor approval.",
+      ),
+      stage(
+        "Escalate current security risk",
+        "Send live concerns to authorized Platform and Legal decision owners.",
+        "No current permission or accreditation decision is executed by the planned role.",
+      ),
+    ],
+  },
+};
+
 type RoleAuthority = Omit<
   KnowledgeAuthority,
   "capabilities" | "accessibleRoutes"
@@ -19,9 +505,35 @@ interface WarehouseRouteCapabilityEntry {
 }
 
 export const WAREHOUSE_DETAIL_ROUTE_ALIASES = [
-  { route: "/warehouse/inventory/:id", parentPath: "/inventory" },
-  { route: "/warehouse/events/:id", parentPath: "/events" },
+  {
+    route: "/warehouse/inventory/:id",
+    parentPath: "/inventory",
+    parentHref: "/warehouse/inventory",
+    parentLabel: "Open inventory list",
+  },
+  {
+    route: "/warehouse/events/:id",
+    parentPath: "/events",
+    parentHref: "/warehouse/events",
+    parentLabel: "Open events list",
+  },
 ] as const;
+
+export const ROLE_ROUTE_PARENT_PATHS: Readonly<Record<string, string>> =
+  Object.fromEntries(
+    WAREHOUSE_DETAIL_ROUTE_ALIASES.map((alias) => [
+      alias.route,
+      alias.parentHref,
+    ]),
+  );
+
+export const ROLE_ROUTE_PARENT_LABELS: Readonly<Record<string, string>> =
+  Object.fromEntries(
+    WAREHOUSE_DETAIL_ROUTE_ALIASES.map((alias) => [
+      alias.route,
+      alias.parentLabel,
+    ]),
+  );
 
 function warehouseRoute(path: string): string {
   return path === "/" ? "/warehouse" : `/warehouse${path}`;
@@ -46,7 +558,10 @@ export const WAREHOUSE_ROUTE_CAPABILITY_ENTRIES = [
   ...WAREHOUSE_DETAIL_ROUTE_ALIASES.map(detailRouteEntry),
 ] satisfies readonly WarehouseRouteCapabilityEntry[];
 
-type LiveRoleDefinition = Omit<KnowledgeRole, "availability" | "authority"> & {
+type LiveRoleDefinition = Omit<
+  KnowledgeRole,
+  "availability" | "authority" | "dailyTasks" | "responsibilityStages"
+> & {
   rbacModule: RbacModule;
   rbacRole: string;
   authority: RoleAuthority;
@@ -54,7 +569,12 @@ type LiveRoleDefinition = Omit<KnowledgeRole, "availability" | "authority"> & {
 
 type ComingSoonRoleDefinition = Omit<
   KnowledgeRole,
-  "availability" | "authority" | "rbacModule" | "rbacRole"
+  | "availability"
+  | "authority"
+  | "rbacModule"
+  | "rbacRole"
+  | "dailyTasks"
+  | "responsibilityStages"
 > & {
   authority: KnowledgeAuthority;
 };
@@ -73,8 +593,12 @@ function warehouseRoutesFor(role: string): string[] {
 }
 
 function liveRole(definition: LiveRoleDefinition): KnowledgeRole {
+  const operatingDetails = ROLE_OPERATING_DETAILS[definition.id];
+  if (!operatingDetails)
+    throw new Error(`missing role operating details for ${definition.id}`);
   return {
     ...definition,
+    ...operatingDetails,
     availability: "live",
     authority: {
       ...definition.authority,
@@ -88,7 +612,14 @@ function liveRole(definition: LiveRoleDefinition): KnowledgeRole {
 }
 
 function comingSoonRole(definition: ComingSoonRoleDefinition): KnowledgeRole {
-  return { ...definition, availability: "coming_soon" };
+  const operatingDetails = ROLE_OPERATING_DETAILS[definition.id];
+  if (!operatingDetails)
+    throw new Error(`missing role operating details for ${definition.id}`);
+  return {
+    ...definition,
+    ...operatingDetails,
+    availability: "coming_soon",
+  };
 }
 
 export const LIVE_KNOWLEDGE_ROLES: KnowledgeRole[] = [

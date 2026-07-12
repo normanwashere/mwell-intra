@@ -249,11 +249,16 @@ export function KnowledgeBase() {
           (item) =>
             !item.id.startsWith("role-") &&
             !item.id.startsWith("feature-") &&
-            item.roles.some((role) => guide.feature.roleIds.includes(role)),
+            item.flowIds.some((flowId) =>
+              guide.feature.relatedFlowIds.includes(flowId),
+            ),
         )}
-        relatedFlows={KNOWLEDGE_GUIDE_CONTENT.flows.filter((item) =>
-          item.roles.some((role) => guide.feature.roleIds.includes(role)),
-        )}
+        relatedFlows={guide.feature.relatedFlowIds.flatMap((flowId) => {
+          const flow = KNOWLEDGE_GUIDE_CONTENT.flows.find(
+            (item) => item.id === flowId,
+          );
+          return flow ? [flow] : [];
+        })}
         onBack={() => setParams({ article: null })}
         onOpenArticle={openArticle}
         onOpenFlow={openFlow}

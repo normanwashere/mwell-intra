@@ -66,8 +66,12 @@ describe("Knowledge Base live coverage", () => {
   });
 
   it("documents every router page with complete plain-language feature content", () => {
-    expect(KNOWLEDGE_CONTENT.features).toHaveLength(LIVE_ROUTE_MANIFEST.length);
-    for (const feature of KNOWLEDGE_CONTENT.features) {
+    expect(KNOWLEDGE_CONTENT.features).toHaveLength(58);
+    const liveFeatures = KNOWLEDGE_CONTENT.features.filter(
+      (feature) => feature.availability !== "coming_soon",
+    );
+    expect(liveFeatures).toHaveLength(LIVE_ROUTE_MANIFEST.length);
+    for (const feature of liveFeatures) {
       const contract = LIVE_ROUTE_MANIFEST.find((entry) =>
         feature.routes.includes(entry.route),
       );

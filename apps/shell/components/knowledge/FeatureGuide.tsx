@@ -41,18 +41,9 @@ export function FeatureGuide({
   onOpenFlow: (id: string) => void;
 }) {
   const isRoadmap = feature.availability === "coming_soon";
-  const policies = [
-    ...new Set(
-      relatedFlows.flatMap((flow) =>
-        flow.nodes.flatMap((node) =>
-          node.type === "decision" &&
-          node.ownerRoleIds.some((id) => feature.roleIds.includes(id))
-            ? [node.policyBasis]
-            : [],
-        ),
-      ),
-    ),
-  ];
+  const exactFlows = relatedFlows.filter((flow) =>
+    feature.relatedFlowIds.includes(flow.id),
+  );
 
   return (
     <article className="mx-auto max-w-5xl">
@@ -243,19 +234,11 @@ export function FeatureGuide({
         </GuideSection>
 
         <GuideSection id="feature-policy" title="Policy basis">
-          {policies.length > 0 ? (
-            <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-muted">
-              {policies.map((policy) => (
-                <li key={policy}>{policy}</li>
-              ))}
-            </ul>
-          ) : (
-            <p className="mt-2 text-sm leading-6 text-muted">
-              Route capability, current record state, and the owning module
-              policy govern this page. No additional decision policy is
-              registered in a related flow.
-            </p>
-          )}
+          <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-muted">
+            {feature.policyBasis.map((policy) => (
+              <li key={policy}>{policy}</li>
+            ))}
+          </ul>
         </GuideSection>
 
         <GuideSection id="feature-related" title="Related flows and content">
@@ -276,7 +259,7 @@ export function FeatureGuide({
                 onClick={() => onOpenArticle(article.id)}
               />
             ))}
-            {relatedFlows.map((flow) => (
+            {exactFlows.map((flow) => (
               <RelatedButton
                 key={flow.id}
                 label={flow.title}

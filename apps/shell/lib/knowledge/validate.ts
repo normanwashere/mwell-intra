@@ -47,6 +47,7 @@ export function validateKnowledgeContent(
 ): string[] {
   const errors: string[] = [];
   const roleIds = new Set(content.roles.map((role) => role.id));
+  const flowIds = new Set(content.flows.map((flow) => flow.id));
   const evidenceIds = new Set<string>();
 
   for (const role of content.roles) {
@@ -54,6 +55,27 @@ export function validateKnowledgeContent(
       errors.push(`role ${role.id} has invalid availability`);
     if (Boolean(role.rbacModule) !== Boolean(role.rbacRole))
       errors.push(`role ${role.id} has incomplete RBAC coordinates`);
+    if (role.availability === "live" && !role.dailyTasks?.length)
+      errors.push(`role ${role.id} has no daily tasks`);
+    if (role.availability === "live" && !role.responsibilityStages?.length)
+      errors.push(`role ${role.id} has no responsibility stages`);
+    for (const task of role.dailyTasks ?? [])
+      if (!hasText(task))
+        errors.push(`role ${role.id} has an empty daily task`);
+    for (const stage of role.responsibilityStages ?? []) {
+      if (!hasText(stage.title))
+        errors.push(
+          `role ${role.id} has a responsibility stage without a title`,
+        );
+      if (!hasText(stage.responsibility))
+        errors.push(
+          `role ${role.id} has a responsibility stage without responsibility`,
+        );
+      if (!hasText(stage.outcome))
+        errors.push(
+          `role ${role.id} has a responsibility stage without an outcome`,
+        );
+    }
 
     const authority = role.authority;
     if (!authority) {
@@ -95,6 +117,14 @@ export function validateKnowledgeContent(
     for (const roleId of feature.roleIds)
       if (!roleIds.has(roleId))
         errors.push(`feature ${feature.id} references unknown role ${roleId}`);
+    if (!feature.policyBasis?.length)
+      errors.push(`feature ${feature.id} has no policy basis`);
+    for (const policy of feature.policyBasis ?? [])
+      if (!hasText(policy))
+        errors.push(`feature ${feature.id} has an empty policy basis`);
+    for (const flowId of feature.relatedFlowIds ?? [])
+      if (!flowIds.has(flowId))
+        errors.push(`feature ${feature.id} references unknown flow ${flowId}`);
     if (!feature.controls.length)
       errors.push(`feature ${feature.id} has no controls`);
     for (const control of feature.controls)

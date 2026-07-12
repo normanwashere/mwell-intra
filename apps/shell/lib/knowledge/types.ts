@@ -26,6 +26,12 @@ export interface KnowledgeAuthority {
   escalation: string;
 }
 
+export interface KnowledgeResponsibilityStage {
+  title: string;
+  responsibility: string;
+  outcome: string;
+}
+
 export interface KnowledgeRole {
   id: string;
   rbacModule?: "core" | "warehouse" | "procurement" | "legal";
@@ -34,6 +40,8 @@ export interface KnowledgeRole {
   module: KnowledgeModule;
   availability: KnowledgeAvailability;
   purpose: string;
+  dailyTasks: string[];
+  responsibilityStages: KnowledgeResponsibilityStage[];
   authority: KnowledgeAuthority;
 }
 
@@ -60,6 +68,8 @@ export interface KnowledgeFeature {
   roleIds: string[];
   capabilityIds: string[];
   purpose: string;
+  policyBasis: string[];
+  relatedFlowIds: string[];
   controls: KnowledgeFeatureControl[];
   fields?: KnowledgeFeatureField[];
   reads: string[];

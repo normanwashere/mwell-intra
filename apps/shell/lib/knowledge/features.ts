@@ -17,6 +17,301 @@ interface FeatureDefinition {
   roleIds?: string[];
 }
 
+interface FeatureRelationship {
+  policyBasis: string[];
+  relatedFlowIds: string[];
+}
+
+const POLICY = {
+  identity:
+    "Identity and access policy requires active attributable identities and least-privilege scoped access.",
+  knowledge:
+    "Knowledge governance requires owned, reviewed, current guidance that does not grant operational authority.",
+  resilience:
+    "Operational resilience requires clear saved-state, connectivity, retry, and escalation behavior.",
+  doa: "Delegation of Authority governance requires effective-dated, complete, non-conflicting approval coverage.",
+  warehouse:
+    "Warehouse control policy requires attributable stock movement, valid source records, traceability, evidence, and controlled destinations.",
+  quality:
+    "Warehouse quality policy requires documented inspection and authorized hold, release, return, or rejection disposition.",
+  inventory:
+    "Inventory integrity policy requires physical and ledger reconciliation before an approved stock adjustment.",
+  event:
+    "Warehouse custody policy requires attributable reservation, issue, transfer, consumption, return, and event reconciliation.",
+  pricing:
+    "Pricing and valuation policy requires supported cost basis, effective dating, independent review, and immutable price history.",
+  procurement:
+    "Procurement policy requires threshold- and risk-appropriate sourcing, competition evidence, vendor eligibility, budget evidence, and active approval authority.",
+  payment:
+    "Payment-readiness policy requires approved demand, eligible supplier, receipt, inspection, requester acceptance, invoice, and amount reconciliation.",
+  accreditation:
+    "Vendor accreditation policy requires scoped requirements, sufficient evidence, residual-risk review, required instruments, and authorized disposition.",
+  vendorScope:
+    "Vendor portal policy restricts every read and write to the authenticated vendor's own case and applicable requirements.",
+} as const;
+
+const FEATURE_RELATIONSHIPS: Record<string, FeatureRelationship> = {
+  "shell-home": {
+    policyBasis: [POLICY.identity],
+    relatedFlowIds: ["identity-and-access"],
+  },
+  "sign-in": {
+    policyBasis: [POLICY.identity],
+    relatedFlowIds: ["identity-and-access"],
+  },
+  "reset-password": {
+    policyBasis: [POLICY.identity],
+    relatedFlowIds: ["identity-and-access"],
+  },
+  "knowledge-library": {
+    policyBasis: [POLICY.knowledge],
+    relatedFlowIds: [],
+  },
+  "offline-status": {
+    policyBasis: [POLICY.resilience],
+    relatedFlowIds: ["exception-and-recovery"],
+  },
+  "admin-users": {
+    policyBasis: [POLICY.identity],
+    relatedFlowIds: ["identity-and-access", "administration"],
+  },
+  "admin-doa": {
+    policyBasis: [POLICY.doa],
+    relatedFlowIds: ["doa-governance", "administration", "procure-to-pay"],
+  },
+  "warehouse-dashboard": {
+    policyBasis: [POLICY.warehouse],
+    relatedFlowIds: [
+      "warehouse-setup",
+      "receive-to-putaway",
+      "quality-disposition",
+      "event-fulfillment",
+      "returns-reconciliation",
+      "cycle-count-adjustment",
+      "pricing-and-costing",
+      "exception-and-recovery",
+    ],
+  },
+  "warehouse-scan": {
+    policyBasis: [POLICY.warehouse],
+    relatedFlowIds: [
+      "receive-to-putaway",
+      "event-fulfillment",
+      "returns-reconciliation",
+      "cycle-count-adjustment",
+    ],
+  },
+  "warehouse-tasks": {
+    policyBasis: [POLICY.warehouse],
+    relatedFlowIds: [
+      "receive-to-putaway",
+      "quality-disposition",
+      "event-fulfillment",
+      "returns-reconciliation",
+      "cycle-count-adjustment",
+      "exception-and-recovery",
+    ],
+  },
+  "warehouse-inventory": {
+    policyBasis: [POLICY.warehouse, POLICY.inventory],
+    relatedFlowIds: [
+      "receive-to-putaway",
+      "quality-disposition",
+      "event-fulfillment",
+      "returns-reconciliation",
+      "cycle-count-adjustment",
+    ],
+  },
+  "warehouse-product-detail": {
+    policyBasis: [POLICY.warehouse, POLICY.inventory],
+    relatedFlowIds: [
+      "receive-to-putaway",
+      "quality-disposition",
+      "returns-reconciliation",
+      "cycle-count-adjustment",
+    ],
+  },
+  "warehouse-receiving": {
+    policyBasis: [POLICY.warehouse, POLICY.quality],
+    relatedFlowIds: ["receive-to-putaway", "quality-disposition"],
+  },
+  "warehouse-allocations": {
+    policyBasis: [POLICY.event],
+    relatedFlowIds: ["event-fulfillment", "allocation-event-return"],
+  },
+  "warehouse-returns": {
+    policyBasis: [POLICY.event, POLICY.inventory],
+    relatedFlowIds: ["returns-reconciliation", "allocation-event-return"],
+  },
+  "warehouse-storage": {
+    policyBasis: [POLICY.warehouse],
+    relatedFlowIds: ["warehouse-setup", "receive-to-putaway"],
+  },
+  "warehouse-events": {
+    policyBasis: [POLICY.event],
+    relatedFlowIds: ["event-fulfillment", "allocation-event-return"],
+  },
+  "warehouse-event-detail": {
+    policyBasis: [POLICY.event],
+    relatedFlowIds: ["event-fulfillment", "allocation-event-return"],
+  },
+  "warehouse-procurement-planning": {
+    policyBasis: [POLICY.procurement, POLICY.warehouse],
+    relatedFlowIds: ["procure-to-pay", "receive-to-putaway"],
+  },
+  "warehouse-purchase-orders": {
+    policyBasis: [POLICY.procurement, POLICY.warehouse],
+    relatedFlowIds: ["procure-to-pay", "receive-to-putaway"],
+  },
+  "warehouse-cycle-counts": {
+    policyBasis: [POLICY.inventory],
+    relatedFlowIds: ["cycle-count-adjustment"],
+  },
+  "warehouse-quality": {
+    policyBasis: [POLICY.quality],
+    relatedFlowIds: ["quality-disposition", "receive-to-putaway"],
+  },
+  "warehouse-approvals": {
+    policyBasis: [POLICY.inventory, POLICY.quality, POLICY.pricing],
+    relatedFlowIds: [
+      "cycle-count-adjustment",
+      "quality-disposition",
+      "pricing-and-costing",
+    ],
+  },
+  "warehouse-exceptions": {
+    policyBasis: [POLICY.resilience, POLICY.warehouse],
+    relatedFlowIds: [
+      "exception-and-recovery",
+      "receive-to-putaway",
+      "quality-disposition",
+      "returns-reconciliation",
+      "cycle-count-adjustment",
+    ],
+  },
+  "warehouse-finance": {
+    policyBasis: [POLICY.inventory, POLICY.pricing],
+    relatedFlowIds: [
+      "returns-reconciliation",
+      "cycle-count-adjustment",
+      "pricing-and-costing",
+    ],
+  },
+  "warehouse-pricing": {
+    policyBasis: [POLICY.pricing],
+    relatedFlowIds: ["pricing-and-costing"],
+  },
+  "warehouse-data": {
+    policyBasis: [POLICY.inventory],
+    relatedFlowIds: [
+      "returns-reconciliation",
+      "cycle-count-adjustment",
+      "pricing-and-costing",
+    ],
+  },
+  "warehouse-reports": {
+    policyBasis: [POLICY.inventory],
+    relatedFlowIds: [
+      "returns-reconciliation",
+      "cycle-count-adjustment",
+      "pricing-and-costing",
+    ],
+  },
+  "warehouse-suppliers": {
+    policyBasis: [POLICY.procurement, POLICY.warehouse],
+    relatedFlowIds: ["procure-to-pay", "warehouse-setup"],
+  },
+  "warehouse-locations": {
+    policyBasis: [POLICY.warehouse],
+    relatedFlowIds: ["warehouse-setup", "receive-to-putaway"],
+  },
+  "warehouse-imports": {
+    policyBasis: [POLICY.warehouse, POLICY.resilience],
+    relatedFlowIds: ["warehouse-setup", "administration"],
+  },
+  "warehouse-operation-routes": {
+    policyBasis: [POLICY.warehouse],
+    relatedFlowIds: ["warehouse-setup", "administration"],
+  },
+  "procurement-requests": {
+    policyBasis: [POLICY.procurement],
+    relatedFlowIds: ["procure-to-pay"],
+  },
+  "procurement-request-create": {
+    policyBasis: [POLICY.procurement, POLICY.doa],
+    relatedFlowIds: ["procure-to-pay"],
+  },
+  "procurement-request-detail": {
+    policyBasis: [POLICY.procurement, POLICY.doa, POLICY.accreditation],
+    relatedFlowIds: ["procure-to-pay", "vendor-accreditation"],
+  },
+  "procurement-approvals": {
+    policyBasis: [POLICY.procurement, POLICY.doa],
+    relatedFlowIds: ["procure-to-pay", "doa-governance"],
+  },
+  "procurement-purchase-orders": {
+    policyBasis: [POLICY.procurement, POLICY.payment],
+    relatedFlowIds: ["procure-to-pay", "receive-to-putaway"],
+  },
+  "procurement-po-detail": {
+    policyBasis: [POLICY.procurement, POLICY.payment],
+    relatedFlowIds: ["procure-to-pay", "receive-to-putaway"],
+  },
+  "legal-cases": {
+    policyBasis: [POLICY.accreditation],
+    relatedFlowIds: ["vendor-accreditation"],
+  },
+  "legal-case-detail": {
+    policyBasis: [POLICY.accreditation],
+    relatedFlowIds: ["vendor-accreditation"],
+  },
+  "legal-case-application": {
+    policyBasis: [POLICY.accreditation],
+    relatedFlowIds: ["vendor-accreditation"],
+  },
+  "legal-sign-instrument": {
+    policyBasis: [POLICY.accreditation],
+    relatedFlowIds: ["vendor-accreditation"],
+  },
+  "legal-invite-vendor": {
+    policyBasis: [POLICY.accreditation, POLICY.identity],
+    relatedFlowIds: ["vendor-accreditation"],
+  },
+  "vendor-cases": {
+    policyBasis: [POLICY.vendorScope, POLICY.accreditation],
+    relatedFlowIds: ["vendor-accreditation"],
+  },
+  "vendor-case-detail": {
+    policyBasis: [POLICY.vendorScope, POLICY.accreditation],
+    relatedFlowIds: ["vendor-accreditation"],
+  },
+  "vendor-application": {
+    policyBasis: [POLICY.vendorScope, POLICY.accreditation],
+    relatedFlowIds: ["vendor-accreditation"],
+  },
+  "vendor-sign-instrument": {
+    policyBasis: [POLICY.vendorScope, POLICY.accreditation],
+    relatedFlowIds: ["vendor-accreditation"],
+  },
+  "vendor-invite-unavailable": {
+    policyBasis: [POLICY.vendorScope, POLICY.identity],
+    relatedFlowIds: ["vendor-accreditation", "identity-and-access"],
+  },
+  cms: { policyBasis: [POLICY.knowledge], relatedFlowIds: [] },
+  context: { policyBasis: [POLICY.knowledge], relatedFlowIds: [] },
+  analytics: { policyBasis: [POLICY.knowledge], relatedFlowIds: [] },
+  feedback: { policyBasis: [POLICY.knowledge], relatedFlowIds: [] },
+  traceability: { policyBasis: [POLICY.knowledge], relatedFlowIds: [] },
+  walkthrough: { policyBasis: [POLICY.knowledge], relatedFlowIds: [] },
+  language: { policyBasis: [POLICY.knowledge], relatedFlowIds: [] },
+  offline: {
+    policyBasis: [POLICY.knowledge, POLICY.resilience],
+    relatedFlowIds: ["exception-and-recovery"],
+  },
+  learning: { policyBasis: [POLICY.knowledge], relatedFlowIds: [] },
+  release: { policyBasis: [POLICY.knowledge], relatedFlowIds: [] },
+};
+
 const CURRENT_ROLE_IDS = KNOWLEDGE_ROLES.filter(
   (role) => role.availability !== "coming_soon",
 ).map((role) => role.id);
@@ -86,6 +381,11 @@ const defineFeature = (definition: FeatureDefinition): KnowledgeFeature => {
   );
   if (!routeContract)
     throw new Error(`missing route contract for feature ${definition.id}`);
+  const relationship = FEATURE_RELATIONSHIPS[definition.id];
+  if (!relationship)
+    throw new Error(
+      `missing explicit feature relationship for ${definition.id}`,
+    );
   const capabilityIds = [...routeContract.capabilityIds];
   return {
     id: definition.id,
@@ -96,6 +396,8 @@ const defineFeature = (definition: FeatureDefinition): KnowledgeFeature => {
     roleIds: definition.roleIds ?? rolesFor(definition.module, capabilityIds),
     capabilityIds,
     purpose: definition.purpose,
+    policyBasis: relationship.policyBasis,
+    relatedFlowIds: relationship.relatedFlowIds,
     controls: details.controls,
     fields: details.fields,
     reads: [definition.reads],
@@ -1025,5 +1327,161 @@ const definitions: FeatureDefinition[] = [
   },
 ];
 
-export const KNOWLEDGE_FEATURES: KnowledgeFeature[] =
-  definitions.map(defineFeature);
+interface RoadmapFeatureDefinition {
+  id: string;
+  title: string;
+  module: KnowledgeModule;
+  purpose: string;
+  roleIds: string[];
+  owner: string;
+  plannedControl: string;
+}
+
+const roadmapDefinitions: RoadmapFeatureDefinition[] = [
+  {
+    id: "cms",
+    title: "Admin article drafting and publishing",
+    module: "admin",
+    purpose:
+      "Department-owned review, approval, effective dating, and version history.",
+    roleIds: ["platform_admin"],
+    owner: "Platform",
+    plannedControl: "Draft and publish governed article revisions",
+  },
+  {
+    id: "context",
+    title: "Contextual in-screen help",
+    module: "core",
+    purpose:
+      "Open the exact procedure from the operational control being used.",
+    roleIds: ["core_staff_only", "platform_admin"],
+    owner: "Platform",
+    plannedControl: "Open guidance for the current control",
+  },
+  {
+    id: "analytics",
+    title: "Knowledge search analytics",
+    module: "admin",
+    purpose:
+      "Identify unsuccessful searches and documentation gaps without storing sensitive query data.",
+    roleIds: ["platform_admin"],
+    owner: "Platform",
+    plannedControl: "Review privacy-safe search gap metrics",
+  },
+  {
+    id: "feedback",
+    title: "Article correction requests",
+    module: "core",
+    purpose:
+      "Let authenticated users report unclear or outdated guidance to its owner.",
+    roleIds: ["core_staff_only", "platform_admin"],
+    owner: "Platform",
+    plannedControl: "Submit an attributable correction request",
+  },
+  {
+    id: "traceability",
+    title: "Policy-to-procedure traceability",
+    module: "admin",
+    purpose: "Show which policy clause governs each workflow control.",
+    roleIds: ["platform_admin"],
+    owner: "Platform",
+    plannedControl: "Link a governed policy clause to a control",
+  },
+  {
+    id: "walkthrough",
+    title: "Guided sandbox walkthroughs",
+    module: "core",
+    purpose: "Practice workflows with disposable data and progress checks.",
+    roleIds: ["core_staff_only", "platform_admin"],
+    owner: "Platform",
+    plannedControl: "Start a disposable guided practice session",
+  },
+  {
+    id: "language",
+    title: "Multilingual documentation",
+    module: "admin",
+    purpose: "Publish governed translations with the same effective version.",
+    roleIds: ["platform_admin"],
+    owner: "Platform",
+    plannedControl: "Review and publish a version-matched translation",
+  },
+  {
+    id: "offline",
+    title: "Offline Knowledge Base",
+    module: "core",
+    purpose: "Precache approved guidance for resilient warehouse access.",
+    roleIds: ["core_staff_only", "platform_admin"],
+    owner: "Platform",
+    plannedControl: "Make approved guidance available offline",
+  },
+  {
+    id: "learning",
+    title: "Role onboarding curricula",
+    module: "admin",
+    purpose: "Assign role-specific learning paths and completion records.",
+    roleIds: ["platform_admin"],
+    owner: "Platform",
+    plannedControl: "Assign a governed role curriculum",
+  },
+  {
+    id: "release",
+    title: "Workflow-linked release notes",
+    module: "core",
+    purpose: "Explain changed screens and procedures after each release.",
+    roleIds: ["core_staff_only", "platform_admin"],
+    owner: "Platform",
+    plannedControl: "Open release guidance for a changed workflow",
+  },
+];
+
+const defineRoadmapFeature = (
+  definition: RoadmapFeatureDefinition,
+): KnowledgeFeature => {
+  const relationship = FEATURE_RELATIONSHIPS[definition.id];
+  if (!relationship)
+    throw new Error(
+      `missing explicit feature relationship for ${definition.id}`,
+    );
+  return {
+    id: definition.id,
+    title: definition.title,
+    module: definition.module,
+    availability: "coming_soon",
+    routes: [],
+    roleIds: definition.roleIds,
+    capabilityIds: [],
+    purpose: definition.purpose,
+    policyBasis: relationship.policyBasis,
+    relatedFlowIds: relationship.relatedFlowIds,
+    controls: [
+      {
+        name: definition.plannedControl,
+        behavior: `Planned behavior: ${definition.purpose}`,
+        validation:
+          "Unavailable until the roadmap feature, RBAC scope, data contract, and release approval are complete.",
+        result: "No live action occurs while this feature remains coming soon.",
+      },
+    ],
+    fields: [],
+    reads: ["Approved roadmap scope and future governance requirements."],
+    writes: ["No live record is written while this feature is coming soon."],
+    statuses: ["Proposed, planned, in progress, or released."],
+    notifications: ["No live notification is emitted."],
+    exceptions: [
+      "Use the current handbook and escalate the unmet need to the feature owner.",
+    ],
+    completionEvidence: [
+      "A future release record must identify the approved route, RBAC, data, test, and owner contracts.",
+    ],
+    owner: definition.owner,
+    reviewedAt: "2026-07-12",
+  };
+};
+
+export const ROADMAP_KNOWLEDGE_FEATURES =
+  roadmapDefinitions.map(defineRoadmapFeature);
+
+export const KNOWLEDGE_FEATURES: KnowledgeFeature[] = [
+  ...definitions.map(defineFeature),
+  ...ROADMAP_KNOWLEDGE_FEATURES,
+];

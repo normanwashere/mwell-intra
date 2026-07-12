@@ -14,6 +14,14 @@ const valid = (): KnowledgeContent => ({
       module: "core",
       availability: "live",
       purpose: "Acts",
+      dailyTasks: ["Manage the governed flow."],
+      responsibilityStages: [
+        {
+          title: "Manage",
+          responsibility: "Review and decide the flow.",
+          outcome: "The flow reaches a governed outcome.",
+        },
+      ],
       authority: {
         capabilities: ["flow.manage"],
         accessibleRoutes: ["/"],
@@ -36,6 +44,8 @@ const valid = (): KnowledgeContent => ({
       roleIds: ["owner"],
       capabilityIds: ["flow.manage"],
       purpose: "Manage the flow.",
+      policyBasis: ["Flow policy."],
+      relatedFlowIds: ["flow"],
       controls: [
         {
           name: "Governed branch",
@@ -124,6 +134,27 @@ const valid = (): KnowledgeContent => ({
 });
 
 describe("validateKnowledgeContent", () => {
+  it("rejects missing role operating data and invalid feature relationships", () => {
+    const content = valid();
+    content.roles[0]!.dailyTasks = [];
+    content.roles[0]!.responsibilityStages = [];
+    content.features[0]!.policyBasis = [];
+    content.features[0]!.relatedFlowIds = ["missing-flow"];
+
+    expect(
+      validateKnowledgeContent(content, {
+        enforceEvidence: false,
+        enforceDecisionGovernance: false,
+      }),
+    ).toEqual(
+      expect.arrayContaining([
+        `role ${content.roles[0]!.id} has no daily tasks`,
+        `role ${content.roles[0]!.id} has no responsibility stages`,
+        `feature ${content.features[0]!.id} has no policy basis`,
+        `feature ${content.features[0]!.id} references unknown flow missing-flow`,
+      ]),
+    );
+  });
   it("rejects incomplete live content contracts", () => {
     const invalid = {
       roles: [

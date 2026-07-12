@@ -78,8 +78,18 @@ describe("knowledge role authority registry", () => {
     }));
 
     expect(WAREHOUSE_DETAIL_ROUTE_ALIASES).toEqual([
-      { route: "/warehouse/inventory/:id", parentPath: "/inventory" },
-      { route: "/warehouse/events/:id", parentPath: "/events" },
+      {
+        route: "/warehouse/inventory/:id",
+        parentPath: "/inventory",
+        parentHref: "/warehouse/inventory",
+        parentLabel: "Open inventory list",
+      },
+      {
+        route: "/warehouse/events/:id",
+        parentPath: "/events",
+        parentHref: "/warehouse/events",
+        parentLabel: "Open events list",
+      },
     ]);
     expect(WAREHOUSE_ROUTE_CAPABILITY_ENTRIES).toEqual([
       ...routesFromModules,
