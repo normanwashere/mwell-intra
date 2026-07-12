@@ -27,4 +27,24 @@ describe('OperationRoutesPage', () => {
     expect(within(routes).getByText(/online required/i)).toBeInTheDocument();
     expect(within(routes).queryByRole('button', { name: 'Edit route' })).not.toBeInTheDocument();
   });
+
+  it('allows an inactive alternate route to be activated', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<OperationRoutesPage />, {
+      repo: makeRepo(),
+      role: 'warehouse_admin',
+    });
+    const routes = await screen.findByLabelText('Operation routes');
+    const inactive = within(routes).getByText('Inactive').closest('li');
+    expect(inactive).not.toBeNull();
+    await user.click(within(inactive!).getByRole('button', { name: 'Edit route' }));
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Edit operation route',
+    });
+    const active = within(dialog).getByLabelText('Active');
+    expect(active).toBeEnabled();
+    await user.click(active);
+    expect(active).toBeChecked();
+    expect(within(dialog).queryByText(/last active route/i)).not.toBeInTheDocument();
+  });
 });
