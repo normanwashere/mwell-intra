@@ -132,6 +132,10 @@ export interface KnowledgeDecisionNode extends KnowledgeFlowNodeBase {
   type: "decision";
   authorityRoleId: string;
   policyBasis: string;
+  mergeContract?: {
+    destinationNodeId: string;
+    justification: string;
+  };
   terminalOutcome?: never;
 }
 

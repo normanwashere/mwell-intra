@@ -25,6 +25,10 @@ function hasText(value: string | undefined): value is string {
   return Boolean(value?.trim());
 }
 
+function normalizeDecisionLabel(value: string): string {
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
 function hasProhibition(value: string): boolean {
   return /\b(do not|never|must not)\b/i.test(value);
 }
@@ -252,15 +256,69 @@ export function validateKnowledgeContent(
         );
     }
 
-    for (const item of flow.nodes)
-      if (
-        enforceDecisionGovernance &&
-        item.type === "decision" &&
-        (outgoing.get(item.id)?.length ?? 0) < 2
-      )
+    for (const item of flow.nodes) {
+      if (!enforceDecisionGovernance || item.type !== "decision") continue;
+      const branches = outgoing.get(item.id) ?? [];
+      if (branches.length < 2)
         errors.push(
           `flow ${flow.id}:${item.id} decision requires at least two outcomes`,
         );
+
+      const labelCounts = new Map<string, number>();
+      for (const branch of branches) {
+        if (!branch.label?.trim()) continue;
+        const label = normalizeDecisionLabel(branch.label);
+        labelCounts.set(label, (labelCounts.get(label) ?? 0) + 1);
+      }
+      if (labelCounts.size < 2)
+        errors.push(
+          `flow ${flow.id}:${item.id} decision requires at least two unique outcome labels`,
+        );
+      for (const [label, count] of labelCounts)
+        if (count > 1)
+          errors.push(
+            `flow ${flow.id}:${item.id} decision has duplicate outcome label "${label}"`,
+          );
+
+      const destinationCounts = new Map<string, number>();
+      for (const branch of branches)
+        destinationCounts.set(
+          branch.to,
+          (destinationCounts.get(branch.to) ?? 0) + 1,
+        );
+
+      const mergeContract = item.mergeContract;
+      const mergeCount = mergeContract
+        ? (destinationCounts.get(mergeContract.destinationNodeId) ?? 0)
+        : 0;
+      const validMergeContract = Boolean(
+        mergeContract &&
+        hasText(mergeContract.justification) &&
+        mergeCount >= 2,
+      );
+      if (mergeContract && !hasText(mergeContract.justification))
+        errors.push(
+          `flow ${flow.id}:${item.id} merge contract has no justification`,
+        );
+      if (mergeContract && mergeCount < 2)
+        errors.push(
+          `flow ${flow.id}:${item.id} merge contract destination ${mergeContract.destinationNodeId} is not shared by at least two outcomes`,
+        );
+
+      if (destinationCounts.size < 2 && !validMergeContract)
+        errors.push(
+          `flow ${flow.id}:${item.id} decision requires at least two distinct destinations`,
+        );
+      for (const [destination, count] of destinationCounts)
+        if (
+          count > 1 &&
+          (!validMergeContract ||
+            mergeContract?.destinationNodeId !== destination)
+        )
+          errors.push(
+            `flow ${flow.id}:${item.id} decision has duplicate destination ${destination} without a merge contract`,
+          );
+    }
 
     for (const item of flow.nodes)
       if (item.type !== "terminal" && !outgoing.get(item.id)?.length)

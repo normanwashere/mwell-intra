@@ -66,6 +66,7 @@ const PRINCIPAL_DECISIONS: Record<string, string[]> = {
     "p2p-threshold",
     "p2p-risk",
     "p2p-competition",
+    "p2p-rfq-quotes",
     "p2p-bids",
     "p2p-exception",
     "p2p-budget",
@@ -150,7 +151,7 @@ describe("principal workflow decision contracts", () => {
   );
 
   it.each(KNOWLEDGE_FLOWS)(
-    "$id gives every decision authority, policy, and at least two labelled outcomes",
+    "$id gives every decision distinct labelled outcomes and destinations or an explicit merge contract",
     (flow) => {
       for (const decision of flow.nodes.filter(
         (item) => item.type === "decision",
@@ -162,10 +163,32 @@ describe("principal workflow decision contracts", () => {
         expect(decision.policyBasis, decision.id).toBeTruthy();
         const branches = outgoingEdges(flow, decision.id);
         expect(branches.length, decision.id).toBeGreaterThanOrEqual(2);
-        expect(
-          branches.every((edge) => Boolean(edge.label?.trim())),
-          decision.id,
-        ).toBe(true);
+        const labels = branches.map((edge) =>
+          edge.label!.trim().replace(/\s+/g, " ").toLowerCase(),
+        );
+        expect(new Set(labels).size, decision.id).toBe(branches.length);
+
+        const destinations = branches.map((edge) => edge.to);
+        const duplicateDestinations = [...new Set(destinations)].filter(
+          (destination) =>
+            destinations.filter((candidate) => candidate === destination)
+              .length > 1,
+        );
+        if (decision.mergeContract) {
+          expect(
+            decision.mergeContract.justification.trim(),
+            decision.id,
+          ).toBeTruthy();
+          expect(duplicateDestinations, decision.id).toEqual([
+            decision.mergeContract.destinationNodeId,
+          ]);
+        } else {
+          expect(new Set(destinations).size, decision.id).toBe(branches.length);
+          expect(
+            new Set(destinations).size,
+            decision.id,
+          ).toBeGreaterThanOrEqual(2);
+        }
       }
     },
   );
@@ -188,4 +211,50 @@ describe("principal workflow decision contracts", () => {
       );
     },
   );
+
+  it("routes below-threshold RFQ and at-or-above-threshold RFP work separately before vendor eligibility", () => {
+    const procurement = KNOWLEDGE_FLOWS.find(
+      (item) => item.id === "procure-to-pay",
+    )!;
+
+    expect(outgoingEdges(procurement, "p2p-threshold")).toEqual([
+      expect.objectContaining({
+        label: "Below PHP 1,000,000",
+        to: "p2p-rfq-evidence",
+      }),
+      expect.objectContaining({
+        label: "PHP 1,000,000 or above",
+        to: "p2p-rfp-evidence",
+      }),
+    ]);
+    expect(outgoingEdges(procurement, "p2p-rfq-evidence")).toEqual([
+      expect.objectContaining({ to: "p2p-rfq-quotes" }),
+    ]);
+    expect(outgoingEdges(procurement, "p2p-rfp-evidence")).toEqual([
+      expect.objectContaining({ to: "p2p-bids" }),
+    ]);
+    expect(outgoingEdges(procurement, "p2p-rfq-quotes")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          label: "Comparable quotations complete",
+          to: "p2p-accreditation",
+        }),
+      ]),
+    );
+    expect(outgoingEdges(procurement, "p2p-bids")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          label: "Competitive bid pack complete",
+          to: "p2p-accreditation",
+        }),
+      ]),
+    );
+
+    expect(
+      procurement.nodes.find((item) => item.id === "p2p-rfq-evidence")?.body,
+    ).toMatch(/comparable quotations/i);
+    expect(
+      procurement.nodes.find((item) => item.id === "p2p-rfp-evidence")?.body,
+    ).toMatch(/award recommendation.*vendor proposals/i);
+  });
 });

@@ -36,6 +36,7 @@ const decision = (
   body: string,
   authorityRoleId: string,
   policyBasis: string,
+  mergeContract?: KnowledgeDecisionNode["mergeContract"],
 ): KnowledgeDecisionNode => ({
   id,
   type: "decision",
@@ -44,6 +45,7 @@ const decision = (
   body,
   authorityRoleId,
   policyBasis,
+  ...(mergeContract ? { mergeContract } : {}),
 });
 
 const terminal = (
@@ -220,9 +222,9 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
         "p2p-threshold",
         "Which value threshold applies?",
         ["procurement_officer"],
-        "Use the total estimated PHP value to distinguish the below-threshold route from RFP or bidding at PHP 1,000,000 and above.",
+        "Use the total estimated PHP value to select RFQ or quotation work below the threshold and RFP or competitive bidding at PHP 1,000,000 and above.",
         "procurement_officer",
-        "Procurement Policy section 5: RFP or bidding applies at PHP 1,000,000 and above; Procurement confirms every route.",
+        "Procurement Policy section 5: below-threshold comparable purchases follow RFQ or quotation; RFP or bidding applies at PHP 1,000,000 and above.",
       ),
       decision(
         "p2p-risk",
@@ -234,19 +236,49 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
       ),
       decision(
         "p2p-competition",
-        "Is normal competition required?",
+        "Does the request follow normal competition?",
         ["procurement_officer"],
-        "Confirm RFQ or RFP competition unless a documented repeat, direct-award, emergency, or petty-cash route applies.",
+        "Continue to value and risk routing unless a documented repeat, direct-award, emergency, or petty-cash exception is claimed.",
         "procurement_officer",
         "Procurement Policy sections 5 and 11: competitive sourcing is the default; exceptions require a recorded basis.",
       ),
+      process(
+        "p2p-rfq-evidence",
+        "action",
+        "Assemble the RFQ or quotation evidence pack",
+        ["procurement_officer", "procurement_requester"],
+        "Retain the technical description, approved budget evidence, previous purchase cost, and comparable quotations for the below-threshold purchase.",
+        {
+          outcome:
+            "The below-threshold sourcing record shows comparable quotations and price reasonableness.",
+        },
+      ),
+      decision(
+        "p2p-rfq-quotes",
+        "Is the RFQ or quotation pack complete?",
+        ["procurement_officer"],
+        "Confirm comparable quotations, the comparison basis, sourcing effort, and price reasonableness are recorded.",
+        "procurement_officer",
+        "Procurement Policy sections 5 and 6: below-threshold RFQ sourcing retains comparable quotations and the required supporting documents where practicable.",
+      ),
+      process(
+        "p2p-rfp-evidence",
+        "action",
+        "Assemble the RFP or competitive-bidding evidence pack",
+        ["procurement_officer", "procurement_requester"],
+        "Retain the technical specification, approved budget evidence, previous purchase cost, Award Recommendation draft, vendor proposals, evaluation basis, and sourcing record.",
+        {
+          outcome:
+            "The RFP record contains the Award Recommendation and vendor proposals required for competitive evaluation.",
+        },
+      ),
       decision(
         "p2p-bids",
-        "Is the intended bid response set sufficient?",
+        "Is the competitive bid pack complete?",
         ["procurement_officer"],
-        "Compare invited suppliers and received responses with the intended competitive response set and retain the sourcing record.",
+        "Compare invited suppliers and vendor proposals with the intended response set, evaluation basis, and Award Recommendation evidence.",
         "procurement_officer",
-        "Procurement Policy section 5: sourcing effort is documented; a response shortfall requires an insufficient-bids exception.",
+        "Procurement Policy sections 5 and 9 and Annex A: RFP sourcing requires documented competition, evaluation, vendor proposals, and an Award Recommendation; a response shortfall requires an exception.",
       ),
       decision(
         "p2p-exception",
@@ -263,6 +295,11 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
         "Confirm current Legal accreditation or a specifically approved temporary clearance before supplier commitment.",
         "legal_reviewer",
         "Procurement Policy section 7: award and PO eligibility require current vendor accreditation or scoped temporary clearance.",
+        {
+          destinationNodeId: "p2p-budget",
+          justification:
+            "Current accreditation and an approved scoped temporary clearance are distinct eligibility findings that both proceed to the same mandatory budget gate.",
+        },
       ),
       decision(
         "p2p-budget",
@@ -342,31 +379,72 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
       ),
     ],
     [
-      edge("p2p-start", "p2p-threshold"),
-      edge("p2p-threshold", "p2p-risk", "Below PHP 1,000,000", "neutral"),
-      edge("p2p-threshold", "p2p-risk", "PHP 1,000,000 or above", "success"),
-      edge("p2p-risk", "p2p-competition", "Standard risk", "success"),
-      edge("p2p-risk", "p2p-competition", "High risk or complex", "neutral"),
-      edge(
-        "p2p-risk",
-        "p2p-escalated",
-        "Risk cannot be classified",
-        "exception",
-      ),
-      edge("p2p-competition", "p2p-bids", "Competition required", "success"),
+      edge("p2p-start", "p2p-competition"),
+      edge("p2p-competition", "p2p-risk", "Normal competition", "success"),
       edge(
         "p2p-competition",
         "p2p-exception",
         "Exception route claimed",
         "neutral",
       ),
+      edge("p2p-risk", "p2p-threshold", "Standard risk", "success"),
+      edge(
+        "p2p-risk",
+        "p2p-rfp-evidence",
+        "High risk or complex - RFP required",
+        "neutral",
+      ),
+      edge(
+        "p2p-risk",
+        "p2p-escalated",
+        "Risk cannot be classified",
+        "exception",
+      ),
+      edge(
+        "p2p-threshold",
+        "p2p-rfq-evidence",
+        "Below PHP 1,000,000",
+        "neutral",
+      ),
+      edge(
+        "p2p-threshold",
+        "p2p-rfp-evidence",
+        "PHP 1,000,000 or above",
+        "success",
+      ),
+      edge("p2p-rfq-evidence", "p2p-rfq-quotes"),
+      edge(
+        "p2p-rfq-quotes",
+        "p2p-accreditation",
+        "Comparable quotations complete",
+        "success",
+      ),
+      edge(
+        "p2p-rfq-quotes",
+        "p2p-exception",
+        "Quotation shortfall",
+        "exception",
+      ),
+      edge(
+        "p2p-rfq-quotes",
+        "p2p-revision",
+        "Required evidence incomplete",
+        "neutral",
+      ),
+      edge("p2p-rfp-evidence", "p2p-bids"),
       edge(
         "p2p-bids",
         "p2p-accreditation",
-        "Response set sufficient",
+        "Competitive bid pack complete",
         "success",
       ),
       edge("p2p-bids", "p2p-exception", "Insufficient bids", "exception"),
+      edge(
+        "p2p-bids",
+        "p2p-revision",
+        "Award or evaluation evidence incomplete",
+        "neutral",
+      ),
       edge("p2p-exception", "p2p-accreditation", "Approved", "success"),
       edge("p2p-exception", "p2p-revision", "Return for evidence", "neutral"),
       edge("p2p-exception", "p2p-rejected", "Rejected", "exception"),
@@ -570,7 +648,7 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
         "Failed or overdue",
         "exception",
       ),
-      edge("vendor-renewal", "vendor-suspension", "Current", "success"),
+      edge("vendor-renewal", "vendor-active", "Current", "success"),
       edge("vendor-renewal", "vendor-renewal-due", "Renewal due", "neutral"),
       edge(
         "vendor-renewal",
@@ -695,6 +773,11 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
         "Validate the destination bin is active, belongs to the site, supports the stock state, and is allowed by the operation route.",
         "warehouse_logistics_supervisor",
         "Warehouse storage and route control: putaway requires an active compatible bin and permitted source-to-destination route.",
+        {
+          destinationNodeId: "receive-escalated",
+          justification:
+            "Missing routes and restricted destinations both preserve stock in controlled staging for the same accountable configuration escalation.",
+        },
       ),
       process(
         "receive-putaway",

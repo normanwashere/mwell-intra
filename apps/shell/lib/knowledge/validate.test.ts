@@ -362,6 +362,114 @@ describe("validateKnowledgeContent", () => {
     );
   });
 
+  it("rejects duplicate normalized decision labels", () => {
+    const content = valid();
+    content.flows[0]!.edges[0]!.label = " Proceed ";
+    content.flows[0]!.edges[1]!.label = "proceed";
+    expect(validateKnowledgeContent(content)).toEqual(
+      expect.arrayContaining([
+        "flow flow:start decision requires at least two unique outcome labels",
+        'flow flow:start decision has duplicate outcome label "proceed"',
+      ]),
+    );
+  });
+
+  it("rejects duplicate decision destinations without a merge contract", () => {
+    const content = valid();
+    content.flows[0]!.edges[1]!.to = "yes";
+    expect(validateKnowledgeContent(content)).toEqual(
+      expect.arrayContaining([
+        "flow flow:start decision requires at least two distinct destinations",
+        "flow flow:start decision has duplicate destination yes without a merge contract",
+      ]),
+    );
+  });
+
+  it("accepts duplicate destinations declared by a justified merge contract", () => {
+    const content = valid();
+    const flow = content.flows[0]!;
+    const decision = flow.nodes[0]! as KnowledgeDecisionNode;
+    flow.nodes = [flow.nodes[0]!, flow.nodes[1]!];
+    flow.edges[1]!.to = "yes";
+    decision.mergeContract = {
+      destinationNodeId: "yes",
+      justification:
+        "Both labels record distinct policy findings before the shared completion step.",
+    };
+
+    expect(validateKnowledgeContent(content)).toEqual([]);
+  });
+
+  it("reports every reachable node in a closed cycle that cannot reach a terminal", () => {
+    const content = valid();
+    content.flows[0] = {
+      id: "cycle",
+      title: "Closed cycle",
+      summary: "A reachable cycle disconnected from its declared terminal.",
+      roles: ["owner"],
+      startNodeId: "cycle-start",
+      nodes: [
+        {
+          id: "cycle-start",
+          type: "decision",
+          title: "Choose loop",
+          ownerRoleIds: ["owner"],
+          body: "Choose one of two loop entries.",
+          authorityRoleId: "owner",
+          policyBasis: "Cycle policy.",
+        },
+        {
+          id: "cycle-a",
+          type: "system",
+          title: "Cycle A",
+          ownerRoleIds: ["owner"],
+          body: "Continue to cycle B.",
+        },
+        {
+          id: "cycle-b",
+          type: "system",
+          title: "Cycle B",
+          ownerRoleIds: ["owner"],
+          body: "Continue to cycle A.",
+        },
+        {
+          id: "cycle-terminal",
+          type: "terminal",
+          title: "Disconnected terminal",
+          ownerRoleIds: ["owner"],
+          body: "This terminal is not connected.",
+          terminalOutcome: "complete",
+        },
+      ],
+      edges: [
+        {
+          from: "cycle-start",
+          to: "cycle-a",
+          label: "Enter A",
+          outcome: "neutral",
+        },
+        {
+          from: "cycle-start",
+          to: "cycle-b",
+          label: "Enter B",
+          outcome: "neutral",
+        },
+        { from: "cycle-a", to: "cycle-b" },
+        { from: "cycle-b", to: "cycle-a" },
+      ],
+    };
+
+    expect(
+      validateKnowledgeContent(content, { enforceEvidence: false }).filter(
+        (error) => error.includes("cannot reach a terminal outcome"),
+      ),
+    ).toEqual([
+      "cycle:cycle-start cannot reach a terminal outcome",
+      "cycle:cycle-a cannot reach a terminal outcome",
+      "cycle:cycle-b cannot reach a terminal outcome",
+    ]);
+  });
+
   it("rejects unreachable nodes and non-terminal dead ends", () => {
     const content = valid();
     content.flows[0]!.edges = [];
