@@ -10,8 +10,8 @@ describe('OperationRoutesPage', () => {
     const repo = makeRepo();
     renderWithProviders(<OperationRoutesPage />, { repo, role: 'logistics_supervisor' });
     const routes = await screen.findByLabelText('Operation routes');
-    expect(within(routes).getByText(/vendor.*warehouse/i)).toBeInTheDocument();
-    await user.click(within(routes).getByRole('button', { name: 'Edit route' }));
+    expect(within(routes).getAllByText(/vendor.*warehouse/i)).toHaveLength(2);
+    await user.click(within(routes).getAllByRole('button', { name: 'Edit route' })[0]!);
     const dialog = await screen.findByRole('dialog', { name: 'Edit operation route' });
     expect(within(dialog).getByLabelText('Active')).toBeDisabled();
     expect(within(dialog).getByText(/last active route/i)).toBeInTheDocument();
@@ -24,7 +24,7 @@ describe('OperationRoutesPage', () => {
   it('keeps the policy read-only for users without route-management permission', async () => {
     renderWithProviders(<OperationRoutesPage />, { role: 'operations' });
     const routes = await screen.findByLabelText('Operation routes');
-    expect(within(routes).getByText(/online required/i)).toBeInTheDocument();
+    expect(within(routes).getAllByText(/online required/i)).toHaveLength(2);
     expect(within(routes).queryByRole('button', { name: 'Edit route' })).not.toBeInTheDocument();
   });
 

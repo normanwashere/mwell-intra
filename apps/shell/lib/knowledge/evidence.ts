@@ -2,7 +2,7 @@ import { KNOWLEDGE_FLOWS } from "./workflows";
 import type { KnowledgeEvidence, KnowledgeFlowNode } from "./types";
 
 const reviewDate = "2026-07-13";
-const appCommit = "b18b57ab5cc83ebdd8d11a37bd6653e7dbd437a2";
+const appCommit = "31fe8d14277c79f25fe4e9d9b55bf15daf313c62";
 const executableTypes = new Set(["start", "action", "handoff"]);
 
 interface EvidenceScenario {
@@ -368,7 +368,7 @@ export const KNOWLEDGE_EVIDENCE_SCENARIOS: Record<string, EvidenceScenario> = {
     label: "Activate warehouse operation route",
     instruction: "After deliberately enabling Active, save the validated warehouse route so it becomes available for governed receiving.",
     x: 0.6333,
-    y: 0.7894,
+    y: 0.7694,
     mobileX: 0.5,
     mobileY: 0.9408,
   },
