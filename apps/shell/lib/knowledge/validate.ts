@@ -253,6 +253,16 @@ export function validateKnowledgeContent(
     }
 
     for (const item of flow.nodes)
+      if (
+        enforceDecisionGovernance &&
+        item.type === "decision" &&
+        (outgoing.get(item.id)?.length ?? 0) < 2
+      )
+        errors.push(
+          `flow ${flow.id}:${item.id} decision requires at least two outcomes`,
+        );
+
+    for (const item of flow.nodes)
       if (item.type !== "terminal" && !outgoing.get(item.id)?.length)
         errors.push(`${flow.id}:${item.id} is a non-terminal dead end`);
 

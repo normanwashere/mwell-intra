@@ -115,9 +115,8 @@ export interface KnowledgeArticle {
   screenshots?: Array<{ src: string; alt: string; caption: string }>;
 }
 
-export interface KnowledgeFlowNode {
+interface KnowledgeFlowNodeBase {
   id: string;
-  type: FlowNodeType;
   title: string;
   ownerRoleIds: string[];
   body: string;
@@ -126,11 +125,32 @@ export interface KnowledgeFlowNode {
   exception?: string;
   articleId?: string;
   evidenceId?: string;
-  authorityRoleId?: string;
-  policyBasis?: string;
-  terminalOutcome?: KnowledgeOutcome;
   databaseEffect?: string;
 }
+
+export interface KnowledgeDecisionNode extends KnowledgeFlowNodeBase {
+  type: "decision";
+  authorityRoleId: string;
+  policyBasis: string;
+  terminalOutcome?: never;
+}
+
+export interface KnowledgeTerminalNode extends KnowledgeFlowNodeBase {
+  type: "terminal";
+  authorityRoleId?: never;
+  policyBasis?: never;
+  terminalOutcome: KnowledgeOutcome;
+}
+
+export interface KnowledgeProcessNode extends KnowledgeFlowNodeBase {
+  type: Exclude<FlowNodeType, "decision" | "terminal">;
+  authorityRoleId?: never;
+  policyBasis?: never;
+  terminalOutcome?: never;
+}
+
+export type KnowledgeFlowNode =
+  KnowledgeDecisionNode | KnowledgeTerminalNode | KnowledgeProcessNode;
 
 export interface KnowledgeFlowEdge {
   from: string;

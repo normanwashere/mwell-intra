@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { KnowledgeContent } from "./types";
+import type {
+  KnowledgeContent,
+  KnowledgeDecisionNode,
+  KnowledgeTerminalNode,
+} from "./types";
 import { validateKnowledgeContent } from "./validate";
 
 const valid = (): KnowledgeContent => ({
@@ -249,11 +253,13 @@ describe("validateKnowledgeContent", () => {
   it("keeps strict evidence and decision governance as the default while allowing staged aggregate validation", () => {
     const content = valid();
     const flow = content.flows[0]!;
-    const decision = flow.nodes[0]!;
-    const terminal = flow.nodes[1]!;
-    decision.authorityRoleId = undefined;
-    decision.policyBasis = undefined;
-    terminal.terminalOutcome = undefined;
+    const decision = flow.nodes[0]! as KnowledgeDecisionNode;
+    const terminal = flow.nodes[1]! as KnowledgeTerminalNode;
+    Object.assign(decision, {
+      authorityRoleId: undefined,
+      policyBasis: undefined,
+    });
+    Object.assign(terminal, { terminalOutcome: undefined });
     content.articles.push({
       id: "article",
       slug: "procedures/article",
@@ -345,6 +351,14 @@ describe("validateKnowledgeContent", () => {
     content.flows[0]!.edges[0]!.label = undefined;
     expect(validateKnowledgeContent(content)).toContain(
       "flow:start decision edge to yes requires a label",
+    );
+  });
+
+  it("rejects a decision with fewer than two outcomes", () => {
+    const content = valid();
+    content.flows[0]!.edges.pop();
+    expect(validateKnowledgeContent(content)).toContain(
+      "flow flow:start decision requires at least two outcomes",
     );
   });
 

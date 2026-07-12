@@ -14,7 +14,6 @@ describe("Knowledge Base content", () => {
     expect(
       validateKnowledgeContent(KNOWLEDGE_CONTENT, {
         enforceEvidence: false,
-        enforceDecisionGovernance: false,
       }),
     ).toEqual([]);
   });
