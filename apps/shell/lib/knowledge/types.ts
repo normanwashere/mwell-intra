@@ -201,7 +201,42 @@ export interface KnowledgeEvidence {
   expectedLandmark: string;
   expectedDatabaseEffect?: string;
   sensitiveDataReviewed: boolean;
+  sharedEvidenceGroup?: string;
   hotspots: KnowledgeHotspot[];
+}
+
+export interface KnowledgeCaptureBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface KnowledgeCaptureArtifact {
+  file: string;
+  sha256: string;
+  width: number;
+  height: number;
+  controlBounds: KnowledgeCaptureBounds;
+  hotspot: { x: number; y: number };
+}
+
+export interface KnowledgeCaptureReportEntry {
+  route: string;
+  roleId: string;
+  state: string;
+  control: Pick<KnowledgeHotspot, "id" | "label" | "instruction">;
+  desktop: KnowledgeCaptureArtifact;
+  mobile: KnowledgeCaptureArtifact;
+}
+
+export interface KnowledgeCaptureReport {
+  schemaVersion: 1;
+  sourceCommit: string;
+  capturedAt: string;
+  reviewedAt: string;
+  evidenceCount: number;
+  evidence: Record<string, KnowledgeCaptureReportEntry>;
 }
 
 export interface KnowledgeFlow {

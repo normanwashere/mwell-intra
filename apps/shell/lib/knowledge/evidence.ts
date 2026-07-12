@@ -317,7 +317,7 @@ export const KNOWLEDGE_EVIDENCE_SCENARIOS: Record<string, EvidenceScenario> = {
   },
   "count-enter": {
     route: "/warehouse/scan",
-    state: "Warehouse operations is using the authorized scan surface to identify observed stock.",
+    state: "The warehouse logistics supervisor is using the authorized count surface to identify observed stock.",
     landmark: "Enter barcode manually",
     label: "Scan observed stock",
     instruction: "Scan or enter the observed stock identity for the accountable count handoff.",

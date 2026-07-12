@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { KNOWLEDGE_CONTENT } from "./content";
 import { KNOWLEDGE_GUIDE_CONTENT } from "@shell/components/knowledge/KnowledgeBase";
@@ -318,6 +318,25 @@ describe("Knowledge Base content", () => {
           item.mobileSrc,
         ).toBe(true);
     }
+  });
+
+  it("assigns count entry to a role with cycle-count authority", () => {
+    const countEntry = KNOWLEDGE_CONTENT.flows
+      .flatMap((flow) => flow.nodes)
+      .find((node) => node.id === "count-enter")!;
+    for (const roleId of countEntry.ownerRoleIds) {
+      const role = KNOWLEDGE_CONTENT.roles.find((item) => item.id === roleId)!;
+      expect(role.authority.capabilities, roleId).toContain("cycle_count");
+    }
+  });
+
+  it("keeps evidence capture as one atomic full-regeneration mode", () => {
+    const captureSource = readFileSync(
+      path.resolve("tests/e2e/capture-knowledge-evidence.spec.ts"),
+      "utf8",
+    );
+    expect(captureSource).not.toContain("CAPTURE_FROM");
+    expect(captureSource).not.toContain("REFRESH_HOTSPOTS");
   });
 
   it("searches governed branches and screenshot instructions", () => {

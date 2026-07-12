@@ -1,14 +1,21 @@
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { inflateSync } from "node:zlib";
-import type { KnowledgeContent, KnowledgeFeature } from "./types";
+import type {
+  KnowledgeCaptureArtifact,
+  KnowledgeCaptureReport,
+  KnowledgeCaptureReportEntry,
+  KnowledgeContent,
+  KnowledgeEvidence,
+  KnowledgeFeature,
+} from "./types";
 import { edgeChoiceId } from "./graph";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const GIT_COMMIT = /^[0-9a-f]{40}$/;
 const EXECUTABLE_NODE_TYPES = new Set(["start", "action", "handoff"]);
-const PUBLIC_ROUTES = new Set(["/login", "/forgot-password", "/reset-password"]);
 const AVAILABILITY = new Set(["live", "limited", "coming_soon"]);
 const OUTCOMES = new Set([
   "complete",
@@ -49,7 +56,8 @@ function routeMatches(pattern: string, route: string): boolean {
   return (
     patternSegments.length === routeSegments.length &&
     patternSegments.every(
-      (segment, index) => segment.startsWith(":") || segment === routeSegments[index],
+      (segment, index) =>
+        segment.startsWith(":") || segment === routeSegments[index],
     )
   );
 }
@@ -59,10 +67,11 @@ function roleCanAccessRoute(
   roleId: string,
   route: string,
 ): boolean {
-  if (PUBLIC_ROUTES.has(route)) return true;
   const role = content.roles.find((candidate) => candidate.id === roleId);
   return Boolean(
-    role?.authority.accessibleRoutes.some((pattern) => routeMatches(pattern, route)),
+    role?.authority.accessibleRoutes.some((pattern) =>
+      routeMatches(pattern, route),
+    ),
   );
 }
 
@@ -223,18 +232,7 @@ export function validateFeatureSemanticMappings(
   return [...errors];
 }
 
-export interface KnowledgeValidationOptions {
-  enforceEvidence?: boolean;
-  enforceDecisionGovernance?: boolean;
-}
-
-export function validateKnowledgeContent(
-  content: KnowledgeContent,
-  {
-    enforceEvidence = true,
-    enforceDecisionGovernance = true,
-  }: KnowledgeValidationOptions = {},
-): string[] {
+export function validateKnowledgeContent(content: KnowledgeContent): string[] {
   const errors: string[] = [];
   const roleIds = new Set(content.roles.map((role) => role.id));
   const flowIds = new Set(content.flows.map((flow) => flow.id));
@@ -375,7 +373,9 @@ export function validateKnowledgeContent(
         nodeContext.node.databaseEffect &&
         evidence.expectedDatabaseEffect !== nodeContext.node.databaseEffect
       )
-        errors.push(`${evidence.id} does not match its expected database effect`);
+        errors.push(
+          `${evidence.id} does not match its expected database effect`,
+        );
     }
     if (!roleCanAccessRoute(content, evidence.roleId, evidence.route))
       errors.push(
@@ -389,10 +389,14 @@ export function validateKnowledgeContent(
       evidence.expectedLandmark,
       evidence.hotspots.map((hotspot) => hotspot.label).join("|"),
     ].join("\u0000");
-    for (const source of [evidence.desktopSrc, evidence.mobileSrc].filter(Boolean)) {
+    for (const source of [evidence.desktopSrc, evidence.mobileSrc].filter(
+      Boolean,
+    )) {
       const existingContext = imageContexts.get(source);
       if (existingContext && existingContext !== sharingContext)
-        errors.push(`${evidence.id} reuses ${source} for a different capture context`);
+        errors.push(
+          `${evidence.id} reuses ${source} for a different capture context`,
+        );
       else imageContexts.set(source, sharingContext);
     }
 
@@ -463,7 +467,6 @@ export function validateKnowledgeContent(
           `${flow.id}:${item.id} references missing evidence ${item.evidenceId}`,
         );
       if (
-        enforceEvidence &&
         EXECUTABLE_NODE_TYPES.has(item.type) &&
         item.ownerRoleIds.some(
           (roleId) =>
@@ -473,7 +476,7 @@ export function validateKnowledgeContent(
         !item.evidenceId
       )
         errors.push(`flow ${flow.id}:${item.id} requires screenshot evidence`);
-      if (enforceDecisionGovernance && item.type === "decision") {
+      if (item.type === "decision") {
         if (!hasText(item.authorityRoleId))
           errors.push(`flow ${flow.id}:${item.id} has no authority`);
         else if (!roleIds.has(item.authorityRoleId))
@@ -487,7 +490,7 @@ export function validateKnowledgeContent(
         if (!hasText(item.policyBasis))
           errors.push(`flow ${flow.id}:${item.id} has no policy basis`);
       }
-      if (enforceDecisionGovernance && item.type === "terminal") {
+      if (item.type === "terminal") {
         if (!item.terminalOutcome || !OUTCOMES.has(item.terminalOutcome))
           errors.push(
             `flow ${flow.id}:${item.id} has invalid terminal outcome`,
@@ -522,7 +525,7 @@ export function validateKnowledgeContent(
     }
 
     for (const item of flow.nodes) {
-      if (!enforceDecisionGovernance || item.type !== "decision") continue;
+      if (item.type !== "decision") continue;
       const branches = outgoing.get(item.id) ?? [];
       if (branches.length < 2)
         errors.push(
@@ -626,6 +629,7 @@ export function validateKnowledgeContent(
 interface EvidenceArtifactValidationOptions {
   publicRoot: string;
   repositoryRoot: string;
+  reportPath: string;
 }
 
 function decodePng(file: string): { width: number; height: number } {
@@ -675,32 +679,69 @@ function decodePng(file: string): { width: number; height: number } {
   if (!channels) throw new Error("unsupported PNG color type");
   const decoded = inflateSync(Buffer.concat(imageData));
   const rowBytes = Math.ceil((width * channels * bitDepth) / 8) + 1;
-  if (decoded.length !== rowBytes * height) throw new Error("invalid PNG raster");
+  if (decoded.length !== rowBytes * height)
+    throw new Error("invalid PNG raster");
   return { width, height };
 }
 
 export function validateKnowledgeEvidenceArtifacts(
   content: KnowledgeContent,
-  { publicRoot, repositoryRoot }: EvidenceArtifactValidationOptions,
+  { publicRoot, repositoryRoot, reportPath }: EvidenceArtifactValidationOptions,
 ): string[] {
   const errors: string[] = [];
-  const commits = new Set(content.evidence.map((evidence) => evidence.appCommit));
-  for (const commit of commits) {
-    if (!GIT_COMMIT.test(commit)) continue;
-    try {
-      execFileSync("git", ["cat-file", "-e", `${commit}^{commit}`], {
-        cwd: repositoryRoot,
-        stdio: "ignore",
-      });
-    } catch {
-      errors.push(`evidence app commit ${commit} is not valid in this repository`);
-    }
+  const commits = new Set(
+    content.evidence.map((evidence) => evidence.appCommit),
+  );
+  for (const commit of commits) validateCommit(commit, repositoryRoot, errors);
+  let report: KnowledgeCaptureReport | undefined;
+  try {
+    const parsed = JSON.parse(readFileSync(reportPath, "utf8")) as unknown;
+    if (isCaptureReport(parsed)) report = parsed;
+  } catch {
+    // The per-evidence migration errors below identify the complete recapture set.
   }
 
+  if (!report) {
+    for (const evidence of content.evidence)
+      errors.push(`${evidence.id} requires capture report schema v1 metadata`);
+    return errors;
+  }
+
+  if (report.evidenceCount !== content.evidence.length)
+    errors.push("capture report evidence count mismatch");
+  validateCommit(report.sourceCommit, repositoryRoot, errors);
+  if (
+    content.evidence.some(
+      (evidence) =>
+        evidence.capturedAt !== report.capturedAt ||
+        evidence.reviewedAt !== report.reviewedAt,
+    )
+  )
+    errors.push("capture report dates do not match evidence metadata");
+  const expectedIds = new Set(content.evidence.map((evidence) => evidence.id));
+  for (const id of Object.keys(report.evidence))
+    if (!expectedIds.has(id))
+      errors.push(`capture report has unknown evidence ${id}`);
+
+  if (commits.size !== 1 || !commits.has(report.sourceCommit))
+    errors.push(
+      "capture report sourceCommit does not match evidence source commit",
+    );
+
+  const hashes = new Map<
+    string,
+    Array<{ evidence: KnowledgeEvidence; kind: string }>
+  >();
   for (const evidence of content.evidence) {
+    const entry = report.evidence[evidence.id];
+    if (!entry) {
+      errors.push(`${evidence.id} requires capture report schema v1 metadata`);
+      continue;
+    }
+    validateCaptureSemantics(evidence, entry, errors);
     for (const [kind, source, expected] of [
-      ["desktop", evidence.desktopSrc, { width: 1440, height: 900 }],
-      ["mobile", evidence.mobileSrc, { width: 390, height: 844 }],
+      ["desktop", evidence.desktopSrc, entry.desktop],
+      ["mobile", evidence.mobileSrc, entry.mobile],
     ] as const) {
       const root = path.resolve(publicRoot);
       const file = path.resolve(root, `.${source}`);
@@ -710,24 +751,199 @@ export function validateKnowledgeEvidenceArtifacts(
       }
       try {
         const dimensions = decodePng(file);
+        const hash = createHash("sha256")
+          .update(readFileSync(file))
+          .digest("hex");
+        if (expected.file !== source)
+          errors.push(`${evidence.id} ${kind} capture file mismatch`);
+        if (hash !== expected.sha256)
+          errors.push(`${evidence.id} ${kind} SHA-256 mismatch`);
         if (
           dimensions.width !== expected.width ||
           dimensions.height !== expected.height
         )
+          errors.push(`${evidence.id} ${kind} dimensions mismatch`);
+        const viewport =
+          kind === "desktop"
+            ? { width: 1440, height: 900 }
+            : { width: 390, height: 844 };
+        if (
+          dimensions.width !== viewport.width ||
+          dimensions.height !== viewport.height
+        )
           errors.push(
-            `${evidence.id} ${kind} screenshot must be ${expected.width}x${expected.height}, received ${dimensions.width}x${dimensions.height}`,
+            `${evidence.id} ${kind} screenshot must be ${viewport.width}x${viewport.height}, received ${dimensions.width}x${dimensions.height}`,
           );
+        const hashKey = `${kind}\u0000${hash}`;
+        const matches = hashes.get(hashKey) ?? [];
+        matches.push({ evidence, kind });
+        hashes.set(hashKey, matches);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        errors.push(`${evidence.id} cannot decode ${kind} screenshot: ${message}`);
+        errors.push(
+          `${evidence.id} cannot decode ${kind} screenshot: ${message}`,
+        );
       }
+    }
+  }
+
+  for (const matches of hashes.values()) {
+    if (matches.length < 2) continue;
+    const [first, ...duplicates] = matches;
+    for (const duplicate of duplicates) {
+      const sameGroup =
+        Boolean(first!.evidence.sharedEvidenceGroup) &&
+        first!.evidence.sharedEvidenceGroup ===
+          duplicate.evidence.sharedEvidenceGroup;
+      const sameSemantics =
+        evidenceSharingContext(first!.evidence) ===
+        evidenceSharingContext(duplicate.evidence);
+      if (!sameGroup || !sameSemantics)
+        errors.push(
+          `${duplicate.evidence.id} has duplicate ${duplicate.kind} bytes with ${first!.evidence.id} without an identical sharedEvidenceGroup context`,
+        );
     }
   }
   return errors;
 }
 
+function validateCommit(
+  commit: string,
+  repositoryRoot: string,
+  errors: string[],
+): void {
+  if (!GIT_COMMIT.test(commit)) return;
+  try {
+    execFileSync("git", ["cat-file", "-e", `${commit}^{commit}`], {
+      cwd: repositoryRoot,
+      stdio: "ignore",
+    });
+  } catch {
+    errors.push(
+      `evidence app commit ${commit} is not valid in this repository`,
+    );
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isCaptureArtifact(value: unknown): value is KnowledgeCaptureArtifact {
+  if (
+    !isRecord(value) ||
+    !isRecord(value.controlBounds) ||
+    !isRecord(value.hotspot)
+  )
+    return false;
+  const bounds = value.controlBounds;
+  return (
+    typeof value.file === "string" &&
+    typeof value.sha256 === "string" &&
+    /^[0-9a-f]{64}$/.test(value.sha256) &&
+    isFiniteNumber(value.width) &&
+    isFiniteNumber(value.height) &&
+    ["x", "y", "width", "height"].every((key) => isFiniteNumber(bounds[key])) &&
+    isFiniteNumber(value.hotspot.x) &&
+    isFiniteNumber(value.hotspot.y)
+  );
+}
+
+function isCaptureEntry(value: unknown): value is KnowledgeCaptureReportEntry {
+  if (!isRecord(value) || !isRecord(value.control)) return false;
+  return (
+    typeof value.route === "string" &&
+    typeof value.roleId === "string" &&
+    typeof value.state === "string" &&
+    typeof value.control.id === "string" &&
+    typeof value.control.label === "string" &&
+    typeof value.control.instruction === "string" &&
+    isCaptureArtifact(value.desktop) &&
+    isCaptureArtifact(value.mobile)
+  );
+}
+
+function isCaptureReport(value: unknown): value is KnowledgeCaptureReport {
+  if (!isRecord(value) || !isRecord(value.evidence)) return false;
+  return (
+    value.schemaVersion === 1 &&
+    typeof value.sourceCommit === "string" &&
+    GIT_COMMIT.test(value.sourceCommit) &&
+    typeof value.capturedAt === "string" &&
+    typeof value.reviewedAt === "string" &&
+    isFiniteNumber(value.evidenceCount) &&
+    Object.values(value.evidence).every(isCaptureEntry)
+  );
+}
+
+function evidenceSharingContext(evidence: KnowledgeEvidence): string {
+  const control = evidence.hotspots[0];
+  return [
+    evidence.roleId,
+    evidence.route,
+    evidence.state,
+    control?.id,
+    control?.label,
+    control?.instruction,
+  ].join("\u0000");
+}
+
+function validateCaptureSemantics(
+  evidence: KnowledgeEvidence,
+  entry: KnowledgeCaptureReportEntry,
+  errors: string[],
+): void {
+  if (entry.route !== evidence.route)
+    errors.push(`${evidence.id} capture report route mismatch`);
+  if (entry.roleId !== evidence.roleId)
+    errors.push(`${evidence.id} capture report role mismatch`);
+  if (entry.state !== evidence.state)
+    errors.push(`${evidence.id} capture report state mismatch`);
+  const control = evidence.hotspots[0];
+  if (
+    !control ||
+    entry.control.id !== control.id ||
+    entry.control.label !== control.label ||
+    entry.control.instruction !== control.instruction
+  )
+    errors.push(`${evidence.id} capture report control mismatch`);
+
+  for (const [kind, artifact, x, y] of [
+    ["desktop", entry.desktop, control?.x, control?.y],
+    ["mobile", entry.mobile, control?.mobileX, control?.mobileY],
+  ] as const) {
+    const bounds = artifact.controlBounds;
+    if (
+      bounds.x < 0 ||
+      bounds.y < 0 ||
+      bounds.width <= 0 ||
+      bounds.height <= 0 ||
+      bounds.x + bounds.width > artifact.width ||
+      bounds.y + bounds.height > artifact.height
+    )
+      errors.push(`${evidence.id} ${kind} control bounds are invalid`);
+    const derivedX = Number(
+      ((bounds.x + bounds.width / 2) / artifact.width).toFixed(4),
+    );
+    const derivedY = Number(
+      ((bounds.y + bounds.height / 2) / artifact.height).toFixed(4),
+    );
+    if (
+      artifact.hotspot.x !== x ||
+      artifact.hotspot.y !== y ||
+      derivedX !== x ||
+      derivedY !== y
+    )
+      errors.push(`${evidence.id} ${kind} hotspot mismatch`);
+  }
+}
+
 export function validateKnowledgeBase(content: KnowledgeContent): string[] {
-  const errors: string[] = [];
+  const errors: string[] = validateKnowledgeContent(content);
   const roleIds = new Set(content.roles.map((role) => role.id));
   const articleIds = new Set<string>();
   const slugs = new Set<string>();
@@ -778,5 +994,5 @@ export function validateKnowledgeBase(content: KnowledgeContent): string[] {
     if (!content.flows.some((flow) => flow.roles.includes(role.id)))
       errors.push(`Role ${role.id} has no flow`);
   }
-  return errors;
+  return [...new Set(errors)];
 }

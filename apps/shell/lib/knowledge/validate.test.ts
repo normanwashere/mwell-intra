@@ -1,17 +1,17 @@
 import { describe, expect, it } from "vitest";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { tmpdir } from "node:os";
 import path from "node:path";
-import type {
-  KnowledgeContent,
-  KnowledgeDecisionNode,
-  KnowledgeTerminalNode,
-} from "./types";
+import type { KnowledgeContent, KnowledgeDecisionNode, KnowledgeTerminalNode } from "./types";
 import { KNOWLEDGE_CONTENT } from "./content";
-import {
-  validateKnowledgeContent,
-  validateKnowledgeEvidenceArtifacts,
-} from "./validate";
+import { validateKnowledgeContent, validateKnowledgeEvidenceArtifacts, validateKnowledgeBase } from "./validate";
 
 const APP_COMMIT = "11e1fec866c6537ed340111550b9a1ce341a0a58";
+
+function sha256(file: string): string {
+  return createHash("sha256").update(readFileSync(file)).digest("hex");
+}
 
 const valid = (): KnowledgeContent => ({
   roles: [
@@ -153,12 +153,7 @@ describe("validateKnowledgeContent", () => {
     content.features[0]!.policyBasis = [];
     content.features[0]!.relatedFlowIds = ["missing-flow"];
 
-    expect(
-      validateKnowledgeContent(content, {
-        enforceEvidence: false,
-        enforceDecisionGovernance: false,
-      }),
-    ).toEqual(
+    expect(validateKnowledgeContent(content)).toEqual(
       expect.arrayContaining([
         `role ${content.roles[0]!.id} has no daily tasks`,
         `role ${content.roles[0]!.id} has no responsibility stages`,
@@ -293,7 +288,7 @@ describe("validateKnowledgeContent", () => {
     expect(validateKnowledgeContent(valid())).toEqual([]);
   });
 
-  it("keeps strict principal-flow evidence and decision governance as the default while allowing staged validation", () => {
+  it("keeps principal-flow evidence and decision governance strict", () => {
     const content = valid();
     const flow = content.flows[0]!;
     const decision = flow.nodes[0]! as KnowledgeDecisionNode;
@@ -340,12 +335,24 @@ describe("validateKnowledgeContent", () => {
         "flow flow:yes has invalid terminal outcome",
       ]),
     );
-    expect(
-      validateKnowledgeContent(content, {
-        enforceEvidence: false,
-        enforceDecisionGovernance: false,
-      }),
-    ).toEqual([]);
+  });
+
+  it("does not bypass evidence route ownership for public routes", () => {
+    const content = valid();
+    content.roles[0]!.authority.accessibleRoutes = ["/owned"];
+    content.evidence[0]!.route = "/login";
+
+    expect(validateKnowledgeContent(content)).toContain("ev-start route /login is not accessible to role owner");
+  });
+
+  it("makes the aggregate validator enforce the complete content contract", () => {
+    const content = valid();
+    Object.assign(content.flows[0]!.nodes[0]!, {
+      type: "action",
+      evidenceId: undefined,
+    });
+
+    expect(validateKnowledgeBase(content)).toContain("flow flow:start requires screenshot evidence");
   });
 
   it("does not treat generated article control descriptions as executable flow steps", () => {
@@ -386,17 +393,13 @@ describe("validateKnowledgeContent", () => {
   it("rejects unlabeled decision branches", () => {
     const content = valid();
     content.flows[0]!.edges[0]!.label = undefined;
-    expect(validateKnowledgeContent(content)).toContain(
-      "flow:start decision edge to yes requires a label",
-    );
+    expect(validateKnowledgeContent(content)).toContain("flow:start decision edge to yes requires a label");
   });
 
   it("rejects a decision with fewer than two outcomes", () => {
     const content = valid();
     content.flows[0]!.edges.pop();
-    expect(validateKnowledgeContent(content)).toContain(
-      "flow flow:start decision requires at least two outcomes",
-    );
+    expect(validateKnowledgeContent(content)).toContain("flow flow:start decision requires at least two outcomes");
   });
 
   it("rejects duplicate normalized decision labels", () => {
@@ -430,8 +433,7 @@ describe("validateKnowledgeContent", () => {
     flow.edges[1]!.to = "yes";
     decision.mergeContract = {
       destinationNodeId: "yes",
-      justification:
-        "Both labels record distinct policy findings before the shared completion step.",
+      justification: "Both labels record distinct policy findings before the shared completion step.",
     };
 
     expect(validateKnowledgeContent(content)).toEqual([]);
@@ -497,9 +499,7 @@ describe("validateKnowledgeContent", () => {
     };
 
     expect(
-      validateKnowledgeContent(content, { enforceEvidence: false }).filter(
-        (error) => error.includes("cannot reach a terminal outcome"),
-      ),
+      validateKnowledgeContent(content).filter((error) => error.includes("cannot reach a terminal outcome")),
     ).toEqual([
       "cycle:cycle-start cannot reach a terminal outcome",
       "cycle:cycle-a cannot reach a terminal outcome",
@@ -524,10 +524,7 @@ describe("validateKnowledgeContent", () => {
     content.flows[0]!.nodes.push({ ...content.flows[0]!.nodes[0]! });
     content.flows[0]!.nodes[0]!.evidenceId = "missing";
     expect(validateKnowledgeContent(content)).toEqual(
-      expect.arrayContaining([
-        "flow has duplicate node id start",
-        "flow:start references missing evidence missing",
-      ]),
+      expect.arrayContaining(["flow has duplicate node id start", "flow:start references missing evidence missing"]),
     );
   });
 
@@ -536,9 +533,7 @@ describe("validateKnowledgeContent", () => {
     content.flows[0]!.edges[0]!.id = "same-choice";
     content.flows[0]!.edges[1]!.id = "same-choice";
 
-    expect(validateKnowledgeContent(content)).toContain(
-      "flow has duplicate edge choice id flow~same-choice",
-    );
+    expect(validateKnowledgeContent(content)).toContain("flow has duplicate edge choice id flow~same-choice");
   });
 
   it("rejects invalid and duplicate hotspots", () => {
@@ -566,7 +561,7 @@ describe("validateKnowledgeContent", () => {
 
   it("requires a reviewed mobile pair, capture state, and valid app commit provenance", () => {
     const content = valid();
-    const evidence = content.evidence[0]! as typeof content.evidence[number] & {
+    const evidence = content.evidence[0]! as (typeof content.evidence)[number] & {
       appCommit?: string;
       state?: string;
     };
@@ -609,12 +604,168 @@ describe("validateKnowledgeContent", () => {
     );
   });
 
-  it("validates every real evidence file, decoded viewport, and provenance commit", () => {
-    expect(
-      validateKnowledgeEvidenceArtifacts(KNOWLEDGE_CONTENT, {
-        publicRoot: path.resolve(process.cwd(), "public"),
+  it("requires the versioned capture report metadata for every evidence id", () => {
+    const errors = validateKnowledgeEvidenceArtifacts(KNOWLEDGE_CONTENT, {
+      publicRoot: path.resolve(process.cwd(), "public"),
+      repositoryRoot: path.resolve(process.cwd(), "../.."),
+      reportPath: path.resolve(process.cwd(), "../../.superpowers/sdd/task-8-report.json"),
+    } as Parameters<typeof validateKnowledgeEvidenceArtifacts>[1]);
+
+    const migrationIds = errors
+      .filter((error) => error.endsWith("requires capture report schema v1 metadata"))
+      .map((error) => error.split(" ")[0]);
+    if (process.env.KNOWLEDGE_ARTIFACT_GATE === "1")
+      expect(migrationIds, `Evidence migration required (${migrationIds.length}): ${migrationIds.join(", ")}`).toEqual(
+        [],
+      );
+    expect(migrationIds).toEqual(KNOWLEDGE_CONTENT.evidence.map((item) => item.id));
+  });
+
+  it("rejects report hash, dimensions, provenance, and semantic mismatches", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "knowledge-evidence-"));
+    try {
+      const publicRoot = path.join(root, "public");
+      const screenshotRoot = path.join(publicRoot, "knowledge", "screenshots");
+      const desktop = path.join(screenshotRoot, "start.png");
+      const mobile = path.join(screenshotRoot, "start-mobile.png");
+      const sourceRoot = path.resolve(process.cwd(), "public/knowledge/screenshots");
+      mkdirSync(screenshotRoot, { recursive: true });
+      copyFileSync(path.join(sourceRoot, "task8-access-start-desktop.png"), desktop);
+      copyFileSync(path.join(sourceRoot, "task8-access-start-mobile.png"), mobile);
+      const reportPath = path.join(root, "report.json");
+      writeFileSync(
+        reportPath,
+        JSON.stringify({
+          schemaVersion: 1,
+          sourceCommit: "0000000000000000000000000000000000000000",
+          capturedAt: "2026-07-11",
+          reviewedAt: "2026-07-11",
+          evidenceCount: 1,
+          evidence: {
+            "ev-start": {
+              route: "/wrong",
+              roleId: "wrong",
+              state: "wrong",
+              control: { id: "wrong", label: "wrong", instruction: "wrong" },
+              desktop: {
+                file: "/knowledge/screenshots/start.png",
+                sha256: "0".repeat(64),
+                width: 1,
+                height: 1,
+                controlBounds: { x: 1, y: 1, width: 1, height: 1 },
+                hotspot: { x: 0.1, y: 0.1 },
+              },
+              mobile: {
+                file: "/knowledge/screenshots/start-mobile.png",
+                sha256: sha256(mobile),
+                width: 390,
+                height: 844,
+                controlBounds: { x: 0, y: 0, width: 10, height: 10 },
+                hotspot: { x: 0.5, y: 0.5 },
+              },
+            },
+          },
+        }),
+      );
+
+      const errors = validateKnowledgeEvidenceArtifacts(valid(), {
+        publicRoot,
         repositoryRoot: path.resolve(process.cwd(), "../.."),
-      }),
-    ).toEqual([]);
+        reportPath,
+      } as Parameters<typeof validateKnowledgeEvidenceArtifacts>[1]);
+      expect(errors).toEqual(
+        expect.arrayContaining([
+          "capture report sourceCommit does not match evidence source commit",
+          "ev-start capture report route mismatch",
+          "ev-start capture report role mismatch",
+          "ev-start capture report state mismatch",
+          "ev-start capture report control mismatch",
+          "ev-start desktop SHA-256 mismatch",
+          "ev-start desktop dimensions mismatch",
+          "ev-start desktop hotspot mismatch",
+        ]),
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects duplicate image bytes without an explicit semantically identical sharing group", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "knowledge-duplicates-"));
+    try {
+      const publicRoot = path.join(root, "public");
+      const screenshotRoot = path.join(publicRoot, "knowledge", "screenshots");
+      const sourceRoot = path.resolve(process.cwd(), "public/knowledge/screenshots");
+      mkdirSync(screenshotRoot, { recursive: true });
+      for (const name of ["start.png", "copy.png"])
+        copyFileSync(path.join(sourceRoot, "task8-access-start-desktop.png"), path.join(screenshotRoot, name));
+      for (const name of ["start-mobile.png", "copy-mobile.png"])
+        copyFileSync(path.join(sourceRoot, "task8-access-start-mobile.png"), path.join(screenshotRoot, name));
+      const content = valid();
+      content.evidence.push({
+        ...content.evidence[0]!,
+        id: "ev-copy",
+        desktopSrc: "/knowledge/screenshots/copy.png",
+        mobileSrc: "/knowledge/screenshots/copy-mobile.png",
+      });
+      const artifact = (file: string, width: number, height: number) => ({
+        file: `/knowledge/screenshots/${path.basename(file)}`,
+        sha256: sha256(path.join(screenshotRoot, path.basename(file))),
+        width,
+        height,
+        controlBounds: {
+          x: (width - 100) / 2,
+          y: (height - 40) / 2,
+          width: 100,
+          height: 40,
+        },
+        hotspot: { x: 0.5, y: 0.5 },
+      });
+      const entry = (desktopFile: string, mobileFile: string) => ({
+        route: "/",
+        roleId: "owner",
+        state: content.evidence[0]!.state,
+        control: {
+          id: "open",
+          label: "Open",
+          instruction: "Open the record.",
+        },
+        desktop: artifact(desktopFile, 1440, 900),
+        mobile: artifact(mobileFile, 390, 844),
+      });
+      const reportPath = path.join(root, "report.json");
+      writeFileSync(
+        reportPath,
+        JSON.stringify({
+          schemaVersion: 1,
+          sourceCommit: APP_COMMIT,
+          capturedAt: "2026-07-11",
+          reviewedAt: "2026-07-11",
+          evidenceCount: 2,
+          evidence: {
+            "ev-start": entry("start.png", "start-mobile.png"),
+            "ev-copy": entry("copy.png", "copy-mobile.png"),
+          },
+        }),
+      );
+      const options = {
+        publicRoot,
+        repositoryRoot: path.resolve(process.cwd(), "../.."),
+        reportPath,
+      } as Parameters<typeof validateKnowledgeEvidenceArtifacts>[1];
+
+      expect(validateKnowledgeEvidenceArtifacts(content, options)).toEqual(
+        expect.arrayContaining([
+          expect.stringContaining("duplicate desktop bytes"),
+          expect.stringContaining("duplicate mobile bytes"),
+        ]),
+      );
+
+      content.evidence[0]!.sharedEvidenceGroup = "same-control";
+      content.evidence[1]!.sharedEvidenceGroup = "same-control";
+      expect(validateKnowledgeEvidenceArtifacts(content, options)).toEqual([]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

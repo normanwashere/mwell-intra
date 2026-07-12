@@ -10,14 +10,14 @@ const result = spawnSync(
     "vitest",
     "run",
     "lib/knowledge/content.test.ts",
+    "lib/knowledge/validate.test.ts",
   ],
   {
     cwd: process.cwd(),
     stdio: "inherit",
     shell: process.platform === "win32",
+    env: { ...process.env, KNOWLEDGE_ARTIFACT_GATE: "1" },
   },
 );
 if (result.status !== 0) process.exit(result.status ?? 1);
-console.log(
-  "Knowledge Base verified: 20 roles, governed flows, search aliases, and secret hygiene.",
-);
+console.log("Knowledge Base content and evidence provenance verified.");

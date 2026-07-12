@@ -1,23 +1,25 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import {
-  KNOWLEDGE_EVIDENCE,
-  KNOWLEDGE_EVIDENCE_SCENARIOS,
-} from "../../lib/knowledge/evidence";
+import { KNOWLEDGE_EVIDENCE, KNOWLEDGE_EVIDENCE_SCENARIOS } from "../../lib/knowledge/evidence";
+import type {
+  KnowledgeCaptureArtifact,
+  KnowledgeCaptureReport,
+  KnowledgeCaptureReportEntry,
+} from "../../lib/knowledge/types";
 
 const SESSION_KEY = "intra.memory-session.v1";
 const REPORT_PATH = path.resolve(process.cwd(), "../../.superpowers/sdd/task-8-report.json");
+const REPOSITORY_ROOT = path.resolve(process.cwd(), "../..");
 
 const VIEWPORTS = {
   desktop: { width: 1440, height: 900 },
   mobile: { width: 390, height: 844 },
 } as const;
 
-const SESSIONS: Record<
-  string,
-  { profileId: string; roles: Record<string, string[]> }
-> = {
+const SESSIONS: Record<string, { profileId: string; roles: Record<string, string[]> }> = {
   core_staff_only: {
     profileId: "demo-operations",
     roles: { core: ["staff"] },
@@ -94,9 +96,7 @@ async function openInspection(page: Page): Promise<void> {
 
 async function enterShirtCount(page: Page): Promise<void> {
   const label =
-    (page.viewportSize()?.width ?? 0) < 640
-      ? "Event Shirt (L) counted quantity"
-      : "Counted Event Shirt (L)";
+    (page.viewportSize()?.width ?? 0) < 640 ? "Event Shirt (L) counted quantity" : "Counted Event Shirt (L)";
   const input = page.getByLabel(label, { exact: true });
   await expect(input).toBeVisible();
   await input.fill("199");
@@ -108,7 +108,7 @@ async function targetFor(page: Page, nodeId: string): Promise<Locator> {
     case "recover-retry":
       return page.getByRole("button", { name: "Sign in", exact: true });
     case "access-fix":
-      return page.getByRole("heading", { name: "Access matrix" });
+      return page.getByRole("button", { name: "Refresh" });
     case "p2p-start":
     case "vendor-start":
       return page.getByRole("button", { name: "Continue", exact: true });
@@ -123,7 +123,7 @@ async function targetFor(page: Page, nodeId: string): Promise<Locator> {
     case "p2p-receive":
       return first(page.getByRole("link", { name: "Receive in procurement" }));
     case "p2p-payment-pack":
-      return page.getByRole("heading", { name: "Acceptance and payment readiness" });
+      return page.getByRole("textbox").first();
     case "vendor-apply":
       return page.getByRole("button", { name: "Save draft", exact: true });
     case "setup-start":
@@ -139,7 +139,7 @@ async function targetFor(page: Page, nodeId: string): Promise<Locator> {
       return page.getByRole("button", { name: "Save route" });
     }
     case "receive-start":
-      return page.getByRole("heading", { name: "Purchase Orders" });
+      return page.getByRole("link", { name: "Open quality queue" });
     case "receive-record":
       return page.getByRole("button", { name: "Add to receipt" });
     case "receive-putaway":
@@ -188,23 +188,24 @@ async function targetFor(page: Page, nodeId: string): Promise<Locator> {
       if (await dismissToast.count()) await dismissToast.click();
       if ((page.viewportSize()?.width ?? 0) < 640) {
         await page.getByRole("button", { name: "More" }).click();
-        const approvalsTool = page.getByRole("button", { name: /Stock Approvals/ });
+        const approvalsTool = page.getByRole("button", {
+          name: /Stock Approvals/,
+        });
         await expect(approvalsTool).toBeVisible();
         await approvalsTool.click();
-      } else
-        await (await first(page.getByRole("link", { name: "Stock Approvals" }))).click();
+      } else await (await first(page.getByRole("link", { name: "Stock Approvals" }))).click();
       await expect(page.getByLabel("Waiting on you approvals")).toBeVisible();
       return page.getByRole("button", { name: "Review" });
     }
     case "admin-start":
-      return page.getByRole("heading", { name: "Access matrix" });
+      return page.getByRole("button", { name: "Refresh" });
     case "admin-activate":
     case "doa-activate":
       return page.getByRole("button", { name: "Save draft" });
     case "allocation-start":
       return page.getByRole("button", { name: "Reserve" });
     case "price-start":
-      return page.getByRole("heading", { name: "Landed cost & turnover" });
+      return page.getByLabel("Product");
     case "doa-start":
       return page.getByRole("button", { name: "Add tier" });
     case "recover-start":
@@ -216,39 +217,80 @@ async function targetFor(page: Page, nodeId: string): Promise<Locator> {
   }
 }
 
+async function assertActionableAndEnabled(target: Locator, nodeId: string, viewportName: string): Promise<void> {
+  const state = await target.evaluate((element) => {
+    const actionableTags = new Set(["A", "BUTTON", "INPUT", "SELECT", "TEXTAREA"]);
+    const role = element.getAttribute("role");
+    const disabled =
+      ("disabled" in element && Boolean((element as HTMLButtonElement).disabled)) ||
+      element.getAttribute("aria-disabled") === "true";
+    return {
+      actionable: actionableTags.has(element.tagName) || role === "button" || role === "link",
+      disabled,
+    };
+  });
+  expect(state.actionable, `${nodeId} ${viewportName} target is actionable`).toBe(true);
+  expect(state.disabled, `${nodeId} ${viewportName} target is enabled`).toBe(false);
+  await expect(target).toBeEnabled();
+}
+
+async function captureArtifact(
+  file: string,
+  source: string,
+  viewport: { width: number; height: number },
+  box: { x: number; y: number; width: number; height: number },
+  hotspot: { x: number; y: number },
+): Promise<KnowledgeCaptureArtifact> {
+  const bytes = await readFile(file);
+  return {
+    file: source,
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+    width: viewport.width,
+    height: viewport.height,
+    controlBounds: box,
+    hotspot,
+  };
+}
+
 test("captures reviewed desktop and mobile principal-flow evidence", async ({ browser }) => {
   test.setTimeout(10 * 60_000);
   expect(KNOWLEDGE_EVIDENCE).toHaveLength(39);
   expect(Object.keys(KNOWLEDGE_EVIDENCE_SCENARIOS)).toHaveLength(39);
+  const sourceCommit = execFileSync("git", ["rev-parse", "HEAD"], {
+    cwd: REPOSITORY_ROOT,
+    encoding: "utf8",
+  }).trim();
+  expect(sourceCommit).toMatch(/^[0-9a-f]{40}$/);
+  const stagingRoot = path.resolve(process.cwd(), "../../.superpowers/sdd", `.task-8-capture-${process.pid}`);
+  await rm(stagingRoot, { recursive: true, force: true });
+  await mkdir(stagingRoot, { recursive: true });
+  const reportEntries: Record<string, KnowledgeCaptureReportEntry> = {};
+  const stagedFiles: Array<{ staged: string; output: string }> = [];
 
-  const captureFrom = process.env.CAPTURE_FROM;
-  let report: Record<string, Record<string, number | string | boolean>> = {};
-  if (captureFrom) {
-    try {
-      report = JSON.parse(await readFile(REPORT_PATH, "utf8")).report ?? {};
-    } catch {
-      report = {};
-    }
-  }
-  const startIndex = captureFrom
-    ? KNOWLEDGE_EVIDENCE.findIndex((item) => item.nodeId === captureFrom)
-    : 0;
-  expect(startIndex, `CAPTURE_FROM ${captureFrom}`).toBeGreaterThanOrEqual(0);
-  for (const evidence of KNOWLEDGE_EVIDENCE.slice(startIndex)) {
+  for (const evidence of KNOWLEDGE_EVIDENCE) {
     const session = SESSIONS[evidence.roleId];
     expect(session, `memory session for ${evidence.roleId}`).toBeTruthy();
     expect(evidence.capturedAt).toBe("2026-07-13");
     expect(evidence.reviewedAt).toBe("2026-07-13");
     expect(evidence.sensitiveDataReviewed).toBe(true);
-    report[evidence.nodeId] = {};
+    const entry = {
+      route: evidence.route,
+      roleId: evidence.roleId,
+      state: evidence.state,
+      control: {
+        id: evidence.hotspots[0]!.id,
+        label: evidence.hotspots[0]!.label,
+        instruction: evidence.hotspots[0]!.instruction,
+      },
+    } as Omit<KnowledgeCaptureReportEntry, "desktop" | "mobile"> &
+      Partial<Pick<KnowledgeCaptureReportEntry, "desktop" | "mobile">>;
 
     for (const [viewportName, viewport] of Object.entries(VIEWPORTS)) {
       const page = await browser.newPage({ viewport });
       const browserIssues: string[] = [];
       page.on("pageerror", (error) => browserIssues.push(error.message));
       page.on("console", (message) => {
-        if (message.type() === "error" && !/favicon\.ico|404/.test(message.text()))
-          browserIssues.push(message.text());
+        if (message.type() === "error" && !/favicon\.ico|404/.test(message.text())) browserIssues.push(message.text());
       });
       await page.addInitScript(
         ({ key, value }) => {
@@ -256,7 +298,10 @@ test("captures reviewed desktop and mobile principal-flow evidence", async ({ br
           else sessionStorage.removeItem(key);
           localStorage.setItem("intra-theme", "light");
         },
-        { key: SESSION_KEY, value: evidence.route === "/login" ? null : session },
+        {
+          key: SESSION_KEY,
+          value: evidence.route === "/login" ? null : session,
+        },
       );
       await page.goto(evidence.route, { waitUntil: "networkidle" });
       await expect(page.getByRole("main")).toBeVisible();
@@ -272,13 +317,10 @@ test("captures reviewed desktop and mobile principal-flow evidence", async ({ br
       }
       const target = await targetFor(page, evidence.nodeId);
       await expect(target).toBeVisible();
-      await target.evaluate((element) =>
-        element.scrollIntoView({ block: "center", inline: "center" }),
-      );
+      await assertActionableAndEnabled(target, evidence.nodeId, viewportName);
+      await target.evaluate((element) => element.scrollIntoView({ block: "center", inline: "center" }));
       await page.waitForTimeout(200);
-      await target.evaluate((element) =>
-        element.scrollIntoView({ block: "center", inline: "center" }),
-      );
+      await target.evaluate((element) => element.scrollIntoView({ block: "center", inline: "center" }));
       await page.waitForTimeout(100);
       const box = await target.boundingBox();
       expect(box, `${evidence.nodeId} ${viewportName} hotspot target`).not.toBeNull();
@@ -293,21 +335,15 @@ test("captures reviewed desktop and mobile principal-flow evidence", async ({ br
       const hotspot = evidence.hotspots[0]!;
       const expectedX = viewportName === "desktop" ? hotspot.x : hotspot.mobileX;
       const expectedY = viewportName === "desktop" ? hotspot.y : hotspot.mobileY;
-      if (process.env.REFRESH_HOTSPOTS !== "1") {
-        expect(x, `${evidence.nodeId} ${viewportName} hotspot x`).toBeCloseTo(expectedX, 3);
-        expect(y, `${evidence.nodeId} ${viewportName} hotspot y`).toBeCloseTo(expectedY, 3);
-      }
+      expect(x, `${evidence.nodeId} ${viewportName} hotspot x`).toBeCloseTo(expectedX, 3);
+      expect(y, `${evidence.nodeId} ${viewportName} hotspot y`).toBeCloseTo(expectedY, 3);
       expect(new URL(page.url()).pathname).toBe(evidence.route);
-      report[evidence.nodeId]![`${viewportName}X`] = x;
-      report[evidence.nodeId]![`${viewportName}Y`] = y;
-      report[evidence.nodeId]![`${viewportName}Route`] = new URL(page.url()).pathname;
-      report[evidence.nodeId]![`${viewportName}SensitiveMasked`] = true;
 
       const source = viewportName === "desktop" ? evidence.desktopSrc : evidence.mobileSrc;
       const output = path.resolve(process.cwd(), "public", `.${source}`);
-      await mkdir(path.dirname(output), { recursive: true });
+      const staged = path.join(stagingRoot, path.basename(output));
       await page.screenshot({
-        path: output,
+        path: staged,
         fullPage: false,
         animations: "disabled",
         maskColor: "#111827",
@@ -319,25 +355,32 @@ test("captures reviewed desktop and mobile principal-flow evidence", async ({ br
           ...(evidence.route === "/admin/users" ? [page.locator("main li")] : []),
         ],
       });
+      entry[viewportName] = await captureArtifact(staged, source, viewport, box!, { x, y });
+      stagedFiles.push({ staged, output });
       expect(browserIssues, `${evidence.nodeId} ${viewportName} browser issues`).toEqual([]);
       await page.close();
     }
+    expect(entry.desktop, `${evidence.id} desktop capture metadata`).toBeTruthy();
+    expect(entry.mobile, `${evidence.id} mobile capture metadata`).toBeTruthy();
+    reportEntries[evidence.id] = entry as KnowledgeCaptureReportEntry;
   }
 
+  const report: KnowledgeCaptureReport = {
+    schemaVersion: 1,
+    sourceCommit,
+    capturedAt: "2026-07-13",
+    reviewedAt: "2026-07-13",
+    evidenceCount: KNOWLEDGE_EVIDENCE.length,
+    evidence: reportEntries,
+  };
+  const stagedReport = path.join(stagingRoot, "task-8-report.json");
+  await writeFile(stagedReport, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+
+  for (const file of stagedFiles) {
+    await mkdir(path.dirname(file.output), { recursive: true });
+    await rename(file.staged, file.output);
+  }
   await mkdir(path.dirname(REPORT_PATH), { recursive: true });
-  await writeFile(
-    REPORT_PATH,
-    `${JSON.stringify(
-      {
-        capturedAt: "2026-07-13",
-        reviewedAt: "2026-07-13",
-        appCommit: KNOWLEDGE_EVIDENCE[0]!.appCommit,
-        evidenceCount: KNOWLEDGE_EVIDENCE.length,
-        report,
-      },
-      null,
-      2,
-    )}\n`,
-    "utf8",
-  );
+  await rename(stagedReport, REPORT_PATH);
+  await rm(stagingRoot, { recursive: true, force: true });
 });

@@ -1234,7 +1234,7 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
         "count-enter",
         "action",
         "Record the physical count",
-        ["warehouse_operations"],
+        ["warehouse_logistics_supervisor"],
         "Scan or enter observed product, lot, serial, bin, quantity, counter, and evidence.",
       ),
       decision(

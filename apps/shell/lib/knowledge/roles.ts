@@ -632,7 +632,7 @@ export const LIVE_KNOWLEDGE_ROLES: KnowledgeRole[] = [
     purpose:
       "Use shared Intra records, locate assigned work, and begin governed department workflows.",
     authority: {
-      accessibleRoutes: ["/", "/knowledge"],
+      accessibleRoutes: ["/", "/knowledge", "/login"],
       canDo: [
         "View the directory, vendor master data, shared documents, and approval records assigned through another module role.",
         "Use the Command Center to locate the responsible queue and hand off through the recorded workflow.",
