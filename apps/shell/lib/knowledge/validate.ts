@@ -1005,6 +1005,9 @@ function isCaptureReport(value: unknown): value is KnowledgeCaptureReport {
     value.schemaVersion === 1 &&
     typeof value.sourceCommit === "string" &&
     GIT_COMMIT.test(value.sourceCommit) &&
+    isRecord(value.runtime) &&
+    /^v22\./.test(String(value.runtime.parentNode)) &&
+    /^v22\./.test(String(value.runtime.serverNode)) &&
     typeof value.capturedAt === "string" &&
     typeof value.reviewedAt === "string" &&
     isFiniteNumber(value.evidenceCount) &&

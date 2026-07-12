@@ -234,6 +234,10 @@ export interface KnowledgeCaptureReportEntry {
 export interface KnowledgeCaptureReport {
   schemaVersion: 1;
   sourceCommit: string;
+  runtime: {
+    parentNode: string;
+    serverNode: string;
+  };
   capturedAt: string;
   reviewedAt: string;
   evidenceCount: number;

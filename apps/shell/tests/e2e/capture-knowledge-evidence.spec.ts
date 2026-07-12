@@ -531,6 +531,9 @@ test("captures reviewed desktop and mobile principal-flow evidence", async ({ br
   const sourceCommits = new Set(KNOWLEDGE_EVIDENCE.map((evidence) => evidence.appCommit));
   expect(sourceCommits.size, "one reviewed application commit backs the capture set").toBe(1);
   const sourceCommit = [...sourceCommits][0]!;
+  const serverNode = process.env.TASK8_SERVER_NODE_VERSION;
+  expect(process.version, "capture parent uses pinned Node 22").toMatch(/^v22\./);
+  expect(serverNode, "server Node version is recorded explicitly").toMatch(/^v22\./);
   execFileSync("git", ["cat-file", "-e", `${sourceCommit}^{commit}`], {
     cwd: REPOSITORY_ROOT,
     stdio: "ignore",
@@ -737,6 +740,7 @@ test("captures reviewed desktop and mobile principal-flow evidence", async ({ br
   const report: KnowledgeCaptureReport = {
     schemaVersion: 1,
     sourceCommit,
+    runtime: { parentNode: process.version, serverNode: serverNode! },
     capturedAt: "2026-07-13",
     reviewedAt: "2026-07-13",
     evidenceCount: KNOWLEDGE_EVIDENCE.length,

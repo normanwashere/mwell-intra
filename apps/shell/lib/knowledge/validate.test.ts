@@ -632,6 +632,7 @@ describe("validateKnowledgeContent", () => {
         reportPath,
         JSON.stringify({
           schemaVersion: 1,
+          runtime: { parentNode: "v22.17.0", serverNode: "v22.17.0" },
           sourceCommit: "0000000000000000000000000000000000000000",
           capturedAt: "2026-07-11",
           reviewedAt: "2026-07-11",
@@ -733,6 +734,7 @@ describe("validateKnowledgeContent", () => {
         reportPath,
         JSON.stringify({
           schemaVersion: 1,
+          runtime: { parentNode: "v22.17.0", serverNode: "v22.17.0" },
           sourceCommit: APP_COMMIT,
           capturedAt: "2026-07-11",
           reviewedAt: "2026-07-11",
