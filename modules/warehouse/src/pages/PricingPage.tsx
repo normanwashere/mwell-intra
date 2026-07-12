@@ -125,6 +125,7 @@ export function PricingPage() {
     <div className="space-y-4">
       <PageHeader
         title="Pricing"
+        icon="trend"
         subtitle="Landed cost, cost variance, turnover & bundles"
       />
 

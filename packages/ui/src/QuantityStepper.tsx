@@ -29,11 +29,11 @@ export function QuantityStepper({
   };
 
   return (
-    <div className="flex items-stretch gap-1">
+    <div className="flex min-w-0 items-stretch gap-1">
       <button
         type="button"
         aria-label="Decrease"
-        className="grid w-10 shrink-0 place-items-center rounded-xl border border-line bg-surface text-ink transition hover:bg-inset disabled:opacity-40"
+        className="grid min-h-11 w-11 shrink-0 place-items-center rounded-xl border border-line bg-surface text-ink transition hover:bg-inset disabled:opacity-40"
         disabled={value <= min}
         onClick={() => onChange(clamp(value - 1))}
       >
@@ -44,7 +44,7 @@ export function QuantityStepper({
         aria-label={ariaLabel}
         type="number"
         inputMode="numeric"
-        className="input text-center"
+        className="input min-w-0 flex-1 text-center"
         min={min}
         max={max}
         value={Number.isNaN(value) ? '' : value}
@@ -53,7 +53,7 @@ export function QuantityStepper({
       <button
         type="button"
         aria-label="Increase"
-        className="grid w-10 shrink-0 place-items-center rounded-xl border border-line bg-surface text-ink transition hover:bg-inset disabled:opacity-40"
+        className="grid min-h-11 w-11 shrink-0 place-items-center rounded-xl border border-line bg-surface text-ink transition hover:bg-inset disabled:opacity-40"
         disabled={max !== undefined && value >= max}
         onClick={() => onChange(clamp(value + 1))}
       >

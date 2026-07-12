@@ -4,6 +4,7 @@ import { screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ProductDetailPage } from './ProductDetailPage';
 import { renderWithProviders } from '@/test/renderWithProviders';
+import { makeRepo } from '@/test/renderWithProviders';
 
 import type { Role } from '@/domain/types';
 
@@ -23,6 +24,22 @@ describe('ProductDetailPage', () => {
     expect(screen.getByLabelText('Stock by location')).toBeInTheDocument();
     expect(screen.getByLabelText('Serialized units')).toBeInTheDocument();
     expect(screen.getByLabelText('Movement history')).toBeInTheDocument();
+  });
+
+  it('shows shelf-life risk on the product record', async () => {
+    const seed = await makeRepo().getData();
+    seed.products = seed.products.map((product) => product.id === 'doctor-token'
+      ? { ...product, expiryTracked: true, shelfLifeWarningDays: 30 }
+      : product);
+    seed.lots.push({
+      id: 'lot-expired-detail', productId: 'doctor-token', lotCode: 'EXP-DETAIL',
+      unitCost: 10, receivedAt: '2026-06-01T00:00:00Z', expiryDate: '2026-07-09',
+    });
+    renderWithProviders(
+      <Routes><Route path="/inventory/:id" element={<ProductDetailPage />} /></Routes>,
+      { route: '/inventory/doctor-token', repo: makeRepo(seed) },
+    );
+    expect(await screen.findByText('Expired')).toBeInTheDocument();
   });
 
   it('opens a unit traceability timeline', async () => {
@@ -59,6 +76,35 @@ describe('ProductDetailPage', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/transferred/i)).toBeInTheDocument();
+    });
+  });
+
+  it('transfers the exact serialized unit selected by scan', async () => {
+    const user = userEvent.setup();
+    const repo = makeRepo();
+    renderWithProviders(
+      <Routes><Route path="/inventory/:id" element={<ProductDetailPage />} /></Routes>,
+      { route: '/inventory/smart-watch', role: 'logistics_supervisor', repo },
+    );
+    await screen.findByRole('heading', { name: /mWellness Smart Watch/i });
+    await user.click(screen.getByRole('button', { name: /transfer/i }));
+    const dialog = await screen.findByRole('dialog', { name: /transfer stock/i });
+    const manual = within(dialog).getByLabelText('Enter barcode manually');
+
+    await user.type(manual, 'ECG-RING-6-SN0003');
+    await user.click(within(dialog).getByRole('button', { name: 'Add' }));
+    expect(within(dialog).getByRole('alert')).toHaveTextContent(/does not match/i);
+
+    await user.type(manual, 'SMART-WATCH-SN0001');
+    await user.click(within(dialog).getByRole('button', { name: 'Add' }));
+    await user.selectOptions(within(dialog).getByLabelText('To'), 'loc-cebu');
+    await user.click(within(dialog).getByRole('button', { name: /confirm transfer/i }));
+
+    await waitFor(async () => {
+      const unit = (await repo.getData()).units.find(
+        (row) => row.serialNumber === 'SMART-WATCH-SN0001',
+      );
+      expect(unit?.locationId).toBe('loc-cebu');
     });
   });
 

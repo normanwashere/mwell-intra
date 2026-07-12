@@ -25,6 +25,17 @@ function reportError(scope: string, error: Error & { digest?: string }) {
   } catch {
     // Never let error reporting itself surface an error.
   }
+  void fetch('/api/client-errors', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    keepalive: true,
+    body: JSON.stringify({
+      scope,
+      digest: error.digest,
+      route: window.location.pathname,
+    }),
+  }).catch(() => undefined);
 }
 
 export interface RouteErrorFallbackProps {

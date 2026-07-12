@@ -6,8 +6,8 @@ import { getSupabaseClient, hasSupabaseConfig } from './client';
  * In live (Supabase) mode photos are uploaded to a private `evidence` Storage
  * bucket and the returned object PATH is persisted in `evidence_urls`. This
  * keeps movement/receipt rows small (no base64) and lets evidence be viewed
- * later via signed URLs. In memory mode (or if the upload fails) we fall back to
- * an inline base64 data URL so capture still works end-to-end for tests/demo.
+ * later via signed URLs. In memory mode we fall back to an inline base64 data
+ * URL so capture still works end-to-end for tests/demo.
  *
  * Stored values are intentionally indistinguishable from the caller's
  * perspective: a string per photo. Use `resolveEvidenceUrl` to turn a path into
@@ -36,24 +36,21 @@ export async function uploadEvidence(
   if (!hasSupabaseConfig() || isDataUrl(dataUrl) === false) {
     return dataUrl; // memory mode, or already a non-data value
   }
-  try {
-    const client = getSupabaseClient();
-    const base64 = dataUrl.split(',')[1] ?? '';
-    const mime = (dataUrl.match(/^data:(.+);/) ?? [])[1] ?? 'image/jpeg';
-    const ext = mime === 'image/png' ? 'png' : 'jpg';
-    const path = `${reference}/${crypto.randomUUID()}.${ext}`;
-    const { error } = await client.storage
-      .from(BUCKET)
-      .upload(path, decodeBase64(base64), {
-        contentType: mime,
-        upsert: false,
-      });
-    if (error) throw error;
-    return path;
-  } catch {
-    // Fall back to inline base64 so the workflow isn't blocked by storage issues.
-    return dataUrl;
+  const client = getSupabaseClient();
+  const base64 = dataUrl.split(',')[1] ?? '';
+  const mime = (dataUrl.match(/^data:(.+);/) ?? [])[1] ?? 'image/jpeg';
+  const ext = mime === 'image/png' ? 'png' : 'jpg';
+  const path = `${reference}/${crypto.randomUUID()}.${ext}`;
+  const { error } = await client.storage
+    .from(BUCKET)
+    .upload(path, decodeBase64(base64), {
+      contentType: mime,
+      upsert: false,
+    });
+  if (error) {
+    throw new Error(`Evidence upload failed: ${error.message}`);
   }
+  return path;
 }
 
 /** Upload every captured data URL; returns the persisted values in order. */

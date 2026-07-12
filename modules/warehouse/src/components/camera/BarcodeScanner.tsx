@@ -8,6 +8,8 @@ interface BarcodeScannerProps {
   /** Injectable for tests / custom engines. */
   engineFactory?: () => ScanEngine;
   label?: string;
+  manualLabel?: string;
+  manualActionLabel?: string;
 }
 
 /**
@@ -18,6 +20,8 @@ export function BarcodeScanner({
   onDetected,
   engineFactory = createScanEngine,
   label = 'Scan barcode',
+  manualLabel = 'Enter barcode manually',
+  manualActionLabel = 'Add',
 }: BarcodeScannerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const engineRef = useRef<ScanEngine | null>(null);
@@ -36,22 +40,29 @@ export function BarcodeScanner({
     const engine = engineFactory();
     engineRef.current = engine;
     setScanning(true);
-    await engine.start(
-      videoRef.current as HTMLVideoElement,
-      (code) => {
-        // Guard against the engine firing multiple results before stop().
-        if (handledRef.current) return;
-        handledRef.current = true;
-        onDetected(code);
-        stop();
-      },
-      () => {
-        setError(
-          'Scanning needs camera access. Allow the camera in your browser settings, or type the code manually below.',
-        );
-        setScanning(false);
-      },
-    );
+    try {
+      await engine.start(
+        videoRef.current as HTMLVideoElement,
+        (code) => {
+          // Guard against the engine firing multiple results before stop().
+          if (handledRef.current) return;
+          handledRef.current = true;
+          onDetected(code);
+          stop();
+        },
+        () => {
+          setError(
+            'Scanning needs camera access. Allow the camera in your browser settings, or type the code manually below.',
+          );
+          setScanning(false);
+        },
+      );
+    } catch {
+      setError(
+        'Scanning needs camera access. Allow the camera in your browser settings, or type the code manually below.',
+      );
+      stop();
+    }
   };
 
   const stop = () => {
@@ -115,16 +126,19 @@ export function BarcodeScanner({
         </p>
       )}
 
-      <form onSubmit={submitManual} className="flex gap-2">
+      <form
+        onSubmit={submitManual}
+        className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-2"
+      >
         <input
-          className="input"
-          placeholder="Or enter barcode / serial manually"
-          aria-label="Enter barcode manually"
+          className="input min-w-0"
+          placeholder="Barcode / serial"
+          aria-label={manualLabel}
           value={manual}
           onChange={(e) => setManual(e.target.value)}
         />
         <button type="submit" className="btn-primary shrink-0">
-          Add
+          {manualActionLabel}
         </button>
       </form>
     </div>

@@ -4,6 +4,7 @@
 // are safe to import from server components, client components, and tests.
 
 import type { UserRoles } from '@intra/rbac';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 /** Which auth backend the SessionProvider resolved. */
 export type AuthMode = 'supabase' | 'memory';
@@ -47,6 +48,12 @@ export interface SessionValue {
   userRoles: Partial<UserRoles>;
   /** The resolved auth backend. */
   mode: AuthMode;
+  /**
+   * Authenticated Supabase browser client when `mode === 'supabase'`.
+   * Module data adapters use this client to call their schema-scoped RLS/RPC
+   * contract instead of falling back to browser storage.
+   */
+  supabaseClient: SupabaseClient<Record<string, unknown>, string> | null;
   /** True while the initial session is being restored (supabase mode). */
   loading: boolean;
   /** True while an interactive sign-in is in flight. */
@@ -55,8 +62,8 @@ export interface SessionValue {
   authError: string | null;
   /** Demo tiles for memory mode (empty in supabase mode). */
   memoryProfiles: MemoryProfile[];
-  /** Establish a session with email + password. */
-  signInWithPassword: (email: string, password: string) => Promise<void>;
+  /** Establish a session with email + password. Resolves true when verified. */
+  signInWithPassword: (email: string, password: string) => Promise<boolean>;
   /** Clear the session locally and on the server. */
   signOut: () => Promise<void>;
   /** Send a password-reset email (supabase mode only). */

@@ -4,18 +4,18 @@
 // can degrade gracefully instead of throwing at build/render time.
 
 import { createServerClient } from '@supabase/ssr';
-import type { SupabaseClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { DEFAULT_SCHEMA, SUPABASE_ANON_KEY, SUPABASE_URL } from './env';
+import type { ShellDatabase, ShellSupabaseClient } from './types';
 
 export async function createSupabaseServerClient(
   schema: string = DEFAULT_SCHEMA,
-): Promise<SupabaseClient<any, string> | null> {
+): Promise<ShellSupabaseClient | null> {
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
 
   const cookieStore = await cookies();
 
-  return createServerClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  return createServerClient<ShellDatabase, string>(SUPABASE_URL, SUPABASE_ANON_KEY, {
     db: { schema },
     cookies: {
       getAll() {

@@ -29,7 +29,6 @@ import {
   receiveOverlay,
   issueOverlay,
   returnOverlay,
-  cycleCountOverlay,
   transferOverlay,
   relocateOverlay,
   adjustOverlay,
@@ -39,11 +38,13 @@ import {
   removeEntry as outboxRemove,
   DATA_STORAGE_KEY,
 } from '@intra/data-kit';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import type {
   AdjustStockInput,
   CancelAllocationInput,
   CancelPurchaseOrderInput,
   CreateEventInput,
+  CreateVendorReturnInput,
   CreateLocationInput,
   CreateProductInput,
   CreatePurchaseOrderInput,
@@ -51,11 +52,21 @@ import type {
   CreateSupplierInput,
   CycleCountInput,
   DataSource,
+  DecideStockChangeInput,
+  InspectQualityInput,
+  InventoryHold,
+  InventoryPosition,
   IssueInput,
   OutboxEntry,
   QueueableMethod,
+  PageQuery,
+  PageResult,
   ReceiveAgainstPOInput,
   ReceiveStockInput,
+  ReceiveProcurementPOInput,
+  ProcurementPOHandoff,
+  ReleaseHoldInput,
+  ResolveExceptionInput,
   RelocateInput,
   ReserveInput,
   ReturnInput,
@@ -63,12 +74,19 @@ import type {
   SetProductPriceInput,
   TransferInput,
   UpdateLocationInput,
+  UpdateOperationRouteInput,
   UpdateProductInput,
   UpdateStorageAreaInput,
   UpdateSupplierInput,
   WarehouseData,
+  WarehouseControlRepository,
+  WarehouseException,
   WarehousePatch,
-  WarehouseRepository,
+  WarehouseTask,
+  VendorReturn,
+  QualityInspection,
+  StockChangeRequest,
+  SubmitCycleCountInput,
 } from '@intra/data-kit';
 
 interface WarehouseContextValue {
@@ -79,6 +97,7 @@ interface WarehouseContextValue {
   role: Role;
   setRole: (role: Role) => void;
   actor: string;
+  identityId: string;
   refresh: () => Promise<void>;
   /** Number of floor-op mutations queued offline, awaiting sync. */
   pendingSync: number;
@@ -98,6 +117,10 @@ interface WarehouseContextValue {
   issue: (input: Omit<IssueInput, 'actor'>) => Promise<boolean>;
   recordReturn: (input: Omit<ReturnInput, 'actor'>) => Promise<boolean>;
   recordCycleCount: (input: Omit<CycleCountInput, 'actor'>) => Promise<boolean>;
+  submitNewCycleCount: (
+    input: Omit<CycleCountInput, 'actor'> &
+      Pick<SubmitCycleCountInput, 'reason' | 'evidenceUrls'>,
+  ) => Promise<boolean>;
   transfer: (input: Omit<TransferInput, 'actor'>) => Promise<boolean>;
   createPurchaseOrder: (
     input: Omit<CreatePurchaseOrderInput, 'actor'>,
@@ -127,6 +150,22 @@ interface WarehouseContextValue {
   createProduct: (input: Omit<CreateProductInput, 'actor'>) => Promise<boolean>;
   updateProduct: (input: Omit<UpdateProductInput, 'actor'>) => Promise<boolean>;
   adjustStock: (input: Omit<AdjustStockInput, 'actor'>) => Promise<boolean>;
+  loadQualityInspections: (query: PageQuery) => Promise<PageResult<QualityInspection>>;
+  loadHolds: (query: PageQuery) => Promise<PageResult<InventoryHold>>;
+  loadVendorReturns: (query: PageQuery) => Promise<PageResult<VendorReturn>>;
+  loadExceptions: (query: PageQuery) => Promise<PageResult<WarehouseException>>;
+  loadStockChangeRequests: (query: PageQuery) => Promise<PageResult<StockChangeRequest>>;
+  loadWarehouseTasks: (query: PageQuery) => Promise<PageResult<WarehouseTask>>;
+  loadInventoryPositions: (query: PageQuery) => Promise<PageResult<InventoryPosition>>;
+  inspectQuality: (input: InspectQualityInput) => Promise<boolean>;
+  releaseHold: (input: ReleaseHoldInput) => Promise<boolean>;
+  createVendorReturn: (input: CreateVendorReturnInput) => Promise<boolean>;
+  updateOperationRoute: (input: UpdateOperationRouteInput) => Promise<boolean>;
+  submitCycleCount: (input: SubmitCycleCountInput) => Promise<boolean>;
+  decideStockChange: (input: DecideStockChangeInput) => Promise<boolean>;
+  resolveException: (input: ResolveExceptionInput) => Promise<boolean>;
+  loadReceivableProcurementPOs: () => Promise<ProcurementPOHandoff[]>;
+  receiveProcurementPO: (input: ReceiveProcurementPOInput) => Promise<boolean>;
   /** Demo-only: clear the local dataset and reload with the fresh seed. */
   resetDemo: () => void;
 }
@@ -149,23 +188,31 @@ export function WarehouseProvider({
   children,
   repo: injectedRepo,
   source: injectedSource,
+  supabaseClient,
   initialRole = 'logistics_supervisor',
   actor: providedActor,
+  identityId: providedIdentityId,
 }: {
   children: ReactNode;
-  repo?: WarehouseRepository;
+  repo?: WarehouseControlRepository;
   source?: DataSource;
+  supabaseClient?: SupabaseClient<Record<string, unknown>, string>;
   initialRole?: Role;
   /** Overrides the default `${role}@mwell` actor (e.g. the signed-in user's email). */
   actor?: string;
+  /** Auth profile id used for separation-of-duties comparisons. */
+  identityId?: string;
 }) {
-  const created = useRef<{ repo: WarehouseRepository; source: DataSource } | null>(
+  const created = useRef<{ repo: WarehouseControlRepository; source: DataSource } | null>(
     null,
   );
   if (!created.current) {
     created.current = injectedRepo
       ? { repo: injectedRepo, source: injectedSource ?? 'memory' }
-      : createRepository();
+      : createRepository({
+          dataSource: injectedSource,
+          supabaseClient,
+        });
   }
   const repo = created.current.repo;
   const source = created.current.source;
@@ -182,6 +229,7 @@ export function WarehouseProvider({
     () => providedActor ?? `${role}@mwell`,
     [providedActor, role],
   );
+  const identityId = providedIdentityId ?? actor;
 
   const refreshPending = useCallback(async () => {
     setPendingSync(await outboxPendingCount());
@@ -284,6 +332,7 @@ export function WarehouseProvider({
     role,
     setRole,
     actor,
+    identityId,
     refresh,
     pendingSync,
     conflicts,
@@ -313,12 +362,23 @@ export function WarehouseProvider({
         input as Record<string, unknown>,
       ),
     recordCycleCount: (input) =>
-      runAction(
-        'recordCycleCount',
-        () => repo.recordCycleCount({ ...input, actor }),
-        cycleCountOverlay(input, actor),
-        input as Record<string, unknown>,
-      ),
+      runAction('other', () => repo.recordCycleCount({ ...input, actor })),
+    submitNewCycleCount: (input) =>
+      runAction('other', async () => {
+        const count = await repo.recordCycleCount({
+          locationId: input.locationId,
+          binId: input.binId,
+          category: input.category,
+          lines: input.lines,
+          actor,
+        });
+        await repo.submitCycleCount({
+          idempotencyKey: `submit-count-${count.id}`,
+          cycleCountId: count.id,
+          reason: input.reason,
+          evidenceUrls: input.evidenceUrls,
+        });
+      }),
     transfer: (input) =>
       runAction(
         'transfer',
@@ -366,6 +426,28 @@ export function WarehouseProvider({
         adjustOverlay(input, actor),
         input as Record<string, unknown>,
       ),
+    loadQualityInspections: (query) => repo.listQualityInspections(query),
+    loadHolds: (query) => repo.listHolds(query),
+    loadVendorReturns: (query) => repo.listVendorReturns(query),
+    loadExceptions: (query) => repo.listExceptions(query),
+    loadStockChangeRequests: (query) => repo.listStockChangeRequests(query),
+    loadWarehouseTasks: (query) => repo.listWarehouseTasks(query),
+    loadInventoryPositions: (query) => repo.listInventoryPositions(query),
+    inspectQuality: (input) => runAction('other', () => repo.inspectQuality(input)),
+    releaseHold: (input) => runAction('other', () => repo.releaseHold(input)),
+    createVendorReturn: (input) =>
+      runAction('other', () => repo.createVendorReturn(input)),
+    updateOperationRoute: (input) =>
+      runAction('other', () => repo.updateOperationRoute(input)),
+    submitCycleCount: (input) =>
+      runAction('other', () => repo.submitCycleCount(input)),
+    decideStockChange: (input) =>
+      runAction('other', () => repo.decideStockChange(input)),
+    resolveException: (input) =>
+      runAction('other', () => repo.resolveException(input)),
+    loadReceivableProcurementPOs: () => repo.getReceivableProcurementPOs(),
+    receiveProcurementPO: (input) =>
+      runAction('other', () => repo.receiveProcurementPO(input)),
     resetDemo,
   };
 

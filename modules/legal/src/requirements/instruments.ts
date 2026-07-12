@@ -12,25 +12,125 @@
 
 import type { InstrumentCode, InstrumentTemplate } from '../types';
 
+export const TECHNOLOGY_MNDA_TEMPLATE_VERSION =
+  'mnda-tech-service-provider-2026.06.10-clean-v1';
+
+export interface TechnologyMndaFields {
+  executionDate: string;
+  serviceProviderName: string;
+  serviceProviderAddress: string;
+  potentialTransaction: string;
+  serviceProviderNoticeName: string;
+  serviceProviderNoticeAddress: string;
+  serviceProviderNoticeFax: string;
+  serviceProviderNoticeEmail: string;
+  serviceProviderSignatoryName: string;
+  serviceProviderSignatoryDesignation: string;
+  mphtcSignatoryName: string;
+  mphtcSignatoryDesignation: string;
+}
+
+export interface GeneratedTechnologyMnda {
+  templateVersion: typeof TECHNOLOGY_MNDA_TEMPLATE_VERSION;
+  body: string[];
+  canonicalText: string;
+  sha256: string;
+}
+
+export function renderTechnologyMnda(fields: TechnologyMndaFields): string[] {
+  return [
+    `This Non-Disclosure Agreement is made on ${fields.executionDate} between Metro Pacific Health Tech Corporation, a Philippine company with registered office at 9F Rockwell Business Center Tower 1, Ortigas Avenue, Pasig City ("MPHTC"), and ${fields.serviceProviderName}, with registered address at ${fields.serviceProviderAddress} ("SERVICE PROVIDER"). MPHTC and SERVICE PROVIDER are each a "Party" and together the "Parties".`,
+    `The Parties are exploring a potential technology engagement involving ${fields.potentialTransaction} (the "Potential Transaction") and may disclose Confidential Information to facilitate those discussions.`,
+    '"Confidential Information" means confidential, proprietary, or non-public information concerning a Party, its Affiliates, their activities, or the Potential Transaction, including related documents and analyses, the existence and terms of this Agreement, and the fact that discussions or negotiations are taking place, whether disclosed before or after execution.',
+    'The Receiving Party shall keep Confidential Information strictly confidential, use no less than reasonable care, use it only for the Potential Transaction, and disclose it only to Representatives with a need to know who are bound to protect it. The Receiving Party remains liable for unauthorized disclosure or use by its Representatives.',
+    'Confidential Information excludes information that becomes public without breach, was already known as shown by records, is disclosed with written approval, is ascertainable from commercially available products or manuals, or is received lawfully from a third party without a confidentiality restriction.',
+    'A Receiving Party compelled by a court, government agency, regulator, or applicable stock exchange may disclose only what is required and, where practicable and legally permitted, shall notify the Disclosing Party in advance.',
+    'Nothing in this Agreement authorizes either Party to bind the other, creates a joint venture, partnership, or formal business organization, promises a future contract, or grants a license or other right in Confidential Information.',
+    'Each Party shall comply with Republic Act No. 10173, the Data Privacy Act of the Philippines, its implementing rules and regulations, and other applicable privacy laws. Personal data may be collected, processed, shared, and used only for the Potential Transaction. Each Party warrants that required consents have been obtained before disclosure.',
+    'Upon written request, expiry, or termination, the Receiving Party shall within five (5) business days return or destroy the Disclosing Party\'s Confidential Information and copies. A copy may be retained only where required by law, regulation, professional standard, or internal retention policy, and remains subject to confidentiality.',
+    'This Agreement remains effective until the earlier of (a) two (2) years from execution and (b) the date the Parties execute definitive agreements implementing the Potential Transaction.',
+    'Notices must be in writing. Service Provider notices are addressed to ' +
+      `${fields.serviceProviderName}, ${fields.serviceProviderNoticeAddress}, attention ${fields.serviceProviderNoticeName}, fax ${fields.serviceProviderNoticeFax}, email ${fields.serviceProviderNoticeEmail}.`,
+    'Any addition or modification must be in a written instrument signed by duly authorized representatives of both Parties. Neither Party may assign its rights or obligations without prior consent, except an assignment to a subsidiary or holding company with prior written notice.',
+    'Announcements, publications, press releases, and media participation concerning the Potential Transaction or this Agreement require the other Party\'s written approval where practicable and legally feasible.',
+    'This Agreement is governed by the laws of the Republic of the Philippines. Disputes shall be settled under the Philippine Dispute Resolution Center Inc. (PDRCI) Arbitration Rules by three (3) arbitrators. The seat and venue are Makati, Philippines, and the language is English.',
+    'Money damages may be insufficient for breach; the Disclosing Party may seek equitable relief, including injunction or specific performance, in addition to other remedies.',
+    `The Parties execute this Agreement through authorized representatives: MPHTC by ${fields.mphtcSignatoryName}, ${fields.mphtcSignatoryDesignation}; SERVICE PROVIDER by ${fields.serviceProviderSignatoryName}, ${fields.serviceProviderSignatoryDesignation}. Counterparts together constitute one agreement.`,
+  ];
+}
+
+async function sha256(value: string): Promise<string> {
+  const digest = await globalThis.crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(value),
+  );
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+export async function generateTechnologyMnda(
+  fields: TechnologyMndaFields,
+): Promise<GeneratedTechnologyMnda> {
+  const body = renderTechnologyMnda(fields);
+  const canonicalText = body.join('\n\n').replace(/\r\n/g, '\n').trim();
+  return {
+    templateVersion: TECHNOLOGY_MNDA_TEMPLATE_VERSION,
+    body,
+    canonicalText,
+    sha256: await sha256(canonicalText),
+  };
+}
+
+export function technologyMndaReturnOrDestroyDueAt(triggeredAt: string): string {
+  const due = new Date(triggeredAt);
+  if (!Number.isFinite(due.getTime())) throw new Error('Invalid MNDA lifecycle timestamp');
+  let remaining = 5;
+  while (remaining > 0) {
+    due.setUTCDate(due.getUTCDate() + 1);
+    const day = due.getUTCDay();
+    if (day !== 0 && day !== 6) remaining -= 1;
+  }
+  return due.toISOString();
+}
+
+const TEMPLATE_FIELDS: TechnologyMndaFields = {
+  executionDate: '[EXECUTION DATE]',
+  serviceProviderName: '[SERVICE PROVIDER LEGAL NAME]',
+  serviceProviderAddress: '[SERVICE PROVIDER REGISTERED ADDRESS]',
+  potentialTransaction: '[POTENTIAL TECHNOLOGY TRANSACTION]',
+  serviceProviderNoticeName: '[NOTICE CONTACT]',
+  serviceProviderNoticeAddress: '[NOTICE ADDRESS]',
+  serviceProviderNoticeFax: '[FAX OR N/A]',
+  serviceProviderNoticeEmail: '[NOTICE EMAIL]',
+  serviceProviderSignatoryName: '[SERVICE PROVIDER SIGNATORY]',
+  serviceProviderSignatoryDesignation: '[DESIGNATION]',
+  mphtcSignatoryName: '[APPROVED MPHTC SIGNATORY]',
+  mphtcSignatoryDesignation: '[DESIGNATION]',
+};
+
 export const INSTRUMENT_TEMPLATES: readonly InstrumentTemplate[] = [
   {
     code: 'nda_mutual',
     label: 'Mutual Non-Disclosure Agreement',
-    version: '2026.07.01',
+    version: TECHNOLOGY_MNDA_TEMPLATE_VERSION,
     group: 'nda',
     summary:
-      'Standard mutual NDA. Both parties treat confidential information disclosed under the accreditation as protected for five (5) years from disclosure.',
+      'Technology service-provider MNDA. Both parties protect confidential information exchanged while evaluating or performing software, systems-integration, consulting, or technical services.',
     jurisdictions: [],
     riskTiers: [],
-    body: [
-      'This Mutual Non-Disclosure Agreement is entered into by mWell Corporation ("mWell") and the vendor identified on the accreditation case ("Vendor").',
-      'Each party may disclose to the other information that is confidential or proprietary, including but not limited to business plans, pricing, technical designs, patient data references (aggregated only), source code, and product roadmap ("Confidential Information").',
-      'The receiving party shall (a) use Confidential Information solely to evaluate and perform the contemplated engagement; (b) protect it with at least the same care it applies to its own confidential information (never less than reasonable care); and (c) restrict access to personnel with a need to know who are themselves under written confidentiality obligations.',
-      'Confidential Information does not include information that is or becomes public through no fault of the receiving party, was rightfully known before disclosure, is independently developed without use of the disclosed information, or is rightfully received from a third party without confidentiality obligations.',
-      'The receiving party may disclose Confidential Information if compelled by law, provided it gives the disclosing party prompt notice (where legally permitted) and cooperates in seeking a protective order.',
-      'The obligations in this NDA survive for five (5) years from the date of disclosure. All Confidential Information remains the property of the disclosing party.',
-      'This NDA is governed by the laws of the Republic of the Philippines. Any dispute arising from this NDA is submitted to the exclusive jurisdiction of the courts of Metro Manila.',
-      'By signing below, the Vendor\u2019s authorized signatory represents they have authority to bind the Vendor to this NDA.',
+    body: renderTechnologyMnda(TEMPLATE_FIELDS),
+    fields: [
+      { name: 'executionDate', label: 'Execution date', kind: 'text', required: true },
+      { name: 'serviceProviderName', label: 'Service provider legal name', kind: 'text', required: true },
+      { name: 'serviceProviderAddress', label: 'Registered address', kind: 'textarea', required: true },
+      { name: 'potentialTransaction', label: 'Potential transaction', kind: 'textarea', required: true },
+      { name: 'serviceProviderNoticeName', label: 'Notice contact', kind: 'text', required: true },
+      { name: 'serviceProviderNoticeAddress', label: 'Notice address', kind: 'textarea', required: true },
+      { name: 'serviceProviderNoticeFax', label: 'Fax number or N/A', kind: 'text', required: true },
+      { name: 'serviceProviderNoticeEmail', label: 'Notice email', kind: 'text', required: true },
+      { name: 'serviceProviderSignatoryName', label: 'Service provider signatory', kind: 'text', required: true },
+      { name: 'serviceProviderSignatoryDesignation', label: 'Service provider designation', kind: 'text', required: true },
+      { name: 'mphtcSignatoryName', label: 'Approved MPHTC signatory', kind: 'text', required: true },
+      { name: 'mphtcSignatoryDesignation', label: 'MPHTC signatory designation', kind: 'text', required: true },
     ],
   },
   {

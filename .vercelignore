@@ -1,0 +1,49 @@
+# Local dependencies and package-manager caches
+.git/
+node_modules/
+**/node_modules/
+.pnpm-store/
+
+# Build outputs and framework caches
+.next/
+**/.next/
+dist/
+**/dist/
+out/
+**/out/
+build/
+**/build/
+.turbo/
+**/.turbo/
+*.tsbuildinfo
+
+# Vercel local state / prebuilt output
+.vercel/
+**/.vercel/
+
+# Local env files and logs
+.env
+.env.*
+**/.env
+**/.env.*
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Test reports, screenshots, and audit artifacts
+coverage/
+**/coverage/
+playwright-report/
+**/playwright-report/
+test-results/
+**/test-results/
+.qa/
+.review-shots/
+.playwright-cli/
+.pwcli/
+.tmp/
+
+# Editor / OS noise
+.DS_Store
+Thumbs.db
+.vscode/

@@ -2,3 +2,20 @@ packages:
   - "apps/*"
   - "modules/*"
   - "packages/*"
+
+overrides:
+  "@types/react": "^19.2.0"
+  "@types/react-dom": "^19.2.0"
+  postcss: "^8.5.10"
+
+onlyBuiltDependencies:
+  - "@swc/core"
+  - esbuild
+  - sharp
+  - unrs-resolver
+
+allowBuilds:
+  "@swc/core": true
+  esbuild: true
+  sharp: true
+  unrs-resolver: true

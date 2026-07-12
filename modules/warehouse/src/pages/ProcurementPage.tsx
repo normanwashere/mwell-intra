@@ -1,4 +1,3 @@
-import { useNavigate } from 'react-router-dom';
 import { useWarehouse } from '@/app/store';
 import { toStockState } from '@/data/repository';
 import { availableForProduct, lowStockProducts } from '@/domain/stock';
@@ -15,6 +14,8 @@ import {
   PageHeader,
   SectionTitle,
   StatCard,
+  StaggerGrid,
+  StaggerItem,
   useToast,
   type Column,
 } from '@/components/ui';
@@ -32,7 +33,6 @@ interface ReorderRow {
 
 export function ProcurementPage() {
   const { data, createPurchaseOrder } = useWarehouse();
-  const navigate = useNavigate();
   const toast = useToast();
   if (!data) return null;
   const state = toStockState(data);
@@ -167,22 +167,30 @@ export function ProcurementPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Procurement" subtitle="Reorder, stockout risk & lead times" />
+      <PageHeader title="Procurement" icon="cart" subtitle="Reorder, stockout risk & lead times" />
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="SKUs to reorder" value={low.length} icon="cart" tone="amber" />
-        <StatCard label="Stockout risk" value={atRiskCount} icon="alert" tone={atRiskCount ? 'rose' : 'emerald'} />
-        <StatCard label="Open POs" value={openPOs} icon="list" tone="brand" />
-        <StatCard
-          label="Avg lead time"
-          value={`${Math.round(
-            data.suppliers.reduce((s, x) => s + x.leadTimeDays, 0) /
-              Math.max(1, data.suppliers.length),
-          )}d`}
-          icon="calendar"
-          tone="accent"
-        />
-      </div>
+      <StaggerGrid className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <StaggerItem>
+          <StatCard label="SKUs to reorder" value={low.length} icon="cart" tone="amber" />
+        </StaggerItem>
+        <StaggerItem>
+          <StatCard label="Stockout risk" value={atRiskCount} icon="alert" tone={atRiskCount ? 'rose' : 'emerald'} />
+        </StaggerItem>
+        <StaggerItem>
+          <StatCard label="Open POs" value={openPOs} icon="list" tone="brand" />
+        </StaggerItem>
+        <StaggerItem>
+          <StatCard
+            label="Avg lead time"
+            value={`${Math.round(
+              data.suppliers.reduce((s, x) => s + x.leadTimeDays, 0) /
+                Math.max(1, data.suppliers.length),
+            )}d`}
+            icon="calendar"
+            tone="accent"
+          />
+        </StaggerItem>
+      </StaggerGrid>
 
       <Card>
         <SectionTitle
@@ -204,7 +212,6 @@ export function ProcurementPage() {
             rows={reorderRows}
             keyOf={(r) => r.product.id}
             ariaLabel="Reorder worklist"
-            onRowClick={(r) => navigate(`/inventory/${r.product.id}`)}
           />
         )}
       </Card>

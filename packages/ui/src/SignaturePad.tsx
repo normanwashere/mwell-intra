@@ -86,7 +86,6 @@ export function SignaturePad({
     ctx.strokeStyle = '#0f172a';
     setHasInk(false);
     onChange(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
 
   const commit = useCallback(() => {
@@ -141,7 +140,6 @@ export function SignaturePad({
   // signer having to click a separate "confirm".
   useEffect(() => {
     if (mode === 'typed') commit();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signerName, mode]);
 
   const clearInk = () => {

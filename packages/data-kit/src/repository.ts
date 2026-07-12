@@ -1,6 +1,7 @@
 import type {
   Allocation,
   CycleCount,
+  CycleCountLine,
   DeviceType,
   EventType,
   InventoryUnit,
@@ -21,6 +22,28 @@ import type {
   WarehouseEvent,
 } from './domain/types';
 import type { StockState } from './domain/stock';
+import type {
+  DecideStockChangeInput,
+  CreateVendorReturnInput,
+  InspectQualityInput,
+  InventoryHold,
+  InventoryPosition,
+  OperationRoute,
+  OperationType,
+  PageQuery,
+  PageResult,
+  ProcurementPOHandoff,
+  QualityInspection,
+  ReleaseHoldInput,
+  ReceiveProcurementPOInput,
+  ResolveExceptionInput,
+  StockChangeRequest,
+  SubmitCycleCountInput,
+  UpdateOperationRouteInput,
+  WarehouseException,
+  WarehouseTask,
+  VendorReturn,
+} from './domain/warehouseControls';
 
 /** Full snapshot of the warehouse read model. */
 export interface WarehouseData {
@@ -38,6 +61,8 @@ export interface WarehouseData {
   cycleCounts: CycleCount[];
   receipts: Receipt[];
   purchaseOrders: PurchaseOrder[];
+  operationTypes?: OperationType[];
+  operationRoutes?: OperationRoute[];
 }
 
 export interface ReceiveStockInput {
@@ -47,6 +72,7 @@ export interface ReceiveStockInput {
     productId: string;
     quantity: number;
     lotCode?: string;
+    expiryDate?: string;
     serialNumbers?: string[];
     unitCost?: number;
     /** Storage area the stock is put away into (undefined = general area). */
@@ -100,7 +126,7 @@ export interface CycleCountInput {
   category?: 'device' | 'merchandise';
   /** Storage area being counted (undefined = general area). */
   binId?: string;
-  lines: { productId: string; expected: number; counted: number }[];
+  lines: CycleCountLine[];
   actor: string;
 }
 
@@ -284,6 +310,26 @@ export interface WarehouseRepository {
   createProduct(input: CreateProductInput): Promise<Product>;
   updateProduct(input: UpdateProductInput): Promise<Product>;
   adjustStock(input: AdjustStockInput): Promise<Movement>;
+}
+
+/** W1 control extension implemented by live and memory adapters in Task 5. */
+export interface WarehouseControlRepository extends WarehouseRepository {
+  listQualityInspections(query: PageQuery): Promise<PageResult<QualityInspection>>;
+  listHolds(query: PageQuery): Promise<PageResult<InventoryHold>>;
+  listVendorReturns(query: PageQuery): Promise<PageResult<VendorReturn>>;
+  listExceptions(query: PageQuery): Promise<PageResult<WarehouseException>>;
+  listStockChangeRequests(query: PageQuery): Promise<PageResult<StockChangeRequest>>;
+  listWarehouseTasks(query: PageQuery): Promise<PageResult<WarehouseTask>>;
+  listInventoryPositions(query: PageQuery): Promise<PageResult<InventoryPosition>>;
+  inspectQuality(input: InspectQualityInput): Promise<QualityInspection>;
+  releaseHold(input: ReleaseHoldInput): Promise<InventoryHold>;
+  createVendorReturn(input: CreateVendorReturnInput): Promise<VendorReturn>;
+  updateOperationRoute(input: UpdateOperationRouteInput): Promise<OperationRoute>;
+  submitCycleCount(input: SubmitCycleCountInput): Promise<StockChangeRequest[]>;
+  decideStockChange(input: DecideStockChangeInput): Promise<StockChangeRequest>;
+  resolveException(input: ResolveExceptionInput): Promise<WarehouseException>;
+  getReceivableProcurementPOs(): Promise<ProcurementPOHandoff[]>;
+  receiveProcurementPO(input: ReceiveProcurementPOInput): Promise<Receipt>;
 }
 
 export function toStockState(data: WarehouseData): StockState {

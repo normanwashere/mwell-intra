@@ -49,6 +49,10 @@ export interface Product {
   /** Flag for items used as promotional / corporate give-aways. */
   promotional?: boolean;
   barcode?: string;
+  /** Whether receipts may carry an expiry date for this SKU. */
+  expiryTracked?: boolean;
+  /** Days before expiry when the UI starts warning. */
+  shelfLifeWarningDays?: number;
 }
 
 export type LocationType = 'warehouse' | 'event_site' | 'vendor';
@@ -90,6 +94,7 @@ export interface Lot {
   supplierId?: Id;
   unitCost: number;
   receivedAt: string;
+  expiryDate?: string;
 }
 
 export type UnitStatus =
@@ -97,6 +102,7 @@ export type UnitStatus =
   | 'allocated'
   | 'issued'
   | 'returned'
+  | 'vendor_return'
   | 'lost';
 
 /** A single serialized physical unit (e.g. one ECG ring). */
@@ -129,6 +135,7 @@ export type MovementType =
   | 'allocation'
   | 'issue'
   | 'return'
+  | 'vendor_return'
   | 'transfer'
   | 'adjustment'
   | 'cycle_count';
@@ -165,6 +172,8 @@ export interface ReturnLine {
   serialNumber?: string;
   /** Location the stock is returned into (for non-serialized restock). */
   locationId?: Id;
+  /** Storage area holding the returned stock while it awaits inspection. */
+  binId?: Id;
   /** What happens to returned stock: back to shelf, written off, or sent to vendor. */
   disposition?: ReturnDisposition;
 }
@@ -210,6 +219,8 @@ export interface ReceiptLine {
   productId: Id;
   quantity: number;
   lotCode?: string;
+  /** Expiry date captured for expiry-tracked lots. */
+  expiryDate?: string;
   serialNumbers?: string[];
   unitCost?: number;
   /** Storage area the received stock was put away into. */
@@ -222,6 +233,9 @@ export interface Receipt {
   locationId: Id;
   lines: ReceiptLine[];
   evidenceUrls?: string[];
+  operationRouteId?: string;
+  procurementPoId?: string;
+  qualityStatus?: 'pending' | 'partial' | 'accepted' | 'hold' | 'closed';
   actor: string;
   createdAt: string;
 }
@@ -230,6 +244,8 @@ export interface CycleCountLine {
   productId: Id;
   expected: number;
   counted: number;
+  /** Required for serialized products; duplicates and unknown serials are rejected. */
+  serialNumbers?: string[];
 }
 
 export interface CycleCount {
@@ -239,6 +255,9 @@ export interface CycleCount {
   binId?: Id;
   category?: ItemCategory;
   lines: CycleCountLine[];
+  status?: 'draft' | 'submitted' | 'pending_approval' | 'approved' | 'rejected';
+  requestedBy?: string;
+  submittedAt?: string;
   actor: string;
   createdAt: string;
 }
@@ -267,7 +286,7 @@ export interface PurchaseOrder {
   createdAt: string;
 }
 
-/** The 8 user-story roles. */
+/** Warehouse roles exposed by the module. */
 export type Role =
   | 'logistics_supervisor'
   | 'operations'
@@ -276,7 +295,8 @@ export type Role =
   | 'business_unit'
   | 'marketing'
   | 'procurement'
-  | 'pricing';
+  | 'pricing'
+  | 'warehouse_admin';
 
 /** A demo/staff user that signs in by picking their role. */
 export interface Profile {

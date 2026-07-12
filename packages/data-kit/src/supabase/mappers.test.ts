@@ -7,6 +7,13 @@ import {
   movementToRow,
   rowToAllocation,
   allocationToRow,
+  rowToException,
+  rowToHold,
+  rowToInventoryPosition,
+  rowToOperationRoute,
+  rowToQualityInspection,
+  rowToStockChangeRequest,
+  rowToWarehouseTask,
 } from './mappers';
 
 // Ported from `mwell-intra-warehouse/src/data/supabase/mappers.test.ts`.
@@ -97,5 +104,69 @@ describe('allocation round-trip', () => {
     });
     expect(domain.promotional).toBeUndefined();
     expect(allocationToRow(domain).promotional).toBe(false);
+  });
+});
+
+describe('warehouse control row mapping', () => {
+  it('maps quality, hold, and exception rows without leaking database nulls', () => {
+    expect(
+      rowToQualityInspection({
+        id: 'qi-1', source_type: 'receipt', source_id: 'rcpt-1', product_id: 'shirt',
+        bin_id: null, lot_id: null, serial_number: null, quantity: 2,
+        disposition: 'hold', reason: 'Damaged carton', evidence_urls: null,
+        inspected_by: 'user-1', created_at: '2026-07-10T00:00:00Z',
+      }),
+    ).toMatchObject({ binId: undefined, evidenceUrls: [], inspectedBy: 'user-1' });
+    expect(
+      rowToHold({
+        id: 'hold-1', inspection_id: 'qi-1', product_id: 'shirt', location_id: 'loc-wh',
+        bin_id: 'bin-a', lot_id: null, serial_number: null, quantity: 2,
+        status: 'active', reason: 'Damaged carton', created_by: 'user-1',
+        created_at: '2026-07-10T00:00:00Z', released_by: null, released_at: null,
+      }),
+    ).toMatchObject({ binId: 'bin-a', releasedBy: undefined });
+    expect(
+      rowToException({
+        id: 'ex-1', exception_type: 'quality', severity: 'P2', source_type: 'quality_inspection',
+        source_id: 'qi-1', status: 'open', owner_id: null, due_at: null,
+        resolution: null, created_at: '2026-07-10T00:00:00Z',
+      }),
+    ).toMatchObject({ type: 'quality', ownerId: undefined, resolution: undefined });
+  });
+
+  it('coerces numeric stock-change and inventory-position values', () => {
+    expect(
+      rowToStockChangeRequest({
+        id: 'scr-1', source_type: 'cycle_count', source_id: 'cc-1', product_id: 'shirt',
+        location_id: 'loc-wh', bin_id: null, quantity_delta: '-3', unit_cost: '200.50',
+        financial_impact: '601.50', reason: 'Count variance', evidence_urls: null,
+        status: 'pending_supervisor', requested_by: 'user-1', requested_at: '2026-07-10T00:00:00Z',
+      }),
+    ).toMatchObject({ quantityDelta: -3, unitCost: 200.5, financialImpact: 601.5 });
+    expect(
+      rowToInventoryPosition({
+        product_id: 'shirt', location_id: 'loc-wh', bin_id: null,
+        on_hand: '20', committed: '3', held: '2', unavailable: '1', available: '14',
+      }),
+    ).toEqual({
+      productId: 'shirt', locationId: 'loc-wh', binId: undefined,
+      onHand: 20, committed: 3, held: 2, unavailable: 1, available: 14,
+    });
+  });
+
+  it('maps operation-route arrays and task timestamps', () => {
+    expect(
+      rowToOperationRoute({
+        id: 'route-1', operation_type_id: 'op-1', source_location_types: ['vendor'],
+        destination_location_types: ['warehouse'], requires_evidence: true,
+        requires_approval: false, requires_online: true, active: true,
+      }),
+    ).toMatchObject({ sourceLocationTypes: ['vendor'], requiresOnline: true });
+    expect(
+      rowToWarehouseTask({
+        id: 'task-1', task_type: 'quality', source_id: 'qi-1', title: 'Inspect receipt',
+        status: 'due', assignee_id: null, due_at: null, completed_at: null,
+      }),
+    ).toMatchObject({ type: 'quality', assigneeId: undefined, completedAt: undefined });
   });
 });

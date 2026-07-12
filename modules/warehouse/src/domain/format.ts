@@ -16,6 +16,7 @@ export const MOVEMENT_TYPE_LABELS: Record<MovementType, string> = {
   allocation: 'Allocation',
   issue: 'Issue',
   return: 'Return',
+  vendor_return: 'Vendor return',
   transfer: 'Transfer',
   adjustment: 'Adjustment',
   cycle_count: 'Cycle count',
@@ -27,7 +28,7 @@ export function movementTypeLabel(type: MovementType): string {
 }
 
 /** Outbound movement types — stock leaving the warehouse. */
-const OUTBOUND: ReadonlySet<MovementType> = new Set(['issue', 'allocation']);
+const OUTBOUND: ReadonlySet<MovementType> = new Set(['issue', 'allocation', 'vendor_return']);
 /** Inbound movement types — stock coming back / arriving. */
 const INBOUND: ReadonlySet<MovementType> = new Set(['receipt', 'return']);
 

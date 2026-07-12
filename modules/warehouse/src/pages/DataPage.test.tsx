@@ -10,5 +10,8 @@ describe('DataPage', () => {
     expect(screen.getByLabelText('Data dictionary')).toBeInTheDocument();
     expect(screen.getByLabelText('Metric definitions')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /inventory/i })).toBeInTheDocument();
+    expect(screen.getByText('Warehouse Operations')).toBeInTheDocument();
+    expect(screen.getAllByText(/inventory_position_v1\.on_hand/i).length).toBeGreaterThan(0);
+    expect(screen.getByRole('link', { name: /open inventory reports/i })).toHaveAttribute('href', '/reports');
   });
 });

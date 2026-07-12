@@ -35,6 +35,21 @@ describe('InventoryPage', () => {
     expect(within(list).getByText('mWellness Smart Watch')).toBeInTheDocument();
   });
 
+  it('shows shelf-life risk on expiry-tracked inventory', async () => {
+    const seed = await makeRepo().getData();
+    seed.products = seed.products.map((product) => product.id === 'doctor-token'
+      ? { ...product, expiryTracked: true, shelfLifeWarningDays: 30 }
+      : product);
+    seed.lots.push({
+      id: 'lot-expired-ui', productId: 'doctor-token', lotCode: 'EXP-001',
+      unitCost: 10, receivedAt: '2026-06-01T00:00:00Z', expiryDate: '2026-07-09',
+    });
+    renderWithProviders(<InventoryPage />, { repo: makeRepo(seed) });
+
+    const list = await screen.findByLabelText('Inventory list');
+    expect(within(list).getByText('Expired')).toBeInTheDocument();
+  });
+
   it('filters to low-stock items only', async () => {
     const user = userEvent.setup();
     renderWithProviders(<InventoryPage />);

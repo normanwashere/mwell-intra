@@ -27,7 +27,9 @@ import {
   inventoryToCsv,
   movementsToCsv,
 } from '@/domain/export';
-import { downloadText } from '@/app/download';
+import type { WarehouseExportKind } from '@/domain/export';
+import { downloadText, downloadUrl } from '@/app/download';
+import { prepareWarehouseExport } from '@/app/governedExports';
 import {
   PO_STATUS_LABELS,
   formatWhen,
@@ -37,22 +39,23 @@ import {
 import { ROLES, can } from '@/auth/roles';
 import { useSession } from '@/auth/session';
 import type { Role } from '@/domain/types';
-import { Logo } from '@/components/Logo';
 import { Icon, type IconName } from '@/components/Icon';
 import {
   BarRow,
   Badge,
   Card,
   DataTable,
+  DonutChart,
   EmptyState,
+  HeroChipButton,
   SectionTitle,
   SegmentedControl,
   Sheet,
-  Sparkline,
   StatCard,
+  StaggerGrid,
+  StaggerItem,
   compactMoney,
   money,
-  relativeTime,
   useToast,
   type Column,
   type Tone,
@@ -82,6 +85,143 @@ function issuedSeries(
     if (idx >= 0 && idx < days) buckets[idx] = (buckets[idx] ?? 0) + m.quantity;
   }
   return buckets;
+}
+
+function IssuedComparison({ recent, prior }: { recent: number; prior: number }) {
+  const max = Math.max(recent, prior, 1);
+  const rows = [
+    { label: 'Last 5d', value: recent, tone: 'bg-brand-600' },
+    { label: 'Prior 5d', value: prior, tone: 'bg-brand-300' },
+  ];
+
+  return (
+    <div
+      className="mt-2 space-y-1.5 rounded-xl bg-surface/70 p-2 ring-1 ring-line/70"
+      aria-label={`Issued comparison: last 5 days ${recent}, prior 5 days ${prior}`}
+    >
+      {rows.map(({ label, value, tone }) => {
+        const ratio = value / max;
+
+        return (
+          <div
+            key={label}
+            className="grid grid-cols-[3.25rem_minmax(0,1fr)_2.25rem] items-center gap-2 text-[0.65rem]"
+          >
+            <span className="font-semibold text-faint">{label}</span>
+            <span className="h-1.5 overflow-hidden rounded-full bg-inset">
+              <span
+                className={`block h-full rounded-full ${tone}`}
+                style={{ width: value === 0 ? '0%' : `${Math.max(8, ratio * 100)}%` }}
+              />
+            </span>
+            <span className="tnum text-right font-bold text-ink">{value}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function DashboardHero({
+  eyebrow,
+  title,
+  description,
+  roleLabel,
+  icon,
+  action,
+  children,
+}: {
+  eyebrow: string;
+  title: string;
+  description: string;
+  roleLabel: string;
+  icon: IconName;
+  action: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section
+      className="hero-surface relative overflow-hidden rounded-3xl p-5 sm:p-6"
+      data-testid="warehouse-dashboard-hero"
+    >
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 left-0 z-10 w-1 rounded-l-3xl bg-gradient-to-b from-brand-500 to-brand-700"
+      />
+      <div
+        aria-hidden
+        data-testid="warehouse-dashboard-hero-watermark"
+        className="pointer-events-none absolute bottom-4 right-4 z-0 text-brand-700 dark:text-brand-300"
+        style={{ opacity: 0.05 }}
+      >
+        <Icon name={icon} className="h-32 w-32 sm:h-44 sm:w-44" />
+      </div>
+
+      <div className="relative z-10 grid min-w-0 gap-5 md:grid-cols-[minmax(0,1fr)_minmax(17rem,20rem)] md:items-end">
+        <div className="min-w-0">
+          <p className="text-caption font-semibold uppercase tracking-wide text-faint">
+            {eyebrow}
+          </p>
+          <h1 className="mt-1 font-display text-title text-ink sm:text-display">
+            {title}
+          </h1>
+          <p className="mt-1.5 max-w-xl text-body text-muted">{description}</p>
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            {action}
+            <span className="chip bg-inset text-muted">{roleLabel}</span>
+          </div>
+        </div>
+
+        <div className="min-w-0">{children}</div>
+      </div>
+    </section>
+  );
+}
+
+function IssuedMetricDock({
+  total,
+  recent,
+  prior,
+  trendPct,
+}: {
+  total: number;
+  recent: number;
+  prior: number;
+  trendPct: number;
+}) {
+  return (
+    <div
+      className="rounded-2xl border border-line/70 bg-inset/85 p-3 shadow-e1 backdrop-blur-sm sm:p-4"
+      data-testid="warehouse-dashboard-hero-metric"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-caption font-semibold uppercase tracking-wide text-faint">
+            10-day issued
+          </p>
+          <div className="mt-1 flex items-baseline gap-1">
+            <span className="tnum text-2xl font-extrabold text-ink">{total}</span>
+            <span className="text-xs font-medium text-faint">units</span>
+          </div>
+        </div>
+        <span
+          className={
+            trendPct >= 0
+              ? 'chip bg-emerald-500/15 text-emerald-800 dark:text-emerald-300'
+              : 'chip bg-rose-500/15 text-rose-700 dark:text-rose-300'
+          }
+        >
+          {trendPct >= 0 ? '+' : ''}
+          {trendPct}%
+        </span>
+      </div>
+
+      <IssuedComparison recent={recent} prior={prior} />
+      <p className="mt-2 text-xs font-medium text-faint">
+        Last 5 days compared with the previous 5.
+      </p>
+    </div>
+  );
 }
 
 type Window = '30' | '90' | 'all';
@@ -122,26 +262,42 @@ const ROLE_PANELS: Record<Role, PanelId[]> = {
   marketing: ['consumption', 'events', 'fastMoving'],
   procurement: ['reorder', 'openPOs', 'lowStock'],
   pricing: ['topValue', 'valuation', 'fastMoving'],
+  warehouse_admin: ['lowStock', 'reconciliation', 'recentActivity'],
 };
 
 /** Roles whose dashboard is analytics-driven get the date-window control. */
 const WINDOWED_ROLES: Role[] = ['bi_analyst', 'marketing'];
 
 export function DashboardPage() {
-  const { data, role } = useWarehouse();
+  const { data, role, source } = useWarehouse();
   const { profile } = useSession();
   const navigate = useNavigate();
   const toast = useToast();
   const [exportOpen, setExportOpen] = useState(false);
+  const [exporting, setExporting] = useState<WarehouseExportKind | null>(null);
   const [window, setWindow] = useState<Window>('all');
   if (!data) return null;
   const state = toStockState(data);
   const showWindow = WINDOWED_ROLES.includes(role);
 
-  const exportCsv = (name: string, content: string) => {
-    downloadText(name, content);
-    toast.success(`Exported ${name}`);
-    setExportOpen(false);
+  const canExport = can(role, 'view_analytics') || can(role, 'view_finance');
+  const exportCsv = async (kind: WarehouseExportKind, content: string) => {
+    setExporting(kind);
+    try {
+      const prepared = await prepareWarehouseExport({ source, kind, demoContent: content });
+      if (prepared.downloadUrl) downloadUrl(prepared.filename, prepared.downloadUrl);
+      else downloadText(prepared.filename, prepared.demoContent ?? '');
+      toast.success(
+        source === 'memory'
+          ? `Downloaded demo export ${prepared.filename}`
+          : `Recorded and downloaded ${prepared.filename}`,
+      );
+      setExportOpen(false);
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'Export failed.');
+    } finally {
+      setExporting(null);
+    }
   };
 
   const mv: Movement[] =
@@ -166,6 +322,25 @@ export function DashboardPage() {
   const consumption = consumptionByEventType(mv, data.events);
   const maxConsumption = Math.max(1, ...consumption.map((c) => c.issued));
   const series = issuedSeries(data.movements);
+  // Simple momentum trend (last 5 days vs prior 5).
+  const recentIssuedTotal = series.reduce((sum, value) => sum + value, 0);
+  const recentHalf = series.slice(-5).reduce((s, v) => s + v, 0);
+  const priorHalf = series.slice(-10, -5).reduce((s, v) => s + v, 0);
+  const issuedTrendPct =
+    priorHalf === 0
+      ? recentHalf > 0
+        ? 100
+        : 0
+      : Math.round(((recentHalf - priorHalf) / priorHalf) * 100);
+  const valuationSlices = [
+    { label: 'Devices', value: devicesValue, tone: 'brand' as const },
+    { label: 'Merchandise', value: merchValue, tone: 'accent' as const },
+  ].filter((s) => s.value > 0);
+  const consumptionSlices = consumption.map((c, i) => ({
+    label: EVENT_TYPE_LABELS[c.eventType] ?? c.eventType,
+    value: c.issued,
+    tone: (['accent', 'brand', 'amber', 'emerald', 'rose', 'slate'] as const)[i % 6],
+  }));
 
   const reserved = data.allocations.filter((a) => a.status === 'reserved');
   const reservedCount = reserved.length;
@@ -250,6 +425,7 @@ export function DashboardPage() {
     marketing: `${compactMoney(promoSpend)} promo spend · ${data.events.length} event${data.events.length === 1 ? '' : 's'}`,
     procurement: `${reorderRows.length} SKU${reorderRows.length === 1 ? '' : 's'} to reorder · ${openPOs.length} open PO${openPOs.length === 1 ? '' : 's'}`,
     pricing: `${compactMoney(totalLanded)} at landed cost · ${multiSupplier} multi-supplier SKUs`,
+    warehouse_admin: `${low.length} SKU${low.length === 1 ? '' : 's'} need reorder · ${reconciliation.length} variance${reconciliation.length === 1 ? '' : 's'} open`,
   };
 
   const HERO_CTA: Record<Role, { label: string; icon: IconName; to: string }> = {
@@ -261,6 +437,7 @@ export function DashboardPage() {
     marketing: { label: 'Events', icon: 'calendar', to: '/events' },
     procurement: { label: 'Reorders & POs', icon: 'cart', to: '/procurement' },
     pricing: { label: 'Pricing workspace', icon: 'trend', to: '/pricing' },
+    warehouse_admin: { label: 'Receive stock', icon: 'truck', to: '/receiving' },
   };
 
   const KPIS: Record<Role, Kpi[]> = {
@@ -311,6 +488,12 @@ export function DashboardPage() {
       { label: 'Avg turnover', value: `${avgTurnover}×`, icon: 'trend', tone: 'accent', to: '/pricing', hint: 'Inventory turns (90d)' },
       { label: 'Multi-supplier SKUs', value: multiSupplier, icon: 'building', tone: 'amber', to: '/pricing', hint: 'Sourced from 2+ suppliers' },
       { label: 'Promo spend', value: compactMoney(promoSpend), icon: 'tag', tone: 'brand', to: '/pricing', hint: 'Promotional cost' },
+    ],
+    warehouse_admin: [
+      { label: 'Low-stock items', value: low.length, icon: 'alert', tone: low.length ? 'amber' : 'emerald', to: '/inventory?filter=low', hint: 'At or below reorder point' },
+      { label: 'Serialized in field', value: assets.length, icon: 'tag', tone: 'brand', to: '/inventory?filter=device', hint: 'Serialized devices issued' },
+      { label: 'Open variances', value: reconciliation.length, icon: 'clipboard', tone: reconciliation.length ? 'rose' : 'emerald', to: '/cycle-counts?filter=variances', hint: 'Variance from last count' },
+      { label: 'Active SKUs', value: data.products.length, icon: 'box', to: '/inventory', hint: 'Products in the catalog' },
     ],
   };
 
@@ -380,7 +563,7 @@ export function DashboardPage() {
         ) : (
           <ul className="divide-y divide-line">
             {reconciliation.slice(0, 6).map((r) => (
-              <li key={r.productId}>
+              <li key={`${r.productId}|${r.locationId}|${r.binId ?? ''}`}>
                 <button
                   type="button"
                   onClick={() =>
@@ -494,17 +677,22 @@ export function DashboardPage() {
         {consumption.length === 0 ? (
           <EmptyState icon="calendar" title="No events recorded" />
         ) : (
-          <div className="space-y-3">
-            {consumption.map((c) => (
-              <BarRow
-                key={c.eventType}
-                label={EVENT_TYPE_LABELS[c.eventType] ?? c.eventType}
-                value={c.issued}
-                max={maxConsumption}
-                tone="accent"
-                suffix=" pcs"
-              />
-            ))}
+          <div className="flex items-center gap-4">
+            {consumptionSlices.length > 0 && (
+              <DonutChart slices={consumptionSlices} size={96} className="shrink-0" />
+            )}
+            <div className="min-w-0 flex-1 space-y-3">
+              {consumption.map((c) => (
+                <BarRow
+                  key={c.eventType}
+                  label={EVENT_TYPE_LABELS[c.eventType] ?? c.eventType}
+                  value={c.issued}
+                  max={maxConsumption}
+                  tone="accent"
+                  suffix=" pcs"
+                />
+              ))}
+            </div>
           </div>
         )}
       </Card>
@@ -542,20 +730,25 @@ export function DashboardPage() {
     valuation: (
       <Card key="valuation">
         <SectionTitle title="Valuation by category" subtitle="Devices vs merchandise" />
-        <div className="space-y-3">
-          <BarRow
-            label="Wearable devices"
-            value={devicesValue}
-            max={value}
-            valueLabel={money(devicesValue)}
-          />
-          <BarRow
-            label="Marketing merchandise"
-            value={merchValue}
-            max={value}
-            tone="accent"
-            valueLabel={money(merchValue)}
-          />
+        <div className="flex items-center gap-4">
+          {valuationSlices.length > 0 && (
+            <DonutChart slices={valuationSlices} size={96} className="shrink-0" />
+          )}
+          <div className="min-w-0 flex-1 space-y-3">
+            <BarRow
+              label="Wearable devices"
+              value={devicesValue}
+              max={value}
+              valueLabel={money(devicesValue)}
+            />
+            <BarRow
+              label="Marketing merchandise"
+              value={merchValue}
+              max={value}
+              tone="accent"
+              valueLabel={money(merchValue)}
+            />
+          </div>
         </div>
         <p className="mt-3 text-xs text-faint">
           Devices {money(devicesValue)} • Merchandise {money(merchValue)}
@@ -598,7 +791,7 @@ export function DashboardPage() {
           title="Reorder worklist"
           subtitle="At-risk first"
           action={
-            <button type="button" className="text-xs font-semibold text-brand-700 dark:text-brand-300" onClick={() => navigate('/procurement')}>
+            <button type="button" className="min-h-11 rounded-lg px-2 text-xs font-semibold text-brand-700 dark:text-brand-300" onClick={() => navigate('/procurement')}>
               View all
             </button>
           }
@@ -632,7 +825,7 @@ export function DashboardPage() {
           title="Open purchase orders"
           subtitle="In progress"
           action={
-            <button type="button" className="text-xs font-semibold text-brand-700 dark:text-brand-300" onClick={() => navigate('/purchase-orders')}>
+            <button type="button" className="min-h-11 rounded-lg px-2 text-xs font-semibold text-brand-700 dark:text-brand-300" onClick={() => navigate('/purchase-orders')}>
               View all
             </button>
           }
@@ -690,56 +883,51 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      {/* Hero */}
-      <div className="relative overflow-hidden rounded-3xl bg-brand-grad p-5 text-white shadow-navy sm:p-6">
-        <div className="absolute -right-8 -top-10 opacity-10">
-          <Logo className="h-40 w-auto" variant="light" />
-        </div>
-        <div className="relative">
-          <p className="text-sm text-brand-100/80">Welcome back,</p>
-          <h1 className="font-display text-2xl font-extrabold sm:text-3xl">
-            {firstName ?? ROLES[role].label}
-          </h1>
-          <p className="mt-1 max-w-md text-sm text-brand-100/70">
-            {HERO_STATUS[role]}
-          </p>
-          <button
-            type="button"
+      <DashboardHero
+        eyebrow="Warehouse dashboard"
+        title={firstName ?? ROLES[role].label}
+        description={HERO_STATUS[role]}
+        roleLabel={ROLES[role].label}
+        icon={heroCta.icon}
+        action={
+          <HeroChipButton
+            icon={heroCta.icon}
             onClick={() => navigate(heroCta.to)}
-            className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/25"
           >
-            <Icon name={heroCta.icon} className="h-4 w-4" /> {heroCta.label}
-          </button>
-          <div className="mt-4 flex items-end justify-end gap-4">
-            <div className="text-right">
-              <p className="text-xs uppercase tracking-wide text-brand-100/70">Issued (10d)</p>
-              <Sparkline values={series} className="text-accent-soft" width={120} />
-            </div>
-          </div>
-        </div>
-      </div>
+            {heroCta.label}
+          </HeroChipButton>
+        }
+      >
+        <IssuedMetricDock
+          total={recentIssuedTotal}
+          recent={recentHalf}
+          prior={priorHalf}
+          trendPct={issuedTrendPct}
+        />
+      </DashboardHero>
 
-      <div className="stagger grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <StaggerGrid className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {KPIS[role].map((k) => (
-          <StatCard
-            key={k.label}
-            label={k.label}
-            value={k.value}
-            icon={k.icon}
-            tone={k.tone}
-            hint={k.hint}
-            onClick={() => navigate(k.to)}
-          />
+          <StaggerItem key={k.label}>
+            <StatCard
+              label={k.label}
+              value={k.value}
+              icon={k.icon}
+              tone={k.tone}
+              hint={k.hint}
+              onClick={() => navigate(k.to)}
+            />
+          </StaggerItem>
         ))}
-      </div>
+      </StaggerGrid>
 
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="font-display text-base font-bold text-ink sm:text-lg">
           Overview
         </h2>
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
           {showWindow && (
-            <div className="w-44">
+            <div className="w-44 max-w-full">
               <SegmentedControl<Window>
                 ariaLabel="Analytics window"
                 value={window}
@@ -754,13 +942,15 @@ export function DashboardPage() {
           )}
           {/* Export lives with the data it exports, not as the hero's only
               action (WH-10). */}
-          <button
-            type="button"
-            className="btn-ghost btn-sm shrink-0"
-            onClick={() => setExportOpen(true)}
-          >
-            <Icon name="download" className="h-4 w-4" /> Export data
-          </button>
+          {canExport ? (
+            <button
+              type="button"
+              className="btn-ghost btn-sm shrink-0"
+              onClick={() => setExportOpen(true)}
+            >
+              <Icon name="download" className="h-4 w-4" /> Export data
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -775,15 +965,20 @@ export function DashboardPage() {
         description="Download CSVs for offline analysis & reconciliation."
       >
         <div className="space-y-2">
-          <button type="button" className="btn-outline w-full justify-between" onClick={() => exportCsv('inventory.csv', inventoryToCsv(state))}>
-            Inventory snapshot <Icon name="download" className="h-4 w-4" />
+          <button type="button" disabled={exporting !== null} className="btn-outline w-full justify-between" onClick={() => void exportCsv('inventory', inventoryToCsv(state))}>
+            {exporting === 'inventory' ? 'Preparing...' : 'Inventory snapshot'} <Icon name="download" className="h-4 w-4" />
           </button>
-          <button type="button" className="btn-outline w-full justify-between" onClick={() => exportCsv('movements.csv', movementsToCsv(data.movements, data.products))}>
-            Movement ledger <Icon name="download" className="h-4 w-4" />
+          <button type="button" disabled={exporting !== null} className="btn-outline w-full justify-between" onClick={() => void exportCsv('movements', movementsToCsv(data.movements, data.products))}>
+            {exporting === 'movements' ? 'Preparing...' : 'Movement ledger'} <Icon name="download" className="h-4 w-4" />
           </button>
-          <button type="button" className="btn-outline w-full justify-between" onClick={() => exportCsv('allocations.csv', allocationsToCsv(data.allocations, data.products, data.events))}>
-            Allocations <Icon name="download" className="h-4 w-4" />
+          <button type="button" disabled={exporting !== null} className="btn-outline w-full justify-between" onClick={() => void exportCsv('allocations', allocationsToCsv(data.allocations, data.products, data.events))}>
+            {exporting === 'allocations' ? 'Preparing...' : 'Allocations'} <Icon name="download" className="h-4 w-4" />
           </button>
+          <p className="pt-2 text-xs text-faint">
+            {source === 'memory'
+              ? 'Demo exports stay on this device.'
+              : 'Live exports are checksummed and recorded before download.'}
+          </p>
         </div>
       </Sheet>
     </div>

@@ -89,7 +89,7 @@ body {
   }
 
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 py-2.5
       text-sm font-semibold transition-all duration-150 active:scale-[0.97]
       focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2
       focus-visible:outline-brand-500 disabled:cursor-not-allowed disabled:opacity-50;
@@ -112,7 +112,7 @@ body {
   }
 
   .btn-sm {
-    @apply px-3 py-1.5 text-xs;
+    @apply min-h-11 px-3 py-2 text-xs;
   }
 
   .input {
@@ -144,7 +144,7 @@ body {
 
 /* gradient text matching the mWell wordmark */
 .brand-gradient {
-  background: linear-gradient(90deg, #0a3168 0%, #0b4da2 35%, #22c1f0 100%);
+  background: linear-gradient(90deg, #004f9d 0%, #1580c1 55%, #33c6f4 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;

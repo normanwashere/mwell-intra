@@ -12,10 +12,8 @@
 //   Annex A  Award Recommendation Form
 //   Annex C  Direct Award Justification
 //
-// TODO(policy-owner): three thresholds below (petty cash, small purchase,
-// finance escalation) are internal defaults — they are not spelled out in the
-// source doc. The RFQ ↔ RFP boundary at PHP 1,000,000 IS in policy §5. Adjust
-// the internal amounts here once the Delegation of Authority document lands.
+// Where the source is silent, return a policy-decision-required state instead
+// of inventing a threshold, response quorum, or approver.
 
 import type {
   ApprovalSignature,
@@ -34,20 +32,42 @@ import type {
 /** Policy §5: RFP / bidding kicks in at PHP 1,000,000 and above. */
 export const RFP_THRESHOLD = 1_000_000;
 
-/** Internal default — petty cash covers ad-hoc, low-value operational buys.
- *  Awaits DOA confirmation. */
-export const PETTY_CASH_MAX = 15_000;
-
-/** Internal default — small-purchase "one quote is enough" band, sitting
- *  between petty cash and full RFQ. Awaits DOA confirmation. */
-export const SMALL_PURCHASE_MAX = 100_000;
-
-/** Internal default — Finance tier joins the ladder at PHP 200,000+ or when
- *  category is capex / construction / manpower (regardless of amount). */
-export const FINANCE_TIER_MIN = 200_000;
-
 /** Policy §12: construction contracts at PHP 5M+ trigger performance bonds. */
 export const CONSTRUCTION_BOND_TRIGGER = 5_000_000;
+
+// ---------------------------------------------------------------------------
+// Delegation of Authority (DOA) matrix
+// ---------------------------------------------------------------------------
+
+export interface DoaAssignment {
+  id: string;
+  matrixVersion: string;
+  minAmount: number;
+  maxAmount: number | null;
+  approverUserId: string;
+  approverName: string;
+  active: boolean;
+}
+
+export type DoaResolution =
+  | { status: 'resolved'; assignment: DoaAssignment }
+  | { status: 'policy_decision_required'; assignment: undefined };
+
+export function resolveDoaAssignment(
+  assignments: readonly DoaAssignment[],
+  amount: number | undefined,
+): DoaResolution {
+  const value = typeof amount === 'number' && amount >= 0 ? amount : 0;
+  const assignment = assignments.find(
+    (candidate) =>
+      candidate.active &&
+      value >= candidate.minAmount &&
+      (candidate.maxAmount === null || value <= candidate.maxAmount),
+  );
+  return assignment
+    ? { status: 'resolved', assignment }
+    : { status: 'policy_decision_required', assignment: undefined };
+}
 
 // ---------------------------------------------------------------------------
 // Category metadata
@@ -100,38 +120,74 @@ export interface SuggestSourcingInput {
   emergency?: boolean;
   /** Requester is renewing a prior contract with the same vendor/terms. */
   repeat?: boolean;
+  comparable?: boolean;
+  complex?: boolean;
+  technical?: boolean;
+  strategic?: boolean;
+  highRisk?: boolean;
+  dataSensitive?: boolean;
+}
+
+export type SourcingReason =
+  | 'emergency'
+  | 'repeat_continuity'
+  | 'explicit_petty_cash'
+  | 'complex'
+  | 'technical'
+  | 'strategic'
+  | 'high_risk'
+  | 'data_sensitive'
+  | 'amount_threshold'
+  | 'clear_comparable_below_threshold'
+  | 'procurement_confirmation_required';
+
+export interface SourcingRecommendation {
+  method: SourcingMethod;
+  reasons: SourcingReason[];
+  requiresProcurementConfirmation: true;
 }
 
 /**
  * Suggest a sourcing path per policy §5 + §11. The rules:
  *   1. Emergency overrides everything → 'emergency'.
  *   2. Repeat order flag → 'repeat_order'.
- *   3. Petty cash category or amount ≤ PETTY_CASH_MAX → 'petty_cash'.
+ *   3. Explicit petty-cash category → 'petty_cash', pending Finance confirmation.
  *   4. High-risk categories (capex/construction/manpower/medical) escalate to
  *      RFP regardless of amount (policy §5 "complex, technical, strategic,
  *      or high-risk work regardless of amount").
  *   5. Amount ≥ RFP_THRESHOLD (PHP 1,000,000) → 'rfp'.
- *   6. Amount ≥ SMALL_PURCHASE_MAX → 'rfq'.
- *   7. Amount < SMALL_PURCHASE_MAX → 'small_purchase'.
- *   8. Amount unknown → 'rfq' (safe default for the officer to override).
+ *   6. Amount below the RFP threshold → 'rfq'.
+ *   7. Amount unknown → 'rfq', pending Procurement confirmation.
  *
  * The officer can override any suggestion with a justification stored in
  * `compliance.directAwardReason` + `compliance.priceReasonableness`.
  */
-export function suggestSourcingMethod(input: SuggestSourcingInput): SourcingMethod {
+export function deriveSourcingRecommendation(input: SuggestSourcingInput): SourcingRecommendation {
   const { category, amount, emergency, repeat } = input;
-  if (emergency) return 'emergency';
-  if (repeat) return 'repeat_order';
-  if (category === 'petty_cash') return 'petty_cash';
-  if (typeof amount === 'number' && amount > 0 && amount <= PETTY_CASH_MAX) {
-    return 'petty_cash';
-  }
+  const result = (method: SourcingMethod, reasons: SourcingReason[]): SourcingRecommendation => ({
+    method,
+    reasons,
+    requiresProcurementConfirmation: true,
+  });
+  if (emergency) return result('emergency', ['emergency']);
+  if (repeat) return result('repeat_order', ['repeat_continuity']);
+  if (category === 'petty_cash') return result('petty_cash', ['explicit_petty_cash']);
+  if (input.dataSensitive) return result('rfp', ['data_sensitive']);
+  if (input.complex) return result('rfp', ['complex']);
+  if (input.technical) return result('rfp', ['technical']);
+  if (input.strategic) return result('rfp', ['strategic']);
+  if (input.highRisk) return result('rfp', ['high_risk']);
   const meta = categoryMeta(category);
-  if (meta?.highRisk) return 'rfp';
-  if (typeof amount !== 'number' || amount <= 0) return 'rfq';
-  if (amount >= RFP_THRESHOLD) return 'rfp';
-  if (amount >= SMALL_PURCHASE_MAX) return 'rfq';
-  return 'small_purchase';
+  if (meta?.highRisk) return result('rfp', ['high_risk']);
+  if (typeof amount !== 'number' || amount <= 0) {
+    return result('rfq', ['procurement_confirmation_required']);
+  }
+  if (amount >= RFP_THRESHOLD) return result('rfp', ['amount_threshold']);
+  return result('rfq', ['clear_comparable_below_threshold']);
+}
+
+export function suggestSourcingMethod(input: SuggestSourcingInput): SourcingMethod {
+  return deriveSourcingRecommendation(input).method;
 }
 
 export function sourcingMethodLabel(m: SourcingMethod): string {
@@ -149,19 +205,29 @@ export function sourcingMethodLabel(m: SourcingMethod): string {
 /** Per-method minimum quote count from policy §5. Used to surface a warning
  *  on the request-detail page when the officer can't yet demonstrate a
  *  quorum. `null` means "no explicit minimum — Procurement judgement". */
-export function minimumQuotes(m: SourcingMethod): number | null {
-  switch (m) {
-    case 'petty_cash':
-    case 'small_purchase':
-    case 'direct_award':
-    case 'repeat_order':
-    case 'emergency':
-      return null;
-    case 'rfq':
-      return 2;
-    case 'rfp':
-      return 3;
-  }
+export interface SourcingReadinessInput {
+  method: SourcingMethod;
+  invited: number;
+  responses: number;
+  intendedResponses?: number;
+  insufficientBidsExceptionApproved?: boolean;
+}
+
+export interface SourcingReadiness {
+  ready: boolean;
+  insufficientBidsExceptionRequired: boolean;
+}
+
+export function evaluateSourcingReadiness(input: SourcingReadinessInput): SourcingReadiness {
+  const shortfall =
+    typeof input.intendedResponses === 'number' &&
+    input.intendedResponses > 0 &&
+    input.responses < input.intendedResponses;
+  return {
+    ready: !shortfall || input.insufficientBidsExceptionApproved === true,
+    insufficientBidsExceptionRequired:
+      shortfall && input.insufficientBidsExceptionApproved !== true,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -194,18 +260,17 @@ export function tierLabel(t: ApproverTier): string {
  *   final_approver — DOA sign-off (policy §9).
  *
  * Then conditional insertions:
- *   finance — inserted before final_approver when amount ≥ FINANCE_TIER_MIN
- *             OR category ∈ {capex, construction, manpower}.
+ *   finance — inserted before final_approver for categories with explicit
+ *             financial-protection exposure.
  *   legal   — inserted after procurement_head when the category loops Legal
  *             in (services, subscription, construction, manpower, it_software)
  *             OR sourcing method ∈ {direct_award, emergency, rfp} (§11 + §9).
  */
 export function buildApprovalLadder(input: BuildLadderInput): ApproverTier[] {
-  const { category, amount, sourcingMethod } = input;
+  const { category, sourcingMethod } = input;
   const tiers: ApproverTier[] = ['dept_head', 'procurement_head'];
 
   const meta = categoryMeta(category);
-  const highValue = typeof amount === 'number' && amount >= FINANCE_TIER_MIN;
   const categoryNeedsFinance =
     category === 'capex' || category === 'construction' || category === 'manpower';
 
@@ -216,7 +281,7 @@ export function buildApprovalLadder(input: BuildLadderInput): ApproverTier[] {
     sourcingMethod === 'rfp';
 
   if (legalTriggered) tiers.push('legal');
-  if (highValue || categoryNeedsFinance) tiers.push('finance');
+  if (categoryNeedsFinance) tiers.push('finance');
 
   tiers.push('final_approver');
   return tiers;
@@ -239,7 +304,10 @@ export function buildApprovalSteps(
     order: i + 1,
     tier,
     status: 'pending',
-    label: tierLabel(tier),
+    label:
+      tier === 'final_approver'
+        ? 'Final Approver - Policy decision required (DOA)'
+        : tierLabel(tier),
   }));
 }
 
@@ -332,10 +400,10 @@ export function requiredDocuments(input: BuildLadderInput): RequiredDoc[] {
   ];
   if (sourcingMethod === 'rfp') {
     docs.push({ key: 'ar', label: 'Award Recommendation draft', why: 'Required for RFP / bidding (Annex A).' });
-    docs.push({ key: 'bids', label: 'Vendor proposals (≥3)', why: 'RFP quorum per policy §5.' });
+    docs.push({ key: 'bids', label: 'Vendor proposals', why: 'Supports the documented RFP evaluation and sourcing effort.' });
   }
   if (sourcingMethod === 'rfq') {
-    docs.push({ key: 'quotes', label: 'Comparable quotations (≥2)', why: 'RFQ / canvassing per policy §5.' });
+    docs.push({ key: 'quotes', label: 'Comparable quotations', why: 'Supports documented RFQ comparison where practicable.' });
   }
   if (sourcingMethod === 'direct_award' || sourcingMethod === 'emergency') {
     docs.push({ key: 'da_justification', label: 'Direct-award justification', why: 'Annex C — sole supplier / emergency basis.' });
@@ -384,4 +452,44 @@ export function requiredDocumentsStatus(
     const accepted = DOC_KIND_MATCH[doc.key] ?? [];
     return { ...doc, attached: accepted.some((k) => kinds.has(k)) };
   });
+}
+
+// ---------------------------------------------------------------------------
+// Submit readiness gate (policy §5/§9 — enforce, not just display)
+// ---------------------------------------------------------------------------
+
+export interface SubmitReadiness {
+  /** True when all required documents are attached. */
+  ok: boolean;
+  /** Human-readable labels of required documents not yet attached. */
+  missingDocs: string[];
+}
+
+/**
+ * Whether a request satisfies the policy prerequisites to enter the approval
+ * ladder: the required-document set is attached. Procurement separately
+ * records sourcing effort and any approved insufficient-bids exception.
+ */
+export function evaluateSubmitReadiness(req: {
+  category?: RequestCategory;
+  estimatedAmount?: number;
+  sourcingMethod?: SourcingMethod;
+  attachments?: readonly Pick<RequestAttachment, 'kind'>[];
+  compliance?: { routeConfirmed?: boolean };
+}): SubmitReadiness {
+  const input: BuildLadderInput = {
+    category: req.category,
+    amount: req.estimatedAmount,
+    sourcingMethod: req.sourcingMethod,
+  };
+  const missingDocs = requiredDocumentsStatus(input, req.attachments)
+    .filter((d) => !d.attached)
+    .map((d) => d.label);
+  if (!req.compliance?.routeConfirmed) {
+    missingDocs.unshift('Procurement-confirmed sourcing route');
+  }
+  return {
+    ok: missingDocs.length === 0,
+    missingDocs,
+  };
 }

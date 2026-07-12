@@ -23,6 +23,7 @@ import {
 //     wire payload envelope is identical — these assertions stay valid.
 function makeMockClient(seed: WarehouseData) {
   const calls: { fn: string; payload: Record<string, unknown> }[] = [];
+  const queries: { table: string; projection: string; limit?: number; orders: string[] }[] = [];
   const locationRows = seed.locations.map((l) => ({
     id: l.id,
     name: l.name,
@@ -95,10 +96,77 @@ function makeMockClient(seed: WarehouseData) {
     receipts: receiptRows,
     purchase_orders: poRows,
     profiles: [],
+    operation_types: [],
+    operation_routes: [],
+    quality_inspections: [{
+      id: 'qi-1', source_type: 'receipt', source_id: 'rcpt-1', product_id: 'shirt',
+      bin_id: null, lot_id: null, serial_number: null, quantity: 1,
+      disposition: 'accepted', reason: null, evidence_urls: [], inspected_by: 'user-1',
+      created_at: '2026-07-10T00:00:00Z',
+    }],
+    inventory_holds: [{
+      id: 'hold-1', inspection_id: 'qi-1', product_id: 'shirt', location_id: 'loc-wh',
+      bin_id: null, lot_id: null, serial_number: null, quantity: 1, status: 'active',
+      reason: 'Damage', created_by: 'user-1', created_at: '2026-07-10T00:00:00Z',
+      released_by: null, released_at: null,
+    }],
+    vendor_returns: [{
+      id: 'vr-1', hold_id: 'hold-1', supplier_id: 'sup-1', source_receipt_id: 'rcpt-1',
+      source_return_id: null, product_id: 'shirt', lot_id: null, serial_number: null,
+      quantity: 1, reason: 'Rejected', reference: 'RMA-001', status: 'ready',
+      evidence_urls: [], created_by: 'user-2', created_at: '2026-07-10T00:00:00Z',
+      handed_off_by: null, handed_off_at: null, completed_at: null,
+    }],
+    exceptions: [{
+      id: 'ex-1', exception_type: 'quality', severity: 'P2', source_type: 'quality_inspection',
+      source_id: 'qi-1', status: 'open', owner_id: null, due_at: null, resolution: null,
+      created_at: '2026-07-10T00:00:00Z',
+    }],
+    stock_change_requests: [{
+      id: 'scr-1', source_type: 'cycle_count', source_id: 'cc-1', product_id: 'shirt',
+      location_id: 'loc-wh', bin_id: null, quantity_delta: -1, unit_cost: 200,
+      financial_impact: 200, reason: 'Variance', evidence_urls: [],
+      status: 'pending_supervisor', requested_by: 'user-1', requested_at: '2026-07-10T00:00:00Z',
+    }],
+    warehouse_tasks: [{
+      id: 'task-1', task_type: 'quality', source_id: 'qi-1', title: 'Inspect receipt',
+      status: 'due', assignee_id: null, due_at: null, completed_at: null,
+      created_at: '2026-07-10T00:00:00Z',
+    }],
+    inventory_position_v1: [{
+      id: 'shirt|loc-wh|', product_id: 'shirt', location_id: 'loc-wh', bin_id: null,
+      on_hand: 20, committed: 1, held: 1, unavailable: 0, available: 18,
+      created_at: '2026-07-10T00:00:00Z',
+    }],
+    procurement_po_handoff: [{
+      id: 'live-po-1', po_number: 'PO-LIVE-001', vendor_name: 'Live Vendor',
+      status: 'issued', expected_date: '2026-07-20',
+      lines: [{ id: 'line-1', productId: 'shirt', description: 'Shirts', quantity: 5, receivedQuantity: 1 }],
+    }],
   };
   const client = {
     from: (table: string) => ({
-      select: () => Promise.resolve({ data: tables[table] ?? [], error: null }),
+      select: (projection: string) => {
+        const record = { table, projection, orders: [] } as {
+          table: string; projection: string; limit?: number; orders: string[];
+        };
+        queries.push(record);
+        const result = Promise.resolve({ data: tables[table] ?? [], error: null });
+        const query = {
+          order: (column: string) => {
+            record.orders.push(column);
+            return query;
+          },
+          or: () => query,
+          eq: () => query,
+          limit: (limit: number) => {
+            record.limit = limit;
+            return query;
+          },
+          then: result.then.bind(result),
+        };
+        return query;
+      },
       insert: () => Promise.resolve({ data: null, error: null }),
       update: () => ({
         eq: () => ({
@@ -130,6 +198,10 @@ function makeMockClient(seed: WarehouseData) {
         from_location_id: null,
         to_location_id: null,
         lot_id: null,
+        code: 'BIN-MOCK',
+        label: null,
+        zone: null,
+        active: true,
         reason: null,
         reference: null,
         sku: 'MOCK',
@@ -155,11 +227,133 @@ function makeMockClient(seed: WarehouseData) {
         received_at: null,
         assigned_to: null,
       };
-      return Promise.resolve({ data: row, error: null });
+      const quality = tables.quality_inspections![0] as Record<string, unknown>;
+      const hold = tables.inventory_holds![0] as Record<string, unknown>;
+      const exception = tables.exceptions![0] as Record<string, unknown>;
+      const request = tables.stock_change_requests![0] as Record<string, unknown>;
+      const route = {
+        id: 'route-1', operation_type_id: 'op-1', source_location_types: ['vendor'],
+        destination_location_types: ['warehouse'], requires_evidence: true,
+        requires_approval: false, requires_online: true, active: true,
+      };
+      const response = fn === 'inspect_quality' ? { inspection: quality }
+        : fn === 'release_quality_hold' ? hold
+          : fn === 'update_operation_route' ? route
+            : fn === 'submit_cycle_count' ? { cycle_count: row, requests: [request] }
+              : fn === 'decide_stock_change' ? request
+                : fn === 'resolve_exception' ? exception
+                  : fn === 'receive_procurement_po' ? { receipt: row, purchase_order: {} }
+                  : row;
+      return Promise.resolve({ data: response, error: null });
     },
   };
-  return { client: client as never, calls };
+  return { client: client as never, calls, queries };
 }
+
+describe('SupabaseRepository read model query shape', () => {
+  it('uses explicit projections and bounds operational history', async () => {
+    const { client, queries } = makeMockClient(buildSeed());
+    await new SupabaseRepository(client).getData();
+    expect(queries).toHaveLength(16);
+    expect(queries.every((query) => query.projection !== '*')).toBe(true);
+    expect(queries.find((query) => query.table === 'movements')?.limit).toBe(5000);
+    expect(queries.find((query) => query.table === 'products')?.limit).toBeUndefined();
+  });
+});
+
+describe('SupabaseRepository W1 control boundary', () => {
+  it('uses explicit projections and stable bounded pagination for every control list', async () => {
+    const { client, queries } = makeMockClient(buildSeed());
+    const repo = new SupabaseRepository(client);
+    await Promise.all([
+      repo.listQualityInspections({ limit: 500 }),
+      repo.listHolds({ limit: 500 }),
+      repo.listVendorReturns({ limit: 500 }),
+      repo.listExceptions({ limit: 500 }),
+      repo.listStockChangeRequests({ limit: 500 }),
+      repo.listWarehouseTasks({ limit: 500 }),
+      repo.listInventoryPositions({ limit: 500 }),
+    ]);
+    const controlTables = [
+      'quality_inspections', 'inventory_holds', 'vendor_returns', 'exceptions',
+      'stock_change_requests', 'warehouse_tasks', 'inventory_position_v1',
+    ];
+    for (const table of controlTables) {
+      const query = queries.find((item) => item.table === table)!;
+      expect(query.projection).not.toBe('*');
+      expect(query.orders).toEqual(['created_at', 'id']);
+      expect(query.limit).toBe(101);
+    }
+  });
+
+  it('sends idempotent command payloads without trusted actor or role values', async () => {
+    const { client, calls } = makeMockClient(buildSeed());
+    const repo = new SupabaseRepository(client);
+    await repo.inspectQuality({
+      idempotencyKey: 'quality-key-0001', sourceType: 'receipt', sourceId: 'rcpt-1',
+      productId: 'shirt', quantity: 1, disposition: 'accepted',
+    });
+    await repo.releaseHold({
+      idempotencyKey: 'release-key-0001', holdId: 'hold-1', targetDisposition: 'accepted',
+      reason: 'QC cleared', evidenceUrls: ['evidence/release.jpg'],
+    });
+    await repo.updateOperationRoute({
+      idempotencyKey: 'route-key-00001', routeId: 'route-1',
+      patch: {
+        sourceLocationTypes: ['vendor'], destinationLocationTypes: ['warehouse'],
+        requiresEvidence: true, requiresApproval: false, requiresOnline: true, active: true,
+      },
+    });
+    await repo.submitCycleCount({
+      idempotencyKey: 'count-key-00001', cycleCountId: 'cc-1', reason: 'Scheduled count',
+    });
+    await repo.decideStockChange({
+      idempotencyKey: 'decision-key-01', requestId: 'scr-1', decision: 'approved',
+    });
+    await repo.resolveException({
+      idempotencyKey: 'exception-key01', exceptionId: 'ex-1', action: 'begin',
+    });
+
+    for (const call of calls.slice(-6)) {
+      expect(call.payload.idempotency_key).toMatch(/key/);
+      expect(call.payload).not.toHaveProperty('actor');
+      expect(call.payload).not.toHaveProperty('role');
+    }
+    expect(calls.slice(-6).map((call) => call.fn)).toEqual([
+      'inspect_quality', 'release_quality_hold', 'update_operation_route',
+      'submit_cycle_count', 'decide_stock_change', 'resolve_exception',
+    ]);
+  });
+
+  it('receives a procurement PO through one idempotent RPC without actor claims', async () => {
+    const { client, calls } = makeMockClient(buildSeed());
+    const repo = new SupabaseRepository(client);
+    await repo.receiveProcurementPO({
+      idempotencyKey: 'procurement-receipt-01', poId: 'po-live-1',
+      locationId: 'loc-wh', binId: 'bin-a',
+      lines: [{ lineId: 'line-1', productId: 'shirt', quantity: 2 }],
+      evidenceUrls: ['evidence/delivery.jpg'],
+    });
+    const call = calls.find((item) => item.fn === 'receive_procurement_po')!;
+    expect(call.payload).toMatchObject({
+      idempotency_key: 'procurement-receipt-01', po_id: 'po-live-1',
+      location_id: 'loc-wh', bin_id: 'bin-a',
+    });
+    expect(call.payload).not.toHaveProperty('actor');
+    expect(call.payload).not.toHaveProperty('role');
+  });
+
+  it('reads the explicit RLS-backed procurement handoff projection', async () => {
+    const { client, queries } = makeMockClient(buildSeed());
+    const rows = await new SupabaseRepository(client).getReceivableProcurementPOs();
+    expect(rows).toEqual([expect.objectContaining({
+      id: 'live-po-1', poNumber: 'PO-LIVE-001', status: 'issued',
+    })]);
+    const query = queries.find((item) => item.table === 'procurement_po_handoff')!;
+    expect(query.projection).not.toBe('*');
+    expect(query.limit).toBe(500);
+  });
+});
 
 describe('SupabaseRepository concurrency-safe payloads (warehouse.* v8 RPCs)', () => {
   const seed = buildSeed();
@@ -278,7 +472,7 @@ describe('SupabaseRepository concurrency-safe payloads (warehouse.* v8 RPCs)', (
     expect(alloc.status).toBe('reserved');
   });
 
-  it('recordCycleCount sends absolute stock_sets + variance movements', async () => {
+  it('recordCycleCount creates only a governed draft', async () => {
     const { client, calls } = makeMockClient(seed);
     const repo = new SupabaseRepository(client);
     await repo.recordCycleCount({
@@ -287,12 +481,13 @@ describe('SupabaseRepository concurrency-safe payloads (warehouse.* v8 RPCs)', (
       actor: 'test',
     });
     const call = calls.find((c) => c.fn === 'record_cycle_count')!;
-    const sets = call.payload.stock_sets as { quantity: number }[];
-    expect(sets).toHaveLength(1);
-    // Cycle count SETS the counted quantity (absolute), unlike other mutations.
-    expect(sets[0]!.quantity).toBe(75);
-    const movements = call.payload.movements as { quantity: number }[];
-    expect(movements[0]!.quantity).toBe(-5);
+    expect(call.payload).not.toHaveProperty('stock_sets');
+    expect(call.payload).not.toHaveProperty('movements');
+    expect(call.payload.cycle_count).toMatchObject({
+      status: 'draft',
+    });
+    expect(call.payload.cycle_count).not.toHaveProperty('requested_by');
+    expect(call.payload.cycle_count).not.toHaveProperty('actor');
   });
 
   it('recordReturn accumulates restock deltas + registers evidence-carrying return row', async () => {
@@ -398,6 +593,46 @@ describe('SupabaseRepository concurrency-safe payloads (warehouse.* v8 RPCs)', (
     expect(call.payload.storage_area_id).toBe('bin-pasig-a1');
   });
 
+  it('createEvent routes through the create_event RPC', async () => {
+    const { client, calls } = makeMockClient(seed);
+    const repo = new SupabaseRepository(client);
+    await repo.createEvent({
+      name: 'Audit Pop-up Clinic',
+      type: 'medical_mission',
+      siteLocationId: 'site-makati',
+      startDate: '2026-08-01',
+    });
+    const call = calls.find((c) => c.fn === 'create_event')!;
+    expect(call).toBeDefined();
+    expect((call.payload.event as Record<string, unknown>).name).toBe(
+      'Audit Pop-up Clinic',
+    );
+  });
+
+  it('createStorageArea and updateStorageArea route through bin RPCs', async () => {
+    const { client, calls } = makeMockClient(seed);
+    const repo = new SupabaseRepository(client);
+    await repo.createStorageArea({
+      locationId: 'loc-wh',
+      code: 'A-99',
+      label: 'Audit shelf',
+      zone: 'A',
+    });
+    const create = calls.find((c) => c.fn === 'create_storage_area')!;
+    expect(create).toBeDefined();
+    expect((create.payload.storage_area as Record<string, unknown>).code).toBe('A-99');
+
+    await repo.updateStorageArea({
+      storageAreaId: 'bin-pasig-a1',
+      code: 'A-01',
+      label: 'Updated shelf',
+      active: false,
+    });
+    const update = calls.find((c) => c.fn === 'update_storage_area')!;
+    expect(update.payload.storage_area_id).toBe('bin-pasig-a1');
+    expect((update.payload.patch as Record<string, unknown>).active).toBe(false);
+  });
+
   it('relocate reuses the transfer RPC with same-location from/to deltas', async () => {
     const { client, calls } = makeMockClient(seed);
     const repo = new SupabaseRepository(client);
@@ -416,5 +651,24 @@ describe('SupabaseRepository concurrency-safe payloads (warehouse.* v8 RPCs)', (
     const to = call.payload.to_stock_delta as { delta: number };
     expect(from.delta).toBe(-2);
     expect(to.delta).toBe(2);
+  });
+
+  it('routes vendor return custody through the controlled RPC', async () => {
+    const { client, calls } = makeMockClient(seed);
+    const repo = new SupabaseRepository(client);
+    await repo.createVendorReturn({
+      idempotencyKey: 'vendor-return-rpc-001',
+      holdId: 'hold-1',
+      supplierId: 'sup-1',
+      reason: 'Incoming quality rejection',
+      reference: 'RMA-001',
+      evidenceUrls: ['evidence/rma.jpg'],
+    });
+    const call = calls.find((entry) => entry.fn === 'create_vendor_return')!;
+    expect(call.payload).toMatchObject({
+      hold_id: 'hold-1',
+      supplier_id: 'sup-1',
+      reference: 'RMA-001',
+    });
   });
 });

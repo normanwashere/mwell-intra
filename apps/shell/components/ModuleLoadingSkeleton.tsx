@@ -25,11 +25,11 @@ export function ModuleLoadingSkeleton({
       <span className="sr-only">{label}</span>
 
       {/* Desktop sidebar rail */}
-      <aside className="hidden w-60 shrink-0 flex-col bg-brand-grad px-3 py-5 md:flex lg:w-64">
-        <Skeleton className="mb-6 h-6 w-32 bg-white/20" />
+      <aside className="hidden w-60 shrink-0 flex-col border-r border-line bg-surface px-3 py-5 md:flex lg:w-64">
+        <Skeleton className="mb-6 h-6 w-32" />
         <div className="space-y-2">
           {Array.from({ length: 6 }).map((_, i) => (
-            <Skeleton key={i} className="h-9 w-full rounded-xl bg-white/15" />
+            <Skeleton key={i} className="h-9 w-full rounded-xl" />
           ))}
         </div>
       </aside>
@@ -47,7 +47,7 @@ export function ModuleLoadingSkeleton({
           </div>
         </header>
 
-        <main className="mx-auto w-full max-w-5xl flex-1 space-y-6 px-4 py-5 pb-24 sm:px-6 md:pb-10 xl:max-w-6xl">
+        <main className="mx-auto w-full max-w-5xl flex-1 space-y-6 px-4 py-5 pb-[calc(11rem+env(safe-area-inset-bottom))] sm:px-6 md:pb-10 xl:max-w-6xl">
           <div className="space-y-3">
             <Skeleton className="h-7 w-2/5" />
             <Skeleton className="h-4 w-3/5" />
@@ -61,9 +61,9 @@ export function ModuleLoadingSkeleton({
 
         {/* Mobile bottom nav rail */}
         <div className="safe-bottom fixed inset-x-0 bottom-0 z-10 border-t border-line bg-surface/95 backdrop-blur md:hidden">
-          <div className="flex items-center justify-around px-2 py-2">
+          <div className="flex items-center justify-around px-2 py-2.5">
             {Array.from({ length: 5 }).map((_, i) => (
-              <Skeleton key={i} className="h-9 w-12 rounded-full" />
+              <Skeleton key={i} className="h-11 w-12 rounded-full" />
             ))}
           </div>
         </div>

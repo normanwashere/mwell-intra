@@ -15,10 +15,13 @@ import {
   QuantityStepper,
   SegmentedControl,
   Sheet,
+  StaggerGrid,
+  StaggerItem,
   useToast,
 } from '@/components/ui';
 import { Icon } from '@/components/Icon';
 import { ProductThumb } from '@/components/ProductThumb';
+import { ExpiryBadge } from '@/components/ExpiryStatus';
 import { clsx } from 'clsx';
 
 type Filter = 'all' | ItemCategory;
@@ -137,6 +140,7 @@ export function InventoryPage() {
     <div className="space-y-4">
       <PageHeader
         title="Inventory"
+        icon="box"
         subtitle="Grouped by product family, with sizes & serials"
         action={
           canManageProducts ? (
@@ -182,7 +186,7 @@ export function InventoryPage() {
             aria-pressed={lowOnly}
             onClick={() => setLowOnly((v) => !v)}
             className={clsx(
-              'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition',
+              'inline-flex min-h-11 items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition',
               lowOnly
                 ? 'bg-amber-500/20 text-amber-800 dark:text-amber-200'
                 : 'bg-inset text-muted hover:text-ink',
@@ -210,8 +214,8 @@ export function InventoryPage() {
           title={lowOnly ? 'No low-stock items' : 'No matching items'}
         />
       ) : (
-        <ul
-          className="stagger grid gap-2 lg:grid-cols-2"
+        <StaggerGrid
+          className="grid min-w-0 gap-2 lg:grid-cols-2"
           aria-label="Inventory list"
         >
           {families.map((fam) => {
@@ -224,27 +228,33 @@ export function InventoryPage() {
             if (!fam.isFamily) {
               const available = avail(single);
               return (
-                <li key={fam.key}>
+                <StaggerItem key={fam.key}>
                   <button
                     type="button"
                     onClick={() => navigate(`/inventory/${single.id}`)}
-                    className="card flex w-full items-center justify-between gap-3 p-3.5 text-left transition hover:-translate-y-0.5 hover:shadow-e3"
+                    className="card flex min-w-0 w-full items-center justify-between gap-2 overflow-hidden p-3.5 text-left transition hover:-translate-y-0.5 hover:shadow-e3 sm:gap-3"
                   >
-                    <ProductThumb product={single} />
+                    <ProductThumb
+                      product={single}
+                      className="h-10 w-10 sm:h-11 sm:w-11"
+                    />
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-semibold text-ink">{single.name}</p>
                       <div className="mt-1 flex flex-wrap items-center gap-1.5">
                         <Badge tone="slate">
-                          <span className="font-mono">{single.sku}</span>
+                          <span className="block max-w-[7rem] truncate font-mono sm:max-w-none">
+                            {single.sku}
+                          </span>
                         </Badge>
                         <Badge tone={single.category === 'device' ? 'brand' : 'cyan'}>
                           {single.category}
                         </Badge>
                         {single.serialized && <Badge tone="slate">serialized</Badge>}
                         {single.promotional && <Badge tone="amber">promo</Badge>}
+                        <ExpiryBadge product={single} lots={data.lots} />
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 text-right">
+                    <div className="flex shrink-0 items-center gap-1.5 text-right sm:gap-2">
                       <div>
                         <p
                           className={clsx(
@@ -261,21 +271,24 @@ export function InventoryPage() {
                       <Icon name="chevron" className="h-4 w-4 text-faint" />
                     </div>
                   </button>
-                </li>
+                </StaggerItem>
               );
             }
 
             const isOpen = searching || lowOnly || expanded.has(fam.key);
             return (
-              <li key={fam.key}>
-                <div className="card overflow-hidden !p-0">
+              <StaggerItem key={fam.key}>
+                <div className="card min-w-0 overflow-hidden !p-0">
                   <button
                     type="button"
                     aria-expanded={isOpen}
                     onClick={() => toggle(fam.key)}
-                    className="flex w-full items-center justify-between gap-3 p-3.5 text-left transition hover:bg-inset"
+                    className="flex min-w-0 w-full items-center justify-between gap-2 p-3.5 text-left transition hover:bg-inset sm:gap-3"
                   >
-                    <ProductThumb product={fam.variants[0]!} />
+                    <ProductThumb
+                      product={fam.variants[0]!}
+                      className="h-10 w-10 sm:h-11 sm:w-11"
+                    />
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-semibold text-ink">{fam.label}</p>
                       <div className="mt-1 flex flex-wrap items-center gap-1.5">
@@ -286,7 +299,7 @@ export function InventoryPage() {
                         {anyLow && <Badge tone="amber">low stock</Badge>}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 text-right">
+                    <div className="flex shrink-0 items-center gap-1.5 text-right sm:gap-2">
                       <div>
                         <p className="tnum text-lg font-extrabold text-ink">{total}</p>
                         {/* One stock noun module-wide (WH-23). */}
@@ -304,28 +317,28 @@ export function InventoryPage() {
 
                   {isOpen && (
                     <div className="border-t border-line bg-inset/40 p-3">
-                      <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      <ul className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3">
                         {fam.shown.map((v) => {
                           const a = avail(v);
                           const low = isBelowReorder(v, a);
                           return (
-                            <li key={v.id}>
+                            <li key={v.id} className="min-w-0">
                               <button
                                 type="button"
                                 onClick={() => navigate(`/inventory/${v.id}`)}
-                                className="flex w-full items-center justify-between gap-2 rounded-xl bg-surface p-2.5 text-left shadow-e1 ring-1 ring-line transition hover:-translate-y-0.5 hover:shadow-e2"
+                                className="flex min-w-0 w-full items-center justify-between gap-2 overflow-hidden rounded-xl bg-surface p-2.5 text-left shadow-e1 ring-1 ring-line transition hover:-translate-y-0.5 hover:shadow-e2"
                               >
-                                <span className="min-w-0">
+                                <span className="min-w-0 flex-1">
                                   <span className="block truncate text-sm font-medium text-ink">
                                     {variantLabel(v)}
                                   </span>
-                                  <span className="block font-mono text-[0.7rem] text-faint">
+                                  <span className="block truncate font-mono text-[0.7rem] text-faint">
                                     {v.sku}
                                   </span>
                                 </span>
                                 <span
                                   className={clsx(
-                                    'tnum text-base font-extrabold',
+                                    'tnum shrink-0 text-base font-extrabold',
                                     low ? 'text-rose-600 dark:text-rose-300' : 'text-ink',
                                   )}
                                 >
@@ -339,10 +352,10 @@ export function InventoryPage() {
                     </div>
                   )}
                 </div>
-              </li>
+              </StaggerItem>
             );
           })}
-        </ul>
+        </StaggerGrid>
       )}
 
       <Sheet

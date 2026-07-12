@@ -4,6 +4,28 @@ import userEvent from '@testing-library/user-event';
 import { PurchaseOrdersPage } from './PurchaseOrdersPage';
 import { renderWithProviders } from '@/test/renderWithProviders';
 import { PROCUREMENT_PO_KEY } from '@/data/procurementBridge';
+import { InMemoryRepository } from '@/data/inMemoryRepository';
+import type { ReceiveProcurementPOInput } from '@intra/data-kit';
+
+class LiveProcurementRepository extends InMemoryRepository {
+  receivedInputs: ReceiveProcurementPOInput[] = [];
+
+  override async getReceivableProcurementPOs() {
+    return [{
+      id: 'live-po-1', poNumber: 'PO-LIVE-001', vendorName: 'Live Medical Vendor',
+      status: 'issued' as const,
+      lines: [{
+        id: 'live-line-1', productId: 'smart-watch', description: 'Smart watches',
+        quantity: 2, receivedQuantity: 0,
+      }],
+    }];
+  }
+
+  override async receiveProcurementPO(input: ReceiveProcurementPOInput) {
+    this.receivedInputs.push(input);
+    return super.receiveProcurementPO(input);
+  }
+}
 
 describe('PurchaseOrdersPage', () => {
   beforeEach(() => {
@@ -61,11 +83,13 @@ describe('PurchaseOrdersPage', () => {
     await user.click(within(detail).getByRole('button', { name: /^receive$/i }));
 
     const dialog = await screen.findByRole('dialog', { name: /receive against po/i });
+    expect(within(dialog).getByText(/inspection required/i)).toBeInTheDocument();
     await user.click(within(dialog).getByRole('button', { name: /confirm receipt/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/received against po/i)).toBeInTheDocument();
+      expect(screen.getByText(/received against po into inspection staging/i)).toBeInTheDocument();
     });
+    expect(screen.getByRole('link', { name: /open quality queue/i })).toBeInTheDocument();
   });
 
   it('does not offer Receive on a draft PO (WH-25)', async () => {
@@ -139,5 +163,28 @@ describe('PurchaseOrdersPage', () => {
       within(list).getByRole('link', { name: /receive in procurement/i }),
     ).toHaveAttribute('href', '/procurement/purchase-orders/ppo-9');
     expect(within(list).getByText(/Acme Medical Supplies/i)).toBeInTheDocument();
+  });
+
+  it('uses the live handoff in Supabase mode and ignores local cached POs', async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem(PROCUREMENT_PO_KEY, JSON.stringify([{
+      id: 'cached-po', poNumber: 'PO-CACHED', vendorName: 'Cached Vendor', status: 'issued',
+      lines: [], createdAt: '2026-07-01T00:00:00Z',
+    }]));
+    const repo = new LiveProcurementRepository();
+    renderWithProviders(<PurchaseOrdersPage />, {
+      role: 'logistics_supervisor', repo, source: 'supabase',
+    });
+
+    const list = await screen.findByLabelText('Purchase orders');
+    expect(within(list).getByText('PO-LIVE-001')).toBeInTheDocument();
+    expect(within(list).queryByText('PO-CACHED')).not.toBeInTheDocument();
+    await user.click(within(list).getByRole('button', { name: /^receive$/i }));
+    const dialog = await screen.findByRole('dialog', { name: /receive approved procurement po/i });
+    await user.type(within(dialog).getByLabelText(/delivery evidence url/i), 'evidence/live.jpg');
+    await user.click(within(dialog).getByRole('button', { name: /confirm governed receipt/i }));
+
+    await waitFor(() => expect(repo.receivedInputs).toHaveLength(1));
+    expect(repo.receivedInputs[0]).toMatchObject({ poId: 'live-po-1', locationId: 'loc-wh' });
   });
 });

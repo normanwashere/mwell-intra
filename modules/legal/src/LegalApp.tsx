@@ -1,7 +1,13 @@
 'use client';
 
-import { useEffect } from 'react';
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import {
+  BrowserRouter,
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+} from 'react-router-dom';
 import { useSession } from '@intra/auth';
 import { can } from '@intra/rbac';
 import { SignInPrompt, SkeletonList, SkeletonStats } from '@intra/ui';
@@ -9,6 +15,7 @@ import { AccreditationCasesPage } from './pages/AccreditationCasesPage';
 import { CaseDetailPage } from './pages/CaseDetailPage';
 import { InviteVendorPage } from './pages/InviteVendorPage';
 import { SignInstrumentPage } from './pages/SignInstrumentPage';
+import { VendorApplicationPage } from './pages/VendorApplicationPage';
 import { LegalTabs } from './components/LegalTabs';
 
 export interface LegalAppProps {
@@ -27,51 +34,74 @@ function useNormalizeBasenamePath(basename: string): void {
   }, [basename]);
 }
 
+function ScrollToTopOnRouteChange() {
+  const { pathname, search } = useLocation();
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  }, [pathname, search]);
+  return null;
+}
+
 export function LegalApp({ basename = '/legal' }: LegalAppProps) {
   useNormalizeBasenamePath(basename);
   const { userRoles, profile, loading, signOut } = useSession();
-  const isVendor = profile?.kind === 'vendor';
+  const isVendorSurface = basename.startsWith('/vendor');
+  const isVendor = isVendorSurface && profile?.kind === 'vendor';
   const hasInternalAccess = can(userRoles, 'legal', 'view_dashboard');
   // External vendor tier lives in core (reconciled 2026-07-05, ADR-002 #3).
-  const hasVendorAccess = can(userRoles, 'core', 'view_own_accreditation');
+  const hasVendorAccess =
+    isVendorSurface && can(userRoles, 'core', 'view_own_accreditation');
+  const canUseVendorSurface = isVendor && hasVendorAccess;
   if (loading) {
     return (
-      <div className="mx-auto max-w-5xl space-y-6 p-4 md:p-6" aria-busy="true">
+      <main className="mx-auto max-w-5xl space-y-6 p-4 md:p-6" aria-busy="true">
         <SkeletonStats />
         <SkeletonList rows={5} />
-      </div>
+      </main>
     );
   }
 
   // Signed out entirely → invite the user to sign in (with a redirect back
   // here), instead of the misleading "no role" copy meant for signed-in users.
   if (!profile) {
-    return <SignInPrompt module="Legal" basename={basename} />;
+    const prompt = <SignInPrompt module="Legal" basename={basename} />;
+    return isVendorSurface ? <main>{prompt}</main> : prompt;
   }
 
-  if (isVendor ? !hasVendorAccess : !hasInternalAccess) {
+  if (isVendorSurface ? !canUseVendorSurface : !hasInternalAccess) {
     return (
-      <div
+      <main
         role="alert"
         className="grid min-h-[60vh] place-items-center bg-app p-6 text-center"
       >
         <div className="max-w-sm space-y-3">
           <h1 className="text-lg font-bold text-ink">No legal access</h1>
           <p className="text-sm text-muted">
-            {isVendor
-              ? 'This vendor account is not enrolled in accreditation yet. Contact your Mwell account manager.'
+            {isVendorSurface
+              ? 'This area is reserved for enrolled vendor accounts. Sign in with a vendor account or contact your Mwell account manager.'
               : "Your account doesn't include a legal role. Contact your administrator if you need access."}
           </p>
           <a
-            href={isVendor ? '/login' : '/'}
-            className="inline-flex items-center justify-center rounded-xl bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-app"
+            href={isVendorSurface ? '/login' : '/'}
+            className="inline-flex min-h-11 items-center justify-center rounded-xl bg-brand-600 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-app"
           >
-            {isVendor ? 'Sign in with a different account' : 'Back to dashboard'}
+            {isVendorSurface ? 'Sign in with a different account' : 'Back to dashboard'}
           </a>
         </div>
-      </div>
+      </main>
     );
   }
+
+  const routes = (
+    <Routes>
+      <Route path="/" element={<AccreditationCasesPage />} />
+      <Route path="/cases/:id" element={<CaseDetailPage />} />
+      <Route path="/cases/:id/application" element={<VendorApplicationPage />} />
+      <Route path="/cases/:id/sign/:code" element={<SignInstrumentPage />} />
+      <Route path="/invites/new" element={<InviteVendorPage />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
 
   return (
     <BrowserRouter
@@ -90,13 +120,14 @@ export function LegalApp({ basename = '/legal' }: LegalAppProps) {
       ) : (
         <LegalTabs canInvite={can(userRoles, 'legal', 'manage_checklist')} />
       )}
-      <Routes>
-        <Route path="/" element={<AccreditationCasesPage />} />
-        <Route path="/cases/:id" element={<CaseDetailPage />} />
-        <Route path="/cases/:id/sign/:code" element={<SignInstrumentPage />} />
-        <Route path="/invites/new" element={<InviteVendorPage />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <ScrollToTopOnRouteChange />
+      {isVendor ? (
+        <main className="mx-auto w-full max-w-5xl px-4 py-5 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-6">
+          {routes}
+        </main>
+      ) : (
+        <div>{routes}</div>
+      )}
     </BrowserRouter>
   );
 }
@@ -114,6 +145,14 @@ function VendorChrome({
   profileName: string;
   onSignOut: () => Promise<void>;
 }) {
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 16);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
   const initials = profileName
     .split(/\s+/)
     .slice(0, 2)
@@ -121,20 +160,36 @@ function VendorChrome({
     .join('') || 'V';
   return (
     <header
-      className="safe-top sticky top-0 z-20 border-b border-line bg-surface/85 backdrop-blur"
+      className={`safe-top sticky top-0 z-20 border-b border-line bg-surface/90 backdrop-blur-md transition-shadow ${
+        scrolled ? 'shadow-e1' : ''
+      }`}
       aria-label="Vendor portal chrome"
     >
-      <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3 md:px-6">
+      <div
+        className={`mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 sm:px-6 transition-[padding] ${
+          scrolled ? 'py-2' : 'py-3'
+        }`}
+      >
         <div className="flex min-w-0 items-center gap-3">
+          <a
+            href="/vendor"
+            className="hidden min-w-0 sm:block"
+            title="Vendor portal home"
+          >
+            <p className="font-display text-lg font-extrabold tracking-tight text-ink">
+              m<span className="brand-gradient">well</span>
+              <span className="ml-1.5 text-xs font-semibold text-faint">Vendor</span>
+            </p>
+          </a>
           <span
             aria-hidden
-            className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand-grad text-sm font-bold text-white shadow-soft"
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand-600 text-sm font-bold text-white shadow-e2 sm:hidden"
           >
             {initials}
           </span>
           <div className="min-w-0">
-            <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-brand-700 dark:text-brand-300">
-              Mwell Intra · Vendor portal
+            <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-brand-700 dark:text-brand-300 sm:hidden">
+              Vendor portal
             </p>
             <p className="truncate text-sm font-semibold text-ink" title={profileName}>
               {profileName}

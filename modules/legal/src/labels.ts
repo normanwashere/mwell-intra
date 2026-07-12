@@ -14,6 +14,7 @@ export const CASE_STATUS_LABEL: Record<CaseStatus, string> = {
   submitted: 'Submitted',
   under_review: 'Under review',
   approved: 'Approved',
+  provisional: 'Provisional clearance',
   rejected: 'Rejected',
   expired: 'Expired',
   renewal_due: 'Renewal due',
@@ -25,6 +26,7 @@ export const VENDOR_STATUS_LABEL: Record<CaseStatus, string> = {
   submitted: 'We\u2019re reviewing your documents',
   under_review: 'We\u2019re reviewing your documents',
   approved: 'Accredited',
+  provisional: 'Temporary clearance granted',
   rejected: 'Not approved — see reviewer notes',
   renewal_due: 'Renewal needed',
   expired: 'Accreditation expired',
@@ -40,6 +42,8 @@ export const VENDOR_STATUS_EXPLAINER: Record<CaseStatus, string> = {
     'Our Legal team is checking every document you submitted. We\u2019ll flag anything that needs a re-upload.',
   approved:
     'Your organization is accredited to transact with Mwell. We\u2019ll remind you before it expires.',
+  provisional:
+    'You have time-limited clearance to transact while a few items are finalized. Complete the outstanding requirements before it expires to become fully accredited.',
   rejected:
     'Legal could not approve the application. Open the case to read the reviewer notes and next steps.',
   renewal_due:
@@ -54,6 +58,7 @@ export const CASE_STATUS_DOT: Record<CaseStatus, string> = {
   submitted: 'bg-cyan-400',
   under_review: 'bg-amber-400',
   approved: 'bg-emerald-400',
+  provisional: 'bg-cyan-400',
   rejected: 'bg-rose-400',
   expired: 'bg-rose-400',
   renewal_due: 'bg-amber-400',
@@ -68,6 +73,7 @@ export const CASE_STATUS_TONE: Record<
   submitted: 'cyan',
   under_review: 'amber',
   approved: 'emerald',
+  provisional: 'cyan',
   rejected: 'rose',
   expired: 'rose',
   renewal_due: 'amber',

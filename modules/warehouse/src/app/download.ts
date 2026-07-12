@@ -14,3 +14,14 @@ export function downloadText(
   a.remove();
   URL.revokeObjectURL(url);
 }
+
+/** Trigger a browser download from a short-lived, server-authorized URL. */
+export function downloadUrl(filename: string, url: string): void {
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}

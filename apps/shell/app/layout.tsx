@@ -4,7 +4,7 @@
 
 import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
-import { Inter, Plus_Jakarta_Sans } from 'next/font/google';
+import { Inter, JetBrains_Mono, Poppins } from 'next/font/google';
 import '@intra/ui/styles.css';
 import './globals.css';
 import { Providers } from './providers';
@@ -18,9 +18,18 @@ const inter = Inter({
   display: 'swap',
 });
 
-const jakarta = Plus_Jakarta_Sans({
+// mWell brand typeface (mwell.com.ph). Drives display + body via the shared
+// Tailwind preset (`--font-poppins`).
+const poppins = Poppins({
   subsets: ['latin'],
-  variable: '--font-jakarta',
+  weight: ['400', '500', '600', '700', '800'],
+  variable: '--font-poppins',
+  display: 'swap',
+});
+
+const jbMono = JetBrains_Mono({
+  subsets: ['latin'],
+  variable: '--font-jbmono',
   display: 'swap',
 });
 
@@ -59,7 +68,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${inter.variable} ${jakarta.variable}`}
+      className={`${poppins.variable} ${inter.variable} ${jbMono.variable}`}
       suppressHydrationWarning
     >
       <head>

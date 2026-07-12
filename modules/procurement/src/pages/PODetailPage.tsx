@@ -7,6 +7,7 @@ import {
   Card,
   DataTable,
   HeroChipButton,
+  HeroStat,
   Icon,
   InfoTip,
   ModuleHero,
@@ -27,7 +28,9 @@ import {
   useProcurementVendors,
   usePurchaseOrders,
 } from '../localStore';
-import { outstandingOf } from '../receiving';
+import { evaluateIssueReadiness, outstandingOf } from '../receiving';
+import { PaymentReadinessPanel, type PaymentReadinessDraft } from '../components/PaymentReadinessPanel';
+import { ProcurementAccessDenied } from '../components/ProcurementAccessDenied';
 import {
   accreditationLabel,
   formatDate,
@@ -63,13 +66,18 @@ const lineColumns: Column<PurchaseOrderLine>[] = [
 
 export function PODetailPage() {
   const { id = '' } = useParams();
-  const { rows, approve, issue, cancel, receive, loading } = usePurchaseOrders();
+  const {
+    rows, approve, issue, cancel, receive, recordAcceptance,
+    preparePayment, reviewPayment, loading,
+  } = usePurchaseOrders();
   const { rows: requests } = useProcurementRequests();
   const vendors = useProcurementVendors();
   const { profile } = useSession();
   const { success, error } = useToast();
   const canApproveAward = useCan('procurement', 'approve_award');
-
+  const canAuthorPo = useCan('procurement', 'author_po');
+  const canViewFinance = useCan('procurement', 'view_finance');
+  const canAdmin = useCan('procurement', 'admin');
   const po: PurchaseOrder | undefined = useMemo(() => rows.find((r) => r.id === id), [rows, id]);
   const vendor = useMemo(
     () => (po ? vendors.find((v) => v.id === po.vendorId) : undefined),
@@ -79,6 +87,11 @@ export function PODetailPage() {
     () => (po?.requestId ? requests.find((r) => r.id === po.requestId) : undefined),
     [po, requests],
   );
+  const isSourceRequester = Boolean(
+    profile?.email && sourceRequest?.requesterEmail === profile.email,
+  );
+  const canViewPurchaseOrders =
+    canAuthorPo || canApproveAward || canViewFinance || canAdmin || isSourceRequester;
 
   // Signature-capture sheet state for the award approval flow.
   const [signOpen, setSignOpen] = useState(false);
@@ -106,15 +119,33 @@ export function PODetailPage() {
       </div>
     );
   }
+  if (!canViewPurchaseOrders) {
+    return (
+      <ProcurementAccessDenied
+        title="No purchase order access"
+        message="Purchase order details are restricted to procurement officers, approvers, finance, and procurement admins."
+      />
+    );
+  }
   if (!po) return <Navigate to="/purchase-orders" replace />;
 
   const accreditationOk = vendor ? isAccredited(vendor) : false;
+  const sourceAwardOk = sourceRequest?.status === 'approved';
+  const issueBlockers = evaluateIssueReadiness({
+    poApproved: po.status === 'approved',
+    sourceAwardApproved: sourceAwardOk,
+    vendorEligible: accreditationOk,
+  });
   const fullyReceived = po.lines.every((l) => l.receivedQuantity >= l.quantity);
   const receipts = po.receipts ?? [];
 
   function openApprovalSheet() {
     if (!accreditationOk) {
-      error('Vendor accreditation must be current to approve this PO.');
+      error('Vendor accreditation or scoped temporary clearance must be current to approve this PO.');
+      return;
+    }
+    if (!sourceAwardOk) {
+      error('The source request must complete its approval ladder before the PO award can be approved.');
       return;
     }
     setSignature(null);
@@ -122,11 +153,11 @@ export function PODetailPage() {
     setSignOpen(true);
   }
 
-  function confirmApproval() {
+  async function confirmApproval() {
     if (!po) return;
     const sig = signature ?? makeTypedSignature(profile?.name);
     if (!sig) return;
-    const next = approve(po.id, {
+    const next = await approve(po.id, {
       email: profile?.email,
       note: approvalNote || undefined,
       signature: sig,
@@ -140,14 +171,22 @@ export function PODetailPage() {
       error('Could not save the approval.');
     }
   }
-  function handleIssue() {
+  async function handleIssue() {
     if (!po) return;
-    const next = issue(po.id);
+    if (issueBlockers.length > 0) {
+      error(`Cannot issue yet: ${issueBlockers.join(', ')}.`);
+      return;
+    }
+    const next = await issue(po.id, {
+      sourceAwardApproved: sourceAwardOk,
+      vendorEligible: accreditationOk,
+    });
     if (next) success(`PO ${next.poNumber} issued`);
+    else error('Could not issue the PO because a policy prerequisite changed. Refresh and review the blockers.');
   }
-  function handleCancel() {
+  async function handleCancel() {
     if (!po) return;
-    const next = cancel(po.id);
+    const next = await cancel(po.id);
     if (next) success(`PO ${next.poNumber} cancelled`);
   }
 
@@ -176,9 +215,9 @@ export function PODetailPage() {
     return { outstanding, receiving, linesTouched, closes: receiving >= outstanding && outstanding > 0 };
   })();
 
-  function confirmReceive() {
+  async function confirmReceive() {
     if (!po) return;
-    const next = receive(po.id, {
+    const next = await receive(po.id, {
       lines: po.lines.map((l) => ({ lineId: l.id, quantity: receiveQty[l.id] ?? 0 })),
       actorEmail: profile?.email,
       note: receiveNote || undefined,
@@ -196,13 +235,40 @@ export function PODetailPage() {
     }
   }
 
+  async function handleAcceptance(scope: string, exceptions: string[]) {
+    if (!po) return;
+    const next = await recordAcceptance(po.id, {
+      acceptanceType: sourceRequest?.category === 'services' || sourceRequest?.category === 'subscription'
+        ? 'service' : 'goods',
+      acceptedScope: scope,
+      exceptions,
+      actorEmail: profile?.email,
+    });
+    if (next) success('Technical acceptance recorded');
+    else error('Could not record acceptance. A goods receipt or authorized requester is required.');
+  }
+
+  async function handlePreparePayment(draft: PaymentReadinessDraft) {
+    if (!po) return;
+    const next = await preparePayment(po.id, { ...draft, actorEmail: profile?.email });
+    if (next) success('Payment evidence sent to Finance');
+    else error('Could not prepare payment readiness. Record acceptance first.');
+  }
+
+  async function handleReviewPayment(status: 'returned' | 'accepted', note: string) {
+    if (!po) return;
+    const next = await reviewPayment(po.id, { status, note, actorEmail: profile?.email });
+    if (next) success(status === 'accepted' ? 'Payment pack accepted' : 'Payment pack returned for correction');
+    else error('Could not save the Finance review.');
+  }
+
   // PR-27: hero primary action = the PO's current lifecycle action.
   const heroAction =
-    po.status === 'draft' && canApproveAward ? (
+    po.status === 'draft' && canApproveAward && accreditationOk && sourceAwardOk ? (
       <HeroChipButton icon="signature" onClick={openApprovalSheet}>
         Sign & approve award
       </HeroChipButton>
-    ) : po.status === 'approved' ? (
+    ) : po.status === 'approved' && issueBlockers.length === 0 ? (
       <HeroChipButton icon="rotate" onClick={handleIssue}>
         Issue to vendor
       </HeroChipButton>
@@ -225,16 +291,14 @@ export function PODetailPage() {
         icon="cart"
         action={heroAction}
         accessory={
-          <>
-            <div>
-              <p className="text-xs uppercase tracking-wide text-brand-100/70">Status</p>
-              <p className="mt-1"><Badge tone={PO_TONE[po.status]}>{poStatusLabel(po.status)}</Badge></p>
-            </div>
-            <div className="text-right">
-              <p className="text-xs uppercase tracking-wide text-brand-100/70">Total</p>
-              <p className="tnum text-2xl font-extrabold">{money(po.total)}</p>
-            </div>
-          </>
+          <div className="flex flex-wrap items-end gap-3">
+            <HeroStat label="Status">
+              <Badge tone={PO_TONE[po.status]}>{poStatusLabel(po.status)}</Badge>
+            </HeroStat>
+            <HeroStat label="Total" align="right">
+              <p className="tnum font-display text-2xl font-extrabold text-ink">{money(po.total)}</p>
+            </HeroStat>
+          </div>
         }
       />
 
@@ -293,6 +357,18 @@ export function PODetailPage() {
         </Card>
       )}
 
+      {!sourceAwardOk && (po.status === 'draft' || po.status === 'pending_approval' || po.status === 'approved') && (
+        <Card className="border-amber-500/30 bg-amber-500/5">
+          <div className="flex items-start gap-3">
+            <Icon name="alert" className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+            <div>
+              <p className="font-semibold text-ink">PO blocked - source award is not approved.</p>
+              <p className="text-sm text-muted">Complete the request approval ladder and preserve the Award Recommendation before approval or issue.</p>
+            </div>
+          </div>
+        </Card>
+      )}
+
       <div>
         <SectionTitle title="Line items" subtitle={`${po.lines.length} line${po.lines.length === 1 ? '' : 's'}`} />
         <DataTable rows={po.lines} columns={lineColumns} keyOf={(r) => r.id} />
@@ -304,7 +380,7 @@ export function PODetailPage() {
             <button
               type="button"
               onClick={openApprovalSheet}
-              disabled={!accreditationOk}
+              disabled={!accreditationOk || !sourceAwardOk}
               className="btn-primary"
             >
               <Icon name="signature" className="h-4 w-4" />
@@ -313,7 +389,12 @@ export function PODetailPage() {
           </Guard>
         )}
         {po.status === 'approved' && (
-          <button type="button" onClick={handleIssue} className="btn-primary">
+          <button
+            type="button"
+            onClick={handleIssue}
+            disabled={issueBlockers.length > 0}
+            className="btn-primary disabled:cursor-not-allowed disabled:opacity-60"
+          >
             <Icon name="rotate" className="h-4 w-4" />
             Issue to vendor
           </button>
@@ -336,6 +417,27 @@ export function PODetailPage() {
           </Link>
         )}
       </div>
+
+      {(po.status === 'issued' || po.status === 'closed' || receipts.length > 0) && (
+        <div>
+          <SectionTitle
+            title="Payment handoff"
+            subtitle="Acceptance and three-way evidence are required before Finance release."
+          />
+          <Card>
+            <PaymentReadinessPanel
+              acceptance={po.acceptancePack}
+              pack={po.paymentReadiness}
+              canAccept={isSourceRequester && !po.acceptancePack}
+              canPrepare={canAuthorPo}
+              canReview={canViewFinance}
+              onAccept={handleAcceptance}
+              onPrepare={handlePreparePayment}
+              onReview={handleReviewPayment}
+            />
+          </Card>
+        </div>
+      )}
 
       {receipts.length > 0 && (
         <div>

@@ -32,6 +32,7 @@
   },
   "devDependencies": {
     "@intra/config": "workspace:*",
+    "framer-motion": "^12.42.2",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/jest-dom": "^6.5.0",
     "@testing-library/react": "^16.0.1",

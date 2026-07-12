@@ -29,12 +29,15 @@ import {
   DataTable,
   EmptyState,
   HeroChipButton,
+  HeroStat,
   Icon,
   ModuleHero,
   SectionTitle,
   Sheet,
   Skeleton,
   StatCard,
+  StaggerGrid,
+  StaggerItem,
   useToast,
   type Column,
 } from '@intra/ui';
@@ -176,32 +179,34 @@ function MemoryAdminUsers() {
       <ModuleHero
         eyebrow="Platform admin,"
         title="Users & Roles"
-        description="Assign scoped module roles per user. Writes go through core.assign_user_role / core.revoke_user_role."
+        description="Assign each person only the access they need across Mwell Intra."
         icon="list"
         accessory={
-          <>
-            <div>
-              <p className="text-xs uppercase tracking-wide text-brand-100/70">
-                Profiles
-              </p>
-              <p className="tnum text-2xl font-extrabold">{profiles.length}</p>
-            </div>
-            <div className="text-right">
-              <p className="text-xs uppercase tracking-wide text-brand-100/70">
-                Scoped grants
-              </p>
-              <p className="tnum text-2xl font-extrabold">{totalGrants}</p>
-            </div>
-          </>
+          <div className="flex flex-wrap items-end gap-3">
+            <HeroStat label="Profiles">
+              <p className="tnum font-display text-2xl font-extrabold text-ink">{profiles.length}</p>
+            </HeroStat>
+            <HeroStat label="Scoped grants" align="right">
+              <p className="tnum font-display text-2xl font-extrabold text-ink">{totalGrants}</p>
+            </HeroStat>
+          </div>
         }
       />
 
-      <div className="stagger grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard label="Profiles" value={profiles.length} icon="list" tone="brand" hint="Employees + vendors" />
-        <StatCard label="Scoped grants" value={totalGrants} icon="check" tone="emerald" hint="Across all modules" />
-        <StatCard label="External vendors" value={vendors} icon="building" tone="cyan" hint="kind = vendor" />
-        <StatCard label="Backend" value="Demo" icon="alert" tone="amber" hint="Read-only preview" />
-      </div>
+      <StaggerGrid className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StaggerItem>
+          <StatCard label="Profiles" value={profiles.length} icon="list" tone="brand" hint="Employees + vendors" />
+        </StaggerItem>
+        <StaggerItem>
+          <StatCard label="Scoped grants" value={totalGrants} icon="check" tone="emerald" hint="Across all modules" />
+        </StaggerItem>
+        <StaggerItem>
+          <StatCard label="External vendors" value={vendors} icon="building" tone="cyan" hint="kind = vendor" />
+        </StaggerItem>
+        <StaggerItem>
+          <StatCard label="Backend" value="Demo" icon="alert" tone="amber" hint="Read-only preview" />
+        </StaggerItem>
+      </StaggerGrid>
 
       <Card className="border-amber-500/30 bg-amber-500/5">
         <div className="flex items-start gap-3">
@@ -209,13 +214,10 @@ function MemoryAdminUsers() {
             <Icon name="info" className="h-5 w-5" />
           </span>
           <div className="min-w-0">
-            <p className="font-semibold text-ink">Memory mode — no live backend</p>
+            <p className="font-semibold text-ink">Read-only preview</p>
             <p className="mt-0.5 text-sm text-muted">
-              The shell couldn&apos;t find Supabase env, so this screen shows the
-              static demo profiles below and every control is disabled.
-              Configure <code>NEXT_PUBLIC_SUPABASE_URL</code> and{' '}
-              <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> to grant/revoke roles
-              against the real <code>core.user_roles</code> table.
+              Live identity services are not connected in this environment, so
+              the profiles below are examples and access controls are disabled.
             </p>
           </div>
         </div>
@@ -345,7 +347,7 @@ function LiveAdminUsers() {
       <ModuleHero
         eyebrow="Platform admin,"
         title="Users & Roles"
-        description="Assign scoped module roles per user. Writes go through core.assign_user_role / core.revoke_user_role."
+        description="Assign each person only the access they need across Mwell Intra."
         icon="list"
         action={
           <HeroChipButton icon="rotate" onClick={() => void refresh()}>
@@ -353,29 +355,31 @@ function LiveAdminUsers() {
           </HeroChipButton>
         }
         accessory={
-          <>
-            <div>
-              <p className="text-xs uppercase tracking-wide text-brand-100/70">
-                Profiles
-              </p>
-              <p className="tnum text-2xl font-extrabold">{profiles.length}</p>
-            </div>
-            <div className="text-right">
-              <p className="text-xs uppercase tracking-wide text-brand-100/70">
-                Scoped grants
-              </p>
-              <p className="tnum text-2xl font-extrabold">{totalGrants}</p>
-            </div>
-          </>
+          <div className="flex flex-wrap items-end gap-3">
+            <HeroStat label="Profiles">
+              <p className="tnum font-display text-2xl font-extrabold text-ink">{profiles.length}</p>
+            </HeroStat>
+            <HeroStat label="Scoped grants" align="right">
+              <p className="tnum font-display text-2xl font-extrabold text-ink">{totalGrants}</p>
+            </HeroStat>
+          </div>
         }
       />
 
-      <div className="stagger grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard label="Profiles" value={profiles.length} icon="list" tone="brand" hint="Employees + vendors" />
-        <StatCard label="Scoped grants" value={totalGrants} icon="check" tone="emerald" hint="Across all modules" />
-        <StatCard label="External vendors" value={vendors} icon="building" tone="cyan" hint="kind = vendor" />
-        <StatCard label="Backend" value="Live" icon="bell" tone="emerald" hint="Supabase connected" />
-      </div>
+      <StaggerGrid className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StaggerItem>
+          <StatCard label="Profiles" value={profiles.length} icon="list" tone="brand" hint="Employees + vendors" />
+        </StaggerItem>
+        <StaggerItem>
+          <StatCard label="Scoped grants" value={totalGrants} icon="check" tone="emerald" hint="Across all modules" />
+        </StaggerItem>
+        <StaggerItem>
+          <StatCard label="External vendors" value={vendors} icon="building" tone="cyan" hint="kind = vendor" />
+        </StaggerItem>
+        <StaggerItem>
+          <StatCard label="Backend" value="Live" icon="bell" tone="emerald" hint="Supabase connected" />
+        </StaggerItem>
+      </StaggerGrid>
 
       {error && (
         <Card className="mb-4 border-rose-500/30 bg-rose-500/5">
@@ -401,7 +405,7 @@ function LiveAdminUsers() {
         <EmptyState
           icon="info"
           title="No profiles yet"
-          message="Users appear here after they sign in for the first time (core.profiles gets provisioned on signup)."
+          message="Users appear here after they sign in for the first time."
         />
       ) : (
         <UserRoleTable
@@ -496,28 +500,6 @@ function UserRoleTable({
       },
     ];
 
-    for (const col of roleColumns) {
-      cols.push({
-        key: col.key,
-        header: col.key,
-        align: 'center',
-        hideOnMobile: true,
-        render: (row) => {
-          const checked = held.get(row.id)?.has(col.key) ?? false;
-          const rowPending =
-            pending?.has(`${row.id}::${col.key}`) ?? false;
-          return (
-            <RoleCheckbox
-              checked={checked}
-              disabled={disabled || rowPending}
-              label={`${col.key} for ${row.email}`}
-              onChange={(next) => onToggle(row.id, col.module, col.role, next)}
-            />
-          );
-        },
-      });
-    }
-
     cols.push({
       key: 'summary',
       header: 'Roles',
@@ -567,14 +549,14 @@ function UserRoleTable({
   }, [roleColumns, held, pending, onToggle, onOpenDetail, disabled]);
 
   return (
-    <div className="card">
+    <div className="card min-w-0 overflow-hidden">
       <div className="border-b border-line px-4 pb-2 pt-4 sm:px-5">
         <SectionTitle
           title="Access matrix"
           subtitle={`${profiles.length} user${profiles.length === 1 ? '' : 's'} · ${roleColumns.length} scoped role${roleColumns.length === 1 ? '' : 's'}`}
         />
       </div>
-      <div className="overflow-x-auto px-4 pb-4 pt-2 sm:px-5 sm:pb-5">
+      <div className="max-w-full overflow-x-auto px-4 pb-4 pt-2 sm:px-5 sm:pb-5">
         <DataTable
           ariaLabel="Users and scoped role assignments"
           columns={columns}
@@ -604,11 +586,8 @@ function RoleCheckbox({
   return (
     <label
       className={cx(
-        'inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-md border transition',
+        'inline-flex h-11 w-11 cursor-pointer items-center justify-center rounded-lg transition',
         disabled && 'cursor-not-allowed opacity-50',
-        checked
-          ? 'border-brand-500 bg-brand-500 text-white'
-          : 'border-line bg-surface text-transparent hover:border-brand-300',
       )}
       title={label}
     >
@@ -620,7 +599,17 @@ function RoleCheckbox({
         onChange={(e) => onChange(e.currentTarget.checked)}
         className="sr-only"
       />
-      {checked && <Icon name="check" className="h-3.5 w-3.5" />}
+      <span
+        aria-hidden
+        className={cx(
+          'inline-flex h-6 w-6 items-center justify-center rounded-md border transition',
+          checked
+            ? 'border-brand-500 bg-brand-500 text-white'
+            : 'border-line bg-surface text-transparent hover:border-brand-300',
+        )}
+      >
+        {checked && <Icon name="check" className="h-3.5 w-3.5" />}
+      </span>
     </label>
   );
 }

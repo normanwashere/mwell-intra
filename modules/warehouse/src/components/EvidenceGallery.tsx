@@ -78,10 +78,10 @@ export function EvidenceGallery({
   return (
     <div className={className}>
       <ul className="grid grid-cols-4 gap-2" aria-label="Evidence photos">
-        {list.map((u) => {
+        {list.map((u, index) => {
           const src = resolved[u] ?? undefined;
           return (
-            <li key={u}>
+            <li key={`${u}-${index}`}>
               <button
                 type="button"
                 onClick={() => setLightbox(src ?? u)}

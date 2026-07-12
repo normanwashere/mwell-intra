@@ -5,12 +5,24 @@ import { Logo } from './Logo';
 import { Icon, type IconName } from './Icon';
 import { UserMenu } from './UserMenu';
 import { useWarehouse } from '@/app/store';
-import { modulesForRole, primaryModulesForRole } from '@/app/modules';
+import {
+  MODULE_GROUP_LABELS,
+  modulesForRole,
+  primaryModulesForRole,
+  type ModuleGroup,
+} from '@/app/modules';
 import { ROLES } from '@/auth/roles';
 import { buildNotifications } from '@/app/notifications';
-import { Sheet, Fab, useToast } from './ui';
+import { Sheet, useToast, PageTransition } from './ui';
 import { ThemeToggle } from './ThemeToggle';
-import { BarcodeScanner } from './camera/BarcodeScanner';
+
+const MODULE_GROUP_ORDER: ModuleGroup[] = [
+  'operate',
+  'plan',
+  'control',
+  'analyze',
+  'configure',
+];
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { role, source, data, resetDemo, pendingSync, conflicts, syncNow, discardConflict } =
@@ -22,7 +34,6 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const [moreOpen, setMoreOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
-  const [scanOpen, setScanOpen] = useState(false);
   const [conflictsOpen, setConflictsOpen] = useState(false);
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -40,6 +51,15 @@ export function AppShell({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 24);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [location.pathname]);
+
   const handleSyncNow = async () => {
     setSyncing(true);
     try {
@@ -56,7 +76,13 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
 
   const primary = primaryModulesForRole(role);
-  const hasMore = modules.length > primary.length;
+  const canScan = primary.some((module) => module.id === 'scan');
+  const primaryIds = new Set(primary.map((module) => module.id));
+  const remainingModules = modules.filter((module) => !primaryIds.has(module.id));
+  const groupedModules = MODULE_GROUP_ORDER.map((group) => ({
+    group,
+    modules: modules.filter((module) => module.group === group),
+  })).filter((section) => section.modules.length > 0);
 
   // Reset demo data is destructive (wipes + reseeds) — always confirm first
   // and give explicit feedback before the reload (WH-6).
@@ -70,40 +96,47 @@ export function AppShell({ children }: { children: ReactNode }) {
     window.setTimeout(() => resetDemo(), 450);
   };
 
-  const handleScan = (code: string) => {
-    setScanOpen(false);
-    const product = data?.products.find(
-      (p) => p.barcode === code || code.startsWith(p.sku),
-    );
-    if (product) {
-      navigate(`/inventory/${product.id}`);
-      toast.success(`Opened ${product.name}`);
-    } else {
-      toast.error(`No product matches "${code}"`);
-    }
-  };
-
   return (
-    <div className="min-h-screen bg-app md:flex">
+    <div className="h-dvh overflow-hidden bg-app md:flex md:h-auto md:min-h-screen md:overflow-visible">
       {/* Desktop sidebar */}
-      <aside className="hidden w-60 shrink-0 flex-col bg-brand-grad text-white md:flex lg:w-64">
+      <aside className="hidden w-60 shrink-0 flex-col border-r border-line bg-surface md:flex lg:w-64">
         <div className="safe-top flex items-center gap-2 px-5 py-5">
-          <Logo className="h-7 w-auto" variant="light" />
-          <span className="text-xs font-semibold text-brand-100/70">Intra</span>
+          <a href="/" className="flex min-w-0 items-center gap-2 transition hover:opacity-80" title="Mwell Intra home">
+            <Logo className="h-7 w-auto" />
+            <span className="text-xs font-semibold text-faint">Warehouse</span>
+          </a>
         </div>
-        <nav className="flex-1 space-y-1 px-3" aria-label="Primary">
-          {modules.map((m) => (
-            <SideLink key={m.id} to={m.path} icon={m.icon as IconName} label={m.label} />
+        <nav className="flex-1 space-y-5 overflow-y-auto px-3 pb-4" aria-label="Primary">
+          {groupedModules.map((section) => (
+            <section key={section.group} aria-labelledby={`warehouse-nav-${section.group}`}>
+              <h2
+                id={`warehouse-nav-${section.group}`}
+                tabIndex={0}
+                className="mb-1 px-3 text-[0.65rem] font-bold uppercase text-faint outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+              >
+                {MODULE_GROUP_LABELS[section.group]}
+              </h2>
+              <div className="space-y-1">
+                {section.modules.map((module) => (
+                  <SideLink
+                    key={module.id}
+                    to={module.path}
+                    icon={module.icon as IconName}
+                    label={module.label}
+                  />
+                ))}
+              </div>
+            </section>
           ))}
         </nav>
-        <div className="safe-bottom border-t border-white/10 px-5 py-4">
-          <p className="text-sm font-semibold text-white">{ROLES[role].label}</p>
-          <p className="mt-0.5 text-xs text-brand-100/70">{ROLES[role].description}</p>
+        <div className="safe-bottom border-t border-line px-5 py-4">
+          <p className="text-sm font-semibold text-ink">{ROLES[role].label}</p>
+          <p className="mt-0.5 text-xs text-muted">{ROLES[role].description}</p>
           {source === 'memory' && (
             <button
               type="button"
               onClick={requestReset}
-              className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-brand-100/70 transition hover:text-white"
+              className="mt-3 inline-flex min-h-11 items-center gap-1.5 rounded-lg px-1.5 text-xs font-medium text-muted transition hover:bg-inset hover:text-ink"
             >
               <Icon name="rotate" className="h-3.5 w-3.5" /> Reset demo data
             </button>
@@ -111,10 +144,20 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col md:h-auto md:min-h-screen">
         {/* Top bar */}
-        <header className="safe-top sticky top-0 z-20 border-b border-line bg-surface/85 backdrop-blur">
-          <div className="flex items-center justify-between gap-3 px-4 py-3 sm:px-6">
+        <header
+          className={clsx(
+            'safe-top z-20 shrink-0 border-b border-line bg-surface/85 backdrop-blur transition-[padding,box-shadow] md:sticky md:top-0',
+            scrolled && 'shadow-e1',
+          )}
+        >
+          <div
+            className={clsx(
+              'flex items-center justify-between gap-3 px-4 sm:px-6 transition-[padding]',
+              scrolled ? 'py-2' : 'py-3',
+            )}
+          >
             <div className="flex items-center gap-2 md:hidden">
               <Logo className="h-6 w-auto" />
             </div>
@@ -129,7 +172,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <div className="flex items-center gap-1.5">
               <span
                 className={clsx(
-                  'chip',
+                  'chip hidden min-[390px]:inline-flex md:inline-flex',
                   source === 'supabase'
                     ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
                     : 'bg-amber-500/15 text-amber-800 dark:text-amber-300',
@@ -138,14 +181,16 @@ export function AppShell({ children }: { children: ReactNode }) {
               >
                 {source === 'supabase' ? 'Live' : 'Demo'}
               </span>
-              <button
-                type="button"
-                onClick={() => setScanOpen(true)}
-                aria-label="Quick scan"
-                className="hidden h-10 w-10 place-items-center rounded-full text-muted transition hover:bg-inset hover:text-ink md:grid"
-              >
-                <Icon name="scan" />
-              </button>
+              {canScan && (
+                <button
+                  type="button"
+                  onClick={() => navigate('/scan')}
+                  aria-label="Quick scan"
+                  className="grid h-11 w-11 place-items-center rounded-full text-muted transition hover:bg-inset hover:text-ink"
+                >
+                  <Icon name="scan" />
+                </button>
+              )}
               <ThemeToggle />
               {/* Branded "Module alerts" (not "Notifications") so it doesn't
                   contradict the shell's disabled demo bell (SH-7). */}
@@ -154,7 +199,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 onClick={() => setNotifOpen(true)}
                 aria-label={`Module alerts (${notifications.length})`}
                 title="Module alerts"
-                className="relative grid h-10 w-10 place-items-center rounded-full text-muted transition hover:bg-inset hover:text-ink"
+                className="relative grid h-11 w-11 place-items-center rounded-full text-muted transition hover:bg-inset hover:text-ink"
               >
                 <Icon name="bell" />
                 {notifications.length > 0 && (
@@ -170,7 +215,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         {(offline || pendingSync > 0 || conflicts.length > 0) && (
           <div
-            className="flex flex-wrap items-center justify-center gap-3 bg-amber-500 px-4 py-1.5 text-xs font-semibold text-white"
+            className="flex shrink-0 flex-wrap items-center justify-center gap-3 bg-amber-500 px-4 py-1.5 text-xs font-semibold text-white"
             role="status"
           >
             <span className="inline-flex items-center gap-1.5">
@@ -205,22 +250,28 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         )}
 
-        {/* Clearance matches the shell main (Exec #3): fixed nav height +
-            safe-area + headroom for sticky bars/sheets. */}
-        <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-5 pb-[calc(9rem+env(safe-area-inset-bottom))] sm:px-6 md:pb-10 xl:max-w-6xl">
-          <div key={location.pathname} className="animate-fade-in">
+        <main
+          data-testid="warehouse-scroll-region"
+          className="mx-auto min-h-0 w-full max-w-5xl flex-1 scroll-pb-[calc(5rem+env(safe-area-inset-bottom))] overflow-y-auto overscroll-contain px-4 py-5 pb-[calc(7.5rem+env(safe-area-inset-bottom))] sm:px-6 md:overflow-visible md:pb-10 xl:max-w-6xl"
+        >
+          <PageTransition
+            id={location.pathname}
+            className="warehouse-workspace min-w-0 max-w-full"
+          >
             {children}
-          </div>
+          </PageTransition>
         </main>
 
-        {/* Mobile bottom navigation. Solid background (no translucency-only)
-            + top border so partially covered content clearly sits BENEATH
-            chrome instead of ghosting through it (Exec #3). */}
+        {/* Mobile primary navigation stays in the thumb zone as shell chrome,
+            outside the scrolling page area, so controls never slide behind it. */}
         <nav
-          className="safe-bottom fixed inset-x-0 bottom-0 z-20 border-t border-line bg-surface md:hidden"
+          className="safe-bottom z-30 shrink-0 border-t border-line bg-surface/95 shadow-e2 backdrop-blur-md md:hidden"
           aria-label="Primary mobile"
         >
-          <ul className="flex">
+          <ul
+            className="grid"
+            style={{ gridTemplateColumns: `repeat(${primary.length + 1}, minmax(0, 1fr))` }}
+          >
             {primary.map((m) => (
               <li key={m.id} className="flex-1">
                 <BottomLink
@@ -230,34 +281,19 @@ export function AppShell({ children }: { children: ReactNode }) {
                 />
               </li>
             ))}
-            {hasMore && (
-              <li className="flex-1">
-                <button
-                  type="button"
-                  onClick={() => setMoreOpen(true)}
-                  className="flex w-full flex-col items-center gap-0.5 px-2 py-2.5 text-[0.65rem] font-medium text-faint"
-                >
-                  <Icon name="dots" className="h-5 w-5" />
-                  More
-                </button>
-              </li>
-            )}
+            <li className="min-w-0">
+              <button
+                type="button"
+                onClick={() => setMoreOpen(true)}
+                className="flex min-h-16 w-full flex-col items-center justify-center gap-0.5 px-1 py-2.5 text-[0.65rem] font-medium text-faint transition hover:bg-inset hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500"
+              >
+                <Icon name="dots" className="h-5 w-5" />
+                <span className="max-w-full truncate">More</span>
+              </button>
+            </li>
           </ul>
         </nav>
       </div>
-
-      {/* Quick-scan FAB */}
-      <Fab onClick={() => setScanOpen(true)} icon="scan" label="Quick scan" mobileOnly />
-
-      {/* Scanner sheet */}
-      <Sheet
-        open={scanOpen}
-        onOpenChange={setScanOpen}
-        title="Quick scan"
-        description="Scan a product barcode to jump to its details."
-      >
-        <BarcodeScanner onDetected={handleScan} label="Start scanning" />
-      </Sheet>
 
       {/* More drawer */}
       <Sheet
@@ -274,7 +310,21 @@ export function AppShell({ children }: { children: ReactNode }) {
         }
       >
         <ul className="space-y-1">
-          {modules.map((m) => (
+          <li>
+            <a
+              href="/"
+              className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium text-muted hover:bg-inset hover:text-ink"
+            >
+              <span className="grid h-9 w-9 place-items-center rounded-lg bg-inset text-brand-700 dark:text-brand-300">
+                <Icon name="grid" />
+              </span>
+              <span className="min-w-0">
+                <span className="block">Mwell Intra home</span>
+                <span className="block truncate text-xs text-faint">All modules</span>
+              </span>
+            </a>
+          </li>
+          {remainingModules.map((m) => (
             <li key={m.id}>
               <button
                 type="button"
@@ -435,10 +485,10 @@ function SideLink({ to, icon, label }: { to: string; icon: IconName; label: stri
       end={to === '/'}
       className={({ isActive }) =>
         clsx(
-          'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition',
+          'flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition',
           isActive
-            ? 'bg-white/15 text-white shadow-soft'
-            : 'text-brand-100/80 hover:bg-white/10 hover:text-white',
+            ? 'bg-brand-500/12 text-brand-700 dark:text-brand-300'
+            : 'text-muted hover:bg-inset hover:text-ink',
         )
       }
     >
@@ -455,7 +505,7 @@ function BottomLink({ to, icon, label }: { to: string; icon: IconName; label: st
       end={to === '/'}
       className={({ isActive }) =>
         clsx(
-          'flex flex-col items-center gap-0.5 px-2 py-2.5 text-[0.65rem] font-medium transition',
+          'flex min-h-16 flex-col items-center justify-center gap-0.5 px-2 py-2.5 text-[0.65rem] font-medium transition',
           isActive ? 'text-brand-600 dark:text-brand-300' : 'text-faint',
         )
       }

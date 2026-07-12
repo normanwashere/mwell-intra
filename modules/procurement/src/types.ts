@@ -138,9 +138,12 @@ export interface RequestAttachment {
   filename: string;
   mimeType: string;
   sizeBytes: number;
-  /** Base64 data-URL captured in preview builds; live builds hand back a
-   *  storage object path via core.register_document instead. */
+  /** Base64 data URL exists only in explicit memory/demo mode. */
   dataUrl?: string;
+  /** Private object path in the procurement-requests Storage bucket. */
+  storagePath?: string;
+  /** SHA-256 digest of the uploaded bytes for evidence integrity checks. */
+  sha256?: string;
   uploadedAt: string;
   uploadedByEmail?: string;
   /** Optional tag so we can render "budget evidence" vs "brochure" etc.
@@ -162,14 +165,24 @@ export type RequestAttachmentKind =
   | 'other';
 
 /** Vendor / bidding compliance flags surfaced on the request per policy §7
- *  (accreditation) + §5 (RFP quorum) + §11 (direct-award justification). All
+ *  (accreditation) + §5 (sourcing effort) + §11 (direct-award justification). All
  *  optional so drafts stay valid; the RequestDetail page prompts when they're
  *  missing on submit. */
 export interface ComplianceChecks {
   /** True when the request explicitly requires an accredited vendor. */
   vendorAccreditationRequired?: boolean;
-  /** ≥3 comparable quotations gathered for RFP flow (policy §5). */
+  /** Legacy preview field. It cannot authorize a live submission or award. */
   rfpQuorumMet?: boolean;
+  intendedResponses?: number;
+  vendorsInvited?: number;
+  responsesReceived?: number;
+  insufficientBidsExceptionApproved?: boolean;
+  routeConfirmed?: boolean;
+  routeConfirmedByEmail?: string;
+  policyVersion?: string;
+  riskFacts?: ProcurementRiskFacts;
+  exceptionPack?: ProcurementExceptionPack;
+  importationPlan?: ImportationPlan;
   /** Free-text reference (e.g. PhilGEPS notice #) captured when applicable. */
   philgepsReference?: string;
   /** Direct-award reason (policy Annex C). Only rendered when sourcing is
@@ -182,6 +195,35 @@ export interface ComplianceChecks {
   /** Free-text price-reasonableness note; required by Annex C for direct
    *  awards, optional otherwise. */
   priceReasonableness?: string;
+}
+
+export interface ProcurementRiskFacts {
+  comparable: boolean;
+  complex: boolean;
+  technical: boolean;
+  strategic: boolean;
+  highRisk: boolean;
+  dataSensitive: boolean;
+  importation: boolean;
+}
+
+export interface ProcurementExceptionPack {
+  type: 'direct_award' | 'emergency' | 'repeat_continuity' | 'insufficient_bids' | 'petty_cash_non_accredited';
+  justification: string;
+  priceReasonableness?: string;
+  risksAndMitigations?: string;
+  financeEligibilityConfirmed?: boolean;
+  nonRecurringNonSplitAttested?: boolean;
+}
+
+export interface ImportationPlan {
+  incoterms: string;
+  importerOfRecord: string;
+  permitsAndRegistrations: string;
+  customsBrokerAndLogistics: string;
+  dutiesTaxesFreightInsurance: string;
+  foreignPaymentTiming: string;
+  deliveryAcceptanceAndWarranty: string;
 }
 
 export interface ProcurementRequest {
@@ -221,6 +263,9 @@ export interface ProcurementRequest {
   justification?: BusinessJustification;
   attachments?: RequestAttachment[];
   compliance?: ComplianceChecks;
+  riskFacts?: ProcurementRiskFacts;
+  exceptionPack?: ProcurementExceptionPack;
+  importationPlan?: ImportationPlan;
   /** Multi-tier ladder (policy §3 + §9). Absent for drafts, populated on
    *  submit. Approvals advance one step at a time. */
   approvalSteps?: ApprovalStep[];
@@ -271,6 +316,37 @@ export interface PurchaseOrderReceipt {
   closedPo: boolean;
 }
 
+export interface AcceptancePack {
+  id: string;
+  purchaseOrderId: string;
+  requestId?: string;
+  warehouseReceiptReference?: string;
+  acceptanceType: 'goods' | 'service' | 'milestone';
+  acceptedScope: string;
+  exceptions: string[];
+  acceptedByEmail?: string;
+  acceptedAt: string;
+  documentHash?: string;
+  status: 'accepted' | 'accepted_with_exceptions' | 'superseded';
+}
+
+export interface PaymentReadinessPack {
+  id: string;
+  purchaseOrderId: string;
+  acceptancePackId: string;
+  poMatch: boolean;
+  invoiceOrSiReference?: string;
+  milestoneSupportReference?: string;
+  taxWithholdingSupportReference?: string;
+  status: 'draft' | 'ready_for_finance' | 'returned' | 'accepted' | 'released' | 'superseded';
+  preparedByEmail?: string;
+  preparedAt: string;
+  financeReviewedByEmail?: string;
+  financeReviewedAt?: string;
+  financeNote?: string;
+  correctedFrom?: string;
+}
+
 export interface PurchaseOrder {
   id: string;
   poNumber: string; // human-friendly (PO-2026-0001)
@@ -292,6 +368,10 @@ export interface PurchaseOrder {
   /** Append-only goods receipts (partial receipts supported). Optional so
    *  legacy localStorage rows keep loading. */
   receipts?: PurchaseOrderReceipt[];
+  /** Latest non-superseded requester/Warehouse acceptance record. */
+  acceptancePack?: AcceptancePack;
+  /** Latest non-superseded Finance readiness record. */
+  paymentReadiness?: PaymentReadinessPack;
   /** sum(qty * unitPrice ?? 0). */
   total: number;
 }
@@ -326,6 +406,7 @@ export interface ProcurementVendor {
     | 'submitted'
     | 'under_review'
     | 'approved'
+    | 'provisional'
     | 'rejected'
     | 'expired'
     | 'renewal_due';

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { clsx } from 'clsx';
+import { Link } from 'react-router-dom';
 import { useWarehouse } from '@/app/store';
 import { actorName, formatWhen } from '@/domain/format';
 import {
@@ -24,6 +25,7 @@ interface Line {
   serials: string[];
   unitCost: string;
   lotCode: string;
+  expiryDate: string;
 }
 
 export function ReceivingPage() {
@@ -43,6 +45,7 @@ export function ReceivingPage() {
   const [newQty, setNewQty] = useState(1);
   const [lines, setLines] = useState<Line[]>([]);
   const [evidence, setEvidence] = useState<string[]>([]);
+  const [lastReceiptStaged, setLastReceiptStaged] = useState(false);
 
   if (!data) return null;
   const products = data.products;
@@ -64,11 +67,11 @@ export function ReceivingPage() {
           l.productId === productId ? { ...l, quantity: l.quantity + qty } : l,
         );
       }
-      return [...prev, { productId, quantity: qty, serials: [], unitCost: '', lotCode: '' }];
+      return [...prev, { productId, quantity: qty, serials: [], unitCost: '', lotCode: '', expiryDate: '' }];
     });
   };
 
-  const setLineField = (productId: string, field: 'unitCost' | 'lotCode', value: string) => {
+  const setLineField = (productId: string, field: 'unitCost' | 'lotCode' | 'expiryDate', value: string) => {
     setLines((prev) =>
       prev.map((l) => (l.productId === productId ? { ...l, [field]: value } : l)),
     );
@@ -98,7 +101,7 @@ export function ReceivingPage() {
           l.productId === productId ? { ...l, serials, quantity: serials.length } : l,
         );
       }
-      return [...prev, { productId, quantity: 1, serials: [serial], unitCost: '', lotCode: '' }];
+      return [...prev, { productId, quantity: 1, serials: [serial], unitCost: '', lotCode: '', expiryDate: '' }];
     });
   };
 
@@ -137,30 +140,59 @@ export function ReceivingPage() {
             ? Number(l.unitCost)
             : undefined,
         lotCode: l.lotCode.trim() || undefined,
+        expiryDate: l.expiryDate || undefined,
         binId: activeBin || undefined,
       })),
     });
     if (!ok) return;
-    toast.success(`Received ${totalItems} item(s) and tagged stock`);
+    toast.success(`Received ${totalItems} item(s) into inspection staging`);
+    setLastReceiptStaged(true);
     setLines([]);
     setEvidence([]);
   };
 
   return (
-    <div className="space-y-4">
-      <PageHeader title="Receiving" subtitle="Scan & tag incoming inventory" />
+    <div
+      className={clsx(
+        'space-y-4 overflow-x-clip',
+        lines.length > 0 && 'pb-24 md:pb-0',
+      )}
+    >
+      <PageHeader
+        title="Receiving"
+        icon="truck"
+        subtitle="Scan & tag incoming inventory"
+        action={
+          <Link to="/purchase-orders" className="btn-ghost btn-sm">
+            <Icon name="cart" className="h-4 w-4" /> Approved POs
+          </Link>
+        }
+      />
 
-      <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+      <div className="flex flex-col gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="font-semibold">Inspection required</p>
+          <p className="text-xs opacity-80">Received stock is staged for quality review before putaway.</p>
+        </div>
+        <Link to="/quality" className="btn-ghost btn-sm shrink-0 justify-center">Open quality queue</Link>
+      </div>
+      {lastReceiptStaged && (
+        <p role="status" className="rounded-xl bg-brand-500/10 px-4 py-3 text-sm font-medium text-brand-800 dark:text-brand-200">
+          Receipt saved in inspection staging and is ready for quality review.
+        </p>
+      )}
+
+      <div className="grid min-w-0 gap-4 lg:grid-cols-2 lg:items-start">
         {/* Left: capture controls — scan-first (WH-11): the scanner card
             leads; where/who selects collapse into a summary chip on mobile. */}
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           <button
             type="button"
-            className="flex w-full items-center justify-between gap-2 rounded-xl border border-line bg-surface px-3 py-2.5 text-left text-sm lg:hidden"
+            className="flex min-h-11 w-full max-w-full items-start justify-between gap-2 rounded-xl border border-line bg-surface px-3 py-2.5 text-left text-sm lg:hidden"
             aria-expanded={contextOpen}
             onClick={() => setContextOpen((v) => !v)}
           >
-            <span className="min-w-0 truncate text-muted">
+            <span className="min-w-0 break-words leading-snug text-muted">
               Receiving into:{' '}
               <span className="font-semibold text-ink">
                 {warehouses.find((l) => l.id === activeLocation)?.name ?? '—'}
@@ -182,7 +214,7 @@ export function ReceivingPage() {
             />
           </button>
 
-          <Card className="space-y-3">
+          <Card className="min-w-0 space-y-3 overflow-hidden">
             <Field
               label="Product"
               htmlFor="rcv-product"
@@ -201,8 +233,8 @@ export function ReceivingPage() {
                 Serialized device — scan each unit's serial below to add it.
               </p>
             ) : (
-              <div className="flex items-end gap-2">
-                <div className="w-32">
+              <div className="grid min-w-0 gap-2 sm:grid-cols-[10rem_minmax(0,1fr)] sm:items-end">
+                <div className="min-w-0">
                   <Field label="Quantity" htmlFor="rcv-qty">
                     <QuantityStepper
                       id="rcv-qty"
@@ -215,7 +247,7 @@ export function ReceivingPage() {
                 </div>
                 <button
                   type="button"
-                  className="btn-primary flex-1"
+                  className="btn-primary min-w-0 whitespace-nowrap px-3"
                   disabled={!selectedProductId}
                   onClick={addSelected}
                 >
@@ -293,7 +325,7 @@ export function ReceivingPage() {
         </div>
 
         {/* Right: running receipt + evidence */}
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           <Card>
             <SectionTitle
               title="Receipt lines"
@@ -336,7 +368,7 @@ export function ReceivingPage() {
                             ))}
                           </div>
                         )}
-                        <div className="mt-2 grid grid-cols-2 gap-2">
+                          <div className="mt-2 grid gap-2 sm:grid-cols-2">
                           <Field label="Unit cost (₱)" htmlFor={`rcv-cost-${l.productId}`}>
                             <input
                               id={`rcv-cost-${l.productId}`}
@@ -363,6 +395,19 @@ export function ReceivingPage() {
                               placeholder="optional"
                             />
                           </Field>
+                          {p.expiryTracked && (
+                            <div className="sm:col-span-2">
+                              <Field label={`Expiry date for ${p.name}`} htmlFor={`rcv-expiry-${l.productId}`}>
+                                <input
+                                  id={`rcv-expiry-${l.productId}`}
+                                  type="date"
+                                  className="input"
+                                  value={l.expiryDate}
+                                  onChange={(event) => setLineField(l.productId, 'expiryDate', event.target.value)}
+                                />
+                              </Field>
+                            </div>
+                          )}
                         </div>
                       </div>
                       <button
@@ -388,16 +433,17 @@ export function ReceivingPage() {
       </div>
 
       {/* Sticky action bar */}
-      <div className="sticky bottom-36 z-20 md:bottom-4">
-        <button
-          type="button"
-          className="btn-primary w-full shadow-pop"
-          disabled={lines.length === 0}
-          onClick={() => void submit()}
-        >
-          Receive {totalItems} item(s)
-        </button>
-      </div>
+      {lines.length > 0 && (
+        <div className="sticky bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-20 rounded-2xl border border-line bg-surface/95 p-2 shadow-e3 backdrop-blur md:bottom-4">
+          <button
+            type="button"
+            className="btn-primary min-h-12 w-full shadow-pop"
+            onClick={() => void submit()}
+          >
+            Receive {totalItems} item(s)
+          </button>
+        </div>
+      )}
 
       {/* Receipt history — parity with the Returns recent list. */}
       <Card>
@@ -416,7 +462,7 @@ export function ReceivingPage() {
                 const total = r.lines.reduce((s, l) => s + l.quantity, 0);
                 return (
                   <li key={r.id} className="rounded-xl bg-inset p-3">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                       <span className="text-sm font-medium text-ink">
                         {total} item(s) into {loc?.name ?? r.locationId}
                       </span>

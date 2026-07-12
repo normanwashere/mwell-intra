@@ -106,8 +106,21 @@ export function tailorRequirements(
 export function tailorRequiredOnly(
   profile: TailoringProfile,
 ): RequirementDefinition[] {
-  return tailorRequirements(profile).filter((r) => r.required);
+  return tailorRequirements(profile).filter(isPolicyBackedRequirement);
 }
+
+/** Only sourced requirements may block submission or accreditation. */
+export function isPolicyBackedRequirement(
+  requirement: RequirementDefinition,
+): boolean {
+  return requirement.required && Boolean(requirement.policySource);
+}
+
+export {
+  VENDOR_ACCREDITATION_V2025,
+  buildV2025Checklist,
+  validateV2025Application,
+} from './vendorAccreditationV2025';
 
 /** Group tailored requirements by `RequirementGroup`. */
 export function groupTailored(

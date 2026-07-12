@@ -1,31 +1,93 @@
-import { describe, it, expect } from 'vitest';
-import { primaryModulesForRole, modulesForRole } from './modules';
+import { describe, expect, it } from "vitest";
+import { MODULES, modulesForRole, primaryModulesForRole } from "./modules";
+import { ROLE_LIST } from "@/auth/roles";
 
-describe('primaryModulesForRole', () => {
-  it('keeps Returns and Cycle Counts in the logistics primary nav', () => {
-    const ids = primaryModulesForRole('logistics_supervisor').map((m) => m.id);
-    expect(ids).toContain('returns');
-    expect(ids).toContain('cycle-counts');
-    expect(ids.length).toBeLessThanOrEqual(4);
+describe("warehouse navigation metadata", () => {
+  it("assigns every route to exactly one desktop group", () => {
+    expect(MODULES.every((module) => Boolean(module.group))).toBe(true);
+    expect(new Set(MODULES.map((module) => module.id)).size).toBe(
+      MODULES.length,
+    );
   });
 
-  it('surfaces Returns for operations instead of burying it', () => {
-    const ids = primaryModulesForRole('operations').map((m) => m.id);
-    expect(ids).toContain('returns');
-    expect(ids.length).toBeLessThanOrEqual(4);
+  it("uses the exact logistics mobile primary order", () => {
+    expect(
+      primaryModulesForRole("logistics_supervisor").map(
+        (module) => module.mobile,
+      ),
+    ).toEqual(["home", "scan", "tasks", "inventory"]);
   });
 
-  it('only includes modules the role can actually see', () => {
-    const visible = new Set(modulesForRole('operations').map((m) => m.id));
-    for (const m of primaryModulesForRole('operations')) {
-      expect(visible.has(m.id)).toBe(true);
+  it("gives every role a Home destination", () => {
+    for (const role of ROLE_LIST) {
+      expect(primaryModulesForRole(role.id)[0]?.mobile).toBe("home");
     }
   });
 
-  it('returns all modules when a role has four or fewer', () => {
-    const all = modulesForRole('business_unit');
-    expect(primaryModulesForRole('business_unit')).toHaveLength(
-      Math.min(all.length, 4),
+  it("shows scan and tasks only to roles with actionable capabilities", () => {
+    expect(
+      primaryModulesForRole("business_unit").map((module) => module.id),
+    ).not.toContain("scan");
+    expect(
+      primaryModulesForRole("business_unit").map((module) => module.id),
+    ).not.toContain("tasks");
+    expect(
+      primaryModulesForRole("logistics_supervisor").map((module) => module.id),
+    ).toEqual(expect.arrayContaining(["scan", "tasks"]));
+  });
+
+  it("only includes modules authorized for the role", () => {
+    const visible = new Set(
+      modulesForRole("operations").map((module) => module.id),
     );
+    for (const module of primaryModulesForRole("operations"))
+      expect(visible.has(module.id)).toBe(true);
+  });
+
+  it("places quality control in the Control group for inspection roles", () => {
+    const quality = modulesForRole("operations").find(
+      (module) => module.id === "quality",
+    );
+    expect(quality).toMatchObject({
+      path: "/quality",
+      group: "control",
+      icon: "shield",
+    });
+    expect(
+      modulesForRole("finance").some((module) => module.id === "quality"),
+    ).toBe(false);
+  });
+
+  it("exposes approvals and exceptions only to their authorized roles", () => {
+    expect(
+      modulesForRole("logistics_supervisor").find(
+        (module) => module.id === "approvals",
+      ),
+    ).toMatchObject({ path: "/approvals", group: "control" });
+    expect(
+      modulesForRole("finance").find((module) => module.id === "approvals"),
+    ).toBeDefined();
+    expect(
+      modulesForRole("operations").find((module) => module.id === "approvals"),
+    ).toBeUndefined();
+    expect(
+      modulesForRole("operations").find((module) => module.id === "exceptions"),
+    ).toMatchObject({ path: "/exceptions", group: "control" });
+  });
+
+  it("places imports, reports, and operation routes in their operating groups", () => {
+    expect(
+      modulesForRole("warehouse_admin").find(
+        (module) => module.id === "imports",
+      ),
+    ).toMatchObject({ path: "/imports", group: "configure" });
+    expect(
+      modulesForRole("bi_analyst").find((module) => module.id === "reports"),
+    ).toMatchObject({ path: "/reports", group: "analyze" });
+    expect(
+      modulesForRole("logistics_supervisor").find(
+        (module) => module.id === "operation-routes",
+      ),
+    ).toMatchObject({ path: "/operation-routes", group: "configure" });
   });
 });

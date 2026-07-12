@@ -61,7 +61,7 @@ export function DocumentUploader({
     setBusy(true);
     try {
       const dataUrl = await readAsDataUrl(file);
-      const doc = upload({
+      const doc = await upload({
         caseId,
         vendorId,
         requirementId: requirement.id,

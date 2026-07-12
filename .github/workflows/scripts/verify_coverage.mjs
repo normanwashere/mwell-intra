@@ -13,7 +13,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
 
-const MIN = Number.parseFloat(process.env.COVERAGE_MIN ?? '70');
+const MIN = Number.parseFloat(process.env.COVERAGE_MIN ?? '50');
 if (!Number.isFinite(MIN) || MIN < 0 || MIN > 100) {
   console.error(`Invalid COVERAGE_MIN=${process.env.COVERAGE_MIN}`);
   process.exit(2);

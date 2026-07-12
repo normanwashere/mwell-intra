@@ -15,6 +15,7 @@ export {
   BarRow,
   ModuleHero,
   HeroChipButton,
+  HeroStat,
   type Tone,
 } from './primitives';
 
@@ -40,7 +41,7 @@ export {
 export { QuantityStepper } from './QuantityStepper';
 export { Sparkline } from './Sparkline';
 export { Fab } from './Fab';
-export { DataTable, type Column } from './DataTable';
+export { DataTable, type Column, type DataTableDensity } from './DataTable';
 export {
   SignaturePad,
   type SignaturePayload,
@@ -48,3 +49,25 @@ export {
 } from './SignaturePad';
 export { InfoTip, type InfoTipProps } from './Tooltip';
 export { SignInPrompt, type SignInPromptProps } from './SignInPrompt';
+export { StatValue } from './StatValue';
+
+// ---- motion system (framer-motion, LazyMotion-strict) ----
+export { MotionProvider } from './motion/MotionProvider';
+export { AnimatedNumber, type AnimatedNumberProps } from './motion/AnimatedNumber';
+export { StaggerGrid, StaggerItem, type StaggerGridProps } from './motion/StaggerGrid';
+export { PageTransition, type PageTransitionProps } from './motion/PageTransition';
+export { Collapse, type CollapseProps } from './motion/Collapse';
+export {
+  DURATION,
+  EASE_OUT,
+  SPRING_SNAPPY,
+  SPRING_GENTLE,
+  staggerContainer,
+  staggerItem,
+  pageVariants,
+} from './motion/tokens';
+
+// ---- charts (dependency-free SVG) ----
+export { AreaChart, type AreaChartProps, type AreaChartPoint } from './charts/AreaChart';
+export { DonutChart, type DonutChartProps, type DonutSlice } from './charts/DonutChart';
+export { TrendChip, type TrendChipProps } from './charts/TrendChip';

@@ -46,23 +46,20 @@ export async function uploadEvidence(
   if (!client || !isDataUrl(dataUrl)) {
     return dataUrl; // memory mode, or already a non-data value
   }
-  try {
-    const base64 = dataUrl.split(',')[1] ?? '';
-    const mime = (dataUrl.match(/^data:(.+);/) ?? [])[1] ?? 'image/jpeg';
-    const ext = mime === 'image/png' ? 'png' : 'jpg';
-    const path = `${reference}/${crypto.randomUUID()}.${ext}`;
-    const { error } = await client.storage
-      .from(BUCKET)
-      .upload(path, decodeBase64(base64), {
-        contentType: mime,
-        upsert: false,
-      });
-    if (error) throw error;
-    return path;
-  } catch {
-    // Fall back to inline base64 so the workflow isn't blocked by storage issues.
-    return dataUrl;
+  const base64 = dataUrl.split(',')[1] ?? '';
+  const mime = (dataUrl.match(/^data:(.+);/) ?? [])[1] ?? 'image/jpeg';
+  const ext = mime === 'image/png' ? 'png' : 'jpg';
+  const path = `${reference}/${crypto.randomUUID()}.${ext}`;
+  const { error } = await client.storage
+    .from(BUCKET)
+    .upload(path, decodeBase64(base64), {
+      contentType: mime,
+      upsert: false,
+    });
+  if (error) {
+    throw new Error(`Evidence upload failed: ${error.message}`);
   }
+  return path;
 }
 
 /** Upload every captured data URL; returns the persisted values in order. */

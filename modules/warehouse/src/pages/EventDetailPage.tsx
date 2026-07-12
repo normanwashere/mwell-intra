@@ -18,6 +18,8 @@ import {
   SectionTitle,
   Sheet,
   StatCard,
+  StaggerGrid,
+  StaggerItem,
   money,
   useToast,
   type Tone,
@@ -236,11 +238,15 @@ export function EventDetailPage() {
         <Icon name="chevron" className="h-4 w-4 rotate-180" /> Events
       </button>
 
-      <div className="overflow-hidden rounded-3xl bg-brand-grad p-5 text-white shadow-navy">
-        <div className="flex items-start justify-between gap-3">
+      <div className="hero-surface relative overflow-hidden rounded-3xl p-5 sm:p-6">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-y-0 left-0 w-1 rounded-l-3xl bg-gradient-to-b from-brand-500 to-brand-700"
+        />
+        <div className="relative flex items-start justify-between gap-3 pl-2">
           <div className="min-w-0">
-            <h1 className="font-display text-xl font-extrabold sm:text-2xl">{event.name}</h1>
-            <p className="text-sm text-brand-100/80">
+            <h1 className="font-display text-xl font-extrabold text-ink sm:text-2xl">{event.name}</h1>
+            <p className="text-sm text-muted">
               {statusLabel(event.type)} · {formatDate(event.startDate)}
               {event.endDate ? ` – ${formatDate(event.endDate)}` : ''}
             </p>
@@ -257,14 +263,20 @@ export function EventDetailPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="Reserved" value={summary.reserved} icon="tag" tone="amber" hint="Units" />
-        <StatCard label="Issued" value={summary.issued} icon="truck" tone="brand" hint="Units" />
-        <StatCard label="Returned" value={summary.returned} icon="rotate" tone="slate" hint="Units" />
-        {/* "Units consumed" — the events LIST shows ₱ spent; same word must
-            not mean two things (WH-16). */}
-        <StatCard label="Units consumed" value={summary.consumed} icon="check" tone="emerald" hint="Units" />
-      </div>
+      <StaggerGrid className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <StaggerItem>
+          <StatCard label="Reserved" value={summary.reserved} icon="tag" tone="amber" hint="Units" />
+        </StaggerItem>
+        <StaggerItem>
+          <StatCard label="Issued" value={summary.issued} icon="truck" tone="brand" hint="Units" />
+        </StaggerItem>
+        <StaggerItem>
+          <StatCard label="Returned" value={summary.returned} icon="rotate" tone="slate" hint="Units" />
+        </StaggerItem>
+        <StaggerItem>
+          <StatCard label="Units consumed" value={summary.consumed} icon="check" tone="emerald" hint="Units" />
+        </StaggerItem>
+      </StaggerGrid>
 
       <Card>
         <SectionTitle title="Event costing" subtitle="Sold/used vs promotional give-aways" />

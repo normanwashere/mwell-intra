@@ -11,6 +11,8 @@ import {
   Field,
   PageHeader,
   Sheet,
+  StaggerGrid,
+  StaggerItem,
   money,
   useToast,
   type Tone,
@@ -84,6 +86,7 @@ export function EventsPage() {
     <div className="space-y-4">
       <PageHeader
         title="Events"
+        icon="calendar"
         subtitle="Activations with consumption & costing"
         action={
           canCreate ? (
@@ -97,12 +100,12 @@ export function EventsPage() {
       {data.events.length === 0 ? (
         <EmptyState icon="calendar" title="No events yet" />
       ) : (
-        <ul className="stagger grid gap-2 lg:grid-cols-2" aria-label="Events">
+        <StaggerGrid className="grid gap-2 lg:grid-cols-2" aria-label="Events">
           {data.events.map((ev) => {
             const summary = eventSummary(data.allocations, data.movements, ev.id);
             const costing = eventCosting(data.movements, data.products, ev.id);
             return (
-              <li key={ev.id}>
+              <StaggerItem key={ev.id}>
                 <button
                   type="button"
                   onClick={() => navigate(`/events/${ev.id}`)}
@@ -133,10 +136,10 @@ export function EventsPage() {
                     <Icon name="chevron" className="h-4 w-4 text-faint" />
                   </div>
                 </button>
-              </li>
+              </StaggerItem>
             );
           })}
-        </ul>
+        </StaggerGrid>
       )}
 
       <Sheet

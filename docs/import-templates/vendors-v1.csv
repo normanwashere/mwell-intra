@@ -1,0 +1,2 @@
+template_version,vendor_external_id,company_name,contact_email,category,jurisdiction,risk_tier,status
+1,VEN-EXAMPLE,Example Vendor,vendor@example.com,goods,PH,low,pending

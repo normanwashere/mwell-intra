@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Link,
   Navigate,
@@ -13,6 +13,7 @@ import {
   Card,
   DataTable,
   HeroChipButton,
+  HeroStat,
   Icon,
   InfoTip,
   ModuleHero,
@@ -21,12 +22,14 @@ import {
   useToast,
   type Column,
 } from '@intra/ui';
-import { Guard, useSession } from '@intra/auth';
+import { Guard, useCan, useSession } from '@intra/auth';
 import type {
   ApprovalStep,
+  ProcurementRiskFacts,
   ProcurementRequestLine,
   RequestAttachment,
   RequestStatus,
+  SourcingMethod,
 } from '../types';
 import {
   useApprovalHistory,
@@ -35,11 +38,14 @@ import {
 } from '../localStore';
 import {
   categoryMeta,
-  minimumQuotes,
+  deriveSourcingRecommendation,
+  evaluateSubmitReadiness,
   requiredDocumentsStatus,
   sourcingMethodLabel,
   tierLabel,
+  type SubmitReadiness,
 } from '../policy';
+import { SourcingDecisionPanel } from '../components/SourcingDecisionPanel';
 import {
   attachmentKindLabel,
   formatDate,
@@ -47,16 +53,28 @@ import {
   statusLabel,
   stepStatusLabel,
 } from '../labels';
+import {
+  createGovernedAttachmentUrl,
+  type GovernedAccessClient,
+} from '../attachments';
 
-// Bright dots for status pills placed on the navy hero (badges with tinted
-// backgrounds look faded against the gradient; solid dots read cleanly).
-const STATUS_DOT: Record<RequestStatus, string> = {
-  draft: 'bg-slate-300',
-  submitted: 'bg-cyan-300',
-  under_review: 'bg-amber-300',
-  approved: 'bg-emerald-300',
-  rejected: 'bg-rose-300',
-  cancelled: 'bg-slate-400',
+/** Compose a blocking message from an unmet submit-readiness result. */
+function readinessMessage(r: SubmitReadiness): string {
+  const parts: string[] = [];
+  if (r.missingDocs.length > 0) {
+    parts.push(`attach ${r.missingDocs.join(', ')}`);
+  }
+  return `Can't submit yet — ${parts.join('; ')}.`;
+}
+
+// Status tones for badges on the porcelain hero surface.
+const STATUS_TONE: Record<RequestStatus, 'slate' | 'cyan' | 'amber' | 'emerald' | 'rose'> = {
+  draft: 'slate',
+  submitted: 'cyan',
+  under_review: 'amber',
+  approved: 'emerald',
+  rejected: 'rose',
+  cancelled: 'slate',
 };
 
 const DIRECT_AWARD_REASON_LABEL: Record<string, string> = {
@@ -93,21 +111,43 @@ export function RequestDetailPage() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { rows, submit, cancel, loading } = useProcurementRequests();
+  const { rows, submit, cancel, update, loading } = useProcurementRequests();
   const { rows: pos, add: addPO } = usePurchaseOrders();
   const history = useApprovalHistory(id);
   const { success, error } = useToast();
-  const { profile } = useSession();
+  const { profile, mode, supabaseClient } = useSession();
+  const canConfirmRoute = useCan('procurement', 'manage_rfp');
+  const [routeMethod, setRouteMethod] = useState<SourcingMethod>('rfq');
+  const [routeRiskFacts, setRouteRiskFacts] = useState<ProcurementRiskFacts>({
+    comparable: true,
+    complex: false,
+    technical: false,
+    strategic: false,
+    highRisk: false,
+    dataSensitive: false,
+    importation: false,
+  });
 
   const req = useMemo(() => rows.find((r) => r.id === id), [rows, id]);
 
   useEffect(() => {
     if (!req) return;
+    setRouteMethod(req.sourcingMethod ?? 'rfq');
+    if (req.compliance?.riskFacts) setRouteRiskFacts(req.compliance.riskFacts);
+  }, [req?.id]);
+
+  useEffect(() => {
+    if (!req) return;
     if (searchParams.get('submit') === '1' && req.status === 'draft') {
-      const ok = submit(req.id);
-      if (ok) {
-        success('Request submitted for approval');
-      }
+      void (async () => {
+        const readiness = evaluateSubmitReadiness(req);
+        if (!readiness.ok) {
+          error(readinessMessage(readiness));
+        } else {
+          const ok = await submit(req.id);
+          if (ok) success('Request submitted for approval');
+        }
+      })();
       searchParams.delete('submit');
       setSearchParams(searchParams, { replace: true });
     }
@@ -198,24 +238,72 @@ export function RequestDetailPage() {
 
   const isRequester = profile?.email && req.requesterEmail === profile.email;
   const cat = categoryMeta(req.category);
+  const routeRecommendation = deriveSourcingRecommendation({
+    category: req.category,
+    amount: req.estimatedAmount,
+    ...routeRiskFacts,
+  });
 
-  function handleSubmit() {
+  async function confirmRoute() {
+    if (!canConfirmRoute || !req) return;
+    const currentRequest = req;
+    try {
+      if (mode === 'supabase' && supabaseClient) {
+        const { error: rpcError } = await supabaseClient.schema('procurement').rpc(
+          'confirm_route_decision',
+          {
+            payload: {
+              request_id: currentRequest.id,
+              request_version: 1,
+              method: routeMethod,
+              reasons: routeRecommendation.reasons,
+              risk_facts: routeRiskFacts,
+            },
+          },
+        );
+        if (rpcError) throw new Error(rpcError.message);
+        window.location.reload();
+        return;
+      }
+      await update(currentRequest.id, {
+        sourcingMethod: routeMethod,
+        sourcingOverride: routeMethod !== routeRecommendation.method,
+        compliance: {
+          ...currentRequest.compliance,
+          routeConfirmed: true,
+          routeConfirmedByEmail: profile?.email,
+          policyVersion: 'procurement-policy-revised-2026',
+          riskFacts: routeRiskFacts,
+        },
+      });
+      success('Sourcing route confirmed');
+    } catch (cause) {
+      error(cause instanceof Error ? cause.message : 'Could not confirm the sourcing route.');
+    }
+  }
+
+  async function handleSubmit() {
     if (!req) return;
-    const ok = submit(req.id);
+    const readiness = evaluateSubmitReadiness(req);
+    if (!readiness.ok) {
+      error(readinessMessage(readiness));
+      return;
+    }
+    const ok = await submit(req.id);
     if (ok) success('Request submitted for approval');
     else error('Could not submit — try again.');
   }
-  function handleCancel() {
+  async function handleCancel() {
     if (!req) return;
-    const ok = cancel(req.id);
+    const ok = await cancel(req.id);
     if (ok) success('Request cancelled');
   }
-  function handleAuthorPO() {
+  async function handleAuthorPO() {
     if (!req || !req.vendorId || !req.vendorName) {
       error('Assign a vendor to this request before authoring a PO.');
       return;
     }
-    const po = addPO({
+    const po = await addPO({
       requestId: req.id,
       vendorId: req.vendorId,
       vendorName: req.vendorName,
@@ -243,8 +331,6 @@ export function RequestDetailPage() {
       )
     : [];
   const missingDocs = reqDocs.filter((d) => !d.attached);
-  const minQuotes = req.sourcingMethod ? minimumQuotes(req.sourcingMethod) : null;
-
   // PR-20: the 10-tile meta grid collapses to one muted line; the full
   // record lives behind the (i).
   const metaLine = [
@@ -274,27 +360,15 @@ export function RequestDetailPage() {
           </HeroChipButton>
         }
         accessory={
-          <div className="flex flex-wrap items-end gap-6">
-            <div>
-              <p className="text-xs uppercase tracking-wide text-brand-100/70">Status</p>
-              <p className="mt-1">
-                <span
-                  className={`inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-0.5 text-xs font-semibold text-white`}
-                >
-                  <span
-                    aria-hidden
-                    className={`inline-block h-1.5 w-1.5 rounded-full ${STATUS_DOT[req.status]}`}
-                  />
-                  {statusLabel(req.status)}
-                </span>
-              </p>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-wide text-brand-100/70">Estimated total</p>
-              <p className="tnum text-2xl font-extrabold">
+          <div className="flex flex-wrap items-end gap-3">
+            <HeroStat label="Status">
+              <Badge tone={STATUS_TONE[req.status]}>{statusLabel(req.status)}</Badge>
+            </HeroStat>
+            <HeroStat label="Estimated total" align="right">
+              <p className="tnum font-display text-2xl font-extrabold text-ink">
                 {req.estimatedAmount != null ? money(req.estimatedAmount) : '—'}
               </p>
-            </div>
+            </HeroStat>
           </div>
         }
       />
@@ -318,6 +392,32 @@ export function RequestDetailPage() {
           }
         />
       </div>
+
+      {req.status === 'draft' && !req.compliance?.routeConfirmed && (
+        <div>
+          <SectionTitle
+            title="Sourcing route decision"
+            subtitle="The requester supplies facts; Procurement confirms the route before approval submission."
+          />
+          <Card>
+            <SourcingDecisionPanel
+              riskFacts={routeRiskFacts}
+              onRiskFactsChange={setRouteRiskFacts}
+              recommendation={routeRecommendation}
+              value={routeMethod}
+              onChange={setRouteMethod}
+              canConfirm={canConfirmRoute}
+              confirmed={false}
+            />
+            {canConfirmRoute && (
+              <button type="button" className="btn-primary mt-4" onClick={() => void confirmRoute()}>
+                <Icon name="check" className="h-4 w-4" />
+                Confirm sourcing route
+              </button>
+            )}
+          </Card>
+        </div>
+      )}
 
       {req.justification && (
         <div>
@@ -358,10 +458,12 @@ export function RequestDetailPage() {
           <SectionTitle
             title="Approval ladder"
             action={
-              <InfoTip
-                label="How the ladder was derived"
-                content="Multi-tier routing derived from category + amount + sourcing method (policy §3, §9). Each tier signs electronically."
-              />
+              <span className="hidden sm:inline-flex">
+                <InfoTip
+                  label="How the ladder was derived"
+                  content="Multi-tier routing derived from category + amount + sourcing method (policy §3, §9). Each tier signs electronically."
+                />
+              </span>
             }
           />
           <Card>
@@ -429,10 +531,10 @@ export function RequestDetailPage() {
                 attach and tag {missingDocs.length === 1 ? 'it' : 'them'} so approvers see a complete pack.
               </p>
             )}
-            {minQuotes != null && (
+            {(req.sourcingMethod === 'rfp' || req.sourcingMethod === 'rfq') && (
               <p className="mt-3 rounded-lg bg-inset px-3 py-2 text-xs text-muted">
                 <Icon name="info" className="mr-1 inline h-3.5 w-3.5" />
-                {minQuotes} comparable {req.sourcingMethod === 'rfp' ? 'proposals' : 'quotations'} required.
+                Procurement must record invited vendors, responses, and any approved insufficient-bids exception.
               </p>
             )}
           </Card>
@@ -588,6 +690,32 @@ const STEP_STATUS: Record<
 
 function AttachmentRow({ att }: { att: RequestAttachment }) {
   const sizeKb = (att.sizeBytes / 1024).toFixed(1);
+  const { mode, supabaseClient } = useSession();
+  const { error } = useToast();
+  const [downloading, setDownloading] = useState(false);
+
+  async function downloadLiveAttachment() {
+    if (mode !== 'supabase' || !supabaseClient || !att.storagePath) return;
+    setDownloading(true);
+    try {
+      const prepared = await createGovernedAttachmentUrl(
+        supabaseClient as unknown as GovernedAccessClient,
+        att.id,
+      );
+      const anchor = document.createElement('a');
+      anchor.href = prepared.url;
+      anchor.download = prepared.filename;
+      anchor.rel = 'noopener';
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+    } catch (cause) {
+      error(cause instanceof Error ? cause.message : 'Could not download the attachment.');
+    } finally {
+      setDownloading(false);
+    }
+  }
+
   return (
     <li className="flex items-center justify-between gap-3 rounded-xl border border-line bg-surface p-2">
       <div className="min-w-0">
@@ -612,6 +740,18 @@ function AttachmentRow({ att }: { att: RequestAttachment }) {
           <Icon name="download" className="h-4 w-4" />
           Download
         </a>
+      )}
+      {!att.dataUrl && att.storagePath && (
+        <button
+          type="button"
+          className="btn-ghost btn-sm min-h-11"
+          aria-label={`Download ${att.filename}`}
+          disabled={downloading}
+          onClick={downloadLiveAttachment}
+        >
+          <Icon name="download" className="h-4 w-4" />
+          {downloading ? 'Preparing...' : 'Download'}
+        </button>
       )}
     </li>
   );

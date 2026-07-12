@@ -14,16 +14,21 @@ const ALL_ROLES: Role[] = [
   'marketing',
   'procurement',
   'pricing',
+  'warehouse_admin',
 ];
+
+const FIRST_RENDER_TIMEOUT = 10_000;
 
 describe('DashboardPage', () => {
   it('shows the active role and its KPIs (BI analyst)', async () => {
     renderWithProviders(<DashboardPage />, { role: 'bi_analyst' });
-    expect(await screen.findByText('BI Analyst')).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'BI Analyst' }),
+    ).toBeInTheDocument();
     expect(screen.getByText('Active SKUs')).toBeInTheDocument();
     expect(screen.getByText('Inventory Value')).toBeInTheDocument();
     expect(screen.getByText('Device return rate')).toBeInTheDocument();
-  });
+  }, FIRST_RENDER_TIMEOUT);
 
   it('renders analytics panels for the BI analyst', async () => {
     renderWithProviders(<DashboardPage />, { role: 'bi_analyst' });
@@ -83,23 +88,38 @@ describe('DashboardPage', () => {
     expect(screen.getByRole('heading', { name: /pending reservations/i })).toBeInTheDocument();
   });
 
+  it('gives the Warehouse Administrator an operational control overview', async () => {
+    renderWithProviders(<DashboardPage />, { role: 'warehouse_admin' });
+    expect(
+      await screen.findByRole('heading', { name: 'Warehouse Administrator' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/low-stock alerts/i)).toBeInTheDocument();
+    expect(screen.getByText(/reconciliation/i)).toBeInTheDocument();
+  });
+
   it('lists low-stock items for logistics', async () => {
     renderWithProviders(<DashboardPage />, { role: 'logistics_supervisor' });
     expect(await screen.findByText(/low-stock alerts/i)).toBeInTheDocument();
     expect(screen.getAllByText(/left$/i).length).toBeGreaterThan(0);
   });
 
-  it('renders an overview and interactive panels for every role', async () => {
-    for (const role of ALL_ROLES) {
-      const { unmount } = renderWithProviders(<DashboardPage />, { role });
-      expect(await screen.findByRole('heading', { name: /overview$/i })).toBeInTheDocument();
-      const buttons = screen
-        .getAllByRole('button')
-        .filter((b) => !/export data/i.test(b.textContent ?? ''));
-      buttons.forEach((b) => fireEvent.click(b));
-      unmount();
-    }
-  });
+  it(
+    'renders an overview and interactive panels for every role',
+    async () => {
+      for (const role of ALL_ROLES) {
+        const { unmount } = renderWithProviders(<DashboardPage />, { role });
+        expect(await screen.findByRole('heading', { name: /overview$/i })).toBeInTheDocument();
+        const buttons = screen
+          .getAllByRole('button')
+          .filter((b) => !/export data/i.test(b.textContent ?? ''));
+        buttons.forEach((b) => fireEvent.click(b));
+        unmount();
+      }
+    },
+    // Renders every role against the full 90-day seed history — needs more
+    // headroom than the 5s default.
+    15_000,
+  );
 
   it('has no accessibility violations', async () => {
     const { container } = renderWithProviders(<DashboardPage />, { role: 'bi_analyst' });

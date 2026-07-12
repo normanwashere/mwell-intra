@@ -1,5 +1,5 @@
 import { Route, Routes, useNavigate } from 'react-router-dom';
-import { Suspense, lazy, useEffect } from 'react';
+import { Suspense, lazy, useEffect, useRef } from 'react';
 import { AppShell } from '@/components/AppShell';
 import { useWarehouse } from './store';
 import { can, type Capability } from '@/auth/roles';
@@ -64,6 +64,30 @@ const EventDetailPage = lazy(() =>
 const DataPage = lazy(() =>
   import('@/pages/DataPage').then((m) => ({ default: m.DataPage })),
 );
+const ScanPage = lazy(() =>
+  import('@/pages/ScanPage').then((m) => ({ default: m.ScanPage })),
+);
+const TasksPage = lazy(() =>
+  import('@/pages/TasksPage').then((m) => ({ default: m.TasksPage })),
+);
+const QualityPage = lazy(() =>
+  import('@/pages/QualityPage').then((m) => ({ default: m.QualityPage })),
+);
+const ApprovalsPage = lazy(() =>
+  import('@/pages/ApprovalsPage').then((m) => ({ default: m.ApprovalsPage })),
+);
+const ExceptionsPage = lazy(() =>
+  import('@/pages/ExceptionsPage').then((m) => ({ default: m.ExceptionsPage })),
+);
+const ImportsPage = lazy(() =>
+  import('@/pages/ImportsPage').then((m) => ({ default: m.ImportsPage })),
+);
+const ReportsPage = lazy(() =>
+  import('@/pages/ReportsPage').then((m) => ({ default: m.ReportsPage })),
+);
+const OperationRoutesPage = lazy(() =>
+  import('@/pages/OperationRoutesPage').then((m) => ({ default: m.OperationRoutesPage })),
+);
 
 function AccessDenied() {
   const navigate = useNavigate();
@@ -90,9 +114,13 @@ function Guard({
 }) {
   const { role } = useWarehouse();
   const toast = useToast();
+  const toasted = useRef(false);
   const allowed = anyOf.some((c) => can(role, c));
   useEffect(() => {
-    if (!allowed) toast.toast('That tool is not available for your role.', 'info');
+    if (!allowed && !toasted.current) {
+      toasted.current = true;
+      toast.toast('That tool is not available for your role.', 'info');
+    }
   }, [allowed, toast]);
   // Render an explicit, friendly access-denied page rather than silently
   // redirecting (a blank flash) — the user always gets clear feedback.
@@ -152,7 +180,13 @@ export function App() {
     <AppShell>
       <Suspense
         fallback={
-          <div className="space-y-6">
+          <div
+            className="space-y-6"
+            role="status"
+            aria-live="polite"
+            aria-label="Loading warehouse page"
+            aria-busy="true"
+          >
             <Skeleton className="h-28 rounded-3xl sm:h-32" />
             <SkeletonStats />
             <SkeletonList rows={5} />
@@ -163,6 +197,49 @@ export function App() {
         <Route path="/" element={<DashboardPage />} />
         <Route path="/inventory" element={<InventoryPage />} />
         <Route path="/inventory/:id" element={<ProductDetailPage />} />
+        <Route
+          path="/scan"
+          element={
+            <Guard anyOf={['receive_stock', 'issue_items', 'manage_returns', 'cycle_count', 'transfer_stock']}>
+              <ScanPage />
+            </Guard>
+          }
+        />
+        <Route
+          path="/tasks"
+          element={
+            <Guard anyOf={['inspect_quality', 'view_exceptions', 'cycle_count']}>
+              <TasksPage />
+            </Guard>
+          }
+        />
+        <Route
+          path="/quality"
+          element={
+            <Guard anyOf={['inspect_quality', 'release_quality_hold']}>
+              <QualityPage />
+            </Guard>
+          }
+        />
+        <Route
+          path="/approvals"
+          element={
+            <Guard anyOf={['approve_stock_adjustment']}>
+              <ApprovalsPage />
+            </Guard>
+          }
+        />
+        <Route
+          path="/exceptions"
+          element={
+            <Guard anyOf={['view_exceptions']}>
+              <ExceptionsPage />
+            </Guard>
+          }
+        />
+        <Route path="/imports" element={<Guard anyOf={['import_warehouse_data']}><ImportsPage /></Guard>} />
+        <Route path="/reports" element={<Guard anyOf={['view_analytics', 'view_finance']}><ReportsPage /></Guard>} />
+        <Route path="/operation-routes" element={<Guard anyOf={['manage_operation_routes']}><OperationRoutesPage /></Guard>} />
         <Route
           path="/receiving"
           element={

@@ -28,16 +28,19 @@ import {
 } from '@/components/ui';
 import { Icon } from '@/components/Icon';
 import { ProductThumb } from '@/components/ProductThumb';
+import { ExpiryBadge } from '@/components/ExpiryStatus';
 import { EvidenceGallery } from '@/components/EvidenceGallery';
 import { PriceEditorSheet } from '@/components/PriceEditorSheet';
 import { ProductEditorSheet } from '@/components/ProductEditorSheet';
 import { can } from '@/auth/roles';
+import { WarehouseScanFlow } from '@/components/camera/WarehouseScanFlow';
 
 const UNIT_TONE: Record<UnitStatus, Tone> = {
   in_stock: 'emerald',
   allocated: 'amber',
   issued: 'brand',
   returned: 'slate',
+  vendor_return: 'rose',
   lost: 'rose',
 };
 
@@ -60,6 +63,7 @@ export function ProductDetailPage() {
   const [toBin, setToBin] = useState('');
   const [qty, setQty] = useState(1);
   const [tErr, setTErr] = useState<string | null>(null);
+  const [transferSerials, setTransferSerials] = useState<string[]>([]);
   const [timelineSerial, setTimelineSerial] = useState<string | null>(null);
   const [unitQuery, setUnitQuery] = useState('');
   const [priceOpen, setPriceOpen] = useState(false);
@@ -191,6 +195,7 @@ export function ProductDetailPage() {
     setToLoc('');
     setToBin('');
     setQty(1);
+    setTransferSerials([]);
     setTErr(null);
     setTransferOpen(true);
   };
@@ -259,6 +264,7 @@ export function ProductDetailPage() {
       fromBinId: fromBin || undefined,
       toBinId: toBin || undefined,
       quantity: qty,
+      serialNumbers: product.serialized ? transferSerials : undefined,
     });
     if (!ok) return;
     toast.success(`Transferred ${qty}× to ${locationName(toLoc)}`);
@@ -280,43 +286,48 @@ export function ProductDetailPage() {
       </button>
 
       {/* Header */}
-      <div className="overflow-hidden rounded-3xl bg-brand-grad p-5 text-white shadow-navy">
-        <div className="flex items-start justify-between gap-3">
+      <div className="hero-surface relative overflow-hidden rounded-3xl p-5 sm:p-6">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-y-0 left-0 w-1 rounded-l-3xl bg-gradient-to-b from-brand-500 to-brand-700"
+        />
+        <div className="relative flex items-start justify-between gap-3 pl-2">
           <div className="flex min-w-0 items-start gap-3">
-            <ProductThumb product={product} size="lg" className="ring-white/20" />
+            <ProductThumb product={product} size="lg" />
           <div className="min-w-0">
-            <h1 className="text-xl font-extrabold sm:text-2xl">{product.name}</h1>
-            <p className="font-mono text-sm text-brand-100/80">{product.sku}</p>
+            <h1 className="font-display text-xl font-extrabold text-ink sm:text-2xl">{product.name}</h1>
+            <p className="font-mono text-sm text-muted">{product.sku}</p>
             <div className="mt-2 flex flex-wrap gap-1.5">
-              <span className="chip bg-white/15 text-white">
+              <span className="chip bg-brand-500/10 text-brand-700 dark:text-brand-300">
                 {statusLabel(product.category)}
               </span>
               {product.serialized && (
-                <span className="chip bg-white/15 text-white">Serialized</span>
+                <span className="chip bg-inset text-muted">Serialized</span>
               )}
               {Object.entries(product.attributes).map(([k, v]) => (
-                <span key={k} className="chip bg-white/15 text-white">
+                <span key={k} className="chip bg-inset text-muted">
                   {k}: {v}
                 </span>
               ))}
               {product.promotional && (
-                <span className="chip bg-amber-300/90 text-amber-900">Promo</span>
+                <span className="chip bg-amber-500/15 text-amber-800 dark:text-amber-300">Promo</span>
               )}
+              <ExpiryBadge product={product} lots={data.lots} />
             </div>
           </div>
           </div>
           <div className="text-right">
-            <p className="text-3xl font-extrabold">{available}</p>
-            <p className="text-xs text-brand-100/80">available</p>
+            <p className="tnum font-display text-3xl font-extrabold text-ink">{available}</p>
+            <p className="text-xs text-faint">available</p>
           </div>
         </div>
-        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+        <div className="relative mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 pl-2">
           {canViewFinancials && (
-            <span className="text-sm text-brand-100/80">
+            <span className="text-sm text-muted">
               Landed {money(product.unitCost)}
             </span>
           )}
-          <span className="text-sm text-brand-100/80">
+          <span className="text-sm text-muted">
             Price {product.price != null ? money(product.price) : '—'}
           </span>
           <div className="flex w-full flex-col gap-2 sm:ml-auto sm:w-auto sm:flex-row sm:items-center">
@@ -615,7 +626,12 @@ export function ProductDetailPage() {
         title="Transfer stock"
         description={`Move ${product.name} between sites.`}
         footer={
-          <button type="button" className="btn-primary w-full" onClick={() => void submitTransfer()}>
+          <button
+            type="button"
+            className="btn-primary w-full"
+            disabled={product.serialized && transferSerials.length === 0}
+            onClick={() => void submitTransfer()}
+          >
             Confirm transfer
           </button>
         }
@@ -629,6 +645,8 @@ export function ProductDetailPage() {
               onChange={(e) => {
                 setFromLoc(e.target.value);
                 setFromBin(topBinAt(e.target.value));
+                setTransferSerials([]);
+                setQty(1);
               }}
             >
               {data.locations
@@ -646,7 +664,11 @@ export function ProductDetailPage() {
                 id="tr-from-bin"
                 className="input"
                 value={fromBin}
-                onChange={(e) => setFromBin(e.target.value)}
+                onChange={(e) => {
+                  setFromBin(e.target.value);
+                  setTransferSerials([]);
+                  setQty(1);
+                }}
               >
                 <option value="">General area (unassigned)</option>
                 {binsAt(fromLoc).map((b) => (
@@ -694,15 +716,35 @@ export function ProductDetailPage() {
               </select>
             </Field>
           )}
-          <Field label="Quantity" htmlFor="tr-qty">
-            <QuantityStepper
-              id="tr-qty"
-              aria-label="Transfer quantity"
-              value={qty}
-              onChange={setQty}
-              min={1}
-            />
-          </Field>
+          {product.serialized ? (
+            <Field label="Serialized units" hint={`${transferSerials.length} selected`}>
+              <WarehouseScanFlow
+                key={`${fromLoc}:${fromBin || 'general'}`}
+                data={data}
+                context="transfer"
+                expectedProductId={product.id}
+                expectedLocationId={fromLoc}
+                expectedBinId={fromBin || null}
+                scannedCodes={transferSerials}
+                label="Scan transfer serial"
+                onResolved={(resolution) => {
+                  if (!resolution.serialNumber) return;
+                  setTransferSerials((current) => [...current, resolution.serialNumber!]);
+                  setQty((current) => current + (transferSerials.length === 0 ? 0 : 1));
+                }}
+              />
+            </Field>
+          ) : (
+            <Field label="Quantity" htmlFor="tr-qty">
+              <QuantityStepper
+                id="tr-qty"
+                aria-label="Transfer quantity"
+                value={qty}
+                onChange={setQty}
+                min={1}
+              />
+            </Field>
+          )}
           {tErr && (
             <p role="alert" className="text-sm text-rose-600 dark:text-rose-300">
               {tErr}

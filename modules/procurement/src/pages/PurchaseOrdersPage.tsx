@@ -7,19 +7,25 @@ import {
   DataTable,
   EmptyState,
   HeroChipButton,
+  Icon,
   InfoTip,
   ModuleHero,
   SectionTitle,
   StatCard,
+  StaggerGrid,
+  StaggerItem,
   money,
+  useToast,
   type Column,
   type IconName,
   type Tone,
 } from '@intra/ui';
-import { useSession } from '@intra/auth';
+import { useCan, useSession } from '@intra/auth';
 import type { PurchaseOrder, PurchaseOrderStatus } from '../types';
 import { usePurchaseOrders } from '../localStore';
+import { downloadCsv, purchaseOrdersToCsv } from '../export';
 import { formatDate, poStatusLabel } from '../labels';
+import { ProcurementAccessDenied } from '../components/ProcurementAccessDenied';
 
 const PO_TONE: Record<PurchaseOrderStatus, 'slate' | 'cyan' | 'amber' | 'emerald' | 'rose'> = {
   draft: 'slate',
@@ -36,6 +42,8 @@ const columns: Column<PurchaseOrder>[] = [
     key: 'poNumber',
     header: 'PO #',
     primary: true,
+    sortable: true,
+    sortValue: (r) => r.poNumber,
     render: (r) => (
       <span className="font-semibold text-ink">
         {r.poNumber}
@@ -52,6 +60,8 @@ const columns: Column<PurchaseOrder>[] = [
   {
     key: 'total',
     header: 'Total',
+    sortable: true,
+    sortValue: (r) => r.total,
     render: (r) => money(r.total),
   },
   {
@@ -62,6 +72,8 @@ const columns: Column<PurchaseOrder>[] = [
   {
     key: 'updatedAt',
     header: 'Updated',
+    sortable: true,
+    sortValue: (r) => r.updatedAt,
     render: (r) => formatDate(r.updatedAt),
   },
 ];
@@ -77,9 +89,24 @@ const PO_FILTER_LABEL: Record<PoFilter, string> = {
 export function PurchaseOrdersPage() {
   const { rows, loading } = usePurchaseOrders();
   const { profile } = useSession();
+  const { success } = useToast();
+  const canAuthorPo = useCan('procurement', 'author_po');
+  const canApproveAward = useCan('procurement', 'approve_award');
+  const canViewFinance = useCan('procurement', 'view_finance');
+  const canAdmin = useCan('procurement', 'admin');
+  const canViewPurchaseOrders =
+    canAuthorPo || canApproveAward || canViewFinance || canAdmin;
   const firstName = profile?.name?.split(/\s+/)[0] ?? 'Procurement';
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
+
+  const exportCsv = () => {
+    downloadCsv(
+      `purchase-orders-${new Date().toISOString().slice(0, 10)}.csv`,
+      purchaseOrdersToCsv(rows),
+    );
+    success('Purchase orders exported for Finance');
+  };
   const filter = (params.get('filter') as PoFilter) ?? 'all';
 
   const kpis = useMemo(() => {
@@ -109,6 +136,15 @@ export function PurchaseOrdersPage() {
     setParams(params, { replace: false });
   };
 
+  if (!canViewPurchaseOrders) {
+    return (
+      <ProcurementAccessDenied
+        title="No purchase order access"
+        message="Your procurement role can raise requests, but purchase orders and Finance exports are restricted."
+      />
+    );
+  }
+
   // One KPI surface (PR-1 treatment): StatCards are the counts AND the
   // filters; hero carries no numbers; the count-tabs row is gone.
   const filterCards: Array<{
@@ -132,18 +168,18 @@ export function PurchaseOrdersPage() {
         title={firstName}
         description="Author, approve, and issue POs to accredited vendors."
         icon="cart"
-        action={
+        action={canAuthorPo ? (
           <HeroChipButton href="/procurement/?filter=approved" icon="arrowRight">
             Author from approved request
           </HeroChipButton>
-        }
+        ) : undefined}
       />
 
-      <div className="stagger grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <StaggerGrid className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {filterCards.map((c) => {
           const active = filter === c.key;
           return (
-            <div
+            <StaggerItem
               key={c.key}
               className={
                 active
@@ -159,10 +195,10 @@ export function PurchaseOrdersPage() {
                 hint={active ? 'Showing below' : c.hint}
                 onClick={() => applyFilter(c.key)}
               />
-            </div>
+            </StaggerItem>
           );
         })}
-      </div>
+      </StaggerGrid>
 
       <div>
         <SectionTitle
@@ -175,10 +211,17 @@ export function PurchaseOrdersPage() {
               : `Filtered to ${PO_FILTER_LABEL[filter]} — tap a card above to change scope.`
           }
           action={
-            <InfoTip
-              label="About purchase orders"
-              content="POs are authored from approved requests. Awards are gated on vendor accreditation; the warehouse receives against issued POs."
-            />
+            <div className="flex items-center gap-2">
+              {rows.length > 0 && (
+                <button type="button" className="btn-ghost btn-sm" onClick={exportCsv}>
+                  <Icon name="download" className="h-4 w-4" /> Export CSV
+                </button>
+              )}
+              <InfoTip
+                label="About purchase orders"
+                content="POs are authored from approved requests. Awards are gated on vendor accreditation; the warehouse receives against issued POs. Export hands the PO extract to Finance (CSV MVP boundary)."
+              />
+            </div>
           }
         />
 

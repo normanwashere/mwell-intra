@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import { buildRoleCapabilityMatrixFromRbac } from './createCoreRepository';
 import { InMemoryCoreRepository } from './inMemoryCoreRepository';
-import type { CoreActor } from './types';
+import type { AccreditationStatus, CoreActor } from './types';
 
 const matrix = buildRoleCapabilityMatrixFromRbac();
 
@@ -91,14 +91,17 @@ describe('InMemoryCoreRepository — vendors', () => {
     expect(updated.accreditationStatus).toBe('approved');
     const log = await repo.getActivityLog({ module: 'legal', entityType: 'vendor' });
     expect(log[0]?.action).toBe('status_changed');
-    expect((log[0]?.detail as any).to).toBe('approved');
+    expect((log[0]?.detail as { to?: string } | undefined)?.to).toBe('approved');
   });
 
   it('rejects invalid accreditation status', async () => {
     const repo = makeRepo(makeAdmin());
     const v = await repo.upsertVendor({ legalName: 'X' });
     await expect(
-      repo.setAccreditationStatus({ vendorId: v.id, accreditationStatus: 'bogus' as any }),
+      repo.setAccreditationStatus({
+        vendorId: v.id,
+        accreditationStatus: 'bogus' as unknown as AccreditationStatus,
+      }),
     ).rejects.toThrow(/Invalid accreditation_status/);
   });
 
@@ -186,7 +189,10 @@ describe('InMemoryCoreRepository — approvals', () => {
       approverRole: 'approver',
     });
     await expect(
-      repo.recordApprovalDecision({ approvalId: a.id, decision: 'maybe' as any }),
+      repo.recordApprovalDecision({
+        approvalId: a.id,
+        decision: 'maybe' as unknown as 'approved',
+      }),
     ).rejects.toThrow(/approved or rejected/);
   });
 

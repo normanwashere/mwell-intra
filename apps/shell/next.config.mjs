@@ -4,6 +4,21 @@ import { withSerwist } from '@serwist/turbopack';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const warehouseSrc = path.join(__dirname, '../../modules/warehouse/src');
+const isDev = process.env.NODE_ENV !== 'production';
+const contentSecurityPolicy = [
+  "default-src 'self'",
+  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''}`,
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob: https:",
+  "font-src 'self' data:",
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
+  "worker-src 'self' blob:",
+  "manifest-src 'self'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+  "object-src 'none'",
+].join('; ');
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -21,6 +36,7 @@ const nextConfig = {
     '@intra/legal',
   ],
   turbopack: {
+    root: path.join(__dirname, '../..'),
     // Warehouse module keeps Vite-era `@/*` → `src/*`; the shell resolves it
     // to the warehouse `src` so the ported code compiles unmodified. `@warehouse`
     // is the explicit alias future callers / other modules should prefer so a
@@ -31,6 +47,25 @@ const nextConfig = {
       '@': warehouseSrc,
       '@warehouse': warehouseSrc,
     },
+  },
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          { key: 'Content-Security-Policy', value: contentSecurityPolicy },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'X-Frame-Options', value: 'DENY' },
+          { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
+          { key: 'Permissions-Policy', value: 'camera=(self), geolocation=(), microphone=()' },
+          {
+            key: 'Strict-Transport-Security',
+            value: 'max-age=63072000; includeSubDomains; preload',
+          },
+        ],
+      },
+    ];
   },
 };
 

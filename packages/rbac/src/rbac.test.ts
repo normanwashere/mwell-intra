@@ -13,7 +13,7 @@ import {
 } from './index';
 
 describe('warehouse parity vs source roles.ts', () => {
-  it('has the 8 source roles', () => {
+  it('has the 8 source roles plus Warehouse Administrator', () => {
     expect(Object.keys(warehouseModule.roles).sort()).toEqual(
       [
         'bi_analyst',
@@ -24,12 +24,13 @@ describe('warehouse parity vs source roles.ts', () => {
         'operations',
         'pricing',
         'procurement',
+        'warehouse_admin',
       ].sort(),
     );
   });
 
-  it('has the 15 source capabilities', () => {
-    expect(warehouseModule.capabilities).toHaveLength(15);
+  it('has the 15 source capabilities plus W1 controls', () => {
+    expect(warehouseModule.capabilities).toHaveLength(22);
     expect([...warehouseModule.capabilities].sort()).toEqual(
       [
         'view_dashboard',
@@ -47,6 +48,13 @@ describe('warehouse parity vs source roles.ts', () => {
         'view_procurement',
         'view_pricing',
         'set_pricing',
+        'manage_operation_routes',
+        'inspect_quality',
+        'release_quality_hold',
+        'approve_stock_adjustment',
+        'view_exceptions',
+        'resolve_exceptions',
+        'import_warehouse_data',
       ].sort(),
     );
   });
@@ -63,6 +71,13 @@ describe('warehouse parity vs source roles.ts', () => {
       'manage_returns',
       'issue_items',
       'transfer_stock',
+      'manage_operation_routes',
+      'inspect_quality',
+      'release_quality_hold',
+      'approve_stock_adjustment',
+      'view_exceptions',
+      'resolve_exceptions',
+      'import_warehouse_data',
     ],
     operations: [
       'view_dashboard',
@@ -71,9 +86,23 @@ describe('warehouse parity vs source roles.ts', () => {
       'issue_items',
       'manage_returns',
       'transfer_stock',
+      'inspect_quality',
+      'view_exceptions',
     ],
-    finance: ['view_dashboard', 'manage_inventory', 'view_finance', 'cycle_count'],
-    bi_analyst: ['view_dashboard', 'manage_inventory', 'view_analytics'],
+    finance: [
+      'view_dashboard',
+      'manage_inventory',
+      'view_finance',
+      'cycle_count',
+      'approve_stock_adjustment',
+      'view_exceptions',
+    ],
+    bi_analyst: [
+      'view_dashboard',
+      'manage_inventory',
+      'view_analytics',
+      'view_exceptions',
+    ],
     business_unit: ['view_dashboard', 'manage_inventory', 'reserve_allocate'],
     marketing: [
       'view_dashboard',
@@ -94,6 +123,7 @@ describe('warehouse parity vs source roles.ts', () => {
       'set_pricing',
       'view_finance',
     ],
+    warehouse_admin: [...warehouseModule.capabilities],
   };
 
   it.each(Object.entries(EXPECTED))(
@@ -103,7 +133,9 @@ describe('warehouse parity vs source roles.ts', () => {
         ([name]) => name === role,
       )?.[1];
       expect(roleDef).toBeDefined();
-      expect([...(roleDef?.capabilities ?? [])].sort()).toEqual([...caps].sort());
+      expect([...(roleDef?.capabilities ?? [])].sort()).toEqual(
+        [...caps].sort(),
+      );
     },
   );
 });
@@ -182,18 +214,32 @@ describe('hasCapInModule()', () => {
   });
 
   it('external vendor tier lives in core:vendor_portal (reconciled 2026-07-05)', () => {
-    expect(hasCapInModule('core', 'vendor_portal', 'submit_documents')).toBe(true);
-    expect(hasCapInModule('core', 'vendor_portal', 'submit_accreditation')).toBe(true);
-    expect(hasCapInModule('core', 'vendor_portal', 'view_own_accreditation')).toBe(true);
+    expect(hasCapInModule('core', 'vendor_portal', 'submit_documents')).toBe(
+      true,
+    );
+    expect(
+      hasCapInModule('core', 'vendor_portal', 'submit_accreditation'),
+    ).toBe(true);
+    expect(
+      hasCapInModule('core', 'vendor_portal', 'view_own_accreditation'),
+    ).toBe(true);
     // Retired: legal:vendor no longer exists.
-    expect(hasCapInModule('legal', 'vendor', 'approve_accreditation')).toBe(false);
+    expect(hasCapInModule('legal', 'vendor', 'approve_accreditation')).toBe(
+      false,
+    );
   });
 });
 
 describe('provisional procurement/legal/core matrices', () => {
   it('exposes the chosen procurement roles', () => {
     expect(listModuleRoles('procurement').sort()).toEqual(
-      ['admin', 'approver', 'finance', 'procurement_officer', 'requester'].sort(),
+      [
+        'admin',
+        'approver',
+        'finance',
+        'procurement_officer',
+        'requester',
+      ].sort(),
     );
     expect(MODULES.procurement.provisional).toBe(true);
   });
@@ -258,5 +304,24 @@ describe('toRoleCapabilityRows() — DB seed shape', () => {
       role: 'logistics_supervisor',
       cap: 'receive_stock',
     });
+  });
+});
+
+describe('department DOA administration', () => {
+  it('grants DOA configuration only to Legal Admin', () => {
+    expect(can({ legal: ['admin'] }, 'legal', 'manage_doa')).toBe(true);
+    expect(can({ legal: ['legal_reviewer'] }, 'legal', 'manage_doa')).toBe(
+      false,
+    );
+    expect(can({ legal: ['compliance'] }, 'legal', 'manage_doa')).toBe(false);
+  });
+
+  it('does not turn DOA configuration into procurement approval authority', () => {
+    expect(can({ legal: ['admin'] }, 'procurement', 'approve_request')).toBe(
+      false,
+    );
+    expect(
+      can({ core: ['platform_admin'] }, 'procurement', 'approve_request'),
+    ).toBe(false);
   });
 });

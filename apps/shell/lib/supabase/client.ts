@@ -3,9 +3,39 @@
 // one session. Schema is pinned per-call (`core` for shell-level reads; modules
 // pass their own domain schema later).
 
-import { createBrowserClient } from '@supabase/ssr';
-import type { SupabaseClient } from '@supabase/supabase-js';
-import { DEFAULT_SCHEMA, SUPABASE_ANON_KEY, SUPABASE_URL } from './env';
+import { createBrowserClient } from "@supabase/ssr";
+import {
+  DEFAULT_SCHEMA,
+  SUPABASE_ANON_KEY,
+  SUPABASE_URL,
+  forceMemoryMode,
+} from "./env";
+import type { ShellDatabase, ShellSupabaseClient } from "./types";
+
+const NETWORK_ERROR_RESPONSE = JSON.stringify({
+  message:
+    "Network request failed. Please check your connection and try again.",
+  error: "network_error",
+});
+
+async function supabaseFetch(
+  input: Parameters<typeof fetch>[0],
+  init?: Parameters<typeof fetch>[1],
+): Promise<Response> {
+  try {
+    return await fetch(input, init);
+  } catch (error) {
+    const name = error instanceof Error ? error.name : "";
+    if (name === "AbortError" || error instanceof TypeError) {
+      return new Response(NETWORK_ERROR_RESPONSE, {
+        status: 503,
+        statusText: "Supabase network unavailable",
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    throw error;
+  }
+}
 
 /**
  * Construct the browser Supabase client. Returns `null` when the public env is
@@ -14,9 +44,19 @@ import { DEFAULT_SCHEMA, SUPABASE_ANON_KEY, SUPABASE_URL } from './env';
  */
 export function createSupabaseBrowserClient(
   schema: string = DEFAULT_SCHEMA,
-): SupabaseClient<any, string> | null {
+): ShellSupabaseClient | null {
+  if (forceMemoryMode()) return null;
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
-  return createBrowserClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    db: { schema },
-  });
+  return createBrowserClient<ShellDatabase, string>(
+    SUPABASE_URL,
+    SUPABASE_ANON_KEY,
+    {
+      // Schema-scoped clients must not reuse the first browser singleton. Reuse
+      // silently preserves its Accept-Profile header (usually `core`) for later
+      // procurement, legal, and warehouse clients.
+      isSingleton: false,
+      db: { schema },
+      global: { fetch: supabaseFetch },
+    },
+  );
 }

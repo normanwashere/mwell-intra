@@ -4,3 +4,4 @@
 
 export { ProcurementApp } from './ProcurementApp';
 export type { ProcurementAppProps } from './ProcurementApp';
+export { ensureProcurementSeed } from './localStore';

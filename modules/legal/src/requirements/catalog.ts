@@ -23,13 +23,11 @@
 
 import type {
   InstrumentCode,
-  Jurisdiction,
   RequirementDefinition,
   SpendBand,
 } from '../types';
-
-// Small helper so lines below stay compact.
-const ALL_JUR: readonly (Jurisdiction | '*')[] = ['*'];
+import { VENDOR_ACCREDITATION_V2025 } from './vendorAccreditationV2025';
+import { TECHNOLOGY_MNDA_TEMPLATE_VERSION } from './instruments';
 
 // ---------------------------------------------------------------------------
 // PH — Statutory registration
@@ -463,6 +461,26 @@ const PH_REGULATORY: readonly RequirementDefinition[] = [
     requiresPersonalData: true,
     tags: ['data-privacy'],
   },
+  {
+    code: 'PH_PRIVACY_IMPACT_ASSESSMENT',
+    label: 'Privacy Impact Assessment / Data Privacy Compliance Pack',
+    description:
+      'Privacy Impact Assessment or equivalent Data Privacy Act compliance evidence for the services in scope.',
+    whyWeNeedIt:
+      'The mWell accreditation form requires privacy-impact and Data Privacy Act evidence when the vendor handles personal data.',
+    authority: 'NPC',
+    helpUrl: 'https://www.privacy.gov.ph/',
+    jurisdictions: ['PH'],
+    entityTypes: ['*'],
+    categories: ['*'],
+    riskTiers: ['*'],
+    required: true,
+    evidenceFormat: 'pdf',
+    group: 'regulatory',
+    instrument: false,
+    requiresPersonalData: true,
+    tags: ['data-privacy'],
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -471,8 +489,8 @@ const PH_REGULATORY: readonly RequirementDefinition[] = [
 const PH_FINANCIAL: readonly RequirementDefinition[] = [
   {
     code: 'PH_AFS',
-    label: 'Audited Financial Statements (latest 2 years)',
-    description: 'Audited Financial Statements for the two most recent fiscal years.',
+    label: 'Audited Financial Statements (latest 3 years)',
+    description: 'Audited Financial Statements for the three most recent fiscal years.',
     whyWeNeedIt: 'Baseline solvency / going-concern check before we engage on any material contract.',
     authority: 'Vendor',
     jurisdictions: ['PH'],
@@ -576,15 +594,34 @@ const PH_GOVERNANCE: readonly RequirementDefinition[] = [
   },
   {
     code: 'PH_COMPANY_PROFILE',
-    label: 'Company Profile / Brochure / Client List',
-    description: 'Company profile, product brochures, and a reference client list.',
-    whyWeNeedIt: 'Diligence context on the vendor\u2019s track record and the goods / services they actually deliver.',
+    label: 'Company Profile, Portfolio and Client References',
+    description:
+      'Company profile, product or service portfolio, and current / past client references with contact details.',
+    whyWeNeedIt:
+      'The mWell accreditation form requires a profile and client history so reviewers can validate operating track record and delivered scope.',
     authority: 'Vendor',
     jurisdictions: ['*'],
     entityTypes: ['*'],
     categories: ['*'],
     riskTiers: ['*'],
-    required: false,
+    required: true,
+    evidenceFormat: 'any',
+    group: 'governance',
+    instrument: false,
+  },
+  {
+    code: 'PH_MANPOWER_EXPERIENCE',
+    label: 'Manpower, Expertise and Completed Projects',
+    description:
+      'Headcount by expertise, key qualifications or certifications, and completed projects relevant to the proposed services.',
+    whyWeNeedIt:
+      'The accreditation form asks service providers to disclose manpower, specialist expertise, and completed projects before mWell awards work.',
+    authority: 'Vendor',
+    jurisdictions: ['PH'],
+    entityTypes: ['*'],
+    categories: ['services', 'manpower', 'consulting', 'it_software', 'marketing', 'logistics'],
+    riskTiers: ['*'],
+    required: true,
     evidenceFormat: 'any',
     group: 'governance',
     instrument: false,
@@ -673,6 +710,24 @@ const QUALITY: readonly RequirementDefinition[] = [
     required: true,
     renewsAfterMonths: 36,
     evidenceFormat: 'pdf',
+    group: 'quality',
+    instrument: false,
+    tags: ['infosec'],
+  },
+  {
+    code: 'CYBERSECURITY_POLICIES',
+    label: 'Cybersecurity Policies and Secure SDLC Evidence',
+    description:
+      'Cybersecurity policy set, access-control standard, incident-response procedure, and secure SDLC or QA security controls.',
+    whyWeNeedIt:
+      'The accreditation form asks technology providers for cybersecurity policies where applicable; this supports production-readiness review before system access.',
+    authority: 'Vendor',
+    jurisdictions: ['*'],
+    entityTypes: ['*'],
+    categories: ['it_software', 'subscription', 'consulting'],
+    riskTiers: ['*'],
+    required: true,
+    evidenceFormat: 'any',
     group: 'quality',
     instrument: false,
     tags: ['infosec'],
@@ -1252,7 +1307,7 @@ const INSTRUMENT_ROWS: readonly RequirementDefinition[] = [
     group: 'legal_instruments',
     instrument: true,
     instrumentCode: 'SIGN_NDA',
-    templateVersion: 'nda-v1',
+    templateVersion: TECHNOLOGY_MNDA_TEMPLATE_VERSION,
   },
   {
     code: 'SIGN_DPA_PH',
@@ -1382,6 +1437,25 @@ const INSTRUMENT_ROWS: readonly RequirementDefinition[] = [
 // ---------------------------------------------------------------------------
 // Aggregate export
 // ---------------------------------------------------------------------------
+const V2025_CATALOG_CODES = new Set([
+  'PH_SEC_REG',
+  'PH_DTI_REG',
+  'PH_ARTICLES_INC',
+  'PH_BYLAWS',
+  'PH_GIS',
+  'PH_BIR_2303',
+  'PH_SAMPLE_INVOICE',
+  'PH_MAYORS_PERMIT',
+  'PH_PRIVACY_IMPACT_ASSESSMENT',
+  'PH_AFS',
+  'PH_BANK_CERT',
+  'PH_SEC_CERT',
+  'PH_COMPANY_PROFILE',
+  'PH_MANPOWER_EXPERIENCE',
+  'CYBERSECURITY_POLICIES',
+  'SIGN_NDA',
+]);
+
 export const REQUIREMENT_CATALOG: readonly RequirementDefinition[] = Object.freeze([
   ...PH_STATUTORY,
   ...PH_TAX,
@@ -1396,7 +1470,11 @@ export const REQUIREMENT_CATALOG: readonly RequirementDefinition[] = Object.free
   ...INTL_ROWS,
   ...OWNERSHIP_ROWS,
   ...INSTRUMENT_ROWS,
-] as readonly RequirementDefinition[]);
+].map((definition) =>
+  V2025_CATALOG_CODES.has(definition.code)
+    ? { ...definition, policySource: VENDOR_ACCREDITATION_V2025 }
+    : definition,
+) as readonly RequirementDefinition[]);
 
 /** O(1) lookup by catalog code. */
 export const CATALOG_BY_CODE: Readonly<Record<string, RequirementDefinition>> =

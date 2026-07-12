@@ -13,9 +13,11 @@ import {
   checklistItemFromDefinition,
   checklistRowRank,
   computeCaseProgress,
+  currentEvidenceApproved,
   deriveInboxBucket,
   derivePreviousCaseId,
   docVersionChain,
+  docsForChecklistItem,
   groupLabel,
   groupOrderIndex,
   hasEvidence,
@@ -23,6 +25,9 @@ import {
   itemExpiringSoon,
   migrateChecklist,
   migrateChecklistItem,
+  normalizeChecklistDecision,
+  requiredItemsReadyForDecision,
+  reviewDecisionForItem,
   sortChecklistRows,
 } from './caseLogic';
 import { CATALOG_BY_CODE } from './requirements/catalog';
@@ -294,6 +299,48 @@ describe('evidence + progress', () => {
     expect(progress.ratio).toBe(0);
   });
 
+  it('normalizes live-only submitted checklist states back to pending', () => {
+    expect(normalizeChecklistDecision('submitted')).toBe('pending');
+    expect(normalizeChecklistDecision('approved')).toBe('approved');
+  });
+
+  it('defaults review decisions to approved only when evidence is present', () => {
+    const items = buildTailoredChecklist(DEFAULT_TAILORING_PROFILE, 'case_1', nextId);
+    const target = items.find((i) => i.required && !i.instrument)!;
+    expect(reviewDecisionForItem(target, { docs: [], signed: [] })).toBe('pending');
+    expect(
+      reviewDecisionForItem(target, {
+        docs: [doc({ requirementId: target.id })],
+        signed: [],
+      }),
+    ).toBe('approved');
+  });
+
+  it('requires current required evidence to be approved before final decision', () => {
+    const items = buildTailoredChecklist(DEFAULT_TAILORING_PROFILE, 'case_1', nextId);
+    const requiredDocs = items.filter((i) => i.required && !i.instrument).slice(0, 2);
+    const signedItems = items.filter((i) => i.required && i.instrument);
+    const scoped = [...requiredDocs, ...signedItems].map((i) => ({
+      ...i,
+      decision: 'approved' as const,
+    }));
+    const docs = requiredDocs.map((item, index) =>
+      doc({
+        requirementId: item.id,
+        status: index === 0 ? 'approved' : 'submitted',
+        version: 1,
+      }),
+    );
+    const signed = signedItems.map((item) =>
+      signedRow({ code: item.instrumentCode ?? item.code ?? 'SIGN_NDA' }),
+    );
+    expect(docsForChecklistItem(requiredDocs[0]!, { docs, signed })).toHaveLength(1);
+    expect(currentEvidenceApproved(requiredDocs[0]!, { docs, signed })).toBe(true);
+    expect(requiredItemsReadyForDecision(scoped, { docs, signed })).toBe(false);
+    const approvedDocs = docs.map((d) => ({ ...d, status: 'approved' as const }));
+    expect(requiredItemsReadyForDecision(scoped, { docs: approvedDocs, signed })).toBe(true);
+  });
+
   it('groups follow the canonical order and expose per-group ratios', () => {
     const items = buildTailoredChecklist(UK_IT_PROFILE, 'case_1', nextId);
     const progress = computeCaseProgress(items, { docs: [], signed: [] });
@@ -342,7 +389,14 @@ describe('deriveInboxBucket', () => {
     const done = items.map((i) =>
       i.required ? { ...i, decision: 'approved' as const } : i,
     );
-    const bucket = deriveInboxBucket(baseCase(), done, { docs: [], signed: [] });
+    const required = done.filter((i) => i.required);
+    const docs = required
+      .filter((i) => !i.instrument)
+      .map((i) => doc({ requirementId: i.id, status: 'approved' }));
+    const signed = required
+      .filter((i) => i.instrument)
+      .map((i) => signedRow({ code: i.instrumentCode ?? i.code ?? 'SIGN_NDA' }));
+    const bucket = deriveInboxBucket(baseCase(), done, { docs, signed });
     expect(bucket).toBe('ready_for_decision');
   });
 

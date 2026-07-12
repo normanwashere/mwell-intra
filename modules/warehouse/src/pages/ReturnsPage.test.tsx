@@ -5,7 +5,9 @@ import { ReturnsPage } from './ReturnsPage';
 import { renderWithProviders } from '@/test/renderWithProviders';
 
 describe('ReturnsPage', () => {
-  it('records a customer return and shows it in the list', async () => {
+  // The seeded returns list is larger since the 90-day history landed; give
+  // the record-and-rerender flow more headroom than the 5s default.
+  it('records a customer return and shows it in the list', { timeout: 15_000 }, async () => {
     const user = userEvent.setup();
     renderWithProviders(<ReturnsPage />, { role: 'operations' });
     await screen.findByText(/recent returns/i);
@@ -21,7 +23,8 @@ describe('ReturnsPage', () => {
       const list = screen.getByLabelText('Returns');
       expect(within(list).getByText(/Event Shirt \(L\)/i)).toBeInTheDocument();
     });
-    expect(screen.getByText(/return logged/i)).toBeInTheDocument();
+    expect(screen.getByText(/return logged in inspection staging/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /open quality queue/i })).toBeInTheDocument();
     expect(
       within(screen.getByLabelText('Returns')).getAllByText('Restocked').length,
     ).toBeGreaterThan(0);
@@ -40,5 +43,21 @@ describe('ReturnsPage', () => {
 
     await user.type(screen.getByLabelText('Serial number'), 'ECG-RING-10-SN0001');
     expect(screen.getByRole('button', { name: /record return/i })).toBeEnabled();
+  });
+
+  it('accepts only an issued serial for the selected return product and event', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ReturnsPage />, { role: 'operations' });
+    await screen.findByText(/recent returns/i);
+    await user.selectOptions(screen.getByLabelText('Product'), 'smart-watch');
+    await user.selectOptions(screen.getByLabelText('Related event (optional)'), 'evt-vip');
+    const manual = screen.getByLabelText('Enter barcode manually');
+    await user.type(manual, 'SMART-WATCH-SN0001');
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+    expect(screen.getByRole('alert')).toHaveTextContent(/cannot be returned/i);
+    await user.type(manual, 'SMART-WATCH-VIP001');
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+    expect(screen.getByRole('status')).toHaveTextContent(/scan accepted/i);
+    expect(screen.getByLabelText('Serial number')).toHaveValue('SMART-WATCH-VIP001');
   });
 });

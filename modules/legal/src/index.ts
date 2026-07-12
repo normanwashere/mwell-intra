@@ -6,3 +6,4 @@
 
 export { LegalApp } from './LegalApp';
 export type { LegalAppProps } from './LegalApp';
+export { ensureLegalSeed } from './localStore';

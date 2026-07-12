@@ -6,24 +6,29 @@
 // contract; otherwise we fall back to `memory` mode with demo profiles so the
 // app builds and runs with NO live backend.
 
-import { useMemo, type ReactNode } from 'react';
+import { useEffect, useMemo, type ReactNode } from 'react';
 import { SerwistProvider } from '@serwist/turbopack/react';
 import { SessionProvider, type AuthConfig } from '@intra/auth';
-import { ToastProvider } from '@intra/ui';
+import { ToastProvider, MotionProvider } from '@intra/ui';
 import { createSupabaseBrowserClient } from '@shell/lib/supabase/client';
 import { DEMO_PROFILES } from '@shell/lib/demoProfiles';
+import { DemoSeeder } from '@shell/components/DemoSeeder';
+import { StorageFullToast } from '@shell/components/StorageFullToast';
 
 // Prod-safety guard: if a production build somehow ships without Supabase env
 // (spec §9), we render a hard error instead of silently using demo profiles.
-// Escape hatch: NEXT_PUBLIC_ALLOW_DEMO_IN_PROD=true for staging previews.
+// A forced memory data source is never valid for a production build.
 function isDemoAllowed(): boolean {
   if (process.env.NODE_ENV !== 'production') return true;
-  return process.env.NEXT_PUBLIC_ALLOW_DEMO_IN_PROD === 'true';
+  return (
+    process.env.NEXT_PUBLIC_DATA_SOURCE === 'memory' &&
+    process.env.NEXT_PUBLIC_ALLOW_DEMO_IN_PROD === 'true'
+  );
 }
 
 function MissingSupabaseConfig() {
   return (
-    <div
+    <main
       role="alert"
       className="grid min-h-screen place-items-center bg-app px-6 text-center"
     >
@@ -35,8 +40,39 @@ function MissingSupabaseConfig() {
           backend. Contact your administrator.
         </p>
       </div>
-    </div>
+    </main>
   );
+}
+
+// Deployed production builds are installable/offline-capable by default.
+// Operators can explicitly disable registration for incident recovery.
+function isServiceWorkerEnabled(): boolean {
+  return (
+    process.env.NODE_ENV === 'production' &&
+    process.env.NEXT_PUBLIC_ENABLE_SW !== 'false'
+  );
+}
+
+function ServiceWorkerDevCleanup() {
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) {
+      return;
+    }
+    navigator.serviceWorker.getRegistrations().then((regs) => {
+      if (regs.length === 0) return;
+      void Promise.all([
+        ...regs.map((r) => r.unregister()),
+        typeof caches !== 'undefined'
+          ? caches.keys().then((ks) => Promise.all(ks.map((k) => caches.delete(k))))
+          : Promise.resolve(),
+      ]).then(() => {
+        // Reload once so the page is served fresh from the dev server instead
+        // of the now-removed SW cache.
+        window.location.reload();
+      });
+    });
+  }, []);
+  return null;
 }
 
 export function Providers({ children }: { children: ReactNode }) {
@@ -56,11 +92,27 @@ export function Providers({ children }: { children: ReactNode }) {
 
   if (config === null) return <MissingSupabaseConfig />;
 
-  return (
-    <SerwistProvider swUrl="/serwist/sw.js">
+  const swEnabled = isServiceWorkerEnabled();
+
+  const tree = (
+    <MotionProvider>
       <SessionProvider config={config}>
-        <ToastProvider>{children}</ToastProvider>
+        <DemoSeeder />
+        <ToastProvider>
+          <StorageFullToast />
+          {children}
+        </ToastProvider>
       </SessionProvider>
-    </SerwistProvider>
+    </MotionProvider>
+  );
+
+  // Register only for explicit PWA deployments; otherwise clear stale local SWs.
+  return swEnabled ? (
+    <SerwistProvider swUrl="/serwist/sw.js">{tree}</SerwistProvider>
+  ) : (
+    <>
+      <ServiceWorkerDevCleanup />
+      {tree}
+    </>
   );
 }

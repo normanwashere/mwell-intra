@@ -18,6 +18,7 @@
 // key, and skip malformed rows rather than throwing.
 
 import { useCallback, useEffect, useState } from 'react';
+import type { DataSource, ProcurementPOHandoff } from '@intra/data-kit';
 
 export const PROCUREMENT_PO_KEY = 'intra.procurement.v2.purchase_orders';
 /** Same-tab change event the procurement store dispatches on writes. */
@@ -28,6 +29,7 @@ const RECEIVABLE_STATUSES = new Set(['approved', 'issued']);
 
 export interface BridgedPOLine {
   readonly id: string;
+  readonly productId?: string;
   readonly description: string;
   readonly quantity: number;
   readonly uom?: string;
@@ -69,6 +71,7 @@ function mapLine(raw: unknown, index: number): BridgedPOLine | null {
   if (!Number.isFinite(quantity)) return null;
   return {
     id: asString(line.id, `line-${index}`),
+    productId: typeof line.productId === 'string' ? line.productId : undefined,
     description: asString(line.description, 'Line item'),
     quantity,
     uom: typeof line.uom === 'string' ? line.uom : undefined,
@@ -143,31 +146,70 @@ export function readProcurementPOs(
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
+export async function loadProcurementPOs(
+  source: DataSource,
+  loadLive: () => Promise<ProcurementPOHandoff[]>,
+  storage?: Pick<Storage, 'getItem'>,
+): Promise<BridgedPO[]> {
+  if (source === 'memory') return readProcurementPOs(storage);
+  const rows = await loadLive();
+  return rows
+    .filter((po) => RECEIVABLE_STATUSES.has(po.status))
+    .map((po) => {
+      const lines: BridgedPOLine[] = po.lines.map((line) => ({
+        ...line,
+        receivedQuantity: line.receivedQuantity,
+      }));
+      return {
+        id: po.id,
+        poNumber: po.poNumber,
+        vendorName: po.vendorName,
+        status: po.status,
+        expectedDate: po.expectedDate,
+        createdAt: new Date(0).toISOString(),
+        lines,
+        totalOrdered: lines.reduce((sum, line) => sum + line.quantity, 0),
+        totalReceived: lines.reduce((sum, line) => sum + line.receivedQuantity, 0),
+        value: 0,
+        href: `/procurement/purchase-orders/${encodeURIComponent(po.id)}`,
+      };
+    });
+}
+
 /**
  * Live view of the bridged procurement POs. Re-reads on the procurement
  * module's same-tab change event and on cross-tab storage events.
  */
-export function useProcurementPOs(): BridgedPO[] {
+export function useProcurementPOs(
+  source: DataSource = 'memory',
+  loadLive: () => Promise<ProcurementPOHandoff[]> = async () => [],
+  reloadKey = 0,
+): BridgedPO[] {
   // Start empty so SSR + first client render match.
   const [pos, setPos] = useState<BridgedPO[]>([]);
 
-  const refresh = useCallback(() => {
-    setPos(readProcurementPOs());
-  }, []);
+  const refresh = useCallback(async () => {
+    try {
+      setPos(await loadProcurementPOs(source, loadLive));
+    } catch {
+      setPos([]);
+    }
+  }, [loadLive, source]);
 
   useEffect(() => {
-    refresh();
-    if (typeof window === 'undefined') return;
+    void refresh();
+    if (typeof window === 'undefined' || source !== 'memory') return;
     const onStorage = (e: StorageEvent) => {
       if (!e.key || e.key === PROCUREMENT_PO_KEY) refresh();
     };
-    window.addEventListener(PROCUREMENT_CHANGE_EVENT, refresh);
+    const onChange = () => void refresh();
+    window.addEventListener(PROCUREMENT_CHANGE_EVENT, onChange);
     window.addEventListener('storage', onStorage);
     return () => {
-      window.removeEventListener(PROCUREMENT_CHANGE_EVENT, refresh);
+      window.removeEventListener(PROCUREMENT_CHANGE_EVENT, onChange);
       window.removeEventListener('storage', onStorage);
     };
-  }, [refresh]);
+  }, [refresh, reloadKey, source]);
 
   return pos;
 }

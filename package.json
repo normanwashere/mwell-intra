@@ -2,9 +2,9 @@
   "name": "mwell-intra",
   "version": "0.0.0",
   "private": true,
-  "packageManager": "pnpm@9.15.9",
+  "packageManager": "pnpm@10.23.0",
   "engines": {
-    "node": ">=20.9.0"
+    "node": ">=22.0.0"
   },
   "scripts": {
     "build": "turbo run build",
@@ -13,17 +13,25 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "test:e2e": "turbo run test:e2e",
+    "test:intra-live": "node scripts/qa/full-intra-live-e2e.mjs",
+    "test:warehouse-w1": "pnpm --filter @intra/shell exec playwright test tests/e2e/warehouse-w1-workflows.spec.ts",
+    "test:warehouse-w1:visual": "pnpm --filter @intra/shell exec playwright test tests/e2e/warehouse-w1-visual.spec.ts",
+    "test:warehouse-w1:live": "pnpm --filter @intra/shell run test:e2e:live",
+    "test:warehouse-w1:performance": "pnpm --filter @intra/shell exec playwright test tests/e2e/warehouse-w1-performance.spec.ts",
+    "report:warehouse-w1:visual": "node scripts/qa/build-warehouse-contact-sheet.mjs",
+    "provision:test:warehouse-w1": "node scripts/qa/provision-warehouse-w1-test-users.mjs",
+    "verify:procurement-contract": "node scripts/verify-effective-procurement-contract.mjs",
+    "verify:policy-alignment-schema": "node scripts/verify-policy-alignment-schema.mjs",
+    "verify:warehouse-w1-schema": "node scripts/verify-warehouse-w1-schema.mjs",
+    "verify:warehouse-w1-contract": "node scripts/verify-warehouse-w1-contract.mjs",
+    "verify:launch-artifacts": "node scripts/verify-launch-artifacts.mjs",
+    "verify:knowledge-base": "node scripts/verify-knowledge-base.mjs",
+    "verify:supabase-cutover": "node scripts/verify-supabase-cutover.mjs",
     "format": "prettier --write \"**/*.{ts,tsx,md,json}\""
   },
   "devDependencies": {
     "prettier": "^3.3.3",
     "turbo": "^2.3.3",
     "typescript": "^5.6.3"
-  },
-  "pnpm": {
-    "overrides": {
-      "@types/react": "^19.2.0",
-      "@types/react-dom": "^19.2.0"
-    }
   }
 }

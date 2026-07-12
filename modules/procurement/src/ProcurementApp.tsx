@@ -1,7 +1,13 @@
 'use client';
 
 import { useEffect, useMemo } from 'react';
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import {
+  BrowserRouter,
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+} from 'react-router-dom';
 import { SignInPrompt, SkeletonList, SkeletonStats } from '@intra/ui';
 import { useSession } from '@intra/auth';
 import { can } from '@intra/rbac';
@@ -30,6 +36,14 @@ function useNormalizeBasenamePath(basename: string): void {
   }, [basename]);
 }
 
+function ScrollToTopOnRouteChange() {
+  const { pathname, search } = useLocation();
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  }, [pathname, search]);
+  return null;
+}
+
 export function ProcurementApp({ basename = '/procurement' }: ProcurementAppProps) {
   useNormalizeBasenamePath(basename);
   const { profile, userRoles, loading } = useSession();
@@ -46,6 +60,11 @@ export function ProcurementApp({ basename = '/procurement' }: ProcurementAppProp
   const approvalsOnly = !canViewDashboard && myTiers.length > 0;
   const canApprove =
     can(userRoles, 'procurement', 'approve_request') || myTiers.length > 0;
+  const canViewPurchaseOrders =
+    can(userRoles, 'procurement', 'author_po') ||
+    can(userRoles, 'procurement', 'approve_award') ||
+    can(userRoles, 'procurement', 'view_finance') ||
+    can(userRoles, 'procurement', 'admin');
   if (loading) {
     return (
       <div className="mx-auto max-w-5xl space-y-6 p-4 md:p-6" aria-busy="true">
@@ -91,10 +110,11 @@ export function ProcurementApp({ basename = '/procurement' }: ProcurementAppProp
     >
       {/* No nested ToastProvider — the shell's root Providers already mounts
           one; nesting a second rendered a duplicate toast viewport. */}
+      <ScrollToTopOnRouteChange />
       <ProcurementTabs
         canApprove={canApprove}
         showRequests={!approvalsOnly}
-        showPurchaseOrders={!approvalsOnly}
+        showPurchaseOrders={!approvalsOnly && canViewPurchaseOrders}
       />
       <Routes>
         {approvalsOnly ? (

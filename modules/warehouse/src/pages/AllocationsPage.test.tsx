@@ -51,6 +51,25 @@ describe('AllocationsPage', () => {
     expect(await within(dialog).findByRole('alert')).toHaveTextContent(/available/i);
   });
 
+  it('warns about expired stock without blocking reservation in W1', async () => {
+    const seed = await makeRepo().getData();
+    seed.products = seed.products.map((product) => product.id === 'doctor-token'
+      ? { ...product, expiryTracked: true, shelfLifeWarningDays: 30 }
+      : product);
+    seed.lots.push({
+      id: 'lot-expired-allocation', productId: 'doctor-token', lotCode: 'EXP-ALLOC',
+      unitCost: 10, receivedAt: '2026-06-01T00:00:00Z', expiryDate: '2026-07-09',
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<AllocationsPage />, { role: 'operations', repo: makeRepo(seed) });
+    await screen.findByLabelText('Allocations');
+
+    const dialog = await openReserveSheet(user);
+    await user.selectOptions(within(dialog).getByLabelText('Product'), 'doctor-token');
+    expect(within(dialog).getByText(/expired lot on hand/i)).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: /^reserve$/i })).toBeEnabled();
+  });
+
   it('filters allocations by status', async () => {
     const user = userEvent.setup();
     renderWithProviders(<AllocationsPage />, { role: 'operations' });
@@ -135,6 +154,24 @@ describe('AllocationsPage', () => {
     // Restore the count → enabled again.
     await user.click(within(dialog).getByText('SMART-WATCH-SN0002'));
     expect(confirm).toBeEnabled();
+  });
+
+  it('validates scanned issue serials against the allocation product', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<AllocationsPage />, { role: 'operations' });
+    await screen.findByLabelText('Allocations');
+    await user.click(issueButtonFor('mWellness Smart Watch'));
+    const dialog = await screen.findByRole('dialog', { name: /issue allocation/i });
+    await user.click(within(dialog).getByText('SMART-WATCH-SN0001'));
+
+    const manual = within(dialog).getByLabelText('Enter barcode manually');
+    await user.type(manual, 'ECG-RING-6-SN0003');
+    await user.click(within(dialog).getByRole('button', { name: 'Add' }));
+    expect(within(dialog).getByRole('alert')).toHaveTextContent(/does not match/i);
+    await user.type(manual, 'SMART-WATCH-SN0009');
+    await user.click(within(dialog).getByRole('button', { name: 'Add' }));
+    expect(within(dialog).getByRole('status')).toHaveTextContent(/scan accepted/i);
+    expect(within(dialog).getByRole('button', { name: /confirm issue/i })).toBeEnabled();
   });
 
   it('issues a non-serialized allocation without a serial picker', async () => {

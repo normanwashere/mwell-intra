@@ -22,7 +22,9 @@ export {
  * never touches env.
  */
 export function createSupabaseWarehouseRepository(
-  client: SupabaseClient<any, any>,
+  client: SupabaseClient,
 ): WarehouseRepository {
-  return new SupabaseRepository(client);
+  return new SupabaseRepository(
+    client.schema('warehouse') as unknown as SupabaseClient,
+  );
 }

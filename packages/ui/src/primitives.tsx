@@ -1,6 +1,7 @@
 import { clsx } from 'clsx';
 import type { ReactNode } from 'react';
 import { Icon, type IconName } from './Icon';
+import { StatValue } from './StatValue';
 
 export function Card({
   children,
@@ -35,14 +36,14 @@ export function SectionTitle({
   action?: ReactNode;
 }) {
   return (
-    <div className="mb-3 flex items-start justify-between gap-3">
+    <div className="mb-3 flex flex-col items-start gap-3 sm:flex-row sm:justify-between">
       <div className="min-w-0">
         <h2 className="font-display text-base font-bold text-ink sm:text-lg">
           {title}
         </h2>
         {subtitle && <p className="text-sm text-muted">{subtitle}</p>}
       </div>
-      {action && <div className="shrink-0">{action}</div>}
+      {action && <div className="w-full shrink-0 sm:w-auto">{action}</div>}
     </div>
   );
 }
@@ -51,20 +52,31 @@ export function PageHeader({
   title,
   subtitle,
   action,
+  icon,
 }: {
   title: string;
   subtitle?: string;
   action?: ReactNode;
+  /** Optional leading icon in a tinted chip. */
+  icon?: IconName;
 }) {
   return (
-    <div className="mb-5 flex items-start justify-between gap-3">
-      <div className="min-w-0">
-        <h1 className="font-display text-2xl font-extrabold tracking-tight text-ink">
-          {title}
-        </h1>
-        {subtitle && <p className="mt-0.5 text-sm text-muted">{subtitle}</p>}
+    <div className="mb-5 flex flex-col items-start gap-3 border-b border-line/80 pb-4 sm:flex-row sm:justify-between">
+      <div className="flex min-w-0 items-start gap-3">
+        {icon && (
+          <span
+            aria-hidden
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand-500/10 text-brand-700 dark:text-brand-300"
+          >
+            <Icon name={icon} className="h-5 w-5" />
+          </span>
+        )}
+        <div className="min-w-0">
+          <h1 className="font-display text-title text-ink">{title}</h1>
+          {subtitle && <p className="mt-0.5 text-sm text-muted">{subtitle}</p>}
+        </div>
       </div>
-      {action && <div className="shrink-0">{action}</div>}
+      {action && <div className="w-full shrink-0 sm:w-auto">{action}</div>}
     </div>
   );
 }
@@ -72,12 +84,9 @@ export function PageHeader({
 export type Tone = 'brand' | 'accent' | 'amber' | 'rose' | 'emerald' | 'slate' | 'cyan';
 
 /**
- * ModuleHero — the suite-wide hero banner (spec §13 look & feel).
- * Ported from the warehouse dashboard hero so every module (Procurement,
- * Legal, Vendor, Admin) reads as the same product. Deep-navy brand gradient
- * with a subtle watermark, welcome eyebrow, big display title, one-line
- * description, an optional action button, and an optional right-side
- * accessory (Sparkline, StatCard mini, etc.).
+ * ModuleHero — suite-wide page header (v2 clinical-modern).
+ * Porcelain surface card with a signature teal accent stripe — gradient is
+ * reserved for the wordmark and small highlights, not full-bleed backgrounds.
  */
 export function ModuleHero({
   eyebrow = 'Welcome back,',
@@ -93,36 +102,48 @@ export function ModuleHero({
   description?: string;
   action?: ReactNode;
   accessory?: ReactNode;
-  /** Watermark icon rendered top-right at 10% opacity. */
+  /** Watermark icon rendered top-right at low opacity. */
   icon?: IconName;
   className?: string;
 }) {
   return (
     <div
       className={clsx(
-        'relative overflow-hidden rounded-3xl bg-brand-grad p-5 text-white shadow-navy sm:p-6',
+        'hero-surface relative overflow-hidden rounded-2xl p-4 sm:p-5',
         className,
       )}
     >
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 left-0 w-1 rounded-l-2xl bg-gradient-to-b from-brand-500 to-brand-700"
+      />
       {icon && (
         <div
           aria-hidden
-          className="pointer-events-none absolute -right-6 -top-6 text-white/10"
+          data-module-hero-watermark="true"
+          className="pointer-events-none absolute right-3 top-3 z-0 text-brand-500/10 sm:right-4 sm:top-4"
         >
-          <Icon name={icon} className="h-40 w-40" />
+          <Icon name={icon} className="h-16 w-16 sm:h-20 sm:w-20" />
         </div>
       )}
-      <div className="relative">
-        <p className="text-sm text-brand-100/80">{eyebrow}</p>
-        <h1 className="font-display text-2xl font-extrabold sm:text-3xl">
+      <div
+        className={clsx(
+          'relative z-10 min-w-0 pl-2',
+          icon && 'pr-14 sm:pr-20',
+        )}
+      >
+        <p className="text-caption font-semibold uppercase tracking-normal text-faint">
+          {eyebrow}
+        </p>
+        <h1 className="mt-1 break-words font-display text-title text-ink sm:text-display">
           {title}
         </h1>
         {description && (
-          <p className="mt-1 max-w-md text-sm text-brand-100/70">{description}</p>
+          <p className="mt-1.5 max-w-xl text-body text-muted">{description}</p>
         )}
-        {action && <div className="mt-3">{action}</div>}
+        {action && <div className="mt-4 flex flex-wrap items-center gap-2">{action}</div>}
         {accessory && (
-          <div className="mt-4 flex items-end justify-between gap-4">
+          <div className="mt-4 flex flex-col items-stretch gap-3 sm:flex-row sm:items-end sm:justify-between">
             {accessory}
           </div>
         )}
@@ -132,9 +153,35 @@ export function ModuleHero({
 }
 
 /**
- * HeroChipButton — a small pill button styled for use INSIDE ModuleHero
- * (translucent white on the navy gradient). Use for the hero's primary
- * action (e.g. "Export", "New request").
+ * HeroStat — compact metric block for ModuleHero accessories (v2 porcelain).
+ */
+export function HeroStat({
+  label,
+  children,
+  align = 'left',
+  className,
+}: {
+  label: string;
+  children: ReactNode;
+  align?: 'left' | 'right';
+  className?: string;
+}) {
+  return (
+    <div
+      className={clsx(
+        'rounded-2xl bg-inset px-4 py-2',
+        align === 'right' && 'text-right',
+        className,
+      )}
+    >
+      <p className="text-xs uppercase tracking-normal text-faint">{label}</p>
+      <div className="mt-1">{children}</div>
+    </div>
+  );
+}
+
+/**
+ * HeroChipButton — primary CTA styled for use inside ModuleHero (v2).
  */
 export function HeroChipButton({
   onClick,
@@ -150,7 +197,7 @@ export function HeroChipButton({
   type?: 'button' | 'submit';
 }) {
   const cls =
-    'inline-flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60';
+    'inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-2 text-xs font-semibold text-white shadow-e1 transition hover:bg-brand-700 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40';
   if (href) {
     return (
       <a href={href} className={cls}>
@@ -169,7 +216,7 @@ export function HeroChipButton({
 
 const ICON_TONES: Record<string, string> = {
   brand: 'bg-brand-500/10 text-brand-700 dark:text-brand-300',
-  accent: 'bg-cyan-500/10 text-cyan-800 dark:text-cyan-300',
+  accent: 'bg-accent/15 text-accent dark:text-accent-soft',
   cyan: 'bg-cyan-500/10 text-cyan-800 dark:text-cyan-300',
   amber: 'bg-amber-500/15 text-amber-800 dark:text-amber-300',
   rose: 'bg-rose-500/15 text-rose-800 dark:text-rose-300',
@@ -203,8 +250,8 @@ export function StatCard({
   const interactive = Boolean(onClick) || Boolean(href);
   const inner = (
     <>
-      <div className="flex items-start justify-between gap-2">
-        <p className="text-[0.62rem] font-semibold uppercase leading-snug tracking-wide text-faint sm:text-[0.68rem]">
+      <div className="flex min-w-0 items-start justify-between gap-2">
+        <p className="min-w-0 break-words text-[0.62rem] font-semibold uppercase leading-snug tracking-wide text-faint sm:text-[0.68rem]">
           {label}
         </p>
         {icon && (
@@ -218,9 +265,9 @@ export function StatCard({
           </span>
         )}
       </div>
-      <div className="mt-auto flex items-end justify-between gap-2">
-        <p className="tnum font-display text-xl font-extrabold leading-none text-ink sm:text-2xl">
-          {value}
+      <div className="mt-auto flex min-w-0 items-end justify-between gap-2">
+        <p className="tnum min-w-0 font-display text-xl font-extrabold leading-none text-ink sm:text-2xl">
+          <StatValue value={value} />
         </p>
         {trend ? (
           <span
@@ -249,7 +296,7 @@ export function StatCard({
 
   // Cramped mobile → tighter padding; roomier from `sm` onwards.
   const shell =
-    'card group flex flex-col gap-2 p-3 sm:gap-2.5 sm:p-4 text-left transition';
+    'card group flex min-w-0 max-w-full flex-col gap-2 overflow-hidden p-3 sm:gap-2.5 sm:p-4 text-left transition';
   const interactiveShell =
     ' hover:-translate-y-0.5 hover:shadow-e3 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500';
 

@@ -3,8 +3,8 @@ import { ROLES, ROLE_LIST, can } from './roles';
 import { modulesForRole } from '@/app/modules';
 
 describe('roles', () => {
-  it('defines all 8 user-story roles', () => {
-    expect(ROLE_LIST).toHaveLength(8);
+  it('defines all 8 user-story roles plus Warehouse Administrator', () => {
+    expect(ROLE_LIST).toHaveLength(9);
   });
 
   it('grants every role the dashboard and inventory view', () => {

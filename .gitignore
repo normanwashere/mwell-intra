@@ -16,6 +16,7 @@ build/
 coverage/
 playwright-report/
 test-results/
+.qa/
 
 # env
 .env
@@ -39,3 +40,5 @@ pnpm-debug.log*
 .playwright-cli/
 .pwcli/
 .review-shots/
+.superpowers/
+.vercel/

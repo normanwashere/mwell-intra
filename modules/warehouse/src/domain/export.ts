@@ -8,9 +8,28 @@ import type {
 
 type CsvValue = string | number;
 export type CsvRow = Record<string, CsvValue>;
+export type WarehouseExportKind =
+  | 'inventory'
+  | 'movements'
+  | 'allocations'
+  | 'inventory_position'
+  | 'quality'
+  | 'cycle_counts';
+
+export function governedExportFilename(
+  kind: WarehouseExportKind,
+  createdAt = new Date(),
+): string {
+  const stamp = createdAt
+    .toISOString()
+    .replace(/[-:]/g, '')
+    .replace(/\.\d{3}Z$/, 'Z');
+  return `mwell-intra-${kind}-${stamp}.csv`;
+}
 
 function escapeCell(value: CsvValue): string {
-  const text = String(value);
+  const raw = String(value);
+  const text = typeof value === 'string' && /^[=+\-@]/.test(raw) ? `'${raw}` : raw;
   if (/[",\n\r]/.test(text)) {
     return `"${text.replace(/"/g, '""')}"`;
   }
