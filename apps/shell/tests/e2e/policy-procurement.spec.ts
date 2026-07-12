@@ -1,6 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
 
 async function expectMobileActionsClearOfNavigation(page: Page) {
+  if (await page.evaluate(() => window.innerWidth < 768)) {
+    const action = page.locator('[data-mobile-action-bar="true"]');
+    await action.waitFor();
+    await action.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(100);
+  }
   const geometry = await page.evaluate(() => {
     if (window.innerWidth >= 768) return { skipped: true } as const;
     const nav = document.querySelector<HTMLElement>(

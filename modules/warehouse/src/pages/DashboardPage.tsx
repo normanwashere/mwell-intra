@@ -207,7 +207,7 @@ function IssuedMetricDock({
         <span
           className={
             trendPct >= 0
-              ? 'chip bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+              ? 'chip bg-emerald-500/15 text-emerald-800 dark:text-emerald-300'
               : 'chip bg-rose-500/15 text-rose-700 dark:text-rose-300'
           }
         >

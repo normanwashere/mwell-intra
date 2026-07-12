@@ -160,6 +160,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Link
               key={e.href}
               href={e.href}
+              aria-label={e.label}
               aria-current={isActive(e.href) ? "page" : undefined}
               className={cx(
                 "group relative grid h-11 w-11 place-items-center rounded-xl text-faint transition hover:bg-inset hover:text-ink",

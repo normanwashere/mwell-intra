@@ -16,7 +16,7 @@
     "test:intra-live": "node scripts/qa/full-intra-live-e2e.mjs",
     "test:warehouse-w1": "pnpm --filter @intra/shell exec playwright test tests/e2e/warehouse-w1-workflows.spec.ts",
     "test:warehouse-w1:visual": "pnpm --filter @intra/shell exec playwright test tests/e2e/warehouse-w1-visual.spec.ts",
-    "test:warehouse-w1:live": "pnpm --filter @intra/shell exec playwright test tests/e2e/warehouse-w1-live.spec.ts",
+    "test:warehouse-w1:live": "pnpm --filter @intra/shell run test:e2e:live",
     "test:warehouse-w1:performance": "pnpm --filter @intra/shell exec playwright test tests/e2e/warehouse-w1-performance.spec.ts",
     "report:warehouse-w1:visual": "node scripts/qa/build-warehouse-contact-sheet.mjs",
     "provision:test:warehouse-w1": "node scripts/qa/provision-warehouse-w1-test-users.mjs",

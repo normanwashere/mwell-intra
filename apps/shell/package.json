@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:smoke": "playwright test tests/smoke",
-    "test:e2e": "playwright test tests/smoke tests/e2e"
+    "test:e2e": "playwright test tests/smoke tests/e2e",
+    "test:e2e:live": "playwright test tests/e2e/warehouse-w1-live.spec.ts --config=playwright.live.config.ts"
   },
   "dependencies": {
     "@intra/auth": "workspace:*",

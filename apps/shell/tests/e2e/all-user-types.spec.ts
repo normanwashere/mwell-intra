@@ -711,7 +711,7 @@ function dashboardTextFor(roles: Roles): RegExp {
   if ((roles.warehouse?.length ?? 0) > 0) return /Warehouse/i;
   if ((roles.procurement?.length ?? 0) > 0) return /Procurement/i;
   if ((roles.legal?.length ?? 0) > 0) return /Legal/i;
-  return /No modules yet/i;
+  return /Knowledge Base/i;
 }
 
 async function installMemorySession(page: Page, persona: Persona): Promise<void> {

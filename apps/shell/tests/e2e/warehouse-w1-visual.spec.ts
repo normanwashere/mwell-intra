@@ -40,7 +40,14 @@ async function auditRoute(
   };
   await assertLayout('top');
   const axe = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
-  expect(axe.violations.map(({ id, impact, nodes }) => ({ id, impact, nodes: nodes.length })), `${route} axe violations`).toEqual([]);
+  expect(
+    axe.violations.map(({ id, impact, nodes }) => ({
+      id,
+      impact,
+      nodes: nodes.map(({ target, failureSummary }) => ({ target, failureSummary })),
+    })),
+    `${route} axe violations`,
+  ).toEqual([]);
   const output = path.resolve(
     'test-results',
     'warehouse-w1',

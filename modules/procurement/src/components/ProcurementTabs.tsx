@@ -45,10 +45,10 @@ export function ProcurementTabs({
     });
   }
   return (
-    <div className="mb-4 border-b border-line">
+    <div className="relative z-10 mb-4 border-b border-line bg-app">
       <nav
         aria-label="Procurement sections"
-        className="-mb-px flex gap-1 overflow-x-auto px-1"
+        className="-mb-px grid grid-flow-col auto-cols-fr gap-0 sm:flex sm:gap-1 sm:overflow-x-auto sm:px-1"
       >
         {visible.map((t) => (
           <NavLink
@@ -57,7 +57,7 @@ export function ProcurementTabs({
             end={t.end}
             className={({ isActive }) =>
               [
-                'group inline-flex min-h-11 items-center gap-2 whitespace-nowrap rounded-t-lg px-3 py-2.5 text-sm font-semibold transition',
+                'group inline-flex min-h-11 min-w-0 items-center justify-center gap-1 whitespace-nowrap rounded-t-lg px-2 py-2.5 text-sm font-semibold transition sm:justify-start sm:gap-2 sm:px-3',
                 isActive
                   ? 'border-b-2 border-brand-600 text-brand-700 dark:border-brand-300 dark:text-brand-300'
                   : 'border-b-2 border-transparent text-muted hover:border-line hover:text-ink',

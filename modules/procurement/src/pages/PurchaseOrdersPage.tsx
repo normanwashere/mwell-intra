@@ -168,11 +168,11 @@ export function PurchaseOrdersPage() {
         title={firstName}
         description="Author, approve, and issue POs to accredited vendors."
         icon="cart"
-        action={
+        action={canAuthorPo ? (
           <HeroChipButton href="/procurement/?filter=approved" icon="arrowRight">
             Author from approved request
           </HeroChipButton>
-        }
+        ) : undefined}
       />
 
       <StaggerGrid className="grid grid-cols-2 gap-3 lg:grid-cols-4">
