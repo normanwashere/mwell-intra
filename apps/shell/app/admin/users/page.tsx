@@ -695,6 +695,18 @@ function UserDetail({
     }
     return g;
   }, [roleColumns]);
+  const orderedGroups = useMemo(
+    () =>
+      Array.from(grouped.entries()).sort(([leftModule, left], [rightModule, right]) => {
+        const leftAssigned = left.some((column) => held.has(column.key));
+        const rightAssigned = right.some((column) => held.has(column.key));
+        if (leftAssigned !== rightAssigned) return leftAssigned ? -1 : 1;
+        if (leftModule === 'core' && rightModule !== 'core') return 1;
+        if (rightModule === 'core' && leftModule !== 'core') return -1;
+        return MODULE_LIST.indexOf(leftModule) - MODULE_LIST.indexOf(rightModule);
+      }),
+    [grouped, held],
+  );
 
   return (
     <div className="space-y-5">
@@ -719,7 +731,7 @@ function UserDetail({
         </p>
       </div>
 
-      {Array.from(grouped.entries()).map(([moduleName, cols]) => (
+      {orderedGroups.map(([moduleName, cols]) => (
         <section key={moduleName}>
           <SectionTitle
             title={MODULES[moduleName].label}
