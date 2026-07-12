@@ -4,7 +4,7 @@ async function expectMobileActionsClearOfNavigation(page: Page) {
   if (await page.evaluate(() => window.innerWidth < 768)) {
     const action = page.locator('[data-mobile-action-bar="true"]');
     await action.waitFor();
-    await action.scrollIntoViewIfNeeded();
+    await action.evaluate((element) => element.scrollIntoView({ block: "center" }));
     await page.waitForTimeout(100);
   }
   const geometry = await page.evaluate(() => {

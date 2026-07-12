@@ -109,6 +109,15 @@ export function CreateRequestPage() {
   const vendors = useProcurementVendors();
   const { profile } = useSession();
   const canConfirmRoute = useCan("procurement", "manage_rfp");
+  const [compactLineEditor, setCompactLineEditor] = useState(false);
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 639px)");
+    const sync = () => setCompactLineEditor(media.matches);
+    sync();
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, []);
 
   const [step, setStep] = useState<StepN>(1);
 
@@ -626,7 +635,92 @@ export function CreateRequestPage() {
                   </button>
                 </div>
 
-                <div className="w-0 min-w-full max-w-full overflow-x-auto overscroll-x-contain">
+                {compactLineEditor && <div className="space-y-3">
+                  {lines.map((line, index) => {
+                    const quantity = toNumber(line.quantity) ?? 0;
+                    const unitPrice = toNumber(line.unitPrice) ?? 0;
+                    return (
+                      <fieldset key={line.key} className="space-y-3 rounded-xl border border-line bg-surface p-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <legend className="text-sm font-semibold text-ink">Line {index + 1}</legend>
+                          <button
+                            type="button"
+                            onClick={() => removeLine(line.key)}
+                            disabled={lines.length === 1}
+                            aria-label={`Remove line ${index + 1}`}
+                            className="grid h-11 w-11 place-items-center rounded-lg text-faint transition hover:bg-inset hover:text-rose-600 disabled:opacity-30"
+                          >
+                            <Icon name="x" className="h-4 w-4" />
+                          </button>
+                        </div>
+                        <label className="block text-xs font-semibold text-muted">
+                          Description
+                          <input
+                            aria-label={`Line ${index + 1} description`}
+                            className="input mt-1"
+                            value={line.description}
+                            onChange={(event) => updateLine(line.key, { description: event.target.value })}
+                            placeholder="Product or service"
+                          />
+                        </label>
+                        <div className="grid grid-cols-2 gap-3">
+                          <label className="block text-xs font-semibold text-muted">
+                            Quantity
+                            <input
+                              aria-label={`Line ${index + 1} quantity`}
+                              className="input mt-1"
+                              type="number"
+                              inputMode="numeric"
+                              min="0"
+                              step="1"
+                              value={line.quantity}
+                              onChange={(event) => updateLine(line.key, { quantity: event.target.value })}
+                            />
+                          </label>
+                          <label className="block text-xs font-semibold text-muted">
+                            Unit
+                            <input
+                              aria-label={`Line ${index + 1} unit of measure`}
+                              className="input mt-1"
+                              value={line.uom}
+                              onChange={(event) => updateLine(line.key, { uom: event.target.value })}
+                            />
+                          </label>
+                        </div>
+                        <div className="grid grid-cols-2 items-end gap-3">
+                          <label className="block text-xs font-semibold text-muted">
+                            Unit price
+                            <input
+                              aria-label={`Line ${index + 1} unit price`}
+                              className="input mt-1"
+                              type="number"
+                              inputMode="decimal"
+                              min="0"
+                              step="0.01"
+                              value={line.unitPrice}
+                              onChange={(event) => updateLine(line.key, { unitPrice: event.target.value })}
+                              placeholder="0.00"
+                            />
+                          </label>
+                          <div className="pb-2 text-right">
+                            <p className="text-xs font-semibold text-muted">Line total</p>
+                            <p className="tnum font-bold text-ink">
+                              ₱{(quantity * unitPrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </p>
+                          </div>
+                        </div>
+                      </fieldset>
+                    );
+                  })}
+                  <div className="flex items-center justify-between border-t border-line pt-3">
+                    <span className="text-xs font-semibold uppercase text-muted">Estimated total</span>
+                    <span className="tnum text-base font-extrabold text-ink">
+                      ₱{total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                </div>}
+
+                {!compactLineEditor && <div className="w-0 min-w-full max-w-full overflow-x-auto overscroll-x-contain">
                   <table className="w-full min-w-[720px] table-fixed text-sm">
                     <thead className="text-left text-xs uppercase tracking-wide text-faint">
                       <tr>
@@ -743,7 +837,7 @@ export function CreateRequestPage() {
                       </tr>
                     </tfoot>
                   </table>
-                </div>
+                </div>}
               </section>
             </>
           )}
@@ -1276,7 +1370,7 @@ export function CreateRequestPage() {
           {/* Sticky wizard footer — Continue / Back / Save / Submit. */}
           <div
             data-mobile-action-bar="true"
-            className="sticky bottom-[calc(8.5rem+env(safe-area-inset-bottom))] z-30 -mx-1 flex flex-wrap items-center justify-between gap-3 border-t border-line bg-app/95 px-1 py-3 backdrop-blur md:bottom-0"
+            className="relative z-10 -mx-1 flex flex-wrap items-center justify-between gap-3 border-t border-line bg-app/95 px-1 py-3 md:sticky md:bottom-0 md:z-30 md:backdrop-blur"
           >
             {step > 1 ? (
               <button type="button" onClick={goBack} className="btn-ghost">
