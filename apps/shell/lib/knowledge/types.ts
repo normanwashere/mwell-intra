@@ -44,6 +44,13 @@ export interface KnowledgeFeatureControl {
   result: string;
 }
 
+export interface KnowledgeFeatureField {
+  name: string;
+  purpose: string;
+  required: boolean;
+  validation: string;
+}
+
 export interface KnowledgeFeature {
   id: string;
   title: string;
@@ -54,10 +61,13 @@ export interface KnowledgeFeature {
   capabilityIds: string[];
   purpose: string;
   controls: KnowledgeFeatureControl[];
+  fields?: KnowledgeFeatureField[];
   reads: string[];
   writes: string[];
   statuses: string[];
+  notifications?: string[];
   exceptions: string[];
+  completionEvidence?: string[];
   owner: string;
   reviewedAt: string;
 }

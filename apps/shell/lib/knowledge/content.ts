@@ -1,4 +1,5 @@
 import { KNOWLEDGE_ROLES } from "./roles";
+import { KNOWLEDGE_FEATURES } from "./features";
 import { KNOWLEDGE_FLOWS } from "./workflows";
 import { KNOWLEDGE_EVIDENCE } from "./evidence";
 import type {
@@ -144,6 +145,73 @@ const roleArticles: KnowledgeArticle[] = KNOWLEDGE_ROLES.map((role) => ({
         : role.module,
   reviewedAt: "2026-07-11",
 }));
+
+const featureArticles: KnowledgeArticle[] = KNOWLEDGE_FEATURES.map(
+  (feature) => ({
+    id: `feature-${feature.id}`,
+    slug: `features/${feature.id}`,
+    title: feature.title,
+    summary: feature.purpose,
+    module: feature.module,
+    roles: feature.roleIds,
+    keywords: [
+      feature.title,
+      feature.module,
+      ...feature.routes,
+      ...feature.capabilityIds,
+      "page reference",
+      "controls",
+      "validation",
+    ],
+    sections: [
+      {
+        id: "purpose-and-access",
+        title: "Purpose and access",
+        body: `${feature.purpose} Entry: ${feature.routes.join(", ")}. Required capabilities: ${feature.capabilityIds.length ? feature.capabilityIds.join(", ") : "authenticated or recovery-session access as described"}.`,
+      },
+      {
+        id: "controls",
+        title: "Controls and validation",
+        body: "Use only the controls available to the current role and record. Disabled or denied controls do not authorize an offline workaround.",
+        steps: feature.controls.map((control) => ({
+          title: control.name,
+          ownerRoleIds: feature.roleIds,
+          instruction: control.behavior,
+          expectedOutcome: control.result,
+          exception: control.validation,
+        })),
+      },
+      {
+        id: "fields",
+        title: "Fields and validation",
+        body: (feature.fields ?? [])
+          .map(
+            (field) =>
+              `${field.name}${field.required ? " (required)" : " (optional)"}: ${field.purpose} Validation: ${field.validation}`,
+          )
+          .join(" "),
+      },
+      {
+        id: "data-and-status",
+        title: "Data, statuses, and notifications",
+        body: `Reads: ${feature.reads.join(" ")} Writes: ${feature.writes.join(" ")} Statuses: ${feature.statuses.join(" ")} Notifications: ${(feature.notifications ?? []).join(" ")}`,
+      },
+      {
+        id: "exceptions-and-completion",
+        title: "Exceptions and completion evidence",
+        body: `Exceptions: ${feature.exceptions.join(" ")} Completion evidence: ${(feature.completionEvidence ?? []).join(" ")}`,
+      },
+    ],
+    relatedArticleIds: feature.roleIds.map((roleId) => `role-${roleId}`),
+    flowIds: KNOWLEDGE_FLOWS.filter((flow) =>
+      flow.roles.some((roleId) => feature.roleIds.includes(roleId)),
+    ).map((flow) => flow.id),
+    liveRoutes:
+      feature.availability === "coming_soon" ? [] : [...feature.routes],
+    owner: feature.owner,
+    reviewedAt: feature.reviewedAt,
+  }),
+);
 
 const processArticle = (
   id: string,
@@ -553,8 +621,8 @@ const procedureArticles: KnowledgeArticle[] = [
 
 export const KNOWLEDGE_CONTENT: KnowledgeContent = {
   roles: KNOWLEDGE_ROLES,
-  features: [],
-  articles: [...roleArticles, ...procedureArticles],
+  features: KNOWLEDGE_FEATURES,
+  articles: [...roleArticles, ...featureArticles, ...procedureArticles],
   flows: KNOWLEDGE_FLOWS,
   glossary: [
     {
