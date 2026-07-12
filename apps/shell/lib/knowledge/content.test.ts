@@ -32,6 +32,63 @@ describe("Knowledge Base content", () => {
     );
   });
 
+  it.each([
+    [
+      "task",
+      "Receive, inspect, and put away stock",
+      "task",
+      /Receive, inspect, and put away stock/i,
+    ],
+    ["role", "Warehouse operations", "role", /Warehouse operations/i],
+    ["page", "Inventory browser", "feature", /Inventory browser/i],
+    ["control", "Place hold", "feature", /Quality control/i],
+    [
+      "field",
+      "Destination bin",
+      "feature",
+      /Warehouse (receiving|product detail)/i,
+    ],
+    ["status", "partially authorized", "feature", /Intra home/i],
+    ["problem", "expected module is absent", "feature", /Intra home/i],
+    [
+      "policy term",
+      "least privilege",
+      "task",
+      /permissions correct|access authorized/i,
+    ],
+    ["glossary alias", "PR", "glossary", /Purchase request/i],
+  ])(
+    "indexes %s language with typed operational context",
+    (_surface, query, type, title) => {
+      const result = searchKnowledge(KNOWLEDGE_CONTENT, query)[0];
+
+      expect(result).toMatchObject({
+        type,
+        availability: "live",
+      });
+      expect(result?.title).toMatch(title);
+      expect(result?.destinationContext).toBeTruthy();
+      expect(result?.roleContext).toBeInstanceOf(Array);
+    },
+  );
+
+  it("ranks usable guidance above roadmap matches unless roadmap is requested", () => {
+    const normal = searchKnowledge(KNOWLEDGE_CONTENT, "offline knowledge");
+    expect(normal.some((item) => item.availability === "coming_soon")).toBe(
+      true,
+    );
+    expect(normal[0]?.availability).toBe("live");
+
+    const roadmap = searchKnowledge(
+      KNOWLEDGE_CONTENT,
+      "roadmap offline knowledge",
+    );
+    expect(roadmap[0]).toMatchObject({
+      type: "roadmap",
+      availability: "coming_soon",
+    });
+  });
+
   it("keeps future capabilities visibly proposed", () => {
     expect(KNOWLEDGE_CONTENT.futureFeatures.length).toBeGreaterThanOrEqual(10);
     expect(

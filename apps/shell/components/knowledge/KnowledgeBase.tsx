@@ -2,28 +2,29 @@
 
 import { useEffect, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
-import { Badge, EmptyState, Icon, ModuleHero } from "@intra/ui";
+import { Badge, EmptyState, Icon } from "@intra/ui";
 import { useSession } from "@intra/auth";
 import { KNOWLEDGE_CONTENT } from "@shell/lib/knowledge/content";
-import { searchKnowledge } from "@shell/lib/knowledge/search";
+import {
+  searchKnowledge,
+  type HandbookEntryMode,
+  type HandbookSearchResult,
+} from "@shell/lib/knowledge/search";
 import type {
+  KnowledgeAvailability,
   KnowledgeModule,
-  KnowledgeResultType,
 } from "@shell/lib/knowledge/types";
+import { HandbookLanding } from "./HandbookLanding";
 import { KnowledgeArticle } from "./KnowledgeArticle";
 import { KnowledgeFlow } from "./KnowledgeFlow";
-import { WorkflowLibrary } from "./WorkflowLibrary";
 
-const MODULES = [
+const ENTRY_MODES = new Set<HandbookEntryMode>(["task", "role", "feature"]);
+const AVAILABILITY_FILTERS = new Set<KnowledgeAvailability | "all">([
   "all",
-  "core",
-  "warehouse",
-  "procurement",
-  "legal",
-  "vendor",
-  "admin",
-] as const;
-const TYPES = ["all", "article", "flow", "glossary", "future"] as const;
+  "live",
+  "limited",
+  "coming_soon",
+]);
 
 export function KnowledgeBase() {
   const { profile, loading, userRoles } = useSession();
@@ -32,7 +33,26 @@ export function KnowledgeBase() {
   const query = params.get("q") ?? "";
   const module = (params.get("module") ?? "all") as KnowledgeModule | "all";
   const roleId = params.get("role") ?? "";
-  const type = (params.get("type") ?? "all") as KnowledgeResultType | "all";
+  const legacyType = params.get("type");
+  const requestedMode = params.get("mode") as HandbookEntryMode | null;
+  const mode =
+    requestedMode && ENTRY_MODES.has(requestedMode)
+      ? requestedMode
+      : legacyType === "future"
+        ? "feature"
+        : "task";
+  const requestedAvailability = params.get("availability") as
+    KnowledgeAvailability | "all" | null;
+  const availability =
+    requestedAvailability && AVAILABILITY_FILTERS.has(requestedAvailability)
+      ? requestedAvailability
+      : legacyType === "future"
+        ? "coming_soon"
+        : "all";
+  const requestedLimit = Number(params.get("limit") ?? "12");
+  const resultLimit = Number.isFinite(requestedLimit)
+    ? Math.min(60, Math.max(12, requestedLimit))
+    : 12;
   const articleId = params.get("article");
   const flowId = params.get("flow");
   const stepId = params.get("step");
@@ -46,9 +66,8 @@ export function KnowledgeBase() {
       searchKnowledge(KNOWLEDGE_CONTENT, query, {
         module,
         roleId: roleId || undefined,
-        type,
       }),
-    [module, query, roleId, type],
+    [module, query, roleId],
   );
 
   const setParams = (
@@ -171,7 +190,9 @@ export function KnowledgeBase() {
         article={article}
         rolesById={rolesById}
         onBack={() => setParams({ article: null })}
-        onOpenFlow={(id) => setParams({ article: null, flow: id })}
+        onOpenFlow={(id) =>
+          setParams({ article: null, flow: id, step: null, view: "flow" })
+        }
       />
     );
   const flow = KNOWLEDGE_CONTENT.flows.find((item) => item.id === flowId);
@@ -180,7 +201,7 @@ export function KnowledgeBase() {
       <div className="space-y-5">
         <button
           className="btn-ghost btn-sm"
-          onClick={() => setParams({ flow: null })}
+          onClick={() => setParams({ flow: null, step: null, view: null })}
         >
           <Icon name="chevron" className="h-4 w-4 rotate-90" />
           Back to Knowledge Base
@@ -208,172 +229,39 @@ export function KnowledgeBase() {
         assignedRoleIds.includes(role.id.replace(/^warehouse_/, "")),
     )
     .map((role) => role.id);
+
+  const openResult = (result: HandbookSearchResult) => {
+    const target = new URL(result.href, window.location.origin);
+    const changes: Record<string, string | null> = {
+      article: null,
+      flow: null,
+      step: null,
+      glossary: null,
+      view: null,
+      type: null,
+    };
+    target.searchParams.forEach((value, key) => {
+      changes[key] = value;
+    });
+    if (target.searchParams.has("flow") && !target.searchParams.has("view"))
+      changes.view = "flow";
+    setParams(changes);
+  };
+
   return (
-    <div className="space-y-6">
-      <ModuleHero
-        eyebrow="Mwell Intra"
-        title="Knowledge Base"
-        description="Search functions, role guides, workflows, troubleshooting, policies, and future recommendations."
-        icon="search"
-      />
-      {!query && !roleId && type === "all" && (
-        <WorkflowLibrary
-          flows={KNOWLEDGE_CONTENT.flows}
-          rolesById={rolesById}
-          recommendedRoleIds={recommendedRoleIds}
-          onOpenFlow={(id) => setParams({ flow: id, article: null })}
-        />
-      )}
-      <section
-        aria-label="Knowledge search"
-        className="border-y border-line py-5"
-      >
-        <label
-          htmlFor="knowledge-search"
-          className="text-sm font-semibold text-ink"
-        >
-          Search functions and workflows
-        </label>
-        <div className="relative mt-2">
-          <Icon
-            name="search"
-            className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-faint"
-          />
-          <input
-            id="knowledge-search"
-            type="search"
-            value={query}
-            onChange={(event) =>
-              setParams(
-                {
-                  q: event.target.value || null,
-                  article: null,
-                  flow: null,
-                },
-                { replace: true },
-              )
-            }
-            className="input-base min-h-11 w-full pl-10"
-            placeholder="Try receive stock, PR, vendor renewal, bins..."
-          />
-        </div>
-        <p className="mt-2 text-sm text-muted" role="status" aria-live="polite">
-          {results.length} result{results.length === 1 ? "" : "s"}
-        </p>
-        <div
-          className="mt-4 flex gap-2 overflow-x-auto pb-1"
-          aria-label="Module filters"
-        >
-          {MODULES.map((item) => (
-            <button
-              key={item}
-              onClick={() =>
-                setParams({ module: item === "all" ? null : item })
-              }
-              className={
-                module === item ? "btn-primary btn-sm" : "btn-outline btn-sm"
-              }
-            >
-              {item === "all" ? "All modules" : item}
-            </button>
-          ))}
-        </div>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <label className="text-sm font-medium text-muted">
-            Role
-            <select
-              className="input-base mt-1 min-h-11 w-full"
-              value={roleId}
-              onChange={(event) =>
-                setParams({ role: event.target.value || null })
-              }
-            >
-              <option value="">All roles</option>
-              {KNOWLEDGE_CONTENT.roles.map((role) => (
-                <option key={role.id} value={role.id}>
-                  {role.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="text-sm font-medium text-muted">
-            Content type
-            <select
-              className="input-base mt-1 min-h-11 w-full"
-              value={type}
-              onChange={(event) =>
-                setParams({
-                  type:
-                    event.target.value === "all" ? null : event.target.value,
-                })
-              }
-            >
-              {TYPES.map((item) => (
-                <option key={item} value={item}>
-                  {item === "all" ? "All content" : item}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-      </section>
-      <section aria-label="Knowledge results">
-        {results.length === 0 ? (
-          <EmptyState
-            icon="search"
-            title="No matching guidance"
-            message="Try a shorter task name, an acronym such as PR or PO, or clear a filter."
-          />
-        ) : (
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {results.map((result) => (
-              <button
-                key={`${result.type}-${result.id}`}
-                onClick={() => {
-                  const target = new URL(result.href, window.location.origin);
-                  const changes: Record<string, string | null> = {
-                    q: null,
-                    article: null,
-                    flow: null,
-                    step: null,
-                    glossary: null,
-                    type: null,
-                  };
-                  target.searchParams.forEach((value, key) => {
-                    changes[key] = value;
-                  });
-                  setParams(changes);
-                }}
-                className="min-w-0 border border-line bg-surface p-4 text-left shadow-e1 transition hover:border-brand-500 hover:bg-inset focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <Badge
-                    tone={
-                      result.type === "future"
-                        ? "amber"
-                        : result.type === "flow"
-                          ? "cyan"
-                          : "brand"
-                    }
-                  >
-                    {result.type}
-                  </Badge>
-                  {result.module && (
-                    <span className="text-xs text-faint">{result.module}</span>
-                  )}
-                </div>
-                <h2 className="mt-3 font-semibold text-ink">{result.title}</h2>
-                <p className="mt-1 line-clamp-3 text-sm text-muted">
-                  {result.summary}
-                </p>
-                <span className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-brand-700">
-                  Open <Icon name="arrowRight" className="h-3.5 w-3.5" />
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
-      </section>
-    </div>
+    <HandbookLanding
+      content={KNOWLEDGE_CONTENT}
+      results={results}
+      query={query}
+      mode={mode}
+      module={module}
+      roleId={roleId}
+      availability={availability}
+      resultLimit={resultLimit}
+      recommendedRoleIds={recommendedRoleIds}
+      rolesById={rolesById}
+      onSetParams={setParams}
+      onOpenResult={openResult}
+    />
   );
 }
