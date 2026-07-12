@@ -1,7 +1,100 @@
-import { roleCapabilities, type Module as RbacModule } from "@intra/rbac";
+import {
+  roleCapabilities,
+  type Module as RbacModule,
+  type WarehouseCapability,
+} from "@intra/rbac";
 import type { KnowledgeAuthority, KnowledgeRole } from "./types";
 
-type RoleAuthority = Omit<KnowledgeAuthority, "capabilities">;
+type RoleAuthority = Omit<
+  KnowledgeAuthority,
+  "capabilities" | "accessibleRoutes"
+> & {
+  accessibleRoutes?: string[];
+};
+
+interface WarehouseRouteCapability {
+  route: string;
+  capabilities: readonly WarehouseCapability[];
+}
+
+// Extracted from the warehouse router guards and module navigation definitions.
+export const WAREHOUSE_ROUTE_CAPABILITY_MANIFEST = [
+  { route: "/warehouse", capabilities: ["view_dashboard"] },
+  { route: "/warehouse/inventory", capabilities: ["manage_inventory"] },
+  {
+    route: "/warehouse/inventory/:id",
+    capabilities: ["manage_inventory"],
+  },
+  {
+    route: "/warehouse/scan",
+    capabilities: [
+      "receive_stock",
+      "issue_items",
+      "manage_returns",
+      "cycle_count",
+      "transfer_stock",
+    ],
+  },
+  {
+    route: "/warehouse/tasks",
+    capabilities: ["inspect_quality", "view_exceptions", "cycle_count"],
+  },
+  {
+    route: "/warehouse/quality",
+    capabilities: ["inspect_quality", "release_quality_hold"],
+  },
+  {
+    route: "/warehouse/approvals",
+    capabilities: ["approve_stock_adjustment"],
+  },
+  { route: "/warehouse/exceptions", capabilities: ["view_exceptions"] },
+  { route: "/warehouse/imports", capabilities: ["import_warehouse_data"] },
+  {
+    route: "/warehouse/reports",
+    capabilities: ["view_analytics", "view_finance"],
+  },
+  {
+    route: "/warehouse/operation-routes",
+    capabilities: ["manage_operation_routes"],
+  },
+  { route: "/warehouse/receiving", capabilities: ["receive_stock"] },
+  {
+    route: "/warehouse/allocations",
+    capabilities: ["reserve_allocate", "issue_items"],
+  },
+  {
+    route: "/warehouse/events",
+    capabilities: ["reserve_allocate", "view_finance"],
+  },
+  {
+    route: "/warehouse/events/:id",
+    capabilities: ["reserve_allocate", "view_finance"],
+  },
+  { route: "/warehouse/cycle-counts", capabilities: ["cycle_count"] },
+  { route: "/warehouse/returns", capabilities: ["manage_returns"] },
+  {
+    route: "/warehouse/procurement",
+    capabilities: ["view_procurement"],
+  },
+  {
+    route: "/warehouse/purchase-orders",
+    capabilities: ["view_procurement", "receive_stock"],
+  },
+  { route: "/warehouse/suppliers", capabilities: ["view_procurement"] },
+  {
+    route: "/warehouse/storage",
+    capabilities: [
+      "receive_stock",
+      "manage_locations",
+      "transfer_stock",
+      "cycle_count",
+    ],
+  },
+  { route: "/warehouse/locations", capabilities: ["manage_locations"] },
+  { route: "/warehouse/finance", capabilities: ["view_finance"] },
+  { route: "/warehouse/pricing", capabilities: ["view_pricing"] },
+  { route: "/warehouse/data", capabilities: ["view_analytics"] },
+] as const satisfies readonly WarehouseRouteCapability[];
 
 type LiveRoleDefinition = Omit<KnowledgeRole, "availability" | "authority"> & {
   rbacModule: RbacModule;
@@ -22,12 +115,23 @@ function capabilitiesFor(module: RbacModule, role: string): string[] {
     .map((grant) => grant.cap);
 }
 
+function warehouseRoutesFor(role: string): string[] {
+  const capabilities = capabilitiesFor("warehouse", role);
+  return WAREHOUSE_ROUTE_CAPABILITY_MANIFEST.filter((route) =>
+    route.capabilities.some((capability) => capabilities.includes(capability)),
+  ).map((route) => route.route);
+}
+
 function liveRole(definition: LiveRoleDefinition): KnowledgeRole {
   return {
     ...definition,
     availability: "live",
     authority: {
       ...definition.authority,
+      accessibleRoutes:
+        definition.rbacModule === "warehouse"
+          ? warehouseRoutesFor(definition.rbacRole)
+          : (definition.authority.accessibleRoutes ?? []),
       capabilities: capabilitiesFor(definition.rbacModule, definition.rbacRole),
     },
   };
@@ -133,20 +237,6 @@ export const LIVE_KNOWLEDGE_ROLES: KnowledgeRole[] = [
     purpose:
       "Control receiving, traceability, inspection, storage, counts, returns, approved adjustments, and warehouse exceptions.",
     authority: {
-      accessibleRoutes: [
-        "/warehouse",
-        "/warehouse/inventory",
-        "/warehouse/receiving",
-        "/warehouse/quality",
-        "/warehouse/storage",
-        "/warehouse/locations",
-        "/warehouse/operation-routes",
-        "/warehouse/cycle-counts",
-        "/warehouse/returns",
-        "/warehouse/approvals",
-        "/warehouse/exceptions",
-        "/warehouse/data",
-      ],
       canDo: [
         "Receive against receivable purchase orders, capture traceability, inspect stock, put away accepted items, and manage returns.",
         "Run cycle counts, approve supported stock adjustments, resolve warehouse exceptions, and maintain operational routes and locations.",
@@ -177,15 +267,6 @@ export const LIVE_KNOWLEDGE_ROLES: KnowledgeRole[] = [
     purpose:
       "Allocate, issue, transfer, inspect, return, and reconcile inventory for approved operational demand.",
     authority: {
-      accessibleRoutes: [
-        "/warehouse",
-        "/warehouse/inventory",
-        "/warehouse/allocations",
-        "/warehouse/events",
-        "/warehouse/returns",
-        "/warehouse/quality",
-        "/warehouse/exceptions",
-      ],
       canDo: [
         "Reserve available stock, issue it to approved events or operations, record transfers, and receive returned stock for inspection.",
         "Inspect operational stock and surface exceptions for supervised resolution.",
@@ -219,14 +300,6 @@ export const LIVE_KNOWLEDGE_ROLES: KnowledgeRole[] = [
     purpose:
       "Review inventory valuation, count variance, adjustment evidence, reconciliation, and financial warehouse controls.",
     authority: {
-      accessibleRoutes: [
-        "/warehouse",
-        "/warehouse/inventory",
-        "/warehouse/finance",
-        "/warehouse/cycle-counts",
-        "/warehouse/approvals",
-        "/warehouse/exceptions",
-      ],
       canDo: [
         "Review valuation and inventory evidence, perform count-related control review, and approve supported stock adjustments.",
         "Investigate financial warehouse exceptions and hand the outcome back through the recorded ledger workflow.",
@@ -257,12 +330,6 @@ export const LIVE_KNOWLEDGE_ROLES: KnowledgeRole[] = [
     purpose:
       "Analyze governed inventory, utilization, consumption, and exception data to support operational decisions.",
     authority: {
-      accessibleRoutes: [
-        "/warehouse",
-        "/warehouse/inventory",
-        "/warehouse/data",
-        "/warehouse/exceptions",
-      ],
       canDo: [
         "Review inventory, analytics, and exception data to identify trends, stock risk, and reporting questions.",
         "Hand evidence-backed findings to the accountable warehouse owner.",
@@ -293,12 +360,6 @@ export const LIVE_KNOWLEDGE_ROLES: KnowledgeRole[] = [
     purpose:
       "View available inventory and reserve stock for confirmed business activity through the governed allocation path.",
     authority: {
-      accessibleRoutes: [
-        "/warehouse",
-        "/warehouse/inventory",
-        "/warehouse/allocations",
-        "/warehouse/events",
-      ],
       canDo: [
         "Review availability and submit or manage reservations for confirmed business demand.",
         "Track the allocation handoff to warehouse operations.",
@@ -328,13 +389,6 @@ export const LIVE_KNOWLEDGE_ROLES: KnowledgeRole[] = [
     purpose:
       "Reserve campaign stock, track distribution demand, and return unused promotional inventory through controlled custody steps.",
     authority: {
-      accessibleRoutes: [
-        "/warehouse",
-        "/warehouse/inventory",
-        "/warehouse/allocations",
-        "/warehouse/events",
-        "/warehouse/returns",
-      ],
       canDo: [
         "Reserve promotional stock for approved campaigns and record returns of unused items.",
         "Track campaign demand and the warehouse handoff for issue and return.",
@@ -364,13 +418,6 @@ export const LIVE_KNOWLEDGE_ROLES: KnowledgeRole[] = [
     purpose:
       "Review stock risk, supplier and receivable purchase-order data, and product information for replenishment coordination.",
     authority: {
-      accessibleRoutes: [
-        "/warehouse",
-        "/warehouse/inventory",
-        "/warehouse/procurement",
-        "/warehouse/purchase-orders",
-        "/warehouse/suppliers",
-      ],
       canDo: [
         "Review procurement visibility, supplier information, product data, and receivable purchase orders for replenishment planning.",
         "Hand approved inbound requirements to the warehouse receiving team.",
@@ -400,12 +447,6 @@ export const LIVE_KNOWLEDGE_ROLES: KnowledgeRole[] = [
     purpose:
       "Review landed cost, valuation context, turnover, and controlled warehouse price changes.",
     authority: {
-      accessibleRoutes: [
-        "/warehouse",
-        "/warehouse/inventory",
-        "/warehouse/pricing",
-        "/warehouse/finance",
-      ],
       canDo: [
         "Review pricing and finance context and set controlled warehouse prices with the required supporting basis.",
         "Hand price-change evidence to finance and warehouse operations.",
@@ -432,27 +473,6 @@ export const LIVE_KNOWLEDGE_ROLES: KnowledgeRole[] = [
     purpose:
       "Administer warehouse configuration, imports, operational controls, quality oversight, inventory execution, and exception recovery.",
     authority: {
-      accessibleRoutes: [
-        "/warehouse",
-        "/warehouse/inventory",
-        "/warehouse/receiving",
-        "/warehouse/allocations",
-        "/warehouse/events",
-        "/warehouse/cycle-counts",
-        "/warehouse/returns",
-        "/warehouse/procurement",
-        "/warehouse/purchase-orders",
-        "/warehouse/suppliers",
-        "/warehouse/storage",
-        "/warehouse/locations",
-        "/warehouse/operation-routes",
-        "/warehouse/quality",
-        "/warehouse/approvals",
-        "/warehouse/exceptions",
-        "/warehouse/finance",
-        "/warehouse/pricing",
-        "/warehouse/data",
-      ],
       canDo: [
         "Configure warehouse controls, perform governed imports, oversee quality and exception resolution, and execute the complete warehouse operating model.",
         "Investigate role-boundary failures and restore a controlled workflow with evidence.",

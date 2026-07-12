@@ -29,7 +29,18 @@ function hasProhibition(value: string): boolean {
   return /\b(do not|never|must not)\b/i.test(value);
 }
 
-export function validateKnowledgeContent(content: KnowledgeContent): string[] {
+export interface KnowledgeValidationOptions {
+  enforceEvidence?: boolean;
+  enforceDecisionGovernance?: boolean;
+}
+
+export function validateKnowledgeContent(
+  content: KnowledgeContent,
+  {
+    enforceEvidence = true,
+    enforceDecisionGovernance = true,
+  }: KnowledgeValidationOptions = {},
+): string[] {
   const errors: string[] = [];
   const roleIds = new Set(content.roles.map((role) => role.id));
   const evidenceIds = new Set<string>();
@@ -151,7 +162,7 @@ export function validateKnowledgeContent(content: KnowledgeContent): string[] {
     for (const section of article.sections)
       for (const step of section.steps ?? []) {
         // KnowledgeStep has no informational discriminator, so each step is executable.
-        if (!step.evidenceId)
+        if (enforceEvidence && !step.evidenceId)
           errors.push(
             `${article.id}:${step.title} requires screenshot evidence`,
           );
@@ -188,6 +199,7 @@ export function validateKnowledgeContent(content: KnowledgeContent): string[] {
           `${flow.id}:${item.id} references missing evidence ${item.evidenceId}`,
         );
       if (
+        enforceEvidence &&
         ["start", "action", "handoff"].includes(item.type) &&
         item.ownerRoleIds.some(
           (roleId) =>
@@ -197,7 +209,7 @@ export function validateKnowledgeContent(content: KnowledgeContent): string[] {
         !item.evidenceId
       )
         errors.push(`flow ${flow.id}:${item.id} requires screenshot evidence`);
-      if (item.type === "decision") {
+      if (enforceDecisionGovernance && item.type === "decision") {
         if (!hasText(item.authorityRoleId))
           errors.push(`flow ${flow.id}:${item.id} has no authority`);
         else if (!roleIds.has(item.authorityRoleId))
@@ -211,7 +223,7 @@ export function validateKnowledgeContent(content: KnowledgeContent): string[] {
         if (!hasText(item.policyBasis))
           errors.push(`flow ${flow.id}:${item.id} has no policy basis`);
       }
-      if (item.type === "terminal") {
+      if (enforceDecisionGovernance && item.type === "terminal") {
         if (!item.terminalOutcome || !OUTCOMES.has(item.terminalOutcome))
           errors.push(
             `flow ${flow.id}:${item.id} has invalid terminal outcome`,

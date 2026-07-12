@@ -246,6 +246,60 @@ describe("validateKnowledgeContent", () => {
     expect(validateKnowledgeContent(valid())).toEqual([]);
   });
 
+  it("keeps strict evidence and decision governance as the default while allowing staged aggregate validation", () => {
+    const content = valid();
+    const flow = content.flows[0]!;
+    const decision = flow.nodes[0]!;
+    const terminal = flow.nodes[1]!;
+    decision.authorityRoleId = undefined;
+    decision.policyBasis = undefined;
+    terminal.terminalOutcome = undefined;
+    content.articles.push({
+      id: "article",
+      slug: "procedures/article",
+      title: "Article",
+      summary: "Summary",
+      module: "core",
+      roles: ["owner"],
+      keywords: [],
+      sections: [
+        {
+          id: "procedure",
+          title: "Procedure",
+          body: "Follow the governed procedure.",
+          steps: [
+            {
+              title: "Complete action",
+              ownerRoleIds: ["owner"],
+              instruction: "Complete the action.",
+              expectedOutcome: "The action is complete.",
+            },
+          ],
+        },
+      ],
+      relatedArticleIds: [],
+      flowIds: ["flow"],
+      liveRoutes: ["/"],
+      owner: "Platform",
+      reviewedAt: "2026-07-11",
+    });
+
+    expect(validateKnowledgeContent(content)).toEqual(
+      expect.arrayContaining([
+        "article:Complete action requires screenshot evidence",
+        "flow flow:start has no authority",
+        "flow flow:start has no policy basis",
+        "flow flow:yes has invalid terminal outcome",
+      ]),
+    );
+    expect(
+      validateKnowledgeContent(content, {
+        enforceEvidence: false,
+        enforceDecisionGovernance: false,
+      }),
+    ).toEqual([]);
+  });
+
   it("requires screenshot evidence for every executable article step", () => {
     const content = valid();
     content.articles.push({
