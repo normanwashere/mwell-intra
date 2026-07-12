@@ -1132,11 +1132,12 @@ export const LIVE_KNOWLEDGE_ROLES: KnowledgeRole[] = [
       ],
       canDo: [
         "Administer procurement records, sourcing, vendor coordination, approvals, awards, purchase orders, and exception recovery under the current provisional matrix.",
-        "Maintain and validate the procurement department DOA through the governed administration path.",
+        "Review the active department DOA and report routing gaps to Platform or Legal administration before procurement work proceeds.",
       ],
       cannotDo: [
         "Do not use administrative capability to bypass a named approval, accreditation gate, competition rule, finance control, or audit trail.",
         "Do not approve an unsupported record you created when segregation of duties requires an independent decision.",
+        "Do not create, validate, activate, supersede, or otherwise configure a department DOA; only Platform or Legal administrators may change it.",
       ],
       decisions: [
         "Decide procurement control, exception, administrative, and approval outcomes permitted by the active delegated authority.",

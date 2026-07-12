@@ -4,6 +4,10 @@ import path from "node:path";
 import { KNOWLEDGE_CONTENT } from "./content";
 import { KNOWLEDGE_GUIDE_CONTENT } from "@shell/components/knowledge/KnowledgeBase";
 import { ROLE_ROUTE_PARENT_PATHS } from "./roles";
+import {
+  DOA_CONFIGURATION_ROLE_IDS,
+  DOA_REVIEW_ROLE_IDS,
+} from "./workflows";
 import { ADMINISTRATOR_GUIDES } from "./admin";
 import {
   GOVERNANCE_GUIDES,
@@ -493,6 +497,44 @@ describe("Knowledge Base content", () => {
       const role = KNOWLEDGE_CONTENT.roles.find((item) => item.id === roleId)!;
       expect(role.authority.capabilities, roleId).toContain("cycle_count");
     }
+  });
+
+  it("restricts DOA configuration to Platform and Legal administrators", () => {
+    const flow = KNOWLEDGE_CONTENT.flows.find(
+      (item) => item.id === "doa-governance",
+    )!;
+    const executableNodes = flow.nodes.filter((node) =>
+      ["start", "action", "decision"].includes(node.type),
+    );
+    const configurationRoles = new Set(DOA_CONFIGURATION_ROLE_IDS);
+
+    for (const node of executableNodes) {
+      expect(node.ownerRoleIds.length, node.id).toBeGreaterThan(0);
+      expect(
+        node.ownerRoleIds.every((roleId) =>
+          configurationRoles.has(roleId as never),
+        ),
+        `${node.id} owners: ${node.ownerRoleIds.join(", ")}`,
+      ).toBe(true);
+      if (node.type === "decision") {
+        expect(configurationRoles.has(node.authorityRoleId as never)).toBe(
+          true,
+        );
+      }
+    }
+
+    const procurement = KNOWLEDGE_CONTENT.roles.find(
+      (role) => role.id === DOA_REVIEW_ROLE_IDS[0],
+    )!;
+    expect(procurement.authority.canDo.join(" ")).toMatch(/review.*DOA/i);
+    expect(procurement.authority.cannotDo.join(" ")).toMatch(
+      /do not create, validate, activate, supersede.*DOA/i,
+    );
+    expect(
+      procurement.authority.canDo.some((capability) =>
+        /(?:maintain|configure|administer).*DOA/i.test(capability),
+      ),
+    ).toBe(false);
   });
 
   it("keeps evidence capture as one atomic full-regeneration mode", () => {

@@ -115,6 +115,13 @@ const allLiveRoleIds = [
   "legal_admin",
 ];
 
+export const DOA_CONFIGURATION_ROLE_IDS = [
+  "platform_admin",
+  "legal_admin",
+] as const;
+
+export const DOA_REVIEW_ROLE_IDS = ["procurement_admin"] as const;
+
 export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
   flow(
     "identity-and-access",
@@ -1680,22 +1687,22 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
         "doa-start",
         "start",
         "Create an immutable DOA revision",
-        ["legal_admin", "procurement_admin", "platform_admin"],
+        [...DOA_CONFIGURATION_ROLE_IDS],
         "Copy the active matrix and update department, amount, category, approver, and effective-date assignments in a draft.",
       ),
       decision(
         "doa-valid",
         "Is the DOA draft valid?",
-        ["legal_admin", "procurement_admin", "platform_admin"],
+        [...DOA_CONFIGURATION_ROLE_IDS],
         "Confirm no amount gaps or overlaps, named active approvers, ordered steps, effective dates, and a final authority.",
-        "procurement_admin",
+        "legal_admin",
         "Delegation of Authority control: the active version must deterministically resolve complete ordered approval authority.",
       ),
       process(
         "doa-activate",
         "action",
         "Activate and supersede",
-        ["legal_admin", "procurement_admin", "platform_admin"],
+        [...DOA_CONFIGURATION_ROLE_IDS],
         "Activate the approved revision deliberately and retain the superseded version and audit evidence.",
       ),
       terminal(
@@ -1708,7 +1715,7 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
       terminal(
         "doa-revision",
         "DOA draft returned for correction",
-        ["legal_admin", "procurement_admin"],
+        [...DOA_CONFIGURATION_ROLE_IDS],
         "Correct the validation errors before activation.",
         "revision",
       ),
