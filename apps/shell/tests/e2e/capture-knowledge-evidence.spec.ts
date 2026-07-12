@@ -440,6 +440,10 @@ async function frameTarget(
       const actionBar = document.querySelector<HTMLElement>("[data-mobile-action-bar='true']");
       if (actionBar && window.innerWidth >= 640) actionBar.style.bottom = "40px";
     });
+  if (nodeId === "admin-start" && viewport.width < 640)
+    await page.evaluate(() => {
+      document.body.style.paddingBottom = "12rem";
+    });
   if (nodeId === "doa-start" && viewport.width < 640)
     await target.evaluate((element) => {
       document.body.style.zoom = "0.65";
@@ -491,6 +495,8 @@ async function frameTarget(
   if (viewport.width < 640) {
     const isNavigationControl = await target.evaluate((element) => Boolean(element.closest("nav")));
     if (isNavigationControl) return;
+    const isModalControl = await target.evaluate((element) => Boolean(element.closest('[role="dialog"]')));
+    if (isModalControl) return;
     const safeBottom = viewport.height - 76;
     const rect = await target.boundingBox();
     expect(rect, `${nodeId} mobile framed target`).not.toBeNull();

@@ -2,7 +2,7 @@ import { KNOWLEDGE_FLOWS } from "./workflows";
 import type { KnowledgeEvidence, KnowledgeFlowNode } from "./types";
 
 const reviewDate = "2026-07-13";
-const appCommit = "229a42ddc08c1672451c806b27baba1e61cc20e8";
+const appCommit = "6f617eb78dcb6212bdb7a1a037c38644ceb6bb06";
 const executableTypes = new Set(["start", "action", "handoff"]);
 
 interface EvidenceScenario {
@@ -37,9 +37,9 @@ export const KNOWLEDGE_EVIDENCE_SCENARIOS: Record<string, EvidenceScenario> = {
     label: "Grant scoped warehouse access",
     instruction: "Select only the approved scoped role for Marco Reyes, then verify the resulting access with a new session.",
     x: 0.9597,
-    y: 0.9289,
-    mobileX: 0.959,
-    mobileY: 0.5,
+    y: 0.6311,
+    mobileX: 0.8615,
+    mobileY: 0.6469,
   },
   "p2p-start": {
     route: "/procurement/requests/new",
@@ -355,10 +355,10 @@ export const KNOWLEDGE_EVIDENCE_SCENARIOS: Record<string, EvidenceScenario> = {
     landmark: "Manage Marco Reyes",
     label: "Manage named user",
     instruction: "Open Marco Reyes's record and compare the requested scope with current assignments before making a change.",
-    x: 0.025,
-    y: 0.1622,
-    mobileX: 0.5,
-    mobileY: 0.9621,
+    x: 0.8963,
+    y: 0.1627,
+    mobileX: 0.7452,
+    mobileY: 0.6,
   },
   "admin-activate": {
     route: "/warehouse/operation-routes",
@@ -367,10 +367,10 @@ export const KNOWLEDGE_EVIDENCE_SCENARIOS: Record<string, EvidenceScenario> = {
     landmark: "Save route",
     label: "Activate warehouse operation route",
     instruction: "After deliberately enabling Active, save the validated warehouse route so it becomes available for governed receiving.",
-    x: 0.2335,
-    y: 0.4027,
+    x: 0.6333,
+    y: 0.7894,
     mobileX: 0.5,
-    mobileY: 0.3962,
+    mobileY: 0.9408,
   },
   "allocation-start": {
     route: "/warehouse/allocations",
