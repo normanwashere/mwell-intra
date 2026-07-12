@@ -7,14 +7,21 @@
 // @intra/* foundation packages — this module contributes the warehouse-specific
 // domain, store binding, pages, and composite components.
 
-export { WarehouseApp } from './WarehouseApp';
-export type { WarehouseAppProps } from './WarehouseApp';
+export { WarehouseApp } from "./WarehouseApp";
+export type { WarehouseAppProps } from "./WarehouseApp";
 
 // React binding over @intra/data-kit's pipeline, exposed for the shell/tests.
-export { WarehouseProvider, useWarehouse, ROLE_KEY } from './app/store';
+export { WarehouseProvider, useWarehouse, ROLE_KEY } from "./app/store";
 
 // Navigation metadata + role adapter (mirrors @intra/rbac; single source of truth).
-export { MODULES, modulesForRole, primaryModulesForRole } from './app/modules';
-export type { ModuleDef } from './app/modules';
-export { ROLES, ROLE_LIST, can } from './auth/roles';
-export type { Capability, RoleProfile } from './auth/roles';
+export {
+  MODULES,
+  WAREHOUSE_DETAIL_ROUTES,
+  WAREHOUSE_ROUTE_BY_ID,
+  WAREHOUSE_ROUTE_CONTRACTS,
+  modulesForRole,
+  primaryModulesForRole,
+} from "./app/modules";
+export type { ModuleDef, WarehouseRouteContract } from "./app/modules";
+export { ROLES, ROLE_LIST, can } from "./auth/roles";
+export type { Capability, RoleProfile } from "./auth/roles";

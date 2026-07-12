@@ -1,92 +1,109 @@
-import { Route, Routes, useNavigate } from 'react-router-dom';
-import { Suspense, lazy, useEffect, useRef } from 'react';
-import { AppShell } from '@/components/AppShell';
-import { useWarehouse } from './store';
-import { can, type Capability } from '@/auth/roles';
+import { Route, Routes, useNavigate } from "react-router-dom";
+import { Suspense, lazy, useEffect, useRef } from "react";
+import { AppShell } from "@/components/AppShell";
+import { useWarehouse } from "./store";
+import { can, type Capability } from "@/auth/roles";
 import {
   EmptyState,
   Skeleton,
   SkeletonList,
   SkeletonStats,
   useToast,
-} from '@/components/ui';
+} from "@/components/ui";
 // Dashboard is the landing route — keep it eager so first paint has no chunk
 // wait. Every other page is code-split so the initial bundle stays lean on the
 // warehouse floor's mobile connections.
-import { DashboardPage } from '@/pages/DashboardPage';
-import type { ReactNode } from 'react';
+import { DashboardPage } from "@/pages/DashboardPage";
+import type { ReactNode } from "react";
+import { WAREHOUSE_ROUTE_BY_ID } from "./modules";
 
 const InventoryPage = lazy(() =>
-  import('@/pages/InventoryPage').then((m) => ({ default: m.InventoryPage })),
+  import("@/pages/InventoryPage").then((m) => ({ default: m.InventoryPage })),
 );
 const ProductDetailPage = lazy(() =>
-  import('@/pages/ProductDetailPage').then((m) => ({ default: m.ProductDetailPage })),
+  import("@/pages/ProductDetailPage").then((m) => ({
+    default: m.ProductDetailPage,
+  })),
 );
 const ReceivingPage = lazy(() =>
-  import('@/pages/ReceivingPage').then((m) => ({ default: m.ReceivingPage })),
+  import("@/pages/ReceivingPage").then((m) => ({ default: m.ReceivingPage })),
 );
 const AllocationsPage = lazy(() =>
-  import('@/pages/AllocationsPage').then((m) => ({ default: m.AllocationsPage })),
+  import("@/pages/AllocationsPage").then((m) => ({
+    default: m.AllocationsPage,
+  })),
 );
 const CycleCountsPage = lazy(() =>
-  import('@/pages/CycleCountsPage').then((m) => ({ default: m.CycleCountsPage })),
+  import("@/pages/CycleCountsPage").then((m) => ({
+    default: m.CycleCountsPage,
+  })),
 );
 const ReturnsPage = lazy(() =>
-  import('@/pages/ReturnsPage').then((m) => ({ default: m.ReturnsPage })),
+  import("@/pages/ReturnsPage").then((m) => ({ default: m.ReturnsPage })),
 );
 const ProcurementPage = lazy(() =>
-  import('@/pages/ProcurementPage').then((m) => ({ default: m.ProcurementPage })),
+  import("@/pages/ProcurementPage").then((m) => ({
+    default: m.ProcurementPage,
+  })),
 );
 const PurchaseOrdersPage = lazy(() =>
-  import('@/pages/PurchaseOrdersPage').then((m) => ({ default: m.PurchaseOrdersPage })),
+  import("@/pages/PurchaseOrdersPage").then((m) => ({
+    default: m.PurchaseOrdersPage,
+  })),
 );
 const SuppliersPage = lazy(() =>
-  import('@/pages/SuppliersPage').then((m) => ({ default: m.SuppliersPage })),
+  import("@/pages/SuppliersPage").then((m) => ({ default: m.SuppliersPage })),
 );
 const LocationsPage = lazy(() =>
-  import('@/pages/LocationsPage').then((m) => ({ default: m.LocationsPage })),
+  import("@/pages/LocationsPage").then((m) => ({ default: m.LocationsPage })),
 );
 const StorageAreasPage = lazy(() =>
-  import('@/pages/StorageAreasPage').then((m) => ({ default: m.StorageAreasPage })),
+  import("@/pages/StorageAreasPage").then((m) => ({
+    default: m.StorageAreasPage,
+  })),
 );
 const FinancePage = lazy(() =>
-  import('@/pages/FinancePage').then((m) => ({ default: m.FinancePage })),
+  import("@/pages/FinancePage").then((m) => ({ default: m.FinancePage })),
 );
 const PricingPage = lazy(() =>
-  import('@/pages/PricingPage').then((m) => ({ default: m.PricingPage })),
+  import("@/pages/PricingPage").then((m) => ({ default: m.PricingPage })),
 );
 const EventsPage = lazy(() =>
-  import('@/pages/EventsPage').then((m) => ({ default: m.EventsPage })),
+  import("@/pages/EventsPage").then((m) => ({ default: m.EventsPage })),
 );
 const EventDetailPage = lazy(() =>
-  import('@/pages/EventDetailPage').then((m) => ({ default: m.EventDetailPage })),
+  import("@/pages/EventDetailPage").then((m) => ({
+    default: m.EventDetailPage,
+  })),
 );
 const DataPage = lazy(() =>
-  import('@/pages/DataPage').then((m) => ({ default: m.DataPage })),
+  import("@/pages/DataPage").then((m) => ({ default: m.DataPage })),
 );
 const ScanPage = lazy(() =>
-  import('@/pages/ScanPage').then((m) => ({ default: m.ScanPage })),
+  import("@/pages/ScanPage").then((m) => ({ default: m.ScanPage })),
 );
 const TasksPage = lazy(() =>
-  import('@/pages/TasksPage').then((m) => ({ default: m.TasksPage })),
+  import("@/pages/TasksPage").then((m) => ({ default: m.TasksPage })),
 );
 const QualityPage = lazy(() =>
-  import('@/pages/QualityPage').then((m) => ({ default: m.QualityPage })),
+  import("@/pages/QualityPage").then((m) => ({ default: m.QualityPage })),
 );
 const ApprovalsPage = lazy(() =>
-  import('@/pages/ApprovalsPage').then((m) => ({ default: m.ApprovalsPage })),
+  import("@/pages/ApprovalsPage").then((m) => ({ default: m.ApprovalsPage })),
 );
 const ExceptionsPage = lazy(() =>
-  import('@/pages/ExceptionsPage').then((m) => ({ default: m.ExceptionsPage })),
+  import("@/pages/ExceptionsPage").then((m) => ({ default: m.ExceptionsPage })),
 );
 const ImportsPage = lazy(() =>
-  import('@/pages/ImportsPage').then((m) => ({ default: m.ImportsPage })),
+  import("@/pages/ImportsPage").then((m) => ({ default: m.ImportsPage })),
 );
 const ReportsPage = lazy(() =>
-  import('@/pages/ReportsPage').then((m) => ({ default: m.ReportsPage })),
+  import("@/pages/ReportsPage").then((m) => ({ default: m.ReportsPage })),
 );
 const OperationRoutesPage = lazy(() =>
-  import('@/pages/OperationRoutesPage').then((m) => ({ default: m.OperationRoutesPage })),
+  import("@/pages/OperationRoutesPage").then((m) => ({
+    default: m.OperationRoutesPage,
+  })),
 );
 
 function AccessDenied() {
@@ -97,7 +114,11 @@ function AccessDenied() {
       title="You don't have access to this page"
       message="This tool isn't part of your role. Head back to your dashboard to keep working."
       action={
-        <button type="button" className="btn-primary" onClick={() => navigate('/')}>
+        <button
+          type="button"
+          className="btn-primary"
+          onClick={() => navigate("/")}
+        >
           Back to dashboard
         </button>
       }
@@ -119,7 +140,7 @@ function Guard({
   useEffect(() => {
     if (!allowed && !toasted.current) {
       toasted.current = true;
-      toast.toast('That tool is not available for your role.', 'info');
+      toast.toast("That tool is not available for your role.", "info");
     }
   }, [allowed, toast]);
   // Render an explicit, friendly access-denied page rather than silently
@@ -136,7 +157,11 @@ function NotFound() {
       title="Page not found"
       message="The page you're looking for doesn't exist."
       action={
-        <button type="button" className="btn-primary" onClick={() => navigate('/')}>
+        <button
+          type="button"
+          className="btn-primary"
+          onClick={() => navigate("/")}
+        >
           Back to dashboard
         </button>
       }
@@ -194,165 +219,211 @@ export function App() {
         }
       >
         <Routes>
-        <Route path="/" element={<DashboardPage />} />
-        <Route path="/inventory" element={<InventoryPage />} />
-        <Route path="/inventory/:id" element={<ProductDetailPage />} />
-        <Route
-          path="/scan"
-          element={
-            <Guard anyOf={['receive_stock', 'issue_items', 'manage_returns', 'cycle_count', 'transfer_stock']}>
-              <ScanPage />
-            </Guard>
-          }
-        />
-        <Route
-          path="/tasks"
-          element={
-            <Guard anyOf={['inspect_quality', 'view_exceptions', 'cycle_count']}>
-              <TasksPage />
-            </Guard>
-          }
-        />
-        <Route
-          path="/quality"
-          element={
-            <Guard anyOf={['inspect_quality', 'release_quality_hold']}>
-              <QualityPage />
-            </Guard>
-          }
-        />
-        <Route
-          path="/approvals"
-          element={
-            <Guard anyOf={['approve_stock_adjustment']}>
-              <ApprovalsPage />
-            </Guard>
-          }
-        />
-        <Route
-          path="/exceptions"
-          element={
-            <Guard anyOf={['view_exceptions']}>
-              <ExceptionsPage />
-            </Guard>
-          }
-        />
-        <Route path="/imports" element={<Guard anyOf={['import_warehouse_data']}><ImportsPage /></Guard>} />
-        <Route path="/reports" element={<Guard anyOf={['view_analytics', 'view_finance']}><ReportsPage /></Guard>} />
-        <Route path="/operation-routes" element={<Guard anyOf={['manage_operation_routes']}><OperationRoutesPage /></Guard>} />
-        <Route
-          path="/receiving"
-          element={
-            <Guard anyOf={['receive_stock']}>
-              <ReceivingPage />
-            </Guard>
-          }
-        />
-        <Route
-          path="/allocations"
-          element={
-            <Guard anyOf={['reserve_allocate', 'issue_items']}>
-              <AllocationsPage />
-            </Guard>
-          }
-        />
-        <Route
-          path="/events"
-          element={
-            <Guard anyOf={['reserve_allocate', 'view_finance']}>
-              <EventsPage />
-            </Guard>
-          }
-        />
-        <Route
-          path="/events/:id"
-          element={
-            <Guard anyOf={['reserve_allocate', 'view_finance']}>
-              <EventDetailPage />
-            </Guard>
-          }
-        />
-        <Route
-          path="/cycle-counts"
-          element={
-            <Guard anyOf={['cycle_count']}>
-              <CycleCountsPage />
-            </Guard>
-          }
-        />
-        <Route
-          path="/returns"
-          element={
-            <Guard anyOf={['manage_returns']}>
-              <ReturnsPage />
-            </Guard>
-          }
-        />
-        <Route
-          path="/procurement"
-          element={
-            <Guard anyOf={['view_procurement']}>
-              <ProcurementPage />
-            </Guard>
-          }
-        />
-        <Route
-          path="/purchase-orders"
-          element={
-            <Guard anyOf={['view_procurement', 'receive_stock']}>
-              <PurchaseOrdersPage />
-            </Guard>
-          }
-        />
-        <Route
-          path="/suppliers"
-          element={
-            <Guard anyOf={['view_procurement']}>
-              <SuppliersPage />
-            </Guard>
-          }
-        />
-        <Route
-          path="/storage"
-          element={
-            <Guard anyOf={['receive_stock', 'manage_locations', 'transfer_stock', 'cycle_count']}>
-              <StorageAreasPage />
-            </Guard>
-          }
-        />
-        <Route
-          path="/locations"
-          element={
-            <Guard anyOf={['manage_locations']}>
-              <LocationsPage />
-            </Guard>
-          }
-        />
-        <Route
-          path="/finance"
-          element={
-            <Guard anyOf={['view_finance']}>
-              <FinancePage />
-            </Guard>
-          }
-        />
-        <Route
-          path="/pricing"
-          element={
-            <Guard anyOf={['view_pricing']}>
-              <PricingPage />
-            </Guard>
-          }
-        />
-        <Route
-          path="/data"
-          element={
-            <Guard anyOf={['view_analytics']}>
-              <DataPage />
-            </Guard>
-          }
-        />
-        <Route path="*" element={<NotFound />} />
+          <Route
+            path={WAREHOUSE_ROUTE_BY_ID.dashboard.path}
+            element={<DashboardPage />}
+          />
+          <Route
+            path={WAREHOUSE_ROUTE_BY_ID.inventory.path}
+            element={<InventoryPage />}
+          />
+          <Route
+            path={WAREHOUSE_ROUTE_BY_ID["product-detail"].path}
+            element={<ProductDetailPage />}
+          />
+          <Route
+            path={WAREHOUSE_ROUTE_BY_ID.scan.path}
+            element={
+              <Guard anyOf={WAREHOUSE_ROUTE_BY_ID.scan.gateCapabilityIds}>
+                <ScanPage />
+              </Guard>
+            }
+          />
+          <Route
+            path={WAREHOUSE_ROUTE_BY_ID.tasks.path}
+            element={
+              <Guard anyOf={WAREHOUSE_ROUTE_BY_ID.tasks.gateCapabilityIds}>
+                <TasksPage />
+              </Guard>
+            }
+          />
+          <Route
+            path={WAREHOUSE_ROUTE_BY_ID.quality.path}
+            element={
+              <Guard anyOf={WAREHOUSE_ROUTE_BY_ID.quality.gateCapabilityIds}>
+                <QualityPage />
+              </Guard>
+            }
+          />
+          <Route
+            path={WAREHOUSE_ROUTE_BY_ID.approvals.path}
+            element={
+              <Guard anyOf={WAREHOUSE_ROUTE_BY_ID.approvals.gateCapabilityIds}>
+                <ApprovalsPage />
+              </Guard>
+            }
+          />
+          <Route
+            path={WAREHOUSE_ROUTE_BY_ID.exceptions.path}
+            element={
+              <Guard anyOf={WAREHOUSE_ROUTE_BY_ID.exceptions.gateCapabilityIds}>
+                <ExceptionsPage />
+              </Guard>
+            }
+          />
+          <Route
+            path={WAREHOUSE_ROUTE_BY_ID.imports.path}
+            element={
+              <Guard anyOf={WAREHOUSE_ROUTE_BY_ID.imports.gateCapabilityIds}>
+                <ImportsPage />
+              </Guard>
+            }
+          />
+          <Route
+            path={WAREHOUSE_ROUTE_BY_ID.reports.path}
+            element={
+              <Guard anyOf={WAREHOUSE_ROUTE_BY_ID.reports.gateCapabilityIds}>
+                <ReportsPage />
+              </Guard>
+            }
+          />
+          <Route
+            path={WAREHOUSE_ROUTE_BY_ID["operation-routes"].path}
+            element={
+              <Guard
+                anyOf={
+                  WAREHOUSE_ROUTE_BY_ID["operation-routes"].gateCapabilityIds
+                }
+              >
+                <OperationRoutesPage />
+              </Guard>
+            }
+          />
+          <Route
+            path={WAREHOUSE_ROUTE_BY_ID.receiving.path}
+            element={
+              <Guard anyOf={WAREHOUSE_ROUTE_BY_ID.receiving.gateCapabilityIds}>
+                <ReceivingPage />
+              </Guard>
+            }
+          />
+          <Route
+            path={WAREHOUSE_ROUTE_BY_ID.allocations.path}
+            element={
+              <Guard
+                anyOf={WAREHOUSE_ROUTE_BY_ID.allocations.gateCapabilityIds}
+              >
+                <AllocationsPage />
+              </Guard>
+            }
+          />
+          <Route
+            path={WAREHOUSE_ROUTE_BY_ID.events.path}
+            element={
+              <Guard anyOf={WAREHOUSE_ROUTE_BY_ID.events.gateCapabilityIds}>
+                <EventsPage />
+              </Guard>
+            }
+          />
+          <Route
+            path={WAREHOUSE_ROUTE_BY_ID["event-detail"].path}
+            element={
+              <Guard
+                anyOf={WAREHOUSE_ROUTE_BY_ID["event-detail"].gateCapabilityIds}
+              >
+                <EventDetailPage />
+              </Guard>
+            }
+          />
+          <Route
+            path={WAREHOUSE_ROUTE_BY_ID["cycle-counts"].path}
+            element={
+              <Guard
+                anyOf={WAREHOUSE_ROUTE_BY_ID["cycle-counts"].gateCapabilityIds}
+              >
+                <CycleCountsPage />
+              </Guard>
+            }
+          />
+          <Route
+            path={WAREHOUSE_ROUTE_BY_ID.returns.path}
+            element={
+              <Guard anyOf={WAREHOUSE_ROUTE_BY_ID.returns.gateCapabilityIds}>
+                <ReturnsPage />
+              </Guard>
+            }
+          />
+          <Route
+            path={WAREHOUSE_ROUTE_BY_ID.procurement.path}
+            element={
+              <Guard
+                anyOf={WAREHOUSE_ROUTE_BY_ID.procurement.gateCapabilityIds}
+              >
+                <ProcurementPage />
+              </Guard>
+            }
+          />
+          <Route
+            path={WAREHOUSE_ROUTE_BY_ID["purchase-orders"].path}
+            element={
+              <Guard
+                anyOf={
+                  WAREHOUSE_ROUTE_BY_ID["purchase-orders"].gateCapabilityIds
+                }
+              >
+                <PurchaseOrdersPage />
+              </Guard>
+            }
+          />
+          <Route
+            path={WAREHOUSE_ROUTE_BY_ID.suppliers.path}
+            element={
+              <Guard anyOf={WAREHOUSE_ROUTE_BY_ID.suppliers.gateCapabilityIds}>
+                <SuppliersPage />
+              </Guard>
+            }
+          />
+          <Route
+            path={WAREHOUSE_ROUTE_BY_ID.storage.path}
+            element={
+              <Guard anyOf={WAREHOUSE_ROUTE_BY_ID.storage.gateCapabilityIds}>
+                <StorageAreasPage />
+              </Guard>
+            }
+          />
+          <Route
+            path={WAREHOUSE_ROUTE_BY_ID.locations.path}
+            element={
+              <Guard anyOf={WAREHOUSE_ROUTE_BY_ID.locations.gateCapabilityIds}>
+                <LocationsPage />
+              </Guard>
+            }
+          />
+          <Route
+            path={WAREHOUSE_ROUTE_BY_ID.finance.path}
+            element={
+              <Guard anyOf={WAREHOUSE_ROUTE_BY_ID.finance.gateCapabilityIds}>
+                <FinancePage />
+              </Guard>
+            }
+          />
+          <Route
+            path={WAREHOUSE_ROUTE_BY_ID.pricing.path}
+            element={
+              <Guard anyOf={WAREHOUSE_ROUTE_BY_ID.pricing.gateCapabilityIds}>
+                <PricingPage />
+              </Guard>
+            }
+          />
+          <Route
+            path={WAREHOUSE_ROUTE_BY_ID.data.path}
+            element={
+              <Guard anyOf={WAREHOUSE_ROUTE_BY_ID.data.gateCapabilityIds}>
+                <DataPage />
+              </Guard>
+            }
+          />
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </Suspense>
     </AppShell>

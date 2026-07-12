@@ -1,10 +1,16 @@
 import type { KnowledgeContent, KnowledgeModule } from "./types";
+import { WAREHOUSE_ROUTE_CONTRACTS } from "@intra/warehouse";
+import { PROCUREMENT_ROUTE_CONTRACTS } from "@intra/procurement";
+import { mountLegalRouteContracts } from "@intra/legal";
+import { SHELL_PAGE_ROUTE_CONTRACTS } from "../routes";
 
 export interface LiveRouteManifestEntry {
   route: string;
   module: KnowledgeModule;
   capabilityIds: string[];
   administratorRoleIds?: string[];
+  minimumControls: number;
+  minimumFields: number;
 }
 
 export interface KnowledgeCoverageReport {
@@ -13,176 +19,70 @@ export interface KnowledgeCoverageReport {
   routeCoverage: Map<string, string[]>;
 }
 
-const route = (
-  routePath: string,
-  module: KnowledgeModule,
-  capabilityIds: string[] = [],
-  administratorRoleIds?: string[],
-): LiveRouteManifestEntry => ({
-  route: routePath,
-  module,
-  capabilityIds,
-  administratorRoleIds,
-});
+type RouteSource = Omit<LiveRouteManifestEntry, "administratorRoleIds"> & {
+  administratorRoleIds?: string[];
+};
+
+const routeSources: RouteSource[] = [
+  ...SHELL_PAGE_ROUTE_CONTRACTS,
+  ...WAREHOUSE_ROUTE_CONTRACTS.map((entry) => ({
+    ...entry,
+    route: entry.path === "/" ? "/warehouse" : `/warehouse${entry.path}`,
+    module: "warehouse" as const,
+  })),
+  ...PROCUREMENT_ROUTE_CONTRACTS.map((entry) => ({
+    ...entry,
+    route: entry.path === "/" ? "/procurement" : `/procurement${entry.path}`,
+    module: "procurement" as const,
+  })),
+  ...mountLegalRouteContracts("/legal", "legal"),
+  ...mountLegalRouteContracts("/vendor", "vendor"),
+];
+
+const mergedRoutes = new Map<string, LiveRouteManifestEntry>();
+for (const source of routeSources) {
+  const existing = mergedRoutes.get(source.route);
+  if (!existing) {
+    mergedRoutes.set(source.route, {
+      route: source.route,
+      module: source.module as KnowledgeModule,
+      capabilityIds: [...source.capabilityIds],
+      administratorRoleIds: source.administratorRoleIds
+        ? [...source.administratorRoleIds]
+        : undefined,
+      minimumControls: source.minimumControls,
+      minimumFields: source.minimumFields,
+    });
+    continue;
+  }
+  if (existing.module !== source.module)
+    throw new Error(
+      `route ${source.route} has conflicting modules ${existing.module} and ${source.module}`,
+    );
+  existing.capabilityIds = [
+    ...new Set([...existing.capabilityIds, ...source.capabilityIds]),
+  ];
+  const administratorRoleIds = [
+    ...new Set([
+      ...(existing.administratorRoleIds ?? []),
+      ...(source.administratorRoleIds ?? []),
+    ]),
+  ];
+  existing.administratorRoleIds = administratorRoleIds.length
+    ? administratorRoleIds
+    : undefined;
+  existing.minimumControls = Math.max(
+    existing.minimumControls,
+    source.minimumControls,
+  );
+  existing.minimumFields = Math.max(
+    existing.minimumFields,
+    source.minimumFields,
+  );
+}
 
 export const LIVE_ROUTE_MANIFEST: LiveRouteManifestEntry[] = [
-  route("/", "core", [
-    "view_directory",
-    "view_vendors",
-    "view_documents",
-    "view_approvals",
-    "manage_notifications",
-  ]),
-  route("/login", "core"),
-  route("/reset-password", "core"),
-  route("/knowledge", "core"),
-  route("/~offline", "core"),
-  route(
-    "/admin/users",
-    "admin",
-    ["manage_rbac", "view_audit", "manage_approvals", "record_approval"],
-    ["platform_admin"],
-  ),
-  route(
-    "/admin/doa",
-    "admin",
-    ["manage_doa"],
-    ["platform_admin", "legal_admin"],
-  ),
-
-  route("/warehouse", "warehouse", ["view_dashboard"]),
-  route("/warehouse/scan", "warehouse", [
-    "receive_stock",
-    "issue_items",
-    "manage_returns",
-    "cycle_count",
-    "transfer_stock",
-  ]),
-  route("/warehouse/tasks", "warehouse", [
-    "inspect_quality",
-    "view_exceptions",
-    "cycle_count",
-  ]),
-  route("/warehouse/inventory", "warehouse", [
-    "manage_inventory",
-    "manage_products",
-  ]),
-  route("/warehouse/inventory/:id", "warehouse", [
-    "manage_inventory",
-    "manage_products",
-  ]),
-  route("/warehouse/receiving", "warehouse", ["receive_stock"]),
-  route("/warehouse/allocations", "warehouse", [
-    "reserve_allocate",
-    "issue_items",
-  ]),
-  route("/warehouse/returns", "warehouse", ["manage_returns"]),
-  route("/warehouse/storage", "warehouse", [
-    "receive_stock",
-    "manage_locations",
-    "transfer_stock",
-    "cycle_count",
-  ]),
-  route("/warehouse/events", "warehouse", ["reserve_allocate", "view_finance"]),
-  route("/warehouse/events/:id", "warehouse", [
-    "reserve_allocate",
-    "view_finance",
-  ]),
-  route("/warehouse/procurement", "warehouse", ["view_procurement"]),
-  route("/warehouse/purchase-orders", "warehouse", [
-    "view_procurement",
-    "receive_stock",
-  ]),
-  route("/warehouse/cycle-counts", "warehouse", ["cycle_count"]),
-  route("/warehouse/quality", "warehouse", [
-    "inspect_quality",
-    "release_quality_hold",
-  ]),
-  route("/warehouse/approvals", "warehouse", ["approve_stock_adjustment"]),
-  route("/warehouse/exceptions", "warehouse", [
-    "view_exceptions",
-    "resolve_exceptions",
-  ]),
-  route("/warehouse/finance", "warehouse", ["view_finance"]),
-  route("/warehouse/pricing", "warehouse", ["view_pricing", "set_pricing"]),
-  route("/warehouse/data", "warehouse", ["view_analytics"]),
-  route("/warehouse/reports", "warehouse", ["view_analytics", "view_finance"]),
-  route("/warehouse/suppliers", "warehouse", ["view_procurement"]),
-  route("/warehouse/locations", "warehouse", ["manage_locations"]),
-  route("/warehouse/imports", "warehouse", ["import_warehouse_data"]),
-  route("/warehouse/operation-routes", "warehouse", [
-    "manage_operation_routes",
-  ]),
-
-  route("/procurement", "procurement", ["view_dashboard"]),
-  route("/procurement/requests/new", "procurement", [
-    "create_request",
-    "manage_rfp",
-  ]),
-  route("/procurement/requests/:id", "procurement", [
-    "view_dashboard",
-    "approve_request",
-    "approve_award",
-    "view_finance",
-    "manage_rfp",
-  ]),
-  route("/procurement/approvals", "procurement", [
-    "approve_request",
-    "approve_award",
-  ]),
-  route("/procurement/purchase-orders", "procurement", [
-    "author_po",
-    "approve_award",
-    "view_finance",
-    "admin",
-  ]),
-  route("/procurement/purchase-orders/:id", "procurement", [
-    "author_po",
-    "approve_award",
-    "view_finance",
-    "admin",
-  ]),
-
-  route("/legal", "legal", [
-    "view_dashboard",
-    "review_accreditation",
-    "manage_accreditation",
-    "view_vendors",
-  ]),
-  route("/legal/cases/:id", "legal", [
-    "review_accreditation",
-    "manage_checklist",
-    "approve_accreditation",
-    "manage_documents",
-    "manage_accreditation",
-    "manage_approvals",
-    "record_approval",
-  ]),
-  route("/legal/cases/:id/application", "legal", [
-    "review_accreditation",
-    "manage_checklist",
-  ]),
-  route("/legal/cases/:id/sign/:code", "legal", [
-    "manage_documents",
-    "approve_accreditation",
-  ]),
-  route("/legal/invites/new", "legal", ["manage_checklist", "manage_vendors"]),
-
-  route("/vendor", "vendor", ["view_own_accreditation"]),
-  route("/vendor/cases/:id", "vendor", [
-    "view_own_accreditation",
-    "submit_documents",
-    "submit_accreditation",
-  ]),
-  route("/vendor/cases/:id/application", "vendor", [
-    "submit_accreditation",
-    "view_own_accreditation",
-  ]),
-  route("/vendor/cases/:id/sign/:code", "vendor", [
-    "submit_documents",
-    "view_own_accreditation",
-  ]),
-  route("/vendor/invites/new", "vendor", ["view_own_accreditation"]),
+  ...mergedRoutes.values(),
 ];
 
 function normalizeRoute(value: string): string {
@@ -252,9 +152,14 @@ export function buildKnowledgeCoverage(
       );
 
     for (const featureRoute of feature.routes) {
-      const matchingEntries = LIVE_ROUTE_MANIFEST.filter((entry) =>
-        matchesRoute(entry.route, featureRoute),
+      const exactEntries = LIVE_ROUTE_MANIFEST.filter(
+        (entry) => normalizeRoute(entry.route) === normalizeRoute(featureRoute),
       );
+      const matchingEntries = exactEntries.length
+        ? exactEntries
+        : LIVE_ROUTE_MANIFEST.filter((entry) =>
+            matchesRoute(entry.route, featureRoute),
+          );
       if (matchingEntries.length === 0) {
         const message = `feature ${feature.id} references unknown route ${normalizeRoute(featureRoute)}`;
         if (isLive) errors.push(message);
@@ -262,8 +167,32 @@ export function buildKnowledgeCoverage(
         continue;
       }
       for (const entry of matchingEntries) {
-        if (isLive) routeCoverage.get(entry.route)!.push(feature.id);
-        else
+        if (isLive) {
+          routeCoverage.get(entry.route)!.push(feature.id);
+          if (feature.controls.length < entry.minimumControls)
+            errors.push(
+              `live feature ${feature.id} documents ${feature.controls.length} controls; route ${entry.route} requires at least ${entry.minimumControls}`,
+            );
+          if ((feature.fields?.length ?? 0) < entry.minimumFields)
+            errors.push(
+              `live feature ${feature.id} documents ${feature.fields?.length ?? 0} fields; route ${entry.route} requires at least ${entry.minimumFields}`,
+            );
+          for (const control of feature.controls)
+            if (/\,|\band\b/i.test(control.name))
+              errors.push(
+                `live feature ${feature.id} has combined control name ${control.name}`,
+              );
+          for (const field of feature.fields ?? [])
+            if (/\,|\band\b/i.test(field.name))
+              errors.push(
+                `live feature ${feature.id} has combined field name ${field.name}`,
+              );
+          for (const capability of feature.capabilityIds)
+            if (!entry.capabilityIds.includes(capability))
+              errors.push(
+                `feature ${feature.id} claims capability ${capability} outside route ${entry.route}`,
+              );
+        } else
           warnings.push(
             `coming-soon feature ${feature.id} references live route ${entry.route}`,
           );
@@ -290,21 +219,18 @@ export function buildKnowledgeCoverage(
           `administrator route ${entry.route} is not assigned to an authorized administrator role`,
         );
     }
+    const routeFeatures = liveFeatures.filter((feature) =>
+      featureIds.includes(feature.id),
+    );
+    const documentedCapabilities = new Set(
+      routeFeatures.flatMap((feature) => feature.capabilityIds),
+    );
+    for (const capability of entry.capabilityIds)
+      if (!documentedCapabilities.has(capability))
+        errors.push(
+          `live route ${entry.route} capability ${capability} has no feature documentation`,
+        );
   }
-
-  const documentedCapabilities = new Set(
-    liveFeatures.flatMap((feature) => feature.capabilityIds),
-  );
-  const currentCapabilities = new Set(
-    content.roles
-      .filter((role) => role.availability !== "coming_soon")
-      .flatMap((role) => role.authority.capabilities),
-  );
-  for (const capability of currentCapabilities)
-    if (!documentedCapabilities.has(capability))
-      errors.push(
-        `live capability ${capability} has no live feature documentation`,
-      );
 
   return { errors, warnings, routeCoverage };
 }

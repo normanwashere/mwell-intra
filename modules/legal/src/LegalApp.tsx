@@ -1,22 +1,23 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState } from "react";
 import {
   BrowserRouter,
   Navigate,
   Route,
   Routes,
   useLocation,
-} from 'react-router-dom';
-import { useSession } from '@intra/auth';
-import { can } from '@intra/rbac';
-import { SignInPrompt, SkeletonList, SkeletonStats } from '@intra/ui';
-import { AccreditationCasesPage } from './pages/AccreditationCasesPage';
-import { CaseDetailPage } from './pages/CaseDetailPage';
-import { InviteVendorPage } from './pages/InviteVendorPage';
-import { SignInstrumentPage } from './pages/SignInstrumentPage';
-import { VendorApplicationPage } from './pages/VendorApplicationPage';
-import { LegalTabs } from './components/LegalTabs';
+} from "react-router-dom";
+import { useSession } from "@intra/auth";
+import { can } from "@intra/rbac";
+import { SignInPrompt, SkeletonList, SkeletonStats } from "@intra/ui";
+import { AccreditationCasesPage } from "./pages/AccreditationCasesPage";
+import { CaseDetailPage } from "./pages/CaseDetailPage";
+import { InviteVendorPage } from "./pages/InviteVendorPage";
+import { SignInstrumentPage } from "./pages/SignInstrumentPage";
+import { VendorApplicationPage } from "./pages/VendorApplicationPage";
+import { LegalTabs } from "./components/LegalTabs";
+import { LEGAL_ROUTE_BY_ID } from "./routes";
 
 export interface LegalAppProps {
   /** Path prefix the shell mounts this module under (default `/legal`). */
@@ -26,10 +27,10 @@ export interface LegalAppProps {
 // See WarehouseApp for the react-router basename normalization rationale.
 function useNormalizeBasenamePath(basename: string): void {
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === "undefined") return;
     if (window.location.pathname === basename) {
       const next = `${basename}/${window.location.search}${window.location.hash}`;
-      window.history.replaceState(window.history.state, '', next);
+      window.history.replaceState(window.history.state, "", next);
     }
   }, [basename]);
 }
@@ -37,20 +38,20 @@ function useNormalizeBasenamePath(basename: string): void {
 function ScrollToTopOnRouteChange() {
   const { pathname, search } = useLocation();
   useEffect(() => {
-    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }, [pathname, search]);
   return null;
 }
 
-export function LegalApp({ basename = '/legal' }: LegalAppProps) {
+export function LegalApp({ basename = "/legal" }: LegalAppProps) {
   useNormalizeBasenamePath(basename);
   const { userRoles, profile, loading, signOut } = useSession();
-  const isVendorSurface = basename.startsWith('/vendor');
-  const isVendor = isVendorSurface && profile?.kind === 'vendor';
-  const hasInternalAccess = can(userRoles, 'legal', 'view_dashboard');
+  const isVendorSurface = basename.startsWith("/vendor");
+  const isVendor = isVendorSurface && profile?.kind === "vendor";
+  const hasInternalAccess = can(userRoles, "legal", "view_dashboard");
   // External vendor tier lives in core (reconciled 2026-07-05, ADR-002 #3).
   const hasVendorAccess =
-    isVendorSurface && can(userRoles, 'core', 'view_own_accreditation');
+    isVendorSurface && can(userRoles, "core", "view_own_accreditation");
   const canUseVendorSurface = isVendor && hasVendorAccess;
   if (loading) {
     return (
@@ -78,14 +79,16 @@ export function LegalApp({ basename = '/legal' }: LegalAppProps) {
           <h1 className="text-lg font-bold text-ink">No legal access</h1>
           <p className="text-sm text-muted">
             {isVendorSurface
-              ? 'This area is reserved for enrolled vendor accounts. Sign in with a vendor account or contact your Mwell account manager.'
+              ? "This area is reserved for enrolled vendor accounts. Sign in with a vendor account or contact your Mwell account manager."
               : "Your account doesn't include a legal role. Contact your administrator if you need access."}
           </p>
           <a
-            href={isVendorSurface ? '/login' : '/'}
+            href={isVendorSurface ? "/login" : "/"}
             className="inline-flex min-h-11 items-center justify-center rounded-xl bg-brand-600 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-app"
           >
-            {isVendorSurface ? 'Sign in with a different account' : 'Back to dashboard'}
+            {isVendorSurface
+              ? "Sign in with a different account"
+              : "Back to dashboard"}
           </a>
         </div>
       </main>
@@ -94,11 +97,26 @@ export function LegalApp({ basename = '/legal' }: LegalAppProps) {
 
   const routes = (
     <Routes>
-      <Route path="/" element={<AccreditationCasesPage />} />
-      <Route path="/cases/:id" element={<CaseDetailPage />} />
-      <Route path="/cases/:id/application" element={<VendorApplicationPage />} />
-      <Route path="/cases/:id/sign/:code" element={<SignInstrumentPage />} />
-      <Route path="/invites/new" element={<InviteVendorPage />} />
+      <Route
+        path={LEGAL_ROUTE_BY_ID.cases.path}
+        element={<AccreditationCasesPage />}
+      />
+      <Route
+        path={LEGAL_ROUTE_BY_ID["case-detail"].path}
+        element={<CaseDetailPage />}
+      />
+      <Route
+        path={LEGAL_ROUTE_BY_ID.application.path}
+        element={<VendorApplicationPage />}
+      />
+      <Route
+        path={LEGAL_ROUTE_BY_ID["sign-instrument"].path}
+        element={<SignInstrumentPage />}
+      />
+      <Route
+        path={LEGAL_ROUTE_BY_ID["invite-vendor"].path}
+        element={<InviteVendorPage />}
+      />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
@@ -114,11 +132,11 @@ export function LegalApp({ basename = '/legal' }: LegalAppProps) {
           hydration-mismatch surface reported at Toast.tsx on /vendor. */}
       {isVendor ? (
         <VendorChrome
-          profileName={profile?.name ?? profile?.email ?? 'Vendor'}
+          profileName={profile?.name ?? profile?.email ?? "Vendor"}
           onSignOut={signOut}
         />
       ) : (
-        <LegalTabs canInvite={can(userRoles, 'legal', 'manage_checklist')} />
+        <LegalTabs canInvite={can(userRoles, "legal", "manage_checklist")} />
       )}
       <ScrollToTopOnRouteChange />
       {isVendor ? (
@@ -149,25 +167,26 @@ function VendorChrome({
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 16);
     onScroll();
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  const initials = profileName
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((s) => s[0]?.toUpperCase() ?? '')
-    .join('') || 'V';
+  const initials =
+    profileName
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((s) => s[0]?.toUpperCase() ?? "")
+      .join("") || "V";
   return (
     <header
       className={`safe-top sticky top-0 z-20 border-b border-line bg-surface/90 backdrop-blur-md transition-shadow ${
-        scrolled ? 'shadow-e1' : ''
+        scrolled ? "shadow-e1" : ""
       }`}
       aria-label="Vendor portal chrome"
     >
       <div
         className={`mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 sm:px-6 transition-[padding] ${
-          scrolled ? 'py-2' : 'py-3'
+          scrolled ? "py-2" : "py-3"
         }`}
       >
         <div className="flex min-w-0 items-center gap-3">
@@ -178,7 +197,9 @@ function VendorChrome({
           >
             <p className="font-display text-lg font-extrabold tracking-tight text-ink">
               m<span className="brand-gradient">well</span>
-              <span className="ml-1.5 text-xs font-semibold text-faint">Vendor</span>
+              <span className="ml-1.5 text-xs font-semibold text-faint">
+                Vendor
+              </span>
             </p>
           </a>
           <span
@@ -191,7 +212,10 @@ function VendorChrome({
             <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-brand-700 dark:text-brand-300 sm:hidden">
               Vendor portal
             </p>
-            <p className="truncate text-sm font-semibold text-ink" title={profileName}>
+            <p
+              className="truncate text-sm font-semibold text-ink"
+              title={profileName}
+            >
               {profileName}
             </p>
           </div>
@@ -200,7 +224,8 @@ function VendorChrome({
           type="button"
           onClick={() =>
             void onSignOut().then(() => {
-              if (typeof window !== 'undefined') window.location.assign('/login');
+              if (typeof window !== "undefined")
+                window.location.assign("/login");
             })
           }
           className="btn-ghost btn-sm"
