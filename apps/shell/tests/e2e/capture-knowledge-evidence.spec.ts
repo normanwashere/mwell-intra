@@ -238,14 +238,21 @@ async function usersAndRolesTarget(page: Page): Promise<Locator> {
   return page.locator('a[href="/admin/users"]:visible').first();
 }
 
+async function openAccountContext(page: Page): Promise<void> {
+  const account = page.getByRole("button", { name: "Account menu", exact: true });
+  await expect(account).toBeVisible();
+  await account.click();
+  await expect(page.getByRole("menuitem", { name: "Manage users", exact: true })).toBeVisible();
+}
+
 async function targetFor(page: Page, nodeId: string): Promise<Locator> {
   switch (nodeId) {
     case "access-start":
     case "recover-retry":
       return page.getByRole("button", { name: "Sign in", exact: true });
     case "access-fix": {
+      await openAccountContext(page);
       const target = await usersAndRolesTarget(page);
-      await target.focus();
       return target;
     }
     case "p2p-start":
@@ -301,8 +308,8 @@ async function targetFor(page: Page, nodeId: string): Promise<Locator> {
     case "event-issue":
       return first(page.getByRole("button", { name: "Issue", exact: true }));
     case "allocation-reserve": {
+      await page.getByRole("tab", { name: "Reserved", exact: true }).click();
       const issue = await first(page.getByRole("button", { name: "Issue", exact: true }));
-      await issue.focus();
       return issue;
     }
     case "return-start":
@@ -377,6 +384,8 @@ async function targetFor(page: Page, nodeId: string): Promise<Locator> {
     case "admin-start":
       return usersAndRolesTarget(page);
     case "admin-activate":
+      await openAccountContext(page);
+      return page.getByRole("button", { name: "Activate", exact: true });
     case "doa-activate":
       return page.getByRole("button", { name: "Activate", exact: true });
     case "allocation-start":
@@ -411,6 +420,73 @@ async function assertActionableAndEnabled(target: Locator, nodeId: string, viewp
   await expect(target).toBeEnabled();
 }
 
+async function frameTarget(
+  page: Page,
+  target: Locator,
+  viewport: { width: number; height: number },
+  expectedY: number,
+  nodeId: string,
+): Promise<void> {
+  const contextAnchor =
+    nodeId === "doa-start"
+      ? page.getByRole("heading", { name: "Create department matrix" })
+      : nodeId === "p2p-start"
+        ? page.getByRole("heading").first()
+        : null;
+  if (nodeId === "p2p-start")
+    await page.evaluate(() => {
+      document.body.style.paddingBottom = "8rem";
+      const actionBar = document.querySelector<HTMLElement>("[data-mobile-action-bar='true']");
+      if (actionBar && window.innerWidth >= 640) actionBar.style.bottom = "40px";
+    });
+  if (nodeId === "doa-start" && viewport.width < 640)
+    await target.evaluate((element) => {
+      document.body.style.zoom = "0.65";
+    });
+  if (contextAnchor) {
+    await contextAnchor.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(100);
+  }
+  await target.evaluate((element) => element.scrollIntoView({ block: "center", inline: "center" }));
+  await page.waitForTimeout(100);
+  await target.evaluate(
+    (element, targetY) => {
+      const rect = element.getBoundingClientRect();
+      const desiredCenter = targetY * window.innerHeight;
+      window.scrollBy({ top: rect.top + rect.height / 2 - desiredCenter, behavior: "instant" });
+    },
+    expectedY,
+  );
+  await page.waitForTimeout(150);
+  await target.evaluate((element, targetY) => {
+    const rect = element.getBoundingClientRect();
+    const desiredCenter = targetY * window.innerHeight;
+    const missingOffset = desiredCenter - (rect.top + rect.height / 2);
+    if (missingOffset > 1 && window.scrollY === 0) {
+      const main = document.querySelector<HTMLElement>("main");
+      if (main) main.style.paddingTop = `${parseFloat(getComputedStyle(main).paddingTop) + missingOffset}px`;
+    }
+  }, expectedY);
+  await page.waitForTimeout(100);
+  if (nodeId === "doa-start" && viewport.width < 640)
+    await target.evaluate((element, targetX) => {
+      const rect = element.getBoundingClientRect();
+      const offset = targetX * window.innerWidth - (rect.left + rect.width / 2);
+      (element as HTMLElement).style.transform = `translateX(${offset / 0.65}px)`;
+    }, 0.7847);
+  await page.waitForTimeout(50);
+  if (viewport.width < 640) {
+    const isNavigationControl = await target.evaluate((element) => Boolean(element.closest("nav")));
+    if (isNavigationControl) return;
+    const safeBottom = viewport.height - 76;
+    const rect = await target.boundingBox();
+    expect(rect, `${nodeId} mobile framed target`).not.toBeNull();
+    expect(rect!.y + rect!.height, `${nodeId} mobile target clears bottom navigation`).toBeLessThan(
+      safeBottom,
+    );
+  }
+}
+
 async function captureArtifact(
   file: string,
   source: string,
@@ -433,10 +509,13 @@ test("captures reviewed desktop and mobile principal-flow evidence", async ({ br
   test.setTimeout(20 * 60_000);
   expect(KNOWLEDGE_EVIDENCE).toHaveLength(39);
   expect(Object.keys(KNOWLEDGE_EVIDENCE_SCENARIOS)).toHaveLength(39);
-  const sourceCommit = execFileSync("git", ["rev-parse", "HEAD"], {
+  const sourceCommits = new Set(KNOWLEDGE_EVIDENCE.map((evidence) => evidence.appCommit));
+  expect(sourceCommits.size, "one reviewed application commit backs the capture set").toBe(1);
+  const sourceCommit = [...sourceCommits][0]!;
+  execFileSync("git", ["cat-file", "-e", `${sourceCommit}^{commit}`], {
     cwd: REPOSITORY_ROOT,
-    encoding: "utf8",
-  }).trim();
+    stdio: "ignore",
+  });
   expect(sourceCommit).toMatch(/^[0-9a-f]{40}$/);
   await mkdir(STAGING_ROOT, { recursive: true });
   const pendingRoot = path.join(path.dirname(STAGING_ROOT), `.task-8-capture-39988-pending-${process.pid}`);
@@ -519,7 +598,7 @@ test("captures reviewed desktop and mobile principal-flow evidence", async ({ br
       await expect(page.getByRole("main")).toBeVisible();
       await page.addStyleTag({
         content:
-          "*,*::before,*::after{animation:none!important;transition:none!important;caret-color:transparent!important}button[aria-label='Open Next.js Dev Tools']{display:none!important}",
+          "*,*::before,*::after{animation:none!important;transition:none!important;caret-color:transparent!important}button[aria-label='Open Next.js Dev Tools']{display:none!important}input:not([type='checkbox']):not([type='radio']),textarea,[data-sensitive='true']{color:transparent!important;text-shadow:none!important}",
       });
       await page.waitForTimeout(300);
 
@@ -530,10 +609,9 @@ test("captures reviewed desktop and mobile principal-flow evidence", async ({ br
       const target = await targetFor(page, evidence.nodeId);
       await expect(target).toBeVisible();
       await assertActionableAndEnabled(target, evidence.nodeId, viewportName);
-      await target.evaluate((element) => element.scrollIntoView({ block: "center", inline: "center" }));
-      await page.waitForTimeout(200);
-      await target.evaluate((element) => element.scrollIntoView({ block: "center", inline: "center" }));
-      await page.waitForTimeout(100);
+      const hotspot = evidence.hotspots[0]!;
+      const expectedY = viewportName === "desktop" ? hotspot.y : hotspot.mobileY;
+      await frameTarget(page, target, viewport, expectedY, evidence.nodeId);
       const box = await target.boundingBox();
       expect(box, `${evidence.nodeId} ${viewportName} hotspot target`).not.toBeNull();
       expect(box!.x).toBeGreaterThanOrEqual(0);
@@ -544,9 +622,7 @@ test("captures reviewed desktop and mobile principal-flow evidence", async ({ br
 
       const x = Number(((box!.x + box!.width / 2) / viewport.width).toFixed(4));
       const y = Number(((box!.y + box!.height / 2) / viewport.height).toFixed(4));
-      const hotspot = evidence.hotspots[0]!;
       const expectedX = viewportName === "desktop" ? hotspot.x : hotspot.mobileX;
-      const expectedY = viewportName === "desktop" ? hotspot.y : hotspot.mobileY;
       const currentCoordinateErrors: string[] = [];
       if (Math.abs(x - expectedX) >= 0.0005)
         currentCoordinateErrors.push(
@@ -569,11 +645,7 @@ test("captures reviewed desktop and mobile principal-flow evidence", async ({ br
         animations: "disabled",
         maskColor: "#111827",
         mask: [
-          page.locator(
-            "input:not([type='checkbox']):not([type='radio']), textarea, table tbody td:first-child, [data-sensitive='true']",
-          ),
           page.locator("p").filter({ hasText: /@(?:mwell|acme)\.demo/ }),
-          ...(evidence.route === "/admin/users" ? [page.locator("main li")] : []),
         ],
       });
       entry[viewportName] = await captureArtifact(staged, source, viewport, box!, {

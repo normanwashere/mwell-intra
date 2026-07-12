@@ -747,12 +747,30 @@ describe("validateKnowledgeContent", () => {
         publicRoot,
         repositoryRoot: path.resolve(process.cwd(), "../.."),
         reportPath,
+        semanticDistinctPairs: [["ev-start", "ev-copy"]],
       } as Parameters<typeof validateKnowledgeEvidenceArtifacts>[1];
 
       expect(validateKnowledgeEvidenceArtifacts(content, options)).toEqual(
         expect.arrayContaining([
           expect.stringContaining("duplicate desktop bytes"),
           expect.stringContaining("duplicate mobile bytes"),
+        ]),
+      );
+
+      for (const name of ["copy.png", "copy-mobile.png"]) {
+        const file = path.join(screenshotRoot, name);
+        writeFileSync(file, Buffer.concat([readFileSync(file), Buffer.from("cosmetic-only-change")]));
+      }
+      const report = JSON.parse(readFileSync(reportPath, "utf8")) as {
+        evidence: Record<string, { desktop: { sha256: string }; mobile: { sha256: string } }>;
+      };
+      report.evidence["ev-copy"]!.desktop.sha256 = sha256(path.join(screenshotRoot, "copy.png"));
+      report.evidence["ev-copy"]!.mobile.sha256 = sha256(path.join(screenshotRoot, "copy-mobile.png"));
+      writeFileSync(reportPath, JSON.stringify(report));
+      expect(validateKnowledgeEvidenceArtifacts(content, options)).toEqual(
+        expect.arrayContaining([
+          expect.stringContaining("near-duplicate desktop capture"),
+          expect.stringContaining("near-duplicate mobile capture"),
         ]),
       );
 

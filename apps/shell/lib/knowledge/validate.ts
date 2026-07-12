@@ -642,9 +642,88 @@ interface EvidenceArtifactValidationOptions {
   publicRoot: string;
   repositoryRoot: string;
   reportPath: string;
+  semanticDistinctPairs?: ReadonlyArray<readonly [string, string]>;
 }
 
-function decodePng(file: string): { width: number; height: number } {
+const REQUIRED_SEMANTIC_DISTINCT_PAIRS: ReadonlyArray<readonly [string, string]> = [
+  ["ev-access-fix", "ev-admin-start"],
+  ["ev-event-issue", "ev-allocation-reserve"],
+];
+
+const REQUIRED_PAIR_NEAR_DUPLICATE_THRESHOLD = 0.003;
+
+interface DecodedPng {
+  width: number;
+  height: number;
+  perceptualSample?: number[];
+}
+
+function paethPredictor(left: number, above: number, upperLeft: number): number {
+  const estimate = left + above - upperLeft;
+  const leftDistance = Math.abs(estimate - left);
+  const aboveDistance = Math.abs(estimate - above);
+  const upperLeftDistance = Math.abs(estimate - upperLeft);
+  if (leftDistance <= aboveDistance && leftDistance <= upperLeftDistance) return left;
+  return aboveDistance <= upperLeftDistance ? above : upperLeft;
+}
+
+function perceptualSample(
+  decoded: Buffer,
+  width: number,
+  height: number,
+  channels: number,
+): number[] {
+  const stride = width * channels;
+  const raster = Buffer.alloc(stride * height);
+  for (let y = 0; y < height; y += 1) {
+    const sourceRow = y * (stride + 1);
+    const filter = decoded[sourceRow]!;
+    for (let x = 0; x < stride; x += 1) {
+      const raw = decoded[sourceRow + 1 + x]!;
+      const left = x >= channels ? raster[y * stride + x - channels]! : 0;
+      const above = y > 0 ? raster[(y - 1) * stride + x]! : 0;
+      const upperLeft = y > 0 && x >= channels ? raster[(y - 1) * stride + x - channels]! : 0;
+      const predictor =
+        filter === 0
+          ? 0
+          : filter === 1
+            ? left
+            : filter === 2
+              ? above
+              : filter === 3
+                ? Math.floor((left + above) / 2)
+                : filter === 4
+                  ? paethPredictor(left, above, upperLeft)
+                  : Number.NaN;
+      if (!Number.isFinite(predictor)) throw new Error(`unsupported PNG filter ${filter}`);
+      raster[y * stride + x] = (raw + predictor) & 0xff;
+    }
+  }
+
+  const columns = 32;
+  const rows = 20;
+  const sample: number[] = [];
+  for (let sampleY = 0; sampleY < rows; sampleY += 1) {
+    const y = Math.min(height - 1, Math.floor(((sampleY + 0.5) * height) / rows));
+    for (let sampleX = 0; sampleX < columns; sampleX += 1) {
+      const x = Math.min(width - 1, Math.floor(((sampleX + 0.5) * width) / columns));
+      const offset = y * stride + x * channels;
+      const red = raster[offset]!;
+      const green = channels === 1 || channels === 2 ? red : raster[offset + 1]!;
+      const blue = channels === 1 || channels === 2 ? red : raster[offset + 2]!;
+      sample.push(Math.round(0.2126 * red + 0.7152 * green + 0.0722 * blue));
+    }
+  }
+  return sample;
+}
+
+function perceptualDifference(left: number[], right: number[]): number {
+  if (left.length !== right.length || left.length === 0) return 1;
+  return left.reduce((total, value, index) => total + Math.abs(value - right[index]!), 0) /
+    (left.length * 255);
+}
+
+function decodePng(file: string): DecodedPng {
   const bytes = readFileSync(file);
   const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
   if (bytes.length < 33 || !bytes.subarray(0, 8).equals(signature))
@@ -693,12 +772,23 @@ function decodePng(file: string): { width: number; height: number } {
   const rowBytes = Math.ceil((width * channels * bitDepth) / 8) + 1;
   if (decoded.length !== rowBytes * height)
     throw new Error("invalid PNG raster");
-  return { width, height };
+  return {
+    width,
+    height,
+    perceptualSample: bitDepth === 8 && colorType !== 3
+      ? perceptualSample(decoded, width, height, channels)
+      : undefined,
+  };
 }
 
 export function validateKnowledgeEvidenceArtifacts(
   content: KnowledgeContent,
-  { publicRoot, repositoryRoot, reportPath }: EvidenceArtifactValidationOptions,
+  {
+    publicRoot,
+    repositoryRoot,
+    reportPath,
+    semanticDistinctPairs = REQUIRED_SEMANTIC_DISTINCT_PAIRS,
+  }: EvidenceArtifactValidationOptions,
 ): string[] {
   const errors: string[] = [];
   const commits = new Set(
@@ -744,6 +834,11 @@ export function validateKnowledgeEvidenceArtifacts(
     string,
     Array<{ evidence: KnowledgeEvidence; kind: string }>
   >();
+  const perceptualCaptures: Array<{
+    evidence: KnowledgeEvidence;
+    kind: "desktop" | "mobile";
+    sample: number[];
+  }> = [];
   for (const evidence of content.evidence) {
     const entry = report.evidence[evidence.id];
     if (!entry) {
@@ -790,6 +885,8 @@ export function validateKnowledgeEvidenceArtifacts(
         const matches = hashes.get(hashKey) ?? [];
         matches.push({ evidence, kind });
         hashes.set(hashKey, matches);
+        if (dimensions.perceptualSample)
+          perceptualCaptures.push({ evidence, kind, sample: dimensions.perceptualSample });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         errors.push(
@@ -813,6 +910,29 @@ export function validateKnowledgeEvidenceArtifacts(
       if (!sameGroup || !sameSemantics)
         errors.push(
           `${duplicate.evidence.id} has duplicate ${duplicate.kind} bytes with ${first!.evidence.id} without an identical sharedEvidenceGroup context`,
+        );
+    }
+  }
+  const requiredDistinctPairs = new Set(
+    semanticDistinctPairs.map(([left, right]) => [left, right].sort().join("\u0000")),
+  );
+  for (let index = 0; index < perceptualCaptures.length; index += 1) {
+    const first = perceptualCaptures[index]!;
+    for (const candidate of perceptualCaptures.slice(index + 1)) {
+      const pairKey = [first.evidence.id, candidate.evidence.id].sort().join("\u0000");
+      if (first.kind !== candidate.kind || !requiredDistinctPairs.has(pairKey)) continue;
+      const sameGroup =
+        Boolean(first.evidence.sharedEvidenceGroup) &&
+        first.evidence.sharedEvidenceGroup === candidate.evidence.sharedEvidenceGroup;
+      const sameSemantics =
+        evidenceSharingContext(first.evidence) === evidenceSharingContext(candidate.evidence);
+      const difference = perceptualDifference(first.sample, candidate.sample);
+      if (
+        difference < REQUIRED_PAIR_NEAR_DUPLICATE_THRESHOLD &&
+        (!sameGroup || !sameSemantics)
+      )
+        errors.push(
+          `${candidate.evidence.id} is a near-duplicate ${candidate.kind} capture of ${first.evidence.id} (${difference.toFixed(4)} perceptual difference); capture a workflow-specific state`,
         );
     }
   }

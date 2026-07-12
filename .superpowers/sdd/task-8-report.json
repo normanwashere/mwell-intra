@@ -58,7 +58,7 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-access-fix-desktop.png",
-        "sha256": "7f4ae95df5e569cd985b888fdc8785358dbbc3aab8bf393e65fd5a9d467a8f62",
+        "sha256": "9dc308eac0e4ceebfe9dcd00af47b74041e732fcd7b32f64add9e6e458e9a886",
         "width": 1440,
         "height": 900,
         "controlBounds": {
@@ -74,7 +74,7 @@
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-access-fix-mobile.png",
-        "sha256": "9f189247b766aa5987fe96bc0cf24b1e96062bc6c10b08f2706214c9c03e472a",
+        "sha256": "3180cc29458ecbd83639931a67329f29b2e0b522ca1fe4c007d97c319491a901",
         "width": 390,
         "height": 844,
         "controlBounds": {
@@ -100,12 +100,12 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-p2p-start-desktop.png",
-        "sha256": "c1ef83edf4597ce2fbd14af19fdd94f29f7d454165d4056e26cf139e0b40e967",
+        "sha256": "da2a727ec27d18eb7847bbb2585a774a9926cf3d3561d6159ae2c06f511b19ec",
         "width": 1440,
         "height": 900,
         "controlBounds": {
           "x": 1082.578125,
-          "y": 809.890625,
+          "y": 810,
           "width": 121.421875,
           "height": 44
         },
@@ -116,7 +116,7 @@
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-p2p-start-mobile.png",
-        "sha256": "5ec9ca64921bf01e0816417b7963cae2f1cf24a315ceaebe1b374edc1ed8b71b",
+        "sha256": "6fde5286ef55f69af7b1750f5bea8d082ed1fbb6d9bc8503dfc8578ca0b8184a",
         "width": 390,
         "height": 844,
         "controlBounds": {
@@ -1276,7 +1276,7 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-admin-start-desktop.png",
-        "sha256": "18407effb15df5d41b8b7adc1acd062ddea8fa2e1f6f8803bbf92f25a43e14cc",
+        "sha256": "a6e6ac2e6e81eb3c780c4f58dd22d263cc98dca3ff3f580decc13051e0dab696",
         "width": 1440,
         "height": 900,
         "controlBounds": {
@@ -1292,7 +1292,7 @@
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-admin-start-mobile.png",
-        "sha256": "2c46190b2a0d21872de993d675a4a378d5b6cfbc31fb6f941b72276610db47e6",
+        "sha256": "30010b452d87c22d09c18efd2dfb3da63b37feeb2e716b9202b5630925f5ab30",
         "width": 390,
         "height": 844,
         "controlBounds": {
@@ -1318,7 +1318,7 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-admin-activate-desktop.png",
-        "sha256": "e50a7d074fbc2547b6294151e7c061ff8ae2b314cc6064f2d6e7c328510e551e",
+        "sha256": "faa6f33082dded6763f00671addd5968c77d84890d2bdf5ba11b7283b2669904",
         "width": 1440,
         "height": 900,
         "controlBounds": {
@@ -1334,7 +1334,7 @@
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-admin-activate-mobile.png",
-        "sha256": "5484b587df5772a41500b8bfa8b6782c44c56ce49f2490451dacc0448a20f0fc",
+        "sha256": "5bb7bca7e7a63516c277e2a9d8545a8bec9ce36123a8447f07b5b32fb39681b5",
         "width": 390,
         "height": 844,
         "controlBounds": {
@@ -1402,12 +1402,12 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-allocation-reserve-desktop.png",
-        "sha256": "6dfb4b71b799e792109fe11fd5c9ba079d6b79b178d7ec28b7875a36947739cf",
+        "sha256": "6e3595ac8694dfa23401aa60fe545df67b2dd56f93bf6f0501204c40608e213d",
         "width": 1440,
         "height": 900,
         "controlBounds": {
           "x": 773.59375,
-          "y": 355.796875,
+          "y": 355.8125,
           "width": 58.40625,
           "height": 44
         },
@@ -1418,7 +1418,7 @@
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-allocation-reserve-mobile.png",
-        "sha256": "d9f71586784120c388add59794845b5a7024dba6c6507ba0df570edfd673c392",
+        "sha256": "6ad891911c2e2153a810680da56db9a43a8532383f48646121ee56d0cfe6436c",
         "width": 390,
         "height": 844,
         "controlBounds": {
@@ -1472,90 +1472,6 @@
         "hotspot": {
           "x": 0.5,
           "y": 0.4536
-        }
-      }
-    },
-    "ev-doa-start": {
-      "route": "/admin/doa",
-      "roleId": "legal_admin",
-      "state": "Legal administration is preparing a seeded immutable DOA revision.",
-      "control": {
-        "id": "primary",
-        "label": "Add DOA tier",
-        "instruction": "Add the governed approval tier and retain the prior active matrix."
-      },
-      "desktop": {
-        "file": "/knowledge/screenshots/task8-doa-start-desktop.png",
-        "sha256": "84761665b03f80f6fe391542df18b3628c9686862cf4f6a40799d20f8051cc89",
-        "width": 1440,
-        "height": 900,
-        "controlBounds": {
-          "x": 1249.03125,
-          "y": 487.390625,
-          "width": 101.96875,
-          "height": 44
-        },
-        "hotspot": {
-          "x": 0.9028,
-          "y": 0.566
-        }
-      },
-      "mobile": {
-        "file": "/knowledge/screenshots/task8-doa-start-mobile.png",
-        "sha256": "61e4e63e1dd9826f07f9527256c069638e9c9886eb7352ef186b3c6189ccdcc2",
-        "width": 390,
-        "height": 844,
-        "controlBounds": {
-          "x": 255.03125,
-          "y": 312.390625,
-          "width": 101.96875,
-          "height": 44
-        },
-        "hotspot": {
-          "x": 0.7847,
-          "y": 0.3962
-        }
-      }
-    },
-    "ev-doa-activate": {
-      "route": "/admin/doa",
-      "roleId": "legal_admin",
-      "state": "Legal administration is reviewing a deterministic approved DOA revision at the controlled activation command.",
-      "control": {
-        "id": "primary",
-        "label": "Activate DOA revision",
-        "instruction": "Activate the approved revision deliberately and retain the superseded version and audit evidence."
-      },
-      "desktop": {
-        "file": "/knowledge/screenshots/task8-doa-activate-desktop.png",
-        "sha256": "47cbd565acecab18fc022cb5b05d330b7e45ef2073ff909ca8ef3cba3ca68af4",
-        "width": 1440,
-        "height": 900,
-        "controlBounds": {
-          "x": 295.5,
-          "y": 340.390625,
-          "width": 81.46875,
-          "height": 44
-        },
-        "hotspot": {
-          "x": 0.2335,
-          "y": 0.4027
-        }
-      },
-      "mobile": {
-        "file": "/knowledge/screenshots/task8-doa-activate-mobile.png",
-        "sha256": "b8fb082779e1bec83753028e760ac49cb8e72db0a2bb61e92726e76ec1ac929f",
-        "width": 390,
-        "height": 844,
-        "controlBounds": {
-          "x": 33,
-          "y": 312.390625,
-          "width": 324,
-          "height": 44
-        },
-        "hotspot": {
-          "x": 0.5,
-          "y": 0.3962
         }
       }
     },
@@ -1640,6 +1556,90 @@
         "hotspot": {
           "x": 0.5,
           "y": 0.5993
+        }
+      }
+    },
+    "ev-doa-start": {
+      "route": "/admin/doa",
+      "roleId": "platform_admin",
+      "state": "Legal administration is preparing a seeded immutable DOA revision.",
+      "control": {
+        "id": "primary",
+        "label": "Add DOA tier",
+        "instruction": "Add the governed approval tier and retain the prior active matrix."
+      },
+      "desktop": {
+        "file": "/knowledge/screenshots/task8-doa-start-desktop.png",
+        "sha256": "e73868748cb49930715f5fb32d948784d15ad3195d96149fd150127660787b06",
+        "width": 1440,
+        "height": 900,
+        "controlBounds": {
+          "x": 1249.03125,
+          "y": 487.390625,
+          "width": 101.96875,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.9028,
+          "y": 0.566
+        }
+      },
+      "mobile": {
+        "file": "/knowledge/screenshots/task8-doa-start-mobile.png",
+        "sha256": "86946eb5bc0143e3019748bf0a50f3d2c2ea19a42c63685a4de0e970b4cb4bb3",
+        "width": 390,
+        "height": 844,
+        "controlBounds": {
+          "x": 272.55645751953125,
+          "y": 320.1187438964844,
+          "width": 66.953125,
+          "height": 28.593780517578125
+        },
+        "hotspot": {
+          "x": 0.7847,
+          "y": 0.3962
+        }
+      }
+    },
+    "ev-doa-activate": {
+      "route": "/admin/doa",
+      "roleId": "platform_admin",
+      "state": "Legal administration is reviewing a deterministic approved DOA revision at the controlled activation command.",
+      "control": {
+        "id": "primary",
+        "label": "Activate DOA revision",
+        "instruction": "Activate the approved revision deliberately and retain the superseded version and audit evidence."
+      },
+      "desktop": {
+        "file": "/knowledge/screenshots/task8-doa-activate-desktop.png",
+        "sha256": "d556546a9a5930320d3d2dd57b2ad1c70c18908b4b6f2b8a5f1a6f38ccc2e801",
+        "width": 1440,
+        "height": 900,
+        "controlBounds": {
+          "x": 295.5,
+          "y": 340.390625,
+          "width": 81.46875,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.2335,
+          "y": 0.4027
+        }
+      },
+      "mobile": {
+        "file": "/knowledge/screenshots/task8-doa-activate-mobile.png",
+        "sha256": "a84eacd1baf300ff784a7b540824a3986e82cf7e2ccea7ecb7833dbbd027666d",
+        "width": 390,
+        "height": 844,
+        "controlBounds": {
+          "x": 33,
+          "y": 312.390625,
+          "width": 324,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.5,
+          "y": 0.3962
         }
       }
     }
