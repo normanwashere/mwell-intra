@@ -1,8 +1,5 @@
-import {
-  roleCapabilities,
-  type Module as RbacModule,
-  type WarehouseCapability,
-} from "@intra/rbac";
+import { roleCapabilities, type Module as RbacModule } from "@intra/rbac";
+import { MODULES as WAREHOUSE_MODULES } from "@intra/warehouse";
 import type { KnowledgeAuthority, KnowledgeRole } from "./types";
 
 type RoleAuthority = Omit<
@@ -12,89 +9,38 @@ type RoleAuthority = Omit<
   accessibleRoutes?: string[];
 };
 
-interface WarehouseRouteCapability {
+interface WarehouseRouteCapabilityEntry {
   route: string;
-  capabilities: readonly WarehouseCapability[];
+  capabilities: readonly string[];
 }
 
-// Extracted from the warehouse router guards and module navigation definitions.
-export const WAREHOUSE_ROUTE_CAPABILITY_MANIFEST = [
-  { route: "/warehouse", capabilities: ["view_dashboard"] },
-  { route: "/warehouse/inventory", capabilities: ["manage_inventory"] },
-  {
-    route: "/warehouse/inventory/:id",
-    capabilities: ["manage_inventory"],
-  },
-  {
-    route: "/warehouse/scan",
-    capabilities: [
-      "receive_stock",
-      "issue_items",
-      "manage_returns",
-      "cycle_count",
-      "transfer_stock",
-    ],
-  },
-  {
-    route: "/warehouse/tasks",
-    capabilities: ["inspect_quality", "view_exceptions", "cycle_count"],
-  },
-  {
-    route: "/warehouse/quality",
-    capabilities: ["inspect_quality", "release_quality_hold"],
-  },
-  {
-    route: "/warehouse/approvals",
-    capabilities: ["approve_stock_adjustment"],
-  },
-  { route: "/warehouse/exceptions", capabilities: ["view_exceptions"] },
-  { route: "/warehouse/imports", capabilities: ["import_warehouse_data"] },
-  {
-    route: "/warehouse/reports",
-    capabilities: ["view_analytics", "view_finance"],
-  },
-  {
-    route: "/warehouse/operation-routes",
-    capabilities: ["manage_operation_routes"],
-  },
-  { route: "/warehouse/receiving", capabilities: ["receive_stock"] },
-  {
-    route: "/warehouse/allocations",
-    capabilities: ["reserve_allocate", "issue_items"],
-  },
-  {
-    route: "/warehouse/events",
-    capabilities: ["reserve_allocate", "view_finance"],
-  },
-  {
-    route: "/warehouse/events/:id",
-    capabilities: ["reserve_allocate", "view_finance"],
-  },
-  { route: "/warehouse/cycle-counts", capabilities: ["cycle_count"] },
-  { route: "/warehouse/returns", capabilities: ["manage_returns"] },
-  {
-    route: "/warehouse/procurement",
-    capabilities: ["view_procurement"],
-  },
-  {
-    route: "/warehouse/purchase-orders",
-    capabilities: ["view_procurement", "receive_stock"],
-  },
-  { route: "/warehouse/suppliers", capabilities: ["view_procurement"] },
-  {
-    route: "/warehouse/storage",
-    capabilities: [
-      "receive_stock",
-      "manage_locations",
-      "transfer_stock",
-      "cycle_count",
-    ],
-  },
-  { route: "/warehouse/locations", capabilities: ["manage_locations"] },
-  { route: "/warehouse/finance", capabilities: ["view_finance"] },
-  { route: "/warehouse/pricing", capabilities: ["view_pricing"] },
-  { route: "/warehouse/data", capabilities: ["view_analytics"] },
-] as const satisfies readonly WarehouseRouteCapability[];
+export const WAREHOUSE_DETAIL_ROUTE_ALIASES = [
+  { route: "/warehouse/inventory/:id", parentPath: "/inventory" },
+  { route: "/warehouse/events/:id", parentPath: "/events" },
+] as const;
+
+function warehouseRoute(path: string): string {
+  return path === "/" ? "/warehouse" : `/warehouse${path}`;
+}
+
+function detailRouteEntry(
+  alias: (typeof WAREHOUSE_DETAIL_ROUTE_ALIASES)[number],
+) {
+  const parent = WAREHOUSE_MODULES.find(
+    (module) => module.path === alias.parentPath,
+  );
+  if (!parent)
+    throw new Error(`Missing warehouse module for detail route ${alias.route}`);
+  return { route: alias.route, capabilities: parent.capabilities };
+}
+
+export const WAREHOUSE_ROUTE_CAPABILITY_ENTRIES = [
+  ...WAREHOUSE_MODULES.map((module) => ({
+    route: warehouseRoute(module.path),
+    capabilities: module.capabilities,
+  })),
+  ...WAREHOUSE_DETAIL_ROUTE_ALIASES.map(detailRouteEntry),
+] satisfies readonly WarehouseRouteCapabilityEntry[];
 
 type LiveRoleDefinition = Omit<KnowledgeRole, "availability" | "authority"> & {
   rbacModule: RbacModule;
@@ -117,7 +63,7 @@ function capabilitiesFor(module: RbacModule, role: string): string[] {
 
 function warehouseRoutesFor(role: string): string[] {
   const capabilities = capabilitiesFor("warehouse", role);
-  return WAREHOUSE_ROUTE_CAPABILITY_MANIFEST.filter((route) =>
+  return WAREHOUSE_ROUTE_CAPABILITY_ENTRIES.filter((route) =>
     route.capabilities.some((capability) => capabilities.includes(capability)),
   ).map((route) => route.route);
 }

@@ -1,10 +1,12 @@
 import { MODULE_LIST, listModuleRoles, roleCapabilities } from "@intra/rbac";
+import { MODULES as WAREHOUSE_MODULES } from "@intra/warehouse";
 import { describe, expect, it } from "vitest";
 import {
   COMING_SOON_ROLES,
   KNOWLEDGE_ROLES,
   LIVE_KNOWLEDGE_ROLES,
-  WAREHOUSE_ROUTE_CAPABILITY_MANIFEST,
+  WAREHOUSE_DETAIL_ROUTE_ALIASES,
+  WAREHOUSE_ROUTE_CAPABILITY_ENTRIES,
   knowledgeRoleForRbac,
 } from "./roles";
 
@@ -51,10 +53,34 @@ describe("knowledge role authority registry", () => {
     );
   });
 
-  it("derives every warehouse route from the router capability manifest", () => {
+  it("derives warehouse route capabilities from the independent warehouse module export", () => {
+    const routesFromModules = WAREHOUSE_MODULES.map((module) => ({
+      route: module.path === "/" ? "/warehouse" : `/warehouse${module.path}`,
+      capabilities: module.capabilities,
+    }));
+
+    expect(WAREHOUSE_DETAIL_ROUTE_ALIASES).toEqual([
+      { route: "/warehouse/inventory/:id", parentPath: "/inventory" },
+      { route: "/warehouse/events/:id", parentPath: "/events" },
+    ]);
+    expect(WAREHOUSE_ROUTE_CAPABILITY_ENTRIES).toEqual([
+      ...routesFromModules,
+      ...WAREHOUSE_DETAIL_ROUTE_ALIASES.map((alias) => {
+        const parent = WAREHOUSE_MODULES.find(
+          (module) => module.path === alias.parentPath,
+        );
+        return {
+          route: alias.route,
+          capabilities: parent?.capabilities,
+        };
+      }),
+    ]);
+  });
+
+  it("derives every warehouse handbook route from those capability entries", () => {
     for (const role of listModuleRoles("warehouse")) {
       const guide = knowledgeRoleForRbac("warehouse", role);
-      const expectedRoutes = WAREHOUSE_ROUTE_CAPABILITY_MANIFEST.filter(
+      const expectedRoutes = WAREHOUSE_ROUTE_CAPABILITY_ENTRIES.filter(
         (route) =>
           route.capabilities.some((capability) =>
             guide?.authority.capabilities.includes(capability),
