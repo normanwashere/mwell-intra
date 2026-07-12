@@ -2,6 +2,13 @@ import { KNOWLEDGE_ROLES } from "./roles";
 import { KNOWLEDGE_FEATURES } from "./features";
 import { KNOWLEDGE_FLOWS } from "./workflows";
 import { KNOWLEDGE_EVIDENCE } from "./evidence";
+import { ADMINISTRATOR_ARTICLES } from "./admin";
+import {
+  GOVERNANCE_ARTICLES,
+  OPERATIONS_GLOSSARY,
+  RELEASE_NOTE_ARTICLES,
+} from "./governance";
+import { TROUBLESHOOTING_ARTICLES } from "./troubleshooting";
 import type {
   KnowledgeArticle,
   KnowledgeContent,
@@ -620,15 +627,17 @@ const procedureArticles: KnowledgeArticle[] = [
 export const KNOWLEDGE_CONTENT: KnowledgeContent = {
   roles: KNOWLEDGE_ROLES,
   features: KNOWLEDGE_FEATURES,
-  articles: [...roleArticles, ...featureArticles, ...procedureArticles],
+  articles: [
+    ...roleArticles,
+    ...featureArticles,
+    ...procedureArticles,
+    ...ADMINISTRATOR_ARTICLES,
+    ...GOVERNANCE_ARTICLES,
+    ...TROUBLESHOOTING_ARTICLES,
+    ...RELEASE_NOTE_ARTICLES,
+  ],
   flows: KNOWLEDGE_FLOWS,
   glossary: [
-    {
-      term: "DOA",
-      definition:
-        "Delegation of Authority: the effective department matrix that assigns named approval responsibility by amount and category.",
-      aliases: ["approval matrix", "delegation"],
-    },
     {
       term: "Purchase request",
       definition:
@@ -642,12 +651,6 @@ export const KNOWLEDGE_CONTENT: KnowledgeContent = {
       aliases: ["PO"],
     },
     {
-      term: "Accreditation",
-      definition:
-        "Legal and compliance determination that a vendor satisfies applicable evidence, risk, and instrument requirements.",
-      aliases: ["vendor approval"],
-    },
-    {
       term: "Putaway",
       definition:
         "Controlled movement of accepted received stock into a valid storage bin.",
@@ -659,18 +662,7 @@ export const KNOWLEDGE_CONTENT: KnowledgeContent = {
         "A physical inventory count used to identify and govern stock variance.",
       aliases: ["stock count"],
     },
-    {
-      term: "Idempotency",
-      definition:
-        "A transaction safeguard that prevents the same command from creating duplicate effects when retried.",
-      aliases: ["duplicate protection"],
-    },
-    {
-      term: "RLS",
-      definition:
-        "Row Level Security: database policy that restricts which rows an authenticated identity may read or change.",
-      aliases: ["row security"],
-    },
+    ...OPERATIONS_GLOSSARY,
   ],
   futureFeatures: KNOWLEDGE_FEATURES.filter(
     (feature) => feature.availability === "coming_soon",

@@ -4,6 +4,13 @@ import path from "node:path";
 import { KNOWLEDGE_CONTENT } from "./content";
 import { KNOWLEDGE_GUIDE_CONTENT } from "@shell/components/knowledge/KnowledgeBase";
 import { ROLE_ROUTE_PARENT_PATHS } from "./roles";
+import { ADMINISTRATOR_GUIDES } from "./admin";
+import {
+  GOVERNANCE_GUIDES,
+  HANDBOOK_RELEASE_NOTES,
+  OPERATIONS_GLOSSARY,
+} from "./governance";
+import { TROUBLESHOOTING_GUIDES } from "./troubleshooting";
 import { searchKnowledge } from "./search";
 import {
   validateFeatureSemanticMappings,
@@ -12,6 +19,142 @@ import {
 } from "./validate";
 
 describe("Knowledge Base content", () => {
+  it("covers every required administrator control surface with operational detail", () => {
+    expect(ADMINISTRATOR_GUIDES.map((item) => item.id)).toEqual(
+      expect.arrayContaining([
+        "admin-users-roles",
+        "admin-departments",
+        "admin-doa",
+        "admin-procurement-thresholds",
+        "admin-legal-checklist",
+        "admin-warehouse-structure",
+        "admin-receiving-routes",
+        "admin-evidence-audit",
+      ]),
+    );
+    for (const item of ADMINISTRATOR_GUIDES) {
+      expect(
+        item.prerequisites.length,
+        `${item.id} prerequisites`,
+      ).toBeGreaterThan(0);
+      expect(item.authority, `${item.id} authority`).toMatch(
+        /administrator|administration/i,
+      );
+      expect(
+        item.configurationFields.length,
+        `${item.id} fields`,
+      ).toBeGreaterThan(0);
+      expect(item.validation.length, `${item.id} validation`).toBeGreaterThan(
+        0,
+      );
+      expect(
+        item.affectedUsers.length,
+        `${item.id} affected users`,
+      ).toBeGreaterThan(0);
+      expect(item.auditEffect, `${item.id} audit`).toMatch(
+        /record|version|preserv/i,
+      );
+      expect(item.recovery, `${item.id} recovery`).toBeTruthy();
+      expect(item.requiredReview, `${item.id} review`).toBeTruthy();
+    }
+  });
+
+  it("covers common failures by observed symptom with safe recovery and escalation", () => {
+    expect(TROUBLESHOOTING_GUIDES.map((item) => item.id)).toEqual(
+      expect.arrayContaining([
+        "trouble-sign-in",
+        "trouble-access-denied",
+        "trouble-missing-data",
+        "trouble-upload",
+        "trouble-offline-write",
+        "trouble-rejected-request",
+        "trouble-quality-hold",
+        "trouble-variance",
+        "trouble-stale-session",
+      ]),
+    );
+    for (const item of TROUBLESHOOTING_GUIDES) {
+      expect(item.likelyCauses.length, `${item.id} causes`).toBeGreaterThan(0);
+      expect(item.safeRecovery.length, `${item.id} recovery`).toBeGreaterThan(
+        0,
+      );
+      expect(item.dataImpact, `${item.id} data impact`).toBeTruthy();
+      expect(item.escalationOwner, `${item.id} owner`).toBeTruthy();
+      expect(
+        item.escalationEvidence.length,
+        `${item.id} escalation evidence`,
+      ).toBeGreaterThan(0);
+      expect(
+        item.prohibitedWorkarounds.length,
+        `${item.id} prohibited`,
+      ).toBeGreaterThan(0);
+    }
+  });
+
+  it("ties governance controls to approved sources and prohibited workarounds", () => {
+    expect(GOVERNANCE_GUIDES.map((item) => item.source).join(" ")).toMatch(
+      /Procurement Policy/,
+    );
+    expect(GOVERNANCE_GUIDES.map((item) => item.source).join(" ")).toMatch(
+      /LGL004/,
+    );
+    expect(GOVERNANCE_GUIDES.map((item) => item.source).join(" ")).toMatch(
+      /MNDA/,
+    );
+    for (const item of GOVERNANCE_GUIDES) {
+      expect(
+        item.operationalControls.length,
+        `${item.id} controls`,
+      ).toBeGreaterThan(0);
+      expect(item.evidence.length, `${item.id} evidence`).toBeGreaterThan(0);
+      expect(
+        item.prohibitedWorkarounds.length,
+        `${item.id} prohibited`,
+      ).toBeGreaterThan(0);
+    }
+  });
+
+  it("separates live guidance from coming-soon roadmap and expands operating terminology", () => {
+    expect(KNOWLEDGE_CONTENT.futureFeatures.length).toBeGreaterThanOrEqual(10);
+    expect(
+      KNOWLEDGE_CONTENT.futureFeatures.every(
+        (item) => item.status === "proposed",
+      ),
+    ).toBe(true);
+    expect(OPERATIONS_GLOSSARY.map((item) => item.term)).toEqual(
+      expect.arrayContaining([
+        "Delegation of Authority",
+        "Segregation of duties",
+        "Quality hold",
+        "Audit trail",
+      ]),
+    );
+    expect(searchKnowledge(KNOWLEDGE_CONTENT, "failed upload")[0]?.type).toBe(
+      "task",
+    );
+    expect(searchKnowledge(KNOWLEDGE_CONTENT, "LGL004")[0]?.title).toMatch(
+      /Vendor accreditation/i,
+    );
+    expect(
+      searchKnowledge(KNOWLEDGE_CONTENT, "roadmap offline knowledge")[0],
+    ).toMatchObject({ availability: "coming_soon" });
+    expect(HANDBOOK_RELEASE_NOTES.map((item) => item.availability)).toEqual(
+      expect.arrayContaining(["live", "limited"]),
+    );
+    for (const note of HANDBOOK_RELEASE_NOTES) {
+      expect(
+        note.changedWorkflowIds.length,
+        `${note.id} workflows`,
+      ).toBeGreaterThan(0);
+      expect(note.affectedRoleIds.length, `${note.id} roles`).toBeGreaterThan(
+        0,
+      );
+      expect(
+        note.administratorAction,
+        `${note.id} administrator action`,
+      ).toBeTruthy();
+    }
+  });
   it("defines explicit operating data for all 26 role profiles", () => {
     expect(KNOWLEDGE_GUIDE_CONTENT.roles).toHaveLength(26);
     for (const role of KNOWLEDGE_GUIDE_CONTENT.roles) {
