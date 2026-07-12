@@ -16,6 +16,7 @@ export interface HandbookSearchResult {
   href: string;
   availability: KnowledgeAvailability;
   module?: KnowledgeModule;
+  moduleContext: KnowledgeModule[];
   roleIds: string[];
   roleContext: string[];
   destinationContext: string;
@@ -111,6 +112,14 @@ export function searchKnowledge(
   const rolesById = new Map(content.roles.map((role) => [role.id, role]));
   const roleContext = (roleIds: string[]) =>
     roleIds.map((id) => rolesById.get(id)?.label ?? id);
+  const moduleContext = (roleIds: string[]) => [
+    ...new Set(
+      roleIds.flatMap((id) => {
+        const module = rolesById.get(id)?.module;
+        return module ? [module] : [];
+      }),
+    ),
+  ];
   const rawQuery = normalize(query);
   const requestsRoadmap = [...ROADMAP_TERMS].some(
     (term) =>
@@ -131,6 +140,7 @@ export function searchKnowledge(
       title: role.label,
       summary: role.purpose,
       module: role.module,
+      moduleContext: [role.module],
       roleIds: [role.id],
       roleContext: [role.label],
       availability: role.availability,
@@ -161,6 +171,7 @@ export function searchKnowledge(
       title: feature.title,
       summary: feature.purpose,
       module: feature.module,
+      moduleContext: [feature.module],
       roleIds: feature.roleIds,
       roleContext: roleContext(feature.roleIds),
       availability: feature.availability,
@@ -208,6 +219,7 @@ export function searchKnowledge(
       title: article.title,
       summary: article.summary,
       module: article.module,
+      moduleContext: [article.module],
       roleIds: article.roles,
       roleContext: roleContext(article.roles),
       availability: "live",
@@ -236,11 +248,27 @@ export function searchKnowledge(
   }
 
   for (const flow of content.flows) {
+    const flowArticles = content.articles.filter(
+      (article) =>
+        !referenceArticleIds.has(article.id) &&
+        article.flowIds.includes(flow.id),
+    );
+    const flowPrimaryModule =
+      flowArticles[0]?.module ?? moduleContext(flow.roles)[0];
+    const flowModules = [
+      ...new Set([
+        ...(flowPrimaryModule ? [flowPrimaryModule] : []),
+        ...moduleContext(flow.roles),
+        ...flowArticles.map((article) => article.module),
+      ]),
+    ];
     results.push({
       id: flow.id,
       type: "task",
       title: flow.title,
       summary: flow.summary,
+      module: flowModules[0],
+      moduleContext: flowModules,
       roleIds: flow.roles,
       roleContext: roleContext(flow.roles),
       availability: "live",
@@ -265,11 +293,27 @@ export function searchKnowledge(
 
     for (const node of flow.nodes) {
       const evidence = content.evidence.find((item) => item.nodeId === node.id);
+      const nodeArticleModule = content.articles.find(
+        (article) => article.id === node.articleId,
+      )?.module;
+      const nodePrimaryModule =
+        nodeArticleModule ??
+        flowPrimaryModule ??
+        moduleContext(node.ownerRoleIds)[0];
+      const nodeModules = [
+        ...new Set([
+          ...(nodePrimaryModule ? [nodePrimaryModule] : []),
+          ...moduleContext(node.ownerRoleIds),
+          ...flowModules,
+        ]),
+      ];
       results.push({
         id: `${flow.id}-${node.id}`,
         type: "task",
         title: node.title,
         summary: node.body,
+        module: nodeModules[0],
+        moduleContext: nodeModules,
         roleIds: node.ownerRoleIds,
         roleContext: roleContext(node.ownerRoleIds),
         availability: "live",
@@ -307,6 +351,7 @@ export function searchKnowledge(
       title: item.term,
       summary: item.definition,
       roleIds: [],
+      moduleContext: [],
       roleContext: [],
       availability: "live",
       href: `/knowledge?glossary=${encodeURIComponent(item.term)}`,
@@ -326,6 +371,7 @@ export function searchKnowledge(
       title: item.title,
       summary: item.value,
       roleIds: [],
+      moduleContext: [],
       roleContext: [],
       availability: item.status === "released" ? "live" : "coming_soon",
       href: "/knowledge?mode=feature&availability=coming_soon",
@@ -358,7 +404,7 @@ export function searchKnowledge(
         item.relevance > 0 &&
         (!filters.module ||
           filters.module === "all" ||
-          item.module === filters.module) &&
+          item.moduleContext.includes(filters.module)) &&
         (!filters.roleId ||
           item.roleIds.length === 0 ||
           item.roleIds.includes(filters.roleId)) &&

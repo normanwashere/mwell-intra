@@ -1,4 +1,8 @@
-import { roleCapabilities, type Module as RbacModule } from "@intra/rbac";
+import {
+  MODULE_LIST,
+  roleCapabilities,
+  type Module as RbacModule,
+} from "@intra/rbac";
 import { MODULES as WAREHOUSE_MODULES } from "@intra/warehouse";
 import type { KnowledgeAuthority, KnowledgeRole } from "./types";
 
@@ -890,5 +894,16 @@ export function knowledgeRoleForRbac(
 ): KnowledgeRole | undefined {
   return LIVE_KNOWLEDGE_ROLES.find(
     (profile) => profile.rbacModule === module && profile.rbacRole === role,
+  );
+}
+
+export function knowledgeRoleIdsForAssignments(
+  assignments: Partial<Record<RbacModule, readonly string[]>>,
+): string[] {
+  return MODULE_LIST.flatMap((module) =>
+    (assignments[module] ?? []).flatMap((role) => {
+      const handbookRole = knowledgeRoleForRbac(module, role);
+      return handbookRole ? [handbookRole.id] : [];
+    }),
   );
 }

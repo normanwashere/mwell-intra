@@ -95,7 +95,9 @@ export function HandbookLanding({
   const matchingResults = results.filter(
     (result) =>
       (availability === "all" || result.availability === availability) &&
-      (query.length > 0 || result.type === mode),
+      (query.length > 0 ||
+        result.type === mode ||
+        (mode === "feature" && result.type === "roadmap")),
   );
   const visibleResults = matchingResults.slice(0, resultLimit);
   const recommended = results
@@ -237,7 +239,7 @@ export function HandbookLanding({
               onClick={() =>
                 onSetParams({ q: null, limit: null }, { replace: true })
               }
-              className="absolute right-1 top-1 grid h-10 w-10 place-items-center text-muted hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+              className="absolute right-0.5 top-0.5 grid h-11 w-11 place-items-center text-muted hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
               aria-label="Clear handbook search"
               title="Clear search"
             >

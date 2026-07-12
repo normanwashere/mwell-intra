@@ -178,12 +178,12 @@ export function buildKnowledgeCoverage(
               `live feature ${feature.id} documents ${feature.fields?.length ?? 0} fields; route ${entry.route} requires at least ${entry.minimumFields}`,
             );
           for (const control of feature.controls)
-            if (/\,|\band\b/i.test(control.name))
+            if (/,|\band\b/i.test(control.name))
               errors.push(
                 `live feature ${feature.id} has combined control name ${control.name}`,
               );
           for (const field of feature.fields ?? [])
-            if (/\,|\band\b/i.test(field.name))
+            if (/,|\band\b/i.test(field.name))
               errors.push(
                 `live feature ${feature.id} has combined field name ${field.name}`,
               );

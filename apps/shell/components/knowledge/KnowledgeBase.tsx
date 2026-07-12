@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { Badge, EmptyState, Icon } from "@intra/ui";
 import { useSession } from "@intra/auth";
 import { KNOWLEDGE_CONTENT } from "@shell/lib/knowledge/content";
+import { knowledgeRoleIdsForAssignments } from "@shell/lib/knowledge/roles";
 import {
   searchKnowledge,
   type HandbookEntryMode,
@@ -91,11 +92,10 @@ export function KnowledgeBase() {
     if (loading) return;
     const key = `knowledge-scroll:${window.location.pathname}${window.location.search}`;
     const restore = sessionStorage.getItem(key);
+    const target = restore === null ? 0 : Number(restore);
     let frame = 0;
     let animationFrame = 0;
     const restorePosition = () => {
-      if (restore === null) return;
-      const target = Number(restore);
       window.scrollTo({ top: target });
       frame += 1;
       if (Math.abs(window.scrollY - target) > 2 && frame < 60)
@@ -220,15 +220,7 @@ export function KnowledgeBase() {
       </div>
     );
 
-  const assignedRoleIds = Object.values(userRoles).flat();
-  const recommendedRoleIds = KNOWLEDGE_CONTENT.roles
-    .filter(
-      (role) =>
-        role.module === "core" ||
-        (profile.kind === "vendor" && role.module === "vendor") ||
-        assignedRoleIds.includes(role.id.replace(/^warehouse_/, "")),
-    )
-    .map((role) => role.id);
+  const recommendedRoleIds = knowledgeRoleIdsForAssignments(userRoles);
 
   const openResult = (result: HandbookSearchResult) => {
     const target = new URL(result.href, window.location.origin);

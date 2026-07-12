@@ -7,10 +7,28 @@ import {
   LIVE_KNOWLEDGE_ROLES,
   WAREHOUSE_DETAIL_ROUTE_ALIASES,
   WAREHOUSE_ROUTE_CAPABILITY_ENTRIES,
+  knowledgeRoleIdsForAssignments,
   knowledgeRoleForRbac,
 } from "./roles";
 
 describe("knowledge role authority registry", () => {
+  it("maps scoped RBAC assignments to explicit handbook role IDs", () => {
+    expect(
+      knowledgeRoleIdsForAssignments({
+        core: ["staff", "vendor_portal"],
+        procurement: ["procurement_officer"],
+        legal: ["legal_reviewer"],
+        warehouse: ["operations"],
+      }),
+    ).toEqual([
+      "core_staff_only",
+      "vendor_portal",
+      "warehouse_operations",
+      "procurement_officer",
+      "legal_reviewer",
+    ]);
+  });
+
   it("maps every current RBAC role to exactly one live handbook profile with matching capabilities", () => {
     for (const module of MODULE_LIST) {
       for (const role of listModuleRoles(module)) {

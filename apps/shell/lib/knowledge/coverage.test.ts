@@ -3,7 +3,7 @@ import { readdirSync } from "node:fs";
 import path from "node:path";
 import { WAREHOUSE_ROUTE_CONTRACTS } from "@intra/warehouse";
 import { PROCUREMENT_ROUTE_CONTRACTS } from "@intra/procurement";
-import { LEGAL_ROUTE_CONTRACTS, mountLegalRouteContracts } from "@intra/legal";
+import { mountLegalRouteContracts } from "@intra/legal";
 import { SHELL_PAGE_ROUTE_CONTRACTS } from "../routes";
 import { KNOWLEDGE_CONTENT } from "./content";
 import { buildKnowledgeCoverage, LIVE_ROUTE_MANIFEST } from "./coverage";

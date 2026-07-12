@@ -72,6 +72,22 @@ describe("Knowledge Base content", () => {
     },
   );
 
+  it("retains a cross-module flow when any applicable module is filtered", () => {
+    const flow = searchKnowledge(KNOWLEDGE_CONTENT, "Procure to pay", {
+      module: "procurement",
+    }).find((item) => item.href === "/knowledge?flow=procure-to-pay");
+
+    expect(flow).toMatchObject({
+      type: "task",
+      module: "procurement",
+      destinationContext: "End-to-end workflow",
+    });
+    expect(flow?.moduleContext).toEqual(
+      expect.arrayContaining(["procurement", "warehouse", "legal"]),
+    );
+    expect(flow?.roleContext).toContain("Procurement officer");
+  });
+
   it("ranks usable guidance above roadmap matches unless roadmap is requested", () => {
     const normal = searchKnowledge(KNOWLEDGE_CONTENT, "offline knowledge");
     expect(normal.some((item) => item.availability === "coming_soon")).toBe(
@@ -88,6 +104,45 @@ describe("Knowledge Base content", () => {
       availability: "coming_soon",
     });
   });
+
+  it("lists roadmap entries for the legacy future filter without a query", () => {
+    const roadmap = searchKnowledge(KNOWLEDGE_CONTENT, "", {
+      type: "future",
+    });
+
+    expect(roadmap).toHaveLength(KNOWLEDGE_CONTENT.futureFeatures.length);
+    expect(roadmap.every((item) => item.type === "roadmap")).toBe(true);
+    expect(roadmap.every((item) => item.availability === "coming_soon")).toBe(
+      true,
+    );
+  });
+
+  it.each([
+    ["procurement", "Which value threshold applies?", "Procurement officer"],
+    [
+      "warehouse",
+      "What is the inspection disposition?",
+      "Warehouse operations",
+    ],
+    [
+      "core",
+      "Are department and task permissions correct?",
+      "Platform administrator",
+    ],
+  ] as const)(
+    "retains %s workflow steps with substantive module and role context",
+    (module, query, roleLabel) => {
+      const result = searchKnowledge(KNOWLEDGE_CONTENT, query, {
+        module,
+      }).find((item) => item.type === "task" && item.href.includes("step="));
+
+      expect(result).toMatchObject({ type: "task", module });
+      expect(result?.moduleContext).toContain(module);
+      expect(result?.roleContext).toContain(roleLabel);
+      expect(result?.href).toContain("flow=");
+      expect(result?.href).toContain("step=");
+    },
+  );
 
   it("keeps future capabilities visibly proposed", () => {
     expect(KNOWLEDGE_CONTENT.futureFeatures.length).toBeGreaterThanOrEqual(10);
