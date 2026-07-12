@@ -114,6 +114,7 @@ export interface KnowledgeArticle {
   title: string;
   summary: string;
   module: KnowledgeModule;
+  availability: KnowledgeAvailability;
   roles: string[];
   keywords: string[];
   sections: KnowledgeSection[];

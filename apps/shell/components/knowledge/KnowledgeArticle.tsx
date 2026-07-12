@@ -7,6 +7,12 @@ import type {
   KnowledgeRole,
 } from "@shell/lib/knowledge/types";
 
+const availabilityLabel = {
+  live: "Live",
+  limited: "Limited guidance",
+  coming_soon: "Coming soon",
+} as const;
+
 export function KnowledgeArticle({
   article,
   rolesById,
@@ -31,6 +37,17 @@ export function KnowledgeArticle({
       <header className="mt-4 border-b border-line pb-5">
         <div className="flex flex-wrap gap-2">
           <Badge tone="brand">{article.module}</Badge>
+          <Badge
+            tone={
+              article.availability === "live"
+                ? "emerald"
+                : article.availability === "limited"
+                  ? "amber"
+                  : "slate"
+            }
+          >
+            {availabilityLabel[article.availability]}
+          </Badge>
           {article.roles.slice(0, 4).map((id) => (
             <Badge key={id} tone="slate">
               {rolesById.get(id)?.label ?? id}
@@ -116,6 +133,13 @@ export function KnowledgeArticle({
       </div>
       <footer className="mt-8 border-t border-line pt-5">
         <h2 className="font-semibold text-ink">Continue in Intra</h2>
+        {article.availability !== "live" && (
+          <p className="mt-2 text-sm text-muted">
+            This guidance describes a controlled or planned capability. No
+            executable destination is published until the operating surface is
+            released and verified.
+          </p>
+        )}
         <div className="mt-3 flex flex-wrap gap-2">
           {article.liveRoutes.map((route) => (
             <Link key={route} href={route} className="btn-outline btn-sm">

@@ -427,11 +427,23 @@ export function validateKnowledgeContent(content: KnowledgeContent): string[] {
   }
 
   for (const article of content.articles) {
+    if (!AVAILABILITY.has(article.availability))
+      errors.push(`${article.id} has invalid article availability`);
     if (!isISODate(article.reviewedAt))
       errors.push(`${article.id} has invalid article review date`);
     for (const route of article.liveRoutes)
       if (!route.startsWith("/"))
         errors.push(`${article.id} has invalid route ${route}`);
+      else if (
+        !content.features.some(
+          (feature) =>
+            feature.availability !== "coming_soon" &&
+            feature.routes.some((pattern) => routeMatches(pattern, route)),
+        )
+      )
+        errors.push(`${article.id} links unregistered live route ${route}`);
+    if (article.availability === "coming_soon" && article.liveRoutes.length)
+      errors.push(`${article.id} is coming soon but links a live route`);
     for (const section of article.sections)
       for (const step of section.steps ?? []) {
         for (const roleId of step.ownerRoleIds)
@@ -958,6 +970,8 @@ export function validateKnowledgeBase(content: KnowledgeContent): string[] {
       errors.push(`Duplicate article slug: ${article.slug}`);
     articleIds.add(article.id);
     slugs.add(article.slug);
+    if (!AVAILABILITY.has(article.availability))
+      errors.push(`Article ${article.id} has invalid availability`);
     for (const role of article.roles)
       if (!roleIds.has(role))
         errors.push(`Article ${article.id} references unknown role ${role}`);

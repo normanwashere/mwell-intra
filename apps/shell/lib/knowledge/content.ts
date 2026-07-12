@@ -91,6 +91,7 @@ const roleArticles: KnowledgeArticle[] = KNOWLEDGE_ROLES.map((role) => ({
   title: `${role.label} guide`,
   summary: role.purpose,
   module: role.module,
+  availability: role.availability,
   roles: [role.id],
   keywords: [
     role.label,
@@ -143,7 +144,7 @@ const roleArticles: KnowledgeArticle[] = KNOWLEDGE_ROLES.map((role) => ({
   flowIds: KNOWLEDGE_FLOWS.filter((flow) => flow.roles.includes(role.id)).map(
     (flow) => flow.id,
   ),
-  liveRoutes: [moduleRoute[role.module]],
+  liveRoutes: role.availability === "live" ? [moduleRoute[role.module]] : [],
   owner:
     role.module === "vendor"
       ? "Legal"
@@ -160,6 +161,7 @@ const featureArticles: KnowledgeArticle[] = KNOWLEDGE_FEATURES.map(
     title: feature.title,
     summary: feature.purpose,
     module: feature.module,
+    availability: feature.availability,
     roles: feature.roleIds,
     keywords: [
       feature.title,
@@ -233,6 +235,7 @@ const processArticle = (
   title,
   summary,
   module,
+  availability: "live",
   roles,
   keywords: title
     .toLowerCase()

@@ -5,7 +5,8 @@ export interface AdministratorGuide {
   title: string;
   summary: string;
   module: KnowledgeModule;
-  route: string;
+  route?: string;
+  availability: "live" | "limited" | "coming_soon";
   roleIds: string[];
   prerequisites: string[];
   authority: string;
@@ -28,6 +29,7 @@ export const ADMINISTRATOR_GUIDES: AdministratorGuide[] = [
       "Provision an attributable identity and grant only the approved duties and scope.",
     module: "admin",
     route: "/admin/users",
+    availability: "live",
     roleIds: ["platform_admin"],
     prerequisites: [
       "Approved access request",
@@ -69,7 +71,7 @@ export const ADMINISTRATOR_GUIDES: AdministratorGuide[] = [
     summary:
       "Keep organizational scope, ownership, and workflow routing aligned with the approved operating structure.",
     module: "admin",
-    route: "/admin/departments",
+    availability: "limited",
     roleIds: ["platform_admin"],
     prerequisites: [
       "Approved organization change",
@@ -111,7 +113,8 @@ export const ADMINISTRATOR_GUIDES: AdministratorGuide[] = [
       "Create an editable, versioned approval ladder for each department without rewriting historical decisions.",
     module: "admin",
     route: "/admin/doa",
-    roleIds: ["platform_admin", "legal_admin", "procurement_admin"],
+    availability: "live",
+    roleIds: ["platform_admin", "legal_admin"],
     prerequisites: [
       "Approved department authority schedule",
       "Named approvers and alternates",
@@ -144,7 +147,7 @@ export const ADMINISTRATOR_GUIDES: AdministratorGuide[] = [
     recovery:
       "Supersede an incorrect version with a corrected reviewed version. Do not edit or delete a ladder already used by a transaction.",
     requiredReview:
-      "Legal or Platform governance review plus Procurement validation before activation and after any material change.",
+      "Legal or Platform governance review before activation and after any material change; Procurement may review the operational effect but cannot configure or activate the ladder.",
     flowIds: ["doa-governance", "procure-to-pay"],
   }),
   guide({
@@ -153,7 +156,7 @@ export const ADMINISTRATOR_GUIDES: AdministratorGuide[] = [
     summary:
       "Translate approved procurement policy into value, competition, exception, and approval routing controls.",
     module: "procurement",
-    route: "/procurement/settings",
+    availability: "limited",
     roleIds: ["procurement_admin"],
     prerequisites: [
       "Approved procurement policy revision",
@@ -197,7 +200,7 @@ export const ADMINISTRATOR_GUIDES: AdministratorGuide[] = [
     summary:
       "Maintain risk-based accreditation evidence and instrument requirements from approved Legal sources.",
     module: "legal",
-    route: "/legal/admin",
+    availability: "limited",
     roleIds: ["legal_admin"],
     prerequisites: [
       "Approved LGL004 or Legal policy revision",
@@ -241,6 +244,7 @@ export const ADMINISTRATOR_GUIDES: AdministratorGuide[] = [
       "Build a unique, scannable storage hierarchy before inventory transactions begin.",
     module: "warehouse",
     route: "/warehouse/storage",
+    availability: "live",
     roleIds: ["warehouse_admin", "warehouse_logistics_supervisor"],
     prerequisites: [
       "Approved physical layout",
@@ -288,7 +292,8 @@ export const ADMINISTRATOR_GUIDES: AdministratorGuide[] = [
     summary:
       "Define which receipts require inspection, evidence, traceability, hold, and destination controls.",
     module: "warehouse",
-    route: "/warehouse/admin/receiving-routes",
+    route: "/warehouse/operation-routes",
+    availability: "live",
     roleIds: ["warehouse_admin", "warehouse_logistics_supervisor"],
     prerequisites: [
       "Active warehouse hierarchy",
@@ -331,7 +336,7 @@ export const ADMINISTRATOR_GUIDES: AdministratorGuide[] = [
     summary:
       "Define required proof, monitor exceptions, and review attributable activity without changing operational history.",
     module: "admin",
-    route: "/admin/audit",
+    availability: "limited",
     roleIds: [
       "platform_admin",
       "legal_admin",
@@ -385,6 +390,7 @@ export const ADMINISTRATOR_ARTICLES: KnowledgeArticle[] =
     title: item.title,
     summary: item.summary,
     module: item.module,
+    availability: item.availability,
     roles: item.roleIds,
     keywords: [
       "administrator",
@@ -428,7 +434,7 @@ export const ADMINISTRATOR_ARTICLES: KnowledgeArticle[] =
     ],
     relatedArticleIds: item.roleIds.map((roleId) => `role-${roleId}`),
     flowIds: item.flowIds,
-    liveRoutes: [item.route],
+    liveRoutes: item.availability === "live" && item.route ? [item.route] : [],
     owner:
       item.module === "admin"
         ? "Platform"

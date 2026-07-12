@@ -130,7 +130,7 @@ export const GOVERNANCE_GUIDES: GovernanceGuide[] = [
     summary:
       "Keep actions attributable, approvals independent, evidence durable, and history reviewable across Intra.",
     source:
-      "Approved Mwell access, records-retention, and module operating controls",
+      "Mwell Intra Internal Control Register (Platform-owned working register; approval status and effective version must be confirmed before reliance)",
     owner: "Platform",
     operationalControls: [
       "Use a unique identity and the minimum approved role",
@@ -176,6 +176,7 @@ export const GOVERNANCE_ARTICLES: KnowledgeArticle[] = GOVERNANCE_GUIDES.map(
         : item.owner === "Procurement"
           ? "procurement"
           : "admin",
+    availability: "live",
     roles: item.roleIds,
     keywords: [
       "policy",
@@ -259,7 +260,7 @@ export const HANDBOOK_RELEASE_NOTES: HandbookReleaseNote[] = [
     availability: "limited",
     summary:
       "Roadmap profiles and capabilities are visible for planning but have no live authority, route, or transaction behavior until separately released.",
-    changedWorkflowIds: ["administration-governance"],
+    changedWorkflowIds: ["doa-governance", "identity-and-access"],
     affectedRoleIds: [
       "platform_admin",
       "procurement_admin",
@@ -278,6 +279,7 @@ export const RELEASE_NOTE_ARTICLES: KnowledgeArticle[] =
     title: item.title,
     summary: item.summary,
     module: "admin",
+    availability: item.availability,
     roles: item.affectedRoleIds,
     keywords: [
       "release notes",
@@ -308,9 +310,7 @@ export const RELEASE_NOTE_ARTICLES: KnowledgeArticle[] =
       },
     ],
     relatedArticleIds: item.affectedRoleIds.map((roleId) => `role-${roleId}`),
-    flowIds: item.changedWorkflowIds.filter(
-      (flowId) => flowId !== "administration-governance",
-    ),
+    flowIds: item.changedWorkflowIds,
     liveRoutes: [],
     owner: "Product and Platform",
     reviewedAt: item.releasedAt,

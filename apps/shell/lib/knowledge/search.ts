@@ -223,7 +223,7 @@ export function searchKnowledge(
       moduleContext: [article.module],
       roleIds: article.roles,
       roleContext: roleContext(article.roles),
-      availability: "live",
+      availability: article.availability,
       href: `/knowledge?article=${encodeURIComponent(article.id)}`,
       destinationContext: `${article.module} procedure`,
       reviewedAt: article.reviewedAt,

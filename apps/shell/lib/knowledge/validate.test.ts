@@ -304,6 +304,7 @@ describe("validateKnowledgeContent", () => {
       title: "Article",
       summary: "Summary",
       module: "core",
+      availability: "live",
       roles: ["owner"],
       keywords: [],
       sections: [
@@ -363,6 +364,7 @@ describe("validateKnowledgeContent", () => {
       title: "Article",
       summary: "Summary",
       module: "core",
+      availability: "live",
       roles: ["owner"],
       keywords: [],
       sections: [

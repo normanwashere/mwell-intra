@@ -159,6 +159,7 @@ const relatedArticle: KnowledgeArticle = {
   title: "Run a governed release",
   summary: "Prepare, review, and hand off a release.",
   module: "admin",
+  availability: "live",
   roles: [liveRole.id],
   keywords: [],
   sections: [],

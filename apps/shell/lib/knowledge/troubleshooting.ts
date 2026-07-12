@@ -372,6 +372,7 @@ export const TROUBLESHOOTING_ARTICLES: KnowledgeArticle[] =
     title: item.symptom,
     summary: item.summary,
     module: item.module,
+    availability: "live",
     roles: item.roleIds,
     keywords: [
       "problem",

@@ -154,6 +154,28 @@ describe("Knowledge Base content", () => {
         `${note.id} administrator action`,
       ).toBeTruthy();
     }
+    for (const article of KNOWLEDGE_CONTENT.articles) {
+      for (const route of article.liveRoutes) {
+        expect(
+          KNOWLEDGE_CONTENT.features.some(
+            (feature) =>
+              feature.availability !== "coming_soon" &&
+              feature.routes.includes(route),
+          ),
+          `${article.id} registered route ${route}`,
+        ).toBe(true);
+      }
+    }
+    expect(
+      searchKnowledge(KNOWLEDGE_CONTENT, "Roadmap capability boundary").find(
+        (result) => result.id === "release-roadmap-boundary",
+      ),
+    ).toMatchObject({ availability: "limited" });
+    expect(
+      searchKnowledge(KNOWLEDGE_CONTENT, "Maintain departments").find(
+        (result) => result.id === "admin-departments",
+      ),
+    ).toMatchObject({ availability: "limited" });
   });
   it("defines explicit operating data for all 26 role profiles", () => {
     expect(KNOWLEDGE_GUIDE_CONTENT.roles).toHaveLength(26);
