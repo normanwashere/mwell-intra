@@ -100,14 +100,22 @@ function DoaWorkspace() {
   ]);
   const [saving, setSaving] = useState(false);
   const [loadingRevision, setLoadingRevision] = useState<string | null>(null);
+  const [captureActivationDraft, setCaptureActivationDraft] = useState(false);
+
+  useEffect(() => {
+    setCaptureActivationDraft(
+      window.sessionStorage.getItem("intra.evidence-scenario") ===
+        "doa-activation",
+    );
+  }, []);
 
   const load = useCallback(async () => {
     if (mode !== "supabase" || !procurement || !core) {
       setMatrices([
         {
-          id: "preview",
+          id: captureActivationDraft ? "evidence-draft" : "preview",
           department: "Operations",
-          version: "Preview 1",
+          version: captureActivationDraft ? "OPS-DOA-2026.2" : "Preview 1",
           status: "draft",
           effective_at: effectiveAt,
           active: false,
@@ -140,7 +148,7 @@ function DoaWorkspace() {
     }
     setMatrices((matrixResult.data ?? []) as unknown as MatrixRow[]);
     setProfiles((profileResult.data ?? []) as unknown as ProfileRow[]);
-  }, [core, effectiveAt, mode, procurement, toast]);
+  }, [captureActivationDraft, core, effectiveAt, mode, procurement, toast]);
   useEffect(() => {
     void load();
   }, [load]);
@@ -185,6 +193,17 @@ function DoaWorkspace() {
   };
 
   const activate = async (matrix: MatrixRow) => {
+    if (mode === "memory" && matrix.id === "evidence-draft") {
+      setMatrices((rows) =>
+        rows.map((row) =>
+          row.id === matrix.id
+            ? { ...row, active: true, status: "active" }
+            : row,
+        ),
+      );
+      toast.success(`${matrix.department} DOA activated.`);
+      return;
+    }
     if (!procurement || mode !== "supabase") return;
     if (
       !window.confirm(

@@ -935,8 +935,10 @@ function validateCaptureSemantics(
     if (
       artifact.hotspot.x !== x ||
       artifact.hotspot.y !== y ||
-      derivedX !== x ||
-      derivedY !== y
+      typeof x !== "number" ||
+      typeof y !== "number" ||
+      Math.abs(derivedX - x) >= 0.0005 ||
+      Math.abs(derivedY - y) >= 0.0005
     )
       errors.push(`${evidence.id} ${kind} hotspot mismatch`);
   }

@@ -604,21 +604,14 @@ describe("validateKnowledgeContent", () => {
     );
   });
 
-  it("requires the versioned capture report metadata for every evidence id", () => {
+  it("accepts versioned capture report metadata for every evidence id", () => {
     const errors = validateKnowledgeEvidenceArtifacts(KNOWLEDGE_CONTENT, {
       publicRoot: path.resolve(process.cwd(), "public"),
       repositoryRoot: path.resolve(process.cwd(), "../.."),
       reportPath: path.resolve(process.cwd(), "../../.superpowers/sdd/task-8-report.json"),
     } as Parameters<typeof validateKnowledgeEvidenceArtifacts>[1]);
 
-    const migrationIds = errors
-      .filter((error) => error.endsWith("requires capture report schema v1 metadata"))
-      .map((error) => error.split(" ")[0]);
-    if (process.env.KNOWLEDGE_ARTIFACT_GATE === "1")
-      expect(migrationIds, `Evidence migration required (${migrationIds.length}): ${migrationIds.join(", ")}`).toEqual(
-        [],
-      );
-    expect(migrationIds).toEqual(KNOWLEDGE_CONTENT.evidence.map((item) => item.id));
+    expect(errors).toEqual([]);
   });
 
   it("rejects report hash, dimensions, provenance, and semantic mismatches", () => {

@@ -1,0 +1,1647 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "6837e0f9e053afd22ee87894b32bab0b236542fa",
+  "capturedAt": "2026-07-13",
+  "reviewedAt": "2026-07-13",
+  "evidenceCount": 39,
+  "evidence": {
+    "ev-access-start": {
+      "route": "/login",
+      "roleId": "core_staff_only",
+      "state": "The memory-mode sign-in form is ready for an approved staff identity.",
+      "control": {
+        "id": "primary",
+        "label": "Sign in",
+        "instruction": "Enter the approved identity and select Sign in."
+      },
+      "desktop": {
+        "file": "/knowledge/screenshots/task8-access-start-desktop.png",
+        "sha256": "5e579889bb0123b2d70111ec402b688c9bd0100b7a54a13e4dfc16b38bc96568",
+        "width": 1440,
+        "height": 900,
+        "controlBounds": {
+          "x": 517,
+          "y": 497.796875,
+          "width": 406,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.5,
+          "y": 0.5776
+        }
+      },
+      "mobile": {
+        "file": "/knowledge/screenshots/task8-access-start-mobile.png",
+        "sha256": "de11ecd120de06012c607a6e6652a0ad6a4ae0ff42f46b67c1abc0c1924ddcee",
+        "width": 390,
+        "height": 844,
+        "controlBounds": {
+          "x": 33,
+          "y": 483.796875,
+          "width": 324,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.5,
+          "y": 0.5993
+        }
+      }
+    },
+    "ev-access-fix": {
+      "route": "/admin/users",
+      "roleId": "platform_admin",
+      "state": "The platform administrator has opened the seeded scoped-role access matrix for least-privilege review.",
+      "control": {
+        "id": "primary",
+        "label": "Open users and roles",
+        "instruction": "Open Users & Roles and review the account's scoped grants before applying the minimum approved role."
+      },
+      "desktop": {
+        "file": "/knowledge/screenshots/task8-access-fix-desktop.png",
+        "sha256": "7f4ae95df5e569cd985b888fdc8785358dbbc3aab8bf393e65fd5a9d467a8f62",
+        "width": 1440,
+        "height": 900,
+        "controlBounds": {
+          "x": 13.5,
+          "y": 124,
+          "width": 44,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.025,
+          "y": 0.1622
+        }
+      },
+      "mobile": {
+        "file": "/knowledge/screenshots/task8-access-fix-mobile.png",
+        "sha256": "9f189247b766aa5987fe96bc0cf24b1e96062bc6c10b08f2706214c9c03e472a",
+        "width": 390,
+        "height": 844,
+        "controlBounds": {
+          "x": 167,
+          "y": 784,
+          "width": 56,
+          "height": 56
+        },
+        "hotspot": {
+          "x": 0.5,
+          "y": 0.9621
+        }
+      }
+    },
+    "ev-p2p-start": {
+      "route": "/procurement/requests/new",
+      "roleId": "procurement_requester",
+      "state": "A requester is drafting the first step of a new purchase request.",
+      "control": {
+        "id": "primary",
+        "label": "Continue request",
+        "instruction": "Complete the required purchase need and line items, then select Continue."
+      },
+      "desktop": {
+        "file": "/knowledge/screenshots/task8-p2p-start-desktop.png",
+        "sha256": "c1ef83edf4597ce2fbd14af19fdd94f29f7d454165d4056e26cf139e0b40e967",
+        "width": 1440,
+        "height": 900,
+        "controlBounds": {
+          "x": 1082.578125,
+          "y": 809.890625,
+          "width": 121.421875,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.794,
+          "y": 0.9243
+        }
+      },
+      "mobile": {
+        "file": "/knowledge/screenshots/task8-p2p-start-mobile.png",
+        "sha256": "5ec9ca64921bf01e0816417b7963cae2f1cf24a315ceaebe1b374edc1ed8b71b",
+        "width": 390,
+        "height": 844,
+        "controlBounds": {
+          "x": 252.578125,
+          "y": 618.390625,
+          "width": 121.421875,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.8033,
+          "y": 0.7588
+        }
+      }
+    },
+    "ev-p2p-rfq-evidence": {
+      "route": "/procurement/requests/req_seed_001",
+      "roleId": "procurement_officer",
+      "state": "The procurement officer has selected RFQ / Canvassing for the seeded request.",
+      "control": {
+        "id": "primary",
+        "label": "Confirm RFQ route",
+        "instruction": "Review the quotation evidence and confirm the RFQ sourcing route."
+      },
+      "desktop": {
+        "file": "/knowledge/screenshots/task8-p2p-rfq-evidence-desktop.png",
+        "sha256": "71c4ffa0c834cdf977d914b51e300f2fa39a8ca98ba150a53f1f6281640a9e54",
+        "width": 1440,
+        "height": 900,
+        "controlBounds": {
+          "x": 329,
+          "y": 340.390625,
+          "width": 221.109375,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.3052,
+          "y": 0.4027
+        }
+      },
+      "mobile": {
+        "file": "/knowledge/screenshots/task8-p2p-rfq-evidence-mobile.png",
+        "sha256": "cf095b4e9426d03fce3ca611ad1e50f8aba62fb10430e74a03d3248589c2ed5c",
+        "width": 390,
+        "height": 844,
+        "controlBounds": {
+          "x": 33,
+          "y": 312.390625,
+          "width": 221.109375,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.3681,
+          "y": 0.3962
+        }
+      }
+    },
+    "ev-p2p-rfp-evidence": {
+      "route": "/procurement/requests/req_seed_001",
+      "roleId": "procurement_officer",
+      "state": "The procurement officer has selected RFP / Bidding for the seeded request.",
+      "control": {
+        "id": "primary",
+        "label": "Confirm RFP route",
+        "instruction": "Review the competition evidence and confirm the RFP sourcing route."
+      },
+      "desktop": {
+        "file": "/knowledge/screenshots/task8-p2p-rfp-evidence-desktop.png",
+        "sha256": "0cdfea9c0f01330f65695724dce8574f4d3b037d6b5b3ea0a1a03091def9893d",
+        "width": 1440,
+        "height": 900,
+        "controlBounds": {
+          "x": 329,
+          "y": 340.390625,
+          "width": 221.109375,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.3052,
+          "y": 0.4027
+        }
+      },
+      "mobile": {
+        "file": "/knowledge/screenshots/task8-p2p-rfp-evidence-mobile.png",
+        "sha256": "2f0f4dddc03ad4e900b429c3be2137c7a24124023f969a31346de5d122fe85b0",
+        "width": 390,
+        "height": 844,
+        "controlBounds": {
+          "x": 33,
+          "y": 312.390625,
+          "width": 221.109375,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.3681,
+          "y": 0.3962
+        }
+      }
+    },
+    "ev-p2p-po": {
+      "route": "/procurement/purchase-orders",
+      "roleId": "procurement_officer",
+      "state": "Approved seeded demand is available for controlled PO authoring.",
+      "control": {
+        "id": "primary",
+        "label": "Author purchase order",
+        "instruction": "Select Author from approved request and retain the approved demand link."
+      },
+      "desktop": {
+        "file": "/knowledge/screenshots/task8-p2p-po-desktop.png",
+        "sha256": "afa012163aca4af3a701b6b16038e9af4ac8601a309f43e3a804b9cb56f0711a",
+        "width": 1440,
+        "height": 900,
+        "controlBounds": {
+          "x": 169,
+          "y": 279.390625,
+          "width": 235.96875,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.1993,
+          "y": 0.3349
+        }
+      },
+      "mobile": {
+        "file": "/knowledge/screenshots/task8-p2p-po-mobile.png",
+        "sha256": "8012c6d36558daf5601a1bc083555eed0c2e85452d9d077f6ead57e83240123e",
+        "width": 390,
+        "height": 844,
+        "controlBounds": {
+          "x": 41,
+          "y": 285.59375,
+          "width": 235.96875,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.4077,
+          "y": 0.3644
+        }
+      }
+    },
+    "ev-p2p-receive": {
+      "route": "/warehouse/purchase-orders",
+      "roleId": "warehouse_procurement",
+      "state": "Warehouse procurement is reviewing seeded receivable purchase orders.",
+      "control": {
+        "id": "primary",
+        "label": "Receive supply",
+        "instruction": "Open the receivable order and hand it to governed warehouse receiving."
+      },
+      "desktop": {
+        "file": "/knowledge/screenshots/task8-p2p-receive-desktop.png",
+        "sha256": "06bdf074d81fdef0701a0bba4a734afb0306e7cc9799ee1a862c94c484af05f6",
+        "width": 1440,
+        "height": 900,
+        "controlBounds": {
+          "x": 615.640625,
+          "y": 578.796875,
+          "width": 205.359375,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.4988,
+          "y": 0.6676
+        }
+      },
+      "mobile": {
+        "file": "/knowledge/screenshots/task8-p2p-receive-mobile.png",
+        "sha256": "b1042066042704f0eeec0d5a5759299f84b7ea2dfb7fa614564a1515ded86b71",
+        "width": 390,
+        "height": 844,
+        "controlBounds": {
+          "x": 151.640625,
+          "y": 360.796875,
+          "width": 205.359375,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.6521,
+          "y": 0.4536
+        }
+      }
+    },
+    "ev-p2p-payment-pack": {
+      "route": "/procurement/purchase-orders/po_seed_006",
+      "roleId": "procurement_finance",
+      "state": "Finance has opened the seeded closed PO and can inspect its full governed record beside the payment-readiness evidence.",
+      "control": {
+        "id": "primary",
+        "label": "Inspect full PO record",
+        "instruction": "Open the full PO record and review the receipt, acceptance, invoice, and amount match before deciding readiness."
+      },
+      "desktop": {
+        "file": "/knowledge/screenshots/task8-p2p-payment-pack-desktop.png",
+        "sha256": "d75daf8f1cc57a5929bfa8fc5983b409f1a560b4a408475105e6a2057dc25977",
+        "width": 1440,
+        "height": 900,
+        "controlBounds": {
+          "x": 969.0625,
+          "y": 340.390625,
+          "width": 44,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.6882,
+          "y": 0.4027
+        }
+      },
+      "mobile": {
+        "file": "/knowledge/screenshots/task8-p2p-payment-pack-mobile.png",
+        "sha256": "26fca246d1a9562ee09c64af50acf13b67dce02d2c5cb35cffd2d15131095433",
+        "width": 390,
+        "height": 844,
+        "controlBounds": {
+          "x": 16,
+          "y": 312.390625,
+          "width": 44,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.0974,
+          "y": 0.3962
+        }
+      }
+    },
+    "ev-vendor-start": {
+      "route": "/legal/invites/new",
+      "roleId": "legal_admin",
+      "state": "Legal administration is preparing a new masked demo vendor invitation.",
+      "control": {
+        "id": "primary",
+        "label": "Continue vendor invite",
+        "instruction": "Enter the verified vendor identity and continue to the governed invitation review."
+      },
+      "desktop": {
+        "file": "/knowledge/screenshots/task8-vendor-start-desktop.png",
+        "sha256": "2a23d4d10085f71a1238578f3f024ce6212ebb19f38f93506d0144740f2ed0e0",
+        "width": 1440,
+        "height": 900,
+        "controlBounds": {
+          "x": 970.578125,
+          "y": 754.390625,
+          "width": 121.421875,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.7162,
+          "y": 0.8627
+        }
+      },
+      "mobile": {
+        "file": "/knowledge/screenshots/task8-vendor-start-mobile.png",
+        "sha256": "55ff6c00d01b42ea1d3ce710d4cb384efd47df9807a5992627dbef934757b6a2",
+        "width": 390,
+        "height": 844,
+        "controlBounds": {
+          "x": 252.578125,
+          "y": 558.390625,
+          "width": 121.421875,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.8033,
+          "y": 0.6877
+        }
+      }
+    },
+    "ev-vendor-apply": {
+      "route": "/vendor/cases/case_seed_001/application",
+      "roleId": "vendor_portal",
+      "state": "The seeded vendor portal application is open for vendor-owned updates.",
+      "control": {
+        "id": "primary",
+        "label": "Save application draft",
+        "instruction": "Complete the vendor-owned fields and save the accreditation application draft."
+      },
+      "desktop": {
+        "file": "/knowledge/screenshots/task8-vendor-apply-desktop.png",
+        "sha256": "94f874ce3c4eae68e35e4fa582c3ffe0538ad2e0dcb27da048c76a6ff3a7d4c6",
+        "width": 1440,
+        "height": 900,
+        "controlBounds": {
+          "x": 909.265625,
+          "y": 827,
+          "width": 105.28125,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.668,
+          "y": 0.9433
+        }
+      },
+      "mobile": {
+        "file": "/knowledge/screenshots/task8-vendor-apply-mobile.png",
+        "sha256": "59ac82fca6fe7cb9e3e0e3fd692bd7ec989ef314597baf7583f9bd96a6385172",
+        "width": 390,
+        "height": 844,
+        "controlBounds": {
+          "x": 75.265625,
+          "y": 691.109375,
+          "width": 105.28125,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.328,
+          "y": 0.8449
+        }
+      }
+    },
+    "ev-setup-start": {
+      "route": "/warehouse/storage",
+      "roleId": "warehouse_admin",
+      "state": "The warehouse administrator has opened Add storage area at the warehouse selector.",
+      "control": {
+        "id": "primary",
+        "label": "Select warehouse",
+        "instruction": "Select the governed warehouse that will own the storage area."
+      },
+      "desktop": {
+        "file": "/knowledge/screenshots/task8-setup-start-desktop.png",
+        "sha256": "025f7fd80cd7164587e5dfdf83e8f919c2c39236780e5eab8efd41f5ffc2433f",
+        "width": 1440,
+        "height": 900,
+        "controlBounds": {
+          "x": 296,
+          "y": 203.796875,
+          "width": 1104,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.5889,
+          "y": 0.2509
+        }
+      },
+      "mobile": {
+        "file": "/knowledge/screenshots/task8-setup-start-mobile.png",
+        "sha256": "d20d2b47c8f2e3abd59cffea28011bc78ac6405b6f5b15b30d9a099b9c063303",
+        "width": 390,
+        "height": 844,
+        "controlBounds": {
+          "x": 16,
+          "y": 259.796875,
+          "width": 358,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.5,
+          "y": 0.3339
+        }
+      }
+    },
+    "ev-setup-area": {
+      "route": "/warehouse/storage",
+      "roleId": "warehouse_admin",
+      "state": "The warehouse administrator is naming a controlled area in Add storage area.",
+      "control": {
+        "id": "primary",
+        "label": "Storage area label",
+        "instruction": "Enter the controlled storage-area label for the selected warehouse."
+      },
+      "desktop": {
+        "file": "/knowledge/screenshots/task8-setup-area-desktop.png",
+        "sha256": "46171338928a222156fa6958ec93099b0b530d7640c2766ddf11b2d0ba7701cb",
+        "width": 1440,
+        "height": 900,
+        "controlBounds": {
+          "x": 456,
+          "y": 441,
+          "width": 528,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.5,
+          "y": 0.5144
+        }
+      },
+      "mobile": {
+        "file": "/knowledge/screenshots/task8-setup-area-mobile.png",
+        "sha256": "8e21130b928418a67be3ddb7516fb455fa3db2e1d37e0eb24e42d19db97797ca",
+        "width": 390,
+        "height": 844,
+        "controlBounds": {
+          "x": 20,
+          "y": 612,
+          "width": 350,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.5,
+          "y": 0.7512
+        }
+      }
+    },
+    "ev-setup-bin": {
+      "route": "/warehouse/storage",
+      "roleId": "warehouse_admin",
+      "state": "The warehouse administrator is defining the scannable bin code in Add storage area.",
+      "control": {
+        "id": "primary",
+        "label": "Scannable bin code",
+        "instruction": "Enter the unique scannable bin code and select Add bin."
+      },
+      "desktop": {
+        "file": "/knowledge/screenshots/task8-setup-bin-desktop.png",
+        "sha256": "00b60e45504ea103df760cbdc6dc98aa28fc71b54febd3890b853cce9bc904b6",
+        "width": 1440,
+        "height": 900,
+        "controlBounds": {
+          "x": 456,
+          "y": 338,
+          "width": 439.703125,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.4693,
+          "y": 0.4
+        }
+      },
+      "mobile": {
+        "file": "/knowledge/screenshots/task8-setup-bin-mobile.png",
+        "sha256": "8c77ffbac8bb7e9d06e71ff1277fa217bcd314da840796dd3b043d5677f22252",
+        "width": 390,
+        "height": 844,
+        "controlBounds": {
+          "x": 20,
+          "y": 493,
+          "width": 261.703125,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.3868,
+          "y": 0.6102
+        }
+      }
+    },
+    "ev-setup-route": {
+      "route": "/warehouse/operation-routes",
+      "roleId": "warehouse_admin",
+      "state": "The warehouse administrator has opened the seeded operation-route editor.",
+      "control": {
+        "id": "primary",
+        "label": "Save operation route",
+        "instruction": "Review the configured source, destination, and evidence controls, then save the route."
+      },
+      "desktop": {
+        "file": "/knowledge/screenshots/task8-setup-route-desktop.png",
+        "sha256": "7ff1d069e6090d259b59206ff26904c53571fac40f0f25ad8800ff95f99bb3c3",
+        "width": 1440,
+        "height": 900,
+        "controlBounds": {
+          "x": 840,
+          "y": 688.5,
+          "width": 144,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.6333,
+          "y": 0.7894
+        }
+      },
+      "mobile": {
+        "file": "/knowledge/screenshots/task8-setup-route-mobile.png",
+        "sha256": "fcba798e39081f3672705977bf74780b83a1870c96f50cc1cd322bb078c40200",
+        "width": 390,
+        "height": 844,
+        "controlBounds": {
+          "x": 20,
+          "y": 772,
+          "width": 350,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.5,
+          "y": 0.9408
+        }
+      }
+    },
+    "ev-receive-start": {
+      "route": "/warehouse/purchase-orders",
+      "roleId": "warehouse_procurement",
+      "state": "Warehouse procurement is reviewing the seeded open supplier deliveries.",
+      "control": {
+        "id": "primary",
+        "label": "Open supplier delivery",
+        "instruction": "Open the matching receivable purchase order before accepting physical delivery."
+      },
+      "desktop": {
+        "file": "/knowledge/screenshots/task8-receive-start-desktop.png",
+        "sha256": "f36b6bb6c990561c0ab8de7102c3cd9bdc9431135442725c2d4987d583b34096",
+        "width": 1440,
+        "height": 900,
+        "controlBounds": {
+          "x": 296,
+          "y": 281.796875,
+          "width": 546,
+          "height": 160
+        },
+        "hotspot": {
+          "x": 0.3951,
+          "y": 0.402
+        }
+      },
+      "mobile": {
+        "file": "/knowledge/screenshots/task8-receive-start-mobile.png",
+        "sha256": "76729fb457d77c2975194a76871470648e8e12aefc36c24d1093c586065444c4",
+        "width": 390,
+        "height": 844,
+        "controlBounds": {
+          "x": 16,
+          "y": 306.796875,
+          "width": 358,
+          "height": 152
+        },
+        "hotspot": {
+          "x": 0.5,
+          "y": 0.4536
+        }
+      }
+    },
+    "ev-receive-record": {
+      "route": "/warehouse/receiving",
+      "roleId": "warehouse_logistics_supervisor",
+      "state": "The logistics supervisor has selected a seeded product and quantity for the receipt draft.",
+      "control": {
+        "id": "primary",
+        "label": "Add receipt line",
+        "instruction": "Select the delivered product and quantity, then add the governed receipt line."
+      },
+      "desktop": {
+        "file": "/knowledge/screenshots/task8-receive-record-desktop.png",
+        "sha256": "5c3c703c76b7ef598709ddde433b9aa40e86f99c0253cc473a080e5894b80a8f",
+        "width": 1440,
+        "height": 900,
+        "controlBounds": {
+          "x": 485,
+          "y": 339.796875,
+          "width": 334,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.4528,
+          "y": 0.402
+        }
+      },
+      "mobile": {
+        "file": "/knowledge/screenshots/task8-receive-record-mobile.png",
+        "sha256": "1089d2a769790a73abab4c4b4dfd0af5b8f7d1544e38e950171bf24ae7b500b1",
+        "width": 390,
+        "height": 844,
+        "controlBounds": {
+          "x": 33,
+          "y": 312.296875,
+          "width": 324,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.5,
+          "y": 0.3961
+        }
+      }
+    },
+    "ev-receive-putaway": {
+      "route": "/warehouse/storage",
+      "roleId": "warehouse_logistics_supervisor",
+      "state": "The logistics supervisor has opened the putaway scanner for accepted stock.",
+      "control": {
+        "id": "primary",
+        "label": "Add stock for putaway",
+        "instruction": "Scan or enter accepted stock before selecting its controlled destination bin."
+      },
+      "desktop": {
+        "file": "/knowledge/screenshots/task8-receive-putaway-desktop.png",
+        "sha256": "bceb754574caeb98ebc73b71e170b8a65958a27c97efb2eb4b1daf5ff45e8c0c",
+        "width": 1440,
+        "height": 900,
+        "controlBounds": {
+          "x": 881.046875,
+          "y": 378.5,
+          "width": 102.953125,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.6476,
+          "y": 0.445
+        }
+      },
+      "mobile": {
+        "file": "/knowledge/screenshots/task8-receive-putaway-mobile.png",
+        "sha256": "77231416d3f40830cd4e78caa0f826be29f98e5de614d276a068f84396525f9d",
+        "width": 390,
+        "height": 844,
+        "controlBounds": {
+          "x": 267.046875,
+          "y": 496,
+          "width": 102.953125,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.8167,
+          "y": 0.6137
+        }
+      }
+    },
+    "ev-quality-start": {
+      "route": "/warehouse/quality",
+      "roleId": "warehouse_logistics_supervisor",
+      "state": "The logistics supervisor is reviewing the seeded pending-inspection queue.",
+      "control": {
+        "id": "primary",
+        "label": "Inspect pending stock",
+        "instruction": "Open the matching pending receipt or return for quality inspection."
+      },
+      "desktop": {
+        "file": "/knowledge/screenshots/task8-quality-start-desktop.png",
+        "sha256": "d51ef76053c0eddbce7e236d32502043a147a0fc9f32daa824a7f83c78ea00ba",
+        "width": 1440,
+        "height": 900,
+        "controlBounds": {
+          "x": 1310,
+          "y": 273.796875,
+          "width": 73,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.9351,
+          "y": 0.3287
+        }
+      },
+      "mobile": {
+        "file": "/knowledge/screenshots/task8-quality-start-mobile.png",
+        "sha256": "2ad1ee9d72ca4416e1f73a76cf9112f3edf447f476372e9404c3a78dfae869e7",
+        "width": 390,
+        "height": 844,
+        "controlBounds": {
+          "x": 33,
+          "y": 341.796875,
+          "width": 324,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.5,
+          "y": 0.431
+        }
+      }
+    },
+    "ev-quality-release": {
+      "route": "/warehouse/quality",
+      "roleId": "warehouse_logistics_supervisor",
+      "state": "The seeded inspection sheet is set to Accepted for putaway with required evidence attached and submission enabled.",
+      "control": {
+        "id": "primary",
+        "label": "Release accepted stock",
+        "instruction": "Submit the accepted disposition after reviewing required inspection evidence."
+      },
+      "desktop": {
+        "file": "/knowledge/screenshots/task8-quality-release-desktop.png",
+        "sha256": "d293d72ff960664a338e97f398502760041654e4bb034c0c4b8993c395ac06d7",
+        "width": 1440,
+        "height": 900,
+        "controlBounds": {
+          "x": 822.546875,
+          "y": 640.328125,
+          "width": 161.453125,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.6273,
+          "y": 0.7359
+        }
+      },
+      "mobile": {
+        "file": "/knowledge/screenshots/task8-quality-release-mobile.png",
+        "sha256": "6d8ec626e7d893e4bdd5f5324727422f98f3419ebe18d967100e37f39b0c92ae",
+        "width": 390,
+        "height": 844,
+        "controlBounds": {
+          "x": 20,
+          "y": 772,
+          "width": 350,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.5,
+          "y": 0.9408
+        }
+      }
+    },
+    "ev-quality-return": {
+      "route": "/warehouse/purchase-orders",
+      "roleId": "warehouse_procurement",
+      "state": "Warehouse procurement is reviewing the quality queue handoff from a supplier order.",
+      "control": {
+        "id": "primary",
+        "label": "Open vendor-return handoff",
+        "instruction": "Open the quality queue and prepare the supplier return disposition with source evidence."
+      },
+      "desktop": {
+        "file": "/knowledge/screenshots/task8-quality-return-desktop.png",
+        "sha256": "79ca2c068b3211cb7aaac57c5f48d10fa1430e72e8651ca9ca4430388c1c5c40",
+        "width": 1440,
+        "height": 900,
+        "controlBounds": {
+          "x": 1228.765625,
+          "y": 189.796875,
+          "width": 154.234375,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.9069,
+          "y": 0.2353
+        }
+      },
+      "mobile": {
+        "file": "/knowledge/screenshots/task8-quality-return-mobile.png",
+        "sha256": "8a47c1c3d34c7707e6abd2a9f20d3880744b3fe4a6429bd5f5f3d9b651252b72",
+        "width": 390,
+        "height": 844,
+        "controlBounds": {
+          "x": 33,
+          "y": 305.796875,
+          "width": 324,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.5,
+          "y": 0.3884
+        }
+      }
+    },
+    "ev-event-fulfillment-start": {
+      "route": "/warehouse/events",
+      "roleId": "warehouse_business_unit",
+      "state": "The business-unit owner is viewing seeded events and the New event command.",
+      "control": {
+        "id": "primary",
+        "label": "Create event demand",
+        "instruction": "Select New event and record accountable demand before reservation."
+      },
+      "desktop": {
+        "file": "/knowledge/screenshots/task8-event-fulfillment-start-desktop.png",
+        "sha256": "1664e4eaf5ab02710fa9a9e0a4ae2b8a169b6de222475a3fb5227a8b4d72201c",
+        "width": 1440,
+        "height": 900,
+        "controlBounds": {
+          "x": 1282.890625,
+          "y": 89,
+          "width": 117.109375,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.9316,
+          "y": 0.1233
+        }
+      },
+      "mobile": {
+        "file": "/knowledge/screenshots/task8-event-fulfillment-start-mobile.png",
+        "sha256": "2d79b5e0502e24a8283fe84407a3ec6c3e6001d178e5952f0e625d5c467972a3",
+        "width": 390,
+        "height": 844,
+        "controlBounds": {
+          "x": 16,
+          "y": 151.796875,
+          "width": 117.109375,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.1912,
+          "y": 0.2059
+        }
+      }
+    },
+    "ev-event-issue": {
+      "route": "/warehouse/allocations",
+      "roleId": "warehouse_operations",
+      "state": "Warehouse operations is reviewing seeded reserved allocations ready to issue.",
+      "control": {
+        "id": "primary",
+        "label": "Issue allocated stock",
+        "instruction": "Select Issue only for the matching approved allocation and custody recipient."
+      },
+      "desktop": {
+        "file": "/knowledge/screenshots/task8-event-issue-desktop.png",
+        "sha256": "dd85db40457e72dffc59d09815eb0749d2e22209d057c768710e9fb6a50f6629",
+        "width": 1440,
+        "height": 900,
+        "controlBounds": {
+          "x": 773.59375,
+          "y": 355.796875,
+          "width": 58.40625,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.5575,
+          "y": 0.4198
+        }
+      },
+      "mobile": {
+        "file": "/knowledge/screenshots/task8-event-issue-mobile.png",
+        "sha256": "d01c171d128b76a8d3b2f521a01cdc3f705738ad99877c32a57e1580ac0d6cd4",
+        "width": 390,
+        "height": 844,
+        "controlBounds": {
+          "x": 286.59375,
+          "y": 360.796875,
+          "width": 58.40625,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.8097,
+          "y": 0.4536
+        }
+      }
+    },
+    "ev-return-start": {
+      "route": "/warehouse/returns",
+      "roleId": "warehouse_operations",
+      "state": "Warehouse operations has opened the governed return form for seeded custody.",
+      "control": {
+        "id": "primary",
+        "label": "Match returned custody",
+        "instruction": "Select the accountable event or custody source before recording returned stock."
+      },
+      "desktop": {
+        "file": "/knowledge/screenshots/task8-return-start-desktop.png",
+        "sha256": "3d7aafb5cd72aaa416635a7873d7b76d443b72ae98d3efc39e4d5b2d51dbe293",
+        "width": 1440,
+        "height": 900,
+        "controlBounds": {
+          "x": 574,
+          "y": 310.796875,
+          "width": 245,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.4837,
+          "y": 0.3698
+        }
+      },
+      "mobile": {
+        "file": "/knowledge/screenshots/task8-return-start-mobile.png",
+        "sha256": "0a2883b297b7d0e53db17e807cf7b7aac129b8082ee25d0d1d68559b15c062b8",
+        "width": 390,
+        "height": 844,
+        "controlBounds": {
+          "x": 33,
+          "y": 311.796875,
+          "width": 324,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.5,
+          "y": 0.3955
+        }
+      }
+    },
+    "ev-return-restock": {
+      "route": "/warehouse/returns",
+      "roleId": "warehouse_operations",
+      "state": "The seeded return form is set to Restock (back to available).",
+      "control": {
+        "id": "primary",
+        "label": "Record restock return",
+        "instruction": "Record the accepted return so availability and custody reconcile."
+      },
+      "desktop": {
+        "file": "/knowledge/screenshots/task8-return-restock-desktop.png",
+        "sha256": "31e2ef42c5b5903dd230cf206cd5515085166dbeca85a06801b06ac326a6e023",
+        "width": 1440,
+        "height": 900,
+        "controlBounds": {
+          "x": 317,
+          "y": 794.796875,
+          "width": 502,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.3944,
+          "y": 0.9076
+        }
+      },
+      "mobile": {
+        "file": "/knowledge/screenshots/task8-return-restock-mobile.png",
+        "sha256": "e378270d4728123b73156c5660eafa6a888fb0ea5614bdd4c76e85d484b115a1",
+        "width": 390,
+        "height": 844,
+        "controlBounds": {
+          "x": 33,
+          "y": 311.796875,
+          "width": 324,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.5,
+          "y": 0.3955
+        }
+      }
+    },
+    "ev-return-quarantine": {
+      "route": "/warehouse/quality",
+      "roleId": "warehouse_logistics_supervisor",
+      "state": "The logistics supervisor has set a seeded inspection to Place on hold with a reason and required evidence attached.",
+      "control": {
+        "id": "primary",
+        "label": "Quarantine return",
+        "instruction": "Submit the supported hold disposition so non-accepted stock remains unavailable."
+      },
+      "desktop": {
+        "file": "/knowledge/screenshots/task8-return-quarantine-desktop.png",
+        "sha256": "ce96e5a0c8a818c7cbefd4426c6a33aeba48a93c8cb20836319d264083471e1d",
+        "width": 1440,
+        "height": 900,
+        "controlBounds": {
+          "x": 822.546875,
+          "y": 723.328125,
+          "width": 161.453125,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.6273,
+          "y": 0.8281
+        }
+      },
+      "mobile": {
+        "file": "/knowledge/screenshots/task8-return-quarantine-mobile.png",
+        "sha256": "05e85fe3f09c9b514a14d3508d4e1eee828d6cf02b6f3508a8743f0ee63d0b2d",
+        "width": 390,
+        "height": 844,
+        "controlBounds": {
+          "x": 20,
+          "y": 772,
+          "width": 350,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.5,
+          "y": 0.9408
+        }
+      }
+    },
+    "ev-return-adjustment-handoff": {
+      "route": "/warehouse/cycle-counts",
+      "roleId": "warehouse_finance",
+      "state": "Warehouse finance has entered a deterministic physical variance ready for approval handoff.",
+      "control": {
+        "id": "primary",
+        "label": "Submit supported adjustment",
+        "instruction": "Submit the variance with count, reason, value, and custody evidence for controlled approval."
+      },
+      "desktop": {
+        "file": "/knowledge/screenshots/task8-return-adjustment-handoff-desktop.png",
+        "sha256": "06a224464d18633b79ca5a890a13d9f58b51458d98d30fed8b4f207fd83dbfda",
+        "width": 1440,
+        "height": 900,
+        "controlBounds": {
+          "x": 296,
+          "y": 815.796875,
+          "width": 1104,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.5889,
+          "y": 0.9309
+        }
+      },
+      "mobile": {
+        "file": "/knowledge/screenshots/task8-return-adjustment-handoff-mobile.png",
+        "sha256": "553dbd84a16ef1bfecbf672460cc829860cf6c12955143c93a5d8a775dadfac6",
+        "width": 390,
+        "height": 844,
+        "controlBounds": {
+          "x": 16,
+          "y": 612.796875,
+          "width": 358,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.5,
+          "y": 0.7521
+        }
+      }
+    },
+    "ev-count-start": {
+      "route": "/warehouse/cycle-counts",
+      "roleId": "warehouse_finance",
+      "state": "Warehouse finance is selecting the controlled location and count scope.",
+      "control": {
+        "id": "primary",
+        "label": "Select count location",
+        "instruction": "Select the controlled location and category for the count sheet."
+      },
+      "desktop": {
+        "file": "/knowledge/screenshots/task8-count-start-desktop.png",
+        "sha256": "7d1b24c0f4a046bec8cdff39c148deb7cce4ffc37dbcd975bdff4864efbc9e30",
+        "width": 1440,
+        "height": 900,
+        "controlBounds": {
+          "x": 317,
+          "y": 224.796875,
+          "width": 525,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.4024,
+          "y": 0.2742
+        }
+      },
+      "mobile": {
+        "file": "/knowledge/screenshots/task8-count-start-mobile.png",
+        "sha256": "39fa1deaf03b3b88e2b78ca1fe0e8973a7db1ff61649cbab6bc94a4a6b682245",
+        "width": 390,
+        "height": 844,
+        "controlBounds": {
+          "x": 33,
+          "y": 220.796875,
+          "width": 324,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.5,
+          "y": 0.2877
+        }
+      }
+    },
+    "ev-count-enter": {
+      "route": "/warehouse/cycle-counts",
+      "roleId": "warehouse_logistics_supervisor",
+      "state": "The warehouse logistics supervisor has entered the observed physical quantity on the authorized cycle-count sheet.",
+      "control": {
+        "id": "primary",
+        "label": "Enter physical count",
+        "instruction": "Enter the observed product quantity on the controlled count sheet and retain accountable count evidence."
+      },
+      "desktop": {
+        "file": "/knowledge/screenshots/task8-count-enter-desktop.png",
+        "sha256": "c4dae9c46222d45cc0e7e50890263ed7d4bde4bf5f6169492ab8cdfc1d2f93f5",
+        "width": 1440,
+        "height": 900,
+        "controlBounds": {
+          "x": 1170.3125,
+          "y": 665.796875,
+          "width": 96,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.8461,
+          "y": 0.7642
+        }
+      },
+      "mobile": {
+        "file": "/knowledge/screenshots/task8-count-enter-mobile.png",
+        "sha256": "01880d0462b9d90c7a6cb5aaacb2221b57733c3b854ea591c0077e2aa06ab3f2",
+        "width": 390,
+        "height": 844,
+        "controlBounds": {
+          "x": 248,
+          "y": 388.796875,
+          "width": 96,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.759,
+          "y": 0.4867
+        }
+      }
+    },
+    "ev-count-investigate": {
+      "route": "/warehouse/cycle-counts",
+      "roleId": "warehouse_logistics_supervisor",
+      "state": "The logistics supervisor is reviewing seeded count lines with Variances only enabled.",
+      "control": {
+        "id": "primary",
+        "label": "Investigate count variance",
+        "instruction": "Filter to variances and compare movements, custody, and recount evidence."
+      },
+      "desktop": {
+        "file": "/knowledge/screenshots/task8-count-investigate-desktop.png",
+        "sha256": "9ace2b4176ce6dcddcc723700e6ee6afceec02108d49526863a7fa4f95529f63",
+        "width": 1440,
+        "height": 900,
+        "controlBounds": {
+          "x": 439.71875,
+          "y": 339.796875,
+          "width": 137.140625,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.353,
+          "y": 0.402
+        }
+      },
+      "mobile": {
+        "file": "/knowledge/screenshots/task8-count-investigate-mobile.png",
+        "sha256": "afd7c8efacc7ec4a8419a6e819fedb776a64c1a50fc9d186208079a078de5f52",
+        "width": 390,
+        "height": 844,
+        "controlBounds": {
+          "x": 155.71875,
+          "y": 499.796875,
+          "width": 137.140625,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.5751,
+          "y": 0.6182
+        }
+      }
+    },
+    "ev-count-post": {
+      "route": "/warehouse/approvals",
+      "roleId": "warehouse_admin",
+      "state": "The warehouse administrator has approved the deterministic stock change and the cycle-count adjustment is posted.",
+      "control": {
+        "id": "primary",
+        "label": "Review posted adjustment",
+        "instruction": "Confirm the approved result; an auditable stock movement corrected the ledger without rewriting history."
+      },
+      "desktop": {
+        "file": "/knowledge/screenshots/task8-count-post-desktop.png",
+        "sha256": "910701e0d9400e2e15e8a87685af6bf0a6531ee0c199835d53518cde088e5cc1",
+        "width": 1440,
+        "height": 900,
+        "controlBounds": {
+          "x": 1033.328125,
+          "y": 196.796875,
+          "width": 362.671875,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.8435,
+          "y": 0.2431
+        }
+      },
+      "mobile": {
+        "file": "/knowledge/screenshots/task8-count-post-mobile.png",
+        "sha256": "9bcd0a75cb2a8c3f24015169a3cb44d0c126c1e86eddab75232251b9e3214016",
+        "width": 390,
+        "height": 844,
+        "controlBounds": {
+          "x": 256,
+          "y": 216.796875,
+          "width": 114,
+          "height": 56
+        },
+        "hotspot": {
+          "x": 0.8026,
+          "y": 0.29
+        }
+      }
+    },
+    "ev-admin-start": {
+      "route": "/admin/users",
+      "roleId": "platform_admin",
+      "state": "The platform administrator is reviewing the governed access matrix and seeded request context.",
+      "control": {
+        "id": "primary",
+        "label": "Open administration request",
+        "instruction": "Open Users & Roles and match the request owner, scope, and approval evidence to the access matrix."
+      },
+      "desktop": {
+        "file": "/knowledge/screenshots/task8-admin-start-desktop.png",
+        "sha256": "18407effb15df5d41b8b7adc1acd062ddea8fa2e1f6f8803bbf92f25a43e14cc",
+        "width": 1440,
+        "height": 900,
+        "controlBounds": {
+          "x": 13.5,
+          "y": 124,
+          "width": 44,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.025,
+          "y": 0.1622
+        }
+      },
+      "mobile": {
+        "file": "/knowledge/screenshots/task8-admin-start-mobile.png",
+        "sha256": "2c46190b2a0d21872de993d675a4a378d5b6cfbc31fb6f941b72276610db47e6",
+        "width": 390,
+        "height": 844,
+        "controlBounds": {
+          "x": 167,
+          "y": 784,
+          "width": 56,
+          "height": 56
+        },
+        "hotspot": {
+          "x": 0.5,
+          "y": 0.9621
+        }
+      }
+    },
+    "ev-admin-activate": {
+      "route": "/admin/doa",
+      "roleId": "platform_admin",
+      "state": "The platform administrator is reviewing a deterministic approved DOA draft at the controlled activation command.",
+      "control": {
+        "id": "primary",
+        "label": "Activate approved configuration",
+        "instruction": "Activate the approved configuration so the prior matrix is superseded with audit history retained."
+      },
+      "desktop": {
+        "file": "/knowledge/screenshots/task8-admin-activate-desktop.png",
+        "sha256": "e50a7d074fbc2547b6294151e7c061ff8ae2b314cc6064f2d6e7c328510e551e",
+        "width": 1440,
+        "height": 900,
+        "controlBounds": {
+          "x": 295.5,
+          "y": 340.390625,
+          "width": 81.46875,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.2335,
+          "y": 0.4027
+        }
+      },
+      "mobile": {
+        "file": "/knowledge/screenshots/task8-admin-activate-mobile.png",
+        "sha256": "5484b587df5772a41500b8bfa8b6782c44c56ce49f2490451dacc0448a20f0fc",
+        "width": 390,
+        "height": 844,
+        "controlBounds": {
+          "x": 33,
+          "y": 312.390625,
+          "width": 324,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.5,
+          "y": 0.3962
+        }
+      }
+    },
+    "ev-allocation-start": {
+      "route": "/warehouse/allocations",
+      "roleId": "warehouse_business_unit",
+      "state": "The business-unit owner is preparing a seeded reservation from approved demand.",
+      "control": {
+        "id": "primary",
+        "label": "Reserve event stock",
+        "instruction": "Select Reserve and tie the request to approved event demand."
+      },
+      "desktop": {
+        "file": "/knowledge/screenshots/task8-allocation-start-desktop.png",
+        "sha256": "d9f372f5c5a8f538fe6820d1abfb6116f23cb61e265731aaca8e3dd05dcbe2e3",
+        "width": 1440,
+        "height": 900,
+        "controlBounds": {
+          "x": 1299.46875,
+          "y": 89,
+          "width": 100.53125,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.9373,
+          "y": 0.1233
+        }
+      },
+      "mobile": {
+        "file": "/knowledge/screenshots/task8-allocation-start-mobile.png",
+        "sha256": "821cc94cc2d6988bff5e9688e73f70f1375e2929b89813c36a4bdfa100117ac6",
+        "width": 390,
+        "height": 844,
+        "controlBounds": {
+          "x": 16,
+          "y": 171.796875,
+          "width": 100.53125,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.1699,
+          "y": 0.2296
+        }
+      }
+    },
+    "ev-allocation-reserve": {
+      "route": "/warehouse/allocations",
+      "roleId": "warehouse_operations",
+      "state": "Warehouse operations is reviewing seeded reserved stock and the Issue command.",
+      "control": {
+        "id": "primary",
+        "label": "Reserve and issue stock",
+        "instruction": "Issue only the reserved quantity to the accountable custody record."
+      },
+      "desktop": {
+        "file": "/knowledge/screenshots/task8-allocation-reserve-desktop.png",
+        "sha256": "6dfb4b71b799e792109fe11fd5c9ba079d6b79b178d7ec28b7875a36947739cf",
+        "width": 1440,
+        "height": 900,
+        "controlBounds": {
+          "x": 773.59375,
+          "y": 355.796875,
+          "width": 58.40625,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.5575,
+          "y": 0.4198
+        }
+      },
+      "mobile": {
+        "file": "/knowledge/screenshots/task8-allocation-reserve-mobile.png",
+        "sha256": "d9f71586784120c388add59794845b5a7024dba6c6507ba0df570edfd673c392",
+        "width": 390,
+        "height": 844,
+        "controlBounds": {
+          "x": 286.59375,
+          "y": 360.796875,
+          "width": 58.40625,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.8097,
+          "y": 0.4536
+        }
+      }
+    },
+    "ev-price-start": {
+      "route": "/warehouse/pricing",
+      "roleId": "warehouse_pricing",
+      "state": "The pricing analyst is reviewing the seeded landed-cost and turnover table.",
+      "control": {
+        "id": "primary",
+        "label": "Prepare landed-cost basis",
+        "instruction": "Open the product row and review landed cost, valuation, and turnover before proposing price."
+      },
+      "desktop": {
+        "file": "/knowledge/screenshots/task8-price-start-desktop.png",
+        "sha256": "cf76311914c856130968edf754b08cc551d57df510251b293b7b76a43cc9addf",
+        "width": 1440,
+        "height": 900,
+        "controlBounds": {
+          "x": 317,
+          "y": 436.796875,
+          "width": 1062,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.5889,
+          "y": 0.5098
+        }
+      },
+      "mobile": {
+        "file": "/knowledge/screenshots/task8-price-start-mobile.png",
+        "sha256": "b74cc2d5fb9ae7026885740ffaf35c5c686634071889d774defaf6b476cdc01f",
+        "width": 390,
+        "height": 844,
+        "controlBounds": {
+          "x": 33,
+          "y": 360.796875,
+          "width": 324,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.5,
+          "y": 0.4536
+        }
+      }
+    },
+    "ev-doa-start": {
+      "route": "/admin/doa",
+      "roleId": "legal_admin",
+      "state": "Legal administration is preparing a seeded immutable DOA revision.",
+      "control": {
+        "id": "primary",
+        "label": "Add DOA tier",
+        "instruction": "Add the governed approval tier and retain the prior active matrix."
+      },
+      "desktop": {
+        "file": "/knowledge/screenshots/task8-doa-start-desktop.png",
+        "sha256": "84761665b03f80f6fe391542df18b3628c9686862cf4f6a40799d20f8051cc89",
+        "width": 1440,
+        "height": 900,
+        "controlBounds": {
+          "x": 1249.03125,
+          "y": 487.390625,
+          "width": 101.96875,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.9028,
+          "y": 0.566
+        }
+      },
+      "mobile": {
+        "file": "/knowledge/screenshots/task8-doa-start-mobile.png",
+        "sha256": "61e4e63e1dd9826f07f9527256c069638e9c9886eb7352ef186b3c6189ccdcc2",
+        "width": 390,
+        "height": 844,
+        "controlBounds": {
+          "x": 255.03125,
+          "y": 312.390625,
+          "width": 101.96875,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.7847,
+          "y": 0.3962
+        }
+      }
+    },
+    "ev-doa-activate": {
+      "route": "/admin/doa",
+      "roleId": "legal_admin",
+      "state": "Legal administration is reviewing a deterministic approved DOA revision at the controlled activation command.",
+      "control": {
+        "id": "primary",
+        "label": "Activate DOA revision",
+        "instruction": "Activate the approved revision deliberately and retain the superseded version and audit evidence."
+      },
+      "desktop": {
+        "file": "/knowledge/screenshots/task8-doa-activate-desktop.png",
+        "sha256": "47cbd565acecab18fc022cb5b05d330b7e45ef2073ff909ca8ef3cba3ca68af4",
+        "width": 1440,
+        "height": 900,
+        "controlBounds": {
+          "x": 295.5,
+          "y": 340.390625,
+          "width": 81.46875,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.2335,
+          "y": 0.4027
+        }
+      },
+      "mobile": {
+        "file": "/knowledge/screenshots/task8-doa-activate-mobile.png",
+        "sha256": "b8fb082779e1bec83753028e760ac49cb8e72db0a2bb61e92726e76ec1ac929f",
+        "width": 390,
+        "height": 844,
+        "controlBounds": {
+          "x": 33,
+          "y": 312.390625,
+          "width": 324,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.5,
+          "y": 0.3962
+        }
+      }
+    },
+    "ev-recover-start": {
+      "route": "/login",
+      "roleId": "core_staff_only",
+      "state": "The memory-mode sign-in form shows a masked incomplete retry after a workflow access failure.",
+      "control": {
+        "id": "primary",
+        "label": "Review failed attempt",
+        "instruction": "Verify the failed state and committed outcome before retrying."
+      },
+      "desktop": {
+        "file": "/knowledge/screenshots/task8-recover-start-desktop.png",
+        "sha256": "b0893238d5dd646991130ce4a162be83c7083129788a189f3ee1bb20d741e143",
+        "width": 1440,
+        "height": 900,
+        "controlBounds": {
+          "x": 517,
+          "y": 437.796875,
+          "width": 406,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.5,
+          "y": 0.5109
+        }
+      },
+      "mobile": {
+        "file": "/knowledge/screenshots/task8-recover-start-mobile.png",
+        "sha256": "bf5ff9099435b35f4c6c4f87b63bbaa3c4e76302fd5b9e9e431d6afdca514a1c",
+        "width": 390,
+        "height": 844,
+        "controlBounds": {
+          "x": 33,
+          "y": 423.796875,
+          "width": 324,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.5,
+          "y": 0.5282
+        }
+      }
+    },
+    "ev-recover-retry": {
+      "route": "/login",
+      "roleId": "core_staff_only",
+      "state": "The memory-mode sign-in form contains masked corrected credentials ready for one retry.",
+      "control": {
+        "id": "primary",
+        "label": "Retry once",
+        "instruction": "After verifying no committed session exists, select Sign in once."
+      },
+      "desktop": {
+        "file": "/knowledge/screenshots/task8-recover-retry-desktop.png",
+        "sha256": "bc1b3b7a71feff65ede554d7ba1cfc187b9a85de7d3955d824482e415b586847",
+        "width": 1440,
+        "height": 900,
+        "controlBounds": {
+          "x": 517,
+          "y": 497.796875,
+          "width": 406,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.5,
+          "y": 0.5776
+        }
+      },
+      "mobile": {
+        "file": "/knowledge/screenshots/task8-recover-retry-mobile.png",
+        "sha256": "40fd8020853e48566c4ab0c843c6943a266920b8ec055b6670eec152f40ee182",
+        "width": 390,
+        "height": 844,
+        "controlBounds": {
+          "x": 33,
+          "y": 483.796875,
+          "width": 324,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.5,
+          "y": 0.5993
+        }
+      }
+    }
+  }
+}
