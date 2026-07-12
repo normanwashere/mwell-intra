@@ -2,7 +2,7 @@ import { KNOWLEDGE_FLOWS } from "./workflows";
 import type { KnowledgeEvidence, KnowledgeFlowNode } from "./types";
 
 const reviewDate = "2026-07-13";
-const appCommit = "31fe8d14277c79f25fe4e9d9b55bf15daf313c62";
+const appCommit = "edb3609d20eea7eb27a59f1a6d8dfcf9163048b9";
 const executableTypes = new Set(["start", "action", "handoff"]);
 
 interface EvidenceScenario {
