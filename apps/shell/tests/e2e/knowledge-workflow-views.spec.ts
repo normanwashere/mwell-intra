@@ -23,11 +23,36 @@ test.beforeEach(async ({ page }) => {
 test("desktop keeps workflow tabs, selected node, URL, and canvas synchronized", async ({
   page,
 }) => {
-  test.skip((page.viewportSize()?.width ?? 0) < 640, "desktop and tablet contract");
+  test.skip(
+    (page.viewportSize()?.width ?? 0) < 640,
+    "desktop and tablet contract",
+  );
   await page.goto("/knowledge?flow=identity-and-access&view=flow");
 
   const flowTab = page.getByRole("tab", { name: "Flow" });
   await expect(flowTab).toHaveAttribute("aria-selected", "true");
+  const panelShells = page.locator('[role="tabpanel"]');
+  await expect(panelShells).toHaveCount(4);
+  for (const view of ["flow", "steps", "roles", "exceptions"]) {
+    const tab = page.locator(`#workflow-tab-${view}`);
+    const panel = page.locator(`#workflow-panel-${view}`);
+    await expect(tab).toHaveAttribute(
+      "aria-controls",
+      `workflow-panel-${view}`,
+    );
+    await expect(panel).toHaveAttribute(
+      "aria-labelledby",
+      `workflow-tab-${view}`,
+    );
+    if (view === "flow") await expect(panel).toBeVisible();
+    else {
+      await expect(panel).toBeHidden();
+      await expect(panel).toHaveAttribute("hidden", "");
+    }
+  }
+  await expect(
+    page.locator('[id^="workflow-panel-"][role="tabpanel"]:not([hidden])'),
+  ).toHaveCount(1);
   await expect(
     page.getByLabel("Identity and access decision tree"),
   ).toBeVisible();
@@ -100,9 +125,10 @@ test("mobile guides a branch, preserves scroll, and restores the decision", asyn
   const scrollBefore = await page.evaluate(() => window.scrollY);
   await reject.click();
 
-  await expect(page).toHaveURL(
-    /view=flow&branch=access-denied&step=access-denied/,
-  );
+  await expect
+    .poll(() => new URL(page.url()).searchParams.get("branch"))
+    .toBe("identity-and-access~access-authorized-access-denied-not-authorized");
+  expect(new URL(page.url()).searchParams.get("step")).toBe("access-denied");
   await expect(
     page.getByRole("heading", { name: "Access request escalated" }),
   ).toBeFocused();
@@ -124,4 +150,46 @@ test("mobile guides a branch, preserves scroll, and restores the decision", asyn
   await expect(
     page.getByRole("button", { name: "Authorized", exact: true }),
   ).toBeVisible();
+});
+
+test("repairs invalid and partial branch URLs atomically", async ({ page }) => {
+  test.skip((page.viewportSize()?.width ?? 0) < 640, "desktop contract");
+  const validChoice =
+    "identity-and-access~access-authorized-access-denied-not-authorized";
+  await page.goto(
+    `/knowledge?flow=identity-and-access&view=roles&branch=${validChoice},other-flow~stale&step=access-start`,
+  );
+
+  await expect(page).toHaveURL(
+    new RegExp(
+      `flow=identity-and-access&view=roles&branch=${validChoice.replace("~", "%7E")}&step=access-denied$`,
+    ),
+  );
+  await expect(
+    page.getByRole("heading", { name: "Access request escalated" }),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByLabel("Workflow views")
+      .getByRole("tab", { name: "Roles involved" }),
+  ).toHaveAttribute("aria-selected", "true");
+});
+
+test("clears branch history when leaving and switching flows", async ({
+  page,
+}) => {
+  test.skip((page.viewportSize()?.width ?? 0) >= 640, "mobile contract");
+  await page.goto("/knowledge?flow=identity-and-access&view=flow");
+  await page.getByRole("button", { name: "Not authorized" }).click();
+  await expect(page).toHaveURL(/branch=/);
+
+  await page.getByRole("button", { name: "Back to Knowledge Base" }).click();
+  await expect(page).toHaveURL(/\/knowledge$/);
+  await expect(page).not.toHaveURL(/branch=|step=|flow=/);
+
+  await page.getByRole("button", { name: /Receive to putaway/ }).click();
+  await expect(page).toHaveURL(
+    /flow=receive-to-putaway&view=flow&step=receive-po-eligible$/,
+  );
+  await expect(page).not.toHaveURL(/branch=/);
 });

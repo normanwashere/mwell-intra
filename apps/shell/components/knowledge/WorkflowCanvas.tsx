@@ -1,7 +1,7 @@
 "use client";
 
 import { Badge } from "@intra/ui";
-import { layoutFlow } from "@shell/lib/knowledge/graph";
+import { edgeChoiceId, layoutFlow } from "@shell/lib/knowledge/graph";
 import type { KnowledgeFlow, KnowledgeRole } from "@shell/lib/knowledge/types";
 
 export function WorkflowCanvas({
@@ -49,7 +49,7 @@ export function WorkflowCanvas({
               x2 = to.x + 100,
               y2 = to.y;
             return (
-              <g key={`${edge.from}-${edge.to}-${edge.label ?? "next"}`}>
+              <g key={edgeChoiceId(flow, edge)}>
                 <path
                   d={`M ${x1} ${y1} C ${x1} ${(y1 + y2) / 2}, ${x2} ${(y1 + y2) / 2}, ${x2} ${y2}`}
                   fill="none"

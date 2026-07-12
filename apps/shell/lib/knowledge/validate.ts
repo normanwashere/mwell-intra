@@ -1,4 +1,5 @@
 import type { KnowledgeContent, KnowledgeFeature } from "./types";
+import { edgeChoiceId } from "./graph";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const AVAILABILITY = new Set(["live", "limited", "coming_soon"]);
@@ -431,7 +432,12 @@ export function validateKnowledgeContent(
 
     const outgoing = new Map<string, typeof flow.edges>();
     const incoming = new Map<string, typeof flow.edges>();
+    const edgeChoiceIds = new Set<string>();
     for (const edge of flow.edges) {
+      const choiceId = edgeChoiceId(flow, edge);
+      if (edgeChoiceIds.has(choiceId))
+        errors.push(`${flow.id} has duplicate edge choice id ${choiceId}`);
+      edgeChoiceIds.add(choiceId);
       if (!nodeIds.has(edge.from) || !nodeIds.has(edge.to)) {
         errors.push(`${flow.id} has invalid edge ${edge.from}->${edge.to}`);
         continue;

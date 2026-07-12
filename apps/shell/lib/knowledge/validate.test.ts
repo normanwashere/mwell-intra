@@ -525,6 +525,16 @@ describe("validateKnowledgeContent", () => {
     );
   });
 
+  it("rejects duplicate stable edge choice ids", () => {
+    const content = valid();
+    content.flows[0]!.edges[0]!.id = "same-choice";
+    content.flows[0]!.edges[1]!.id = "same-choice";
+
+    expect(validateKnowledgeContent(content)).toContain(
+      "flow has duplicate edge choice id flow~same-choice",
+    );
+  });
+
   it("rejects invalid and duplicate hotspots", () => {
     const content = valid();
     content.evidence[0]!.hotspots.push({

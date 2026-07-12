@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   branchOptions,
+  edgeChoiceId,
   exceptionNodes,
   layoutFlow,
   outgoingEdges,
+  resolveBranch,
   roleNodes,
   traceBranch,
 } from "./graph";
@@ -100,8 +102,15 @@ const mergingFlow: KnowledgeFlow = {
     },
   ],
   edges: [
-    { from: "start", to: "standard", label: "Standard", outcome: "success" },
     {
+      id: "standard-route",
+      from: "start",
+      to: "standard",
+      label: "Standard",
+      outcome: "success",
+    },
+    {
+      id: "exception-route",
       from: "start",
       to: "exception",
       label: "Exception",
@@ -110,6 +119,29 @@ const mergingFlow: KnowledgeFlow = {
     { from: "standard", to: "merge" },
     { from: "exception", to: "merge" },
     { from: "merge", to: "complete" },
+  ],
+};
+
+const sameDestinationFlow: KnowledgeFlow = {
+  ...mergingFlow,
+  id: "same-destination",
+  nodes: mergingFlow.nodes.filter((node) =>
+    ["start", "merge", "complete"].includes(node.id),
+  ),
+  edges: [
+    {
+      id: "manual-approval",
+      from: "start",
+      to: "merge",
+      label: "Manual approval",
+    },
+    {
+      id: "delegated-approval",
+      from: "start",
+      to: "merge",
+      label: "Delegated approval",
+    },
+    { id: "record-completion", from: "merge", to: "complete" },
   ],
 };
 
@@ -133,16 +165,19 @@ describe("knowledge graph layout", () => {
 
 describe("guided branch traversal", () => {
   it("selects a decision edge and follows its path through a merge", () => {
-    expect(traceBranch(mergingFlow, ["standard"]).map((node) => node.id)).toEqual([
-      "start",
-      "standard",
-      "merge",
-      "complete",
-    ]);
+    expect(
+      traceBranch(mergingFlow, [
+        edgeChoiceId(mergingFlow, mergingFlow.edges[0]!),
+      ]).map((node) => node.id),
+    ).toEqual(["start", "standard", "merge", "complete"]);
   });
 
   it("restores the decision node when the latest choice is backtracked", () => {
-    expect(traceBranch(mergingFlow, ["exception"]).at(-1)?.id).toBe("complete");
+    expect(
+      traceBranch(mergingFlow, [
+        edgeChoiceId(mergingFlow, mergingFlow.edges[1]!),
+      ]).at(-1)?.id,
+    ).toBe("complete");
     expect(traceBranch(mergingFlow, []).map((node) => node.id)).toEqual([
       "start",
     ]);
@@ -163,13 +198,48 @@ describe("guided branch traversal", () => {
   });
 
   it("retains terminal completion evidence in the traced outcome", () => {
-    const terminal = traceBranch(mergingFlow, ["standard"]).at(-1);
+    const terminal = traceBranch(mergingFlow, [
+      edgeChoiceId(mergingFlow, mergingFlow.edges[0]!),
+    ]).at(-1);
     expect(terminal).toMatchObject({
       type: "terminal",
       terminalOutcome: "complete",
       evidenceId: "completion-record",
       outcome: "Approval and evidence are recorded.",
     });
+  });
+
+  it("preserves distinct same-destination edge identities and labels", () => {
+    const [manual, delegated] = branchOptions(sameDestinationFlow, "start");
+    const manualId = edgeChoiceId(sameDestinationFlow, manual!);
+    const delegatedId = edgeChoiceId(sameDestinationFlow, delegated!);
+
+    expect(manualId).not.toBe(delegatedId);
+    expect(resolveBranch(sameDestinationFlow, [manualId])).toMatchObject({
+      choiceIds: [manualId],
+      chosenEdges: [expect.objectContaining({ label: "Manual approval" })],
+      invalidChoiceIds: [],
+    });
+    expect(resolveBranch(sameDestinationFlow, [delegatedId])).toMatchObject({
+      choiceIds: [delegatedId],
+      chosenEdges: [expect.objectContaining({ label: "Delegated approval" })],
+      invalidChoiceIds: [],
+    });
+  });
+
+  it("truncates invalid choice sequences at the last valid decision", () => {
+    const validId = edgeChoiceId(
+      sameDestinationFlow,
+      sameDestinationFlow.edges[0]!,
+    );
+    const resolution = resolveBranch(sameDestinationFlow, [
+      validId,
+      "other-flow:stale-choice",
+    ]);
+
+    expect(resolution.choiceIds).toEqual([validId]);
+    expect(resolution.invalidChoiceIds).toEqual(["other-flow:stale-choice"]);
+    expect(resolution.currentNode.id).toBe("complete");
   });
 });
 

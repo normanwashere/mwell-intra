@@ -110,7 +110,13 @@ export function KnowledgeBase() {
       String(window.scrollY),
     );
     const next = new URLSearchParams(params.toString());
-    for (const [key, value] of Object.entries(changes)) {
+    const normalizedChanges = Object.prototype.hasOwnProperty.call(
+      changes,
+      "flow",
+    )
+      ? { ...changes, branch: null }
+      : changes;
+    for (const [key, value] of Object.entries(normalizedChanges)) {
       if (value) next.set(key, value);
       else next.delete(key);
     }

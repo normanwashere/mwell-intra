@@ -12,11 +12,14 @@ import type {
 import { GuidedDecisionPath } from "./GuidedDecisionPath";
 import { WorkflowNavigator } from "./WorkflowNavigator";
 
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean })
-  .IS_REACT_ACT_ENVIRONMENT = true;
+(
+  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true;
 
 vi.mock("@intra/ui", () => ({
-  Badge: ({ children }: { children: React.ReactNode }) => <span>{children}</span>,
+  Badge: ({ children }: { children: React.ReactNode }) => (
+    <span>{children}</span>
+  ),
   Icon: ({ name }: { name: string }) => <span aria-hidden>{name}</span>,
 }));
 
@@ -98,6 +101,26 @@ const evidence: KnowledgeEvidence[] = [
   },
 ];
 
+const sameDestinationFlow: KnowledgeFlow = {
+  ...flow,
+  id: "same-destination-guided",
+  nodes: flow.nodes.filter((node) => node.id !== "rejected"),
+  edges: [
+    {
+      id: "manual-approval",
+      from: "choose",
+      to: "complete",
+      label: "Manual approval",
+    },
+    {
+      id: "delegated-approval",
+      from: "choose",
+      to: "complete",
+      label: "Delegated approval",
+    },
+  ],
+};
+
 function GuidedHarness() {
   const [choices, setChoices] = React.useState<string[]>([]);
   return (
@@ -106,7 +129,23 @@ function GuidedHarness() {
       choices={choices}
       evidence={evidence}
       rolesById={new Map([[role.id, role]])}
-      onChoose={(destination) => setChoices((current) => [...current, destination])}
+      onChoose={(destination) =>
+        setChoices((current) => [...current, destination])
+      }
+      onBacktrack={() => setChoices((current) => current.slice(0, -1))}
+    />
+  );
+}
+
+function SameDestinationHarness() {
+  const [choices, setChoices] = React.useState<string[]>([]);
+  return (
+    <GuidedDecisionPath
+      flow={sameDestinationFlow}
+      choices={choices}
+      evidence={evidence}
+      rolesById={new Map([[role.id, role]])}
+      onChoose={(choiceId) => setChoices((current) => [...current, choiceId])}
       onBacktrack={() => setChoices((current) => current.slice(0, -1))}
     />
   );
@@ -131,8 +170,8 @@ function render(element: React.ReactNode) {
 }
 
 function button(name: string) {
-  const match = [...container.querySelectorAll("button")].find(
-    (item) => item.textContent?.includes(name),
+  const match = [...container.querySelectorAll("button")].find((item) =>
+    item.textContent?.includes(name),
   );
   if (!match) throw new Error(`Missing button: ${name}`);
   return match;
@@ -149,9 +188,7 @@ function heading(name: string) {
 describe("synchronized workflow controls", () => {
   it("activates adjacent tabs with arrow keys and moves focus", async () => {
     const onSelectView = vi.fn();
-    render(
-      <WorkflowNavigator activeView="flow" onSelectView={onSelectView} />,
-    );
+    render(<WorkflowNavigator activeView="flow" onSelectView={onSelectView} />);
 
     const flowTab = button("Flow");
     flowTab.focus();
@@ -176,5 +213,19 @@ describe("synchronized workflow controls", () => {
     await act(() => button("Backtrack").click());
     expect(document.activeElement).toBe(heading("Choose route"));
     expect(button("Approve")).toBeTruthy();
+  });
+
+  it("keeps same-destination choices distinct in history and backtracking", async () => {
+    render(<SameDestinationHarness />);
+
+    await act(() => button("Delegated approval").click());
+    expect(document.activeElement).toBe(heading("Approval complete"));
+    expect(container.textContent).toContain("Via Delegated approval");
+    expect(container.textContent).not.toContain("Via Manual approval");
+
+    await act(() => button("Backtrack").click());
+    expect(document.activeElement).toBe(heading("Choose route"));
+    expect(button("Manual approval")).toBeTruthy();
+    expect(button("Delegated approval")).toBeTruthy();
   });
 });

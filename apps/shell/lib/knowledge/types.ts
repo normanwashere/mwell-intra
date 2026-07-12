@@ -167,6 +167,7 @@ export type KnowledgeFlowNode =
   KnowledgeDecisionNode | KnowledgeTerminalNode | KnowledgeProcessNode;
 
 export interface KnowledgeFlowEdge {
+  id?: string;
   from: string;
   to: string;
   label?: string;

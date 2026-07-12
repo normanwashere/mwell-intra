@@ -79,12 +79,42 @@ export function branchOptions(
   return outgoingEdges(flow, nodeId);
 }
 
-export function traceBranch(
+export function edgeChoiceId(
   flow: KnowledgeFlow,
-  choices: readonly string[],
-): KnowledgeFlowNode[] {
+  edge: KnowledgeFlowEdge,
+): string {
+  const localId =
+    edge.id ??
+    [edge.from, edge.to, edge.label ?? "next"]
+      .map((part) =>
+        part
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-|-$/g, ""),
+      )
+      .join("-");
+  return `${encodeURIComponent(flow.id)}~${encodeURIComponent(localId)}`;
+}
+
+export interface BranchResolution {
+  nodes: KnowledgeFlowNode[];
+  traversedEdges: KnowledgeFlowEdge[];
+  chosenEdges: KnowledgeFlowEdge[];
+  choiceIds: string[];
+  invalidChoiceIds: string[];
+  currentNode: KnowledgeFlowNode;
+}
+
+export function resolveBranch(
+  flow: KnowledgeFlow,
+  requestedChoiceIds: readonly string[],
+): BranchResolution {
   const nodesById = new Map(flow.nodes.map((node) => [node.id, node]));
-  const path: KnowledgeFlowNode[] = [];
+  const nodes: KnowledgeFlowNode[] = [];
+  const traversedEdges: KnowledgeFlowEdge[] = [];
+  const chosenEdges: KnowledgeFlowEdge[] = [];
+  const choiceIds: string[] = [];
   const visited = new Set<string>();
   let currentId: string | undefined = flow.startNodeId;
   let choiceIndex = 0;
@@ -92,30 +122,47 @@ export function traceBranch(
   while (currentId && !visited.has(currentId)) {
     const current = nodesById.get(currentId);
     if (!current) break;
-    path.push(current);
+    nodes.push(current);
     visited.add(currentId);
 
     const options = branchOptions(flow, currentId);
     if (options.length === 0) break;
+    let selected: KnowledgeFlowEdge | undefined;
     if (options.length === 1) {
-      currentId = options[0]!.to;
-      continue;
+      selected = options[0]!;
+    } else {
+      const requestedId = requestedChoiceIds[choiceIndex];
+      if (!requestedId) break;
+      selected = options.find(
+        (edge) => edgeChoiceId(flow, edge) === requestedId,
+      );
+      if (!selected) break;
+      chosenEdges.push(selected);
+      choiceIds.push(requestedId);
+      choiceIndex += 1;
     }
-
-    const choice = choices[choiceIndex];
-    if (!choice) break;
-    const selected = options.find(
-      (edge) =>
-        edge.to === choice ||
-        edge.label === choice ||
-        `${edge.from}:${edge.to}` === choice,
-    );
     if (!selected) break;
-    choiceIndex += 1;
+    traversedEdges.push(selected);
     currentId = selected.to;
   }
 
-  return path;
+  const currentNode =
+    nodes.at(-1) ?? nodesById.get(flow.startNodeId) ?? flow.nodes[0]!;
+  return {
+    nodes,
+    traversedEdges,
+    chosenEdges,
+    choiceIds,
+    invalidChoiceIds: requestedChoiceIds.slice(choiceIndex),
+    currentNode,
+  };
+}
+
+export function traceBranch(
+  flow: KnowledgeFlow,
+  choices: readonly string[],
+): KnowledgeFlowNode[] {
+  return resolveBranch(flow, choices).nodes;
 }
 
 export function roleNodes(
