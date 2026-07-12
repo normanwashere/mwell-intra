@@ -5,7 +5,10 @@ import { useSearchParams } from "next/navigation";
 import { Badge, EmptyState, Icon } from "@intra/ui";
 import { useSession } from "@intra/auth";
 import { KNOWLEDGE_CONTENT } from "@shell/lib/knowledge/content";
-import { knowledgeRoleIdsForAssignments } from "@shell/lib/knowledge/roles";
+import {
+  COMING_SOON_ROLES,
+  knowledgeRoleIdsForAssignments,
+} from "@shell/lib/knowledge/roles";
 import {
   searchKnowledge,
   type HandbookEntryMode,
@@ -13,11 +16,14 @@ import {
 } from "@shell/lib/knowledge/search";
 import type {
   KnowledgeAvailability,
+  KnowledgeContent,
   KnowledgeModule,
 } from "@shell/lib/knowledge/types";
+import { FeatureGuide } from "./FeatureGuide";
 import { HandbookLanding } from "./HandbookLanding";
 import { KnowledgeArticle } from "./KnowledgeArticle";
 import { KnowledgeFlow } from "./KnowledgeFlow";
+import { KnowledgeRoleGuide } from "./KnowledgeRoleGuide";
 
 const ENTRY_MODES = new Set<HandbookEntryMode>(["task", "role", "feature"]);
 const AVAILABILITY_FILTERS = new Set<KnowledgeAvailability | "all">([
@@ -26,6 +32,25 @@ const AVAILABILITY_FILTERS = new Set<KnowledgeAvailability | "all">([
   "limited",
   "coming_soon",
 ]);
+
+export const KNOWLEDGE_GUIDE_CONTENT: KnowledgeContent = {
+  ...KNOWLEDGE_CONTENT,
+  roles: [...KNOWLEDGE_CONTENT.roles, ...COMING_SOON_ROLES],
+};
+
+export function resolveKnowledgeGuide(
+  content: KnowledgeContent,
+  articleId: string | null,
+) {
+  if (!articleId) return null;
+  const role = content.roles.find((item) => `role-${item.id}` === articleId);
+  if (role) return { kind: "role" as const, role };
+  const feature = content.features.find(
+    (item) => `feature-${item.id}` === articleId,
+  );
+  if (feature) return { kind: "feature" as const, feature };
+  return null;
+}
 
 export function KnowledgeBase() {
   const { profile, loading, userRoles } = useSession();
@@ -59,12 +84,17 @@ export function KnowledgeBase() {
   const stepId = params.get("step");
   const glossaryTerm = params.get("glossary");
   const rolesById = useMemo(
-    () => new Map(KNOWLEDGE_CONTENT.roles.map((role) => [role.id, role])),
+    () => new Map(KNOWLEDGE_GUIDE_CONTENT.roles.map((role) => [role.id, role])),
+    [],
+  );
+  const articlesById = useMemo(
+    () =>
+      new Map(KNOWLEDGE_GUIDE_CONTENT.articles.map((item) => [item.id, item])),
     [],
   );
   const results = useMemo(
     () =>
-      searchKnowledge(KNOWLEDGE_CONTENT, query, {
+      searchKnowledge(KNOWLEDGE_GUIDE_CONTENT, query, {
         module,
         roleId: roleId || undefined,
       }),
@@ -123,11 +153,11 @@ export function KnowledgeBase() {
       />
     );
 
-  const glossary = KNOWLEDGE_CONTENT.glossary.find(
+  const glossary = KNOWLEDGE_GUIDE_CONTENT.glossary.find(
     (item) => item.term.toLowerCase() === glossaryTerm?.toLowerCase(),
   );
   if (glossary) {
-    const relatedFlows = KNOWLEDGE_CONTENT.flows.filter((item) =>
+    const relatedFlows = KNOWLEDGE_GUIDE_CONTENT.flows.filter((item) =>
       `${item.title} ${item.summary} ${item.nodes.map((node) => `${node.title} ${node.body}`).join(" ")}`
         .toLowerCase()
         .includes(glossary.term.toLowerCase()),
@@ -181,7 +211,56 @@ export function KnowledgeBase() {
     );
   }
 
-  const article = KNOWLEDGE_CONTENT.articles.find(
+  const guide = resolveKnowledgeGuide(KNOWLEDGE_GUIDE_CONTENT, articleId);
+  const openArticle = (id: string) =>
+    setParams({ article: id, flow: null, step: null, view: null });
+  const openFlow = (id: string) =>
+    setParams({ article: null, flow: id, step: null, view: "flow" });
+  if (guide?.kind === "role") {
+    const roleId = guide.role.id;
+    return (
+      <KnowledgeRoleGuide
+        role={guide.role}
+        rolesById={rolesById}
+        relatedFeatures={KNOWLEDGE_GUIDE_CONTENT.features.filter((feature) =>
+          feature.roleIds.includes(roleId),
+        )}
+        relatedArticles={KNOWLEDGE_GUIDE_CONTENT.articles.filter(
+          (item) =>
+            item.id !== `role-${roleId}` &&
+            !item.id.startsWith("feature-") &&
+            item.roles.includes(roleId),
+        )}
+        relatedFlows={KNOWLEDGE_GUIDE_CONTENT.flows.filter((item) =>
+          item.roles.includes(roleId),
+        )}
+        onBack={() => setParams({ article: null })}
+        onOpenArticle={openArticle}
+        onOpenFlow={openFlow}
+      />
+    );
+  }
+  if (guide?.kind === "feature")
+    return (
+      <FeatureGuide
+        feature={guide.feature}
+        rolesById={rolesById}
+        relatedArticles={KNOWLEDGE_GUIDE_CONTENT.articles.filter(
+          (item) =>
+            !item.id.startsWith("role-") &&
+            !item.id.startsWith("feature-") &&
+            item.roles.some((role) => guide.feature.roleIds.includes(role)),
+        )}
+        relatedFlows={KNOWLEDGE_GUIDE_CONTENT.flows.filter((item) =>
+          item.roles.some((role) => guide.feature.roleIds.includes(role)),
+        )}
+        onBack={() => setParams({ article: null })}
+        onOpenArticle={openArticle}
+        onOpenFlow={openFlow}
+      />
+    );
+
+  const article = KNOWLEDGE_GUIDE_CONTENT.articles.find(
     (item) => item.id === articleId,
   );
   if (article)
@@ -189,13 +268,13 @@ export function KnowledgeBase() {
       <KnowledgeArticle
         article={article}
         rolesById={rolesById}
+        articlesById={articlesById}
         onBack={() => setParams({ article: null })}
-        onOpenFlow={(id) =>
-          setParams({ article: null, flow: id, step: null, view: "flow" })
-        }
+        onOpenArticle={openArticle}
+        onOpenFlow={openFlow}
       />
     );
-  const flow = KNOWLEDGE_CONTENT.flows.find((item) => item.id === flowId);
+  const flow = KNOWLEDGE_GUIDE_CONTENT.flows.find((item) => item.id === flowId);
   if (flow)
     return (
       <div className="space-y-5">
@@ -213,7 +292,7 @@ export function KnowledgeBase() {
               ? stepId!
               : flow.startNodeId
           }
-          evidence={KNOWLEDGE_CONTENT.evidence}
+          evidence={KNOWLEDGE_GUIDE_CONTENT.evidence}
           rolesById={rolesById}
           onSelectNode={(id) => setParams({ step: id })}
         />
@@ -242,7 +321,7 @@ export function KnowledgeBase() {
 
   return (
     <HandbookLanding
-      content={KNOWLEDGE_CONTENT}
+      content={KNOWLEDGE_GUIDE_CONTENT}
       results={results}
       query={query}
       mode={mode}

@@ -10,7 +10,12 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["tests/api/**/*.test.ts", "lib/**/*.test.ts"],
+    include: [
+      "tests/api/**/*.test.ts",
+      "lib/**/*.test.ts",
+      "lib/**/*.test.tsx",
+      "components/**/*.test.tsx",
+    ],
     clearMocks: true,
   },
 });

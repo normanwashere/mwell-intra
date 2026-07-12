@@ -10,12 +10,16 @@ import type {
 export function KnowledgeArticle({
   article,
   rolesById,
+  articlesById,
   onBack,
+  onOpenArticle,
   onOpenFlow,
 }: {
   article: Article;
   rolesById: Map<string, KnowledgeRole>;
+  articlesById?: Map<string, Article>;
   onBack: () => void;
+  onOpenArticle?: (id: string) => void;
   onOpenFlow: (id: string) => void;
 }) {
   return (
@@ -136,6 +140,31 @@ export function KnowledgeArticle({
               </Button>
             ))}
           </div>
+        )}
+        {article.relatedArticleIds.length > 0 && onOpenArticle && (
+          <section
+            className="mt-6 border-t border-line pt-5"
+            aria-labelledby="article-related-title"
+          >
+            <h2 id="article-related-title" className="font-semibold text-ink">
+              Related content
+            </h2>
+            <div className="mt-2 divide-y divide-line border-y border-line">
+              {article.relatedArticleIds.map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  className="flex min-h-11 w-full items-center justify-between gap-4 py-3 text-left hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                  onClick={() => onOpenArticle(id)}
+                >
+                  <span className="text-sm font-semibold text-ink">
+                    {articlesById?.get(id)?.title ?? id}
+                  </span>
+                  <Icon name="arrowRight" className="h-4 w-4 shrink-0" />
+                </button>
+              ))}
+            </div>
+          </section>
         )}
       </footer>
     </article>
