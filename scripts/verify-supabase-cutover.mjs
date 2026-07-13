@@ -53,6 +53,10 @@ const REQUIRED = {
   ],
 };
 
+// These tables are part of the deployed schema contract but deliberately have
+// no authenticated-user policy. A successful read would be a security failure.
+const SERVICE_ONLY_TABLES = new Set(['warehouse.command_log']);
+
 function readEnvFile(path) {
   if (!existsSync(path)) return {};
   return Object.fromEntries(
@@ -192,6 +196,21 @@ async function main() {
     for (const table of tables) {
       const result = await probeTable({ url, anonKey, accessToken, schema, table });
       const label = `${schema}.${table}`;
+      if (SERVICE_ONLY_TABLES.has(label)) {
+        if (!result.ok && [401, 403].includes(result.status)) {
+          console.log(`PASS ${label} (service-only; authenticated read denied)`);
+        } else {
+          failures.push({
+            label,
+            ...result,
+            detail: result.ok
+              ? 'authenticated read unexpectedly succeeded'
+              : `expected 401/403 denial, received ${result.detail}`,
+          });
+          console.error(`FAIL ${label}: service-only boundary is not enforced`);
+        }
+        continue;
+      }
       if (result.ok) {
         console.log(`PASS ${label}`);
       } else {
