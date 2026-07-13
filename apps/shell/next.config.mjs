@@ -23,6 +23,12 @@ const contentSecurityPolicy = [
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  env: {
+    NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA:
+      process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA ??
+      process.env.VERCEL_GIT_COMMIT_SHA ??
+      "",
+  },
   // The workspace packages ship raw TS/TSX (their `main`/`exports` point at
   // ./src). Next must compile them through its own pipeline (spec §2, ADR-003).
   transpilePackages: [

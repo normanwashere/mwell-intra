@@ -74,4 +74,22 @@ describe("EvidenceViewer", () => {
     expect(document.querySelector('[role="dialog"]')).toBeTruthy();
     expect(document.body.textContent).toContain("Demo example");
   });
+
+  it("identifies evidence captured from an earlier deployed build", async () => {
+    const previous = process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA;
+    process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA =
+      "5637ac6d8b4d6d328d270ac66f827a5377e092a0";
+    try {
+      await act(() =>
+        root.render(<EvidenceViewer evidence={evidence} node={node} />),
+      );
+      expect(container.textContent).toContain("Reference from an earlier build");
+    } finally {
+      if (previous === undefined) {
+        delete process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA;
+      } else {
+        process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA = previous;
+      }
+    }
+  });
 });
