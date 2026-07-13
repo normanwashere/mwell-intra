@@ -20,7 +20,7 @@ if (!REUSE_EXISTING_SERVER) {
 
 export default defineConfig({
   testDir: './tests',
-  testIgnore: ['**/*-live.spec.ts'],
+  testIgnore: ['**/*-live.spec.ts', '**/capture-knowledge-evidence.spec.ts'],
   fullyParallel: true,
   forbidOnly: IS_CI,
   retries: IS_CI ? 1 : 0,
