@@ -1,7 +1,9 @@
 # Supabase Advisor Baseline
 
-**Project:** M-Intra (`abbfziukjalyqtcuskhi`)  
-**Captured:** 2026-07-13  
+**Project:** M-Intra (`abbfziukjalyqtcuskhi`)
+
+**Captured:** 2026-07-13
+
 **Purpose:** Pre-hardening baseline for currently implemented Mwell Intra functions.
 
 ## Security
