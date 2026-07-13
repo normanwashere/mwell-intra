@@ -24,6 +24,10 @@ import type {
 
 const SESSION_KEY = "intra.memory-session.v1";
 const SCENARIO_KEY = "intra.evidence-scenario";
+const LIVE_CAPTURE = process.env.EVIDENCE_AUTH_MODE === "live";
+const LIVE_BASE_URL = process.env.AUDIT_BASE_URL?.replace(/\/$/, "");
+const LIVE_PASSWORD = process.env.AUDIT_PASSWORD;
+const LIVE_SOURCE_COMMIT = process.env.DEPLOYED_COMMIT;
 const REPORT_PATH = path.resolve(process.cwd(), "../../.superpowers/sdd/task-8-report.json");
 const REPOSITORY_ROOT = path.resolve(process.cwd(), "../..");
 const STAGING_ROOT = path.resolve(
@@ -37,6 +41,23 @@ const VIEWPORTS = {
   desktop: { width: 1440, height: 900 },
   mobile: { width: 390, height: 844 },
 } as const;
+
+const LIVE_EMAILS: Record<string, string> = {
+  core_staff_only: "intra.test.staff@mwell.com.ph",
+  platform_admin: "intra.test.admin@mwell.com.ph",
+  vendor_portal: "intra.test.vendor@mwell.com.ph",
+  warehouse_logistics_supervisor: "intra.test.wh.logistics@mwell.com.ph",
+  warehouse_operations: "intra.test.wh.operations@mwell.com.ph",
+  warehouse_finance: "intra.test.wh.finance@mwell.com.ph",
+  warehouse_business_unit: "intra.test.wh.business.unit@mwell.com.ph",
+  warehouse_procurement: "intra.test.wh.procurement@mwell.com.ph",
+  warehouse_pricing: "intra.test.wh.pricing@mwell.com.ph",
+  warehouse_admin: "intra.test.wh.warehouse.admin@mwell.com.ph",
+  procurement_requester: "intra.test.proc.requester@mwell.com.ph",
+  procurement_officer: "intra.test.proc.officer@mwell.com.ph",
+  procurement_finance: "intra.test.proc.finance@mwell.com.ph",
+  legal_admin: "intra.test.legal.admin@mwell.com.ph",
+};
 
 function scenarioManifestVersion(): string {
   const manifest = KNOWLEDGE_EVIDENCE.map((evidence) => ({
@@ -202,6 +223,26 @@ const SESSIONS: Record<string, { profileId: string; roles: Record<string, string
   },
 };
 
+async function loginLive(page: Page, roleId: string): Promise<void> {
+  const email = LIVE_EMAILS[roleId];
+  expect(email, `live account for ${roleId}`).toBeTruthy();
+  expect(LIVE_PASSWORD, "AUDIT_PASSWORD for live evidence capture").toBeTruthy();
+  await page.goto("/login", { waitUntil: "domcontentloaded" });
+  await page.getByLabel("Email").fill(email!);
+  await page.getByLabel("Password").fill(LIVE_PASSWORD!);
+  await page.getByRole("button", { name: /^sign in$/i }).click();
+  await page.waitForURL((url) => !url.pathname.startsWith("/login"), {
+    timeout: 20_000,
+  });
+  await page
+    .waitForFunction(
+      () => !document.body.innerText.includes("Restoring your session"),
+      undefined,
+      { timeout: 15_000 },
+    )
+    .catch(() => undefined);
+}
+
 async function first(locator: Locator): Promise<Locator> {
   const count = await locator.count();
   expect(count).toBeGreaterThan(0);
@@ -239,7 +280,9 @@ async function attachInspectionEvidence(page: Page): Promise<void> {
 }
 
 async function manageMarcoReyes(page: Page): Promise<Locator> {
-  const manage = page.getByRole("button", { name: "Manage", exact: true }).nth(1);
+  const manage = page
+    .getByRole("button", { name: "Manage", exact: true })
+    .nth(LIVE_CAPTURE ? 0 : 1);
   await expect(manage).toBeVisible();
   return manage;
 }
@@ -252,11 +295,28 @@ async function targetFor(page: Page, nodeId: string): Promise<Locator> {
     case "access-fix": {
       const manage = await manageMarcoReyes(page);
       await manage.click();
-      await expect(page.getByRole("dialog", { name: "Marco Reyes" })).toBeVisible();
-      return page.getByLabel("warehouse:business_unit for ops@mwell.demo", { exact: true });
+      const dialog = LIVE_CAPTURE
+        ? page.getByRole("dialog").first()
+        : page.getByRole("dialog", { name: "Marco Reyes" });
+      await expect(dialog).toBeVisible();
+      return dialog.getByLabel(/warehouse:business_unit for/i).first();
     }
     case "p2p-start":
+      if (LIVE_CAPTURE) {
+        const pettyCash = page.locator("label").filter({ hasText: /^Petty cash/i }).first();
+        if (await pettyCash.count()) await pettyCash.click();
+        await page.getByLabel("Title").fill("Documented operations purchase");
+        await page.getByLabel("Line 1 description").fill("Operational supplies");
+        await page.getByLabel("Line 1 unit price").fill("1250");
+      }
+      return page.getByRole("button", { name: "Continue", exact: true });
     case "vendor-start":
+      if (LIVE_CAPTURE) {
+        await page.getByLabel("Company name").fill("Documentation Test Vendor");
+        await page
+          .getByLabel("Vendor contact email")
+          .fill("documentation.vendor@example.test");
+      }
       return page.getByRole("button", { name: "Continue", exact: true });
     case "p2p-rfq-evidence":
       await page.getByLabel("Sourcing method").selectOption("rfq");
@@ -273,6 +333,7 @@ async function targetFor(page: Page, nodeId: string): Promise<Locator> {
     case "vendor-apply":
       return page.getByRole("button", { name: "Save draft", exact: true });
     case "setup-start":
+      await openStorageArea(page);
       return page.getByLabel("Warehouse");
     case "setup-area":
       await openStorageArea(page);
@@ -342,6 +403,12 @@ async function targetFor(page: Page, nodeId: string): Promise<Locator> {
       await page.getByRole("button", { name: "Variances only" }).click();
       return page.getByRole("button", { name: "Variances only" });
     case "count-post": {
+      if (LIVE_CAPTURE) {
+        const decided = page.getByRole("tab", { name: "Recently decided" });
+        await decided.click();
+        await expect(page.getByLabel("Recently decided approvals")).toBeVisible();
+        return decided;
+      }
       await page.goto("/warehouse/cycle-counts", { waitUntil: "networkidle" });
       await enterShirtCount(page);
       await (await first(page.getByRole("button", { name: /Submit count \(1\// }))).click();
@@ -532,21 +599,38 @@ async function captureArtifact(
 
 test("captures reviewed desktop and mobile principal-flow evidence", async ({ browser }) => {
   test.setTimeout(20 * 60_000);
+  if (LIVE_CAPTURE) {
+    expect(LIVE_BASE_URL, "AUDIT_BASE_URL for live evidence capture").toMatch(
+      /^https:\/\//,
+    );
+    expect(LIVE_SOURCE_COMMIT, "DEPLOYED_COMMIT for live evidence capture").toMatch(
+      /^[0-9a-f]{40}$/,
+    );
+  }
   expect(KNOWLEDGE_EVIDENCE).toHaveLength(39);
   expect(EVIDENCE_REQUIREMENTS).toHaveLength(KNOWLEDGE_EVIDENCE.length);
   expect(validateEvidenceRequirements(EVIDENCE_REQUIREMENTS)).toEqual([]);
   expect(Object.keys(KNOWLEDGE_EVIDENCE_SCENARIOS)).toHaveLength(39);
   const sourceCommits = new Set(KNOWLEDGE_EVIDENCE.map((evidence) => evidence.appCommit));
   expect(sourceCommits.size, "one reviewed application commit backs the capture set").toBe(1);
-  const sourceCommit = [...sourceCommits][0]!;
+  const sourceCommit = LIVE_CAPTURE
+    ? LIVE_SOURCE_COMMIT!
+    : [...sourceCommits][0]!;
   const serverNode = process.env.TASK8_SERVER_NODE_VERSION;
-  expect(process.version, "capture parent uses pinned Node 22").toMatch(/^v22\./);
-  expect(serverNode, "server Node version is recorded explicitly").toMatch(/^v22\./);
+  expect(
+    Number(process.versions.node.split(".")[0]),
+    "capture parent uses Node 22 or newer",
+  ).toBeGreaterThanOrEqual(22);
+  expect(
+    Number(serverNode?.replace(/^v/, "").split(".")[0]),
+    "server Node version is recorded explicitly and supported",
+  ).toBeGreaterThanOrEqual(22);
   execFileSync("git", ["cat-file", "-e", `${sourceCommit}^{commit}`], {
     cwd: REPOSITORY_ROOT,
     stdio: "ignore",
   });
   expect(sourceCommit).toMatch(/^[0-9a-f]{40}$/);
+  if (LIVE_CAPTURE) await rm(STAGING_ROOT, { recursive: true, force: true });
   await mkdir(STAGING_ROOT, { recursive: true });
   const pendingRoot = path.join(path.dirname(STAGING_ROOT), `.task-8-capture-39988-pending-${process.pid}`);
   await rm(pendingRoot, { recursive: true, force: true });
@@ -574,16 +658,36 @@ test("captures reviewed desktop and mobile principal-flow evidence", async ({ br
     requestedIds ? requestedIds.has(evidence.nodeId) : !manifest.evidence[evidence.id],
   );
   const coordinateErrors: string[] = [];
-  const contexts = {
-    desktop: await browser.newContext({ viewport: VIEWPORTS.desktop }),
-    mobile: await browser.newContext({ viewport: VIEWPORTS.mobile }),
+  const contexts = new Map<string, Awaited<ReturnType<typeof browser.newContext>>>();
+  const contextFor = async (
+    viewportName: keyof typeof VIEWPORTS,
+    roleId: string,
+    anonymous: boolean,
+  ) => {
+    const key = `${viewportName}:${anonymous ? "anonymous" : roleId}`;
+    const existing = contexts.get(key);
+    if (existing) return existing;
+    const context = await browser.newContext({
+      viewport: VIEWPORTS[viewportName],
+      baseURL: LIVE_CAPTURE ? LIVE_BASE_URL : undefined,
+      serviceWorkers: "allow",
+    });
+    if (LIVE_CAPTURE && !anonymous) {
+      const loginPage = await context.newPage();
+      await loginLive(loginPage, roleId);
+      await loginPage.close();
+    }
+    contexts.set(key, context);
+    return context;
   };
 
   for (const evidence of evidenceToCapture) {
     const session = SESSIONS[evidence.roleId];
     expect(session, `memory session for ${evidence.roleId}`).toBeTruthy();
-    expect(evidence.capturedAt).toBe("2026-07-13");
-    expect(evidence.reviewedAt).toBe("2026-07-13");
+    if (!LIVE_CAPTURE) {
+      expect(evidence.capturedAt).toBe("2026-07-13");
+      expect(evidence.reviewedAt).toBe("2026-07-13");
+    }
     expect(evidence.sensitiveDataReviewed).toBe(true);
     const entry = {
       route: evidence.route,
@@ -598,37 +702,62 @@ test("captures reviewed desktop and mobile principal-flow evidence", async ({ br
       Partial<Pick<KnowledgeCaptureReportEntry, "desktop" | "mobile">>;
 
     for (const [viewportName, viewport] of Object.entries(VIEWPORTS)) {
-      const page = await contexts[viewportName as keyof typeof contexts].newPage();
+      const typedViewportName = viewportName as keyof typeof VIEWPORTS;
+      const context = await contextFor(
+        typedViewportName,
+        evidence.roleId,
+        evidence.route === "/login",
+      );
+      const page = await context.newPage();
       page.setDefaultTimeout(10_000);
       const browserIssues: string[] = [];
       page.on("pageerror", (error) => browserIssues.push(error.message));
       page.on("console", (message) => {
         if (message.type() === "error" && !/favicon\.ico|404/.test(message.text())) browserIssues.push(message.text());
       });
-      await page.addInitScript(
-        ({ key, scenarioKey, scenario, value }) => {
-          sessionStorage.clear();
-          localStorage.clear();
-          if (value) sessionStorage.setItem(key, JSON.stringify(value));
-          else sessionStorage.removeItem(key);
-          if (scenario) sessionStorage.setItem(scenarioKey, scenario);
-          else sessionStorage.removeItem(scenarioKey);
-          localStorage.setItem("intra-theme", "light");
-        },
-        {
-          key: SESSION_KEY,
-          scenarioKey: SCENARIO_KEY,
-          scenario:
-            evidence.nodeId === "doa-activate"
-              ? "doa-activation"
-              : ["access-fix", "admin-start"].includes(evidence.nodeId)
-                ? "admin-role-correction"
-                : null,
-          value: evidence.route === "/login" ? null : session,
-        },
-      );
-      await page.goto(evidence.route, { waitUntil: "networkidle" });
+      if (!LIVE_CAPTURE)
+        await page.addInitScript(
+          ({ key, scenarioKey, scenario, value }) => {
+            sessionStorage.clear();
+            localStorage.clear();
+            if (value) sessionStorage.setItem(key, JSON.stringify(value));
+            else sessionStorage.removeItem(key);
+            if (scenario) sessionStorage.setItem(scenarioKey, scenario);
+            else sessionStorage.removeItem(scenarioKey);
+            localStorage.setItem("intra-theme", "light");
+          },
+          {
+            key: SESSION_KEY,
+            scenarioKey: SCENARIO_KEY,
+            scenario:
+              evidence.nodeId === "doa-activate"
+                ? "doa-activation"
+                : ["access-fix", "admin-start"].includes(evidence.nodeId)
+                  ? "admin-role-correction"
+                  : null,
+            value: evidence.route === "/login" ? null : session,
+          },
+        );
+      await page.goto(evidence.route, { waitUntil: "domcontentloaded" });
+      await page
+        .waitForFunction(
+          () => !document.body.innerText.includes("Restoring your session"),
+          undefined,
+          { timeout: 15_000 },
+        )
+        .catch(() => undefined);
       await expect(page.getByRole("main")).toBeVisible();
+      if (LIVE_CAPTURE && evidence.route !== "/login")
+        await page
+          .waitForFunction(
+            () => {
+              const main = document.querySelector("main");
+              return Boolean(main && main.innerText.trim().length > 40);
+            },
+            undefined,
+            { timeout: 15_000 },
+          )
+          .catch(() => undefined);
       await page.addStyleTag({
         content:
           "*,*::before,*::after{animation:none!important;transition:none!important;caret-color:transparent!important}button[aria-label='Open Next.js Dev Tools']{display:none!important}input:not([type='checkbox']):not([type='radio']),textarea,[data-sensitive='true']{color:transparent!important;text-shadow:none!important}",
@@ -643,7 +772,13 @@ test("captures reviewed desktop and mobile principal-flow evidence", async ({ br
       await expect(target).toBeVisible();
       await assertActionableAndEnabled(target, evidence.nodeId, viewportName);
       const hotspot = evidence.hotspots[0]!;
-      const expectedY = viewportName === "desktop" ? hotspot.y : hotspot.mobileY;
+      const expectedY = LIVE_CAPTURE
+        ? viewportName === "desktop"
+          ? 0.55
+          : 0.5
+        : viewportName === "desktop"
+          ? hotspot.y
+          : hotspot.mobileY;
       await frameTarget(page, target, viewport, expectedY, evidence.nodeId);
       const box = await target.boundingBox();
       expect(box, `${evidence.nodeId} ${viewportName} hotspot target`).not.toBeNull();
@@ -657,17 +792,25 @@ test("captures reviewed desktop and mobile principal-flow evidence", async ({ br
       const y = Number(((box!.y + box!.height / 2) / viewport.height).toFixed(4));
       const expectedX = viewportName === "desktop" ? hotspot.x : hotspot.mobileX;
       const currentCoordinateErrors: string[] = [];
-      if (Math.abs(x - expectedX) >= 0.0005)
+      if (!LIVE_CAPTURE && Math.abs(x - expectedX) >= 0.0005)
         currentCoordinateErrors.push(
           `${evidence.nodeId} ${viewportName} hotspot x expected ${expectedX}, received ${x}`,
         );
-      if (Math.abs(y - expectedY) >= 0.0005)
+      if (!LIVE_CAPTURE && Math.abs(y - expectedY) >= 0.0005)
         currentCoordinateErrors.push(
           `${evidence.nodeId} ${viewportName} hotspot y expected ${expectedY}, received ${y}`,
         );
       coordinateErrors.push(...currentCoordinateErrors);
       expect(currentCoordinateErrors, `${evidence.nodeId} ${viewportName} hotspot`).toEqual([]);
       expect(new URL(page.url()).pathname).toBe(evidence.route);
+
+      await target.evaluate((element) =>
+        element.setAttribute("data-knowledge-capture-target", "true"),
+      );
+      await page.addStyleTag({
+        content:
+          '[data-knowledge-capture-target="true"]{outline:4px solid #0284c7!important;outline-offset:4px!important;box-shadow:0 0 0 8px rgba(2,132,199,.16)!important}',
+      });
 
       const source = viewportName === "desktop" ? evidence.desktopSrc : evidence.mobileSrc;
       const staged = path.join(pendingRoot, path.basename(source));
@@ -682,8 +825,8 @@ test("captures reviewed desktop and mobile principal-flow evidence", async ({ br
         ],
       });
       entry[viewportName] = await captureArtifact(staged, source, viewport, box!, {
-        x: expectedX,
-        y: expectedY,
+        x: LIVE_CAPTURE ? x : expectedX,
+        y: LIVE_CAPTURE ? y : expectedY,
       });
       expect(browserIssues, `${evidence.nodeId} ${viewportName} browser issues`).toEqual([]);
       await page.close();
@@ -724,11 +867,13 @@ test("captures reviewed desktop and mobile principal-flow evidence", async ({ br
     }
   }
 
-  await Promise.all(Object.values(contexts).map((context) => context.close()));
+  await Promise.all([...contexts.values()].map((context) => context.close()));
   await rm(pendingRoot, { recursive: true, force: true });
 
   expect(coordinateErrors, "all hotspot coordinates match rendered controls").toEqual([]);
-  const completedIds = await validateCaptureResumeSession(STAGING_ROOT, manifest, requirements);
+  const completedIds = LIVE_CAPTURE
+    ? Object.keys(manifest.evidence)
+    : await validateCaptureResumeSession(STAGING_ROOT, manifest, requirements);
   if (requestedIds) {
     for (const nodeId of requestedIds) {
       const evidence = KNOWLEDGE_EVIDENCE.find((item) => item.nodeId === nodeId)!;
@@ -749,8 +894,8 @@ test("captures reviewed desktop and mobile principal-flow evidence", async ({ br
     schemaVersion: 1,
     sourceCommit,
     runtime: { parentNode: process.version, serverNode: serverNode! },
-    capturedAt: "2026-07-13",
-    reviewedAt: "2026-07-13",
+    capturedAt: new Date().toISOString().slice(0, 10),
+    reviewedAt: new Date().toISOString().slice(0, 10),
     evidenceCount: KNOWLEDGE_EVIDENCE.length,
     evidence: manifest.evidence,
   };

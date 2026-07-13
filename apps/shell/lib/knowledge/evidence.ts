@@ -127,8 +127,8 @@ export const KNOWLEDGE_EVIDENCE_SCENARIOS: Record<string, EvidenceScenario> = {
     mobileY: 0.6877,
   },
   "vendor-apply": {
-    route: "/vendor/cases/case_seed_001/application",
-    state: "The seeded vendor portal application is open for vendor-owned updates.",
+    route: "/vendor/cases/case_documentation_vendor_draft/application",
+    state: "The controlled documentation vendor application is open for vendor-owned updates.",
     landmark: "Save draft",
     label: "Save application draft",
     instruction: "Complete the vendor-owned fields and save the accreditation application draft.",
