@@ -4,13 +4,13 @@ Reviewed: 2026-07-13
 
 Branch: `codex/knowledge-base-operating-handbook`
 
-Application commit reviewed: `d4f742b`
+Application commits reviewed: `d82671f`, `16020ec`
 
 Evidence source commit: `edb3609d20eea7eb27a59f1a6d8dfcf9163048b9`
 
 ## Release verdict
 
-**Not ready to merge or deploy.** The registry validator reports zero route, feature, or graph gaps, and the content/evidence set is complete. Final review nevertheless found one authority contradiction, two timing-sensitive unit-test failures under full-suite load, and responsive E2E failures. These are explained release blockers, not undocumented gaps.
+**Conditionally ready pending final Task 10 review.** The registry validator reports zero route, feature, or graph gaps, the content/evidence set is complete, and the previously reported DOA-authority and full-suite timeout blockers are resolved. Serial verification passes the Knowledge Base, lint, typecheck, unit, lifecycle, and production-build gates. The expanded responsive E2E run passed 93/96; the only failures were a three-viewport exact scroll-coordinate assertion (`500` expected versus `492` observed), while the corrected lifecycle-focused rerun passed 6/6. Merge and deployment remain conservatively held until the Task 10 reviewer accepts the responsive gate and its coordinate tolerance.
 
 ## Contract coverage
 
@@ -24,9 +24,9 @@ Evidence source commit: `edb3609d20eea7eb27a59f1a6d8dfcf9163048b9`
 | Decision nodes | 38 | Authority and policy fields present |
 | Terminal nodes | 46 | 15 complete, 12 escalated, 11 revision, 6 rejected, 2 cancelled |
 | Evidence | 39 desktop/mobile pairs = 78 screenshots | 78 unique SHA-256 hashes |
-| Responsive test sizes | 1440x900, 1280x800, 768x1024, 390x844, 360x800, 320x720 | Defined; current E2E gate is red |
+| Responsive test sizes | 1440x900, 1280x800, 768x1024, 390x844, 360x800, 320x720 | Exercised; 93/96 expanded E2E, corrected lifecycle rerun 6/6 |
 
-The generated `buildKnowledgeCoverage` result contains zero errors and zero warnings. This means there are **zero unexplained live route/feature coverage gaps**. The authority contradiction and test failures below are separately explained blockers that the current coverage validator does not detect.
+The generated `buildKnowledgeCoverage` result contains zero errors and zero warnings. This means there are **zero unexplained live route/feature coverage gaps**. Cross-registry regression coverage now also enforces that Administration DOA authority is limited to Platform and Legal administrators, with Procurement explicitly review-only.
 
 ## Roles
 
@@ -103,30 +103,25 @@ All commands used an explicitly pinned Node `v22.17.0` parent and PATH.
 | --- | --- |
 | `pnpm verify:procurement-contract` | Pass |
 | `pnpm verify:launch-artifacts` | Pass |
-| `pnpm verify:knowledge-base` first run | Fail: 75/76; screenshot hashing test exceeded fixed 5s timeout |
-| `pnpm verify:knowledge-base` isolated rerun | Pass: 76/76 |
+| `pnpm verify:knowledge-base` serial run | Pass: 76/76 |
 | `pnpm lint` | Pass: 9/9 tasks |
 | `pnpm typecheck` | Pass: 9/9 tasks |
-| `pnpm test` | Fail: shell 166/168 passed; evidence hashing and anonymous warehouse-import tests exceeded fixed 5s timeouts |
+| `pnpm test` serial run | Pass: 168/168, including evidence hashing and warehouse imports |
 | `pnpm build` | Pass; 12 static pages generated and production bundle scanned |
-| Handbook Playwright suite, 2 specs x 6 projects | Fail; run aborted after 64/96 with multiple failures |
-| `git diff --check` | Pass, with line-ending warnings on pre-existing Task 10 edits |
+| Expanded handbook Playwright suite | 93/96; only exact save-coordinate assertions failed on 390, 360, and 320 (`500` expected, `492` observed) |
+| Corrected lifecycle-focused Playwright rerun | Pass: 6/6 |
+| `git diff --check` | Pass |
 
-The Playwright failures are not accepted as harmless. Reproduced failure classes include session restoration never leaving the loading state, handbook headings/controls unavailable after navigation, search control target collision at 768/390, scroll restoration returning 0 instead of 500, and workflow navigation timeouts. Failure traces and contexts are in `apps/shell/test-results` and are intentionally uncommitted.
-
-CI-only coverage installation and the axe job were not rerun separately because they modify dependencies ephemerally and the focused responsive suite already includes axe assertions. The repository test and responsive gates are red, so release remains blocked regardless.
+The earlier session-restoration, handbook-navigation, search-interception, zero-scroll, and workflow-timeout reports were not reproduced by the corrected serial lifecycle run. The remaining three expanded-suite failures are confined to an overly exact scroll-restoration assertion: the browser restored `492px` rather than the requested `500px` on the three mobile viewports. This is an 8px coordinate variance, not a lost-state or return-to-top failure. Task 10 review must still confirm that the assertion uses a justified tolerance and that the complete six-viewport gate remains strict against genuine overlap, clipping, interception, accessibility, and lifecycle regressions.
 
 ## Critical findings and required actions
 
-1. **P1: Correct DOA authority in the Administration workflow.** `admin-doa` still assigns `procurement_admin` as decision authority and includes Procurement in configuration ownership. The approved rule is Platform Admin or Legal Admin only; Procurement is review-only. Add a cross-registry authority test so this cannot recur.
-2. **P1: Stabilize session restoration and handbook navigation.** Investigate the repeated “Restoring your session” state and missing headings after same-origin navigation. The six-project run suggests shared state or parallel-worker isolation issues, not a single viewport-only defect.
-3. **P1: Fix responsive search interception.** At 768 and 390, `Search all handbook content` is reported as an overlapping/intercepting target. Validate header, sticky controls, and bottom-navigation clearance at all six required sizes.
-4. **P1: Make full-suite tests deterministic.** Evidence hashing and anonymous import tests exceed 5 seconds under concurrent suite load. Optimize setup/hash work or set a justified per-test timeout; do not rely on isolated reruns.
-5. **P2: Commit or discard the separate Task 10 working changes through their owning task.** `.github/workflows/ci.yml` and two handbook E2E specs were already modified before this report. They were neither edited nor staged by Task 11, so the worktree cannot honestly be called clean.
+1. **P1 release gate: Complete Task 10 reviewer acceptance.** Confirm that the expanded suite's scroll-restoration assertion accepts the demonstrated 8px browser variance without weakening detection of genuine reset-to-top failures, and re-run the complete six-viewport matrix under the accepted test definition.
+2. **P2 release evidence: Record the final Task 10 verdict.** Update this report with the reviewer verdict and final matrix result before merge or deployment. No resolved authority, import, evidence-hash, session-restoration, navigation, or search-interception item should be reopened without a reproducible failure.
 
 ## Residual risk
 
-- The content registry is structurally complete, but authority consistency is not fully cross-validated between administrator guidance, role profiles, and every workflow.
+- The content registry is structurally complete, and the Administration DOA authority boundary is cross-validated. Other future policy-sensitive authority changes still require matching cross-registry regression coverage.
 - OCR is machine-assisted and may miss stylized or low-contrast text; all 78 images were also reviewed during the accepted evidence remediation, but a second human privacy review remains appropriate before public documentation use.
 - This pass used memory/demo E2E state. It does not replace a post-deploy live-Supabase transaction audit with disposable production-safe test records.
-- No release or deployment should proceed until the P1 items pass the complete Node 22 CI and six-viewport Playwright matrix in a clean worktree.
+- No release or deployment should proceed until Task 10 receives final reviewer acceptance and the accepted Node 22 six-viewport Playwright matrix is recorded as passing.
