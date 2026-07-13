@@ -106,6 +106,34 @@ export function accessibleModules(
   return MODULE_NAV.filter((item) => hasModuleAccess(userRoles, item.module));
 }
 
+/**
+ * Every first-class destination shown on the signed-in dashboard and shell.
+ * Keeping this composition in one place prevents the access count, quick links,
+ * cards, and navigation from describing different permission sets.
+ */
+export function dashboardAreas(
+  userRoles: Partial<UserRoles>,
+  profileKind: "employee" | "vendor",
+): readonly ShellNavItem[] {
+  const areas: ShellNavItem[] = [...accessibleModules(userRoles)];
+
+  if (profileKind === "vendor") areas.push(VENDOR_NAV);
+  if (can(userRoles, "warehouse", "view_finance")) areas.push(FINANCE_NAV);
+  if (can(userRoles, "core", "manage_rbac")) areas.push(ADMIN_NAV);
+  if (
+    can(userRoles, "core", "manage_rbac") ||
+    can(userRoles, "legal", "manage_doa")
+  ) {
+    areas.push(DOA_NAV);
+  }
+  areas.push(KNOWLEDGE_NAV);
+
+  return areas.filter(
+    (area, index) =>
+      areas.findIndex((candidate) => candidate.href === area.href) === index,
+  );
+}
+
 export interface MobileContextAction {
   href: string;
   label: string;

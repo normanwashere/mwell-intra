@@ -1,22 +1,22 @@
-'use client';
+"use client";
 
 // Sign-in (spec §5). Email + password via useSession().signInWithPassword.
 // In memory mode it matches an injected demo profile by email; quick-fill chips
 // make the demo profiles one tap away. On success we route to the dashboard.
 
-import { useEffect, useState, type FormEvent } from 'react';
-import { useSearchParams } from 'next/navigation';
-import Link from 'next/link';
-import * as m from 'framer-motion/m';
-import { Button, Card, Field, Icon, Input } from '@intra/ui';
-import { useSession } from '@intra/auth';
-import { MwellIntraLogo } from '@shell/components/MwellIntraLogo';
+import { useEffect, useState, type FormEvent } from "react";
+import { useSearchParams } from "next/navigation";
+import Link from "next/link";
+import * as m from "framer-motion/m";
+import { Button, Card, Field, Icon, Input } from "@intra/ui";
+import { useSession } from "@intra/auth";
+import { MwellIntraLogo } from "@shell/components/MwellIntraLogo";
 
 /** Only allow local same-origin paths in ?redirect to prevent open-redirect. */
 function safeRedirect(candidate: string | null): string {
-  if (!candidate) return '/';
-  if (!candidate.startsWith('/') || candidate.startsWith('//')) return '/';
-  if (candidate === '/warehouse') return '/warehouse/';
+  if (!candidate) return "/";
+  if (!candidate.startsWith("/") || candidate.startsWith("//")) return "/";
+  if (candidate === "/warehouse") return "/warehouse/";
   return candidate;
 }
 
@@ -35,9 +35,9 @@ export default function LoginPage() {
     resetPassword,
   } = useSession();
   const searchParams = useSearchParams();
-  const redirectTo = safeRedirect(searchParams?.get('redirect') ?? null);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const redirectTo = safeRedirect(searchParams?.get("redirect") ?? null);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [redirecting, setRedirecting] = useState(false);
   const [hydrated, setHydrated] = useState(false);
@@ -57,8 +57,8 @@ export default function LoginPage() {
     e.preventDefault();
     setNotice(null);
     const formData = new FormData(e.currentTarget);
-    const submittedEmail = String(formData.get('email') ?? email).trim();
-    const submittedPassword = String(formData.get('password') ?? password);
+    const submittedEmail = String(formData.get("email") ?? email).trim();
+    const submittedPassword = String(formData.get("password") ?? password);
     setEmail(submittedEmail);
     setPassword(submittedPassword);
     const ok = await signInWithPassword(submittedEmail, submittedPassword);
@@ -71,12 +71,12 @@ export default function LoginPage() {
   const onReset = async () => {
     setNotice(null);
     if (!email.trim()) {
-      setNotice('Enter your email above first.');
+      setNotice("Enter your email above first.");
       return;
     }
     try {
       await resetPassword(email);
-      setNotice('If that email exists, a reset link is on its way.');
+      setNotice("If that email exists, a reset link is on its way.");
     } catch {
       // authError surfaces the failure message.
     }
@@ -112,14 +112,14 @@ export default function LoginPage() {
           <div className="relative">
             <MwellIntraLogo
               className="justify-center"
-              logoClassName="text-2xl"
+              logoClassName="h-9"
               labelClassName="text-[0.68rem]"
             />
             <h1 className="mt-1 font-display text-display text-ink">Sign in</h1>
             <p className="mt-1.5 text-sm text-muted">
-              {mode === 'supabase'
-                ? 'Use your Mwell email and password.'
-                : 'Demo mode — pick a profile below or use its email.'}
+              {mode === "supabase"
+                ? "Use your Mwell email and password."
+                : "Demo mode — pick a profile below or use its email."}
             </p>
           </div>
         </div>
@@ -146,18 +146,26 @@ export default function LoginPage() {
                 autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder={mode === 'memory' ? 'any value in demo mode' : '••••••••'}
+                placeholder={
+                  mode === "memory" ? "any value in demo mode" : "••••••••"
+                }
                 required
               />
             </Field>
 
             {authError && (
-              <p className="text-sm font-medium text-rose-600 dark:text-rose-300" role="alert">
+              <p
+                className="text-sm font-medium text-rose-600 dark:text-rose-300"
+                role="alert"
+              >
                 {authError}
               </p>
             )}
             {notice && (
-              <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300" role="status">
+              <p
+                className="text-sm font-medium text-emerald-700 dark:text-emerald-300"
+                role="status"
+              >
                 {notice}
               </p>
             )}
@@ -169,13 +177,13 @@ export default function LoginPage() {
             >
               <Icon name="lock" className="h-4 w-4" />
               {!hydrated
-                ? 'Preparing…'
+                ? "Preparing…"
                 : signingIn || redirecting
-                  ? 'Signing in…'
-                  : 'Sign in'}
+                  ? "Signing in…"
+                  : "Sign in"}
             </Button>
 
-            {mode === 'supabase' && (
+            {mode === "supabase" && (
               <button
                 type="button"
                 onClick={() => void onReset()}
@@ -187,7 +195,7 @@ export default function LoginPage() {
           </form>
         </Card>
 
-        {mode === 'memory' && memoryProfiles.length > 0 && (
+        {mode === "memory" && memoryProfiles.length > 0 && (
           <Card>
             <details className="group">
               <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3">
@@ -205,7 +213,8 @@ export default function LoginPage() {
                 />
               </summary>
               <p className="mt-2 text-xs text-muted">
-                Tap a tile to prefill the form. Passwords are ignored in demo mode.
+                Tap a tile to prefill the form. Passwords are ignored in demo
+                mode.
               </p>
               <ul className="mt-3 grid gap-1.5">
                 {memoryProfiles.map((p) => (
@@ -214,7 +223,7 @@ export default function LoginPage() {
                       type="button"
                       onClick={() => {
                         setEmail(p.email);
-                        setPassword('demo');
+                        setPassword("demo");
                       }}
                       className="flex min-h-11 w-full items-center justify-between gap-3 rounded-xl bg-inset px-3 py-2.5 text-left transition hover:bg-line active:scale-[0.99]"
                     >
@@ -226,7 +235,10 @@ export default function LoginPage() {
                           {p.title ?? p.email}
                         </span>
                       </span>
-                      <Icon name="arrowRight" className="h-4 w-4 shrink-0 text-faint" />
+                      <Icon
+                        name="arrowRight"
+                        className="h-4 w-4 shrink-0 text-faint"
+                      />
                     </button>
                   </li>
                 ))}
@@ -236,7 +248,10 @@ export default function LoginPage() {
         )}
 
         <p className="text-center text-xs text-faint">
-          <Link href="/" className="inline-flex min-h-11 items-center justify-center hover:underline">
+          <Link
+            href="/"
+            className="inline-flex min-h-11 items-center justify-center hover:underline"
+          >
             Back to home
           </Link>
         </p>

@@ -11,16 +11,11 @@ import { useReducedMotion } from "framer-motion";
 import * as m from "framer-motion/m";
 import { Icon, PageTransition, Sheet, type IconName } from "@intra/ui";
 import { useSession } from "@intra/auth";
-import { can } from "@intra/rbac";
 import {
-  ADMIN_NAV,
-  DOA_NAV,
   FINANCE_NAV,
   KNOWLEDGE_NAV,
-  accessibleModules,
+  dashboardAreas,
   mobileCenterAction,
-  VENDOR_NAV,
-  type ModuleNav,
   type ShellNavItem,
 } from "@shell/lib/navigation";
 import { cx } from "@shell/lib/cx";
@@ -37,10 +32,6 @@ interface NavEntry {
 }
 
 const HOME_ENTRY: NavEntry = { href: "/", label: "Home", icon: "grid" };
-
-function toEntry(item: ModuleNav): NavEntry {
-  return { href: item.href, label: item.label, icon: item.icon };
-}
 
 function navItemToEntry(item: ShellNavItem): NavEntry {
   return { href: item.href, label: item.label, icon: item.icon };
@@ -107,27 +98,9 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => controller.abort();
   }, [pathname, profileId]);
 
-  const modules = loading ? [] : accessibleModules(userRoles);
-  const entries: NavEntry[] = [HOME_ENTRY, ...modules.map(toEntry)];
-  if (!loading && can(userRoles, "warehouse", "view_finance")) {
-    entries.push(navItemToEntry(FINANCE_NAV));
-  }
-  if (!loading && can(userRoles, "core", "manage_rbac")) {
-    entries.push(navItemToEntry(ADMIN_NAV));
-  }
-  if (
-    !loading &&
-    (can(userRoles, "core", "manage_rbac") ||
-      can(userRoles, "legal", "manage_doa"))
-  ) {
-    entries.push(navItemToEntry(DOA_NAV));
-  }
-  if (!loading && profile?.kind === "vendor") {
-    entries.push(navItemToEntry(VENDOR_NAV));
-  }
-  if (!loading && profile) {
-    entries.push(navItemToEntry(KNOWLEDGE_NAV));
-  }
+  const areas =
+    loading || !profile ? [] : dashboardAreas(userRoles, profile.kind);
+  const entries: NavEntry[] = [HOME_ENTRY, ...areas.map(navItemToEntry)];
 
   const isActive = (href: string) => {
     if (href === "/") return pathname === "/";
@@ -154,19 +127,29 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       {/* Desktop icon rail */}
       <aside
-        className="safe-top hidden w-[4.25rem] shrink-0 flex-col items-center border-r border-line bg-surface py-4 md:flex lg:w-[4.5rem]"
+        className="safe-top hidden w-[4.75rem] shrink-0 flex-col items-center border-r border-line bg-surface py-4 md:flex lg:w-[12.5rem] lg:items-stretch"
         aria-label="Primary"
       >
         <Link
           href="/"
-          className="mb-5 grid h-10 w-10 place-items-center rounded-xl text-ink transition hover:bg-inset"
+          className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl text-ink transition hover:bg-inset lg:mx-3 lg:w-auto lg:justify-start lg:px-2"
           aria-label="Mwell Intra home"
         >
-          <MwellIntraLogo showLabel={false} logoClassName="text-sm" />
+          <span
+            aria-hidden
+            className="brand-gradient font-display text-2xl font-extrabold lg:hidden"
+          >
+            M
+          </span>
+          <MwellIntraLogo
+            className="hidden lg:inline-flex"
+            logoClassName="h-7"
+            labelClassName="text-sm"
+          />
         </Link>
 
         <nav
-          className="flex flex-1 flex-col items-center gap-1"
+          className="flex flex-1 flex-col items-center gap-1 lg:items-stretch lg:px-3"
           aria-label="Primary"
         >
           {entries.map((e) => (
@@ -176,7 +159,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               aria-label={e.label}
               aria-current={isActive(e.href) ? "page" : undefined}
               className={cx(
-                "group relative grid h-11 w-11 place-items-center rounded-xl text-faint transition hover:bg-inset hover:text-ink",
+                "group relative grid h-11 w-11 place-items-center rounded-xl text-faint transition hover:bg-inset hover:text-ink lg:flex lg:w-full lg:justify-start lg:gap-3 lg:px-3",
                 isActive(e.href) && "text-brand-700 dark:text-brand-300",
               )}
             >
@@ -191,8 +174,11 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <span className="absolute inset-0 rounded-xl bg-brand-500/12" />
               )}
               <Icon name={e.icon} className="relative h-5 w-5" />
+              <span className="relative hidden min-w-0 truncate text-sm font-medium lg:block">
+                {e.label}
+              </span>
               <span
-                className="pointer-events-none absolute left-full z-50 ml-2 hidden whitespace-nowrap rounded-lg border border-line bg-surface px-2.5 py-1 text-xs font-medium text-ink opacity-0 shadow-e2 transition group-hover:opacity-100 lg:block"
+                className="pointer-events-none absolute left-full z-50 ml-2 hidden whitespace-nowrap rounded-lg border border-line bg-surface px-2.5 py-1 text-xs font-medium text-ink opacity-0 shadow-e2 transition group-hover:opacity-100 md:block lg:hidden"
                 role="tooltip"
               >
                 {e.label}
@@ -201,7 +187,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           ))}
         </nav>
 
-        <div className="mt-auto px-2">
+        <div className="mt-auto px-2 lg:px-3">
           <button
             type="button"
             onClick={() => {
@@ -209,11 +195,12 @@ export function AppShell({ children }: { children: ReactNode }) {
                 new KeyboardEvent("keydown", { key: "k", metaKey: true }),
               );
             }}
-            className="grid h-10 w-10 place-items-center rounded-xl border border-line bg-inset text-faint transition hover:text-ink"
+            className="flex h-10 w-10 items-center justify-center gap-3 rounded-xl border border-line bg-inset text-faint transition hover:text-ink lg:w-full lg:justify-start lg:px-3"
             aria-label="Open command palette"
             title="Command palette (⌘K)"
           >
             <Icon name="search" className="h-4 w-4" />
+            <span className="hidden text-sm font-medium lg:inline">Search</span>
           </button>
         </div>
       </aside>
@@ -245,7 +232,10 @@ export function AppShell({ children }: { children: ReactNode }) {
             >
               {topBarLabel(pathname, entries) || "Home"}
             </p>
-            <div className="flex items-center gap-1.5">
+            <div
+              className="flex shrink-0 items-center gap-1.5"
+              data-shell-header-actions="true"
+            >
               <button
                 type="button"
                 onClick={() => {
@@ -296,7 +286,9 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </Link>
               )}
               <NotificationBell />
-              <ThemeToggle />
+              <span className="hidden min-[400px]:block">
+                <ThemeToggle />
+              </span>
               <UserMenu />
             </div>
           </div>
@@ -447,7 +439,7 @@ function MobileTab({
 function BrandMark({ compact = false }: { compact?: boolean }) {
   return (
     <MwellIntraLogo
-      logoClassName={compact ? "text-lg" : "text-xl"}
+      logoClassName={compact ? "h-5" : "h-7"}
       labelClassName={compact ? "text-[0.65rem]" : "text-xs"}
     />
   );

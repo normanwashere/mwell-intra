@@ -1,30 +1,30 @@
-'use client';
+"use client";
 
 // Password reset landing (spec §5). Supabase redirects here after a reset email
 // (SessionProvider `resetRedirectPath`). Minimal stub: set a new password via
 // useSession().changePassword. Fuller recovery UX can arrive later.
 
-import { useEffect, useState, type FormEvent } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import Link from 'next/link';
-import * as m from 'framer-motion/m';
-import { Button, Card, Field, HeroStat, Icon, Input } from '@intra/ui';
-import { useSession } from '@intra/auth';
-import { MwellIntraLogo } from '@shell/components/MwellIntraLogo';
+import { useEffect, useState, type FormEvent } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
+import * as m from "framer-motion/m";
+import { Button, Card, Field, HeroStat, Icon, Input } from "@intra/ui";
+import { useSession } from "@intra/auth";
+import { MwellIntraLogo } from "@shell/components/MwellIntraLogo";
 
 export default function ResetPasswordPage() {
   const { mode, changePassword } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const requestedNext = searchParams?.get('next');
+  const requestedNext = searchParams?.get("next");
   const nextPath =
-    requestedNext?.startsWith('/') &&
-    !requestedNext.startsWith('//') &&
-    !requestedNext.includes('://')
+    requestedNext?.startsWith("/") &&
+    !requestedNext.startsWith("//") &&
+    !requestedNext.includes("://")
       ? requestedNext
-      : '/';
-  const [password, setPassword] = useState('');
-  const [confirm, setConfirm] = useState('');
+      : "/";
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -38,7 +38,7 @@ export default function ResetPasswordPage() {
     e.preventDefault();
     setError(null);
     if (password !== confirm) {
-      setError('Passwords do not match.');
+      setError("Passwords do not match.");
       return;
     }
     setBusy(true);
@@ -47,7 +47,9 @@ export default function ResetPasswordPage() {
       setDone(true);
       setTimeout(() => router.replace(nextPath), 1200);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not update password.');
+      setError(
+        err instanceof Error ? err.message : "Could not update password.",
+      );
     } finally {
       setBusy(false);
     }
@@ -55,7 +57,10 @@ export default function ResetPasswordPage() {
 
   return (
     <main className="relative flex min-h-[calc(100dvh-2rem)] flex-col items-center justify-center px-4 py-8">
-      <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 overflow-hidden"
+      >
         <div className="absolute -left-24 top-0 h-72 w-72 rounded-full bg-brand-500/8 blur-3xl" />
         <div className="absolute -right-16 bottom-0 h-64 w-64 rounded-full bg-accent/10 blur-3xl" />
       </div>
@@ -73,10 +78,12 @@ export default function ResetPasswordPage() {
           />
           <MwellIntraLogo
             className="justify-center"
-            logoClassName="text-2xl"
+            logoClassName="h-9"
             labelClassName="text-[0.68rem]"
           />
-          <h1 className="mt-1 font-display text-display text-ink">Set a new password</h1>
+          <h1 className="mt-1 font-display text-display text-ink">
+            Set a new password
+          </h1>
           <p className="mt-1.5 text-sm text-muted">
             Choose a strong password of at least 8 characters.
           </p>
@@ -88,17 +95,24 @@ export default function ResetPasswordPage() {
         </div>
 
         <Card>
-          {mode === 'memory' ? (
+          {mode === "memory" ? (
             <p className="text-sm text-muted" role="status">
-              Password reset isn&apos;t available in demo mode.{' '}
-              <Link href="/login" className="font-medium text-brand-700 hover:underline dark:text-brand-300">
+              Password reset isn&apos;t available in demo mode.{" "}
+              <Link
+                href="/login"
+                className="font-medium text-brand-700 hover:underline dark:text-brand-300"
+              >
                 Back to sign in
               </Link>
               .
             </p>
           ) : done ? (
-            <p className="flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-300" role="status">
-              <Icon name="check" className="h-4 w-4" /> Password updated. Redirecting…
+            <p
+              className="flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-300"
+              role="status"
+            >
+              <Icon name="check" className="h-4 w-4" /> Password updated.
+              Redirecting…
             </p>
           ) : (
             <form method="post" onSubmit={onSubmit} className="grid gap-4">
@@ -123,19 +137,33 @@ export default function ResetPasswordPage() {
                 />
               </Field>
               {error && (
-                <p className="text-sm font-medium text-rose-600 dark:text-rose-300" role="alert">
+                <p
+                  className="text-sm font-medium text-rose-600 dark:text-rose-300"
+                  role="alert"
+                >
                   {error}
                 </p>
               )}
-              <Button type="submit" disabled={!hydrated || busy} className="w-full">
-                {!hydrated ? 'Preparing…' : busy ? 'Updating…' : 'Update password'}
+              <Button
+                type="submit"
+                disabled={!hydrated || busy}
+                className="w-full"
+              >
+                {!hydrated
+                  ? "Preparing…"
+                  : busy
+                    ? "Updating…"
+                    : "Update password"}
               </Button>
             </form>
           )}
         </Card>
 
         <p className="text-center text-xs text-faint">
-          <Link href="/login" className="inline-flex min-h-11 items-center justify-center hover:underline">
+          <Link
+            href="/login"
+            className="inline-flex min-h-11 items-center justify-center hover:underline"
+          >
             Back to sign in
           </Link>
         </p>

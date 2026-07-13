@@ -63,7 +63,7 @@ const viewports = [
 ];
 
 const commonRoutes = [
-  { path: "/", text: /Your modules|No modules yet|Vendor Portal|Admin/i },
+  { path: "/", text: /Your areas|No areas yet|Vendor Portal|Admin/i },
   {
     path: "/warehouse",
     text: /Warehouse|Dashboard|No warehouse access|Access denied/i,

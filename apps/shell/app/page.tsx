@@ -14,19 +14,9 @@ import {
   Icon,
   InfoTip,
   ModuleHero,
-  StaggerGrid,
-  StaggerItem,
 } from "@intra/ui";
 import { useSession } from "@intra/auth";
-import { can } from "@intra/rbac";
-import {
-  ADMIN_NAV,
-  FINANCE_NAV,
-  KNOWLEDGE_NAV,
-  VENDOR_NAV,
-  accessibleModules,
-  type ModuleNav,
-} from "@shell/lib/navigation";
+import { dashboardAreas, type ModuleNav } from "@shell/lib/navigation";
 import { useModuleBadges } from "@shell/lib/moduleBadges";
 import { cx } from "@shell/lib/cx";
 
@@ -90,18 +80,16 @@ export default function DashboardPage() {
     );
   }
 
-  const cards: CardModel[] = accessibleModules(userRoles).map((m) => ({
-    href: m.href,
-    label: m.label,
-    description: m.description,
-    icon: m.icon,
-    tone: m.tone,
-  }));
-  if (profile.kind === "vendor") cards.push({ ...VENDOR_NAV });
-  if (can(userRoles, "warehouse", "view_finance"))
-    cards.push({ ...FINANCE_NAV });
-  if (can(userRoles, "core", "manage_rbac")) cards.push({ ...ADMIN_NAV });
-  cards.push({ ...KNOWLEDGE_NAV });
+  const cards: CardModel[] = dashboardAreas(userRoles, profile.kind).map(
+    (m) => ({
+      href: m.href,
+      label: m.label,
+      description: m.description,
+      icon: m.icon,
+      tone: m.tone,
+    }),
+  );
+  const quickAreas = cards.slice(0, 3);
 
   const firstName = profile.name?.split(/\s+/)[0] ?? "there";
 
@@ -118,30 +106,41 @@ export default function DashboardPage() {
         action={
           cards.length > 0 ? (
             <div className="flex flex-wrap gap-2">
-              {cards.slice(0, 2).map((c) => (
+              {quickAreas.map((c) => (
                 <HeroChipButton key={c.href} href={c.href} icon={c.icon}>
-                  {c.label.split(/\s+—\s+/)[0]}
+                  {c.label}
                 </HeroChipButton>
               ))}
+              {cards.length > quickAreas.length && (
+                <a
+                  href="#workspace-areas"
+                  className="inline-flex min-h-11 items-center rounded-xl border border-line bg-surface px-3.5 py-2 text-xs font-semibold text-ink transition hover:bg-inset focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"
+                >
+                  +{cards.length - quickAreas.length} more below
+                </a>
+              )}
             </div>
           ) : undefined
         }
         accessory={
           <div>
             <p className="text-caption font-semibold uppercase tracking-wide text-faint">
-              Access
+              Areas available
             </p>
             <p className="tnum font-display text-2xl font-extrabold text-ink">
               <AnimatedNumber value={cards.length} />
               <span className="ml-1 text-sm font-medium text-muted">
-                {cards.length === 1 ? "module" : "modules"}
+                {cards.length === 1 ? "area" : "areas"}
               </span>
             </p>
           </div>
         }
       />
 
-      <div className="flex items-center justify-between gap-3">
+      <div
+        id="workspace-areas"
+        className="scroll-mt-24 flex items-center justify-between gap-3"
+      >
         <div>
           <p className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-faint">
             Your workspace
@@ -149,15 +148,15 @@ export default function DashboardPage() {
               label="About your workspace"
               content={
                 profile.title
-                  ? `Signed in as ${profile.title}. You see only the modules your roles grant; ask an administrator to widen access.`
+                  ? `Signed in as ${profile.title}. You see only the areas your roles grant; ask an administrator to widen access.`
                   : profile.kind === "vendor"
                     ? "Vendor accreditation & document uploads for your organization."
-                    : "You see only the modules your roles grant; ask an administrator to widen access."
+                    : "You see only the areas your roles grant; ask an administrator to widen access."
               }
             />
           </p>
           <h2 className="font-display text-lg font-bold text-ink">
-            {cards.length > 0 ? "Your modules" : "No modules yet"}
+            {cards.length > 0 ? "Your areas" : "No areas yet"}
           </h2>
         </div>
         <Badge tone={profile.kind === "vendor" ? "emerald" : "brand"}>
@@ -168,8 +167,8 @@ export default function DashboardPage() {
       {cards.length === 0 ? (
         <EmptyState
           icon="info"
-          title="No modules yet"
-          message="You don't have a role in any module. Contact your administrator to get access."
+          title="No areas yet"
+          message="You don't have access to an operational area yet. Contact your administrator to request the right role."
           action={
             <span
               className={cx(
@@ -184,7 +183,8 @@ export default function DashboardPage() {
           }
         />
       ) : (
-        <StaggerGrid
+        <div
+          id="workspace-area-cards"
           className={cx(
             "grid gap-4",
             cards.length === 1
@@ -197,47 +197,40 @@ export default function DashboardPage() {
           {cards.map((c) => {
             const badge = badges[c.href];
             return (
-              <StaggerItem key={c.href}>
-                <Link href={c.href} className="block">
-                  <Card
-                    interactive
-                    className="group flex h-full flex-col gap-3"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <span
-                        className={cx(
-                          "grid h-11 w-11 place-items-center rounded-xl",
-                          TONE_CLASS[c.tone],
-                        )}
-                      >
-                        <Icon name={c.icon} />
-                      </span>
-                      {badge && (
-                        <span className="chip bg-amber-500/15 font-semibold text-amber-800 dark:text-amber-300">
-                          {badge.label}
-                        </span>
+              <Link key={c.href} href={c.href} className="block h-full">
+                <Card interactive className="group flex h-full flex-col gap-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <span
+                      className={cx(
+                        "grid h-11 w-11 place-items-center rounded-xl",
+                        TONE_CLASS[c.tone],
                       )}
+                    >
+                      <Icon name={c.icon} />
+                    </span>
+                    {badge && (
+                      <span className="chip bg-amber-500/15 font-semibold text-amber-800 dark:text-amber-300">
+                        {badge.label}
+                      </span>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <h2 className="font-display text-base font-bold text-ink">
+                        {c.label}
+                      </h2>
+                      <Icon
+                        name="arrowRight"
+                        className="h-4 w-4 text-faint transition group-hover:translate-x-0.5 group-hover:text-brand-600 dark:group-hover:text-brand-300"
+                      />
                     </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <h2 className="font-display text-base font-bold text-ink">
-                          {c.label}
-                        </h2>
-                        <Icon
-                          name="arrowRight"
-                          className="h-4 w-4 text-faint transition group-hover:translate-x-0.5 group-hover:text-brand-600 dark:group-hover:text-brand-300"
-                        />
-                      </div>
-                      <p className="mt-0.5 text-sm text-muted">
-                        {c.description}
-                      </p>
-                    </div>
-                  </Card>
-                </Link>
-              </StaggerItem>
+                    <p className="mt-0.5 text-sm text-muted">{c.description}</p>
+                  </div>
+                </Card>
+              </Link>
             );
           })}
-        </StaggerGrid>
+        </div>
       )}
     </div>
   );

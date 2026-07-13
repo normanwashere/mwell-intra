@@ -1,12 +1,13 @@
-import { Logo } from '@warehouse/components/Logo';
-import { cx } from '@shell/lib/cx';
+import React from "react";
+import Image from "next/image";
+import { cx } from "@shell/lib/cx";
 
 interface MwellIntraLogoProps {
   className?: string;
   labelClassName?: string;
   logoClassName?: string;
   showLabel?: boolean;
-  variant?: 'color' | 'light';
+  variant?: "color" | "light";
 }
 
 export function MwellIntraLogo({
@@ -14,20 +15,28 @@ export function MwellIntraLogo({
   labelClassName,
   logoClassName,
   showLabel = true,
-  variant = 'color',
+  variant = "color",
 }: MwellIntraLogoProps) {
   return (
-    <span className={cx('inline-flex select-none items-baseline gap-2', className)}>
-      <Logo
-        className={cx('text-xl leading-none', logoClassName)}
-        title="mWell"
-        variant={variant}
+    <span
+      className={cx(
+        "inline-flex min-w-0 select-none items-center gap-2",
+        className,
+      )}
+      aria-label={showLabel ? "mWell Intra" : "mWell"}
+    >
+      <Image
+        src="/mwell-wordmark.png"
+        width={500}
+        height={154}
+        alt=""
+        className={cx("h-7 w-auto max-w-none object-contain", logoClassName)}
       />
       {showLabel && (
         <span
           className={cx(
-            'text-xs font-semibold uppercase tracking-wide',
-            variant === 'light' ? 'text-white/75' : 'text-faint',
+            "shrink-0 font-display text-sm font-bold tracking-normal",
+            variant === "light" ? "text-white" : "text-ink",
             labelClassName,
           )}
         >
