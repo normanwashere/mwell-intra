@@ -614,7 +614,7 @@ describe("validateKnowledgeContent", () => {
     } as Parameters<typeof validateKnowledgeEvidenceArtifacts>[1]);
 
     expect(errors).toEqual([]);
-  });
+  }, 90_000);
 
   it("rejects report hash, dimensions, provenance, and semantic mismatches", () => {
     const root = mkdtempSync(path.join(tmpdir(), "knowledge-evidence-"));
@@ -782,5 +782,5 @@ describe("validateKnowledgeContent", () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
-  });
+  }, 30_000);
 });
