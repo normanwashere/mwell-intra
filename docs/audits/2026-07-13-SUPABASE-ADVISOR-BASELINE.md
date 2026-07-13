@@ -30,3 +30,17 @@ The pre-hardening advisor returned 174 notices:
 ## Acceptance Gate
 
 The hardening pass must reduce unindexed foreign keys, auth init-plan warnings, duplicate permissive policies, and missing primary keys to zero. Newly created indexes may appear as unused until production queries exercise them; this is not grounds for immediate deletion. Security must continue to have no warning or critical finding.
+
+## Verified Post-Hardening State
+
+The live migration `current_function_advisor_hardening` was applied transactionally on 2026-07-13. Its catalog assertions completed without error.
+
+| Finding | Before | After | Result |
+| --- | ---: | ---: | --- |
+| Unindexed foreign keys | 131 | 0 | Pass |
+| Auth RLS init-plan | 5 | 0 | Pass |
+| Tables without a primary key | 1 | 0 | Pass |
+| Multiple permissive policies | 2 | 0 | Pass |
+| Security warning or critical | 0 | 0 | Pass |
+
+The post-change performance advisor contains only informational notices: 165 unused-index observations and one absolute Auth connection-allocation observation. The unused-index total includes the 131 newly created foreign-key indexes, which have no meaningful production telemetry yet. Retain them until a sustained workload review can distinguish unused indexes from low-frequency integrity and join paths. The Auth allocation remains an infrastructure scaling setting rather than an application-code defect.
