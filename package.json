@@ -14,6 +14,7 @@
     "test": "turbo run test",
     "test:e2e": "turbo run test:e2e",
     "test:intra-live": "node scripts/qa/full-intra-live-e2e.mjs",
+    "test:intra-live-contract": "node --test scripts/qa/live-e2e-contract.test.mjs",
     "test:warehouse-w1": "pnpm --filter @intra/shell exec playwright test tests/e2e/warehouse-w1-workflows.spec.ts",
     "test:warehouse-w1:visual": "pnpm --filter @intra/shell exec playwright test tests/e2e/warehouse-w1-visual.spec.ts",
     "test:warehouse-w1:live": "pnpm --filter @intra/shell run test:e2e:live",

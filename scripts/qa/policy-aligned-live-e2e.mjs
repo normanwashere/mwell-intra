@@ -9,6 +9,7 @@ const required = [
   'AUDIT_RUN_ID',
   'POLICY_TEST_PROJECT_REF',
   'NEXT_PUBLIC_SUPABASE_URL',
+  'SUPABASE_SERVICE_ROLE_KEY',
 ];
 const missing = required.filter((key) => !process.env[key]);
 if (missing.length > 0) {

@@ -1,6 +1,12 @@
 import { createRequire } from "node:module";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import {
+  CURRENT_LIVE_ROLES,
+  assertAuditRunId,
+} from "./live-e2e-scenarios.mjs";
+import { verifyCheckpoint } from "./live-e2e-db-verify.mjs";
+import { cleanupRun } from "./live-e2e-cleanup.mjs";
 
 const require = createRequire(path.resolve("apps/shell/package.json"));
 const { chromium } = require("@playwright/test");
@@ -10,6 +16,14 @@ const password = process.env.AUDIT_PASSWORD;
 const allowMutations = process.env.AUDIT_MUTATIONS === "true";
 const viewFilter = process.env.AUDIT_VIEWPORT;
 const roleFilter = process.env.AUDIT_ROLE;
+const auditRunId = allowMutations
+  ? assertAuditRunId(process.env.AUDIT_RUN_ID ?? "")
+  : process.env.AUDIT_RUN_ID || null;
+
+if (allowMutations && !process.env.SUPABASE_SERVICE_ROLE_KEY)
+  throw new Error(
+    "SUPABASE_SERVICE_ROLE_KEY is required for persistence verification and governed cleanup.",
+  );
 
 if (!baseUrl || !/^https:\/\//.test(baseUrl)) {
   throw new Error(
@@ -22,61 +36,7 @@ if (!password) {
   );
 }
 
-const users = [
-  { role: "core_staff_only", email: "intra.test.staff@mwell.com.ph" },
-  { role: "platform_admin", email: "intra.test.admin@mwell.com.ph" },
-  { role: "vendor_portal", email: "intra.test.vendor@mwell.com.ph" },
-  {
-    role: "warehouse_logistics_supervisor",
-    email: "intra.test.wh.logistics@mwell.com.ph",
-  },
-  {
-    role: "warehouse_operations",
-    email: "intra.test.wh.operations@mwell.com.ph",
-  },
-  { role: "warehouse_finance", email: "intra.test.wh.finance@mwell.com.ph" },
-  { role: "warehouse_bi_analyst", email: "intra.test.wh.bi@mwell.com.ph" },
-  {
-    role: "warehouse_business_unit",
-    email: "intra.test.wh.business.unit@mwell.com.ph",
-  },
-  {
-    role: "warehouse_marketing",
-    email: "intra.test.wh.marketing@mwell.com.ph",
-  },
-  {
-    role: "warehouse_procurement",
-    email: "intra.test.wh.procurement@mwell.com.ph",
-  },
-  { role: "warehouse_pricing", email: "intra.test.wh.pricing@mwell.com.ph" },
-  {
-    role: "warehouse_admin",
-    email: "intra.test.wh.warehouse.admin@mwell.com.ph",
-  },
-  {
-    role: "procurement_requester",
-    email: "intra.test.proc.requester@mwell.com.ph",
-  },
-  {
-    role: "procurement_officer",
-    email: "intra.test.proc.officer@mwell.com.ph",
-  },
-  {
-    role: "procurement_approver",
-    email: "intra.test.proc.approver@mwell.com.ph",
-  },
-  {
-    role: "procurement_finance",
-    email: "intra.test.proc.finance@mwell.com.ph",
-  },
-  { role: "procurement_admin", email: "intra.test.proc.admin@mwell.com.ph" },
-  { role: "legal_reviewer", email: "intra.test.legal.reviewer@mwell.com.ph" },
-  {
-    role: "legal_compliance",
-    email: "intra.test.legal.compliance@mwell.com.ph",
-  },
-  { role: "legal_admin", email: "intra.test.legal.admin@mwell.com.ph" },
-];
+const users = CURRENT_LIVE_ROLES;
 
 const viewports = [
   {
@@ -529,7 +489,8 @@ async function auditRoute(page, route) {
   };
 }
 
-async function procurementCreateRequestWorkflow(page) {
+async function procurementCreateRequestWorkflow(page, marker) {
+  const title = `${marker} Procurement draft`;
   await page.goto(
     `${baseUrl}/procurement/requests/new?workflow=${Date.now()}`,
     {
@@ -543,7 +504,7 @@ async function procurementCreateRequestWorkflow(page) {
     .filter({ hasText: /^Petty cash/i })
     .first()
     .click();
-  await page.getByLabel("Title").fill(`Audit petty cash ${Date.now()}`);
+  await page.getByLabel("Title").fill(title);
   await page.getByLabel("Line 1 description").fill("Audit workflow supplies");
   await page.getByLabel("Line 1 unit price").fill("1250");
   await page.getByRole("button", { name: /continue/i }).click();
@@ -566,6 +527,14 @@ async function procurementCreateRequestWorkflow(page) {
   await waitForMeaningfulRoute(page);
   const audit = await pageAudit(page);
   const path = new URL(page.url()).pathname;
+  const requestId = path.split("/").filter(Boolean).at(-1);
+  const checkpoint = await verifyCheckpoint({
+    schema: "procurement",
+    table: "requests",
+    filters: { id: requestId },
+    expected: { title, status: "draft" },
+    select: "id,title,status",
+  });
   return {
     name: "procurement request draft",
     ok:
@@ -576,17 +545,19 @@ async function procurementCreateRequestWorkflow(page) {
       !path.endsWith("/new"),
     finalUrl: page.url().replace(baseUrl, ""),
     text: audit.text.slice(0, 260),
+    checkpoint,
   };
 }
 
-async function legalInviteVendorWorkflow(page) {
+async function legalInviteVendorWorkflow(page, marker) {
   const unique = Date.now();
+  const companyName = `${marker} Vendor`;
   await page.goto(`${baseUrl}/legal/invites/new?workflow=${unique}`, {
     waitUntil: "domcontentloaded",
     timeout: 20_000,
   });
   await waitForMeaningfulRoute(page);
-  await page.getByLabel("Company name").fill(`Audit Vendor ${unique}`);
+  await page.getByLabel("Company name").fill(companyName);
   await page
     .getByLabel("Vendor contact email")
     .fill(`audit.vendor.${unique}@example.com`);
@@ -600,14 +571,254 @@ async function legalInviteVendorWorkflow(page) {
     .catch(() => {});
   await waitForMeaningfulRoute(page);
   const audit = await pageAudit(page);
+  const caseId = new URL(page.url()).pathname.split("/").filter(Boolean).at(-1);
+  const checkpoint = await verifyCheckpoint({
+    schema: "legal",
+    table: "accreditation_cases",
+    filters: { id: caseId },
+    expected: { vendor_name: companyName },
+    select: "id,vendor_name,status",
+  });
   return {
     name: "legal vendor invite",
     ok:
-      audit.text.includes(`Audit Vendor ${unique}`) &&
+      audit.text.includes(companyName) &&
       /\/legal\/cases\//.test(page.url()),
     finalUrl: page.url().replace(baseUrl, ""),
     text: audit.text.slice(0, 260),
+    checkpoint,
   };
+}
+
+async function warehouseCreateBinWorkflow(page, marker) {
+  const code = marker.toUpperCase();
+  await page.goto(`${baseUrl}/warehouse/storage?workflow=${Date.now()}`, {
+    waitUntil: "domcontentloaded",
+    timeout: 20_000,
+  });
+  await waitForMeaningfulRoute(page);
+  await page.getByRole("button", { name: "Add bin", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Add storage area" });
+  await dialog.getByRole("button", { name: "Add bin", exact: true }).click();
+  await dialog.getByRole("alert").waitFor({ state: "visible" });
+  await dialog.getByLabel("Bin code").fill(code);
+  await dialog.getByLabel("Label (optional)").fill(`${marker} controlled bin`);
+  await dialog.getByLabel("Zone (optional)").fill("QA isolation");
+  await dialog.getByRole("button", { name: "Add bin", exact: true }).click();
+  await page.getByText(code, { exact: true }).first().waitFor({ state: "visible" });
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await waitForMeaningfulRoute(page);
+  await page.getByText(code, { exact: true }).first().waitFor({ state: "visible" });
+  const checkpoint = await verifyCheckpoint({
+    schema: "warehouse",
+    table: "storage_areas",
+    filters: { code },
+    expected: { label: `${marker} controlled bin`, active: true },
+    select: "id,code,label,active",
+  });
+  return {
+    name: "warehouse bin creation",
+    ok: true,
+    finalUrl: page.url().replace(baseUrl, ""),
+    checkpoint,
+  };
+}
+
+async function warehouseCreateEventWorkflow(page, marker) {
+  const eventName = `${marker} Event`;
+  await page.goto(`${baseUrl}/warehouse/events?workflow=${Date.now()}`, {
+    waitUntil: "domcontentloaded",
+    timeout: 20_000,
+  });
+  await waitForMeaningfulRoute(page);
+  await page.getByRole("button", { name: "New event" }).click();
+  const dialog = page.getByRole("dialog", { name: "New event" });
+  await dialog.getByRole("button", { name: "Create event" }).click();
+  await dialog.getByText("Event name is required.").waitFor({ state: "visible" });
+  await dialog.getByLabel("Event name").fill(eventName);
+  await dialog.getByLabel("Start date").fill("2026-07-14");
+  await dialog.getByLabel("End date").fill("2026-07-13");
+  await dialog.getByRole("button", { name: "Create event" }).click();
+  await dialog
+    .getByText("End date cannot be before the start date.")
+    .waitFor({ state: "visible" });
+  await dialog.getByLabel("End date").fill("2026-07-15");
+  await dialog.getByRole("button", { name: "Create event" }).click();
+  await page.getByText(eventName, { exact: true }).waitFor({ state: "visible" });
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await waitForMeaningfulRoute(page);
+  await page.getByText(eventName, { exact: true }).waitFor({ state: "visible" });
+  const checkpoint = await verifyCheckpoint({
+    schema: "warehouse",
+    table: "events",
+    filters: { name: eventName },
+    expected: { type: "corporate", start_date: "2026-07-14" },
+    select: "id,name,type,start_date,end_date",
+  });
+  return {
+    name: "warehouse event creation",
+    ok: true,
+    finalUrl: page.url().replace(baseUrl, ""),
+    checkpoint,
+  };
+}
+
+async function adminCreateDoaWorkflow(page, marker) {
+  const department = `${marker} Department`;
+  const version = `${marker}-V1`;
+  await page.goto(`${baseUrl}/admin/doa?workflow=${Date.now()}`, {
+    waitUntil: "domcontentloaded",
+    timeout: 20_000,
+  });
+  await waitForMeaningfulRoute(page);
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await page.getByText("Department and version are required.").waitFor({
+    state: "visible",
+  });
+  await page.getByLabel("Department").fill(department);
+  await page.getByLabel("Version").fill(version);
+  await page.getByLabel("Source document").fill(`${marker} controlled test`);
+  await page.getByLabel("Effective date").fill("2026-07-14");
+  await page.getByLabel("Tier 1").selectOption("final_approver");
+  await page.getByLabel("Minimum").fill("0");
+  await page.getByLabel("Maximum").fill("1000");
+  await page.getByLabel("Named approver").selectOption({ index: 1 });
+  await page.getByRole("button", { name: "Save draft" }).click();
+  const departmentHeading = page.getByRole("heading", {
+    name: department,
+    exact: true,
+  });
+  await departmentHeading.waitFor({
+    state: "visible",
+  });
+  const card = departmentHeading.locator(
+    "xpath=ancestor::div[.//button[normalize-space()='Activate']][1]",
+  );
+  page.once("dialog", (dialog) => void dialog.accept());
+  await card.getByRole("button", { name: "Activate" }).click();
+  await page.getByText(`${department} DOA activated.`).waitFor({ state: "visible" });
+  const checkpoint = await verifyCheckpoint({
+    schema: "procurement",
+    table: "doa_matrices",
+    filters: { department, version },
+    expected: { status: "active", active: true },
+    select: "id,department,version,status,active",
+  });
+  return {
+    name: "department DOA creation",
+    ok: true,
+    finalUrl: page.url().replace(baseUrl, ""),
+    checkpoint,
+  };
+}
+
+async function warehouseReceivingValidationWorkflow(page) {
+  await page.goto(`${baseUrl}/warehouse/receiving?workflow=${Date.now()}`, {
+    waitUntil: "domcontentloaded",
+    timeout: 20_000,
+  });
+  await waitForMeaningfulRoute(page);
+  const addLine = page.getByRole("button", { name: "Add to receipt" });
+  if (!(await addLine.isDisabled()))
+    throw new Error("Receiving accepted an empty receipt line.");
+  await page.getByLabel("Enter barcode manually").fill("QA-UNKNOWN-STOCK");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await page.locator('[role="alert"]').first().waitFor({ state: "visible" });
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await waitForMeaningfulRoute(page);
+  return {
+    name: "warehouse receiving validation",
+    ok: await page.getByRole("button", { name: "Add to receipt" }).isDisabled(),
+    finalUrl: page.url().replace(baseUrl, ""),
+  };
+}
+
+async function warehouseQualityValidationWorkflow(page) {
+  await page.goto(`${baseUrl}/warehouse/quality?workflow=${Date.now()}`, {
+    waitUntil: "domcontentloaded",
+    timeout: 20_000,
+  });
+  await waitForMeaningfulRoute(page);
+  const inspect = page.getByRole("button", { name: "Inspect", exact: true }).first();
+  if (!(await inspect.count()))
+    return {
+      name: "warehouse quality validation",
+      ok: /No inspections waiting/i.test(await page.locator("body").innerText()),
+      finalUrl: page.url().replace(baseUrl, ""),
+    };
+  await inspect.click();
+  const dialog = page.getByRole("dialog", { name: "Inspect stock" });
+  const submit = dialog.getByRole("button", { name: "Submit inspection" });
+  if (!(await submit.isDisabled()))
+    throw new Error("Quality inspection bypassed required evidence.");
+  await dialog.getByLabel("Disposition").selectOption("hold");
+  if (!(await submit.isDisabled()))
+    throw new Error("Quality hold bypassed reason and evidence validation.");
+  await dialog.getByRole("button", { name: "Close" }).click();
+  return {
+    name: "warehouse quality validation",
+    ok: true,
+    finalUrl: page.url().replace(baseUrl, ""),
+  };
+}
+
+async function warehouseCycleCountValidationWorkflow(page) {
+  await page.goto(`${baseUrl}/warehouse/cycle-counts?workflow=${Date.now()}`, {
+    waitUntil: "domcontentloaded",
+    timeout: 20_000,
+  });
+  await waitForMeaningfulRoute(page);
+  await page.getByLabel("Category").selectOption("device");
+  await page.getByLabel("Enter barcode manually").fill("QA-UNKNOWN-UNIT");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await page.locator('p[role="alert"]').waitFor({ state: "visible" });
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await waitForMeaningfulRoute(page);
+  return {
+    name: "warehouse cycle count validation",
+    ok: true,
+    finalUrl: page.url().replace(baseUrl, ""),
+  };
+}
+
+async function warehouseReturnValidationWorkflow(page) {
+  await page.goto(`${baseUrl}/warehouse/returns?workflow=${Date.now()}`, {
+    waitUntil: "domcontentloaded",
+    timeout: 20_000,
+  });
+  await waitForMeaningfulRoute(page);
+  await page.getByLabel("Related event (optional)").selectOption({ index: 1 });
+  await page.getByLabel("Product").selectOption({ index: 1 });
+  const serialInput = page.getByLabel("Enter barcode manually");
+  if (await serialInput.count()) {
+    await serialInput.fill("QA-UNKNOWN-RETURN");
+    await page.getByRole("button", { name: "Add", exact: true }).click();
+    await page.locator('p[role="alert"]').waitFor({ state: "visible" });
+  }
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await waitForMeaningfulRoute(page);
+  return {
+    name: "warehouse return validation",
+    ok: true,
+    finalUrl: page.url().replace(baseUrl, ""),
+  };
+}
+
+async function roleHandoffReadbackWorkflow(page, route, expectedText, name) {
+  await page.goto(`${baseUrl}${route}?handoff=${Date.now()}`, {
+    waitUntil: "domcontentloaded",
+    timeout: 20_000,
+  });
+  await waitForMeaningfulRoute(page);
+  await page.getByText(expectedText, { exact: true }).first().waitFor({
+    state: "visible",
+  });
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await waitForMeaningfulRoute(page);
+  await page.getByText(expectedText, { exact: true }).first().waitFor({
+    state: "visible",
+  });
+  return { name, ok: true, finalUrl: page.url().replace(baseUrl, "") };
 }
 
 async function runWorkflow(browser, viewport, user, workflow) {
@@ -792,40 +1003,224 @@ for (const viewport of viewports.filter(
 }
 
 const workflows = [];
-if (allowMutations) {
-  for (const viewport of viewports.filter(
-    (item) => !viewFilter || item.name === viewFilter,
-  )) {
-    workflows.push(
-      await runWorkflow(
-        browser,
-        viewport,
-        { email: "intra.test.proc.requester@mwell.com.ph" },
-        {
-          name: "procurement request draft",
-          run: procurementCreateRequestWorkflow,
+let cleanup = { runId: auditRunId, complete: true, results: [] };
+const transactionViewports = viewports.filter(
+  (item) =>
+    ["desktop-1440", "mobile-390"].includes(item.name) &&
+    (!viewFilter || item.name === viewFilter),
+);
+const auditMarkers = transactionViewports.map(
+  (viewport) => `${auditRunId}-${viewport.name}`,
+);
+const cleanupTargets = allowMutations
+  ? auditMarkers.flatMap((marker) => [
+      {
+        runId: auditRunId,
+        schema: "legal",
+        table: "vendor_invites",
+        filters: { company_name: `${marker} Vendor` },
+        proofColumn: "company_name",
+      },
+      {
+        runId: auditRunId,
+        schema: "legal",
+        table: "accreditation_cases",
+        filters: { vendor_name: `${marker} Vendor` },
+        proofColumn: "vendor_name",
+      },
+      {
+        runId: auditRunId,
+        schema: "core",
+        table: "vendors",
+        filters: { legal_name: `${marker} Vendor` },
+        proofColumn: "legal_name",
+      },
+      {
+        runId: auditRunId,
+        schema: "procurement",
+        table: "requests",
+        filters: { title: `${marker} Procurement draft` },
+        proofColumn: "title",
+      },
+      {
+        runId: auditRunId,
+        schema: "warehouse",
+        table: "storage_areas",
+        filters: { code: marker.toUpperCase() },
+        proofColumn: "code",
+      },
+      {
+        runId: auditRunId,
+        schema: "warehouse",
+        table: "events",
+        filters: { name: `${marker} Event` },
+        proofColumn: "name",
+      },
+      {
+        runId: auditRunId,
+        schema: "procurement",
+        table: "doa_assignments",
+        filters: { department: `${marker} Department` },
+        proofColumn: "department",
+      },
+      {
+        runId: auditRunId,
+        schema: "procurement",
+        table: "doa_matrices",
+        filters: {
+          department: `${marker} Department`,
+          version: `${marker}-V1`,
         },
-      ),
-    );
-    workflows.push(
-      await runWorkflow(
-        browser,
-        viewport,
-        { email: "intra.test.legal.reviewer@mwell.com.ph" },
-        {
-          name: "legal vendor invite",
-          run: legalInviteVendorWorkflow,
-        },
-      ),
+        proofColumn: "department",
+      },
+    ])
+  : [];
+
+try {
+  if (allowMutations) {
+    for (const viewport of transactionViewports) {
+      const marker = `${auditRunId}-${viewport.name}`;
+      workflows.push(
+        await runWorkflow(
+          browser,
+          viewport,
+          { email: "intra.test.proc.requester@mwell.com.ph" },
+          {
+            name: "procurement request draft",
+            run: (page) => procurementCreateRequestWorkflow(page, marker),
+          },
+        ),
+      );
+      workflows.push(
+        await runWorkflow(
+          browser,
+          viewport,
+          { email: "intra.test.legal.reviewer@mwell.com.ph" },
+          {
+            name: "legal vendor invite",
+            run: (page) => legalInviteVendorWorkflow(page, marker),
+          },
+        ),
+      );
+      workflows.push(
+        await runWorkflow(
+          browser,
+          viewport,
+          { email: "intra.test.wh.warehouse.admin@mwell.com.ph" },
+          {
+            name: "warehouse bin creation",
+            run: (page) => warehouseCreateBinWorkflow(page, marker),
+          },
+        ),
+      );
+      workflows.push(
+        await runWorkflow(
+          browser,
+          viewport,
+          { email: "intra.test.wh.logistics@mwell.com.ph" },
+          {
+            name: "warehouse bin role handoff",
+            run: (page) =>
+              roleHandoffReadbackWorkflow(
+                page,
+                "/warehouse/storage",
+                marker.toUpperCase(),
+                "warehouse bin role handoff",
+              ),
+          },
+        ),
+      );
+      workflows.push(
+        await runWorkflow(
+          browser,
+          viewport,
+          { email: "intra.test.wh.business.unit@mwell.com.ph" },
+          {
+            name: "warehouse event creation",
+            run: (page) => warehouseCreateEventWorkflow(page, marker),
+          },
+        ),
+      );
+      workflows.push(
+        await runWorkflow(
+          browser,
+          viewport,
+          { email: "intra.test.wh.marketing@mwell.com.ph" },
+          {
+            name: "warehouse event role handoff",
+            run: (page) =>
+              roleHandoffReadbackWorkflow(
+                page,
+                "/warehouse/events",
+                `${marker} Event`,
+                "warehouse event role handoff",
+              ),
+          },
+        ),
+      );
+      workflows.push(
+        await runWorkflow(
+          browser,
+          viewport,
+          { email: "intra.test.admin@mwell.com.ph" },
+          {
+            name: "department DOA creation",
+            run: (page) => adminCreateDoaWorkflow(page, marker),
+          },
+        ),
+      );
+      workflows.push(
+        await runWorkflow(
+          browser,
+          viewport,
+          { email: "intra.test.legal.admin@mwell.com.ph" },
+          {
+            name: "department DOA role handoff",
+            run: (page) =>
+              roleHandoffReadbackWorkflow(
+                page,
+                "/admin/doa",
+                `${marker} Department`,
+                "department DOA role handoff",
+              ),
+          },
+        ),
+      );
+      for (const [email, name, run] of [
+        [
+          "intra.test.wh.logistics@mwell.com.ph",
+          "warehouse receiving validation",
+          warehouseReceivingValidationWorkflow,
+        ],
+        [
+          "intra.test.wh.logistics@mwell.com.ph",
+          "warehouse quality validation",
+          warehouseQualityValidationWorkflow,
+        ],
+        [
+          "intra.test.wh.finance@mwell.com.ph",
+          "warehouse cycle count validation",
+          warehouseCycleCountValidationWorkflow,
+        ],
+        [
+          "intra.test.wh.operations@mwell.com.ph",
+          "warehouse return validation",
+          warehouseReturnValidationWorkflow,
+        ],
+      ])
+        workflows.push(
+          await runWorkflow(browser, viewport, { email }, { name, run }),
+        );
+    }
+  } else {
+    console.warn(
+      "AUDIT_MUTATIONS is not true; write/read-back workflows were skipped.",
     );
   }
-} else {
-  console.warn(
-    "AUDIT_MUTATIONS is not true; write/read-back workflows were skipped.",
-  );
+} finally {
+  await browser.close();
+  if (allowMutations) cleanup = await cleanupRun(auditRunId, cleanupTargets);
 }
-
-await browser.close();
 
 const aggregate = results.map((item) => ({
   viewport: item.viewport,
@@ -885,7 +1280,7 @@ const outputPath = path.resolve(
 await mkdir(path.dirname(outputPath), { recursive: true });
 await writeFile(
   outputPath,
-  `${JSON.stringify({ generatedAt: new Date().toISOString(), baseUrl, aggregate, workflows, results }, null, 2)}\n`,
+  `${JSON.stringify({ generatedAt: new Date().toISOString(), baseUrl, runId: auditRunId, aggregate, workflows, cleanup, results }, null, 2)}\n`,
 );
 
 const routeFailures = aggregate.flatMap((item) => [
@@ -925,6 +1320,7 @@ const workflowFailures = workflows
     (workflow) =>
       `${workflow.viewport}/${workflow.workflow}: ${workflow.error ?? "failed"}`,
   );
+if (!cleanup.complete) workflowFailures.push(`${auditRunId}: cleanup incomplete`);
 
 console.log(`Wrote ${outputPath}`);
 if (routeFailures.length || workflowFailures.length) {
