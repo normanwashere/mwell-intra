@@ -31,6 +31,35 @@ function terminalPaths(flow: KnowledgeFlow) {
   return paths;
 }
 
+function reachableNodeIds(flow: KnowledgeFlow, startNodeId: string) {
+  const reachable = new Set<string>();
+  const visit = (nodeId: string) => {
+    if (reachable.has(nodeId)) return;
+    reachable.add(nodeId);
+    for (const edge of flow.edges.filter((candidate) => candidate.from === nodeId)) visit(edge.to);
+  };
+  visit(startNodeId);
+  return reachable;
+}
+
+function choicePathToNode(flow: KnowledgeFlow, targetNodeId: string) {
+  const walk = (nodeId: string, choices: string[], seen: Set<string>): string[] | null => {
+    if (nodeId === targetNodeId) return choices;
+    if (seen.has(nodeId)) return null;
+    const edges = flow.edges.filter((edge) => edge.from === nodeId);
+    for (const edge of edges) {
+      const result = walk(
+        edge.to,
+        edges.length > 1 ? [...choices, edgeChoiceId(flow, edge)] : choices,
+        new Set([...seen, nodeId]),
+      );
+      if (result) return result;
+    }
+    return null;
+  };
+  return walk(flow.startNodeId, [], new Set());
+}
+
 test.beforeEach(async ({ page }) => installSession(page));
 
 test("task, role, and feature search supports recovery and browser history", async ({ page }) => {
@@ -86,8 +115,8 @@ test("every feature guide opens and coming-soon controls remain clearly non-oper
   }
 });
 
-test("all principal workflows, decision outcomes, and terminal nodes are navigable", async ({ page }) => {
-  test.setTimeout(120_000);
+test("all principal workflows, decision outcomes, and terminal nodes are navigable", async ({ page }, testInfo) => {
+  test.setTimeout(180_000);
   for (const flow of KNOWLEDGE_CONTENT.flows) {
     const paths = terminalPaths(flow);
     const terminals = flow.nodes.filter((node) => node.type === "terminal");
@@ -99,6 +128,30 @@ test("all principal workflows, decision outcomes, and terminal nodes are navigab
       await page.goto(`/knowledge?${params}`);
       await expect(page.getByRole("heading", { name: flow.title, exact: true })).toBeVisible();
       await expect(page.getByRole("region", { name: terminal.title, exact: true })).toBeVisible();
+    }
+    if (testInfo.project.name !== "desktop-1280") continue;
+    for (const decision of flow.nodes.filter((node) => node.type === "decision")) {
+      const outcomes = flow.edges.filter((edge) => edge.from === decision.id);
+      expect(outcomes.length, `${flow.id}:${decision.id} decision outcomes`).toBeGreaterThan(1);
+      for (const outcome of outcomes) {
+        await test.step(`${flow.id}:${decision.id}:${outcome.label}`, async () => {
+          const target = flow.nodes.find((node) => node.id === outcome.to)!;
+          const prefix = choicePathToNode(flow, decision.id);
+          expect(prefix, `${flow.id}:${decision.id} reachable decision`).not.toBeNull();
+          const params = new URLSearchParams({ flow: flow.id, view: "steps", step: decision.id });
+          if (prefix!.length) params.set("branch", prefix!.join(","));
+          await page.goto(`/knowledge?${params}`);
+          await expect(page.getByRole("region", { name: decision.title, exact: true })).toBeVisible();
+          await page.getByRole("region", { name: decision.title, exact: true })
+            .getByRole("button", { name: outcome.label!, exact: true }).first().click();
+          const choiceId = edgeChoiceId(flow, outcome);
+          await expect.poll(() => new URL(page.url()).searchParams.get("branch")?.split(",")).toContain(choiceId);
+          const selectedId = new URL(page.url()).searchParams.get("step");
+          expect(reachableNodeIds(flow, target.id), `${flow.id}:${choiceId} selected ${selectedId}`).toContain(selectedId);
+          const selected = flow.nodes.find((node) => node.id === selectedId)!;
+          await expect(page.getByRole("region", { name: selected.title, exact: true })).toBeVisible();
+        });
+      }
     }
   }
 });
@@ -121,8 +174,8 @@ test("branch backtracking and four workflow views share one selected node", asyn
   }
 });
 
-test("deep links, refresh, scroll restoration, and every evidence hotspot remain stable", async ({ page, request }) => {
-  test.setTimeout(90_000);
+test("deep links, refresh, scroll restoration, and every evidence hotspot remain stable", async ({ page, request }, testInfo) => {
+  test.setTimeout(240_000);
   const evidence = KNOWLEDGE_CONTENT.evidence.find((item) => item.id === "ev-admin-start")!;
   const flow = KNOWLEDGE_CONTENT.flows.find((item) => item.nodes.some((node) => node.evidenceId === evidence.id))!;
   const node = flow.nodes.find((item) => item.evidenceId === evidence.id)!;
@@ -130,31 +183,53 @@ test("deep links, refresh, scroll restoration, and every evidence hotspot remain
   await expect
     .poll(() => page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight))
     .toBeGreaterThan(200);
+  await page.evaluate(() => new Promise<void>((resolve) =>
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+  ));
   await page.evaluate(() =>
     window.scrollTo(0, Math.min(500, document.documentElement.scrollHeight - window.innerHeight)),
   );
   const before = await page.evaluate(() => window.scrollY);
   expect(before).toBeGreaterThan(200);
-  await page.evaluate((scrollY) => {
+  await page.evaluate(() => window.dispatchEvent(new Event("scroll")));
+  await expect.poll(() => page.evaluate((expected) => {
     const key = `knowledge-scroll:${window.location.pathname}${window.location.search}`;
-    sessionStorage.setItem(key, String(scrollY));
-  }, before);
+    return Math.abs(Number(sessionStorage.getItem(key)) - expected);
+  }, before)).toBeLessThanOrEqual(16);
   await page.reload();
   await expect(page).toHaveURL(new RegExp(`step=${node.id}`));
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
   await expect
     .poll(async () => Math.abs((await page.evaluate(() => window.scrollY)) - before))
     .toBeLessThanOrEqual(64);
+  if (testInfo.project.name !== "desktop-1280") return;
   for (const item of KNOWLEDGE_CONTENT.evidence) {
+    const evidenceFlow = KNOWLEDGE_CONTENT.flows.find((candidate) =>
+      candidate.nodes.some((candidateNode) => candidateNode.evidenceId === item.id),
+    )!;
+    const evidenceNode = evidenceFlow.nodes.find((candidateNode) => candidateNode.evidenceId === item.id)!;
     for (const src of [item.desktopSrc, item.mobileSrc]) {
       const response = await request.get(src);
       expect(response.ok(), `${item.id} ${src}`).toBeTruthy();
       expect((await response.body()).byteLength, src).toBeGreaterThan(12_000);
     }
-    for (const hotspot of item.hotspots) {
-      for (const coordinate of [hotspot.x, hotspot.y, hotspot.mobileX, hotspot.mobileY]) {
-        expect(coordinate, `${item.id}:${hotspot.id}`).toBeGreaterThanOrEqual(0);
-        expect(coordinate, `${item.id}:${hotspot.id}`).toBeLessThanOrEqual(1);
+    for (const [width, height] of [[1280, 800], [390, 844]] as const) {
+      await page.setViewportSize({ width, height });
+      await page.goto(`/knowledge?flow=${evidenceFlow.id}&view=steps&step=${evidenceNode.id}`);
+      const region = page.getByRole("region", { name: evidenceNode.title, exact: true });
+      await expect(region).toBeVisible();
+      const image = region.locator("img");
+      await expect(image).toBeVisible();
+      for (const hotspot of item.hotspots) {
+        const marker = region.getByRole("button", { name: `${hotspot.number}. ${hotspot.label}`, exact: true });
+        await expect(marker).toBeVisible();
+        const [markerBox, imageBox] = await Promise.all([marker.boundingBox(), image.boundingBox()]);
+        expect(markerBox, `${item.id}:${hotspot.id}:${width} marker`).not.toBeNull();
+        expect(imageBox, `${item.id}:${hotspot.id}:${width} image`).not.toBeNull();
+        expect(markerBox!.x).toBeGreaterThanOrEqual(imageBox!.x - 1);
+        expect(markerBox!.y).toBeGreaterThanOrEqual(imageBox!.y - 1);
+        expect(markerBox!.x + markerBox!.width).toBeLessThanOrEqual(imageBox!.x + imageBox!.width + 1);
+        expect(markerBox!.y + markerBox!.height).toBeLessThanOrEqual(imageBox!.y + imageBox!.height + 1);
       }
     }
   }

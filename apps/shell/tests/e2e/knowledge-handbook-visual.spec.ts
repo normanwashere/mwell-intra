@@ -31,12 +31,37 @@ async function assertVisualIntegrity(page: Page) {
     };
     const label = (el: Element) => el.getAttribute("aria-label") || el.textContent?.trim().slice(0, 80) || el.tagName;
     const controls = [...document.querySelectorAll<HTMLElement>('button, a[href], input, select, textarea, [role="tab"]')].filter(visible);
-    const clipped = [...document.querySelectorAll<HTMLElement>("h1,h2,h3,p,label")].filter(visible).filter((el) => { const style = getComputedStyle(el); return el.scrollWidth > el.clientWidth + 2 && style.overflowX !== "auto" && style.overflow !== "hidden" && style.textOverflow !== "ellipsis"; }).map(label);
+    const textBearing = "h1,h2,h3,h4,p,label,button,a,[role='tab'],[role='status'],li,td,th,dt,dd";
+    const clipped = [...document.querySelectorAll<HTMLElement>(textBearing)].filter(visible).filter((el) => {
+      const rect = el.getBoundingClientRect();
+      if (rect.bottom <= 0 || rect.top >= innerHeight || rect.right <= 0 || rect.left >= innerWidth) return false;
+      if (!el.innerText.trim()) return false;
+      const style = getComputedStyle(el);
+      if (style.clipPath !== "none" || (rect.width <= 2 && rect.height <= 2)) return false;
+      const intentionallyScrollable = [style.overflow, style.overflowX, style.overflowY].some((value) => value === "auto" || value === "scroll");
+      const intentionallyTruncated = style.textOverflow === "ellipsis" || style.webkitLineClamp !== "none";
+      const clipsX = style.overflow === "hidden" || style.overflow === "clip" || style.overflowX === "hidden" || style.overflowX === "clip";
+      const clipsY = style.overflow === "hidden" || style.overflow === "clip" || style.overflowY === "hidden" || style.overflowY === "clip";
+      return !intentionallyScrollable && !intentionallyTruncated &&
+        ((clipsX && el.scrollWidth > el.clientWidth + 2) || (clipsY && el.scrollHeight > el.clientHeight + 2));
+    }).map(label);
     const minimum = innerWidth < 640 ? 44 : 24;
-    const undersized = controls.filter((el) => { const r = el.getBoundingClientRect(); return (r.width < minimum || r.height < minimum) && !el.closest("[data-compact-control]"); }).map(label);
+    const undersized = controls.filter((el) => { const r = el.getBoundingClientRect(); return r.width < minimum || r.height < minimum; }).map(label);
     const mobileNav = document.querySelector<HTMLElement>('nav[aria-label="Primary mobile"]');
     const navRect = mobileNav && visible(mobileNav) ? mobileNav.getBoundingClientRect() : null;
-    const intercepted = controls.filter((el) => { const r = el.getBoundingClientRect(); if (r.left < 0 || r.right > innerWidth || r.top < 0 || r.bottom > innerHeight) return false; const x = r.left + r.width / 2; const y = r.top + r.height / 2; if (navRect && y >= navRect.top) return false; const top = document.elementFromPoint(x, y); return top && top !== el && !el.contains(top); }).map(label);
+    const initialScrollY = window.scrollY;
+    const intercepted = controls.filter((el) => {
+      if (mobileNav?.contains(el)) return false;
+      el.scrollIntoView({ block: "center", inline: "center" });
+      const r = el.getBoundingClientRect();
+      if (r.left < 0 || r.right > innerWidth || r.top < 0 || r.bottom > innerHeight) return true;
+      const currentNavRect = mobileNav && visible(mobileNav) ? mobileNav.getBoundingClientRect() : null;
+      const x = r.left + r.width / 2; const y = r.top + r.height / 2;
+      if (currentNavRect && y >= currentNavRect.top && y <= currentNavRect.bottom) return true;
+      const top = document.elementFromPoint(x, y);
+      return Boolean(top && top !== el && !el.contains(top));
+    }).map(label);
+    window.scrollTo(0, initialScrollY);
     const main = document.querySelector("main");
     const navClearance = navRect && main ? Number.parseFloat(getComputedStyle(main).paddingBottom) - navRect.height : 0;
     return { overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth, clipped, undersized, intercepted, navClearance, main: document.querySelectorAll("main").length, h1: document.querySelectorAll("main h1").length };
