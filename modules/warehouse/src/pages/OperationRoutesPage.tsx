@@ -22,10 +22,19 @@ export function OperationRoutesPage() {
   const [draft, setDraft] = useState<OperationRoute | null>(null);
   const [saving, setSaving] = useState(false);
   const guideApplied = useRef(false);
-  useEffect(() => setDraft(selected ? { ...selected, sourceLocationTypes: [...selected.sourceLocationTypes], destinationLocationTypes: [...selected.destinationLocationTypes] } : null), [selected]);
   const routes = data?.operationRoutes ?? [];
   const mayEdit = can(role, 'manage_operation_routes');
   const guideReturnTo = knowledgeGuideReturnPath(searchParams);
+  const openRoute = (route: OperationRoute | null) => {
+    setSelected(route);
+    setDraft(route
+      ? {
+          ...route,
+          sourceLocationTypes: [...route.sourceLocationTypes],
+          destinationLocationTypes: [...route.destinationLocationTypes],
+        }
+      : null);
+  };
   useEffect(() => {
     if (
       guideApplied.current ||
@@ -35,7 +44,7 @@ export function OperationRoutesPage() {
     )
       return;
     guideApplied.current = true;
-    setSelected(routes[0]!);
+    openRoute(routes[0]!);
   }, [mayEdit, routes, searchParams]);
   if (!data) return null;
   const isLastActive = (route: OperationRoute) =>
@@ -66,7 +75,7 @@ export function OperationRoutesPage() {
           active: draft.active,
         },
       });
-      if (ok) setSelected(null);
+      if (ok) openRoute(null);
     } finally { setSaving(false); }
   };
 
@@ -83,13 +92,13 @@ export function OperationRoutesPage() {
                 <div className="mt-2 flex flex-wrap gap-2 text-xs text-faint"><span>{route.requiresEvidence ? 'Evidence required' : 'Evidence optional'}</span><span>·</span><span>{route.requiresApproval ? 'Approval required' : 'No approval'}</span><span>·</span><span>{route.requiresOnline ? 'Online required' : 'Offline allowed'}</span></div>
                 {!route.active && <p className="mt-2 text-xs font-medium text-amber-700 dark:text-amber-300">Inactive routes cannot be selected for new warehouse work.</p>}
               </div>
-              {mayEdit && <button type="button" className="btn-primary btn-sm justify-center" onClick={() => setSelected(route)}>Edit route</button>}
+              {mayEdit && <button type="button" className="btn-primary btn-sm justify-center" onClick={() => openRoute(route)}>Edit route</button>}
             </li>
           ))}
         </ul>
       )}
 
-      <Sheet open={Boolean(selected)} onOpenChange={(open) => { if (!open) setSelected(null); }} title="Edit operation route" description={selected ? label(selected.operationTypeId) : undefined} footer={<button type="button" className="btn-primary w-full justify-center" disabled={!draft || draft.sourceLocationTypes.length === 0 || draft.destinationLocationTypes.length === 0 || saving} onClick={() => void save()}>{saving ? 'Saving...' : 'Save route'}</button>}>
+      <Sheet open={Boolean(selected)} onOpenChange={(open) => { if (!open) openRoute(null); }} title="Edit operation route" description={selected ? label(selected.operationTypeId) : undefined} footer={<button type="button" className="btn-primary w-full justify-center" disabled={!draft || draft.sourceLocationTypes.length === 0 || draft.destinationLocationTypes.length === 0 || saving} onClick={() => void save()}>{saving ? 'Saving...' : 'Save route'}</button>}>
         {draft && <div className="space-y-4">
           {guideReturnTo && (
             <a

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const getUser = vi.fn();
 const hasCapability = vi.fn();
@@ -39,11 +39,13 @@ function adminClient() {
   };
 }
 
-async function route() {
-  return import('@shell/app/api/warehouse/imports/route');
-}
+let POST: typeof import('@shell/app/api/warehouse/imports/route').POST;
 
 describe('POST /api/warehouse/imports', () => {
+  beforeAll(async () => {
+    ({ POST } = await import('@shell/app/api/warehouse/imports/route'));
+  }, 15_000);
+
   beforeEach(() => {
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-test';
     getUser.mockReset();
@@ -57,7 +59,6 @@ describe('POST /api/warehouse/imports', () => {
 
   it('denies anonymous requests', async () => {
     getUser.mockResolvedValue({ data: { user: null }, error: null });
-    const { POST } = await route();
     const response = await POST(new Request('http://localhost/api/warehouse/imports', {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}',
     }) as never);
@@ -67,7 +68,6 @@ describe('POST /api/warehouse/imports', () => {
   it.each(['business-unit', 'bi-analyst'])('denies users without import capability (%s)', async () => {
     getUser.mockResolvedValue({ data: { user: { id: 'user-1', email: 'user@mwell.test' } }, error: null });
     hasCapability.mockResolvedValue({ data: false, error: null });
-    const { POST } = await route();
     const response = await POST(new Request('http://localhost/api/warehouse/imports', {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}',
     }) as never);
@@ -77,7 +77,6 @@ describe('POST /api/warehouse/imports', () => {
   it('denies creator-as-reviewer apply requests', async () => {
     getUser.mockResolvedValue({ data: { user: { id: 'creator-1', email: 'creator@mwell.test' } }, error: null });
     hasCapability.mockResolvedValue({ data: true, error: null });
-    const { POST } = await route();
     const response = await POST(new Request('http://localhost/api/warehouse/imports', {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ action: 'apply', job_id: 'job-1', idempotency_key: 'import-apply-001' }),
@@ -93,7 +92,6 @@ describe('POST /api/warehouse/imports', () => {
     form.set('action', 'validate');
     form.set('kind', 'locations_bins_v1');
     form.set('file', new File([new Uint8Array(10 * 1024 * 1024 + 1)], 'large.csv', { type: 'text/csv' }));
-    const { POST } = await route();
     const response = await POST(new Request('http://localhost/api/warehouse/imports', {
       method: 'POST', body: form,
     }) as never);
