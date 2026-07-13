@@ -4,14 +4,15 @@
 -- ## DEMO SEED — DISABLED BY DEFAULT. DO NOT APPLY TO PRODUCTION AS-IS.      ##
 -- ##                                                                        ##
 -- ## This provisions one real Supabase Auth account per warehouse demo role ##
--- ## (role-tile login), all sharing the demo password `mWell-Demo-2026!`,   ##
+-- ## (role-tile login), using an operator-supplied preview-only password.    ##
 -- ## and wires each into the AUTHORITATIVE monorepo RBAC (core.profiles +    ##
--- ## core.user_roles). Because it seeds a shared, well-known password it is  ##
--- ## gated behind a runtime flag and is a NO-OP unless explicitly enabled.   ##
+-- ## core.user_roles). Both the opt-in flag and preview password are         ##
+-- ## required. The migration is a NO-OP unless explicitly enabled.          ##
 -- ##                                                                        ##
--- ## To seed (local / preview ONLY), set the flag in the SAME session that   ##
+-- ## To seed (local / preview ONLY), set both values in the SAME session:    ##
 -- ## applies this migration, e.g.:                                          ##
--- ##     set mwell.seed_demo = 'on';   -- then run `supabase db push`        ##
+-- ##     set mwell.seed_demo = 'on';                                         ##
+-- ##     set mwell.seed_demo_password = '<unique-preview-password>';          ##
 -- ## or persist it for a dev database:                                      ##
 -- ##     alter database postgres set mwell.seed_demo = 'on';                 ##
 -- ## Leave it unset in production; the block below simply does nothing.      ##
@@ -35,6 +36,7 @@ do $$
 declare
   u jsonb;
   uid uuid;
+  demo_password text := current_setting('mwell.seed_demo_password', true);
   accounts jsonb := '[
     {"email":"marco.reyes@mwell.com.ph","role":"logistics_supervisor","name":"Marco Reyes","title":"Warehouse Supervisor"},
     {"email":"joana.cruz@mwell.com.ph","role":"operations","name":"Joana Cruz","title":"eCommerce Operations Manager"},
@@ -51,6 +53,9 @@ begin
     raise notice 'warehouse demo users skipped (set mwell.seed_demo=''on'' to seed).';
     return;
   end if;
+  if length(coalesce(demo_password, '')) < 16 then
+    raise exception 'mwell.seed_demo_password must contain at least 16 characters';
+  end if;
 
   for u in select * from jsonb_array_elements(accounts)
   loop
@@ -66,7 +71,7 @@ begin
         is_sso_user, is_anonymous
       ) values (
         '00000000-0000-0000-0000-000000000000', uid, 'authenticated', 'authenticated',
-        u->>'email', crypt('mWell-Demo-2026!', gen_salt('bf')),
+        u->>'email', crypt(demo_password, gen_salt('bf')),
         now(), now(), now(), null,
         jsonb_build_object(
           'provider','email',

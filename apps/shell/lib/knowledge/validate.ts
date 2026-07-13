@@ -999,6 +999,11 @@ function isCaptureEntry(value: unknown): value is KnowledgeCaptureReportEntry {
   );
 }
 
+function isSupportedNodeRuntime(value: unknown): boolean {
+  const match = /^v(\d+)\./.exec(String(value));
+  return Boolean(match && Number(match[1]) >= 22);
+}
+
 function isCaptureReport(value: unknown): value is KnowledgeCaptureReport {
   if (!isRecord(value) || !isRecord(value.evidence)) return false;
   return (
@@ -1006,8 +1011,8 @@ function isCaptureReport(value: unknown): value is KnowledgeCaptureReport {
     typeof value.sourceCommit === "string" &&
     GIT_COMMIT.test(value.sourceCommit) &&
     isRecord(value.runtime) &&
-    /^v22\./.test(String(value.runtime.parentNode)) &&
-    /^v22\./.test(String(value.runtime.serverNode)) &&
+    isSupportedNodeRuntime(value.runtime.parentNode) &&
+    isSupportedNodeRuntime(value.runtime.serverNode) &&
     typeof value.capturedAt === "string" &&
     typeof value.reviewedAt === "string" &&
     isFiniteNumber(value.evidenceCount) &&

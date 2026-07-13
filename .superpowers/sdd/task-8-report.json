@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "sourceCommit": "edb3609d20eea7eb27a59f1a6d8dfcf9163048b9",
+  "sourceCommit": "d021d170bff5f8179ef95159a2bdcda7449840ea",
   "runtime": {
-    "parentNode": "v22.17.0",
-    "serverNode": "v22.17.0"
+    "parentNode": "v24.14.0",
+    "serverNode": "v24.14.0"
   },
   "capturedAt": "2026-07-13",
   "reviewedAt": "2026-07-13",
@@ -12,7 +12,7 @@
     "ev-access-start": {
       "route": "/login",
       "roleId": "core_staff_only",
-      "state": "The memory-mode sign-in form is ready for an approved staff identity.",
+      "state": "The production sign-in form is ready for an approved staff identity.",
       "control": {
         "id": "primary",
         "label": "Sign in",
@@ -20,76 +20,76 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-access-start-desktop.png",
-        "sha256": "23f0a049c781791b5ad639cf7c3b05d50787347055ba48e7d88a5eb95b1a59a7",
+        "sha256": "089084cc9d179f53a451fb34271399e6aefe5e1a642b3d674469703f6ba5cfeb",
         "width": 1440,
         "height": 900,
         "controlBounds": {
           "x": 517,
-          "y": 497.796875,
+          "y": 518.796875,
           "width": 406,
           "height": 44
         },
         "hotspot": {
           "x": 0.5,
-          "y": 0.5776
+          "y": 0.6009
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-access-start-mobile.png",
-        "sha256": "93df91c8c2dcb111183cf4bef0429e57684376c7c1f0b126e63504dd20d9611f",
+        "sha256": "8de6d4b0f42e90be807d24983bdc9d6b22db273dea4ef64ea2c83de751057842",
         "width": 390,
         "height": 844,
         "controlBounds": {
           "x": 33,
-          "y": 483.796875,
+          "y": 490.796875,
           "width": 324,
           "height": 44
         },
         "hotspot": {
           "x": 0.5,
-          "y": 0.5993
+          "y": 0.6076
         }
       }
     },
     "ev-access-fix": {
       "route": "/admin/users",
       "roleId": "platform_admin",
-      "state": "The platform administrator has opened Marco Reyes's scoped-role sheet to apply the minimum approved warehouse grant.",
+      "state": "The platform administrator has opened the disposable Intra Test Admin account to demonstrate a minimum approved warehouse grant.",
       "control": {
         "id": "primary",
         "label": "Grant scoped warehouse access",
-        "instruction": "Select only the approved scoped role for Marco Reyes, then verify the resulting access with a new session."
+        "instruction": "Select only the approved scoped role for the test account, then verify the resulting access with a new session."
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-access-fix-desktop.png",
-        "sha256": "09ad98028a2d2fcef14e9ca4c74bda5fe1b03213fc44705bda413b0cd2d02b12",
+        "sha256": "c027217ba38ebfc5ade612a55abfe85443d726efaf6c83129489eba91d026a02",
         "width": 1440,
         "height": 900,
         "controlBounds": {
-          "x": 1381.5,
-          "y": 567.5,
-          "width": 1,
-          "height": 1
+          "x": 1360,
+          "y": 471,
+          "width": 44,
+          "height": 44
         },
         "hotspot": {
           "x": 0.9597,
-          "y": 0.6311
+          "y": 0.5478
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-access-fix-mobile.png",
-        "sha256": "60780472208f09aeb801365b66f1d07fff61ebe366aef7efbd5ea61e32d373ec",
+        "sha256": "4586eabb8fde5c554bdd389ad0414aa5af615392ae6a52c5c8bb03e42189cd6c",
         "width": 390,
         "height": 844,
         "controlBounds": {
-          "x": 335.5,
-          "y": 545.5,
-          "width": 1,
-          "height": 1
+          "x": 314,
+          "y": 434,
+          "width": 44,
+          "height": 44
         },
         "hotspot": {
           "x": 0.8615,
-          "y": 0.6469
+          "y": 0.5403
         }
       }
     },
@@ -104,41 +104,41 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-p2p-start-desktop.png",
-        "sha256": "0149d5da3ed2aa726234ca3c65fa6c439b50319788346504ba590fa17d7b9031",
+        "sha256": "7d3e3fbd23902ac53803936f6e3d002f5376d7b3f2a8ae1fe3f939482cab852b",
         "width": 1440,
         "height": 900,
         "controlBounds": {
           "x": 1082.578125,
-          "y": 810,
+          "y": 681.890625,
           "width": 121.421875,
           "height": 44
         },
         "hotspot": {
           "x": 0.794,
-          "y": 0.9243
+          "y": 0.7821
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-p2p-start-mobile.png",
-        "sha256": "6fde5286ef55f69af7b1750f5bea8d082ed1fbb6d9bc8503dfc8578ca0b8184a",
+        "sha256": "63dcb9d7c8b66beba154ae18d76680b47db83bd3471a4d37a3242495623f059c",
         "width": 390,
         "height": 844,
         "controlBounds": {
           "x": 252.578125,
-          "y": 618.390625,
+          "y": 490.390625,
           "width": 121.421875,
           "height": 44
         },
         "hotspot": {
           "x": 0.8033,
-          "y": 0.7588
+          "y": 0.6071
         }
       }
     },
     "ev-p2p-rfq-evidence": {
-      "route": "/procurement/requests/req_seed_001",
+      "route": "/procurement/requests/new",
       "roleId": "procurement_officer",
-      "state": "The procurement officer has selected RFQ / Canvassing for the seeded request.",
+      "state": "The procurement officer has completed request intake and selected RFQ / Canvassing on Sourcing & review.",
       "control": {
         "id": "primary",
         "label": "Confirm RFQ route",
@@ -146,41 +146,41 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-p2p-rfq-evidence-desktop.png",
-        "sha256": "2bda25a4be62f6ad6f952b750ecc3526dd9bfc36d3a69c916e161045d1349c99",
+        "sha256": "1b8ebd9fd2d615d9bbcef8fa3b8a72216620ba4edf5626a66054517d9e868dea",
         "width": 1440,
         "height": 900,
         "controlBounds": {
           "x": 329,
-          "y": 340.390625,
+          "y": 473.390625,
           "width": 221.109375,
           "height": 44
         },
         "hotspot": {
           "x": 0.3052,
-          "y": 0.4027
+          "y": 0.5504
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-p2p-rfq-evidence-mobile.png",
-        "sha256": "cf095b4e9426d03fce3ca611ad1e50f8aba62fb10430e74a03d3248589c2ed5c",
+        "sha256": "42df10f9c2b5d5fe6d85608001a8bcb887f1c0817d18064522ed882bc8061a0e",
         "width": 390,
         "height": 844,
         "controlBounds": {
           "x": 33,
-          "y": 312.390625,
+          "y": 400.390625,
           "width": 221.109375,
           "height": 44
         },
         "hotspot": {
           "x": 0.3681,
-          "y": 0.3962
+          "y": 0.5005
         }
       }
     },
     "ev-p2p-rfp-evidence": {
-      "route": "/procurement/requests/req_seed_001",
+      "route": "/procurement/requests/new",
       "roleId": "procurement_officer",
-      "state": "The procurement officer has selected RFP / Bidding for the seeded request.",
+      "state": "The procurement officer has completed request intake and selected RFP / Bidding on Sourcing & review.",
       "control": {
         "id": "primary",
         "label": "Confirm RFP route",
@@ -188,34 +188,34 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-p2p-rfp-evidence-desktop.png",
-        "sha256": "a0769395735d68d1d641ce62361b9e6a3baae06ccbe5252e06bbc795348c8434",
+        "sha256": "b12424d0dfe0423fbd214cb95d558034c83ac67a23884a956e06c34d1702737e",
         "width": 1440,
         "height": 900,
         "controlBounds": {
           "x": 329,
-          "y": 340.390625,
+          "y": 473.390625,
           "width": 221.109375,
           "height": 44
         },
         "hotspot": {
           "x": 0.3052,
-          "y": 0.4027
+          "y": 0.5504
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-p2p-rfp-evidence-mobile.png",
-        "sha256": "2f0f4dddc03ad4e900b429c3be2137c7a24124023f969a31346de5d122fe85b0",
+        "sha256": "d1e8786b98e049a0a5df14923dec76fc2571ba46396104762793e273e1602e10",
         "width": 390,
         "height": 844,
         "controlBounds": {
           "x": 33,
-          "y": 312.390625,
+          "y": 400.390625,
           "width": 221.109375,
           "height": 44
         },
         "hotspot": {
           "x": 0.3681,
-          "y": 0.3962
+          "y": 0.5005
         }
       }
     },
@@ -230,125 +230,125 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-p2p-po-desktop.png",
-        "sha256": "00b549dc222263b2e7a412133dfb5edc162e373e67bb50121f7c5f5865df2952",
+        "sha256": "3932421d91fda4f410cd6843aca1e9272b5bc312160de92114a1bc5524c44550",
         "width": 1440,
         "height": 900,
         "controlBounds": {
           "x": 169,
-          "y": 279.390625,
+          "y": 473,
           "width": 235.96875,
           "height": 44
         },
         "hotspot": {
           "x": 0.1993,
-          "y": 0.3349
+          "y": 0.55
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-p2p-po-mobile.png",
-        "sha256": "8012c6d36558daf5601a1bc083555eed0c2e85452d9d077f6ead57e83240123e",
+        "sha256": "71642e135f38c3f4737e2bc89174e2fafebe524c34eb8878bff164136072f09c",
         "width": 390,
         "height": 844,
         "controlBounds": {
           "x": 41,
-          "y": 285.59375,
+          "y": 400,
           "width": 235.96875,
           "height": 44
         },
         "hotspot": {
           "x": 0.4077,
-          "y": 0.3644
+          "y": 0.5
         }
       }
     },
     "ev-p2p-receive": {
       "route": "/warehouse/purchase-orders",
       "roleId": "warehouse_procurement",
-      "state": "Warehouse procurement is reviewing seeded receivable purchase orders.",
+      "state": "Warehouse procurement has opened an ordered purchase order and is ready to start controlled receiving.",
       "control": {
         "id": "primary",
         "label": "Receive supply",
-        "instruction": "Open the receivable order and hand it to governed warehouse receiving."
+        "instruction": "Open the ordered purchase order and select Receive to record custody in inspection staging."
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-p2p-receive-desktop.png",
-        "sha256": "06bdf074d81fdef0701a0bba4a734afb0306e7cc9799ee1a862c94c484af05f6",
+        "sha256": "69a15f075014b72374e0dde53b03a9d9e9f1449548028db49b030ffbcae926df",
         "width": 1440,
         "height": 900,
         "controlBounds": {
-          "x": 615.640625,
-          "y": 578.796875,
-          "width": 205.359375,
+          "x": 872.390625,
+          "y": 548.5,
+          "width": 111.609375,
           "height": 44
         },
         "hotspot": {
-          "x": 0.4988,
-          "y": 0.6676
+          "x": 0.6446,
+          "y": 0.6339
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-p2p-receive-mobile.png",
-        "sha256": "b1042066042704f0eeec0d5a5759299f84b7ea2dfb7fa614564a1515ded86b71",
+        "sha256": "6a56b82e5e9571d209a1da5984b8bf5e91daf2e077cfb1f5bb51e704bddde6c0",
         "width": 390,
         "height": 844,
         "controlBounds": {
-          "x": 151.640625,
-          "y": 360.796875,
-          "width": 205.359375,
+          "x": 199,
+          "y": 772,
+          "width": 171,
           "height": 44
         },
         "hotspot": {
-          "x": 0.6521,
-          "y": 0.4536
+          "x": 0.7295,
+          "y": 0.9408
         }
       }
     },
     "ev-p2p-payment-pack": {
-      "route": "/procurement/purchase-orders/po_seed_006",
+      "route": "/procurement/purchase-orders/po_seed_001",
       "roleId": "procurement_finance",
-      "state": "Finance has opened the seeded closed PO and can inspect its full governed record beside the payment-readiness evidence.",
+      "state": "Finance is inspecting the approved seeded PO record and its upstream blockers before payment-readiness evidence can be assembled.",
       "control": {
         "id": "primary",
         "label": "Inspect full PO record",
-        "instruction": "Open the full PO record and review the receipt, acceptance, invoice, and amount match before deciding readiness."
+        "instruction": "Open the full PO record, then resolve approval, receipt, acceptance, invoice, and tax-evidence blockers before deciding readiness."
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-p2p-payment-pack-desktop.png",
-        "sha256": "2202a5d0fd0dbc7821c0547016b6e082b49f099cc784c9a7adabc7452423acb0",
+        "sha256": "419082e747510de440c262f72a6a5719e875625abe088dbd0b264450e8d71c2e",
         "width": 1440,
         "height": 900,
         "controlBounds": {
-          "x": 969.0625,
-          "y": 340.390625,
+          "x": 1096.90625,
+          "y": 473,
           "width": 44,
           "height": 44
         },
         "hotspot": {
-          "x": 0.6882,
-          "y": 0.4027
+          "x": 0.777,
+          "y": 0.55
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-p2p-payment-pack-mobile.png",
-        "sha256": "26fca246d1a9562ee09c64af50acf13b67dce02d2c5cb35cffd2d15131095433",
+        "sha256": "407e836e9c06967276f61997eafdda10755b7e3b7543c646b531c11ca7ebbd36",
         "width": 390,
         "height": 844,
         "controlBounds": {
           "x": 16,
-          "y": 312.390625,
+          "y": 400.390625,
           "width": 44,
           "height": 44
         },
         "hotspot": {
           "x": 0.0974,
-          "y": 0.3962
+          "y": 0.5005
         }
       }
     },
     "ev-vendor-start": {
       "route": "/legal/invites/new",
       "roleId": "legal_admin",
-      "state": "Legal administration is preparing a new masked demo vendor invitation.",
+      "state": "Legal administration is preparing a controlled documentation vendor invitation.",
       "control": {
         "id": "primary",
         "label": "Continue vendor invite",
@@ -356,41 +356,41 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-vendor-start-desktop.png",
-        "sha256": "7a6db117ceacfadf8987651c0bf300c54c2737b7f5a0068d515a831a4aec2f9e",
+        "sha256": "3e6a237b1bf5ff493c1b7489d31e3b6e497db82317831f8afd93976d66dfa882",
         "width": 1440,
         "height": 900,
         "controlBounds": {
           "x": 970.578125,
-          "y": 754.390625,
+          "y": 822.390625,
           "width": 121.421875,
           "height": 44
         },
         "hotspot": {
           "x": 0.7162,
-          "y": 0.8627
+          "y": 0.9382
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-vendor-start-mobile.png",
-        "sha256": "68c4901a2ef7e99372c020c6ee3bd70aa70b3ecfdb7822019030733b1453f5f6",
+        "sha256": "bccfc844464dab52f07abbbb20565bbac7d59ece921c1bfe6c04965abf2d3039",
         "width": 390,
         "height": 844,
         "controlBounds": {
           "x": 252.578125,
-          "y": 558.390625,
+          "y": 618.390625,
           "width": 121.421875,
           "height": 44
         },
         "hotspot": {
           "x": 0.8033,
-          "y": 0.6877
+          "y": 0.7588
         }
       }
     },
     "ev-vendor-apply": {
-      "route": "/vendor/cases/case_seed_001/application",
+      "route": "/vendor/cases/case_documentation_vendor_draft/application",
       "roleId": "vendor_portal",
-      "state": "The seeded vendor portal application is open for vendor-owned updates.",
+      "state": "The controlled documentation vendor application is open for vendor-owned updates.",
       "control": {
         "id": "primary",
         "label": "Save application draft",
@@ -398,7 +398,7 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-vendor-apply-desktop.png",
-        "sha256": "b11b423bf94d40413b92080cfcd3089c7c0927f3a4169f52cc07a3179552995d",
+        "sha256": "83781635fcf6fbd4bfb3216dee56bfa48cf57593b91453a66c6d05c69e4f76b7",
         "width": 1440,
         "height": 900,
         "controlBounds": {
@@ -414,7 +414,7 @@
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-vendor-apply-mobile.png",
-        "sha256": "ef5e5c2039dc0c6b6452e4459569c08f90c170f785791eabb5719126c27fcef3",
+        "sha256": "f8f7d986171f1317625b70cd500c5b7baa05b936f773596d4f636eaa35dacecc",
         "width": 390,
         "height": 844,
         "controlBounds": {
@@ -440,34 +440,34 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-setup-start-desktop.png",
-        "sha256": "025f7fd80cd7164587e5dfdf83e8f919c2c39236780e5eab8efd41f5ffc2433f",
+        "sha256": "8e2e8b51d329e26b2fe9234dcd661afa96746f645b888d47e7636232a8847c53",
         "width": 1440,
         "height": 900,
         "controlBounds": {
           "x": 296,
-          "y": 203.796875,
+          "y": 473,
           "width": 1104,
           "height": 44
         },
         "hotspot": {
           "x": 0.5889,
-          "y": 0.2509
+          "y": 0.55
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-setup-start-mobile.png",
-        "sha256": "d20d2b47c8f2e3abd59cffea28011bc78ac6405b6f5b15b30d9a099b9c063303",
+        "sha256": "49ade1c281f8c6e5b7dd198957a3a8982c7fb6fbd03452596fb91da885e189aa",
         "width": 390,
         "height": 844,
         "controlBounds": {
           "x": 16,
-          "y": 259.796875,
+          "y": 400,
           "width": 358,
           "height": 44
         },
         "hotspot": {
           "x": 0.5,
-          "y": 0.3339
+          "y": 0.5
         }
       }
     },
@@ -482,7 +482,7 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-setup-area-desktop.png",
-        "sha256": "40f855f0688aa7c9fafd9061b545b64ccb07ddaa835cef0452d922f62a02b27c",
+        "sha256": "725013d9809ca199b5eac4505e519f1839accfe4bbf2b4adc3a2501765bd7da9",
         "width": 1440,
         "height": 900,
         "controlBounds": {
@@ -498,7 +498,7 @@
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-setup-area-mobile.png",
-        "sha256": "d94b62b85b2563f9a29b09e49b5caab8f3009f30d73b39ca66d50573576a5b7c",
+        "sha256": "372500a97cc28eaa24740ced0a3817260e0eeba26d712a26fe55e15549c7a8d4",
         "width": 390,
         "height": 844,
         "controlBounds": {
@@ -524,7 +524,7 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-setup-bin-desktop.png",
-        "sha256": "9963bcebf926125e8301b7d7f969267ee7c1b4eaad6a60c31a15dd2b9afb8ad6",
+        "sha256": "d63263de27cab9f17209506364f16fb996b0eefda2176163a3b50638fa9d1149",
         "width": 1440,
         "height": 900,
         "controlBounds": {
@@ -540,7 +540,7 @@
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-setup-bin-mobile.png",
-        "sha256": "11646c2b94bbb3f63b143bd9785c27d78545753cff4f79b6e474d03e2c5aafbe",
+        "sha256": "74e8fe4389652f921e12b64ff0add438874c2076bc441b97d7576e97e6855d4a",
         "width": 390,
         "height": 844,
         "controlBounds": {
@@ -566,7 +566,7 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-setup-route-desktop.png",
-        "sha256": "14f7d0d6988db7bcc2501743e5ef579ab0c1e9d85e41b16b5dff4d7b69855f5f",
+        "sha256": "aa644ea27e99e549d97afbc3a050511aef0f079b8ed0a77150a77df336c7a796",
         "width": 1440,
         "height": 900,
         "controlBounds": {
@@ -582,7 +582,7 @@
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-setup-route-mobile.png",
-        "sha256": "fcba798e39081f3672705977bf74780b83a1870c96f50cc1cd322bb078c40200",
+        "sha256": "1c355dbeb5df43f327d56fae59aac7b047b0f2738f5441dbac43ccbc0cf67829",
         "width": 390,
         "height": 844,
         "controlBounds": {
@@ -608,34 +608,34 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-receive-start-desktop.png",
-        "sha256": "f36b6bb6c990561c0ab8de7102c3cd9bdc9431135442725c2d4987d583b34096",
+        "sha256": "71ec3092e3e765cb61efe52c0a48d3f4cde4c54772b3f9529f21f98f886d56e8",
         "width": 1440,
         "height": 900,
         "controlBounds": {
           "x": 296,
-          "y": 281.796875,
+          "y": 415,
           "width": 546,
           "height": 160
         },
         "hotspot": {
           "x": 0.3951,
-          "y": 0.402
+          "y": 0.55
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-receive-start-mobile.png",
-        "sha256": "76729fb457d77c2975194a76871470648e8e12aefc36c24d1093c586065444c4",
+        "sha256": "97cca1d881601271bec32f84fe8e8240f13576b503ed62114418b8d78c51960e",
         "width": 390,
         "height": 844,
         "controlBounds": {
           "x": 16,
-          "y": 306.796875,
+          "y": 346,
           "width": 358,
           "height": 152
         },
         "hotspot": {
           "x": 0.5,
-          "y": 0.4536
+          "y": 0.5
         }
       }
     },
@@ -650,34 +650,34 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-receive-record-desktop.png",
-        "sha256": "10d4efba0da33c2b2ae4c01fbab14abbcd6778a4ce3f122a8f4a56826888de0b",
+        "sha256": "6b4ad5833165c0c19b1f6589936c3801c262cdff8537591ac53d54c5cf0ace69",
         "width": 1440,
         "height": 900,
         "controlBounds": {
           "x": 485,
-          "y": 339.796875,
+          "y": 473,
           "width": 334,
           "height": 44
         },
         "hotspot": {
           "x": 0.4528,
-          "y": 0.402
+          "y": 0.55
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-receive-record-mobile.png",
-        "sha256": "e53018288625098ddf3b5f35f7078b89b6f3f36bca6fbbbe5b92fd82d9e910a7",
+        "sha256": "c7badb41d5a7c253e839275753171a162d83c6f3a58d08c2efb25805f202c403",
         "width": 390,
         "height": 844,
         "controlBounds": {
           "x": 33,
-          "y": 312.296875,
+          "y": 400,
           "width": 324,
           "height": 44
         },
         "hotspot": {
           "x": 0.5,
-          "y": 0.3961
+          "y": 0.5
         }
       }
     },
@@ -692,7 +692,7 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-receive-putaway-desktop.png",
-        "sha256": "abffce2c8ae49a0bcc5369257c5c81a3ce43f9cabfad4eec17e1ff56eab4bfe5",
+        "sha256": "5ff3cc8ea407e62407e316a3703f91967e17a96eb62b59bb2aae0173134fe45a",
         "width": 1440,
         "height": 900,
         "controlBounds": {
@@ -708,7 +708,7 @@
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-receive-putaway-mobile.png",
-        "sha256": "338dfd571e442233b75dad8d7b0bd506c00729b880cfb056b9c15e434766ba6e",
+        "sha256": "5ce13f9ec411ddd9367dcd0be1323594c370365c58c730d143803acb7e519a0d",
         "width": 390,
         "height": 844,
         "controlBounds": {
@@ -734,34 +734,34 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-quality-start-desktop.png",
-        "sha256": "c73b61c83cce3aded2a046ee15ef0abf2ef158de1d77fd6a16d93caed07d6e15",
+        "sha256": "c1a19bf14a31473641339b4419ace8d0f127828b3d6249c48d63955ffdf9a255",
         "width": 1440,
         "height": 900,
         "controlBounds": {
           "x": 1310,
-          "y": 273.796875,
+          "y": 473,
           "width": 73,
           "height": 44
         },
         "hotspot": {
           "x": 0.9351,
-          "y": 0.3287
+          "y": 0.55
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-quality-start-mobile.png",
-        "sha256": "2ad1ee9d72ca4416e1f73a76cf9112f3edf447f476372e9404c3a78dfae869e7",
+        "sha256": "04da7904af220181e1b8e187018e0254aa642b2aa5e886e3f0b48941a5756cf8",
         "width": 390,
         "height": 844,
         "controlBounds": {
           "x": 33,
-          "y": 341.796875,
+          "y": 400,
           "width": 324,
           "height": 44
         },
         "hotspot": {
           "x": 0.5,
-          "y": 0.431
+          "y": 0.5
         }
       }
     },
@@ -776,7 +776,7 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-quality-release-desktop.png",
-        "sha256": "6b86afd03ca23b4c8098ece6a23bdf6d9dd6c75462bbc091b03059f8a6faa012",
+        "sha256": "b08cb533e42b7fec0c4424d9587ab6e9d018733d3f70c5ea6ec310c55027b978",
         "width": 1440,
         "height": 900,
         "controlBounds": {
@@ -792,7 +792,7 @@
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-quality-release-mobile.png",
-        "sha256": "9238348bae2e6d5485a718f1c9398724b028e4c7d4fc49d2c1339675b575d026",
+        "sha256": "a2f102017be03d4828e82c4e61f85aa03dc931c4add02c1511c9b9aa8fbab5a3",
         "width": 390,
         "height": 844,
         "controlBounds": {
@@ -818,34 +818,34 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-quality-return-desktop.png",
-        "sha256": "79ca2c068b3211cb7aaac57c5f48d10fa1430e72e8651ca9ca4430388c1c5c40",
+        "sha256": "7fe6b07d0b9cadf35d46e95d5bac7ccb08a829d019e175bd2f010429604c3b2c",
         "width": 1440,
         "height": 900,
         "controlBounds": {
           "x": 1228.765625,
-          "y": 189.796875,
+          "y": 473,
           "width": 154.234375,
           "height": 44
         },
         "hotspot": {
           "x": 0.9069,
-          "y": 0.2353
+          "y": 0.55
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-quality-return-mobile.png",
-        "sha256": "8a47c1c3d34c7707e6abd2a9f20d3880744b3fe4a6429bd5f5f3d9b651252b72",
+        "sha256": "98275f0e75082af3847b84a1105f58f6bfd645a8595d35d2f6b9abeede8eebbc",
         "width": 390,
         "height": 844,
         "controlBounds": {
           "x": 33,
-          "y": 305.796875,
+          "y": 400,
           "width": 324,
           "height": 44
         },
         "hotspot": {
           "x": 0.5,
-          "y": 0.3884
+          "y": 0.5
         }
       }
     },
@@ -860,34 +860,34 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-event-fulfillment-start-desktop.png",
-        "sha256": "800b0d1f3354a96de59ac9910eb724bd8bd04e41b68a8ed8baaa7e86d871c54d",
+        "sha256": "fc3ba5cd9008318bae56c66ee0f92329848fe55c5312523681be14e3e45e0ec9",
         "width": 1440,
         "height": 900,
         "controlBounds": {
           "x": 1282.890625,
-          "y": 89,
+          "y": 473,
           "width": 117.109375,
           "height": 44
         },
         "hotspot": {
           "x": 0.9316,
-          "y": 0.1233
+          "y": 0.55
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-event-fulfillment-start-mobile.png",
-        "sha256": "2d79b5e0502e24a8283fe84407a3ec6c3e6001d178e5952f0e625d5c467972a3",
+        "sha256": "d510d8be8ceccce061b7f55c5980ca1582dc38762b6e08f83a7ff7b6731cbe21",
         "width": 390,
         "height": 844,
         "controlBounds": {
           "x": 16,
-          "y": 151.796875,
+          "y": 400,
           "width": 117.109375,
           "height": 44
         },
         "hotspot": {
           "x": 0.1912,
-          "y": 0.2059
+          "y": 0.5
         }
       }
     },
@@ -902,34 +902,34 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-event-issue-desktop.png",
-        "sha256": "dd85db40457e72dffc59d09815eb0749d2e22209d057c768710e9fb6a50f6629",
+        "sha256": "572ca3f0a1a6fbe2ad8840476bcd69c04ee8860f5cdebe1404bdea9a44d29e18",
         "width": 1440,
         "height": 900,
         "controlBounds": {
-          "x": 773.59375,
-          "y": 355.796875,
+          "x": 1308.59375,
+          "y": 473,
           "width": 58.40625,
           "height": 44
         },
         "hotspot": {
-          "x": 0.5575,
-          "y": 0.4198
+          "x": 0.929,
+          "y": 0.55
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-event-issue-mobile.png",
-        "sha256": "d01c171d128b76a8d3b2f521a01cdc3f705738ad99877c32a57e1580ac0d6cd4",
+        "sha256": "e5163c6c026b0326e8b3a1cc863beb51903d35f1f64161b9eaf24b776149b61f",
         "width": 390,
         "height": 844,
         "controlBounds": {
           "x": 286.59375,
-          "y": 360.796875,
+          "y": 400,
           "width": 58.40625,
           "height": 44
         },
         "hotspot": {
           "x": 0.8097,
-          "y": 0.4536
+          "y": 0.5
         }
       }
     },
@@ -944,34 +944,34 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-return-start-desktop.png",
-        "sha256": "ce47b4c0950ffe899e61600d3a6bf36f0095fc3497d76229fc3f68b82ced2939",
+        "sha256": "927f8d449a6d14f66aafe9746e5b3dac2ca9c11bcf6bda8ca370e936dce42260",
         "width": 1440,
         "height": 900,
         "controlBounds": {
           "x": 574,
-          "y": 310.796875,
+          "y": 473,
           "width": 245,
           "height": 44
         },
         "hotspot": {
           "x": 0.4837,
-          "y": 0.3698
+          "y": 0.55
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-return-start-mobile.png",
-        "sha256": "4d0b6e26b1847afc1334ae173ecac1ef2258e01aa37f0f8658be7fd2c2bc5cd3",
+        "sha256": "dfbeca5e90daabe764982abd9b873d97a97067ae1cf74750a47549e3ae973447",
         "width": 390,
         "height": 844,
         "controlBounds": {
           "x": 33,
-          "y": 311.796875,
+          "y": 400,
           "width": 324,
           "height": 44
         },
         "hotspot": {
           "x": 0.5,
-          "y": 0.3955
+          "y": 0.5
         }
       }
     },
@@ -986,7 +986,7 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-return-restock-desktop.png",
-        "sha256": "e6cb61caa7c1610c588b6036af7426f7e8ba68a52bae76b481df0d58b58e25f6",
+        "sha256": "d352378b2ee11de01b4ad3c9cbaaabd6c1ed36a43ed0612fd25820294b2cbb24",
         "width": 1440,
         "height": 900,
         "controlBounds": {
@@ -1002,18 +1002,18 @@
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-return-restock-mobile.png",
-        "sha256": "4a2f976c9fd9a3b6e313f305ba312ab8ff6e8918fe66b5319240a5092b657037",
+        "sha256": "1081c0ae4892157412b9682cb5f01bc8e5e24739a2ff911cee39f55b1429bf93",
         "width": 390,
         "height": 844,
         "controlBounds": {
           "x": 33,
-          "y": 311.796875,
+          "y": 400,
           "width": 324,
           "height": 44
         },
         "hotspot": {
           "x": 0.5,
-          "y": 0.3955
+          "y": 0.5
         }
       }
     },
@@ -1028,7 +1028,7 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-return-quarantine-desktop.png",
-        "sha256": "10e5098075cd49516995e807a89c7b113e563521b3b67b4c5f95e14232789c8b",
+        "sha256": "411c83062ddac9002d822f47796e63f6bd516f9d1955e524741b73541a63e2d6",
         "width": 1440,
         "height": 900,
         "controlBounds": {
@@ -1044,7 +1044,7 @@
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-return-quarantine-mobile.png",
-        "sha256": "cd6ad2e8f42269326d1d8419003dc3d15fb3a821b332ddb3ff2fcc8a439455e5",
+        "sha256": "fcd9458e755164cc3e5ac0221f635d785a2eead224ab48236d97510b2c5d00c1",
         "width": 390,
         "height": 844,
         "controlBounds": {
@@ -1070,7 +1070,7 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-return-adjustment-handoff-desktop.png",
-        "sha256": "8ac2e748af89855d46231e1cd46a8b70dd9f171bd3637cd9d2fea946daeaa6bc",
+        "sha256": "57f1f085e2fb7b10e76d1294424ecee0ac2cb35d513d2bf07d2928e18bbc6d52",
         "width": 1440,
         "height": 900,
         "controlBounds": {
@@ -1086,7 +1086,7 @@
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-return-adjustment-handoff-mobile.png",
-        "sha256": "1cb521332d7199021c7d7d06e267b7ffde94b9d4db0db02db066e9917267ab2c",
+        "sha256": "ba694804e6d7b83dba3556fd3a3262f544a8870a1a832e22a30c83a0d4c1adc1",
         "width": 390,
         "height": 844,
         "controlBounds": {
@@ -1112,34 +1112,34 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-count-start-desktop.png",
-        "sha256": "8cfa6b0b9690efc0c5d9ca5cb2b73af697016eef0b9ce9f1b72b738567dce413",
+        "sha256": "93d33a02b33acfe8c1a60d1c14981006ff7bd15af8d5c79e596a25472417049b",
         "width": 1440,
         "height": 900,
         "controlBounds": {
           "x": 317,
-          "y": 224.796875,
+          "y": 473,
           "width": 525,
           "height": 44
         },
         "hotspot": {
           "x": 0.4024,
-          "y": 0.2742
+          "y": 0.55
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-count-start-mobile.png",
-        "sha256": "15e042a9cf45c47998e748d6d64e116a107ccf5bc357b08f9dcbd3b7eb5ed6f0",
+        "sha256": "dab735c5b6d2e72010d73ba03f1b03e3f9b47d87fbdb42aa6b9336e3e5817733",
         "width": 390,
         "height": 844,
         "controlBounds": {
           "x": 33,
-          "y": 220.796875,
+          "y": 400,
           "width": 324,
           "height": 44
         },
         "hotspot": {
           "x": 0.5,
-          "y": 0.2877
+          "y": 0.5
         }
       }
     },
@@ -1154,7 +1154,7 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-count-enter-desktop.png",
-        "sha256": "58073de371420106b0a4a9601dcd129754ce735231f5303810c2a8945cc01949",
+        "sha256": "5d3ea9919ceb7a52197405bbceabc2026c6ab4c611995b2e15c351e49d80d086",
         "width": 1440,
         "height": 900,
         "controlBounds": {
@@ -1170,18 +1170,18 @@
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-count-enter-mobile.png",
-        "sha256": "cbe95d63c1527c7e208d03673fbaddc5b131e1e1581361918eb3e14e60302b80",
+        "sha256": "7c28064908f7cf29b8675c130d2087fa7cfd887cfe140925ea222c11fba06320",
         "width": 390,
         "height": 844,
         "controlBounds": {
           "x": 248,
-          "y": 388.796875,
+          "y": 400,
           "width": 96,
           "height": 44
         },
         "hotspot": {
           "x": 0.759,
-          "y": 0.4867
+          "y": 0.5
         }
       }
     },
@@ -1196,23 +1196,23 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-count-investigate-desktop.png",
-        "sha256": "05a61eddca13997ef8e3242ba62d6ed01a8bc229b9c6409d59cd5efc76f99c20",
+        "sha256": "c07cd6fa1e55315f7ade5acf0a572ee0f1478bfd806b9208ce4d236cf370d1db",
         "width": 1440,
         "height": 900,
         "controlBounds": {
           "x": 439.71875,
-          "y": 339.796875,
+          "y": 472.796875,
           "width": 137.140625,
           "height": 44
         },
         "hotspot": {
           "x": 0.353,
-          "y": 0.402
+          "y": 0.5498
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-count-investigate-mobile.png",
-        "sha256": "ccfbefc7dcb8628bd63bb0e86969341ab109c5fa019851e200d538c7f21e6fc4",
+        "sha256": "b1fff8a4b0554a28636ff1d9af434c583dee833400006d2d548f8485186ead8c",
         "width": 390,
         "height": 844,
         "controlBounds": {
@@ -1230,7 +1230,7 @@
     "ev-count-post": {
       "route": "/warehouse/approvals",
       "roleId": "warehouse_admin",
-      "state": "The warehouse administrator has approved the deterministic stock change and the cycle-count adjustment is posted.",
+      "state": "The warehouse administrator is opening decision history to verify whether supported cycle-count adjustments have posted.",
       "control": {
         "id": "primary",
         "label": "Review posted adjustment",
@@ -1238,107 +1238,107 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-count-post-desktop.png",
-        "sha256": "910701e0d9400e2e15e8a87685af6bf0a6531ee0c199835d53518cde088e5cc1",
+        "sha256": "232c2622253cbdc6bed10373fe4aa66e3a760e6db89d53ee71986e17fc900fa3",
         "width": 1440,
         "height": 900,
         "controlBounds": {
           "x": 1033.328125,
-          "y": 196.796875,
+          "y": 473,
           "width": 362.671875,
           "height": 44
         },
         "hotspot": {
           "x": 0.8435,
-          "y": 0.2431
+          "y": 0.55
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-count-post-mobile.png",
-        "sha256": "9bcd0a75cb2a8c3f24015169a3cb44d0c126c1e86eddab75232251b9e3214016",
+        "sha256": "3baa77284d09c48babe79b94efc3f84f83fa91f6e8173a30525e71c076b137ff",
         "width": 390,
         "height": 844,
         "controlBounds": {
           "x": 256,
-          "y": 216.796875,
+          "y": 394,
           "width": 114,
           "height": 56
         },
         "hotspot": {
           "x": 0.8026,
-          "y": 0.29
+          "y": 0.5
         }
       }
     },
     "ev-admin-start": {
       "route": "/admin/users",
       "roleId": "platform_admin",
-      "state": "The platform administrator is reviewing the seeded user register before opening a named access request.",
+      "state": "The platform administrator is reviewing the live user register before opening a controlled test account.",
       "control": {
         "id": "primary",
-        "label": "Manage named user",
-        "instruction": "Open Marco Reyes's record and compare the requested scope with current assignments before making a change."
+        "label": "Manage test account",
+        "instruction": "Open Intra Test Admin and compare the requested scope with current assignments before making a change."
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-admin-start-desktop.png",
-        "sha256": "b098e3997833fdc67110f3a4b01c505019754a9c92e572a4960058ebbf6d3d33",
+        "sha256": "ec23fc929d8f45b2b88926dbb2b5f40a8417a1c2966d77a61c0aa4b8ca184867",
         "width": 1440,
         "height": 900,
         "controlBounds": {
           "x": 1239.25,
-          "y": 124.390625,
+          "y": 473.390625,
           "width": 102.75,
           "height": 44
         },
         "hotspot": {
           "x": 0.8963,
-          "y": 0.1627
+          "y": 0.5504
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-admin-start-mobile.png",
-        "sha256": "ec0d53ea74e857fb50eb9145dca15f1d037985e9d6d40360b986b1098fcce5ea",
+        "sha256": "03774021f596d0d5aec7394a61ec7afb2526235113a9c9e9b1829440e3a3ea81",
         "width": 390,
         "height": 844,
         "controlBounds": {
           "x": 239.25,
-          "y": 484.59375,
+          "y": 399.59375,
           "width": 102.75,
           "height": 44
         },
         "hotspot": {
           "x": 0.7452,
-          "y": 0.6
+          "y": 0.4995
         }
       }
     },
     "ev-admin-activate": {
       "route": "/warehouse/operation-routes",
       "roleId": "warehouse_admin",
-      "state": "The warehouse administrator has enabled the seeded controlled alternate receiving route and is ready to save it.",
+      "state": "The warehouse administrator has opened a seeded operation route, verified that it remains active, and is ready to save the governed settings.",
       "control": {
         "id": "primary",
         "label": "Activate warehouse operation route",
-        "instruction": "After deliberately enabling Active, save the validated warehouse route so it becomes available for governed receiving."
+        "instruction": "Verify the evidence, approval, online, and Active settings, then save the validated operation route deliberately."
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-admin-activate-desktop.png",
-        "sha256": "24e4b93e5c289729fef664cc0914d6641ba6fc27ab69654a904427b7e7965c6c",
+        "sha256": "8a463013fa4094e2e9fa78a80d4a33a4a2323236c2646e8667d8aa022683fe7e",
         "width": 1440,
         "height": 900,
         "controlBounds": {
           "x": 840,
-          "y": 670.5,
+          "y": 688.5,
           "width": 144,
           "height": 44
         },
         "hotspot": {
           "x": 0.6333,
-          "y": 0.7694
+          "y": 0.7894
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-admin-activate-mobile.png",
-        "sha256": "9178fe52367dc2c1b86613c8adddb1bb3372fa7bd3ba713638cb4a0211e7a5ce",
+        "sha256": "513621c776d88a4e8a196eb2683873f04c1aec8f402f27eae2d19043b7243085",
         "width": 390,
         "height": 844,
         "controlBounds": {
@@ -1364,34 +1364,34 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-allocation-start-desktop.png",
-        "sha256": "d9f372f5c5a8f538fe6820d1abfb6116f23cb61e265731aaca8e3dd05dcbe2e3",
+        "sha256": "2338ec3bc2fad7710b209c03ce9e6fceb81a3cfe82b8b973309717230e88d64e",
         "width": 1440,
         "height": 900,
         "controlBounds": {
           "x": 1299.46875,
-          "y": 89,
+          "y": 473,
           "width": 100.53125,
           "height": 44
         },
         "hotspot": {
           "x": 0.9373,
-          "y": 0.1233
+          "y": 0.55
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-allocation-start-mobile.png",
-        "sha256": "821cc94cc2d6988bff5e9688e73f70f1375e2929b89813c36a4bdfa100117ac6",
+        "sha256": "f13c26273891d8babfa879034d91ab96e220721ab9b8cacbf962fd5575df71d8",
         "width": 390,
         "height": 844,
         "controlBounds": {
           "x": 16,
-          "y": 171.796875,
+          "y": 400,
           "width": 100.53125,
           "height": 44
         },
         "hotspot": {
           "x": 0.1699,
-          "y": 0.2296
+          "y": 0.5
         }
       }
     },
@@ -1406,34 +1406,34 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-allocation-reserve-desktop.png",
-        "sha256": "6e3595ac8694dfa23401aa60fe545df67b2dd56f93bf6f0501204c40608e213d",
+        "sha256": "0dd94e838b13fb1575e55dd70bfb282ba34a58bd5f03c80ace6ded8917e33d40",
         "width": 1440,
         "height": 900,
         "controlBounds": {
           "x": 773.59375,
-          "y": 355.8125,
+          "y": 473,
           "width": 58.40625,
           "height": 44
         },
         "hotspot": {
           "x": 0.5575,
-          "y": 0.4198
+          "y": 0.55
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-allocation-reserve-mobile.png",
-        "sha256": "6ad891911c2e2153a810680da56db9a43a8532383f48646121ee56d0cfe6436c",
+        "sha256": "88550c8399a9880be9fb6e93edea29eb2efed7df1ca1c7604df0f092ce2a2ab7",
         "width": 390,
         "height": 844,
         "controlBounds": {
           "x": 286.59375,
-          "y": 360.796875,
+          "y": 403.796875,
           "width": 58.40625,
           "height": 44
         },
         "hotspot": {
           "x": 0.8097,
-          "y": 0.4536
+          "y": 0.5045
         }
       }
     },
@@ -1448,34 +1448,34 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-price-start-desktop.png",
-        "sha256": "1766522cb4c078d04c57cebc8e3199deda6cb44d9ba4c70ad0a19927c822aa2d",
+        "sha256": "aa68e1d61210ea0c2a2faaee6fe764e11c185bf07a0cf049ca341fa8c8041df3",
         "width": 1440,
         "height": 900,
         "controlBounds": {
           "x": 317,
-          "y": 436.796875,
+          "y": 472.796875,
           "width": 1062,
           "height": 44
         },
         "hotspot": {
           "x": 0.5889,
-          "y": 0.5098
+          "y": 0.5498
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-price-start-mobile.png",
-        "sha256": "b74cc2d5fb9ae7026885740ffaf35c5c686634071889d774defaf6b476cdc01f",
+        "sha256": "d10cef3e0ca3c19533f5d436c79f365116e6b32281c1f0842a00bbfb878fbc02",
         "width": 390,
         "height": 844,
         "controlBounds": {
           "x": 33,
-          "y": 360.796875,
+          "y": 400,
           "width": 324,
           "height": 44
         },
         "hotspot": {
           "x": 0.5,
-          "y": 0.4536
+          "y": 0.5
         }
       }
     },
@@ -1490,7 +1490,7 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-doa-start-desktop.png",
-        "sha256": "e73868748cb49930715f5fb32d948784d15ad3195d96149fd150127660787b06",
+        "sha256": "2eba817d00bc9bffb5377a1b21729c484ce26a753252de7ea64935f9b4a4de36",
         "width": 1440,
         "height": 900,
         "controlBounds": {
@@ -1506,18 +1506,18 @@
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-doa-start-mobile.png",
-        "sha256": "86946eb5bc0143e3019748bf0a50f3d2c2ea19a42c63685a4de0e970b4cb4bb3",
+        "sha256": "2e0096f9565fb62590cb6fc7baa0374d1f77f7860a869078010a371cce4b7c06",
         "width": 390,
         "height": 844,
         "controlBounds": {
           "x": 272.55645751953125,
-          "y": 320.1187438964844,
+          "y": 407.7750244140625,
           "width": 66.953125,
-          "height": 28.593780517578125
+          "height": 28.59375
         },
         "hotspot": {
           "x": 0.7847,
-          "y": 0.3962
+          "y": 0.5001
         }
       }
     },
@@ -1532,41 +1532,41 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-doa-activate-desktop.png",
-        "sha256": "d556546a9a5930320d3d2dd57b2ad1c70c18908b4b6f2b8a5f1a6f38ccc2e801",
+        "sha256": "a5d8516552dc90036cf6cbdc2eb6471b8820770fb8d970b3b7d2885680c7cdab",
         "width": 1440,
         "height": 900,
         "controlBounds": {
-          "x": 295.5,
-          "y": 340.390625,
+          "x": 710.15625,
+          "y": 473,
           "width": 81.46875,
           "height": 44
         },
         "hotspot": {
-          "x": 0.2335,
-          "y": 0.4027
+          "x": 0.5215,
+          "y": 0.55
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-doa-activate-mobile.png",
-        "sha256": "a84eacd1baf300ff784a7b540824a3986e82cf7e2ccea7ecb7833dbbd027666d",
+        "sha256": "5aed7600cf6d32f0b11ee775ea387858763fd2995b70a415519b4f44906fa262",
         "width": 390,
         "height": 844,
         "controlBounds": {
           "x": 33,
-          "y": 312.390625,
+          "y": 400.390625,
           "width": 324,
           "height": 44
         },
         "hotspot": {
           "x": 0.5,
-          "y": 0.3962
+          "y": 0.5005
         }
       }
     },
     "ev-recover-start": {
       "route": "/login",
       "roleId": "core_staff_only",
-      "state": "The memory-mode sign-in form shows a masked incomplete retry after a workflow access failure.",
+      "state": "The production sign-in form shows a masked incomplete retry after a workflow access failure.",
       "control": {
         "id": "primary",
         "label": "Review failed attempt",
@@ -1574,41 +1574,41 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-recover-start-desktop.png",
-        "sha256": "3080fcc4e6ca5f22450b40a0c9c17c4ceba156e839dfa0d473fa4e66d4b05eb2",
+        "sha256": "bffa7aa1d4b804f2ef770de0deafd6df9b9177bf50cd2b0689cf306ebd60e095",
         "width": 1440,
         "height": 900,
         "controlBounds": {
           "x": 517,
-          "y": 437.796875,
+          "y": 465.890625,
           "width": 406,
           "height": 44
         },
         "hotspot": {
           "x": 0.5,
-          "y": 0.5109
+          "y": 0.5421
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-recover-start-mobile.png",
-        "sha256": "cd1e776e1add375208a835b7bbed397e5f6222fe136b45c5248275ea97935555",
+        "sha256": "e5e887b667dc5f5434c483e39a4308881e4ea4d0d93568c673ff728f1dea605b",
         "width": 390,
         "height": 844,
         "controlBounds": {
           "x": 33,
-          "y": 423.796875,
+          "y": 430.796875,
           "width": 324,
           "height": 44
         },
         "hotspot": {
           "x": 0.5,
-          "y": 0.5282
+          "y": 0.5365
         }
       }
     },
     "ev-recover-retry": {
       "route": "/login",
       "roleId": "core_staff_only",
-      "state": "The memory-mode sign-in form contains masked corrected credentials ready for one retry.",
+      "state": "The production sign-in form contains masked corrected credentials ready for one retry.",
       "control": {
         "id": "primary",
         "label": "Retry once",
@@ -1616,34 +1616,34 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-recover-retry-desktop.png",
-        "sha256": "4abf26ff8b09bc984165890fce839af191b39049d368e70db745385f9f024ba3",
+        "sha256": "d794f13350d360e7f0956e5430fad2137ccad4938c92cc47c2c23878deb2429f",
         "width": 1440,
         "height": 900,
         "controlBounds": {
           "x": 517,
-          "y": 497.796875,
+          "y": 518.796875,
           "width": 406,
           "height": 44
         },
         "hotspot": {
           "x": 0.5,
-          "y": 0.5776
+          "y": 0.6009
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-recover-retry-mobile.png",
-        "sha256": "c57800a561ef738c9fa123344a5441c2c88168b52d8f5a4f7a283f6806251c36",
+        "sha256": "f6c154ee605c7da53e19f4f0cc47bb67f36d5b93e9949eaee5f539762e02b45f",
         "width": 390,
         "height": 844,
         "controlBounds": {
           "x": 33,
-          "y": 483.796875,
+          "y": 490.796875,
           "width": 324,
           "height": 44
         },
         "hotspot": {
           "x": 0.5,
-          "y": 0.5993
+          "y": 0.6076
         }
       }
     }

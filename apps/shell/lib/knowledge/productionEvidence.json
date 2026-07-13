@@ -1,0 +1,397 @@
+{
+  "sourceCommit": "d021d170bff5f8179ef95159a2bdcda7449840ea",
+  "capturedAt": "2026-07-13",
+  "reviewedAt": "2026-07-13",
+  "hotspots": {
+    "ev-access-start": {
+      "desktop": {
+        "x": 0.5,
+        "y": 0.6009
+      },
+      "mobile": {
+        "x": 0.5,
+        "y": 0.6076
+      }
+    },
+    "ev-access-fix": {
+      "desktop": {
+        "x": 0.9597,
+        "y": 0.5478
+      },
+      "mobile": {
+        "x": 0.8615,
+        "y": 0.5403
+      }
+    },
+    "ev-p2p-start": {
+      "desktop": {
+        "x": 0.794,
+        "y": 0.7821
+      },
+      "mobile": {
+        "x": 0.8033,
+        "y": 0.6071
+      }
+    },
+    "ev-p2p-rfq-evidence": {
+      "desktop": {
+        "x": 0.3052,
+        "y": 0.5504
+      },
+      "mobile": {
+        "x": 0.3681,
+        "y": 0.5005
+      }
+    },
+    "ev-p2p-rfp-evidence": {
+      "desktop": {
+        "x": 0.3052,
+        "y": 0.5504
+      },
+      "mobile": {
+        "x": 0.3681,
+        "y": 0.5005
+      }
+    },
+    "ev-p2p-po": {
+      "desktop": {
+        "x": 0.1993,
+        "y": 0.55
+      },
+      "mobile": {
+        "x": 0.4077,
+        "y": 0.5
+      }
+    },
+    "ev-p2p-receive": {
+      "desktop": {
+        "x": 0.6446,
+        "y": 0.6339
+      },
+      "mobile": {
+        "x": 0.7295,
+        "y": 0.9408
+      }
+    },
+    "ev-p2p-payment-pack": {
+      "desktop": {
+        "x": 0.777,
+        "y": 0.55
+      },
+      "mobile": {
+        "x": 0.0974,
+        "y": 0.5005
+      }
+    },
+    "ev-vendor-start": {
+      "desktop": {
+        "x": 0.7162,
+        "y": 0.9382
+      },
+      "mobile": {
+        "x": 0.8033,
+        "y": 0.7588
+      }
+    },
+    "ev-vendor-apply": {
+      "desktop": {
+        "x": 0.668,
+        "y": 0.9433
+      },
+      "mobile": {
+        "x": 0.328,
+        "y": 0.8449
+      }
+    },
+    "ev-setup-start": {
+      "desktop": {
+        "x": 0.5889,
+        "y": 0.55
+      },
+      "mobile": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    "ev-setup-area": {
+      "desktop": {
+        "x": 0.5,
+        "y": 0.5144
+      },
+      "mobile": {
+        "x": 0.5,
+        "y": 0.7512
+      }
+    },
+    "ev-setup-bin": {
+      "desktop": {
+        "x": 0.4693,
+        "y": 0.4
+      },
+      "mobile": {
+        "x": 0.3868,
+        "y": 0.6102
+      }
+    },
+    "ev-setup-route": {
+      "desktop": {
+        "x": 0.6333,
+        "y": 0.7894
+      },
+      "mobile": {
+        "x": 0.5,
+        "y": 0.9408
+      }
+    },
+    "ev-receive-start": {
+      "desktop": {
+        "x": 0.3951,
+        "y": 0.55
+      },
+      "mobile": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    "ev-receive-record": {
+      "desktop": {
+        "x": 0.4528,
+        "y": 0.55
+      },
+      "mobile": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    "ev-receive-putaway": {
+      "desktop": {
+        "x": 0.6476,
+        "y": 0.445
+      },
+      "mobile": {
+        "x": 0.8167,
+        "y": 0.6137
+      }
+    },
+    "ev-quality-start": {
+      "desktop": {
+        "x": 0.9351,
+        "y": 0.55
+      },
+      "mobile": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    "ev-quality-release": {
+      "desktop": {
+        "x": 0.6273,
+        "y": 0.7359
+      },
+      "mobile": {
+        "x": 0.5,
+        "y": 0.9408
+      }
+    },
+    "ev-quality-return": {
+      "desktop": {
+        "x": 0.9069,
+        "y": 0.55
+      },
+      "mobile": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    "ev-event-fulfillment-start": {
+      "desktop": {
+        "x": 0.9316,
+        "y": 0.55
+      },
+      "mobile": {
+        "x": 0.1912,
+        "y": 0.5
+      }
+    },
+    "ev-event-issue": {
+      "desktop": {
+        "x": 0.929,
+        "y": 0.55
+      },
+      "mobile": {
+        "x": 0.8097,
+        "y": 0.5
+      }
+    },
+    "ev-return-start": {
+      "desktop": {
+        "x": 0.4837,
+        "y": 0.55
+      },
+      "mobile": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    "ev-return-restock": {
+      "desktop": {
+        "x": 0.3944,
+        "y": 0.9076
+      },
+      "mobile": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    "ev-return-quarantine": {
+      "desktop": {
+        "x": 0.6273,
+        "y": 0.8281
+      },
+      "mobile": {
+        "x": 0.5,
+        "y": 0.9408
+      }
+    },
+    "ev-return-adjustment-handoff": {
+      "desktop": {
+        "x": 0.5889,
+        "y": 0.9309
+      },
+      "mobile": {
+        "x": 0.5,
+        "y": 0.7521
+      }
+    },
+    "ev-count-start": {
+      "desktop": {
+        "x": 0.4024,
+        "y": 0.55
+      },
+      "mobile": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    "ev-count-enter": {
+      "desktop": {
+        "x": 0.8461,
+        "y": 0.7642
+      },
+      "mobile": {
+        "x": 0.759,
+        "y": 0.5
+      }
+    },
+    "ev-count-investigate": {
+      "desktop": {
+        "x": 0.353,
+        "y": 0.5498
+      },
+      "mobile": {
+        "x": 0.5751,
+        "y": 0.6182
+      }
+    },
+    "ev-count-post": {
+      "desktop": {
+        "x": 0.8435,
+        "y": 0.55
+      },
+      "mobile": {
+        "x": 0.8026,
+        "y": 0.5
+      }
+    },
+    "ev-admin-start": {
+      "desktop": {
+        "x": 0.8963,
+        "y": 0.5504
+      },
+      "mobile": {
+        "x": 0.7452,
+        "y": 0.4995
+      }
+    },
+    "ev-admin-activate": {
+      "desktop": {
+        "x": 0.6333,
+        "y": 0.7894
+      },
+      "mobile": {
+        "x": 0.5,
+        "y": 0.9408
+      }
+    },
+    "ev-allocation-start": {
+      "desktop": {
+        "x": 0.9373,
+        "y": 0.55
+      },
+      "mobile": {
+        "x": 0.1699,
+        "y": 0.5
+      }
+    },
+    "ev-allocation-reserve": {
+      "desktop": {
+        "x": 0.5575,
+        "y": 0.55
+      },
+      "mobile": {
+        "x": 0.8097,
+        "y": 0.5045
+      }
+    },
+    "ev-price-start": {
+      "desktop": {
+        "x": 0.5889,
+        "y": 0.5498
+      },
+      "mobile": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    "ev-doa-start": {
+      "desktop": {
+        "x": 0.9028,
+        "y": 0.566
+      },
+      "mobile": {
+        "x": 0.7847,
+        "y": 0.5001
+      }
+    },
+    "ev-doa-activate": {
+      "desktop": {
+        "x": 0.5215,
+        "y": 0.55
+      },
+      "mobile": {
+        "x": 0.5,
+        "y": 0.5005
+      }
+    },
+    "ev-recover-start": {
+      "desktop": {
+        "x": 0.5,
+        "y": 0.5421
+      },
+      "mobile": {
+        "x": 0.5,
+        "y": 0.5365
+      }
+    },
+    "ev-recover-retry": {
+      "desktop": {
+        "x": 0.5,
+        "y": 0.6009
+      },
+      "mobile": {
+        "x": 0.5,
+        "y": 0.6076
+      }
+    }
+  }
+}
