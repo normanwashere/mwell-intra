@@ -4,6 +4,11 @@ import { createHash } from "node:crypto";
 import { copyFile, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { KNOWLEDGE_EVIDENCE, KNOWLEDGE_EVIDENCE_SCENARIOS } from "../../lib/knowledge/evidence";
+import { KNOWLEDGE_CONTENT } from "../../lib/knowledge/content";
+import {
+  evidenceRequirements,
+  validateEvidenceRequirements,
+} from "../../lib/knowledge/evidenceContract";
 import {
   readCaptureResumeManifest,
   validateCaptureResumeSession,
@@ -26,6 +31,7 @@ const STAGING_ROOT = path.resolve(
   "../../.superpowers/sdd/.task-8-capture-39988",
 );
 const SCENARIO_MANIFEST_SCHEMA = "task-8-capture-v1";
+const EVIDENCE_REQUIREMENTS = evidenceRequirements(KNOWLEDGE_CONTENT);
 
 const VIEWPORTS = {
   desktop: { width: 1440, height: 900 },
@@ -527,6 +533,8 @@ async function captureArtifact(
 test("captures reviewed desktop and mobile principal-flow evidence", async ({ browser }) => {
   test.setTimeout(20 * 60_000);
   expect(KNOWLEDGE_EVIDENCE).toHaveLength(39);
+  expect(EVIDENCE_REQUIREMENTS).toHaveLength(KNOWLEDGE_EVIDENCE.length);
+  expect(validateEvidenceRequirements(EVIDENCE_REQUIREMENTS)).toEqual([]);
   expect(Object.keys(KNOWLEDGE_EVIDENCE_SCENARIOS)).toHaveLength(39);
   const sourceCommits = new Set(KNOWLEDGE_EVIDENCE.map((evidence) => evidence.appCommit));
   expect(sourceCommits.size, "one reviewed application commit backs the capture set").toBe(1);

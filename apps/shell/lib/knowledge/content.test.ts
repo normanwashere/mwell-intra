@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { KNOWLEDGE_CONTENT } from "./content";
+import {
+  evidenceRequirements,
+  validateEvidenceRequirements,
+} from "./evidenceContract";
 import { KNOWLEDGE_GUIDE_CONTENT } from "@shell/components/knowledge/KnowledgeBase";
 import { ROLE_ROUTE_PARENT_PATHS } from "./roles";
 import {
@@ -465,10 +469,14 @@ describe("Knowledge Base content", () => {
   });
 
   it("provides reviewed screen evidence for every executable workflow step", () => {
+    const requirements = evidenceRequirements(KNOWLEDGE_CONTENT);
+    expect(validateEvidenceRequirements(requirements)).toEqual([]);
     const evidenceIds = new Set(
       KNOWLEDGE_CONTENT.evidence.map((item) => item.id),
     );
-    for (const flow of KNOWLEDGE_CONTENT.flows)
+    for (const flow of KNOWLEDGE_CONTENT.flows.filter(
+      (item) => item.availability === "live",
+    ))
       for (const node of flow.nodes.filter((item) =>
         ["start", "action", "handoff"].includes(item.type),
       )) {
@@ -477,6 +485,7 @@ describe("Knowledge Base content", () => {
           true,
         );
       }
+    expect(requirements).toHaveLength(39);
     expect(
       KNOWLEDGE_CONTENT.evidence.every((item) => item.sensitiveDataReviewed),
     ).toBe(true);
