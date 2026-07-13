@@ -48,7 +48,7 @@ export function ProcurementTabs({
     <div className="relative z-10 mb-4 border-b border-line bg-app">
       <nav
         aria-label="Procurement sections"
-        className="-mb-px grid grid-flow-col auto-cols-fr gap-0 sm:flex sm:gap-1 sm:overflow-x-auto sm:px-1"
+        className="-mb-px grid min-w-0 grid-flow-col auto-cols-fr gap-0 sm:flex sm:gap-1 sm:overflow-x-auto sm:px-1"
       >
         {visible.map((t) => (
           <NavLink

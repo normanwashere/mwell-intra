@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Badge, EmptyState, Icon } from "@intra/ui";
 import type {
   HandbookEntryMode,
@@ -112,7 +113,10 @@ export function HandbookLanding({
   rolesById: Map<string, KnowledgeRole>;
   onSetParams: (
     changes: Record<string, string | null>,
-    options?: { replace?: boolean },
+    options?: {
+      replace?: boolean;
+      scroll?: "top" | "preserve" | "restore";
+    },
   ) => void;
   onOpenResult: (result: HandbookSearchResult) => void;
 }) {
@@ -155,10 +159,10 @@ export function HandbookLanding({
         </p>
         <div className="mt-1 flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-ink">Start with the flow</h1>
+            <h1 className="text-2xl font-bold text-ink">How can we help?</h1>
             <p className="mt-1 max-w-3xl text-sm leading-6 text-muted">
-              Follow the governed process, find the exact control, and confirm
-              who owns the next decision.
+              Search for a task, page, role, policy, status, or error. The
+              handbook will take you to the exact instruction and next owner.
             </p>
           </div>
           <span className="text-sm text-muted">
@@ -166,59 +170,6 @@ export function HandbookLanding({
           </span>
         </div>
       </header>
-
-      <section aria-labelledby="principal-flow-title">
-        <div className="flex items-center justify-between gap-3">
-          <h2 id="principal-flow-title" className="text-lg font-bold text-ink">
-            Principal Intra flows
-          </h2>
-          <span className="text-xs text-faint">
-            Grouped by operating phase
-          </span>
-        </div>
-        <div className="mt-4 space-y-7">
-          {["Govern and secure", "Source and control", "Operate inventory", "Recover and improve"].map((phase) => (
-            <section key={phase} aria-labelledby={`phase-${phase.replaceAll(" ", "-")}`}>
-              <h3 id={`phase-${phase.replaceAll(" ", "-")}`} className="mb-3 text-sm font-semibold uppercase text-muted">{phase}</h3>
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {content.flows.filter((flow) => flowPhase(flow.id) === phase).map((flow, index) => {
-            const decisions = flow.nodes.filter(
-              (node) => node.type === "decision",
-            ).length;
-            const outcomes = flow.nodes.filter(
-              (node) => node.type === "terminal",
-            ).length;
-            return (
-              <button
-                key={flow.id}
-                type="button"
-                onClick={() =>
-                  onSetParams({ flow: flow.id, step: null, view: "flow" })
-                }
-                className="group min-h-40 w-full border border-line bg-surface p-4 text-left transition hover:border-brand-500 hover:bg-inset focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-              >
-                <span className="flex items-center justify-between gap-2">
-                  <span className="grid h-8 w-8 place-items-center bg-brand-50 text-sm font-bold text-brand-700">
-                    {index + 1}
-                  </span>
-                  <Badge tone={flow.availability === "limited" ? "amber" : "emerald"}>{flow.availability === "limited" ? "Limited" : "Live"}</Badge>
-                </span>
-                <span className="mt-3 line-clamp-2 block font-semibold text-ink">
-                  {flow.title}
-                </span>
-                <span className="mt-3 flex gap-3 text-xs text-faint">
-                  <span>{flow.nodes.length} steps</span>
-                  <span>{decisions} {decisions === 1 ? "decision" : "decisions"}</span>
-                  <span>{outcomes} {outcomes === 1 ? "outcome" : "outcomes"}</span>
-                </span>
-              </button>
-            );
-          })}
-              </div>
-            </section>
-          ))}
-        </div>
-      </section>
 
       <section
         aria-labelledby="handbook-search-title"
@@ -257,7 +208,7 @@ export function HandbookLanding({
             onChange={(event) =>
               onSetParams(
                 { q: event.target.value || null, limit: null },
-                { replace: true },
+                { replace: true, scroll: "preserve" },
               )
             }
             className="input-base min-h-12 w-full pl-11 pr-12 text-base"
@@ -267,7 +218,10 @@ export function HandbookLanding({
             <button
               type="button"
               onClick={() =>
-                onSetParams({ q: null, limit: null }, { replace: true })
+                onSetParams(
+                  { q: null, limit: null },
+                  { replace: true, scroll: "preserve" },
+                )
               }
               className="absolute right-0.5 top-0.5 grid h-11 w-11 place-items-center text-muted hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
               aria-label="Clear handbook search"
@@ -393,6 +347,10 @@ export function HandbookLanding({
         />
       )}
 
+      {!query && !filtersActive && mode === "task" && (
+        <PrincipalFlowLibrary content={content} onSetParams={onSetParams} />
+      )}
+
       <ResultSection
         id="handbook-results"
         title={
@@ -455,6 +413,131 @@ export function HandbookLanding({
         </section>
       )}
     </div>
+  );
+}
+
+const FLOW_PHASES = [
+  "Govern and secure",
+  "Source and control",
+  "Operate inventory",
+  "Recover and improve",
+] as const;
+
+function PrincipalFlowLibrary({
+  content,
+  onSetParams,
+}: {
+  content: KnowledgeContent;
+  onSetParams: (changes: Record<string, string | null>) => void;
+}) {
+  const [openPhase, setOpenPhase] = useState<string | null>(null);
+
+  return (
+    <section aria-labelledby="principal-flow-title" className="border-t border-line pt-7">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 id="principal-flow-title" className="text-lg font-bold text-ink">
+            Browse complete workflows
+          </h2>
+          <p className="mt-1 text-sm text-muted">
+            Open an operating phase, then follow its decisions, handoffs, and
+            outcomes.
+          </p>
+        </div>
+        <span className="text-xs text-faint">
+          {content.flows.length} workflows in 4 phases
+        </span>
+      </div>
+      <div className="mt-4 divide-y divide-line border-y border-line">
+        {FLOW_PHASES.map((phase) => {
+          const flows = content.flows.filter(
+            (flow) => flowPhase(flow.id) === phase,
+          );
+          const expanded = openPhase === phase;
+          const panelId = `principal-flow-${phase.toLowerCase().replaceAll(" ", "-")}`;
+          return (
+            <section key={phase}>
+              <button
+                type="button"
+                aria-expanded={expanded}
+                aria-controls={panelId}
+                onClick={() => setOpenPhase(expanded ? null : phase)}
+                className="flex min-h-14 w-full items-center justify-between gap-4 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+              >
+                <span>
+                  <span className="block text-sm font-semibold text-ink">
+                    {phase}
+                  </span>
+                  <span className="mt-0.5 block text-xs text-muted">
+                    {flows.length} {flows.length === 1 ? "workflow" : "workflows"}
+                  </span>
+                </span>
+                <Icon
+                  name="chevron"
+                  className={`h-4 w-4 text-faint transition ${expanded ? "rotate-90" : "-rotate-90"}`}
+                />
+              </button>
+              {expanded && <div
+                id={panelId}
+                data-testid="principal-flow-carousel"
+                className="grid gap-3 pb-5 sm:grid-cols-2 xl:grid-cols-3"
+              >
+                {flows.map((flow) => {
+                  const decisions = flow.nodes.filter(
+                    (node) => node.type === "decision",
+                  ).length;
+                  const outcomes = flow.nodes.filter(
+                    (node) => node.type === "terminal",
+                  ).length;
+                  return (
+                    <button
+                      key={flow.id}
+                      type="button"
+                      onClick={() =>
+                        onSetParams({
+                          flow: flow.id,
+                          step: null,
+                          view: "flow",
+                        })
+                      }
+                      className="group/flow min-h-32 w-full border border-line bg-surface p-4 text-left transition hover:border-brand-500 hover:bg-inset focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                    >
+                      <span className="flex items-center justify-between gap-2">
+                        <Badge
+                          tone={
+                            flow.availability === "limited"
+                              ? "amber"
+                              : "emerald"
+                          }
+                        >
+                          {flow.availability === "limited" ? "Limited" : "Live"}
+                        </Badge>
+                        <Icon
+                          name="arrowRight"
+                          className="h-4 w-4 text-faint transition group-hover/flow:translate-x-0.5 group-hover/flow:text-brand-700"
+                        />
+                      </span>
+                      <span className="mt-3 block font-semibold text-ink">
+                        {flow.title}
+                      </span>
+                      <span className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-faint">
+                        <span>{flow.nodes.length} steps</span>
+                        <span>
+                          {decisions} {decisions === 1 ? "decision" : "decisions"}
+                        </span>
+                        <span>
+                          {outcomes} {outcomes === 1 ? "outcome" : "outcomes"}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>}
+            </section>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 

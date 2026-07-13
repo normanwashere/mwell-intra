@@ -103,12 +103,13 @@ export function KnowledgeBase() {
 
   const setParams = (
     changes: Record<string, string | null>,
-    options: { replace?: boolean } = {},
+    options: {
+      replace?: boolean;
+      scroll?: "top" | "preserve" | "restore";
+    } = {},
   ) => {
-    sessionStorage.setItem(
-      `knowledge-scroll:${window.location.pathname}${window.location.search}`,
-      String(window.scrollY),
-    );
+    const currentScrollKey = `knowledge-scroll:${window.location.pathname}${window.location.search}`;
+    sessionStorage.setItem(currentScrollKey, String(window.scrollY));
     const next = new URLSearchParams(params.toString());
     const normalizedChanges = Object.prototype.hasOwnProperty.call(
       changes,
@@ -121,6 +122,11 @@ export function KnowledgeBase() {
       else next.delete(key);
     }
     const href = `/knowledge${next.size ? `?${next}` : ""}`;
+    const destinationScrollKey = `knowledge-scroll:${href}`;
+    if (options.scroll === "preserve")
+      sessionStorage.setItem(destinationScrollKey, String(window.scrollY));
+    else if (options.scroll !== "restore")
+      sessionStorage.setItem(destinationScrollKey, "0");
     if (options.replace) window.history.replaceState(null, "", href);
     else window.history.pushState(null, "", href);
   };
@@ -181,7 +187,9 @@ export function KnowledgeBase() {
         <button
           type="button"
           className="btn-ghost btn-sm"
-          onClick={() => setParams({ glossary: null })}
+          onClick={() =>
+            setParams({ glossary: null }, { scroll: "restore" })
+          }
         >
           <Icon name="chevron" className="h-4 w-4 rotate-90" />
           Back to Knowledge Base
@@ -248,7 +256,9 @@ export function KnowledgeBase() {
         relatedFlows={KNOWLEDGE_GUIDE_CONTENT.flows.filter((item) =>
           item.roles.includes(roleId),
         )}
-        onBack={() => setParams({ article: null })}
+        onBack={() =>
+          setParams({ article: null }, { scroll: "restore" })
+        }
         onOpenArticle={openArticle}
         onOpenFlow={openFlow}
       />
@@ -273,7 +283,9 @@ export function KnowledgeBase() {
           );
           return flow ? [flow] : [];
         })}
-        onBack={() => setParams({ article: null })}
+        onBack={() =>
+          setParams({ article: null }, { scroll: "restore" })
+        }
         onOpenArticle={openArticle}
         onOpenFlow={openFlow}
       />
@@ -288,7 +300,9 @@ export function KnowledgeBase() {
         article={article}
         rolesById={rolesById}
         articlesById={articlesById}
-        onBack={() => setParams({ article: null })}
+        onBack={() =>
+          setParams({ article: null }, { scroll: "restore" })
+        }
         onOpenArticle={openArticle}
         onOpenFlow={openFlow}
       />
@@ -299,7 +313,12 @@ export function KnowledgeBase() {
       <div className="space-y-5">
         <button
           className="btn-ghost btn-sm"
-          onClick={() => setParams({ flow: null, step: null, view: null })}
+          onClick={() =>
+            setParams(
+              { flow: null, step: null, view: null },
+              { scroll: "restore" },
+            )
+          }
         >
           <Icon name="chevron" className="h-4 w-4 rotate-90" />
           Back to Knowledge Base
@@ -313,7 +332,9 @@ export function KnowledgeBase() {
           }
           evidence={KNOWLEDGE_GUIDE_CONTENT.evidence}
           rolesById={rolesById}
-          onSelectNode={(id) => setParams({ step: id })}
+          onSelectNode={(id) =>
+            setParams({ step: id }, { scroll: "preserve" })
+          }
         />
       </div>
     );

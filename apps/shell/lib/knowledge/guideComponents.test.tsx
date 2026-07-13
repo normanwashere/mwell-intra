@@ -265,7 +265,8 @@ describe("KnowledgeRoleGuide", () => {
     expect(markup).toContain("Live");
     expect(markup).toContain("Own governed production release readiness");
     expect(markup).toContain("/admin/releases");
-    expect(markup).toContain("review_release");
+    expect(markup).toContain("Review release");
+    expect(markup).not.toContain("review_release");
     expect(markup).toContain("Verify release evidence.");
     expect(markup).toContain("Cannot approve a release they authored.");
     expect(markup).toContain(

@@ -143,6 +143,12 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "Only recognized content type values are accepted from the URL.",
           "The library displays only the requested content category.",
         ),
+        control(
+          "Open contextual guidance",
+          "Opens the exact Knowledge Base feature guide for the operational page currently in use.",
+          "The active route must match a documented implemented feature; unknown routes do not show an unrelated guide.",
+          "The matching live guide opens with the page purpose, controls, fields, roles, and related workflows.",
+        ),
       ],
       fields: [
         field(

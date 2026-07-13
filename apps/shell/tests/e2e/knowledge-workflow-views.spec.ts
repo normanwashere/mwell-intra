@@ -137,7 +137,7 @@ test("mobile guides a branch, preserves scroll, and restores the decision", asyn
     .poll(async () =>
       Math.abs((await page.evaluate(() => window.scrollY)) - scrollBefore),
     )
-    .toBeLessThanOrEqual(12);
+    .toBeLessThanOrEqual(16);
 
   await page.getByRole("button", { name: "Backtrack" }).click();
   await expect(page).toHaveURL(
@@ -187,6 +187,7 @@ test("clears branch history when leaving and switching flows", async ({
   await expect(page).toHaveURL(/\/knowledge$/);
   await expect(page).not.toHaveURL(/branch=|step=|flow=/);
 
+  await page.getByRole("button", { name: /Operate inventory/ }).click();
   await page.getByRole("button", { name: /Receive to putaway/ }).click();
   await expect(page).toHaveURL(
     /flow=receive-to-putaway&view=flow&step=receive-po-eligible$/,

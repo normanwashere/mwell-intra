@@ -15,6 +15,7 @@ import { ROLES } from '@/auth/roles';
 import { buildNotifications } from '@/app/notifications';
 import { Sheet, useToast, PageTransition } from './ui';
 import { ThemeToggle } from './ThemeToggle';
+import { ContextualHelpLink } from '@intra/ui';
 
 const MODULE_GROUP_ORDER: ModuleGroup[] = [
   'operate',
@@ -24,6 +25,42 @@ const MODULE_GROUP_ORDER: ModuleGroup[] = [
   'configure',
 ];
 
+const WAREHOUSE_GUIDES = [
+  { path: '/', articleId: 'feature-warehouse-dashboard', title: 'Warehouse dashboard' },
+  { path: '/scan', articleId: 'feature-warehouse-scan', title: 'Warehouse scan' },
+  { path: '/tasks', articleId: 'feature-warehouse-tasks', title: 'Warehouse tasks' },
+  { path: '/inventory/:id', articleId: 'feature-warehouse-product-detail', title: 'Warehouse product detail' },
+  { path: '/inventory', articleId: 'feature-warehouse-inventory', title: 'Inventory browser' },
+  { path: '/receiving', articleId: 'feature-warehouse-receiving', title: 'Warehouse receiving' },
+  { path: '/allocations', articleId: 'feature-warehouse-allocations', title: 'Stock allocations' },
+  { path: '/returns', articleId: 'feature-warehouse-returns', title: 'Warehouse returns' },
+  { path: '/storage', articleId: 'feature-warehouse-storage', title: 'Warehouse storage areas and bins' },
+  { path: '/events/:id', articleId: 'feature-warehouse-event-detail', title: 'Warehouse event detail' },
+  { path: '/events', articleId: 'feature-warehouse-events', title: 'Warehouse events' },
+  { path: '/procurement', articleId: 'feature-warehouse-procurement-planning', title: 'Warehouse procurement planning' },
+  { path: '/purchase-orders', articleId: 'feature-warehouse-purchase-orders', title: 'Warehouse purchase orders' },
+  { path: '/cycle-counts', articleId: 'feature-warehouse-cycle-counts', title: 'Cycle counts' },
+  { path: '/quality', articleId: 'feature-warehouse-quality', title: 'Quality control' },
+  { path: '/approvals', articleId: 'feature-warehouse-approvals', title: 'Stock approvals' },
+  { path: '/exceptions', articleId: 'feature-warehouse-exceptions', title: 'Warehouse exceptions' },
+  { path: '/finance', articleId: 'feature-warehouse-finance', title: 'Warehouse finance' },
+  { path: '/pricing', articleId: 'feature-warehouse-pricing', title: 'Warehouse pricing' },
+  { path: '/data', articleId: 'feature-warehouse-data', title: 'Warehouse data and analytics' },
+  { path: '/reports', articleId: 'feature-warehouse-reports', title: 'Inventory reports' },
+  { path: '/suppliers', articleId: 'feature-warehouse-suppliers', title: 'Warehouse suppliers' },
+  { path: '/locations', articleId: 'feature-warehouse-locations', title: 'Warehouse locations' },
+  { path: '/imports', articleId: 'feature-warehouse-imports', title: 'Warehouse imports' },
+  { path: '/operation-routes', articleId: 'feature-warehouse-operation-routes', title: 'Warehouse operation routes' },
+] as const;
+
+const routeMatches = (pattern: string, pathname: string) => {
+  const expected = pattern.split('/').filter(Boolean);
+  const actual = pathname.split('/').filter(Boolean);
+  return expected.length === actual.length && expected.every(
+    (segment, index) => segment.startsWith(':') || segment === actual[index],
+  );
+};
+
 export function AppShell({ children }: { children: ReactNode }) {
   const { role, source, data, resetDemo, pendingSync, conflicts, syncNow, discardConflict } =
     useWarehouse();
@@ -31,6 +68,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const toast = useToast();
   const modules = modulesForRole(role);
+  const pageGuide = WAREHOUSE_GUIDES.find((guide) =>
+    routeMatches(guide.path, location.pathname),
+  ) ?? WAREHOUSE_GUIDES[0];
 
   const [moreOpen, setMoreOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
@@ -181,6 +221,10 @@ export function AppShell({ children }: { children: ReactNode }) {
               >
                 {source === 'supabase' ? 'Live' : 'Demo'}
               </span>
+              <ContextualHelpLink
+                articleId={pageGuide.articleId}
+                title={pageGuide.title}
+              />
               {canScan && (
                 <button
                   type="button"

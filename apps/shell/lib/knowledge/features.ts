@@ -361,7 +361,6 @@ const FEATURE_RELATIONSHIPS: Record<string, FeatureRelationship> = {
     relatedFlowIds: ["vendor-accreditation", "identity-and-access"],
   },
   cms: { policyBasis: [POLICY.knowledge], relatedFlowIds: [] },
-  context: { policyBasis: [POLICY.knowledge], relatedFlowIds: [] },
   analytics: { policyBasis: [POLICY.knowledge], relatedFlowIds: [] },
   feedback: { policyBasis: [POLICY.knowledge], relatedFlowIds: [] },
   traceability: { policyBasis: [POLICY.knowledge], relatedFlowIds: [] },
@@ -1431,16 +1430,6 @@ const roadmapDefinitions: RoadmapFeatureDefinition[] = [
     roleIds: ["platform_admin"],
     owner: "Platform",
     plannedControl: "Draft and publish governed article revisions",
-  },
-  {
-    id: "context",
-    title: "Contextual in-screen help",
-    module: "core",
-    purpose:
-      "Open the exact procedure from the operational control being used.",
-    roleIds: ["core_staff_only", "platform_admin"],
-    owner: "Platform",
-    plannedControl: "Open guidance for the current control",
   },
   {
     id: "analytics",

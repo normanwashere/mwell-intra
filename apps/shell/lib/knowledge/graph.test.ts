@@ -155,6 +155,20 @@ describe("knowledge graph layout", () => {
     );
   });
 
+  it("centers the root and each depth layer inside the canvas", () => {
+    const layout = layoutFlow(mergingFlow);
+    const root = layout.nodes.get("start")!;
+    const branchCenters = ["standard", "exception"].map(
+      (id) => layout.nodes.get(id)!.x + 100,
+    );
+
+    expect(root.x + 100).toBeCloseTo(layout.width / 2, 1);
+    expect((Math.min(...branchCenters) + Math.max(...branchCenters)) / 2).toBeCloseTo(
+      layout.width / 2,
+      1,
+    );
+  });
+
   it("returns every named outgoing branch", () => {
     expect(outgoingEdges(flow, "start").map((edge) => edge.label)).toEqual([
       "Yes",

@@ -5,6 +5,13 @@ export interface GovernanceGuide {
   title: string;
   summary: string;
   source: string;
+  sourceControl: {
+    reference: string;
+    version: string;
+    effectiveDate: string;
+    status: "controlled" | "owner_confirmation_required" | "working_draft";
+    repository: string;
+  };
   owner: string;
   operationalControls: string[];
   evidence: string[];
@@ -32,6 +39,13 @@ export const GOVERNANCE_GUIDES: GovernanceGuide[] = [
       "Apply the approved route, competition, exception, budget, and authority controls before commitment.",
     source:
       "mWell Procurement Policy and Procedures - Revised Modern Visual Updated",
+    sourceControl: {
+      reference: "Procurement policy and procedures",
+      version: "Version number requires owner confirmation",
+      effectiveDate: "Effective date requires owner confirmation",
+      status: "owner_confirmation_required",
+      repository: "Controlled Procurement policy register",
+    },
     owner: "Procurement",
     operationalControls: [
       "Determine the route from total value and category",
@@ -65,6 +79,13 @@ export const GOVERNANCE_GUIDES: GovernanceGuide[] = [
     summary:
       "Use risk-based evidence, declarations, instruments, remediation, approval, renewal, and suspension controls.",
     source: "LGL004-Vendor Accreditation Form 2.0",
+    sourceControl: {
+      reference: "LGL004",
+      version: "Version 2.0",
+      effectiveDate: "Effective date requires owner confirmation",
+      status: "owner_confirmation_required",
+      repository: "Controlled Legal forms register",
+    },
     owner: "Legal",
     operationalControls: [
       "Capture the vendor's legal and ownership facts",
@@ -98,6 +119,13 @@ export const GOVERNANCE_GUIDES: GovernanceGuide[] = [
     summary:
       "Complete the applicable confidentiality, data, security, and service instruments before an eligible engagement.",
     source: "[MNDA]- Tech Service Provider",
+    sourceControl: {
+      reference: "MNDA - Technology Service Provider",
+      version: "Template version requires owner confirmation",
+      effectiveDate: "Effective date requires owner confirmation",
+      status: "owner_confirmation_required",
+      repository: "Controlled Legal instruments register",
+    },
     owner: "Legal",
     operationalControls: [
       "Identify confidential information and data handling",
@@ -131,6 +159,13 @@ export const GOVERNANCE_GUIDES: GovernanceGuide[] = [
       "Keep actions attributable, approvals independent, evidence durable, and history reviewable across Intra.",
     source:
       "Mwell Intra Internal Control Register (Platform-owned working register; approval status and effective version must be confirmed before reliance)",
+    sourceControl: {
+      reference: "Mwell Intra Internal Control Register",
+      version: "Working draft",
+      effectiveDate: "Not effective until approved",
+      status: "working_draft",
+      repository: "Platform governance working register",
+    },
     owner: "Platform",
     operationalControls: [
       "Use a unique identity and the minimum approved role",
@@ -190,8 +225,8 @@ export const GOVERNANCE_ARTICLES: KnowledgeArticle[] = GOVERNANCE_GUIDES.map(
     sections: [
       {
         id: "source",
-        title: "Governing source and owner",
-        body: `${item.source}. Accountable content owner: ${item.owner}. Confirm the currently approved version before changing a control.`,
+        title: "Controlled source",
+        body: `${item.sourceControl.reference}. ${item.sourceControl.version}. ${item.sourceControl.effectiveDate}. Document status: ${item.sourceControl.status.replaceAll("_", " ")}. Accountable owner: ${item.owner}. Repository: ${item.sourceControl.repository}. The source file is not published as a public asset; obtain the current controlled copy from the owner before changing a control.`,
       },
       {
         id: "controls",

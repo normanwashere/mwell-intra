@@ -64,14 +64,18 @@ export function WorkflowCanvas({
                   markerEnd={`url(#arrow-${flow.id})`}
                 />
                 {edge.label && (
-                  <text
-                    x={(x1 + x2) / 2}
-                    y={(y1 + y2) / 2 - 5}
-                    textAnchor="middle"
-                    className="fill-muted text-[11px] font-semibold"
+                  <foreignObject
+                    x={(x1 + x2) / 2 - 76}
+                    y={(y1 + y2) / 2 - 20}
+                    width="152"
+                    height="40"
                   >
-                    {edge.label}
-                  </text>
+                    <div className="flex h-full items-center justify-center px-1 text-center text-[11px] font-semibold leading-4 text-muted">
+                      <span className="bg-inset px-1.5 py-0.5">
+                        {edge.label}
+                      </span>
+                    </div>
+                  </foreignObject>
                 )}
               </g>
             );

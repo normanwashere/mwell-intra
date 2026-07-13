@@ -70,4 +70,16 @@ describe("Knowledge Base evidence contract", () => {
       ]),
     );
   });
+
+  it("blocks release verification when the deployed commit is unknown", () => {
+    const requirements = evidenceRequirements(KNOWLEDGE_CONTENT);
+
+    expect(
+      validateEvidenceRequirements(requirements, {
+        requireDeployedCommit: true,
+      }),
+    ).toContain(
+      "DEPLOYED_COMMIT is required for release evidence verification",
+    );
+  });
 });

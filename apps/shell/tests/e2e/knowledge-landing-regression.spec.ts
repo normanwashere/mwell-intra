@@ -26,6 +26,7 @@ test("legacy future URLs render roadmap entries", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "Explore a feature" }),
   ).toBeVisible();
+  await expect(page.locator("#principal-flow-title")).toBeHidden();
   await expect(
     page.getByRole("button", {
       name: /Roadmap Coming soon Offline Knowledge Base/,
@@ -37,6 +38,22 @@ test("landing interactions preserve URL state and accessible targets", async ({
   page,
 }) => {
   await page.goto("/knowledge");
+
+  const searchSection = page.locator("#handbook-search-title");
+  const flowSection = page.locator("#principal-flow-title");
+  await expect(searchSection).toBeVisible();
+  await expect(flowSection).toBeVisible();
+  const sectionOrder = await page.evaluate(
+    ([searchId, flowId]) => {
+      const search = document.getElementById(searchId);
+      const flows = document.getElementById(flowId);
+      if (!search || !flows) return null;
+      return search.compareDocumentPosition(flows);
+    },
+    ["handbook-search-title", "principal-flow-title"],
+  );
+  expect(sectionOrder).not.toBeNull();
+  expect(sectionOrder! & 4).toBeTruthy();
 
   const recommendations = page.locator("section").filter({
     has: page.getByRole("heading", { name: "Recommended for your work" }),
@@ -65,6 +82,7 @@ test("landing interactions preserve URL state and accessible targets", async ({
   });
   await search.fill("Place hold");
   await expect(page).toHaveURL(/\?q=Place\+hold$/);
+  await expect(flowSection).toBeHidden();
   const qualityResult = page.getByRole("button", {
     name: /Feature Live warehouse Quality control/,
   });
@@ -78,13 +96,15 @@ test("landing interactions preserve URL state and accessible targets", async ({
   await expect(page).toHaveURL(
     /\?q=Place\+hold&article=feature-warehouse-quality$/,
   );
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
   await page.goBack();
   await expect(page).toHaveURL(/\?q=Place\+hold$/);
   await clear.click();
   await expect(page).toHaveURL(/\/knowledge$/);
 
+  await page.getByText("Govern and secure", { exact: true }).click();
   await page
-    .getByRole("button", { name: /1 Identity and access 7 steps/ })
+    .getByRole("button", { name: /Identity and access 7 steps/ })
     .click();
   await expect(page).toHaveURL(
     /\?flow=identity-and-access&view=flow&step=access-authorized$/,

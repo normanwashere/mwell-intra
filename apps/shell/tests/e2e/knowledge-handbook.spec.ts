@@ -88,7 +88,7 @@ test("task, role, and feature search supports recovery and browser history", asy
   await page.goBack();
   await expect(page).toHaveURL(/q=/);
   await page.goForward();
-  await expect(page.getByRole("heading", { name: "Start with the flow" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "How can we help?" })).toBeVisible();
 });
 
 test("every current and planned role has a complete, availability-aware profile", async ({ page }) => {

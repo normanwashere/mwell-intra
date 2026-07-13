@@ -3,6 +3,7 @@
 // ./styles.css; the Tailwind preset in @intra/config references those vars.
 
 export { Icon, type IconName } from './Icon';
+export { ContextualHelpLink } from './ContextualHelpLink';
 
 export {
   Card,

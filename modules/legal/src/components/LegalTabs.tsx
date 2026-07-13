@@ -26,7 +26,7 @@ export function LegalTabs({ canInvite }: { canInvite: boolean }) {
     <div className="sticky top-[var(--shell-header,0px)] z-10 -mx-4 mb-4 border-b border-line bg-surface/90 px-4 backdrop-blur-md sm:-mx-6 sm:px-6">
       <nav
         aria-label="Legal sections"
-        className="-mb-px flex gap-1 overflow-x-auto"
+        className="-mb-px flex min-w-0 gap-1 overflow-x-auto"
       >
         {visible.map((t) => (
           <NavLink

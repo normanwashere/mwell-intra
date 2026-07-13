@@ -81,7 +81,7 @@ export function EvidenceViewer({
         </span>
         <div className="flex gap-1">
           <button
-            className="icon-btn"
+            className="icon-btn h-11 w-11 sm:h-8 sm:w-8"
             aria-label="Zoom out"
             title="Zoom out"
             onClick={() => setZoom((value) => Math.max(1, value - 0.25))}
@@ -89,7 +89,7 @@ export function EvidenceViewer({
             <Icon name="minus" />
           </button>
           <button
-            className="icon-btn"
+            className="icon-btn h-11 w-11 sm:h-8 sm:w-8"
             aria-label="Reset zoom"
             title="Reset zoom"
             onClick={() => setZoom(1)}
@@ -97,7 +97,7 @@ export function EvidenceViewer({
             <Icon name="scan" />
           </button>
           <button
-            className="icon-btn"
+            className="icon-btn h-11 w-11 sm:h-8 sm:w-8"
             aria-label="Zoom in"
             title="Zoom in"
             onClick={() => setZoom((value) => Math.min(2, value + 0.25))}
@@ -132,7 +132,7 @@ export function EvidenceViewer({
                 left: `${(mobile ? (hotspot.mobileX ?? hotspot.x) : hotspot.x) * 100}%`,
                 top: `${(mobile ? (hotspot.mobileY ?? hotspot.y) : hotspot.y) * 100}%`,
               }}
-              className={`absolute grid h-8 w-8 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full text-xs font-bold text-white shadow-e2 ring-4 ring-white ${active === hotspot.id ? "bg-brand-700" : "bg-brand-500"}`}
+              className={`absolute grid h-11 w-11 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full text-xs font-bold text-white shadow-e2 ring-4 ring-white sm:h-8 sm:w-8 ${active === hotspot.id ? "bg-brand-700" : "bg-brand-500"}`}
             >
               {hotspot.number}
             </button>

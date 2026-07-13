@@ -23,6 +23,8 @@ const bundled = await build({
       export const requirements = evidenceRequirements(KNOWLEDGE_CONTENT);
       export const errors = validateEvidenceRequirements(requirements, {
         deployedCommit: process.env.DEPLOYED_COMMIT || undefined,
+        requireDeployedCommit:
+          process.env.KNOWLEDGE_RELEASE_VERIFICATION === "1",
       });
     `,
     resolveDir: root,

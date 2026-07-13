@@ -94,9 +94,16 @@ export function evidenceRequirements(
 
 export function validateEvidenceRequirements(
   requirements: KnowledgeEvidenceRequirement[],
-  options: { deployedCommit?: string } = {},
+  options: {
+    deployedCommit?: string;
+    requireDeployedCommit?: boolean;
+  } = {},
 ): string[] {
   const errors: string[] = [];
+  if (options.requireDeployedCommit && !options.deployedCommit)
+    errors.push(
+      "DEPLOYED_COMMIT is required for release evidence verification",
+    );
   const evidenceIds = new Set<string>();
   const nodeKeys = new Set<string>();
 

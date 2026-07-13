@@ -9,6 +9,7 @@ import type {
   KnowledgeFlow,
   KnowledgeRole,
 } from "@shell/lib/knowledge/types";
+import { capabilityGuidance } from "@shell/lib/knowledge/capabilities";
 
 const availabilityLabel = {
   live: "Live",
@@ -116,7 +117,12 @@ export function FeatureGuide({
           <p className="mt-3 text-sm text-muted">
             Required capabilities:{" "}
             {feature.capabilityIds.length > 0
-              ? feature.capabilityIds.join(", ")
+              ? feature.capabilityIds
+                  .map(
+                    (capability) =>
+                      capabilityGuidance(capability, feature.module).label,
+                  )
+                  .join(", ")
               : "authenticated access described by the route"}
             .
           </p>

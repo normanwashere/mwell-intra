@@ -65,10 +65,15 @@ function topBarLabel(pathname: string, entries: readonly NavEntry[]): string {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { profile, userRoles, mode, loading } = useSession();
+  const profileId = profile?.id;
   const pathname = usePathname() ?? "/";
   const reduced = useReducedMotion();
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [pageGuide, setPageGuide] = useState<{
+    title: string;
+    href: string;
+  } | null>(null);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
@@ -76,6 +81,31 @@ export function AppShell({ children }: { children: ReactNode }) {
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, [pathname]);
+
+  useEffect(() => {
+    if (!profileId || pathname.startsWith("/knowledge")) {
+      setPageGuide(null);
+      return;
+    }
+    const controller = new AbortController();
+    setPageGuide(null);
+    fetch(`/api/knowledge/context?path=${encodeURIComponent(pathname)}`, {
+      signal: controller.signal,
+    })
+      .then(async (response) =>
+        response.ok
+          ? ((await response.json()) as {
+              guide: { title: string; href: string } | null;
+            })
+          : { guide: null },
+      )
+      .then((payload) => setPageGuide(payload.guide))
+      .catch((error: unknown) => {
+        if (!(error instanceof DOMException && error.name === "AbortError"))
+          setPageGuide(null);
+      });
+    return () => controller.abort();
+  }, [pathname, profileId]);
 
   const modules = loading ? [] : accessibleModules(userRoles);
   const entries: NavEntry[] = [HOME_ENTRY, ...modules.map(toEntry)];
@@ -247,6 +277,24 @@ export function AppShell({ children }: { children: ReactNode }) {
               >
                 {mode === "supabase" ? "Live" : "Demo"}
               </span>
+              {profile && !pathname.startsWith("/knowledge") && (
+                <Link
+                  href={pageGuide?.href ?? "/knowledge"}
+                  aria-label={
+                    pageGuide
+                      ? `Help for ${pageGuide.title}`
+                      : "Open the Knowledge Base"
+                  }
+                  title={
+                    pageGuide
+                      ? `Help for ${pageGuide.title}`
+                      : "Open the Knowledge Base"
+                  }
+                  className="grid h-10 w-10 place-items-center rounded-xl text-faint transition hover:bg-inset hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                >
+                  <Icon name="info" className="h-5 w-5" />
+                </Link>
+              )}
               <NotificationBell />
               <ThemeToggle />
               <UserMenu />

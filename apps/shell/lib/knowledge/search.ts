@@ -83,6 +83,31 @@ const scoreText = (text: WeightedText, query: string) => {
   const keywords = (text.keywords ?? []).map(normalize);
   const body = normalize(text.body ?? "");
   const tokens = query.split(" ").filter(Boolean);
+  const indexedText = [title, ...aliases, ...keywords, body].join(" ");
+  const primaryText = [title, ...aliases, ...keywords].join(" ");
+  const exactBodyPhrase = phraseScore(body, query, 1) > 0;
+
+  const matchedTitleTokens = tokens.filter((token) =>
+    includesToken(title, token),
+  ).length;
+  const matchesEveryToken = tokens.every((token) =>
+    includesToken(indexedText, token),
+  );
+  if (
+    !matchesEveryToken &&
+    !(
+      tokens.length > 1 &&
+      matchedTitleTokens >= Math.ceil(tokens.length / 2)
+    )
+  )
+    return 0;
+  if (
+    tokens.length > 1 &&
+    !exactBodyPhrase &&
+    !tokens.some((token) => includesToken(primaryText, token))
+  )
+    return 0;
+
   let score = phraseScore(title, query, 180);
   score += Math.max(
     0,
@@ -314,6 +339,34 @@ export function searchKnowledge(
 
     for (const node of flow.nodes) {
       const evidence = content.evidence.find((item) => item.nodeId === node.id);
+      const routeScreenshotText = evidence
+        ? content.articles
+            .filter((article) => article.liveRoutes.includes(evidence.route))
+            .flatMap((article) =>
+              (article.screenshots ?? []).flatMap((screenshot) => [
+                screenshot.alt,
+                screenshot.caption,
+              ]),
+            )
+        : [];
+      const routeFeatureText = evidence
+        ? content.features
+            .filter((feature) => feature.routes.includes(evidence.route))
+            .flatMap((feature) => [
+              feature.title,
+              feature.purpose,
+              ...feature.controls.flatMap((control) => [
+                control.name,
+                control.behavior,
+                control.validation,
+              ]),
+              ...(feature.fields ?? []).flatMap((field) => [
+                field.name,
+                field.purpose,
+                field.validation,
+              ]),
+            ])
+        : [];
       const nodeArticleModule = content.articles.find(
         (article) => article.id === node.articleId,
       )?.module;
@@ -357,6 +410,12 @@ export function searchKnowledge(
           keywords: [
             node.type,
             node.type === "decision" ? node.policyBasis : "",
+            ...(evidence?.hotspots.flatMap((hotspot) => [
+              hotspot.label,
+              hotspot.instruction,
+            ]) ?? []),
+            ...routeScreenshotText,
+            ...routeFeatureText,
           ],
           body: [
             node.body,
@@ -427,9 +486,9 @@ export function searchKnowledge(
           ? 1_000
           : 0
         : item.availability === "live"
-          ? 1_000
+          ? 500
           : item.availability === "limited"
-            ? 500
+            ? 250
             : 0;
       return { ...item, score: relevance + availabilityBoost, relevance };
     })
@@ -453,7 +512,7 @@ export function searchKnowledge(
     const key = `${item.type}:${normalize(item.title)}:${item.href}`;
     if (!unique.has(key)) unique.set(key, item);
   }
-  return [...unique.values()]
-    .slice(0, 60)
-    .map(({ relevance: _relevance, ...item }) => item);
+  return [...unique.values()].map(
+    ({ relevance: _relevance, ...item }) => item,
+  );
 }

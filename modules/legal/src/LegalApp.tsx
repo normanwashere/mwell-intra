@@ -10,7 +10,12 @@ import {
 } from "react-router-dom";
 import { useSession } from "@intra/auth";
 import { can } from "@intra/rbac";
-import { SignInPrompt, SkeletonList, SkeletonStats } from "@intra/ui";
+import {
+  ContextualHelpLink,
+  SignInPrompt,
+  SkeletonList,
+  SkeletonStats,
+} from "@intra/ui";
 import { AccreditationCasesPage } from "./pages/AccreditationCasesPage";
 import { CaseDetailPage } from "./pages/CaseDetailPage";
 import { InviteVendorPage } from "./pages/InviteVendorPage";
@@ -163,6 +168,14 @@ function VendorChrome({
   profileName: string;
   onSignOut: () => Promise<void>;
 }) {
+  const { pathname } = useLocation();
+  const pageGuide = /\/cases\/[^/]+\/application$/.test(pathname)
+    ? { articleId: "feature-vendor-application", title: "Vendor application" }
+    : /\/cases\/[^/]+\/sign\/[^/]+$/.test(pathname)
+      ? { articleId: "feature-vendor-sign-instrument", title: "Vendor instrument signature" }
+      : /^\/cases\/[^/]+$/.test(pathname)
+        ? { articleId: "feature-vendor-case-detail", title: "Vendor portal case detail" }
+        : { articleId: "feature-vendor-cases", title: "Vendor portal cases" };
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 16);
@@ -220,18 +233,24 @@ function VendorChrome({
             </p>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() =>
-            void onSignOut().then(() => {
-              if (typeof window !== "undefined")
-                window.location.assign("/login");
-            })
-          }
-          className="btn-ghost btn-sm"
-        >
-          Sign out
-        </button>
+        <div className="flex items-center gap-1">
+          <ContextualHelpLink
+            articleId={pageGuide.articleId}
+            title={pageGuide.title}
+          />
+          <button
+            type="button"
+            onClick={() =>
+              void onSignOut().then(() => {
+                if (typeof window !== "undefined")
+                  window.location.assign("/login");
+              })
+            }
+            className="btn-ghost btn-sm"
+          >
+            Sign out
+          </button>
+        </div>
       </div>
     </header>
   );

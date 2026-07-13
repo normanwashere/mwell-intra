@@ -9,6 +9,7 @@ import type {
   KnowledgeFlow,
   KnowledgeRole,
 } from "@shell/lib/knowledge/types";
+import { capabilityGuidance } from "@shell/lib/knowledge/capabilities";
 import {
   ROLE_ROUTE_PARENT_LABELS,
   ROLE_ROUTE_PARENT_PATHS,
@@ -118,21 +119,26 @@ export function KnowledgeRoleGuide({
               </thead>
               <tbody className="divide-y divide-line">
                 {role.authority.capabilities.length > 0 ? (
-                  role.authority.capabilities.map((capability) => (
+                  role.authority.capabilities.map((capability) => {
+                    const guidance = capabilityGuidance(
+                      capability,
+                      role.rbacModule ?? role.module,
+                    );
+                    return (
                     <tr key={capability}>
                       <th
                         scope="row"
-                        className="px-3 py-3 font-mono font-medium text-ink"
+                        className="px-3 py-3 font-medium text-ink"
                       >
-                        {capability}
+                        {guidance.label}
                       </th>
                       <td className="px-3 py-3 text-muted">Granted</td>
                       <td className="px-3 py-3 text-muted">
-                        Subject to current record state, route policy, and
-                        segregation of duties.
+                        {guidance.description}
                       </td>
                     </tr>
-                  ))
+                    );
+                  })
                 ) : (
                   <tr>
                     <td colSpan={3} className="px-3 py-4 text-muted">

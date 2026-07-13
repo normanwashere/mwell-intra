@@ -48,6 +48,10 @@ export function KnowledgeFlow({
   const hasBranch = params.has("branch");
   const requestedChoiceIds = (rawBranch ?? "").split(",").filter(Boolean);
   const branchResolution = resolveBranch(flow, requestedChoiceIds);
+  const defaultNodeId =
+    branchResolution.currentNode.type === "decision"
+      ? branchResolution.currentNode.id
+      : flow.startNodeId;
   const canonicalBranch = branchResolution.choiceIds.join(",");
   const requestedStepId = params.get("step");
   const requestedSelected = flow.nodes.find(
@@ -87,10 +91,14 @@ export function KnowledgeFlow({
     changes: Record<string, string | null>,
     options: { replace?: boolean; focusWorkspace?: boolean } = {},
   ) => {
+    const scrollY = window.scrollY;
     const href = nextHref(changes);
     rememberDestinationScroll(href);
     if (options.replace) window.history.replaceState(null, "", href);
     else window.history.pushState(null, "", href);
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => window.scrollTo(0, scrollY)),
+    );
     if (options.focusWorkspace)
       requestAnimationFrame(() =>
         document.getElementById("step-workspace-title")?.focus({
@@ -108,7 +116,7 @@ export function KnowledgeFlow({
       else next.delete("branch");
       next.set("step", branchResolution.currentNode.id);
     } else if (!requestedSelected) {
-      next.set("step", flow.startNodeId);
+      next.set("step", defaultNodeId);
     }
     if (next.toString() === paramKey) return;
     const href = `/knowledge?${next}`;
@@ -121,7 +129,7 @@ export function KnowledgeFlow({
     paramKey,
     requestedSelected,
     requestedView,
-    flow.startNodeId,
+    defaultNodeId,
   ]);
 
   useEffect(() => {
