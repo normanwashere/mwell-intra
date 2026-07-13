@@ -523,6 +523,23 @@ describe("Knowledge Base content", () => {
       }
     }
 
+    const administrationFlow = KNOWLEDGE_CONTENT.flows.find(
+      (item) => item.id === "administration",
+    )!;
+    const administrationDoa = administrationFlow.nodes.find(
+      (node) => node.id === "admin-doa" && node.type === "decision",
+    )!;
+    expect(
+      administrationDoa.ownerRoleIds.every((roleId) =>
+        configurationRoles.has(roleId as never),
+      ),
+    ).toBe(true);
+    if (administrationDoa.type === "decision") {
+      expect(
+        configurationRoles.has(administrationDoa.authorityRoleId as never),
+      ).toBe(true);
+    }
+
     const procurement = KNOWLEDGE_CONTENT.roles.find(
       (role) => role.id === DOA_REVIEW_ROLE_IDS[0],
     )!;

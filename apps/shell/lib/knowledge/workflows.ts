@@ -1393,9 +1393,9 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
       decision(
         "admin-doa",
         "Is the DOA revision complete and conflict-free?",
-        ["legal_admin", "procurement_admin", "platform_admin"],
+        ["legal_admin", "platform_admin"],
         "Validate immutable version, effective dates, amount and category coverage, named approvers, no gaps or overlaps, and a final authority.",
-        "procurement_admin",
+        "legal_admin",
         "Delegation of Authority control: one active version must resolve ordered named approval without gaps, overlaps, or self-approval conflicts.",
       ),
       decision(
