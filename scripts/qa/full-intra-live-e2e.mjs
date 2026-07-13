@@ -773,7 +773,9 @@ async function adminCreateDoaWorkflow(page, marker) {
   await page.getByLabel("Version", { exact: true }).fill(version);
   await page.getByLabel("Source document", { exact: true }).fill(`${marker} controlled test`);
   await page.getByLabel("Effective date", { exact: true }).fill("2026-07-14");
-  await page.getByLabel("Tier 1").selectOption("final_approver");
+  await page
+    .getByLabel("Tier 1", { exact: true })
+    .selectOption("final_approver");
   await page.getByLabel("Tier 1 minimum").fill("0");
   await page.getByLabel("Tier 1 maximum").fill("1000");
   const approvers = page.getByLabel(/Tier \d+ named approver/);

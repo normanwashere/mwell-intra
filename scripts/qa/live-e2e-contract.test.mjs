@@ -76,6 +76,7 @@ test("the mutating harness waits for quality data and uses unambiguous DOA contr
     "utf8",
   );
   assert.match(source, /getByLabel\("Department", \{ exact: true \}\)/);
+  assert.match(source, /getByLabel\("Tier 1", \{ exact: true \}\)/);
   assert.match(source, /getByLabel\(`Tier \$\{index \+ 1\} named approver`\)/);
   assert.match(source, /Loading quality controls/);
   assert.match(source, /No inspections waiting/);
