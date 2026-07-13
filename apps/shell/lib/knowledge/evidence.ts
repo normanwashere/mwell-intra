@@ -16,6 +16,14 @@ interface EvidenceScenario {
   y?: number;
   mobileX?: number;
   mobileY?: number;
+  hotspots?: Array<{
+    label: string;
+    instruction: string;
+    x: number;
+    y: number;
+    mobileX: number;
+    mobileY: number;
+  }>;
 }
 
 export const KNOWLEDGE_EVIDENCE_SCENARIOS: Record<string, EvidenceScenario> = {
@@ -131,6 +139,7 @@ export const KNOWLEDGE_EVIDENCE_SCENARIOS: Record<string, EvidenceScenario> = {
   },
   "setup-start": {
     route: "/warehouse/storage",
+    roleId: "warehouse_admin",
     state: "The warehouse administrator has opened Add storage area at the warehouse selector.",
     landmark: "Warehouse",
     label: "Select warehouse",
@@ -142,6 +151,7 @@ export const KNOWLEDGE_EVIDENCE_SCENARIOS: Record<string, EvidenceScenario> = {
   },
   "setup-area": {
     route: "/warehouse/storage",
+    roleId: "warehouse_admin",
     state: "The warehouse administrator is naming a controlled area in Add storage area.",
     landmark: "Area label",
     label: "Storage area label",
@@ -153,17 +163,37 @@ export const KNOWLEDGE_EVIDENCE_SCENARIOS: Record<string, EvidenceScenario> = {
   },
   "setup-bin": {
     route: "/warehouse/storage",
+    roleId: "warehouse_admin",
     state: "The warehouse administrator is defining the scannable bin code in Add storage area.",
     landmark: "Bin code",
     label: "Scannable bin code",
-    instruction: "Enter the unique scannable bin code and select Add bin.",
+    instruction: "Enter the unique scannable bin code.",
     x: 0.4693,
     y: 0.4,
     mobileX: 0.3868,
     mobileY: 0.6102,
+    hotspots: [
+      {
+        label: "Scannable bin code",
+        instruction: "Enter a unique code that matches the physical shelf label.",
+        x: 0.4693,
+        y: 0.4,
+        mobileX: 0.3868,
+        mobileY: 0.6102,
+      },
+      {
+        label: "Add bin",
+        instruction: "After reviewing the code, label, zone, and warehouse, select Add bin once.",
+        x: 0.79,
+        y: 0.895,
+        mobileX: 0.5,
+        mobileY: 0.91,
+      },
+    ],
   },
   "setup-route": {
     route: "/warehouse/operation-routes",
+    roleId: "warehouse_admin",
     state: "The warehouse administrator has opened the seeded operation-route editor.",
     landmark: "Save route",
     label: "Save operation route",
@@ -471,22 +501,25 @@ function buildEvidence(node: KnowledgeFlowNode): KnowledgeEvidence {
     reviewedAt: reviewDate,
     appCommit,
     provenance: "documentation",
+    environment: "demo",
     alt: `${scenario.landmark} application evidence for ${node.title}`,
     expectedLandmark: scenario.landmark,
     expectedDatabaseEffect: node.databaseEffect,
     sensitiveDataReviewed: true,
-    hotspots: [
+    hotspots: (scenario.hotspots ?? [
       {
-        id: "primary",
-        number: 1,
+        label: scenario.label,
+        instruction: scenario.instruction,
         x: scenario.x ?? 0.5,
         y: scenario.y ?? 0.5,
         mobileX: scenario.mobileX ?? 0.5,
         mobileY: scenario.mobileY ?? 0.5,
-        label: scenario.label,
-        instruction: scenario.instruction,
       },
-    ],
+    ]).map((hotspot, index) => ({
+      id: index === 0 ? "primary" : `step-${index + 1}`,
+      number: index + 1,
+      ...hotspot,
+    })),
   };
 }
 

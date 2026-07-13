@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Badge, Icon } from "@intra/ui";
+import { useSession } from "@intra/auth";
 import { edgeChoiceId, outgoingEdges } from "@shell/lib/knowledge/graph";
 import type {
   KnowledgeEvidence,
@@ -9,6 +11,8 @@ import type {
   KnowledgeFlowNode,
   KnowledgeRole,
 } from "@shell/lib/knowledge/types";
+import { knowledgeRoleIdsForAssignments } from "@shell/lib/knowledge/roles";
+import { guidedEvidenceRoute } from "@shell/lib/knowledge/semantics";
 import { EvidenceViewer } from "./EvidenceViewer";
 
 export function StepWorkspace({
@@ -26,6 +30,16 @@ export function StepWorkspace({
   onSelectNode: (nodeId: string) => void;
   onChooseBranch?: (choiceId: string) => void;
 }) {
+  const params = useSearchParams();
+  const { userRoles } = useSession();
+  const assignedRoleIds = knowledgeRoleIdsForAssignments(userRoles);
+  const canExecute = node.ownerRoleIds.some((roleId) =>
+    assignedRoleIds.includes(roleId),
+  );
+  const returnTo = `/knowledge${params.size ? `?${params}` : ""}`;
+  const liveRoute = evidence?.route
+    ? guidedEvidenceRoute(evidence.route, node.id, returnTo)
+    : null;
   const branches = outgoingEdges(flow, node.id);
   const selectEdge = (edge: (typeof branches)[number]) => {
     if (branches.length > 1 && onChooseBranch)
@@ -39,7 +53,7 @@ export function StepWorkspace({
     >
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.55fr)_minmax(20rem,.85fr)]">
         <div className="min-w-0">
-          <EvidenceViewer evidence={evidence} />
+          <EvidenceViewer evidence={evidence} node={node} />
         </div>
         <div className="min-w-0">
           <div className="flex flex-wrap gap-2">
@@ -122,38 +136,30 @@ export function StepWorkspace({
               </div>
             </div>
           )}
-          {evidence?.route && (
-            <Link
-              href={evidence.route}
-              className="btn-primary mt-6 w-full justify-center"
-            >
-              Open live screen <Icon name="arrowRight" className="h-4 w-4" />
+          {liveRoute && canExecute && (
+            <Link href={liveRoute} className="btn-primary mt-6 w-full justify-center">
+              Open guided screen <Icon name="arrowRight" className="h-4 w-4" />
             </Link>
           )}
+          {liveRoute && !canExecute && (
+            <div className="mt-6 border border-amber-300 bg-amber-50 p-4">
+              <p className="flex items-center gap-2 text-sm font-semibold text-amber-900">
+                <Icon name="lock" className="h-4 w-4" /> View-only guidance
+              </p>
+              <p className="mt-1 text-sm text-amber-800">
+                This action requires {node.ownerRoleIds
+                  .map((id) => rolesById.get(id)?.label ?? id)
+                  .join(" or ")}.
+              </p>
+              <Link
+                href="/knowledge?flow=identity-and-access&view=flow"
+                className="btn-outline btn-sm mt-3 min-h-11"
+              >
+                Request access guidance
+              </Link>
+            </div>
+          )}
         </div>
-      </div>
-      <div className="sticky bottom-20 z-20 mt-4 grid grid-cols-2 gap-2 border border-line bg-surface/95 p-2 shadow-e2 backdrop-blur md:hidden">
-        {branches[0] ? (
-          <button
-            type="button"
-            onClick={() => selectEdge(branches[0]!)}
-            className="btn-outline min-w-0 justify-center"
-          >
-            <span className="truncate">{branches[0].label ?? "Next step"}</span>
-            <Icon name="arrowRight" className="h-4 w-4 shrink-0" />
-          </button>
-        ) : (
-          <span />
-        )}
-        {evidence?.route && (
-          <Link
-            href={evidence.route}
-            className="btn-primary min-w-0 justify-center"
-          >
-            <span className="truncate">Open live screen</span>
-            <Icon name="arrowRight" className="h-4 w-4 shrink-0" />
-          </Link>
-        )}
       </div>
     </section>
   );

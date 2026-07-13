@@ -54,11 +54,36 @@ const availabilityTone = (availability: KnowledgeAvailability) =>
       : ("slate" as const);
 
 const resultTypeLabel: Record<HandbookSearchResult["type"], string> = {
-  task: "Task",
+  workflow: "Workflow",
+  procedure: "Procedure",
+  action: "Action",
+  decision: "Decision",
+  system: "System step",
+  exception: "Exception",
+  outcome: "Outcome",
   role: "Role",
   feature: "Feature",
   glossary: "Glossary",
   roadmap: "Roadmap",
+};
+
+const taskResultTypes: HandbookSearchResult["type"][] = [
+  "workflow",
+  "procedure",
+  "action",
+  "decision",
+  "system",
+  "exception",
+  "outcome",
+];
+
+const flowPhase = (id: string) => {
+  if (["identity-and-access", "administration", "doa-governance", "access-recertification-offboarding", "audit-incident-handling"].includes(id))
+    return "Govern and secure";
+  if (["procure-to-pay", "vendor-accreditation", "product-master-data-lifecycle", "po-amendment-cancellation", "finance-export-reconciliation"].includes(id))
+    return "Source and control";
+  if (["exception-and-recovery"].includes(id)) return "Recover and improve";
+  return "Operate inventory";
 };
 
 export function HandbookLanding({
@@ -96,14 +121,15 @@ export function HandbookLanding({
     (result) =>
       (availability === "all" || result.availability === availability) &&
       (query.length > 0 ||
-        result.type === mode ||
+        (mode === "task" && taskResultTypes.includes(result.type)) ||
+        (mode !== "task" && result.type === mode) ||
         (mode === "feature" && result.type === "roadmap")),
   );
   const visibleResults = matchingResults.slice(0, resultLimit);
   const recommended = results
     .filter(
       (result) =>
-        result.type === "task" &&
+        ["workflow", "procedure", "action"].includes(result.type) &&
         result.availability === "live" &&
         result.roleIds.some((id) => recommendedRoles.has(id)),
     )
@@ -144,14 +170,18 @@ export function HandbookLanding({
       <section aria-labelledby="principal-flow-title">
         <div className="flex items-center justify-between gap-3">
           <h2 id="principal-flow-title" className="text-lg font-bold text-ink">
-            Principal Intra flow
+            Principal Intra flows
           </h2>
           <span className="text-xs text-faint">
-            Scroll to compare workflows
+            Grouped by operating phase
           </span>
         </div>
-        <div className="mt-3 grid snap-x grid-flow-col auto-cols-[16rem] gap-3 overflow-x-auto pb-3 md:grid-flow-row md:grid-cols-2 md:auto-cols-auto md:overflow-x-visible xl:grid-cols-3">
-          {content.flows.map((flow, index) => {
+        <div className="mt-4 space-y-7">
+          {["Govern and secure", "Source and control", "Operate inventory", "Recover and improve"].map((phase) => (
+            <section key={phase} aria-labelledby={`phase-${phase.replaceAll(" ", "-")}`}>
+              <h3 id={`phase-${phase.replaceAll(" ", "-")}`} className="mb-3 text-sm font-semibold uppercase text-muted">{phase}</h3>
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {content.flows.filter((flow) => flowPhase(flow.id) === phase).map((flow, index) => {
             const decisions = flow.nodes.filter(
               (node) => node.type === "decision",
             ).length;
@@ -165,28 +195,28 @@ export function HandbookLanding({
                 onClick={() =>
                   onSetParams({ flow: flow.id, step: null, view: "flow" })
                 }
-                className="group min-h-36 w-64 shrink-0 snap-start border border-line bg-surface p-4 text-left transition hover:border-brand-500 hover:bg-inset focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 md:w-auto"
+                className="group min-h-40 w-full border border-line bg-surface p-4 text-left transition hover:border-brand-500 hover:bg-inset focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
               >
                 <span className="flex items-center justify-between gap-2">
                   <span className="grid h-8 w-8 place-items-center bg-brand-50 text-sm font-bold text-brand-700">
                     {index + 1}
                   </span>
-                  <Icon
-                    name="arrowRight"
-                    className="h-4 w-4 text-brand-700 transition group-hover:translate-x-0.5"
-                  />
+                  <Badge tone={flow.availability === "limited" ? "amber" : "emerald"}>{flow.availability === "limited" ? "Limited" : "Live"}</Badge>
                 </span>
                 <span className="mt-3 line-clamp-2 block font-semibold text-ink">
                   {flow.title}
                 </span>
                 <span className="mt-3 flex gap-3 text-xs text-faint">
                   <span>{flow.nodes.length} steps</span>
-                  <span>{decisions} decisions</span>
-                  <span>{outcomes} outcomes</span>
+                  <span>{decisions} {decisions === 1 ? "decision" : "decisions"}</span>
+                  <span>{outcomes} {outcomes === 1 ? "outcome" : "outcomes"}</span>
                 </span>
               </button>
             );
           })}
+              </div>
+            </section>
+          ))}
         </div>
       </section>
 

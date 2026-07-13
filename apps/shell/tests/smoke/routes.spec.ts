@@ -53,6 +53,7 @@ const ROUTES: readonly RouteCase[] = [
   { path: "/legal", label: "legal module" },
   { path: "/vendor", label: "vendor portal" },
   { path: "/knowledge", label: "knowledge base" },
+  { path: "/admin", label: "administration" },
   { path: "/nonexistent-route", label: "not-found page" },
 ];
 
@@ -109,6 +110,13 @@ const AUTHENTICATED_ROUTES: readonly AuthenticatedRouteCase[] = [
     fixture: FIXTURES.admin,
     expectedPath: "/",
     expectedText: /Admin|Users & Roles/i,
+  },
+  {
+    path: "/admin",
+    label: "administration landing",
+    fixture: FIXTURES.admin,
+    expectedPath: "/admin",
+    expectedText: /Administration|Users and roles/i,
   },
   {
     path: "/admin/users",

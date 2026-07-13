@@ -13,6 +13,7 @@ import type {
   KnowledgeFlow as Flow,
   KnowledgeRole,
 } from "@shell/lib/knowledge/types";
+import { resolveSelectedWorkflowNode } from "@shell/lib/knowledge/semantics";
 import { GuidedDecisionPath } from "./GuidedDecisionPath";
 import { StepWorkspace } from "./StepWorkspace";
 import { WorkflowCanvas } from "./WorkflowCanvas";
@@ -52,10 +53,11 @@ export function KnowledgeFlow({
   const requestedSelected = flow.nodes.find(
     (node) => node.id === requestedStepId,
   );
-  const selected =
-    hasBranch || !requestedSelected
-      ? branchResolution.currentNode
-      : requestedSelected;
+  const selected = resolveSelectedWorkflowNode(flow, {
+    requestedStepId,
+    hasBranch,
+    branchNodeId: branchResolution.currentNode.id,
+  });
   const selectedEvidence = evidence.find(
     (item) => item.id === selected.evidenceId,
   );
@@ -106,7 +108,7 @@ export function KnowledgeFlow({
       else next.delete("branch");
       next.set("step", branchResolution.currentNode.id);
     } else if (!requestedSelected) {
-      next.set("step", branchResolution.currentNode.id);
+      next.set("step", flow.startNodeId);
     }
     if (next.toString() === paramKey) return;
     const href = `/knowledge?${next}`;
@@ -119,7 +121,15 @@ export function KnowledgeFlow({
     paramKey,
     requestedSelected,
     requestedView,
+    flow.startNodeId,
   ]);
+
+  useEffect(() => {
+    if (activeView !== "steps") return;
+    document
+      .querySelector<HTMLElement>(`[data-workflow-step="${selected.id}"]`)
+      ?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+  }, [activeView, selected.id]);
 
   const selectNode = (nodeId: string) => {
     if (hasBranch) {
@@ -165,8 +175,15 @@ export function KnowledgeFlow({
         <p className="mt-2 max-w-3xl text-base text-muted">{flow.summary}</p>
         <div className="mt-3 flex flex-wrap gap-2">
           <Badge tone="brand">{flow.nodes.length} steps</Badge>
-          <Badge tone="amber">{decisions} decisions</Badge>
-          <Badge tone="emerald">{outcomes} outcomes</Badge>
+          <Badge tone={flow.availability === "limited" ? "amber" : "emerald"}>
+            {flow.availability === "limited" ? "Limited workflow" : "Live workflow"}
+          </Badge>
+          <Badge tone="amber">
+            {decisions} {decisions === 1 ? "decision" : "decisions"}
+          </Badge>
+          <Badge tone="emerald">
+            {outcomes} {outcomes === 1 ? "outcome" : "outcomes"}
+          </Badge>
         </div>
       </header>
 
@@ -250,6 +267,7 @@ export function KnowledgeFlow({
                   key={node.id}
                   onClick={() => selectNode(node.id)}
                   aria-current={node.id === selected.id ? "step" : undefined}
+                  data-workflow-step={node.id}
                   className={`min-h-11 min-w-40 border-l-4 px-3 py-2 text-left text-sm md:min-w-0 ${node.id === selected.id ? "border-brand-600 bg-brand-50 font-semibold text-brand-800" : "border-line bg-surface text-muted hover:bg-inset"}`}
                 >
                   <span className="block text-[10px] uppercase text-faint">

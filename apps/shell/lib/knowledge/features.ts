@@ -71,6 +71,16 @@ const FEATURE_RELATIONSHIPS: Record<string, FeatureRelationship> = {
     policyBasis: [POLICY.resilience],
     relatedFlowIds: ["exception-and-recovery"],
   },
+  "admin-governance": {
+    policyBasis: [POLICY.identity, POLICY.doa],
+    relatedFlowIds: [
+      "administration",
+      "identity-and-access",
+      "doa-governance",
+      "access-recertification-offboarding",
+      "audit-incident-handling",
+    ],
+  },
   "admin-users": {
     policyBasis: [POLICY.identity],
     relatedFlowIds: ["identity-and-access", "administration"],
@@ -414,6 +424,8 @@ const auditedNotification = (definition: FeatureDefinition): string => {
       "Search and filter states appear in the page and URL; the library does not write notification records.",
     "offline-status":
       "The fallback presents connectivity guidance only and does not write notification records.",
+    "admin-governance":
+      "The landing page only navigates to governed administration controls and does not write records.",
     "admin-users":
       "Role assignment and revocation use local success or error toasts; the page does not write core.notifications.",
     "admin-doa":
@@ -557,6 +569,25 @@ const definitions: FeatureDefinition[] = [
       "Do not repeat uncertain transactions; reconnect, open the record, and verify activity before retrying.",
     completionEvidence:
       "A fresh navigation loads the live page and any queued command shows an explicit synchronized outcome.",
+  },
+  {
+    id: "admin-governance",
+    title: "Administration governance",
+    module: "admin",
+    route: "/admin",
+    roleIds: ["platform_admin"],
+    purpose:
+      "Provides one governed entry point for identity access, Delegation of Authority, and administration runbooks.",
+    reads:
+      "Current administrator authorization and the released administration destinations.",
+    writes:
+      "No record is changed; the page routes an authorized administrator to the selected governed control.",
+    statuses:
+      "Authorized administration landing, access denied, or selected destination.",
+    exception:
+      "If a required control is unavailable, verify the administrator role and use the governance runbook before requesting a configuration change.",
+    completionEvidence:
+      "The intended governed administration workspace opens under an authorized administrator session.",
   },
   {
     id: "admin-users",

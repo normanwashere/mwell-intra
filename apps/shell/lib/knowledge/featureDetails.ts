@@ -201,6 +201,48 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
       ],
     },
+    "admin-governance": {
+      controls: [
+        control(
+          "Open users",
+          "Navigates to the governed user and role administration workspace.",
+          "The current identity must hold core manage_rbac authority.",
+          "The user and role workspace opens without changing access.",
+        ),
+        control(
+          "Open authority",
+          "Navigates to the department Delegation of Authority workspace.",
+          "The current identity must be authorized for the target administration route.",
+          "The DOA workspace opens without changing an active matrix.",
+        ),
+        control(
+          "Open runbook",
+          "Navigates to the administration decision flow in the Knowledge Base.",
+          "Documentation remains visible but does not grant administration authority.",
+          "The governance decision tree opens at its declared start node.",
+        ),
+      ],
+      fields: [
+        field(
+          "Administration area",
+          "Names the governed destination represented by each entry.",
+          true,
+          "The destination must exist in the released route registry.",
+        ),
+        field(
+          "Availability",
+          "Shows whether the destination is a live control or guidance.",
+          true,
+          "The label must match the released route or documentation state.",
+        ),
+        field(
+          "Authority notice",
+          "States the approval and audit expectations for administration changes.",
+          true,
+          "The notice is informational and cannot be used to bypass a route guard.",
+        ),
+      ],
+    },
     "admin-users": {
       controls: [
         control(

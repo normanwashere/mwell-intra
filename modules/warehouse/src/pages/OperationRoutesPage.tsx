@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import type { ControlledLocationType, OperationRoute } from '@intra/data-kit';
 import { useWarehouse } from '@/app/store';
 import { can } from '@/auth/roles';
 import { Badge, EmptyState, PageHeader, Sheet } from '@/components/ui';
+import { knowledgeGuideReturnPath } from '@/lib/knowledgeGuide';
 
 const LOCATION_TYPES: ControlledLocationType[] = ['warehouse', 'event_site', 'vendor'];
 const POLICY_FIELDS: Array<{ text: string; field: 'requiresEvidence' | 'requiresApproval' | 'requiresOnline' | 'active' }> = [
@@ -14,14 +16,28 @@ const POLICY_FIELDS: Array<{ text: string; field: 'requiresEvidence' | 'requires
 const label = (value: string) => value.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 
 export function OperationRoutesPage() {
+  const [searchParams] = useSearchParams();
   const { data, role, updateOperationRoute } = useWarehouse();
   const [selected, setSelected] = useState<OperationRoute | null>(null);
   const [draft, setDraft] = useState<OperationRoute | null>(null);
   const [saving, setSaving] = useState(false);
+  const guideApplied = useRef(false);
   useEffect(() => setDraft(selected ? { ...selected, sourceLocationTypes: [...selected.sourceLocationTypes], destinationLocationTypes: [...selected.destinationLocationTypes] } : null), [selected]);
-  if (!data) return null;
-  const routes = data.operationRoutes ?? [];
+  const routes = data?.operationRoutes ?? [];
   const mayEdit = can(role, 'manage_operation_routes');
+  const guideReturnTo = knowledgeGuideReturnPath(searchParams);
+  useEffect(() => {
+    if (
+      guideApplied.current ||
+      searchParams.get('guide') !== 'setup-route' ||
+      !mayEdit ||
+      routes.length === 0
+    )
+      return;
+    guideApplied.current = true;
+    setSelected(routes[0]!);
+  }, [mayEdit, routes, searchParams]);
+  if (!data) return null;
   const isLastActive = (route: OperationRoute) =>
     selected?.id === route.id &&
     selected.active &&
@@ -75,6 +91,14 @@ export function OperationRoutesPage() {
 
       <Sheet open={Boolean(selected)} onOpenChange={(open) => { if (!open) setSelected(null); }} title="Edit operation route" description={selected ? label(selected.operationTypeId) : undefined} footer={<button type="button" className="btn-primary w-full justify-center" disabled={!draft || draft.sourceLocationTypes.length === 0 || draft.destinationLocationTypes.length === 0 || saving} onClick={() => void save()}>{saving ? 'Saving...' : 'Save route'}</button>}>
         {draft && <div className="space-y-4">
+          {guideReturnTo && (
+            <a
+              href={guideReturnTo}
+              className="btn-ghost btn-sm w-full justify-center"
+            >
+              Back to workflow guide
+            </a>
+          )}
           {(['sourceLocationTypes', 'destinationLocationTypes'] as const).map((field) => <fieldset key={field}><legend className="label">{field === 'sourceLocationTypes' ? 'Source types' : 'Destination types'}</legend><div className="grid grid-cols-3 gap-2">{LOCATION_TYPES.map((value) => <label key={value} className="flex min-h-11 items-center gap-2 rounded-lg border border-line px-3 text-sm text-ink"><input type="checkbox" checked={draft[field].includes(value)} onChange={() => toggleLocation(field, value)} />{label(value)}</label>)}</div></fieldset>)}
           <div className="space-y-2">
             {POLICY_FIELDS.map(({ text, field }) => <label key={field} className="flex min-h-11 items-center justify-between rounded-lg bg-inset px-3 text-sm font-medium text-ink"><span>{text}</span><input type="checkbox" aria-label={text} checked={draft[field]} disabled={field === 'active' && isLastActive(draft)} onChange={(event) => setDraft({ ...draft, [field]: event.target.checked })} /></label>)}

@@ -451,7 +451,7 @@ describe("production guide rendering contracts", () => {
     KNOWLEDGE_GUIDE_CONTENT.roles.map((role) => [role.id, role]),
   );
 
-  it("renders every task and responsibility stage for all 26 roles", () => {
+  it("renders every task and responsibility stage for every documented role", () => {
     for (const role of KNOWLEDGE_GUIDE_CONTENT.roles) {
       const markup = renderToStaticMarkup(
         <KnowledgeRoleGuide
@@ -482,7 +482,7 @@ describe("production guide rendering contracts", () => {
     }
   });
 
-  it("renders exact policies, controls, fields, and flows for all 58 features", () => {
+  it("renders exact policies, controls, fields, and flows for every documented feature", () => {
     for (const feature of KNOWLEDGE_CONTENT.features) {
       const markup = renderToStaticMarkup(
         <FeatureGuide

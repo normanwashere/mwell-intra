@@ -22,6 +22,12 @@ vi.mock("@intra/ui", () => ({
   ),
   Icon: ({ name }: { name: string }) => <span aria-hidden>{name}</span>,
 }));
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => new URLSearchParams(),
+}));
+vi.mock("@intra/auth", () => ({
+  useSession: () => ({ userRoles: { procurement: ["approver"] } }),
+}));
 
 const flow: KnowledgeFlow = {
   id: "guided",

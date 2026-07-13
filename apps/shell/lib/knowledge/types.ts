@@ -198,6 +198,7 @@ export interface KnowledgeEvidence {
   reviewedAt: string;
   appCommit: string;
   provenance: "production" | "documentation";
+  environment?: "demo" | "production";
   alt: string;
   expectedLandmark: string;
   expectedDatabaseEffect?: string;
@@ -248,6 +249,7 @@ export interface KnowledgeFlow {
   id: string;
   title: string;
   summary: string;
+  availability?: KnowledgeAvailability;
   roles: string[];
   startNodeId: string;
   nodes: KnowledgeFlowNode[];

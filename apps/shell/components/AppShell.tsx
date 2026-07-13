@@ -18,6 +18,7 @@ import {
   FINANCE_NAV,
   KNOWLEDGE_NAV,
   accessibleModules,
+  mobileCenterAction,
   VENDOR_NAV,
   type ModuleNav,
   type ShellNavItem,
@@ -60,24 +61,6 @@ function topBarLabel(pathname: string, entries: readonly NavEntry[]): string {
   if (pathname.startsWith("/login")) return "Sign in";
   if (pathname.startsWith("/reset-password")) return "Reset password";
   return "";
-}
-
-/** Context-aware primary action for the mobile center FAB. */
-function centerAction(pathname: string): NavEntry | null {
-  if (pathname.startsWith("/procurement")) {
-    return {
-      href: "/procurement/requests/new",
-      label: "New request",
-      icon: "plus",
-    };
-  }
-  if (pathname.startsWith("/legal")) {
-    return { href: "/legal/invites/new", label: "Invite vendor", icon: "plus" };
-  }
-  if (pathname.startsWith("/admin")) {
-    return { href: "/admin/users", label: "Users", icon: "list" };
-  }
-  return null;
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -128,7 +111,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     return pathname.startsWith(href);
   };
 
-  const fab = centerAction(pathname);
+  const fab = mobileCenterAction(pathname, userRoles);
   const mobileLeft = entries.slice(0, 2);
   const hasMobileOverflow = entries.length > 4;
   const mobileRight = hasMobileOverflow

@@ -5,6 +5,23 @@ import { OperationRoutesPage } from './OperationRoutesPage';
 import { makeRepo, renderWithProviders } from '@/test/renderWithProviders';
 
 describe('OperationRoutesPage', () => {
+  it('opens the editable route sheet requested by a Knowledge Base guide link', async () => {
+    renderWithProviders(<OperationRoutesPage />, {
+      repo: makeRepo(),
+      role: 'logistics_supervisor',
+      route:
+        '/operation-routes?guide=setup-route&returnTo=%2Fknowledge%3Fflow%3Dwarehouse-setup',
+    });
+
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Edit operation route',
+    });
+    expect(dialog).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole('link', { name: 'Back to workflow guide' }),
+    ).toHaveAttribute('href', '/knowledge?flow=warehouse-setup');
+  });
+
   it('shows route policy and saves editable controls for Logistics', async () => {
     const user = userEvent.setup();
     const repo = makeRepo();

@@ -1,21 +1,19 @@
 import { spawnSync } from "node:child_process";
+import { resolve } from "node:path";
 
-const command = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+const shellDirectory = resolve(process.cwd(), "apps/shell");
+const vitestCli = resolve(shellDirectory, "node_modules/vitest/vitest.mjs");
 const result = spawnSync(
-  command,
+  process.execPath,
   [
-    "--filter",
-    "@intra/shell",
-    "exec",
-    "vitest",
+    vitestCli,
     "run",
     "lib/knowledge/content.test.ts",
     "lib/knowledge/validate.test.ts",
   ],
   {
-    cwd: process.cwd(),
+    cwd: shellDirectory,
     stdio: "inherit",
-    shell: process.platform === "win32",
     env: { ...process.env, KNOWLEDGE_ARTIFACT_GATE: "1" },
   },
 );

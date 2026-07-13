@@ -44,6 +44,14 @@ export const SHELL_PAGE_ROUTE_CONTRACTS: ShellPageRouteContract[] = [
     minimumFields: 2,
   },
   {
+    route: "/admin",
+    module: "admin",
+    capabilityIds: ["manage_rbac"],
+    administratorRoleIds: ["platform_admin"],
+    minimumControls: 3,
+    minimumFields: 0,
+  },
+  {
     route: "/admin/users",
     module: "admin",
     capabilityIds: ["manage_rbac"],

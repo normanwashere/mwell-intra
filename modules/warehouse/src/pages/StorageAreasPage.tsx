@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useWarehouse } from '@/app/store';
 import { toStockState } from '@/data/repository';
 import { can } from '@/auth/roles';
@@ -20,8 +21,10 @@ import {
 import { Icon } from '@/components/Icon';
 import { BarcodeScanner } from '@/components/camera/BarcodeScanner';
 import { WarehouseScanFlow } from '@/components/camera/WarehouseScanFlow';
+import { knowledgeGuideReturnPath } from '@/lib/knowledgeGuide';
 
 export function StorageAreasPage() {
+  const [searchParams] = useSearchParams();
   const {
     data,
     role,
@@ -33,6 +36,7 @@ export function StorageAreasPage() {
   const toast = useToast();
   const canManage = can(role, 'manage_locations');
   const canPutAway = can(role, 'receive_stock') || can(role, 'transfer_stock');
+  const guideReturnTo = knowledgeGuideReturnPath(searchParams);
 
   const warehouses = useMemo(
     () => (data?.locations ?? []).filter((l) => l.type === 'warehouse'),
@@ -59,6 +63,31 @@ export function StorageAreasPage() {
   const [zone, setZone] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const guideApplied = useRef(false);
+
+  useEffect(() => {
+    if (
+      guideApplied.current ||
+      !canManage ||
+      !['setup-start', 'setup-area', 'setup-bin'].includes(
+        searchParams.get('guide') ?? '',
+      )
+    )
+      return;
+    guideApplied.current = true;
+    setEditing(null);
+    setCode('');
+    setLabel('');
+    setZone('');
+    setError(null);
+    setConfirmDelete(false);
+    setOpen(true);
+  }, [canManage, searchParams]);
+
+  useEffect(() => {
+    if (!open || searchParams.get('guide') !== 'setup-bin') return;
+    requestAnimationFrame(() => document.getElementById('sa-code')?.focus());
+  }, [open, searchParams]);
 
   // contents / scan-lookup sheet
   const [viewing, setViewing] = useState<StorageArea | null>(null);
@@ -355,6 +384,14 @@ export function StorageAreasPage() {
         }
       >
         <div className="space-y-3">
+          {guideReturnTo && (
+            <a
+              href={guideReturnTo}
+              className="btn-ghost btn-sm w-full justify-center"
+            >
+              Back to workflow guide
+            </a>
+          )}
           <Field
             label="Bin code"
             htmlFor="sa-code"

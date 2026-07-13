@@ -5,7 +5,18 @@ import type {
 } from "./types";
 
 export type HandbookEntryMode = "task" | "role" | "feature";
-export type HandbookResultType = HandbookEntryMode | "glossary" | "roadmap";
+export type HandbookResultType =
+  | "workflow"
+  | "procedure"
+  | "action"
+  | "decision"
+  | "system"
+  | "exception"
+  | "outcome"
+  | "role"
+  | "feature"
+  | "glossary"
+  | "roadmap";
 
 export interface HandbookSearchResult {
   id: string;
@@ -26,7 +37,7 @@ export interface HandbookSearchResult {
 export interface KnowledgeFilters {
   module?: KnowledgeModule | "all";
   roleId?: string;
-  type?: HandbookResultType | "article" | "flow" | "future" | "all";
+  type?: HandbookResultType | HandbookEntryMode | "article" | "flow" | "future" | "all";
 }
 
 interface WeightedText {
@@ -99,7 +110,16 @@ const typeMatches = (
   requested: KnowledgeFilters["type"],
 ) => {
   if (!requested || requested === "all") return true;
-  if (requested === "article" || requested === "flow") return actual === "task";
+  if (requested === "task" || requested === "article" || requested === "flow")
+    return [
+      "workflow",
+      "procedure",
+      "action",
+      "decision",
+      "system",
+      "exception",
+      "outcome",
+    ].includes(actual);
   if (requested === "future") return actual === "roadmap";
   return actual === requested;
 };
@@ -216,7 +236,7 @@ export function searchKnowledge(
     if (referenceArticleIds.has(article.id)) continue;
     results.push({
       id: article.id,
-      type: "task",
+      type: "procedure",
       title: article.title,
       summary: article.summary,
       module: article.module,
@@ -265,14 +285,14 @@ export function searchKnowledge(
     ];
     results.push({
       id: flow.id,
-      type: "task",
+      type: "workflow",
       title: flow.title,
       summary: flow.summary,
       module: flowModules[0],
       moduleContext: flowModules,
       roleIds: flow.roles,
       roleContext: roleContext(flow.roles),
-      availability: "live",
+      availability: flow.availability ?? "live",
       href: `/knowledge?flow=${encodeURIComponent(flow.id)}`,
       destinationContext: "End-to-end workflow",
       text: {
@@ -310,14 +330,23 @@ export function searchKnowledge(
       ];
       results.push({
         id: `${flow.id}-${node.id}`,
-        type: "task",
+        type:
+          node.type === "terminal"
+            ? "outcome"
+            : node.type === "start" || node.type === "action" || node.type === "handoff"
+              ? "action"
+              : node.type,
         title: node.title,
         summary: node.body,
         module: nodeModules[0],
         moduleContext: nodeModules,
         roleIds: node.ownerRoleIds,
         roleContext: roleContext(node.ownerRoleIds),
-        availability: "live",
+        availability:
+          flow.availability === "limited" ||
+          node.type === "terminal" || node.type === "system"
+            ? "limited"
+            : "live",
         href: `/knowledge?flow=${encodeURIComponent(flow.id)}&step=${encodeURIComponent(node.id)}`,
         destinationContext: `${flow.title} / ${node.type}`,
         text: {
@@ -390,7 +419,7 @@ export function searchKnowledge(
     });
   }
 
-  return results
+  const ranked = results
     .map(({ text, ...item }) => {
       const relevance = scoreText(text, q);
       const availabilityBoost = requestsRoadmap
@@ -418,6 +447,13 @@ export function searchKnowledge(
     .sort(
       (left, right) =>
         right.score - left.score || left.title.localeCompare(right.title),
-    )
+    );
+  const unique = new Map<string, (typeof ranked)[number]>();
+  for (const item of ranked) {
+    const key = `${item.type}:${normalize(item.title)}:${item.href}`;
+    if (!unique.has(key)) unique.set(key, item);
+  }
+  return [...unique.values()]
+    .slice(0, 60)
     .map(({ relevance: _relevance, ...item }) => item);
 }

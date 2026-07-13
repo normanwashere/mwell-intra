@@ -3,7 +3,7 @@
 // it (`userRoles[module]?.length`). `core` is the shared foundation and has no
 // hosted route of its own, so it is intentionally excluded from the nav.
 
-import type { Module, UserRoles } from "@intra/rbac";
+import { can, type Module, type UserRoles } from "@intra/rbac";
 import type { IconName, Tone } from "@intra/ui";
 
 export interface ModuleNav {
@@ -65,8 +65,8 @@ export const FINANCE_NAV = {
 
 /** Platform administration route, visible to users with core:manage_rbac. */
 export const ADMIN_NAV = {
-  href: "/admin/users",
-  label: "Admin — Users & Roles",
+  href: "/admin",
+  label: "Administration",
   description:
     "Provision profiles, assign scoped module roles, review audit trail.",
   icon: "list",
@@ -104,4 +104,34 @@ export function accessibleModules(
   userRoles: Partial<UserRoles>,
 ): readonly ModuleNav[] {
   return MODULE_NAV.filter((item) => hasModuleAccess(userRoles, item.module));
+}
+
+export interface MobileContextAction {
+  href: string;
+  label: string;
+  icon: IconName;
+}
+
+export function mobileCenterAction(
+  pathname: string,
+  userRoles: Partial<UserRoles>,
+): MobileContextAction | null {
+  if (
+    pathname.startsWith("/procurement") &&
+    can(userRoles, "procurement", "create_request")
+  )
+    return {
+      href: "/procurement/requests/new",
+      label: "New request",
+      icon: "plus",
+    };
+  if (pathname.startsWith("/legal") && can(userRoles, "legal", "admin"))
+    return {
+      href: "/legal/invites/new",
+      label: "Invite vendor",
+      icon: "plus",
+    };
+  if (pathname.startsWith("/admin") && can(userRoles, "core", "manage_rbac"))
+    return { href: "/admin/users", label: "Users", icon: "list" };
+  return null;
 }

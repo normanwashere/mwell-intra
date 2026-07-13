@@ -17,7 +17,7 @@ import type {
 
 const moduleRoute: Record<KnowledgeModule, string> = {
   core: "/",
-  admin: "/admin/users",
+  admin: "/admin",
   vendor: "/vendor",
   warehouse: "/warehouse",
   procurement: "/procurement",

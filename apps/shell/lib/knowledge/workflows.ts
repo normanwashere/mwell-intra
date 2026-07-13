@@ -83,6 +83,7 @@ const flow = (
   summary,
   roles,
   startNodeId: nodes[0]!.id,
+  availability: "live",
   nodes: nodes.map((item) => ({
     ...item,
     ...(["start", "action", "handoff"].includes(item.type)
@@ -90,6 +91,63 @@ const flow = (
       : {}),
   })) as KnowledgeFlowNode[],
   edges,
+});
+
+const limitedFlow = (
+  id: string,
+  title: string,
+  summary: string,
+  roles: string[],
+  authorityRoleId: string,
+  policyBasis: string,
+): KnowledgeFlow => ({
+  id,
+  title,
+  summary,
+  roles,
+  availability: "limited",
+  startNodeId: `${id}-scope`,
+  nodes: [
+    decision(
+      `${id}-scope`,
+      "Can the current Intra controls govern this case end to end?",
+      roles,
+      "Confirm the source record, accountable owner, approval authority, audit evidence, and whether every required transaction is supported by a released control.",
+      authorityRoleId,
+      policyBasis,
+    ),
+    process(
+      `${id}-handoff`,
+      "system",
+      "Record the controlled interim handoff",
+      roles,
+      "Link the approved external control record to Intra without inventing a status or bypassing authority.",
+      {
+        databaseEffect:
+          "Only released Intra records are updated; unsupported transaction details remain in the approved controlled system of record.",
+      },
+    ),
+    terminal(
+      `${id}-complete`,
+      "Governed case completed",
+      roles,
+      "The released Intra controls and linked evidence provide a complete attributable record.",
+      "complete",
+    ),
+    terminal(
+      `${id}-limited`,
+      "Controlled interim process required",
+      roles,
+      "Do not simulate an unavailable function. Use the approved interim control, retain the reference, and track this product gap.",
+      "escalated",
+    ),
+  ],
+  edges: [
+    edge(`${id}-scope`, `${id}-handoff`, "Partially supported", "neutral"),
+    edge(`${id}-scope`, `${id}-complete`, "Fully supported", "success"),
+    edge(`${id}-scope`, `${id}-limited`, "Required control unavailable", "exception"),
+    edge(`${id}-handoff`, `${id}-complete`),
+  ],
 });
 
 const allLiveRoleIds = [
@@ -690,28 +748,28 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
         "setup-start",
         "start",
         "Create the warehouse location",
-        ["warehouse_admin"],
+        ["warehouse_logistics_supervisor", "warehouse_admin"],
         "Define the site identity and operational ownership.",
       ),
       process(
         "setup-area",
         "action",
         "Create controlled storage areas",
-        ["warehouse_admin"],
+        ["warehouse_logistics_supervisor", "warehouse_admin"],
         "Set area type, restrictions, capacity context, and custody purpose.",
       ),
       process(
         "setup-bin",
         "action",
         "Create scannable bins",
-        ["warehouse_admin"],
+        ["warehouse_logistics_supervisor", "warehouse_admin"],
         "Assign each bin to one valid location and area.",
       ),
       process(
         "setup-route",
         "action",
         "Configure operation routes",
-        ["warehouse_admin"],
+        ["warehouse_logistics_supervisor", "warehouse_admin"],
         "Permit only reviewed operation, source, and destination location-type combinations.",
       ),
       terminal(
@@ -739,6 +797,7 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
       "warehouse_logistics_supervisor",
       "warehouse_operations",
       "warehouse_finance",
+      "warehouse_admin",
     ],
     [
       process(
@@ -1352,6 +1411,7 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
     [
       "platform_admin",
       "warehouse_admin",
+      "warehouse_logistics_supervisor",
       "legal_admin",
       "procurement_admin",
       "procurement_approver",
@@ -1796,5 +1856,77 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
       ),
       edge("recover-retry", "recover-complete"),
     ],
+  ),
+  limitedFlow(
+    "product-master-data-lifecycle",
+    "Product and master-data lifecycle",
+    "Create, review, activate, revise, and retire governed product and reference data.",
+    ["warehouse_procurement", "warehouse_logistics_supervisor", "warehouse_admin"],
+    "warehouse_admin",
+    "Master-data control: identifiers, ownership, effective status, traceability rules, and retirement must remain attributable and non-destructive.",
+  ),
+  limitedFlow(
+    "po-amendment-cancellation",
+    "PO amendment and cancellation",
+    "Control post-approval quantity, price, scope, date, supplier, and cancellation changes.",
+    ["procurement_officer", "procurement_approver", "procurement_finance", "procurement_admin"],
+    "procurement_approver",
+    "Procurement policy: a material PO change requires retained reason, impact review, renewed authority, supplier notice, and an immutable revision trail.",
+  ),
+  limitedFlow(
+    "inter-warehouse-transfer",
+    "Inter-warehouse transfer",
+    "Authorize, dispatch, receive, reconcile, and close custody between controlled sites.",
+    ["warehouse_logistics_supervisor", "warehouse_operations", "warehouse_admin"],
+    "warehouse_logistics_supervisor",
+    "Warehouse custody control: source issue and destination receipt must reconcile quantities, identities, condition, route, and accountable handlers.",
+  ),
+  limitedFlow(
+    "outbound-fulfillment",
+    "Outbound fulfillment",
+    "Pick, verify, issue, dispatch, acknowledge, and close approved outbound demand.",
+    ["warehouse_operations", "warehouse_business_unit", "warehouse_logistics_supervisor"],
+    "warehouse_operations",
+    "Outbound control: only approved reserved demand may be picked and issued to a named recipient with custody evidence.",
+  ),
+  limitedFlow(
+    "disposal-write-off",
+    "Disposal and write-off",
+    "Quarantine, value, authorize, witness, dispose, and post an auditable stock write-off.",
+    ["warehouse_logistics_supervisor", "warehouse_finance", "warehouse_admin"],
+    "warehouse_finance",
+    "Asset control: disposal requires supported condition, valuation, delegated approval, witnessed disposition, and an immutable ledger movement.",
+  ),
+  limitedFlow(
+    "recall-expiry-traceability",
+    "Recall, expiry, and lot traceability",
+    "Identify affected stock and custody, stop movement, notify owners, reconcile, and close the incident.",
+    ["warehouse_logistics_supervisor", "warehouse_operations", "warehouse_admin"],
+    "warehouse_admin",
+    "Traceability control: lot, serial, location, custody, movement, hold, notification, and disposition evidence must support complete forward and backward tracing.",
+  ),
+  limitedFlow(
+    "finance-export-reconciliation",
+    "Finance export and reconciliation",
+    "Freeze a reporting period, export governed balances, reconcile differences, approve adjustments, and archive evidence.",
+    ["warehouse_finance", "warehouse_bi_analyst", "warehouse_admin"],
+    "warehouse_finance",
+    "Financial control: exports must be period-bound, repeatable, reconciled to source movements, approved, and retained with adjustment evidence.",
+  ),
+  limitedFlow(
+    "access-recertification-offboarding",
+    "Access recertification and offboarding",
+    "Review active access, resolve conflicts, revoke obsolete grants, terminate sessions, and retain certification evidence.",
+    ["platform_admin", "legal_admin", "procurement_admin", "warehouse_admin"],
+    "platform_admin",
+    "Access control: active grants require periodic accountable certification and immediate revocation when employment, vendor status, or responsibility ends.",
+  ),
+  limitedFlow(
+    "audit-incident-handling",
+    "Audit and incident handling",
+    "Triage a control event, preserve evidence, contain impact, investigate cause, approve remediation, and verify closure.",
+    ["platform_admin", "legal_compliance", "procurement_admin", "warehouse_admin"],
+    "platform_admin",
+    "Incident control: evidence preservation, least-privilege containment, accountable decisions, corrective action, and independent closure verification are mandatory.",
   ),
 ];

@@ -1,6 +1,9 @@
 "use client";
 
 import React, { useEffect, useRef } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { useSession } from "@intra/auth";
 import { Badge, Icon } from "@intra/ui";
 import {
   branchOptions,
@@ -12,6 +15,9 @@ import type {
   KnowledgeFlow,
   KnowledgeRole,
 } from "@shell/lib/knowledge/types";
+import { knowledgeRoleIdsForAssignments } from "@shell/lib/knowledge/roles";
+import { guidedEvidenceRoute } from "@shell/lib/knowledge/semantics";
+import { EvidenceViewer } from "./EvidenceViewer";
 
 export function GuidedDecisionPath({
   flow,
@@ -30,6 +36,8 @@ export function GuidedDecisionPath({
   onChoose: (choiceId: string) => void;
   onBacktrack: () => void;
 }) {
+  const params = useSearchParams();
+  const { userRoles } = useSession();
   const resolution = resolveBranch(flow, choices);
   const current =
     flow.nodes.find((node) => node.id === selectedNodeId) ??
@@ -40,6 +48,14 @@ export function GuidedDecisionPath({
   const currentEvidence = evidence.find(
     (item) => item.id === current.evidenceId,
   );
+  const assignedRoleIds = knowledgeRoleIdsForAssignments(userRoles);
+  const canExecute = current.ownerRoleIds.some((roleId) =>
+    assignedRoleIds.includes(roleId),
+  );
+  const returnTo = `/knowledge${params.size ? `?${params}` : ""}`;
+  const liveRoute = currentEvidence?.route
+    ? guidedEvidenceRoute(currentEvidence.route, current.id, returnTo)
+    : null;
   const headingRef = useRef<HTMLHeadingElement>(null);
   const previousNodeId = useRef(current.id);
 
@@ -53,7 +69,7 @@ export function GuidedDecisionPath({
     <section
       aria-labelledby="guided-current-step"
       aria-live="polite"
-      className="min-h-[40rem] border-y border-line bg-surface py-4 min-[640px]:hidden"
+      className="border-y border-line bg-surface py-4 min-[640px]:hidden"
     >
       <nav aria-label="Branch history" className="pb-2">
         <ol className="flex flex-wrap items-center gap-2 text-xs text-muted">
@@ -109,6 +125,10 @@ export function GuidedDecisionPath({
         </h2>
         <p className="mt-2 leading-6 text-muted">{current.body}</p>
 
+        <div className="mt-5">
+          <EvidenceViewer evidence={currentEvidence} node={current} />
+        </div>
+
         <dl className="mt-4 grid gap-3 text-sm">
           <div>
             <dt className="font-semibold text-ink">Responsible role</dt>
@@ -163,6 +183,20 @@ export function GuidedDecisionPath({
             <Icon name="chevron" className="h-4 w-4 rotate-90" />
             Backtrack
           </button>
+        )}
+        {liveRoute && canExecute && (
+          <Link href={liveRoute} className="btn-primary mt-4 min-h-11 w-full justify-center">
+            Open guided screen <Icon name="arrowRight" className="h-4 w-4" />
+          </Link>
+        )}
+        {liveRoute && !canExecute && (
+          <div className="mt-4 border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+            <p className="font-semibold">View-only guidance</p>
+            <p className="mt-1">Your current role cannot perform this step.</p>
+            <Link href="/knowledge?flow=identity-and-access&view=flow" className="btn-outline btn-sm mt-3 min-h-11">
+              Request access guidance
+            </Link>
+          </div>
         )}
       </div>
     </section>

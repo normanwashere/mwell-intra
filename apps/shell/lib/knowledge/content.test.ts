@@ -134,7 +134,7 @@ describe("Knowledge Base content", () => {
       ]),
     );
     expect(searchKnowledge(KNOWLEDGE_CONTENT, "failed upload")[0]?.type).toBe(
-      "task",
+      "procedure",
     );
     expect(searchKnowledge(KNOWLEDGE_CONTENT, "LGL004")[0]?.title).toMatch(
       /Vendor accreditation/i,
@@ -210,8 +210,8 @@ describe("Knowledge Base content", () => {
     ).toBe(26);
   });
 
-  it("defines exact policy and flow relationships for all 58 feature profiles", () => {
-    expect(KNOWLEDGE_CONTENT.features).toHaveLength(58);
+  it("defines exact policy and flow relationships for all 59 feature profiles", () => {
+    expect(KNOWLEDGE_CONTENT.features).toHaveLength(59);
     const flowIds = new Set(KNOWLEDGE_CONTENT.flows.map((flow) => flow.id));
     for (const feature of KNOWLEDGE_CONTENT.features) {
       expect(
@@ -343,7 +343,7 @@ describe("Knowledge Base content", () => {
     [
       "task",
       "Receive, inspect, and put away stock",
-      "task",
+      "procedure",
       /Receive, inspect, and put away stock/i,
     ],
     ["role", "Warehouse operations", "role", /Warehouse operations/i],
@@ -360,7 +360,7 @@ describe("Knowledge Base content", () => {
     [
       "policy term",
       "least privilege",
-      "task",
+      "decision",
       /permissions correct|access authorized/i,
     ],
     ["glossary alias", "PR", "glossary", /Purchase request/i],
@@ -385,7 +385,7 @@ describe("Knowledge Base content", () => {
     }).find((item) => item.href === "/knowledge?flow=procure-to-pay");
 
     expect(flow).toMatchObject({
-      type: "task",
+      type: "workflow",
       module: "procurement",
       destinationContext: "End-to-end workflow",
     });
@@ -441,9 +441,13 @@ describe("Knowledge Base content", () => {
     (module, query, roleLabel) => {
       const result = searchKnowledge(KNOWLEDGE_CONTENT, query, {
         module,
-      }).find((item) => item.type === "task" && item.href.includes("step="));
+      }).find((item) =>
+        ["action", "decision", "system", "exception", "outcome"].includes(
+          item.type,
+        ) && item.href.includes("step="),
+      );
 
-      expect(result).toMatchObject({ type: "task", module });
+      expect(result).toMatchObject({ module });
       expect(result?.moduleContext).toContain(module);
       expect(result?.roleContext).toContain(roleLabel);
       expect(result?.href).toContain("flow=");
