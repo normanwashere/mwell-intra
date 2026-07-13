@@ -137,9 +137,13 @@ export function StepWorkspace({
             </div>
           )}
           {liveRoute && canExecute && (
-            <Link href={liveRoute} className="btn-primary mt-6 w-full justify-center">
+            <a
+              href={liveRoute}
+              data-navigation="document"
+              className="btn-primary mt-6 w-full justify-center"
+            >
               Open guided screen <Icon name="arrowRight" className="h-4 w-4" />
-            </Link>
+            </a>
           )}
           {liveRoute && !canExecute && (
             <div className="mt-6 border border-amber-300 bg-amber-50 p-4">

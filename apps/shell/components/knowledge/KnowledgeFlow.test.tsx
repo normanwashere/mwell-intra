@@ -33,23 +33,23 @@ const flow: KnowledgeFlow = {
   id: "guided",
   title: "Guided approval",
   summary: "Choose a route",
-  roles: ["approver"],
+  roles: ["procurement_approver"],
   startNodeId: "choose",
   nodes: [
     {
       id: "choose",
       type: "decision",
       title: "Choose route",
-      ownerRoleIds: ["approver"],
+      ownerRoleIds: ["procurement_approver"],
       body: "Select the documented route.",
-      authorityRoleId: "approver",
+      authorityRoleId: "procurement_approver",
       policyBasis: "Approval policy.",
     },
     {
       id: "complete",
       type: "terminal",
       title: "Approval complete",
-      ownerRoleIds: ["approver"],
+      ownerRoleIds: ["procurement_approver"],
       body: "The request is complete.",
       outcome: "The approval record is ready for audit.",
       evidenceId: "approval-record",
@@ -59,7 +59,7 @@ const flow: KnowledgeFlow = {
       id: "rejected",
       type: "terminal",
       title: "Request rejected",
-      ownerRoleIds: ["approver"],
+      ownerRoleIds: ["procurement_approver"],
       body: "The request is rejected.",
       terminalOutcome: "rejected",
     },
@@ -71,7 +71,7 @@ const flow: KnowledgeFlow = {
 };
 
 const role: KnowledgeRole = {
-  id: "approver",
+  id: "procurement_approver",
   label: "Approver",
   module: "procurement",
   availability: "live",
@@ -218,6 +218,13 @@ describe("synchronized workflow controls", () => {
     expect(document.activeElement).toBe(heading("Approval complete"));
     expect(container.textContent).toContain("Completed: complete");
     expect(container.textContent).toContain("Approval record");
+    expect(
+      container
+        .querySelector('a[data-navigation="document"]')
+        ?.getAttribute("href"),
+    ).toBe(
+      "/approvals/1?guide=complete&returnTo=%2Fknowledge",
+    );
 
     await act(() => button("Backtrack").click());
     expect(document.activeElement).toBe(heading("Choose route"));

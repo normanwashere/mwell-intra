@@ -185,9 +185,13 @@ export function GuidedDecisionPath({
           </button>
         )}
         {liveRoute && canExecute && (
-          <Link href={liveRoute} className="btn-primary mt-4 min-h-11 w-full justify-center">
+          <a
+            href={liveRoute}
+            data-navigation="document"
+            className="btn-primary mt-4 min-h-11 w-full justify-center"
+          >
             Open guided screen <Icon name="arrowRight" className="h-4 w-4" />
-          </Link>
+          </a>
         )}
         {liveRoute && !canExecute && (
           <div className="mt-4 border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
