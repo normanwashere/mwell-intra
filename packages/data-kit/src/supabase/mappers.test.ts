@@ -114,9 +114,14 @@ describe('warehouse control row mapping', () => {
         id: 'qi-1', source_type: 'receipt', source_id: 'rcpt-1', product_id: 'shirt',
         bin_id: null, lot_id: null, serial_number: null, quantity: 2,
         disposition: 'hold', reason: 'Damaged carton', evidence_urls: null,
-        inspected_by: 'user-1', created_at: '2026-07-10T00:00:00Z',
+        inspected_by: 'user-1', inspected_at: '2026-07-10T00:00:00Z',
       }),
-    ).toMatchObject({ binId: undefined, evidenceUrls: [], inspectedBy: 'user-1' });
+    ).toMatchObject({
+      binId: undefined,
+      evidenceUrls: [],
+      inspectedBy: 'user-1',
+      inspectedAt: '2026-07-10T00:00:00Z',
+    });
     expect(
       rowToHold({
         id: 'hold-1', inspection_id: 'qi-1', product_id: 'shirt', location_id: 'loc-wh',

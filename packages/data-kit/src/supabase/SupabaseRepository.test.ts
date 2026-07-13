@@ -102,7 +102,7 @@ function makeMockClient(seed: WarehouseData) {
       id: 'qi-1', source_type: 'receipt', source_id: 'rcpt-1', product_id: 'shirt',
       bin_id: null, lot_id: null, serial_number: null, quantity: 1,
       disposition: 'accepted', reason: null, evidence_urls: [], inspected_by: 'user-1',
-      created_at: '2026-07-10T00:00:00Z',
+      inspected_at: '2026-07-10T00:00:00Z',
     }],
     inventory_holds: [{
       id: 'hold-1', inspection_id: 'qi-1', product_id: 'shirt', location_id: 'loc-wh',
@@ -281,9 +281,15 @@ describe('SupabaseRepository W1 control boundary', () => {
     for (const table of controlTables) {
       const query = queries.find((item) => item.table === table)!;
       expect(query.projection).not.toBe('*');
-      expect(query.orders).toEqual(['created_at', 'id']);
+      expect(query.orders).toEqual([
+        table === 'quality_inspections' ? 'inspected_at' : 'created_at',
+        'id',
+      ]);
       expect(query.limit).toBe(101);
     }
+    const qualityQuery = queries.find((item) => item.table === 'quality_inspections')!;
+    expect(qualityQuery.projection).toContain('inspected_at');
+    expect(qualityQuery.projection).not.toContain('created_at');
   });
 
   it('sends idempotent command payloads without trusted actor or role values', async () => {

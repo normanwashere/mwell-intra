@@ -378,7 +378,7 @@ export function rowToQualityInspection(r: Row): QualityInspection {
     reason: r.reason ?? undefined,
     evidenceUrls: r.evidence_urls ?? [],
     inspectedBy: r.inspected_by,
-    inspectedAt: r.created_at,
+    inspectedAt: r.inspected_at,
   };
 }
 

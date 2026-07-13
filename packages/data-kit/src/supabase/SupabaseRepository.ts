@@ -128,7 +128,7 @@ const TABLE_PROJECTIONS: Record<string, string> = {
   profiles: 'id,role,name,email,title',
   operation_types: 'id,code,label,active',
   operation_routes: 'id,operation_type_id,source_location_types,destination_location_types,requires_evidence,requires_approval,requires_online,active',
-  quality_inspections: 'id,source_type,source_id,product_id,bin_id,lot_id,serial_number,quantity,disposition,reason,evidence_urls,inspected_by,created_at',
+  quality_inspections: 'id,source_type,source_id,product_id,bin_id,lot_id,serial_number,quantity,disposition,reason,evidence_urls,inspected_by,inspected_at',
   inventory_holds: 'id,inspection_id,product_id,location_id,bin_id,lot_id,serial_number,quantity,status,reason,created_by,created_at,released_by,released_at',
   vendor_returns: 'id,hold_id,supplier_id,source_receipt_id,source_return_id,product_id,lot_id,serial_number,quantity,reason,reference,status,evidence_urls,created_by,created_at,handed_off_by,handed_off_at,completed_at',
   exceptions: 'id,exception_type,severity,source_type,source_id,status,owner_id,due_at,resolution,created_at',
@@ -146,6 +146,9 @@ const BOUNDED_HISTORY = new Set([
   'purchase_orders',
 ]);
 const OPERATIONAL_HISTORY_LIMIT = 5000;
+const CONTROL_TIMESTAMP_COLUMNS: Record<string, string> = {
+  quality_inspections: 'inspected_at',
+};
 
 /**
  * Supabase-backed repository. Mutations mirror the in-memory adapter's logic but
@@ -254,6 +257,7 @@ export class SupabaseRepository implements WarehouseControlRepository {
     const normalized = normalizePageQuery(query);
     const projection = TABLE_PROJECTIONS[table];
     if (!projection) throw new Error(`No safe projection configured for ${table}.`);
+    const timestampColumn = CONTROL_TIMESTAMP_COLUMNS[table] ?? 'created_at';
     let request: any = this.db.from(table).select(projection);
     if (normalized.status && statusColumn) {
       request = request.eq(statusColumn, normalized.status);
@@ -273,11 +277,11 @@ export class SupabaseRepository implements WarehouseControlRepository {
         throw new Error('Invalid page cursor.');
       }
       request = request.or(
-        `created_at.lt.${decoded[0]},and(created_at.eq.${decoded[0]},id.lt.${decoded[1]})`,
+        `${timestampColumn}.lt.${decoded[0]},and(${timestampColumn}.eq.${decoded[0]},id.lt.${decoded[1]})`,
       );
     }
     request = request
-      .order('created_at', { ascending: false })
+      .order(timestampColumn, { ascending: false })
       .order('id', { ascending: false })
       .limit(normalized.limit + 1);
     const { data, error } = await request;
@@ -288,7 +292,11 @@ export class SupabaseRepository implements WarehouseControlRepository {
     return {
       rows: rows.map((row) => map(row as never)),
       ...(raw.length > normalized.limit && last
-        ? { nextCursor: encodeURIComponent(JSON.stringify([last.created_at, last.id])) }
+        ? {
+            nextCursor: encodeURIComponent(
+              JSON.stringify([last[timestampColumn], last.id]),
+            ),
+          }
         : {}),
     };
   }
