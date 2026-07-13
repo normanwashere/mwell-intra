@@ -4,13 +4,15 @@ Reviewed: 2026-07-13
 
 Branch: `codex/knowledge-base-operating-handbook`
 
-Application commits reviewed: `d82671f`, `16020ec`
+Reviewed branch range: `4f2623e..f604cab`
+
+Final reviewer verdict: **READY** (no current P0-P3 findings after capture isolation)
 
 Evidence source commit: `edb3609d20eea7eb27a59f1a6d8dfcf9163048b9`
 
 ## Release verdict
 
-**Conditionally ready pending final Task 10 review.** The registry validator reports zero route, feature, or graph gaps, the content/evidence set is complete, and the previously reported DOA-authority and full-suite timeout blockers are resolved. Serial verification passes the Knowledge Base, lint, typecheck, unit, lifecycle, and production-build gates. The expanded responsive E2E run passed 93/96; the only failures were a three-viewport exact scroll-coordinate assertion (`500` expected versus `492` observed), while the corrected lifecycle-focused rerun passed 6/6. Merge and deployment remain conservatively held until the Task 10 reviewer accepts the responsive gate and its coordinate tolerance.
+**Ready for merge and deployment.** The registry validator reports zero route, feature, or graph gaps, the content/evidence set is complete, and the DOA-authority and contention-induced timeout findings are resolved. Serial verification passes the Knowledge Base, lint, typecheck, unit, production-build, and responsive browser gates. The final accepted handbook matrix passed 96/96 across all six viewports. Evidence generation is excluded from normal E2E and runs only through the dedicated single-project maintenance command.
 
 ## Contract coverage
 
@@ -24,7 +26,7 @@ Evidence source commit: `edb3609d20eea7eb27a59f1a6d8dfcf9163048b9`
 | Decision nodes | 38 | Authority and policy fields present |
 | Terminal nodes | 46 | 15 complete, 12 escalated, 11 revision, 6 rejected, 2 cancelled |
 | Evidence | 39 desktop/mobile pairs = 78 screenshots | 78 unique SHA-256 hashes |
-| Responsive test sizes | 1440x900, 1280x800, 768x1024, 390x844, 360x800, 320x720 | Exercised; 93/96 expanded E2E, corrected lifecycle rerun 6/6 |
+| Responsive test sizes | 1440x900, 1280x800, 768x1024, 390x844, 360x800, 320x720 | Exercised; final accepted matrix 96/96 |
 
 The generated `buildKnowledgeCoverage` result contains zero errors and zero warnings. This means there are **zero unexplained live route/feature coverage gaps**. Cross-registry regression coverage now also enforces that Administration DOA authority is limited to Platform and Legal administrators, with Procurement explicitly review-only.
 
@@ -108,20 +110,20 @@ All commands used an explicitly pinned Node `v22.17.0` parent and PATH.
 | `pnpm typecheck` | Pass: 9/9 tasks |
 | `pnpm test` serial run | Pass: 168/168, including evidence hashing and warehouse imports |
 | `pnpm build` | Pass; 12 static pages generated and production bundle scanned |
-| Expanded handbook Playwright suite | 93/96; only exact save-coordinate assertions failed on 390, 360, and 320 (`500` expected, `492` observed) |
-| Corrected lifecycle-focused Playwright rerun | Pass: 6/6 |
+| Final handbook Playwright suite | Pass: 96/96 across 1440, 1280, 768, 390, 360, and 320 in 6.4 minutes |
+| Default E2E discovery | Pass: 696 tests in 13 files; evidence capture excluded |
+| Evidence maintenance discovery | Pass: exactly 1 test in 1 single-worker project |
 | `git diff --check` | Pass |
 
-The earlier session-restoration, handbook-navigation, search-interception, zero-scroll, and workflow-timeout reports were not reproduced by the corrected serial lifecycle run. The remaining three expanded-suite failures are confined to an overly exact scroll-restoration assertion: the browser restored `492px` rather than the requested `500px` on the three mobile viewports. This is an 8px coordinate variance, not a lost-state or return-to-top failure. Task 10 review must still confirm that the assertion uses a justified tolerance and that the complete six-viewport gate remains strict against genuine overlap, clipping, interception, accessibility, and lifecycle regressions.
+Earlier session-restoration, handbook-navigation, search-interception, zero-scroll, workflow-timeout, evidence-hash, and import timeout reports did not reproduce under serial verification. The scroll lifecycle now exercises the application's real save and restore behavior with a strict 16px save tolerance and 64px post-layout restoration tolerance while explicitly rejecting return-to-top behavior. The final reviewer accepted the full gate with no current findings.
 
 ## Critical findings and required actions
 
-1. **P1 release gate: Complete Task 10 reviewer acceptance.** Confirm that the expanded suite's scroll-restoration assertion accepts the demonstrated 8px browser variance without weakening detection of genuine reset-to-top failures, and re-run the complete six-viewport matrix under the accepted test definition.
-2. **P2 release evidence: Record the final Task 10 verdict.** Update this report with the reviewer verdict and final matrix result before merge or deployment. No resolved authority, import, evidence-hash, session-restoration, navigation, or search-interception item should be reopened without a reproducible failure.
+No open P0-P3 findings remain for the handbook release scope. Evidence regeneration is a maintenance operation and must use `pnpm --filter @intra/shell capture:knowledge-evidence`; it must not be added back to normal sharded E2E.
 
 ## Residual risk
 
 - The content registry is structurally complete, and the Administration DOA authority boundary is cross-validated. Other future policy-sensitive authority changes still require matching cross-registry regression coverage.
 - OCR is machine-assisted and may miss stylized or low-contrast text; all 78 images were also reviewed during the accepted evidence remediation, but a second human privacy review remains appropriate before public documentation use.
 - This pass used memory/demo E2E state. It does not replace a post-deploy live-Supabase transaction audit with disposable production-safe test records.
-- No release or deployment should proceed until Task 10 receives final reviewer acceptance and the accepted Node 22 six-viewport Playwright matrix is recorded as passing.
+- Live-Supabase transactional validation remains a separate post-deployment requirement using disposable production-safe records.
