@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import path from "node:path";
 
 const requiredDocs = [
@@ -30,6 +31,25 @@ const csvHeaders = new Map([
 ]);
 
 const failures = [];
+const advisorSnapshot = path.resolve(
+  "scripts/qa/snapshot-supabase-advisors.mjs",
+);
+if (!existsSync(advisorSnapshot)) {
+  failures.push("Supabase advisor snapshot script is missing");
+}
+try {
+  const pkg = JSON.parse(await readFile(path.resolve("package.json"), "utf8"));
+  if (
+    pkg.scripts?.["verify:supabase-advisors"] !==
+    "node scripts/qa/snapshot-supabase-advisors.mjs"
+  ) {
+    failures.push(
+      "verify:supabase-advisors must run the governed snapshot script",
+    );
+  }
+} catch {
+  failures.push("package.json could not be read for advisor verification");
+}
 for (const file of requiredDocs) {
   try {
     const content = await readFile(path.resolve(file), "utf8");

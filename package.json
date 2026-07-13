@@ -25,6 +25,7 @@
     "verify:warehouse-w1-schema": "node scripts/verify-warehouse-w1-schema.mjs",
     "verify:warehouse-w1-contract": "node scripts/verify-warehouse-w1-contract.mjs",
     "verify:launch-artifacts": "node scripts/verify-launch-artifacts.mjs",
+    "verify:supabase-advisors": "node scripts/qa/snapshot-supabase-advisors.mjs",
     "verify:knowledge-base": "node scripts/verify-knowledge-base.mjs",
     "verify:supabase-cutover": "node scripts/verify-supabase-cutover.mjs",
     "format": "prettier --write \"**/*.{ts,tsx,md,json}\""
