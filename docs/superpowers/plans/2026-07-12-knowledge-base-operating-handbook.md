@@ -525,4 +525,3 @@ Run the same commands as GitHub CI and require a clean worktree afterward.
 git add docs/knowledge-base-coverage-report.md
 git commit -m "docs: record handbook release coverage"
 ```
-

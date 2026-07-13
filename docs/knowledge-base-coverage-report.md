@@ -111,7 +111,7 @@ All commands used an explicitly pinned Node `v22.17.0` parent and PATH.
 | `pnpm test` serial run | Pass: 168/168, including evidence hashing and warehouse imports |
 | `pnpm build` | Pass; 12 static pages generated and production bundle scanned |
 | Final handbook Playwright suite | Pass: 96/96 across 1440, 1280, 768, 390, 360, and 320 in 6.4 minutes |
-| Default E2E discovery | Pass: 696 tests in 13 files; evidence capture excluded |
+| Exact CI E2E discovery (`tests/smoke tests/e2e`) | Pass: 840 tests in 14 files; evidence capture excluded |
 | Evidence maintenance discovery | Pass: exactly 1 test in 1 single-worker project |
 | `git diff --check` | Pass |
 
