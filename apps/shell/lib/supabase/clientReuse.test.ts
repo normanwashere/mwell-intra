@@ -24,4 +24,20 @@ describe("authenticated Supabase browser client ownership", () => {
     expect(adminDoa).toContain('supabaseClient?.schema("procurement")');
     expect(adminDoa).toContain('supabaseClient?.schema("core")');
   });
+
+  it("associates DOA editor labels with their controls", () => {
+    const adminDoa = source("app/admin/doa/page.tsx");
+
+    for (const field of [
+      "department",
+      "version",
+      "source-document",
+      "effective-date",
+    ]) {
+      expect(adminDoa).toContain(`htmlFor="doa-${field}"`);
+      expect(adminDoa).toContain(`id="doa-${field}"`);
+    }
+    expect(adminDoa).toContain("htmlFor={`doa-approver-${row.key}`}");
+    expect(adminDoa).toContain("id={`doa-approver-${row.key}`}");
+  });
 });

@@ -370,7 +370,7 @@ export const KNOWLEDGE_EVIDENCE_SCENARIOS: Record<string, EvidenceScenario> = {
   },
   "count-post": {
     route: "/warehouse/approvals",
-    state: "The warehouse administrator has approved the deterministic stock change and the cycle-count adjustment is posted.",
+    state: "The warehouse administrator is opening decision history to verify whether supported cycle-count adjustments have posted.",
     landmark: "Recently decided",
     label: "Review posted adjustment",
     instruction: "Confirm the approved result; an auditable stock movement corrected the ledger without rewriting history.",

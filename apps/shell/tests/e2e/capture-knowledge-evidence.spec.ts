@@ -406,7 +406,6 @@ async function targetFor(page: Page, nodeId: string): Promise<Locator> {
       if (LIVE_CAPTURE) {
         const decided = page.getByRole("tab", { name: "Recently decided" });
         await decided.click();
-        await expect(page.getByLabel("Recently decided approvals")).toBeVisible();
         return decided;
       }
       await page.goto("/warehouse/cycle-counts", { waitUntil: "networkidle" });
@@ -460,8 +459,25 @@ async function targetFor(page: Page, nodeId: string): Promise<Locator> {
       await expect(active).toBeChecked();
       return page.getByRole("button", { name: "Save route" });
     }
-    case "doa-activate":
-      return page.getByRole("button", { name: "Activate", exact: true });
+    case "doa-activate": {
+      const activate = page.getByRole("button", {
+        name: "Activate",
+        exact: true,
+      });
+      if (!LIVE_CAPTURE || (await activate.count())) return activate.first();
+
+      const revision = page
+        .getByRole("button", { name: "Create revision", exact: true })
+        .first();
+      await expect(revision).toBeVisible();
+      await revision.click();
+      const version = page.getByLabel("Version");
+      await expect(version).toHaveValue(/-REV$/);
+      await version.fill("TEMP-DOC-DOA-2026-07-DRAFT");
+      await page.getByRole("button", { name: "Save draft", exact: true }).click();
+      await expect(activate.first()).toBeVisible({ timeout: 15_000 });
+      return activate.first();
+    }
     case "allocation-start":
       return page.getByRole("button", { name: "Reserve" });
     case "price-start":

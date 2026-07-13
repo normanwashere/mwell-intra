@@ -334,28 +334,32 @@ function DoaWorkspace() {
             deliberately.
           </p>
           <div className="mt-5 grid gap-4 md:grid-cols-2">
-            <Field label="Department">
+            <Field label="Department" htmlFor="doa-department">
               <Input
+                id="doa-department"
                 value={department}
                 onChange={(e) => setDepartment(e.target.value)}
                 placeholder="e.g. Operations"
               />
             </Field>
-            <Field label="Version">
+            <Field label="Version" htmlFor="doa-version">
               <Input
+                id="doa-version"
                 value={version}
                 onChange={(e) => setVersion(e.target.value)}
                 placeholder="e.g. OPS-DOA-2026.1"
               />
             </Field>
-            <Field label="Source document">
+            <Field label="Source document" htmlFor="doa-source-document">
               <Input
+                id="doa-source-document"
                 value={sourceDocument}
                 onChange={(e) => setSourceDocument(e.target.value)}
               />
             </Field>
-            <Field label="Effective date">
+            <Field label="Effective date" htmlFor="doa-effective-date">
               <Input
+                id="doa-effective-date"
                 type="date"
                 value={effectiveAt}
                 onChange={(e) => setEffectiveAt(e.target.value)}
@@ -381,8 +385,12 @@ function DoaWorkspace() {
                 key={row.key}
                 className="grid gap-3 rounded-lg border border-line bg-inset p-3 md:grid-cols-[1.1fr_1fr_.7fr_.7fr_1.4fr_auto] md:items-end"
               >
-                <Field label={`Tier ${index + 1}`}>
+                <Field
+                  label={`Tier ${index + 1}`}
+                  htmlFor={`doa-tier-${row.key}`}
+                >
                   <select
+                    id={`doa-tier-${row.key}`}
                     className="input-base w-full"
                     value={row.tier}
                     onChange={(e) =>
@@ -398,16 +406,21 @@ function DoaWorkspace() {
                     ))}
                   </select>
                 </Field>
-                <Field label="Category (optional)">
+                <Field
+                  label="Category (optional)"
+                  htmlFor={`doa-category-${row.key}`}
+                >
                   <Input
+                    id={`doa-category-${row.key}`}
                     value={row.category}
                     onChange={(e) =>
                       updateAssignment(row.key, { category: e.target.value })
                     }
                   />
                 </Field>
-                <Field label="Minimum">
+                <Field label="Minimum" htmlFor={`doa-minimum-${row.key}`}>
                   <Input
+                    id={`doa-minimum-${row.key}`}
                     type="number"
                     min="0"
                     value={row.minAmount}
@@ -416,8 +429,9 @@ function DoaWorkspace() {
                     }
                   />
                 </Field>
-                <Field label="Maximum">
+                <Field label="Maximum" htmlFor={`doa-maximum-${row.key}`}>
                   <Input
+                    id={`doa-maximum-${row.key}`}
                     type="number"
                     min="0"
                     value={row.maxAmount}
@@ -427,8 +441,12 @@ function DoaWorkspace() {
                     placeholder="No limit"
                   />
                 </Field>
-                <Field label="Named approver">
+                <Field
+                  label="Named approver"
+                  htmlFor={`doa-approver-${row.key}`}
+                >
                   <select
+                    id={`doa-approver-${row.key}`}
                     className="input-base w-full"
                     value={row.approverUserId}
                     onChange={(e) =>
