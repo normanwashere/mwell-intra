@@ -32,6 +32,10 @@ import { cleanupCases } from './hygiene';
 import { buildLegalSeed } from './seed';
 import type { VendorLoginAlias } from './vendorAccess';
 import type { TailoringProfile } from './requirements/policy';
+import {
+  resolveVendorInviteDelivery,
+  type VendorInviteDeliveryEnvelope,
+} from './vendorInviteDelivery';
 
 type MaybePromise<T> = T | Promise<T>;
 type LiveClient = NonNullable<ReturnType<typeof useSession>['supabaseClient']>;
@@ -298,6 +302,7 @@ function mapTimeline(row: LiveRow): CaseTimelineEntry {
 }
 
 function mapInvite(row: LiveRow): VendorInvite {
+  const deliveryStatus = row.status === 'delivery_failed' ? 'delivery_failed' : 'sent';
   return {
     id: row.id,
     email: row.email,
@@ -307,6 +312,8 @@ function mapInvite(row: LiveRow): VendorInvite {
     createdByEmail: row.created_by_email ?? undefined,
     acceptedAt: row.accepted_at ?? undefined,
     status: row.status,
+    deliveryStatus,
+    deliveryError: row.delivery_error ?? undefined,
     vendorId: row.vendor_id ?? undefined,
     caseId: row.case_id ?? undefined,
     jurisdiction: row.profile?.jurisdiction ?? undefined,
@@ -1279,6 +1286,36 @@ export interface InvitesAPI {
   rows: VendorInvite[];
   loading: boolean;
   invite: (input: InviteInput) => MaybePromise<VendorInvite>;
+  retry: (inviteId: string) => MaybePromise<VendorInvite>;
+}
+
+async function mapInviteDeliveryResponse(
+  response: Response,
+  refresh: () => Promise<void>,
+): Promise<VendorInvite> {
+  const result = (await response.json().catch(() => ({}))) as
+    | (InviteVendorRpcResult & VendorInviteDeliveryEnvelope)
+    | { error?: string };
+  if (!response.ok) {
+    throw new Error(
+      'error' in result && result.error
+        ? result.error
+        : 'Vendor invitation delivery failed.',
+    );
+  }
+  const resolved = resolveVendorInviteDelivery(
+    result as InviteVendorRpcResult & VendorInviteDeliveryEnvelope,
+  );
+  const mapped: VendorInvite = {
+    ...mapInvite(resolved.inviteRow as LiveRow),
+    caseId: resolved.caseId,
+    vendorId: resolved.vendorId,
+    status: resolved.deliveryStatus,
+    deliveryStatus: resolved.deliveryStatus,
+    deliveryError: resolved.deliveryError,
+  };
+  await refresh();
+  return mapped;
 }
 
 export function useVendorInvites(): InvitesAPI {
@@ -1310,26 +1347,7 @@ export function useVendorInvites(): InvitesAPI {
             profile: input.profile,
             origin_country: input.originCountry,
           }),
-        }).then(async (response) => {
-          const result = (await response.json().catch(() => ({}))) as
-            | InviteVendorRpcResult
-            | { error?: string };
-          if (!response.ok) {
-            throw new Error(
-              'error' in result && result.error
-                ? result.error
-                : 'Vendor invitation delivery failed.',
-            );
-          }
-          const delivered = result as InviteVendorRpcResult;
-          const inviteRow = delivered?.invite ?? delivered;
-          const mapped = {
-            ...mapInvite(inviteRow),
-            caseId: inviteRow?.case_id ?? delivered?.case?.id,
-            vendorId: inviteRow?.vendor_id ?? delivered?.vendor?.id,
-          };
-          return refreshLive().then(() => mapped);
-        });
+        }).then((response) => mapInviteDeliveryResponse(response, refreshLive));
       }
       const next: VendorInvite = {
         id: newId('inv'),
@@ -1376,7 +1394,25 @@ export function useVendorInvites(): InvitesAPI {
     },
     [set, live, refreshLive],
   );
-  return { rows, loading, invite };
+  const retry = useCallback<InvitesAPI['retry']>(
+    (inviteId) => {
+      if (!isLive(live)) {
+        const existing = safeRead<VendorInvite>(INVITES_KEY).find(
+          (row) => row.id === inviteId,
+        );
+        if (!existing) throw new Error('Vendor invite not found.');
+        return existing;
+      }
+      return fetch('/api/legal/vendor-invites', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invite_id: inviteId }),
+      }).then((response) => mapInviteDeliveryResponse(response, refreshLive));
+    },
+    [live, refreshLive],
+  );
+  return { rows, loading, invite, retry };
 }
 
 // ---------------------------------------------------------------------------

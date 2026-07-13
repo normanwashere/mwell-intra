@@ -57,7 +57,7 @@ const STEPS = [
 export function InviteVendorPage() {
   const navigate = useNavigate();
   const { profile: session, mode } = useSession();
-  const { success, error } = useToast();
+  const { toast, success, error } = useToast();
   const { invite } = useVendorInvites();
   const { addCase } = useAccreditationCases();
 
@@ -138,9 +138,16 @@ export function InviteVendorPage() {
               contactEmail: email.trim(),
             },
           );
-      success(
-        `Invite sent — ${tailored.length} tailored requirements opened for ${companyName.trim()}`,
-      );
+      if (inv.deliveryStatus === "delivery_failed") {
+        toast(
+          `Case opened, but the invitation email was not delivered. Verify the address before resending.`,
+          "info",
+        );
+      } else {
+        success(
+          `Invite sent — ${tailored.length} tailored requirements opened for ${companyName.trim()}`,
+        );
+      }
       navigate(`/cases/${kase.id}`);
     } catch (e) {
       error(e instanceof Error ? e.message : "Could not send the invite.");

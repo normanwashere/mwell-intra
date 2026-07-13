@@ -5,7 +5,10 @@ import {
   CURRENT_LIVE_ROLES,
   assertAuditRunId,
 } from "./live-e2e-scenarios.mjs";
-import { verifyCheckpoint } from "./live-e2e-db-verify.mjs";
+import {
+  createAuditDatabaseClient,
+  verifyCheckpoint,
+} from "./live-e2e-db-verify.mjs";
 import { cleanupRun } from "./live-e2e-cleanup.mjs";
 
 const require = createRequire(path.resolve("apps/shell/package.json"));
@@ -624,6 +627,7 @@ async function procurementCreateRequestWorkflow(page, marker) {
 async function legalInviteVendorWorkflow(page, marker) {
   const unique = Date.now();
   const companyName = `${marker} Vendor`;
+  const vendorEmail = vendorAuditEmail(marker);
   await page.goto(`${baseUrl}/legal/invites/new?workflow=${unique}`, {
     waitUntil: "domcontentloaded",
     timeout: 20_000,
@@ -632,7 +636,7 @@ async function legalInviteVendorWorkflow(page, marker) {
   await page.getByLabel("Company name").fill(companyName);
   await page
     .getByLabel("Vendor contact email")
-    .fill(`audit.vendor.${unique}@example.com`);
+    .fill(vendorEmail);
   await page.getByRole("button", { name: /continue/i }).click();
   await page.getByRole("button", { name: /continue/i }).click();
   await page.getByRole("button", { name: /send invite & open case/i }).click();
@@ -643,14 +647,30 @@ async function legalInviteVendorWorkflow(page, marker) {
     .catch(() => {});
   await waitForMeaningfulRoute(page);
   const audit = await pageAudit(page);
-  const caseId = new URL(page.url()).pathname.split("/").filter(Boolean).at(-1);
   const checkpoint = await verifyCheckpoint({
     schema: "legal",
     table: "accreditation_cases",
-    filters: { id: caseId },
+    filters: { vendor_name: companyName },
     expected: { vendor_name: companyName },
     select: "id,vendor_name,status",
   });
+  const inviteCheckpoint = await verifyCheckpoint({
+    schema: "legal",
+    table: "vendor_invites",
+    filters: { company_name: companyName },
+    expected: { company_name: companyName },
+    select: "id,company_name,status,case_id",
+  });
+  const db = createAuditDatabaseClient();
+  const { data: deliveryRows, error: deliveryError } = await db
+    .schema("legal")
+    .from("vendor_invites")
+    .select("status")
+    .eq("company_name", companyName);
+  if (deliveryError) throw new Error(deliveryError.message);
+  const deliveryStatus = deliveryRows?.[0]?.status;
+  if (!["sent", "delivery_failed"].includes(deliveryStatus))
+    throw new Error(`Unexpected vendor invite delivery status: ${deliveryStatus}`);
   return {
     name: "legal vendor invite",
     ok:
@@ -659,6 +679,8 @@ async function legalInviteVendorWorkflow(page, marker) {
     finalUrl: page.url().replace(baseUrl, ""),
     text: audit.text.slice(0, 260),
     checkpoint,
+    inviteCheckpoint,
+    deliveryStatus,
   };
 }
 
@@ -747,14 +769,18 @@ async function adminCreateDoaWorkflow(page, marker) {
   await page.getByText("Department and version are required.").waitFor({
     state: "visible",
   });
-  await page.getByLabel("Department").fill(department);
-  await page.getByLabel("Version").fill(version);
-  await page.getByLabel("Source document").fill(`${marker} controlled test`);
-  await page.getByLabel("Effective date").fill("2026-07-14");
+  await page.getByLabel("Department", { exact: true }).fill(department);
+  await page.getByLabel("Version", { exact: true }).fill(version);
+  await page.getByLabel("Source document", { exact: true }).fill(`${marker} controlled test`);
+  await page.getByLabel("Effective date", { exact: true }).fill("2026-07-14");
   await page.getByLabel("Tier 1").selectOption("final_approver");
-  await page.getByLabel("Minimum").fill("0");
-  await page.getByLabel("Maximum").fill("1000");
-  await page.getByLabel("Named approver").selectOption({ index: 1 });
+  await page.getByLabel("Tier 1 minimum").fill("0");
+  await page.getByLabel("Tier 1 maximum").fill("1000");
+  const approvers = page.getByLabel(/Tier \d+ named approver/);
+  for (let index = 0; index < (await approvers.count()); index += 1)
+    await page
+      .getByLabel(`Tier ${index + 1} named approver`)
+      .selectOption({ index: 1 });
   await page.getByRole("button", { name: "Save draft" }).click();
   const departmentHeading = page.getByRole("heading", {
     name: department,
@@ -811,6 +837,22 @@ async function warehouseQualityValidationWorkflow(page) {
     timeout: 20_000,
   });
   await waitForMeaningfulRoute(page);
+  await page
+    .waitForFunction(
+      () => {
+        const text = document.body.innerText;
+        return (
+          !/Loading quality controls/i.test(text) &&
+          (/No inspections waiting/i.test(text) ||
+            [...document.querySelectorAll("button")].some(
+              (button) => button.textContent?.trim() === "Inspect",
+            ))
+        );
+      },
+      undefined,
+      { timeout: 12_000 },
+    )
+    .catch(() => {});
   const inspect = page.getByRole("button", { name: "Inspect", exact: true }).first();
   if (!(await inspect.count()))
     return {
@@ -1076,6 +1118,8 @@ for (const viewport of viewports.filter(
 
 const workflows = [];
 let cleanup = { runId: auditRunId, complete: true, results: [] };
+const vendorAuditEmail = (marker) =>
+  `audit.vendor.${marker.toLowerCase()}@example.com`;
 const transactionViewports = viewports.filter(
   (item) =>
     ["desktop-1440", "mobile-390"].includes(item.name) &&
@@ -1291,7 +1335,10 @@ try {
   }
 } finally {
   await browser.close();
-  if (allowMutations) cleanup = await cleanupRun(auditRunId, cleanupTargets);
+  if (allowMutations)
+    cleanup = await cleanupRun(auditRunId, cleanupTargets, {
+      authEmails: auditMarkers.map((marker) => vendorAuditEmail(marker)),
+    });
 }
 
 const aggregate = results.map((item) => ({

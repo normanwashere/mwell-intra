@@ -16,6 +16,13 @@ describe("authenticated Supabase browser client ownership", () => {
     expect(adminDoa).not.toContain("createSupabaseBrowserClient");
   });
 
+  it("keeps the root browser auth client singleton", () => {
+    const client = source("lib/supabase/client.ts");
+
+    expect(client).toContain("isSingleton: true");
+    expect(client).not.toContain("isSingleton: false");
+  });
+
   it("uses the session client with explicit schemas in admin features", () => {
     const adminUsers = source("app/admin/users/page.tsx");
     const adminDoa = source("app/admin/doa/page.tsx");
@@ -39,5 +46,10 @@ describe("authenticated Supabase browser client ownership", () => {
     }
     expect(adminDoa).toContain("htmlFor={`doa-approver-${row.key}`}");
     expect(adminDoa).toContain("id={`doa-approver-${row.key}`}");
+    expect(adminDoa).toContain("aria-label={`Tier ${index + 1} minimum`}");
+    expect(adminDoa).toContain("aria-label={`Tier ${index + 1} maximum`}");
+    expect(adminDoa).toContain(
+      "aria-label={`Tier ${index + 1} named approver`}",
+    );
   });
 });

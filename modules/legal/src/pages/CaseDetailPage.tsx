@@ -35,6 +35,7 @@ import {
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import {
   Badge,
+  Button,
   Card,
   DataTable,
   HeroChipButton,
@@ -68,6 +69,7 @@ import {
   useChecklist,
   useSignedInstruments,
   useVendorAliases,
+  useVendorInvites,
 } from '../localStore';
 import {
   computeCaseProgress,
@@ -145,6 +147,7 @@ export function CaseDetailPage() {
   const { forCase: docsForCase, setStatus: setDocStatus } = useAccreditationDocs();
   const { forCase: signedForCase } = useSignedInstruments();
   const { rows: aliases } = useVendorAliases();
+  const { rows: invites, retry: retryInvite } = useVendorInvites();
   const { rows: timeline } = useCaseTimeline(id);
   const { success, error } = useToast();
   const { profile } = useSession();
@@ -197,6 +200,7 @@ export function CaseDetailPage() {
   /** Per-group expand override; default comes from isGroupSolved. */
   const [groupOverrides, setGroupOverrides] = useState<Record<string, boolean>>({});
   const [prevCycleOpen, setPrevCycleOpen] = useState(false);
+  const [retryingInvite, setRetryingInvite] = useState(false);
 
   // Sticky progress bar (§2.2.1): appears once the hero scrolls out of view.
   const pageRef = useRef<HTMLDivElement>(null);
@@ -232,6 +236,9 @@ export function CaseDetailPage() {
   if (!kase) return <Navigate to="/" replace />;
 
   const isVendor = profile?.kind === 'vendor';
+  const failedInvite = invites.find(
+    (invite) => invite.caseId === id && invite.status === 'delivery_failed',
+  );
   // Vendor-ownership guard (F1.1): never render another vendor's case shell.
   if (shouldBlockVendorAccess(profile, kase, aliases)) {
     return <Navigate to="/" replace />;
@@ -353,6 +360,29 @@ export function CaseDetailPage() {
     else error('Could not record the reminder.');
   }
 
+  async function handleInviteRetry() {
+    if (!failedInvite) return;
+    setRetryingInvite(true);
+    try {
+      const result = await retryInvite(failedInvite.id);
+      if (result.deliveryStatus === 'delivery_failed') {
+        error(
+          'Invitation email still could not be delivered. Verify the vendor address and try again.',
+        );
+      } else {
+        success(`Invitation email sent to ${result.email}`);
+      }
+    } catch (cause) {
+      error(
+        cause instanceof Error
+          ? cause.message
+          : 'Could not retry the invitation email.',
+      );
+    } finally {
+      setRetryingInvite(false);
+    }
+  }
+
   function downloadSummary() {
     const content = accreditationSummaryCsv(kase!, items, docs);
     const blob = new Blob([`\uFEFF${content}`], { type: 'text/csv;charset=utf-8' });
@@ -441,6 +471,28 @@ export function CaseDetailPage() {
           }
         />
       </div>
+
+      {!isVendor && failedInvite && (
+        <div role="alert">
+          <Card className="flex flex-col gap-3 border-amber-500/40 bg-amber-500/10 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="font-semibold text-ink">Invitation email was not delivered</p>
+              <p className="mt-1 text-sm text-muted">
+                The accreditation case is intact, but the vendor cannot use the invitation yet.
+                Verify {failedInvite.email}, then retry delivery.
+              </p>
+            </div>
+            <Button
+              className="w-full shrink-0 sm:w-auto"
+              variant="outline"
+              disabled={retryingInvite}
+              onClick={() => void handleInviteRetry()}
+            >
+              {retryingInvite ? 'Retrying...' : 'Retry invitation email'}
+            </Button>
+          </Card>
+        </div>
+      )}
 
       {/* Meta demoted to one muted line; full record behind (i) (§2.2.4). */}
       <div className="-mt-3 flex flex-wrap items-center gap-2 px-1">

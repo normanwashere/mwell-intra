@@ -69,3 +69,36 @@ test("the mutating harness is run-scoped and always invokes cleanup", async () =
   assert.doesNotMatch(source, /service_role\s*[=:]\s*["']/i);
   assert.doesNotMatch(source, /AUDIT_PASSWORD\s*[=:]\s*["'][^"']+/);
 });
+
+test("the mutating harness waits for quality data and uses unambiguous DOA controls", async () => {
+  const source = await readFile(
+    new URL("./full-intra-live-e2e.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /getByLabel\("Department", \{ exact: true \}\)/);
+  assert.match(source, /getByLabel\(`Tier \$\{index \+ 1\} named approver`\)/);
+  assert.match(source, /Loading quality controls/);
+  assert.match(source, /No inspections waiting/);
+});
+
+test("the invite workflow verifies the persisted delivery state", async () => {
+  const source = await readFile(
+    new URL("./full-intra-live-e2e.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /delivery_failed/);
+  assert.match(source, /table: "vendor_invites"/);
+  assert.match(source, /filters: \{ company_name: companyName \}/);
+});
+
+test("the mutating harness scopes and removes temporary auth identities", async () => {
+  const [harness, cleanup] = await Promise.all([
+    readFile(new URL("./full-intra-live-e2e.mjs", import.meta.url), "utf8"),
+    readFile(new URL("./live-e2e-cleanup.mjs", import.meta.url), "utf8"),
+  ]);
+  assert.match(harness, /vendorAuditEmail\(marker\)/);
+  assert.match(harness, /authEmails/);
+  assert.match(cleanup, /auth\.admin\.listUsers/);
+  assert.match(cleanup, /auth\.admin\.deleteUser/);
+  assert.match(cleanup, /includes\(runId\.toLowerCase\(\)\)/);
+});

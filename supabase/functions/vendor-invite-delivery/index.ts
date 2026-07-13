@@ -2,6 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, type User } from "jsr:@supabase/supabase-js@2";
 
 interface InviteBody {
+  invite_id?: string;
   email?: string;
   company_name?: string;
   category?: string;
@@ -41,15 +42,53 @@ Deno.serve(async (request) => {
   if (!verifiedUser) return json({ error: "Authentication required." }, 401);
 
   const body = (await request.json().catch(() => null)) as InviteBody | null;
-  const email = body?.email?.trim().toLowerCase();
-  const companyName = body?.company_name?.trim();
-  if (!email || !/^\S+@\S+\.\S+$/.test(email))
-    return json({ error: "A valid vendor email is required." }, 400);
-  if (!companyName) return json({ error: "Company name is required." }, 400);
-
   const admin = createClient(url, service, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
+  let email = body?.email?.trim().toLowerCase();
+  let companyName = body?.company_name?.trim();
+  let invite: Record<string, unknown>;
+
+  if (body?.invite_id) {
+    const { data: existing, error } = await userClient
+      .from("vendor_invites")
+      .select("*")
+      .eq("id", body.invite_id)
+      .single();
+    if (error || !existing)
+      return json({ error: error?.message ?? "Vendor invite not found." }, 404);
+    if (existing.status === "accepted" || existing.status === "expired")
+      return json(
+        { error: `A ${existing.status} invite cannot be retried.` },
+        409,
+      );
+    email = existing.email?.trim().toLowerCase();
+    companyName = existing.company_name?.trim();
+    invite = {
+      invite: existing,
+      case: { id: existing.case_id },
+      vendor: { id: existing.vendor_id },
+    };
+  } else {
+    if (!email || !/^\S+@\S+\.\S+$/.test(email))
+      return json({ error: "A valid vendor email is required." }, 400);
+    if (!companyName) return json({ error: "Company name is required." }, 400);
+    const { data, error } = await userClient.rpc("invite_vendor", {
+      payload: {
+        email,
+        company_name: companyName,
+        category: body?.category,
+        actor: verifiedUser.email,
+        profile: body?.profile,
+        origin_country: body?.origin_country,
+      },
+    });
+    if (error) return json({ error: error.message }, 403);
+    invite = data as Record<string, unknown>;
+  }
+
+  if (!email || !companyName)
+    return json({ error: "Vendor invite is missing delivery details." }, 422);
   const { data: profile, error: profileError } = await admin
     .schema("core")
     .from("profiles")
@@ -67,22 +106,10 @@ Deno.serve(async (request) => {
     );
   }
 
-  const { data: invite, error: inviteError } = await userClient.rpc(
-    "invite_vendor",
-    {
-      payload: {
-        email,
-        company_name: companyName,
-        category: body?.category,
-        actor: verifiedUser.email,
-        profile: body?.profile,
-        origin_country: body?.origin_country,
-      },
-    },
-  );
-  if (inviteError) return json({ error: inviteError.message }, 403);
-
-  const inviteId = (invite as { id: string }).id;
+  const inviteRow = (invite.invite ?? invite) as { id?: string };
+  const inviteId = inviteRow.id;
+  if (!inviteId)
+    return json({ error: "Invitation service returned no invite id." }, 502);
   const markDelivery = async (payload: Record<string, unknown>) => {
     const { error } = await admin
       .schema("legal")
@@ -145,7 +172,10 @@ Deno.serve(async (request) => {
       status: "sent",
       auth_user_id: authUser.id,
     });
-    return json(invite, 201);
+    return json(
+      { ...invite, delivery_status: "sent" },
+      body?.invite_id ? 200 : 201,
+    );
   } catch (cause) {
     const message =
       cause instanceof Error
@@ -156,6 +186,14 @@ Deno.serve(async (request) => {
       status: "delivery_failed",
       error: message,
     }).catch(() => undefined);
-    return json({ error: message }, 502);
+    return json(
+      {
+        ...invite,
+        delivery_status: "delivery_failed",
+        delivery_error:
+          "The case was opened, but the invitation email was not delivered. Verify the address and retry delivery.",
+      },
+      202,
+    );
   }
 });

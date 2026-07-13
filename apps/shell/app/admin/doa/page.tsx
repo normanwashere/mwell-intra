@@ -421,6 +421,7 @@ function DoaWorkspace() {
                 <Field label="Minimum" htmlFor={`doa-minimum-${row.key}`}>
                   <Input
                     id={`doa-minimum-${row.key}`}
+                    aria-label={`Tier ${index + 1} minimum`}
                     type="number"
                     min="0"
                     value={row.minAmount}
@@ -432,6 +433,7 @@ function DoaWorkspace() {
                 <Field label="Maximum" htmlFor={`doa-maximum-${row.key}`}>
                   <Input
                     id={`doa-maximum-${row.key}`}
+                    aria-label={`Tier ${index + 1} maximum`}
                     type="number"
                     min="0"
                     value={row.maxAmount}
@@ -447,6 +449,7 @@ function DoaWorkspace() {
                 >
                   <select
                     id={`doa-approver-${row.key}`}
+                    aria-label={`Tier ${index + 1} named approver`}
                     className="input-base w-full"
                     value={row.approverUserId}
                     onChange={(e) =>

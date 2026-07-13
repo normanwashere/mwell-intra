@@ -51,10 +51,9 @@ export function createSupabaseBrowserClient(
     SUPABASE_URL,
     SUPABASE_ANON_KEY,
     {
-      // Schema-scoped clients must not reuse the first browser singleton. Reuse
-      // silently preserves its Accept-Profile header (usually `core`) for later
-      // procurement, legal, and warehouse clients.
-      isSingleton: false,
+      // Providers owns one cookie-aware auth client. Domain access is derived
+      // from it with client.schema(...), so remounts must reuse the singleton.
+      isSingleton: true,
       db: { schema },
       global: { fetch: supabaseFetch },
     },

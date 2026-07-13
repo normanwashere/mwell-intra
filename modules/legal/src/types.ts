@@ -418,7 +418,11 @@ export interface VendorInvite {
   createdAt: string;
   createdByEmail?: string;
   acceptedAt?: string;
-  status: 'sent' | 'accepted' | 'expired';
+  status: 'sent' | 'accepted' | 'expired' | 'delivery_failed';
+  /** Delivery is separate from case creation so a mail outage cannot orphan work. */
+  deliveryStatus?: 'sent' | 'delivery_failed';
+  /** User-safe delivery guidance; provider diagnostics remain server-side. */
+  deliveryError?: string;
   // v2 additions carried over from the invite wizard
   jurisdiction?: Jurisdiction;
   originCountry?: string;

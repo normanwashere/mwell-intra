@@ -10,7 +10,7 @@ function applyFilters(query, filters) {
 export async function cleanupRun(
   runId,
   targets,
-  client = createAuditDatabaseClient(),
+  { client = createAuditDatabaseClient(), authEmails = [] } = {},
 ) {
   assertAuditRunId(runId);
   const results = [];
@@ -58,6 +58,42 @@ export async function cleanupRun(
     }
   }
 
+  const authResults = [];
+  for (const rawEmail of authEmails) {
+    const email = String(rawEmail).trim().toLowerCase();
+    try {
+      if (!email.includes(runId.toLowerCase()))
+        throw new Error("Auth cleanup email is not bound to the audit run.");
+      let user = null;
+      for (let page = 1; page <= 20 && !user; page += 1) {
+        const { data, error } = await client.auth.admin.listUsers({
+          page,
+          perPage: 1000,
+        });
+        if (error) throw new Error(error.message);
+        user =
+          data.users.find(
+            (candidate) => candidate.email?.toLowerCase() === email,
+          ) ?? null;
+        if (data.users.length < 1000) break;
+      }
+      if (user) {
+        const { error } = await client.auth.admin.deleteUser(user.id);
+        if (error) throw new Error(error.message);
+      }
+      authResults.push({ entity: "auth.users", email, removed: user ? 1 : 0, remaining: 0 });
+    } catch (error) {
+      authResults.push({
+        entity: "auth.users",
+        email,
+        removed: 0,
+        remaining: null,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  results.push(...authResults);
   const complete = results.every(
     (item) => item.remaining === 0 && !item.error,
   );
