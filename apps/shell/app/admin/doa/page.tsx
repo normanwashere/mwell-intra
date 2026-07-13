@@ -12,7 +12,6 @@ import {
 } from "@intra/ui";
 import { can } from "@intra/rbac";
 import { useSession } from "@intra/auth";
-import { createSupabaseBrowserClient } from "@shell/lib/supabase/client";
 
 type Tier =
   "dept_head" | "procurement_head" | "finance" | "legal" | "final_approver";
@@ -77,13 +76,16 @@ export default function DoaAdministrationPage() {
 }
 
 function DoaWorkspace() {
-  const { mode } = useSession();
+  const { mode, supabaseClient } = useSession();
   const toast = useToast();
   const procurement = useMemo(
-    () => createSupabaseBrowserClient("procurement"),
-    [],
+    () => supabaseClient?.schema("procurement") ?? null,
+    [supabaseClient],
   );
-  const core = useMemo(() => createSupabaseBrowserClient("core"), []);
+  const core = useMemo(
+    () => supabaseClient?.schema("core") ?? null,
+    [supabaseClient],
+  );
   const [matrices, setMatrices] = useState<MatrixRow[]>([]);
   const [profiles, setProfiles] = useState<ProfileRow[]>([]);
   const [department, setDepartment] = useState("");

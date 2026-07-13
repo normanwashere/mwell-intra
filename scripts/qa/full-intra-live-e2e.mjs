@@ -83,7 +83,7 @@ const commonRoutes = [
   },
   {
     path: "/knowledge",
-    text: /Knowledge Base|Search functions and workflows/i,
+    text: /Start with the flow|MWELL INTRA OPERATING HANDBOOK|Knowledge Base/i,
   },
 ];
 

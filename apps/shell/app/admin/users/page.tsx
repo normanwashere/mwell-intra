@@ -48,7 +48,6 @@ import {
   type Module,
   type UserRoles,
 } from '@intra/rbac';
-import { createSupabaseBrowserClient } from '@shell/lib/supabase/client';
 import { DEMO_PROFILES } from '@shell/lib/demoProfiles';
 import { cx } from '@shell/lib/cx';
 
@@ -296,11 +295,11 @@ function MemoryAdminUsers() {
 function LiveAdminUsers() {
   const toast = useToast();
   const columns = useMemo(buildRoleColumns, []);
-
-  // The provider builds its own browser client for auth; this factory returns
-  // a second client scoped to the `core` schema for direct table reads. Both
-  // share the auth cookies via @supabase/ssr, so no separate sign-in needed.
-  const supabase = useMemo(() => createSupabaseBrowserClient('core'), []);
+  const { supabaseClient } = useSession();
+  const supabase = useMemo(
+    () => supabaseClient?.schema('core') ?? null,
+    [supabaseClient],
+  );
 
   const [profiles, setProfiles] = useState<AdminProfile[]>([]);
   const [held, setHeld] = useState<Map<string, Set<string>>>(new Map());
