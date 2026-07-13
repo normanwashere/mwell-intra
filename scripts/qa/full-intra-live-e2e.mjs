@@ -226,10 +226,36 @@ async function waitForMeaningfulRoute(page) {
           lower.includes("runtime error")
         );
       },
+      undefined,
       { timeout: 8_000 },
     )
     .catch(() => {});
   await page.waitForTimeout(500);
+}
+
+async function waitForRouteExpectation(page, expected) {
+  if (!expected) return;
+  await page
+    .waitForFunction(
+      ({ source, flags }) => {
+        const text = document.body.innerText.trim().replace(/\s+/g, " ");
+        const lower = text.toLowerCase();
+        return (
+          new RegExp(source, flags).test(text) ||
+          lower.includes("access denied") ||
+          lower.includes("doesn't include") ||
+          lower.includes("not authorized") ||
+          lower.includes("no access") ||
+          lower.includes("reserved for enrolled") ||
+          lower.includes("application error") ||
+          lower.includes("runtime error")
+        );
+      },
+      { source: expected.source, flags: expected.flags },
+      { timeout: 10_000 },
+    )
+    .catch(() => {});
+  await page.waitForTimeout(250);
 }
 
 async function pageAudit(page) {
@@ -335,12 +361,57 @@ async function pageAudit(page) {
         el.contains(blockerControl)
       )
         continue;
+      function fixedAncestor(node) {
+        let current = node;
+        while (current && current !== document.documentElement) {
+          if (["fixed", "sticky"].includes(getComputedStyle(current).position))
+            return current;
+          current = current.parentElement;
+        }
+        return null;
+      }
+      const fixedBlocker = fixedAncestor(blockerControl);
+      const fixedTarget = fixedAncestor(el);
+      const blockerRect = (
+        fixedBlocker ?? blockerControl
+      ).getBoundingClientRect();
+      if (
+        fixedBlocker &&
+        !fixedTarget &&
+        blockerRect.top > window.innerHeight / 2
+      ) {
+        const targetScrollY =
+          window.scrollY + Math.max(0, rect.bottom - (blockerRect.top - 16));
+        const maxScrollY = Math.max(
+          0,
+          document.documentElement.scrollHeight - window.innerHeight,
+        );
+        if (targetScrollY >= 0 && targetScrollY <= maxScrollY + 1) continue;
+      }
       overlapExamples.push({
         a: controls[i]?.text || controls[i]?.tag || "control",
         b:
           blockerControl.innerText?.trim().replace(/\s+/g, " ").slice(0, 80) ||
           blockerControl.getAttribute("aria-label") ||
           blockerControl.tagName.toLowerCase(),
+        target: {
+          top: Math.round(rect.top),
+          bottom: Math.round(rect.bottom),
+          height: Math.round(rect.height),
+        },
+        blocker: {
+          top: Math.round(blockerRect.top),
+          bottom: Math.round(blockerRect.bottom),
+        },
+        scroll: {
+          y: Math.round(window.scrollY),
+          max: Math.round(
+            Math.max(
+              0,
+              document.documentElement.scrollHeight - window.innerHeight,
+            ),
+          ),
+        },
       });
     }
 
@@ -469,6 +540,7 @@ async function auditRoute(page, route) {
     timeout: 20_000,
   });
   await waitForMeaningfulRoute(page);
+  await waitForRouteExpectation(page, route.text);
   const audit = await pageAudit(page);
   const expectationMet = route.text ? route.text.test(audit.text) : true;
   return {
