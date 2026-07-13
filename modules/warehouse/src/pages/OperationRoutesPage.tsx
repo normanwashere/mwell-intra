@@ -22,7 +22,13 @@ export function OperationRoutesPage() {
   if (!data) return null;
   const routes = data.operationRoutes ?? [];
   const mayEdit = can(role, 'manage_operation_routes');
-  const isLastActive = (route: OperationRoute) => route.active && routes.filter((other) => other.operationTypeId === route.operationTypeId && other.active).length === 1;
+  const isLastActive = (route: OperationRoute) =>
+    selected?.id === route.id &&
+    selected.active &&
+    routes.filter(
+      (other) =>
+        other.operationTypeId === route.operationTypeId && other.active,
+    ).length === 1;
   const toggleLocation = (field: 'sourceLocationTypes' | 'destinationLocationTypes', value: ControlledLocationType) => {
     if (!draft) return;
     const values = draft[field].includes(value) ? draft[field].filter((item) => item !== value) : [...draft[field], value];

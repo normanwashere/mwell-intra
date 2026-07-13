@@ -3,11 +3,19 @@ import path from "node:path";
 
 export default defineConfig({
   resolve: {
-    alias: { "@shell": path.resolve(__dirname) },
+    alias: {
+      "@shell": path.resolve(__dirname),
+      "@": path.resolve(__dirname, "../../modules/warehouse/src"),
+    },
   },
   test: {
     environment: "node",
-    include: ["tests/api/**/*.test.ts", "lib/**/*.test.ts"],
+    include: [
+      "tests/api/**/*.test.ts",
+      "lib/**/*.test.ts",
+      "lib/**/*.test.tsx",
+      "components/**/*.test.tsx",
+    ],
     clearMocks: true,
   },
 });

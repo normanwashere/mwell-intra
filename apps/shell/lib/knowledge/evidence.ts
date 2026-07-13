@@ -1,298 +1,496 @@
 import { KNOWLEDGE_FLOWS } from "./workflows";
 import type { KnowledgeEvidence, KnowledgeFlowNode } from "./types";
 
-const date = "2026-07-11";
+const reviewDate = "2026-07-13";
+const appCommit = "edb3609d20eea7eb27a59f1a6d8dfcf9163048b9";
+const executableTypes = new Set(["start", "action", "handoff"]);
 
-interface ScreenSource {
-  src: string;
+interface EvidenceScenario {
   route: string;
+  roleId?: string;
+  state: string;
   landmark: string;
-  mobileSrc?: string;
+  label: string;
+  instruction: string;
+  x?: number;
+  y?: number;
+  mobileX?: number;
+  mobileY?: number;
 }
 
-function interactionFor(node: KnowledgeFlowNode, source: ScreenSource) {
-  const id = node.id;
-  if (id === "vendor-start")
-    return {
-      x: 0.2,
-      y: 0.026,
-      mobileX: 0.5,
-      mobileY: 0.22,
-      label: "Invite vendor",
-      instruction: "Select Invite vendor to create the governed invitation.",
-    };
-  if (id === "vendor-apply")
-    return {
-      x: 0.5,
-      y: 0.57,
-      label: "Continue application",
-      instruction:
-        "Select Continue application to open the vendor checklist and upload the outstanding requirements.",
-    };
-  if (id === "vendor-end")
-    return {
-      x: 0.5,
-      y: 0.38,
-      label: "Accreditation status",
-      instruction:
-        "Review the status, expiry, outstanding documents, and signature actions from the vendor portal.",
-    };
-  if (id.startsWith("vendor-"))
-    return {
-      x: 0.24,
-      y: 0.16,
-      mobileX: 0.5,
-      mobileY: 0.38,
-      label: "Accreditation case",
-      instruction:
-        "Open the vendor's case row to review its checklist and next required action.",
-    };
-  if (id === "p2p-start")
-    return {
-      x: 0.16,
-      y: 0.045,
-      mobileX: 0.5,
-      mobileY: 0.2,
-      label: "New request",
-      instruction: "Select New request to begin the purchase request wizard.",
-    };
-  if (id === "receive-record")
-    return {
-      x: 0.36,
-      y: 0.18,
-      label: "Product and quantity",
-      instruction:
-        "Select the delivered product, enter its quantity, then add it to the receipt.",
-    };
-  if (id.includes("inspect") || id.includes("outcome"))
-    return {
-      x: 0.48,
-      y: 0.25,
-      label: source.landmark,
-      instruction: `Use the highlighted ${source.landmark} control to record the decision and required evidence.`,
-    };
-  if (id === "receive-putaway" || id.startsWith("setup-"))
-    return {
-      x: 0.36,
-      y: 0.38,
-      label: source.landmark,
-      instruction: `Select the highlighted ${source.landmark} control to continue this step.`,
-    };
-  return {
-    x: 0.25,
-    y: 0.16,
-    label: source.landmark,
-    instruction: `Open the highlighted ${source.landmark} area, then complete: ${node.body}`,
-  };
-}
+export const KNOWLEDGE_EVIDENCE_SCENARIOS: Record<string, EvidenceScenario> = {
+  "access-start": {
+    route: "/login",
+    state: "The memory-mode sign-in form is ready for an approved staff identity.",
+    landmark: "Sign in",
+    label: "Sign in",
+    instruction: "Enter the approved identity and select Sign in.",
+    x: 0.5,
+    y: 0.5776,
+    mobileX: 0.5,
+    mobileY: 0.5993,
+  },
+  "access-fix": {
+    route: "/admin/users",
+    state: "The platform administrator has opened Marco Reyes's scoped-role sheet to apply the minimum approved warehouse grant.",
+    landmark: "warehouse:business_unit for ops@mwell.demo",
+    label: "Grant scoped warehouse access",
+    instruction: "Select only the approved scoped role for Marco Reyes, then verify the resulting access with a new session.",
+    x: 0.9597,
+    y: 0.6311,
+    mobileX: 0.8615,
+    mobileY: 0.6469,
+  },
+  "p2p-start": {
+    route: "/procurement/requests/new",
+    state: "A requester is drafting the first step of a new purchase request.",
+    landmark: "Continue",
+    label: "Continue request",
+    instruction: "Complete the required purchase need and line items, then select Continue.",
+    x: 0.794,
+    y: 0.9243,
+    mobileX: 0.8033,
+    mobileY: 0.7588,
+  },
+  "p2p-rfq-evidence": {
+    route: "/procurement/requests/req_seed_001",
+    state: "The procurement officer has selected RFQ / Canvassing for the seeded request.",
+    landmark: "Confirm sourcing route",
+    label: "Confirm RFQ route",
+    instruction: "Review the quotation evidence and confirm the RFQ sourcing route.",
+    x: 0.3052,
+    y: 0.4027,
+    mobileX: 0.3681,
+    mobileY: 0.3962,
+  },
+  "p2p-rfp-evidence": {
+    route: "/procurement/requests/req_seed_001",
+    state: "The procurement officer has selected RFP / Bidding for the seeded request.",
+    landmark: "Confirm sourcing route",
+    label: "Confirm RFP route",
+    instruction: "Review the competition evidence and confirm the RFP sourcing route.",
+    x: 0.3052,
+    y: 0.4027,
+    mobileX: 0.3681,
+    mobileY: 0.3962,
+  },
+  "p2p-po": {
+    route: "/procurement/purchase-orders",
+    state: "Approved seeded demand is available for controlled PO authoring.",
+    landmark: "Author from approved request",
+    label: "Author purchase order",
+    instruction: "Select Author from approved request and retain the approved demand link.",
+    x: 0.1993,
+    y: 0.3349,
+    mobileX: 0.4077,
+    mobileY: 0.3644,
+  },
+  "p2p-receive": {
+    route: "/warehouse/purchase-orders",
+    state: "Warehouse procurement is reviewing seeded receivable purchase orders.",
+    landmark: "Receive in procurement",
+    label: "Receive supply",
+    instruction: "Open the receivable order and hand it to governed warehouse receiving.",
+    x: 0.4988,
+    y: 0.6676,
+    mobileX: 0.6521,
+    mobileY: 0.4536,
+  },
+  "p2p-payment-pack": {
+    route: "/procurement/purchase-orders/po_seed_006",
+    state: "Finance has opened the seeded closed PO and can inspect its full governed record beside the payment-readiness evidence.",
+    landmark: "Full PO record",
+    label: "Inspect full PO record",
+    instruction: "Open the full PO record and review the receipt, acceptance, invoice, and amount match before deciding readiness.",
+    x: 0.6882,
+    y: 0.4027,
+    mobileX: 0.0974,
+    mobileY: 0.3962,
+  },
+  "vendor-start": {
+    route: "/legal/invites/new",
+    state: "Legal administration is preparing a new masked demo vendor invitation.",
+    landmark: "Continue",
+    label: "Continue vendor invite",
+    instruction: "Enter the verified vendor identity and continue to the governed invitation review.",
+    x: 0.7162,
+    y: 0.8627,
+    mobileX: 0.8033,
+    mobileY: 0.6877,
+  },
+  "vendor-apply": {
+    route: "/vendor/cases/case_seed_001/application",
+    state: "The seeded vendor portal application is open for vendor-owned updates.",
+    landmark: "Save draft",
+    label: "Save application draft",
+    instruction: "Complete the vendor-owned fields and save the accreditation application draft.",
+    x: 0.668,
+    y: 0.9433,
+    mobileX: 0.328,
+    mobileY: 0.8449,
+  },
+  "setup-start": {
+    route: "/warehouse/storage",
+    state: "The warehouse administrator has opened Add storage area at the warehouse selector.",
+    landmark: "Warehouse",
+    label: "Select warehouse",
+    instruction: "Select the governed warehouse that will own the storage area.",
+    x: 0.5889,
+    y: 0.2509,
+    mobileX: 0.5,
+    mobileY: 0.3339,
+  },
+  "setup-area": {
+    route: "/warehouse/storage",
+    state: "The warehouse administrator is naming a controlled area in Add storage area.",
+    landmark: "Area label",
+    label: "Storage area label",
+    instruction: "Enter the controlled storage-area label for the selected warehouse.",
+    x: 0.5,
+    y: 0.5144,
+    mobileX: 0.5,
+    mobileY: 0.7512,
+  },
+  "setup-bin": {
+    route: "/warehouse/storage",
+    state: "The warehouse administrator is defining the scannable bin code in Add storage area.",
+    landmark: "Bin code",
+    label: "Scannable bin code",
+    instruction: "Enter the unique scannable bin code and select Add bin.",
+    x: 0.4693,
+    y: 0.4,
+    mobileX: 0.3868,
+    mobileY: 0.6102,
+  },
+  "setup-route": {
+    route: "/warehouse/operation-routes",
+    state: "The warehouse administrator has opened the seeded operation-route editor.",
+    landmark: "Save route",
+    label: "Save operation route",
+    instruction: "Review the configured source, destination, and evidence controls, then save the route.",
+    x: 0.6333,
+    y: 0.7894,
+    mobileX: 0.5,
+    mobileY: 0.9408,
+  },
+  "receive-start": {
+    route: "/warehouse/purchase-orders",
+    state: "Warehouse procurement is reviewing the seeded open supplier deliveries.",
+    landmark: "Open supplier order",
+    label: "Open supplier delivery",
+    instruction: "Open the matching receivable purchase order before accepting physical delivery.",
+    x: 0.3951,
+    y: 0.402,
+    mobileX: 0.5,
+    mobileY: 0.4536,
+  },
+  "receive-record": {
+    route: "/warehouse/receiving",
+    state: "The logistics supervisor has selected a seeded product and quantity for the receipt draft.",
+    landmark: "Add to receipt",
+    label: "Add receipt line",
+    instruction: "Select the delivered product and quantity, then add the governed receipt line.",
+    x: 0.4528,
+    y: 0.402,
+    mobileX: 0.5,
+    mobileY: 0.3961,
+  },
+  "receive-putaway": {
+    route: "/warehouse/storage",
+    state: "The logistics supervisor has opened the putaway scanner for accepted stock.",
+    landmark: "Add stock",
+    label: "Add stock for putaway",
+    instruction: "Scan or enter accepted stock before selecting its controlled destination bin.",
+    x: 0.6476,
+    y: 0.445,
+    mobileX: 0.8167,
+    mobileY: 0.6137,
+  },
+  "quality-start": {
+    route: "/warehouse/quality",
+    state: "The logistics supervisor is reviewing the seeded pending-inspection queue.",
+    landmark: "Inspect",
+    label: "Inspect pending stock",
+    instruction: "Open the matching pending receipt or return for quality inspection.",
+    x: 0.9351,
+    y: 0.3287,
+    mobileX: 0.5,
+    mobileY: 0.431,
+  },
+  "quality-release": {
+    route: "/warehouse/quality",
+    state: "The seeded inspection sheet is set to Accepted for putaway with required evidence attached and submission enabled.",
+    landmark: "Submit inspection",
+    label: "Release accepted stock",
+    instruction: "Submit the accepted disposition after reviewing required inspection evidence.",
+    x: 0.6273,
+    y: 0.7359,
+    mobileX: 0.5,
+    mobileY: 0.9408,
+  },
+  "quality-return": {
+    route: "/warehouse/purchase-orders",
+    state: "Warehouse procurement is reviewing the quality queue handoff from a supplier order.",
+    landmark: "Open quality queue",
+    label: "Open vendor-return handoff",
+    instruction: "Open the quality queue and prepare the supplier return disposition with source evidence.",
+    x: 0.9069,
+    y: 0.2353,
+    mobileX: 0.5,
+    mobileY: 0.3884,
+  },
+  "event-fulfillment-start": {
+    route: "/warehouse/events",
+    state: "The business-unit owner is viewing seeded events and the New event command.",
+    landmark: "New event",
+    label: "Create event demand",
+    instruction: "Select New event and record accountable demand before reservation.",
+    x: 0.9316,
+    y: 0.1233,
+    mobileX: 0.1912,
+    mobileY: 0.2059,
+  },
+  "event-issue": {
+    route: "/warehouse/allocations",
+    state: "Warehouse operations is reviewing seeded reserved allocations ready to issue.",
+    landmark: "Issue",
+    label: "Issue allocated stock",
+    instruction: "Select Issue only for the matching approved allocation and custody recipient.",
+    x: 0.5575,
+    y: 0.4198,
+    mobileX: 0.8097,
+    mobileY: 0.4536,
+  },
+  "return-start": {
+    route: "/warehouse/returns",
+    state: "Warehouse operations has opened the governed return form for seeded custody.",
+    landmark: "Related event (optional)",
+    label: "Match returned custody",
+    instruction: "Select the accountable event or custody source before recording returned stock.",
+    x: 0.4837,
+    y: 0.3698,
+    mobileX: 0.5,
+    mobileY: 0.3955,
+  },
+  "return-restock": {
+    route: "/warehouse/returns",
+    state: "The seeded return form is set to Restock (back to available).",
+    landmark: "Record return",
+    label: "Record restock return",
+    instruction: "Record the accepted return so availability and custody reconcile.",
+    x: 0.3944,
+    y: 0.9076,
+    mobileX: 0.5,
+    mobileY: 0.3955,
+  },
+  "return-quarantine": {
+    route: "/warehouse/quality",
+    state: "The logistics supervisor has set a seeded inspection to Place on hold with a reason and required evidence attached.",
+    landmark: "Submit inspection",
+    label: "Quarantine return",
+    instruction: "Submit the supported hold disposition so non-accepted stock remains unavailable.",
+    x: 0.6273,
+    y: 0.8281,
+    mobileX: 0.5,
+    mobileY: 0.9408,
+  },
+  "return-adjustment-handoff": {
+    route: "/warehouse/cycle-counts",
+    state: "Warehouse finance has entered a deterministic physical variance ready for approval handoff.",
+    landmark: "Submit count",
+    label: "Submit supported adjustment",
+    instruction: "Submit the variance with count, reason, value, and custody evidence for controlled approval.",
+    x: 0.5889,
+    y: 0.9309,
+    mobileX: 0.5,
+    mobileY: 0.7521,
+  },
+  "count-start": {
+    route: "/warehouse/cycle-counts",
+    state: "Warehouse finance is selecting the controlled location and count scope.",
+    landmark: "Location",
+    label: "Select count location",
+    instruction: "Select the controlled location and category for the count sheet.",
+    x: 0.4024,
+    y: 0.2742,
+    mobileX: 0.5,
+    mobileY: 0.2877,
+  },
+  "count-enter": {
+    route: "/warehouse/cycle-counts",
+    state: "The warehouse logistics supervisor has entered the observed physical quantity on the authorized cycle-count sheet.",
+    landmark: "Counted Event Shirt (L)",
+    label: "Enter physical count",
+    instruction: "Enter the observed product quantity on the controlled count sheet and retain accountable count evidence.",
+    x: 0.8461,
+    y: 0.7642,
+    mobileX: 0.759,
+    mobileY: 0.4867,
+  },
+  "count-investigate": {
+    route: "/warehouse/cycle-counts",
+    state: "The logistics supervisor is reviewing seeded count lines with Variances only enabled.",
+    landmark: "Variances only",
+    label: "Investigate count variance",
+    instruction: "Filter to variances and compare movements, custody, and recount evidence.",
+    x: 0.353,
+    y: 0.402,
+    mobileX: 0.5751,
+    mobileY: 0.6182,
+  },
+  "count-post": {
+    route: "/warehouse/approvals",
+    state: "The warehouse administrator has approved the deterministic stock change and the cycle-count adjustment is posted.",
+    landmark: "Recently decided",
+    label: "Review posted adjustment",
+    instruction: "Confirm the approved result; an auditable stock movement corrected the ledger without rewriting history.",
+    x: 0.8435,
+    y: 0.2431,
+    mobileX: 0.8026,
+    mobileY: 0.29,
+  },
+  "admin-start": {
+    route: "/admin/users",
+    state: "The platform administrator is reviewing the seeded user register before opening a named access request.",
+    landmark: "Manage Marco Reyes",
+    label: "Manage named user",
+    instruction: "Open Marco Reyes's record and compare the requested scope with current assignments before making a change.",
+    x: 0.8963,
+    y: 0.1627,
+    mobileX: 0.7452,
+    mobileY: 0.6,
+  },
+  "admin-activate": {
+    route: "/warehouse/operation-routes",
+    roleId: "warehouse_admin",
+    state: "The warehouse administrator has enabled the seeded controlled alternate receiving route and is ready to save it.",
+    landmark: "Save route",
+    label: "Activate warehouse operation route",
+    instruction: "After deliberately enabling Active, save the validated warehouse route so it becomes available for governed receiving.",
+    x: 0.6333,
+    y: 0.7694,
+    mobileX: 0.5,
+    mobileY: 0.9408,
+  },
+  "allocation-start": {
+    route: "/warehouse/allocations",
+    state: "The business-unit owner is preparing a seeded reservation from approved demand.",
+    landmark: "Reserve",
+    label: "Reserve event stock",
+    instruction: "Select Reserve and tie the request to approved event demand.",
+    x: 0.9373,
+    y: 0.1233,
+    mobileX: 0.1699,
+    mobileY: 0.2296,
+  },
+  "allocation-reserve": {
+    route: "/warehouse/allocations",
+    state: "Warehouse operations is reviewing seeded reserved stock and the Issue command.",
+    landmark: "Issue",
+    label: "Reserve and issue stock",
+    instruction: "Issue only the reserved quantity to the accountable custody record.",
+    x: 0.5575,
+    y: 0.4198,
+    mobileX: 0.8097,
+    mobileY: 0.4536,
+  },
+  "price-start": {
+    route: "/warehouse/pricing",
+    state: "The pricing analyst is reviewing the seeded landed-cost and turnover table.",
+    landmark: "Pricing table",
+    label: "Prepare landed-cost basis",
+    instruction: "Open the product row and review landed cost, valuation, and turnover before proposing price.",
+    x: 0.5889,
+    y: 0.5098,
+    mobileX: 0.5,
+    mobileY: 0.4536,
+  },
+  "doa-start": {
+    route: "/admin/doa",
+    state: "Legal administration is preparing a seeded immutable DOA revision.",
+    landmark: "Add tier",
+    label: "Add DOA tier",
+    instruction: "Add the governed approval tier and retain the prior active matrix.",
+    x: 0.9028,
+    y: 0.566,
+    mobileX: 0.7847,
+    mobileY: 0.3962,
+  },
+  "doa-activate": {
+    route: "/admin/doa",
+    state: "Legal administration is reviewing a deterministic approved DOA revision at the controlled activation command.",
+    landmark: "Activate",
+    label: "Activate DOA revision",
+    instruction: "Activate the approved revision deliberately and retain the superseded version and audit evidence.",
+    x: 0.2335,
+    y: 0.4027,
+    mobileX: 0.5,
+    mobileY: 0.3962,
+  },
+  "recover-start": {
+    route: "/login",
+    state: "The memory-mode sign-in form shows a masked incomplete retry after a workflow access failure.",
+    landmark: "Password",
+    label: "Review failed attempt",
+    instruction: "Verify the failed state and committed outcome before retrying.",
+    x: 0.5,
+    y: 0.5109,
+    mobileX: 0.5,
+    mobileY: 0.5282,
+  },
+  "recover-retry": {
+    route: "/login",
+    state: "The memory-mode sign-in form contains masked corrected credentials ready for one retry.",
+    landmark: "Sign in",
+    label: "Retry once",
+    instruction: "After verifying no committed session exists, select Sign in once.",
+    x: 0.5,
+    y: 0.5776,
+    mobileX: 0.5,
+    mobileY: 0.5993,
+  },
+};
 
-function sourceFor(node: KnowledgeFlowNode): ScreenSource {
-  const id = node.id;
-  if (id === "access-start")
-    return {
-      src: "/knowledge/screenshots/sign-in-desktop.png",
-      route: "/login",
-      landmark: "Sign in",
-    };
-  if (id.startsWith("access-") || id.startsWith("recover-"))
-    return id.includes("fix") || id.includes("escalate")
-      ? {
-          src: "/knowledge/screenshots/admin-users-desktop.png",
-          route: "/admin/users",
-          landmark: "Users",
-        }
-      : {
-          src: "/knowledge/screenshots/intra-home-desktop.png",
-          route: "/",
-          landmark: "Mwell Intra",
-        };
-  if (id.startsWith("p2p-")) {
-    if (id === "p2p-start")
-      return {
-        src: "/knowledge/screenshots/procurement-list-desktop.png",
-        mobileSrc: "/knowledge/screenshots/procurement-request-mobile.png",
-        route: "/procurement/requests/new",
-        landmark: "Purchase request",
-      };
-    if (
-      id.includes("approve") ||
-      id.includes("accept") ||
-      id.includes("outcome")
-    )
-      return {
-        src: "/knowledge/screenshots/procurement-approvals-desktop.png",
-        route: "/procurement/approvals",
-        landmark: "Approvals",
-      };
-    if (id.includes("po") || id.includes("end"))
-      return {
-        src: "/knowledge/screenshots/procurement-purchase-orders-desktop.png",
-        route: "/procurement/purchase-orders",
-        landmark: "Purchase orders",
-      };
-    if (id.includes("receive"))
-      return {
-        src: "/knowledge/screenshots/warehouse-receiving-desktop.png",
-        route: "/warehouse/receiving",
-        landmark: "Receiving",
-      };
-    return {
-      src: "/knowledge/screenshots/procurement-list-desktop.png",
-      route: "/procurement",
-      landmark: "Procurement",
-    };
-  }
-  if (id.startsWith("vendor-"))
-    return id === "vendor-start"
-      ? {
-          src: "/knowledge/screenshots/legal-cases-desktop.png",
-          mobileSrc: "/knowledge/screenshots/legal-invite-mobile.png",
-          route: "/legal/invites/new",
-          landmark: "Invite",
-        }
-      : id === "vendor-apply" || id === "vendor-end"
-        ? {
-            src: "/knowledge/screenshots/vendor-portal-desktop.png",
-            route: "/vendor",
-            landmark: "Continue application",
-          }
-        : {
-            src: "/knowledge/screenshots/legal-cases-desktop.png",
-            route: "/legal",
-            landmark: "Cases",
-          };
-  if (id.startsWith("setup-"))
-    return id === "setup-route"
-      ? {
-          src: "/knowledge/screenshots/warehouse-operation-routes-desktop.png",
-          route: "/warehouse/operation-routes",
-          landmark: "Operation Routes",
-        }
-      : {
-          src: "/knowledge/screenshots/warehouse-storage-desktop.png",
-          route: "/warehouse/storage",
-          landmark: "Storage areas",
-        };
-  if (id.startsWith("receive-")) {
-    if (id === "receive-start")
-      return {
-        src: "/knowledge/screenshots/warehouse-purchase-orders-desktop.png",
-        route: "/warehouse/purchase-orders",
-        landmark: "Purchase Orders",
-      };
-    if (id === "receive-record")
-      return {
-        src: "/knowledge/screenshots/warehouse-receiving-desktop.png",
-        route: "/warehouse/receiving",
-        landmark: "Receiving",
-      };
-    if (id.includes("inspect") || id.includes("outcome"))
-      return {
-        src: "/knowledge/screenshots/warehouse-quality-desktop.png",
-        route: "/warehouse/quality",
-        landmark: "Quality Control",
-      };
-    if (id === "receive-putaway")
-      return {
-        src: "/knowledge/screenshots/warehouse-storage-desktop.png",
-        route: "/warehouse/storage",
-        landmark: "Storage areas",
-      };
-    return {
-      src: "/knowledge/screenshots/warehouse-inventory-desktop.png",
-      route: "/warehouse/inventory",
-      landmark: "Inventory",
-    };
-  }
-  if (id.startsWith("event-")) {
-    if (id === "event-start" || id === "event-end")
-      return {
-        src: "/knowledge/screenshots/warehouse-events-desktop.png",
-        route: "/warehouse/events",
-        landmark: "Events",
-      };
-    if (id === "event-reserve" || id === "event-issue")
-      return {
-        src: "/knowledge/screenshots/warehouse-allocations-desktop.png",
-        route: "/warehouse/allocations",
-        landmark: "Allocations",
-      };
-    if (id.includes("outcome"))
-      return {
-        src: "/knowledge/screenshots/warehouse-exceptions-desktop.png",
-        route: "/warehouse/exceptions",
-        landmark: "Exceptions",
-      };
-    return {
-      src: "/knowledge/screenshots/warehouse-returns-desktop.png",
-      route: "/warehouse/returns",
-      landmark: "Returns",
-    };
-  }
-  if (id.startsWith("count-")) {
-    if (id === "count-adjust")
-      return {
-        src: "/knowledge/screenshots/warehouse-approvals-desktop.png",
-        route: "/warehouse/approvals",
-        landmark: "Stock approvals",
-      };
-    if (id === "count-end")
-      return {
-        src: "/knowledge/screenshots/warehouse-inventory-desktop.png",
-        route: "/warehouse/inventory",
-        landmark: "Inventory",
-      };
-    return {
-      src: "/knowledge/screenshots/warehouse-cycle-counts-desktop.png",
-      route: "/warehouse/cycle-counts",
-      landmark: "Cycle Counts",
-    };
-  }
-  if (id.startsWith("price-"))
-    return {
-      src: "/knowledge/screenshots/warehouse-pricing-desktop.png",
-      route: "/warehouse/pricing",
-      landmark: "Pricing",
-    };
-  if (id.startsWith("doa-"))
-    return {
-      src: "/knowledge/screenshots/admin-doa-desktop.png",
-      route: "/admin/doa",
-      landmark: "Delegation",
-    };
-  return {
-    src: "/knowledge/screenshots/intra-home-desktop.png",
-    route: "/",
-    landmark: "Mwell Intra",
-  };
-}
-
-export const KNOWLEDGE_EVIDENCE: KnowledgeEvidence[] = KNOWLEDGE_FLOWS.flatMap(
-  (flow) =>
-    flow.nodes.map((node) => {
-      const source = sourceFor(node);
-      const interaction = interactionFor(node, source);
-      return {
-        id: `ev-${node.id}`,
-        nodeId: node.id,
-        desktopSrc: source.src,
-        mobileSrc: source.mobileSrc,
-        route: source.route,
-        roleId: node.ownerRoleIds[0]!,
-        capturedAt: date,
-        reviewedAt: date,
-        provenance: "documentation" as const,
-        alt: `${source.landmark} screen for ${node.title}`,
-        expectedLandmark: source.landmark,
-        expectedDatabaseEffect: node.databaseEffect,
-        sensitiveDataReviewed: true,
-        hotspots: [
-          {
-            id: "primary",
-            number: 1,
-            ...interaction,
-          },
-        ],
-      };
-    }),
+const executableNodes = KNOWLEDGE_FLOWS.flatMap((flow) =>
+  flow.nodes.filter((node) => executableTypes.has(node.type)),
 );
+
+function buildEvidence(node: KnowledgeFlowNode): KnowledgeEvidence {
+  const scenario = KNOWLEDGE_EVIDENCE_SCENARIOS[node.id];
+  if (!scenario) throw new Error(`Missing evidence scenario for ${node.id}`);
+  const prefix = `/knowledge/screenshots/task8-${node.id}`;
+  return {
+    id: `ev-${node.id}`,
+    nodeId: node.id,
+    desktopSrc: `${prefix}-desktop.png`,
+    mobileSrc: `${prefix}-mobile.png`,
+    route: scenario.route,
+    roleId: scenario.roleId ?? node.ownerRoleIds[0]!,
+    state: scenario.state,
+    capturedAt: reviewDate,
+    reviewedAt: reviewDate,
+    appCommit,
+    provenance: "documentation",
+    alt: `${scenario.landmark} application evidence for ${node.title}`,
+    expectedLandmark: scenario.landmark,
+    expectedDatabaseEffect: node.databaseEffect,
+    sensitiveDataReviewed: true,
+    hotspots: [
+      {
+        id: "primary",
+        number: 1,
+        x: scenario.x ?? 0.5,
+        y: scenario.y ?? 0.5,
+        mobileX: scenario.mobileX ?? 0.5,
+        mobileY: scenario.mobileY ?? 0.5,
+        label: scenario.label,
+        instruction: scenario.instruction,
+      },
+    ],
+  };
+}
+
+if (Object.keys(KNOWLEDGE_EVIDENCE_SCENARIOS).length !== executableNodes.length)
+  throw new Error("Evidence scenario count does not match executable flow nodes");
+
+export const KNOWLEDGE_EVIDENCE: KnowledgeEvidence[] = executableNodes.map(buildEvidence);

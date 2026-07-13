@@ -103,16 +103,28 @@ export class InMemoryRepository implements WarehouseControlRepository {
   private vendorReturns: VendorReturn[] = [];
   private exceptions: WarehouseException[] = [];
   private stockChanges: StockChangeRequest[] = [];
-  private operationRoutes: OperationRoute[] = [{
-    id: 'route-receipt-default',
-    operationTypeId: 'operation-receipt',
-    sourceLocationTypes: ['vendor'],
-    destinationLocationTypes: ['warehouse'],
-    requiresEvidence: true,
-    requiresApproval: false,
-    requiresOnline: true,
-    active: true,
-  }];
+  private operationRoutes: OperationRoute[] = [
+    {
+      id: 'route-receipt-default',
+      operationTypeId: 'operation-receipt',
+      sourceLocationTypes: ['vendor'],
+      destinationLocationTypes: ['warehouse'],
+      requiresEvidence: true,
+      requiresApproval: false,
+      requiresOnline: true,
+      active: true,
+    },
+    {
+      id: 'route-receipt-controlled-alternate',
+      operationTypeId: 'operation-receipt',
+      sourceLocationTypes: ['vendor'],
+      destinationLocationTypes: ['warehouse'],
+      requiresEvidence: true,
+      requiresApproval: true,
+      requiresOnline: true,
+      active: false,
+    },
+  ];
   private commandResponses = new Map<string, { payload: string; response: unknown }>();
 
   constructor(initial?: WarehouseData, options: InMemoryOptions = {}) {

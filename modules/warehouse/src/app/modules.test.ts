@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { MODULES, modulesForRole, primaryModulesForRole } from "./modules";
+import {
+  MODULES,
+  WAREHOUSE_DETAIL_ROUTES,
+  WAREHOUSE_ROUTE_CONTRACTS,
+  modulesForRole,
+  primaryModulesForRole,
+} from "./modules";
 import { ROLE_LIST } from "@/auth/roles";
 
 describe("warehouse navigation metadata", () => {
@@ -8,6 +14,13 @@ describe("warehouse navigation metadata", () => {
     expect(new Set(MODULES.map((module) => module.id)).size).toBe(
       MODULES.length,
     );
+  });
+
+  it("builds router contracts from every navigation module plus detail alias", () => {
+    expect(WAREHOUSE_ROUTE_CONTRACTS.map((entry) => entry.path)).toEqual([
+      ...MODULES.map((module) => module.path),
+      ...WAREHOUSE_DETAIL_ROUTES.map((entry) => entry.path),
+    ]);
   });
 
   it("uses the exact logistics mobile primary order", () => {

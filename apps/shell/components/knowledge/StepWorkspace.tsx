@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Badge, Icon } from "@intra/ui";
-import { outgoingEdges } from "@shell/lib/knowledge/graph";
+import { edgeChoiceId, outgoingEdges } from "@shell/lib/knowledge/graph";
 import type {
   KnowledgeEvidence,
   KnowledgeFlow,
@@ -17,14 +17,21 @@ export function StepWorkspace({
   evidence,
   rolesById,
   onSelectNode,
+  onChooseBranch,
 }: {
   flow: KnowledgeFlow;
   node: KnowledgeFlowNode;
   evidence?: KnowledgeEvidence;
   rolesById: Map<string, KnowledgeRole>;
   onSelectNode: (nodeId: string) => void;
+  onChooseBranch?: (choiceId: string) => void;
 }) {
   const branches = outgoingEdges(flow, node.id);
+  const selectEdge = (edge: (typeof branches)[number]) => {
+    if (branches.length > 1 && onChooseBranch)
+      onChooseBranch(edgeChoiceId(flow, edge));
+    else onSelectNode(edge.to);
+  };
   return (
     <section
       aria-labelledby="step-workspace-title"
@@ -55,7 +62,8 @@ export function StepWorkspace({
           </div>
           <h2
             id="step-workspace-title"
-            className="mt-3 text-2xl font-bold text-ink"
+            tabIndex={-1}
+            className="mt-3 text-2xl font-bold text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
           >
             {node.title}
           </h2>
@@ -103,8 +111,8 @@ export function StepWorkspace({
                 {branches.map((edge) => (
                   <button
                     type="button"
-                    key={`${edge.from}-${edge.to}`}
-                    onClick={() => onSelectNode(edge.to)}
+                    key={edgeChoiceId(flow, edge)}
+                    onClick={() => selectEdge(edge)}
                     className={`flex min-h-11 items-center justify-between gap-3 border px-3 py-2 text-left text-sm font-semibold ${edge.outcome === "exception" ? "border-rose-300 bg-rose-50 text-rose-800" : "border-line bg-surface text-ink hover:border-brand-400"}`}
                   >
                     <span>{edge.label ?? "Next step"}</span>
@@ -128,7 +136,7 @@ export function StepWorkspace({
         {branches[0] ? (
           <button
             type="button"
-            onClick={() => onSelectNode(branches[0]!.to)}
+            onClick={() => selectEdge(branches[0]!)}
             className="btn-outline min-w-0 justify-center"
           >
             <span className="truncate">{branches[0].label ?? "Next step"}</span>

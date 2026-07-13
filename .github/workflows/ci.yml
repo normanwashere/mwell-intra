@@ -28,6 +28,21 @@ env:
   COVERAGE_MIN: '50'
 
 jobs:
+  knowledge-base:
+    name: Knowledge Base contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm verify:knowledge-base
+
   # ---------------------------------------------------------------------------
   # Static checks run in parallel on every push/PR against the launch runtime.
   # ---------------------------------------------------------------------------
@@ -82,6 +97,8 @@ jobs:
         node: ['22']
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -137,6 +154,7 @@ jobs:
   build:
     name: Build shell (node ${{ matrix.node }})
     runs-on: ubuntu-latest
+    needs: knowledge-base
     strategy:
       fail-fast: false
       matrix:
@@ -254,7 +272,7 @@ jobs:
     name: E2E (playwright shard ${{ matrix.shard }}/3)
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: [typecheck, lint, test, build, axe]
+    needs: [knowledge-base, typecheck, lint, test, build, axe]
     strategy:
       fail-fast: false
       matrix:
@@ -271,3 +289,13 @@ jobs:
         run: pnpm --filter @intra/shell exec playwright install --with-deps
       - name: E2E
         run: pnpm --filter @intra/shell exec playwright test tests/smoke tests/e2e --shard=${{ matrix.shard }}/3
+      - name: Upload Playwright failures and traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-failures-${{ matrix.shard }}
+          path: |
+            apps/shell/test-results/**
+            apps/shell/playwright-report/**
+          if-no-files-found: ignore
+          retention-days: 7

@@ -1,24 +1,25 @@
-'use client';
+"use client";
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo } from "react";
 import {
   BrowserRouter,
   Navigate,
   Route,
   Routes,
   useLocation,
-} from 'react-router-dom';
-import { SignInPrompt, SkeletonList, SkeletonStats } from '@intra/ui';
-import { useSession } from '@intra/auth';
-import { can } from '@intra/rbac';
-import { ProcurementTabs } from './components/ProcurementTabs';
-import { RequestsPage } from './pages/RequestsPage';
-import { CreateRequestPage } from './pages/CreateRequestPage';
-import { RequestDetailPage } from './pages/RequestDetailPage';
-import { ApprovalInboxPage } from './pages/ApprovalInboxPage';
-import { PurchaseOrdersPage } from './pages/PurchaseOrdersPage';
-import { PODetailPage } from './pages/PODetailPage';
-import { resolveTiers, type UserRolesShape } from './tiers';
+} from "react-router-dom";
+import { SignInPrompt, SkeletonList, SkeletonStats } from "@intra/ui";
+import { useSession } from "@intra/auth";
+import { can } from "@intra/rbac";
+import { ProcurementTabs } from "./components/ProcurementTabs";
+import { RequestsPage } from "./pages/RequestsPage";
+import { CreateRequestPage } from "./pages/CreateRequestPage";
+import { RequestDetailPage } from "./pages/RequestDetailPage";
+import { ApprovalInboxPage } from "./pages/ApprovalInboxPage";
+import { PurchaseOrdersPage } from "./pages/PurchaseOrdersPage";
+import { PODetailPage } from "./pages/PODetailPage";
+import { resolveTiers, type UserRolesShape } from "./tiers";
+import { PROCUREMENT_ROUTE_BY_ID } from "./routes";
 
 export interface ProcurementAppProps {
   /** Path prefix the shell mounts this module under (default `/procurement`). */
@@ -28,10 +29,10 @@ export interface ProcurementAppProps {
 // See WarehouseApp for the react-router basename normalization rationale.
 function useNormalizeBasenamePath(basename: string): void {
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === "undefined") return;
     if (window.location.pathname === basename) {
       const next = `${basename}/${window.location.search}${window.location.hash}`;
-      window.history.replaceState(window.history.state, '', next);
+      window.history.replaceState(window.history.state, "", next);
     }
   }, [basename]);
 }
@@ -39,12 +40,14 @@ function useNormalizeBasenamePath(basename: string): void {
 function ScrollToTopOnRouteChange() {
   const { pathname, search } = useLocation();
   useEffect(() => {
-    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }, [pathname, search]);
   return null;
 }
 
-export function ProcurementApp({ basename = '/procurement' }: ProcurementAppProps) {
+export function ProcurementApp({
+  basename = "/procurement",
+}: ProcurementAppProps) {
   useNormalizeBasenamePath(basename);
   const { profile, userRoles, loading } = useSession();
   // PR-11 (P0): the module previously gated on procurement.view_dashboard,
@@ -55,16 +58,16 @@ export function ProcurementApp({ basename = '/procurement' }: ProcurementAppProp
     () => resolveTiers(userRoles as UserRolesShape),
     [userRoles],
   );
-  const canViewDashboard = can(userRoles, 'procurement', 'view_dashboard');
+  const canViewDashboard = can(userRoles, "procurement", "view_dashboard");
   const hasAccess = canViewDashboard || myTiers.length > 0;
   const approvalsOnly = !canViewDashboard && myTiers.length > 0;
   const canApprove =
-    can(userRoles, 'procurement', 'approve_request') || myTiers.length > 0;
+    can(userRoles, "procurement", "approve_request") || myTiers.length > 0;
   const canViewPurchaseOrders =
-    can(userRoles, 'procurement', 'author_po') ||
-    can(userRoles, 'procurement', 'approve_award') ||
-    can(userRoles, 'procurement', 'view_finance') ||
-    can(userRoles, 'procurement', 'admin');
+    can(userRoles, "procurement", "author_po") ||
+    can(userRoles, "procurement", "approve_award") ||
+    can(userRoles, "procurement", "view_finance") ||
+    can(userRoles, "procurement", "admin");
   if (loading) {
     return (
       <div className="mx-auto max-w-5xl space-y-6 p-4 md:p-6" aria-busy="true">
@@ -122,19 +125,46 @@ export function ProcurementApp({ basename = '/procurement' }: ProcurementAppProp
             {/* Tier-only entrants (e.g. Legal) land on the approvals surface.
                 Request detail stays reachable — it's the "Review" step of an
                 approval — but the list/create/PO surfaces are off-limits. */}
-            <Route path="/" element={<Navigate to="/approvals" replace />} />
-            <Route path="/approvals" element={<ApprovalInboxPage />} />
-            <Route path="/requests/:id" element={<RequestDetailPage />} />
+            <Route
+              path={PROCUREMENT_ROUTE_BY_ID.requests.path}
+              element={<Navigate to="/approvals" replace />}
+            />
+            <Route
+              path={PROCUREMENT_ROUTE_BY_ID.approvals.path}
+              element={<ApprovalInboxPage />}
+            />
+            <Route
+              path={PROCUREMENT_ROUTE_BY_ID["request-detail"].path}
+              element={<RequestDetailPage />}
+            />
             <Route path="*" element={<Navigate to="/approvals" replace />} />
           </>
         ) : (
           <>
-            <Route path="/" element={<RequestsPage />} />
-            <Route path="/requests/new" element={<CreateRequestPage />} />
-            <Route path="/requests/:id" element={<RequestDetailPage />} />
-            <Route path="/approvals" element={<ApprovalInboxPage />} />
-            <Route path="/purchase-orders" element={<PurchaseOrdersPage />} />
-            <Route path="/purchase-orders/:id" element={<PODetailPage />} />
+            <Route
+              path={PROCUREMENT_ROUTE_BY_ID.requests.path}
+              element={<RequestsPage />}
+            />
+            <Route
+              path={PROCUREMENT_ROUTE_BY_ID["create-request"].path}
+              element={<CreateRequestPage />}
+            />
+            <Route
+              path={PROCUREMENT_ROUTE_BY_ID["request-detail"].path}
+              element={<RequestDetailPage />}
+            />
+            <Route
+              path={PROCUREMENT_ROUTE_BY_ID.approvals.path}
+              element={<ApprovalInboxPage />}
+            />
+            <Route
+              path={PROCUREMENT_ROUTE_BY_ID["purchase-orders"].path}
+              element={<PurchaseOrdersPage />}
+            />
+            <Route
+              path={PROCUREMENT_ROUTE_BY_ID["po-detail"].path}
+              element={<PODetailPage />}
+            />
             <Route path="*" element={<Navigate to="/" replace />} />
           </>
         )}

@@ -1,4 +1,8 @@
-import type { KnowledgeFlow } from "./types";
+import type {
+  KnowledgeFlow,
+  KnowledgeFlowEdge,
+  KnowledgeFlowNode,
+} from "./types";
 
 export interface FlowLayoutNode {
   id: string;
@@ -66,4 +70,122 @@ export function layoutFlow(flow: KnowledgeFlow): FlowLayout {
 
 export function outgoingEdges(flow: KnowledgeFlow, nodeId: string) {
   return flow.edges.filter((edge) => edge.from === nodeId);
+}
+
+export function branchOptions(
+  flow: KnowledgeFlow,
+  nodeId: string,
+): KnowledgeFlowEdge[] {
+  return outgoingEdges(flow, nodeId);
+}
+
+export function edgeChoiceId(
+  flow: KnowledgeFlow,
+  edge: KnowledgeFlowEdge,
+): string {
+  const localId =
+    edge.id ??
+    [edge.from, edge.to, edge.label ?? "next"]
+      .map((part) =>
+        part
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-|-$/g, ""),
+      )
+      .join("-");
+  return `${encodeURIComponent(flow.id)}~${encodeURIComponent(localId)}`;
+}
+
+export interface BranchResolution {
+  nodes: KnowledgeFlowNode[];
+  traversedEdges: KnowledgeFlowEdge[];
+  chosenEdges: KnowledgeFlowEdge[];
+  choiceIds: string[];
+  invalidChoiceIds: string[];
+  currentNode: KnowledgeFlowNode;
+}
+
+export function resolveBranch(
+  flow: KnowledgeFlow,
+  requestedChoiceIds: readonly string[],
+): BranchResolution {
+  const nodesById = new Map(flow.nodes.map((node) => [node.id, node]));
+  const nodes: KnowledgeFlowNode[] = [];
+  const traversedEdges: KnowledgeFlowEdge[] = [];
+  const chosenEdges: KnowledgeFlowEdge[] = [];
+  const choiceIds: string[] = [];
+  const visited = new Set<string>();
+  let currentId: string | undefined = flow.startNodeId;
+  let choiceIndex = 0;
+
+  while (currentId && !visited.has(currentId)) {
+    const current = nodesById.get(currentId);
+    if (!current) break;
+    nodes.push(current);
+    visited.add(currentId);
+
+    const options = branchOptions(flow, currentId);
+    if (options.length === 0) break;
+    let selected: KnowledgeFlowEdge | undefined;
+    if (options.length === 1) {
+      selected = options[0]!;
+    } else {
+      const requestedId = requestedChoiceIds[choiceIndex];
+      if (!requestedId) break;
+      selected = options.find(
+        (edge) => edgeChoiceId(flow, edge) === requestedId,
+      );
+      if (!selected) break;
+      chosenEdges.push(selected);
+      choiceIds.push(requestedId);
+      choiceIndex += 1;
+    }
+    if (!selected) break;
+    traversedEdges.push(selected);
+    currentId = selected.to;
+  }
+
+  const currentNode =
+    nodes.at(-1) ?? nodesById.get(flow.startNodeId) ?? flow.nodes[0]!;
+  return {
+    nodes,
+    traversedEdges,
+    chosenEdges,
+    choiceIds,
+    invalidChoiceIds: requestedChoiceIds.slice(choiceIndex),
+    currentNode,
+  };
+}
+
+export function traceBranch(
+  flow: KnowledgeFlow,
+  choices: readonly string[],
+): KnowledgeFlowNode[] {
+  return resolveBranch(flow, choices).nodes;
+}
+
+export function roleNodes(
+  flow: KnowledgeFlow,
+  roleId: string,
+): KnowledgeFlowNode[] {
+  return flow.nodes.filter(
+    (node) =>
+      node.ownerRoleIds.includes(roleId) ||
+      (node.type === "decision" && node.authorityRoleId === roleId),
+  );
+}
+
+export function exceptionNodes(flow: KnowledgeFlow): KnowledgeFlowNode[] {
+  const exceptionDestinations = new Set(
+    flow.edges
+      .filter((edge) => edge.outcome === "exception")
+      .map((edge) => edge.to),
+  );
+  return flow.nodes.filter(
+    (node) =>
+      node.type === "exception" ||
+      Boolean(node.exception) ||
+      exceptionDestinations.has(node.id),
+  );
 }

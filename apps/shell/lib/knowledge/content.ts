@@ -1,6 +1,14 @@
 import { KNOWLEDGE_ROLES } from "./roles";
+import { KNOWLEDGE_FEATURES } from "./features";
 import { KNOWLEDGE_FLOWS } from "./workflows";
 import { KNOWLEDGE_EVIDENCE } from "./evidence";
+import { ADMINISTRATOR_ARTICLES } from "./admin";
+import {
+  GOVERNANCE_ARTICLES,
+  OPERATIONS_GLOSSARY,
+  RELEASE_NOTE_ARTICLES,
+} from "./governance";
+import { TROUBLESHOOTING_ARTICLES } from "./troubleshooting";
 import type {
   KnowledgeArticle,
   KnowledgeContent,
@@ -83,6 +91,7 @@ const roleArticles: KnowledgeArticle[] = KNOWLEDGE_ROLES.map((role) => ({
   title: `${role.label} guide`,
   summary: role.purpose,
   module: role.module,
+  availability: role.availability,
   roles: [role.id],
   keywords: [
     role.label,
@@ -135,7 +144,7 @@ const roleArticles: KnowledgeArticle[] = KNOWLEDGE_ROLES.map((role) => ({
   flowIds: KNOWLEDGE_FLOWS.filter((flow) => flow.roles.includes(role.id)).map(
     (flow) => flow.id,
   ),
-  liveRoutes: [moduleRoute[role.module]],
+  liveRoutes: role.availability === "live" ? [moduleRoute[role.module]] : [],
   owner:
     role.module === "vendor"
       ? "Legal"
@@ -144,6 +153,72 @@ const roleArticles: KnowledgeArticle[] = KNOWLEDGE_ROLES.map((role) => ({
         : role.module,
   reviewedAt: "2026-07-11",
 }));
+
+const featureArticles: KnowledgeArticle[] = KNOWLEDGE_FEATURES.map(
+  (feature) => ({
+    id: `feature-${feature.id}`,
+    slug: `features/${feature.id}`,
+    title: feature.title,
+    summary: feature.purpose,
+    module: feature.module,
+    availability: feature.availability,
+    roles: feature.roleIds,
+    keywords: [
+      feature.title,
+      feature.module,
+      ...feature.routes,
+      ...feature.capabilityIds,
+      "page reference",
+      "controls",
+      "validation",
+    ],
+    sections: [
+      {
+        id: "purpose-and-access",
+        title: "Purpose and access",
+        body: `${feature.purpose} Entry: ${feature.routes.join(", ")}. Required capabilities: ${feature.capabilityIds.length ? feature.capabilityIds.join(", ") : "authenticated or recovery-session access as described"}.`,
+      },
+      {
+        id: "controls",
+        title: "Controls and validation",
+        body: "Use only the controls available to the current role and record. Disabled or denied controls do not authorize an offline workaround.",
+        steps: feature.controls.map((control) => ({
+          title: control.name,
+          ownerRoleIds: feature.roleIds,
+          instruction: control.behavior,
+          expectedOutcome: control.result,
+          exception: control.validation,
+        })),
+      },
+      {
+        id: "fields",
+        title: "Fields and validation",
+        body: (feature.fields ?? [])
+          .map(
+            (field) =>
+              `${field.name}${field.required ? " (required)" : " (optional)"}: ${field.purpose} Validation: ${field.validation}`,
+          )
+          .join(" "),
+      },
+      {
+        id: "data-and-status",
+        title: "Data, statuses, and notifications",
+        body: `Reads: ${feature.reads.join(" ")} Writes: ${feature.writes.join(" ")} Statuses: ${feature.statuses.join(" ")} Notifications: ${(feature.notifications ?? []).join(" ")}`,
+      },
+      {
+        id: "exceptions-and-completion",
+        title: "Exceptions and completion evidence",
+        body: `Exceptions: ${feature.exceptions.join(" ")} Completion evidence: ${(feature.completionEvidence ?? []).join(" ")}`,
+      },
+    ],
+    relatedArticleIds: feature.roleIds.map((roleId) => `role-${roleId}`),
+    flowIds: [...feature.relatedFlowIds],
+    liveRoutes:
+      feature.availability === "coming_soon" ? [] : [...feature.routes],
+    owner: feature.owner,
+    reviewedAt: feature.reviewedAt,
+  }),
+);
 
 const processArticle = (
   id: string,
@@ -160,6 +235,7 @@ const processArticle = (
   title,
   summary,
   module,
+  availability: "live",
   roles,
   keywords: title
     .toLowerCase()
@@ -553,15 +629,18 @@ const procedureArticles: KnowledgeArticle[] = [
 
 export const KNOWLEDGE_CONTENT: KnowledgeContent = {
   roles: KNOWLEDGE_ROLES,
-  articles: [...roleArticles, ...procedureArticles],
+  features: KNOWLEDGE_FEATURES,
+  articles: [
+    ...roleArticles,
+    ...featureArticles,
+    ...procedureArticles,
+    ...ADMINISTRATOR_ARTICLES,
+    ...GOVERNANCE_ARTICLES,
+    ...TROUBLESHOOTING_ARTICLES,
+    ...RELEASE_NOTE_ARTICLES,
+  ],
   flows: KNOWLEDGE_FLOWS,
   glossary: [
-    {
-      term: "DOA",
-      definition:
-        "Delegation of Authority: the effective department matrix that assigns named approval responsibility by amount and category.",
-      aliases: ["approval matrix", "delegation"],
-    },
     {
       term: "Purchase request",
       definition:
@@ -575,12 +654,6 @@ export const KNOWLEDGE_CONTENT: KnowledgeContent = {
       aliases: ["PO"],
     },
     {
-      term: "Accreditation",
-      definition:
-        "Legal and compliance determination that a vendor satisfies applicable evidence, risk, and instrument requirements.",
-      aliases: ["vendor approval"],
-    },
-    {
       term: "Putaway",
       definition:
         "Controlled movement of accepted received stock into a valid storage bin.",
@@ -592,76 +665,14 @@ export const KNOWLEDGE_CONTENT: KnowledgeContent = {
         "A physical inventory count used to identify and govern stock variance.",
       aliases: ["stock count"],
     },
-    {
-      term: "Idempotency",
-      definition:
-        "A transaction safeguard that prevents the same command from creating duplicate effects when retried.",
-      aliases: ["duplicate protection"],
-    },
-    {
-      term: "RLS",
-      definition:
-        "Row Level Security: database policy that restricts which rows an authenticated identity may read or change.",
-      aliases: ["row security"],
-    },
+    ...OPERATIONS_GLOSSARY,
   ],
-  futureFeatures: (
-    [
-      [
-        "cms",
-        "Admin article drafting and publishing",
-        "Department-owned review, approval, effective dating, and version history.",
-      ],
-      [
-        "context",
-        "Contextual in-screen help",
-        "Open the exact procedure from the operational control being used.",
-      ],
-      [
-        "analytics",
-        "Knowledge search analytics",
-        "Identify unsuccessful searches and documentation gaps without storing sensitive query data.",
-      ],
-      [
-        "feedback",
-        "Article correction requests",
-        "Let authenticated users report unclear or outdated guidance to its owner.",
-      ],
-      [
-        "traceability",
-        "Policy-to-procedure traceability",
-        "Show which policy clause governs each workflow control.",
-      ],
-      [
-        "walkthrough",
-        "Guided sandbox walkthroughs",
-        "Practice workflows with disposable data and progress checks.",
-      ],
-      [
-        "language",
-        "Multilingual documentation",
-        "Publish governed translations with the same effective version.",
-      ],
-      [
-        "offline",
-        "Offline Knowledge Base",
-        "Precache approved guidance for resilient warehouse access.",
-      ],
-      [
-        "learning",
-        "Role onboarding curricula",
-        "Assign role-specific learning paths and completion records.",
-      ],
-      [
-        "release",
-        "Workflow-linked release notes",
-        "Explain changed screens and procedures after each release.",
-      ],
-    ] satisfies Array<[string, string, string]>
-  ).map(([id, title, value]) => ({
-    id,
-    title,
-    value,
+  futureFeatures: KNOWLEDGE_FEATURES.filter(
+    (feature) => feature.availability === "coming_soon",
+  ).map((feature) => ({
+    id: feature.id,
+    title: feature.title,
+    value: feature.purpose,
     status: "proposed" as const,
   })),
   evidence: KNOWLEDGE_EVIDENCE,

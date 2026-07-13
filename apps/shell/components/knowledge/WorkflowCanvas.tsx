@@ -1,7 +1,7 @@
 "use client";
 
 import { Badge } from "@intra/ui";
-import { layoutFlow } from "@shell/lib/knowledge/graph";
+import { edgeChoiceId, layoutFlow } from "@shell/lib/knowledge/graph";
 import type { KnowledgeFlow, KnowledgeRole } from "@shell/lib/knowledge/types";
 
 export function WorkflowCanvas({
@@ -49,7 +49,7 @@ export function WorkflowCanvas({
               x2 = to.x + 100,
               y2 = to.y;
             return (
-              <g key={`${edge.from}-${edge.to}-${edge.label ?? "next"}`}>
+              <g key={edgeChoiceId(flow, edge)}>
                 <path
                   d={`M ${x1} ${y1} C ${x1} ${(y1 + y2) / 2}, ${x2} ${(y1 + y2) / 2}, ${x2} ${y2}`}
                   fill="none"
@@ -88,7 +88,7 @@ export function WorkflowCanvas({
               style={{ left: position.x, top: position.y }}
               aria-current={selected ? "step" : undefined}
               aria-label={`${index + 1}. ${node.title}. ${node.type}. ${node.ownerRoleIds.map((id) => rolesById.get(id)?.label ?? id).join(", ")}`}
-              className={`absolute z-10 flex h-[108px] w-[200px] flex-col justify-center border-2 bg-surface px-3 text-left shadow-e1 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${selected ? "border-brand-600 shadow-e2" : node.type === "decision" ? "border-amber-500" : node.type === "terminal" ? "rounded-[3rem] border-emerald-500" : node.type === "start" ? "rounded-[3rem] border-brand-500" : node.type === "system" ? "border-cyan-500" : "border-line hover:border-brand-400"}`}
+              className={`absolute z-10 flex h-[108px] w-[200px] flex-col justify-center border-2 bg-surface px-3 text-left shadow-e1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${selected ? "border-brand-600 shadow-e2" : node.type === "decision" ? "border-amber-500" : node.type === "terminal" ? "rounded-[3rem] border-emerald-500" : node.type === "start" ? "rounded-[3rem] border-brand-500" : node.type === "system" ? "border-cyan-500" : "border-line hover:border-brand-400"}`}
             >
               <span className="flex items-center justify-between gap-2 text-[10px] font-semibold uppercase text-faint">
                 <span>Step {index + 1}</span>

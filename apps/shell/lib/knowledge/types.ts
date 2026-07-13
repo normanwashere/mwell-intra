@@ -1,6 +1,11 @@
 export type KnowledgeModule =
   "core" | "warehouse" | "procurement" | "legal" | "vendor" | "admin";
 
+export type KnowledgeAvailability = "live" | "limited" | "coming_soon";
+
+export type KnowledgeOutcome =
+  "complete" | "revision" | "rejected" | "cancelled" | "escalated";
+
 export type FlowNodeType =
   | "start"
   | "action"
@@ -10,11 +15,77 @@ export type FlowNodeType =
   | "exception"
   | "terminal";
 
+export interface KnowledgeAuthority {
+  capabilities: string[];
+  accessibleRoutes: string[];
+  canDo: string[];
+  cannotDo: string[];
+  decisions: string[];
+  upstreamRoleIds: string[];
+  downstreamRoleIds: string[];
+  escalation: string;
+}
+
+export interface KnowledgeResponsibilityStage {
+  title: string;
+  responsibility: string;
+  outcome: string;
+}
+
 export interface KnowledgeRole {
   id: string;
+  rbacModule?: "core" | "warehouse" | "procurement" | "legal";
+  rbacRole?: string;
   label: string;
   module: KnowledgeModule;
+  availability: KnowledgeAvailability;
   purpose: string;
+  dailyTasks: string[];
+  responsibilityStages: KnowledgeResponsibilityStage[];
+  authority: KnowledgeAuthority;
+}
+
+export interface KnowledgeFeatureControl {
+  name: string;
+  behavior: string;
+  validation: string;
+  result: string;
+}
+
+export interface KnowledgeFeatureField {
+  name: string;
+  purpose: string;
+  required: boolean;
+  validation: string;
+}
+
+export interface KnowledgeFeature {
+  id: string;
+  title: string;
+  module: KnowledgeModule;
+  availability: KnowledgeAvailability;
+  routes: string[];
+  roleIds: string[];
+  capabilityIds: string[];
+  purpose: string;
+  policyBasis: string[];
+  relatedFlowIds: string[];
+  controls: KnowledgeFeatureControl[];
+  fields?: KnowledgeFeatureField[];
+  reads: string[];
+  writes: string[];
+  statuses: string[];
+  notifications?: string[];
+  exceptions: string[];
+  completionEvidence?: string[];
+  owner: string;
+  reviewedAt: string;
+}
+
+export interface KnowledgeDecision {
+  authorityRoleId: string;
+  policyBasis: string;
+  terminalOutcome?: KnowledgeOutcome;
 }
 
 export interface KnowledgeStep {
@@ -23,6 +94,11 @@ export interface KnowledgeStep {
   instruction: string;
   expectedOutcome: string;
   exception?: string;
+  evidenceId?: string;
+  prerequisites?: string[];
+  databaseEffect?: string;
+  handoff?: string;
+  prohibitedActions?: string[];
 }
 
 export interface KnowledgeSection {
@@ -38,6 +114,7 @@ export interface KnowledgeArticle {
   title: string;
   summary: string;
   module: KnowledgeModule;
+  availability: KnowledgeAvailability;
   roles: string[];
   keywords: string[];
   sections: KnowledgeSection[];
@@ -49,9 +126,8 @@ export interface KnowledgeArticle {
   screenshots?: Array<{ src: string; alt: string; caption: string }>;
 }
 
-export interface KnowledgeFlowNode {
+interface KnowledgeFlowNodeBase {
   id: string;
-  type: FlowNodeType;
   title: string;
   ownerRoleIds: string[];
   body: string;
@@ -63,7 +139,36 @@ export interface KnowledgeFlowNode {
   databaseEffect?: string;
 }
 
+export interface KnowledgeDecisionNode extends KnowledgeFlowNodeBase {
+  type: "decision";
+  authorityRoleId: string;
+  policyBasis: string;
+  mergeContract?: {
+    destinationNodeId: string;
+    justification: string;
+  };
+  terminalOutcome?: never;
+}
+
+export interface KnowledgeTerminalNode extends KnowledgeFlowNodeBase {
+  type: "terminal";
+  authorityRoleId?: never;
+  policyBasis?: never;
+  terminalOutcome: KnowledgeOutcome;
+}
+
+export interface KnowledgeProcessNode extends KnowledgeFlowNodeBase {
+  type: Exclude<FlowNodeType, "decision" | "terminal">;
+  authorityRoleId?: never;
+  policyBasis?: never;
+  terminalOutcome?: never;
+}
+
+export type KnowledgeFlowNode =
+  KnowledgeDecisionNode | KnowledgeTerminalNode | KnowledgeProcessNode;
+
 export interface KnowledgeFlowEdge {
+  id?: string;
   from: string;
   to: string;
   label?: string;
@@ -75,8 +180,8 @@ export interface KnowledgeHotspot {
   number: number;
   x: number;
   y: number;
-  mobileX?: number;
-  mobileY?: number;
+  mobileX: number;
+  mobileY: number;
   label: string;
   instruction: string;
 }
@@ -85,17 +190,58 @@ export interface KnowledgeEvidence {
   id: string;
   nodeId: string;
   desktopSrc: string;
-  mobileSrc?: string;
+  mobileSrc: string;
   route: string;
   roleId: string;
+  state: string;
   capturedAt: string;
   reviewedAt: string;
+  appCommit: string;
   provenance: "production" | "documentation";
   alt: string;
   expectedLandmark: string;
   expectedDatabaseEffect?: string;
   sensitiveDataReviewed: boolean;
+  sharedEvidenceGroup?: string;
   hotspots: KnowledgeHotspot[];
+}
+
+export interface KnowledgeCaptureBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface KnowledgeCaptureArtifact {
+  file: string;
+  sha256: string;
+  width: number;
+  height: number;
+  controlBounds: KnowledgeCaptureBounds;
+  hotspot: { x: number; y: number };
+}
+
+export interface KnowledgeCaptureReportEntry {
+  route: string;
+  roleId: string;
+  state: string;
+  control: Pick<KnowledgeHotspot, "id" | "label" | "instruction">;
+  desktop: KnowledgeCaptureArtifact;
+  mobile: KnowledgeCaptureArtifact;
+}
+
+export interface KnowledgeCaptureReport {
+  schemaVersion: 1;
+  sourceCommit: string;
+  runtime: {
+    parentNode: string;
+    serverNode: string;
+  };
+  capturedAt: string;
+  reviewedAt: string;
+  evidenceCount: number;
+  evidence: Record<string, KnowledgeCaptureReportEntry>;
 }
 
 export interface KnowledgeFlow {
@@ -123,6 +269,7 @@ export interface FutureFeature {
 
 export interface KnowledgeContent {
   roles: KnowledgeRole[];
+  features: KnowledgeFeature[];
   articles: KnowledgeArticle[];
   flows: KnowledgeFlow[];
   glossary: GlossaryEntry[];

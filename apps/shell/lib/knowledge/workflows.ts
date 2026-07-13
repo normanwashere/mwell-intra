@@ -1,257 +1,214 @@
-import type { KnowledgeFlow, KnowledgeFlowNode } from "./types";
+import type {
+  KnowledgeDecisionNode,
+  KnowledgeFlow,
+  KnowledgeFlowEdge,
+  KnowledgeFlowNode,
+  KnowledgeOutcome,
+  KnowledgeProcessNode,
+  KnowledgeTerminalNode,
+} from "./types";
 
-const node = (
+const process = (
   id: string,
-  type: KnowledgeFlowNode["type"],
+  type: KnowledgeProcessNode["type"],
   title: string,
-  owners: string[],
+  ownerRoleIds: string[],
   body: string,
-  outcome?: string,
-  exception?: string,
-): KnowledgeFlowNode => ({
+  details: Partial<
+    Pick<
+      KnowledgeProcessNode,
+      "prerequisite" | "outcome" | "exception" | "databaseEffect"
+    >
+  > = {},
+): KnowledgeProcessNode => ({
   id,
   type,
   title,
-  ownerRoleIds: owners,
+  ownerRoleIds,
   body,
-  outcome,
-  exception,
+  ...details,
 });
 
-interface DecisionRoute {
-  primaryLabel: string;
-  primaryTo?: string;
-  alternatives: Array<{
-    label: string;
-    to?: string;
-    title?: string;
-    outcome: "success" | "exception" | "neutral";
-  }>;
-}
+const decision = (
+  id: string,
+  title: string,
+  ownerRoleIds: string[],
+  body: string,
+  authorityRoleId: string,
+  policyBasis: string,
+  mergeContract?: KnowledgeDecisionNode["mergeContract"],
+): KnowledgeDecisionNode => ({
+  id,
+  type: "decision",
+  title,
+  ownerRoleIds,
+  body,
+  authorityRoleId,
+  policyBasis,
+  ...(mergeContract ? { mergeContract } : {}),
+});
 
-const DECISION_ROUTES: Record<string, DecisionRoute> = {
-  "access-decision": {
-    primaryLabel: "Access correct",
-    primaryTo: "access-end",
-    alternatives: [
-      { label: "Access incorrect", to: "access-fix", outcome: "neutral" },
-    ],
-  },
-  "p2p-approve": {
-    primaryLabel: "Approved",
-    alternatives: [
-      {
-        label: "Rejected or returned",
-        title: "Request stopped for correction",
-        outcome: "exception",
-      },
-    ],
-  },
-  "vendor-review": {
-    primaryLabel: "Evidence complete",
-    alternatives: [
-      {
-        label: "Correction required",
-        title: "Application returned to vendor",
-        outcome: "exception",
-      },
-    ],
-  },
-  "vendor-decide": {
-    primaryLabel: "Approved",
-    alternatives: [
-      {
-        label: "Conditional",
-        title: "Conditional accreditation recorded",
-        outcome: "neutral",
-      },
-      {
-        label: "Rejected",
-        title: "Accreditation rejected",
-        outcome: "exception",
-      },
-    ],
-  },
-  "receive-inspect": {
-    primaryLabel: "Accept",
-    alternatives: [
-      {
-        label: "Hold",
-        title: "Stock placed on quality hold",
-        outcome: "exception",
-      },
-      {
-        label: "Damaged or unavailable",
-        title: "Stock recorded as non-available",
-        outcome: "exception",
-      },
-      {
-        label: "Return to vendor",
-        title: "Return disposition recorded",
-        outcome: "exception",
-      },
-    ],
-  },
-  "event-return": {
-    primaryLabel: "Fully reconciled",
-    alternatives: [
-      {
-        label: "Variance found",
-        title: "Inventory exception opened",
-        outcome: "exception",
-      },
-    ],
-  },
-  "count-review": {
-    primaryLabel: "Approval required",
-    alternatives: [
-      { label: "No variance", to: "count-end", outcome: "success" },
-    ],
-  },
-  "price-review": {
-    primaryLabel: "Approved",
-    alternatives: [
-      {
-        label: "Rejected",
-        title: "Price proposal rejected",
-        outcome: "exception",
-      },
-    ],
-  },
-  "doa-validate": {
-    primaryLabel: "Valid",
-    alternatives: [
-      {
-        label: "Invalid",
-        title: "DOA draft returned for correction",
-        outcome: "exception",
-      },
-    ],
-  },
-  "recover-check": {
-    primaryLabel: "Not saved",
-    alternatives: [
-      { label: "Already saved", to: "recover-end", outcome: "success" },
-    ],
-  },
-};
+const terminal = (
+  id: string,
+  title: string,
+  ownerRoleIds: string[],
+  body: string,
+  terminalOutcome: KnowledgeOutcome,
+): KnowledgeTerminalNode => ({
+  id,
+  type: "terminal",
+  title,
+  ownerRoleIds,
+  body,
+  terminalOutcome,
+});
 
-const governed = (
+const edge = (
+  from: string,
+  to: string,
+  label?: string,
+  outcome?: KnowledgeFlowEdge["outcome"],
+): KnowledgeFlowEdge => ({ from, to, label, outcome });
+
+const flow = (
   id: string,
   title: string,
   summary: string,
   roles: string[],
   nodes: KnowledgeFlowNode[],
-): KnowledgeFlow => {
-  const expandedNodes: KnowledgeFlowNode[] = [...nodes];
-  const edges: KnowledgeFlow["edges"] = [];
-  for (const [index, item] of nodes.entries()) {
-    if (item.type === "terminal") continue;
-    const next = nodes[index + 1];
-    const decision = DECISION_ROUTES[item.id];
-    if (!decision) {
-      if (next) edges.push({ from: item.id, to: next.id });
-      continue;
-    }
-    const primaryTo = decision.primaryTo ?? next?.id;
-    if (primaryTo)
-      edges.push({
-        from: item.id,
-        to: primaryTo,
-        label: decision.primaryLabel,
-        outcome: "success",
-      });
-    for (const [
-      alternativeIndex,
-      alternative,
-    ] of decision.alternatives.entries()) {
-      let target = alternative.to;
-      if (!target) {
-        target = `${item.id}-outcome-${alternativeIndex + 1}`;
-        expandedNodes.push({
-          id: target,
-          type: "terminal",
-          title: alternative.title ?? alternative.label,
-          ownerRoleIds: item.ownerRoleIds,
-          body:
-            item.exception ??
-            `The ${alternative.label.toLowerCase()} outcome is recorded with its reason and evidence.`,
-        });
-      }
-      edges.push({
-        from: item.id,
-        to: target,
-        label: alternative.label,
-        outcome: alternative.outcome,
-      });
-    }
-  }
-  return {
-    id,
-    title,
-    summary,
-    roles,
-    startNodeId: nodes[0]!.id,
-    nodes: expandedNodes.map((item) => ({
-      ...item,
-      evidenceId: `ev-${item.id}`,
-    })),
-    edges,
-  };
-};
+  edges: KnowledgeFlowEdge[],
+): KnowledgeFlow => ({
+  id,
+  title,
+  summary,
+  roles,
+  startNodeId: nodes[0]!.id,
+  nodes: nodes.map((item) => ({
+    ...item,
+    ...(["start", "action", "handoff"].includes(item.type)
+      ? { evidenceId: `ev-${item.id}` }
+      : {}),
+  })) as KnowledgeFlowNode[],
+  edges,
+});
+
+const allLiveRoleIds = [
+  "core_staff_only",
+  "platform_admin",
+  "vendor_portal",
+  "warehouse_logistics_supervisor",
+  "warehouse_operations",
+  "warehouse_finance",
+  "warehouse_bi_analyst",
+  "warehouse_business_unit",
+  "warehouse_marketing",
+  "warehouse_procurement",
+  "warehouse_pricing",
+  "warehouse_admin",
+  "procurement_requester",
+  "procurement_officer",
+  "procurement_approver",
+  "procurement_finance",
+  "procurement_admin",
+  "legal_reviewer",
+  "legal_compliance",
+  "legal_admin",
+];
+
+export const DOA_CONFIGURATION_ROLE_IDS = [
+  "platform_admin",
+  "legal_admin",
+] as const;
+
+export const DOA_REVIEW_ROLE_IDS = ["procurement_admin"] as const;
 
 export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
-  governed(
+  flow(
     "identity-and-access",
     "Identity and access",
-    "From sign-in through role resolution, denied access, and administrator correction.",
+    "Authenticate, resolve scoped access, correct assignments, and record denied access.",
     ["core_staff_only", "platform_admin", "vendor_portal"],
     [
-      node(
+      process(
         "access-start",
         "start",
         "User signs in",
         ["core_staff_only", "vendor_portal"],
-        "Enter the approved Mwell identity and password.",
+        "Enter the approved Mwell identity and password without sharing credentials.",
       ),
-      node(
+      decision(
+        "access-authorized",
+        "Is the identity authorized?",
+        ["platform_admin", "core_staff_only", "vendor_portal"],
+        "Confirm the account is active and belongs to the person requesting access.",
+        "platform_admin",
+        "Identity and access policy: active, attributable identities are required before a session is restored.",
+      ),
+      process(
         "access-resolve",
         "system",
-        "Intra resolves profile and roles",
+        "Resolve department and scoped roles",
         ["platform_admin"],
-        "Supabase Auth restores the session and scoped role metadata.",
-        "Only permitted modules appear.",
+        "Restore the session and resolve only the approved department role assignments.",
+        {
+          databaseEffect:
+            "The authenticated session carries the current scoped RBAC claims.",
+        },
       ),
-      node(
-        "access-decision",
-        "decision",
-        "Access correct?",
-        ["core_staff_only", "vendor_portal"],
-        "Confirm the expected module and task are visible.",
-        undefined,
-        "If denied, capture the route and contact the platform administrator.",
+      decision(
+        "access-role-correct",
+        "Are department and task permissions correct?",
+        ["platform_admin", "core_staff_only", "vendor_portal"],
+        "Compare visible modules and actions with the approved responsibility and department.",
+        "platform_admin",
+        "Least-privilege RBAC policy: access must match the approved department responsibility and no broader role.",
       ),
-      node(
+      process(
         "access-fix",
         "action",
-        "Administrator corrects assignment",
+        "Correct the scoped assignment",
         ["platform_admin"],
-        "Review the user profile, role scope, status, and audit trail.",
-        "A new session receives corrected access.",
+        "Review the approval evidence, remove conflicting roles, apply the minimum role, and retain the audit event.",
+        {
+          databaseEffect:
+            "The role assignment and access-change audit record are updated.",
+        },
       ),
-      node(
-        "access-end",
-        "terminal",
-        "User resumes work",
-        ["core_staff_only", "vendor_portal"],
-        "Return to the intended task and verify access.",
+      terminal(
+        "access-complete",
+        "Authorized access confirmed",
+        ["core_staff_only", "vendor_portal", "platform_admin"],
+        "The user starts the intended task with the approved minimum permissions.",
+        "complete",
+      ),
+      terminal(
+        "access-denied",
+        "Access request escalated",
+        ["platform_admin"],
+        "Keep access denied and escalate identity conflict or missing authorization with the route and request evidence.",
+        "escalated",
       ),
     ],
+    [
+      edge("access-start", "access-authorized"),
+      edge("access-authorized", "access-resolve", "Authorized", "success"),
+      edge("access-authorized", "access-denied", "Not authorized", "exception"),
+      edge("access-resolve", "access-role-correct"),
+      edge("access-role-correct", "access-complete", "Correct", "success"),
+      edge(
+        "access-role-correct",
+        "access-fix",
+        "Too little or too much access",
+        "exception",
+      ),
+      edge("access-fix", "access-complete"),
+    ],
   ),
-  governed(
+
+  flow(
     "procure-to-pay",
     "Procure to pay",
-    "Request, sourcing, approval, PO, receiving, acceptance, and payment readiness.",
+    "Route a supported need through sourcing policy, vendor eligibility, budget, DOA, receipt, and payment readiness.",
     [
       "procurement_requester",
       "procurement_officer",
@@ -263,65 +220,278 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
       "warehouse_logistics_supervisor",
     ],
     [
-      node(
+      process(
         "p2p-start",
         "start",
-        "Requester drafts purchase request",
+        "Draft the purchase request",
         ["procurement_requester"],
-        "Enter category, line items, justification, cost context, dates, and evidence.",
+        "Record the need, category, line items, estimated value, budget context, dates, and supporting documents.",
       ),
-      node(
-        "p2p-route",
-        "action",
-        "Procurement confirms sourcing route",
+      decision(
+        "p2p-threshold",
+        "Which value threshold applies?",
         ["procurement_officer"],
-        "Validate competition, exception pack, vendor accreditation, and policy route.",
-        undefined,
-        "Return incomplete or unsupported requests for clarification.",
+        "Use the total estimated PHP value to select RFQ or quotation work below the threshold and RFP or competitive bidding at PHP 1,000,000 and above.",
+        "procurement_officer",
+        "Procurement Policy section 5: below-threshold comparable purchases follow RFQ or quotation; RFP or bidding applies at PHP 1,000,000 and above.",
       ),
-      node(
-        "p2p-approve",
-        "decision",
-        "Approvers decide",
-        ["procurement_approver", "procurement_finance"],
-        "Review only the assigned DOA step and supporting record.",
-        "Approved requests become eligible for PO authoring.",
-        "A rejection or return records the reason and stops progression.",
+      decision(
+        "p2p-risk",
+        "Does risk override the value route?",
+        ["procurement_officer", "legal_reviewer"],
+        "Assess complexity, technical or strategic scope, data sensitivity, and high-risk category indicators regardless of amount.",
+        "procurement_officer",
+        "Procurement Policy section 5: complex, technical, strategic, data-sensitive, or high-risk work can require RFP regardless of amount.",
       ),
-      node(
+      decision(
+        "p2p-competition",
+        "Does the request follow normal competition?",
+        ["procurement_officer"],
+        "Continue to value and risk routing unless a documented repeat, direct-award, emergency, or petty-cash exception is claimed.",
+        "procurement_officer",
+        "Procurement Policy sections 5 and 11: competitive sourcing is the default; exceptions require a recorded basis.",
+      ),
+      process(
+        "p2p-rfq-evidence",
+        "action",
+        "Assemble the RFQ or quotation evidence pack",
+        ["procurement_officer", "procurement_requester"],
+        "Retain the technical description, approved budget evidence, previous purchase cost, and comparable quotations for the below-threshold purchase.",
+        {
+          outcome:
+            "The below-threshold sourcing record shows comparable quotations and price reasonableness.",
+        },
+      ),
+      decision(
+        "p2p-rfq-quotes",
+        "Is the RFQ or quotation pack complete?",
+        ["procurement_officer"],
+        "Confirm comparable quotations, the comparison basis, sourcing effort, and price reasonableness are recorded.",
+        "procurement_officer",
+        "Procurement Policy sections 5 and 6: below-threshold RFQ sourcing retains comparable quotations and the required supporting documents where practicable.",
+      ),
+      process(
+        "p2p-rfp-evidence",
+        "action",
+        "Assemble the RFP or competitive-bidding evidence pack",
+        ["procurement_officer", "procurement_requester"],
+        "Retain the technical specification, approved budget evidence, previous purchase cost, Award Recommendation draft, vendor proposals, evaluation basis, and sourcing record.",
+        {
+          outcome:
+            "The RFP record contains the Award Recommendation and vendor proposals required for competitive evaluation.",
+        },
+      ),
+      decision(
+        "p2p-bids",
+        "Is the competitive bid pack complete?",
+        ["procurement_officer"],
+        "Compare invited suppliers and vendor proposals with the intended response set, evaluation basis, and Award Recommendation evidence.",
+        "procurement_officer",
+        "Procurement Policy sections 5 and 9 and Annex A: RFP sourcing requires documented competition, evaluation, vendor proposals, and an Award Recommendation; a response shortfall requires an exception.",
+      ),
+      decision(
+        "p2p-exception",
+        "Is the sourcing exception approved?",
+        ["procurement_admin", "procurement_approver", "legal_reviewer"],
+        "Review direct-award, repeat, emergency, petty-cash, or insufficient-bids justification and price reasonableness.",
+        "procurement_admin",
+        "Procurement Policy section 11 and Annex C: exceptions require documented justification and the designated approval authority.",
+      ),
+      decision(
+        "p2p-accreditation",
+        "Is the selected vendor eligible?",
+        ["procurement_officer", "legal_reviewer"],
+        "Confirm current Legal accreditation or a specifically approved temporary clearance before supplier commitment.",
+        "legal_reviewer",
+        "Procurement Policy section 7: award and PO eligibility require current vendor accreditation or scoped temporary clearance.",
+        {
+          destinationNodeId: "p2p-budget",
+          justification:
+            "Current accreditation and an approved scoped temporary clearance are distinct eligibility findings that both proceed to the same mandatory budget gate.",
+        },
+      ),
+      decision(
+        "p2p-budget",
+        "Is budget evidence complete and available?",
+        ["procurement_finance", "procurement_requester"],
+        "Validate cost center, budget or GL code, funding evidence, total value, and financial protection requirements.",
+        "procurement_finance",
+        "Procurement Policy sections 9 and 12: budget evidence and applicable financial protection precede approval and commitment.",
+      ),
+      decision(
+        "p2p-doa",
+        "Has the active DOA chain approved?",
+        ["procurement_approver", "procurement_admin", "procurement_finance"],
+        "Resolve the active matrix by department, category, and amount; decide only the next named approval step.",
+        "procurement_approver",
+        "Active department Delegation of Authority and Procurement Policy section 9: ordered named approval is required before award.",
+      ),
+      process(
         "p2p-po",
         "action",
-        "Procurement authors and issues PO",
+        "Issue the controlled purchase order",
         ["procurement_officer", "procurement_admin"],
-        "Use the approved request and accredited vendor; preserve line and value controls.",
+        "Author the PO from the approved request and award without changing approved supplier, lines, or value outside revision control.",
+        {
+          databaseEffect:
+            "The approved request is linked to an issued purchase order.",
+        },
       ),
-      node(
+      process(
         "p2p-receive",
         "handoff",
-        "Warehouse receives supply",
+        "Receive and accept the supply",
         ["warehouse_procurement", "warehouse_logistics_supervisor"],
-        "Match the PO, quantities, serials/lots, and delivery evidence.",
+        "Match the receivable PO, quantities, serial or lot traceability, inspection, delivery, and acceptance evidence.",
       ),
-      node(
-        "p2p-accept",
+      process(
+        "p2p-payment-pack",
         "action",
-        "Business and Finance confirm acceptance",
-        ["procurement_finance", "procurement_requester"],
-        "Confirm delivery, inspection, and acceptance evidence.",
+        "Assemble payment-readiness evidence",
+        ["procurement_finance"],
+        "Confirm the approved request, PO, receipt, inspection, and business acceptance references agree.",
       ),
-      node(
-        "p2p-end",
-        "terminal",
+      terminal(
+        "p2p-complete",
         "Payment readiness established",
         ["procurement_finance"],
-        "The governed record contains approved request, PO, receipt, and acceptance evidence.",
+        "The governed procurement record is complete and eligible for the finance payment process.",
+        "complete",
+      ),
+      terminal(
+        "p2p-revision",
+        "Request returned for revision",
+        ["procurement_requester", "procurement_officer"],
+        "Correct the stated sourcing, vendor, evidence, or approval gap and submit a traceable revision.",
+        "revision",
+      ),
+      terminal(
+        "p2p-rejected",
+        "Procurement request rejected",
+        ["procurement_approver", "procurement_admin"],
+        "The rejection reason and deciding authority are recorded; no supplier commitment may proceed.",
+        "rejected",
+      ),
+      terminal(
+        "p2p-cancelled",
+        "Request cancelled for unavailable budget",
+        ["procurement_finance", "procurement_requester"],
+        "Close the request without commitment and retain the funding decision evidence.",
+        "cancelled",
+      ),
+      terminal(
+        "p2p-escalated",
+        "Policy or authority gap escalated",
+        ["procurement_admin"],
+        "Escalate the unresolved threshold, risk, exception, budget, or DOA issue before any commitment.",
+        "escalated",
       ),
     ],
+    [
+      edge("p2p-start", "p2p-competition"),
+      edge("p2p-competition", "p2p-risk", "Normal competition", "success"),
+      edge(
+        "p2p-competition",
+        "p2p-exception",
+        "Exception route claimed",
+        "neutral",
+      ),
+      edge("p2p-risk", "p2p-threshold", "Standard risk", "success"),
+      edge(
+        "p2p-risk",
+        "p2p-rfp-evidence",
+        "High risk or complex - RFP required",
+        "neutral",
+      ),
+      edge(
+        "p2p-risk",
+        "p2p-escalated",
+        "Risk cannot be classified",
+        "exception",
+      ),
+      edge(
+        "p2p-threshold",
+        "p2p-rfq-evidence",
+        "Below PHP 1,000,000",
+        "neutral",
+      ),
+      edge(
+        "p2p-threshold",
+        "p2p-rfp-evidence",
+        "PHP 1,000,000 or above",
+        "success",
+      ),
+      edge("p2p-rfq-evidence", "p2p-rfq-quotes"),
+      edge(
+        "p2p-rfq-quotes",
+        "p2p-accreditation",
+        "Comparable quotations complete",
+        "success",
+      ),
+      edge(
+        "p2p-rfq-quotes",
+        "p2p-exception",
+        "Quotation shortfall",
+        "exception",
+      ),
+      edge(
+        "p2p-rfq-quotes",
+        "p2p-revision",
+        "Required evidence incomplete",
+        "neutral",
+      ),
+      edge("p2p-rfp-evidence", "p2p-bids"),
+      edge(
+        "p2p-bids",
+        "p2p-accreditation",
+        "Competitive bid pack complete",
+        "success",
+      ),
+      edge("p2p-bids", "p2p-exception", "Insufficient bids", "exception"),
+      edge(
+        "p2p-bids",
+        "p2p-revision",
+        "Award or evaluation evidence incomplete",
+        "neutral",
+      ),
+      edge("p2p-exception", "p2p-accreditation", "Approved", "success"),
+      edge("p2p-exception", "p2p-revision", "Return for evidence", "neutral"),
+      edge("p2p-exception", "p2p-rejected", "Rejected", "exception"),
+      edge(
+        "p2p-accreditation",
+        "p2p-budget",
+        "Currently accredited",
+        "success",
+      ),
+      edge(
+        "p2p-accreditation",
+        "p2p-budget",
+        "Temporary clearance approved",
+        "neutral",
+      ),
+      edge("p2p-accreditation", "p2p-revision", "Not eligible", "exception"),
+      edge("p2p-budget", "p2p-doa", "Funded with complete evidence", "success"),
+      edge("p2p-budget", "p2p-cancelled", "Budget unavailable", "exception"),
+      edge("p2p-budget", "p2p-revision", "Evidence incomplete", "neutral"),
+      edge("p2p-doa", "p2p-po", "Approved in order", "success"),
+      edge("p2p-doa", "p2p-revision", "Returned for revision", "neutral"),
+      edge("p2p-doa", "p2p-rejected", "Rejected", "exception"),
+      edge(
+        "p2p-doa",
+        "p2p-escalated",
+        "No valid authority resolves",
+        "exception",
+      ),
+      edge("p2p-po", "p2p-receive"),
+      edge("p2p-receive", "p2p-payment-pack"),
+      edge("p2p-payment-pack", "p2p-complete"),
+    ],
   ),
-  governed(
+
+  flow(
     "vendor-accreditation",
     "Vendor accreditation",
-    "Invitation through application, evidence, instruments, decision, and renewal.",
+    "Invite, evidence, risk, instruments, disposition, remediation, renewal, and suspension.",
     [
       "legal_admin",
       "legal_reviewer",
@@ -330,101 +500,240 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
       "procurement_officer",
     ],
     [
-      node(
+      process(
         "vendor-start",
         "start",
-        "Legal invites vendor",
+        "Invite the verified vendor contact",
         ["legal_admin"],
-        "Create the case with verified company and contact details.",
+        "Create the case with verified entity and contact details and a vendor-scoped invitation.",
       ),
-      node(
+      process(
         "vendor-apply",
         "action",
-        "Vendor completes application",
+        "Submit the accreditation application",
         ["vendor_portal"],
-        "Submit entity, ownership, risk, data-handling, documentary, and technology information.",
+        "Provide entity, ownership, risk, data-handling, documentary, and technology information.",
       ),
-      node(
-        "vendor-review",
-        "decision",
-        "Legal reviews evidence",
+      decision(
+        "vendor-evidence",
+        "Is required evidence complete and current?",
         ["legal_reviewer", "legal_compliance"],
-        "Approve, reject, or request correction for each governed requirement.",
-        undefined,
-        "Missing or expired evidence returns to the vendor with a specific reason.",
+        "Validate each checklist requirement, document owner, validity period, and case reference.",
+        "legal_reviewer",
+        "Vendor Accreditation Standard: every applicable checklist item needs current, attributable evidence before disposition.",
       ),
-      node(
-        "vendor-sign",
-        "action",
-        "Parties execute required instruments",
-        ["vendor_portal", "legal_reviewer"],
-        "Complete MNDA and applicable service-provider instruments with lifecycle evidence.",
+      decision(
+        "vendor-risk",
+        "Is residual vendor risk acceptable?",
+        ["legal_reviewer", "legal_compliance"],
+        "Review ownership, compliance, service, data, security, and material-risk facts against the case evidence.",
+        "legal_compliance",
+        "Vendor risk and compliance policy: unresolved material risk requires remediation, rejection, or escalation.",
       ),
-      node(
-        "vendor-decide",
-        "decision",
-        "Legal records accreditation decision",
+      decision(
+        "vendor-instruments",
+        "Are all applicable instruments executed?",
+        ["legal_reviewer", "vendor_portal"],
+        "Confirm MNDA and each applicable service-provider instrument has the required parties, version, and immutable signature evidence.",
+        "legal_reviewer",
+        "Legal instrument control: required NDA or service instruments must be fully executed before accreditation approval.",
+      ),
+      decision(
+        "vendor-disposition",
+        "What accreditation disposition is authorized?",
         ["legal_reviewer", "legal_admin"],
-        "Confirm checklist completion, risk disposition, and decision authority.",
-        "Approved status unblocks eligible procurement awards.",
-        "Rejected or conditional cases retain reasons and remediation.",
+        "Choose approval, conditional approval with explicit controls, or rejection from the complete case record.",
+        "legal_reviewer",
+        "Legal accreditation procedure: the authorized reviewer records approved, conditional, or rejected status with reasons.",
       ),
-      node(
-        "vendor-end",
-        "terminal",
-        "Vendor monitored for renewal",
+      decision(
+        "vendor-remediation",
+        "Has required remediation been verified?",
+        ["legal_compliance", "legal_reviewer", "vendor_portal"],
+        "Review corrective evidence, due dates, conditional controls, and any remaining material exposure.",
+        "legal_compliance",
+        "Vendor compliance procedure: conditional status remains controlled until remediation evidence is verified by Legal.",
+      ),
+      decision(
+        "vendor-renewal",
+        "Is accreditation current for continued use?",
+        ["legal_compliance", "legal_reviewer"],
+        "Check expiry, renewal evidence, material changes, instruments, and open remediation before continued eligibility.",
+        "legal_compliance",
+        "Vendor lifecycle policy: accreditation is time-bound and requires renewal review before expiry or continued award use.",
+      ),
+      decision(
+        "vendor-suspension",
+        "Does a material change require suspension?",
+        ["legal_compliance", "legal_admin"],
+        "Assess expired evidence, adverse information, control failure, or unremediated conditions before preserving eligibility.",
+        "legal_compliance",
+        "Vendor lifecycle and risk policy: material adverse change can suspend accreditation pending accountable review.",
+      ),
+      terminal(
+        "vendor-active",
+        "Vendor accreditation active",
+        ["legal_compliance", "vendor_portal", "procurement_officer"],
+        "The current status, expiry, controls, and evidence references are visible for eligible procurement use.",
+        "complete",
+      ),
+      terminal(
+        "vendor-revision",
+        "Application returned for revision",
+        ["vendor_portal", "legal_reviewer"],
+        "The vendor receives specific missing, expired, or incorrectly executed evidence requirements.",
+        "revision",
+      ),
+      terminal(
+        "vendor-rejected",
+        "Accreditation rejected",
+        ["legal_reviewer", "legal_admin"],
+        "The authorized rejection reason is recorded and the vendor remains ineligible.",
+        "rejected",
+      ),
+      terminal(
+        "vendor-renewal-due",
+        "Renewal required",
         ["legal_compliance", "vendor_portal"],
-        "Track expiry, renewal evidence, and material changes.",
+        "Continued eligibility waits for a new review of expiring or changed evidence.",
+        "revision",
+      ),
+      terminal(
+        "vendor-suspended",
+        "Accreditation suspended and escalated",
+        ["legal_compliance", "legal_admin"],
+        "Procurement eligibility is blocked while Legal resolves the material change and records the authority decision.",
+        "escalated",
+      ),
+    ],
+    [
+      edge("vendor-start", "vendor-apply"),
+      edge("vendor-apply", "vendor-evidence"),
+      edge("vendor-evidence", "vendor-risk", "Complete and current", "success"),
+      edge(
+        "vendor-evidence",
+        "vendor-revision",
+        "Missing, expired, or inconsistent",
+        "exception",
+      ),
+      edge("vendor-risk", "vendor-instruments", "Acceptable", "success"),
+      edge(
+        "vendor-risk",
+        "vendor-remediation",
+        "Remediation required",
+        "neutral",
+      ),
+      edge("vendor-risk", "vendor-rejected", "Unacceptable", "exception"),
+      edge(
+        "vendor-instruments",
+        "vendor-disposition",
+        "Fully executed",
+        "success",
+      ),
+      edge(
+        "vendor-instruments",
+        "vendor-revision",
+        "Missing or incomplete",
+        "exception",
+      ),
+      edge("vendor-disposition", "vendor-renewal", "Approved", "success"),
+      edge(
+        "vendor-disposition",
+        "vendor-remediation",
+        "Conditional approval",
+        "neutral",
+      ),
+      edge("vendor-disposition", "vendor-rejected", "Rejected", "exception"),
+      edge("vendor-remediation", "vendor-renewal", "Verified", "success"),
+      edge(
+        "vendor-remediation",
+        "vendor-revision",
+        "More evidence required",
+        "neutral",
+      ),
+      edge(
+        "vendor-remediation",
+        "vendor-rejected",
+        "Failed or overdue",
+        "exception",
+      ),
+      edge("vendor-renewal", "vendor-active", "Current", "success"),
+      edge("vendor-renewal", "vendor-renewal-due", "Renewal due", "neutral"),
+      edge(
+        "vendor-renewal",
+        "vendor-suspension",
+        "Material change reported",
+        "exception",
+      ),
+      edge(
+        "vendor-suspension",
+        "vendor-active",
+        "No suspension required",
+        "success",
+      ),
+      edge(
+        "vendor-suspension",
+        "vendor-suspended",
+        "Suspend eligibility",
+        "exception",
       ),
     ],
   ),
-  governed(
+
+  flow(
     "warehouse-setup",
     "Warehouse setup",
-    "Create locations, storage areas, bins, and permitted operation routes.",
+    "Create locations, storage areas, bins, and controlled operation routes.",
     ["warehouse_admin", "warehouse_logistics_supervisor"],
     [
-      node(
+      process(
         "setup-start",
         "start",
-        "Create warehouse location",
+        "Create the warehouse location",
         ["warehouse_admin"],
-        "Define the site and operational identity.",
+        "Define the site identity and operational ownership.",
       ),
-      node(
+      process(
         "setup-area",
         "action",
-        "Create storage area",
+        "Create controlled storage areas",
         ["warehouse_admin"],
-        "Set area type, restrictions, and capacity context.",
+        "Set area type, restrictions, capacity context, and custody purpose.",
       ),
-      node(
+      process(
         "setup-bin",
         "action",
-        "Create bins",
+        "Create scannable bins",
         ["warehouse_admin"],
-        "Create scannable bins with location and area ownership.",
+        "Assign each bin to one valid location and area.",
       ),
-      node(
+      process(
         "setup-route",
         "action",
         "Configure operation routes",
         ["warehouse_admin"],
-        "Permit valid source and destination location types.",
+        "Permit only reviewed operation, source, and destination location-type combinations.",
       ),
-      node(
-        "setup-end",
-        "terminal",
-        "Warehouse ready for controlled stock",
-        ["warehouse_logistics_supervisor"],
-        "Verify scan, receive, transfer, and putaway destinations.",
+      terminal(
+        "setup-complete",
+        "Warehouse setup complete",
+        ["warehouse_logistics_supervisor", "warehouse_admin"],
+        "Validated locations, bins, and routes are ready for controlled stock.",
+        "complete",
       ),
     ],
+    [
+      edge("setup-start", "setup-area"),
+      edge("setup-area", "setup-bin"),
+      edge("setup-bin", "setup-route"),
+      edge("setup-route", "setup-complete"),
+    ],
   ),
-  governed(
+
+  flow(
     "receive-to-putaway",
     "Receive to putaway",
-    "PO matching, receipt, inspection, hold, putaway, and inventory availability.",
+    "Verify PO eligibility and traceability before receiving into a valid putaway bin.",
     [
       "warehouse_procurement",
       "warehouse_logistics_supervisor",
@@ -432,56 +741,248 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
       "warehouse_finance",
     ],
     [
-      node(
+      process(
         "receive-start",
         "start",
-        "Select receivable PO",
+        "Open the supplier delivery",
         ["warehouse_procurement", "warehouse_logistics_supervisor"],
-        "Confirm supplier, site, lines, and remaining quantity.",
+        "Identify the supplier, delivery reference, site, and candidate source PO.",
       ),
-      node(
+      decision(
+        "receive-po-eligible",
+        "Is the PO eligible to receive?",
+        ["warehouse_procurement", "warehouse_logistics_supervisor"],
+        "Confirm approved source award, issued PO, eligible vendor, open line, remaining quantity, and matching site.",
+        "warehouse_procurement",
+        "PO receiving control: only approved, issued, vendor-eligible PO lines with remaining quantity may be received.",
+      ),
+      decision(
+        "receive-traceability",
+        "Is required traceability complete?",
+        ["warehouse_logistics_supervisor"],
+        "Capture quantity, serials for serialized items, lot or batch details, delivery evidence, and recipient custody.",
+        "warehouse_logistics_supervisor",
+        "Warehouse traceability control: product, quantity, serial or lot identity, source, and evidence must be attributable before posting.",
+      ),
+      process(
         "receive-record",
         "action",
-        "Record receipt lines",
+        "Post the governed receipt",
         ["warehouse_logistics_supervisor"],
-        "Scan or enter product, quantity, serial/lot, and evidence.",
+        "Record only the delivered eligible quantities and preserve receipt and traceability references.",
+        {
+          databaseEffect:
+            "Receipt lines, units or lots, and the inventory ledger are posted from the PO.",
+        },
       ),
-      node(
-        "receive-inspect",
-        "decision",
-        "Inspect quality",
-        ["warehouse_logistics_supervisor"],
-        "Accept, hold, mark damaged, unavailable, or return to vendor.",
-        "Accepted units proceed to putaway.",
-        "Non-accepted outcomes require reason and evidence.",
+      decision(
+        "receive-bin-ready",
+        "Is a valid putaway bin ready?",
+        ["warehouse_logistics_supervisor", "warehouse_admin"],
+        "Validate the destination bin is active, belongs to the site, supports the stock state, and is allowed by the operation route.",
+        "warehouse_logistics_supervisor",
+        "Warehouse storage and route control: putaway requires an active compatible bin and permitted source-to-destination route.",
+        {
+          destinationNodeId: "receive-escalated",
+          justification:
+            "Missing routes and restricted destinations both preserve stock in controlled staging for the same accountable configuration escalation.",
+        },
       ),
-      node(
+      process(
         "receive-putaway",
         "action",
-        "Put away accepted stock",
+        "Put away received stock",
         ["warehouse_logistics_supervisor", "warehouse_operations"],
-        "Move units into valid bins and preserve custody.",
+        "Scan the destination and move accepted units while preserving custody and traceability.",
+        {
+          databaseEffect:
+            "Stock location and bin balances move from receiving to the controlled destination.",
+        },
       ),
-      node(
-        "receive-post",
-        "system",
-        "Inventory and valuation update",
-        ["warehouse_finance"],
-        "The ledger, units, lots, and stock levels reflect the governed receipt.",
+      terminal(
+        "receive-complete",
+        "Receipt available for quality disposition",
+        ["warehouse_logistics_supervisor", "warehouse_operations"],
+        "The eligible, traceable receipt is in a valid bin and linked to its inspection workflow.",
+        "complete",
       ),
-      node(
-        "receive-end",
-        "terminal",
-        "Stock available for allocation",
-        ["warehouse_operations"],
-        "Available, non-held stock can be reserved and issued.",
+      terminal(
+        "receive-rejected",
+        "Delivery rejected from receiving",
+        ["warehouse_procurement", "warehouse_logistics_supervisor"],
+        "No inventory is created; record the PO, supplier, quantity, or eligibility mismatch.",
+        "rejected",
+      ),
+      terminal(
+        "receive-revision",
+        "Receipt held for traceability correction",
+        ["warehouse_logistics_supervisor"],
+        "Correct the missing serial, lot, quantity, or delivery evidence before posting.",
+        "revision",
+      ),
+      terminal(
+        "receive-escalated",
+        "Putaway route escalated",
+        ["warehouse_admin", "warehouse_logistics_supervisor"],
+        "Keep stock in controlled staging and escalate the missing, restricted, or invalid destination route.",
+        "escalated",
       ),
     ],
+    [
+      edge("receive-start", "receive-po-eligible"),
+      edge(
+        "receive-po-eligible",
+        "receive-traceability",
+        "Eligible",
+        "success",
+      ),
+      edge(
+        "receive-po-eligible",
+        "receive-rejected",
+        "Not eligible",
+        "exception",
+      ),
+      edge("receive-traceability", "receive-record", "Complete", "success"),
+      edge(
+        "receive-traceability",
+        "receive-revision",
+        "Incomplete or mismatched",
+        "exception",
+      ),
+      edge("receive-record", "receive-bin-ready"),
+      edge(
+        "receive-bin-ready",
+        "receive-putaway",
+        "Active compatible bin",
+        "success",
+      ),
+      edge(
+        "receive-bin-ready",
+        "receive-escalated",
+        "No valid bin or route",
+        "exception",
+      ),
+      edge(
+        "receive-bin-ready",
+        "receive-escalated",
+        "Destination restricted",
+        "neutral",
+      ),
+      edge("receive-putaway", "receive-complete"),
+    ],
   ),
-  governed(
-    "allocation-event-return",
-    "Allocation, event, and return",
-    "Request, reserve, issue, consume, return, inspect, and reconcile stock.",
+
+  flow(
+    "quality-disposition",
+    "Quality disposition",
+    "Inspect stock and control acceptance, hold, release, and return-to-vendor outcomes.",
+    [
+      "warehouse_logistics_supervisor",
+      "warehouse_operations",
+      "warehouse_procurement",
+      "warehouse_finance",
+    ],
+    [
+      process(
+        "quality-start",
+        "start",
+        "Open stock pending inspection",
+        ["warehouse_logistics_supervisor", "warehouse_operations"],
+        "Match the receipt or return, product, quantity, serial or lot, and inspection evidence context.",
+      ),
+      decision(
+        "quality-inspection",
+        "What is the inspection disposition?",
+        ["warehouse_logistics_supervisor", "warehouse_operations"],
+        "Record accepted, hold, damaged, unavailable, or return-to-vendor with a reason and supporting evidence.",
+        "warehouse_logistics_supervisor",
+        "Warehouse quality control: inspected stock receives an evidence-backed disposition before it becomes available or leaves custody.",
+      ),
+      process(
+        "quality-release",
+        "action",
+        "Release accepted stock",
+        ["warehouse_logistics_supervisor"],
+        "Make only accepted units available and retain the inspection reference.",
+        {
+          databaseEffect:
+            "The inspection is completed and accepted stock becomes available.",
+        },
+      ),
+      decision(
+        "quality-hold-review",
+        "Can held stock be released?",
+        ["warehouse_logistics_supervisor", "warehouse_procurement"],
+        "Review corrective evidence and decide release, continued hold, or return to vendor without bypassing the active hold.",
+        "warehouse_logistics_supervisor",
+        "Inventory hold control: only an authorized hold review may release stock to an accepted disposition or direct vendor return.",
+      ),
+      process(
+        "quality-return",
+        "handoff",
+        "Create the vendor return disposition",
+        ["warehouse_procurement", "warehouse_logistics_supervisor"],
+        "Record supplier, PO or receipt, quantity, serial or lot, reason, and outbound custody evidence.",
+      ),
+      terminal(
+        "quality-complete",
+        "Stock accepted and released",
+        ["warehouse_operations", "warehouse_logistics_supervisor"],
+        "Accepted stock is available with a complete inspection trail.",
+        "complete",
+      ),
+      terminal(
+        "quality-returned",
+        "Return to vendor authorized",
+        ["warehouse_procurement", "warehouse_logistics_supervisor"],
+        "Non-accepted stock remains unavailable and follows the recorded vendor return.",
+        "complete",
+      ),
+      terminal(
+        "quality-held",
+        "Quality hold escalated",
+        ["warehouse_logistics_supervisor", "warehouse_finance"],
+        "Stock remains unavailable while the unresolved quality issue is escalated with evidence.",
+        "escalated",
+      ),
+    ],
+    [
+      edge("quality-start", "quality-inspection"),
+      edge("quality-inspection", "quality-release", "Accepted", "success"),
+      edge("quality-inspection", "quality-hold-review", "Hold", "neutral"),
+      edge(
+        "quality-inspection",
+        "quality-return",
+        "Damaged or return to vendor",
+        "exception",
+      ),
+      edge("quality-release", "quality-complete"),
+      edge(
+        "quality-hold-review",
+        "quality-release",
+        "Release as accepted",
+        "success",
+      ),
+      edge(
+        "quality-hold-review",
+        "quality-held",
+        "Continue hold and escalate",
+        "neutral",
+      ),
+      edge(
+        "quality-hold-review",
+        "quality-return",
+        "Return to vendor",
+        "exception",
+      ),
+      edge("quality-return", "quality-returned"),
+    ],
+  ),
+
+  flow(
+    "event-fulfillment",
+    "Event fulfillment",
+    "Validate demand, reserve and issue stock, then reconcile consumption and return obligations.",
     [
       "warehouse_business_unit",
       "warehouse_marketing",
@@ -489,142 +990,692 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
       "warehouse_logistics_supervisor",
     ],
     [
-      node(
-        "event-start",
+      process(
+        "event-fulfillment-start",
         "start",
-        "Business creates event or demand",
+        "Create event demand",
         ["warehouse_business_unit", "warehouse_marketing"],
-        "Provide dates, owner, location, purpose, and requested products.",
+        "Record event owner, dates, location, purpose, and requested products and quantities.",
       ),
-      node(
-        "event-reserve",
-        "action",
-        "Operations allocates stock",
-        ["warehouse_operations"],
-        "Reserve available quantities against the event or request.",
+      decision(
+        "event-demand-valid",
+        "Is the event demand still valid?",
+        ["warehouse_business_unit", "warehouse_marketing"],
+        "Confirm the approved activity, dates, accountable recipient, and current quantity need.",
+        "warehouse_marketing",
+        "Event custody policy: stock may be reserved only for active, attributable business demand.",
       ),
-      node(
+      decision(
+        "event-stock-ready",
+        "Is eligible stock ready to issue?",
+        ["warehouse_operations", "warehouse_logistics_supervisor"],
+        "Check available non-held quantity, allocation, valid source bin, serialized-unit selection, and custody recipient.",
+        "warehouse_operations",
+        "Warehouse allocation and issue control: only available, allocated, traceable stock may leave controlled custody.",
+      ),
+      process(
         "event-issue",
         "action",
-        "Warehouse issues stock",
+        "Issue allocated stock",
         ["warehouse_operations", "warehouse_logistics_supervisor"],
-        "Scan custody out and record recipient evidence.",
+        "Scan source, units, and recipient; record issued quantity and handoff evidence.",
+        {
+          databaseEffect:
+            "Allocated stock is issued to the event custody record.",
+        },
       ),
-      node(
-        "event-return",
-        "decision",
-        "Unused stock returned?",
+      decision(
+        "event-reconciled",
+        "Does event usage reconcile?",
         ["warehouse_marketing", "warehouse_operations"],
-        "Record returned, consumed, lost, or damaged quantities.",
-        undefined,
-        "Variance requires an exception and accountable review.",
+        "Compare issued, consumed, returned, damaged, and missing quantities against the event record.",
+        "warehouse_operations",
+        "Event reconciliation control: every issued unit must be consumed, returned, or recorded as an accountable variance.",
       ),
-      node(
-        "event-reconcile",
-        "action",
-        "Inspect and reconcile",
-        ["warehouse_logistics_supervisor", "warehouse_operations"],
-        "Restock accepted returns and route damaged stock appropriately.",
-      ),
-      node(
-        "event-end",
-        "terminal",
+      terminal(
+        "event-fulfilled",
         "Event inventory closed",
         ["warehouse_marketing", "warehouse_operations"],
-        "Issued, consumed, returned, and variance totals reconcile.",
+        "Issued, consumed, and returned quantities reconcile with custody evidence.",
+        "complete",
+      ),
+      terminal(
+        "event-cancelled",
+        "Event allocation cancelled",
+        ["warehouse_business_unit", "warehouse_marketing"],
+        "Release unissued reservations and retain the cancellation reason.",
+        "cancelled",
+      ),
+      terminal(
+        "event-partial",
+        "Event demand returned for revision",
+        [
+          "warehouse_business_unit",
+          "warehouse_marketing",
+          "warehouse_operations",
+        ],
+        "Revise quantities, substitutes, or dates before any unsupported issue.",
+        "revision",
+      ),
+      terminal(
+        "event-return-required",
+        "Return reconciliation required",
+        ["warehouse_marketing", "warehouse_operations"],
+        "Open the return workflow for unused or damaged stock and preserve event custody references.",
+        "revision",
+      ),
+      terminal(
+        "event-escalated",
+        "Event variance escalated",
+        ["warehouse_logistics_supervisor"],
+        "Escalate missing, custody-break, or unsupported consumption with event and unit evidence.",
+        "escalated",
+      ),
+    ],
+    [
+      edge("event-fulfillment-start", "event-demand-valid"),
+      edge("event-demand-valid", "event-stock-ready", "Valid", "success"),
+      edge("event-demand-valid", "event-cancelled", "Cancelled", "exception"),
+      edge("event-demand-valid", "event-partial", "Needs revision", "neutral"),
+      edge("event-stock-ready", "event-issue", "Fully ready", "success"),
+      edge(
+        "event-stock-ready",
+        "event-partial",
+        "Partial or substitute proposed",
+        "neutral",
+      ),
+      edge(
+        "event-stock-ready",
+        "event-escalated",
+        "Held, missing, or untraceable",
+        "exception",
+      ),
+      edge("event-issue", "event-reconciled"),
+      edge("event-reconciled", "event-fulfilled", "Balanced", "success"),
+      edge(
+        "event-reconciled",
+        "event-return-required",
+        "Unused or damaged stock remains",
+        "neutral",
+      ),
+      edge(
+        "event-reconciled",
+        "event-escalated",
+        "Unexplained variance",
+        "exception",
       ),
     ],
   ),
-  governed(
+
+  flow(
+    "returns-reconciliation",
+    "Returns and reconciliation",
+    "Inspect returned stock, preserve custody, and close or escalate event and inventory variances.",
+    [
+      "warehouse_marketing",
+      "warehouse_operations",
+      "warehouse_logistics_supervisor",
+      "warehouse_finance",
+    ],
+    [
+      process(
+        "return-start",
+        "start",
+        "Receive the returned custody record",
+        ["warehouse_operations", "warehouse_marketing"],
+        "Match the event or allocation, product, quantity, serialized units, recipient, and return evidence.",
+      ),
+      decision(
+        "return-condition",
+        "What is the returned-stock condition?",
+        ["warehouse_operations", "warehouse_logistics_supervisor"],
+        "Inspect each returned unit and classify reusable, damaged, unavailable, or not returned.",
+        "warehouse_logistics_supervisor",
+        "Warehouse return control: returned stock requires inspection and traceability before restock or exception disposition.",
+      ),
+      process(
+        "return-restock",
+        "action",
+        "Restock accepted returns",
+        ["warehouse_operations"],
+        "Move reusable stock into a valid bin and preserve the return and inspection references.",
+      ),
+      process(
+        "return-quarantine",
+        "action",
+        "Quarantine non-accepted returns",
+        ["warehouse_logistics_supervisor"],
+        "Keep damaged or unavailable units out of available inventory and record the quality disposition.",
+      ),
+      process(
+        "return-variance",
+        "exception",
+        "Record missing or quantity variance",
+        ["warehouse_logistics_supervisor", "warehouse_finance"],
+        "Record the accountable event, expected and observed quantities, units, reason, and evidence.",
+      ),
+      decision(
+        "return-reconciled",
+        "Is the return fully reconciled?",
+        ["warehouse_logistics_supervisor", "warehouse_finance"],
+        "Verify issued equals consumed plus accepted returns plus supported non-available or variance quantities.",
+        "warehouse_logistics_supervisor",
+        "Warehouse reconciliation control: all custody quantities require a supported terminal disposition before closure.",
+      ),
+      process(
+        "return-adjustment-handoff",
+        "handoff",
+        "Submit supported adjustment",
+        ["warehouse_finance", "warehouse_logistics_supervisor"],
+        "Send the count, reason, value impact, and custody evidence into the approval-controlled adjustment workflow.",
+      ),
+      terminal(
+        "return-complete",
+        "Return and event reconciled",
+        ["warehouse_operations", "warehouse_marketing", "warehouse_finance"],
+        "Stock disposition and event totals agree with the ledger and custody evidence.",
+        "complete",
+      ),
+      terminal(
+        "return-escalated",
+        "Unresolved return variance escalated",
+        ["warehouse_logistics_supervisor", "warehouse_finance"],
+        "Keep the event open and escalate unsupported loss, damage, or custody discrepancy.",
+        "escalated",
+      ),
+    ],
+    [
+      edge("return-start", "return-condition"),
+      edge("return-condition", "return-restock", "Reusable", "success"),
+      edge(
+        "return-condition",
+        "return-quarantine",
+        "Damaged or unavailable",
+        "neutral",
+      ),
+      edge(
+        "return-condition",
+        "return-variance",
+        "Missing or short",
+        "exception",
+      ),
+      edge("return-restock", "return-reconciled"),
+      edge("return-quarantine", "return-reconciled"),
+      edge("return-variance", "return-reconciled"),
+      edge("return-reconciled", "return-complete", "Balanced", "success"),
+      edge(
+        "return-reconciled",
+        "return-adjustment-handoff",
+        "Supported variance needs adjustment",
+        "neutral",
+      ),
+      edge(
+        "return-reconciled",
+        "return-escalated",
+        "Unsupported variance",
+        "exception",
+      ),
+      edge("return-adjustment-handoff", "return-complete"),
+    ],
+  ),
+
+  flow(
     "cycle-count-adjustment",
     "Cycle count and adjustment",
-    "Count, variance, approval, and controlled stock correction.",
-    ["warehouse_finance", "warehouse_operations", "warehouse_admin"],
+    "Count physical stock, investigate variance, and apply only approved ledger corrections.",
     [
-      node(
+      "warehouse_finance",
+      "warehouse_operations",
+      "warehouse_admin",
+      "warehouse_logistics_supervisor",
+    ],
+    [
+      process(
         "count-start",
         "start",
-        "Create count draft",
+        "Create the controlled count",
         ["warehouse_finance", "warehouse_operations"],
-        "Select location/bin and freeze the expected count context.",
+        "Select location and bin, capture expected count context, and prevent unrecorded movement during the count.",
       ),
-      node(
+      process(
         "count-enter",
         "action",
-        "Record physical count",
-        ["warehouse_operations"],
-        "Enter observed quantities with evidence.",
+        "Record the physical count",
+        ["warehouse_logistics_supervisor"],
+        "Scan or enter observed product, lot, serial, bin, quantity, counter, and evidence.",
       ),
-      node(
-        "count-review",
-        "decision",
-        "Variance requires approval?",
-        ["warehouse_finance"],
-        "Review value, cause, evidence, and segregation of duties.",
+      decision(
+        "count-variance",
+        "Is there a count variance?",
+        ["warehouse_logistics_supervisor", "warehouse_finance"],
+        "Compare expected and observed balances by product, location, bin, lot, and serialized unit.",
+        "warehouse_logistics_supervisor",
+        "Cycle-count control: every observed difference requires cause and evidence before ledger correction.",
       ),
-      node(
-        "count-adjust",
+      process(
+        "count-investigate",
         "action",
-        "Approve and post adjustment",
-        ["warehouse_finance", "warehouse_admin"],
-        "Use the governed stock-change request; never edit stock directly.",
+        "Investigate the variance",
+        ["warehouse_logistics_supervisor", "warehouse_finance"],
+        "Review receipts, issues, transfers, returns, holds, serial or lot custody, and recount evidence.",
       ),
-      node(
-        "count-end",
-        "terminal",
+      decision(
+        "count-adjustment-approval",
+        "Is the stock adjustment authorized?",
+        [
+          "warehouse_finance",
+          "warehouse_admin",
+          "warehouse_logistics_supervisor",
+        ],
+        "Review reason, value impact, count evidence, segregation of duties, and the accountable approval role.",
+        "warehouse_finance",
+        "Stock-adjustment and finance control: inventory changes require supported count evidence and delegated approval; direct edits are prohibited.",
+      ),
+      process(
+        "count-post",
+        "action",
+        "Post the approved adjustment",
+        ["warehouse_admin", "warehouse_finance"],
+        "Use the governed adjustment operation and retain the approver, reason, and source count references.",
+        {
+          databaseEffect:
+            "An auditable stock movement corrects the ledger without rewriting history.",
+        },
+      ),
+      terminal(
+        "count-complete",
         "Count reconciled",
+        ["warehouse_finance", "warehouse_operations"],
+        "Physical and ledger balances agree or an approved adjustment explains the difference.",
+        "complete",
+      ),
+      terminal(
+        "count-revision",
+        "Variance evidence returned for revision",
+        ["warehouse_logistics_supervisor", "warehouse_operations"],
+        "Recount or correct the cause and evidence before resubmitting adjustment approval.",
+        "revision",
+      ),
+      terminal(
+        "count-rejected",
+        "Adjustment rejected",
         ["warehouse_finance"],
-        "Ledger and physical count agree with an auditable reason.",
+        "No ledger correction is posted; retain the rejection reason and unresolved variance.",
+        "rejected",
+      ),
+      terminal(
+        "count-escalated",
+        "Material variance escalated",
+        ["warehouse_finance", "warehouse_admin"],
+        "Escalate material value, suspected misuse, or unresolved custody variance with audit references.",
+        "escalated",
+      ),
+    ],
+    [
+      edge("count-start", "count-enter"),
+      edge("count-enter", "count-variance"),
+      edge("count-variance", "count-complete", "No variance", "success"),
+      edge(
+        "count-variance",
+        "count-investigate",
+        "Variance found",
+        "exception",
+      ),
+      edge("count-investigate", "count-adjustment-approval"),
+      edge("count-adjustment-approval", "count-post", "Approved", "success"),
+      edge(
+        "count-adjustment-approval",
+        "count-revision",
+        "Return for recount or evidence",
+        "neutral",
+      ),
+      edge(
+        "count-adjustment-approval",
+        "count-rejected",
+        "Rejected",
+        "exception",
+      ),
+      edge(
+        "count-adjustment-approval",
+        "count-escalated",
+        "Material or conflicted",
+        "exception",
+      ),
+      edge("count-post", "count-complete"),
+    ],
+  ),
+
+  flow(
+    "administration",
+    "Administration",
+    "Govern user access, department ownership, DOA revisions, and warehouse route configuration.",
+    [
+      "platform_admin",
+      "warehouse_admin",
+      "legal_admin",
+      "procurement_admin",
+      "procurement_approver",
+    ],
+    [
+      process(
+        "admin-start",
+        "start",
+        "Open the governed administration request",
+        [
+          "platform_admin",
+          "warehouse_admin",
+          "legal_admin",
+          "procurement_admin",
+        ],
+        "Identify the requester, department owner, requested configuration, effective date, and approval evidence.",
+      ),
+      decision(
+        "admin-user-access",
+        "Is the requested user access authorized and minimal?",
+        ["platform_admin"],
+        "Verify identity, employment or vendor status, approved responsibility, role scope, conflicts, and expiry where applicable.",
+        "platform_admin",
+        "Identity and access policy: role assignments require attributable approval, least privilege, and segregation of duties.",
+      ),
+      decision(
+        "admin-department",
+        "Is department ownership valid?",
+        [
+          "platform_admin",
+          "legal_admin",
+          "procurement_admin",
+          "warehouse_admin",
+        ],
+        "Confirm the active department, accountable owner, module boundary, and upstream and downstream handoffs.",
+        "platform_admin",
+        "Administration policy: department-scoped records and authorities require an active accountable owner and valid module boundary.",
+      ),
+      decision(
+        "admin-doa",
+        "Is the DOA revision complete and conflict-free?",
+        ["legal_admin", "platform_admin"],
+        "Validate immutable version, effective dates, amount and category coverage, named approvers, no gaps or overlaps, and a final authority.",
+        "legal_admin",
+        "Delegation of Authority control: one active version must resolve ordered named approval without gaps, overlaps, or self-approval conflicts.",
+      ),
+      decision(
+        "admin-route",
+        "Is the warehouse operation route safe and complete?",
+        ["warehouse_admin", "warehouse_logistics_supervisor"],
+        "Validate operation type, source and destination types, active status, alternatives, and that disabling it preserves a valid controlled route.",
+        "warehouse_admin",
+        "Warehouse route-configuration control: only reviewed compatible routes may be active and the last required route cannot be removed without replacement.",
+      ),
+      process(
+        "admin-activate",
+        "action",
+        "Activate the approved configuration",
+        [
+          "platform_admin",
+          "warehouse_admin",
+          "legal_admin",
+          "procurement_admin",
+        ],
+        "Apply the minimum approved change, supersede rather than overwrite governed versions, and retain the audit event.",
+        {
+          databaseEffect:
+            "The approved configuration becomes active with version and audit history.",
+        },
+      ),
+      terminal(
+        "admin-complete",
+        "Configuration activated",
+        [
+          "platform_admin",
+          "warehouse_admin",
+          "legal_admin",
+          "procurement_admin",
+        ],
+        "The authorized user, department, DOA, and route settings are active and auditable.",
+        "complete",
+      ),
+      terminal(
+        "admin-revision",
+        "Administration request returned for revision",
+        [
+          "platform_admin",
+          "warehouse_admin",
+          "legal_admin",
+          "procurement_admin",
+        ],
+        "Correct scope, ownership, matrix, route, or evidence gaps before activation.",
+        "revision",
+      ),
+      terminal(
+        "admin-rejected",
+        "Unauthorized access change rejected",
+        ["platform_admin"],
+        "No role or configuration change is applied; retain the rejection and conflict evidence.",
+        "rejected",
+      ),
+      terminal(
+        "admin-escalated",
+        "Authority or control conflict escalated",
+        [
+          "platform_admin",
+          "legal_admin",
+          "procurement_admin",
+          "warehouse_admin",
+        ],
+        "Escalate unresolved department ownership, DOA authority, segregation, or route-safety conflict before activation.",
+        "escalated",
+      ),
+    ],
+    [
+      edge("admin-start", "admin-user-access"),
+      edge(
+        "admin-user-access",
+        "admin-department",
+        "Authorized and minimal",
+        "success",
+      ),
+      edge(
+        "admin-user-access",
+        "admin-revision",
+        "Evidence or scope incomplete",
+        "neutral",
+      ),
+      edge(
+        "admin-user-access",
+        "admin-rejected",
+        "Unauthorized or conflicted",
+        "exception",
+      ),
+      edge(
+        "admin-department",
+        "admin-doa",
+        "Active accountable department",
+        "success",
+      ),
+      edge(
+        "admin-department",
+        "admin-revision",
+        "Ownership needs correction",
+        "neutral",
+      ),
+      edge(
+        "admin-department",
+        "admin-escalated",
+        "Cross-department conflict",
+        "exception",
+      ),
+      edge("admin-doa", "admin-route", "Valid active revision", "success"),
+      edge(
+        "admin-doa",
+        "admin-revision",
+        "Gap, overlap, or missing final authority",
+        "neutral",
+      ),
+      edge("admin-doa", "admin-escalated", "Authority conflict", "exception"),
+      edge("admin-route", "admin-activate", "Safe and complete", "success"),
+      edge(
+        "admin-route",
+        "admin-revision",
+        "Route correction required",
+        "neutral",
+      ),
+      edge(
+        "admin-route",
+        "admin-escalated",
+        "No safe replacement route",
+        "exception",
+      ),
+      edge("admin-activate", "admin-complete"),
+    ],
+  ),
+
+  flow(
+    "allocation-event-return",
+    "Allocation, event, and return",
+    "Legacy combined view of reserve, issue, return, and reconciliation handoffs.",
+    [
+      "warehouse_business_unit",
+      "warehouse_marketing",
+      "warehouse_operations",
+      "warehouse_logistics_supervisor",
+    ],
+    [
+      process(
+        "allocation-start",
+        "start",
+        "Open approved event demand",
+        ["warehouse_business_unit", "warehouse_marketing"],
+        "Use the event record and requested quantities as the allocation source.",
+      ),
+      process(
+        "allocation-reserve",
+        "action",
+        "Reserve and issue stock",
+        ["warehouse_operations", "warehouse_logistics_supervisor"],
+        "Reserve available stock and record the custody issue against the event.",
+      ),
+      decision(
+        "allocation-balanced",
+        "Does the event custody balance?",
+        ["warehouse_operations", "warehouse_logistics_supervisor"],
+        "Compare issued, consumed, returned, damaged, and missing quantities.",
+        "warehouse_logistics_supervisor",
+        "Event reconciliation control: all issued stock requires a supported disposition.",
+      ),
+      terminal(
+        "allocation-complete",
+        "Combined event flow complete",
+        ["warehouse_marketing", "warehouse_operations"],
+        "The event and return records reconcile.",
+        "complete",
+      ),
+      terminal(
+        "allocation-revision",
+        "Dedicated return workflow required",
+        ["warehouse_operations", "warehouse_logistics_supervisor"],
+        "Continue in the returns and reconciliation flow with the event evidence.",
+        "revision",
+      ),
+      terminal(
+        "allocation-escalated",
+        "Custody variance escalated",
+        ["warehouse_logistics_supervisor"],
+        "Escalate unexplained event inventory variance.",
+        "escalated",
+      ),
+    ],
+    [
+      edge("allocation-start", "allocation-reserve"),
+      edge("allocation-reserve", "allocation-balanced"),
+      edge("allocation-balanced", "allocation-complete", "Balanced", "success"),
+      edge(
+        "allocation-balanced",
+        "allocation-revision",
+        "Return remains",
+        "neutral",
+      ),
+      edge(
+        "allocation-balanced",
+        "allocation-escalated",
+        "Unexplained variance",
+        "exception",
       ),
     ],
   ),
-  governed(
+
+  flow(
     "pricing-and-costing",
     "Pricing and costing",
-    "Landed-cost review, controlled price proposal, approval, and reporting.",
-    ["warehouse_pricing", "warehouse_finance", "warehouse_procurement"],
+    "Review landed cost and activate only an approved controlled price proposal.",
     [
-      node(
+      "warehouse_pricing",
+      "warehouse_finance",
+      "warehouse_procurement",
+      "warehouse_bi_analyst",
+    ],
+    [
+      process(
         "price-start",
         "start",
-        "Review purchase and landed cost",
+        "Prepare landed-cost basis",
         ["warehouse_pricing", "warehouse_finance"],
-        "Confirm source PO, freight, duties, and allocation basis.",
+        "Confirm source PO, supplier lots, freight, duties, allocation basis, and effective date.",
       ),
-      node(
-        "price-propose",
-        "action",
-        "Propose price change",
-        ["warehouse_pricing"],
-        "Record basis, effective date, and evidence.",
+      decision(
+        "price-approval",
+        "Is the price proposal approved?",
+        ["warehouse_finance", "warehouse_pricing"],
+        "Review margin, valuation impact, evidence, and effective-date controls.",
+        "warehouse_finance",
+        "Warehouse finance control: price changes require supported landed-cost basis and finance approval without rewriting history.",
       ),
-      node(
-        "price-review",
-        "decision",
-        "Finance reviews impact",
-        ["warehouse_finance"],
-        "Validate margin, valuation, and effective controls.",
-      ),
-      node(
+      process(
         "price-post",
         "system",
-        "Approved price becomes effective",
+        "Activate the approved price",
         ["warehouse_pricing"],
-        "The controlled price record updates without rewriting historical values.",
+        "Create the effective controlled price while retaining historical values.",
       ),
-      node(
-        "price-end",
-        "terminal",
+      terminal(
+        "price-complete",
         "Pricing report available",
         ["warehouse_pricing", "warehouse_bi_analyst"],
-        "Current and historical basis can be reported.",
+        "Current and historical pricing basis is reportable.",
+        "complete",
+      ),
+      terminal(
+        "price-revision",
+        "Price proposal returned",
+        ["warehouse_pricing"],
+        "Correct the cost basis, evidence, or effective controls.",
+        "revision",
+      ),
+      terminal(
+        "price-rejected",
+        "Price proposal rejected",
+        ["warehouse_finance"],
+        "The current controlled price remains unchanged.",
+        "rejected",
       ),
     ],
+    [
+      edge("price-start", "price-approval"),
+      edge("price-approval", "price-post", "Approved", "success"),
+      edge(
+        "price-approval",
+        "price-revision",
+        "Return for revision",
+        "neutral",
+      ),
+      edge("price-approval", "price-rejected", "Rejected", "exception"),
+      edge("price-post", "price-complete"),
+    ],
   ),
-  governed(
+
+  flow(
     "doa-governance",
     "DOA governance",
-    "Draft, validate, activate, supersede, and use department approval matrices.",
+    "Create, validate, activate, and supersede department approval matrices.",
     [
       "platform_admin",
       "legal_admin",
@@ -632,109 +1683,118 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
       "procurement_approver",
     ],
     [
-      node(
+      process(
         "doa-start",
         "start",
-        "Load active department DOA",
-        ["platform_admin", "legal_admin"],
-        "Review source document, tiers, amounts, categories, and named approvers.",
+        "Create an immutable DOA revision",
+        [...DOA_CONFIGURATION_ROLE_IDS],
+        "Copy the active matrix and update department, amount, category, approver, and effective-date assignments in a draft.",
       ),
-      node(
-        "doa-revise",
-        "action",
-        "Create immutable revision",
-        ["platform_admin", "legal_admin"],
-        "Copy the active matrix, update assignments, and save a new draft version.",
+      decision(
+        "doa-valid",
+        "Is the DOA draft valid?",
+        [...DOA_CONFIGURATION_ROLE_IDS],
+        "Confirm no amount gaps or overlaps, named active approvers, ordered steps, effective dates, and a final authority.",
+        "legal_admin",
+        "Delegation of Authority control: the active version must deterministically resolve complete ordered approval authority.",
       ),
-      node(
-        "doa-validate",
-        "decision",
-        "Draft valid?",
-        ["platform_admin", "legal_admin"],
-        "Confirm no gaps/overlaps and at least one final approver.",
-      ),
-      node(
+      process(
         "doa-activate",
         "action",
-        "Activate revision",
-        ["platform_admin", "legal_admin"],
-        "Supersede the prior matrix deliberately and retain history.",
+        "Activate and supersede",
+        [...DOA_CONFIGURATION_ROLE_IDS],
+        "Activate the approved revision deliberately and retain the superseded version and audit evidence.",
       ),
-      node(
-        "doa-end",
-        "terminal",
-        "New requests use active DOA",
+      terminal(
+        "doa-complete",
+        "New requests use the active DOA",
         ["procurement_admin", "procurement_approver"],
         "Approval routing resolves named users from the effective matrix.",
+        "complete",
+      ),
+      terminal(
+        "doa-revision",
+        "DOA draft returned for correction",
+        [...DOA_CONFIGURATION_ROLE_IDS],
+        "Correct the validation errors before activation.",
+        "revision",
+      ),
+      terminal(
+        "doa-escalated",
+        "DOA authority conflict escalated",
+        ["platform_admin", "legal_admin", "procurement_admin"],
+        "Resolve missing final authority or segregation conflict before activation.",
+        "escalated",
       ),
     ],
+    [
+      edge("doa-start", "doa-valid"),
+      edge("doa-valid", "doa-activate", "Valid", "success"),
+      edge("doa-valid", "doa-revision", "Validation errors", "neutral"),
+      edge("doa-valid", "doa-escalated", "Authority conflict", "exception"),
+      edge("doa-activate", "doa-complete"),
+    ],
   ),
-  governed(
+
+  flow(
     "exception-and-recovery",
     "Exception and recovery",
-    "Detect failures, preserve data, retry safely, and escalate with evidence.",
-    KNOWLEDGE_ROLE_IDS(),
+    "Detect whether an operation saved, retry safely, or escalate with evidence.",
+    allLiveRoleIds,
     [
-      node(
+      process(
         "recover-start",
         "start",
-        "User encounters failure",
+        "Encounter a workflow failure",
         ["core_staff_only"],
-        "Do not repeat destructive actions or expose credentials.",
+        "Do not repeat destructive actions or expose credentials while checking the record.",
       ),
-      node(
-        "recover-check",
-        "decision",
+      decision(
+        "recover-saved",
         "Did the operation save?",
-        ["core_staff_only"],
-        "Refresh the record and inspect status, activity, and notifications.",
+        ["core_staff_only", "platform_admin"],
+        "Refresh the record and inspect status, activity, notifications, and audit references.",
+        "platform_admin",
+        "Operational recovery policy: verify committed state before retrying to avoid duplicate or conflicting transactions.",
       ),
-      node(
+      process(
         "recover-retry",
         "action",
-        "Retry only an idempotent action",
+        "Retry an idempotent action once",
         ["core_staff_only"],
-        "Use the same workflow after confirming no completed transaction exists.",
+        "Use the same governed workflow only after confirming no transaction exists.",
       ),
-      node(
-        "recover-escalate",
-        "handoff",
-        "Escalate with evidence",
+      terminal(
+        "recover-complete",
+        "Operation confirmed or recovered",
+        ["core_staff_only", "platform_admin"],
+        "The record state and audit trail confirm the intended result.",
+        "complete",
+      ),
+      terminal(
+        "recover-escalated",
+        "Failure escalated with evidence",
         ["platform_admin"],
-        "Provide route, time, role, record ID, expected result, and safe screenshot.",
+        "Provide route, time, role, record ID, expected result, observed state, and a safe screenshot.",
+        "escalated",
       ),
-      node(
-        "recover-end",
-        "terminal",
-        "Issue resolved and audited",
-        ["platform_admin"],
-        "Record correction, owner, and prevention action.",
+    ],
+    [
+      edge("recover-start", "recover-saved"),
+      edge("recover-saved", "recover-complete", "Already saved", "success"),
+      edge(
+        "recover-saved",
+        "recover-retry",
+        "Not saved and retry is safe",
+        "neutral",
       ),
+      edge(
+        "recover-saved",
+        "recover-escalated",
+        "State uncertain or retry unsafe",
+        "exception",
+      ),
+      edge("recover-retry", "recover-complete"),
     ],
   ),
 ];
-
-function KNOWLEDGE_ROLE_IDS() {
-  return [
-    "core_staff_only",
-    "platform_admin",
-    "vendor_portal",
-    "warehouse_logistics_supervisor",
-    "warehouse_operations",
-    "warehouse_finance",
-    "warehouse_bi_analyst",
-    "warehouse_business_unit",
-    "warehouse_marketing",
-    "warehouse_procurement",
-    "warehouse_pricing",
-    "warehouse_admin",
-    "procurement_requester",
-    "procurement_officer",
-    "procurement_approver",
-    "procurement_finance",
-    "procurement_admin",
-    "legal_reviewer",
-    "legal_compliance",
-    "legal_admin",
-  ];
-}

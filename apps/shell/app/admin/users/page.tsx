@@ -143,6 +143,8 @@ function AdminUsersInner() {
 // ---------------------------------------------------------------------------
 
 function MemoryAdminUsers() {
+  const [evidenceRoles, setEvidenceRoles] = useState<Set<string> | null>(null);
+  const [detailUserId, setDetailUserId] = useState<string | null>(null);
   const columns = useMemo(buildRoleColumns, []);
   const profiles = useMemo<AdminProfile[]>(
     () =>
@@ -170,6 +172,19 @@ function MemoryAdminUsers() {
     }
     return map;
   }, []);
+
+  useEffect(() => {
+    if (
+      window.sessionStorage.getItem('intra.evidence-scenario') ===
+      'admin-role-correction'
+    ) {
+      setEvidenceRoles(new Set(held.get('demo-operations') ?? []));
+    }
+  }, [held]);
+
+  const evidenceUser = evidenceRoles
+    ? profiles.find((profile) => profile.id === 'demo-operations') ?? null
+    : null;
 
   const totalGrants = Array.from(held.values()).reduce((n, s) => n + s.size, 0);
   const vendors = profiles.filter((p) => p.kind === 'vendor').length;
@@ -225,13 +240,51 @@ function MemoryAdminUsers() {
 
       <UserRoleTable
         profiles={profiles}
-        held={held}
+        held={
+          evidenceRoles
+            ? new Map(held).set('demo-operations', evidenceRoles)
+            : held
+        }
         roleColumns={columns}
-        onToggle={() => {
-          /* disabled */
+        onToggle={(userId, moduleName, role, next) => {
+          if (!evidenceRoles || userId !== 'demo-operations') return;
+          const updated = new Set(evidenceRoles);
+          const key = `${moduleName}:${role}`;
+          if (next) updated.add(key);
+          else updated.delete(key);
+          setEvidenceRoles(updated);
         }}
-        disabled
+        onOpenDetail={
+          evidenceRoles ? (userId) => setDetailUserId(userId) : undefined
+        }
+        disabled={!evidenceRoles}
       />
+
+      <Sheet
+        open={Boolean(evidenceUser && detailUserId === evidenceUser.id)}
+        onOpenChange={(open) => {
+          if (!open) setDetailUserId(null);
+        }}
+        title={evidenceUser?.full_name ?? evidenceUser?.email ?? 'User'}
+        description={evidenceUser?.email}
+        side="right"
+      >
+        {evidenceUser && evidenceRoles && (
+          <UserDetail
+            profile={evidenceUser}
+            held={evidenceRoles}
+            roleColumns={columns}
+            pending={new Set()}
+            onToggle={(moduleName, role, next) => {
+              const updated = new Set(evidenceRoles);
+              const key = `${moduleName}:${role}`;
+              if (next) updated.add(key);
+              else updated.delete(key);
+              setEvidenceRoles(updated);
+            }}
+          />
+        )}
+      </Sheet>
     </div>
   );
 }
@@ -642,6 +695,18 @@ function UserDetail({
     }
     return g;
   }, [roleColumns]);
+  const orderedGroups = useMemo(
+    () =>
+      Array.from(grouped.entries()).sort(([leftModule, left], [rightModule, right]) => {
+        const leftAssigned = left.some((column) => held.has(column.key));
+        const rightAssigned = right.some((column) => held.has(column.key));
+        if (leftAssigned !== rightAssigned) return leftAssigned ? -1 : 1;
+        if (leftModule === 'core' && rightModule !== 'core') return 1;
+        if (rightModule === 'core' && leftModule !== 'core') return -1;
+        return MODULE_LIST.indexOf(leftModule) - MODULE_LIST.indexOf(rightModule);
+      }),
+    [grouped, held],
+  );
 
   return (
     <div className="space-y-5">
@@ -666,7 +731,7 @@ function UserDetail({
         </p>
       </div>
 
-      {Array.from(grouped.entries()).map(([moduleName, cols]) => (
+      {orderedGroups.map(([moduleName, cols]) => (
         <section key={moduleName}>
           <SectionTitle
             title={MODULES[moduleName].label}
