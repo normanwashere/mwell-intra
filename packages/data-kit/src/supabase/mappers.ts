@@ -455,6 +455,7 @@ export function rowToStockChangeRequest(r: Row): StockChangeRequest {
     status: r.status,
     requestedBy: r.requested_by,
     requestedAt: r.requested_at,
+    canDecide: r.can_decide === true,
   };
 }
 

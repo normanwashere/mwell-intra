@@ -5,6 +5,16 @@ import { ReturnsPage } from './ReturnsPage';
 import { renderWithProviders } from '@/test/renderWithProviders';
 
 describe('ReturnsPage', () => {
+  it('keeps the quality handoff only when the live returns bundle can open it', async () => {
+    renderWithProviders(<ReturnsPage />, {
+      role: 'warehouse_operator',
+      source: 'supabase',
+      capabilities: ['manage_returns'],
+    });
+    await screen.findByText(/recent returns/i);
+    expect(screen.getByRole('link', { name: /open quality queue/i })).toHaveAttribute('href', '/quality');
+  });
+
   // The seeded returns list is larger since the 90-day history landed; give
   // the record-and-rerender flow more headroom than the 5s default.
   it('records a customer return and shows it in the list', { timeout: 15_000 }, async () => {

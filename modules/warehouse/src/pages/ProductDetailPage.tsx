@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useWarehouse } from '@/app/store';
+import { WAREHOUSE_MUTATION_CAPABILITIES } from '@/app/authorization';
 import { toStockState } from '@/data/repository';
 import { availableForProduct } from '@/domain/stock';
 import { stockByLocation, validateTransfer } from '@/domain/transfers';
@@ -117,11 +118,10 @@ export function ProductDetailPage() {
   const canTransfer = can('transfer_stock');
   const canSetPrice = can('set_pricing');
   const canManageProducts = can('manage_products');
-  const canAdjust = can('cycle_count');
+  const canAdjust = can(WAREHOUSE_MUTATION_CAPABILITIES.adjustStock);
   const canViewFinancials =
     can('view_finance') || can('view_pricing') || can('view_procurement');
-  const canRelocate =
-    can('transfer_stock') || can('receive_stock') || can('manage_locations');
+  const canRelocate = can(WAREHOUSE_MUTATION_CAPABILITIES.relocate);
   const warehouseIds = new Set(
     data.locations.filter((l) => l.type === 'warehouse').map((l) => l.id),
   );

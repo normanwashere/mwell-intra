@@ -32,6 +32,28 @@ async function createVarianceRequest({
 }
 
 describe('ApprovalsPage', () => {
+  it('renders decisions from server eligibility for a custom live bundle', async () => {
+    const { repo, request } = await createVarianceRequest();
+    vi.spyOn(repo, 'listStockChangeRequests').mockResolvedValue({
+      rows: [
+        { ...request, canDecide: true },
+        { ...request, id: 'server-ineligible', canDecide: false },
+      ],
+    });
+    renderWithProviders(<ApprovalsPage />, {
+      repo,
+      role: 'warehouse_operator',
+      source: 'supabase',
+      capabilities: ['approve_stock_adjustment'],
+    });
+
+    const waiting = await screen.findByLabelText('Waiting on you approvals');
+    expect(within(waiting).getAllByRole('button', { name: 'Review' })).toHaveLength(1);
+    await userEvent.click(screen.getByRole('tab', { name: 'In review' }));
+    expect(await screen.findByText(/Awaiting Warehouse Supervisor/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Review' })).not.toBeInTheDocument();
+  });
+
   it.each(['warehouse_operator', 'warehouse_supervisor'] as const)(
     'renders controlled approvals for canonical %s without collapsing delegation',
     async (role) => {

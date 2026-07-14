@@ -174,8 +174,42 @@ describe('ProductDetailPage', () => {
     });
   });
 
-  it('shows Adjust for the legacy Operator alias with canonical cycle_count capability', async () => {
-    renderDetail('shirt-l', 'operations');
+  it('requires the stock-adjustment approval capability in a live bundle', async () => {
+    const cycleOnly = renderWithProviders(
+      <Routes><Route path="/inventory/:id" element={<ProductDetailPage />} /></Routes>,
+      {
+        route: '/inventory/shirt-l', role: 'warehouse_operator', source: 'supabase',
+        capabilities: ['manage_inventory', 'cycle_count'],
+      },
+    );
+    await screen.findByRole('heading', { name: /Event Shirt \(L\)/i });
+    expect(screen.queryByRole('button', { name: /adjust/i })).not.toBeInTheDocument();
+    cycleOnly.unmount();
+
+    renderWithProviders(
+      <Routes><Route path="/inventory/:id" element={<ProductDetailPage />} /></Routes>,
+      {
+        route: '/inventory/shirt-l', role: 'warehouse_operator', source: 'supabase',
+        capabilities: ['manage_inventory', 'approve_stock_adjustment'],
+      },
+    );
+    expect(await screen.findByRole('button', { name: /adjust/i })).toBeInTheDocument();
+  });
+
+  it('requires transfer_stock for relocation in a live bundle', async () => {
+    renderWithProviders(
+      <Routes><Route path="/inventory/:id" element={<ProductDetailPage />} /></Routes>,
+      {
+        route: '/inventory/shirt-l', role: 'warehouse_operator', source: 'supabase',
+        capabilities: ['manage_inventory', 'receive_stock', 'manage_locations'],
+      },
+    );
+    await screen.findByRole('heading', { name: /Event Shirt \(L\)/i });
+    expect(screen.queryByRole('button', { name: /relocate/i })).not.toBeInTheDocument();
+  });
+
+  it('shows Adjust for the legacy Supervisor alias with canonical approval capability', async () => {
+    renderDetail('shirt-l', 'logistics_supervisor');
     await screen.findByRole('heading', { name: /Event Shirt \(L\)/i });
     expect(screen.getByRole('button', { name: /adjust/i })).toBeInTheDocument();
   });

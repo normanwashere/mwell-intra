@@ -8,14 +8,14 @@ function commandKey(exceptionId: string, action: string) {
   return `exception-${exceptionId}-${action}-${Date.now()}`;
 }
 
-function sourcePath(exception: WarehouseException) {
-  if (exception.sourceType === 'stock_change_request') return '/approvals';
-  if (exception.type === 'quality') return '/quality';
-  return '/cycle-counts';
+function sourceRoute(exception: WarehouseException) {
+  if (exception.sourceType === 'stock_change_request') return { path: '/approvals', routeId: 'approvals' as const };
+  if (exception.type === 'quality') return { path: '/quality', routeId: 'quality' as const };
+  return { path: '/cycle-counts', routeId: 'cycle-counts' as const };
 }
 
 export function ExceptionsPage() {
-  const { can, loadExceptions, resolveException } = useWarehouse();
+  const { can, canOpenRoute, loadExceptions, resolveException } = useWarehouse();
   const [params, setParams] = useSearchParams();
   const [exceptions, setExceptions] = useState<WarehouseException[]>([]);
   const [selected, setSelected] = useState<WarehouseException | null>(null);
@@ -89,7 +89,9 @@ export function ExceptionsPage() {
         <EmptyState icon="check" title="No exceptions match these filters" />
       ) : (
         <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface" aria-label="Warehouse exceptions">
-          {rows.map((exception) => (
+          {rows.map((exception) => {
+            const source = sourceRoute(exception);
+            return (
             <li key={exception.id} className="grid gap-3 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
@@ -98,11 +100,12 @@ export function ExceptionsPage() {
                   <Badge tone="slate">{exception.status.replace('_', ' ')}</Badge>
                 </div>
                 <p className="mt-1 text-xs text-faint">Opened {exception.createdAt.slice(0, 10)} · Owner {exception.ownerId ?? 'Unassigned'}</p>
-                <Link className="mt-2 inline-block text-xs font-semibold text-brand-600 hover:underline dark:text-brand-300" to={sourcePath(exception)}>View source</Link>
+                {canOpenRoute(source.routeId) && <Link className="mt-2 inline-block text-xs font-semibold text-brand-600 hover:underline dark:text-brand-300" to={source.path}>View source</Link>}
               </div>
               {mayResolve && <button type="button" className="btn-primary btn-sm justify-center" onClick={() => setSelected(exception)}>Review exception</button>}
             </li>
-          ))}
+            );
+          })}
         </ul>
       )}
 

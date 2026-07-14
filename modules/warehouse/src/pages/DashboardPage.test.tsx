@@ -20,6 +20,20 @@ const ALL_ROLES: Role[] = [
 const FIRST_RENDER_TIMEOUT = 10_000;
 
 describe('DashboardPage', () => {
+  it('does not render dead-end dashboard navigation for a minimal live bundle', async () => {
+    renderWithProviders(<DashboardPage />, {
+      role: 'warehouse_operator',
+      source: 'supabase',
+      capabilities: ['view_dashboard'],
+    });
+
+    await screen.findByTestId('warehouse-dashboard-hero');
+    expect(screen.queryByRole('button', { name: /browse inventory/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /view product/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /view event/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /view all/i })).not.toBeInTheDocument();
+  });
+
   it.each([
     ['warehouse_operator', /receive and inspect/i],
     ['warehouse_supervisor', /low-stock alerts/i],

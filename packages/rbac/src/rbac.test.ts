@@ -32,7 +32,7 @@ describe('warehouse parity vs source roles.ts', () => {
   });
 
   it('has the 15 source capabilities plus W1 controls', () => {
-    expect(warehouseModule.capabilities).toHaveLength(22);
+    expect(warehouseModule.capabilities).toHaveLength(23);
     expect([...warehouseModule.capabilities].sort()).toEqual(
       [
         'view_dashboard',
@@ -54,6 +54,7 @@ describe('warehouse parity vs source roles.ts', () => {
         'inspect_quality',
         'release_quality_hold',
         'approve_stock_adjustment',
+        'approve_stock_adjustment_finance',
         'view_exceptions',
         'resolve_exceptions',
         'import_warehouse_data',
@@ -131,6 +132,7 @@ describe('warehouse parity vs source roles.ts', () => {
       'view_finance',
       'cycle_count',
       'approve_stock_adjustment',
+      'approve_stock_adjustment_finance',
       'view_exceptions',
     ],
     bi_analyst: [

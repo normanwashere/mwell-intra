@@ -5,6 +5,16 @@ import { StorageAreasPage } from './StorageAreasPage';
 import { makeRepo, renderWithProviders } from '@/test/renderWithProviders';
 
 describe('StorageAreasPage', () => {
+  it('requires transfer_stock for live putaway', async () => {
+    renderWithProviders(<StorageAreasPage />, {
+      role: 'warehouse_operator',
+      source: 'supabase',
+      capabilities: ['receive_stock'],
+    });
+    await screen.findByRole('heading', { name: 'Storage areas' });
+    expect(screen.queryByRole('button', { name: /put away/i })).not.toBeInTheDocument();
+  });
+
   it('opens the exact add-bin state requested by a Knowledge Base guide link', async () => {
     renderWithProviders(<StorageAreasPage />, {
       role: 'logistics_supervisor',

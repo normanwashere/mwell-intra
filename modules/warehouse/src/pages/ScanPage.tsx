@@ -1,24 +1,24 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useWarehouse } from '@/app/store';
-import type { Capability } from '@/auth/roles';
+import type { WarehouseRouteId } from '@/app/modules';
 import { WarehouseScanFlow } from '@/components/camera/WarehouseScanFlow';
 import { PageHeader } from '@/components/ui';
 import { Icon, type IconName } from '@/components/Icon';
 
-const ACTIONS: Array<{ label: string; to: string; icon: IconName; capabilities: Capability[] }> = [
-  { label: 'Receive', to: '/receiving', icon: 'truck', capabilities: ['receive_stock'] },
-  { label: 'Issue', to: '/allocations', icon: 'tag', capabilities: ['issue_items'] },
-  { label: 'Return', to: '/returns', icon: 'rotate', capabilities: ['manage_returns'] },
-  { label: 'Count', to: '/cycle-counts', icon: 'clipboard', capabilities: ['cycle_count'] },
-  { label: 'Put away', to: '/storage', icon: 'pin', capabilities: ['receive_stock', 'transfer_stock'] },
-  { label: 'Transfer', to: '/inventory', icon: 'rotate', capabilities: ['transfer_stock'] },
-  { label: 'Lookup', to: '/inventory', icon: 'search', capabilities: ['manage_inventory'] },
+const ACTIONS: Array<{ label: string; to: string; icon: IconName; routeId: WarehouseRouteId }> = [
+  { label: 'Receive', to: '/receiving', icon: 'truck', routeId: 'receiving' },
+  { label: 'Issue', to: '/allocations', icon: 'tag', routeId: 'allocations' },
+  { label: 'Return', to: '/returns', icon: 'rotate', routeId: 'returns' },
+  { label: 'Count', to: '/cycle-counts', icon: 'clipboard', routeId: 'cycle-counts' },
+  { label: 'Put away', to: '/storage', icon: 'pin', routeId: 'storage' },
+  { label: 'Transfer', to: '/inventory', icon: 'rotate', routeId: 'inventory' },
+  { label: 'Lookup', to: '/inventory', icon: 'search', routeId: 'inventory' },
 ];
 
 export function ScanPage() {
-  const { data, can } = useWarehouse();
+  const { data, canOpenRoute } = useWarehouse();
   const navigate = useNavigate();
-  const actions = ACTIONS.filter((action) => action.capabilities.some(can));
+  const actions = ACTIONS.filter((action) => canOpenRoute(action.routeId));
   return (
     <div className="space-y-5">
       <PageHeader title="Scan" icon="scan" subtitle="Choose an operation or find stock" />
@@ -29,7 +29,7 @@ export function ScanPage() {
           </Link>
         ))}
       </div>
-      {data && (
+      {data && canOpenRoute('product-detail') && (
         <WarehouseScanFlow
           data={data}
           context="lookup"

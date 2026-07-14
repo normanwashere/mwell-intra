@@ -1325,6 +1325,7 @@ export class InMemoryRepository implements WarehouseControlRepository {
             reason: input.reason, evidenceUrls: input.evidenceUrls ?? [],
             status: 'pending_supervisor', requestedBy: count.requestedBy ?? count.actor,
             requestedAt: this.now(),
+            canDecide: true,
           };
           this.stockChanges.push(request);
           created.push(request);
@@ -1359,6 +1360,7 @@ export class InMemoryRepository implements WarehouseControlRepository {
         actor: request.status === 'pending_finance' ? 'demo-finance-approver' : 'demo-supervisor-approver',
         note: input.note,
       });
+      request.canDecide = ['pending_supervisor', 'pending_finance'].includes(request.status);
       const count = this.data.cycleCounts.find((row) => row.id === request.sourceId);
       if (request.status === 'rejected') {
         if (count) count.status = 'rejected';

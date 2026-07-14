@@ -26,6 +26,7 @@ export type WarehouseCapability =
   | 'inspect_quality'
   | 'release_quality_hold'
   | 'approve_stock_adjustment'
+  | 'approve_stock_adjustment_finance'
   | 'view_exceptions'
   | 'resolve_exceptions'
   | 'import_warehouse_data';
@@ -73,6 +74,7 @@ const WAREHOUSE_CAPABILITIES = [
   'inspect_quality',
   'release_quality_hold',
   'approve_stock_adjustment',
+  'approve_stock_adjustment_finance',
   'view_exceptions',
   'resolve_exceptions',
   'import_warehouse_data',
@@ -153,6 +155,7 @@ export const warehouseModule: ModuleDefinition<
         'view_finance',
         'cycle_count',
         'approve_stock_adjustment',
+        'approve_stock_adjustment_finance',
         'view_exceptions',
       ],
     },

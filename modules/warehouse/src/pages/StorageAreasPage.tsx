@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useWarehouse } from '@/app/store';
+import { WAREHOUSE_MUTATION_CAPABILITIES } from '@/app/authorization';
 import { toStockState } from '@/data/repository';
 import type { StorageArea } from '@/domain/types';
 import {
@@ -34,7 +35,7 @@ export function StorageAreasPage() {
   } = useWarehouse();
   const toast = useToast();
   const canManage = can('manage_locations');
-  const canPutAway = can('receive_stock') || can('transfer_stock');
+  const canPutAway = can(WAREHOUSE_MUTATION_CAPABILITIES.relocate);
   const guideReturnTo = knowledgeGuideReturnPath(searchParams);
 
   const warehouses = useMemo(

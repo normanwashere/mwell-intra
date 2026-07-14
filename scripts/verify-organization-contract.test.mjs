@@ -240,3 +240,17 @@ test('department helper access and role assignment integrity are finalized', () 
     /role assignment.*validated/i,
   );
 });
+
+test('warehouse stock approvals use governed capability groups and server eligibility', () => {
+  assert.match(sql, /create table if not exists core\.approval_groups/i);
+  assert.match(sql, /approve_stock_adjustment_finance/i);
+  assert.match(sql, /create or replace function warehouse\.list_stock_change_requests\s*\(payload jsonb\)/i);
+  assert.match(sql, /can_decide/i);
+  assert.match(sql, /requested_by\s*<>\s*auth\.uid\(\)/i);
+  assert.match(sql, /order by step[\s\S]*?limit 1/i);
+  assert.doesNotMatch(
+    sql,
+    /role\s*=\s*v_step\.approver_role/i,
+    'approval decisions must not require a literal role-code assignment',
+  );
+});

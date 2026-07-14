@@ -6,6 +6,18 @@ import { makeRepo, renderWithProviders } from '@/test/renderWithProviders';
 import { availableForProduct } from '@/domain/stock';
 
 describe('ReceivingPage', () => {
+  it('hides downstream links that a minimal live receiving bundle cannot open', async () => {
+    renderWithProviders(<ReceivingPage />, {
+      role: 'warehouse_operator',
+      source: 'supabase',
+      capabilities: ['receive_stock'],
+    });
+    await screen.findByRole('heading', { name: 'Receiving' });
+    expect(screen.getByRole('link', { name: /approved POs/i })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /continue to put away/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /open quality queue/i })).not.toBeInTheDocument();
+  });
+
   it.each(['warehouse_operator', 'warehouse_supervisor'] as const)(
     'renders the receiving surface for canonical %s',
     async (role) => {

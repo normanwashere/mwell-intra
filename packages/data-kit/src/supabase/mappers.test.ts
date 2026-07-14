@@ -146,8 +146,9 @@ describe('warehouse control row mapping', () => {
         location_id: 'loc-wh', bin_id: null, quantity_delta: '-3', unit_cost: '200.50',
         financial_impact: '601.50', reason: 'Count variance', evidence_urls: null,
         status: 'pending_supervisor', requested_by: 'user-1', requested_at: '2026-07-10T00:00:00Z',
+        can_decide: true,
       }),
-    ).toMatchObject({ quantityDelta: -3, unitCost: 200.5, financialImpact: 601.5 });
+    ).toMatchObject({ quantityDelta: -3, unitCost: 200.5, financialImpact: 601.5, canDecide: true });
     expect(
       rowToInventoryPosition({
         product_id: 'shirt', location_id: 'loc-wh', bin_id: null,

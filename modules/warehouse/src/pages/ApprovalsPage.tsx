@@ -19,7 +19,7 @@ function statusLabel(status: StockChangeRequest['status']) {
 }
 
 export function ApprovalsPage() {
-  const { data, role, identityId, source, loadStockChangeRequests, decideStockChange } = useWarehouse();
+  const { data, identityId, source, loadStockChangeRequests, decideStockChange } = useWarehouse();
   const [tab, setTab] = useState<ApprovalTab>('waiting');
   const [requests, setRequests] = useState<StockChangeRequest[]>([]);
   const [selected, setSelected] = useState<StockChangeRequest | null>(null);
@@ -36,15 +36,13 @@ export function ApprovalsPage() {
 
   useEffect(() => { void reload(); }, [reload]);
 
-  const waitingStatus: StockChangeRequest['status'] = role === 'finance'
-    ? 'pending_finance'
-    : 'pending_supervisor';
   const rows = useMemo(() => {
-    if (tab === 'waiting') return requests.filter((request) => request.status === waitingStatus);
+    if (tab === 'waiting') return requests.filter((request) =>
+      request.canDecide && ['pending_supervisor', 'pending_finance'].includes(request.status));
     if (tab === 'review') return requests.filter((request) =>
-      ['pending_supervisor', 'pending_finance'].includes(request.status) && request.status !== waitingStatus);
+      !request.canDecide && ['pending_supervisor', 'pending_finance'].includes(request.status));
     return requests.filter((request) => ['approved', 'rejected'].includes(request.status));
-  }, [requests, tab, waitingStatus]);
+  }, [requests, tab]);
 
   if (!data) return null;
   const productName = (id: string) => data.products.find((product) => product.id === id)?.name ?? id;
@@ -96,7 +94,7 @@ export function ApprovalsPage() {
                 </p>
                 <p className="mt-1 break-all text-xs text-faint">Requested by {request.requestedBy} · {request.reason}</p>
               </div>
-              {tab === 'waiting' && (
+              {request.canDecide && (
                 <button type="button" className="btn-primary btn-sm justify-center" onClick={() => setSelected(request)}>
                   Review
                 </button>

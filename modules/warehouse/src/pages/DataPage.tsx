@@ -30,7 +30,7 @@ const DICTIONARY: { field: string; type: string; meaning: string }[] = [
 ];
 
 export function DataPage() {
-  const { data, source } = useWarehouse();
+  const { data, source, canOpenRoute } = useWarehouse();
   const toast = useToast();
   const [exporting, setExporting] = useState<WarehouseExportKind | null>(null);
   if (!data) return null;
@@ -63,8 +63,8 @@ export function DataPage() {
       />
 
       <div className="grid gap-2 sm:grid-cols-2">
-        <Link to="/reports" className="btn-primary justify-center">Open inventory reports</Link>
-        <Link to="/exceptions" className="btn-outline justify-center">Open exception register</Link>
+        {canOpenRoute('reports') && <Link to="/reports" className="btn-primary justify-center">Open inventory reports</Link>}
+        {canOpenRoute('exceptions') && <Link to="/exceptions" className="btn-outline justify-center">Open exception register</Link>}
       </div>
 
       <Card>

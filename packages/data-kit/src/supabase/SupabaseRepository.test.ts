@@ -127,6 +127,7 @@ function makeMockClient(seed: WarehouseData) {
       location_id: 'loc-wh', bin_id: null, quantity_delta: -1, unit_cost: 200,
       financial_impact: 200, reason: 'Variance', evidence_urls: [],
       status: 'pending_supervisor', requested_by: 'user-1', requested_at: '2026-07-10T00:00:00Z',
+      can_decide: true,
     }],
     warehouse_tasks: [{
       id: 'task-1', task_type: 'quality', source_id: 'qi-1', title: 'Inspect receipt',
@@ -240,7 +241,8 @@ function makeMockClient(seed: WarehouseData) {
         : fn === 'release_quality_hold' ? hold
           : fn === 'update_operation_route' ? route
             : fn === 'submit_cycle_count' ? { cycle_count: row, requests: [request] }
-              : fn === 'decide_stock_change' ? request
+              : fn === 'list_stock_change_requests' ? { rows: [request], next_cursor: null, total: 1 }
+                : fn === 'decide_stock_change' ? request
                 : fn === 'resolve_exception' ? exception
                   : fn === 'receive_procurement_po' ? { receipt: row, purchase_order: {} }
                   : row;
@@ -263,7 +265,7 @@ describe('SupabaseRepository read model query shape', () => {
 
 describe('SupabaseRepository W1 control boundary', () => {
   it('uses explicit projections and stable bounded pagination for every control list', async () => {
-    const { client, queries } = makeMockClient(buildSeed());
+    const { client, queries, calls } = makeMockClient(buildSeed());
     const repo = new SupabaseRepository(client);
     await Promise.all([
       repo.listQualityInspections({ limit: 500 }),
@@ -276,7 +278,7 @@ describe('SupabaseRepository W1 control boundary', () => {
     ]);
     const controlTables = [
       'quality_inspections', 'inventory_holds', 'vendor_returns', 'exceptions',
-      'stock_change_requests', 'warehouse_tasks', 'inventory_position_v1',
+      'warehouse_tasks', 'inventory_position_v1',
     ];
     for (const table of controlTables) {
       const query = queries.find((item) => item.table === table)!;
@@ -290,6 +292,7 @@ describe('SupabaseRepository W1 control boundary', () => {
     const qualityQuery = queries.find((item) => item.table === 'quality_inspections')!;
     expect(qualityQuery.projection).toContain('inspected_at');
     expect(qualityQuery.projection).not.toContain('created_at');
+    expect(calls.find((call) => call.fn === 'list_stock_change_requests')?.payload).toMatchObject({ limit: 100 });
   });
 
   it('sends idempotent command payloads without trusted actor or role values', async () => {

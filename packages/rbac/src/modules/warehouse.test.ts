@@ -73,8 +73,9 @@ describe('warehouse W1 capabilities', () => {
         'view_pricing',
         'set_pricing',
       ] as const) {
-        expect(can(user, 'warehouse', capability)).toBe(false);
+      expect(can(user, 'warehouse', capability)).toBe(false);
       }
+      expect(can(user, 'warehouse', 'approve_stock_adjustment_finance')).toBe(false);
       expect(can(user, 'core', 'manage_rbac')).toBe(false);
       expect(can(user, 'procurement', 'view_dashboard')).toBe(false);
       expect(can(user, 'legal', 'view_dashboard')).toBe(false);
@@ -128,6 +129,7 @@ describe('warehouse W1 capabilities', () => {
     const finance = roles(['finance']);
     const bi = roles(['bi_analyst']);
     expect(can(finance, 'warehouse', 'approve_stock_adjustment')).toBe(true);
+    expect(can(finance, 'warehouse', 'approve_stock_adjustment_finance')).toBe(true);
     expect(can(finance, 'warehouse', 'release_quality_hold')).toBe(false);
     expect(can(bi, 'warehouse', 'view_exceptions')).toBe(true);
     expect(can(bi, 'warehouse', 'resolve_exceptions')).toBe(false);

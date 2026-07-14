@@ -38,7 +38,9 @@ import {
 } from '@/domain/format';
 import {
   normalizeWarehouseRole,
+  type WarehouseRouteId,
 } from '@/app/modules';
+import { warehouseRouteIdForPath } from '@/app/authorization';
 import { useSession } from '@/auth/session';
 import type { Role } from '@/domain/types';
 import { Icon, type IconName } from '@/components/Icon';
@@ -272,7 +274,13 @@ const ROLE_PANELS: Record<Role, PanelId[]> = {
 /** Roles whose dashboard is analytics-driven get the date-window control. */
 const WINDOWED_ROLES: Role[] = ['bi_analyst', 'marketing'];
 
-function OperatorDashboard({ name }: { name?: string }) {
+function OperatorDashboard({
+  name,
+  canOpenRoute,
+}: {
+  name?: string;
+  canOpenRoute: (routeId: WarehouseRouteId) => boolean;
+}) {
   const actions: Array<{
     label: string;
     to: string;
@@ -287,6 +295,18 @@ function OperatorDashboard({ name }: { name?: string }) {
       secondary: { label: 'Cycle counts', to: '/cycle-counts' },
     },
   ];
+  const canOpenPath = (path: string) => {
+    const routeId = warehouseRouteIdForPath(path);
+    return routeId ? canOpenRoute(routeId) : false;
+  };
+  const availableActions = actions
+    .filter((action) => canOpenPath(action.to))
+    .map((action) => ({
+      ...action,
+      secondary: action.secondary && canOpenPath(action.secondary.to)
+        ? action.secondary
+        : undefined,
+    }));
   return (
     <div className="space-y-6">
       <section className="border-b border-line pb-5">
@@ -297,7 +317,7 @@ function OperatorDashboard({ name }: { name?: string }) {
       <section aria-labelledby="operator-overview">
         <h2 id="operator-overview" className="font-display text-lg font-bold text-ink">Overview</h2>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          {actions.map((action) => (
+          {availableActions.map((action) => (
             <div key={action.label} className="rounded-lg border border-line bg-surface shadow-e1">
               <Link
                 to={action.to}
@@ -327,7 +347,7 @@ function OperatorDashboard({ name }: { name?: string }) {
 }
 
 export function DashboardPage() {
-  const { data, role, roleLabel, source, can } = useWarehouse();
+  const { data, role, roleLabel, source, can, canOpenRoute } = useWarehouse();
   const { profile } = useSession();
   const navigate = useNavigate();
   const toast = useToast();
@@ -338,7 +358,7 @@ export function DashboardPage() {
   const operatorExperience =
     can('receive_stock') && can('issue_items') && !can('approve_stock_adjustment');
   if (operatorExperience) {
-    return <OperatorDashboard name={profile?.name?.split(/\s+/)[0]} />;
+    return <OperatorDashboard name={profile?.name?.split(/\s+/)[0]} canOpenRoute={canOpenRoute} />;
   }
   const liveDashboardRole: Role = can('manage_operation_routes') || can('resolve_exceptions')
     ? 'logistics_supervisor'
@@ -963,11 +983,29 @@ export function DashboardPage() {
     ),
   };
 
-  const panels = ROLE_PANELS[dashboardRole];
+  const PANEL_ROUTE_REQUIREMENTS: Partial<Record<PanelId, WarehouseRouteId[]>> = {
+    lowStock: ['product-detail'],
+    reconciliation: ['cycle-counts'],
+    events: ['event-detail'],
+    utilization: ['product-detail'],
+    assets: ['product-detail'],
+    reorder: ['procurement', 'product-detail'],
+    openPOs: ['purchase-orders'],
+  };
+  const panels = ROLE_PANELS[dashboardRole].filter((panel) =>
+    (PANEL_ROUTE_REQUIREMENTS[panel] ?? []).every(canOpenRoute),
+  );
   // Greet by name like the shell home does (WH-7/J3-3); the role already
   // shows in the sidebar caption + account menu.
   const firstName = profile?.name?.split(/\s+/)[0];
   const heroCta = HERO_CTA[dashboardRole];
+  const canOpenPath = (path: string) => {
+    if (path === '/finance') return can('view_finance');
+    const routeId = warehouseRouteIdForPath(path);
+    return routeId ? canOpenRoute(routeId) : false;
+  };
+  const canOpenHeroCta = canOpenPath(heroCta.to);
+  const visibleKpis = KPIS[dashboardRole].filter((kpi) => canOpenPath(kpi.to));
 
   return (
     <div className="space-y-6">
@@ -977,7 +1015,7 @@ export function DashboardPage() {
         description={HERO_STATUS[dashboardRole]}
         roleLabel={rolePresentation.label}
         icon={heroCta.icon}
-        action={
+        action={canOpenHeroCta ? (
           heroCta.to === '/finance' ? (
             <HeroChipButton icon={heroCta.icon} href="/finance">
               {heroCta.label}
@@ -990,7 +1028,7 @@ export function DashboardPage() {
               {heroCta.label}
             </HeroChipButton>
           )
-        }
+        ) : null}
       >
         <IssuedMetricDock
           total={recentIssuedTotal}
@@ -1001,7 +1039,7 @@ export function DashboardPage() {
       </DashboardHero>
 
       <StaggerGrid className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {KPIS[dashboardRole].map((k) => (
+        {visibleKpis.map((k) => (
           <StaggerItem key={k.label}>
             <StatCard
               label={k.label}

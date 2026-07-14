@@ -77,6 +77,45 @@ alter table core.roles
   add column if not exists is_protected boolean not null default false,
   add column if not exists updated_at timestamptz not null default now();
 
+insert into core.capabilities(module, cap)
+values ('warehouse', 'approve_stock_adjustment_finance')
+on conflict do nothing;
+
+-- Approval ledgers retain their stable group code in approver_role for
+-- backwards compatibility. Authority is resolved from this governed catalogue,
+-- never from a literal user-role assignment.
+create table if not exists core.approval_groups (
+  entity_type text not null,
+  group_code text not null,
+  module text not null,
+  capability text not null,
+  request_status text not null,
+  is_active boolean not null default true,
+  primary key (entity_type, group_code),
+  unique (entity_type, request_status),
+  foreign key (module, capability)
+    references core.capabilities(module, cap)
+    on delete restrict
+    deferrable initially immediate
+);
+
+insert into core.approval_groups(
+  entity_type, group_code, module, capability, request_status, is_active
+) values
+  (
+    'warehouse_stock_change', 'logistics_supervisor', 'warehouse',
+    'approve_stock_adjustment', 'pending_supervisor', true
+  ),
+  (
+    'warehouse_stock_change', 'finance', 'warehouse',
+    'approve_stock_adjustment_finance', 'pending_finance', true
+  )
+on conflict (entity_type, group_code) do update set
+  module = excluded.module,
+  capability = excluded.capability,
+  request_status = excluded.request_status,
+  is_active = true;
+
 do $$
 begin
   if not exists (
@@ -974,6 +1013,294 @@ as $$
   ) effective;
 $$;
 
+create or replace function private.warehouse_list_stock_change_requests(payload jsonb)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  v_limit integer := pg_catalog.least(pg_catalog.greatest(coalesce((payload->>'limit')::integer, 50), 1), 100);
+  v_status text := nullif(payload->>'status', '');
+  v_search text := nullif(pg_catalog.btrim(coalesce(payload->>'search', '')), '');
+  v_rows jsonb;
+begin
+  if not (
+    core.has_cap('warehouse', 'approve_stock_adjustment')
+    or core.has_cap('warehouse', 'approve_stock_adjustment_finance')
+  ) then
+    raise exception 'Not authorized: warehouse stock approvals';
+  end if;
+
+  select coalesce(
+    pg_catalog.jsonb_agg(pg_catalog.to_jsonb(listed) order by listed.requested_at desc, listed.id desc),
+    '[]'::jsonb
+  )
+  into v_rows
+  from (
+    select
+      request.*,
+      (
+        request.requested_by <> auth.uid()
+        and current_step.id is not null
+        and approval_group.is_active
+        and approval_group.request_status = request.status
+        and core.has_cap(approval_group.module, approval_group.capability)
+      ) as can_decide
+    from warehouse.stock_change_requests request
+    left join lateral (
+      select approval.id, approval.approver_role
+      from core.approvals approval
+      where approval.entity_type = 'warehouse_stock_change'
+        and approval.entity_id = request.id
+        and approval.decision = 'pending'
+      order by step
+      limit 1
+    ) current_step on true
+    left join core.approval_groups approval_group
+      on approval_group.entity_type = 'warehouse_stock_change'
+     and approval_group.group_code = current_step.approver_role
+    where (v_status is null or request.status = v_status)
+      and (
+        v_search is null
+        or request.product_id ilike '%' || v_search || '%'
+        or request.reason ilike '%' || v_search || '%'
+      )
+    order by request.requested_at desc, request.id desc
+    limit v_limit
+  ) listed;
+
+  return pg_catalog.jsonb_build_object(
+    'rows', v_rows,
+    'next_cursor', null
+  );
+end;
+$$;
+
+create or replace function warehouse.list_stock_change_requests(payload jsonb)
+returns jsonb
+language sql
+security invoker
+set search_path = ''
+as $$
+  select private.warehouse_list_stock_change_requests(payload)
+$$;
+
+create or replace function private.warehouse_decide_stock_change(payload jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_started jsonb;
+  v_command_id uuid;
+  v_request warehouse.stock_change_requests;
+  v_step core.approvals;
+  v_group core.approval_groups;
+  v_count warehouse.cycle_counts;
+  v_product warehouse.products;
+  v_line jsonb;
+  v_decision text := payload->>'decision';
+  v_note text := nullif(pg_catalog.btrim(coalesce(payload->>'note', '')), '');
+  v_movement_id text := 'mv-' || replace(gen_random_uuid()::text, '-', '');
+  v_updated integer := 0;
+  v_response jsonb;
+begin
+  v_started := private.begin_idempotent_command(
+    'decide_stock_change', payload->>'idempotency_key', payload
+  );
+  if (v_started->>'replayed')::boolean then return v_started->'response'; end if;
+  v_command_id := (v_started->>'command_id')::uuid;
+
+  if v_decision not in ('approved', 'rejected') then
+    raise exception 'Invalid stock-change decision';
+  end if;
+  if v_decision = 'rejected' and v_note is null then
+    raise exception 'A rejection note is required';
+  end if;
+
+  select * into v_request
+  from warehouse.stock_change_requests
+  where id = (payload->>'request_id')::uuid
+    and status in ('pending_supervisor', 'pending_finance')
+  for update;
+  if not found then raise exception 'Pending stock-change request not found'; end if;
+  if v_request.requested_by = auth.uid() then
+    raise exception 'The requester cannot approve their own stock change';
+  end if;
+
+  select * into v_step
+  from core.approvals
+  where entity_type = 'warehouse_stock_change'
+    and entity_id = v_request.id
+    and decision = 'pending'
+  order by step
+  limit 1
+  for update;
+  if not found then raise exception 'Pending approval step not found'; end if;
+
+  select * into v_group
+  from core.approval_groups approval_group
+  where approval_group.entity_type = v_step.entity_type
+    and approval_group.group_code = v_step.approver_role
+    and approval_group.is_active
+  for share;
+  if not found or v_group.request_status <> v_request.status then
+    raise exception 'Approval state and current group are inconsistent';
+  end if;
+  if not core.has_cap(v_group.module, v_group.capability) then
+    raise exception 'Not authorized for approval group %', v_group.group_code;
+  end if;
+
+  update core.approvals
+  set decision = v_decision,
+      decided_by = auth.uid(),
+      decided_at = now(),
+      note = v_note
+  where id = v_step.id;
+
+  if v_decision = 'rejected' then
+    update core.approvals
+    set decision = 'rejected',
+        decided_by = auth.uid(),
+        decided_at = now(),
+        note = 'Cancelled after an earlier approval step was rejected'
+    where entity_type = 'warehouse_stock_change'
+      and entity_id = v_request.id
+      and decision = 'pending';
+    update warehouse.stock_change_requests
+    set status = 'rejected', decided_at = now()
+    where id = v_request.id
+    returning * into v_request;
+    if v_request.source_type = 'cycle_count' then
+      update warehouse.cycle_counts set status = 'rejected' where id = v_request.source_id;
+    end if;
+    update warehouse.exceptions
+    set status = 'in_progress',
+        resolution = v_note,
+        owner_id = auth.uid(),
+        updated_at = now()
+    where source_type = 'stock_change_request'
+      and source_id = v_request.id::text
+      and status = 'open';
+  elsif exists (
+    select 1 from core.approvals
+    where entity_type = 'warehouse_stock_change'
+      and entity_id = v_request.id
+      and decision = 'pending'
+  ) then
+    update warehouse.stock_change_requests
+    set status = 'pending_finance'
+    where id = v_request.id
+    returning * into v_request;
+  else
+    select * into v_product from warehouse.products where id = v_request.product_id;
+    if not found then raise exception 'Stock-change product not found'; end if;
+
+    if v_product.serialized then
+      if v_request.quantity_delta > 0 then
+        raise exception 'Serialized cycle counts cannot add unknown units';
+      end if;
+      select * into v_count
+      from warehouse.cycle_counts
+      where id = v_request.source_id
+      for update;
+      select value into v_line
+      from jsonb_array_elements(v_count.lines)
+      where value->>'productId' = v_request.product_id;
+      with missing_units as (
+        select id
+        from warehouse.inventory_units
+        where product_id = v_request.product_id
+          and location_id = v_request.location_id
+          and bin_id is not distinct from v_request.bin_id
+          and status in ('in_stock', 'returned')
+          and not (serial_number = any (
+            array(select jsonb_array_elements_text(coalesce(v_line->'serialNumbers', '[]'::jsonb)))
+          ))
+        order by id
+        limit abs(v_request.quantity_delta)
+        for update
+      )
+      update warehouse.inventory_units
+      set status = 'lost', assigned_to = null, event_id = null
+      where id in (select id from missing_units);
+      get diagnostics v_updated = row_count;
+      if v_updated <> abs(v_request.quantity_delta) then
+        raise exception 'Serialized variance no longer matches locked inventory';
+      end if;
+    else
+      update warehouse.stock_levels
+      set quantity = quantity + v_request.quantity_delta
+      where product_id = v_request.product_id
+        and location_id = v_request.location_id
+        and bin_id is not distinct from v_request.bin_id
+        and lot_id is null
+        and quantity + v_request.quantity_delta >= 0;
+      if not found and v_request.quantity_delta > 0 then
+        insert into warehouse.stock_levels(product_id, location_id, bin_id, lot_id, quantity)
+        values (
+          v_request.product_id, v_request.location_id, v_request.bin_id,
+          null, v_request.quantity_delta
+        );
+      elsif not found then
+        raise exception 'Stock variance would make inventory negative';
+      end if;
+    end if;
+
+    insert into warehouse.movements(
+      id, type, product_id, quantity, to_location_id, to_bin_id,
+      reason, reference, evidence_urls, actor, created_at
+    ) values (
+      v_movement_id,
+      case when v_request.source_type = 'cycle_count' then 'cycle_count' else 'adjustment' end,
+      v_request.product_id, v_request.quantity_delta,
+      v_request.location_id, v_request.bin_id, v_request.reason,
+      v_request.id::text, v_request.evidence_urls,
+      coalesce(auth.jwt()->>'email', auth.uid()::text), now()
+    );
+
+    update warehouse.stock_change_requests
+    set status = 'approved', decided_at = now()
+    where id = v_request.id
+    returning * into v_request;
+    update warehouse.exceptions
+    set status = 'resolved',
+        resolution = coalesce(v_note, 'Approved stock change posted'),
+        owner_id = auth.uid(),
+        updated_at = now()
+    where source_type = 'stock_change_request'
+      and source_id = v_request.id::text
+      and status in ('open', 'in_progress');
+    if v_request.source_type = 'cycle_count' and not exists (
+      select 1 from warehouse.stock_change_requests sibling
+      where sibling.source_type = 'cycle_count'
+        and sibling.source_id = v_request.source_id
+        and sibling.status <> 'approved'
+    ) then
+      update warehouse.cycle_counts set status = 'approved' where id = v_request.source_id;
+    end if;
+  end if;
+
+  insert into core.activity_log(module, entity_type, entity_id, action, actor, detail)
+  values (
+    'warehouse', 'stock_change_request', v_request.id, v_decision, auth.uid(),
+    jsonb_build_object(
+      'step', v_step.step,
+      'approval_group', v_group.group_code,
+      'status', v_request.status,
+      'note', v_note,
+      'movement_id', case when v_request.status = 'approved' then v_movement_id end
+    )
+  );
+
+  v_response := to_jsonb(v_request);
+  return private.finish_idempotent_command(v_command_id, v_response);
+end;
+$$;
+
 -- Initial organization hierarchy. Product is the recorded go-live authority.
 insert into core.departments(code, name, parent_id, sort_order, purpose) values
   ('marketing', 'Marketing', null, 10, null),
@@ -1064,6 +1391,13 @@ insert into core.role_capabilities(module, role, cap) values
   ('warehouse', 'warehouse_supervisor', 'import_warehouse_data')
 on conflict do nothing;
 
+insert into core.role_capabilities(module, role, cap)
+select 'warehouse', role.role, 'approve_stock_adjustment_finance'
+from core.roles role
+where role.module = 'warehouse'
+  and role.role in ('finance', 'warehouse_admin')
+on conflict do nothing;
+
 -- Legacy Operations and Logistics Supervisor roles remain assignment aliases
 -- until active users are explicitly remapped to the canonical bundles.
 insert into core.roles(module, role, label, description, is_active) values
@@ -1119,6 +1453,7 @@ $$;
 
 alter table core.departments enable row level security;
 alter table core.profile_department_scopes enable row level security;
+alter table core.approval_groups enable row level security;
 
 drop policy if exists departments_read on core.departments;
 create policy departments_read on core.departments
@@ -1151,6 +1486,8 @@ revoke all on function core.upsert_role_bundle(jsonb) from public, anon;
 revoke all on function core.my_capabilities() from public, anon;
 revoke all on function core.assign_user_role(jsonb) from public, anon;
 revoke all on function core.revoke_user_role(jsonb) from public, anon;
+revoke all on function private.warehouse_list_stock_change_requests(jsonb) from public, anon;
+revoke all on function warehouse.list_stock_change_requests(jsonb) from public, anon;
 
 grant execute on function core.department_has_unresolved_work(uuid) to service_role;
 grant execute on function core.list_departments() to authenticated, service_role;
@@ -1161,3 +1498,5 @@ grant execute on function core.upsert_role_bundle(jsonb) to authenticated, servi
 grant execute on function core.my_capabilities() to authenticated, service_role;
 grant execute on function core.assign_user_role(jsonb) to authenticated, service_role;
 grant execute on function core.revoke_user_role(jsonb) to authenticated, service_role;
+grant execute on function private.warehouse_list_stock_change_requests(jsonb) to authenticated, service_role;
+grant execute on function warehouse.list_stock_change_requests(jsonb) to authenticated, service_role;

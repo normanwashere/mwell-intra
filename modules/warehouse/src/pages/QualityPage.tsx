@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { InventoryHold, QualityInspection, VendorReturn } from '@intra/data-kit';
 import { useWarehouse } from '@/app/store';
+import { WAREHOUSE_MUTATION_CAPABILITIES } from '@/app/authorization';
 import { Badge, EmptyState, PageHeader, SegmentedControl } from '@/components/ui';
 import { InspectionSheet } from '@/components/quality/InspectionSheet';
 import { HoldReleaseSheet } from '@/components/quality/HoldReleaseSheet';
@@ -102,7 +103,15 @@ export function QualityPage() {
   const completed = inspections.filter((inspection) => inspection.disposition !== 'pending');
   const receiptRoute = data.operationRoutes?.find((route) => route.active && route.operationTypeId.includes('receipt'));
   const requiresEvidence = receiptRoute?.requiresEvidence ?? true;
-  const mayRelease = can('release_quality_hold');
+  const mayInspect = can(WAREHOUSE_MUTATION_CAPABILITIES.inspectQuality);
+  const mayRelease = can(WAREHOUSE_MUTATION_CAPABILITIES.releaseHold);
+  const mayCreateVendorReturn = can(WAREHOUSE_MUTATION_CAPABILITIES.createVendorReturn);
+  const holdMode = (hold: InventoryHold) =>
+    inspections.find((inspection) => inspection.id === hold.inspectionId)?.disposition === 'vendor_return'
+      ? 'vendor_return' as const
+      : 'release' as const;
+  const mayReviewHold = (hold: InventoryHold) =>
+    holdMode(hold) === 'vendor_return' ? mayCreateVendorReturn : mayRelease;
 
   const inspect = async (input: Parameters<typeof inspectQuality>[0]) => {
     const ok = await inspectQuality(input);
@@ -158,7 +167,7 @@ export function QualityPage() {
                   <p className="truncate text-sm font-semibold text-ink">{productName(item.productId)}</p>
                   <p className="text-xs text-faint">{item.sourceType === 'receipt' ? 'Receipt' : 'Return'} {item.sourceId} · {item.quantity} unit(s) · {item.recordedAt.slice(0, 10)}</p>
                 </div>
-                <button type="button" className="btn-primary btn-sm justify-center" onClick={() => setSelectedPending(item)}>Inspect</button>
+                {mayInspect && <button type="button" className="btn-primary btn-sm justify-center" onClick={() => setSelectedPending(item)}>Inspect</button>}
               </li>
             ))}
           </ul>
@@ -174,7 +183,7 @@ export function QualityPage() {
                   <p className="mt-1 text-sm text-muted">{hold.reason}</p>
                   <p className="mt-1 text-xs text-faint">Created by {hold.createdBy} · {hold.createdAt.slice(0, 10)}</p>
                 </div>
-                {mayRelease && <button type="button" className="btn-ghost btn-sm justify-center" onClick={() => setSelectedHold(hold)}>Review hold</button>}
+                {mayReviewHold(hold) && <button type="button" className="btn-ghost btn-sm justify-center" onClick={() => setSelectedHold(hold)}>Review hold</button>}
               </li>
             ))}
           </ul>}
@@ -218,7 +227,7 @@ export function QualityPage() {
         hold={selectedHold}
         actor={identityId}
         productName={selectedHold ? productName(selectedHold.productId) : ''}
-        mode={inspections.find((inspection) => inspection.id === selectedHold?.inspectionId)?.disposition === 'vendor_return' ? 'vendor_return' : 'release'}
+        mode={selectedHold ? holdMode(selectedHold) : 'release'}
         suppliers={data.suppliers}
         defaultSupplierId={selectedHold ? data.receipts.find((receipt) => receipt.id === inspections.find((inspection) => inspection.id === selectedHold.inspectionId)?.sourceId)?.supplierId : undefined}
         onOpenChange={(open) => { if (!open) setSelectedHold(null); }}

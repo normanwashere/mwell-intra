@@ -67,6 +67,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     source,
     data,
     can,
+    canOpenRoute,
     resetDemo,
     pendingSync,
     conflicts,
@@ -121,8 +122,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   };
 
   const notifications = useMemo(
-    () => (data ? buildNotifications(data, can) : []),
-    [can, data],
+    () => (data ? buildNotifications(data, canOpenRoute) : []),
+    [canOpenRoute, data],
   );
 
   const primary = primaryModulesForWarehouseAccess(source, role, can);

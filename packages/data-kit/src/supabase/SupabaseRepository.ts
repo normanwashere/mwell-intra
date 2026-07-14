@@ -317,8 +317,20 @@ export class SupabaseRepository implements WarehouseControlRepository {
     return this.listControl('exceptions', query, rowToException);
   }
 
-  listStockChangeRequests(query: PageQuery): Promise<PageResult<StockChangeRequest>> {
-    return this.listControl('stock_change_requests', query, rowToStockChangeRequest);
+  async listStockChangeRequests(query: PageQuery): Promise<PageResult<StockChangeRequest>> {
+    const normalized = normalizePageQuery(query);
+    const response = await this.callRpc('list_stock_change_requests', {
+      limit: normalized.limit,
+      ...(normalized.status ? { status: normalized.status } : {}),
+      ...(normalized.search ? { search: normalized.search } : {}),
+      ...(normalized.cursor ? { cursor: normalized.cursor } : {}),
+    });
+    const rows = Array.isArray(response.rows) ? response.rows as Row[] : [];
+    return {
+      rows: rows.map(rowToStockChangeRequest),
+      ...(typeof response.next_cursor === 'string' ? { nextCursor: response.next_cursor } : {}),
+      ...(typeof response.total === 'number' ? { total: response.total } : {}),
+    };
   }
 
   listWarehouseTasks(query: PageQuery): Promise<PageResult<WarehouseTask>> {

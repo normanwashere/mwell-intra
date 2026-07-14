@@ -3,7 +3,7 @@ import type { Tone } from '@/components/ui';
 import type { WarehouseData } from '@/data/repository';
 import { toStockState } from '@/data/repository';
 import { lowStockProducts } from '@/domain/stock';
-import type { Capability } from '@/auth/roles';
+import type { WarehouseRouteId } from '@/app/modules';
 
 export interface AppNotification {
   id: string;
@@ -23,14 +23,14 @@ export interface AppNotification {
  */
 export function buildNotifications(
   data: WarehouseData,
-  canAccess: (capability: Capability) => boolean,
+  canOpenRoute: (routeId: WarehouseRouteId) => boolean,
 ): AppNotification[] {
   const state = toStockState(data);
   const notifications: AppNotification[] = [];
 
-  const canOpenInventory = canAccess('manage_inventory');
-  const canOpenEvents = canAccess('reserve_allocate') || canAccess('view_finance');
-  const canOpenAllocations = canAccess('reserve_allocate') || canAccess('issue_items');
+  const canOpenInventory = canOpenRoute('product-detail');
+  const canOpenEvents = canOpenRoute('event-detail');
+  const canOpenAllocations = canOpenRoute('allocations');
 
   for (const { product, available } of lowStockProducts(state)) {
     notifications.push({

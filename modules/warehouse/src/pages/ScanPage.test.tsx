@@ -20,6 +20,18 @@ describe('ScanPage', () => {
     expect(within(actions).queryByRole('link', { name: /receive/i })).not.toBeInTheDocument();
   });
 
+  it('uses destination route gates for a minimal live transfer bundle', async () => {
+    renderWithProviders(<ScanPage />, {
+      role: 'warehouse_operator',
+      source: 'supabase',
+      capabilities: ['transfer_stock'],
+    });
+    const actions = await screen.findByLabelText('Scan operations');
+    expect(within(actions).getByRole('link', { name: /put away/i })).toBeInTheDocument();
+    expect(within(actions).queryByRole('link', { name: /^transfer$/i })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/enter barcode manually/i)).not.toBeInTheDocument();
+  });
+
   it('resolves a unit serial to its product record', async () => {
     const user = userEvent.setup();
     renderWithProviders(

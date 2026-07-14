@@ -18,6 +18,30 @@ async function repositoryWithPendingReceipt() {
 }
 
 describe('QualityPage', () => {
+  it('separates live inspection and hold-release capabilities', async () => {
+    const { repo, receipt } = await repositoryWithPendingReceipt();
+    await repo.inspectQuality({
+      idempotencyKey: 'quality-minimal-hold-001', sourceType: 'receipt', sourceId: receipt.id,
+      productId: 'shirt-l', quantity: 1, disposition: 'hold', reason: 'Review needed',
+      evidenceUrls: ['data:image/png;base64,hold'],
+    });
+    const inspectOnly = renderWithProviders(<QualityPage />, {
+      repo, role: 'warehouse_operator', source: 'supabase', capabilities: ['inspect_quality'],
+    });
+    expect(await screen.findAllByRole('button', { name: 'Inspect' })).not.toHaveLength(0);
+    await userEvent.click(screen.getByRole('tab', { name: 'Holds' }));
+    expect(screen.queryByRole('button', { name: 'Review hold' })).not.toBeInTheDocument();
+    inspectOnly.unmount();
+
+    renderWithProviders(<QualityPage />, {
+      repo, role: 'warehouse_operator', source: 'supabase', capabilities: ['release_quality_hold'],
+    });
+    expect(await screen.findByRole('tab', { name: 'Pending' })).toBeInTheDocument();
+    expect(screen.queryAllByRole('button', { name: 'Inspect' })).toHaveLength(0);
+    await userEvent.click(screen.getByRole('tab', { name: 'Holds' }));
+    expect(await screen.findByRole('button', { name: 'Review hold' })).toBeInTheDocument();
+  });
+
   it.each([
     ['warehouse_operator', /record inspection facts/i],
     ['warehouse_supervisor', /controlled exception disposition/i],
@@ -126,7 +150,12 @@ describe('QualityPage', () => {
       reason: 'Wrong item supplied',
       evidenceUrls: ['data:image/png;base64,rejected'],
     });
-    renderWithProviders(<QualityPage />, { repo, role: 'logistics_supervisor' });
+    renderWithProviders(<QualityPage />, {
+      repo,
+      role: 'warehouse_operator',
+      source: 'supabase',
+      capabilities: ['manage_returns'],
+    });
 
     await user.click(await screen.findByRole('tab', { name: 'Holds' }));
     await user.click(within(await screen.findByLabelText('Active holds')).getByRole('button', { name: 'Review hold' }));

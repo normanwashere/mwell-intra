@@ -113,6 +113,8 @@ export interface StockChangeRequest {
   status: 'pending_supervisor' | 'pending_finance' | 'approved' | 'rejected';
   requestedBy: string;
   requestedAt: string;
+  /** Server-authoritative eligibility for the current pending approval step. */
+  canDecide: boolean;
 }
 
 export interface WarehouseTask {

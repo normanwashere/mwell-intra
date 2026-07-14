@@ -93,6 +93,12 @@ import {
   ROLES,
   type Capability,
 } from '@/auth/roles';
+import {
+  canOpenWarehouseRoute,
+  STOCK_CHANGE_DECISION_CAPABILITIES,
+  WAREHOUSE_MUTATION_CAPABILITIES,
+} from '@/app/authorization';
+import type { WarehouseRouteId } from '@/app/modules';
 
 interface WarehouseContextValue {
   data: WarehouseData | null;
@@ -107,6 +113,7 @@ interface WarehouseContextValue {
   setRole: (role: Role) => void;
   capabilities: readonly Capability[];
   can: (capability: Capability) => boolean;
+  canOpenRoute: (routeId: WarehouseRouteId) => boolean;
   actor: string;
   identityId: string;
   refresh: () => Promise<void>;
@@ -363,14 +370,15 @@ export function WarehouseProvider({
 
   const runAuthorizedAction = useCallback(
     (
-      required: Capability,
+      required: Capability | readonly Capability[],
       method: QueueableMethod | 'other',
       fn: () => Promise<unknown>,
       overlay?: WarehousePatch,
       queueInput?: Record<string, unknown>,
     ): Promise<boolean> => {
-      if (source === 'supabase' && !can(required)) {
-        toast.error(`Not authorized: warehouse.${required}`);
+      const requiredCapabilities = Array.isArray(required) ? required : [required];
+      if (source === 'supabase' && !requiredCapabilities.some(can)) {
+        toast.error(`Not authorized: warehouse.${requiredCapabilities.join('|')}`);
         return Promise.resolve(false);
       }
       return runAction(method, fn, overlay, queueInput);
@@ -387,6 +395,11 @@ export function WarehouseProvider({
     window.location.reload();
   }, []);
 
+  const canOpenRoute = useCallback(
+    (routeId: WarehouseRouteId) => canOpenWarehouseRoute(routeId, can),
+    [can],
+  );
+
   const value: WarehouseContextValue = {
     data,
     loading,
@@ -399,6 +412,7 @@ export function WarehouseProvider({
     setRole,
     capabilities,
     can,
+    canOpenRoute,
     actor,
     identityId,
     refresh,
@@ -520,7 +534,7 @@ export function WarehouseProvider({
       ),
     relocate: (input) =>
       runAuthorizedAction(
-        'transfer_stock',
+        WAREHOUSE_MUTATION_CAPABILITIES.relocate,
         'relocate',
         () => repo.relocate({ ...input, actor }),
         relocateOverlay(input, actor),
@@ -540,7 +554,7 @@ export function WarehouseProvider({
       ),
     adjustStock: (input) =>
       runAuthorizedAction(
-        'approve_stock_adjustment',
+        WAREHOUSE_MUTATION_CAPABILITIES.adjustStock,
         'adjustStock',
         () => repo.adjustStock({ ...input, actor }),
         adjustOverlay(input, actor),
@@ -554,15 +568,15 @@ export function WarehouseProvider({
     loadWarehouseTasks: (query) => repo.listWarehouseTasks(query),
     loadInventoryPositions: (query) => repo.listInventoryPositions(query),
     inspectQuality: (input) =>
-      runAuthorizedAction('inspect_quality', 'other', () =>
+      runAuthorizedAction(WAREHOUSE_MUTATION_CAPABILITIES.inspectQuality, 'other', () =>
         repo.inspectQuality(input),
       ),
     releaseHold: (input) =>
-      runAuthorizedAction('release_quality_hold', 'other', () =>
+      runAuthorizedAction(WAREHOUSE_MUTATION_CAPABILITIES.releaseHold, 'other', () =>
         repo.releaseHold(input),
       ),
     createVendorReturn: (input) =>
-      runAuthorizedAction('manage_returns', 'other', () =>
+      runAuthorizedAction(WAREHOUSE_MUTATION_CAPABILITIES.createVendorReturn, 'other', () =>
         repo.createVendorReturn(input),
       ),
     updateOperationRoute: (input) =>
@@ -574,7 +588,7 @@ export function WarehouseProvider({
         repo.submitCycleCount(input),
       ),
     decideStockChange: (input) =>
-      runAuthorizedAction('approve_stock_adjustment', 'other', () =>
+      runAuthorizedAction(STOCK_CHANGE_DECISION_CAPABILITIES, 'other', () =>
         repo.decideStockChange(input),
       ),
     resolveException: (input) =>

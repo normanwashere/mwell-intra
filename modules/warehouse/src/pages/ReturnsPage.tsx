@@ -49,7 +49,7 @@ const DISPOSITIONS: { value: 'restock' | 'lost' | 'vendor_return'; label: string
 ];
 
 export function ReturnsPage() {
-  const { data, recordReturn } = useWarehouse();
+  const { data, recordReturn, canOpenRoute } = useWarehouse();
   const toast = useToast();
   const [source, setSource] = useState<ReturnSource>('customer');
   const [eventId, setEventId] = useState('');
@@ -123,7 +123,7 @@ export function ReturnsPage() {
           <p className="font-semibold">Inspection required before putaway</p>
           <p className="text-xs opacity-80">Every physical return remains in quality staging until its condition is accepted.</p>
         </div>
-        <Link to="/quality" className="btn-ghost btn-sm shrink-0 justify-center">Open quality queue</Link>
+        {canOpenRoute('quality') && <Link to="/quality" className="btn-ghost btn-sm shrink-0 justify-center">Open quality queue</Link>}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
