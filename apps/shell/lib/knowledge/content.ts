@@ -9,6 +9,7 @@ import {
   RELEASE_NOTE_ARTICLES,
 } from "./governance";
 import { TROUBLESHOOTING_ARTICLES } from "./troubleshooting";
+import { ROLE_WORKSPACE_ARTICLES } from "./roleWorkspaces";
 import type {
   KnowledgeArticle,
   KnowledgeContent,
@@ -23,6 +24,8 @@ const moduleRoute: Record<KnowledgeModule, string> = {
   procurement: "/procurement",
   finance: "/finance",
   legal: "/legal",
+  events: "/events",
+  insights: "/insights",
 };
 
 const SCREENSHOTS: Record<
@@ -281,6 +284,8 @@ const processArticle = (
       procurement: "Procurement",
       finance: "Finance",
       legal: "Legal",
+      events: "Events Operations",
+      insights: "Data and Insights",
     } satisfies Record<KnowledgeModule, string>
   )[module],
   reviewedAt: "2026-07-11",
@@ -639,6 +644,7 @@ export const KNOWLEDGE_CONTENT: KnowledgeContent = {
     ...ADMINISTRATOR_ARTICLES,
     ...GOVERNANCE_ARTICLES,
     ...TROUBLESHOOTING_ARTICLES,
+    ...ROLE_WORKSPACE_ARTICLES,
     ...RELEASE_NOTE_ARTICLES,
   ],
   flows: KNOWLEDGE_FLOWS,

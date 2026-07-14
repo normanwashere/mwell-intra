@@ -171,6 +171,14 @@ const allLiveRoleIds = [
   "legal_reviewer",
   "legal_compliance",
   "legal_admin",
+  "events_requester",
+  "events_coordinator",
+  "events_viewer",
+  "events_admin",
+  "insights_analyst",
+  "insights_manager",
+  "insights_executive",
+  "insights_admin",
 ];
 
 export const DOA_CONFIGURATION_ROLE_IDS = [
@@ -1928,5 +1936,13 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
     ["platform_admin", "legal_compliance", "procurement_admin", "warehouse_admin"],
     "platform_admin",
     "Incident control: evidence preservation, least-privilege containment, accountable decisions, corrective action, and independent closure verification are mandatory.",
+  ),
+  limitedFlow(
+    "event-intent-and-fulfillment",
+    "Event intent and fulfillment",
+    "Create event intent, decide whether stock is required, execute physical fulfillment in Warehouse, reconcile returns, and close the lifecycle.",
+    ["events_requester", "events_coordinator", "events_viewer", "events_admin", "warehouse_marketing", "warehouse_business_unit", "warehouse_operations", "warehouse_logistics_supervisor", "warehouse_admin"],
+    "warehouse_logistics_supervisor",
+    "Event and custody control: activation intent, approved demand, physical issue, named custody, return disposition, and unresolved variance must remain attributable across the Events and Warehouse workspaces.",
   ),
 ];

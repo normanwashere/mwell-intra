@@ -1,6 +1,6 @@
 export interface ShellPageRouteContract {
   route: string;
-  module: "core" | "warehouse" | "procurement" | "finance" | "legal" | "vendor" | "admin";
+  module: "core" | "warehouse" | "procurement" | "finance" | "legal" | "vendor" | "admin" | "events" | "insights";
   capabilityIds: string[];
   administratorRoleIds?: string[];
   minimumControls: number;
@@ -41,6 +41,27 @@ export const SHELL_PAGE_ROUTE_CONTRACTS: ShellPageRouteContract[] = [
     module: "core",
     capabilityIds: [],
     minimumControls: 2,
+    minimumFields: 2,
+  },
+  {
+    route: "/work",
+    module: "core",
+    capabilityIds: [],
+    minimumControls: 3,
+    minimumFields: 2,
+  },
+  {
+    route: "/events",
+    module: "events",
+    capabilityIds: ["view_events", "create_event"],
+    minimumControls: 4,
+    minimumFields: 4,
+  },
+  {
+    route: "/insights",
+    module: "insights",
+    capabilityIds: ["view_warehouse", "view_procurement", "view_legal", "view_finance", "view_executive"],
+    minimumControls: 3,
     minimumFields: 2,
   },
   {

@@ -71,6 +71,18 @@ const FEATURE_RELATIONSHIPS: Record<string, FeatureRelationship> = {
     policyBasis: [POLICY.resilience],
     relatedFlowIds: ["exception-and-recovery"],
   },
+  "my-work": {
+    policyBasis: [POLICY.identity, POLICY.resilience],
+    relatedFlowIds: ["exception-and-recovery"],
+  },
+  "events-workspace": {
+    policyBasis: [POLICY.event, POLICY.warehouse],
+    relatedFlowIds: ["event-intent-and-fulfillment", "event-fulfillment"],
+  },
+  "insights-workspace": {
+    policyBasis: [POLICY.knowledge, POLICY.inventory, POLICY.procurement],
+    relatedFlowIds: ["exception-and-recovery"],
+  },
   "admin-governance": {
     policyBasis: [POLICY.identity, POLICY.doa],
     relatedFlowIds: [
@@ -402,6 +414,8 @@ const ownerFor: Record<KnowledgeModule, string> = {
   finance: "Finance",
   legal: "Legal",
   vendor: "Legal",
+  events: "Events Operations",
+  insights: "Data and Insights",
 };
 
 const auditedNotification = (definition: FeatureDefinition): string => {
@@ -415,6 +429,8 @@ const auditedNotification = (definition: FeatureDefinition): string => {
     return `${definition.title} uses local success or error feedback for implemented actions; procurement localStore and page RPC calls do not write core.notifications.`;
   if (definition.module === "legal" || definition.module === "vendor")
     return `${definition.title} uses local success or error feedback for implemented actions; Legal localStore and page RPC calls do not write core.notifications.`;
+  if (definition.module === "events" || definition.module === "insights")
+    return `${definition.title} uses inline status and source links; it does not write core.notifications.`;
   const coreFeedback: Record<string, string> = {
     "sign-in":
       "Authentication and recovery results appear inline; sign-in itself does not create an operational notification record.",
@@ -569,6 +585,45 @@ const definitions: FeatureDefinition[] = [
       "Do not repeat uncertain transactions; reconnect, open the record, and verify activity before retrying.",
     completionEvidence:
       "A fresh navigation loads the live page and any queued command shows an explicit synchronized outcome.",
+  },
+  {
+    id: "my-work",
+    title: "My Work",
+    module: "core",
+    route: "/work",
+    roleIds: CURRENT_ROLE_IDS,
+    purpose: "Combines assignments and approvals from accessible departments into one personal queue without moving decision authority.",
+    reads: "The governed core.v_my_work projection, current identity, source status, priority, due time, and owning record route.",
+    writes: "No source transaction changes; selecting Open source navigates to the authoritative record.",
+    statuses: "Loading, priority work, normal work, filtered, empty, source unavailable, or retrying.",
+    exception: "If a queue item is stale, open its source and trust the current source status before retrying or escalating.",
+    completionEvidence: "The authoritative source record opens under the same identity and displays its current decision or action state.",
+  },
+  {
+    id: "events-workspace",
+    title: "Events workspace",
+    module: "events",
+    route: "/events",
+    roleIds: ["warehouse_marketing", "warehouse_business_unit", "warehouse_admin"],
+    purpose: "Owns activation intent, dates, lifecycle, and the handoff into Warehouse fulfillment while preserving physical custody ownership.",
+    reads: "Event records, dates, type, location, and Warehouse allocation totals for reserved, issued, and returned units.",
+    writes: "Authorized requesters and coordinators create event intent; stock reservation, issue, and return remain Warehouse commands.",
+    statuses: "Planned, active, completed, loading, unavailable, validation failed, or access denied.",
+    exception: "Correct invalid dates before creation; resolve stock or custody exceptions in Warehouse instead of changing event totals directly.",
+    completionEvidence: "The event appears with dates and lifecycle, and its Warehouse source shows attributable reservation, issue, and return records.",
+  },
+  {
+    id: "insights-workspace",
+    title: "Insights workspace",
+    module: "insights",
+    route: "/insights",
+    roleIds: ["warehouse_bi_analyst", "warehouse_finance", "procurement_finance", "warehouse_admin", "platform_admin"],
+    purpose: "Presents role-scoped operational and executive indicators from governed source data without granting operational writes.",
+    reads: "The governed core.v_insights_snapshot projection filtered by the caller's Insights capabilities.",
+    writes: "No operational data changes; users open the governed source when a metric requires action.",
+    statuses: "Loading, ready, on target, review required, empty, source unavailable, or access denied.",
+    exception: "Do not reconcile a metric by editing an export; open and correct the authoritative source workflow.",
+    completionEvidence: "The metric's source link opens the permitted operational record or queue with current data and ownership.",
   },
   {
     id: "admin-governance",

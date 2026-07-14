@@ -1,5 +1,13 @@
 export type KnowledgeModule =
-  "core" | "warehouse" | "procurement" | "finance" | "legal" | "vendor" | "admin";
+  | "core"
+  | "warehouse"
+  | "procurement"
+  | "finance"
+  | "legal"
+  | "vendor"
+  | "admin"
+  | "events"
+  | "insights";
 
 export type KnowledgeAvailability = "live" | "limited" | "coming_soon";
 
@@ -34,7 +42,7 @@ export interface KnowledgeResponsibilityStage {
 
 export interface KnowledgeRole {
   id: string;
-  rbacModule?: "core" | "warehouse" | "procurement" | "legal";
+  rbacModule?: "core" | "warehouse" | "procurement" | "legal" | "events" | "insights";
   rbacRole?: string;
   label: string;
   module: KnowledgeModule;

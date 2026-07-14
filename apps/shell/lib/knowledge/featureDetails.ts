@@ -2847,6 +2847,42 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
       ],
     },
+    "my-work": {
+      controls: [
+        control("Source filter", "Shows only work from the selected department.", "The source must be one of the released queue sources.", "The queue changes without changing any source record."),
+        control("Open source", "Navigates to the authoritative record or queue.", "The route must be internal and role-authorized.", "The source page opens under the same session."),
+        control("Retry", "Reloads the governed personal projection after a read failure.", "The retry performs no source write.", "Current assignments replace the failed state."),
+      ],
+      fields: [
+        field("Priority", "Shows operational urgency assigned by the source projection.", true, "Critical and high work sort before normal work."),
+        field("Due time", "Shows the source-derived target time when available.", false, "The timestamp remains tied to the source record."),
+      ],
+    },
+    "events-workspace": {
+      controls: [
+        control("New event", "Opens event-intent creation for authorized roles.", "The user needs the events:create_event capability.", "A validated event draft form opens."),
+        control("Create event", "Persists the event intent through the governed Warehouse RPC.", "Name and start date are required; end date cannot precede start.", "The event appears in the lifecycle list."),
+        control("View event", "Opens dates, lifecycle, and fulfillment totals.", "The event must remain in the caller's readable scope.", "The event detail view opens."),
+        control("Open Warehouse fulfillment", "Hands physical stock work to Warehouse.", "The Warehouse role must authorize the requested stock command.", "The authoritative fulfillment view opens."),
+      ],
+      fields: [
+        field("Event name", "Identifies the activation in queues and custody records.", true, "A non-empty attributable name is required."),
+        field("Event type", "Classifies the activation for operations and reporting.", true, "Choose one released event type."),
+        field("Start date", "Sets lifecycle timing and readiness due dates.", true, "A valid date is required."),
+        field("End date", "Sets completion timing for multi-day events.", false, "It cannot be earlier than the start date."),
+      ],
+    },
+    "insights-workspace": {
+      controls: [
+        control("Insight view", "Filters indicators to an authorized department or executive view.", "Only areas granted by the Insights role are offered.", "The visible KPI set changes without a data write."),
+        control("Open governed source", "Navigates from a KPI to its accountable workflow.", "The destination remains independently role-protected.", "The source queue opens for investigation."),
+        control("Retry", "Reloads the governed snapshot after a read failure.", "The retry cannot alter source data.", "Current permitted indicators replace the failed state."),
+      ],
+      fields: [
+        field("Metric value", "Shows the current governed aggregate.", true, "The value is computed in the database projection."),
+        field("Target", "Shows the operating threshold when one is defined.", false, "The target is descriptive and cannot grant approval authority."),
+      ],
+    },
     "vendor-invite-unavailable": {
       controls: [
         control(
