@@ -9,6 +9,7 @@ import { InMemoryRepository } from '@/data/inMemoryRepository';
 import type { WarehouseData } from '@/data/repository';
 import type { DataSource } from '@intra/data-kit';
 import type { Role } from '@/domain/types';
+import type { Capability } from '@/auth/roles';
 
 export function makeRepo(data?: WarehouseData) {
   return new InMemoryRepository(data, { storage: null });
@@ -21,11 +22,13 @@ export function renderWithProviders(
     repo = makeRepo(),
     route = '/',
     source = 'memory',
+    capabilities,
   }: {
     role?: Role;
     repo?: InMemoryRepository;
     route?: string;
     source?: DataSource;
+    capabilities?: readonly Capability[];
   } = {},
 ): RenderResult {
   return render(
@@ -49,7 +52,12 @@ export function renderWithProviders(
       >
         <ThemeProvider>
           <ToastProvider>
-            <WarehouseProvider repo={repo} source={source} initialRole={role}>
+            <WarehouseProvider
+              repo={repo}
+              source={source}
+              initialRole={role}
+              capabilities={capabilities}
+            >
               {ui}
             </WarehouseProvider>
           </ToastProvider>

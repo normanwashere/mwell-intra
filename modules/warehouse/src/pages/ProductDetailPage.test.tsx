@@ -174,9 +174,9 @@ describe('ProductDetailPage', () => {
     });
   });
 
-  it('hides Adjust for roles without cycle_count', async () => {
+  it('shows Adjust for the legacy Operator alias with canonical cycle_count capability', async () => {
     renderDetail('shirt-l', 'operations');
     await screen.findByRole('heading', { name: /Event Shirt \(L\)/i });
-    expect(screen.queryByRole('button', { name: /adjust/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /adjust/i })).toBeInTheDocument();
   });
 });

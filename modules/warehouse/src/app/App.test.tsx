@@ -23,7 +23,10 @@ function ControlFailureProbe() {
 }
 
 class DeniedControlRepository extends InMemoryRepository {
+  attempts = 0;
+
   override async inspectQuality(): Promise<never> {
+    this.attempts += 1;
     throw new Error('Not authorized: warehouse.inspect_quality');
   }
 }
@@ -58,6 +61,52 @@ describe('App routing & guards', () => {
     expect(
       screen.queryByText(/scan & tag incoming inventory/i),
     ).not.toBeInTheDocument();
+  });
+
+  it('uses live capabilities instead of display-role grants in Supabase mode', async () => {
+    const denied = renderWithProviders(<App />, {
+      role: 'logistics_supervisor',
+      source: 'supabase',
+      capabilities: [],
+      route: '/receiving',
+    });
+    expect(
+      await screen.findByText(/don't have access to this page/i),
+    ).toBeInTheDocument();
+    denied.unmount();
+
+    renderWithProviders(<App />, {
+      role: 'finance',
+      source: 'supabase',
+      capabilities: ['receive_stock'],
+      route: '/receiving',
+    });
+    expect(
+      await screen.findByText(/scan & tag incoming inventory/i),
+    ).toBeInTheDocument();
+  });
+
+  it('guards dashboard and inventory routes with live capabilities', async () => {
+    const dashboard = renderWithProviders(<App />, {
+      role: 'warehouse_admin',
+      source: 'supabase',
+      capabilities: [],
+      route: '/',
+    });
+    expect(
+      await screen.findByText(/don't have access to this page/i),
+    ).toBeInTheDocument();
+    dashboard.unmount();
+
+    renderWithProviders(<App />, {
+      role: 'finance',
+      source: 'supabase',
+      capabilities: ['manage_inventory'],
+      route: '/inventory',
+    });
+    expect(
+      await screen.findByRole('heading', { name: /inventory/i }),
+    ).toBeInTheDocument();
   });
 
   it('allows logistics to open the dedicated Scan workspace', async () => {
@@ -118,5 +167,18 @@ describe('App routing & guards', () => {
     fireEvent.click(screen.getByRole('button', { name: /run guarded command/i }));
     expect(await screen.findByText('false')).toBeInTheDocument();
     expect(await screen.findByText(/not authorized: warehouse\.inspect_quality/i)).toBeInTheDocument();
+  });
+
+  it('blocks live mutations before the repository when capability refresh is empty', async () => {
+    const repo = new DeniedControlRepository();
+    renderWithProviders(<ControlFailureProbe />, {
+      repo,
+      source: 'supabase',
+      capabilities: [],
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /run guarded command/i }));
+    expect(await screen.findByText('false')).toBeInTheDocument();
+    expect(repo.attempts).toBe(0);
   });
 });

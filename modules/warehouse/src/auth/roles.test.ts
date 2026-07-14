@@ -16,9 +16,9 @@ describe('roles', () => {
     }
   });
 
-  it('restricts receiving to the logistics supervisor', () => {
+  it('keeps both legacy aliases aligned with canonical receiving access', () => {
     expect(can('logistics_supervisor', 'receive_stock')).toBe(true);
-    expect(can('operations', 'receive_stock')).toBe(false);
+    expect(can('operations', 'receive_stock')).toBe(true);
     expect(can('finance', 'receive_stock')).toBe(false);
   });
 
@@ -28,11 +28,11 @@ describe('roles', () => {
     expect(can('marketing', 'view_finance')).toBe(false);
   });
 
-  it('only operations/marketing/business units can allocate', () => {
+  it('keeps Supervisor allocation access aligned with its canonical bundle', () => {
     expect(can('operations', 'reserve_allocate')).toBe(true);
     expect(can('marketing', 'reserve_allocate')).toBe(true);
     expect(can('business_unit', 'reserve_allocate')).toBe(true);
-    expect(can('logistics_supervisor', 'reserve_allocate')).toBe(false);
+    expect(can('logistics_supervisor', 'reserve_allocate')).toBe(true);
   });
 });
 

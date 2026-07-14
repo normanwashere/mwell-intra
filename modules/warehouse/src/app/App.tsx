@@ -2,7 +2,7 @@ import { Route, Routes, useNavigate } from "react-router-dom";
 import { Suspense, lazy, useEffect, useRef } from "react";
 import { AppShell } from "@/components/AppShell";
 import { useWarehouse } from "./store";
-import { can, type Capability } from "@/auth/roles";
+import type { Capability } from "@/auth/roles";
 import {
   EmptyState,
   Skeleton,
@@ -130,10 +130,10 @@ function Guard({
   anyOf: Capability[];
   children: ReactNode;
 }) {
-  const { role } = useWarehouse();
+  const { can } = useWarehouse();
   const toast = useToast();
   const toasted = useRef(false);
-  const allowed = anyOf.some((c) => can(role, c));
+  const allowed = anyOf.some((capability) => can(capability));
   useEffect(() => {
     if (!allowed && !toasted.current) {
       toasted.current = true;
@@ -218,15 +218,31 @@ export function App() {
         <Routes>
           <Route
             path={WAREHOUSE_ROUTE_BY_ID.dashboard.path}
-            element={<DashboardPage />}
+            element={
+              <Guard anyOf={WAREHOUSE_ROUTE_BY_ID.dashboard.gateCapabilityIds}>
+                <DashboardPage />
+              </Guard>
+            }
           />
           <Route
             path={WAREHOUSE_ROUTE_BY_ID.inventory.path}
-            element={<InventoryPage />}
+            element={
+              <Guard anyOf={WAREHOUSE_ROUTE_BY_ID.inventory.gateCapabilityIds}>
+                <InventoryPage />
+              </Guard>
+            }
           />
           <Route
             path={WAREHOUSE_ROUTE_BY_ID["product-detail"].path}
-            element={<ProductDetailPage />}
+            element={
+              <Guard
+                anyOf={
+                  WAREHOUSE_ROUTE_BY_ID["product-detail"].gateCapabilityIds
+                }
+              >
+                <ProductDetailPage />
+              </Guard>
+            }
           />
           <Route
             path={WAREHOUSE_ROUTE_BY_ID.scan.path}

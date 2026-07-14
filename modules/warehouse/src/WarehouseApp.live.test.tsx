@@ -12,6 +12,8 @@ vi.mock('@/app/store', () => ({
     children: ReactNode;
     source?: string;
     supabaseClient?: SupabaseClient;
+    capabilities?: readonly string[];
+    roleCode?: string;
   }) => {
     providerProps(props);
     return <div data-testid="warehouse-provider">warehouse live</div>;
@@ -23,11 +25,17 @@ vi.mock('@/components/PwaPrompts', () => ({ PwaPrompts: () => null }));
 
 import { WarehouseApp } from './WarehouseApp';
 
-function makeLiveClient(): SupabaseClient<Record<string, unknown>, string> {
+function makeLiveClient({
+  roles = ['logistics_supervisor'],
+  capabilities = ['receive_stock'],
+}: {
+  roles?: string[];
+  capabilities?: string[];
+} = {}): SupabaseClient<Record<string, unknown>, string> {
   const user = {
     id: 'warehouse-user',
     email: 'warehouse@mwell.com.ph',
-    app_metadata: { roles: { warehouse: ['logistics_supervisor'] } },
+    app_metadata: { roles: { warehouse: roles } },
     user_metadata: { full_name: 'Warehouse User' },
     aud: 'authenticated',
     created_at: '2026-07-10T00:00:00.000Z',
@@ -43,6 +51,12 @@ function makeLiveClient(): SupabaseClient<Record<string, unknown>, string> {
         data: { subscription: { unsubscribe: vi.fn() } },
       }),
     },
+    schema: vi.fn().mockReturnValue({
+      rpc: vi.fn().mockResolvedValue({
+        data: { warehouse: capabilities },
+        error: null,
+      }),
+    }),
   } as unknown as SupabaseClient<Record<string, unknown>, string>;
 }
 
@@ -64,7 +78,33 @@ describe('WarehouseApp live repository wiring', () => {
 
     await screen.findByTestId('warehouse-provider');
     expect(providerProps).toHaveBeenCalledWith(
-      expect.objectContaining({ source: 'supabase', supabaseClient: client }),
+      expect.objectContaining({
+        source: 'supabase',
+        supabaseClient: client,
+        capabilities: ['receive_stock'],
+      }),
+    );
+  });
+
+  it('admits an unknown runtime bundle only through its live capabilities', async () => {
+    const client = makeLiveClient({
+      roles: ['night_shift_receiving'],
+      capabilities: ['view_dashboard', 'receive_stock'],
+    });
+    render(
+      <SessionProvider config={{ mode: 'supabase', client }}>
+        <ToastProvider>
+          <WarehouseApp basename="/warehouse" />
+        </ToastProvider>
+      </SessionProvider>,
+    );
+
+    await screen.findByTestId('warehouse-provider');
+    expect(providerProps).toHaveBeenCalledWith(
+      expect.objectContaining({
+        roleCode: 'night_shift_receiving',
+        capabilities: ['view_dashboard', 'receive_stock'],
+      }),
     );
   });
 });

@@ -31,6 +31,16 @@ function replaceInFunction(source, functionName, pattern, replacement) {
   );
 }
 
+function functionSql(source, functionName) {
+  const start = source.search(
+    new RegExp(`create or replace function core\\.${functionName}\\s*\\(`, 'i'),
+  );
+  assert.notEqual(start, -1, `Missing function ${functionName}`);
+  const end = source.indexOf('$$;', start);
+  assert.notEqual(end, -1, `Unterminated function ${functionName}`);
+  return source.slice(start, end + 3);
+}
+
 test('organization migration satisfies the extensibility and authorization contract', () => {
   const result = spawnSync(process.execPath, [verifier], {
     encoding: 'utf8',
@@ -157,5 +167,42 @@ test('compatible locks and real-change audit guards are mandatory', () => {
       ),
     ).join('\n'),
     /real assignment changes/i,
+  );
+});
+
+test('role bundle and assignment writes share deterministic versioned locks', () => {
+  const bundle = functionSql(sql, 'upsert_role_bundle');
+  const assignment = functionSql(sql, 'assign_user_role');
+  const revocation = functionSql(sql, 'revoke_user_role');
+  const catalog = functionSql(sql, 'list_rbac_catalog');
+
+  assert.match(sql, /create or replace function core\.lock_role_bundle_keys/i);
+  assert.match(
+    bundle,
+    /lock_role_bundle_keys\s*\(\s*v_module\s*,\s*v_original_role\s*,\s*v_role/i,
+  );
+  assert.match(assignment, /lock_role_bundle_keys\s*\(\s*v_module\s*,\s*v_role/i);
+  assert.match(revocation, /lock_role_bundle_keys\s*\(\s*v_module\s*,\s*v_role/i);
+  assert.match(bundle, /expected_updated_at[\s\S]*stale editor version/i);
+  assert.match(catalog, /updated_at timestamptz/i);
+  assert.match(
+    sql,
+    /foreign key \(module, role\)[\s\S]*references core\.roles\(module, role\)[\s\S]*deferrable/i,
+  );
+});
+
+test('scope no-ops, migration reruns, and department aggregates are safe', () => {
+  const scope = functionSql(sql, 'assign_profile_department');
+  const noOp = scope.search(/return pg_catalog\.to_jsonb\(v_existing\)/i);
+  const historyGuard = scope.search(/effective scope history is append-only/i);
+  assert.ok(noOp >= 0 && noOp < historyGuard, 'scope no-op must precede history rejection');
+
+  assert.match(
+    sql,
+    /pg_constraint[\s\S]*profile_department_scopes_no_overlap[\s\S]*exclude using gist/i,
+  );
+  assert.match(
+    functionSql(sql, 'list_departments'),
+    /core\.has_cap\s*\(\s*'core'\s*,\s*'manage_rbac'\s*\)/i,
   );
 });

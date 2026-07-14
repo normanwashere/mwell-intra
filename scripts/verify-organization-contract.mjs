@@ -134,6 +134,13 @@ export function verifyOrganizationSql(sql) {
     );
   }
   if (
+    !/pg_catalog\.pg_constraint[\s\S]*?profile_department_scopes_no_overlap[\s\S]*?exclude using gist/i.test(
+      sql,
+    )
+  ) {
+    errors.push('Effective-scope exclusion creation must be safe on migration rerun.');
+  }
+  if (
     !/pg_advisory_xact_lock/i.test(functionSql(sql, 'upsert_department')) ||
     !/pg_advisory_xact_lock/i.test(functionSql(sql, 'prevent_department_cycle'))
   ) {
@@ -169,6 +176,19 @@ export function verifyOrganizationSql(sql) {
       'Department assignment must use a compatible department lock and active-state recheck.',
     );
   }
+  const scopeNoOp = scopeWrite.search(
+    /return pg_catalog\.to_jsonb\(v_existing\)/i,
+  );
+  const scopeHistoryGuard = scopeWrite.search(
+    /effective scope history is append-only/i,
+  );
+  if (
+    scopeNoOp < 0 ||
+    scopeHistoryGuard < 0 ||
+    scopeNoOp > scopeHistoryGuard
+  ) {
+    errors.push('Historical scope no-ops must return before history rejection.');
+  }
   if (
     !/cannot reopen an effective scope[\s\S]*cannot extend an effective scope/i.test(
       functionSql(sql, 'assign_profile_department'),
@@ -194,6 +214,18 @@ export function verifyOrganizationSql(sql) {
   ) {
     errors.push('RBAC catalogue must enforce core:manage_rbac internally.');
   }
+  if (!/updated_at timestamptz/i.test(catalogue)) {
+    errors.push('RBAC catalogue must expose an updated_at editor version.');
+  }
+
+  const departmentCatalogue = functionSql(sql, 'list_departments');
+  if (
+    !/core\.has_cap\s*\(\s*'core'\s*,\s*'manage_rbac'\s*\)/i.test(
+      departmentCatalogue,
+    )
+  ) {
+    errors.push('Department administration aggregates must enforce core:manage_rbac.');
+  }
 
   const claimSync = functionSql(sql, 'sync_user_role_claims');
   const lockPosition = claimSync.search(/from auth\.users[\s\S]*?for update/i);
@@ -209,6 +241,25 @@ export function verifyOrganizationSql(sql) {
   }
 
   const bundle = functionSql(sql, 'upsert_role_bundle');
+  const roleLock = functionSql(sql, 'lock_role_bundle_keys');
+  if (
+    !/order by requested\.role/i.test(roleLock) ||
+    !/lock_role_bundle_keys\s*\(\s*v_module\s*,\s*v_original_role\s*,\s*v_role/i.test(
+      bundle,
+    )
+  ) {
+    errors.push('Role bundle writes must lock original and target keys deterministically.');
+  }
+  if (!/expected_updated_at[\s\S]*stale editor version/i.test(bundle)) {
+    errors.push('Role bundle writes must require a fresh catalogue editor version.');
+  }
+  if (
+    !/from core\.user_roles[\s\S]*?for update[\s\S]*?array_agg\(ur\.user_id/i.test(
+      bundle,
+    )
+  ) {
+    errors.push('Role bundle writes must recalculate affected users under lock.');
+  }
   if (
     !/delete from core\.role_capabilities[\s\S]*?role = v_original_role/i.test(
       bundle,
@@ -229,6 +280,9 @@ export function verifyOrganizationSql(sql) {
 
   for (const name of ['assign_user_role', 'revoke_user_role']) {
     const source = functionSql(sql, name);
+    if (!/lock_role_bundle_keys\s*\(\s*v_module\s*,\s*v_role/i.test(source)) {
+      errors.push(`${name} must share the role bundle advisory lock.`);
+    }
     if (
       !/get diagnostics v_changed = row_count[\s\S]*?if v_changed = 0 then[\s\S]*?return/i.test(
         source,
@@ -236,6 +290,20 @@ export function verifyOrganizationSql(sql) {
     ) {
       errors.push(`${name} must audit only real assignment changes.`);
     }
+  }
+  if (
+    !/foreign key \(module, role\)[\s\S]*?references core\.roles\(module, role\)[\s\S]*?deferrable/i.test(
+      sql,
+    )
+  ) {
+    errors.push('User role assignments need deferrable composite role integrity.');
+  }
+  if (
+    !/\('operations', 'warehouse_operator'\)[\s\S]*?\('logistics_supervisor', 'warehouse_supervisor'\)/i.test(
+      sql,
+    )
+  ) {
+    errors.push('Legacy Warehouse aliases must mirror canonical database grants.');
   }
   if (
     !/roles_module_format_check[\s\S]*roles_role_format_check[\s\S]*roles_label_nonempty_check/i.test(

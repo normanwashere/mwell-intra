@@ -47,24 +47,54 @@ create index if not exists profile_department_scopes_profile_idx
 create index if not exists profile_department_scopes_department_idx
   on core.profile_department_scopes(department_id, effective_from, effective_to);
 
-alter table core.profile_department_scopes
-  add constraint profile_department_scopes_no_overlap
-  exclude using gist (
-    profile_id with =,
-    department_id with =,
-    scope_type with =,
-    daterange(
-      effective_from,
-      coalesce(effective_to + 1, 'infinity'::date),
-      '[)'
-    ) with &&
-  );
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_catalog.pg_constraint
+    where conrelid = 'core.profile_department_scopes'::pg_catalog.regclass
+      and conname = 'profile_department_scopes_no_overlap'
+  ) then
+    alter table core.profile_department_scopes
+      add constraint profile_department_scopes_no_overlap
+      exclude using gist (
+        profile_id with =,
+        department_id with =,
+        scope_type with =,
+        daterange(
+          effective_from,
+          coalesce(effective_to + 1, 'infinity'::date),
+          '[)'
+        ) with &&
+      );
+  end if;
+end;
+$$;
 
 alter table core.roles
   add column if not exists description text,
   add column if not exists is_active boolean not null default true,
   add column if not exists is_protected boolean not null default false,
   add column if not exists updated_at timestamptz not null default now();
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_catalog.pg_constraint
+    where conrelid = 'core.user_roles'::pg_catalog.regclass
+      and conname = 'user_roles_role_integrity_fk'
+  ) then
+    alter table core.user_roles
+      add constraint user_roles_role_integrity_fk
+      foreign key (module, role)
+      references core.roles(module, role)
+      on delete restrict
+      deferrable initially immediate
+      not valid;
+  end if;
+end;
+$$;
 
 do $$
 begin
@@ -297,12 +327,17 @@ returns table (
   can_deactivate boolean,
   deactivation_blocked_reason text
 )
-language sql
+language plpgsql
 stable
 security definer
 set search_path = ''
 as $$
-  select
+begin
+  if not core.has_cap('core', 'manage_rbac') then
+    raise exception 'Not authorized: core.manage_rbac';
+  end if;
+
+  return query select
     d.id,
     d.code,
     d.name,
@@ -325,6 +360,7 @@ as $$
   left join core.profile_department_scopes scope on scope.department_id = d.id
   group by d.id, parent.code
   order by d.sort_order, d.name;
+end;
 $$;
 
 create or replace function core.upsert_department(payload jsonb)
@@ -488,6 +524,15 @@ begin
     else v_existing.effective_to
   end;
 
+  if v_existing.id is not null
+    and v_existing.profile_id is not distinct from v_profile_id
+    and v_existing.department_id is not distinct from v_department_id
+    and v_existing.scope_type is not distinct from v_scope_type
+    and v_existing.effective_from is not distinct from v_from
+    and v_existing.effective_to is not distinct from v_to then
+    return pg_catalog.to_jsonb(v_existing);
+  end if;
+
   if v_profile_id = auth.uid() then
     raise exception 'Self-assignment is not allowed: cannot modify your own department scope';
   end if;
@@ -521,15 +566,6 @@ begin
     raise exception 'Department must exist and be active';
   end if;
 
-  if v_existing.id is not null
-    and v_existing.profile_id is not distinct from v_profile_id
-    and v_existing.department_id is not distinct from v_department_id
-    and v_existing.scope_type is not distinct from v_scope_type
-    and v_existing.effective_from is not distinct from v_from
-    and v_existing.effective_to is not distinct from v_to then
-    return pg_catalog.to_jsonb(v_existing);
-  end if;
-
   if v_existing.id is null then
     insert into core.profile_department_scopes(
       id, profile_id, department_id, scope_type, effective_from, effective_to,
@@ -561,6 +597,33 @@ begin
 end;
 $$;
 
+-- Every role-definition and role-assignment writer uses the same sorted lock
+-- keys so create, rename, deactivate, grant, and revoke cannot pass each other.
+create or replace function core.lock_role_bundle_keys(
+  p_module text,
+  p_first_role text,
+  p_second_role text default null
+)
+returns void
+language plpgsql
+set search_path = ''
+as $$
+declare
+  v_role text;
+begin
+  for v_role in
+    select distinct requested.role
+    from pg_catalog.unnest(array[p_first_role, p_second_role]) requested(role)
+    where requested.role is not null
+    order by requested.role
+  loop
+    perform pg_catalog.pg_advisory_xact_lock(
+      pg_catalog.hashtextextended(p_module || ':' || v_role, 0)
+    );
+  end loop;
+end;
+$$;
+
 create or replace function core.list_rbac_catalog()
 returns table (
   module text,
@@ -569,6 +632,7 @@ returns table (
   description text,
   is_active boolean,
   is_protected boolean,
+  updated_at timestamptz,
   capabilities text[],
   assignment_count bigint
 )
@@ -589,6 +653,7 @@ begin
     r.description,
     r.is_active,
     r.is_protected,
+    r.updated_at,
     coalesce(array_agg(rc.cap order by rc.cap) filter (where rc.cap is not null), array[]::text[]),
     count(distinct ur.user_id)
   from core.roles r
@@ -596,7 +661,9 @@ begin
     on rc.module = r.module and rc.role = r.role
   left join core.user_roles ur
     on ur.module = r.module and ur.role = r.role
-  group by r.module, r.role, r.label, r.description, r.is_active, r.is_protected
+  group by
+    r.module, r.role, r.label, r.description, r.is_active, r.is_protected,
+    r.updated_at
   order by r.module, r.label, r.role;
 end;
 $$;
@@ -617,6 +684,8 @@ declare
   v_label text := nullif(btrim(payload->>'label'), '');
   v_description text := nullif(btrim(payload->>'description'), '');
   v_is_active boolean := coalesce((payload->>'is_active')::boolean, true);
+  v_expected_updated_at timestamptz := nullif(payload->>'expected_updated_at', '')::timestamptz;
+  v_existing core.roles;
   v_caps text[];
   v_before jsonb;
   v_after jsonb;
@@ -663,14 +732,19 @@ begin
     raise exception 'Self-escalation is not allowed: cannot grant core:manage_rbac through a runtime role bundle';
   end if;
 
-  perform pg_catalog.pg_advisory_xact_lock(
-    pg_catalog.hashtextextended(v_module || ':' || v_original_role, 0)
-  );
+  perform core.lock_role_bundle_keys(v_module, v_original_role, v_role);
 
-  perform 1
+  select * into v_existing
   from core.roles r
   where r.module = v_module and r.role = v_original_role
   for update;
+
+  if v_existing.module is not null and (
+    v_expected_updated_at is null
+    or v_expected_updated_at is distinct from v_existing.updated_at
+  ) then
+    raise exception 'Stale editor version: reload the role catalogue before saving';
+  end if;
 
   select pg_catalog.jsonb_build_object(
     'module', r.module,
@@ -701,6 +775,12 @@ begin
   ) then
     raise exception 'Cannot modify your own role assignment through a role bundle';
   end if;
+
+  perform 1
+  from core.user_roles ur
+  where ur.module = v_module and ur.role = v_original_role
+  order by ur.user_id
+  for update;
 
   select coalesce(pg_catalog.array_agg(ur.user_id order by ur.user_id), array[]::uuid[])
   into v_assigned_users
@@ -797,6 +877,7 @@ begin
   if v_user_id = auth.uid() then
     raise exception 'Self-assignment is not allowed: cannot modify your own role assignment';
   end if;
+  perform core.lock_role_bundle_keys(v_module, v_role);
   if not exists (
     select 1 from core.roles
     where module = v_module and role = v_role and is_active
@@ -851,6 +932,7 @@ begin
   if v_user_id = auth.uid() then
     raise exception 'Self-assignment is not allowed: cannot modify your own role assignment';
   end if;
+  perform core.lock_role_bundle_keys(v_module, v_role);
   v_before := jsonb_build_object('assigned', exists(
     select 1 from core.user_roles
     where user_id = v_user_id and module = v_module and role = v_role
@@ -989,6 +1071,22 @@ insert into core.roles(module, role, label, description, is_active) values
   ('warehouse', 'logistics_supervisor', 'Logistics Supervisor', 'Legacy Warehouse supervisor-role alias.', true)
 on conflict (module, role) do update set is_active = true;
 
+delete from core.role_capabilities
+where module = 'warehouse'
+  and role in ('operations', 'logistics_supervisor');
+
+insert into core.role_capabilities(module, role, cap)
+select 'warehouse', aliases.alias_role, canonical.cap
+from (
+  values
+    ('operations', 'warehouse_operator'),
+    ('logistics_supervisor', 'warehouse_supervisor')
+) aliases(alias_role, canonical_role)
+join core.role_capabilities canonical
+  on canonical.module = 'warehouse'
+ and canonical.role = aliases.canonical_role
+on conflict do nothing;
+
 alter table core.departments enable row level security;
 alter table core.profile_department_scopes enable row level security;
 
@@ -1013,6 +1111,7 @@ grant all on core.departments to service_role;
 grant all on core.profile_department_scopes to service_role;
 
 revoke all on function core.prevent_department_cycle() from public, anon, authenticated;
+revoke all on function core.lock_role_bundle_keys(text, text, text) from public, anon, authenticated;
 revoke all on function core.department_has_unresolved_work(uuid) from public, anon;
 revoke all on function core.list_departments() from public, anon;
 revoke all on function core.upsert_department(jsonb) from public, anon;

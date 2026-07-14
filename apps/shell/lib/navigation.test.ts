@@ -211,6 +211,7 @@ describe("configurable organization administration", () => {
     const users = source("app/admin/users/page.tsx");
     expect(users).toContain("rpc('list_rbac_catalog')");
     expect(users).toContain("is_active");
+    expect(users).toContain("updated_at");
     expect(users).toContain("Inactive");
   });
 
@@ -224,7 +225,8 @@ describe("configurable organization administration", () => {
     expect(departments).toContain("Sort order");
     expect(departments).toContain('role="tree"');
     expect(departments).toContain('role="treeitem"');
-    expect(departments).toContain("aria-level={depth + 1}");
+    expect(departments).toContain('role="group"');
+    expect(departments).toContain("DepartmentTreeNode");
     expect(departments).toContain("Reports to");
     expect(departments).toContain("Confirm deactivation");
     expect(departments).toContain("Historical assignments remain available");

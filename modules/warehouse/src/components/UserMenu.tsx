@@ -18,7 +18,7 @@ function initials(name: string): string {
 
 /** Header account button: shows the signed-in profile and offers sign-out. */
 export function UserMenu() {
-  const { role, setRole } = useWarehouse();
+  const { role, roleLabel, roleDescription, setRole } = useWarehouse();
   const { profile, logout, mode, changePassword, userRoles } = useSession();
   const toast = useToast();
   const navigate = useNavigate();
@@ -29,8 +29,7 @@ export function UserMenu() {
   const [pwError, setPwError] = useState<string | null>(null);
   const [pwSaving, setPwSaving] = useState(false);
 
-  const name = profile?.name ?? ROLES[role].label;
-  const roleLabel = ROLES[role].label;
+  const name = profile?.name ?? roleLabel;
   const canChangePassword = mode === 'supabase';
   // In demo/memory mode a user may hold several warehouse roles; let them switch
   // between the roles their session actually carries. In supabase mode the role
@@ -130,7 +129,7 @@ export function UserMenu() {
               Active role
             </p>
             <p className="mt-0.5 text-sm font-semibold text-ink">{roleLabel}</p>
-            <p className="mt-1 text-xs text-muted">{ROLES[role].description}</p>
+            <p className="mt-1 text-xs text-muted">{roleDescription}</p>
           </div>
 
           {canSwitchRole && (

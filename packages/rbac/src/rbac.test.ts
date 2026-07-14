@@ -102,6 +102,7 @@ describe('warehouse parity vs source roles.ts', () => {
       'manage_locations',
       'cycle_count',
       'manage_returns',
+      'reserve_allocate',
       'issue_items',
       'transfer_stock',
       'manage_operation_routes',
@@ -114,7 +115,9 @@ describe('warehouse parity vs source roles.ts', () => {
     ],
     operations: [
       'view_dashboard',
+      'receive_stock',
       'manage_inventory',
+      'cycle_count',
       'reserve_allocate',
       'issue_items',
       'manage_returns',

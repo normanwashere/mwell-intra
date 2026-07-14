@@ -78,6 +78,7 @@ interface RoleCatalogRow {
   readonly description: string | null;
   readonly is_active: boolean;
   readonly is_protected: boolean;
+  readonly updated_at: string;
   readonly capabilities: readonly string[];
   readonly assignment_count: number;
 }
@@ -89,6 +90,7 @@ interface RoleColumn {
   readonly key: string; // `${module}:${role}`
   readonly label: string;
   readonly isActive: boolean;
+  readonly updatedAt: string | null;
 }
 
 /** Materialize the full module × role catalogue in stable declaration order. */
@@ -107,6 +109,7 @@ function buildStaticRoleColumns(): readonly RoleColumn[] {
         key: `${module}:${role}`,
         label: roles[role]?.label ?? role,
         isActive: true,
+        updatedAt: null,
       });
     }
   }
@@ -126,6 +129,7 @@ function roleColumnsFromCatalog(
       key: `${row.module}:${row.role}`,
       label: row.label || row.role,
       isActive: row.is_active,
+      updatedAt: row.updated_at,
     }));
 }
 

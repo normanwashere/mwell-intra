@@ -107,36 +107,154 @@ export function descendantIds(
   return descendants;
 }
 
-function flattenTree(departments: readonly Department[]) {
-  const byParent = new Map<string | null, Department[]>();
-  for (const department of departments) {
-    const siblings = byParent.get(department.parent_id) ?? [];
-    siblings.push(department);
-    byParent.set(department.parent_id, siblings);
-  }
-  for (const siblings of byParent.values()) {
-    siblings.sort(
-      (left, right) =>
-        left.sort_order - right.sort_order ||
-        left.name.localeCompare(right.name),
-    );
-  }
+interface DepartmentTreeItem {
+  readonly department: Department;
+  readonly children: DepartmentTreeItem[];
+}
 
-  const flattened: Array<{ department: Department; depth: number }> = [];
-  const visited = new Set<string>();
-  const visit = (parentId: string | null, depth: number) => {
-    for (const department of byParent.get(parentId) ?? []) {
-      if (visited.has(department.id)) continue;
-      visited.add(department.id);
-      flattened.push({ department, depth });
-      visit(department.id, depth + 1);
-    }
-  };
-  visit(null, 0);
+function buildDepartmentTree(
+  departments: readonly Department[],
+): readonly DepartmentTreeItem[] {
+  const nodes = new Map<string, DepartmentTreeItem>();
   for (const department of departments) {
-    if (!visited.has(department.id)) flattened.push({ department, depth: 0 });
+    nodes.set(department.id, { department, children: [] });
   }
-  return flattened;
+  const roots: DepartmentTreeItem[] = [];
+  for (const node of nodes.values()) {
+    const parent = node.department.parent_id
+      ? nodes.get(node.department.parent_id)
+      : null;
+    if (parent && parent !== node) parent.children.push(node);
+    else roots.push(node);
+  }
+  const sort = (items: DepartmentTreeItem[]) => {
+    items.sort(
+      (left, right) =>
+        left.department.sort_order - right.department.sort_order ||
+        left.department.name.localeCompare(right.department.name),
+    );
+    for (const item of items) sort(item.children);
+  };
+  sort(roots);
+  return roots;
+}
+
+function DepartmentTreeNode({
+  item,
+  level,
+  parentName,
+  isLive,
+  saving,
+  onAddChild,
+  onEdit,
+  onDeactivate,
+}: {
+  item: DepartmentTreeItem;
+  level: number;
+  parentName: string | null;
+  isLive: boolean;
+  saving: boolean;
+  onAddChild: (departmentId: string) => void;
+  onEdit: (department: Department) => void;
+  onDeactivate: (department: Department) => void;
+}) {
+  const { department, children } = item;
+  return (
+    <li
+      role="treeitem"
+      aria-level={level}
+      aria-expanded={children.length > 0 ? true : undefined}
+    >
+      <div className="grid min-h-16 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-line px-2 py-2 sm:px-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="grid h-9 w-9 shrink-0 place-items-center bg-inset text-muted">
+            <Icon
+              name={level === 1 ? "building" : "transfer"}
+              className="h-4 w-4"
+            />
+          </span>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="truncate text-sm font-semibold text-ink">
+                {department.name}
+              </p>
+              <Badge tone={department.is_active ? "emerald" : "slate"}>
+                {department.is_active ? "Active" : "Inactive"}
+              </Badge>
+            </div>
+            <p className="truncate font-mono text-xs text-faint">
+              {department.code} - order {department.sort_order}
+            </p>
+            <p className="truncate text-xs text-muted">
+              {parentName ? `Reports to ${parentName}` : "Top-level department"}
+            </p>
+            {department.deactivation_blocked_reason && department.is_active && (
+              <p className="mt-1 text-xs text-amber-700">
+                {department.deactivation_blocked_reason}
+              </p>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            icon="plus"
+            aria-label={`Add child to ${department.name}`}
+            title={`Add child to ${department.name}`}
+            disabled={!isLive || !department.is_active}
+            onClick={() => onAddChild(department.id)}
+          >
+            <span className="hidden lg:inline">Child</span>
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            icon="edit"
+            aria-label={`Edit ${department.name}`}
+            title={`Edit ${department.name}`}
+            disabled={!isLive}
+            onClick={() => onEdit(department)}
+          >
+            <span className="hidden lg:inline">Edit</span>
+          </Button>
+          {department.is_active && (
+            <Button
+              variant="ghost"
+              size="sm"
+              icon="minus"
+              aria-label={`Deactivate ${department.name}`}
+              title={
+                department.deactivation_blocked_reason ??
+                `Deactivate ${department.name}`
+              }
+              disabled={!isLive || saving || !department.can_deactivate}
+              onClick={() => onDeactivate(department)}
+            >
+              <span className="hidden xl:inline">Deactivate</span>
+            </Button>
+          )}
+        </div>
+      </div>
+      {children.length > 0 && (
+        <ul role="group" className="ml-5 border-l border-line pl-2 sm:ml-7">
+          {children.map((child) => (
+            <DepartmentTreeNode
+              key={child.department.id}
+              item={child}
+              level={level + 1}
+              parentName={department.name}
+              isLive={isLive}
+              saving={saving}
+              onAddChild={onAddChild}
+              onEdit={onEdit}
+              onDeactivate={onDeactivate}
+            />
+          ))}
+        </ul>
+      )}
+    </li>
+  );
 }
 
 export default function DepartmentAdministrationPage() {
@@ -183,9 +301,8 @@ function DepartmentAdministration() {
     if (isLive) void refresh();
   }, [isLive, refresh]);
 
-  const flattened = useMemo(() => flattenTree(departments), [departments]);
-  const departmentById = useMemo(
-    () => new Map(departments.map((department) => [department.id, department])),
+  const departmentTree = useMemo(
+    () => buildDepartmentTree(departments),
     [departments],
   );
   const editing = form?.id
@@ -312,7 +429,7 @@ function DepartmentAdministration() {
           <Skeleton className="h-16 w-full" />
           <Skeleton className="h-16 w-full" />
         </div>
-      ) : flattened.length === 0 ? (
+      ) : departmentTree.length === 0 ? (
         <EmptyState
           icon="building"
           title="No departments configured"
@@ -324,105 +441,25 @@ function DepartmentAdministration() {
           }
         />
       ) : (
-        <section
+        <ul
           role="tree"
           aria-label="Department hierarchy"
           className="border-y border-line"
         >
-          {flattened.map(({ department, depth }) => {
-            const parent = department.parent_id
-              ? departmentById.get(department.parent_id)
-              : null;
-            const hasChildren = departments.some(
-              (candidate) => candidate.parent_id === department.id,
-            );
-            return (
-              <div
-                key={department.id}
-                role="treeitem"
-                aria-level={depth + 1}
-                aria-expanded={hasChildren ? true : undefined}
-                className="grid min-h-16 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-line px-2 py-2 last:border-b-0 sm:px-3"
-              >
-                <div
-                  className="flex min-w-0 items-center gap-3"
-                  style={{ paddingLeft: `${Math.min(depth, 6) * 20}px` }}
-                >
-                  <span className="grid h-9 w-9 shrink-0 place-items-center bg-inset text-muted">
-                    <Icon
-                      name={depth === 0 ? "building" : "transfer"}
-                      className="h-4 w-4"
-                    />
-                  </span>
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="truncate text-sm font-semibold text-ink">
-                        {department.name}
-                      </p>
-                      <Badge tone={department.is_active ? "emerald" : "slate"}>
-                        {department.is_active ? "Active" : "Inactive"}
-                      </Badge>
-                    </div>
-                    <p className="truncate font-mono text-xs text-faint">
-                      {department.code} - order {department.sort_order}
-                    </p>
-                    <p className="truncate text-xs text-muted">
-                      {parent
-                        ? `Reports to ${parent.name}`
-                        : "Top-level department"}
-                    </p>
-                    {department.deactivation_blocked_reason &&
-                      department.is_active && (
-                        <p className="mt-1 text-xs text-amber-700">
-                          {department.deactivation_blocked_reason}
-                        </p>
-                      )}
-                  </div>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    icon="plus"
-                    aria-label={`Add child to ${department.name}`}
-                    title={`Add child to ${department.name}`}
-                    disabled={!isLive || !department.is_active}
-                    onClick={() => openCreate(department.id)}
-                  >
-                    <span className="hidden lg:inline">Child</span>
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    icon="edit"
-                    aria-label={`Edit ${department.name}`}
-                    title={`Edit ${department.name}`}
-                    disabled={!isLive}
-                    onClick={() => openEdit(department)}
-                  >
-                    <span className="hidden lg:inline">Edit</span>
-                  </Button>
-                  {department.is_active && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      icon="minus"
-                      aria-label={`Deactivate ${department.name}`}
-                      title={
-                        department.deactivation_blocked_reason ??
-                        `Deactivate ${department.name}`
-                      }
-                      disabled={!isLive || saving || !department.can_deactivate}
-                      onClick={() => setPendingDeactivation(department)}
-                    >
-                      <span className="hidden xl:inline">Deactivate</span>
-                    </Button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </section>
+          {departmentTree.map((item) => (
+            <DepartmentTreeNode
+              key={item.department.id}
+              item={item}
+              level={1}
+              parentName={null}
+              isLive={isLive}
+              saving={saving}
+              onAddChild={openCreate}
+              onEdit={openEdit}
+              onDeactivate={setPendingDeactivation}
+            />
+          ))}
+        </ul>
       )}
 
       <Sheet

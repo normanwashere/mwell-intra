@@ -46,6 +46,12 @@ export const ROLES: Record<Role, RoleProfile> = Object.fromEntries(
 
 export const ROLE_LIST: RoleProfile[] = Object.values(ROLES);
 
+const CAPABILITY_SET = new Set<string>(warehouseModule.capabilities);
+
+export function isWarehouseCapability(value: unknown): value is Capability {
+  return typeof value === 'string' && CAPABILITY_SET.has(value);
+}
+
 /**
  * Does `role` grant `capability`? Delegates to the scoped @intra/rbac predicate
  * by projecting the single warehouse role onto a `UserRoles` shape — so there is

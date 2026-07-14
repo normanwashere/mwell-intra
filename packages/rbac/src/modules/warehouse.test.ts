@@ -89,6 +89,15 @@ describe('warehouse W1 capabilities', () => {
     );
   });
 
+  it('keeps legacy aliases capability-equivalent to the canonical bundles', () => {
+    expect(warehouseModule.roles.operations.capabilities).toEqual(
+      warehouseModule.roles.warehouse_operator.capabilities,
+    );
+    expect(warehouseModule.roles.logistics_supervisor.capabilities).toEqual(
+      warehouseModule.roles.warehouse_supervisor.capabilities,
+    );
+  });
+
   it('adds the Warehouse Administrator role', () => {
     expect(Object.keys(warehouseModule.roles)).toContain('warehouse_admin');
     expect(warehouseModule.roles.warehouse_admin.capabilities).toEqual(

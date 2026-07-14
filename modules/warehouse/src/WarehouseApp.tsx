@@ -15,8 +15,9 @@
 import { useEffect, useLayoutEffect, useState } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 import { SignInPrompt, SkeletonList, SkeletonStats } from '@intra/ui';
-import { isWarehouseRole } from '@intra/data-kit';
+import { isWarehouseRole, type Role } from '@intra/data-kit';
 import { useSession } from '@/auth/session';
+import { isWarehouseCapability } from '@/auth/roles';
 import { ThemeProvider } from '@/app/theme';
 import { WarehouseProvider } from '@/app/store';
 import { App } from '@/app/App';
@@ -70,9 +71,23 @@ export interface WarehouseAppProps {
  */
 export function WarehouseApp({ basename = '/warehouse' }: WarehouseAppProps) {
   const basenameReady = useNormalizeBasenamePath(basename);
-  const { profile, userRoles, mode, supabaseClient, loading } = useSession();
-  const warehouseRoles = (userRoles.warehouse ?? []).filter(isWarehouseRole);
-  const initialRole = warehouseRoles[0];
+  const {
+    profile,
+    userRoles,
+    userCapabilities,
+    mode,
+    supabaseClient,
+    loading,
+  } = useSession();
+  const claimedRoleCodes = (userRoles.warehouse ?? []) as readonly string[];
+  const warehouseRoles = claimedRoleCodes.filter(isWarehouseRole);
+  const liveCapabilities = (userCapabilities?.warehouse ?? []).filter(
+    isWarehouseCapability,
+  );
+  const hasLiveAccess = mode === 'supabase' && liveCapabilities.length > 0;
+  const initialRole: Role | undefined =
+    warehouseRoles[0] ?? (hasLiveAccess ? 'warehouse_operator' : undefined);
+  const roleCode = claimedRoleCodes[0] ?? initialRole;
 
   // Session still restoring → paint a lightweight skeleton instead of a
   // blank frame (or, worse, a flash of the access-denied notice).
@@ -91,7 +106,7 @@ export function WarehouseApp({ basename = '/warehouse' }: WarehouseAppProps) {
 
   // No warehouse role on the session → the module isn't part of this user's
   // access. Render a friendly notice rather than a blank screen.
-  if (!initialRole) {
+  if (!initialRole || (mode === 'supabase' && !hasLiveAccess)) {
     return (
       <main
         role="alert"
@@ -125,6 +140,8 @@ export function WarehouseApp({ basename = '/warehouse' }: WarehouseAppProps) {
         <WarehouseProvider
           key={profile?.id ?? initialRole}
           initialRole={initialRole}
+          roleCode={mode === 'supabase' ? roleCode : undefined}
+          capabilities={mode === 'supabase' ? liveCapabilities : undefined}
           actor={profile?.email}
           identityId={profile?.id}
           source={mode}

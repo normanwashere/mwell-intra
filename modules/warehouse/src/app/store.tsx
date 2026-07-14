@@ -88,14 +88,25 @@ import type {
   StockChangeRequest,
   SubmitCycleCountInput,
 } from '@intra/data-kit';
+import {
+  can as roleCan,
+  ROLES,
+  type Capability,
+} from '@/auth/roles';
 
 interface WarehouseContextValue {
   data: WarehouseData | null;
   loading: boolean;
   error: string | null;
   source: DataSource;
+  /** Presentation metadata only; never authoritative in Supabase mode. */
   role: Role;
+  roleCode: string;
+  roleLabel: string;
+  roleDescription: string;
   setRole: (role: Role) => void;
+  capabilities: readonly Capability[];
+  can: (capability: Capability) => boolean;
   actor: string;
   identityId: string;
   refresh: () => Promise<void>;
@@ -190,6 +201,8 @@ export function WarehouseProvider({
   source: injectedSource,
   supabaseClient,
   initialRole = 'logistics_supervisor',
+  roleCode: providedRoleCode,
+  capabilities: providedCapabilities,
   actor: providedActor,
   identityId: providedIdentityId,
 }: {
@@ -198,6 +211,10 @@ export function WarehouseProvider({
   source?: DataSource;
   supabaseClient?: SupabaseClient<Record<string, unknown>, string>;
   initialRole?: Role;
+  /** Runtime bundle code used only for display and audit context. */
+  roleCode?: string;
+  /** Fresh core.my_capabilities() projection for live authorization. */
+  capabilities?: readonly Capability[];
   /** Overrides the default `${role}@mwell` actor (e.g. the signed-in user's email). */
   actor?: string;
   /** Auth profile id used for separation-of-duties comparisons. */
@@ -230,6 +247,35 @@ export function WarehouseProvider({
     [providedActor, role],
   );
   const identityId = providedIdentityId ?? actor;
+  const roleCode = providedRoleCode ?? role;
+  const roleProfile = ROLES[role];
+  const roleLabel =
+    roleCode === role
+      ? roleProfile.label
+      : roleCode
+          .split('_')
+          .filter(Boolean)
+          .map((part) => part[0]?.toUpperCase() + part.slice(1))
+          .join(' ');
+  const roleDescription =
+    roleCode === role
+      ? roleProfile.description
+      : 'Runtime Warehouse access bundle managed by an administrator.';
+  const capabilities = useMemo<readonly Capability[]>(
+    () =>
+      source === 'supabase'
+        ? Array.from(new Set(providedCapabilities ?? []))
+        : [...roleProfile.capabilities],
+    [providedCapabilities, roleProfile.capabilities, source],
+  );
+  const capabilitySet = useMemo(() => new Set(capabilities), [capabilities]);
+  const can = useCallback(
+    (capability: Capability) =>
+      source === 'supabase'
+        ? capabilitySet.has(capability)
+        : roleCan(role, capability),
+    [capabilitySet, role, source],
+  );
 
   const refreshPending = useCallback(async () => {
     setPendingSync(await outboxPendingCount());
@@ -315,6 +361,23 @@ export function WarehouseProvider({
     [source, refresh, refreshPending, toast],
   );
 
+  const runAuthorizedAction = useCallback(
+    (
+      required: Capability,
+      method: QueueableMethod | 'other',
+      fn: () => Promise<unknown>,
+      overlay?: WarehousePatch,
+      queueInput?: Record<string, unknown>,
+    ): Promise<boolean> => {
+      if (source === 'supabase' && !can(required)) {
+        toast.error(`Not authorized: warehouse.${required}`);
+        return Promise.resolve(false);
+      }
+      return runAction(method, fn, overlay, queueInput);
+    },
+    [can, runAction, source, toast],
+  );
+
   const resetDemo = useCallback(() => {
     try {
       window.localStorage.removeItem(DATA_STORAGE_KEY);
@@ -330,7 +393,12 @@ export function WarehouseProvider({
     error,
     source,
     role,
+    roleCode,
+    roleLabel,
+    roleDescription,
     setRole,
+    capabilities,
+    can,
     actor,
     identityId,
     refresh,
@@ -339,32 +407,43 @@ export function WarehouseProvider({
     discardConflict,
     syncNow,
     receiveStock: (input) =>
-      runAction(
+      runAuthorizedAction(
+        'receive_stock',
         'receiveStock',
         () => repo.receiveStock({ ...input, actor }),
         receiveOverlay(input, actor),
         input as Record<string, unknown>,
       ),
     reserve: (input) =>
-      runAction('other', () => repo.reserve({ ...input, actor })),
+      runAuthorizedAction(
+        'reserve_allocate',
+        'other',
+        () => repo.reserve({ ...input, actor }),
+      ),
     issue: (input) =>
-      runAction(
+      runAuthorizedAction(
+        'issue_items',
         'issue',
         () => repo.issue({ ...input, actor }),
         issueOverlay(input, data),
         input as Record<string, unknown>,
       ),
     recordReturn: (input) =>
-      runAction(
+      runAuthorizedAction(
+        'manage_returns',
         'recordReturn',
         () => repo.recordReturn({ ...input, actor }),
         returnOverlay(input, actor, data),
         input as Record<string, unknown>,
       ),
     recordCycleCount: (input) =>
-      runAction('other', () => repo.recordCycleCount({ ...input, actor })),
+      runAuthorizedAction(
+        'cycle_count',
+        'other',
+        () => repo.recordCycleCount({ ...input, actor }),
+      ),
     submitNewCycleCount: (input) =>
-      runAction('other', async () => {
+      runAuthorizedAction('cycle_count', 'other', async () => {
         const count = await repo.recordCycleCount({
           locationId: input.locationId,
           binId: input.binId,
@@ -380,47 +459,88 @@ export function WarehouseProvider({
         });
       }),
     transfer: (input) =>
-      runAction(
+      runAuthorizedAction(
+        'transfer_stock',
         'transfer',
         () => repo.transfer({ ...input, actor }),
         transferOverlay(input, actor),
         input as Record<string, unknown>,
       ),
     createPurchaseOrder: (input) =>
-      runAction('other', () => repo.createPurchaseOrder({ ...input, actor })),
+      runAuthorizedAction('view_procurement', 'other', () =>
+        repo.createPurchaseOrder({ ...input, actor }),
+      ),
     receiveAgainstPO: (input) =>
-      runAction('other', () => repo.receiveAgainstPO({ ...input, actor })),
+      runAuthorizedAction('receive_stock', 'other', () =>
+        repo.receiveAgainstPO({ ...input, actor }),
+      ),
     cancelPurchaseOrder: (input) =>
-      runAction('other', () => repo.cancelPurchaseOrder({ ...input, actor })),
-    createEvent: (input) => runAction('other', () => repo.createEvent(input)),
+      runAuthorizedAction('view_procurement', 'other', () =>
+        repo.cancelPurchaseOrder({ ...input, actor }),
+      ),
+    createEvent: (input) =>
+      runAuthorizedAction('reserve_allocate', 'other', () =>
+        repo.createEvent(input),
+      ),
     cancelAllocation: (input) =>
-      runAction('other', () => repo.cancelAllocation({ ...input, actor })),
-    createSupplier: (input) => runAction('other', () => repo.createSupplier(input)),
-    updateSupplier: (input) => runAction('other', () => repo.updateSupplier(input)),
-    createLocation: (input) => runAction('other', () => repo.createLocation(input)),
-    updateLocation: (input) => runAction('other', () => repo.updateLocation(input)),
-    deleteLocation: (input) => runAction('other', () => repo.deleteLocation(input)),
+      runAuthorizedAction('reserve_allocate', 'other', () =>
+        repo.cancelAllocation({ ...input, actor }),
+      ),
+    createSupplier: (input) =>
+      runAuthorizedAction('view_procurement', 'other', () =>
+        repo.createSupplier(input),
+      ),
+    updateSupplier: (input) =>
+      runAuthorizedAction('view_procurement', 'other', () =>
+        repo.updateSupplier(input),
+      ),
+    createLocation: (input) =>
+      runAuthorizedAction('manage_locations', 'other', () =>
+        repo.createLocation(input),
+      ),
+    updateLocation: (input) =>
+      runAuthorizedAction('manage_locations', 'other', () =>
+        repo.updateLocation(input),
+      ),
+    deleteLocation: (input) =>
+      runAuthorizedAction('manage_locations', 'other', () =>
+        repo.deleteLocation(input),
+      ),
     createStorageArea: (input) =>
-      runAction('other', () => repo.createStorageArea(input)),
+      runAuthorizedAction('manage_locations', 'other', () =>
+        repo.createStorageArea(input),
+      ),
     updateStorageArea: (input) =>
-      runAction('other', () => repo.updateStorageArea(input)),
+      runAuthorizedAction('manage_locations', 'other', () =>
+        repo.updateStorageArea(input),
+      ),
     deleteStorageArea: (input) =>
-      runAction('other', () => repo.deleteStorageArea(input)),
+      runAuthorizedAction('manage_locations', 'other', () =>
+        repo.deleteStorageArea(input),
+      ),
     relocate: (input) =>
-      runAction(
+      runAuthorizedAction(
+        'transfer_stock',
         'relocate',
         () => repo.relocate({ ...input, actor }),
         relocateOverlay(input, actor),
         input as Record<string, unknown>,
       ),
     setProductPrice: (input) =>
-      runAction('other', () => repo.setProductPrice({ ...input, actor })),
+      runAuthorizedAction('set_pricing', 'other', () =>
+        repo.setProductPrice({ ...input, actor }),
+      ),
     createProduct: (input) =>
-      runAction('other', () => repo.createProduct({ ...input, actor })),
+      runAuthorizedAction('manage_products', 'other', () =>
+        repo.createProduct({ ...input, actor }),
+      ),
     updateProduct: (input) =>
-      runAction('other', () => repo.updateProduct({ ...input, actor })),
+      runAuthorizedAction('manage_products', 'other', () =>
+        repo.updateProduct({ ...input, actor }),
+      ),
     adjustStock: (input) =>
-      runAction(
+      runAuthorizedAction(
+        'approve_stock_adjustment',
         'adjustStock',
         () => repo.adjustStock({ ...input, actor }),
         adjustOverlay(input, actor),
@@ -433,21 +553,39 @@ export function WarehouseProvider({
     loadStockChangeRequests: (query) => repo.listStockChangeRequests(query),
     loadWarehouseTasks: (query) => repo.listWarehouseTasks(query),
     loadInventoryPositions: (query) => repo.listInventoryPositions(query),
-    inspectQuality: (input) => runAction('other', () => repo.inspectQuality(input)),
-    releaseHold: (input) => runAction('other', () => repo.releaseHold(input)),
+    inspectQuality: (input) =>
+      runAuthorizedAction('inspect_quality', 'other', () =>
+        repo.inspectQuality(input),
+      ),
+    releaseHold: (input) =>
+      runAuthorizedAction('release_quality_hold', 'other', () =>
+        repo.releaseHold(input),
+      ),
     createVendorReturn: (input) =>
-      runAction('other', () => repo.createVendorReturn(input)),
+      runAuthorizedAction('manage_returns', 'other', () =>
+        repo.createVendorReturn(input),
+      ),
     updateOperationRoute: (input) =>
-      runAction('other', () => repo.updateOperationRoute(input)),
+      runAuthorizedAction('manage_operation_routes', 'other', () =>
+        repo.updateOperationRoute(input),
+      ),
     submitCycleCount: (input) =>
-      runAction('other', () => repo.submitCycleCount(input)),
+      runAuthorizedAction('cycle_count', 'other', () =>
+        repo.submitCycleCount(input),
+      ),
     decideStockChange: (input) =>
-      runAction('other', () => repo.decideStockChange(input)),
+      runAuthorizedAction('approve_stock_adjustment', 'other', () =>
+        repo.decideStockChange(input),
+      ),
     resolveException: (input) =>
-      runAction('other', () => repo.resolveException(input)),
+      runAuthorizedAction('resolve_exceptions', 'other', () =>
+        repo.resolveException(input),
+      ),
     loadReceivableProcurementPOs: () => repo.getReceivableProcurementPOs(),
     receiveProcurementPO: (input) =>
-      runAction('other', () => repo.receiveProcurementPO(input)),
+      runAuthorizedAction('receive_stock', 'other', () =>
+        repo.receiveProcurementPO(input),
+      ),
     resetDemo,
   };
 
