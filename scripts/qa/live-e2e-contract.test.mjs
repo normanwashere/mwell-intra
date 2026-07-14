@@ -125,7 +125,7 @@ test("the live harness verifies deployed identity before browser launch", async 
     2,
     "all browser contexts install exact-origin bypass routing",
   );
-  assert.match(source, /await request\.allHeaders\(\)/);
+  assert.match(source, /await routeWithScopedProtectionBypass\(\{/);
   assert.doesNotMatch(
     source,
     /console\.(?:log|warn|error)\([^)]*VERCEL_AUTOMATION_BYPASS_SECRET/,
@@ -168,5 +168,149 @@ test("Vercel protection bypass headers are scoped to the exact app origin", asyn
       `${new URL(requestUrl).origin} must not receive the bypass`,
     );
     assert.equal(headers.accept, "application/json");
+  }
+});
+
+function fakeRoute({ url, headers, method = "GET", postData = null, response }) {
+  const calls = { continue: [], fetch: [], fulfill: [] };
+  return {
+    calls,
+    route: {
+      request: () => ({
+        allHeaders: async () => ({ ...headers }),
+        method: () => method,
+        postDataBuffer: () => postData,
+        url: () => url,
+      }),
+      continue: async (options) => calls.continue.push(options),
+      fetch: async (options) => {
+        calls.fetch.push(options);
+        return response;
+      },
+      fulfill: async (options) => calls.fulfill.push(options),
+    },
+  };
+}
+
+test("app-origin interception preserves request and redirect response semantics", async () => {
+  const { routeWithScopedProtectionBypass } = await import(
+    "../lib/target-environment.mjs"
+  );
+  const postData = Buffer.from("important-body");
+  const redirectResponse = {
+    status: 307,
+    headers: { location: "https://uat.example.com/next" },
+    body: "redirect-body",
+  };
+  const intercepted = fakeRoute({
+    url: "https://uat.example.com/start",
+    headers: {
+      authorization: "Bearer session-token",
+      cookie: "session=abc",
+    },
+    method: "POST",
+    postData,
+    response: redirectResponse,
+  });
+
+  await routeWithScopedProtectionBypass({
+    route: intercepted.route,
+    appOrigin: "https://uat.example.com",
+    protectionBypass: "bypass-secret",
+  });
+
+  assert.equal(intercepted.calls.continue.length, 0);
+  assert.equal(intercepted.calls.fetch.length, 1);
+  assert.deepEqual(intercepted.calls.fetch[0], {
+    headers: {
+      authorization: "Bearer session-token",
+      cookie: "session=abc",
+      "x-vercel-protection-bypass": "bypass-secret",
+    },
+    maxRedirects: 0,
+    method: "POST",
+    postData,
+  });
+  assert.deepEqual(intercepted.calls.fulfill, [
+    { response: redirectResponse },
+  ]);
+});
+
+test("redirect hops to non-app origins never receive the bypass", async () => {
+  const { routeWithScopedProtectionBypass } = await import(
+    "../lib/target-environment.mjs"
+  );
+  for (const redirectUrl of [
+    "https://uatref.supabase.co/rest/v1/items",
+    "https://analytics.example.net/collect",
+    "https://assets.uat.example.com/app.js",
+  ]) {
+    const firstHop = fakeRoute({
+      url: "https://uat.example.com/start",
+      headers: { cookie: "session=abc" },
+      response: { status: 302, headers: { location: redirectUrl } },
+    });
+    await routeWithScopedProtectionBypass({
+      route: firstHop.route,
+      appOrigin: "https://uat.example.com",
+      protectionBypass: "bypass-secret",
+    });
+    assert.equal(firstHop.calls.fetch[0].maxRedirects, 0);
+
+    const redirectedHop = fakeRoute({
+      url: redirectUrl,
+      headers: {
+        accept: "application/json",
+        "x-vercel-protection-bypass": "bypass-secret",
+      },
+    });
+    await routeWithScopedProtectionBypass({
+      route: redirectedHop.route,
+      appOrigin: "https://uat.example.com",
+      protectionBypass: "bypass-secret",
+    });
+
+    assert.equal(redirectedHop.calls.fetch.length, 0);
+    assert.equal(redirectedHop.calls.continue.length, 1);
+    assert.equal(
+      redirectedHop.calls.continue[0].headers[
+        "x-vercel-protection-bypass"
+      ],
+      undefined,
+      `${new URL(redirectUrl).origin} must not receive the bypass`,
+    );
+    assert.equal(
+      redirectedHop.calls.continue[0].headers.accept,
+      "application/json",
+    );
+  }
+});
+
+test("same-origin redirect hops receive a freshly scoped bypass", async () => {
+  const { routeWithScopedProtectionBypass } = await import(
+    "../lib/target-environment.mjs"
+  );
+  for (const url of [
+    "https://uat.example.com/start",
+    "https://uat.example.com/next",
+  ]) {
+    const hop = fakeRoute({
+      url,
+      headers: { cookie: "session=abc" },
+      response: { status: url.endsWith("/start") ? 302 : 200 },
+    });
+    await routeWithScopedProtectionBypass({
+      route: hop.route,
+      appOrigin: "https://uat.example.com",
+      protectionBypass: "bypass-secret",
+    });
+
+    assert.equal(hop.calls.fetch.length, 1);
+    assert.equal(hop.calls.fetch[0].maxRedirects, 0);
+    assert.equal(
+      hop.calls.fetch[0].headers["x-vercel-protection-bypass"],
+      "bypass-secret",
+    );
+    assert.equal(hop.calls.fulfill.length, 1);
   }
 });

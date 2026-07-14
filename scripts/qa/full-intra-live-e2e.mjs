@@ -4,7 +4,7 @@ import path from "node:path";
 import {
   assertApprovedMutationTarget,
   projectRefFromSupabaseUrl,
-  scopedProtectionHeaders,
+  routeWithScopedProtectionBypass,
   verifyDeployedTargetIdentity,
 } from "../lib/target-environment.mjs";
 import {
@@ -74,14 +74,10 @@ const users = CURRENT_LIVE_ROLES;
 async function installScopedProtectionBypass(context) {
   if (!protectionBypass) return;
   await context.route("**/*", async (route) => {
-    const request = route.request();
-    await route.continue({
-      headers: scopedProtectionHeaders({
-        requestUrl: request.url(),
-        appOrigin,
-        requestHeaders: await request.allHeaders(),
-        protectionBypass,
-      }),
+    await routeWithScopedProtectionBypass({
+      route,
+      appOrigin,
+      protectionBypass,
     });
   });
 }

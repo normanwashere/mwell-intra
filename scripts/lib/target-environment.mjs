@@ -37,6 +37,40 @@ export function scopedProtectionHeaders({
   return headers;
 }
 
+export async function routeWithScopedProtectionBypass({
+  route,
+  appOrigin,
+  protectionBypass,
+}) {
+  const request = route.request();
+  const requestUrl = request.url();
+  const headers = scopedProtectionHeaders({
+    requestUrl,
+    appOrigin,
+    requestHeaders: await request.allHeaders(),
+    protectionBypass,
+  });
+
+  let isAppOrigin = false;
+  try {
+    isAppOrigin = new URL(requestUrl).origin === appOrigin;
+  } catch {
+    // Malformed or non-network request URLs are handled without the bypass.
+  }
+  if (!isAppOrigin) {
+    await route.continue({ headers });
+    return;
+  }
+
+  const response = await route.fetch({
+    headers,
+    maxRedirects: 0,
+    method: request.method(),
+    postData: request.postDataBuffer() ?? undefined,
+  });
+  await route.fulfill({ response });
+}
+
 export function assertApprovedMutationTarget({
   appEnv,
   supabaseUrl,
