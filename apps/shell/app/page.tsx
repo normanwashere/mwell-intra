@@ -62,7 +62,7 @@ export default function DashboardPage() {
       <div className="space-y-6">
         <ModuleHero
           eyebrow="Mwell Intra"
-          title="One internal OS for Warehouse, Procurement & Legal"
+          title="One internal OS for every team"
           description="Sign in to see the modules and tools available to your account."
           icon="grid"
           action={

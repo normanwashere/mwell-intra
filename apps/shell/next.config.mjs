@@ -36,10 +36,14 @@ const nextConfig = {
     '@intra/auth',
     '@intra/rbac',
     '@intra/data-kit',
+    '@intra/events',
+    '@intra/finance',
+    '@intra/insights',
     '@intra/core-data',
     '@intra/warehouse',
     '@intra/procurement',
     '@intra/legal',
+    '@intra/work',
   ],
   turbopack: {
     root: path.join(__dirname, '../..'),
@@ -71,6 +75,14 @@ const nextConfig = {
           },
         ],
       },
+    ];
+  },
+  async redirects() {
+    return [
+      { source: '/warehouse/events', destination: '/events', permanent: false },
+      { source: '/warehouse/events/:id', destination: '/events/:id', permanent: false },
+      { source: '/warehouse/data', destination: '/insights/warehouse', permanent: false },
+      { source: '/warehouse/reports', destination: '/insights/warehouse', permanent: false },
     ];
   },
 };

@@ -41,11 +41,17 @@ function formatDate(value: string) {
     .format(new Date(`${value}T00:00:00`));
 }
 
-export function EventsApp() {
+export function EventsApp({
+  eventId,
+  openCreate = false,
+}: {
+  eventId?: string;
+  openCreate?: boolean;
+}) {
   const { profile, userRoles, loading: sessionLoading } = useSession();
   const { data, loading, error, refresh, createEvent } = useEventsData();
   const toast = useToast();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(openCreate);
   const [draft, setDraft] = useState<EventDraft>({ name: '', type: 'corporate', startDate: '' });
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -69,6 +75,49 @@ export function EventsApp() {
           <p className="text-sm text-muted">Ask an administrator for an Events requester, coordinator, viewer, or administrator role.</p>
           <a href="/" className="btn-primary">Back to dashboard</a>
         </div>
+      </div>
+    );
+  }
+
+  const selectedEvent = eventId
+    ? data.events.find((event) => event.id === eventId)
+    : undefined;
+
+  if (eventId) {
+    if (!selectedEvent) {
+      return (
+        <EmptyState
+          icon="calendar"
+          title="Event not found"
+          message="This event may have been removed or is outside your permitted data scope."
+          action={<a href="/events" className="btn-primary">Back to events</a>}
+        />
+      );
+    }
+    return (
+      <div className="space-y-6">
+        <a href="/events" className="btn-ghost w-fit"><Icon name="chevron" className="h-4 w-4 rotate-180" /> Events</a>
+        <ModuleHero
+          eyebrow="Event lifecycle"
+          title={selectedEvent.name}
+          description={`${formatDate(selectedEvent.startDate)}${selectedEvent.endDate ? ` to ${formatDate(selectedEvent.endDate)}` : ''}. Event intent is managed here; Warehouse remains accountable for physical stock.`}
+          icon="calendar"
+          action={<HeroChipButton href={`/warehouse/events/${encodeURIComponent(selectedEvent.id)}`} icon="box">Open Warehouse fulfillment</HeroChipButton>}
+          accessory={<Badge tone={LIFECYCLE_TONE[selectedEvent.lifecycle]}>{selectedEvent.lifecycle}</Badge>}
+        />
+        <div className="grid grid-cols-3 gap-3">
+          <StatCard label="Reserved" value={selectedEvent.reservedUnits} icon="tag" />
+          <StatCard label="Issued" value={selectedEvent.issuedUnits} icon="truck" />
+          <StatCard label="Returned" value={selectedEvent.returnedUnits} icon="rotate" />
+        </div>
+        <Card className="space-y-4">
+          <div>
+            <p className="text-xs font-semibold uppercase text-faint">Next operational step</p>
+            <h2 className="mt-1 font-display text-lg font-bold text-ink">Complete fulfillment at the source</h2>
+            <p className="mt-1 text-sm text-muted">Reserve products, select bins, issue serialized units, and record returns inside Warehouse. The resulting totals flow back into this event.</p>
+          </div>
+          <a href={`/warehouse/events/${encodeURIComponent(selectedEvent.id)}`} className="btn-primary w-full sm:w-fit">Continue in Warehouse <Icon name="arrowRight" className="h-4 w-4" /></a>
+        </Card>
       </div>
     );
   }

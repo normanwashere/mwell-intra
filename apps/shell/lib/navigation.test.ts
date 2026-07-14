@@ -10,10 +10,22 @@ describe("dashboard areas", () => {
   it("shows every Warehouse Administrator area counted by the dashboard", () => {
     expect(
       dashboardAreas(
-        { core: ["staff"], warehouse: ["warehouse_admin"] },
+        {
+          core: ["staff"],
+          warehouse: ["warehouse_admin"],
+          events: ["admin"],
+          insights: ["admin"],
+        },
         "employee",
       ).map((area) => area.label),
-    ).toEqual(["Warehouse", "Finance", "Knowledge Base"]);
+    ).toEqual([
+      "My Work",
+      "Events",
+      "Warehouse",
+      "Insights",
+      "Finance",
+      "Knowledge Base",
+    ]);
   });
 
   it("includes the editable DOA area for authorized administrators", () => {
@@ -21,7 +33,7 @@ describe("dashboard areas", () => {
       dashboardAreas({ core: ["platform_admin", "staff"] }, "employee").map(
         (area) => area.label,
       ),
-    ).toEqual(["Administration", "Delegation of Authority", "Knowledge Base"]);
+    ).toEqual(["My Work", "Administration", "Delegation of Authority", "Knowledge Base"]);
   });
 
   it.each<[Partial<UserRoles>, string]>([
@@ -72,5 +84,8 @@ describe("mobile contextual actions", () => {
     expect(
       mobileCenterAction("/procurement", { procurement: ["requester"] })?.label,
     ).toBe("New request");
+    expect(mobileCenterAction("/events", { events: ["requester"] })?.label).toBe(
+      "New event",
+    );
   });
 });

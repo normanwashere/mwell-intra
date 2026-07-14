@@ -20,6 +20,14 @@ export type ShellNavItem = Omit<ModuleNav, "module">;
 /** Internal, employee-facing module routes (in nav order). */
 export const MODULE_NAV: readonly ModuleNav[] = [
   {
+    module: "events",
+    href: "/events",
+    label: "Events",
+    description: "Activation planning, readiness, and fulfillment handoffs.",
+    icon: "calendar",
+    tone: "cyan",
+  },
+  {
     module: "warehouse",
     href: "/warehouse",
     label: "Warehouse",
@@ -43,7 +51,23 @@ export const MODULE_NAV: readonly ModuleNav[] = [
     icon: "clipboard",
     tone: "amber",
   },
+  {
+    module: "insights",
+    href: "/insights",
+    label: "Insights",
+    description: "Role-scoped operational and executive indicators.",
+    icon: "trend",
+    tone: "slate",
+  },
 ];
+
+export const WORK_NAV = {
+  href: "/work",
+  label: "My Work",
+  description: "Assignments and approvals across every accessible area.",
+  icon: "check",
+  tone: "brand",
+} as const satisfies ShellNavItem;
 
 /** External vendor-tier route (visibility keys off `profile.kind === 'vendor'`). */
 export const VENDOR_NAV = {
@@ -124,7 +148,10 @@ export function dashboardAreas(
   userRoles: Partial<UserRoles>,
   profileKind: "employee" | "vendor",
 ): readonly ShellNavItem[] {
-  const areas: ShellNavItem[] = [...accessibleModules(userRoles)];
+  const areas: ShellNavItem[] = [];
+
+  if (profileKind === "employee") areas.push(WORK_NAV);
+  areas.push(...accessibleModules(userRoles));
 
   if (profileKind === "vendor") areas.push(VENDOR_NAV);
   if (canAccessFinance(userRoles)) areas.push(FINANCE_NAV);
@@ -168,6 +195,8 @@ export function mobileCenterAction(
       label: "Invite vendor",
       icon: "plus",
     };
+  if (pathname.startsWith("/events") && can(userRoles, "events", "create_event"))
+    return { href: "/events?create=1", label: "New event", icon: "plus" };
   if (pathname.startsWith("/admin") && can(userRoles, "core", "manage_rbac"))
     return { href: "/admin/users", label: "Users", icon: "list" };
   return null;
