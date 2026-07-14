@@ -6,7 +6,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Icon, type IconName } from "@intra/ui";
 import { useSession } from "@intra/auth";
-import { can } from "@intra/rbac";
 import {
   ADMIN_NAV,
   FINANCE_NAV,
@@ -14,6 +13,8 @@ import {
   VENDOR_NAV,
   accessibleModules,
   canAccessFinance,
+  hasCapability,
+  hasModuleAccess,
 } from "@shell/lib/navigation";
 import { cx } from "@shell/lib/cx";
 
@@ -31,10 +32,11 @@ export function CommandPalette() {
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const router = useRouter();
-  const { profile, userRoles, loading } = useSession();
+  const { profile, userRoles, userCapabilities, mode, loading } = useSession();
 
   const items = useMemo<CommandItem[]>(() => {
     if (loading) return [];
+    const access = { mode, userRoles, userCapabilities };
     const out: CommandItem[] = [
       { id: "home", label: "Home", icon: "grid", href: "/" },
     ];
@@ -59,7 +61,7 @@ export function CommandPalette() {
       keywords: "help manual documentation workflow how to troubleshooting",
     });
 
-    for (const m of accessibleModules(userRoles)) {
+    for (const m of accessibleModules(access)) {
       out.push({
         id: `mod-${m.module}`,
         label: m.label,
@@ -70,49 +72,51 @@ export function CommandPalette() {
       });
     }
 
-    if (userRoles.procurement?.length) {
-      out.push(
-        {
-          id: "proc-new",
-          label: "New procurement request",
-          icon: "plus",
-          href: "/procurement/requests/new",
-          keywords: "create pr",
-        },
-        {
-          id: "proc-inbox",
-          label: "Approval inbox",
-          icon: "clipboard",
-          href: "/procurement/approvals",
-          keywords: "approve",
-        },
-        {
-          id: "proc-pos",
-          label: "Purchase orders",
-          icon: "cart",
-          href: "/procurement/purchase-orders",
-        },
-      );
+    if (hasCapability(access, "procurement", "create_request")) {
+      out.push({
+        id: "proc-new",
+        label: "New procurement request",
+        icon: "plus",
+        href: "/procurement/requests/new",
+        keywords: "create pr",
+      });
+    }
+    if (hasCapability(access, "procurement", "approve_request")) {
+      out.push({
+        id: "proc-inbox",
+        label: "Approval inbox",
+        icon: "clipboard",
+        href: "/procurement/approvals",
+        keywords: "approve",
+      });
+    }
+    if (hasModuleAccess(access, "procurement")) {
+      out.push({
+        id: "proc-pos",
+        label: "Purchase orders",
+        icon: "cart",
+        href: "/procurement/purchase-orders",
+      });
     }
 
-    if (userRoles.legal?.length) {
-      out.push(
-        {
-          id: "legal-cases",
-          label: "Accreditation cases",
-          icon: "clipboard",
-          href: "/legal/cases",
-        },
-        {
-          id: "legal-invite",
-          label: "Invite vendor",
-          icon: "plus",
-          href: "/legal/invites/new",
-        },
-      );
+    if (hasModuleAccess(access, "legal")) {
+      out.push({
+        id: "legal-cases",
+        label: "Accreditation cases",
+        icon: "clipboard",
+        href: "/legal/cases",
+      });
+    }
+    if (hasCapability(access, "legal", "admin")) {
+      out.push({
+        id: "legal-invite",
+        label: "Invite vendor",
+        icon: "plus",
+        href: "/legal/invites/new",
+      });
     }
 
-    if (userRoles.warehouse?.length) {
+    if (hasModuleAccess(access, "warehouse")) {
       out.push({
         id: "wh-dash",
         label: "Warehouse dashboard",
@@ -121,7 +125,7 @@ export function CommandPalette() {
       });
     }
 
-    if (canAccessFinance(userRoles)) {
+    if (canAccessFinance(access)) {
       out.push({
         id: "finance",
         label: FINANCE_NAV.label,
@@ -142,7 +146,7 @@ export function CommandPalette() {
       });
     }
 
-    if (can(userRoles, "core", "manage_rbac")) {
+    if (hasCapability(access, "core", "manage_rbac")) {
       out.push({
         id: "admin",
         label: ADMIN_NAV.label,
@@ -153,7 +157,7 @@ export function CommandPalette() {
     }
 
     return out;
-  }, [loading, profile, userRoles]);
+  }, [loading, mode, profile, userCapabilities, userRoles]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

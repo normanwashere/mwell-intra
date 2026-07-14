@@ -10,7 +10,7 @@ import {
   can as rbacCan,
   warehouseModule,
   type WarehouseCapability,
-  type WarehouseRole,
+  type WarehouseRegistryRole,
 } from '@intra/rbac';
 import type { Role } from '@/domain/types';
 
@@ -24,21 +24,24 @@ export interface RoleProfile {
   capabilities: Capability[];
 }
 
-type RbacRoleDef = (typeof warehouseModule.roles)[WarehouseRole];
+type RbacRoleDef = (typeof warehouseModule.roles)[WarehouseRegistryRole];
 
 /** Role metadata projected from the canonical @intra/rbac matrix. */
 export const ROLES: Record<Role, RoleProfile> = Object.fromEntries(
-  (Object.entries(warehouseModule.roles) as [WarehouseRole, RbacRoleDef][]).map(
-    ([id, def]) => [
+  (
+    Object.entries(warehouseModule.roles) as [
+      WarehouseRegistryRole,
+      RbacRoleDef,
+    ][]
+  ).map(([id, def]) => [
+    id,
+    {
       id,
-      {
-        id,
-        label: def.label,
-        description: def.description,
-        capabilities: [...def.capabilities],
-      } satisfies RoleProfile,
-    ],
-  ),
+      label: def.label,
+      description: def.description,
+      capabilities: [...def.capabilities],
+    } satisfies RoleProfile,
+  ]),
 ) as Record<Role, RoleProfile>;
 
 export const ROLE_LIST: RoleProfile[] = Object.values(ROLES);
@@ -49,5 +52,5 @@ export const ROLE_LIST: RoleProfile[] = Object.values(ROLES);
  * exactly ONE authorization source of truth (spec §6.6).
  */
 export function can(role: Role, capability: Capability): boolean {
-  return rbacCan({ warehouse: [role as WarehouseRole] }, 'warehouse', capability);
+  return rbacCan({ warehouse: [role] }, 'warehouse', capability);
 }

@@ -76,6 +76,42 @@ const ROLE_OPERATING_DETAILS: Record<string, RoleOperatingDetails> = {
       ),
     ],
   },
+  warehouse_operator: {
+    dailyTasks: [
+      "Complete assigned receiving, inspection, putaway, reservation, picking, issue, transfer, return, and count work.",
+      "Record quantities, traceability, destinations, and exception evidence, then stop for a Warehouse Supervisor when a controlled decision is required.",
+    ],
+    responsibilityStages: [
+      stage(
+        "Verify routine floor work",
+        "Match the item, source, quantity, traceability, destination, and assigned task before handling stock.",
+        "The routine movement or count is ready for attributable execution.",
+      ),
+      stage(
+        "Execute or escalate",
+        "Record the physical result once and send holds, variances, exceptions, or configuration needs to the Warehouse Supervisor.",
+        "Routine work is evidenced and every controlled outcome has a separate decision owner.",
+      ),
+    ],
+  },
+  warehouse_supervisor: {
+    dailyTasks: [
+      "Review operator evidence for quality holds, count variances, stock adjustments, and warehouse exceptions.",
+      "Maintain products, locations, operation routes, and governed imports with a second named warehouse person for controlled changes.",
+    ],
+    responsibilityStages: [
+      stage(
+        "Review controlled evidence",
+        "Confirm the source record, operator evidence, physical state, and separation of duties before deciding an exception.",
+        "A supported quality, adjustment, or exception decision is ready for an independent outcome.",
+      ),
+      stage(
+        "Decide and verify",
+        "Release or retain holds, approve or reject adjustments, resolve exceptions, and verify configuration or import results.",
+        "The controlled outcome and its before-and-after audit history remain attributable.",
+      ),
+    ],
+  },
   warehouse_logistics_supervisor: {
     dailyTasks: [
       "Review inbound receipts, quality holds, count variances, and warehouse exceptions.",
@@ -854,6 +890,58 @@ export const LIVE_KNOWLEDGE_ROLES: KnowledgeRole[] = [
       downstreamRoleIds: ["legal_reviewer", "legal_compliance"],
       escalation:
         "Escalate invitation, ownership, upload, or status issues to the Legal contact named on the accreditation case without sharing credentials.",
+    },
+  }),
+  liveRole({
+    id: "warehouse_operator",
+    rbacModule: "warehouse",
+    rbacRole: "warehouse_operator",
+    label: "Warehouse Operator",
+    module: "warehouse",
+    purpose:
+      "Performs routine warehouse floor work under the two-person model and hands every controlled exception, release, approval, or configuration decision to a Warehouse Supervisor.",
+    authority: {
+      canDo: [
+        "Receive and inspect stock, complete putaway and inventory work, reserve or pick stock, issue and transfer items, process returns, and enter cycle counts.",
+        "View warehouse exceptions, record complete evidence, and escalate the record without resolving or approving the controlled outcome.",
+      ],
+      cannotDo: [
+        "Do not release your own quality hold, approve your own stock adjustment, resolve your own exception, or make warehouse configuration and import changes; the Warehouse Supervisor must perform the controlled decision.",
+        "Do not perform Finance, Procurement, BI or Insights, Marketing or Events, Pricing, Legal, or RBAC role administration work through this role.",
+      ],
+      decisions: [
+        "Decide whether the physical item matches the assigned routine task; record any mismatch as an exception and stop before a controlled outcome.",
+      ],
+      upstreamRoleIds: ["warehouse_business_unit", "warehouse_procurement"],
+      downstreamRoleIds: ["warehouse_supervisor"],
+      escalation:
+        "Escalate damaged, mismatched, excess, short, held, or untraceable stock with the source record and floor evidence to the Warehouse Supervisor.",
+    },
+  }),
+  liveRole({
+    id: "warehouse_supervisor",
+    rbacModule: "warehouse",
+    rbacRole: "warehouse_supervisor",
+    label: "Warehouse Supervisor",
+    module: "warehouse",
+    purpose:
+      "Owns the controlled side of the two-person warehouse model: exception resolution, quality disposition, stock-adjustment approval, configuration, and governed imports.",
+    authority: {
+      canDo: [
+        "Review operator evidence, release or retain quality holds, approve supported stock adjustments, and resolve warehouse exceptions.",
+        "Maintain products, locations, and operation routes, run governed imports, and verify the resulting configuration and audit history.",
+      ],
+      cannotDo: [
+        "Do not approve or release your own receipt, hold, count, stock adjustment, exception, configuration, or import change; a second named warehouse person must prepare or verify the controlled record.",
+        "Do not perform Finance, Procurement, BI or Insights, Marketing or Events, Pricing, Legal, or RBAC role administration work through this role.",
+      ],
+      decisions: [
+        "Decide quality disposition, stock-adjustment approval, exception resolution, and controlled warehouse configuration only from complete attributable evidence.",
+      ],
+      upstreamRoleIds: ["warehouse_operator"],
+      downstreamRoleIds: ["warehouse_operator", "warehouse_admin"],
+      escalation:
+        "Escalate conflicts, missing evidence, material unreconciled variances, or changes requiring Finance, Procurement, Legal, or Platform authority to the accountable domain owner.",
     },
   }),
   liveRole({

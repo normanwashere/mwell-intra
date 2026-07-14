@@ -1,9 +1,15 @@
-// Shell navigation model (spec §1: the shell hosts modules as routes; §4.2:
-// scoped RBAC). A module is VISIBLE when the signed-in user holds ANY role in
-// it (`userRoles[module]?.length`). `core` is the shared foundation and has no
-// hosted route of its own, so it is intentionally excluded from the nav.
+// Shell navigation model.
+// Supabase sessions use live capabilities; memory-mode demos use the static
+// role registry. `core` is the shared foundation and has no hosted route of its
+// own, so it is intentionally excluded from the nav.
 
-import { can, type Module, type UserRoles } from "@intra/rbac";
+import type { AuthMode, UserCapabilities } from "@intra/auth";
+import {
+  can,
+  type CapabilityFor,
+  type Module,
+  type UserRoles,
+} from "@intra/rbac";
 import type { IconName, Tone } from "@intra/ui";
 
 export interface ModuleNav {
@@ -16,6 +22,26 @@ export interface ModuleNav {
 }
 
 export type ShellNavItem = Omit<ModuleNav, "module">;
+
+export interface ShellAccess {
+  readonly mode: AuthMode;
+  readonly userRoles: Partial<UserRoles>;
+  readonly userCapabilities?: UserCapabilities;
+}
+
+export function memoryAccess(userRoles: Partial<UserRoles>): ShellAccess {
+  return { mode: "memory", userRoles, userCapabilities: {} };
+}
+
+export function hasCapability<M extends Module>(
+  access: ShellAccess,
+  module: M,
+  capability: CapabilityFor<M>,
+): boolean {
+  return access.mode === "supabase"
+    ? access.userCapabilities?.[module]?.includes(capability) === true
+    : can(access.userRoles, module, capability);
+}
 
 /** Internal, employee-facing module routes (in nav order). */
 export const MODULE_NAV: readonly ModuleNav[] = [
@@ -125,25 +151,22 @@ export const KNOWLEDGE_NAV = {
 } as const satisfies ShellNavItem;
 
 /** Does the user hold at least one role in `module`? */
-export function hasModuleAccess(
-  userRoles: Partial<UserRoles>,
-  module: Module,
-): boolean {
-  return (userRoles[module]?.length ?? 0) > 0;
+export function hasModuleAccess(access: ShellAccess, module: Module): boolean {
+  return access.mode === "supabase"
+    ? (access.userCapabilities?.[module]?.length ?? 0) > 0
+    : (access.userRoles[module]?.length ?? 0) > 0;
 }
 
 /** The internal module routes the user can see, in nav order. */
-export function accessibleModules(
-  userRoles: Partial<UserRoles>,
-): readonly ModuleNav[] {
-  return MODULE_NAV.filter((item) => hasModuleAccess(userRoles, item.module));
+export function accessibleModules(access: ShellAccess): readonly ModuleNav[] {
+  return MODULE_NAV.filter((item) => hasModuleAccess(access, item.module));
 }
 
 /** Finance is an Intra-wide area backed by scoped module capabilities. */
-export function canAccessFinance(userRoles: Partial<UserRoles>): boolean {
+export function canAccessFinance(access: ShellAccess): boolean {
   return (
-    can(userRoles, "warehouse", "view_finance") ||
-    can(userRoles, "procurement", "view_finance")
+    hasCapability(access, "warehouse", "view_finance") ||
+    hasCapability(access, "procurement", "view_finance")
   );
 }
 
@@ -153,7 +176,7 @@ export function canAccessFinance(userRoles: Partial<UserRoles>): boolean {
  */
 export function authorizedPostLoginPath(
   requestedPath: string,
-  userRoles: Partial<UserRoles>,
+  access: ShellAccess,
   profileKind: "employee" | "vendor",
 ): string {
   if (requestedPath === "/") return "/";
@@ -164,20 +187,20 @@ export function authorizedPostLoginPath(
   if (requestedPath === "/vendor" || requestedPath.startsWith("/vendor/"))
     return profileKind === "vendor" ? requestedPath : "/";
   if (requestedPath === "/finance" || requestedPath.startsWith("/finance/"))
-    return canAccessFinance(userRoles) ? requestedPath : "/";
+    return canAccessFinance(access) ? requestedPath : "/";
   if (requestedPath === "/admin/doa" || requestedPath.startsWith("/admin/doa/"))
-    return can(userRoles, "core", "manage_rbac") ||
-      can(userRoles, "legal", "manage_doa")
+    return hasCapability(access, "core", "manage_rbac") ||
+      hasCapability(access, "legal", "manage_doa")
       ? requestedPath
       : "/";
   if (requestedPath === "/admin" || requestedPath.startsWith("/admin/"))
-    return can(userRoles, "core", "manage_rbac") ? requestedPath : "/";
+    return hasCapability(access, "core", "manage_rbac") ? requestedPath : "/";
 
   const requestedModule = MODULE_NAV.find(
     (item) =>
       requestedPath === item.href || requestedPath.startsWith(`${item.href}/`),
   );
-  return requestedModule && hasModuleAccess(userRoles, requestedModule.module)
+  return requestedModule && hasModuleAccess(access, requestedModule.module)
     ? requestedPath
     : "/";
 }
@@ -188,22 +211,22 @@ export function authorizedPostLoginPath(
  * cards, and navigation from describing different permission sets.
  */
 export function dashboardAreas(
-  userRoles: Partial<UserRoles>,
+  access: ShellAccess,
   profileKind: "employee" | "vendor",
 ): readonly ShellNavItem[] {
   const areas: ShellNavItem[] = [];
 
   if (profileKind === "employee") areas.push(WORK_NAV);
-  areas.push(...accessibleModules(userRoles));
+  areas.push(...accessibleModules(access));
 
   if (profileKind === "vendor") areas.push(VENDOR_NAV);
-  if (canAccessFinance(userRoles)) areas.push(FINANCE_NAV);
-  if (can(userRoles, "core", "manage_rbac")) {
+  if (canAccessFinance(access)) areas.push(FINANCE_NAV);
+  if (hasCapability(access, "core", "manage_rbac")) {
     areas.push(ADMIN_NAV, DEPARTMENTS_NAV);
   }
   if (
-    can(userRoles, "core", "manage_rbac") ||
-    can(userRoles, "legal", "manage_doa")
+    hasCapability(access, "core", "manage_rbac") ||
+    hasCapability(access, "legal", "manage_doa")
   ) {
     areas.push(DOA_NAV);
   }
@@ -223,18 +246,18 @@ export interface MobileContextAction {
 
 export function mobileCenterAction(
   pathname: string,
-  userRoles: Partial<UserRoles>,
+  access: ShellAccess,
 ): MobileContextAction | null {
   if (
     pathname.startsWith("/procurement") &&
-    can(userRoles, "procurement", "create_request")
+    hasCapability(access, "procurement", "create_request")
   )
     return {
       href: "/procurement/requests/new",
       label: "New request",
       icon: "plus",
     };
-  if (pathname.startsWith("/legal") && can(userRoles, "legal", "admin"))
+  if (pathname.startsWith("/legal") && hasCapability(access, "legal", "admin"))
     return {
       href: "/legal/invites/new",
       label: "Invite vendor",
@@ -242,10 +265,13 @@ export function mobileCenterAction(
     };
   if (
     pathname.startsWith("/events") &&
-    can(userRoles, "events", "create_event")
+    hasCapability(access, "events", "create_event")
   )
     return { href: "/events?create=1", label: "New event", icon: "plus" };
-  if (pathname.startsWith("/admin") && can(userRoles, "core", "manage_rbac"))
+  if (
+    pathname.startsWith("/admin") &&
+    hasCapability(access, "core", "manage_rbac")
+  )
     return { href: "/admin/users", label: "Users", icon: "list" };
   return null;
 }

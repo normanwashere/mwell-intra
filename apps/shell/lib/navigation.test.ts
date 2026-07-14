@@ -7,10 +7,39 @@ import {
   authorizedPostLoginPath,
   canAccessFinance,
   dashboardAreas,
+  memoryAccess,
   mobileCenterAction,
 } from "./navigation";
 
 describe("authorized post-login destinations", () => {
+  it("uses only live capabilities in Supabase mode", () => {
+    const staleRoleSnapshot = {
+      mode: "supabase" as const,
+      userRoles: { core: ["platform_admin"] } satisfies Partial<UserRoles>,
+      userCapabilities: {},
+    };
+    expect(
+      authorizedPostLoginPath(
+        "/admin/departments",
+        staleRoleSnapshot,
+        "employee",
+      ),
+    ).toBe("/");
+
+    const liveAuthority = {
+      mode: "supabase" as const,
+      userRoles: {} satisfies Partial<UserRoles>,
+      userCapabilities: {
+        core: ["manage_rbac"],
+        warehouse: ["view_finance"],
+      },
+    };
+    expect(
+      authorizedPostLoginPath("/admin/departments", liveAuthority, "employee"),
+    ).toBe("/admin/departments");
+    expect(canAccessFinance(liveAuthority)).toBe(true);
+  });
+
   it("keeps authorized module and shared destinations", () => {
     const roles: Partial<UserRoles> = {
       core: ["staff"],
@@ -18,30 +47,31 @@ describe("authorized post-login destinations", () => {
       insights: ["analyst"],
       warehouse: ["finance"],
     };
-    expect(authorizedPostLoginPath("/events", roles, "employee")).toBe(
+    const access = memoryAccess(roles);
+    expect(authorizedPostLoginPath("/events", access, "employee")).toBe(
       "/events",
     );
     expect(
-      authorizedPostLoginPath("/insights/warehouse", roles, "employee"),
+      authorizedPostLoginPath("/insights/warehouse", access, "employee"),
     ).toBe("/insights/warehouse");
-    expect(authorizedPostLoginPath("/finance", roles, "employee")).toBe(
+    expect(authorizedPostLoginPath("/finance", access, "employee")).toBe(
       "/finance",
     );
-    expect(authorizedPostLoginPath("/work", roles, "employee")).toBe("/work");
+    expect(authorizedPostLoginPath("/work", access, "employee")).toBe("/work");
   });
 
   it("allows only RBAC administrators into Department Administration", () => {
     expect(
       authorizedPostLoginPath(
         "/admin/departments",
-        { core: ["platform_admin"] },
+        memoryAccess({ core: ["platform_admin"] }),
         "employee",
       ),
     ).toBe("/admin/departments");
     expect(
       authorizedPostLoginPath(
         "/admin/departments",
-        { core: ["staff"] },
+        memoryAccess({ core: ["staff"] }),
         "employee",
       ),
     ).toBe("/");
@@ -52,24 +82,37 @@ describe("authorized post-login destinations", () => {
       core: ["staff"],
       warehouse: ["logistics_supervisor"],
     };
-    expect(authorizedPostLoginPath("/events", roles, "employee")).toBe("/");
-    expect(authorizedPostLoginPath("/admin/users", roles, "employee")).toBe(
+    const access = memoryAccess(roles);
+    expect(authorizedPostLoginPath("/events", access, "employee")).toBe("/");
+    expect(authorizedPostLoginPath("/admin/users", access, "employee")).toBe(
       "/",
     );
     expect(
-      authorizedPostLoginPath("/not-a-real-route", roles, "employee"),
+      authorizedPostLoginPath("/not-a-real-route", access, "employee"),
     ).toBe("/");
   });
 
   it("keeps employee and vendor shared areas separated", () => {
     expect(
-      authorizedPostLoginPath("/vendor", { core: ["vendor"] }, "vendor"),
+      authorizedPostLoginPath(
+        "/vendor",
+        memoryAccess({ core: ["vendor"] }),
+        "vendor",
+      ),
     ).toBe("/vendor");
     expect(
-      authorizedPostLoginPath("/work", { core: ["vendor"] }, "vendor"),
+      authorizedPostLoginPath(
+        "/work",
+        memoryAccess({ core: ["vendor"] }),
+        "vendor",
+      ),
     ).toBe("/");
     expect(
-      authorizedPostLoginPath("/vendor", { core: ["staff"] }, "employee"),
+      authorizedPostLoginPath(
+        "/vendor",
+        memoryAccess({ core: ["staff"] }),
+        "employee",
+      ),
     ).toBe("/");
   });
 });
@@ -78,12 +121,12 @@ describe("dashboard areas", () => {
   it("shows every Warehouse Administrator area counted by the dashboard", () => {
     expect(
       dashboardAreas(
-        {
+        memoryAccess({
           core: ["staff"],
           warehouse: ["warehouse_admin"],
           events: ["admin"],
           insights: ["admin"],
-        },
+        }),
         "employee",
       ).map((area) => area.label),
     ).toEqual([
@@ -98,9 +141,10 @@ describe("dashboard areas", () => {
 
   it("includes the editable DOA area for authorized administrators", () => {
     expect(
-      dashboardAreas({ core: ["platform_admin", "staff"] }, "employee").map(
-        (area) => area.label,
-      ),
+      dashboardAreas(
+        memoryAccess({ core: ["platform_admin", "staff"] }),
+        "employee",
+      ).map((area) => area.label),
     ).toEqual([
       "My Work",
       "Administration",
@@ -122,12 +166,13 @@ describe("dashboard areas", () => {
       "dual Finance",
     ],
   ])("gives %s one first-class Finance area", (roles) => {
-    const finance = dashboardAreas(roles, "employee").filter(
+    const access = memoryAccess(roles);
+    const finance = dashboardAreas(access, "employee").filter(
       (area) => area.label === "Finance",
     );
     expect(finance).toHaveLength(1);
     expect(finance[0]?.href).toBe("/finance");
-    expect(canAccessFinance(roles)).toBe(true);
+    expect(canAccessFinance(access)).toBe(true);
   });
 
   it("does not grant Finance through unrelated roles", () => {
@@ -136,9 +181,10 @@ describe("dashboard areas", () => {
       warehouse: ["operations"],
       procurement: ["requester"],
     };
-    expect(canAccessFinance(roles)).toBe(false);
+    const access = memoryAccess(roles);
+    expect(canAccessFinance(access)).toBe(false);
     expect(
-      dashboardAreas(roles, "employee").some(
+      dashboardAreas(access, "employee").some(
         (area) => area.label === "Finance",
       ),
     ).toBe(false);
@@ -170,30 +216,41 @@ describe("configurable organization administration", () => {
 
   it("provides a sheet-based department tree editor with safe parent choices", () => {
     const departments = source("app/admin/departments/page.tsx");
-    expect(departments).toContain("rpc('list_departments')");
-    expect(departments).toContain("rpc('upsert_department'");
+    expect(departments).toContain('rpc("list_departments")');
+    expect(departments).toContain('rpc("upsert_department"');
     expect(departments).toContain("descendantIds");
     expect(departments).toContain("deactivation_blocked_reason");
     expect(departments).toContain("<Sheet");
     expect(departments).toContain("Sort order");
+    expect(departments).toContain('role="tree"');
+    expect(departments).toContain('role="treeitem"');
+    expect(departments).toContain("aria-level={depth + 1}");
+    expect(departments).toContain("Reports to");
+    expect(departments).toContain("Confirm deactivation");
+    expect(departments).toContain("Historical assignments remain available");
+    expect(departments).toContain("expected_updated_at");
   });
 });
 
 describe("mobile contextual actions", () => {
   it("does not show Legal or Procurement write actions without permission", () => {
-    expect(mobileCenterAction("/legal", {})).toBeNull();
-    expect(mobileCenterAction("/procurement", {})).toBeNull();
+    expect(mobileCenterAction("/legal", memoryAccess({}))).toBeNull();
+    expect(mobileCenterAction("/procurement", memoryAccess({}))).toBeNull();
   });
 
   it("shows actions only for a role with the required capability", () => {
-    expect(mobileCenterAction("/legal", { legal: ["admin"] })?.label).toBe(
-      "Invite vendor",
-    );
     expect(
-      mobileCenterAction("/procurement", { procurement: ["requester"] })?.label,
+      mobileCenterAction("/legal", memoryAccess({ legal: ["admin"] }))?.label,
+    ).toBe("Invite vendor");
+    expect(
+      mobileCenterAction(
+        "/procurement",
+        memoryAccess({ procurement: ["requester"] }),
+      )?.label,
     ).toBe("New request");
     expect(
-      mobileCenterAction("/events", { events: ["requester"] })?.label,
+      mobileCenterAction("/events", memoryAccess({ events: ["requester"] }))
+        ?.label,
     ).toBe("New event");
   });
 });

@@ -7,13 +7,16 @@ import { WarehouseApp } from './WarehouseApp';
 const MEMORY_SESSION_KEY = 'intra.memory-session.v1';
 const FIRST_RENDER_TIMEOUT = 10_000;
 
-function renderSignedInWarehouse(path: string) {
+function renderSignedInWarehouse(
+  path: string,
+  warehouseRoles: string[] = ['procurement'],
+) {
   window.history.replaceState(window.history.state, '', path);
   window.sessionStorage.setItem(
     MEMORY_SESSION_KEY,
     JSON.stringify({
       profileId: 'grace',
-      roles: { warehouse: ['procurement'] },
+      roles: { warehouse: warehouseRoles },
     }),
   );
 
@@ -28,7 +31,7 @@ function renderSignedInWarehouse(path: string) {
             kind: 'employee',
             name: 'Grace',
             title: 'Procurement',
-            roles: { warehouse: ['procurement'] },
+            roles: { warehouse: warehouseRoles },
           },
         ],
       }}
@@ -41,13 +44,43 @@ function renderSignedInWarehouse(path: string) {
 }
 
 describe('WarehouseApp basename handling', () => {
-  it('normalizes bare /warehouse before mounting BrowserRouter', async () => {
-    renderSignedInWarehouse('/warehouse');
+  it(
+    'normalizes bare /warehouse before mounting BrowserRouter',
+    async () => {
+      renderSignedInWarehouse('/warehouse');
 
-    await waitFor(() => {
-      expect(window.location.pathname).toBe('/warehouse/');
-    });
-    expect(await screen.findByRole('heading', { name: 'Grace' })).toBeInTheDocument();
-    expect(screen.getByText(/warehouse dashboard/i)).toBeInTheDocument();
-  }, FIRST_RENDER_TIMEOUT);
+      await waitFor(() => {
+        expect(window.location.pathname).toBe('/warehouse/');
+      });
+      expect(
+        await screen.findByRole('heading', { name: 'Grace' }),
+      ).toBeInTheDocument();
+      expect(screen.getByText(/warehouse dashboard/i)).toBeInTheDocument();
+    },
+    FIRST_RENDER_TIMEOUT,
+  );
+
+  it(
+    'accepts canonical Warehouse roles from a validated session claim',
+    async () => {
+      renderSignedInWarehouse('/warehouse/', ['warehouse_operator']);
+
+      expect(
+        await screen.findByRole('heading', { name: 'Grace' }),
+      ).toBeInTheDocument();
+    },
+    FIRST_RENDER_TIMEOUT,
+  );
+
+  it(
+    'rejects an unknown Warehouse role instead of casting the claim',
+    async () => {
+      renderSignedInWarehouse('/warehouse/', ['made_up_role']);
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        /no warehouse access/i,
+      );
+    },
+    FIRST_RENDER_TIMEOUT,
+  );
 });

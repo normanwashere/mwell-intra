@@ -291,6 +291,78 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
       ],
     },
+    "admin-departments": {
+      controls: [
+        control(
+          "Add department",
+          "Opens an empty editor for a new root or child department.",
+          "The administrator must have manage_rbac and choose an available parent when creating a child.",
+          "An unsaved department form opens without changing the live hierarchy.",
+        ),
+        control(
+          "Edit department",
+          "Opens the selected department in the compact editing sheet.",
+          "The selected department must still exist in the latest hierarchy response.",
+          "Current code, name, parent, order, purpose, and status are displayed for review.",
+        ),
+        control(
+          "Choose parent",
+          "Moves the department beneath another active department in the hierarchy.",
+          "The department itself and every descendant are excluded to prevent a hierarchy cycle.",
+          "The selected valid parent becomes part of the pending department change.",
+        ),
+        control(
+          "Save department",
+          "Sends the edited department definition to the governed upsert RPC.",
+          "Code and name are required, sort order must be valid, the parent cannot create a cycle, and the editor version must still be current.",
+          "The refreshed tree shows the saved hierarchy and audit values, or a stale-editor message asks the administrator to reload.",
+        ),
+        control(
+          "Deactivate department",
+          "Opens an impact confirmation, then marks an unused department inactive while keeping its identifier and history.",
+          "Active child departments and every current or future profile assignment must be resolved before deactivation.",
+          "The confirmed department becomes inactive, or the page explains the dependency or stale version that blocked the change.",
+        ),
+      ],
+      fields: [
+        field(
+          "Code",
+          "Provides the stable short identifier used for organizational scope.",
+          true,
+          "A non-empty trimmed code must remain unique across all departments.",
+        ),
+        field(
+          "Name",
+          "Displays the plain-language department name throughout the hierarchy.",
+          true,
+          "A non-empty trimmed name is required before the department can be saved.",
+        ),
+        field(
+          "Purpose",
+          "Explains the department responsibility represented by this organizational scope.",
+          false,
+          "Blank is allowed; entered text is trimmed before the governed save.",
+        ),
+        field(
+          "Parent department",
+          "Places the department at the root or beneath another department.",
+          false,
+          "The selected parent must be active and cannot be the department or any descendant.",
+        ),
+        field(
+          "Sort order",
+          "Controls the department position among siblings in the compact tree.",
+          true,
+          "The value must be a whole numeric order accepted by the department RPC.",
+        ),
+        field(
+          "Active status",
+          "Shows whether the department can receive current organizational assignments.",
+          true,
+          "Deactivation is blocked while active children or current or future profile assignments still depend on it.",
+        ),
+      ],
+    },
     "admin-doa": {
       controls: [
         control(
@@ -2849,38 +2921,128 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
     },
     "my-work": {
       controls: [
-        control("Source filter", "Shows only work from the selected department.", "The source must be one of the released queue sources.", "The queue changes without changing any source record."),
-        control("Open source", "Navigates to the authoritative record or queue.", "The route must be internal and role-authorized.", "The source page opens under the same session."),
-        control("Retry", "Reloads the governed personal projection after a read failure.", "The retry performs no source write.", "Current assignments replace the failed state."),
+        control(
+          "Source filter",
+          "Shows only work from the selected department.",
+          "The source must be one of the released queue sources.",
+          "The queue changes without changing any source record.",
+        ),
+        control(
+          "Open source",
+          "Navigates to the authoritative record or queue.",
+          "The route must be internal and role-authorized.",
+          "The source page opens under the same session.",
+        ),
+        control(
+          "Retry",
+          "Reloads the governed personal projection after a read failure.",
+          "The retry performs no source write.",
+          "Current assignments replace the failed state.",
+        ),
       ],
       fields: [
-        field("Priority", "Shows operational urgency assigned by the source projection.", true, "Critical and high work sort before normal work."),
-        field("Due time", "Shows the source-derived target time when available.", false, "The timestamp remains tied to the source record."),
+        field(
+          "Priority",
+          "Shows operational urgency assigned by the source projection.",
+          true,
+          "Critical and high work sort before normal work.",
+        ),
+        field(
+          "Due time",
+          "Shows the source-derived target time when available.",
+          false,
+          "The timestamp remains tied to the source record.",
+        ),
       ],
     },
     "events-workspace": {
       controls: [
-        control("New event", "Opens event-intent creation for authorized roles.", "The user needs the events:create_event capability.", "A validated event draft form opens."),
-        control("Create event", "Persists the event intent through the governed Warehouse RPC.", "Name and start date are required; end date cannot precede start.", "The event appears in the lifecycle list."),
-        control("View event", "Opens dates, lifecycle, and fulfillment totals.", "The event must remain in the caller's readable scope.", "The event detail view opens."),
-        control("Open Warehouse fulfillment", "Hands physical stock work to Warehouse.", "The Warehouse role must authorize the requested stock command.", "The authoritative fulfillment view opens."),
+        control(
+          "New event",
+          "Opens event-intent creation for authorized roles.",
+          "The user needs the events:create_event capability.",
+          "A validated event draft form opens.",
+        ),
+        control(
+          "Create event",
+          "Persists the event intent through the governed Warehouse RPC.",
+          "Name and start date are required; end date cannot precede start.",
+          "The event appears in the lifecycle list.",
+        ),
+        control(
+          "View event",
+          "Opens dates, lifecycle, and fulfillment totals.",
+          "The event must remain in the caller's readable scope.",
+          "The event detail view opens.",
+        ),
+        control(
+          "Open Warehouse fulfillment",
+          "Hands physical stock work to Warehouse.",
+          "The Warehouse role must authorize the requested stock command.",
+          "The authoritative fulfillment view opens.",
+        ),
       ],
       fields: [
-        field("Event name", "Identifies the activation in queues and custody records.", true, "A non-empty attributable name is required."),
-        field("Event type", "Classifies the activation for operations and reporting.", true, "Choose one released event type."),
-        field("Start date", "Sets lifecycle timing and readiness due dates.", true, "A valid date is required."),
-        field("End date", "Sets completion timing for multi-day events.", false, "It cannot be earlier than the start date."),
+        field(
+          "Event name",
+          "Identifies the activation in queues and custody records.",
+          true,
+          "A non-empty attributable name is required.",
+        ),
+        field(
+          "Event type",
+          "Classifies the activation for operations and reporting.",
+          true,
+          "Choose one released event type.",
+        ),
+        field(
+          "Start date",
+          "Sets lifecycle timing and readiness due dates.",
+          true,
+          "A valid date is required.",
+        ),
+        field(
+          "End date",
+          "Sets completion timing for multi-day events.",
+          false,
+          "It cannot be earlier than the start date.",
+        ),
       ],
     },
     "insights-workspace": {
       controls: [
-        control("Insight view", "Filters indicators to an authorized department or executive view.", "Only areas granted by the Insights role are offered.", "The visible KPI set changes without a data write."),
-        control("Open governed source", "Navigates from a KPI to its accountable workflow.", "The destination remains independently role-protected.", "The source queue opens for investigation."),
-        control("Retry", "Reloads the governed snapshot after a read failure.", "The retry cannot alter source data.", "Current permitted indicators replace the failed state."),
+        control(
+          "Insight view",
+          "Filters indicators to an authorized department or executive view.",
+          "Only areas granted by the Insights role are offered.",
+          "The visible KPI set changes without a data write.",
+        ),
+        control(
+          "Open governed source",
+          "Navigates from a KPI to its accountable workflow.",
+          "The destination remains independently role-protected.",
+          "The source queue opens for investigation.",
+        ),
+        control(
+          "Retry",
+          "Reloads the governed snapshot after a read failure.",
+          "The retry cannot alter source data.",
+          "Current permitted indicators replace the failed state.",
+        ),
       ],
       fields: [
-        field("Metric value", "Shows the current governed aggregate.", true, "The value is computed in the database projection."),
-        field("Target", "Shows the operating threshold when one is defined.", false, "The target is descriptive and cannot grant approval authority."),
+        field(
+          "Metric value",
+          "Shows the current governed aggregate.",
+          true,
+          "The value is computed in the database projection.",
+        ),
+        field(
+          "Target",
+          "Shows the operating threshold when one is defined.",
+          false,
+          "The target is descriptive and cannot grant approval authority.",
+        ),
       ],
     },
     "vendor-invite-unavailable": {

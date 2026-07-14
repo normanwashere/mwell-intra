@@ -124,6 +124,75 @@ describe("knowledge role authority registry", () => {
     }
   });
 
+  it("documents the canonical two-person Warehouse authority boundary", () => {
+    const operator = knowledgeRoleForRbac("warehouse", "warehouse_operator");
+    const supervisor = knowledgeRoleForRbac(
+      "warehouse",
+      "warehouse_supervisor",
+    );
+
+    expect(operator).toBeDefined();
+    expect(supervisor).toBeDefined();
+
+    const operatorWork = [
+      operator?.purpose,
+      ...operator!.dailyTasks,
+      ...operator!.authority.canDo,
+    ].join(" ");
+    const supervisorWork = [
+      supervisor?.purpose,
+      ...supervisor!.dailyTasks,
+      ...supervisor!.authority.canDo,
+      ...supervisor!.authority.decisions,
+    ].join(" ");
+
+    expect(operatorWork).toMatch(/receiv/i);
+    expect(operatorWork).toMatch(/inspect/i);
+    expect(operatorWork).toMatch(/putaway|put away/i);
+    expect(operatorWork).toMatch(/pick|reserv|allocat/i);
+    expect(operatorWork).toMatch(/issue/i);
+    expect(operatorWork).toMatch(/return/i);
+    expect(operatorWork).toMatch(/count/i);
+    expect(supervisorWork).toMatch(/quality hold|quality disposition/i);
+    expect(supervisorWork).toMatch(/stock adjustment/i);
+    expect(supervisorWork).toMatch(/exception/i);
+    expect(supervisorWork).toMatch(/configur|route|location/i);
+    expect(supervisorWork).toMatch(/import/i);
+    expect(operator?.authority.downstreamRoleIds).toContain(
+      "warehouse_supervisor",
+    );
+    expect(supervisor?.authority.upstreamRoleIds).toContain(
+      "warehouse_operator",
+    );
+  });
+
+  it.each(["warehouse_operator", "warehouse_supervisor"])(
+    "keeps %s outside cross-domain and self-approval authority",
+    (role) => {
+      const guide = knowledgeRoleForRbac("warehouse", role)!;
+      const prohibited = guide.authority.cannotDo.join(" ");
+
+      expect(guide.authority.capabilities).not.toEqual(
+        expect.arrayContaining([
+          "view_finance",
+          "view_analytics",
+          "view_procurement",
+          "view_pricing",
+          "set_pricing",
+          "manage_rbac",
+        ]),
+      );
+      expect(prohibited).toMatch(/finance/i);
+      expect(prohibited).toMatch(/procurement/i);
+      expect(prohibited).toMatch(/insights|analytics|BI/i);
+      expect(prohibited).toMatch(/marketing|events/i);
+      expect(prohibited).toMatch(/pricing/i);
+      expect(prohibited).toMatch(/legal/i);
+      expect(prohibited).toMatch(/RBAC|role administration/i);
+      expect(prohibited).toMatch(/own|self/i);
+    },
+  );
+
   it("gives every live profile complete authority guidance and handoffs", () => {
     for (const role of LIVE_KNOWLEDGE_ROLES) {
       const authority = role.authority;

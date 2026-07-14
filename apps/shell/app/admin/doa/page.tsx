@@ -10,8 +10,7 @@ import {
   ModuleHero,
   useToast,
 } from "@intra/ui";
-import { can } from "@intra/rbac";
-import { useSession } from "@intra/auth";
+import { useCan, useSession } from "@intra/auth";
 
 type Tier =
   "dept_head" | "procurement_head" | "finance" | "legal" | "final_approver";
@@ -55,10 +54,10 @@ const assignment = (tier: Tier = "dept_head"): AssignmentDraft => ({
 });
 
 export default function DoaAdministrationPage() {
-  const { userRoles, loading } = useSession();
-  const allowed =
-    can(userRoles, "core", "manage_rbac") ||
-    can(userRoles, "legal", "manage_doa");
+  const { loading } = useSession();
+  const canManageRbac = useCan("core", "manage_rbac");
+  const canManageDoa = useCan("legal", "manage_doa");
+  const allowed = canManageRbac || canManageDoa;
   if (loading) return null;
   if (!allowed)
     return (

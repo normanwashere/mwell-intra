@@ -66,7 +66,7 @@ describe("Knowledge Base live coverage", () => {
   });
 
   it("documents every router page with complete plain-language feature content", () => {
-    expect(KNOWLEDGE_CONTENT.features).toHaveLength(61);
+    expect(KNOWLEDGE_CONTENT.features).toHaveLength(62);
     const liveFeatures = KNOWLEDGE_CONTENT.features.filter(
       (feature) => feature.availability !== "coming_soon",
     );
@@ -159,6 +159,38 @@ describe("Knowledge Base live coverage", () => {
         "Minimum amount",
         "Maximum amount",
         "Named approver",
+      ]),
+    );
+  });
+
+  it("documents department hierarchy administration in plain language", () => {
+    const feature = KNOWLEDGE_CONTENT.features.find(
+      (item) => item.id === "admin-departments",
+    );
+
+    expect(feature).toMatchObject({
+      availability: "live",
+      routes: ["/admin/departments"],
+      roleIds: ["platform_admin"],
+      capabilityIds: ["manage_rbac"],
+    });
+    expect(feature?.controls.map((control) => control.name)).toEqual(
+      expect.arrayContaining([
+        "Add department",
+        "Edit department",
+        "Choose parent",
+        "Save department",
+        "Deactivate department",
+      ]),
+    );
+    expect(feature?.fields?.map((field) => field.name)).toEqual(
+      expect.arrayContaining([
+        "Code",
+        "Name",
+        "Purpose",
+        "Parent department",
+        "Sort order",
+        "Active status",
       ]),
     );
   });

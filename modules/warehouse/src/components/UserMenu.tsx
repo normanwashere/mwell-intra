@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { Role } from '@/domain/types';
+import { isWarehouseRole } from '@/domain/types';
 import { useWarehouse } from '@/app/store';
 import { useSession } from '@/auth/session';
 import { ROLES } from '@/auth/roles';
@@ -35,7 +35,7 @@ export function UserMenu() {
   // In demo/memory mode a user may hold several warehouse roles; let them switch
   // between the roles their session actually carries. In supabase mode the role
   // is authoritative from the JWT, so no in-app switching is offered.
-  const switchableRoles = (userRoles.warehouse ?? []) as Role[];
+  const switchableRoles = (userRoles.warehouse ?? []).filter(isWarehouseRole);
   const canSwitchRole = mode === 'memory' && switchableRoles.length > 1;
 
   const handleLogout = async () => {
@@ -65,7 +65,9 @@ export function UserMenu() {
       setPw('');
       setConfirm('');
     } catch (e2) {
-      setPwError(e2 instanceof Error ? e2.message : 'Could not update password.');
+      setPwError(
+        e2 instanceof Error ? e2.message : 'Could not update password.',
+      );
     } finally {
       setPwSaving(false);
     }
@@ -90,7 +92,10 @@ export function UserMenu() {
             {roleLabel}
           </span>
         </span>
-        <Icon name="chevron" className="hidden h-4 w-4 rotate-90 text-faint lg:block" />
+        <Icon
+          name="chevron"
+          className="hidden h-4 w-4 rotate-90 text-faint lg:block"
+        />
       </button>
 
       <Sheet
@@ -121,7 +126,9 @@ export function UserMenu() {
             </div>
           </div>
           <div className="rounded-xl bg-inset p-3">
-            <p className="text-xs uppercase tracking-wide text-faint">Active role</p>
+            <p className="text-xs uppercase tracking-wide text-faint">
+              Active role
+            </p>
             <p className="mt-0.5 text-sm font-semibold text-ink">{roleLabel}</p>
             <p className="mt-1 text-xs text-muted">{ROLES[role].description}</p>
           </div>
@@ -166,10 +173,15 @@ export function UserMenu() {
           )}
 
           {pwOpen && (
-            <form onSubmit={submitPassword} className="space-y-3 rounded-xl bg-inset p-3">
+            <form
+              onSubmit={submitPassword}
+              className="space-y-3 rounded-xl bg-inset p-3"
+            >
               <p className="text-sm font-semibold text-ink">Change password</p>
               <div>
-                <label htmlFor="um-pw" className="label">New password</label>
+                <label htmlFor="um-pw" className="label">
+                  New password
+                </label>
                 <input
                   id="um-pw"
                   type="password"
@@ -182,7 +194,9 @@ export function UserMenu() {
                 />
               </div>
               <div>
-                <label htmlFor="um-pw-confirm" className="label">Confirm</label>
+                <label htmlFor="um-pw-confirm" className="label">
+                  Confirm
+                </label>
                 <input
                   id="um-pw-confirm"
                   type="password"
@@ -194,7 +208,10 @@ export function UserMenu() {
                 />
               </div>
               {pwError && (
-                <p role="alert" className="text-xs text-rose-600 dark:text-rose-300">
+                <p
+                  role="alert"
+                  className="text-xs text-rose-600 dark:text-rose-300"
+                >
                   {pwError}
                 </p>
               )}

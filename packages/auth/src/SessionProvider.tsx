@@ -13,6 +13,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import type { ReactNode } from 'react';
@@ -76,18 +77,22 @@ export function SessionProvider({
   );
   const resetRedirectPath =
     config.mode === 'supabase'
-      ? config.resetRedirectPath ?? '/reset-password'
+      ? (config.resetRedirectPath ?? '/reset-password')
       : '/reset-password';
 
   const [profile, setProfile] = useState<SessionProfile | null>(null);
   const [userRoles, setUserRoles] = useState<Partial<UserRoles>>({});
-  const [userCapabilities, setUserCapabilities] = useState<UserCapabilities>({});
+  const [userCapabilities, setUserCapabilities] = useState<UserCapabilities>(
+    {},
+  );
   // Always start `loading=true` so first server render matches first client
   // render — hydration-safe. We flip to false after we've consulted
   // sessionStorage (memory) or the supabase session (live).
   const [loading, setLoading] = useState(true);
   const [signingIn, setSigningIn] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const liveGeneration = useRef(0);
+  const activeUserId = useRef<string | null>(null);
 
   // MEMORY-mode session persistence (fixes: hard-nav / F5 / deep-link losing
   // the session). We keep the actor in sessionStorage so it lives for the tab
@@ -126,78 +131,149 @@ export function SessionProvider({
 
   // Project a verified user (or clear). Roles ALWAYS come from the fresh JWT
   // `app_metadata`, so a stale/tampered client value can never elevate access.
-  const applyUser = useCallback((
-    user: User | null,
-    capabilities: UserCapabilities = {},
-  ) => {
-    if (user) {
-      setProfile(profileFromUser(user));
-      setUserRoles(parseUserRolesFromClaims(user.app_metadata));
-      setUserCapabilities(capabilities);
-    } else {
+  const applyUser = useCallback(
+    (user: User | null, capabilities: UserCapabilities = {}) => {
+      if (user) {
+        activeUserId.current = user.id;
+        setProfile(profileFromUser(user));
+        setUserRoles(parseUserRolesFromClaims(user.app_metadata));
+        setUserCapabilities(capabilities);
+      } else {
+        activeUserId.current = null;
+        setProfile(null);
+        setUserRoles({});
+        setUserCapabilities({});
+      }
+    },
+    [],
+  );
+
+  const loadLiveCapabilities =
+    useCallback(async (): Promise<UserCapabilities> => {
+      if (!client) return {};
+      const { data, error } = await client
+        .schema('core')
+        .rpc('my_capabilities');
+      if (error) throw error;
+      return parseUserCapabilitiesFromClaims(data);
+    }, [client]);
+
+  const beginLiveRefresh = useCallback((session?: Session | null) => {
+    const generation = ++liveGeneration.current;
+    setUserCapabilities({});
+    if (
+      session === null ||
+      (session && activeUserId.current !== session.user.id)
+    ) {
+      activeUserId.current = null;
       setProfile(null);
       setUserRoles({});
-      setUserCapabilities({});
     }
+    return generation;
   }, []);
 
-  const loadLiveCapabilities = useCallback(async (): Promise<UserCapabilities> => {
-    if (!client) return {};
-    const { data, error } = await client.schema('core').rpc('my_capabilities');
-    if (error) throw error;
-    return parseUserCapabilitiesFromClaims(data);
-  }, [client]);
+  const verifyAndApplyLiveUser = useCallback(
+    async (session: Session | null, generation: number): Promise<boolean> => {
+      if (!client || generation !== liveGeneration.current) return false;
+      if (!session) {
+        applyUser(null);
+        return false;
+      }
+
+      let user: User | null = null;
+      try {
+        const { data, error } = await client.auth.getUser();
+        if (error) throw error;
+        user = data.user ?? null;
+        if (
+          generation !== liveGeneration.current ||
+          !user ||
+          user.id !== session.user.id
+        ) {
+          if (generation === liveGeneration.current) applyUser(null);
+          return false;
+        }
+      } catch {
+        if (generation === liveGeneration.current) applyUser(null);
+        return false;
+      }
+
+      applyUser(user, {});
+      try {
+        const capabilities = await loadLiveCapabilities();
+        if (
+          generation !== liveGeneration.current ||
+          activeUserId.current !== user.id
+        )
+          return false;
+        applyUser(user, capabilities);
+      } catch {
+        if (
+          generation === liveGeneration.current &&
+          activeUserId.current === user.id
+        )
+          applyUser(user, {});
+      }
+      return (
+        generation === liveGeneration.current &&
+        activeUserId.current === user.id
+      );
+    },
+    [client, applyUser, loadLiveCapabilities],
+  );
 
   useEffect(() => {
     if (!client) return;
     let active = true;
 
-    const verifyAndApplyUser = async (session: Session | null) => {
-      if (!session) {
-        applyUser(null);
-        return;
-      }
-      try {
-        const { data, error } = await client.auth.getUser();
-        if (error) throw error;
-        const user = data.user ?? null;
-        if (!user) {
-          applyUser(null);
-          return;
-        }
-        const capabilities = await loadLiveCapabilities();
-        applyUser(user, capabilities);
-      } catch {
-        applyUser(null);
-      }
-    };
+    const initialGeneration = beginLiveRefresh(null);
 
     client.auth
       .getSession()
       .then(({ data }) => {
-        if (!active) return;
-        return verifyAndApplyUser(data.session ?? null);
+        if (!active || initialGeneration !== liveGeneration.current) return;
+        return verifyAndApplyLiveUser(data.session ?? null, initialGeneration);
       })
       .catch(() => {
         // Couldn't confirm a live session — treat as signed out (least privilege).
-        if (!active) return;
+        if (!active || initialGeneration !== liveGeneration.current) return;
         applyUser(null);
       })
       .finally(() => {
-        if (!active) return;
+        if (!active || initialGeneration !== liveGeneration.current) return;
         setLoading(false);
       });
 
     const { data: sub } = client.auth.onAuthStateChange((_event, session) => {
       if (!active) return;
-      void verifyAndApplyUser(session);
+      const generation = beginLiveRefresh(session);
+      void verifyAndApplyLiveUser(session, generation).finally(() => {
+        if (active && generation === liveGeneration.current) setLoading(false);
+      });
     });
+
+    const refreshOnFocus = () => {
+      if (!active) return;
+      const generation = beginLiveRefresh();
+      void client.auth
+        .getSession()
+        .then(({ data }) => {
+          if (!active || generation !== liveGeneration.current) return false;
+          return verifyAndApplyLiveUser(data.session ?? null, generation);
+        })
+        .catch(() => {
+          if (active && generation === liveGeneration.current) applyUser(null);
+        });
+    };
+    window.addEventListener('focus', refreshOnFocus);
 
     return () => {
       active = false;
+      liveGeneration.current += 1;
+      window.removeEventListener('focus', refreshOnFocus);
       sub.subscription.unsubscribe();
     };
-  }, [client, applyUser, loadLiveCapabilities]);
+  }, [client, applyUser, beginLiveRefresh, verifyAndApplyLiveUser]);
 
   const signInWithPassword = useCallback(
     async (email: string, password: string) => {
@@ -237,23 +313,21 @@ export function SessionProvider({
       }
       setSigningIn(true);
       try {
-        const { error } = await client.auth.signInWithPassword({
+        const { data, error } = await client.auth.signInWithPassword({
           email: email.trim(),
           password,
         });
         if (error) throw error;
-        const { data: verified, error: verifyError } =
-          await client.auth.getUser();
-        if (verifyError) throw verifyError;
-        const user = verified.user ?? null;
-        if (!user) {
+        const session = data.session ?? null;
+        if (!session) {
           throw new Error('Sign-in succeeded, but no session was restored.');
         }
-        const capabilities = await loadLiveCapabilities();
-        applyUser(user, capabilities);
-        return true;
+        const generation = beginLiveRefresh(session);
+        const verified = await verifyAndApplyLiveUser(session, generation);
+        if (!verified)
+          throw new Error('Sign-in session could not be verified.');
+        return verified;
       } catch (e) {
-        applyUser(null);
         setAuthError(
           e instanceof Error ? e.message : 'Sign-in failed. Please try again.',
         );
@@ -262,11 +336,13 @@ export function SessionProvider({
         setSigningIn(false);
       }
     },
-    [client, memoryProfiles, applyUser, loadLiveCapabilities],
+    [client, memoryProfiles, beginLiveRefresh, verifyAndApplyLiveUser],
   );
 
   const signOut = useCallback(async () => {
     setAuthError(null);
+    liveGeneration.current += 1;
+    applyUser(null);
     if (client) {
       try {
         await client.auth.signOut();
@@ -274,9 +350,6 @@ export function SessionProvider({
         // Clear locally regardless of a network/server error.
       }
     }
-    setProfile(null);
-    setUserRoles({});
-    setUserCapabilities({});
     if (typeof window !== 'undefined') {
       try {
         window.sessionStorage.removeItem(MEMORY_SESSION_KEY);
@@ -284,7 +357,7 @@ export function SessionProvider({
         /* ignore */
       }
     }
-  }, [client]);
+  }, [client, applyUser]);
 
   const resetPassword = useCallback(
     async (email: string) => {
@@ -311,7 +384,8 @@ export function SessionProvider({
 
   const changePassword = useCallback(
     async (password: string) => {
-      if (!client) throw new Error('Password change is unavailable in demo mode.');
+      if (!client)
+        throw new Error('Password change is unavailable in demo mode.');
       if (password.length < 8) {
         throw new Error('Password must be at least 8 characters.');
       }

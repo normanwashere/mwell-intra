@@ -8,10 +8,7 @@ import {
 } from "./evidenceContract";
 import { KNOWLEDGE_GUIDE_CONTENT } from "@shell/components/knowledge/KnowledgeBase";
 import { ROLE_ROUTE_PARENT_PATHS } from "./roles";
-import {
-  DOA_CONFIGURATION_ROLE_IDS,
-  DOA_REVIEW_ROLE_IDS,
-} from "./workflows";
+import { DOA_CONFIGURATION_ROLE_IDS, DOA_REVIEW_ROLE_IDS } from "./workflows";
 import { ADMINISTRATOR_GUIDES } from "./admin";
 import {
   GOVERNANCE_GUIDES,
@@ -145,7 +142,9 @@ describe("Knowledge Base content", () => {
     );
     expect(
       searchKnowledge(KNOWLEDGE_CONTENT, "roadmap offline knowledge")[0],
-    ).toMatchObject({ availability: "coming_soon" });
+    ).toMatchObject({
+      availability: "coming_soon",
+    });
     expect(HANDBOOK_RELEASE_NOTES.map((item) => item.availability)).toEqual(
       expect.arrayContaining(["live", "limited"]),
     );
@@ -184,9 +183,15 @@ describe("Knowledge Base content", () => {
         (result) => result.id === "admin-departments",
       ),
     ).toMatchObject({ availability: "limited" });
+    expect(
+      searchKnowledge(KNOWLEDGE_CONTENT, "Department administration").find(
+        (result) =>
+          result.id === "admin-departments" && result.type === "feature",
+      ),
+    ).toMatchObject({ availability: "live" });
   });
-  it("defines explicit operating data for all 34 role profiles", () => {
-    expect(KNOWLEDGE_GUIDE_CONTENT.roles).toHaveLength(34);
+  it("defines explicit operating data for all 36 role profiles", () => {
+    expect(KNOWLEDGE_GUIDE_CONTENT.roles).toHaveLength(36);
     for (const role of KNOWLEDGE_GUIDE_CONTENT.roles) {
       expect(role.dailyTasks.length, `${role.id} daily tasks`).toBeGreaterThan(
         0,
@@ -211,11 +216,11 @@ describe("Knowledge Base content", () => {
           JSON.stringify([role.dailyTasks, role.responsibilityStages]),
         ),
       ).size,
-    ).toBe(34);
+    ).toBe(36);
   });
 
-  it("defines exact policy and flow relationships for all 61 feature profiles", () => {
-    expect(KNOWLEDGE_CONTENT.features).toHaveLength(61);
+  it("defines exact policy and flow relationships for all 62 feature profiles", () => {
+    expect(KNOWLEDGE_CONTENT.features).toHaveLength(62);
     const flowIds = new Set(KNOWLEDGE_CONTENT.flows.map((flow) => flow.id));
     for (const feature of KNOWLEDGE_CONTENT.features) {
       expect(
@@ -324,7 +329,7 @@ describe("Knowledge Base content", () => {
     }
   });
   it("covers every production persona with valid articles and flows", () => {
-    expect(KNOWLEDGE_CONTENT.roles).toHaveLength(28);
+    expect(KNOWLEDGE_CONTENT.roles).toHaveLength(30);
     expect(validateKnowledgeBase(KNOWLEDGE_CONTENT)).toEqual([]);
     expect(validateKnowledgeContent(KNOWLEDGE_CONTENT)).toEqual([]);
   });
@@ -445,10 +450,11 @@ describe("Knowledge Base content", () => {
     (module, query, roleLabel) => {
       const result = searchKnowledge(KNOWLEDGE_CONTENT, query, {
         module,
-      }).find((item) =>
-        ["action", "decision", "system", "exception", "outcome"].includes(
-          item.type,
-        ) && item.href.includes("step="),
+      }).find(
+        (item) =>
+          ["action", "decision", "system", "exception", "outcome"].includes(
+            item.type,
+          ) && item.href.includes("step="),
       );
 
       expect(result).toMatchObject({ module });

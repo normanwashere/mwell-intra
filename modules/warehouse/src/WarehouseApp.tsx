@@ -15,7 +15,7 @@
 import { useEffect, useLayoutEffect, useState } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 import { SignInPrompt, SkeletonList, SkeletonStats } from '@intra/ui';
-import type { Role } from '@intra/data-kit';
+import { isWarehouseRole } from '@intra/data-kit';
 import { useSession } from '@/auth/session';
 import { ThemeProvider } from '@/app/theme';
 import { WarehouseProvider } from '@/app/store';
@@ -33,7 +33,8 @@ const useIsomorphicLayoutEffect =
 
 function useNormalizeBasenamePath(basename: string): boolean {
   const [ready, setReady] = useState(
-    () => typeof window === 'undefined' || window.location.pathname !== basename,
+    () =>
+      typeof window === 'undefined' || window.location.pathname !== basename,
   );
 
   useIsomorphicLayoutEffect(() => {
@@ -70,7 +71,7 @@ export interface WarehouseAppProps {
 export function WarehouseApp({ basename = '/warehouse' }: WarehouseAppProps) {
   const basenameReady = useNormalizeBasenamePath(basename);
   const { profile, userRoles, mode, supabaseClient, loading } = useSession();
-  const warehouseRoles = (userRoles.warehouse ?? []) as Role[];
+  const warehouseRoles = (userRoles.warehouse ?? []).filter(isWarehouseRole);
   const initialRole = warehouseRoles[0];
 
   // Session still restoring → paint a lightweight skeleton instead of a
@@ -99,8 +100,8 @@ export function WarehouseApp({ basename = '/warehouse' }: WarehouseAppProps) {
         <div className="max-w-sm space-y-3">
           <h1 className="text-lg font-bold text-ink">No warehouse access</h1>
           <p className="text-sm text-muted">
-            Your account doesn&apos;t include a warehouse role. If you think this
-            is a mistake, contact your administrator.
+            Your account doesn&apos;t include a warehouse role. If you think
+            this is a mistake, contact your administrator.
           </p>
           <a
             href="/"

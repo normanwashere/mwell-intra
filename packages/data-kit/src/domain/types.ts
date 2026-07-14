@@ -286,17 +286,29 @@ export interface PurchaseOrder {
   createdAt: string;
 }
 
-/** Warehouse roles exposed by the module. */
-export type Role =
-  | 'logistics_supervisor'
-  | 'operations'
-  | 'finance'
-  | 'bi_analyst'
-  | 'business_unit'
-  | 'marketing'
-  | 'procurement'
-  | 'pricing'
-  | 'warehouse_admin';
+/** Warehouse roles exposed by the module, including canonical live bundles. */
+export const WAREHOUSE_ROLES = [
+  'warehouse_operator',
+  'warehouse_supervisor',
+  'logistics_supervisor',
+  'operations',
+  'finance',
+  'bi_analyst',
+  'business_unit',
+  'marketing',
+  'procurement',
+  'pricing',
+  'warehouse_admin',
+] as const;
+
+export type Role = (typeof WAREHOUSE_ROLES)[number];
+
+const WAREHOUSE_ROLE_SET = new Set<string>(WAREHOUSE_ROLES);
+
+/** Narrow untrusted JWT/demo role values before using them as domain roles. */
+export function isWarehouseRole(value: unknown): value is Role {
+  return typeof value === 'string' && WAREHOUSE_ROLE_SET.has(value);
+}
 
 /** A demo/staff user that signs in by picking their role. */
 export interface Profile {

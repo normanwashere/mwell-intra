@@ -3,8 +3,10 @@ import { ROLES, ROLE_LIST, can } from './roles';
 import { modulesForRole } from '@/app/modules';
 
 describe('roles', () => {
-  it('defines all 8 user-story roles plus Warehouse Administrator', () => {
-    expect(ROLE_LIST).toHaveLength(9);
+  it('defines canonical bundles, legacy roles, and Warehouse Administrator', () => {
+    expect(ROLE_LIST).toHaveLength(11);
+    expect(ROLES.warehouse_operator).toBeDefined();
+    expect(ROLES.warehouse_supervisor).toBeDefined();
   });
 
   it('grants every role the dashboard and inventory view', () => {

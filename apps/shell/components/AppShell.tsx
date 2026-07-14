@@ -55,7 +55,8 @@ function topBarLabel(pathname: string, entries: readonly NavEntry[]): string {
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { profile, userRoles, mode, loading } = useSession();
+  const { profile, userRoles, userCapabilities, mode, loading } = useSession();
+  const access = { mode, userRoles, userCapabilities };
   const profileId = profile?.id;
   const pathname = usePathname() ?? "/";
   const reduced = useReducedMotion();
@@ -98,8 +99,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => controller.abort();
   }, [pathname, profileId]);
 
-  const areas =
-    loading || !profile ? [] : dashboardAreas(userRoles, profile.kind);
+  const areas = loading || !profile ? [] : dashboardAreas(access, profile.kind);
   const entries: NavEntry[] = [HOME_ENTRY, ...areas.map(navItemToEntry)];
 
   const isActive = (href: string) => {
@@ -114,7 +114,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     return pathname.startsWith(href);
   };
 
-  const fab = mobileCenterAction(pathname, userRoles);
+  const fab = mobileCenterAction(pathname, access);
   const mobileEntries = entries.some((entry) => entry.href === FINANCE_NAV.href)
     ? [
         HOME_ENTRY,

@@ -39,7 +39,7 @@ interface CardModel {
 }
 
 export default function DashboardPage() {
-  const { profile, userRoles, loading, mode } = useSession();
+  const { profile, userRoles, userCapabilities, loading, mode } = useSession();
   // Live counts read from the module localStores (guarded; empty in SSR).
   const badges = useModuleBadges(profile, userRoles);
 
@@ -80,15 +80,16 @@ export default function DashboardPage() {
     );
   }
 
-  const cards: CardModel[] = dashboardAreas(userRoles, profile.kind).map(
-    (m) => ({
-      href: m.href,
-      label: m.label,
-      description: m.description,
-      icon: m.icon,
-      tone: m.tone,
-    }),
-  );
+  const cards: CardModel[] = dashboardAreas(
+    { mode, userRoles, userCapabilities },
+    profile.kind,
+  ).map((m) => ({
+    href: m.href,
+    label: m.label,
+    description: m.description,
+    icon: m.icon,
+    tone: m.tone,
+  }));
   const quickAreas = cards.slice(0, 3);
 
   const firstName = profile.name?.split(/\s+/)[0] ?? "there";

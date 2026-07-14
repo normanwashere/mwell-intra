@@ -97,6 +97,10 @@ const FEATURE_RELATIONSHIPS: Record<string, FeatureRelationship> = {
     policyBasis: [POLICY.identity],
     relatedFlowIds: ["identity-and-access", "administration"],
   },
+  "admin-departments": {
+    policyBasis: [POLICY.identity, POLICY.doa],
+    relatedFlowIds: ["administration", "identity-and-access", "doa-governance"],
+  },
   "admin-doa": {
     policyBasis: [POLICY.doa],
     relatedFlowIds: ["doa-governance", "administration", "procure-to-pay"],
@@ -444,6 +448,8 @@ const auditedNotification = (definition: FeatureDefinition): string => {
       "The landing page only navigates to governed administration controls and does not write records.",
     "admin-users":
       "Role assignment and revocation use local success or error toasts; the page does not write core.notifications.",
+    "admin-departments":
+      "Department saves and deactivation failures use local success or error feedback; the governed RPC records the audit history instead of writing core.notifications.",
     "admin-doa":
       "Revision load, draft save, activation, and failures use local toasts; the page does not write core.notifications.",
   };
@@ -592,38 +598,66 @@ const definitions: FeatureDefinition[] = [
     module: "core",
     route: "/work",
     roleIds: CURRENT_ROLE_IDS,
-    purpose: "Combines assignments and approvals from accessible departments into one personal queue without moving decision authority.",
-    reads: "The governed core.v_my_work projection, current identity, source status, priority, due time, and owning record route.",
-    writes: "No source transaction changes; selecting Open source navigates to the authoritative record.",
-    statuses: "Loading, priority work, normal work, filtered, empty, source unavailable, or retrying.",
-    exception: "If a queue item is stale, open its source and trust the current source status before retrying or escalating.",
-    completionEvidence: "The authoritative source record opens under the same identity and displays its current decision or action state.",
+    purpose:
+      "Combines assignments and approvals from accessible departments into one personal queue without moving decision authority.",
+    reads:
+      "The governed core.v_my_work projection, current identity, source status, priority, due time, and owning record route.",
+    writes:
+      "No source transaction changes; selecting Open source navigates to the authoritative record.",
+    statuses:
+      "Loading, priority work, normal work, filtered, empty, source unavailable, or retrying.",
+    exception:
+      "If a queue item is stale, open its source and trust the current source status before retrying or escalating.",
+    completionEvidence:
+      "The authoritative source record opens under the same identity and displays its current decision or action state.",
   },
   {
     id: "events-workspace",
     title: "Events workspace",
     module: "events",
     route: "/events",
-    roleIds: ["events_requester", "events_coordinator", "events_viewer", "events_admin"],
-    purpose: "Owns activation intent, dates, lifecycle, and the handoff into Warehouse fulfillment while preserving physical custody ownership.",
-    reads: "Event records, dates, type, location, and Warehouse allocation totals for reserved, issued, and returned units.",
-    writes: "Authorized requesters and coordinators create event intent; stock reservation, issue, and return remain Warehouse commands.",
-    statuses: "Planned, active, completed, loading, unavailable, validation failed, or access denied.",
-    exception: "Correct invalid dates before creation; resolve stock or custody exceptions in Warehouse instead of changing event totals directly.",
-    completionEvidence: "The event appears with dates and lifecycle, and its Warehouse source shows attributable reservation, issue, and return records.",
+    roleIds: [
+      "events_requester",
+      "events_coordinator",
+      "events_viewer",
+      "events_admin",
+    ],
+    purpose:
+      "Owns activation intent, dates, lifecycle, and the handoff into Warehouse fulfillment while preserving physical custody ownership.",
+    reads:
+      "Event records, dates, type, location, and Warehouse allocation totals for reserved, issued, and returned units.",
+    writes:
+      "Authorized requesters and coordinators create event intent; stock reservation, issue, and return remain Warehouse commands.",
+    statuses:
+      "Planned, active, completed, loading, unavailable, validation failed, or access denied.",
+    exception:
+      "Correct invalid dates before creation; resolve stock or custody exceptions in Warehouse instead of changing event totals directly.",
+    completionEvidence:
+      "The event appears with dates and lifecycle, and its Warehouse source shows attributable reservation, issue, and return records.",
   },
   {
     id: "insights-workspace",
     title: "Insights workspace",
     module: "insights",
     route: "/insights",
-    roleIds: ["insights_analyst", "insights_manager", "insights_executive", "insights_admin"],
-    purpose: "Presents role-scoped operational and executive indicators from governed source data without granting operational writes.",
-    reads: "The governed core.v_insights_snapshot projection filtered by the caller's Insights capabilities.",
-    writes: "No operational data changes; users open the governed source when a metric requires action.",
-    statuses: "Loading, ready, on target, review required, empty, source unavailable, or access denied.",
-    exception: "Do not reconcile a metric by editing an export; open and correct the authoritative source workflow.",
-    completionEvidence: "The metric's source link opens the permitted operational record or queue with current data and ownership.",
+    roleIds: [
+      "insights_analyst",
+      "insights_manager",
+      "insights_executive",
+      "insights_admin",
+    ],
+    purpose:
+      "Presents role-scoped operational and executive indicators from governed source data without granting operational writes.",
+    reads:
+      "The governed core.v_insights_snapshot projection filtered by the caller's Insights capabilities.",
+    writes:
+      "No operational data changes; users open the governed source when a metric requires action.",
+    statuses:
+      "Loading, ready, on target, review required, empty, source unavailable, or access denied.",
+    exception:
+      "Do not reconcile a metric by editing an export; open and correct the authoritative source workflow.",
+    completionEvidence:
+      "The metric's source link opens the permitted operational record or queue with current data and ownership.",
   },
   {
     id: "admin-governance",
@@ -662,6 +696,25 @@ const definitions: FeatureDefinition[] = [
       "Stop if identity kind or approved responsibility is unclear and obtain authorization before changing access.",
     completionEvidence:
       "The intended role appears on the profile after the live assignments reload; the RPC owns any database audit side effect.",
+  },
+  {
+    id: "admin-departments",
+    title: "Department administration",
+    module: "admin",
+    route: "/admin/departments",
+    roleIds: ["platform_admin"],
+    purpose:
+      "Lets a platform administrator maintain an arbitrary department hierarchy for scoped ownership and role assignments without rewriting historical records.",
+    reads:
+      "The live department tree, parent relationships, display order, editor version, active status, purpose, assignment impact, and any reason a department cannot be deactivated.",
+    writes:
+      "Creates or updates one department through the governed RPC; deactivation is a soft status change that preserves historical references and audit history.",
+    statuses:
+      "Loading, ready, editing, saving, active, inactive, deactivation blocked, validation failed, or access denied.",
+    exception:
+      "Do not create a parent cycle or deactivate a department with active children or current or future profile assignments; reload stale edits, resolve the displayed dependency, and retry.",
+    completionEvidence:
+      "The refreshed tree shows the saved name, parent, order, purpose, and active state while existing historical records keep their original department reference.",
   },
   {
     id: "admin-doa",

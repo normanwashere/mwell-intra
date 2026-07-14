@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import type { Session, SupabaseClient, User } from '@supabase/supabase-js';
 import type { MemoryProfile } from './contracts';
 import { SessionProvider, useSession } from './SessionProvider';
@@ -38,11 +38,7 @@ function SignInOnMount({ email }: { email: string }) {
   return <span data-testid="who">{profile?.email ?? 'anon'}</span>;
 }
 
-function CanProbe({
-  cap,
-}: {
-  cap: 'receive_stock' | 'reserve_allocate';
-}) {
+function CanProbe({ cap }: { cap: 'receive_stock' | 'reserve_allocate' }) {
   const allowed = useCan('warehouse', cap);
   return <span data-testid="probe">{allowed ? 'yes' : 'no'}</span>;
 }
@@ -86,6 +82,53 @@ function liveClient() {
     schema: vi.fn().mockReturnValue({ rpc }),
   } as unknown as SupabaseClient<Record<string, unknown>, string>;
   return { client, rpc };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((next) => {
+    resolve = next;
+  });
+  return { promise, resolve };
+}
+
+function transitionClient() {
+  const makeUser = (id: string, capabilityRole: string) =>
+    ({
+      id,
+      email: `${id}@mwell.test`,
+      app_metadata: { roles: { warehouse: [capabilityRole] } },
+      user_metadata: {},
+    }) as unknown as User;
+  const userA = makeUser('user-a', 'business_unit');
+  const sessionA = { user: userA } as Session;
+  let authListener:
+    ((_event: string, session: Session | null) => void) | undefined;
+  const rpc = vi.fn().mockResolvedValue({
+    data: { warehouse: ['receive_stock'] },
+    error: null,
+  });
+  const getUser = vi
+    .fn()
+    .mockResolvedValue({ data: { user: userA }, error: null });
+  const client = {
+    auth: {
+      getSession: vi.fn().mockResolvedValue({ data: { session: sessionA } }),
+      getUser,
+      onAuthStateChange: vi.fn().mockImplementation((listener) => {
+        authListener = listener;
+        return { data: { subscription: { unsubscribe: vi.fn() } } };
+      }),
+    },
+    schema: vi.fn().mockReturnValue({ rpc }),
+  } as unknown as SupabaseClient<Record<string, unknown>, string>;
+  return {
+    client,
+    getUser,
+    makeUser,
+    rpc,
+    emit: (session: Session | null) => authListener?.('SIGNED_IN', session),
+  };
 }
 
 describe('<Guard>', () => {
@@ -166,6 +209,94 @@ describe('useCan', () => {
     );
     expect(screen.getByTestId('live-receive').textContent).toBe('yes');
     expect(screen.getByTestId('live-reserve').textContent).toBe('no');
+  });
+
+  it('keeps verified identity but fails closed when live capabilities cannot load', async () => {
+    const { client, rpc } = liveClient();
+    rpc.mockResolvedValueOnce({ data: null, error: new Error('offline') });
+
+    render(
+      <SessionProvider config={{ mode: 'supabase', client }}>
+        <LiveSessionProbe />
+      </SessionProvider>,
+    );
+
+    await screen.findByText('live@mwell.test');
+    expect(screen.getByTestId('live-capabilities').textContent).toBe('none');
+    expect(screen.getByTestId('live-receive').textContent).toBe('no');
+    expect(screen.getByTestId('live-reserve').textContent).toBe('no');
+  });
+
+  it('invalidates capabilities on focus until a fresh snapshot resolves', async () => {
+    const { client, rpc } = liveClient();
+    render(
+      <SessionProvider config={{ mode: 'supabase', client }}>
+        <LiveSessionProbe />
+      </SessionProvider>,
+    );
+    await screen.findByText('live@mwell.test');
+
+    const refresh = deferred<{ data: unknown; error: null }>();
+    rpc.mockImplementationOnce(() => refresh.promise);
+    window.dispatchEvent(new Event('focus'));
+
+    await waitFor(() => {
+      expect(rpc).toHaveBeenCalledTimes(2);
+      expect(screen.getByTestId('live-capabilities').textContent).toBe('none');
+    });
+
+    await act(async () => {
+      refresh.resolve({
+        data: { warehouse: ['reserve_allocate'] },
+        error: null,
+      });
+      await refresh.promise;
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('live-reserve').textContent).toBe('yes');
+      expect(screen.getByTestId('live-receive').textContent).toBe('no');
+    });
+  });
+
+  it('does not let a stale capability refresh overwrite the latest user', async () => {
+    const { client, emit, getUser, makeUser, rpc } = transitionClient();
+    render(
+      <SessionProvider config={{ mode: 'supabase', client }}>
+        <LiveSessionProbe />
+      </SessionProvider>,
+    );
+    await screen.findByText('user-a@mwell.test');
+
+    const userB = makeUser('user-b', 'warehouse_operator');
+    const userC = makeUser('user-c', 'warehouse_supervisor');
+    const staleRefresh = deferred<{ data: unknown; error: null }>();
+    getUser
+      .mockResolvedValueOnce({ data: { user: userB }, error: null })
+      .mockResolvedValueOnce({ data: { user: userC }, error: null });
+    rpc
+      .mockImplementationOnce(() => staleRefresh.promise)
+      .mockResolvedValueOnce({
+        data: { warehouse: ['reserve_allocate'] },
+        error: null,
+      });
+
+    emit({ user: userB } as Session);
+    await waitFor(() => expect(rpc).toHaveBeenCalledTimes(2));
+    emit({ user: userC } as Session);
+    await screen.findByText('user-c@mwell.test');
+    expect(screen.getByTestId('live-reserve').textContent).toBe('yes');
+
+    await act(async () => {
+      staleRefresh.resolve({
+        data: { warehouse: ['receive_stock'] },
+        error: null,
+      });
+      await staleRefresh.promise;
+    });
+    expect(screen.getByTestId('live-user').textContent).toBe(
+      'user-c@mwell.test',
+    );
+    expect(screen.getByTestId('live-reserve').textContent).toBe('yes');
   });
 
   it('reflects the scoped capability of the signed-in roles', async () => {

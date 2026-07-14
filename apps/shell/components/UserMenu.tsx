@@ -9,9 +9,10 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Icon } from '@intra/ui';
 import { useSession } from '@intra/auth';
-import { MODULE_LIST, can } from '@intra/rbac';
+import { MODULE_LIST } from '@intra/rbac';
 import { cx } from '@shell/lib/cx';
 import { resetDemoData } from '@shell/lib/demoData';
+import { hasCapability, hasModuleAccess } from '@shell/lib/navigation';
 
 function initials(nameOrEmail: string): string {
   const source = nameOrEmail.trim();
@@ -26,7 +27,8 @@ function initials(nameOrEmail: string): string {
 }
 
 export function UserMenu() {
-  const { profile, userRoles, signOut, loading, mode } = useSession();
+  const { profile, userRoles, userCapabilities, signOut, loading, mode } =
+    useSession();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -59,10 +61,11 @@ export function UserMenu() {
   }
 
   const label = profile.name ?? profile.email;
-  const activeModules = MODULE_LIST.filter(
-    (m) => (userRoles[m]?.length ?? 0) > 0,
+  const access = { mode, userRoles, userCapabilities };
+  const activeModules = MODULE_LIST.filter((module) =>
+    hasModuleAccess(access, module),
   );
-  const isAdmin = can(userRoles, 'core', 'manage_rbac');
+  const isAdmin = hasCapability(access, 'core', 'manage_rbac');
 
   const handleSignOut = async () => {
     setOpen(false);
@@ -108,9 +111,7 @@ export function UserMenu() {
                 activeModules.map((m) => (
                   <span
                     key={m}
-                    className={cx(
-                      'chip bg-inset capitalize text-muted',
-                    )}
+                    className={cx('chip bg-inset capitalize text-muted')}
                   >
                     {m}
                   </span>
@@ -147,7 +148,10 @@ export function UserMenu() {
                   resetDemoData();
                 }
               }}
-              className={cx('btn-ghost w-full justify-start', isAdmin ? 'mt-1' : 'mt-3')}
+              className={cx(
+                'btn-ghost w-full justify-start',
+                isAdmin ? 'mt-1' : 'mt-3',
+              )}
             >
               <Icon name="rotate" className="h-4 w-4" />
               Reset demo data

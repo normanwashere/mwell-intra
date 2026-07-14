@@ -17,6 +17,7 @@ export const CONTEXTUAL_FEATURE_GUIDES: ContextualFeatureGuide[] = [
   guide("insights-workspace", "Insights workspace", "/insights"),
   guide("admin-governance", "Administration governance", "/admin"),
   guide("admin-users", "User and role administration", "/admin/users"),
+  guide("admin-departments", "Department administration", "/admin/departments"),
   guide("admin-doa", "Delegation of Authority administration", "/admin/doa"),
   guide("warehouse-dashboard", "Warehouse dashboard", "/warehouse"),
   guide("warehouse-scan", "Warehouse scan", "/warehouse/scan"),

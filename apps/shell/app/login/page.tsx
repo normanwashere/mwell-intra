@@ -29,6 +29,7 @@ export default function LoginPage() {
   const {
     profile,
     userRoles,
+    userCapabilities,
     mode,
     signingIn,
     authError,
@@ -53,9 +54,13 @@ export default function LoginPage() {
     if (!profile || redirecting) return;
     setRedirecting(true);
     replaceDocument(
-      authorizedPostLoginPath(redirectTo, userRoles, profile.kind),
+      authorizedPostLoginPath(
+        redirectTo,
+        { mode, userRoles, userCapabilities },
+        profile.kind,
+      ),
     );
-  }, [profile, redirectTo, redirecting, userRoles]);
+  }, [mode, profile, redirectTo, redirecting, userCapabilities, userRoles]);
 
   const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();

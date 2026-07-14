@@ -17,11 +17,16 @@ export function makeRepo(data?: WarehouseData) {
 export function renderWithProviders(
   ui: ReactElement,
   {
-    role = 'logistics_supervisor' as Role,
+    role = 'logistics_supervisor',
     repo = makeRepo(),
     route = '/',
     source = 'memory',
-  }: { role?: Role; repo?: InMemoryRepository; route?: string; source?: DataSource } = {},
+  }: {
+    role?: Role;
+    repo?: InMemoryRepository;
+    route?: string;
+    source?: DataSource;
+  } = {},
 ): RenderResult {
   return render(
     <MemoryRouter
