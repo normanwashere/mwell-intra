@@ -7,7 +7,7 @@ interface StockChangeDecisionSheetProps {
   actor: string;
   online: boolean;
   onOpenChange: (open: boolean) => void;
-  onDecision: (input: Omit<DecideStockChangeInput, 'actor'>) => Promise<boolean>;
+  onDecision: (input: DecideStockChangeInput) => Promise<boolean>;
 }
 
 const number = new Intl.NumberFormat('en-PH', {
@@ -43,7 +43,6 @@ export function StockChangeDecisionSheet({
         idempotencyKey: commandKey(request.id, decision),
         requestId: request.id,
         decision,
-        approvalTier: request.status === 'pending_finance' ? 'finance' : 'logistics_supervisor',
         ...(note.trim() ? { note: note.trim() } : {}),
       });
       if (ok) onOpenChange(false);

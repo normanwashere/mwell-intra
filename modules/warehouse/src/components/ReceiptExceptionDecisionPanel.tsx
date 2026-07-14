@@ -6,15 +6,22 @@ export interface ReceiptExceptionDecisionItem {
   receiptId: string;
   purchaseOrderId: string;
   poNumber: string;
-  requestedDisposition: 'damaged' | 'quarantine';
+  requestedDisposition: 'short' | 'excess' | 'damaged' | 'unidentified';
   requestedBy: string;
   requestedAt: string;
   reason: string;
+  lines: Array<{
+    poLineId: string;
+    productId: string;
+    actualQuantity: number;
+    expectedQuantity: number;
+    rawDescription: string;
+  }>;
 }
 
 export interface ReceiptExceptionDecisionInput {
   decisionId: string;
-  decision: 'quarantine' | 'reject';
+  decision: 'accept' | 'reject' | 'quarantine' | 'escalate';
   reason: string;
   evidenceUrls: string[];
 }
@@ -76,11 +83,17 @@ export function ReceiptExceptionDecisionPanel({ items, onDecision }: ReceiptExce
         description={selected ? `${selected.poNumber} · ${selected.requestedDisposition}` : undefined}
         footer={(
           <div className="grid grid-cols-2 gap-2">
+            <button type="button" className="btn-outline justify-center" disabled={!reason.trim() || !evidence.trim() || submitting} onClick={() => void decide('accept')}>
+              Accept receipt
+            </button>
             <button type="button" className="btn-ghost justify-center text-rose-600" disabled={!reason.trim() || !evidence.trim() || submitting} onClick={() => void decide('reject')}>
               Reject receipt
             </button>
             <button type="button" className="btn-primary justify-center" disabled={!reason.trim() || !evidence.trim() || submitting} onClick={() => void decide('quarantine')}>
-              Confirm quarantine
+              Quarantine receipt
+            </button>
+            <button type="button" className="btn-outline justify-center" disabled={!reason.trim() || !evidence.trim() || submitting} onClick={() => void decide('escalate')}>
+              Escalate receipt
             </button>
           </div>
         )}

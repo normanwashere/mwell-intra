@@ -1237,8 +1237,8 @@ export interface AcceptanceWorkItem {
   poNumber: string;
   requestId: string;
   status: string;
-  latestWarehouseReceiptReference?: string;
-  latestQcStatus?: string;
+  warehouseReceiptReference?: string;
+  qcStatus?: string;
   lines: Array<{
     poLineId: string;
     description: string;
@@ -1246,6 +1246,8 @@ export interface AcceptanceWorkItem {
     orderedQuantity: number;
     qcAcceptedQuantity: number;
     rejectedOrQuarantinedQuantity: number;
+    warehouseReceiptId: string;
+    qcInspectionIds: string[];
   }>;
 }
 
@@ -1255,9 +1257,9 @@ function mapAcceptanceWorkItem(row: Record<string, unknown>): AcceptanceWorkItem
     poNumber: String(row.po_number),
     requestId: String(row.request_id),
     status: String(row.status),
-    latestWarehouseReceiptReference: row.latest_warehouse_receipt_reference == null
-      ? undefined : String(row.latest_warehouse_receipt_reference),
-    latestQcStatus: row.latest_qc_status == null ? undefined : String(row.latest_qc_status),
+    warehouseReceiptReference: row.warehouse_receipt_reference == null
+      ? undefined : String(row.warehouse_receipt_reference),
+    qcStatus: row.qc_status == null ? undefined : String(row.qc_status),
     lines: ((row.lines ?? []) as Array<Record<string, unknown>>).map((line) => ({
       poLineId: String(line.poLineId),
       description: String(line.description),
@@ -1265,6 +1267,9 @@ function mapAcceptanceWorkItem(row: Record<string, unknown>): AcceptanceWorkItem
       orderedQuantity: Number(line.orderedQuantity ?? 0),
       qcAcceptedQuantity: Number(line.qcAcceptedQuantity ?? 0),
       rejectedOrQuarantinedQuantity: Number(line.rejectedOrQuarantinedQuantity ?? 0),
+      warehouseReceiptId: String(line.warehouseReceiptId),
+      qcInspectionIds: Array.isArray(line.qcInspectionIds)
+        ? line.qcInspectionIds.map(String) : [],
     })),
   };
 }
@@ -1291,7 +1296,12 @@ export function useAcceptanceWorkItem(purchaseOrderId: string) {
 
   const recordAcceptance = useCallback(async (input: {
     acceptedScope: string;
-    acceptedLines: Array<{ poLineId: string; quantity: number }>;
+    acceptedLines: Array<{
+      poLineId: string;
+      quantity: number;
+      warehouseReceiptId: string;
+      qcInspectionIds: string[];
+    }>;
     exceptions: string[];
   }) => {
     if (!live || !item) return false;
@@ -1300,7 +1310,7 @@ export function useAcceptanceWorkItem(purchaseOrderId: string) {
       acceptance_type: 'goods',
       accepted_scope: { summary: input.acceptedScope, lines: input.acceptedLines },
       exceptions: input.exceptions,
-      warehouse_receipt_reference: item.latestWarehouseReceiptReference,
+      warehouse_receipt_reference: item.warehouseReceiptReference,
     });
     await load();
     return true;

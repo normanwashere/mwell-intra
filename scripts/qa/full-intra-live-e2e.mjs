@@ -912,10 +912,17 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
     cleanPo: `${marker}-po-clean`,
     partialPo: `${marker}-po-partial`,
     exceptionPo: `${marker}-po-exception`,
+    shortPo: `${marker}-po-short`,
+    excessPo: `${marker}-po-excess`,
+    unidentifiedPo: `${marker}-po-unidentified`,
     cleanLine: `${marker}-line-clean`,
     partialLine: `${marker}-line-partial`,
+    concurrentLine: `${marker}-line-concurrent`,
     cancelledLine: `${marker}-line-cancelled`,
     exceptionLine: `${marker}-line-exception`,
+    shortLine: `${marker}-line-short`,
+    excessLine: `${marker}-line-excess`,
+    unidentifiedLine: `${marker}-line-unidentified`,
     cycleCount: `${marker}-cycle-count`,
     selfCycleCount: `${marker}-self-cycle-count`,
     quarantineReceipt: null,
@@ -929,7 +936,10 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
   };
   const fixture = { marker, client, ids, locationId: locations[0].id, cycleRequestId: null,
     requesterId: requesterProfiles[0].id, reviewerId: reviewerProfiles[0].id,
-    cleanupActivityEntityIds: [], cleanupExceptionIds: [], cleanupDecisionIds: [] };
+    poIds: [ids.cleanPo, ids.partialPo, ids.exceptionPo, ids.shortPo, ids.excessPo, ids.unidentifiedPo],
+    cleanupActivityEntityIds: [], cleanupExceptionIds: [], cleanupDecisionIds: [],
+    cleanupStockRequestIds: [],
+    receiptExceptionScenarios: [] };
   registerTask3Cleanup(fixture);
   await insertAuditRows(client, "core", "vendors", [{
     id: ids.vendor, legal_name: `${marker} Receipt Vendor`, category: "goods",
@@ -1000,17 +1010,31 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
       core_vendor_id: ids.vendor, vendor_name: `${marker} Receipt Vendor`, status: "issued", total: 400 },
     { id: ids.exceptionPo, po_number: `${marker}-PO-EXCEPTION`, request_id: ids.request,
       core_vendor_id: ids.vendor, vendor_name: `${marker} Receipt Vendor`, status: "issued", total: 100 },
+    { id: ids.shortPo, po_number: `${marker}-PO-SHORT`, request_id: ids.request,
+      core_vendor_id: ids.vendor, vendor_name: `${marker} Receipt Vendor`, status: "issued", total: 300 },
+    { id: ids.excessPo, po_number: `${marker}-PO-EXCESS`, request_id: ids.request,
+      core_vendor_id: ids.vendor, vendor_name: `${marker} Receipt Vendor`, status: "issued", total: 100 },
+    { id: ids.unidentifiedPo, po_number: `${marker}-PO-UNIDENTIFIED`, request_id: ids.request,
+      core_vendor_id: ids.vendor, vendor_name: `${marker} Receipt Vendor`, status: "issued", total: 100 },
   ]);
   await insertAuditRows(client, "procurement", "purchase_order_lines", [
     { id: ids.cleanLine, purchase_order_id: ids.cleanPo, line_no: 1,
       description: `${marker} clean receipt`, quantity: 1, warehouse_product_id: ids.product },
     { id: ids.partialLine, purchase_order_id: ids.partialPo, line_no: 1,
-      description: `${marker} partial receipt`, quantity: 3, warehouse_product_id: ids.product },
-    { id: ids.cancelledLine, purchase_order_id: ids.partialPo, line_no: 2,
+      description: `${marker} partial PO first receipt`, quantity: 1, warehouse_product_id: ids.product },
+    { id: ids.concurrentLine, purchase_order_id: ids.partialPo, line_no: 2,
+      description: `${marker} concurrent balance`, quantity: 2, warehouse_product_id: ids.product },
+    { id: ids.cancelledLine, purchase_order_id: ids.partialPo, line_no: 3,
       description: `${marker} cancelled line`, quantity: 1, warehouse_product_id: ids.product,
       receiving_status: "cancelled" },
     { id: ids.exceptionLine, purchase_order_id: ids.exceptionPo, line_no: 1,
       description: `${marker} quarantine receipt`, quantity: 1, warehouse_product_id: ids.product },
+    { id: ids.shortLine, purchase_order_id: ids.shortPo, line_no: 1,
+      description: `${marker} short receipt`, quantity: 3, warehouse_product_id: ids.product },
+    { id: ids.excessLine, purchase_order_id: ids.excessPo, line_no: 1,
+      description: `${marker} excess receipt`, quantity: 1, warehouse_product_id: ids.product },
+    { id: ids.unidentifiedLine, purchase_order_id: ids.unidentifiedPo, line_no: 1,
+      description: `${marker} unidentified receipt`, quantity: 1, warehouse_product_id: ids.product },
   ]);
   return fixture;
 }
@@ -1053,14 +1077,14 @@ async function task3OperatorReceiptTransactions(page, fixture) {
     /cancelled or rejected/i, "cancelled-line receipt",
   );
   requireRpcFailure(
-    await receive(fixture.ids.partialPo, fixture.ids.partialLine, 3, "excess"),
+    await receive(fixture.ids.partialPo, fixture.ids.concurrentLine, 3, "excess"),
     /exceeds/i, "excess receipt",
   );
   const inventoryBefore = (await inventoryLedger()).inventory;
   const ledgerBefore = (await inventoryLedger()).ledger;
   const concurrent = await Promise.all([
-    receive(fixture.ids.partialPo, fixture.ids.partialLine, 2, "concurrent-a"),
-    receive(fixture.ids.partialPo, fixture.ids.partialLine, 2, "concurrent-b"),
+    receive(fixture.ids.partialPo, fixture.ids.concurrentLine, 2, "concurrent-a"),
+    receive(fixture.ids.partialPo, fixture.ids.concurrentLine, 2, "concurrent-b"),
   ]);
   if (concurrent.filter((result) => result.ok).length !== 1)
     throw new Error(`Atomic concurrent receipt expected one success: ${JSON.stringify(concurrent)}`);
@@ -1068,25 +1092,51 @@ async function task3OperatorReceiptTransactions(page, fixture) {
   const ledgerAfter = (await inventoryLedger()).ledger;
   if (inventoryAfter - inventoryBefore !== 2 || ledgerAfter - ledgerBefore !== 1)
     throw new Error(`Concurrent receipt readback mismatch: inventory ${inventoryBefore}->${inventoryAfter}, ledger ${ledgerBefore}->${ledgerAfter}.`);
-  const exceptionBefore = await inventoryLedger();
-  const exceptionReceipt = await callRpcAsBrowserUser(page, "warehouse", "receive_procurement_po_exception", {
-    idempotency_key: `${fixture.marker}-quarantine-receipt`, po_id: fixture.ids.exceptionPo,
-    location_id: fixture.locationId, exception_type: "quarantine", reason: `${fixture.marker} quarantine on arrival`,
-    evidence_urls: [`audit/${fixture.marker}/quarantine.jpg`],
-    lines: [{ line_id: fixture.ids.exceptionLine, product_id: fixture.ids.product, quantity: 1 }],
-  });
-  if (!exceptionReceipt.ok) throw new Error(`Operator exception receipt failed: ${exceptionReceipt.body}`);
-  const exceptionResult = JSON.parse(exceptionReceipt.body);
-  fixture.ids.quarantineReceipt = exceptionResult.receipt.id;
-  fixture.ids.quarantineDecision = exceptionResult.decision.id;
-  fixture.ids.quarantineException = exceptionResult.exception.id;
-  fixture.ids.quarantineRequestedBy = exceptionResult.decision.requested_by;
-  fixture.cleanupDecisionIds.push(exceptionResult.decision.id);
-  fixture.cleanupExceptionIds.push(exceptionResult.exception.id);
-  fixture.cleanupActivityEntityIds.push(fixture.ids.exceptionPo);
-  const exceptionAfter = await inventoryLedger();
-  if (exceptionBefore.inventory !== exceptionAfter.inventory || exceptionBefore.ledger !== exceptionAfter.ledger)
-    throw new Error("Quarantine receipt posted available stock or a receipt movement.");
+  const exceptionFacts = [
+    { exceptionClass: "short", outcome: "accept", poId: fixture.ids.shortPo,
+      lineId: fixture.ids.shortLine, actualQuantity: 1, expectedQuantity: 3 },
+    { exceptionClass: "excess", outcome: "reject", poId: fixture.ids.excessPo,
+      lineId: fixture.ids.excessLine, actualQuantity: 2, expectedQuantity: 1 },
+    { exceptionClass: "damaged", outcome: "quarantine", poId: fixture.ids.exceptionPo,
+      lineId: fixture.ids.exceptionLine, actualQuantity: 1, expectedQuantity: 1 },
+    { exceptionClass: "unidentified", outcome: "escalate", poId: fixture.ids.unidentifiedPo,
+      lineId: fixture.ids.unidentifiedLine, actualQuantity: 1, expectedQuantity: 1,
+      rawDescription: `${fixture.marker} observed unlabelled carton` },
+  ];
+  for (const scenario of exceptionFacts) {
+    const exceptionBefore = await inventoryLedger();
+    const exceptionReceipt = await callRpcAsBrowserUser(
+      page, "warehouse", "receive_procurement_po_exception", {
+        idempotency_key: `${fixture.marker}-receipt-exception-${scenario.exceptionClass}`,
+        po_id: scenario.poId, location_id: fixture.locationId,
+        exception_type: scenario.exceptionClass,
+        reason: `${fixture.marker} receipt exception ${scenario.exceptionClass}`,
+        evidence_urls: [`audit/${fixture.marker}/${scenario.exceptionClass}.jpg`],
+        lines: [{ line_id: scenario.lineId, product_id: fixture.ids.product,
+          actual_quantity: scenario.actualQuantity, expected_quantity: scenario.expectedQuantity,
+          raw_description: scenario.rawDescription ?? `${fixture.marker} ${scenario.exceptionClass}` }],
+      },
+    );
+    if (!exceptionReceipt.ok)
+      throw new Error(`Operator ${scenario.exceptionClass} receipt failed: ${exceptionReceipt.body}`);
+    const result = JSON.parse(exceptionReceipt.body);
+    const tracked = { ...scenario, receiptId: result.receipt.id, decisionId: result.decision.id,
+      exceptionId: result.exception.id, requestedBy: result.decision.requested_by };
+    fixture.receiptExceptionScenarios.push(tracked);
+    fixture.cleanupDecisionIds.push(tracked.decisionId);
+    fixture.cleanupExceptionIds.push(tracked.exceptionId);
+    fixture.cleanupActivityEntityIds.push(scenario.poId);
+    const exceptionAfter = await inventoryLedger();
+    if (exceptionBefore.inventory !== exceptionAfter.inventory || exceptionBefore.ledger !== exceptionAfter.ledger)
+      throw new Error(`${scenario.exceptionClass} receipt posted available stock or a receipt movement.`);
+  }
+  const quarantineScenario = fixture.receiptExceptionScenarios.find(
+    (scenario) => scenario.outcome === "quarantine",
+  );
+  fixture.ids.quarantineReceipt = quarantineScenario.receiptId;
+  fixture.ids.quarantineDecision = quarantineScenario.decisionId;
+  fixture.ids.quarantineException = quarantineScenario.exceptionId;
+  fixture.ids.quarantineRequestedBy = quarantineScenario.requestedBy;
   requireRpcFailure(await callRpcAsBrowserUser(page, "warehouse", "resolve_procurement_po_exception", {
     idempotency_key: `${fixture.marker}-operator-self-exception-denial`,
     decision_id: fixture.ids.quarantineDecision, decision: "quarantine",
@@ -1107,6 +1157,34 @@ async function task3OperatorReceiptTransactions(page, fixture) {
   if (!cycleSubmit.ok) throw new Error(`Operator cycle-count submit failed: ${cycleSubmit.body}`);
   fixture.cycleRequestId = JSON.parse(cycleSubmit.body).requests[0].id;
   fixture.cleanupActivityEntityIds.push(fixture.cycleRequestId);
+  requireRpcFailure(await callRpcAsBrowserUser(page, "warehouse", "adjust_stock", {
+    stock_delta: { product_id: fixture.ids.product, location_id: fixture.locationId, delta: 1 },
+    movement: { id: `${fixture.marker}-direct-adjustment-probe` },
+  }), /retired|permission|not authorized/i, "retired direct stock adjustment");
+  const stockBeforeRequests = await inventoryLedger();
+  fixture.manualStockRequests = {};
+  for (const [name, sourceType, quantityDelta] of [
+    ["positive", "adjustment", 2],
+    ["negative", "write_off", -1],
+    ["insufficient", "write_off", -999],
+  ]) {
+    const requested = await callRpcAsBrowserUser(page, "warehouse", "request_stock_change", {
+      idempotency_key: `${fixture.marker}-manual-${name}`,
+      source_type: sourceType, product_id: fixture.ids.product,
+      location_id: fixture.locationId, quantity_delta: quantityDelta,
+      reason: `${fixture.marker} governed ${name} stock request`,
+      evidence_urls: [`audit/${fixture.marker}/manual-${name}.jpg`],
+    });
+    if (!requested.ok) throw new Error(`Governed ${name} stock request failed: ${requested.body}`);
+    const request = JSON.parse(requested.body);
+    fixture.manualStockRequests[name] = request.id;
+    fixture.cleanupStockRequestIds.push(request.id);
+    fixture.cleanupActivityEntityIds.push(request.id);
+  }
+  const stockAfterRequests = await inventoryLedger();
+  if (stockBeforeRequests.inventory !== stockAfterRequests.inventory
+      || stockBeforeRequests.ledger !== stockAfterRequests.ledger)
+    throw new Error("A stock-change request mutated inventory before locked approval.");
   return { name: "Task 3 operator receipt transactions", ok: true,
     cleanReceipt: JSON.parse(clean.body).receipt.id,
     partialReceipt: JSON.parse(partial.body).receipt.id,
@@ -1115,6 +1193,12 @@ async function task3OperatorReceiptTransactions(page, fixture) {
 }
 
 async function task3SupervisorTransactions(page, fixture) {
+  const inventoryQuantity = async () => {
+    const { data, error } = await fixture.client.schema("warehouse").from("stock_levels")
+      .select("quantity").eq("product_id", fixture.ids.product).eq("location_id", fixture.locationId);
+    if (error) throw new Error(`Stock approval readback failed: ${error.message}`);
+    return (data ?? []).reduce((total, row) => total + Number(row.quantity ?? 0), 0);
+  };
   requireRpcFailure(await callRpcAsBrowserUser(page, "private", "warehouse_inspect_quality", {
     idempotency_key: `${fixture.marker}-private-quality-denial`, source_type: "receipt",
     source_id: fixture.ids.quarantineReceipt, product_id: fixture.ids.product,
@@ -1132,24 +1216,70 @@ async function task3SupervisorTransactions(page, fixture) {
     expected: { procurement_po_line_id: fixture.ids.exceptionLine },
     select: "source_id,disposition,procurement_po_line_id" }, fixture.client);
 
-  const decisionPayload = {
-    idempotency_key: `${fixture.marker}-supervisor-quarantine-decision`,
-    decision_id: fixture.ids.quarantineDecision, decision: "quarantine",
-    reason: `${fixture.marker} different Warehouse Supervisor quarantine`,
-    evidence_urls: [`audit/${fixture.marker}/supervisor-quarantine.jpg`],
-  };
-  const resolution = await callRpcAsBrowserUser(page, "warehouse", "resolve_procurement_po_exception", decisionPayload);
-  if (!resolution.ok) throw new Error(`Supervisor receipt exception decision failed: ${resolution.body}`);
-  const replay = await callRpcAsBrowserUser(page, "warehouse", "resolve_procurement_po_exception", decisionPayload);
-  if (!replay.ok || JSON.parse(replay.body).decision.id !== fixture.ids.quarantineDecision)
-    throw new Error("Supervisor receipt exception decision was not idempotent.");
-  await verifyCheckpoint({ schema: "warehouse", table: "procurement_receipt_exception_decisions",
-    filters: { id: fixture.ids.quarantineDecision }, expected: { status: "decided", decision: "quarantine" },
-    select: "id,status,decision,requested_by,decided_by" }, fixture.client);
-  await verifyCheckpoint({ schema: "warehouse", table: "quality_inspections",
-    filters: { source_id: fixture.ids.quarantineReceipt }, expected: { disposition: "hold" },
-    select: "id,source_id,disposition,procurement_po_line_id" }, fixture.client);
-  fixture.cleanupActivityEntityIds.push(fixture.ids.quarantineDecision);
+  for (const scenario of fixture.receiptExceptionScenarios) {
+    const decisionPayload = {
+      idempotency_key: `${fixture.marker}-exception-outcome-${scenario.outcome}`,
+      decision_id: scenario.decisionId, decision: scenario.outcome,
+      reason: `${fixture.marker} exception outcome ${scenario.outcome}`,
+      evidence_urls: [`audit/${fixture.marker}/outcome-${scenario.outcome}.jpg`],
+    };
+    const resolution = await callRpcAsBrowserUser(
+      page, "warehouse", "resolve_procurement_po_exception", decisionPayload,
+    );
+    if (!resolution.ok)
+      throw new Error(`Supervisor ${scenario.outcome} decision failed: ${resolution.body}`);
+    const replay = await callRpcAsBrowserUser(
+      page, "warehouse", "resolve_procurement_po_exception", decisionPayload,
+    );
+    if (!replay.ok || JSON.parse(replay.body).decision.id !== scenario.decisionId)
+      throw new Error(`Supervisor ${scenario.outcome} decision was not idempotent.`);
+    await verifyCheckpoint({ schema: "warehouse", table: "procurement_receipt_exception_decisions",
+      filters: { id: scenario.decisionId },
+      expected: { status: scenario.outcome === "escalate" ? "escalated" : "decided",
+        decision: scenario.outcome }, select: "id,status,decision,requested_by,decided_by" }, fixture.client);
+    const expectedDisposition = { accept: "accepted", reject: "vendor_return",
+      quarantine: "hold", escalate: "pending" }[scenario.outcome];
+    await verifyCheckpoint({ schema: "warehouse", table: "quality_inspections",
+      filters: { source_id: scenario.receiptId }, expected: { disposition: expectedDisposition },
+      select: "id,source_id,disposition,procurement_po_line_id" }, fixture.client);
+    fixture.cleanupActivityEntityIds.push(scenario.decisionId);
+    if (scenario.outcome === "quarantine") {
+      const { data: qualityRows, error: qualityError } = await fixture.client.schema("warehouse")
+        .from("quality_inspections").select("id").eq("source_id", scenario.receiptId).limit(1);
+      if (qualityError || !qualityRows?.[0]) throw new Error("Quarantine QC readback failed.");
+      const { data: holdRows, error: holdError } = await fixture.client.schema("warehouse")
+        .from("inventory_holds").select("id,status").eq("inspection_id", qualityRows[0].id)
+        .eq("status", "active").limit(1);
+      if (holdError || !holdRows?.[0]) throw new Error("Quarantine did not create an active inventory hold.");
+      const release = await callRpcAsBrowserUser(page, "warehouse", "release_quality_hold", {
+        idempotency_key: `${fixture.marker}-release-quality-hold`, hold_id: holdRows[0].id,
+        target_disposition: "accepted", reason: `${fixture.marker} controlled hold release`,
+        evidence_urls: [`audit/${fixture.marker}/hold-release.jpg`],
+      });
+      if (!release.ok) throw new Error(`Controlled quarantine release failed: ${release.body}`);
+      await verifyCheckpoint({ schema: "warehouse", table: "inventory_holds",
+        filters: { id: holdRows[0].id }, expected: { status: "released" },
+        select: "id,status,released_by" }, fixture.client);
+    }
+  }
+
+  for (const [name, expectedDelta] of [["positive", 2], ["negative", -1]]) {
+    const before = await inventoryQuantity();
+    const decided = await callRpcAsBrowserUser(page, "warehouse", "decide_stock_change", {
+      idempotency_key: `${fixture.marker}-manual-${name}-approval`,
+      request_id: fixture.manualStockRequests[name], decision: "approved",
+      note: `${fixture.marker} trusted Supervisor ${name} approval`,
+    });
+    if (!decided.ok) throw new Error(`Governed ${name} stock approval failed: ${decided.body}`);
+    const after = await inventoryQuantity();
+    if (after - before !== expectedDelta)
+      throw new Error(`Governed ${name} stock approval applied ${after - before}, expected ${expectedDelta}.`);
+  }
+  requireRpcFailure(await callRpcAsBrowserUser(page, "warehouse", "decide_stock_change", {
+    idempotency_key: `${fixture.marker}-manual-insufficient-approval`,
+    request_id: fixture.manualStockRequests.insufficient, decision: "approved",
+    note: `${fixture.marker} insufficient stock denial`,
+  }), /negative|insufficient/i, "insufficient locked stock-change approval");
 
   const approveVariance = await callRpcAsBrowserUser(page, "warehouse", "decide_stock_change", {
     idempotency_key: `${fixture.marker}-variance-approve`, request_id: fixture.cycleRequestId,
@@ -1232,8 +1362,10 @@ async function task3GoodsAcceptance(page, fixture, purchaseOrderId, expectedLine
   const accepted = await callRpcAsBrowserUser(page, "procurement", "record_acceptance_pack", {
     purchase_order_id: purchaseOrderId, acceptance_type: "goods",
     accepted_scope: { summary: `${fixture.marker} browser-role acceptance`,
-      lines: [{ poLineId: expectedLineId, quantity: Number(line.qcAcceptedQuantity) }] },
-    exceptions: [], warehouse_receipt_reference: item.latest_warehouse_receipt_reference,
+      lines: [{ poLineId: expectedLineId, quantity: Number(line.qcAcceptedQuantity),
+        warehouseReceiptId: line.warehouseReceiptId,
+        qcInspectionIds: line.qcInspectionIds }] },
+    exceptions: [], warehouse_receipt_reference: item.warehouse_receipt_reference,
   });
   if (!accepted.ok) throw new Error(`${workflowName} mutation failed: ${accepted.body}`);
   const pack = JSON.parse(accepted.body);
@@ -1246,7 +1378,7 @@ async function task3GoodsAcceptance(page, fixture, purchaseOrderId, expectedLine
 
 async function assertTask3ZeroResidualRows(fixture) {
   const { client, ids, marker } = fixture;
-  const poIds = [ids.cleanPo, ids.partialPo, ids.exceptionPo];
+  const { poIds } = fixture;
   const checks = [
     ["core.vendors", client.schema("core").from("vendors").select("id", { count: "exact", head: true }).in("id", [ids.vendor, ids.expiredVendor])],
     ["core.activity_log", client.schema("core").from("activity_log").select("id", { count: "exact", head: true }).like("entity_id", `${marker}%`)],
@@ -1285,12 +1417,13 @@ async function assertTask3ZeroResidualRows(fixture) {
 
 async function cleanupTask3ReceiptFixture(fixture) {
   const { client, ids, marker } = fixture;
+  const { poIds } = fixture;
   const remove = async (schema, table, configure) => {
     const { error } = await configure(client.schema(schema).from(table).delete());
     if (error) throw new Error(`${schema}.${table} Task 3 cleanup failed: ${error.message}`);
   };
   const { data: receiptRows, error: receiptError } = await client.schema("warehouse").from("receipts")
-    .select("id").in("procurement_po_id", [ids.cleanPo, ids.partialPo, ids.exceptionPo]);
+    .select("id").in("procurement_po_id", poIds);
   if (receiptError) throw new Error(`Warehouse receipt cleanup lookup failed: ${receiptError.message}`);
   const receiptIds = [...new Set([...(receiptRows ?? []).map((row) => row.id), ids.quarantineReceipt].filter(Boolean))];
   let qualityRows = [];
@@ -1304,7 +1437,10 @@ async function cleanupTask3ReceiptFixture(fixture) {
   const { data: requestRows, error: requestError } = await client.schema("warehouse").from("stock_change_requests")
     .select("id").in("source_id", [ids.cycleCount, ids.selfCycleCount]);
   if (requestError) throw new Error(`Variance cleanup lookup failed: ${requestError.message}`);
-  const stockRequestIds = (requestRows ?? []).map((row) => row.id);
+  const stockRequestIds = [...new Set([
+    ...(requestRows ?? []).map((row) => row.id),
+    ...(fixture.cleanupStockRequestIds ?? []),
+  ])];
   const exceptionSourceIds = [...receiptIds, ...stockRequestIds.map(String), ...qualityIds.map(String)];
   let exceptionRows = [];
   if (exceptionSourceIds.length) {
@@ -1344,13 +1480,14 @@ async function cleanupTask3ReceiptFixture(fixture) {
     await remove("warehouse", "receipts", (query) => query.in("id", receiptIds));
   }
   await remove("warehouse", "stock_change_requests", (query) => query.in("source_id", [ids.cycleCount, ids.selfCycleCount]));
+  if (stockRequestIds.length) await remove("warehouse", "stock_change_requests", (query) => query.in("id", stockRequestIds));
   await remove("warehouse", "cycle_counts", (query) => query.in("id", [ids.cycleCount, ids.selfCycleCount]));
   await remove("warehouse", "stock_levels", (query) => query.eq("product_id", ids.product));
   await remove("warehouse", "suppliers", (query) => query.eq("id", `proc-${ids.vendor}`));
-  await remove("procurement", "acceptance_packs", (query) => query.in("purchase_order_id", [ids.cleanPo, ids.partialPo, ids.exceptionPo]));
+  await remove("procurement", "acceptance_packs", (query) => query.in("purchase_order_id", poIds));
   await remove("procurement", "acceptance_reviewer_assignments", (query) => query.eq("request_id", ids.request));
-  await remove("procurement", "purchase_order_lines", (query) => query.in("purchase_order_id", [ids.cleanPo, ids.partialPo, ids.exceptionPo]));
-  await remove("procurement", "purchase_orders", (query) => query.in("id", [ids.cleanPo, ids.partialPo, ids.exceptionPo]));
+  await remove("procurement", "purchase_order_lines", (query) => query.in("purchase_order_id", poIds));
+  await remove("procurement", "purchase_orders", (query) => query.in("id", poIds));
   await remove("procurement", "exception_packs", (query) => query.in("request_id", [ids.policyDirect, ids.policyPetty]));
   await remove("procurement", "policy_evidence", (query) => query.like("request_id", `${marker}%`));
   await remove("procurement", "route_decisions", (query) => query.like("request_id", `${marker}%`));
@@ -1878,7 +2015,7 @@ try {
       workflows.push(await runWorkflow(
         browser, viewport, { email: "intra.test.legal.reviewer@mwell.com.ph" },
         { name: "Task 3 assigned-reviewer goods acceptance", run: (page) => task3GoodsAcceptance(
-          page, task3Fixture, task3Fixture.ids.partialPo, task3Fixture.ids.partialLine,
+          page, task3Fixture, task3Fixture.ids.partialPo, task3Fixture.ids.concurrentLine,
           "Task 3 assigned-reviewer goods acceptance",
         ) },
       ));

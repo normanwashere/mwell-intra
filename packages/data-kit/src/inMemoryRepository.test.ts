@@ -591,57 +591,6 @@ describe('recordCycleCount', () => {
   });
 });
 
-describe('adjustStock', () => {
-  it('reduces non-serialized stock and logs an adjustment movement', async () => {
-    const mv = await repo.adjustStock({
-      productId: 'shirt',
-      locationId: 'loc-wh',
-      quantityDelta: -5,
-      reason: 'damaged in storage',
-      actor: 'finance@mwell',
-    });
-    expect(mv.type).toBe('adjustment');
-    const state = await repo.getStockState();
-    expect(availableForProduct(state, 'shirt', 'loc-wh')).toBe(15);
-  });
-
-  it('adds non-serialized stock when positive', async () => {
-    await repo.adjustStock({
-      productId: 'shirt',
-      locationId: 'loc-wh',
-      quantityDelta: 8,
-      reason: 'found',
-      actor: 'logi@mwell',
-    });
-    const state = await repo.getStockState();
-    expect(availableForProduct(state, 'shirt', 'loc-wh')).toBe(28);
-  });
-
-  it('writes off serialized units (marks them lost)', async () => {
-    await repo.adjustStock({
-      productId: 'ring',
-      locationId: 'loc-wh',
-      quantityDelta: -1,
-      reason: 'lost in transit',
-      actor: 'logi@mwell',
-    });
-    const data = await repo.getData();
-    expect(data.units.find((u) => u.serialNumber === 'SN1')!.status).toBe('lost');
-  });
-
-  it('requires a reason', async () => {
-    await expect(
-      repo.adjustStock({
-        productId: 'shirt',
-        locationId: 'loc-wh',
-        quantityDelta: -1,
-        reason: '   ',
-        actor: 'x',
-      }),
-    ).rejects.toThrow(/reason is required/i);
-  });
-});
-
 describe('transfer', () => {
   it('moves non-serialized availability between locations', async () => {
     const movements = await repo.transfer({
@@ -952,31 +901,6 @@ describe('storage areas & bins', () => {
 });
 
 describe('integrity guards (v7)', () => {
-  it('refuses a positive serialized adjustment (found units must be received)', async () => {
-    await expect(
-      repo.adjustStock({
-        productId: 'ring',
-        locationId: 'loc-wh',
-        quantityDelta: 2,
-        reason: 'found on shelf',
-        actor: 'logi@mwell',
-      }),
-    ).rejects.toThrow(/received\/registered/i);
-  });
-
-  it('writes off serialized units on a negative adjustment', async () => {
-    const mv = await repo.adjustStock({
-      productId: 'ring',
-      locationId: 'loc-wh',
-      quantityDelta: -1,
-      reason: 'damaged',
-      actor: 'logi@mwell',
-    });
-    expect(mv.quantity).toBe(-1);
-    const state = await repo.getStockState();
-    expect(availableForProduct(state, 'ring')).toBe(0);
-  });
-
   it('does not duplicate stock when transferring from an empty source bin', async () => {
     // All shirt stock lives in the general area (no bin). Moving "from bin-a"
     // (empty) must throw instead of crediting the destination.
@@ -1111,10 +1035,12 @@ describe('W1 control parity', () => {
     const decision = {
       idempotencyKey: 'decision-memory1', requestId: requests[0]!.id,
       decision: 'approved' as const,
-      actor: 'supervisor@mwell', approvalTier: 'logistics_supervisor' as const,
     };
-    await controlled.decideStockChange(decision);
-    await controlled.decideStockChange(decision);
+    const supervisor = {
+      actor: 'supervisor@mwell', capabilities: ['approve_stock_adjustment'] as const,
+    };
+    await controlled.decideStockChange(decision, supervisor);
+    await controlled.decideStockChange(decision, supervisor);
     const data = await controlled.getData();
     expect(data.stockLevels[0]!.quantity).toBe(18);
     expect(data.movements.filter((movement) => movement.reference === requests[0]!.id)).toHaveLength(1);
@@ -1159,8 +1085,7 @@ describe('W1 control parity', () => {
     expect((await controlled.getData()).units.find((unit) => unit.serialNumber === 'SN2')?.status).toBe('in_stock');
     await controlled.decideStockChange({
       idempotencyKey: 'serialized-missing-approve', requestId: request!.id, decision: 'approved',
-      actor: 'supervisor@mwell', approvalTier: 'logistics_supervisor',
-    });
+    }, { actor: 'supervisor@mwell', capabilities: ['approve_stock_adjustment'] });
     expect((await controlled.getData()).units.find((unit) => unit.serialNumber === 'SN2')?.status).toBe('lost');
   });
 
@@ -1182,26 +1107,62 @@ describe('W1 control parity', () => {
 
     await expect(controlled.decideStockChange({
       idempotencyKey: 'tiered-finance-early', requestId: request!.id, decision: 'approved',
-      actor: 'finance@mwell', approvalTier: 'finance',
-    })).rejects.toThrow(/warehouse supervisor/i);
+    }, { actor: 'finance@mwell', capabilities: ['approve_stock_adjustment_finance'] }))
+      .rejects.toThrow(/warehouse supervisor/i);
     await expect(controlled.decideStockChange({
       idempotencyKey: 'tiered-requester', requestId: request!.id, decision: 'approved',
-      actor: 'counter@mwell', approvalTier: 'logistics_supervisor',
-    })).rejects.toThrow(/requester/i);
+    }, { actor: 'counter@mwell', capabilities: ['approve_stock_adjustment'] }))
+      .rejects.toThrow(/requester/i);
     const afterSupervisor = await controlled.decideStockChange({
       idempotencyKey: 'tiered-supervisor', requestId: request!.id, decision: 'approved',
-      actor: 'supervisor@mwell', approvalTier: 'logistics_supervisor',
-    });
+    }, { actor: 'supervisor@mwell', capabilities: ['approve_stock_adjustment'] });
     expect(afterSupervisor.status).toBe('pending_finance');
     await expect(controlled.decideStockChange({
       idempotencyKey: 'tiered-supervisor-late', requestId: request!.id, decision: 'approved',
-      actor: 'supervisor@mwell', approvalTier: 'logistics_supervisor',
-    })).rejects.toThrow(/finance/i);
+    }, { actor: 'supervisor@mwell', capabilities: ['approve_stock_adjustment'] }))
+      .rejects.toThrow(/finance/i);
     await controlled.decideStockChange({
       idempotencyKey: 'tiered-finance', requestId: request!.id, decision: 'approved',
-      actor: 'finance@mwell', approvalTier: 'finance',
-    });
+    }, { actor: 'finance@mwell', capabilities: ['approve_stock_adjustment_finance'] });
     expect((await controlled.getData()).stockLevels[0]!.quantity).toBe(18);
+  });
+
+  it('queues a manual stock change and mutates only after a different authorized approval', async () => {
+    const controlled = new InMemoryRepository(miniData(), {
+      now: () => '2026-07-10T01:00:00Z', id: (prefix) => `${prefix}-manual`,
+    });
+    const request = await controlled.requestStockChange({
+      idempotencyKey: 'manual-request-001', sourceType: 'write_off',
+      productId: 'shirt', locationId: 'loc-wh', quantityDelta: -2,
+      reason: 'Damaged during storage', evidenceUrls: ['evidence/damage.jpg'],
+    }, { actor: 'operator@mwell', capabilities: ['manage_inventory'] });
+    expect(request.status).toBe('pending_supervisor');
+    expect((await controlled.getData()).stockLevels[0]!.quantity).toBe(20);
+
+    await expect(controlled.decideStockChange({
+      idempotencyKey: 'manual-self-approval', requestId: request.id, decision: 'approved',
+    }, { actor: 'operator@mwell', capabilities: ['approve_stock_adjustment'] }))
+      .rejects.toThrow(/requester/i);
+    await controlled.decideStockChange({
+      idempotencyKey: 'manual-supervisor-approval', requestId: request.id, decision: 'approved',
+    }, { actor: 'supervisor@mwell', capabilities: ['approve_stock_adjustment'] });
+    expect((await controlled.getData()).stockLevels[0]!.quantity).toBe(18);
+  });
+
+  it('rejects an approved signed delta when locked stock is insufficient', async () => {
+    const controlled = new InMemoryRepository(miniData(), {
+      now: () => '2026-07-10T01:00:00Z', id: (prefix) => `${prefix}-insufficient`,
+    });
+    const request = await controlled.requestStockChange({
+      idempotencyKey: 'insufficient-request', sourceType: 'adjustment',
+      productId: 'shirt', locationId: 'loc-wh', quantityDelta: -21,
+      reason: 'Reconciliation correction', evidenceUrls: [],
+    }, { actor: 'operator@mwell', capabilities: ['manage_inventory'] });
+    await expect(controlled.decideStockChange({
+      idempotencyKey: 'insufficient-approve', requestId: request.id, decision: 'approved',
+    }, { actor: 'supervisor@mwell', capabilities: ['approve_stock_adjustment'] }))
+      .rejects.toThrow(/negative|insufficient/i);
+    expect((await controlled.getData()).stockLevels[0]!.quantity).toBe(20);
   });
 
   it('moves a vendor-return hold into supplier custody exactly once', async () => {

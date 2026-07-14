@@ -31,7 +31,6 @@ import {
   returnOverlay,
   transferOverlay,
   relocateOverlay,
-  adjustOverlay,
   allConflicts,
   allPending,
   pendingCount as outboxPendingCount,
@@ -40,7 +39,6 @@ import {
 } from '@intra/data-kit';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type {
-  AdjustStockInput,
   CancelAllocationInput,
   CancelPurchaseOrderInput,
   CreateEventInput,
@@ -64,6 +62,7 @@ import type {
   ReceiveAgainstPOInput,
   ReceiveStockInput,
   ReceiveProcurementPOInput,
+  RequestStockChangeInput,
   ProcurementPOHandoff,
   ReleaseHoldInput,
   ResolveExceptionInput,
@@ -91,6 +90,7 @@ import type {
 import { ROLES, type Capability } from '@/auth/roles';
 import {
   canOpenWarehouseRoute,
+  STOCK_CHANGE_DECISION_CAPABILITIES,
   WAREHOUSE_MUTATION_CAPABILITIES,
 } from '@/app/authorization';
 import type { WarehouseRouteId } from '@/app/modules';
@@ -162,7 +162,7 @@ interface WarehouseContextValue {
   ) => Promise<boolean>;
   createProduct: (input: Omit<CreateProductInput, 'actor'>) => Promise<boolean>;
   updateProduct: (input: Omit<UpdateProductInput, 'actor'>) => Promise<boolean>;
-  adjustStock: (input: Omit<AdjustStockInput, 'actor'>) => Promise<boolean>;
+  requestStockChange: (input: RequestStockChangeInput) => Promise<boolean>;
   loadQualityInspections: (query: PageQuery) => Promise<PageResult<QualityInspection>>;
   loadHolds: (query: PageQuery) => Promise<PageResult<InventoryHold>>;
   loadVendorReturns: (query: PageQuery) => Promise<PageResult<VendorReturn>>;
@@ -175,7 +175,7 @@ interface WarehouseContextValue {
   createVendorReturn: (input: CreateVendorReturnInput) => Promise<boolean>;
   updateOperationRoute: (input: UpdateOperationRouteInput) => Promise<boolean>;
   submitCycleCount: (input: SubmitCycleCountInput) => Promise<boolean>;
-  decideStockChange: (input: Omit<DecideStockChangeInput, 'actor'>) => Promise<boolean>;
+  decideStockChange: (input: DecideStockChangeInput) => Promise<boolean>;
   resolveException: (input: ResolveExceptionInput) => Promise<boolean>;
   loadReceivableProcurementPOs: () => Promise<ProcurementPOHandoff[]>;
   receiveProcurementPO: (input: ReceiveProcurementPOInput) => Promise<boolean>;
@@ -546,13 +546,11 @@ export function WarehouseProvider({
       runAuthorizedAction('manage_products', 'other', () =>
         repo.updateProduct({ ...input, actor }),
       ),
-    adjustStock: (input) =>
+    requestStockChange: (input) =>
       runAuthorizedAction(
-        WAREHOUSE_MUTATION_CAPABILITIES.adjustStock,
-        'adjustStock',
-        () => repo.adjustStock({ ...input, actor }),
-        adjustOverlay(input, actor),
-        input as Record<string, unknown>,
+        'manage_inventory',
+        'other',
+        () => repo.requestStockChange(input, { actor: identityId, capabilities }),
       ),
     loadQualityInspections: (query) => repo.listQualityInspections(query),
     loadHolds: (query) => repo.listHolds(query),
@@ -596,11 +594,9 @@ export function WarehouseProvider({
       ),
     decideStockChange: (input) =>
       runAuthorizedAction(
-        input.approvalTier === 'finance'
-          ? 'approve_stock_adjustment_finance'
-          : 'approve_stock_adjustment',
+        STOCK_CHANGE_DECISION_CAPABILITIES,
         'other',
-        () => repo.decideStockChange({ ...input, actor: identityId }),
+        () => repo.decideStockChange(input, { actor: identityId, capabilities }),
       ),
     resolveException: (input) =>
       runAuthorizedAction('resolve_exceptions', 'other', () =>

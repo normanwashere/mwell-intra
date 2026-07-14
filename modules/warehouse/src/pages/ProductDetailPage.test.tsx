@@ -159,27 +159,38 @@ describe('ProductDetailPage', () => {
     });
   });
 
-  it('posts a manual stock adjustment / write-off', async () => {
+  it('submits a governed write-off request without directly changing stock', async () => {
     const user = userEvent.setup();
-    renderDetail('shirt-l', 'logistics_supervisor');
+    const repo = makeRepo();
+    const before = (await repo.getData()).stockLevels.find((row) =>
+      row.productId === 'shirt-l' && row.locationId === 'loc-main')?.quantity;
+    renderWithProviders(
+      <Routes><Route path="/inventory/:id" element={<ProductDetailPage />} /></Routes>,
+      { route: '/inventory/shirt-l', role: 'warehouse_operator', repo },
+    );
     await screen.findByRole('heading', { name: /Event Shirt \(L\)/i });
 
     await user.click(screen.getByRole('button', { name: /adjust/i }));
-    const dialog = await screen.findByRole('dialog', { name: /adjust stock/i });
+    const dialog = await screen.findByRole('dialog', { name: /request stock change/i });
     await user.type(within(dialog).getByLabelText('Reason'), 'damaged');
-    await user.click(within(dialog).getByRole('button', { name: /post adjustment/i }));
+    await user.click(within(dialog).getByRole('button', { name: /submit for approval/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/wrote off/i)).toBeInTheDocument();
+      expect(screen.getByText(/request submitted/i)).toBeInTheDocument();
     });
+    expect((await repo.listStockChangeRequests({})).rows).toEqual([
+      expect.objectContaining({ sourceType: 'write_off', quantityDelta: -1, reason: 'damaged' }),
+    ]);
+    expect((await repo.getData()).stockLevels.find((row) =>
+      row.productId === 'shirt-l' && row.locationId === 'loc-main')?.quantity).toBe(before);
   });
 
-  it('requires the stock-adjustment approval capability in a live bundle', async () => {
+  it('requires inventory authority to request a stock change in a live bundle', async () => {
     const cycleOnly = renderWithProviders(
       <Routes><Route path="/inventory/:id" element={<ProductDetailPage />} /></Routes>,
       {
         route: '/inventory/shirt-l', role: 'warehouse_operator', source: 'supabase',
-        capabilities: ['manage_inventory', 'cycle_count'],
+        capabilities: ['cycle_count'],
       },
     );
     await screen.findByRole('heading', { name: /Event Shirt \(L\)/i });
@@ -190,7 +201,7 @@ describe('ProductDetailPage', () => {
       <Routes><Route path="/inventory/:id" element={<ProductDetailPage />} /></Routes>,
       {
         route: '/inventory/shirt-l', role: 'warehouse_operator', source: 'supabase',
-        capabilities: ['manage_inventory', 'approve_stock_adjustment'],
+        capabilities: ['manage_inventory'],
       },
     );
     expect(await screen.findByRole('button', { name: /adjust/i })).toBeInTheDocument();
@@ -208,7 +219,7 @@ describe('ProductDetailPage', () => {
     expect(screen.queryByRole('button', { name: /relocate/i })).not.toBeInTheDocument();
   });
 
-  it('shows Adjust for the legacy Supervisor alias with canonical approval capability', async () => {
+  it('shows the request action for the legacy Supervisor alias', async () => {
     renderDetail('shirt-l', 'logistics_supervisor');
     await screen.findByRole('heading', { name: /Event Shirt \(L\)/i });
     expect(screen.getByRole('button', { name: /adjust/i })).toBeInTheDocument();

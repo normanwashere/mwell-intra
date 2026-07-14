@@ -37,7 +37,6 @@ import {
 } from './outbox';
 import { toStockState, type WarehouseData, type WarehouseRepository } from './repository';
 import type {
-  AdjustStockInput,
   CycleCountInput,
   IssueInput,
   ReceiveStockInput,
@@ -58,7 +57,6 @@ export const QUEUEABLE: ReadonlySet<QueueableMethod> = new Set<QueueableMethod>(
   'recordReturn',
   'issue',
   'transfer',
-  'adjustStock',
   'relocate',
 ]);
 
@@ -248,9 +246,6 @@ export async function replayEntry(
         break;
       case 'transfer':
         await ctx.repo.transfer(input);
-        break;
-      case 'adjustStock':
-        await ctx.repo.adjustStock(input);
         break;
       case 'relocate':
         await ctx.repo.relocate(input);
@@ -605,36 +600,6 @@ export function relocateOverlay(
         fromBinId: input.fromBinId,
         toBinId: input.toBinId,
         reason: 'bin relocation',
-        actor,
-        createdAt,
-      },
-    ],
-  };
-}
-
-export function adjustOverlay(
-  input: Omit<AdjustStockInput, 'actor'>,
-  actor: string,
-): WarehousePatch {
-  const createdAt = new Date().toISOString();
-  return {
-    stockDeltas: [
-      {
-        productId: input.productId,
-        locationId: input.locationId,
-        binId: input.binId,
-        delta: input.quantityDelta,
-      },
-    ],
-    appendMovements: [
-      {
-        id: tmpId('mv'),
-        type: 'adjustment',
-        productId: input.productId,
-        quantity: input.quantityDelta,
-        toLocationId: input.locationId,
-        toBinId: input.binId,
-        reason: input.reason,
         actor,
         createdAt,
       },

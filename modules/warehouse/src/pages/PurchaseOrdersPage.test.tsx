@@ -191,8 +191,10 @@ describe('PurchaseOrdersPage', () => {
     expect(dialog).toBeInTheDocument();
     expect(within(dialog).getByText('PO-HANDOFF-001')).toBeInTheDocument();
     expect(within(dialog).getByRole('tab', { name: /clean receipt/i })).toBeInTheDocument();
+    expect(within(dialog).getByRole('tab', { name: /short/i })).toBeInTheDocument();
+    expect(within(dialog).getByRole('tab', { name: /excess/i })).toBeInTheDocument();
     expect(within(dialog).getByRole('tab', { name: /damaged/i })).toBeInTheDocument();
-    expect(within(dialog).getByRole('tab', { name: /quarantine/i })).toBeInTheDocument();
+    expect(within(dialog).getByRole('tab', { name: /unidentified/i })).toBeInTheDocument();
   });
 
   it('uses the live handoff in Supabase mode and ignores local cached POs', async () => {

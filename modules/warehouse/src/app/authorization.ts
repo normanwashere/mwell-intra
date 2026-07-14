@@ -6,7 +6,6 @@ import {
 
 export const WAREHOUSE_MUTATION_CAPABILITIES = {
   relocate: 'transfer_stock',
-  adjustStock: 'approve_stock_adjustment',
   inspectQuality: 'inspect_quality',
   releaseHold: 'release_quality_hold',
   createVendorReturn: 'manage_returns',

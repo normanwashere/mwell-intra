@@ -9,7 +9,7 @@ const REQUIRED_CONTRACTS = [
   ['PO lines are locked before stock posting', /from procurement\.purchase_order_lines[\s\S]*?for update/i],
   ['only issued POs are receivable', /status <> 'issued'/i],
   ['cancelled or rejected PO lines are rejected', /receiving_status <> 'open'/i],
-  ['excess receipts are rejected', /received_quantity \+ v_quantity > v_line\.quantity/i],
+  ['excess receipt facts reach the controlled exception ledger', /exception_type[\s\S]*?'excess'[\s\S]*?actual_quantity/i],
   ['only accepted receipt lines may post stock', /disposition[\s\S]*?<> 'accepted'/i],
   ['idempotency payload hashes are compared', /payload_hash[\s\S]*?warehouse_payload_hash/i],
   ['Procurement receives a security-invoker status view', /create or replace view procurement\.v_purchase_order_receipt_status\s+with \(security_invoker\s*=\s*true\)/i],
@@ -36,7 +36,7 @@ const REQUIRED_CONTRACTS = [
   ['goods acceptance reads Warehouse receipts', /policy_record_acceptance_pack[\s\S]*?warehouse\.receipts/i],
   ['goods acceptance validates accepted PO-line quantities', /policy_record_acceptance_pack[\s\S]*?procurement_po_line_id[\s\S]*?accepted/i],
   ['goods acceptance rejects duplicate PO-line ids', /policy_record_acceptance_pack[\s\S]*?group by[\s\S]*?poLineId[\s\S]*?having count\(\*\) > 1/i],
-  ['goods acceptance uses grouped QC accepted totals', /policy_record_acceptance_pack[\s\S]*?group by quality\.procurement_po_line_id/i],
+  ['goods acceptance uses only explicitly selected accepted QC rows', /policy_record_acceptance_pack[\s\S]*?quality\.id::text in[\s\S]*?quality\.disposition='accepted'/i],
   ['goods acceptance is requester or assigned technical reviewer scoped', /policy_record_acceptance_pack[\s\S]*?acceptance_reviewer_assignments/i],
   ['quality inspections preserve procurement PO-line identity', /alter table warehouse\.quality_inspections[\s\S]*?procurement_po_line_id/i],
   ['receipt QC is bound from an ordered transaction-local PO-line queue', /set_config\('warehouse\.procurement_po_line_queue'[\s\S]*?current_setting\('warehouse\.procurement_po_line_queue'/i],
@@ -65,10 +65,20 @@ const REQUIRED_CONTRACTS = [
   ['technology MNDA uses the earlier expiry trigger', /least\([\s\S]*?definitive_agreement_executed_at/i],
   ['technology MNDA return or destruction dates are recorded', /return_or_destroy_requested[\s\S]*?due_at/i],
   ['business-day calculation is stable and uses an explicit policy timezone', /create or replace function private\.add_business_days[\s\S]*?language plpgsql[\s\S]*?stable[\s\S]*?Asia\/Manila/i],
-  ['adjust_stock requires the authoritative adjustment capability', /create or replace function warehouse\.adjust_stock[\s\S]*?core\.has_cap\('warehouse',\s*'approve_stock_adjustment'\)/i],
+  ['direct adjust_stock execution is retired in its function body', /create or replace function warehouse\.adjust_stock[\s\S]*?Direct stock adjustment is retired/i],
   ['vendor return requires the authoritative returns capability', /create or replace function private\.warehouse_create_vendor_return[\s\S]*?core\.has_cap\('warehouse',\s*'manage_returns'\)/i],
   ['Finance is removed from the Supervisor approval capability', /delete from core\.role_capabilities[\s\S]*?role\s*=\s*'finance'[\s\S]*?cap\s*=\s*'approve_stock_adjustment'/i],
-  ['stock approval projection separates Supervisor and Finance tiers', /warehouse_list_stock_change_requests[\s\S]*?pending_supervisor[\s\S]*?approve_stock_adjustment[\s\S]*?pending_finance[\s\S]*?approve_stock_adjustment_finance/i],
+  ['stock decision separates Supervisor and Finance trusted capabilities', /warehouse_decide_stock_change[\s\S]*?pending_supervisor[\s\S]*?approve_stock_adjustment[\s\S]*?pending_finance[\s\S]*?approve_stock_adjustment_finance/i],
+  ['stock approval projection preserves ordered active governed groups', /warehouse_list_stock_change_requests[\s\S]*?current_step[\s\S]*?approval_group\.is_active[\s\S]*?approval_group\.request_status\s*=\s*request\.status[\s\S]*?core\.has_cap\(approval_group\.module,\s*approval_group\.capability\)/i],
+  ['manual stock changes create governed requests', /create or replace function private\.warehouse_request_stock_change[\s\S]*?insert into warehouse\.stock_change_requests[\s\S]*?insert into core\.approvals/i],
+  ['direct adjust_stock execution is retired', /revoke all on function warehouse\.adjust_stock\(jsonb\) from public, anon, authenticated/i],
+  ['locked stock approval applies signed deltas without clamping', /warehouse_decide_stock_change[\s\S]*?for update[\s\S]*?quantity\s*=\s*quantity\+v_request\.quantity_delta[\s\S]*?quantity\+v_request\.quantity_delta>=0/i],
+  ['stock decision rejects caller-supplied approval tiers', /warehouse_decide_stock_change[\s\S]*?payload \? 'approval_tier'[\s\S]*?derived from the governed approval step/i],
+  ['stock decision requires the locked active approval group capability', /warehouse_decide_stock_change[\s\S]*?v_group\.is_active[\s\S]*?v_group\.request_status<>v_request\.status[\s\S]*?core\.has_cap\(v_group\.module,v_group\.capability\)/i],
+  ['receipt exception model covers every governed fact class and outcome', /requested_disposition[\s\S]*?'short'[\s\S]*?'excess'[\s\S]*?'damaged'[\s\S]*?'unidentified'[\s\S]*?decision[\s\S]*?'accept'[\s\S]*?'reject'[\s\S]*?'quarantine'[\s\S]*?'escalate'/i],
+  ['quarantine creates active holds in the decision transaction', /warehouse_resolve_procurement_po_exception[\s\S]*?v_outcome='quarantine'[\s\S]*?insert into warehouse\.inventory_holds[\s\S]*?'active'/i],
+  ['acceptance quantities bind exact receipt and QC inspection identities', /policy_record_acceptance_pack[\s\S]*?warehouseReceiptId[\s\S]*?qcInspectionIds[\s\S]*?quality\.id[\s\S]*?quality\.source_id=v_receipt_reference/i],
+  ['acceptance work item aggregates only its cited accepted receipt', /acceptance_work_items(?=[\s\S]*?accepted_receipt)(?=[\s\S]*?inspection\.source_id\s*=\s*accepted_receipt\.id)(?=[\s\S]*?qcInspectionIds)/i],
 ];
 
 export async function verifyPoReceiptAuthority(migrationUrl) {
@@ -76,6 +86,9 @@ export async function verifyPoReceiptAuthority(migrationUrl) {
   const findings = REQUIRED_CONTRACTS
     .filter(([, pattern]) => !pattern.test(sql))
     .map(([message]) => message);
+  if (/^\s*\+\s*create\s+or\s+replace\s+function/im.test(sql)) {
+    findings.push('Migration contains a stray patch token before CREATE FUNCTION');
+  }
 
   const view = sql.match(
     /create or replace view procurement\.v_purchase_order_receipt_status[\s\S]*?;\s*(?:revoke|grant)/i,

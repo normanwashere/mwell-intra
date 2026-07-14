@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   _resetMemoryQueue,
-  allConflicts,
   allPending,
   pendingCount,
   type OutboxEntry,
@@ -13,6 +12,7 @@ import {
   syncNow,
   transferOverlay,
   receiveOverlay,
+  QUEUEABLE,
   type RunActionContext,
 } from './runAction';
 import { InMemoryRepository } from './inMemoryRepository';
@@ -318,24 +318,7 @@ describe('outbox queue lifecycle (memory fallback)', () => {
     expect(applied.receipts).toHaveLength(1);
   });
 
-  it('conflicts are queryable separately from pending', async () => {
-    const ctx: RunActionContext = {
-      source: 'supabase',
-      applyOptimistic: vi.fn(),
-      refresh: vi.fn(async () => {}),
-      refreshPending: vi.fn(async () => {}),
-      isNetworkError: () => true,
-    };
-    await runAction(
-      ctx,
-      'adjustStock',
-      async () => {
-        throw new Error('offline');
-      },
-      undefined,
-      { productId: 'shirt', locationId: 'loc-wh', quantityDelta: -1, reason: 'x' },
-    );
-    expect(await pendingCount()).toBe(1);
-    expect(await allConflicts()).toHaveLength(0);
+  it('does not queue the retired direct stock adjustment mutation', () => {
+    expect(QUEUEABLE.has('adjustStock' as never)).toBe(false);
   });
 });

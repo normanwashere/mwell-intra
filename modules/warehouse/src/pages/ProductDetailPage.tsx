@@ -47,7 +47,7 @@ const UNIT_TONE: Record<UnitStatus, Tone> = {
 export function ProductDetailPage() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
-  const { data, can, transfer, adjustStock, relocate } = useWarehouse();
+  const { data, can, transfer, requestStockChange, relocate } = useWarehouse();
   const toast = useToast();
 
   const [relocateOpen, setRelocateOpen] = useState(false);
@@ -118,7 +118,7 @@ export function ProductDetailPage() {
   const canTransfer = can('transfer_stock');
   const canSetPrice = can('set_pricing');
   const canManageProducts = can('manage_products');
-  const canAdjust = can(WAREHOUSE_MUTATION_CAPABILITIES.adjustStock);
+  const canAdjust = can('manage_inventory');
   const canViewFinancials =
     can('view_finance') || can('view_pricing') || can('view_procurement');
   const canRelocate = can(WAREHOUSE_MUTATION_CAPABILITIES.relocate);
@@ -169,7 +169,9 @@ export function ProductDetailPage() {
       return;
     }
     const delta = adjDir === 'add' ? adjQty : -adjQty;
-    const ok = await adjustStock({
+    const ok = await requestStockChange({
+      idempotencyKey: `stock-change-${crypto.randomUUID()}`,
+      sourceType: adjDir === 'remove' ? 'write_off' : 'adjustment',
       productId: product.id,
       locationId: adjLoc,
       binId: adjBin || undefined,
@@ -177,9 +179,7 @@ export function ProductDetailPage() {
       reason: adjReason.trim(),
     });
     if (!ok) return;
-    toast.success(
-      `${adjDir === 'add' ? 'Added' : 'Wrote off'} ${adjQty}× ${product.name}`,
-    );
+    toast.success('Stock-change request submitted for independent approval');
     setAdjustOpen(false);
   };
 
@@ -520,15 +520,15 @@ export function ProductDetailPage() {
       {/* Product master editor sheet */}
       <ProductEditorSheet product={product} open={editOpen} onOpenChange={setEditOpen} />
 
-      {/* Stock adjustment / write-off sheet */}
+      {/* Governed stock-change request sheet */}
       <Sheet
         open={adjustOpen}
         onOpenChange={setAdjustOpen}
-        title="Adjust stock"
-        description={`Manual adjustment / write-off for ${product.name}.`}
+        title="Request stock change"
+        description={`Request an adjustment or write-off for ${product.name}.`}
         footer={
           <button type="button" className="btn-primary w-full" onClick={() => void submitAdjust()}>
-            Post adjustment
+            Submit for approval
           </button>
         }
       >

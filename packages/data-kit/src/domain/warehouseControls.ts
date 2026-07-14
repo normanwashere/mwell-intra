@@ -87,7 +87,7 @@ export interface VendorReturn {
 
 export interface WarehouseException {
   id: string;
-  type: 'quality' | 'count_variance' | 'po_receipt' | 'scan_mismatch' | 'import';
+  type: 'quality' | 'count_variance' | 'stock_variance' | 'po_receipt' | 'scan_mismatch' | 'import';
   severity: 'P1' | 'P2' | 'P3';
   sourceType: string;
   sourceId: string;
@@ -208,12 +208,30 @@ export interface SubmitCycleCountInput {
   evidenceUrls?: string[];
 }
 
+export type StockChangeDecisionCapability =
+  | 'approve_stock_adjustment'
+  | 'approve_stock_adjustment_finance';
+
+export interface WarehouseControlPrincipal {
+  actor: string;
+  capabilities: readonly string[];
+}
+
+export interface RequestStockChangeInput {
+  idempotencyKey: string;
+  sourceType: 'adjustment' | 'write_off';
+  productId: string;
+  locationId: string;
+  binId?: string;
+  quantityDelta: number;
+  reason: string;
+  evidenceUrls?: string[];
+}
+
 export interface DecideStockChangeInput {
   idempotencyKey: string;
   requestId: string;
   decision: 'approved' | 'rejected';
-  actor: string;
-  approvalTier: StockChangeApprovalTier;
   note?: string;
 }
 
@@ -315,17 +333,18 @@ export function stockChangeStatusAfterDecision(input: {
   financialImpact: number;
   requestedBy: string;
   actor: string;
-  actorTier: StockChangeApprovalTier;
+  principalCapabilities: readonly StockChangeDecisionCapability[];
   note?: string;
 }): StockChangeRequest['status'] {
   if (!canActorApproveStockChange(input.requestedBy, input.actor)) {
     throw new Error('The requester cannot approve their own stock change.');
   }
-  const requiredTier: StockChangeApprovalTier = input.currentStatus === 'pending_supervisor'
-    ? 'logistics_supervisor'
-    : 'finance';
-  if (input.actorTier !== requiredTier) {
-    throw new Error(requiredTier === 'logistics_supervisor'
+  const requiredCapability: StockChangeDecisionCapability =
+    input.currentStatus === 'pending_supervisor'
+      ? 'approve_stock_adjustment'
+      : 'approve_stock_adjustment_finance';
+  if (!input.principalCapabilities.includes(requiredCapability)) {
+    throw new Error(requiredCapability === 'approve_stock_adjustment'
       ? 'A Warehouse Supervisor must decide this stock change first.'
       : 'Finance must decide this stock change after Warehouse Supervisor approval.');
   }

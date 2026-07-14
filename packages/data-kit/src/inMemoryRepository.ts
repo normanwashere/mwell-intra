@@ -18,7 +18,6 @@ import { poStatusAfterReceipt } from './domain/purchaseOrders';
 import { applyProductPatch, buildNewProduct } from './domain/products';
 import {
   toStockState,
-  type AdjustStockInput,
   type CancelAllocationInput,
   type CancelPurchaseOrderInput,
   type CreateEventInput,
@@ -60,11 +59,13 @@ import {
   type ProcurementPOHandoff,
   type QualityInspection,
   type ReceiveProcurementPOInput,
+  type RequestStockChangeInput,
   type ReleaseHoldInput,
   type ResolveExceptionInput,
   type StockChangeRequest,
   type SubmitCycleCountInput,
   type UpdateOperationRouteInput,
+  type WarehouseControlPrincipal,
   type WarehouseException,
   type WarehouseTask,
   type VendorReturn,
@@ -961,64 +962,6 @@ export class InMemoryRepository implements WarehouseControlRepository {
     return clone(next);
   }
 
-  async adjustStock(input: AdjustStockInput): Promise<Movement> {
-    const product = this.data.products.find((p) => p.id === input.productId);
-    if (!product) throw new Error('Product not found.');
-    if (!input.reason.trim()) throw new Error('A reason is required.');
-    const createdAt = this.now();
-
-    if (product.serialized) {
-      // You can't fabricate serials with a number — surplus must be received as
-      // real, registered units. Refuse a positive serialized adjustment instead
-      // of silently logging a movement that changes nothing.
-      if (input.quantityDelta > 0) {
-        throw new Error(
-          'Found serialized units must be received/registered individually, not added by quantity.',
-        );
-      }
-      // Negative serialized adjustments are write-offs: mark in-stock units lost.
-      if (input.quantityDelta < 0) {
-        let toRemove = -input.quantityDelta;
-        const candidates = this.data.units.filter(
-          (u) =>
-            u.productId === product.id &&
-            u.status === 'in_stock' &&
-            u.locationId === input.locationId &&
-            (input.binId === undefined || u.binId === input.binId),
-        );
-        for (const unit of candidates) {
-          if (toRemove <= 0) break;
-          unit.status = 'lost';
-          unit.assignedTo = undefined;
-          toRemove--;
-        }
-      }
-    } else if (input.quantityDelta !== 0) {
-      const level = this.stockRow(
-        product.id,
-        input.locationId,
-        input.binId,
-        true,
-      )!;
-      level.quantity = Math.max(0, level.quantity + input.quantityDelta);
-    }
-
-    const movement: Movement = {
-      id: uid('mv'),
-      type: 'adjustment',
-      productId: product.id,
-      quantity: input.quantityDelta,
-      toLocationId: input.locationId,
-      toBinId: input.binId,
-      reason: input.reason,
-      actor: input.actor,
-      createdAt,
-    };
-    this.data.movements.push(movement);
-    this.persist();
-    return clone(movement);
-  }
-
   async listQualityInspections(query: PageQuery): Promise<PageResult<QualityInspection>> {
     return this.page(this.qualityInspections, query, (row) => row.disposition);
   }
@@ -1346,8 +1289,65 @@ export class InMemoryRepository implements WarehouseControlRepository {
     });
   }
 
-  async decideStockChange(input: DecideStockChangeInput): Promise<StockChangeRequest> {
-    return this.idempotent('decide_stock_change', input.idempotencyKey, input, () => {
+  async requestStockChange(
+    input: RequestStockChangeInput,
+    principal?: WarehouseControlPrincipal,
+  ): Promise<StockChangeRequest> {
+    return this.idempotent('request_stock_change', input.idempotencyKey, { input, principal }, () => {
+      if (!principal?.capabilities.includes('manage_inventory')) {
+        throw new Error('Not authorized: warehouse.manage_inventory.');
+      }
+      if (!Number.isInteger(input.quantityDelta) || input.quantityDelta === 0) {
+        throw new Error('Stock-change quantity must be a non-zero whole number.');
+      }
+      if (!input.reason.trim()) throw new Error('A stock-change reason is required.');
+      const product = this.data.products.find((row) => row.id === input.productId);
+      if (!product) throw new Error('Stock-change product not found.');
+      const location = this.data.locations.find((row) => row.id === input.locationId);
+      if (!location) throw new Error('Stock-change location not found.');
+      if (input.binId && !this.data.storageAreas.some((row) =>
+        row.id === input.binId && row.locationId === input.locationId)) {
+        throw new Error('Stock-change storage area does not belong to the location.');
+      }
+      if (product.serialized && input.quantityDelta > 0) {
+        throw new Error('Serialized stock cannot be added without identified units.');
+      }
+      const requestId = this.newId('scr');
+      const request: StockChangeRequest = {
+        id: requestId,
+        sourceType: input.sourceType,
+        sourceId: requestId,
+        productId: input.productId,
+        locationId: input.locationId,
+        binId: input.binId,
+        quantityDelta: input.quantityDelta,
+        unitCost: product.unitCost,
+        financialImpact: Math.abs(input.quantityDelta * product.unitCost),
+        reason: input.reason.trim(),
+        evidenceUrls: input.evidenceUrls ?? [],
+        status: 'pending_supervisor',
+        requestedBy: principal.actor,
+        requestedAt: this.now(),
+        canDecide: false,
+      };
+      this.stockChanges.push(request);
+      this.exceptions.push({
+        id: this.newId('ex'), type: 'stock_variance',
+        severity: request.financialImpact > 10_000 ? 'P1' : 'P2',
+        sourceType: 'stock_change_request', sourceId: request.id,
+        status: 'open', createdAt: this.now(),
+      });
+      this.persist();
+      return request;
+    });
+  }
+
+  async decideStockChange(
+    input: DecideStockChangeInput,
+    principal?: WarehouseControlPrincipal,
+  ): Promise<StockChangeRequest> {
+    return this.idempotent('decide_stock_change', input.idempotencyKey, { input, principal }, () => {
+      if (!principal) throw new Error('A trusted Warehouse principal is required.');
       const request = this.stockChanges.find((row) => row.id === input.requestId);
       if (!request || !['pending_supervisor', 'pending_finance'].includes(request.status)) {
         throw new Error('Pending stock-change request not found.');
@@ -1357,8 +1357,12 @@ export class InMemoryRepository implements WarehouseControlRepository {
         decision: input.decision,
         financialImpact: request.financialImpact,
         requestedBy: request.requestedBy,
-        actor: input.actor,
-        actorTier: input.approvalTier,
+        actor: principal.actor,
+        principalCapabilities: principal.capabilities.filter((capability) =>
+          capability === 'approve_stock_adjustment'
+          || capability === 'approve_stock_adjustment_finance') as Array<
+            'approve_stock_adjustment' | 'approve_stock_adjustment_finance'
+          >,
         note: input.note,
       });
       request.canDecide = ['pending_supervisor', 'pending_finance'].includes(request.status);
@@ -1380,10 +1384,12 @@ export class InMemoryRepository implements WarehouseControlRepository {
           level.quantity += request.quantityDelta;
         }
         this.data.movements.push({
-          id: this.newId('mv'), type: 'cycle_count', productId: request.productId,
+          id: this.newId('mv'),
+          type: request.sourceType === 'cycle_count' ? 'cycle_count' : 'adjustment',
+          productId: request.productId,
           quantity: request.quantityDelta, toLocationId: request.locationId,
           toBinId: request.binId, reason: request.reason, reference: request.id,
-          evidenceUrls: request.evidenceUrls, actor: 'demo-approver', createdAt: this.now(),
+          evidenceUrls: request.evidenceUrls, actor: principal.actor, createdAt: this.now(),
         });
         const exception = this.exceptions.find(
           (row) => row.sourceType === 'stock_change_request' && row.sourceId === request.id,

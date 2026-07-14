@@ -26,11 +26,13 @@ import {
   type ProcurementPOHandoff,
   type QualityInspection,
   type ReceiveProcurementPOInput,
+  type RequestStockChangeInput,
   type ReleaseHoldInput,
   type ResolveExceptionInput,
   type StockChangeRequest,
   type SubmitCycleCountInput,
   type UpdateOperationRouteInput,
+  type WarehouseControlPrincipal,
   type WarehouseException,
   type WarehouseTask,
   type VendorReturn,
@@ -41,7 +43,6 @@ import { poStatusAfterReceipt } from '../domain/purchaseOrders';
 import { applyProductPatch, buildNewProduct } from '../domain/products';
 import {
   toStockState,
-  type AdjustStockInput,
   type CancelAllocationInput,
   type CancelPurchaseOrderInput,
   type CreateEventInput,
@@ -406,12 +407,30 @@ export class SupabaseRepository implements WarehouseControlRepository {
     );
   }
 
-  async decideStockChange(input: DecideStockChangeInput): Promise<StockChangeRequest> {
+  async requestStockChange(
+    input: RequestStockChangeInput,
+    _principal?: WarehouseControlPrincipal,
+  ): Promise<StockChangeRequest> {
+    return rowToStockChangeRequest(await this.callRpc('request_stock_change', {
+      idempotency_key: input.idempotencyKey,
+      source_type: input.sourceType,
+      product_id: input.productId,
+      location_id: input.locationId,
+      bin_id: input.binId ?? null,
+      quantity_delta: input.quantityDelta,
+      reason: input.reason,
+      evidence_urls: input.evidenceUrls ?? [],
+    }) as never);
+  }
+
+  async decideStockChange(
+    input: DecideStockChangeInput,
+    _principal?: WarehouseControlPrincipal,
+  ): Promise<StockChangeRequest> {
     return rowToStockChangeRequest(await this.callRpc('decide_stock_change', {
       idempotency_key: input.idempotencyKey,
       request_id: input.requestId,
       decision: input.decision,
-      approval_tier: input.approvalTier,
       note: input.note ?? null,
     }) as never);
   }
@@ -1196,64 +1215,6 @@ export class SupabaseRepository implements WarehouseControlRepository {
       .single();
     if (error) throw new Error(error.message);
     return rowToProduct(row as never);
-  }
-
-  async adjustStock(input: AdjustStockInput): Promise<Movement> {
-    const data = await this.getData();
-    const product = data.products.find((p) => p.id === input.productId);
-    if (!product) throw new Error('Product not found.');
-    if (!input.reason.trim()) throw new Error('A reason is required.');
-    const createdAt = new Date().toISOString();
-
-    const unitIds: string[] = [];
-    let stockDelta: Row | null = null;
-    if (product.serialized) {
-      if (input.quantityDelta > 0) {
-        throw new Error(
-          'Found serialized units must be received/registered individually, not added by quantity.',
-        );
-      }
-      if (input.quantityDelta < 0) {
-        let toRemove = -input.quantityDelta;
-        const candidates = data.units.filter(
-          (u) =>
-            u.productId === product.id &&
-            u.status === 'in_stock' &&
-            u.locationId === input.locationId &&
-            (input.binId === undefined || u.binId === input.binId),
-        );
-        for (const unit of candidates) {
-          if (toRemove <= 0) break;
-          unitIds.push(unit.id);
-          toRemove--;
-        }
-      }
-    } else if (input.quantityDelta !== 0) {
-      stockDelta = {
-        product_id: product.id,
-        location_id: input.locationId,
-        bin_id: input.binId ?? null,
-        delta: input.quantityDelta,
-      };
-    }
-
-    const movement: Movement = {
-      id: uid('mv'),
-      type: 'adjustment',
-      productId: product.id,
-      quantity: input.quantityDelta,
-      toLocationId: input.locationId,
-      toBinId: input.binId,
-      reason: input.reason,
-      actor: input.actor,
-      createdAt,
-    };
-    const row = await this.callRpc('adjust_stock', {
-      unit_ids: unitIds,
-      stock_delta: stockDelta,
-      movement: movementToRow(movement),
-    });
-    return rowToMovement(row);
   }
 
   async createStorageArea(input: CreateStorageAreaInput): Promise<StorageArea> {

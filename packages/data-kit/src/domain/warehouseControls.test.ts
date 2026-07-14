@@ -83,7 +83,7 @@ describe('warehouse control state transitions', () => {
         financialImpact: 10_000,
         requestedBy: 'counter-1',
         actor: 'supervisor-1',
-        actorTier: 'logistics_supervisor',
+        principalCapabilities: ['approve_stock_adjustment'],
       }),
     ).toBe('approved');
   });
@@ -96,7 +96,7 @@ describe('warehouse control state transitions', () => {
         financialImpact: 10_001,
         requestedBy: 'counter-1',
         actor: 'supervisor-1',
-        actorTier: 'logistics_supervisor',
+        principalCapabilities: ['approve_stock_adjustment'],
       }),
     ).toBe('pending_finance');
     expect(
@@ -106,7 +106,7 @@ describe('warehouse control state transitions', () => {
         financialImpact: 10_001,
         requestedBy: 'counter-1',
         actor: 'finance-1',
-        actorTier: 'finance',
+        principalCapabilities: ['approve_stock_adjustment_finance'],
       }),
     ).toBe('approved');
   });
@@ -119,7 +119,7 @@ describe('warehouse control state transitions', () => {
         financialImpact: 500,
         requestedBy: 'counter-1',
         actor: 'supervisor-1',
-        actorTier: 'logistics_supervisor',
+        principalCapabilities: ['approve_stock_adjustment'],
         note: 'Count evidence is incomplete.',
       }),
     ).toBe('rejected');
@@ -130,7 +130,7 @@ describe('warehouse control state transitions', () => {
         financialImpact: 500,
         requestedBy: 'counter-1',
         actor: 'supervisor-1',
-        actorTier: 'logistics_supervisor',
+        principalCapabilities: ['approve_stock_adjustment'],
       }),
     ).toThrow(/note/i);
   });
@@ -143,7 +143,7 @@ describe('warehouse control state transitions', () => {
         financialImpact: 500,
         requestedBy: 'counter-1',
         actor: 'counter-1',
-        actorTier: 'logistics_supervisor',
+        principalCapabilities: ['approve_stock_adjustment'],
       }),
     ).toThrow(/requester/i);
   });
@@ -151,11 +151,13 @@ describe('warehouse control state transitions', () => {
   it('enforces exact Supervisor and Finance tiers', () => {
     expect(() => stockChangeStatusAfterDecision({
       currentStatus: 'pending_supervisor', decision: 'approved', financialImpact: 20_000,
-      requestedBy: 'counter-1', actor: 'finance-1', actorTier: 'finance',
+      requestedBy: 'counter-1', actor: 'finance-1',
+      principalCapabilities: ['approve_stock_adjustment_finance'],
     })).toThrow(/warehouse supervisor/i);
     expect(() => stockChangeStatusAfterDecision({
       currentStatus: 'pending_finance', decision: 'approved', financialImpact: 20_000,
-      requestedBy: 'counter-1', actor: 'supervisor-1', actorTier: 'logistics_supervisor',
+      requestedBy: 'counter-1', actor: 'supervisor-1',
+      principalCapabilities: ['approve_stock_adjustment'],
     })).toThrow(/finance/i);
   });
 });

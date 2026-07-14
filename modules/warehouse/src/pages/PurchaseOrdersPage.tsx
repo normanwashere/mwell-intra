@@ -39,7 +39,7 @@ import {
 } from '@/components/ReceiptExceptionDecisionPanel';
 
 type POFilter = 'all' | 'open' | 'closed';
-type ReceiptDisposition = 'clean' | 'damaged' | 'quarantine';
+type ReceiptDisposition = 'clean' | 'short' | 'excess' | 'damaged' | 'unidentified';
 
 const STATUS_TONE: Record<POStatus, Tone> = {
   draft: 'slate',
@@ -122,10 +122,11 @@ export function PurchaseOrdersPage() {
         receiptId: String(row.receipt_id),
         purchaseOrderId: String(row.purchase_order_id),
         poNumber: String(row.po_number),
-        requestedDisposition: row.requested_disposition as 'damaged' | 'quarantine',
+        requestedDisposition: row.requested_disposition as ReceiptExceptionDecisionItem['requestedDisposition'],
         requestedBy: String(row.requested_by),
         requestedAt: String(row.requested_at),
         reason: String(row.reason ?? ''),
+        lines: ((row.lines ?? []) as ReceiptExceptionDecisionItem['lines']),
       })));
     });
     return () => { active = false; };
@@ -297,7 +298,13 @@ export function PurchaseOrdersPage() {
       }
       const { error: rpcError } = await supabaseClient.schema('warehouse').rpc('receive_procurement_po_exception', { payload: {
         idempotency_key: idempotencyKey, po_id: bridgeReceivePO.id, location_id: bridgeLocation,
-        lines: lines.map((line) => ({ line_id: line.lineId, product_id: line.productId, quantity: line.quantity })),
+        lines: lines.map((line) => {
+          const source = bridgeReceivePO.lines.find((candidate) => candidate.id === line.lineId)!;
+          return { line_id: line.lineId, product_id: line.productId,
+            actual_quantity: line.quantity,
+            expected_quantity: Math.max(0, source.quantity - source.receivedQuantity),
+            raw_description: source.description, bin_id: bridgeBin || null };
+        }),
         evidence_urls: [bridgeEvidence.trim()], exception_type: bridgeDisposition,
         reason: bridgeExceptionReason.trim(),
       } });
@@ -775,7 +782,13 @@ export function PurchaseOrdersPage() {
             </p>
             <SegmentedControl<ReceiptDisposition>
               ariaLabel="Receipt disposition" value={bridgeDisposition} onChange={setBridgeDisposition}
-              options={[{ value: 'clean', label: 'Clean receipt' }, { value: 'damaged', label: 'Damaged' }, { value: 'quarantine', label: 'Quarantine' }]}
+              options={[
+                { value: 'clean', label: 'Clean receipt' },
+                { value: 'short', label: 'Short' },
+                { value: 'excess', label: 'Excess' },
+                { value: 'damaged', label: 'Damaged' },
+                { value: 'unidentified', label: 'Unidentified' },
+              ]}
             />
             <Field label="Receive into" htmlFor="bridge-receive-location">
               <select
@@ -838,7 +851,7 @@ export function PurchaseOrdersPage() {
                     <QuantityStepper
                       aria-label={`Receive ${line.description}`}
                       min={0}
-                      max={remaining}
+                      max={bridgeDisposition === 'excess' ? undefined : remaining}
                       value={bridgeQty[line.id] ?? 0}
                       onChange={(quantity) => setBridgeQty((current) => ({
                         ...current,

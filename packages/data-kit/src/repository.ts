@@ -36,9 +36,11 @@ import type {
   QualityInspection,
   ReleaseHoldInput,
   ReceiveProcurementPOInput,
+  RequestStockChangeInput,
   ResolveExceptionInput,
   StockChangeRequest,
   SubmitCycleCountInput,
+  WarehouseControlPrincipal,
   UpdateOperationRouteInput,
   WarehouseException,
   WarehouseTask,
@@ -265,17 +267,6 @@ export interface UpdateProductInput {
   actor: string;
 }
 
-export interface AdjustStockInput {
-  productId: string;
-  locationId: string;
-  /** Storage area to adjust (undefined = general area). */
-  binId?: string;
-  /** Signed quantity change (+ adds, − writes off). */
-  quantityDelta: number;
-  reason: string;
-  actor: string;
-}
-
 /**
  * Storage-agnostic warehouse repository. Implemented by an in-memory/localStorage
  * adapter (offline + tests) and a Supabase adapter (live backend).
@@ -309,7 +300,6 @@ export interface WarehouseRepository {
   setProductPrice(input: SetProductPriceInput): Promise<Product>;
   createProduct(input: CreateProductInput): Promise<Product>;
   updateProduct(input: UpdateProductInput): Promise<Product>;
-  adjustStock(input: AdjustStockInput): Promise<Movement>;
 }
 
 /** W1 control extension implemented by live and memory adapters in Task 5. */
@@ -326,7 +316,14 @@ export interface WarehouseControlRepository extends WarehouseRepository {
   createVendorReturn(input: CreateVendorReturnInput): Promise<VendorReturn>;
   updateOperationRoute(input: UpdateOperationRouteInput): Promise<OperationRoute>;
   submitCycleCount(input: SubmitCycleCountInput): Promise<StockChangeRequest[]>;
-  decideStockChange(input: DecideStockChangeInput): Promise<StockChangeRequest>;
+  requestStockChange(
+    input: RequestStockChangeInput,
+    principal?: WarehouseControlPrincipal,
+  ): Promise<StockChangeRequest>;
+  decideStockChange(
+    input: DecideStockChangeInput,
+    principal?: WarehouseControlPrincipal,
+  ): Promise<StockChangeRequest>;
   resolveException(input: ResolveExceptionInput): Promise<WarehouseException>;
   getReceivableProcurementPOs(): Promise<ProcurementPOHandoff[]>;
   receiveProcurementPO(input: ReceiveProcurementPOInput): Promise<Receipt>;

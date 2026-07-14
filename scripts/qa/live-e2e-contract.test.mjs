@@ -144,6 +144,17 @@ test("Task 3 uses browser-role exception receipts and proves transactional clean
   assert.match(source, /cleanupActivityEntityIds/);
   assert.match(source, /cleanupExceptionIds/);
   assert.match(source, /private quality inspection direct denial/i);
+  for (const exceptionClass of ['short', 'excess', 'damaged', 'unidentified']) {
+    assert.match(source, new RegExp(`exceptionClass:\\s*["']${exceptionClass}["']`, 'i'));
+  }
+  for (const outcome of ['accept', 'reject', 'quarantine', 'escalate']) {
+    assert.match(source, new RegExp(`outcome:\\s*["']${outcome}["']`, 'i'));
+  }
+  assert.match(source, /inventory_holds[\s\S]*status[\s\S]*active/i);
+  assert.match(source, /release_quality_hold[\s\S]*status[\s\S]*released/i);
+  assert.match(source, /reject:\s*"vendor_return"/i);
+  assert.match(source, /warehouseReceiptId/);
+  assert.match(source, /qcInspectionIds/);
 });
 
 test("the live harness verifies deployed identity before browser launch", async () => {

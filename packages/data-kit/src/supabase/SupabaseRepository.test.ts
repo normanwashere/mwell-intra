@@ -316,22 +316,26 @@ describe('SupabaseRepository W1 control boundary', () => {
     await repo.submitCycleCount({
       idempotencyKey: 'count-key-00001', cycleCountId: 'cc-1', reason: 'Scheduled count',
     });
+    await repo.requestStockChange({
+      idempotencyKey: 'request-key-0001', sourceType: 'write_off', productId: 'shirt',
+      locationId: 'loc-wh', quantityDelta: -1, reason: 'Damaged stock', evidenceUrls: [],
+    });
     await repo.decideStockChange({
       idempotencyKey: 'decision-key-01', requestId: 'scr-1', decision: 'approved',
-      actor: 'supervisor@mwell', approvalTier: 'logistics_supervisor',
     });
     await repo.resolveException({
       idempotencyKey: 'exception-key01', exceptionId: 'ex-1', action: 'begin',
     });
 
-    for (const call of calls.slice(-6)) {
+    for (const call of calls.slice(-7)) {
       expect(call.payload.idempotency_key).toMatch(/key/);
       expect(call.payload).not.toHaveProperty('actor');
       expect(call.payload).not.toHaveProperty('role');
+      expect(call.payload).not.toHaveProperty('approval_tier');
     }
-    expect(calls.slice(-6).map((call) => call.fn)).toEqual([
+    expect(calls.slice(-7).map((call) => call.fn)).toEqual([
       'inspect_quality', 'release_quality_hold', 'update_operation_route',
-      'submit_cycle_count', 'decide_stock_change', 'resolve_exception',
+      'submit_cycle_count', 'request_stock_change', 'decide_stock_change', 'resolve_exception',
     ]);
   });
 
@@ -444,21 +448,6 @@ describe('SupabaseRepository concurrency-safe payloads (warehouse.* v8 RPCs)', (
     const receipt = call.payload.receipt as Record<string, unknown>;
     expect(receipt.location_id).toBe('loc-wh');
     expect(Array.isArray(receipt.evidence_urls)).toBe(true);
-  });
-
-  it('adjustStock sends a signed stock_delta', async () => {
-    const { client, calls } = makeMockClient(seed);
-    const repo = new SupabaseRepository(client);
-    await repo.adjustStock({
-      productId: token.id,
-      locationId: 'loc-wh',
-      quantityDelta: 3,
-      reason: 'found',
-      actor: 'test',
-    });
-    const call = calls.find((c) => c.fn === 'adjust_stock')!;
-    const sd = call.payload.stock_delta as { delta: number };
-    expect(sd.delta).toBe(3);
   });
 
   it('reserve routes through the reserve RPC (server-side ATP re-check)', async () => {

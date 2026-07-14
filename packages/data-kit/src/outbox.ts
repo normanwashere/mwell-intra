@@ -26,7 +26,6 @@ export type QueueableMethod =
   | 'recordReturn'
   | 'issue'
   | 'transfer'
-  | 'adjustStock'
   | 'relocate';
 
 export interface OutboxEntry {

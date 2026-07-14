@@ -15,6 +15,8 @@ export function AcceptanceWorkItemPage() {
   const acceptedLines = useMemo(() => item?.lines.map((line) => ({
     poLineId: line.poLineId,
     quantity: Math.min(line.qcAcceptedQuantity, Math.max(0, quantities[line.poLineId] ?? line.qcAcceptedQuantity)),
+    warehouseReceiptId: line.warehouseReceiptId,
+    qcInspectionIds: line.qcInspectionIds,
   })) ?? [], [item, quantities]);
 
   if (loading) return <p className="p-4 text-sm text-muted">Loading goods acceptance...</p>;
@@ -35,7 +37,7 @@ export function AcceptanceWorkItemPage() {
     <div className="mx-auto max-w-3xl space-y-4">
       <PageHeader title="Goods acceptance" icon="check" subtitle={`${item.poNumber} · Warehouse QC evidence`} />
       <div className="rounded-lg border border-line bg-surface p-4">
-        <p className="text-sm text-muted">Latest receipt <strong className="text-ink">{item.latestWarehouseReceiptReference ?? 'Pending'}</strong> · QC {item.latestQcStatus ?? 'pending'}</p>
+        <p className="text-sm text-muted">Receipt <strong className="text-ink">{item.warehouseReceiptReference ?? 'Pending'}</strong> · QC {item.qcStatus ?? 'pending'}</p>
       </div>
       <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-surface">
         {item.lines.map((line) => (
