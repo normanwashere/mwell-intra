@@ -27,6 +27,10 @@ export type {
 export { procurementModule } from './modules/procurement';
 export type { LegalCapability, LegalRole } from './modules/legal';
 export { legalModule } from './modules/legal';
+export type { EventsCapability, EventsRole } from './modules/events';
+export { eventsModule } from './modules/events';
+export type { InsightsCapability, InsightsRole } from './modules/insights';
+export { insightsModule } from './modules/insights';
 
 // Registry, predicates, and DB-seed helpers.
 export type {

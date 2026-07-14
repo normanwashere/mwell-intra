@@ -174,6 +174,8 @@ describe('can() — per-module scoping (spec §4.2)', () => {
     warehouse: ['logistics_supervisor'],
     procurement: ['approver'],
     legal: [],
+    events: [],
+    insights: [],
   };
 
   it('applies warehouse roles only in the warehouse module', () => {
@@ -303,6 +305,37 @@ describe('toRoleCapabilityRows() — DB seed shape', () => {
       module: 'warehouse',
       role: 'logistics_supervisor',
       cap: 'receive_stock',
+    });
+  });
+});
+
+describe('events and insights workspace matrices', () => {
+  it('exposes the event lifecycle roles', () => {
+    expect(listModuleRoles('events').sort()).toEqual(
+      ['admin', 'coordinator', 'requester', 'viewer'].sort(),
+    );
+    expect(hasCapInModule('events', 'requester', 'create_event')).toBe(true);
+    expect(hasCapInModule('events', 'requester', 'close_event')).toBe(false);
+    expect(hasCapInModule('events', 'coordinator', 'close_event')).toBe(true);
+  });
+
+  it('keeps insight audiences least-privileged', () => {
+    expect(listModuleRoles('insights').sort()).toEqual(
+      ['admin', 'analyst', 'executive', 'manager'].sort(),
+    );
+    expect(hasCapInModule('insights', 'analyst', 'prepare_exports')).toBe(true);
+    expect(hasCapInModule('insights', 'executive', 'view_executive')).toBe(true);
+    expect(hasCapInModule('insights', 'executive', 'view_warehouse')).toBe(false);
+  });
+
+  it('returns fully keyed empty roles for every workspace', () => {
+    expect(emptyUserRoles()).toEqual({
+      core: [],
+      warehouse: [],
+      procurement: [],
+      legal: [],
+      events: [],
+      insights: [],
     });
   });
 });

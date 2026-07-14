@@ -6,6 +6,8 @@ const roles = (warehouse: string[]): UserRoles => ({
   warehouse,
   procurement: [],
   legal: [],
+  events: [],
+  insights: [],
 });
 
 describe('warehouse W1 capabilities', () => {

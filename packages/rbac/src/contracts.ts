@@ -6,7 +6,13 @@
 // unions so module matrices can import them without a circular dependency.
 
 /** A department schema/module in the suite (spec §3, §4.2). */
-export type Module = 'core' | 'warehouse' | 'procurement' | 'legal';
+export type Module =
+  | 'core'
+  | 'warehouse'
+  | 'procurement'
+  | 'legal'
+  | 'events'
+  | 'insights';
 
 /** Ordered list of every module; `core` first to match migration order (§6.8). */
 export const MODULE_LIST = [
@@ -14,6 +20,8 @@ export const MODULE_LIST = [
   'warehouse',
   'procurement',
   'legal',
+  'events',
+  'insights',
 ] as const satisfies readonly Module[];
 
 /** One role's capability grant within a module. */
