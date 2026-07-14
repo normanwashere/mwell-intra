@@ -411,6 +411,7 @@ export class SupabaseRepository implements WarehouseControlRepository {
       idempotency_key: input.idempotencyKey,
       request_id: input.requestId,
       decision: input.decision,
+      approval_tier: input.approvalTier,
       note: input.note ?? null,
     }) as never);
   }

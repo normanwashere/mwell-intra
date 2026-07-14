@@ -1111,6 +1111,7 @@ describe('W1 control parity', () => {
     const decision = {
       idempotencyKey: 'decision-memory1', requestId: requests[0]!.id,
       decision: 'approved' as const,
+      actor: 'supervisor@mwell', approvalTier: 'logistics_supervisor' as const,
     };
     await controlled.decideStockChange(decision);
     await controlled.decideStockChange(decision);
@@ -1158,8 +1159,49 @@ describe('W1 control parity', () => {
     expect((await controlled.getData()).units.find((unit) => unit.serialNumber === 'SN2')?.status).toBe('in_stock');
     await controlled.decideStockChange({
       idempotencyKey: 'serialized-missing-approve', requestId: request!.id, decision: 'approved',
+      actor: 'supervisor@mwell', approvalTier: 'logistics_supervisor',
     });
     expect((await controlled.getData()).units.find((unit) => unit.serialNumber === 'SN2')?.status).toBe('lost');
+  });
+
+  it('keeps Supervisor, Finance, and requester decisions in their exact memory tiers', async () => {
+    const data = miniData();
+    data.products.find((product) => product.id === 'shirt')!.unitCost = 6_000;
+    data.cycleCounts = [{
+      id: 'cc-tiered', locationId: 'loc-wh',
+      lines: [{ productId: 'shirt', expected: 20, counted: 18 }],
+      status: 'draft', actor: 'counter@mwell', requestedBy: 'counter@mwell',
+      createdAt: '2026-07-10T00:00:00Z',
+    }];
+    const controlled = new InMemoryRepository(data, {
+      now: () => '2026-07-10T01:00:00Z', id: (prefix) => `${prefix}-tiered`,
+    });
+    const [request] = await controlled.submitCycleCount({
+      idempotencyKey: 'tiered-submit-01', cycleCountId: 'cc-tiered', reason: 'Material variance',
+    });
+
+    await expect(controlled.decideStockChange({
+      idempotencyKey: 'tiered-finance-early', requestId: request!.id, decision: 'approved',
+      actor: 'finance@mwell', approvalTier: 'finance',
+    })).rejects.toThrow(/warehouse supervisor/i);
+    await expect(controlled.decideStockChange({
+      idempotencyKey: 'tiered-requester', requestId: request!.id, decision: 'approved',
+      actor: 'counter@mwell', approvalTier: 'logistics_supervisor',
+    })).rejects.toThrow(/requester/i);
+    const afterSupervisor = await controlled.decideStockChange({
+      idempotencyKey: 'tiered-supervisor', requestId: request!.id, decision: 'approved',
+      actor: 'supervisor@mwell', approvalTier: 'logistics_supervisor',
+    });
+    expect(afterSupervisor.status).toBe('pending_finance');
+    await expect(controlled.decideStockChange({
+      idempotencyKey: 'tiered-supervisor-late', requestId: request!.id, decision: 'approved',
+      actor: 'supervisor@mwell', approvalTier: 'logistics_supervisor',
+    })).rejects.toThrow(/finance/i);
+    await controlled.decideStockChange({
+      idempotencyKey: 'tiered-finance', requestId: request!.id, decision: 'approved',
+      actor: 'finance@mwell', approvalTier: 'finance',
+    });
+    expect((await controlled.getData()).stockLevels[0]!.quantity).toBe(18);
   });
 
   it('moves a vendor-return hold into supplier custody exactly once', async () => {

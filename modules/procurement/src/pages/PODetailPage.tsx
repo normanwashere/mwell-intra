@@ -106,6 +106,10 @@ export function PODetailPage() {
   const [protectionType, setProtectionType] = useState('performance_bond');
   const [protectionBasis, setProtectionBasis] = useState('Contract commitment');
   const [protectionAmount, setProtectionAmount] = useState('');
+  const [waiverProtectionId, setWaiverProtectionId] = useState<string | null>(null);
+  const [waiverReason, setWaiverReason] = useState('');
+  const [waiverBasis, setWaiverBasis] = useState('');
+  const [waiverEvidence, setWaiverEvidence] = useState('');
 
   // PR-15 parity with the approval inbox: a prefilled signer name arms the
   // confirm button; the pad can still replace the seeded typed signature.
@@ -241,6 +245,16 @@ export function PODetailPage() {
     success('Financial protection requirement added');
   }
 
+  async function handleProtectionWaiver() {
+    if (!waiverProtectionId || !waiverReason.trim() || !waiverBasis.trim() || !waiverEvidence.trim()) return;
+    await reviewFinancialProtection(waiverProtectionId, 'waived', {
+      reason: waiverReason.trim(), basis: waiverBasis.trim(), evidenceStoragePath: waiverEvidence.trim(),
+    });
+    setWaiverProtectionId(null);
+    setWaiverReason(''); setWaiverBasis(''); setWaiverEvidence('');
+    success('Governed protection waiver recorded');
+  }
+
   async function handlePreparePayment(draft: PaymentReadinessDraft) {
     if (!po) return;
     const next = await preparePayment(po.id, { ...draft, actorEmail: profile?.email });
@@ -266,7 +280,7 @@ export function PODetailPage() {
         Issue to vendor
       </HeroChipButton>
     ) : po.status === 'issued' && !fullyReceived && canReceiveInWarehouse ? (
-      <HeroChipButton icon="box" href={`/warehouse/purchase-orders/${po.id}`}>
+      <HeroChipButton icon="box" href={`/warehouse/purchase-orders?po=${encodeURIComponent(po.id)}`}>
         Open Warehouse handoff
       </HeroChipButton>
     ) : (
@@ -445,12 +459,25 @@ export function PODetailPage() {
                   <div key={protection.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
                     <span className="font-medium text-ink">{protection.protectionType}</span>
                     <span className="text-muted">{protection.triggerBasis} · {protection.status}</span>
+                    {protection.status === 'waived' ? (
+                      <span className="basis-full text-xs text-muted">
+                        {protection.waiverBasis} · {protection.waiverReason} · {protection.waiverEvidenceStoragePath}
+                      </span>
+                    ) : null}
                     <div className="flex gap-2">
-                      {(canApproveAward || canViewFinance) && ['required', 'provided'].includes(protection.status) ? <><button type="button" className="btn-ghost btn-sm" onClick={() => void reviewFinancialProtection(protection.id, 'approved')}>Approve</button><button type="button" className="btn-ghost btn-sm" onClick={() => void reviewFinancialProtection(protection.id, 'waived')}>Waive</button></> : null}
+                      {(canApproveAward || canViewFinance) && ['required', 'provided'].includes(protection.status) ? <><button type="button" className="btn-ghost btn-sm" onClick={() => void reviewFinancialProtection(protection.id, 'approved')}>Approve</button><button type="button" className="btn-ghost btn-sm" onClick={() => setWaiverProtectionId(protection.id)}>Waive with evidence</button></> : null}
                       {canAuthorPo && protection.status !== 'superseded' ? <button type="button" className="btn-ghost btn-sm" onClick={() => void supersedeFinancialProtection(protection.id)}>Supersede</button> : null}
                     </div>
                   </div>
                 ))}
+                {waiverProtectionId ? (
+                  <div className="space-y-2 py-3">
+                    <label className="block text-sm font-semibold text-ink">Waiver rationale<textarea className="input mt-1" value={waiverReason} onChange={(event) => setWaiverReason(event.target.value)} /></label>
+                    <label className="block text-sm font-semibold text-ink">Authorized waiver basis<input className="input mt-1" value={waiverBasis} onChange={(event) => setWaiverBasis(event.target.value)} /></label>
+                    <label className="block text-sm font-semibold text-ink">Supporting evidence path<input className="input mt-1" value={waiverEvidence} onChange={(event) => setWaiverEvidence(event.target.value)} /></label>
+                    <button type="button" className="btn-primary btn-sm" disabled={!waiverReason.trim() || !waiverBasis.trim() || !waiverEvidence.trim()} onClick={() => void handleProtectionWaiver()}>Confirm governed waiver</button>
+                  </div>
+                ) : null}
               </div>
             ) : null}
             {canAuthorPo && po.requestId ? (

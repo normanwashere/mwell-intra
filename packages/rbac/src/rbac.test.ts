@@ -131,7 +131,6 @@ describe('warehouse parity vs source roles.ts', () => {
       'manage_inventory',
       'view_finance',
       'cycle_count',
-      'approve_stock_adjustment',
       'approve_stock_adjustment_finance',
       'view_exceptions',
     ],

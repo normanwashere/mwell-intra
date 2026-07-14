@@ -18,6 +18,7 @@ import { RequestDetailPage } from "./pages/RequestDetailPage";
 import { ApprovalInboxPage } from "./pages/ApprovalInboxPage";
 import { PurchaseOrdersPage } from "./pages/PurchaseOrdersPage";
 import { PODetailPage } from "./pages/PODetailPage";
+import { AcceptanceWorkItemPage } from "./pages/AcceptanceWorkItemPage";
 import { resolveTiers, type UserRolesShape } from "./tiers";
 import { PROCUREMENT_ROUTE_BY_ID } from "./routes";
 
@@ -59,7 +60,10 @@ export function ProcurementApp({
     [userRoles],
   );
   const canViewDashboard = can(userRoles, "procurement", "view_dashboard");
-  const hasAccess = canViewDashboard || myTiers.length > 0;
+  const acceptanceDeepLink = typeof window !== "undefined"
+    && window.location.pathname.startsWith(`${basename}/purchase-orders/`);
+  const acceptanceOnly = !canViewDashboard && myTiers.length === 0 && acceptanceDeepLink;
+  const hasAccess = canViewDashboard || myTiers.length > 0 || acceptanceOnly;
   const approvalsOnly = !canViewDashboard && myTiers.length > 0;
   const canApprove =
     can(userRoles, "procurement", "approve_request") || myTiers.length > 0;
@@ -114,13 +118,20 @@ export function ProcurementApp({
       {/* No nested ToastProvider — the shell's root Providers already mounts
           one; nesting a second rendered a duplicate toast viewport. */}
       <ScrollToTopOnRouteChange />
-      <ProcurementTabs
-        canApprove={canApprove}
-        showRequests={!approvalsOnly}
-        showPurchaseOrders={!approvalsOnly && canViewPurchaseOrders}
-      />
+      {!acceptanceOnly && (
+        <ProcurementTabs
+          canApprove={canApprove}
+          showRequests={!approvalsOnly}
+          showPurchaseOrders={!approvalsOnly && canViewPurchaseOrders}
+        />
+      )}
       <Routes>
-        {approvalsOnly ? (
+        {acceptanceOnly ? (
+          <>
+            <Route path={PROCUREMENT_ROUTE_BY_ID["po-detail"].path} element={<AcceptanceWorkItemPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </>
+        ) : approvalsOnly ? (
           <>
             {/* Tier-only entrants (e.g. Legal) land on the approvals surface.
                 Request detail stays reachable — it's the "Review" step of an
@@ -137,6 +148,7 @@ export function ProcurementApp({
               path={PROCUREMENT_ROUTE_BY_ID["request-detail"].path}
               element={<RequestDetailPage />}
             />
+            <Route path={PROCUREMENT_ROUTE_BY_ID["po-detail"].path} element={<AcceptanceWorkItemPage />} />
             <Route path="*" element={<Navigate to="/approvals" replace />} />
           </>
         ) : (
@@ -163,7 +175,7 @@ export function ProcurementApp({
             />
             <Route
               path={PROCUREMENT_ROUTE_BY_ID["po-detail"].path}
-              element={<PODetailPage />}
+              element={canViewPurchaseOrders ? <PODetailPage /> : <AcceptanceWorkItemPage />}
             />
             <Route path="*" element={<Navigate to="/" replace />} />
           </>

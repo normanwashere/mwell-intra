@@ -318,6 +318,7 @@ describe('SupabaseRepository W1 control boundary', () => {
     });
     await repo.decideStockChange({
       idempotencyKey: 'decision-key-01', requestId: 'scr-1', decision: 'approved',
+      actor: 'supervisor@mwell', approvalTier: 'logistics_supervisor',
     });
     await repo.resolveException({
       idempotencyKey: 'exception-key01', exceptionId: 'ex-1', action: 'begin',

@@ -212,6 +212,8 @@ export interface DecideStockChangeInput {
   idempotencyKey: string;
   requestId: string;
   decision: 'approved' | 'rejected';
+  actor: string;
+  approvalTier: StockChangeApprovalTier;
   note?: string;
 }
 
@@ -313,10 +315,19 @@ export function stockChangeStatusAfterDecision(input: {
   financialImpact: number;
   requestedBy: string;
   actor: string;
+  actorTier: StockChangeApprovalTier;
   note?: string;
 }): StockChangeRequest['status'] {
   if (!canActorApproveStockChange(input.requestedBy, input.actor)) {
     throw new Error('The requester cannot approve their own stock change.');
+  }
+  const requiredTier: StockChangeApprovalTier = input.currentStatus === 'pending_supervisor'
+    ? 'logistics_supervisor'
+    : 'finance';
+  if (input.actorTier !== requiredTier) {
+    throw new Error(requiredTier === 'logistics_supervisor'
+      ? 'A Warehouse Supervisor must decide this stock change first.'
+      : 'Finance must decide this stock change after Warehouse Supervisor approval.');
   }
   if (input.decision === 'rejected') {
     if (!input.note?.trim()) throw new Error('A rejection note is required.');

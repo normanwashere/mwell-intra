@@ -329,6 +329,9 @@ export interface FinancialProtectionRecord {
   dueBefore?: string;
   status: 'required' | 'provided' | 'approved' | 'waived' | 'expired' | 'claim_pending' | 'claimed' | 'superseded';
   reviewedAt?: string;
+  waiverReason?: string;
+  waiverBasis?: string;
+  waiverEvidenceStoragePath?: string;
 }
 
 export interface CommitmentReadiness {

@@ -46,7 +46,15 @@ const po: PurchaseOrder = {
       controlCode: 'RFQ_COMMERCIAL_COMPARISON', evidenceType: 'comparison',
       reviewStatus: 'submitted', facts: {},
     }],
-    protections: [],
+    protections: [{
+      id: 'protection-1', protectionType: 'performance_bond',
+      triggerBasis: 'Contract commitment', status: 'required',
+    }, {
+      id: 'protection-2', protectionType: 'payment_bond',
+      triggerBasis: 'Authorized risk decision', status: 'waived',
+      waiverReason: 'Equivalent escrow is active', waiverBasis: 'Approved risk classification',
+      waiverEvidenceStoragePath: 'evidence/escrow-review.pdf',
+    }],
     canRecordAcceptance: true,
   },
   createdAt: '2026-07-14T09:00:00.000Z',
@@ -133,6 +141,11 @@ describe('PODetailPage Warehouse handoff', () => {
     expect(html).toMatch(/approved policy evidence RFQ_COMMERCIAL_COMPARISON/i);
     expect(html).toMatch(/RFQ_COMMERCIAL_COMPARISON[^]*submitted/i);
     expect(html).toMatch(/href="[^"]*\/warehouse\/purchase-orders\?po=po-issued-1"[^>]*>[^<]*open warehouse handoff/i);
+    expect(html).not.toContain('/warehouse/purchase-orders/po-issued-1');
+    expect(html.match(/\/warehouse\/purchase-orders\?po=po-issued-1/g)).toHaveLength(2);
+    expect(html).not.toMatch(/>Waive<\/button>/i);
+    expect(html).toMatch(/waive with evidence/i);
+    expect(html).toMatch(/Approved risk classification[^]*Equivalent escrow is active[^]*escrow-review\.pdf/i);
   });
 
   it('keeps receipt status readable without rendering a dead handoff link', () => {

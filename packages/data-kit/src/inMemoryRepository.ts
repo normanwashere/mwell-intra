@@ -1357,7 +1357,8 @@ export class InMemoryRepository implements WarehouseControlRepository {
         decision: input.decision,
         financialImpact: request.financialImpact,
         requestedBy: request.requestedBy,
-        actor: request.status === 'pending_finance' ? 'demo-finance-approver' : 'demo-supervisor-approver',
+        actor: input.actor,
+        actorTier: input.approvalTier,
         note: input.note,
       });
       request.canDecide = ['pending_supervisor', 'pending_finance'].includes(request.status);

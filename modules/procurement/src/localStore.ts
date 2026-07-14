@@ -924,7 +924,7 @@ export interface PurchaseOrdersAPI {
   reviewPolicyEvidence: (id: string, decision: 'approved' | 'rejected') => Promise<void>;
   supersedePolicyEvidence: (id: string) => Promise<void>;
   createFinancialProtection: (requestId: string, input: { protectionType: string; triggerBasis: string; requiredAmount?: number }) => Promise<void>;
-  reviewFinancialProtection: (id: string, decision: 'approved' | 'waived') => Promise<void>;
+  reviewFinancialProtection: (id: string, decision: 'approved' | 'waived', waiver?: { reason: string; basis: string; evidenceStoragePath: string }) => Promise<void>;
   supersedeFinancialProtection: (id: string) => Promise<void>;
   preparePayment: (id: string, input: { poMatch: boolean; invoiceOrSiReference: string; milestoneSupportReference: string; taxWithholdingSupportReference: string; actorEmail?: string }) => MaybePromise<PurchaseOrder | null>;
   reviewPayment: (id: string, input: { status: 'returned' | 'accepted'; note?: string; actorEmail?: string }) => MaybePromise<PurchaseOrder | null>;
@@ -1170,8 +1170,13 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
     await liveRpc(live, 'procurement', 'create_financial_protection', { request_id: requestId, protection_type: input.protectionType, trigger_basis: input.triggerBasis, required_amount: input.requiredAmount });
     await refreshCommitmentReadiness();
   }, [live, refreshCommitmentReadiness]);
-  const reviewFinancialProtection = useCallback(async (id: string, decision: 'approved' | 'waived') => {
-    if (!live) return; await liveRpc(live, 'procurement', 'review_financial_protection', { id, decision }); await refreshCommitmentReadiness();
+  const reviewFinancialProtection = useCallback(async (id: string, decision: 'approved' | 'waived', waiver?: { reason: string; basis: string; evidenceStoragePath: string }) => {
+    if (!live) return;
+    await liveRpc(live, 'procurement', 'review_financial_protection', {
+      id, decision, waiver_reason: waiver?.reason, waiver_basis: waiver?.basis,
+      waiver_evidence_storage_path: waiver?.evidenceStoragePath,
+    });
+    await refreshCommitmentReadiness();
   }, [live, refreshCommitmentReadiness]);
   const supersedeFinancialProtection = useCallback(async (id: string) => {
     if (!live) return; await liveRpc(live, 'procurement', 'supersede_financial_protection', { id }); await refreshCommitmentReadiness();
@@ -1225,6 +1230,83 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
     createPolicyEvidence, reviewPolicyEvidence, supersedePolicyEvidence,
     createFinancialProtection, reviewFinancialProtection, supersedeFinancialProtection,
     preparePayment, reviewPayment, getById };
+}
+
+export interface AcceptanceWorkItem {
+  purchaseOrderId: string;
+  poNumber: string;
+  requestId: string;
+  status: string;
+  latestWarehouseReceiptReference?: string;
+  latestQcStatus?: string;
+  lines: Array<{
+    poLineId: string;
+    description: string;
+    uom: string;
+    orderedQuantity: number;
+    qcAcceptedQuantity: number;
+    rejectedOrQuarantinedQuantity: number;
+  }>;
+}
+
+function mapAcceptanceWorkItem(row: Record<string, unknown>): AcceptanceWorkItem {
+  return {
+    purchaseOrderId: String(row.purchase_order_id),
+    poNumber: String(row.po_number),
+    requestId: String(row.request_id),
+    status: String(row.status),
+    latestWarehouseReceiptReference: row.latest_warehouse_receipt_reference == null
+      ? undefined : String(row.latest_warehouse_receipt_reference),
+    latestQcStatus: row.latest_qc_status == null ? undefined : String(row.latest_qc_status),
+    lines: ((row.lines ?? []) as Array<Record<string, unknown>>).map((line) => ({
+      poLineId: String(line.poLineId),
+      description: String(line.description),
+      uom: String(line.uom ?? 'ea'),
+      orderedQuantity: Number(line.orderedQuantity ?? 0),
+      qcAcceptedQuantity: Number(line.qcAcceptedQuantity ?? 0),
+      rejectedOrQuarantinedQuantity: Number(line.rejectedOrQuarantinedQuantity ?? 0),
+    })),
+  };
+}
+
+export function useAcceptanceWorkItem(purchaseOrderId: string) {
+  const live = useLiveClient();
+  const [item, setItem] = useState<AcceptanceWorkItem | null>(null);
+  const [loading, setLoading] = useState(Boolean(live));
+
+  const load = useCallback(async () => {
+    if (!live || !purchaseOrderId) { setItem(null); setLoading(false); return; }
+    setLoading(true);
+    try {
+      const rows = await liveRpc<Array<Record<string, unknown>>>(
+        live, 'procurement', 'acceptance_work_items', { purchase_order_id: purchaseOrderId },
+      );
+      setItem(rows[0] ? mapAcceptanceWorkItem(rows[0]) : null);
+    } finally {
+      setLoading(false);
+    }
+  }, [live, purchaseOrderId]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const recordAcceptance = useCallback(async (input: {
+    acceptedScope: string;
+    acceptedLines: Array<{ poLineId: string; quantity: number }>;
+    exceptions: string[];
+  }) => {
+    if (!live || !item) return false;
+    await liveRpc(live, 'procurement', 'record_acceptance_pack', {
+      purchase_order_id: item.purchaseOrderId,
+      acceptance_type: 'goods',
+      accepted_scope: { summary: input.acceptedScope, lines: input.acceptedLines },
+      exceptions: input.exceptions,
+      warehouse_receipt_reference: item.latestWarehouseReceiptReference,
+    });
+    await load();
+    return true;
+  }, [item, live, load]);
+
+  return { item, loading, recordAcceptance };
 }
 
 // ---------------------------------------------------------------------------

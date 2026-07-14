@@ -23,7 +23,7 @@ const REQUIRED_CONTRACTS = [
   ['legacy Procurement receipt writes are revoked', /revoke (?:insert,\s*update,\s*delete|all) on procurement\.receipts from authenticated/i],
   ['temporary clearance requires explicit approval', /conditions->>'approved'\)::boolean\s+is\s+true/i],
   ['one database commitment predicate returns blockers', /create or replace function private\.procurement_commitment_readiness[\s\S]*?blockers/i],
-  ['commitment readiness has authoritative submit award and issue stages', /create or replace function private\.procurement_commitment_readiness(?=[\s\S]*?p_phase\s+not in \('submit','award','issue'\))(?=[\s\S]*?p_phase\s*=\s*'submit')(?=[\s\S]*?p_phase\s*=\s*'award')(?=[\s\S]*?p_phase\s*=\s*'issue')/i],
+  ['commitment readiness has authoritative submit award and issue stages', /create or replace function private\.procurement_commitment_readiness(?=[\s\S]*?p_phase\s+not in \('submit','award','issue'\))(?=[\s\S]*?p_phase\s*=\s*'submit')(?=[\s\S]*?p_phase\s+in\s*\('award','issue'\))(?=[\s\S]*?p_phase\s*=\s*'issue')/i],
   ['exception packs bind exact vendor route request and version', /exception_pack\.vendor_id\s*=\s*p_vendor_id[\s\S]*?exception_pack\.route_decision_id\s*=\s*v_route\.id[\s\S]*?exception_pack\.request_version\s*=\s*v_route\.request_version/i],
   ['exception pack vendor and route binding is immutable', /create or replace function private\.enforce_exception_pack_binding_immutable[\s\S]*?vendor_id[\s\S]*?route_decision_id[\s\S]*?request_version/i],
   ['policy evidence has governed create review and supersede RPCs', /procurement\.create_policy_evidence[\s\S]*?procurement\.review_policy_evidence[\s\S]*?procurement\.supersede_policy_evidence/i],
@@ -45,13 +45,30 @@ const REQUIRED_CONTRACTS = [
   ['outstanding quantity subtracts accepted quantity only', /ordered_quantity[\s\S]*?-\s*coalesce\(totals\.accepted_quantity,\s*0\)[\s\S]*?outstanding/i],
   ['PO closure is recalculated under the locked PO', /v_closed[\s\S]*?receiving_status\s*=\s*'open'[\s\S]*?update procurement\.purchase_orders/i],
   ['Warehouse has an idempotent exception receipt RPC without stock posting', /create or replace function private\.warehouse_receive_procurement_po_exception[\s\S]*?begin_idempotent_command[\s\S]*?insert into warehouse\.quality_inspections/i],
+  ['exception receipts create a pending controlled decision', /create table if not exists warehouse\.procurement_receipt_exception_decisions[\s\S]*?status text not null default 'pending'[\s\S]*?requested_by uuid/i],
+  ['exception receipt QC remains pending until Supervisor decision', /warehouse_receive_procurement_po_exception[\s\S]*?v_disposition\s*:=\s*'pending'[\s\S]*?procurement_receipt_exception_decisions/i],
+  ['exception resolution is idempotent and requires a different Supervisor', /warehouse_resolve_procurement_po_exception[\s\S]*?begin_idempotent_command[\s\S]*?release_quality_hold[\s\S]*?resolve_exceptions[\s\S]*?requested_by\s*=\s*auth\.uid\(\)/i],
+  ['exception resolution atomically finalizes decision QC receipt and exception', /warehouse_resolve_procurement_po_exception[\s\S]*?for update[\s\S]*?update warehouse\.quality_inspections[\s\S]*?update warehouse\.receipts[\s\S]*?update warehouse\.exceptions[\s\S]*?update warehouse\.procurement_receipt_exception_decisions/i],
+  ['exception resolution returns the post-decision receipt state', /warehouse_resolve_procurement_po_exception[\s\S]*?update warehouse\.receipts[\s\S]*?returning \* into v_receipt/i],
+  ['private quality inspection is service-role only', /revoke all on function private\.warehouse_inspect_quality\(jsonb\) from public, anon, authenticated[\s\S]*?grant execute on function private\.warehouse_inspect_quality\(jsonb\) to service_role/i],
   ['quality disposition validates the caller PO line belongs to the receipt', /warehouse\.inspect_quality[\s\S]*?procurement_po_line_id[\s\S]*?jsonb_array_elements\(v_receipt\.lines\)/i],
+  ['acceptance work items are requester or assigned-reviewer scoped', /procurement\.acceptance_work_items[\s\S]*?requester_id\s*=\s*auth\.uid\(\)[\s\S]*?acceptance_reviewer_assignments/i],
+  ['acceptance work items expose no commercial facts', /create or replace function procurement\.acceptance_work_items/i],
+  ['later commitment phases include earlier controls', /p_phase in \('award','issue'\)[\s\S]*?RFQ_COMMERCIAL_COMPARISON/i],
+  ['commitment readiness and governed mutations share a request lock', /create or replace function private\.lock_procurement_request[\s\S]*?for update[\s\S]*?perform private\.lock_procurement_request/i],
+  ['financial-protection waivers require reason basis and evidence', /v_decision\s*=\s*'waived'[\s\S]*?waiver_reason[\s\S]*?waiver_basis[\s\S]*?waiver_evidence_storage_path/i],
+  ['readiness retains governed waiver facts', /'waiverReason'[\s\S]*?'waiverBasis'[\s\S]*?'waiverEvidenceStoragePath'/i],
   ['legacy Legal checklist schema converges before accreditation reads', /alter table legal\.requirement_checklist_items[\s\S]*?add column if not exists code[\s\S]*?add column if not exists decision/i],
+  ['LGL004 N-A requires an explicit reviewer reason', /decision\s*=\s*'na'[\s\S]*?reviewer_note[\s\S]*?btrim/i],
   ['LGL004 supports foreign branches through exact equivalents', /branch_foreign[\s\S]*?foreign_equivalent/i],
   ['NDA cannot be waived through generic equivalence or not-applicable', /v_code\s*<>\s*'SIGN_NDA'[\s\S]*?foreign_equivalent/i],
   ['technology MNDA uses the earlier expiry trigger', /least\([\s\S]*?definitive_agreement_executed_at/i],
   ['technology MNDA return or destruction dates are recorded', /return_or_destroy_requested[\s\S]*?due_at/i],
   ['business-day calculation is stable and uses an explicit policy timezone', /create or replace function private\.add_business_days[\s\S]*?language plpgsql[\s\S]*?stable[\s\S]*?Asia\/Manila/i],
+  ['adjust_stock requires the authoritative adjustment capability', /create or replace function warehouse\.adjust_stock[\s\S]*?core\.has_cap\('warehouse',\s*'approve_stock_adjustment'\)/i],
+  ['vendor return requires the authoritative returns capability', /create or replace function private\.warehouse_create_vendor_return[\s\S]*?core\.has_cap\('warehouse',\s*'manage_returns'\)/i],
+  ['Finance is removed from the Supervisor approval capability', /delete from core\.role_capabilities[\s\S]*?role\s*=\s*'finance'[\s\S]*?cap\s*=\s*'approve_stock_adjustment'/i],
+  ['stock approval projection separates Supervisor and Finance tiers', /warehouse_list_stock_change_requests[\s\S]*?pending_supervisor[\s\S]*?approve_stock_adjustment[\s\S]*?pending_finance[\s\S]*?approve_stock_adjustment_finance/i],
 ];
 
 export async function verifyPoReceiptAuthority(migrationUrl) {
@@ -77,6 +94,24 @@ export async function verifyPoReceiptAuthority(migrationUrl) {
   if (/grant select on procurement\.v_purchase_order_commitment_readiness\s+to authenticated/i.test(sql)) findings.push('Authenticated users can read the unscoped commitment-readiness view');
   if (/riskFacts,technical|risk_facts,technical/i.test(sql)) {
     findings.push('Generic technical risk is incorrectly treated as the technology-service-provider axis');
+  }
+  const acceptanceProjection = sql.match(
+    /create or replace function procurement\.acceptance_work_items[\s\S]*?\$\$;/i,
+  )?.[0] ?? '';
+  if (/unit_price|vendor_name|core_vendor_id|\btotal\b|estimated_amount/i.test(acceptanceProjection)) {
+    findings.push('Acceptance work-item projection leaks commercial facts');
+  }
+  const adjustStock = sql.match(
+    /create or replace function warehouse\.adjust_stock[\s\S]*?\$\$;/i,
+  )?.[0] ?? '';
+  if (/has_cap\('warehouse',\s*'cycle_count'\)/i.test(adjustStock)) {
+    findings.push('Latest adjust_stock still accepts cycle_count instead of approve_stock_adjustment');
+  }
+  const vendorReturn = sql.match(
+    /create or replace function private\.warehouse_create_vendor_return[\s\S]*?\$\$;/i,
+  )?.[0] ?? '';
+  if (/has_cap\('warehouse',\s*'release_quality_hold'\)/i.test(vendorReturn)) {
+    findings.push('Latest vendor-return authority still accepts release_quality_hold instead of manage_returns');
   }
   return findings;
 }

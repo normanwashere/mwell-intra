@@ -154,7 +154,6 @@ export const warehouseModule: ModuleDefinition<
         ...ALL_INVENTORY,
         'view_finance',
         'cycle_count',
-        'approve_stock_adjustment',
         'approve_stock_adjustment_finance',
         'view_exceptions',
       ],

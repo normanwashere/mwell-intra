@@ -32,6 +32,11 @@ import {
   type Tone,
 } from '@/components/ui';
 import { Icon } from '@/components/Icon';
+import {
+  ReceiptExceptionDecisionPanel,
+  type ReceiptExceptionDecisionInput,
+  type ReceiptExceptionDecisionItem,
+} from '@/components/ReceiptExceptionDecisionPanel';
 
 type POFilter = 'all' | 'open' | 'closed';
 type ReceiptDisposition = 'clean' | 'damaged' | 'quarantine';
@@ -52,7 +57,7 @@ interface DraftLine {
 export function PurchaseOrdersPage() {
   const {
     data, source, can, createPurchaseOrder, receiveAgainstPO, cancelPurchaseOrder,
-    loadReceivableProcurementPOs, receiveProcurementPO,
+    loadReceivableProcurementPOs, receiveProcurementPO, canOpenRoute,
   } = useWarehouse();
   const toast = useToast();
   const { mode, supabaseClient } = useSession();
@@ -95,10 +100,53 @@ export function PurchaseOrdersPage() {
   const [bridgeEvidence, setBridgeEvidence] = useState('');
   const [bridgeDisposition, setBridgeDisposition] = useState<ReceiptDisposition>('clean');
   const [bridgeExceptionReason, setBridgeExceptionReason] = useState('');
+  const [exceptionDecisions, setExceptionDecisions] = useState<ReceiptExceptionDecisionItem[]>([]);
   const warehouses = useMemo(
     () => data?.locations.filter((location) => location.type === 'warehouse') ?? [],
     [data],
   );
+
+  const mayResolveReceiptExceptions = can('release_quality_hold') && can('resolve_exceptions');
+  useEffect(() => {
+    if (mode !== 'supabase' || !supabaseClient || !mayResolveReceiptExceptions) {
+      setExceptionDecisions([]);
+      return;
+    }
+    let active = true;
+    void supabaseClient.schema('warehouse').rpc('procurement_receipt_exception_work_items', {
+      payload: { status: 'pending' },
+    }).then(({ data: rows, error: rpcError }) => {
+      if (!active || rpcError) return;
+      setExceptionDecisions(((rows ?? []) as Array<Record<string, unknown>>).map((row) => ({
+        decisionId: String(row.decision_id),
+        receiptId: String(row.receipt_id),
+        purchaseOrderId: String(row.purchase_order_id),
+        poNumber: String(row.po_number),
+        requestedDisposition: row.requested_disposition as 'damaged' | 'quarantine',
+        requestedBy: String(row.requested_by),
+        requestedAt: String(row.requested_at),
+        reason: String(row.reason ?? ''),
+      })));
+    });
+    return () => { active = false; };
+  }, [mayResolveReceiptExceptions, mode, supabaseClient]);
+
+  const decideReceiptException = async (input: ReceiptExceptionDecisionInput) => {
+    if (!supabaseClient) return false;
+    const { error: rpcError } = await supabaseClient.schema('warehouse').rpc('resolve_procurement_po_exception', {
+      payload: {
+        idempotency_key: crypto.randomUUID(),
+        decision_id: input.decisionId,
+        decision: input.decision,
+        reason: input.reason,
+        evidence_urls: input.evidenceUrls,
+      },
+    });
+    if (rpcError) { toast.error(rpcError.message); return false; }
+    setExceptionDecisions((items) => items.filter((item) => item.decisionId !== input.decisionId));
+    toast.success('Controlled receipt decision recorded');
+    return true;
+  };
 
   useEffect(() => {
     if (!handoffPoId || openedHandoffRef.current === handoffPoId) return;
@@ -277,8 +325,14 @@ export function PurchaseOrdersPage() {
 
       <div className="flex flex-col gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100 sm:flex-row sm:items-center sm:justify-between">
         <div><p className="font-semibold">Receive and inspect</p><p className="text-xs opacity-80">Clean accepted stock continues to putaway; shortages, damage, rejection, and quarantine create Supervisor exceptions.</p></div>
-        <Link to="/quality" className="btn-ghost btn-sm shrink-0 justify-center">Open quality queue</Link>
+        {canOpenRoute('quality') && (
+          <Link to="/quality" className="btn-ghost btn-sm shrink-0 justify-center">Open quality queue</Link>
+        )}
       </div>
+
+      {mayResolveReceiptExceptions && (
+        <ReceiptExceptionDecisionPanel items={exceptionDecisions} onDecision={decideReceiptException} />
+      )}
 
       {data.purchaseOrders.length === 0 && bridgedPOs.length === 0 ? (
         <EmptyState

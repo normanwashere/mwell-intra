@@ -465,9 +465,11 @@ export function modulesForWarehouseAccess(
   role: WarehouseUiRole,
   canAccess: CapabilityPredicate,
 ): ModuleDef[] {
-  return source === "memory"
-    ? modulesForRole(role)
-    : modulesForCapabilities(canAccess);
+  if (source === "memory") return modulesForRole(role);
+  if (isWarehouseOperatorRole(role)) {
+    return OPERATOR_MODULES.filter((module) => module.capabilities.some(canAccess));
+  }
+  return modulesForCapabilities(canAccess);
 }
 
 export function primaryModulesForWarehouseAccess(
@@ -476,6 +478,9 @@ export function primaryModulesForWarehouseAccess(
   canAccess: CapabilityPredicate,
 ): ModuleDef[] {
   if (source === "memory") return primaryModulesForRole(role);
+  if (isWarehouseOperatorRole(role)) {
+    return OPERATOR_MODULES.slice(0, 4).filter((module) => module.capabilities.some(canAccess));
+  }
   const order: MobileSlot[] = ["home", "scan", "tasks", "inventory"];
   return modulesForCapabilities(canAccess)
     .filter((module): module is ModuleDef & { mobile: MobileSlot } =>

@@ -92,6 +92,8 @@ describe('ApprovalsPage', () => {
       idempotencyKey: 'supervisor-high-value',
       requestId: request.id,
       decision: 'approved',
+      actor: 'supervisor@mwell',
+      approvalTier: 'logistics_supervisor',
     });
     renderWithProviders(<ApprovalsPage />, { repo, role: 'finance' });
 
@@ -100,16 +102,34 @@ describe('ApprovalsPage', () => {
     expect(within(queue).getByText(/PHP 12,000/)).toBeInTheDocument();
   });
 
-  it('blocks self-approval and requires a note for rejection', async () => {
+  it('keeps wrong-tier memory approvals out of the actionable queue', async () => {
+    const { repo, request } = await createVarianceRequest({ unitCost: 600 });
+    const financeEarly = renderWithProviders(<ApprovalsPage />, { repo, role: 'finance' });
+    expect(await screen.findByText('No approvals in this view')).toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole('tab', { name: 'In review' }));
+    expect(await screen.findByText('Awaiting Warehouse Supervisor')).toBeInTheDocument();
+    financeEarly.unmount();
+
+    await repo.decideStockChange({
+      idempotencyKey: 'supervisor-tier-transition', requestId: request.id,
+      decision: 'approved', actor: 'supervisor@mwell', approvalTier: 'logistics_supervisor',
+    });
+    renderWithProviders(<ApprovalsPage />, { repo, role: 'logistics_supervisor' });
+    expect(await screen.findByText('No approvals in this view')).toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole('tab', { name: 'In review' }));
+    expect(await screen.findByText('Awaiting Finance')).toBeInTheDocument();
+  });
+
+  it('keeps self-approval out of the actionable queue', async () => {
     const user = userEvent.setup();
     const { repo } = await createVarianceRequest({ requestedBy: 'logistics_supervisor@mwell' });
     renderWithProviders(<ApprovalsPage />, { repo, role: 'logistics_supervisor' });
 
-    await user.click(within(await screen.findByLabelText('Waiting on you approvals')).getByRole('button', { name: 'Review' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Review stock change' });
-    expect(within(dialog).getByText(/you requested this change/i)).toBeInTheDocument();
-    expect(within(dialog).getByRole('button', { name: 'Approve change' })).toBeDisabled();
-    expect(within(dialog).getByRole('button', { name: 'Reject change' })).toBeDisabled();
+    expect(await screen.findByText('No approvals in this view')).toBeInTheDocument();
+    await user.click(screen.getByRole('tab', { name: 'In review' }));
+    const review = await screen.findByLabelText('In review approvals');
+    expect(within(review).getByText(/Awaiting Warehouse Supervisor/i)).toBeInTheDocument();
+    expect(within(review).queryByRole('button', { name: 'Review' })).not.toBeInTheDocument();
   });
 
   it('denies approval decisions while the live data source is offline', async () => {

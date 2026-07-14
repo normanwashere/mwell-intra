@@ -128,7 +128,7 @@ describe('warehouse W1 capabilities', () => {
   it('allows Finance to approve and BI to view without control access', () => {
     const finance = roles(['finance']);
     const bi = roles(['bi_analyst']);
-    expect(can(finance, 'warehouse', 'approve_stock_adjustment')).toBe(true);
+    expect(can(finance, 'warehouse', 'approve_stock_adjustment')).toBe(false);
     expect(can(finance, 'warehouse', 'approve_stock_adjustment_finance')).toBe(true);
     expect(can(finance, 'warehouse', 'release_quality_hold')).toBe(false);
     expect(can(bi, 'warehouse', 'view_exceptions')).toBe(true);

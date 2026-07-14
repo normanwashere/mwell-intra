@@ -83,6 +83,7 @@ describe('warehouse control state transitions', () => {
         financialImpact: 10_000,
         requestedBy: 'counter-1',
         actor: 'supervisor-1',
+        actorTier: 'logistics_supervisor',
       }),
     ).toBe('approved');
   });
@@ -95,6 +96,7 @@ describe('warehouse control state transitions', () => {
         financialImpact: 10_001,
         requestedBy: 'counter-1',
         actor: 'supervisor-1',
+        actorTier: 'logistics_supervisor',
       }),
     ).toBe('pending_finance');
     expect(
@@ -104,6 +106,7 @@ describe('warehouse control state transitions', () => {
         financialImpact: 10_001,
         requestedBy: 'counter-1',
         actor: 'finance-1',
+        actorTier: 'finance',
       }),
     ).toBe('approved');
   });
@@ -116,6 +119,7 @@ describe('warehouse control state transitions', () => {
         financialImpact: 500,
         requestedBy: 'counter-1',
         actor: 'supervisor-1',
+        actorTier: 'logistics_supervisor',
         note: 'Count evidence is incomplete.',
       }),
     ).toBe('rejected');
@@ -126,6 +130,7 @@ describe('warehouse control state transitions', () => {
         financialImpact: 500,
         requestedBy: 'counter-1',
         actor: 'supervisor-1',
+        actorTier: 'logistics_supervisor',
       }),
     ).toThrow(/note/i);
   });
@@ -138,8 +143,20 @@ describe('warehouse control state transitions', () => {
         financialImpact: 500,
         requestedBy: 'counter-1',
         actor: 'counter-1',
+        actorTier: 'logistics_supervisor',
       }),
     ).toThrow(/requester/i);
+  });
+
+  it('enforces exact Supervisor and Finance tiers', () => {
+    expect(() => stockChangeStatusAfterDecision({
+      currentStatus: 'pending_supervisor', decision: 'approved', financialImpact: 20_000,
+      requestedBy: 'counter-1', actor: 'finance-1', actorTier: 'finance',
+    })).toThrow(/warehouse supervisor/i);
+    expect(() => stockChangeStatusAfterDecision({
+      currentStatus: 'pending_finance', decision: 'approved', financialImpact: 20_000,
+      requestedBy: 'counter-1', actor: 'supervisor-1', actorTier: 'logistics_supervisor',
+    })).toThrow(/finance/i);
   });
 });
 

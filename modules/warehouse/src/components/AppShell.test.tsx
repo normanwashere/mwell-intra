@@ -53,7 +53,7 @@ describe('AppShell navigation', () => {
     expect(within(sidebar).queryByRole('link', { name: /^finance$/i })).not.toBeInTheDocument();
   });
 
-  it('uses live capabilities for Supabase navigation instead of the fallback role', async () => {
+  it('intersects live Operator capabilities with the canonical routine projection', async () => {
     renderWithProviders(<AppShell>content</AppShell>, {
       role: 'warehouse_operator',
       source: 'supabase',
@@ -61,11 +61,12 @@ describe('AppShell navigation', () => {
     });
 
     const sidebar = await screen.findByRole('navigation', { name: 'Primary' });
-    expect(within(sidebar).getByRole('link', { name: 'Pricing' })).toBeInTheDocument();
+    expect(within(sidebar).queryByRole('link', { name: 'Pricing' })).not.toBeInTheDocument();
     expect(
       within(sidebar).queryByRole('link', { name: 'Receive and inspect' }),
     ).not.toBeInTheDocument();
     expect(within(sidebar).queryByRole('link', { name: 'Receiving' })).not.toBeInTheDocument();
+    expect(within(sidebar).getByRole('link', { name: 'Home' })).toBeInTheDocument();
   });
 
   it('opens the account menu with a sign-out action', async () => {

@@ -88,14 +88,9 @@ import type {
   StockChangeRequest,
   SubmitCycleCountInput,
 } from '@intra/data-kit';
-import {
-  can as roleCan,
-  ROLES,
-  type Capability,
-} from '@/auth/roles';
+import { ROLES, type Capability } from '@/auth/roles';
 import {
   canOpenWarehouseRoute,
-  STOCK_CHANGE_DECISION_CAPABILITIES,
   WAREHOUSE_MUTATION_CAPABILITIES,
 } from '@/app/authorization';
 import type { WarehouseRouteId } from '@/app/modules';
@@ -180,7 +175,7 @@ interface WarehouseContextValue {
   createVendorReturn: (input: CreateVendorReturnInput) => Promise<boolean>;
   updateOperationRoute: (input: UpdateOperationRouteInput) => Promise<boolean>;
   submitCycleCount: (input: SubmitCycleCountInput) => Promise<boolean>;
-  decideStockChange: (input: DecideStockChangeInput) => Promise<boolean>;
+  decideStockChange: (input: Omit<DecideStockChangeInput, 'actor'>) => Promise<boolean>;
   resolveException: (input: ResolveExceptionInput) => Promise<boolean>;
   loadReceivableProcurementPOs: () => Promise<ProcurementPOHandoff[]>;
   receiveProcurementPO: (input: ReceiveProcurementPOInput) => Promise<boolean>;
@@ -272,16 +267,15 @@ export function WarehouseProvider({
     () =>
       source === 'supabase'
         ? Array.from(new Set(providedCapabilities ?? []))
-        : [...roleProfile.capabilities],
-    [providedCapabilities, roleProfile.capabilities, source],
+        : roleProfile.capabilities.filter((capability) =>
+            !(role === 'finance' && capability === 'approve_stock_adjustment'),
+          ),
+    [providedCapabilities, role, roleProfile.capabilities, source],
   );
   const capabilitySet = useMemo(() => new Set(capabilities), [capabilities]);
   const can = useCallback(
-    (capability: Capability) =>
-      source === 'supabase'
-        ? capabilitySet.has(capability)
-        : roleCan(role, capability),
-    [capabilitySet, role, source],
+    (capability: Capability) => capabilitySet.has(capability),
+    [capabilitySet],
   );
 
   const refreshPending = useCallback(async () => {
@@ -564,7 +558,20 @@ export function WarehouseProvider({
     loadHolds: (query) => repo.listHolds(query),
     loadVendorReturns: (query) => repo.listVendorReturns(query),
     loadExceptions: (query) => repo.listExceptions(query),
-    loadStockChangeRequests: (query) => repo.listStockChangeRequests(query),
+    loadStockChangeRequests: async (query) => {
+      const result = await repo.listStockChangeRequests(query);
+      if (source === 'supabase') return result;
+      return {
+        ...result,
+        rows: result.rows.map((request) => ({
+          ...request,
+          canDecide: request.requestedBy !== identityId && (
+            (request.status === 'pending_supervisor' && can('approve_stock_adjustment'))
+            || (request.status === 'pending_finance' && can('approve_stock_adjustment_finance'))
+          ),
+        })),
+      };
+    },
     loadWarehouseTasks: (query) => repo.listWarehouseTasks(query),
     loadInventoryPositions: (query) => repo.listInventoryPositions(query),
     inspectQuality: (input) =>
@@ -588,8 +595,12 @@ export function WarehouseProvider({
         repo.submitCycleCount(input),
       ),
     decideStockChange: (input) =>
-      runAuthorizedAction(STOCK_CHANGE_DECISION_CAPABILITIES, 'other', () =>
-        repo.decideStockChange(input),
+      runAuthorizedAction(
+        input.approvalTier === 'finance'
+          ? 'approve_stock_adjustment_finance'
+          : 'approve_stock_adjustment',
+        'other',
+        () => repo.decideStockChange({ ...input, actor: identityId }),
       ),
     resolveException: (input) =>
       runAuthorizedAction('resolve_exceptions', 'other', () =>

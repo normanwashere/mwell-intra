@@ -136,6 +136,14 @@ test("Task 3 uses browser-role exception receipts and proves transactional clean
   assert.match(source, /finally\s*\{\s*try\s*\{[\s\S]*browser\.close\(\)[\s\S]*finally\s*\{[\s\S]*cleanupTask3ReceiptFixture/);
   assert.match(source, /assertTask3ZeroResidualRows/);
   assert.match(source, /inventoryBefore[\s\S]*inventoryAfter[\s\S]*ledgerBefore[\s\S]*ledgerAfter/);
+  assert.match(source, /resolve_procurement_po_exception/);
+  assert.match(source, /requested_by[\s\S]*different Warehouse Supervisor/i);
+  assert.match(source, /acceptance_work_items/);
+  assert.match(source, /Task 3 requester goods acceptance/);
+  assert.match(source, /Task 3 assigned-reviewer goods acceptance/);
+  assert.match(source, /cleanupActivityEntityIds/);
+  assert.match(source, /cleanupExceptionIds/);
+  assert.match(source, /private quality inspection direct denial/i);
 });
 
 test("the live harness verifies deployed identity before browser launch", async () => {

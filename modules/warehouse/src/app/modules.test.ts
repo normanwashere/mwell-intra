@@ -3,7 +3,9 @@ import {
   MODULES,
   WAREHOUSE_DETAIL_ROUTES,
   WAREHOUSE_ROUTE_CONTRACTS,
+  modulesForWarehouseAccess,
   modulesForRole,
+  primaryModulesForWarehouseAccess,
   primaryModulesForRole,
 } from "./modules";
 import { ROLE_LIST } from "@/auth/roles";
@@ -35,6 +37,25 @@ describe("warehouse navigation metadata", () => {
         "imports", "operation-routes", "approvals", "quality",
       ]),
     );
+  });
+
+  it("intersects live Operator capabilities with the canonical four-flow projection", () => {
+    const capabilities = new Set([
+      "view_dashboard", "receive_stock", "view_pricing", "set_pricing",
+      "manage_locations", "reserve_allocate", "manage_returns",
+    ]);
+    const visible = modulesForWarehouseAccess(
+      "supabase", "warehouse_operator", (capability) => capabilities.has(capability),
+    );
+    expect(visible.map((module) => module.label)).toEqual([
+      "Home", "Receive and inspect", "Put away", "Pick or issue", "Returns and counts",
+    ]);
+    expect(visible.map((module) => module.id)).not.toContain("pricing");
+    expect(primaryModulesForWarehouseAccess(
+      "supabase", "operations", (capability) => capabilities.has(capability),
+    ).map((module) => module.label)).toEqual([
+      "Home", "Receive and inspect", "Put away", "Pick or issue",
+    ]);
   });
 
   it("assigns every route to exactly one desktop group", () => {

@@ -207,6 +207,7 @@ describe('PurchaseOrdersPage', () => {
     });
 
     const list = await screen.findByLabelText('Purchase orders');
+    expect(screen.queryByRole('link', { name: /open quality queue/i })).not.toBeInTheDocument();
     expect(within(list).getByText('PO-LIVE-001')).toBeInTheDocument();
     expect(within(list).queryByText('PO-CACHED')).not.toBeInTheDocument();
     await user.click(within(list).getByRole('button', { name: /^receive and inspect$/i }));
