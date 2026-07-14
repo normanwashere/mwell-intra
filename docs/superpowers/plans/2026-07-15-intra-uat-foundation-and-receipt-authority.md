@@ -233,7 +233,23 @@ Commit: `feat: add configurable departments and role bundles`
 - Modify: `modules/procurement/src/policy.test.ts`
 - Modify: `modules/legal/src/requirements/vendorAccreditationV2025.ts`
 - Modify: `modules/legal/src/requirements/vendorAccreditationV2025.test.ts`
+- Modify: `modules/legal/src/requirements/catalog.ts`
+- Modify: `modules/legal/src/requirements/catalog.test.ts`
 - Modify: `modules/legal/src/requirements/mndaTechnologyV2026.test.ts`
+- Modify: `modules/warehouse/src/app/modules.ts`
+- Modify: `modules/warehouse/src/app/modules.test.ts`
+- Modify: `modules/warehouse/src/components/AppShell.tsx`
+- Modify: `modules/warehouse/src/components/AppShell.test.tsx`
+- Modify: `modules/warehouse/src/pages/DashboardPage.tsx`
+- Modify: `modules/warehouse/src/pages/DashboardPage.test.tsx`
+- Modify: `modules/warehouse/src/pages/ReceivingPage.tsx`
+- Modify: `modules/warehouse/src/pages/ReceivingPage.test.tsx`
+- Modify: `modules/warehouse/src/pages/CycleCountsPage.tsx`
+- Modify: `modules/warehouse/src/pages/CycleCountsPage.test.tsx`
+- Modify: `modules/warehouse/src/pages/QualityPage.tsx`
+- Modify: `modules/warehouse/src/pages/QualityPage.test.tsx`
+- Modify: `modules/warehouse/src/pages/ApprovalsPage.tsx`
+- Modify: `modules/warehouse/src/pages/ApprovalsPage.test.tsx`
 - Modify: `modules/warehouse/src/data/procurementBridge.ts`
 - Modify: `modules/warehouse/src/data/procurementBridge.test.ts`
 - Modify: `modules/warehouse/src/pages/PurchaseOrdersPage.tsx`
@@ -282,6 +298,8 @@ Add fixtures for RFQ, RFP threshold, complex/high-risk RFP, Direct Award, repeat
 
 Technology-provider NDA tests must cover need-to-know handling, Data Privacy Act obligations, the two-year or definitive-agreement expiry rule, and the five-business-day return/destruction obligation. Do not invent a signature authority or legal conclusion not present in the approved source.
 
+Audit the blocking catalogue as well as the form-specific helper. A requirement may block accreditation only when it cites the supplied LGL004 form, the supplied MNDA, another approved policy, applicable law, an approved risk classification, or an engagement-specific Legal decision. The supplied LGL004 form does not make ISO 27001 universally mandatory for every technology vendor; optional recommendations must remain guidance rather than false blockers.
+
 - [ ] **Step 5: Remove the Procurement receipt mutation**
 
 Delete `ReceiveInput`, the `receive` API method, local memory receipt mutation, receive sheet state, and button. Keep receipts as a read-only mapped projection populated by Warehouse status in live mode.
@@ -293,6 +311,8 @@ For issued or partially received POs, show ordered, accepted, rejected/quarantin
 - [ ] **Step 7: Simplify Warehouse for two-person operation**
 
 Give the Operator four primary flows only: `Receive and inspect`, `Put away`, `Pick or issue`, and `Returns and counts`. A clean, expected receipt can move from scan to putaway without Supervisor approval. Require Supervisor action for excess/short/damaged/unidentified receipt, rejection/quarantine disposition, hold release, manual adjustment, material count variance, write-off, and override.
+
+Apply this to the actual desktop/mobile navigation, dashboard actions, receiving, quality, approvals, and cycle-count surfaces. Legacy roles remain migration aliases, but advanced Finance, Procurement authoring, pricing, analytics, events, supplier, or platform-administration controls must not remain in the Operator's primary workflow.
 
 No actor may both perform and approve a controlled transaction. Temporary delegation may substitute personnel but cannot collapse the two actors into one account.
 
