@@ -169,10 +169,18 @@ export function ReceivingPage() {
         }
       />
 
+      <div className="flex flex-col gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-950 dark:border-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-100 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="font-semibold">Clean receipt</p>
+          <p className="text-xs opacity-80">Accepted quantity and condition need no supervisor approval.</p>
+        </div>
+        <Link to="/storage" className="btn-ghost btn-sm shrink-0 justify-center">Continue to put away</Link>
+      </div>
+
       <div className="flex flex-col gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="font-semibold">Inspection required</p>
-          <p className="text-xs opacity-80">Received stock is staged for quality review before putaway.</p>
+          <p className="text-xs opacity-80">Damage, shortage, unidentified stock, rejection, or quarantine routes to Supervisor control.</p>
         </div>
         <Link to="/quality" className="btn-ghost btn-sm shrink-0 justify-center">Open quality queue</Link>
       </div>

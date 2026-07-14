@@ -133,13 +133,18 @@ const roleRoutes = {
   ],
   warehouse_logistics_supervisor: [
     { path: "/warehouse/receiving", text: /Receiving|Receive/i },
+    { path: "/warehouse/quality", text: /Controlled exception disposition/i },
+    { path: "/warehouse/approvals", text: /Controlled exceptions/i },
+    { path: "/warehouse/cycle-counts", text: /material variance requires a different Warehouse Supervisor/i },
     { path: "/warehouse/locations", text: /Locations|Warehouse|Site/i },
     { path: "/warehouse/storage", text: /Storage|Bin|Area/i },
   ],
   warehouse_operations: [
-    { path: "/warehouse/inventory", text: /Inventory|SKUs|Low stock/i },
-    { path: "/warehouse/allocations", text: /Allocations|Reserve|Issue/i },
-    { path: "/warehouse/returns", text: /Returns|Record return/i },
+    { path: "/warehouse", text: /Receive and inspect|Put away|Pick or issue|Returns and counts/i },
+    { path: "/warehouse/purchase-orders", text: /Receive and inspect|Purchase Orders/i },
+    { path: "/warehouse/storage", text: /Put away|Storage|Bin/i },
+    { path: "/warehouse/allocations", text: /Pick or issue|Allocations|Issue/i },
+    { path: "/warehouse/returns", text: /Returns and counts|Returns|Record return/i },
   ],
   warehouse_finance: [
     { path: "/warehouse/finance", text: /Finance|Valuation|Reconciliation/i },
@@ -209,6 +214,22 @@ const roleRoutes = {
     { path: "/legal/invites/new", text: /Invite vendor|Onboard a new vendor/i },
   ],
 };
+
+const TASK3_POLICY_NEGATIVE_CONTRACTS = Object.freeze([
+  "expired accreditation",
+  "unapproved scoped temporary clearance",
+  "unsupported Direct Award",
+  "split petty-cash use",
+  "missing importation controls",
+  "payment readiness without accepted receipt or service acceptance",
+]);
+
+const TASK3_CROSS_ROLE_CONTRACTS = Object.freeze([
+  "Procurement has no receipt mutation and direct receipt RPC is denied",
+  "Warehouse Operator has only four routine floor flows",
+  "Warehouse Supervisor owns quarantine and material-variance decisions",
+  "controlled transactions reject self-approval even under delegation",
+]);
 
 function routesFor(role) {
   return [...commonRoutes, ...(roleRoutes[role] ?? [])];
@@ -839,6 +860,112 @@ async function adminCreateDoaWorkflow(page, marker) {
   };
 }
 
+async function browserAccessToken(page) {
+  return page.evaluate(() => {
+    for (const key of Object.keys(localStorage)) {
+      if (!key.startsWith("sb-") || !key.endsWith("-auth-token")) continue;
+      try {
+        const value = JSON.parse(localStorage.getItem(key) ?? "null");
+        const session = Array.isArray(value) ? value[0] : value;
+        if (typeof session?.access_token === "string") return session.access_token;
+      } catch {
+        // Ignore unrelated or stale local storage entries.
+      }
+    }
+    return null;
+  });
+}
+
+async function callRpcAsBrowserUser(page, schema, fn, payload) {
+  const accessToken = await browserAccessToken(page);
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "");
+  if (!accessToken || !anonKey || !supabaseUrl)
+    throw new Error("Authenticated browser session and public Supabase configuration are required.");
+  const response = await fetch(`${supabaseUrl}/rest/v1/rpc/${fn}`, {
+    method: "POST",
+    headers: {
+      apikey: anonKey,
+      authorization: `Bearer ${accessToken}`,
+      "content-type": "application/json",
+      "accept-profile": schema,
+      "content-profile": schema,
+    },
+    body: JSON.stringify({ payload }),
+  });
+  return { ok: response.ok, status: response.status, body: await response.text() };
+}
+
+async function procurementReceiptAuthorityWorkflow(page) {
+  await page.goto(`${baseUrl}/procurement/purchase-orders?workflow=${Date.now()}`, {
+    waitUntil: "domcontentloaded",
+    timeout: 20_000,
+  });
+  await waitForMeaningfulRoute(page);
+  if (await page.getByRole("button", { name: /receive items|record receipt/i }).count())
+    throw new Error("Procurement still exposes a receipt mutation control.");
+
+  const probe = {
+    idempotency_key: `procurement-denial-${Date.now()}`,
+    po_id: "00000000-0000-0000-0000-000000000000",
+    location_id: "not-used",
+    lines: [{ line_id: "00000000-0000-0000-0000-000000000000", quantity: 1 }],
+  };
+  const removedCommand = await callRpcAsBrowserUser(
+    page,
+    "procurement",
+    "receive_purchase_order",
+    probe,
+  );
+  const warehouseDenial = await callRpcAsBrowserUser(
+    page,
+    "warehouse",
+    "receive_procurement_po",
+    probe,
+  );
+  if (removedCommand.ok) throw new Error("Removed Procurement receipt RPC executed successfully.");
+  if (warehouseDenial.ok || !/not authorized|permission|denied/i.test(warehouseDenial.body))
+    throw new Error(`Procurement officer Warehouse RPC denial was not enforced (${warehouseDenial.status}).`);
+  return {
+    name: "procurement receipt authority denial",
+    ok: true,
+    finalUrl: page.url().replace(baseUrl, ""),
+    removedCommandStatus: removedCommand.status,
+    warehouseDenialStatus: warehouseDenial.status,
+  };
+}
+
+async function warehouseOperatorSurfaceWorkflow(page) {
+  await page.goto(`${baseUrl}/warehouse?workflow=${Date.now()}`, {
+    waitUntil: "domcontentloaded",
+    timeout: 20_000,
+  });
+  await waitForMeaningfulRoute(page);
+  for (const label of ["Receive and inspect", "Put away", "Pick or issue", "Returns and counts"])
+    await page.getByRole("link", { name: label, exact: true }).first().waitFor({ state: "visible" });
+  const body = await page.locator("body").innerText();
+  if (/Data & Reports|Pricing workspace|New event|New PO/i.test(body))
+    throw new Error("Warehouse Operator surface exposes an advanced or authoring workflow.");
+  return { name: "warehouse operator routine surface", ok: true, finalUrl: page.url().replace(baseUrl, "") };
+}
+
+async function warehouseSupervisorControlWorkflow(page) {
+  for (const [route, expected] of [
+    ["/warehouse/quality", /controlled exception disposition/i],
+    ["/warehouse/approvals", /delegation never permits the requester/i],
+    ["/warehouse/cycle-counts", /material variance requires a different Warehouse Supervisor/i],
+  ]) {
+    await page.goto(`${baseUrl}${route}?workflow=${Date.now()}`, {
+      waitUntil: "domcontentloaded",
+      timeout: 20_000,
+    });
+    await waitForMeaningfulRoute(page);
+    if (!expected.test(await page.locator("body").innerText()))
+      throw new Error(`Supervisor control contract missing at ${route}.`);
+  }
+  return { name: "warehouse supervisor controlled exceptions", ok: true, finalUrl: page.url().replace(baseUrl, "") };
+}
+
 async function warehouseReceivingValidationWorkflow(page) {
   await page.goto(`${baseUrl}/warehouse/receiving?workflow=${Date.now()}`, {
     waitUntil: "domcontentloaded",
@@ -1232,6 +1359,28 @@ const cleanupTargets = allowMutations
   : [];
 
 try {
+  for (const viewport of transactionViewports) {
+    for (const [email, name, run] of [
+      [
+        "intra.test.proc.officer@mwell.com.ph",
+        "procurement receipt authority denial",
+        procurementReceiptAuthorityWorkflow,
+      ],
+      [
+        "intra.test.wh.operations@mwell.com.ph",
+        "warehouse operator routine surface",
+        warehouseOperatorSurfaceWorkflow,
+      ],
+      [
+        "intra.test.wh.logistics@mwell.com.ph",
+        "warehouse supervisor controlled exceptions",
+        warehouseSupervisorControlWorkflow,
+      ],
+    ])
+      workflows.push(
+        await runWorkflow(browser, viewport, { email }, { name, run }),
+      );
+  }
   if (allowMutations) {
     for (const viewport of transactionViewports) {
       const marker = `${auditRunId}-${viewport.name}`;
@@ -1438,7 +1587,19 @@ const outputPath = path.resolve(
 await mkdir(path.dirname(outputPath), { recursive: true });
 await writeFile(
   outputPath,
-  `${JSON.stringify({ generatedAt: new Date().toISOString(), baseUrl, runId: auditRunId, aggregate, workflows, cleanup, results }, null, 2)}\n`,
+  `${JSON.stringify({
+    generatedAt: new Date().toISOString(),
+    baseUrl,
+    runId: auditRunId,
+    task3Contracts: {
+      policyNegative: TASK3_POLICY_NEGATIVE_CONTRACTS,
+      crossRole: TASK3_CROSS_ROLE_CONTRACTS,
+    },
+    aggregate,
+    workflows,
+    cleanup,
+    results,
+  }, null, 2)}\n`,
 );
 
 const routeFailures = aggregate.flatMap((item) => [

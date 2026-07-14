@@ -11,7 +11,6 @@ import {
   Icon,
   InfoTip,
   ModuleHero,
-  QuantityStepper,
   SectionTitle,
   Sheet,
   SignaturePad,
@@ -28,7 +27,8 @@ import {
   useProcurementVendors,
   usePurchaseOrders,
 } from '../localStore';
-import { evaluateIssueReadiness, outstandingOf } from '../receiving';
+import { evaluateIssueReadiness } from '../receiving';
+import { evaluateCommitmentReadiness } from '../policy';
 import { PaymentReadinessPanel, type PaymentReadinessDraft } from '../components/PaymentReadinessPanel';
 import { ProcurementAccessDenied } from '../components/ProcurementAccessDenied';
 import {
@@ -67,7 +67,7 @@ const lineColumns: Column<PurchaseOrderLine>[] = [
 export function PODetailPage() {
   const { id = '' } = useParams();
   const {
-    rows, approve, issue, cancel, receive, recordAcceptance,
+    rows, approve, issue, cancel, recordAcceptance,
     preparePayment, reviewPayment, loading,
   } = usePurchaseOrders();
   const { rows: requests } = useProcurementRequests();
@@ -78,6 +78,7 @@ export function PODetailPage() {
   const canAuthorPo = useCan('procurement', 'author_po');
   const canViewFinance = useCan('procurement', 'view_finance');
   const canAdmin = useCan('procurement', 'admin');
+  const canReceiveInWarehouse = useCan('warehouse', 'receive_stock');
   const po: PurchaseOrder | undefined = useMemo(() => rows.find((r) => r.id === id), [rows, id]);
   const vendor = useMemo(
     () => (po ? vendors.find((v) => v.id === po.vendorId) : undefined),
@@ -97,11 +98,6 @@ export function PODetailPage() {
   const [signOpen, setSignOpen] = useState(false);
   const [signature, setSignature] = useState<SignaturePayload | null>(null);
   const [approvalNote, setApprovalNote] = useState('');
-
-  // Receive sheet state (PR-24: confirm + partial quantities).
-  const [receiveOpen, setReceiveOpen] = useState(false);
-  const [receiveQty, setReceiveQty] = useState<Record<string, number>>({});
-  const [receiveNote, setReceiveNote] = useState('');
 
   // PR-15 parity with the approval inbox: a prefilled signer name arms the
   // confirm button; the pad can still replace the seeded typed signature.
@@ -131,13 +127,22 @@ export function PODetailPage() {
 
   const accreditationOk = vendor ? isAccredited(vendor) : false;
   const sourceAwardOk = sourceRequest?.status === 'approved';
-  const issueBlockers = evaluateIssueReadiness({
+  const issueBlockers = [...evaluateIssueReadiness({
     poApproved: po.status === 'approved',
     sourceAwardApproved: sourceAwardOk,
     vendorEligible: accreditationOk,
-  });
-  const fullyReceived = po.lines.every((l) => l.receivedQuantity >= l.quantity);
-  const receipts = po.receipts ?? [];
+  }), ...evaluateCommitmentReadiness({
+    sourcingMethod: sourceRequest?.sourcingMethod ?? 'rfq',
+    vendorEligible: accreditationOk,
+    category: sourceRequest?.category,
+    exceptionPack: sourceRequest?.exceptionPack ?? sourceRequest?.compliance?.exceptionPack,
+    importationRequired: sourceRequest?.riskFacts?.importation ?? sourceRequest?.compliance?.riskFacts?.importation,
+    importationPlan: sourceRequest?.importationPlan ?? sourceRequest?.compliance?.importationPlan,
+    construction: sourceRequest?.category === 'construction',
+  })];
+  const fullyReceived = po.receiptStatus
+    ? po.receiptStatus.outstandingQuantity <= 0
+    : po.lines.every((line) => line.receivedQuantity >= line.quantity);
 
   function openApprovalSheet() {
     if (!accreditationOk) {
@@ -190,51 +195,6 @@ export function PODetailPage() {
     if (next) success(`PO ${next.poNumber} cancelled`);
   }
 
-  function openReceiveSheet() {
-    if (!po) return;
-    // Default each line to its full outstanding quantity — one confirm
-    // records a full receipt, but every line can be dialed down for partials.
-    const defaults: Record<string, number> = {};
-    for (const l of po.lines) defaults[l.id] = outstandingOf(l);
-    setReceiveQty(defaults);
-    setReceiveNote('');
-    setReceiveOpen(true);
-  }
-
-  const receiveTotals = (() => {
-    const outstanding = po.lines.reduce((s, l) => s + outstandingOf(l), 0);
-    let receiving = 0;
-    let linesTouched = 0;
-    for (const l of po.lines) {
-      const q = Math.min(receiveQty[l.id] ?? 0, outstandingOf(l));
-      if (q > 0) {
-        receiving += q;
-        linesTouched += 1;
-      }
-    }
-    return { outstanding, receiving, linesTouched, closes: receiving >= outstanding && outstanding > 0 };
-  })();
-
-  async function confirmReceive() {
-    if (!po) return;
-    const next = await receive(po.id, {
-      lines: po.lines.map((l) => ({ lineId: l.id, quantity: receiveQty[l.id] ?? 0 })),
-      actorEmail: profile?.email,
-      note: receiveNote || undefined,
-    });
-    if (next) {
-      const closed = next.status === 'closed';
-      success(
-        closed
-          ? `Receipt recorded — PO ${next.poNumber} fully received and closed.`
-          : `Partial receipt recorded — ${receiveTotals.receiving} unit${receiveTotals.receiving === 1 ? '' : 's'} received.`,
-      );
-      setReceiveOpen(false);
-    } else {
-      error('Nothing to receive — set a quantity on at least one line.');
-    }
-  }
-
   async function handleAcceptance(scope: string, exceptions: string[]) {
     if (!po) return;
     const next = await recordAcceptance(po.id, {
@@ -272,9 +232,9 @@ export function PODetailPage() {
       <HeroChipButton icon="rotate" onClick={handleIssue}>
         Issue to vendor
       </HeroChipButton>
-    ) : po.status === 'issued' && !fullyReceived ? (
-      <HeroChipButton icon="box" onClick={openReceiveSheet}>
-        Receive items
+    ) : po.status === 'issued' && !fullyReceived && canReceiveInWarehouse ? (
+      <HeroChipButton icon="box" href={`/warehouse/purchase-orders/${po.id}`}>
+        Open Warehouse handoff
       </HeroChipButton>
     ) : (
       <HeroChipButton href="/procurement/purchase-orders" icon="arrowRight">
@@ -399,12 +359,6 @@ export function PODetailPage() {
             Issue to vendor
           </button>
         )}
-        {po.status === 'issued' && !fullyReceived && (
-          <button type="button" onClick={openReceiveSheet} className="btn-primary">
-            <Icon name="box" className="h-4 w-4" />
-            Receive items
-          </button>
-        )}
         {(po.status === 'draft' || po.status === 'approved' || po.status === 'issued') && (
           <button type="button" onClick={handleCancel} className="btn-outline">
             Cancel PO
@@ -418,7 +372,54 @@ export function PODetailPage() {
         )}
       </div>
 
-      {(po.status === 'issued' || po.status === 'closed' || receipts.length > 0) && (
+      {(po.status === 'issued' || po.status === 'closed') && (
+        <div>
+          <SectionTitle
+            title="Warehouse receiving"
+            subtitle="Read-only receipt and quality status from the Warehouse authority."
+          />
+          <Card>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div>
+                <p className="text-xs font-semibold uppercase text-faint">Accepted</p>
+                <p className="tnum mt-1 text-xl font-bold text-ink">
+                  {po.receiptStatus?.acceptedQuantity ?? 0}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase text-faint">Rejected or quarantined</p>
+                <p className="tnum mt-1 text-xl font-bold text-ink">
+                  {po.receiptStatus?.rejectedOrQuarantinedQuantity ?? 0}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase text-faint">Outstanding</p>
+                <p className="tnum mt-1 text-xl font-bold text-ink">
+                  {po.receiptStatus?.outstandingQuantity ?? po.lines.reduce(
+                    (sum, line) => sum + Math.max(line.quantity - line.receivedQuantity, 0),
+                    0,
+                  )}
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4 text-sm text-muted">
+              <span>
+                QC: <strong className="text-ink">{po.receiptStatus?.latestQcStatus ?? 'not_received'}</strong>
+                {po.receiptStatus?.latestReceiptReference
+                  ? ` · Latest receipt ${po.receiptStatus.latestReceiptReference}`
+                  : ''}
+              </span>
+              {canReceiveInWarehouse && po.status === 'issued' && !fullyReceived ? (
+                <Link to={`/warehouse/purchase-orders/${po.id}`} className="btn-outline">
+                  Open Warehouse handoff
+                </Link>
+              ) : null}
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {(po.status === 'issued' || po.status === 'closed') && (
         <div>
           <SectionTitle
             title="Payment handoff"
@@ -435,41 +436,6 @@ export function PODetailPage() {
               onPrepare={handlePreparePayment}
               onReview={handleReviewPayment}
             />
-          </Card>
-        </div>
-      )}
-
-      {receipts.length > 0 && (
-        <div>
-          <SectionTitle
-            title="Receipts"
-            subtitle={`${receipts.length} receipt${receipts.length === 1 ? '' : 's'} recorded against this PO.`}
-          />
-          <Card>
-            <ol className="space-y-3">
-              {[...receipts].reverse().map((rcpt) => (
-                <li key={rcpt.id} className="flex items-start gap-3">
-                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-emerald-500/15 text-emerald-800 dark:text-emerald-300">
-                    <Icon name="box" className="h-4 w-4" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm text-ink">
-                      {rcpt.lines
-                        .map((l) => `${l.quantity} × ${l.description}`)
-                        .join(', ')}
-                    </p>
-                    <p className="text-xs text-faint">
-                      {formatDateTime(rcpt.receivedAt)}
-                      {rcpt.receivedByEmail ? ` · ${rcpt.receivedByEmail}` : ''}
-                      {rcpt.note ? ` · “${rcpt.note}”` : ''}
-                    </p>
-                  </div>
-                  <Badge tone={rcpt.closedPo ? 'emerald' : 'cyan'}>
-                    {rcpt.closedPo ? 'Closed PO' : 'Partial'}
-                  </Badge>
-                </li>
-              ))}
-            </ol>
           </Card>
         </div>
       )}
@@ -571,117 +537,6 @@ export function PODetailPage() {
         </div>
       </Sheet>
 
-      {/* ---------------- Receive sheet (PR-24) ---------------- */}
-      <Sheet
-        open={receiveOpen}
-        onOpenChange={setReceiveOpen}
-        title="Record a receipt"
-        description={`PO ${po.poNumber} — ${po.vendorName}`}
-        footer={
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs text-muted">
-              Receiving{' '}
-              <span className="tnum font-semibold text-ink">
-                {receiveTotals.receiving}
-              </span>{' '}
-              of {receiveTotals.outstanding} outstanding unit
-              {receiveTotals.outstanding === 1 ? '' : 's'}
-            </p>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setReceiveOpen(false)}
-                className="btn-ghost"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={confirmReceive}
-                disabled={receiveTotals.receiving <= 0}
-                className="btn-primary disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <Icon name="check" className="h-4 w-4" />
-                Record receipt
-              </button>
-            </div>
-          </div>
-        }
-      >
-        <div className="space-y-4 p-1">
-          <p className="text-sm text-muted">
-            Set how many units arrived per line — partial receipts are fine and
-            can be recorded again later.
-          </p>
-          <ul className="space-y-3">
-            {po.lines.map((l) => {
-              const outstanding = outstandingOf(l);
-              if (outstanding <= 0) {
-                return (
-                  <li
-                    key={l.id}
-                    className="flex items-center justify-between gap-3 rounded-xl border border-line bg-inset/40 p-3 text-sm text-faint"
-                  >
-                    <span className="min-w-0 truncate">{l.description}</span>
-                    <Badge tone="emerald">Fully received</Badge>
-                  </li>
-                );
-              }
-              return (
-                <li key={l.id} className="rounded-xl border border-line bg-surface p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="min-w-0 flex-1 text-sm font-semibold text-ink">
-                      {l.description}
-                    </p>
-                    <p className="text-xs text-muted">
-                      {l.receivedQuantity} / {l.quantity} received · {outstanding}{' '}
-                      outstanding
-                    </p>
-                  </div>
-                  <div className="mt-2 max-w-[12rem]">
-                    <QuantityStepper
-                      aria-label={`Quantity to receive for ${l.description}`}
-                      value={receiveQty[l.id] ?? 0}
-                      min={0}
-                      max={outstanding}
-                      onChange={(v) =>
-                        setReceiveQty((prev) => ({ ...prev, [l.id]: v }))
-                      }
-                    />
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-
-          <div className="space-y-1">
-            <label
-              htmlFor="receive-note"
-              className="text-xs font-semibold uppercase tracking-wide text-faint"
-            >
-              Note (optional)
-            </label>
-            <input
-              id="receive-note"
-              value={receiveNote}
-              onChange={(e) => setReceiveNote(e.target.value)}
-              className="input"
-              placeholder="Delivery reference, condition remarks…"
-            />
-          </div>
-
-          {receiveTotals.closes && (
-            <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-300">
-              <Icon name="alert" className="mt-0.5 h-4 w-4 shrink-0" />
-              <p>
-                This receipt completes every line —{' '}
-                <span className="font-semibold">PO {po.poNumber} will close</span>{' '}
-                when you confirm.
-              </p>
-            </div>
-          )}
-        </div>
-      </Sheet>
     </div>
   );
 }

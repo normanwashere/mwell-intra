@@ -9,6 +9,34 @@ import {
 import { ROLE_LIST } from "@/auth/roles";
 
 describe("warehouse navigation metadata", () => {
+  it("gives the Operator only the four routine floor flows plus Home", () => {
+    expect(modulesForRole("operations").map((module) => module.label)).toEqual([
+      "Home",
+      "Receive and inspect",
+      "Put away",
+      "Pick or issue",
+      "Returns and counts",
+    ]);
+  });
+
+  it("maps the canonical Operator and Supervisor roles while preserving aliases", () => {
+    expect(modulesForRole("warehouse_operator").map((module) => module.label)).toEqual(
+      modulesForRole("operations").map((module) => module.label),
+    );
+    expect(modulesForRole("warehouse_supervisor").map((module) => module.id)).toEqual(
+      modulesForRole("logistics_supervisor").map((module) => module.id),
+    );
+  });
+
+  it("keeps advanced cross-functional tools out of the Operator workflow", () => {
+    expect(modulesForRole("operations").map((module) => module.id)).not.toEqual(
+      expect.arrayContaining([
+        "procurement", "pricing", "data", "reports", "events", "suppliers",
+        "imports", "operation-routes", "approvals", "quality",
+      ]),
+    );
+  });
+
   it("assigns every route to exactly one desktop group", () => {
     expect(MODULES.every((module) => Boolean(module.group))).toBe(true);
     expect(new Set(MODULES.map((module) => module.id)).size).toBe(
@@ -58,7 +86,7 @@ describe("warehouse navigation metadata", () => {
   });
 
   it("places quality control in the Control group for inspection roles", () => {
-    const quality = modulesForRole("operations").find(
+    const quality = modulesForRole("logistics_supervisor").find(
       (module) => module.id === "quality",
     );
     expect(quality).toMatchObject({
@@ -84,7 +112,7 @@ describe("warehouse navigation metadata", () => {
       modulesForRole("operations").find((module) => module.id === "approvals"),
     ).toBeUndefined();
     expect(
-      modulesForRole("operations").find((module) => module.id === "exceptions"),
+      modulesForRole("logistics_supervisor").find((module) => module.id === "exceptions"),
     ).toMatchObject({ path: "/exceptions", group: "control" });
   });
 

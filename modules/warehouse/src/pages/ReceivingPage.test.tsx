@@ -6,6 +6,21 @@ import { makeRepo, renderWithProviders } from '@/test/renderWithProviders';
 import { availableForProduct } from '@/domain/stock';
 
 describe('ReceivingPage', () => {
+  it.each(['warehouse_operator', 'warehouse_supervisor'] as const)(
+    'renders the receiving surface for canonical %s',
+    async (role) => {
+      renderWithProviders(<ReceivingPage />, { role });
+      expect(await screen.findByRole('heading', { name: 'Receiving' })).toBeInTheDocument();
+    },
+  );
+
+  it('states that a clean inspected receipt continues directly to putaway', async () => {
+    renderWithProviders(<ReceivingPage />, { role: 'operations' });
+    expect(await screen.findByText(/clean receipt/i)).toBeInTheDocument();
+    expect(screen.getByText(/no supervisor approval/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /continue to put away/i })).toHaveAttribute('href', '/storage');
+  });
+
   it('adds a scanned product to the receipt and persists on submit', async () => {
     const repo = makeRepo();
     const before = availableForProduct(await repo.getStockState(), 'ecg-ring-10');

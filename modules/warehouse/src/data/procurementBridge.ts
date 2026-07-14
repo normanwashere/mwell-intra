@@ -54,6 +54,8 @@ export interface BridgedPO {
   readonly value: number;
   /** Deep link back to the procurement module's PO detail. */
   readonly href: string;
+  /** Warehouse-owned receiving destination for this handoff. */
+  readonly warehouseHref: string;
 }
 
 function asNumber(v: unknown, fallback = 0): number {
@@ -113,6 +115,7 @@ function mapPO(raw: unknown): BridgedPO | null {
     totalReceived,
     value,
     href: `/procurement/purchase-orders/${encodeURIComponent(id)}`,
+    warehouseHref: `/warehouse/purchase-orders?po=${encodeURIComponent(id)}`,
   };
 }
 
@@ -172,6 +175,7 @@ export async function loadProcurementPOs(
         totalReceived: lines.reduce((sum, line) => sum + line.receivedQuantity, 0),
         value: 0,
         href: `/procurement/purchase-orders/${encodeURIComponent(po.id)}`,
+        warehouseHref: `/warehouse/purchase-orders?po=${encodeURIComponent(po.id)}`,
       };
     });
 }

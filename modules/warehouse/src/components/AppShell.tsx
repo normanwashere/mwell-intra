@@ -9,9 +9,9 @@ import {
   MODULE_GROUP_LABELS,
   modulesForRole,
   primaryModulesForRole,
+  warehouseRolePresentation,
   type ModuleGroup,
 } from '@/app/modules';
-import { ROLES } from '@/auth/roles';
 import { buildNotifications } from '@/app/notifications';
 import { Sheet, useToast, PageTransition } from './ui';
 import { ThemeToggle } from './ThemeToggle';
@@ -67,6 +67,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const toast = useToast();
   const modules = modulesForRole(role);
+  const rolePresentation = warehouseRolePresentation(role);
   const pageGuide = WAREHOUSE_GUIDES.find((guide) =>
     routeMatches(guide.path, location.pathname),
   ) ?? WAREHOUSE_GUIDES[0];
@@ -169,8 +170,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           ))}
         </nav>
         <div className="safe-bottom border-t border-line px-5 py-4">
-          <p className="text-sm font-semibold text-ink">{ROLES[role].label}</p>
-          <p className="mt-0.5 text-xs text-muted">{ROLES[role].description}</p>
+          <p className="text-sm font-semibold text-ink">{rolePresentation.label}</p>
+          <p className="mt-0.5 text-xs text-muted">{rolePresentation.description}</p>
           {source === 'memory' && (
             <button
               type="button"

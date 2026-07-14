@@ -32,6 +32,22 @@ async function createVarianceRequest({
 }
 
 describe('ApprovalsPage', () => {
+  it.each(['warehouse_operator', 'warehouse_supervisor'] as const)(
+    'renders controlled approvals for canonical %s without collapsing delegation',
+    async (role) => {
+      renderWithProviders(<ApprovalsPage />, { role });
+      expect(await screen.findByText(/controlled exceptions/i)).toBeInTheDocument();
+      expect(screen.getByText(/delegation never permits the requester/i)).toBeInTheDocument();
+    },
+  );
+
+  it('identifies the queue as Supervisor-only controlled exceptions', async () => {
+    const { repo } = await createVarianceRequest();
+    renderWithProviders(<ApprovalsPage />, { repo, role: 'logistics_supervisor' });
+    expect(await screen.findByText(/controlled exceptions/i)).toBeInTheDocument();
+    expect(screen.getByText(/delegation never permits the requester to approve their own transaction/i)).toBeInTheDocument();
+  });
+
   it('lets the supervisor approve a variance and moves it to recently decided', async () => {
     const user = userEvent.setup();
     const { repo } = await createVarianceRequest();

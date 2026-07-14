@@ -50,6 +50,7 @@ const byEntity: Record<
 > = {
   sole_prop: [
     { code: 'PH_DTI_REG', label: 'Registration of Trade Name with DTI', authority: 'DTI' },
+    { code: 'PH_BIR_2303', label: 'BIR Certificate of Registration (Form 2303)', authority: 'BIR' },
     { code: 'PH_MAYORS_PERMIT', label: "Business Permit / Mayor's Permit", authority: 'LGU' },
     { code: 'PH_CLIENT_LIST', label: 'Client list and current/past transaction proof with contact details', authority: 'Vendor' },
   ],

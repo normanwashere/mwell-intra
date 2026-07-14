@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useWarehouse } from '@/app/store';
 import { can } from '@/auth/roles';
+import { isWarehouseOperatorRole, isWarehouseSupervisorRole } from '@/app/modules';
 import {
   poProgress,
   poTotalOrdered,
@@ -55,10 +56,9 @@ export function PurchaseOrdersPage() {
   } = useWarehouse();
   const toast = useToast();
   const navigate = useNavigate();
-  // Procurement plans & cancels POs; the warehouse (receive_stock) can receive
-  // against them. Either capability lands here via the route guard.
-  const canManagePOs = can(role, 'view_procurement');
-  const canReceive = canManagePOs || can(role, 'receive_stock');
+  const operatingRole = isWarehouseOperatorRole(role) || isWarehouseSupervisorRole(role);
+  const canManagePOs = !operatingRole && can(role, 'view_procurement');
+  const canReceive = operatingRole && (isWarehouseOperatorRole(role) || can(role, 'receive_stock'));
 
   // Procurement-module POs (issued/approved) read from their localStorage
   // contract — read-only visibility across the module seam (J1-6).
@@ -238,7 +238,7 @@ export function PurchaseOrdersPage() {
       />
 
       <div className="flex flex-col gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100 sm:flex-row sm:items-center sm:justify-between">
-        <div><p className="font-semibold">PO receipts require quality inspection</p><p className="text-xs opacity-80">Receipt confirmation records custody in staging; it does not complete putaway.</p></div>
+        <div><p className="font-semibold">Receive and inspect</p><p className="text-xs opacity-80">Clean accepted stock continues to putaway; shortages, damage, rejection, and quarantine create Supervisor exceptions.</p></div>
         <Link to="/quality" className="btn-ghost btn-sm shrink-0 justify-center">Open quality queue</Link>
       </div>
 
@@ -368,20 +368,16 @@ export function PurchaseOrdersPage() {
                         <span className="text-sm text-muted">
                           {po.lines.length} line(s) • {money(po.value)}
                         </span>
-                        {/* Receiving stays in the module that owns the PO —
-                            deep link instead of a half-wired local receive. */}
-                        {source === 'supabase' ? (
+                        {canReceive && po.status === 'issued' ? (
                           <button
                             type="button"
                             className="btn-accent btn-sm shrink-0"
                             onClick={() => openBridgeReceive(po)}
                           >
-                            <Icon name="truck" className="h-4 w-4" /> Receive
+                            <Icon name="truck" className="h-4 w-4" /> Receive and inspect
                           </button>
                         ) : (
-                          <a href={po.href} className="btn-accent btn-sm shrink-0">
-                            <Icon name="truck" className="h-4 w-4" /> Receive in procurement
-                          </a>
+                          <span className="text-xs font-medium text-faint">Warehouse handoff status</span>
                         )}
                       </div>
                     </Card>
@@ -422,7 +418,7 @@ export function PurchaseOrdersPage() {
                   className="btn-primary flex-1 justify-center"
                   onClick={() => openReceive(detailPO)}
                 >
-                  <Icon name="truck" className="h-4 w-4" /> Receive
+                  <Icon name="truck" className="h-4 w-4" /> Receive and inspect
                 </button>
               )}
               {confirmCancel && (

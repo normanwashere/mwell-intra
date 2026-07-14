@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { InventoryHold, QualityInspection, VendorReturn } from '@intra/data-kit';
 import { useWarehouse } from '@/app/store';
 import { can } from '@/auth/roles';
+import { isWarehouseOperatorRole } from '@/app/modules';
 import { Badge, EmptyState, PageHeader, SegmentedControl } from '@/components/ui';
 import { InspectionSheet } from '@/components/quality/InspectionSheet';
 import { HoldReleaseSheet } from '@/components/quality/HoldReleaseSheet';
@@ -124,6 +125,19 @@ export function QualityPage() {
   return (
     <div className="space-y-4">
       <PageHeader title="Quality control" icon="clipboard" subtitle="Inspect receipts, control holds, and preserve custody" />
+      <div className="rounded-xl border border-line bg-inset/50 px-4 py-3 text-sm text-muted">
+        {isWarehouseOperatorRole(role) ? (
+          <>
+            <p className="font-semibold text-ink">Record inspection facts.</p>
+            <p className="mt-0.5 text-xs">A Warehouse Supervisor decides quarantine or rejection.</p>
+          </>
+        ) : (
+          <>
+            <p className="font-semibold text-ink">Controlled exception disposition</p>
+            <p className="mt-0.5 text-xs">Review holds, quarantine, rejection, and release without approving your own request.</p>
+          </>
+        )}
+      </div>
       <SegmentedControl<QualityTab>
         ariaLabel="Quality status"
         value={tab}

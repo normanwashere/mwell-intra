@@ -172,6 +172,11 @@ export function CycleCountsPage() {
         subtitle="Count by category & reconcile variances"
       />
 
+      <div className="rounded-xl border border-line bg-inset/50 px-4 py-3 text-sm text-muted">
+        <p className="font-semibold text-ink">Balanced counts close without approval.</p>
+        <p className="mt-0.5 text-xs">A material variance requires a different Warehouse Supervisor; the counter cannot approve it, including through delegation.</p>
+      </div>
+
       <Card className="grid gap-3 sm:grid-cols-2">
         <Field label="Location" htmlFor="cc-location">
           <select

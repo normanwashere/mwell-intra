@@ -20,6 +20,23 @@ const ALL_ROLES: Role[] = [
 const FIRST_RENDER_TIMEOUT = 10_000;
 
 describe('DashboardPage', () => {
+  it.each([
+    ['warehouse_operator', /receive and inspect/i],
+    ['warehouse_supervisor', /low-stock alerts/i],
+  ] as const)('renders the canonical %s dashboard without undefined map access', async (role, expectedContent) => {
+    renderWithProviders(<DashboardPage />, { role });
+    expect(await screen.findByText(expectedContent)).toBeInTheDocument();
+  });
+
+  it('gives the Operator four direct routine floor actions without cross-functional analytics', async () => {
+    renderWithProviders(<DashboardPage />, { role: 'operations' });
+    for (const label of ['Receive and inspect', 'Put away', 'Pick or issue', 'Returns and counts']) {
+      expect(await screen.findByRole('link', { name: label })).toBeInTheDocument();
+    }
+    expect(screen.queryByText(/consumption by event type/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/inventory value/i)).not.toBeInTheDocument();
+  });
+
   it('shows the active role and its KPIs (BI analyst)', async () => {
     renderWithProviders(<DashboardPage />, { role: 'bi_analyst' });
     expect(
@@ -61,13 +78,10 @@ describe('DashboardPage', () => {
     expect(screen.getByText(/asset register/i)).toBeInTheDocument();
   });
 
-  it('tailors the dashboard to operations', async () => {
+  it('keeps the operations alias on the routine floor dashboard', async () => {
     renderWithProviders(<DashboardPage />, { role: 'operations' });
-    expect(
-      await screen.findByRole('heading', { name: /pending reservations/i }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /^events$/i })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /consumption by event type/i })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: /receive and inspect/i })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /^events$/i })).not.toBeInTheDocument();
   });
 
   it('tailors the dashboard to pricing', async () => {
@@ -110,7 +124,7 @@ describe('DashboardPage', () => {
         const { unmount } = renderWithProviders(<DashboardPage />, { role });
         expect(await screen.findByRole('heading', { name: /overview$/i })).toBeInTheDocument();
         const buttons = screen
-          .getAllByRole('button')
+          .queryAllByRole('button')
           .filter((b) => !/export data/i.test(b.textContent ?? ''));
         buttons.forEach((b) => fireEvent.click(b));
         unmount();

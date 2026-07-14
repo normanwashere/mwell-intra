@@ -15,6 +15,8 @@ import {
   resolveDoaAssignment,
   suggestSourcingMethod,
   tierLabel,
+  evaluateCommitmentReadiness,
+  evaluatePaymentReadiness,
 } from './policy';
 import type { ApprovalStep } from './types';
 
@@ -44,6 +46,120 @@ describe('sourcing policy', () => {
 
   it('defaults incomplete intake to an RFQ recommendation pending Procurement confirmation', () => {
     expect(suggestSourcingMethod({})).toBe('rfq');
+  });
+});
+
+describe('binding vendor-to-pay controls', () => {
+  it.each([
+    ['simple comparable below threshold', { amount: RFP_THRESHOLD - 0.01, comparable: true }, 'rfq'],
+    ['threshold amount', { amount: RFP_THRESHOLD, comparable: true }, 'rfp'],
+    ['low-value complex work', { amount: 25_000, comparable: true, complex: true }, 'rfp'],
+    ['low-value technical work', { amount: 25_000, comparable: true, technical: true }, 'rfp'],
+    ['low-value high-risk work', { amount: 25_000, comparable: true, highRisk: true }, 'rfp'],
+    ['low-value data-sensitive work', { amount: 25_000, comparable: true, dataSensitive: true }, 'rfp'],
+  ])('routes %s through the sourced method', (_label, input, expected) => {
+    expect(deriveSourcingRecommendation(input).method).toBe(expected);
+  });
+
+  it('blocks unsupported Direct Award, repeat-order, emergency, and petty-cash exceptions', () => {
+    expect(evaluateCommitmentReadiness({
+      sourcingMethod: 'direct_award',
+      vendorEligible: true,
+      exceptionPack: {
+        type: 'direct_award', justification: '', priceReasonableness: '',
+        procurementHeadReviewed: false, doaApproved: false,
+      },
+    })).toEqual(expect.arrayContaining([
+      'allowed Direct Award basis',
+      'business justification',
+      'price-reasonableness support',
+      'Procurement Head review',
+      'final DOA approval',
+    ]));
+    expect(evaluateCommitmentReadiness({
+      sourcingMethod: 'repeat_order', vendorEligible: true,
+    })).toContain('repeat-order continuity evidence and approval');
+    expect(evaluateCommitmentReadiness({
+      sourcingMethod: 'emergency', vendorEligible: true,
+    })).toContain('documented emergency authority');
+    expect(evaluateCommitmentReadiness({
+      sourcingMethod: 'petty_cash', vendorEligible: false,
+      exceptionPack: {
+        type: 'petty_cash_non_accredited', justification: 'One-time office need',
+        financeEligibilityConfirmed: true, nonRecurringNonSplitAttested: false,
+      },
+    })).toContain('non-recurring and non-split petty-cash attestation');
+  });
+
+  it('permits the narrow non-accredited petty-cash path only with Finance, OR/SI, and liquidation controls', () => {
+    const base = {
+      sourcingMethod: 'petty_cash' as const,
+      vendorEligible: false,
+      exceptionPack: {
+        type: 'petty_cash_non_accredited' as const,
+        justification: 'One-time low-value office need',
+        financeEligibilityConfirmed: true,
+        nonRecurringNonSplitAttested: true,
+      },
+    };
+    expect(evaluateCommitmentReadiness(base)).toEqual(expect.arrayContaining([
+      'official receipt or sales invoice support',
+      'petty-cash liquidation record',
+    ]));
+    expect(evaluateCommitmentReadiness({
+      ...base,
+      exceptionPack: {
+        ...base.exceptionPack,
+        receiptOrInvoiceSupported: true,
+        liquidationRecorded: true,
+      },
+    })).toEqual([]);
+  });
+
+  it('requires the complete foreign-vendor and importation control record', () => {
+    expect(evaluateCommitmentReadiness({
+      sourcingMethod: 'rfp', vendorEligible: true, foreignVendor: true,
+      importationRequired: true,
+      importationPlan: {
+        incoterms: 'DAP', importerOfRecord: '', permitsAndRegistrations: '',
+        customsBrokerAndLogistics: '', dutiesTaxesFreightInsurance: '',
+        foreignPaymentTiming: '', deliveryAcceptanceAndWarranty: '',
+      },
+    })).toEqual(expect.arrayContaining([
+      'importer of record',
+      'import permits and registrations',
+      'landed cost, duties, taxes, freight, and insurance',
+      'currency and foreign-payment risk',
+      'delivery, acceptance, and warranty point',
+    ]));
+  });
+
+  it('blocks issue when accreditation is expired or temporary clearance lacks approved scope', () => {
+    expect(evaluateCommitmentReadiness({ sourcingMethod: 'rfq', vendorEligible: false }))
+      .toContain('current full accreditation or approved scoped temporary clearance');
+  });
+
+  it('applies sourced down-payment, manpower, construction, and installation protections', () => {
+    expect(evaluateCommitmentReadiness({
+      sourcingMethod: 'rfp', vendorEligible: true, downPayment: true,
+      category: 'manpower', construction: true, equipmentInstallation: true,
+    })).toEqual(expect.arrayContaining([
+      'down-payment bond equal to the down payment',
+      'manpower payment-bond or equivalent review',
+      'construction performance, warranty, insurance, and regulatory review',
+      'installation commissioning, defects, warranty, and acceptance controls',
+    ]));
+  });
+
+  it('denies payment readiness without accepted receipt or service evidence', () => {
+    expect(evaluatePaymentReadiness({
+      poOrAgreementApproved: true,
+      invoiceOrOfficialReceipt: true,
+      acceptedWarehouseQuantity: 0,
+      serviceAcceptance: false,
+      paymentTermsRecorded: true,
+      taxWithholdingSupport: true,
+    })).toContain('accepted Warehouse receipt or service acceptance');
   });
 });
 

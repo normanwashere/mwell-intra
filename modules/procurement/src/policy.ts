@@ -22,6 +22,8 @@ import type {
   RequestAttachment,
   RequestAttachmentKind,
   RequestCategory,
+  ImportationPlan,
+  ProcurementExceptionPack,
   SourcingMethod,
 } from './types';
 
@@ -492,4 +494,106 @@ export function evaluateSubmitReadiness(req: {
     ok: missingDocs.length === 0,
     missingDocs,
   };
+}
+
+export interface CommitmentReadinessInput {
+  sourcingMethod: SourcingMethod;
+  vendorEligible: boolean;
+  category?: RequestCategory;
+  exceptionPack?: ProcurementExceptionPack;
+  foreignVendor?: boolean;
+  importationRequired?: boolean;
+  importationPlan?: ImportationPlan;
+  downPayment?: boolean;
+  construction?: boolean;
+  equipmentInstallation?: boolean;
+}
+
+/** Binding controls that must be satisfied before a PO can be issued. */
+export function evaluateCommitmentReadiness(input: CommitmentReadinessInput): string[] {
+  const blockers: string[] = [];
+  const pack = input.exceptionPack;
+  const validPettyCashException =
+    input.sourcingMethod === 'petty_cash' &&
+    pack?.type === 'petty_cash_non_accredited' &&
+    Boolean(pack.justification?.trim()) &&
+    pack.financeEligibilityConfirmed === true &&
+    pack.nonRecurringNonSplitAttested === true &&
+    pack.receiptOrInvoiceSupported === true &&
+    pack.liquidationRecorded === true;
+
+  if (!input.vendorEligible && !validPettyCashException) {
+    blockers.push('current full accreditation or approved scoped temporary clearance');
+  }
+
+  if (input.sourcingMethod === 'direct_award') {
+    if (!pack?.directAwardBasis) blockers.push('allowed Direct Award basis');
+    if (!pack?.supplierSelected) blockers.push('identified supplier');
+    if (!pack?.justification?.trim()) blockers.push('business justification');
+    if (!pack?.priceReasonableness?.trim()) blockers.push('price-reasonableness support');
+    if (!pack?.procurementHeadReviewed) blockers.push('Procurement Head review');
+    if (!pack?.doaApproved) blockers.push('final DOA approval');
+  }
+  if (input.sourcingMethod === 'repeat_order' && pack?.type !== 'repeat_continuity') {
+    blockers.push('repeat-order continuity evidence and approval');
+  }
+  if (input.sourcingMethod === 'emergency' && pack?.type !== 'emergency') {
+    blockers.push('documented emergency authority');
+  }
+  if (input.sourcingMethod === 'petty_cash') {
+    if (!pack?.justification?.trim()) blockers.push('one-time low-value petty-cash justification');
+    if (!pack?.financeEligibilityConfirmed) blockers.push('Finance petty-cash eligibility confirmation');
+    if (!pack?.nonRecurringNonSplitAttested) {
+      blockers.push('non-recurring and non-split petty-cash attestation');
+    }
+    if (!pack?.receiptOrInvoiceSupported) blockers.push('official receipt or sales invoice support');
+    if (!pack?.liquidationRecorded) blockers.push('petty-cash liquidation record');
+  }
+
+  if (input.foreignVendor || input.importationRequired) {
+    const plan = input.importationPlan;
+    const required: Array<[keyof ImportationPlan, string]> = [
+      ['incoterms', 'Incoterms and responsibility allocation'],
+      ['importerOfRecord', 'importer of record'],
+      ['permitsAndRegistrations', 'import permits and registrations'],
+      ['customsBrokerAndLogistics', 'customs broker and logistics plan'],
+      ['dutiesTaxesFreightInsurance', 'landed cost, duties, taxes, freight, and insurance'],
+      ['foreignPaymentTiming', 'currency and foreign-payment risk'],
+      ['deliveryAcceptanceAndWarranty', 'delivery, acceptance, and warranty point'],
+    ];
+    for (const [key, label] of required) {
+      if (!plan?.[key]?.trim()) blockers.push(label);
+    }
+  }
+
+  if (input.downPayment) blockers.push('down-payment bond equal to the down payment');
+  if (input.category === 'manpower') blockers.push('manpower payment-bond or equivalent review');
+  if (input.construction || input.category === 'construction') {
+    blockers.push('construction performance, warranty, insurance, and regulatory review');
+  }
+  if (input.equipmentInstallation) {
+    blockers.push('installation commissioning, defects, warranty, and acceptance controls');
+  }
+  return blockers;
+}
+
+export interface PaymentReadinessInput {
+  poOrAgreementApproved: boolean;
+  invoiceOrOfficialReceipt: boolean;
+  acceptedWarehouseQuantity: number;
+  serviceAcceptance: boolean;
+  paymentTermsRecorded: boolean;
+  taxWithholdingSupport: boolean;
+}
+
+export function evaluatePaymentReadiness(input: PaymentReadinessInput): string[] {
+  const blockers: string[] = [];
+  if (!input.poOrAgreementApproved) blockers.push('approved PO or agreement');
+  if (!input.invoiceOrOfficialReceipt) blockers.push('invoice, official receipt, or sales invoice');
+  if (input.acceptedWarehouseQuantity <= 0 && !input.serviceAcceptance) {
+    blockers.push('accepted Warehouse receipt or service acceptance');
+  }
+  if (!input.paymentTermsRecorded) blockers.push('recorded payment terms');
+  if (!input.taxWithholdingSupport) blockers.push('tax and withholding support');
+  return blockers;
 }

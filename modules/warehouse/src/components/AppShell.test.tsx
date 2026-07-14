@@ -11,6 +11,27 @@ function LocationProbe() {
 }
 
 describe('AppShell navigation', () => {
+  it.each([
+    ['warehouse_operator', 'Receive and inspect'],
+    ['warehouse_supervisor', 'Receiving'],
+  ] as const)('renders canonical %s navigation without an undefined role lookup', async (role, expectedLink) => {
+    renderWithProviders(<AppShell>content</AppShell>, { role });
+    const sidebar = await screen.findByRole('navigation', { name: 'Primary' });
+    expect(within(sidebar).getByRole('link', { name: expectedLink })).toBeInTheDocument();
+    expect(screen.getAllByText(/warehouse (operator|supervisor)/i).length).toBeGreaterThan(0);
+  });
+
+  it('renders the Operator desktop and mobile experience around four routine flows', async () => {
+    renderWithProviders(<AppShell>content</AppShell>, { role: 'operations' });
+    const sidebar = await screen.findByRole('navigation', { name: 'Primary' });
+    for (const label of ['Receive and inspect', 'Put away', 'Pick or issue', 'Returns and counts']) {
+      expect(within(sidebar).getByRole('link', { name: label })).toBeInTheDocument();
+    }
+    for (const label of ['Procurement', 'Pricing', 'Data & Reports', 'Events', 'Suppliers']) {
+      expect(within(sidebar).queryByRole('link', { name: label })).not.toBeInTheDocument();
+    }
+  });
+
   it('shows logistics modules including Receiving', async () => {
     renderWithProviders(<AppShell>content</AppShell>, {
       role: 'logistics_supervisor',

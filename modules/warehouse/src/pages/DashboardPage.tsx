@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useWarehouse } from '@/app/store';
 import { toStockState } from '@/data/repository';
 import {
@@ -36,7 +36,12 @@ import {
   movementTypeLabel,
   signedQuantity,
 } from '@/domain/format';
-import { ROLES, can } from '@/auth/roles';
+import { can } from '@/auth/roles';
+import {
+  isWarehouseOperatorRole,
+  normalizeWarehouseRole,
+  warehouseRolePresentation,
+} from '@/app/modules';
 import { useSession } from '@/auth/session';
 import type { Role } from '@/domain/types';
 import { Icon, type IconName } from '@/components/Icon';
@@ -255,7 +260,9 @@ type PanelId =
 
 const ROLE_PANELS: Record<Role, PanelId[]> = {
   logistics_supervisor: ['lowStock', 'reconciliation', 'recentActivity'],
+  warehouse_supervisor: ['lowStock', 'reconciliation', 'recentActivity'],
   operations: ['reservations', 'events', 'consumption'],
+  warehouse_operator: ['reservations', 'events', 'consumption'],
   finance: ['valuation', 'reconciliation', 'assets'],
   bi_analyst: ['fastMoving', 'consumption', 'utilization'],
   business_unit: ['lowStock', 'reservations', 'events'],
@@ -268,6 +275,42 @@ const ROLE_PANELS: Record<Role, PanelId[]> = {
 /** Roles whose dashboard is analytics-driven get the date-window control. */
 const WINDOWED_ROLES: Role[] = ['bi_analyst', 'marketing'];
 
+function OperatorDashboard({ name }: { name?: string }) {
+  const actions = [
+    { label: 'Receive and inspect', to: '/purchase-orders', icon: 'truck' as const },
+    { label: 'Put away', to: '/storage', icon: 'pin' as const },
+    { label: 'Pick or issue', to: '/allocations', icon: 'tag' as const },
+    { label: 'Returns and counts', to: '/returns', icon: 'rotate' as const },
+  ];
+  return (
+    <div className="space-y-6">
+      <section className="border-b border-line pb-5">
+        <p className="text-caption font-semibold uppercase text-faint">Warehouse floor</p>
+        <h1 className="mt-1 font-display text-title text-ink">{name ?? 'Warehouse Operator'}</h1>
+        <p className="mt-1 text-sm text-muted">Routine work ready for this shift.</p>
+      </section>
+      <section aria-labelledby="operator-overview">
+        <h2 id="operator-overview" className="font-display text-lg font-bold text-ink">Overview</h2>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          {actions.map((action) => (
+            <Link
+              key={action.label}
+              to={action.to}
+              className="flex min-h-20 items-center gap-3 rounded-lg border border-line bg-surface px-4 py-3 shadow-e1 transition hover:border-brand-300"
+            >
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-brand-500/10 text-brand-700">
+                <Icon name={action.icon} className="h-5 w-5" />
+              </span>
+              <span className="font-semibold text-ink">{action.label}</span>
+              <Icon name="chevron" className="ml-auto h-4 w-4 text-faint" />
+            </Link>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export function DashboardPage() {
   const { data, role, source } = useWarehouse();
   const { profile } = useSession();
@@ -277,6 +320,11 @@ export function DashboardPage() {
   const [exporting, setExporting] = useState<WarehouseExportKind | null>(null);
   const [window, setWindow] = useState<Window>('all');
   if (!data) return null;
+  if (isWarehouseOperatorRole(role)) {
+    return <OperatorDashboard name={profile?.name?.split(/\s+/)[0]} />;
+  }
+  const dashboardRole = normalizeWarehouseRole(role);
+  const rolePresentation = warehouseRolePresentation(role);
   const state = toStockState(data);
   const showWindow = WINDOWED_ROLES.includes(role);
 
@@ -418,7 +466,9 @@ export function DashboardPage() {
   // + the "Issued (10d)" sparkline, which is not duplicated by any StatCard.
   const HERO_STATUS: Record<Role, string> = {
     logistics_supervisor: `${low.length} SKU${low.length === 1 ? '' : 's'} need reorder · ${reconciliation.length} variance${reconciliation.length === 1 ? '' : 's'} open`,
+    warehouse_supervisor: `${low.length} SKU${low.length === 1 ? '' : 's'} need reorder · ${reconciliation.length} variance${reconciliation.length === 1 ? '' : 's'} open`,
     operations: `${reservedCount} reservation${reservedCount === 1 ? '' : 's'} pending · ${data.events.length} event${data.events.length === 1 ? '' : 's'}`,
+    warehouse_operator: `${reservedCount} reservation${reservedCount === 1 ? '' : 's'} pending · ${data.events.length} event${data.events.length === 1 ? '' : 's'}`,
     finance: `${compactMoney(value)} on hand · ${reconciliation.length} variance${reconciliation.length === 1 ? '' : 's'} open`,
     bi_analyst: `${data.products.length} active SKUs · ${totalIssued} units issued`,
     business_unit: `${inStockSkus} SKUs in stock · ${reservedCount} reservation${reservedCount === 1 ? '' : 's'} pending`,
@@ -430,7 +480,9 @@ export function DashboardPage() {
 
   const HERO_CTA: Record<Role, { label: string; icon: IconName; to: string }> = {
     logistics_supervisor: { label: 'Receive stock', icon: 'truck', to: '/receiving' },
+    warehouse_supervisor: { label: 'Receive stock', icon: 'truck', to: '/receiving' },
     operations: { label: 'Allocations', icon: 'tag', to: '/allocations' },
+    warehouse_operator: { label: 'Receive and inspect', icon: 'truck', to: '/purchase-orders' },
     finance: { label: 'Finance workspace', icon: 'coins', to: '/finance' },
     bi_analyst: { label: 'Data & reports', icon: 'history', to: '/data' },
     business_unit: { label: 'Browse inventory', icon: 'box', to: '/inventory' },
@@ -447,7 +499,19 @@ export function DashboardPage() {
       { label: 'Open variances', value: reconciliation.length, icon: 'clipboard', tone: reconciliation.length ? 'rose' : 'emerald', to: '/cycle-counts?filter=variances', hint: 'Variance from last count' },
       { label: 'Active SKUs', value: data.products.length, icon: 'box', to: '/inventory', hint: 'Products in the catalog' },
     ],
+    warehouse_supervisor: [
+      { label: 'Low-stock items', value: low.length, icon: 'alert', tone: low.length ? 'amber' : 'emerald', to: '/inventory?filter=low', hint: 'At or below reorder point' },
+      { label: 'Serialized in field', value: assets.length, icon: 'tag', tone: 'brand', to: '/inventory?filter=device', hint: 'Serialized devices issued' },
+      { label: 'Open variances', value: reconciliation.length, icon: 'clipboard', tone: reconciliation.length ? 'rose' : 'emerald', to: '/cycle-counts?filter=variances', hint: 'Variance from last count' },
+      { label: 'Active SKUs', value: data.products.length, icon: 'box', to: '/inventory', hint: 'Products in the catalog' },
+    ],
     operations: [
+      { label: 'Pending reservations', value: reservedCount, icon: 'tag', tone: 'amber', to: '/allocations', hint: 'Reserved, awaiting issue' },
+      { label: 'Events', value: data.events.length, icon: 'calendar', tone: 'brand', to: '/events', hint: 'Activations & campaigns' },
+      { label: 'Units issued', value: totalIssued, icon: 'truck', tone: 'accent', to: '/allocations', hint: 'Issued to events' },
+      { label: 'Device return rate', value: `${returnRate(totalIssued, totalReturned)}%`, icon: 'trend', to: '/returns', hint: 'Returned vs issued' },
+    ],
+    warehouse_operator: [
       { label: 'Pending reservations', value: reservedCount, icon: 'tag', tone: 'amber', to: '/allocations', hint: 'Reserved, awaiting issue' },
       { label: 'Events', value: data.events.length, icon: 'calendar', tone: 'brand', to: '/events', hint: 'Activations & campaigns' },
       { label: 'Units issued', value: totalIssued, icon: 'truck', tone: 'accent', to: '/allocations', hint: 'Issued to events' },
@@ -869,19 +933,19 @@ export function DashboardPage() {
     ),
   };
 
-  const panels = ROLE_PANELS[role];
+  const panels = ROLE_PANELS[dashboardRole];
   // Greet by name like the shell home does (WH-7/J3-3); the role already
   // shows in the sidebar caption + account menu.
   const firstName = profile?.name?.split(/\s+/)[0];
-  const heroCta = HERO_CTA[role];
+  const heroCta = HERO_CTA[dashboardRole];
 
   return (
     <div className="space-y-6">
       <DashboardHero
         eyebrow="Warehouse dashboard"
-        title={firstName ?? ROLES[role].label}
-        description={HERO_STATUS[role]}
-        roleLabel={ROLES[role].label}
+        title={firstName ?? rolePresentation.label}
+        description={HERO_STATUS[dashboardRole]}
+        roleLabel={rolePresentation.label}
         icon={heroCta.icon}
         action={
           heroCta.to === '/finance' ? (
@@ -907,7 +971,7 @@ export function DashboardPage() {
       </DashboardHero>
 
       <StaggerGrid className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {KPIS[role].map((k) => (
+        {KPIS[dashboardRole].map((k) => (
           <StaggerItem key={k.label}>
             <StatCard
               label={k.label}

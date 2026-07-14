@@ -92,6 +92,7 @@ describe('Vendor Accreditation Form v.2025', () => {
     const sole = buildV2025Checklist('sole_prop').map((item) => item.code);
     const partnership = buildV2025Checklist('partnership').map((item) => item.code);
     expect(sole).toContain('PH_DTI_REG');
+    expect(sole).toContain('PH_BIR_2303');
     expect(sole).not.toContain('PH_PARTNERSHIP_ARTICLES');
     expect(partnership).toEqual(
       expect.arrayContaining(['PH_SEC_REG', 'PH_PARTNERSHIP_ARTICLES', 'PH_PARTNERSHIP_RESOLUTION']),
@@ -114,6 +115,41 @@ describe('Vendor Accreditation Form v.2025', () => {
   it('allows reviewer-controlled foreign equivalents', () => {
     const rows = buildV2025Checklist('corporation', { jurisdiction: 'OTHER' });
     expect(rows.filter((row) => row.authority !== 'mWell Legal').every((row) => row.equivalentAllowed)).toBe(true);
+  });
+
+  it('keeps every blocking checklist item anchored to the supplied LGL004 form', () => {
+    for (const entityType of ['sole_prop', 'partnership', 'corporation'] as const) {
+      for (const item of buildV2025Checklist(entityType, {
+        handlesPersonalData: true,
+        technologyServiceProvider: true,
+      }).filter((row) => row.required)) {
+        expect(item.source.sourceDocument).toBe('LGL004-Vendor Accreditation Form 2.0 (3).pdf');
+      }
+    }
+  });
+
+  it('captures manpower, technology qualifications, declaration, and authorized signatory', () => {
+    const missing = validApplication({
+      manpower: { countAndExpertise: '', qualifications: '', completedProjects: '' },
+      technologyQualifications: [],
+      declaration: {
+        ...validApplication().declaration,
+        accepted: false,
+        verificationAuthorized: false,
+        signerName: '',
+        signerTitle: '',
+      },
+    });
+    expect(validateV2025Application(missing).errors).toEqual(expect.arrayContaining([
+      'manpower.countAndExpertise',
+      'manpower.qualifications',
+      'manpower.completedProjects',
+      'technologyQualifications',
+      'declaration.accepted',
+      'declaration.verificationAuthorized',
+      'declaration.signerName',
+      'declaration.signerTitle',
+    ]));
   });
 
   it('requires an accepted signed declaration and complete structured fields', () => {

@@ -28,12 +28,21 @@ class LiveProcurementRepository extends InMemoryRepository {
 }
 
 describe('PurchaseOrdersPage', () => {
+  it('does not expose PO authoring or cancellation to the Operator', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<PurchaseOrdersPage />, { role: 'operations' });
+    const list = await screen.findByLabelText('Purchase orders');
+    expect(screen.queryByRole('button', { name: /new po/i })).not.toBeInTheDocument();
+    await user.click(within(list).getAllByRole('button')[0]!);
+    expect(screen.queryByRole('button', { name: /cancel po/i })).not.toBeInTheDocument();
+  });
+
   beforeEach(() => {
     window.localStorage.clear();
   });
 
   it('lists seeded purchase orders with human PO numbers', async () => {
-    renderWithProviders(<PurchaseOrdersPage />, { role: 'procurement' });
+    renderWithProviders(<PurchaseOrdersPage />, { role: 'operations' });
     const list = await screen.findByLabelText('Purchase orders');
     expect(within(list).getAllByText(/mWellness Wearables/i).length).toBeGreaterThan(0);
     expect(within(list).getByText(/MetroPrint Apparel/i)).toBeInTheDocument();
@@ -72,7 +81,7 @@ describe('PurchaseOrdersPage', () => {
 
   it('receives stock via the PO detail sheet (row is the target)', async () => {
     const user = userEvent.setup();
-    renderWithProviders(<PurchaseOrdersPage />, { role: 'procurement' });
+    renderWithProviders(<PurchaseOrdersPage />, { role: 'operations' });
     const list = await screen.findByLabelText('Purchase orders');
 
     // Open the ordered wearables PO from its row.
@@ -80,7 +89,7 @@ describe('PurchaseOrdersPage', () => {
       within(list).getAllByRole('button', { name: /mWellness Wearables/i })[0]!,
     );
     const detail = await screen.findByRole('dialog', { name: /mWellness Wearables/i });
-    await user.click(within(detail).getByRole('button', { name: /^receive$/i }));
+    await user.click(within(detail).getByRole('button', { name: /^receive and inspect$/i }));
 
     const dialog = await screen.findByRole('dialog', { name: /receive against po/i });
     expect(within(dialog).getByText(/inspection required/i)).toBeInTheDocument();
@@ -94,7 +103,7 @@ describe('PurchaseOrdersPage', () => {
 
   it('does not offer Receive on a draft PO (WH-25)', async () => {
     const user = userEvent.setup();
-    renderWithProviders(<PurchaseOrdersPage />, { role: 'procurement' });
+    renderWithProviders(<PurchaseOrdersPage />, { role: 'operations' });
     const list = await screen.findByLabelText('Purchase orders');
 
     // The seeded draft PO (sleep rings + OTG bags from mWellness Wearables).
@@ -153,15 +162,15 @@ describe('PurchaseOrdersPage', () => {
         },
       ]),
     );
-    renderWithProviders(<PurchaseOrdersPage />, { role: 'procurement' });
+    renderWithProviders(<PurchaseOrdersPage />, { role: 'operations' });
     const list = await screen.findByLabelText('Purchase orders');
 
     expect(within(list).getByText('From Procurement')).toBeInTheDocument();
     const link = within(list).getByRole('link', { name: 'PO-2026-0003' });
     expect(link).toHaveAttribute('href', '/procurement/purchase-orders/ppo-9');
     expect(
-      within(list).getByRole('link', { name: /receive in procurement/i }),
-    ).toHaveAttribute('href', '/procurement/purchase-orders/ppo-9');
+      within(list).getByRole('button', { name: /^receive and inspect$/i }),
+    ).toBeInTheDocument();
     expect(within(list).getByText(/Acme Medical Supplies/i)).toBeInTheDocument();
   });
 
@@ -179,7 +188,7 @@ describe('PurchaseOrdersPage', () => {
     const list = await screen.findByLabelText('Purchase orders');
     expect(within(list).getByText('PO-LIVE-001')).toBeInTheDocument();
     expect(within(list).queryByText('PO-CACHED')).not.toBeInTheDocument();
-    await user.click(within(list).getByRole('button', { name: /^receive$/i }));
+    await user.click(within(list).getByRole('button', { name: /^receive and inspect$/i }));
     const dialog = await screen.findByRole('dialog', { name: /receive approved procurement po/i });
     await user.type(within(dialog).getByLabelText(/delivery evidence url/i), 'evidence/live.jpg');
     await user.click(within(dialog).getByRole('button', { name: /confirm governed receipt/i }));

@@ -28,6 +28,9 @@ describe('technology-service MNDA clean master', () => {
     expect(generated.canonicalText).toContain('two (2) years');
     expect(generated.canonicalText).toContain('five (5) business days');
     expect(generated.canonicalText).toContain('Republic Act No. 10173');
+    expect(generated.canonicalText).toMatch(/need[- ]to[- ]know/i);
+    expect(generated.canonicalText).toMatch(/definitive agreement/i);
+    expect(generated.canonicalText).toMatch(/return or destroy/i);
     expect(generated.canonicalText).toContain('Philippine Dispute Resolution Center Inc.');
     expect(generated.canonicalText).toContain('three (3) arbitrators');
     expect(generated.canonicalText).toContain('Makati, Philippines');

@@ -18,6 +18,25 @@ async function repositoryWithPendingReceipt() {
 }
 
 describe('QualityPage', () => {
+  it.each([
+    ['warehouse_operator', /record inspection facts/i],
+    ['warehouse_supervisor', /controlled exception disposition/i],
+  ] as const)('renders canonical %s quality responsibilities', async (role, expectedContent) => {
+    renderWithProviders(<QualityPage />, { role });
+    expect(await screen.findByText(expectedContent)).toBeInTheDocument();
+  });
+
+  it('separates Operator fact capture from Supervisor exception disposition', async () => {
+    const { repo } = await repositoryWithPendingReceipt();
+    const { unmount } = renderWithProviders(<QualityPage />, { repo, role: 'operations' });
+    expect(await screen.findByText(/record inspection facts/i)).toBeInTheDocument();
+    expect(screen.getByText(/Supervisor decides quarantine or rejection/i)).toBeInTheDocument();
+    unmount();
+
+    renderWithProviders(<QualityPage />, { repo, role: 'logistics_supervisor' });
+    expect(await screen.findByText(/controlled exception disposition/i)).toBeInTheDocument();
+  });
+
   it('holds a pending receipt only after reason and evidence are supplied', async () => {
     const user = userEvent.setup();
     const { repo, receipt } = await repositoryWithPendingReceipt();

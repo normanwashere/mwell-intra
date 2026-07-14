@@ -5,6 +5,21 @@ import { CycleCountsPage } from "./CycleCountsPage";
 import { renderWithProviders } from "@/test/renderWithProviders";
 
 describe("CycleCountsPage", () => {
+  it.each(["warehouse_operator", "warehouse_supervisor"] as const)(
+    "renders governed cycle counts for canonical %s",
+    async (role) => {
+      renderWithProviders(<CycleCountsPage />, { role });
+      expect(await screen.findByText(/count sheet/i)).toBeInTheDocument();
+      expect(screen.getByText(/material variance requires a different Warehouse Supervisor/i)).toBeInTheDocument();
+    },
+  );
+
+  it("explains that balanced counts close cleanly and material variance needs a distinct Supervisor", async () => {
+    renderWithProviders(<CycleCountsPage />, { role: "operations" });
+    expect(await screen.findByText(/balanced counts close without approval/i)).toBeInTheDocument();
+    expect(screen.getByText(/material variance requires a different Warehouse Supervisor/i)).toBeInTheDocument();
+  });
+
   it("never prefills counted quantities with the expected number (WH-18)", async () => {
     renderWithProviders(<CycleCountsPage />, { role: "finance" });
     await screen.findByText(/count sheet/i);

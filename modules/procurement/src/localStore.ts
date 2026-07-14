@@ -29,7 +29,7 @@ import type {
   ProcurementVendor,
   PurchaseOrder,
   PurchaseOrderLine,
-  PurchaseOrderReceipt,
+  PurchaseOrderReceiptStatus,
   RequestAttachment,
   RequestCategory,
   SourcingMethod,
@@ -40,7 +40,6 @@ import {
   nextPendingStep,
   suggestSourcingMethod,
 } from './policy';
-import { applyReceipt, type ReceiptLineInput } from './receiving';
 import { buildProcurementSeed } from './seed';
 import { mergeVendorsWithLegal } from './accreditationBridge';
 import {
@@ -170,6 +169,9 @@ function mapVendor(row: LiveRow): ProcurementVendor {
     category: row.category ?? undefined,
     accreditationStatus: row.accreditation_status,
     accreditationExpiresAt: row.accreditation_expires_at ?? undefined,
+    temporaryClearanceApproved: row.temporary_clearance_approved ?? undefined,
+    temporaryClearanceScope: row.temporary_clearance_scope ?? undefined,
+    temporaryClearanceEffectiveAt: row.temporary_clearance_effective_at ?? undefined,
   };
 }
 
@@ -263,7 +265,7 @@ function mapPaymentReadinessPack(row: LiveRow): PaymentReadinessPack {
 
 function mapPurchaseOrder(
   row: LiveRow,
-  receipts: PurchaseOrderReceipt[] = [],
+  receiptStatus?: PurchaseOrderReceiptStatus,
   acceptancePack?: AcceptancePack,
   paymentReadiness?: PaymentReadinessPack,
 ): PurchaseOrder {
@@ -284,23 +286,24 @@ function mapPurchaseOrder(
     approvedAt: row.approved_at ?? undefined,
     approvedByEmail: row.approved_by_email ?? undefined,
     approvalSignature: row.approval_signature ?? undefined,
-    receipts,
+    receiptStatus,
     acceptancePack,
     paymentReadiness,
     total: Number(row.total ?? 0),
   } as PurchaseOrder;
 }
 
-function mapReceipt(row: LiveRow): PurchaseOrderReceipt & { purchaseOrderId: string } {
+function mapReceiptStatus(row: LiveRow): PurchaseOrderReceiptStatus & { purchaseOrderId: string } {
   return {
-    id: row.id,
     purchaseOrderId: row.purchase_order_id,
-    receivedAt: row.received_at,
-    receivedByEmail: row.received_by_email ?? undefined,
-    note: row.note ?? undefined,
-    lines: row.lines ?? [],
-    closedPo: Boolean(row.closed_po),
-  };
+    orderedQuantity: Number(row.ordered_quantity ?? 0),
+    acceptedQuantity: Number(row.accepted_quantity ?? 0),
+    rejectedOrQuarantinedQuantity: Number(row.rejected_or_quarantined_quantity ?? 0),
+    outstandingQuantity: Number(row.outstanding_quantity ?? 0),
+    latestReceiptReference: row.latest_warehouse_receipt_reference ?? undefined,
+    latestQcStatus: row.qc_status,
+    lastReceiptAt: row.last_received_at ?? undefined,
+  } as unknown as PurchaseOrderReceiptStatus & { purchaseOrderId: string };
 }
 
 // ---------------------------------------------------------------------------
@@ -508,18 +511,18 @@ export function useProcurementVendors(): ProcurementVendor[] {
 }
 
 export function isAccredited(v: ProcurementVendor): boolean {
-  // Full accreditation OR a live provisional (temporary) clearance both permit
-  // award; both honor the expiry date when present.
-  if (
-    v.accreditationStatus !== 'approved' &&
-    v.accreditationStatus !== 'provisional'
-  ) {
-    return false;
+  const now = new Date();
+  if (v.accreditationStatus === 'approved') {
+    return !v.accreditationExpiresAt || new Date(v.accreditationExpiresAt) >= now;
   }
-  if (v.accreditationExpiresAt) {
-    return new Date(v.accreditationExpiresAt) >= new Date();
-  }
-  return true;
+  if (v.accreditationStatus !== 'provisional') return false;
+  return Boolean(
+    v.temporaryClearanceApproved &&
+    v.temporaryClearanceScope?.trim() &&
+    v.accreditationExpiresAt &&
+    new Date(v.accreditationExpiresAt) >= now &&
+    (!v.temporaryClearanceEffectiveAt || new Date(v.temporaryClearanceEffectiveAt) <= now),
+  );
 }
 
 /** True when award is permitted only under a time-limited provisional clearance. */
@@ -903,13 +906,6 @@ function nextPoNumber(existing: PurchaseOrder[]): string {
   return `${prefix}${next.toString().padStart(4, '0')}`;
 }
 
-export interface ReceiveInput {
-  /** Per-line quantities to accept (clamped to outstanding; ≤0 ignored). */
-  lines: ReceiptLineInput[];
-  actorEmail?: string;
-  note?: string;
-}
-
 export interface PurchaseOrdersAPI {
   rows: PurchaseOrder[];
   loading: boolean;
@@ -920,9 +916,6 @@ export interface PurchaseOrdersAPI {
   ) => MaybePromise<PurchaseOrder | null>;
   issue: (id: string, readiness: { sourceAwardApproved: boolean; vendorEligible: boolean }) => MaybePromise<PurchaseOrder | null>;
   cancel: (id: string) => MaybePromise<PurchaseOrder | null>;
-  /** Record a (possibly partial) goods receipt. Appends a
-   *  PurchaseOrderReceipt to the PO's `receipts` history (PR-24). */
-  receive: (id: string, input: ReceiveInput) => MaybePromise<PurchaseOrder | null>;
   recordAcceptance: (id: string, input: { acceptanceType: 'goods' | 'service' | 'milestone'; acceptedScope: string; exceptions: string[]; actorEmail?: string }) => MaybePromise<PurchaseOrder | null>;
   preparePayment: (id: string, input: { poMatch: boolean; invoiceOrSiReference: string; milestoneSupportReference: string; taxWithholdingSupportReference: string; actorEmail?: string }) => MaybePromise<PurchaseOrder | null>;
   reviewPayment: (id: string, input: { status: 'returned' | 'accepted'; note?: string; actorEmail?: string }) => MaybePromise<PurchaseOrder | null>;
@@ -942,12 +935,9 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
     (row) => row,
     { column: 'created_at', ascending: false },
   );
-  const [liveReceipts, liveReceiptsLoading, refreshReceipts] = useLiveRows<
-    PurchaseOrderReceipt & { purchaseOrderId: string }
-  >(live, 'procurement', 'receipts', mapReceipt, {
-    column: 'received_at',
-    ascending: false,
-  });
+  const [liveReceiptStatuses, liveReceiptStatusesLoading, refreshReceiptStatuses] = useLiveRows<
+    PurchaseOrderReceiptStatus & { purchaseOrderId: string }
+  >(live, 'procurement', 'v_purchase_order_receipt_status', mapReceiptStatus);
   const [liveAcceptances, liveAcceptancesLoading, refreshAcceptances] = useLiveRows<AcceptancePack>(
     live, 'procurement', 'acceptance_packs', mapAcceptancePack,
     { column: 'accepted_at', ascending: false },
@@ -959,18 +949,18 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
   const liveRows = liveBaseRows.map((row) =>
     mapPurchaseOrder(
       row,
-      liveReceipts.filter((r) => r.purchaseOrderId === row.id),
+      liveReceiptStatuses.find((status) => status.purchaseOrderId === row.id),
       liveAcceptances.find((pack) => pack.purchaseOrderId === row.id && pack.status !== 'superseded'),
       livePaymentPacks.find((pack) => pack.purchaseOrderId === row.id && pack.status !== 'superseded'),
     ),
   );
   const rows = isLive(live) ? liveRows : localRows;
   const loading = isLive(live)
-    ? liveRowsLoading || liveReceiptsLoading || liveAcceptancesLoading || livePaymentPacksLoading
+    ? liveRowsLoading || liveReceiptStatusesLoading || liveAcceptancesLoading || livePaymentPacksLoading
     : localLoading;
   const refreshLive = useCallback(async () => {
-    await Promise.all([refreshPos(), refreshReceipts(), refreshAcceptances(), refreshPaymentPacks()]);
-  }, [refreshPos, refreshReceipts, refreshAcceptances, refreshPaymentPacks]);
+    await Promise.all([refreshPos(), refreshReceiptStatuses(), refreshAcceptances(), refreshPaymentPacks()]);
+  }, [refreshPos, refreshReceiptStatuses, refreshAcceptances, refreshPaymentPacks]);
 
   const add = useCallback(
     (input: NewPOInput): MaybePromise<PurchaseOrder> => {
@@ -1104,58 +1094,24 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
     [patch, live, refreshLive],
   );
 
-  const receive = useCallback(
-    (id: string, input: ReceiveInput): MaybePromise<PurchaseOrder | null> => {
-      if (isLive(live)) {
-        return liveRpc<LiveRow>(live, 'procurement', 'receive_purchase_order', {
-          id,
-          lines: input.lines,
-          actor_email: input.actorEmail,
-          note: input.note,
-        }).then((row) => {
-          const mapped = mapPurchaseOrder(row);
-          return refreshLive().then(() => mapped);
-        }) as MaybePromise<PurchaseOrder | null>;
-      }
-      const current = safeRead<PurchaseOrder>(PO_KEY);
-      const po = current.find((r) => r.id === id);
-      if (!po) return null;
-      const result = applyReceipt(po.lines, input.lines);
-      if (!result) return null;
-      const status: PurchaseOrder['status'] = result.closes ? 'closed' : 'issued';
-      const receipt: PurchaseOrderReceipt = {
-        id: newId('rcpt'),
-        receivedAt: nowIso(),
-        receivedByEmail: input.actorEmail,
-        note: input.note?.trim() || undefined,
-        lines: result.accepted,
-        closedPo: result.closes,
-      };
-      return patch(id, {
-        lines: result.lines,
-        status,
-        receipts: [...(po.receipts ?? []), receipt],
-      });
-    },
-    [patch, live, refreshLive],
-  );
-
   const recordAcceptance = useCallback((id: string, input: { acceptanceType: 'goods' | 'service' | 'milestone'; acceptedScope: string; exceptions: string[]; actorEmail?: string }): MaybePromise<PurchaseOrder | null> => {
     const current = rows.find((row) => row.id === id);
     if (!current) return null;
-    if (input.acceptanceType === 'goods' && (current.receipts?.length ?? 0) === 0) return null;
+    if (input.acceptanceType === 'goods' &&
+        (current.receiptStatus?.acceptedQuantity ?? 0) <= 0 &&
+        (current.receipts?.length ?? 0) === 0) return null;
     if (isLive(live)) {
       return liveRpc<LiveRow>(live, 'procurement', 'record_acceptance_pack', {
         purchase_order_id: id,
         acceptance_type: input.acceptanceType,
         accepted_scope: input.acceptedScope,
         exceptions: input.exceptions,
-        warehouse_receipt_reference: current.receipts?.at(-1)?.id,
+        warehouse_receipt_reference: current.receiptStatus?.latestReceiptReference ?? current.receipts?.at(-1)?.id,
       }).then(() => refreshLive().then(() => current));
     }
     const acceptancePack: AcceptancePack = {
       id: newId('accept'), purchaseOrderId: id, requestId: current.requestId,
-      warehouseReceiptReference: current.receipts?.at(-1)?.id,
+      warehouseReceiptReference: current.receiptStatus?.latestReceiptReference ?? current.receipts?.at(-1)?.id,
       acceptanceType: input.acceptanceType, acceptedScope: input.acceptedScope,
       exceptions: input.exceptions, acceptedByEmail: input.actorEmail,
       acceptedAt: nowIso(), status: input.exceptions.length ? 'accepted_with_exceptions' : 'accepted',
@@ -1207,7 +1163,7 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
 
   const getById = useCallback((id: string) => rows.find((r) => r.id === id), [rows]);
 
-  return { rows, loading, add, approve, issue, cancel, receive, recordAcceptance, preparePayment, reviewPayment, getById };
+  return { rows, loading, add, approve, issue, cancel, recordAcceptance, preparePayment, reviewPayment, getById };
 }
 
 // ---------------------------------------------------------------------------

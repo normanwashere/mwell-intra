@@ -214,6 +214,12 @@ export interface ProcurementExceptionPack {
   risksAndMitigations?: string;
   financeEligibilityConfirmed?: boolean;
   nonRecurringNonSplitAttested?: boolean;
+  directAwardBasis?: 'sole_supplier' | 'compatibility' | 'emergency' | 'continuity';
+  supplierSelected?: boolean;
+  procurementHeadReviewed?: boolean;
+  doaApproved?: boolean;
+  receiptOrInvoiceSupported?: boolean;
+  liquidationRecorded?: boolean;
 }
 
 export interface ImportationPlan {
@@ -316,6 +322,17 @@ export interface PurchaseOrderReceipt {
   closedPo: boolean;
 }
 
+/** Safe, aggregate Warehouse receipt status exposed to Procurement. */
+export interface PurchaseOrderReceiptStatus {
+  orderedQuantity: number;
+  acceptedQuantity: number;
+  rejectedOrQuarantinedQuantity: number;
+  outstandingQuantity: number;
+  latestReceiptReference?: string;
+  latestQcStatus: 'not_received' | 'partial' | 'accepted' | 'exception';
+  lastReceiptAt?: string;
+}
+
 export interface AcceptancePack {
   id: string;
   purchaseOrderId: string;
@@ -368,6 +385,8 @@ export interface PurchaseOrder {
   /** Append-only goods receipts (partial receipts supported). Optional so
    *  legacy localStorage rows keep loading. */
   receipts?: PurchaseOrderReceipt[];
+  /** Read-only projection from `procurement.v_purchase_order_receipt_status`. */
+  receiptStatus?: PurchaseOrderReceiptStatus;
   /** Latest non-superseded requester/Warehouse acceptance record. */
   acceptancePack?: AcceptancePack;
   /** Latest non-superseded Finance readiness record. */
@@ -411,4 +430,7 @@ export interface ProcurementVendor {
     | 'expired'
     | 'renewal_due';
   accreditationExpiresAt?: string;
+  temporaryClearanceApproved?: boolean;
+  temporaryClearanceScope?: string;
+  temporaryClearanceEffectiveAt?: string;
 }

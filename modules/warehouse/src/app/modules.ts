@@ -1,6 +1,42 @@
 import type { Capability } from "@/auth/roles";
 import type { Role } from "@/domain/types";
-import { can } from "@/auth/roles";
+import { can, ROLES } from "@/auth/roles";
+
+export type WarehouseUiRole = Role | "warehouse_operator" | "warehouse_supervisor";
+
+const CANONICAL_ROLE_ALIASES = {
+  warehouse_operator: "operations",
+  warehouse_supervisor: "logistics_supervisor",
+} as const satisfies Record<string, Role>;
+
+export function normalizeWarehouseRole(role: WarehouseUiRole): Role {
+  if (role === "warehouse_operator" || role === "warehouse_supervisor") {
+    return CANONICAL_ROLE_ALIASES[role];
+  }
+  return role;
+}
+
+export function warehouseRolePresentation(role: WarehouseUiRole): {
+  label: string;
+  description: string;
+} {
+  if (role === "warehouse_operator" || role === "operations") {
+    return {
+      label: "Warehouse Operator",
+      description: "Routine receiving, putaway, issue, returns, and count work.",
+    };
+  }
+  if (
+    role === "warehouse_supervisor" ||
+    role === "logistics_supervisor"
+  ) {
+    return {
+      label: "Warehouse Supervisor",
+      description: "Controlled exceptions, approvals, quality, and floor oversight.",
+    };
+  }
+  return ROLES[normalizeWarehouseRole(role)];
+}
 
 export type ModuleGroup =
   "operate" | "plan" | "control" | "analyze" | "configure";
@@ -176,7 +212,7 @@ export const MODULES: ModuleDef[] = [
     label: "Purchase Orders",
     shortLabel: "POs",
     path: "/purchase-orders",
-    capabilities: ["view_procurement", "receive_stock"],
+    capabilities: ["view_procurement", "receive_stock", "inspect_quality"],
     description: "Approved supply and receiving.",
     icon: "list",
     group: "plan",
@@ -384,13 +420,32 @@ export const WAREHOUSE_ROUTE_BY_ID = Object.fromEntries(
   WAREHOUSE_ROUTE_CONTRACTS.map((entry) => [entry.id, entry]),
 ) as Record<WarehouseRouteId, WarehouseRouteContract>;
 
-export function modulesForRole(role: Role): ModuleDef[] {
+export function isWarehouseOperatorRole(role: WarehouseUiRole): boolean {
+  return role === "warehouse_operator" || role === "operations";
+}
+
+export function isWarehouseSupervisorRole(role: WarehouseUiRole): boolean {
+  return role === "warehouse_supervisor" || role === "logistics_supervisor" || role === "warehouse_admin";
+}
+
+const OPERATOR_MODULES: ModuleDef[] = [
+  { ...MODULES.find((module) => module.id === "dashboard")!, label: "Home", group: "operate" },
+  { ...MODULES.find((module) => module.id === "purchase-orders")!, label: "Receive and inspect", group: "operate" },
+  { ...MODULES.find((module) => module.id === "storage")!, label: "Put away", group: "operate" },
+  { ...MODULES.find((module) => module.id === "allocations")!, label: "Pick or issue", group: "operate" },
+  { ...MODULES.find((module) => module.id === "returns")!, label: "Returns and counts", group: "operate" },
+];
+
+export function modulesForRole(role: WarehouseUiRole): ModuleDef[] {
+  if (isWarehouseOperatorRole(role)) return OPERATOR_MODULES;
+  const capabilityRole = normalizeWarehouseRole(role);
   return MODULES.filter((module) =>
-    module.capabilities.some((capability) => can(role, capability)),
+    module.capabilities.some((capability) => can(capabilityRole, capability)),
   );
 }
 
-export function primaryModulesForRole(role: Role): ModuleDef[] {
+export function primaryModulesForRole(role: WarehouseUiRole): ModuleDef[] {
+  if (isWarehouseOperatorRole(role)) return OPERATOR_MODULES.slice(0, 4);
   const order: MobileSlot[] = ["home", "scan", "tasks", "inventory"];
   return modulesForRole(role)
     .filter((module): module is ModuleDef & { mobile: MobileSlot } =>

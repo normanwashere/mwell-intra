@@ -58,6 +58,10 @@ export function ApprovalsPage() {
   return (
     <div className="space-y-4">
       <PageHeader title="Stock approvals" icon="check" subtitle="Review governed inventory changes and financial escalation" />
+      <div className="rounded-xl border border-line bg-inset/50 px-4 py-3 text-sm text-muted">
+        <p className="font-semibold text-ink">Controlled exceptions</p>
+        <p className="mt-0.5 text-xs">Delegation never permits the requester to approve their own transaction.</p>
+      </div>
       <SegmentedControl<ApprovalTab>
         ariaLabel="Approval status"
         value={tab}

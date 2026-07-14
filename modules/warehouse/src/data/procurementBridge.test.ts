@@ -67,6 +67,7 @@ describe('readProcurementPOs (procurement → warehouse bridge)', () => {
     expect(po!.totalReceived).toBe(1);
     expect(po!.value).toBe(2600000);
     expect(po!.href).toBe('/procurement/purchase-orders/ppo-1');
+    expect(po!.warehouseHref).toBe('/warehouse/purchase-orders?po=ppo-1');
   });
 
   it('only surfaces receivable statuses (approved / issued)', () => {
