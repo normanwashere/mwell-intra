@@ -30,6 +30,9 @@ const po: PurchaseOrder = {
     latestReceiptReference: 'rcpt-warehouse-1',
     latestQcStatus: 'exception',
     lastReceiptAt: '2026-07-15T09:00:00.000Z',
+    acceptedLines: [{
+      poLineId: 'line-1', acceptedQuantity: 3, rejectedOrQuarantinedQuantity: 1,
+    }],
   },
   commitmentReadiness: {
     ready: false,
@@ -39,9 +42,12 @@ const po: PurchaseOrder = {
     route: 'rfq',
     blockers: ['approved policy evidence RFQ_COMMERCIAL_COMPARISON'],
     evidence: [{
+      id: 'evidence-1',
       controlCode: 'RFQ_COMMERCIAL_COMPARISON', evidenceType: 'comparison',
       reviewStatus: 'submitted', facts: {},
     }],
+    protections: [],
+    canRecordAcceptance: true,
   },
   createdAt: '2026-07-14T09:00:00.000Z',
   updatedAt: '2026-07-15T09:00:00.000Z',

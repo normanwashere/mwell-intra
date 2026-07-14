@@ -68,6 +68,8 @@ export function PODetailPage() {
   const { id = '' } = useParams();
   const {
     rows, approve, issue, cancel, recordAcceptance,
+    createPolicyEvidence, reviewPolicyEvidence, supersedePolicyEvidence,
+    createFinancialProtection, reviewFinancialProtection, supersedeFinancialProtection,
     preparePayment, reviewPayment, loading,
   } = usePurchaseOrders();
   const { rows: requests } = useProcurementRequests();
@@ -98,6 +100,12 @@ export function PODetailPage() {
   const [signOpen, setSignOpen] = useState(false);
   const [signature, setSignature] = useState<SignaturePayload | null>(null);
   const [approvalNote, setApprovalNote] = useState('');
+  const [evidenceControlCode, setEvidenceControlCode] = useState('');
+  const [evidenceType, setEvidenceType] = useState('document');
+  const [evidenceFacts, setEvidenceFacts] = useState('{}');
+  const [protectionType, setProtectionType] = useState('performance_bond');
+  const [protectionBasis, setProtectionBasis] = useState('Contract commitment');
+  const [protectionAmount, setProtectionAmount] = useState('');
 
   // PR-15 parity with the approval inbox: a prefilled signer name arms the
   // confirm button; the pad can still replace the seeded typed signature.
@@ -200,17 +208,37 @@ export function PODetailPage() {
     if (next) success(`PO ${next.poNumber} cancelled`);
   }
 
-  async function handleAcceptance(scope: string, exceptions: string[]) {
+  async function handleAcceptance(scope: string, exceptions: string[], acceptedLines: Array<{ poLineId: string; quantity: number }>) {
     if (!po) return;
     const next = await recordAcceptance(po.id, {
       acceptanceType: sourceRequest?.category === 'services' || sourceRequest?.category === 'subscription'
         ? 'service' : 'goods',
       acceptedScope: scope,
+      acceptedLines,
       exceptions,
       actorEmail: profile?.email,
     });
     if (next) success('Technical acceptance recorded');
     else error('Could not record acceptance. A goods receipt or authorized requester is required.');
+  }
+
+  async function handleAddEvidence() {
+    if (!po?.requestId || !evidenceControlCode.trim()) return;
+    let facts: Record<string, unknown>;
+    try {
+      const parsed = JSON.parse(evidenceFacts) as unknown;
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('object required');
+      facts = parsed as Record<string, unknown>;
+    } catch { error('Evidence facts must be valid JSON.'); return; }
+    await createPolicyEvidence(po.requestId, { controlCode: evidenceControlCode.trim(), evidenceType: evidenceType.trim(), facts });
+    setEvidenceControlCode('');
+    success('Policy evidence submitted for review');
+  }
+
+  async function handleAddProtection() {
+    if (!po?.requestId || !protectionType.trim() || !protectionBasis.trim()) return;
+    await createFinancialProtection(po.requestId, { protectionType: protectionType.trim(), triggerBasis: protectionBasis.trim(), requiredAmount: protectionAmount ? Number(protectionAmount) : undefined });
+    success('Financial protection requirement added');
   }
 
   async function handlePreparePayment(draft: PaymentReadinessDraft) {
@@ -400,11 +428,45 @@ export function PODetailPage() {
             {po.commitmentReadiness.evidence.length ? (
               <div className="mt-4 divide-y divide-line border-t border-line">
                 {po.commitmentReadiness.evidence.map((evidence) => (
-                  <div key={`${evidence.controlCode}-${evidence.evidenceType}`} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
+                  <div key={evidence.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
                     <span className="font-medium text-ink">{evidence.controlCode}</span>
                     <span className="text-muted">{evidence.evidenceType} · {evidence.reviewStatus}</span>
+                    <div className="flex gap-2">
+                      {canApproveAward && evidence.reviewStatus === 'submitted' ? <><button type="button" className="btn-ghost btn-sm" onClick={() => void reviewPolicyEvidence(evidence.id, 'approved')}>Approve</button><button type="button" className="btn-ghost btn-sm" onClick={() => void reviewPolicyEvidence(evidence.id, 'rejected')}>Reject</button></> : null}
+                      {canAuthorPo && evidence.reviewStatus !== 'superseded' ? <button type="button" className="btn-ghost btn-sm" onClick={() => void supersedePolicyEvidence(evidence.id)}>Supersede</button> : null}
+                    </div>
                   </div>
                 ))}
+              </div>
+            ) : null}
+            {po.commitmentReadiness.protections.length ? (
+              <div className="mt-4 divide-y divide-line border-t border-line">
+                {po.commitmentReadiness.protections.map((protection) => (
+                  <div key={protection.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
+                    <span className="font-medium text-ink">{protection.protectionType}</span>
+                    <span className="text-muted">{protection.triggerBasis} · {protection.status}</span>
+                    <div className="flex gap-2">
+                      {(canApproveAward || canViewFinance) && ['required', 'provided'].includes(protection.status) ? <><button type="button" className="btn-ghost btn-sm" onClick={() => void reviewFinancialProtection(protection.id, 'approved')}>Approve</button><button type="button" className="btn-ghost btn-sm" onClick={() => void reviewFinancialProtection(protection.id, 'waived')}>Waive</button></> : null}
+                      {canAuthorPo && protection.status !== 'superseded' ? <button type="button" className="btn-ghost btn-sm" onClick={() => void supersedeFinancialProtection(protection.id)}>Supersede</button> : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            {canAuthorPo && po.requestId ? (
+              <div className="mt-4 grid gap-4 border-t border-line pt-4 lg:grid-cols-2">
+                <section className="space-y-2">
+                  <label className="block text-sm font-semibold text-ink">Control code<input className="input mt-1" value={evidenceControlCode} onChange={(event) => setEvidenceControlCode(event.target.value)} /></label>
+                  <label className="block text-sm font-semibold text-ink">Evidence type<input className="input mt-1" value={evidenceType} onChange={(event) => setEvidenceType(event.target.value)} /></label>
+                  <label className="block text-sm font-semibold text-ink">Evidence facts (JSON)<textarea className="input mt-1" rows={3} value={evidenceFacts} onChange={(event) => setEvidenceFacts(event.target.value)} /></label>
+                  <button type="button" className="btn-outline" disabled={!evidenceControlCode.trim()} onClick={() => void handleAddEvidence()}><Icon name="plus" className="h-4 w-4" />Add policy evidence</button>
+                </section>
+                <section className="space-y-2">
+                  <label className="block text-sm font-semibold text-ink">Protection type<input className="input mt-1" value={protectionType} onChange={(event) => setProtectionType(event.target.value)} /></label>
+                  <label className="block text-sm font-semibold text-ink">Trigger basis<input className="input mt-1" value={protectionBasis} onChange={(event) => setProtectionBasis(event.target.value)} /></label>
+                  <label className="block text-sm font-semibold text-ink">Required amount<input className="input mt-1" type="number" min={0} value={protectionAmount} onChange={(event) => setProtectionAmount(event.target.value)} /></label>
+                  <button type="button" className="btn-outline" onClick={() => void handleAddProtection()}><Icon name="plus" className="h-4 w-4" />Add financial protection</button>
+                </section>
               </div>
             ) : null}
           </Card>
@@ -467,8 +529,13 @@ export function PODetailPage() {
           <Card>
             <PaymentReadinessPanel
               acceptance={po.acceptancePack}
+              acceptanceLines={(po.receiptStatus?.acceptedLines ?? []).map((line) => ({
+                poLineId: line.poLineId,
+                description: po.lines.find((poLine) => poLine.id === line.poLineId)?.description ?? line.poLineId,
+                qcAcceptedQuantity: line.acceptedQuantity,
+              }))}
               pack={po.paymentReadiness}
-              canAccept={isSourceRequester && !po.acceptancePack}
+              canAccept={Boolean(po.commitmentReadiness?.canRecordAcceptance ?? isSourceRequester) && !po.acceptancePack}
               canPrepare={canAuthorPo}
               canReview={canViewFinance}
               onAccept={handleAcceptance}

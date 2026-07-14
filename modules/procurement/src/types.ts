@@ -303,25 +303,44 @@ export interface PurchaseOrderReceiptStatus {
   latestReceiptReference?: string;
   latestQcStatus: 'not_received' | 'partial' | 'accepted' | 'exception';
   lastReceiptAt?: string;
+  acceptedLines?: Array<{
+    poLineId: string;
+    acceptedQuantity: number;
+    rejectedOrQuarantinedQuantity: number;
+  }>;
 }
 
 export interface PolicyEvidenceRecord {
+  id: string;
   controlCode: string;
   evidenceType: string;
-  reviewStatus: 'submitted' | 'approved' | 'rejected' | 'expired';
+  reviewStatus: 'submitted' | 'approved' | 'rejected' | 'expired' | 'superseded';
   reviewedAt?: string;
   expiresAt?: string;
-  facts: Record<string, unknown>;
+  facts?: Record<string, unknown>;
+}
+
+export interface FinancialProtectionRecord {
+  id: string;
+  protectionType: string;
+  triggerBasis: string;
+  requiredAmount?: number;
+  requiredPercentage?: number;
+  dueBefore?: string;
+  status: 'required' | 'provided' | 'approved' | 'waived' | 'expired' | 'claim_pending' | 'claimed' | 'superseded';
+  reviewedAt?: string;
 }
 
 export interface CommitmentReadiness {
   ready: boolean;
-  phase: 'submit' | 'approve' | 'issue';
+  phase: 'submit' | 'award' | 'issue';
   requestId: string;
   vendorId?: string;
   route?: SourcingMethod;
   blockers: string[];
   evidence: PolicyEvidenceRecord[];
+  protections: FinancialProtectionRecord[];
+  canRecordAcceptance?: boolean;
 }
 
 export interface AcceptancePack {

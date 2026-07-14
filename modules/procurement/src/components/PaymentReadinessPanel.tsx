@@ -12,8 +12,15 @@ export interface PaymentReadinessDraft {
   taxWithholdingSupportReference: string;
 }
 
+export interface AcceptanceLineDraft {
+  poLineId: string;
+  description: string;
+  qcAcceptedQuantity: number;
+}
+
 export function PaymentReadinessPanel({
   acceptance,
+  acceptanceLines = [],
   pack,
   canAccept,
   canPrepare,
@@ -23,16 +30,18 @@ export function PaymentReadinessPanel({
   onReview,
 }: {
   acceptance?: AcceptancePack;
+  acceptanceLines?: AcceptanceLineDraft[];
   pack?: PaymentReadinessPack;
   canAccept: boolean;
   canPrepare: boolean;
   canReview: boolean;
-  onAccept: (scope: string, exceptions: string[]) => Promise<void>;
+  onAccept: (scope: string, exceptions: string[], acceptedLines: Array<{ poLineId: string; quantity: number }>) => Promise<void>;
   onPrepare: (draft: PaymentReadinessDraft) => Promise<void>;
   onReview: (status: 'returned' | 'accepted', note: string) => Promise<void>;
 }) {
   const [scope, setScope] = useState('Delivered scope matches the approved PO and request.');
   const [exceptionsText, setExceptionsText] = useState('');
+  const [acceptedQuantities, setAcceptedQuantities] = useState<Record<string, number>>({});
   const [financeNote, setFinanceNote] = useState('');
   const [draft, setDraft] = useState<PaymentReadinessDraft>({
     poMatch: pack?.poMatch ?? false,
@@ -48,6 +57,11 @@ export function PaymentReadinessPanel({
       taxWithholdingSupportReference: pack?.taxWithholdingSupportReference ?? '',
     });
   }, [pack?.id]);
+  useEffect(() => {
+    setAcceptedQuantities(Object.fromEntries(
+      acceptanceLines.map((line) => [line.poLineId, line.qcAcceptedQuantity]),
+    ));
+  }, [acceptanceLines]);
   const preview = useMemo<PaymentReadinessPack>(() => ({
     id: pack?.id ?? 'draft', purchaseOrderId: pack?.purchaseOrderId ?? '',
     acceptancePackId: pack?.acceptancePackId ?? acceptance?.id ?? '',
@@ -72,9 +86,22 @@ export function PaymentReadinessPanel({
 
       {canAccept && !acceptance && (
         <section className="space-y-3 rounded-lg border border-line p-4">
+          {acceptanceLines.map((line) => (
+            <label key={line.poLineId} className="block text-sm font-semibold text-ink">
+              QC-accepted quantity for {line.description}
+              <input
+                type="number" min={0} max={line.qcAcceptedQuantity} step={1}
+                className="input mt-1.5" value={acceptedQuantities[line.poLineId] ?? 0}
+                onChange={(event) => setAcceptedQuantities((current) => ({
+                  ...current,
+                  [line.poLineId]: Math.min(line.qcAcceptedQuantity, Math.max(0, Number(event.target.value) || 0)),
+                }))}
+              />
+            </label>
+          ))}
           <label className="block text-sm font-semibold text-ink">Accepted scope<textarea className="input mt-1.5" rows={3} value={scope} onChange={(event) => setScope(event.target.value)} /></label>
           <label className="block text-sm font-semibold text-ink">Exceptions or defects, one per line<textarea className="input mt-1.5" rows={3} value={exceptionsText} onChange={(event) => setExceptionsText(event.target.value)} /></label>
-          <button type="button" className="btn-primary" disabled={!scope.trim()} onClick={() => void onAccept(scope.trim(), exceptions)}><Icon name="check" className="h-4 w-4" />Record technical acceptance</button>
+          <button type="button" className="btn-primary" disabled={!scope.trim()} onClick={() => void onAccept(scope.trim(), exceptions, acceptanceLines.map((line) => ({ poLineId: line.poLineId, quantity: acceptedQuantities[line.poLineId] ?? 0 })).filter((line) => line.quantity > 0))}><Icon name="check" className="h-4 w-4" />Record technical acceptance</button>
         </section>
       )}
 

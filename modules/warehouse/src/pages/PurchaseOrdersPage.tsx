@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useSession } from '@intra/auth';
 import { useWarehouse } from '@/app/store';
 import {
   poProgress,
@@ -33,6 +34,7 @@ import {
 import { Icon } from '@/components/Icon';
 
 type POFilter = 'all' | 'open' | 'closed';
+type ReceiptDisposition = 'clean' | 'damaged' | 'quarantine';
 
 const STATUS_TONE: Record<POStatus, Tone> = {
   draft: 'slate',
@@ -53,6 +55,7 @@ export function PurchaseOrdersPage() {
     loadReceivableProcurementPOs, receiveProcurementPO,
   } = useWarehouse();
   const toast = useToast();
+  const { mode, supabaseClient } = useSession();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const handoffPoId = searchParams.get('po');
@@ -90,6 +93,8 @@ export function PurchaseOrdersPage() {
   const [bridgeLocation, setBridgeLocation] = useState('');
   const [bridgeBin, setBridgeBin] = useState('');
   const [bridgeEvidence, setBridgeEvidence] = useState('');
+  const [bridgeDisposition, setBridgeDisposition] = useState<ReceiptDisposition>('clean');
+  const [bridgeExceptionReason, setBridgeExceptionReason] = useState('');
   const warehouses = useMemo(
     () => data?.locations.filter((location) => location.type === 'warehouse') ?? [],
     [data],
@@ -104,6 +109,8 @@ export function PurchaseOrdersPage() {
     setBridgeLocation(warehouses[0]?.id ?? '');
     setBridgeBin('');
     setBridgeEvidence('');
+    setBridgeDisposition('clean');
+    setBridgeExceptionReason('');
     setBridgeProducts(Object.fromEntries(handoff.lines.map((line) => [line.id, line.productId ?? ''])));
     setBridgeQty(Object.fromEntries(handoff.lines.map((line) => [
       line.id, Math.max(0, line.quantity - line.receivedQuantity),
@@ -210,6 +217,8 @@ export function PurchaseOrdersPage() {
     setBridgeLocation(warehouses[0]?.id ?? '');
     setBridgeBin('');
     setBridgeEvidence('');
+    setBridgeDisposition('clean');
+    setBridgeExceptionReason('');
     setBridgeProducts(Object.fromEntries(po.lines.map((line) => [line.id, line.productId ?? ''])));
     setBridgeQty(Object.fromEntries(po.lines.map((line) => [
       line.id, Math.max(0, line.quantity - line.receivedQuantity),
@@ -226,16 +235,27 @@ export function PurchaseOrdersPage() {
       }))
       .filter((line) => line.productId && line.quantity > 0);
     if (lines.length === 0) return;
-    const ok = await receiveProcurementPO({
-      idempotencyKey: crypto.randomUUID(),
-      poId: bridgeReceivePO.id,
-      locationId: bridgeLocation,
-      binId: bridgeBin || undefined,
-      lines,
-      evidenceUrls: [bridgeEvidence.trim()],
-    });
-    if (!ok) return;
-    toast.success('Procurement PO received into inspection staging');
+    const idempotencyKey = crypto.randomUUID();
+    if (bridgeDisposition === 'clean') {
+      const ok = await receiveProcurementPO({ idempotencyKey, poId: bridgeReceivePO.id,
+        locationId: bridgeLocation, binId: bridgeBin || undefined, lines,
+        evidenceUrls: [bridgeEvidence.trim()] });
+      if (!ok) return;
+      toast.success('Procurement PO received into inspection staging');
+    } else {
+      if (mode !== 'supabase' || !supabaseClient) {
+        toast.error('Exception receipts require the connected Warehouse authority.');
+        return;
+      }
+      const { error: rpcError } = await supabaseClient.schema('warehouse').rpc('receive_procurement_po_exception', { payload: {
+        idempotency_key: idempotencyKey, po_id: bridgeReceivePO.id, location_id: bridgeLocation,
+        lines: lines.map((line) => ({ line_id: line.lineId, product_id: line.productId, quantity: line.quantity })),
+        evidence_urls: [bridgeEvidence.trim()], exception_type: bridgeDisposition,
+        reason: bridgeExceptionReason.trim(),
+      } });
+      if (rpcError) { toast.error(rpcError.message); return; }
+      toast.success('Receipt exception sent to the Supervisor queue');
+    }
     setBridgeReceivePO(null);
     setBridgeReload((value) => value + 1);
   };
@@ -699,6 +719,10 @@ export function PurchaseOrdersPage() {
             <p className="rounded-xl bg-amber-500/10 px-3 py-2 text-sm font-medium text-amber-800 dark:text-amber-200">
               Inspection required before putaway or allocation.
             </p>
+            <SegmentedControl<ReceiptDisposition>
+              ariaLabel="Receipt disposition" value={bridgeDisposition} onChange={setBridgeDisposition}
+              options={[{ value: 'clean', label: 'Clean receipt' }, { value: 'damaged', label: 'Damaged' }, { value: 'quarantine', label: 'Quarantine' }]}
+            />
             <Field label="Receive into" htmlFor="bridge-receive-location">
               <select
                 id="bridge-receive-location"
@@ -736,6 +760,12 @@ export function PurchaseOrdersPage() {
                 placeholder="evidence/delivery-note.jpg"
               />
             </Field>
+            {bridgeDisposition !== 'clean' && (
+              <Field label="Exception reason" htmlFor="bridge-exception-reason">
+                <textarea id="bridge-exception-reason" className="input" rows={3}
+                  value={bridgeExceptionReason} onChange={(event) => setBridgeExceptionReason(event.target.value)} />
+              </Field>
+            )}
             <ul className="space-y-3" aria-label="Procurement PO receipt lines">
               {bridgeReceivePO.lines.map((line) => {
                 const remaining = line.quantity - line.receivedQuantity;

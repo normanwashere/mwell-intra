@@ -125,6 +125,19 @@ test("executes Task 3 receipt and policy contracts against live UAT", {
   assert.match(stdout, /Wrote .*full-intra-live-e2e-results\.json/);
 });
 
+test("Task 3 uses browser-role exception receipts and proves transactional cleanup", async () => {
+  const source = await readFile(new URL("./full-intra-live-e2e.mjs", import.meta.url), "utf8");
+  assert.match(source, /receive_procurement_po_exception/);
+  assert.doesNotMatch(source, /insertAuditRows\([^)]*"warehouse"\s*,\s*"(?:receipts|quality_inspections)"/s,
+    "receipt and QC fixtures must be created through browser-role RPCs");
+  const cleanupRegistration = source.indexOf("registerTask3Cleanup");
+  const firstTask3Insert = source.indexOf('insertAuditRows(client, "core", "vendors"');
+  assert.ok(cleanupRegistration >= 0 && cleanupRegistration < firstTask3Insert);
+  assert.match(source, /finally\s*\{\s*try\s*\{[\s\S]*browser\.close\(\)[\s\S]*finally\s*\{[\s\S]*cleanupTask3ReceiptFixture/);
+  assert.match(source, /assertTask3ZeroResidualRows/);
+  assert.match(source, /inventoryBefore[\s\S]*inventoryAfter[\s\S]*ledgerBefore[\s\S]*ledgerAfter/);
+});
+
 test("the live harness verifies deployed identity before browser launch", async () => {
   const source = await readFile(
     new URL("./full-intra-live-e2e.mjs", import.meta.url),

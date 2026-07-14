@@ -305,12 +305,8 @@ function mapReceiptStatus(row: LiveRow): PurchaseOrderReceiptStatus & { purchase
     latestReceiptReference: row.latest_warehouse_receipt_reference ?? undefined,
     latestQcStatus: row.qc_status,
     lastReceiptAt: row.last_received_at ?? undefined,
+    acceptedLines: Array.isArray(row.accepted_lines) ? row.accepted_lines : [],
   } as unknown as PurchaseOrderReceiptStatus & { purchaseOrderId: string };
-}
-
-function mapCommitmentReadiness(row: LiveRow): PurchaseOrder['commitmentReadiness'] & { purchaseOrderId: string } {
-  const readiness = row.readiness as PurchaseOrder['commitmentReadiness'];
-  return { ...readiness!, purchaseOrderId: row.purchase_order_id };
 }
 
 // ---------------------------------------------------------------------------
@@ -923,7 +919,13 @@ export interface PurchaseOrdersAPI {
   ) => MaybePromise<PurchaseOrder | null>;
   issue: (id: string, readiness: { sourceAwardApproved: boolean; vendorEligible: boolean }) => MaybePromise<PurchaseOrder | null>;
   cancel: (id: string) => MaybePromise<PurchaseOrder | null>;
-  recordAcceptance: (id: string, input: { acceptanceType: 'goods' | 'service' | 'milestone'; acceptedScope: string; exceptions: string[]; actorEmail?: string }) => MaybePromise<PurchaseOrder | null>;
+  recordAcceptance: (id: string, input: { acceptanceType: 'goods' | 'service' | 'milestone'; acceptedScope: string; acceptedLines?: Array<{ poLineId: string; quantity: number }>; exceptions: string[]; actorEmail?: string }) => MaybePromise<PurchaseOrder | null>;
+  createPolicyEvidence: (requestId: string, input: { controlCode: string; evidenceType: string; facts?: Record<string, unknown> }) => Promise<void>;
+  reviewPolicyEvidence: (id: string, decision: 'approved' | 'rejected') => Promise<void>;
+  supersedePolicyEvidence: (id: string) => Promise<void>;
+  createFinancialProtection: (requestId: string, input: { protectionType: string; triggerBasis: string; requiredAmount?: number }) => Promise<void>;
+  reviewFinancialProtection: (id: string, decision: 'approved' | 'waived') => Promise<void>;
+  supersedeFinancialProtection: (id: string) => Promise<void>;
   preparePayment: (id: string, input: { poMatch: boolean; invoiceOrSiReference: string; milestoneSupportReference: string; taxWithholdingSupportReference: string; actorEmail?: string }) => MaybePromise<PurchaseOrder | null>;
   reviewPayment: (id: string, input: { status: 'returned' | 'accepted'; note?: string; actorEmail?: string }) => MaybePromise<PurchaseOrder | null>;
   getById: (id: string) => PurchaseOrder | undefined;
@@ -949,9 +951,26 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
     live, 'procurement', 'acceptance_packs', mapAcceptancePack,
     { column: 'accepted_at', ascending: false },
   );
-  const [liveCommitmentReadiness, liveCommitmentLoading, refreshCommitmentReadiness] = useLiveRows<
+  const [liveCommitmentReadiness, setLiveCommitmentReadiness] = useState<Array<
     NonNullable<PurchaseOrder['commitmentReadiness']> & { purchaseOrderId: string }
-  >(live, 'procurement', 'v_purchase_order_commitment_readiness', mapCommitmentReadiness);
+  >>([]);
+  const [liveCommitmentLoading, setLiveCommitmentLoading] = useState(Boolean(live));
+  const refreshCommitmentReadiness = useCallback(async () => {
+    if (!live) { setLiveCommitmentReadiness([]); setLiveCommitmentLoading(false); return; }
+    setLiveCommitmentLoading(true);
+    try {
+      const readiness = await Promise.all(liveBaseRows.filter((row) => Boolean(row.request_id)).map(async (row) => ({
+        ...(await liveRpc<NonNullable<PurchaseOrder['commitmentReadiness']>>(live, 'procurement', 'commitment_readiness', {
+          request_id: row.request_id, vendor_id: row.core_vendor_id,
+          phase: row.status === 'draft' || row.status === 'pending_approval' ? 'award' : 'issue',
+        })),
+        purchaseOrderId: String(row.id),
+      })));
+      setLiveCommitmentReadiness(readiness);
+    } catch { setLiveCommitmentReadiness([]); }
+    finally { setLiveCommitmentLoading(false); }
+  }, [live, liveBaseRows]);
+  useEffect(() => { void refreshCommitmentReadiness(); }, [refreshCommitmentReadiness]);
   const [livePaymentPacks, livePaymentPacksLoading, refreshPaymentPacks] = useLiveRows<PaymentReadinessPack>(
     live, 'procurement', 'payment_readiness_packs', mapPaymentReadinessPack,
     { column: 'prepared_at', ascending: false },
@@ -1105,7 +1124,7 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
     [patch, live, refreshLive],
   );
 
-  const recordAcceptance = useCallback((id: string, input: { acceptanceType: 'goods' | 'service' | 'milestone'; acceptedScope: string; exceptions: string[]; actorEmail?: string }): MaybePromise<PurchaseOrder | null> => {
+  const recordAcceptance = useCallback((id: string, input: { acceptanceType: 'goods' | 'service' | 'milestone'; acceptedScope: string; acceptedLines?: Array<{ poLineId: string; quantity: number }>; exceptions: string[]; actorEmail?: string }): MaybePromise<PurchaseOrder | null> => {
     const current = rows.find((row) => row.id === id);
     if (!current) return null;
     if (input.acceptanceType === 'goods' &&
@@ -1114,9 +1133,7 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
         const acceptedScope = input.acceptanceType === 'goods'
           ? {
               summary: input.acceptedScope,
-              lines: current.lines
-                .filter((line) => line.receivedQuantity > 0)
-                .map((line) => ({ poLineId: line.id, quantity: line.receivedQuantity })),
+              lines: input.acceptedLines ?? [],
             }
           : input.acceptedScope;
         return liveRpc<LiveRow>(live, 'procurement', 'record_acceptance_pack', {
@@ -1136,6 +1153,29 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
     };
     return patch(id, { acceptancePack });
   }, [live, patch, refreshLive, rows]);
+
+  const createPolicyEvidence = useCallback(async (requestId: string, input: { controlCode: string; evidenceType: string; facts?: Record<string, unknown> }) => {
+    if (!live) return;
+    await liveRpc(live, 'procurement', 'create_policy_evidence', { request_id: requestId, control_code: input.controlCode, evidence_type: input.evidenceType, facts: input.facts ?? {} });
+    await refreshCommitmentReadiness();
+  }, [live, refreshCommitmentReadiness]);
+  const reviewPolicyEvidence = useCallback(async (id: string, decision: 'approved' | 'rejected') => {
+    if (!live) return; await liveRpc(live, 'procurement', 'review_policy_evidence', { id, decision }); await refreshCommitmentReadiness();
+  }, [live, refreshCommitmentReadiness]);
+  const supersedePolicyEvidence = useCallback(async (id: string) => {
+    if (!live) return; await liveRpc(live, 'procurement', 'supersede_policy_evidence', { id }); await refreshCommitmentReadiness();
+  }, [live, refreshCommitmentReadiness]);
+  const createFinancialProtection = useCallback(async (requestId: string, input: { protectionType: string; triggerBasis: string; requiredAmount?: number }) => {
+    if (!live) return;
+    await liveRpc(live, 'procurement', 'create_financial_protection', { request_id: requestId, protection_type: input.protectionType, trigger_basis: input.triggerBasis, required_amount: input.requiredAmount });
+    await refreshCommitmentReadiness();
+  }, [live, refreshCommitmentReadiness]);
+  const reviewFinancialProtection = useCallback(async (id: string, decision: 'approved' | 'waived') => {
+    if (!live) return; await liveRpc(live, 'procurement', 'review_financial_protection', { id, decision }); await refreshCommitmentReadiness();
+  }, [live, refreshCommitmentReadiness]);
+  const supersedeFinancialProtection = useCallback(async (id: string) => {
+    if (!live) return; await liveRpc(live, 'procurement', 'supersede_financial_protection', { id }); await refreshCommitmentReadiness();
+  }, [live, refreshCommitmentReadiness]);
 
   const preparePayment = useCallback((id: string, input: { poMatch: boolean; invoiceOrSiReference: string; milestoneSupportReference: string; taxWithholdingSupportReference: string; actorEmail?: string }): MaybePromise<PurchaseOrder | null> => {
     const current = rows.find((row) => row.id === id);
@@ -1181,7 +1221,10 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
 
   const getById = useCallback((id: string) => rows.find((r) => r.id === id), [rows]);
 
-  return { rows, loading, add, approve, issue, cancel, recordAcceptance, preparePayment, reviewPayment, getById };
+  return { rows, loading, add, approve, issue, cancel, recordAcceptance,
+    createPolicyEvidence, reviewPolicyEvidence, supersedePolicyEvidence,
+    createFinancialProtection, reviewFinancialProtection, supersedeFinancialProtection,
+    preparePayment, reviewPayment, getById };
 }
 
 // ---------------------------------------------------------------------------
