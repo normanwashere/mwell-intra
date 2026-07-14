@@ -206,3 +206,37 @@ test('scope no-ops, migration reruns, and department aggregates are safe', () =>
     /core\.has_cap\s*\(\s*'core'\s*,\s*'manage_rbac'\s*\)/i,
   );
 });
+
+test('department helper access and role assignment integrity are finalized', () => {
+  assert.equal(verifyOrganizationSql(sql).length, 0);
+  assert.doesNotMatch(
+    sql,
+    /grant execute on function core\.department_has_unresolved_work\(uuid\) to authenticated/i,
+  );
+  assert.match(
+    sql,
+    /revoke all on function core\.department_has_unresolved_work\(uuid\) from public, anon, authenticated/i,
+  );
+
+  const aliasSeed = sql.search(/insert into core\.roles[\s\S]*?operations[\s\S]*?logistics_supervisor/i);
+  const orphanCheck = sql.search(/orphan[\s_-]*user[\s_-]*role/i);
+  const validation = sql.search(/validate constraint user_roles_role_integrity_fk/i);
+  assert.ok(aliasSeed >= 0 && aliasSeed < orphanCheck, 'known aliases must be seeded before orphan rejection');
+  assert.ok(orphanCheck >= 0 && orphanCheck < validation, 'orphans must be rejected before FK validation');
+
+  assert.match(
+    verifyOrganizationSql(
+      sql.replace(
+        /revoke all on function core\.department_has_unresolved_work\(uuid\) from public, anon, authenticated/i,
+        'grant execute on function core.department_has_unresolved_work(uuid) to authenticated',
+      ),
+    ).join('\n'),
+    /department helper.*authenticated/i,
+  );
+  assert.match(
+    verifyOrganizationSql(
+      sql.replace(/validate constraint user_roles_role_integrity_fk/i, 'constraint remains not valid'),
+    ).join('\n'),
+    /role assignment.*validated/i,
+  );
+});

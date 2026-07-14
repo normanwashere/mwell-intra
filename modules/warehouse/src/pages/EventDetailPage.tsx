@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useWarehouse } from '@/app/store';
-import { can } from '@/auth/roles';
 import { toStockState } from '@/data/repository';
 import { uncommittedAvailable, validateReservation } from '@/domain/allocations';
 import { eventCosting, eventSummary } from '@/domain/events';
@@ -39,12 +38,12 @@ const STATUS_TONE: Record<AllocationStatus, Tone> = {
 export function EventDetailPage() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
-  const { data, role, reserve, issue, cancelAllocation } = useWarehouse();
+  const { data, reserve, issue, cancelAllocation, can } = useWarehouse();
   const toast = useToast();
-  const canReserve = can(role, 'reserve_allocate');
-  const canIssue = can(role, 'issue_items');
-  const canCancel = can(role, 'reserve_allocate');
-  const canReturn = can(role, 'manage_returns');
+  const canReserve = can('reserve_allocate');
+  const canIssue = can('issue_items');
+  const canCancel = can('reserve_allocate');
+  const canReturn = can('manage_returns');
   const [returnAlloc, setReturnAlloc] = useState<Allocation | null>(null);
 
   const [reserveOpen, setReserveOpen] = useState(false);

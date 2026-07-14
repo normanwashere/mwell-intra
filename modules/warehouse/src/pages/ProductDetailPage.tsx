@@ -32,7 +32,6 @@ import { ExpiryBadge } from '@/components/ExpiryStatus';
 import { EvidenceGallery } from '@/components/EvidenceGallery';
 import { PriceEditorSheet } from '@/components/PriceEditorSheet';
 import { ProductEditorSheet } from '@/components/ProductEditorSheet';
-import { can } from '@/auth/roles';
 import { WarehouseScanFlow } from '@/components/camera/WarehouseScanFlow';
 
 const UNIT_TONE: Record<UnitStatus, Tone> = {
@@ -47,7 +46,7 @@ const UNIT_TONE: Record<UnitStatus, Tone> = {
 export function ProductDetailPage() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
-  const { data, role, transfer, adjustStock, relocate } = useWarehouse();
+  const { data, can, transfer, adjustStock, relocate } = useWarehouse();
   const toast = useToast();
 
   const [relocateOpen, setRelocateOpen] = useState(false);
@@ -115,18 +114,14 @@ export function ProductDetailPage() {
       )
     : allUnits;
   const history = productMovementHistory(data.movements, product.id);
-  const canTransfer = can(role, 'transfer_stock');
-  const canSetPrice = can(role, 'set_pricing');
-  const canManageProducts = can(role, 'manage_products');
-  const canAdjust = can(role, 'cycle_count');
+  const canTransfer = can('transfer_stock');
+  const canSetPrice = can('set_pricing');
+  const canManageProducts = can('manage_products');
+  const canAdjust = can('cycle_count');
   const canViewFinancials =
-    can(role, 'view_finance') ||
-    can(role, 'view_pricing') ||
-    can(role, 'view_procurement');
+    can('view_finance') || can('view_pricing') || can('view_procurement');
   const canRelocate =
-    can(role, 'transfer_stock') ||
-    can(role, 'receive_stock') ||
-    can(role, 'manage_locations');
+    can('transfer_stock') || can('receive_stock') || can('manage_locations');
   const warehouseIds = new Set(
     data.locations.filter((l) => l.type === 'warehouse').map((l) => l.id),
   );

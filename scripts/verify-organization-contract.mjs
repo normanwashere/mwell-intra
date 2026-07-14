@@ -299,6 +299,34 @@ export function verifyOrganizationSql(sql) {
     errors.push('User role assignments need deferrable composite role integrity.');
   }
   if (
+    /grant execute on function core\.department_has_unresolved_work\(uuid\) to authenticated/i.test(
+      sql,
+    ) ||
+    !/revoke all on function core\.department_has_unresolved_work\(uuid\) from public, anon, authenticated/i.test(
+      sql,
+    )
+  ) {
+    errors.push(
+      'Department helper must not be directly executable by authenticated users.',
+    );
+  }
+  const aliasSeed = sql.search(
+    /insert into core\.roles[\s\S]*?operations[\s\S]*?logistics_supervisor/i,
+  );
+  const orphanCheck = sql.search(/orphan[\s_-]*user[\s_-]*role/i);
+  const roleIntegrityValidation = sql.search(
+    /validate constraint user_roles_role_integrity_fk/i,
+  );
+  if (
+    aliasSeed < 0 ||
+    orphanCheck < aliasSeed ||
+    roleIntegrityValidation < orphanCheck
+  ) {
+    errors.push(
+      'Role assignment integrity must reject orphan assignments after alias seeding and be validated.',
+    );
+  }
+  if (
     !/\('operations', 'warehouse_operator'\)[\s\S]*?\('logistics_supervisor', 'warehouse_supervisor'\)/i.test(
       sql,
     )

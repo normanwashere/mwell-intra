@@ -160,11 +160,7 @@ function DepartmentTreeNode({
 }) {
   const { department, children } = item;
   return (
-    <li
-      role="treeitem"
-      aria-level={level}
-      aria-expanded={children.length > 0 ? true : undefined}
-    >
+    <li>
       <div className="grid min-h-16 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-line px-2 py-2 sm:px-3">
         <div className="flex min-w-0 items-center gap-3">
           <span className="grid h-9 w-9 shrink-0 place-items-center bg-inset text-muted">
@@ -237,7 +233,7 @@ function DepartmentTreeNode({
         </div>
       </div>
       {children.length > 0 && (
-        <ul role="group" className="ml-5 border-l border-line pl-2 sm:ml-7">
+        <ul className="ml-5 border-l border-line pl-2 sm:ml-7">
           {children.map((child) => (
             <DepartmentTreeNode
               key={child.department.id}
@@ -441,11 +437,7 @@ function DepartmentAdministration() {
           }
         />
       ) : (
-        <ul
-          role="tree"
-          aria-label="Department hierarchy"
-          className="border-y border-line"
-        >
+        <ul className="border-y border-line">
           {departmentTree.map((item) => (
             <DepartmentTreeNode
               key={item.department.id}

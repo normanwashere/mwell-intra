@@ -36,11 +36,8 @@ import {
   movementTypeLabel,
   signedQuantity,
 } from '@/domain/format';
-import { can } from '@/auth/roles';
 import {
-  isWarehouseOperatorRole,
   normalizeWarehouseRole,
-  warehouseRolePresentation,
 } from '@/app/modules';
 import { useSession } from '@/auth/session';
 import type { Role } from '@/domain/types';
@@ -330,7 +327,7 @@ function OperatorDashboard({ name }: { name?: string }) {
 }
 
 export function DashboardPage() {
-  const { data, role, source } = useWarehouse();
+  const { data, role, roleLabel, source, can } = useWarehouse();
   const { profile } = useSession();
   const navigate = useNavigate();
   const toast = useToast();
@@ -338,15 +335,30 @@ export function DashboardPage() {
   const [exporting, setExporting] = useState<WarehouseExportKind | null>(null);
   const [window, setWindow] = useState<Window>('all');
   if (!data) return null;
-  if (isWarehouseOperatorRole(role)) {
+  const operatorExperience =
+    can('receive_stock') && can('issue_items') && !can('approve_stock_adjustment');
+  if (operatorExperience) {
     return <OperatorDashboard name={profile?.name?.split(/\s+/)[0]} />;
   }
-  const dashboardRole = normalizeWarehouseRole(role);
-  const rolePresentation = warehouseRolePresentation(role);
+  const liveDashboardRole: Role = can('manage_operation_routes') || can('resolve_exceptions')
+    ? 'logistics_supervisor'
+    : can('set_pricing') || can('view_pricing')
+      ? 'pricing'
+      : can('view_procurement')
+        ? 'procurement'
+        : can('view_analytics')
+          ? 'bi_analyst'
+          : can('view_finance')
+            ? 'finance'
+            : can('reserve_allocate')
+              ? 'operations'
+              : 'business_unit';
+  const dashboardRole = source === 'memory' ? normalizeWarehouseRole(role) : liveDashboardRole;
+  const rolePresentation = { label: roleLabel };
   const state = toStockState(data);
-  const showWindow = WINDOWED_ROLES.includes(role);
+  const showWindow = WINDOWED_ROLES.includes(dashboardRole);
 
-  const canExport = can(role, 'view_analytics') || can(role, 'view_finance');
+  const canExport = can('view_analytics') || can('view_finance');
   const exportCsv = async (kind: WarehouseExportKind, content: string) => {
     setExporting(kind);
     try {

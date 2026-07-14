@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildNotifications } from './notifications';
 import type { WarehouseData } from '@/data/repository';
+import type { Capability } from '@/auth/roles';
 
 function data(): WarehouseData {
   return {
@@ -56,8 +57,14 @@ function data(): WarehouseData {
 }
 
 describe('buildNotifications', () => {
+  const allow = (...capabilities: Capability[]) => (capability: Capability) =>
+    capabilities.includes(capability);
+
   it('flags low-stock SKUs and pending reservations', () => {
-    const notes = buildNotifications(data(), 'logistics_supervisor');
+    const notes = buildNotifications(
+      data(),
+      allow('manage_inventory', 'reserve_allocate', 'issue_items'),
+    );
     expect(notes.some((n) => n.id === 'low-ring')).toBe(true);
     expect(notes.some((n) => n.id === 'reserved-a1')).toBe(true);
   });
@@ -65,7 +72,7 @@ describe('buildNotifications', () => {
   it('marks zero-stock as out of stock (rose tone)', () => {
     const d = data();
     d.units = []; // ring now 0 available
-    const ring = buildNotifications(d, 'logistics_supervisor').find(
+    const ring = buildNotifications(d, allow('manage_inventory')).find(
       (n) => n.id === 'low-ring',
     )!;
     expect(ring.tone).toBe('rose');
@@ -73,17 +80,22 @@ describe('buildNotifications', () => {
   });
 
   it('omits reservation link for roles that cannot open events or allocations', () => {
-    // procurement can open neither events nor allocations.
-    const note = buildNotifications(data(), 'procurement').find(
+    const note = buildNotifications(data(), allow('manage_inventory')).find(
       (n) => n.id === 'reserved-a1',
     )!;
     expect(note.to).toBeUndefined();
   });
 
   it('links reservations to the event for roles that can open events', () => {
-    const note = buildNotifications(data(), 'operations').find(
+    const note = buildNotifications(data(), allow('reserve_allocate')).find(
       (n) => n.id === 'reserved-a1',
     )!;
     expect(note.to).toBe('/events/e1');
+  });
+
+  it('uses the supplied live capability predicate for notification targets', () => {
+    const notes = buildNotifications(data(), allow('issue_items'));
+    expect(notes.find((note) => note.id === 'low-ring')?.to).toBeUndefined();
+    expect(notes.find((note) => note.id === 'reserved-a1')?.to).toBe('/allocations');
   });
 });

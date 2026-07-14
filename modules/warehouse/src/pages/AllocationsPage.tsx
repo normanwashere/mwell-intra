@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react';
 import { useWarehouse } from '@/app/store';
-import { can } from '@/auth/roles';
 import { toStockState } from '@/data/repository';
 import { uncommittedAvailable, validateReservation } from '@/domain/allocations';
 import { primaryStockLocation, stockByLocation } from '@/domain/transfers';
@@ -36,11 +35,11 @@ const STATUS_TONE: Record<AllocationStatus, Tone> = {
 };
 
 export function AllocationsPage() {
-  const { data, reserve, issue, cancelAllocation, role } = useWarehouse();
+  const { data, reserve, issue, cancelAllocation, can } = useWarehouse();
   const toast = useToast();
-  const canIssue = can(role, 'issue_items');
-  const canReserve = can(role, 'reserve_allocate');
-  const canReturn = can(role, 'manage_returns');
+  const canIssue = can('issue_items');
+  const canReserve = can('reserve_allocate');
+  const canReturn = can('manage_returns');
   const [returnAlloc, setReturnAlloc] = useState<Allocation | null>(null);
 
   const [open, setOpen] = useState(false);

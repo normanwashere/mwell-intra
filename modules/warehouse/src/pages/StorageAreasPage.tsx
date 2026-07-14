@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useWarehouse } from '@/app/store';
 import { toStockState } from '@/data/repository';
-import { can } from '@/auth/roles';
 import type { StorageArea } from '@/domain/types';
 import {
   binContents,
@@ -27,15 +26,15 @@ export function StorageAreasPage() {
   const [searchParams] = useSearchParams();
   const {
     data,
-    role,
+    can,
     createStorageArea,
     updateStorageArea,
     deleteStorageArea,
     relocate,
   } = useWarehouse();
   const toast = useToast();
-  const canManage = can(role, 'manage_locations');
-  const canPutAway = can(role, 'receive_stock') || can(role, 'transfer_stock');
+  const canManage = can('manage_locations');
+  const canPutAway = can('receive_stock') || can('transfer_stock');
   const guideReturnTo = knowledgeGuideReturnPath(searchParams);
 
   const warehouses = useMemo(

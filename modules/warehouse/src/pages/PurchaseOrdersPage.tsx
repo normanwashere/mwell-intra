@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useWarehouse } from '@/app/store';
-import { can } from '@/auth/roles';
-import { isWarehouseOperatorRole, isWarehouseSupervisorRole } from '@/app/modules';
 import {
   poProgress,
   poTotalOrdered,
@@ -51,7 +49,7 @@ interface DraftLine {
 
 export function PurchaseOrdersPage() {
   const {
-    data, role, source, createPurchaseOrder, receiveAgainstPO, cancelPurchaseOrder,
+    data, source, can, createPurchaseOrder, receiveAgainstPO, cancelPurchaseOrder,
     loadReceivableProcurementPOs, receiveProcurementPO,
   } = useWarehouse();
   const toast = useToast();
@@ -59,9 +57,8 @@ export function PurchaseOrdersPage() {
   const [searchParams] = useSearchParams();
   const handoffPoId = searchParams.get('po');
   const openedHandoffRef = useRef<string | null>(null);
-  const operatingRole = isWarehouseOperatorRole(role) || isWarehouseSupervisorRole(role);
-  const canManagePOs = !operatingRole && can(role, 'view_procurement');
-  const canReceive = operatingRole && (isWarehouseOperatorRole(role) || can(role, 'receive_stock'));
+  const canManagePOs = can('view_procurement');
+  const canReceive = can('receive_stock');
 
   // Procurement-module POs (issued/approved) read from their localStorage
   // contract — read-only visibility across the module seam (J1-6).

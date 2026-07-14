@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import type { ResolveExceptionInput, WarehouseException } from '@intra/data-kit';
 import { useWarehouse } from '@/app/store';
-import { can } from '@/auth/roles';
 import { Badge, EmptyState, Field, PageHeader, Sheet } from '@/components/ui';
 
 function commandKey(exceptionId: string, action: string) {
@@ -16,7 +15,7 @@ function sourcePath(exception: WarehouseException) {
 }
 
 export function ExceptionsPage() {
-  const { role, loadExceptions, resolveException } = useWarehouse();
+  const { can, loadExceptions, resolveException } = useWarehouse();
   const [params, setParams] = useSearchParams();
   const [exceptions, setExceptions] = useState<WarehouseException[]>([]);
   const [selected, setSelected] = useState<WarehouseException | null>(null);
@@ -25,7 +24,7 @@ export function ExceptionsPage() {
   const [submitting, setSubmitting] = useState(false);
   const severity = params.get('severity') ?? 'all';
   const status = params.get('status') ?? 'open';
-  const mayResolve = can(role, 'resolve_exceptions');
+  const mayResolve = can('resolve_exceptions');
 
   const reload = useCallback(async () => {
     setLoading(true);

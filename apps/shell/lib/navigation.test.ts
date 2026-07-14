@@ -223,9 +223,13 @@ describe("configurable organization administration", () => {
     expect(departments).toContain("deactivation_blocked_reason");
     expect(departments).toContain("<Sheet");
     expect(departments).toContain("Sort order");
-    expect(departments).toContain('role="tree"');
-    expect(departments).toContain('role="treeitem"');
-    expect(departments).toContain('role="group"');
+    expect(departments).not.toContain('role="tree"');
+    expect(departments).not.toContain('role="treeitem"');
+    expect(departments).not.toContain('role="group"');
+    expect(departments).not.toContain("aria-level");
+    expect(departments).not.toContain("aria-expanded");
+    expect(departments).toContain("<ul");
+    expect(departments).toContain("<li");
     expect(departments).toContain("DepartmentTreeNode");
     expect(departments).toContain("Reports to");
     expect(departments).toContain("Confirm deactivation");

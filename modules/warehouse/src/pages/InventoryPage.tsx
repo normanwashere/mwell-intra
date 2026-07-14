@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useWarehouse } from '@/app/store';
-import { can } from '@/auth/roles';
 import { toStockState } from '@/data/repository';
 import { availableForProduct, isBelowReorder } from '@/domain/stock';
 import { groupProductsByFamily, variantLabel } from '@/domain/inventory';
@@ -27,10 +26,10 @@ import { clsx } from 'clsx';
 type Filter = 'all' | ItemCategory;
 
 export function InventoryPage() {
-  const { data, role, createProduct } = useWarehouse();
+  const { data, createProduct, can } = useWarehouse();
   const navigate = useNavigate();
   const toast = useToast();
-  const canManageProducts = can(role, 'manage_products');
+  const canManageProducts = can('manage_products');
   // Support dashboard deep-links: /inventory?filter=low|device|merchandise
   const [searchParams] = useSearchParams();
   const initialFilter = searchParams.get('filter');

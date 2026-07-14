@@ -7,9 +7,8 @@ import { UserMenu } from './UserMenu';
 import { useWarehouse } from '@/app/store';
 import {
   MODULE_GROUP_LABELS,
-  modulesForRole,
-  primaryModulesForRole,
-  warehouseRolePresentation,
+  modulesForWarehouseAccess,
+  primaryModulesForWarehouseAccess,
   type ModuleGroup,
 } from '@/app/modules';
 import { buildNotifications } from '@/app/notifications';
@@ -61,13 +60,24 @@ const routeMatches = (pattern: string, pathname: string) => {
 };
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { role, source, data, resetDemo, pendingSync, conflicts, syncNow, discardConflict } =
-    useWarehouse();
+  const {
+    role,
+    roleLabel,
+    roleDescription,
+    source,
+    data,
+    can,
+    resetDemo,
+    pendingSync,
+    conflicts,
+    syncNow,
+    discardConflict,
+  } = useWarehouse();
   const location = useLocation();
   const navigate = useNavigate();
   const toast = useToast();
-  const modules = modulesForRole(role);
-  const rolePresentation = warehouseRolePresentation(role);
+  const modules = modulesForWarehouseAccess(source, role, can);
+  const rolePresentation = { label: roleLabel, description: roleDescription };
   const pageGuide = WAREHOUSE_GUIDES.find((guide) =>
     routeMatches(guide.path, location.pathname),
   ) ?? WAREHOUSE_GUIDES[0];
@@ -111,11 +121,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   };
 
   const notifications = useMemo(
-    () => (data ? buildNotifications(data, role) : []),
-    [data, role],
+    () => (data ? buildNotifications(data, can) : []),
+    [can, data],
   );
 
-  const primary = primaryModulesForRole(role);
+  const primary = primaryModulesForWarehouseAccess(source, role, can);
   const canScan = primary.some((module) => module.id === 'scan');
   const primaryIds = new Set(primary.map((module) => module.id));
   const remainingModules = modules.filter((module) => !primaryIds.has(module.id));

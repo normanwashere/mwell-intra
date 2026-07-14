@@ -1087,6 +1087,36 @@ join core.role_capabilities canonical
  and canonical.role = aliases.canonical_role
 on conflict do nothing;
 
+-- Known aliases are repaired above. Reject any other orphan user role
+-- assignments before making the deferred integrity contract authoritative.
+do $$
+declare
+  orphan_user_roles text;
+begin
+  select pg_catalog.string_agg(
+    pg_catalog.format('%s:%s', orphan.module, orphan.role),
+    ', ' order by orphan.module, orphan.role
+  )
+  into orphan_user_roles
+  from (
+    select distinct ur.module, ur.role
+    from core.user_roles ur
+    left join core.roles r
+      on r.module = ur.module
+     and r.role = ur.role
+    where r.module is null
+  ) orphan;
+
+  if orphan_user_roles is not null then
+    raise exception 'Orphan user role assignments must be repaired before migration: %',
+      orphan_user_roles;
+  end if;
+
+  alter table core.user_roles
+    validate constraint user_roles_role_integrity_fk;
+end;
+$$;
+
 alter table core.departments enable row level security;
 alter table core.profile_department_scopes enable row level security;
 
@@ -1112,7 +1142,7 @@ grant all on core.profile_department_scopes to service_role;
 
 revoke all on function core.prevent_department_cycle() from public, anon, authenticated;
 revoke all on function core.lock_role_bundle_keys(text, text, text) from public, anon, authenticated;
-revoke all on function core.department_has_unresolved_work(uuid) from public, anon;
+revoke all on function core.department_has_unresolved_work(uuid) from public, anon, authenticated;
 revoke all on function core.list_departments() from public, anon;
 revoke all on function core.upsert_department(jsonb) from public, anon;
 revoke all on function core.assign_profile_department(jsonb) from public, anon;
@@ -1122,7 +1152,7 @@ revoke all on function core.my_capabilities() from public, anon;
 revoke all on function core.assign_user_role(jsonb) from public, anon;
 revoke all on function core.revoke_user_role(jsonb) from public, anon;
 
-grant execute on function core.department_has_unresolved_work(uuid) to authenticated, service_role;
+grant execute on function core.department_has_unresolved_work(uuid) to service_role;
 grant execute on function core.list_departments() to authenticated, service_role;
 grant execute on function core.upsert_department(jsonb) to authenticated, service_role;
 grant execute on function core.assign_profile_department(jsonb) to authenticated, service_role;

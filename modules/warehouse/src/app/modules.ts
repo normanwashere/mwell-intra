@@ -453,3 +453,33 @@ export function primaryModulesForRole(role: WarehouseUiRole): ModuleDef[] {
     )
     .sort((a, b) => order.indexOf(a.mobile) - order.indexOf(b.mobile));
 }
+
+type CapabilityPredicate = (capability: Capability) => boolean;
+
+function modulesForCapabilities(canAccess: CapabilityPredicate): ModuleDef[] {
+  return MODULES.filter((module) => module.capabilities.some(canAccess));
+}
+
+export function modulesForWarehouseAccess(
+  source: "memory" | "supabase",
+  role: WarehouseUiRole,
+  canAccess: CapabilityPredicate,
+): ModuleDef[] {
+  return source === "memory"
+    ? modulesForRole(role)
+    : modulesForCapabilities(canAccess);
+}
+
+export function primaryModulesForWarehouseAccess(
+  source: "memory" | "supabase",
+  role: WarehouseUiRole,
+  canAccess: CapabilityPredicate,
+): ModuleDef[] {
+  if (source === "memory") return primaryModulesForRole(role);
+  const order: MobileSlot[] = ["home", "scan", "tasks", "inventory"];
+  return modulesForCapabilities(canAccess)
+    .filter((module): module is ModuleDef & { mobile: MobileSlot } =>
+      Boolean(module.mobile),
+    )
+    .sort((left, right) => order.indexOf(left.mobile) - order.indexOf(right.mobile));
+}

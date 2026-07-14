@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import type { ControlledLocationType, OperationRoute } from '@intra/data-kit';
 import { useWarehouse } from '@/app/store';
-import { can } from '@/auth/roles';
 import { Badge, EmptyState, PageHeader, Sheet } from '@/components/ui';
 import { knowledgeGuideReturnPath } from '@/lib/knowledgeGuide';
 
@@ -17,13 +16,13 @@ const label = (value: string) => value.replaceAll('_', ' ').replace(/\b\w/g, (le
 
 export function OperationRoutesPage() {
   const [searchParams] = useSearchParams();
-  const { data, role, updateOperationRoute } = useWarehouse();
+  const { data, can, updateOperationRoute } = useWarehouse();
   const [selected, setSelected] = useState<OperationRoute | null>(null);
   const [draft, setDraft] = useState<OperationRoute | null>(null);
   const [saving, setSaving] = useState(false);
   const guideApplied = useRef(false);
   const routes = data?.operationRoutes ?? [];
-  const mayEdit = can(role, 'manage_operation_routes');
+  const mayEdit = can('manage_operation_routes');
   const guideReturnTo = knowledgeGuideReturnPath(searchParams);
   const openRoute = (route: OperationRoute | null) => {
     setSelected(route);

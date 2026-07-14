@@ -3,8 +3,7 @@ import type { Tone } from '@/components/ui';
 import type { WarehouseData } from '@/data/repository';
 import { toStockState } from '@/data/repository';
 import { lowStockProducts } from '@/domain/stock';
-import { can } from '@/auth/roles';
-import type { Role } from '@/domain/types';
+import type { Capability } from '@/auth/roles';
 
 export interface AppNotification {
   id: string;
@@ -19,20 +18,19 @@ export interface AppNotification {
 
 /**
  * Derives actionable alerts from the current warehouse state: out-of-stock and
- * low-stock SKUs, plus reservations awaiting issuance. Targets are role-aware:
- * a link is only attached when the role can actually open the destination.
+ * low-stock SKUs, plus reservations awaiting issuance. Targets are capability-aware:
+ * a link is only attached when the current access snapshot can open the destination.
  */
 export function buildNotifications(
   data: WarehouseData,
-  role: Role,
+  canAccess: (capability: Capability) => boolean,
 ): AppNotification[] {
   const state = toStockState(data);
   const notifications: AppNotification[] = [];
 
-  // Every role has manage_inventory, so product detail is always reachable.
-  const canOpenInventory = can(role, 'manage_inventory');
-  const canOpenEvents = can(role, 'reserve_allocate') || can(role, 'view_finance');
-  const canOpenAllocations = can(role, 'reserve_allocate') || can(role, 'issue_items');
+  const canOpenInventory = canAccess('manage_inventory');
+  const canOpenEvents = canAccess('reserve_allocate') || canAccess('view_finance');
+  const canOpenAllocations = canAccess('reserve_allocate') || canAccess('issue_items');
 
   for (const { product, available } of lowStockProducts(state)) {
     notifications.push({

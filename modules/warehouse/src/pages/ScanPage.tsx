@@ -1,6 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useWarehouse } from '@/app/store';
-import { can, type Capability } from '@/auth/roles';
+import type { Capability } from '@/auth/roles';
 import { WarehouseScanFlow } from '@/components/camera/WarehouseScanFlow';
 import { PageHeader } from '@/components/ui';
 import { Icon, type IconName } from '@/components/Icon';
@@ -16,9 +16,9 @@ const ACTIONS: Array<{ label: string; to: string; icon: IconName; capabilities: 
 ];
 
 export function ScanPage() {
-  const { data, role } = useWarehouse();
+  const { data, can } = useWarehouse();
   const navigate = useNavigate();
-  const actions = ACTIONS.filter((action) => action.capabilities.some((capability) => can(role, capability)));
+  const actions = ACTIONS.filter((action) => action.capabilities.some(can));
   return (
     <div className="space-y-5">
       <PageHeader title="Scan" icon="scan" subtitle="Choose an operation or find stock" />

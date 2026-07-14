@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWarehouse } from '@/app/store';
-import { can } from '@/auth/roles';
 import { eventCosting, eventSummary } from '@/domain/events';
 import { formatDate } from '@/domain/format';
 import type { EventType } from '@/domain/types';
@@ -38,10 +37,10 @@ const TYPE_TONE: Record<string, Tone> = {
 };
 
 export function EventsPage() {
-  const { data, role, createEvent } = useWarehouse();
+  const { data, createEvent, can } = useWarehouse();
   const navigate = useNavigate();
   const toast = useToast();
-  const canCreate = can(role, 'reserve_allocate');
+  const canCreate = can('reserve_allocate');
 
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');

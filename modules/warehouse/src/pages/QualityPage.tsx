@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { InventoryHold, QualityInspection, VendorReturn } from '@intra/data-kit';
 import { useWarehouse } from '@/app/store';
-import { can } from '@/auth/roles';
-import { isWarehouseOperatorRole } from '@/app/modules';
 import { Badge, EmptyState, PageHeader, SegmentedControl } from '@/components/ui';
 import { InspectionSheet } from '@/components/quality/InspectionSheet';
 import { HoldReleaseSheet } from '@/components/quality/HoldReleaseSheet';
@@ -22,7 +20,7 @@ interface PendingInspection {
 export function QualityPage() {
   const {
     data,
-    role,
+    can,
     identityId,
     loadQualityInspections,
     loadHolds,
@@ -104,7 +102,7 @@ export function QualityPage() {
   const completed = inspections.filter((inspection) => inspection.disposition !== 'pending');
   const receiptRoute = data.operationRoutes?.find((route) => route.active && route.operationTypeId.includes('receipt'));
   const requiresEvidence = receiptRoute?.requiresEvidence ?? true;
-  const mayRelease = can(role, 'release_quality_hold');
+  const mayRelease = can('release_quality_hold');
 
   const inspect = async (input: Parameters<typeof inspectQuality>[0]) => {
     const ok = await inspectQuality(input);
@@ -126,7 +124,7 @@ export function QualityPage() {
     <div className="space-y-4">
       <PageHeader title="Quality control" icon="clipboard" subtitle="Inspect receipts, control holds, and preserve custody" />
       <div className="rounded-xl border border-line bg-inset/50 px-4 py-3 text-sm text-muted">
-        {isWarehouseOperatorRole(role) ? (
+        {!mayRelease ? (
           <>
             <p className="font-semibold text-ink">Record inspection facts.</p>
             <p className="mt-0.5 text-xs">A Warehouse Supervisor decides quarantine or rejection.</p>
