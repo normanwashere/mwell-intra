@@ -622,12 +622,21 @@ export function evaluateIssueReadiness(input: {
 }
 
 export function evaluatePaymentPackReadiness(
-  acceptance: AcceptancePack | undefined,
+  acceptance: AcceptancePack | AcceptancePack[] | undefined,
   pack: PaymentReadinessPack | undefined,
 ): string[] {
   const blockers: string[] = [];
-  if (!acceptance || acceptance.status === 'superseded') blockers.push('requester or Warehouse acceptance');
-  if (acceptance?.exceptions.length) blockers.push('unresolved acceptance exceptions');
+  const acceptances = (Array.isArray(acceptance) ? acceptance : acceptance ? [acceptance] : [])
+    .filter((item) => item.status !== 'superseded');
+  if (acceptances.length === 0) blockers.push('requester or Warehouse acceptance');
+  if (acceptances.some((item) => item.exceptions.length > 0)) blockers.push('unresolved acceptance exceptions');
+  if (acceptances.length > 0 && pack) {
+    const activeIds = acceptances.map((item) => item.id).sort();
+    const boundIds = [...(pack.acceptancePackIds ?? (pack.acceptancePackId ? [pack.acceptancePackId] : []))].sort();
+    if (activeIds.length !== boundIds.length || activeIds.some((id, index) => id !== boundIds[index])) {
+      blockers.push('complete active acceptance evidence set');
+    }
+  }
   if (!pack?.poMatch) blockers.push('PO/receipt/invoice match');
   if (!pack?.invoiceOrSiReference) blockers.push('invoice, OR, or SI');
   if (!pack?.milestoneSupportReference) blockers.push('delivery or milestone evidence');

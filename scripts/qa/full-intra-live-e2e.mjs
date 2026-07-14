@@ -915,6 +915,9 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
     shortPo: `${marker}-po-short`,
     excessPo: `${marker}-po-excess`,
     unidentifiedPo: `${marker}-po-unidentified`,
+    unidentifiedAcceptPo: `${marker}-po-unidentified-accept`,
+    unidentifiedQuarantinePo: `${marker}-po-unidentified-quarantine`,
+    qualityProbePo: `${marker}-po-quality-probe`,
     collisionPo: `${marker}-po-collision`,
     cleanLine: `${marker}-line-clean`,
     partialLine: `${marker}-line-partial`,
@@ -924,6 +927,9 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
     shortLine: `${marker}-line-short`,
     excessLine: `${marker}-line-excess`,
     unidentifiedLine: `${marker}-line-unidentified`,
+    unidentifiedAcceptLine: `${marker}-line-unidentified-accept`,
+    unidentifiedQuarantineLine: `${marker}-line-unidentified-quarantine`,
+    qualityProbeLine: `${marker}-line-quality-probe`,
     collisionLine: `${marker}-line-collision`,
     event: `${marker}-event`,
     cycleCount: `${marker}-cycle-count`,
@@ -936,15 +942,44 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
     policyExpired: `${marker}-policy-expired`,
     expiredVendor: crypto.randomUUID(),
     accreditationCase: `${marker}-temporary-clearance-case`,
+    activeApprovalRole: `task3_ref_${crypto.randomUUID().replaceAll("-", "")}`,
+    inactiveApprovalRole: `task3_inactive_${crypto.randomUUID().replaceAll("-", "")}`,
   };
+  const { data: approvalGroup, error: approvalGroupError } = await client.schema("core")
+    .from("approval_groups").select("member_roles")
+    .eq("entity_type", "warehouse_stock_change").eq("group_code", "logistics_supervisor").single();
+  if (approvalGroupError || !approvalGroup)
+    throw new Error(`Warehouse Supervisor approval group is required: ${approvalGroupError?.message ?? "missing"}`);
   const fixture = { marker, client, ids, locationId: locations[0].id, cycleRequestId: null,
     requesterId: requesterProfiles[0].id, reviewerId: reviewerProfiles[0].id,
     poIds: [ids.cleanPo, ids.partialPo, ids.exceptionPo, ids.shortPo, ids.excessPo,
-      ids.unidentifiedPo, ids.collisionPo],
+      ids.unidentifiedPo, ids.unidentifiedAcceptPo, ids.unidentifiedQuarantinePo,
+      ids.qualityProbePo, ids.collisionPo],
+    approvalGroupOriginalRoles: approvalGroup.member_roles ?? [],
     cleanupActivityEntityIds: [], cleanupExceptionIds: [], cleanupDecisionIds: [],
     cleanupStockRequestIds: [], cleanupHoldIds: [],
     receiptExceptionScenarios: [] };
   registerTask3Cleanup(fixture);
+  await insertAuditRows(client, "core", "roles", [{
+    module: "warehouse", role: ids.activeApprovalRole,
+    label: `${marker} referenced approval role`, is_active: true,
+  }, {
+    module: "warehouse", role: ids.inactiveApprovalRole,
+    label: `${marker} inactive approval role`, is_active: false,
+  }]);
+  await insertAuditRows(client, "core", "role_capabilities", [
+    { module: "warehouse", role: ids.activeApprovalRole, cap: "approve_stock_adjustment" },
+    { module: "warehouse", role: ids.inactiveApprovalRole, cap: "approve_stock_adjustment" },
+  ]);
+  await insertAuditRows(client, "core", "user_roles", [{
+    user_id: officerProfiles[0].id, module: "warehouse", role: ids.inactiveApprovalRole,
+  }]);
+  const { error: groupUpdateError } = await client.schema("core").from("approval_groups")
+    .update({ member_roles: [...new Set([
+      ...fixture.approvalGroupOriginalRoles, ids.activeApprovalRole, ids.inactiveApprovalRole,
+    ])] })
+    .eq("entity_type", "warehouse_stock_change").eq("group_code", "logistics_supervisor");
+  if (groupUpdateError) throw new Error(`Approval-group role fixture failed: ${groupUpdateError.message}`);
   await insertAuditRows(client, "core", "vendors", [{
     id: ids.vendor, legal_name: `${marker} Receipt Vendor`, category: "goods",
     accreditation_status: "approved", owner_module: "legal",
@@ -1024,6 +1059,12 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
       core_vendor_id: ids.vendor, vendor_name: `${marker} Receipt Vendor`, status: "issued", total: 100 },
     { id: ids.unidentifiedPo, po_number: `${marker}-PO-UNIDENTIFIED`, request_id: ids.request,
       core_vendor_id: ids.vendor, vendor_name: `${marker} Receipt Vendor`, status: "issued", total: 100 },
+    { id: ids.unidentifiedAcceptPo, po_number: `${marker}-PO-UNIDENTIFIED-ACCEPT`, request_id: ids.request,
+      core_vendor_id: ids.vendor, vendor_name: `${marker} Receipt Vendor`, status: "issued", total: 100 },
+    { id: ids.unidentifiedQuarantinePo, po_number: `${marker}-PO-UNIDENTIFIED-QUARANTINE`, request_id: ids.request,
+      core_vendor_id: ids.vendor, vendor_name: `${marker} Receipt Vendor`, status: "issued", total: 100 },
+    { id: ids.qualityProbePo, po_number: `${marker}-PO-QUALITY-PROBE`, request_id: ids.request,
+      core_vendor_id: ids.vendor, vendor_name: `${marker} Receipt Vendor`, status: "issued", total: 100 },
     { id: ids.collisionPo, po_number: `${marker}-PO-COLLISION`, request_id: ids.request,
       core_vendor_id: ids.vendor, vendor_name: `${marker} Receipt Vendor`, status: "issued", total: 100 },
   ]);
@@ -1045,6 +1086,12 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
       description: `${marker} excess receipt`, quantity: 1, warehouse_product_id: ids.product },
     { id: ids.unidentifiedLine, purchase_order_id: ids.unidentifiedPo, line_no: 1,
       description: `${marker} unidentified receipt`, quantity: 1 },
+    { id: ids.unidentifiedAcceptLine, purchase_order_id: ids.unidentifiedAcceptPo, line_no: 1,
+      description: `${marker} unidentified accept receipt`, quantity: 1 },
+    { id: ids.unidentifiedQuarantineLine, purchase_order_id: ids.unidentifiedQuarantinePo, line_no: 1,
+      description: `${marker} unidentified quarantine receipt`, quantity: 1 },
+    { id: ids.qualityProbeLine, purchase_order_id: ids.qualityProbePo, line_no: 1,
+      description: `${marker} public quality wrapper receipt`, quantity: 1, warehouse_product_id: ids.product },
     { id: ids.collisionLine, purchase_order_id: ids.collisionPo, line_no: 1,
       description: `${marker} same-line collision`, quantity: 1, warehouse_product_id: ids.product },
   ]);
@@ -1105,25 +1152,33 @@ async function task3OperatorReceiptTransactions(page, fixture) {
   if (inventoryAfter - inventoryBefore !== 2 || ledgerAfter - ledgerBefore !== 1)
     throw new Error(`Concurrent receipt readback mismatch: inventory ${inventoryBefore}->${inventoryAfter}, ledger ${ledgerBefore}->${ledgerAfter}.`);
   const exceptionFacts = [
-    { exceptionClass: "short", outcome: "accept", poId: fixture.ids.shortPo,
+    { key: "short-accept", exceptionClass: "short", outcome: "accept", poId: fixture.ids.shortPo,
       lineId: fixture.ids.shortLine, actualQuantity: 1, expectedQuantity: 3 },
-    { exceptionClass: "excess", outcome: "quarantine", poId: fixture.ids.excessPo,
+    { key: "excess-quarantine", exceptionClass: "excess", outcome: "quarantine", poId: fixture.ids.excessPo,
       lineId: fixture.ids.excessLine, actualQuantity: 2, expectedQuantity: 1 },
-    { exceptionClass: "damaged", outcome: "reject", poId: fixture.ids.exceptionPo,
+    { key: "damaged-reject", exceptionClass: "damaged", outcome: "reject", poId: fixture.ids.exceptionPo,
       lineId: fixture.ids.exceptionLine, actualQuantity: 1, expectedQuantity: 1 },
-    { exceptionClass: "unidentified", outcome: "escalate", poId: fixture.ids.unidentifiedPo,
+    { key: "unidentified-escalate", exceptionClass: "unidentified", outcome: "escalate", poId: fixture.ids.unidentifiedPo,
       lineId: fixture.ids.unidentifiedLine, actualQuantity: 1, expectedQuantity: 1,
       rawDescription: `${fixture.marker} observed unlabelled carton` },
+    { key: "unidentified-accept", exceptionClass: "unidentified", outcome: "accept",
+      poId: fixture.ids.unidentifiedAcceptPo, lineId: fixture.ids.unidentifiedAcceptLine,
+      actualQuantity: 1, expectedQuantity: 1,
+      rawDescription: `${fixture.marker} unidentified accept identification` },
+    { key: "unidentified-quarantine", exceptionClass: "unidentified", outcome: "quarantine",
+      poId: fixture.ids.unidentifiedQuarantinePo, lineId: fixture.ids.unidentifiedQuarantineLine,
+      actualQuantity: 1, expectedQuantity: 1,
+      rawDescription: `${fixture.marker} unidentified quarantine identification` },
   ];
   for (const scenario of exceptionFacts) {
     const exceptionBefore = await inventoryLedger();
     const exceptionReceipt = await callRpcAsBrowserUser(
       page, "warehouse", "receive_procurement_po_exception", {
-        idempotency_key: `${fixture.marker}-receipt-exception-${scenario.exceptionClass}`,
+        idempotency_key: `${fixture.marker}-receipt-exception-${scenario.key}`,
         po_id: scenario.poId, location_id: fixture.locationId,
         exception_type: scenario.exceptionClass,
         reason: `${fixture.marker} receipt exception ${scenario.exceptionClass}`,
-        evidence_urls: [`audit/${fixture.marker}/${scenario.exceptionClass}.jpg`],
+        evidence_urls: [`audit/${fixture.marker}/${scenario.key}.jpg`],
         lines: [{ line_id: scenario.lineId, product_id: fixture.ids.product,
           actual_quantity: scenario.actualQuantity, expected_quantity: scenario.expectedQuantity,
           raw_description: scenario.rawDescription ?? `${fixture.marker} ${scenario.exceptionClass}` }],
@@ -1142,6 +1197,24 @@ async function task3OperatorReceiptTransactions(page, fixture) {
     if (exceptionBefore.inventory !== exceptionAfter.inventory || exceptionBefore.ledger !== exceptionAfter.ledger)
       throw new Error(`${scenario.exceptionClass} receipt posted available stock or a receipt movement.`);
   }
+
+  const qualityProbeReceipt = await callRpcAsBrowserUser(
+    page, "warehouse", "receive_procurement_po_exception", {
+      idempotency_key: `${fixture.marker}-public-quality-probe-intake`,
+      po_id: fixture.ids.qualityProbePo, location_id: fixture.locationId,
+      exception_type: "damaged", reason: `${fixture.marker} valid public quality inspection`,
+      evidence_urls: [`audit/${fixture.marker}/public-quality-probe.jpg`],
+      lines: [{ line_id: fixture.ids.qualityProbeLine, product_id: fixture.ids.product,
+        actual_quantity: 1, expected_quantity: 1 }],
+    },
+  );
+  if (!qualityProbeReceipt.ok)
+    throw new Error(`Public quality probe intake failed: ${qualityProbeReceipt.body}`);
+  const qualityProbe = JSON.parse(qualityProbeReceipt.body);
+  fixture.ids.qualityProbeReceipt = qualityProbe.receipt.id;
+  fixture.ids.qualityProbeDecision = qualityProbe.decision.id;
+  fixture.cleanupDecisionIds.push(qualityProbe.decision.id);
+  fixture.cleanupExceptionIds.push(qualityProbe.exception.id);
 
   const collisionPayload = (suffix) => ({
     idempotency_key: `${fixture.marker}-same-line-${suffix}`,
@@ -1262,6 +1335,18 @@ async function task3SupervisorTransactions(page, fixture) {
     procurement_po_line_id: fixture.ids.cleanLine, quantity: 1, disposition: "hold",
     reason: "caller line must belong to receipt", evidence_urls: [`audit/${fixture.marker}/wrong-line.jpg`],
   }), /does not belong to the receipt/i, "receipt quality PO-line identity");
+  const validPublicQuality = await callRpcAsBrowserUser(page, "warehouse", "inspect_quality", {
+    idempotency_key: `${fixture.marker}-valid-public-quality-inspection`, source_type: "receipt",
+    source_id: fixture.ids.qualityProbeReceipt, product_id: fixture.ids.product,
+    procurement_po_line_id: fixture.ids.qualityProbeLine, quantity: 1, disposition: "accepted",
+    evidence_urls: [`audit/${fixture.marker}/valid-public-quality.jpg`],
+  });
+  if (!validPublicQuality.ok)
+    throw new Error(`valid public quality inspection failed: ${validPublicQuality.body}`);
+  await verifyCheckpoint({ schema: "warehouse", table: "quality_inspections",
+    filters: { source_id: fixture.ids.qualityProbeReceipt, disposition: "accepted" },
+    expected: { procurement_po_line_id: fixture.ids.qualityProbeLine },
+    select: "source_id,disposition,procurement_po_line_id" }, fixture.client);
   await verifyCheckpoint({ schema: "warehouse", table: "quality_inspections",
     filters: { source_id: fixture.ids.quarantineReceipt, disposition: "pending" },
     expected: { procurement_po_line_id: fixture.ids.quarantineLine },
@@ -1269,10 +1354,14 @@ async function task3SupervisorTransactions(page, fixture) {
 
   for (const scenario of fixture.receiptExceptionScenarios) {
     const decisionPayload = {
-      idempotency_key: `${fixture.marker}-exception-outcome-${scenario.outcome}`,
+      idempotency_key: `${fixture.marker}-exception-outcome-${scenario.key ?? scenario.decisionId}`,
       decision_id: scenario.decisionId, decision: scenario.outcome,
       reason: `${fixture.marker} exception outcome ${scenario.outcome}`,
       evidence_urls: [`audit/${fixture.marker}/outcome-${scenario.outcome}.jpg`],
+      ...(scenario.exceptionClass === "unidentified"
+        && ["accept", "quarantine"].includes(scenario.outcome)
+        ? { identifications: [{ po_line_id: scenario.lineId, product_id: fixture.ids.product }] }
+        : {}),
     };
     const resolution = await callRpcAsBrowserUser(
       page, "warehouse", "resolve_procurement_po_exception", decisionPayload,
@@ -1293,11 +1382,21 @@ async function task3SupervisorTransactions(page, fixture) {
     if (scenario.exceptionClass === "unidentified") {
       await verifyCheckpoint({ schema: "warehouse", table: "unidentified_receipt_custody",
         filters: { decision_id: scenario.decisionId },
-        expected: { po_line_id: scenario.lineId, identified_product_id: null },
+        expected: { po_line_id: scenario.lineId,
+          identified_product_id: ["accept", "quarantine"].includes(scenario.outcome)
+            ? fixture.ids.product : null },
         select: "decision_id,po_line_id,identified_product_id,observed_description" }, fixture.client);
       await verifyCheckpoint({ schema: "procurement", table: "purchase_order_lines",
-        filters: { id: scenario.lineId }, expected: { warehouse_product_id: null },
+        filters: { id: scenario.lineId }, expected: {
+          warehouse_product_id: ["accept", "quarantine"].includes(scenario.outcome)
+            ? fixture.ids.product : null,
+        },
         select: "id,warehouse_product_id" }, fixture.client);
+      if (scenario.outcome === "accept")
+        await verifyCheckpoint({ schema: "warehouse", table: "quality_inspections",
+          filters: { source_id: scenario.receiptId },
+          expected: { disposition: "accepted", procurement_po_line_id: scenario.lineId },
+          select: "source_id,disposition,procurement_po_line_id" }, fixture.client);
     } else {
       await verifyCheckpoint({ schema: "warehouse", table: "quality_inspections",
         filters: { source_id: scenario.receiptId }, expected: { disposition: expectedDisposition },
@@ -1310,21 +1409,33 @@ async function task3SupervisorTransactions(page, fixture) {
       );
       if (!actionable.ok || !actionable.body.includes(scenario.decisionId))
         throw new Error("Escalated receipt decision did not remain in the actionable queue.");
-      const finalDisposition = await callRpcAsBrowserUser(
-        page, "warehouse", "resolve_procurement_po_exception", {
-          idempotency_key: `${fixture.marker}-escalated-final-${scenario.decisionId}`,
-          decision_id: scenario.decisionId, decision: "reject",
-          reason: `${fixture.marker} governed final disposition after escalation`,
-          evidence_urls: [`audit/${fixture.marker}/escalated-final.jpg`],
-        },
-      );
-      if (!finalDisposition.ok)
-        throw new Error(`Escalated final disposition failed: ${finalDisposition.body}`);
+      await page.goto(`${baseUrl}/warehouse/purchase-orders?workflow=${Date.now()}`, {
+        waitUntil: "domcontentloaded", timeout: 20_000,
+      });
+      await waitForMeaningfulRoute(page);
+      const escalatedRow = page.getByText(`${fixture.marker}-PO-UNIDENTIFIED`, { exact: true })
+        .locator("xpath=ancestor::li[1]");
+      await escalatedRow.getByText("Escalated", { exact: true }).waitFor({ state: "visible" });
+      await escalatedRow.getByRole("button", { name: "Review controlled receipt" }).click();
+      await page.getByLabel("Decision reason").fill(`${fixture.marker} browser escalation final disposition`);
+      await page.getByLabel("Decision evidence").fill(`audit/${fixture.marker}/escalated-final.jpg`);
+      await page.getByRole("button", { name: "Reject receipt" }).click();
+      await escalatedRow.waitFor({ state: "detached" });
       await verifyCheckpoint({ schema: "warehouse", table: "procurement_receipt_exception_decisions",
         filters: { id: scenario.decisionId }, expected: { status: "decided", decision: "reject" },
         select: "id,status,decision" }, fixture.client);
     }
     if (scenario.outcome === "quarantine") {
+      requireRpcFailure(await callRpcAsBrowserUser(
+        page, "warehouse", "receive_procurement_po_exception", {
+          idempotency_key: `${fixture.marker}-quarantine-line-claim-collision-${scenario.decisionId}`,
+          po_id: scenario.poId, location_id: fixture.locationId,
+          exception_type: "damaged", reason: `${fixture.marker} quarantine line claim collision`,
+          evidence_urls: [`audit/${fixture.marker}/quarantine-collision.jpg`],
+          lines: [{ line_id: scenario.lineId, product_id: fixture.ids.product,
+            actual_quantity: 1, expected_quantity: scenario.expectedQuantity }],
+        },
+      ), /active receipt decision already reserves/i, "quarantine line claim collision");
       const { data: receiptFact, error: receiptFactError } = await fixture.client.schema("warehouse")
         .from("receipts").select("lines").eq("id", scenario.receiptId).single();
       if (receiptFactError || Number(receiptFact?.lines?.[0]?.actual_quantity) !== scenario.actualQuantity)
@@ -1343,6 +1454,19 @@ async function task3SupervisorTransactions(page, fixture) {
         throw new Error(`bounded quarantine posting created hold ${holdRows[0].quantity}, expected ${postableQuantity}.`);
       fixture.cleanupHoldIds.push(holdRows[0].id);
       fixture.cleanupActivityEntityIds.push(holdRows[0].id);
+      if (scenario.exceptionClass === "excess") {
+        await verifyCheckpoint({ schema: "warehouse",
+          table: "procurement_receipt_excess_custody",
+          filters: { decision_id: scenario.decisionId },
+          expected: { ordered_quantity: 1, excess_quantity: 1, status: "held" },
+          select: "id,decision_id,ordered_quantity,excess_quantity,status" }, fixture.client);
+        const { data: custodyRows, error: custodyError } = await fixture.client.schema("warehouse")
+          .from("procurement_receipt_excess_custody").select("id")
+          .eq("decision_id", scenario.decisionId).limit(1);
+        if (custodyError || !custodyRows?.[0]) throw new Error("Excess custody identity readback failed.");
+        fixture.ids.excessCustody = custodyRows[0].id;
+        fixture.cleanupActivityEntityIds.push(custodyRows[0].id);
+      }
       const heldStock = await inventoryQuantity();
       requireRpcFailure(await callRpcAsBrowserUser(page, "warehouse", "reserve", {
         product_id: fixture.ids.product, quantity: heldStock,
@@ -1351,18 +1475,52 @@ async function task3SupervisorTransactions(page, fixture) {
           promotional: false, created_at: new Date().toISOString() },
       }), /available after active inventory holds|only .* available/i,
       "active hold reservation denial");
-      const release = await callRpcAsBrowserUser(page, "warehouse", "release_quality_hold", {
-        idempotency_key: `${fixture.marker}-release-quality-hold`, hold_id: holdRows[0].id,
+      const releasePayload = {
+        idempotency_key: `${fixture.marker}-release-quality-hold-${scenario.decisionId}`,
+        hold_id: holdRows[0].id,
         target_disposition: "accepted", reason: `${fixture.marker} controlled hold release`,
         evidence_urls: [`audit/${fixture.marker}/hold-release.jpg`],
-      });
+      };
+      const [release, concurrentReservation] = await Promise.all([
+        callRpcAsBrowserUser(page, "warehouse", "release_quality_hold", releasePayload),
+        callRpcAsBrowserUser(page, "warehouse", "reserve", {
+          product_id: fixture.ids.product, quantity: heldStock,
+          allocation: { id: `${fixture.marker}-hold-race-${scenario.decisionId}`,
+            event_id: fixture.ids.event, product_id: fixture.ids.product,
+            quantity: heldStock, status: "reserved", promotional: false,
+            created_at: new Date().toISOString() },
+        }),
+      ]);
       if (!release.ok) throw new Error(`Controlled quarantine release failed: ${release.body}`);
+      if (!concurrentReservation.ok
+          && !/available after active inventory holds|only .* available/i.test(concurrentReservation.body))
+        throw new Error(`hold reservation concurrency failed unexpectedly: ${concurrentReservation.body}`);
       await verifyCheckpoint({ schema: "warehouse", table: "inventory_holds",
         filters: { id: holdRows[0].id }, expected: { status: "released" },
         select: "id,status,released_by" }, fixture.client);
+      if (scenario.exceptionClass === "excess") {
+        await verifyCheckpoint({ schema: "warehouse", table: "procurement_receipt_exception_lines",
+          filters: { decision_id: scenario.decisionId }, expected: { active: true },
+          select: "decision_id,po_line_id,active" }, fixture.client);
+        await verifyCheckpoint({ schema: "procurement", table: "purchase_orders",
+          filters: { id: scenario.poId }, expected: { status: "issued" },
+          select: "id,status" }, fixture.client);
+        const excessResolution = await callRpcAsBrowserUser(
+          page, "warehouse", "resolve_procurement_receipt_excess", {
+            idempotency_key: `${fixture.marker}-excess-custody-vendor-return`,
+            custody_id: fixture.ids.excessCustody, outcome: "vendor_return",
+            reason: `${fixture.marker} excess custody remains governed until vendor return`,
+            evidence_urls: [`audit/${fixture.marker}/excess-return.jpg`],
+          },
+        );
+        if (!excessResolution.ok)
+          throw new Error(`excess custody remains governed resolution failed: ${excessResolution.body}`);
+        await verifyCheckpoint({ schema: "warehouse", table: "procurement_receipt_excess_custody",
+          filters: { id: fixture.ids.excessCustody }, expected: { status: "vendor_return" },
+          select: "id,status,ordered_quantity,excess_quantity" }, fixture.client);
+      }
       await verifyCheckpoint({ schema: "procurement", table: "purchase_orders",
-        filters: { id: scenario.poId }, expected: { status: "closed" },
-        select: "id,status" }, fixture.client);
+        filters: { id: scenario.poId }, expected: { status: "closed" }, select: "id,status" }, fixture.client);
       fixture.cleanupActivityEntityIds.push(scenario.poId);
       // PO status after hold release is authoritative under the same locked release transaction.
     }
@@ -1420,6 +1578,35 @@ async function task3AllCapabilityAdminWrongStep(page, fixture) {
   }), /configured approval group|not authorized|current stock-change approval tier/i,
   "all-capability admin wrong-step denial");
   return { name: "Task 3 all-capability admin wrong-step denial", ok: true };
+}
+
+async function task3ApprovalRoleLifecycleContracts(page, fixture) {
+  const { data: role, error } = await fixture.client.schema("core").from("roles")
+    .select("updated_at").eq("module", "warehouse")
+    .eq("role", fixture.ids.activeApprovalRole).single();
+  if (error || !role) throw new Error(`Referenced approval role readback failed: ${error?.message ?? "missing"}`);
+  const base = {
+    module: "warehouse", original_role: fixture.ids.activeApprovalRole,
+    label: `${fixture.marker} referenced approval role`, description: null,
+    capabilities: ["approve_stock_adjustment"], expected_updated_at: role.updated_at,
+  };
+  requireRpcFailure(await callRpcAsBrowserUser(page, "core", "upsert_role_bundle", {
+    ...base, role: fixture.ids.activeApprovalRole, is_active: false,
+  }), /cannot be renamed or deactivated/i, "referenced approval role rename/deactivate denial");
+  requireRpcFailure(await callRpcAsBrowserUser(page, "core", "upsert_role_bundle", {
+    ...base, role: `${fixture.ids.activeApprovalRole}_renamed`, is_active: true,
+  }), /cannot be renamed or deactivated/i, "referenced approval role rename/deactivate denial");
+  return { name: "Task 3 referenced approval role rename/deactivate denial", ok: true };
+}
+
+async function task3InactiveApprovalRoleDenial(page, fixture) {
+  requireRpcFailure(await callRpcAsBrowserUser(page, "warehouse", "decide_stock_change", {
+    idempotency_key: `${fixture.marker}-inactive-approval-role-denial`,
+    request_id: fixture.manualStockRequests.positive, decision: "approved",
+    note: `${fixture.marker} inactive approval role cannot authorize`,
+  }), /not authorized for current stock-change approval tier|configured approval group/i,
+  "inactive approval role cannot authorize");
+  return { name: "Task 3 inactive approval role cannot authorize", ok: true };
 }
 
 async function task3PolicyNegativeTransactions(page, fixture) {
@@ -1506,8 +1693,31 @@ async function task3CumulativePartialAcceptance(page, fixture) {
     .in("status", ["accepted", "accepted_with_exceptions"]);
   if (error || packs?.length !== 2 || new Set(packs.map((pack) => pack.warehouse_receipt_reference)).size !== 2)
     throw new Error(`cumulative partial acceptance did not preserve two exact receipt evidence groups: ${error?.message ?? JSON.stringify(packs)}`);
+  fixture.cumulativeAcceptancePackIds = [latest.acceptancePackId, earlier.acceptancePackId];
   return { name: "Task 3 cumulative partial acceptance", ok: true,
-    acceptancePackIds: [latest.acceptancePackId, earlier.acceptancePackId] };
+    acceptancePackIds: fixture.cumulativeAcceptancePackIds };
+}
+
+async function task3CumulativePaymentAcceptanceBinding(page, fixture) {
+  const readiness = await callRpcAsBrowserUser(page, "procurement", "prepare_payment_readiness", {
+    purchase_order_id: fixture.ids.partialPo, po_match: true,
+    invoice_or_si_storage_path: `audit/${fixture.marker}/cumulative-invoice.pdf`,
+    milestone_support_storage_path: `audit/${fixture.marker}/cumulative-receipts.pdf`,
+    tax_withholding_support_storage_path: `audit/${fixture.marker}/cumulative-tax.pdf`,
+  });
+  if (!readiness.ok)
+    throw new Error(`cumulative payment acceptance binding failed: ${readiness.body}`);
+  const pack = JSON.parse(readiness.body);
+  const expected = [...fixture.cumulativeAcceptancePackIds].sort();
+  const actual = [...(pack.acceptance_pack_ids ?? [])].sort();
+  if (JSON.stringify(actual) !== JSON.stringify(expected) || Number(pack.accepted_quantity) !== 3)
+    throw new Error(`cumulative payment acceptance binding mismatch: ${readiness.body}`);
+  fixture.ids.paymentReadinessPack = pack.id;
+  await verifyCheckpoint({ schema: "procurement", table: "payment_readiness_packs",
+    filters: { id: pack.id }, expected: { accepted_quantity: 3, status: "ready_for_finance" },
+    select: "id,acceptance_pack_ids,accepted_quantity,status" }, fixture.client);
+  return { name: "Task 3 cumulative payment acceptance binding", ok: true,
+    acceptancePackIds: actual, acceptedQuantity: Number(pack.accepted_quantity) };
 }
 
 async function assertTask3ZeroResidualRows(fixture) {
@@ -1523,6 +1733,7 @@ async function assertTask3ZeroResidualRows(fixture) {
     ["procurement.exception_packs", client.schema("procurement").from("exception_packs").select("id", { count: "exact", head: true }).like("request_id", `${marker}%`)],
     ["procurement.policy_evidence", client.schema("procurement").from("policy_evidence").select("id", { count: "exact", head: true }).like("request_id", `${marker}%`)],
     ["procurement.acceptance_packs", client.schema("procurement").from("acceptance_packs").select("id", { count: "exact", head: true }).in("purchase_order_id", poIds)],
+    ["procurement.payment_readiness_packs", client.schema("procurement").from("payment_readiness_packs").select("id", { count: "exact", head: true }).in("purchase_order_id", poIds)],
     ["legal.accreditation_cases", client.schema("legal").from("accreditation_cases").select("id", { count: "exact", head: true }).eq("id", ids.accreditationCase)],
     ["legal.accreditation_dispositions", client.schema("legal").from("accreditation_dispositions").select("id", { count: "exact", head: true }).eq("case_id", ids.accreditationCase)],
     ["warehouse.products", client.schema("warehouse").from("products").select("id", { count: "exact", head: true }).eq("id", ids.product)],
@@ -1545,11 +1756,18 @@ async function assertTask3ZeroResidualRows(fixture) {
   if (fixture.cleanupDecisionIds?.length) checks.push(["warehouse.procurement_receipt_exception_decisions", client.schema("warehouse").from("procurement_receipt_exception_decisions").select("id", { count: "exact", head: true }).in("id", fixture.cleanupDecisionIds)]);
   if (fixture.cleanupDecisionIds?.length) checks.push(
     ["warehouse.procurement_receipt_exception_lines", client.schema("warehouse").from("procurement_receipt_exception_lines").select("decision_id", { count: "exact", head: true }).in("decision_id", fixture.cleanupDecisionIds)],
-    ["warehouse.unidentified_receipt_custody", client.schema("warehouse").from("unidentified_receipt_custody").select("decision_id", { count: "exact", head: true }).in("decision_id", fixture.cleanupDecisionIds)]);
+    ["warehouse.unidentified_receipt_custody", client.schema("warehouse").from("unidentified_receipt_custody").select("decision_id", { count: "exact", head: true }).in("decision_id", fixture.cleanupDecisionIds)],
+    ["warehouse.procurement_receipt_excess_custody", client.schema("warehouse").from("procurement_receipt_excess_custody").select("decision_id", { count: "exact", head: true }).in("decision_id", fixture.cleanupDecisionIds)]);
   if (fixture.cleanupExceptionIds?.length) checks.push(["warehouse.exceptions by id", client.schema("warehouse").from("exceptions").select("id", { count: "exact", head: true }).in("id", fixture.cleanupExceptionIds)]);
   if (fixture.cleanupActivityEntityIds?.length) checks.push(["core.activity_log exact entities", client.schema("core").from("activity_log").select("id", { count: "exact", head: true }).in("entity_id", fixture.cleanupActivityEntityIds)]);
   checks.push(["procurement.acceptance_reviewer_assignments", client.schema("procurement").from("acceptance_reviewer_assignments").select("request_id", { count: "exact", head: true }).eq("request_id", ids.request)]);
   checks.push(["warehouse.events", client.schema("warehouse").from("events").select("id", { count: "exact", head: true }).eq("id", ids.event)]);
+  checks.push(["core.roles Task 3 approval fixtures", client.schema("core").from("roles")
+    .select("role", { count: "exact", head: true }).eq("module", "warehouse")
+    .in("role", [ids.activeApprovalRole, ids.inactiveApprovalRole])]);
+  checks.push(["core.user_roles Task 3 approval fixtures", client.schema("core").from("user_roles")
+    .select("role", { count: "exact", head: true }).eq("module", "warehouse")
+    .in("role", [ids.activeApprovalRole, ids.inactiveApprovalRole])]);
   for (const [name, query] of checks) {
     const { count, error } = await query;
     if (error || count !== 0) throw new Error(`${name} has ${count ?? "unknown"} residual Task 3 rows: ${error?.message ?? ""}`);
@@ -1563,6 +1781,10 @@ async function cleanupTask3ReceiptFixture(fixture) {
     const { error } = await configure(client.schema(schema).from(table).delete());
     if (error) throw new Error(`${schema}.${table} Task 3 cleanup failed: ${error.message}`);
   };
+  const { error: restoreGroupError } = await client.schema("core").from("approval_groups")
+    .update({ member_roles: fixture.approvalGroupOriginalRoles })
+    .eq("entity_type", "warehouse_stock_change").eq("group_code", "logistics_supervisor");
+  if (restoreGroupError) throw new Error(`Approval-group role cleanup failed: ${restoreGroupError.message}`);
   const { data: receiptRows, error: receiptError } = await client.schema("warehouse").from("receipts")
     .select("id").in("procurement_po_id", poIds);
   if (receiptError) throw new Error(`Warehouse receipt cleanup lookup failed: ${receiptError.message}`);
@@ -1622,6 +1844,7 @@ async function cleanupTask3ReceiptFixture(fixture) {
   ])];
 
   if (decisionIds.length) {
+    await remove("warehouse", "procurement_receipt_excess_custody", (query) => query.in("decision_id", decisionIds));
     await remove("warehouse", "unidentified_receipt_custody", (query) => query.in("decision_id", decisionIds));
     await remove("warehouse", "procurement_receipt_exception_lines", (query) => query.in("decision_id", decisionIds));
   }
@@ -1643,6 +1866,7 @@ async function cleanupTask3ReceiptFixture(fixture) {
   await remove("warehouse", "allocations", (query) => query.eq("event_id", ids.event));
   await remove("warehouse", "events", (query) => query.eq("id", ids.event));
   await remove("warehouse", "suppliers", (query) => query.eq("id", `proc-${ids.vendor}`));
+  await remove("procurement", "payment_readiness_packs", (query) => query.in("purchase_order_id", poIds));
   await remove("procurement", "acceptance_packs", (query) => query.in("purchase_order_id", poIds));
   await remove("procurement", "acceptance_reviewer_assignments", (query) => query.eq("request_id", ids.request));
   await remove("procurement", "purchase_order_lines", (query) => query.in("purchase_order_id", poIds));
@@ -1654,6 +1878,12 @@ async function cleanupTask3ReceiptFixture(fixture) {
   await remove("legal", "accreditation_cases", (query) => query.eq("id", ids.accreditationCase));
   await remove("procurement", "requests", (query) => query.like("id", `${marker}%`));
   await remove("warehouse", "products", (query) => query.eq("id", ids.product));
+  await remove("core", "user_roles", (query) => query.eq("module", "warehouse")
+    .in("role", [ids.activeApprovalRole, ids.inactiveApprovalRole]));
+  await remove("core", "role_capabilities", (query) => query.eq("module", "warehouse")
+    .in("role", [ids.activeApprovalRole, ids.inactiveApprovalRole]));
+  await remove("core", "roles", (query) => query.eq("module", "warehouse")
+    .in("role", [ids.activeApprovalRole, ids.inactiveApprovalRole]));
   if (fixture.cleanupActivityEntityIds.length) await remove("core", "activity_log", (query) => query.in("entity_id", fixture.cleanupActivityEntityIds));
   await remove("core", "activity_log", (query) => query.like("entity_id", `${marker}%`));
   await remove("core", "vendors", (query) => query.in("id", [ids.vendor, ids.expiredVendor]));
@@ -2162,6 +2392,16 @@ try {
           run: (page) => task3AllCapabilityAdminWrongStep(page, task3Fixture) },
       ));
       workflows.push(await runWorkflow(
+        browser, viewport, { email: "intra.test.admin@mwell.com.ph" },
+        { name: "Task 3 referenced approval role lifecycle denial",
+          run: (page) => task3ApprovalRoleLifecycleContracts(page, task3Fixture) },
+      ));
+      workflows.push(await runWorkflow(
+        browser, viewport, { email: "intra.test.proc.officer@mwell.com.ph" },
+        { name: "Task 3 inactive approval role denial",
+          run: (page) => task3InactiveApprovalRoleDenial(page, task3Fixture) },
+      ));
+      workflows.push(await runWorkflow(
         browser, viewport, { email: "intra.test.wh.logistics@mwell.com.ph" },
         { name: "Task 3 supervisor quarantine and variance transactions", run: (page) => task3SupervisorTransactions(page, task3Fixture) },
       ));
@@ -2180,6 +2420,11 @@ try {
         browser, viewport, { email: "intra.test.legal.reviewer@mwell.com.ph" },
         { name: "Task 3 cumulative partial acceptance",
           run: (page) => task3CumulativePartialAcceptance(page, task3Fixture) },
+      ));
+      workflows.push(await runWorkflow(
+        browser, viewport, { email: "intra.test.proc.officer@mwell.com.ph" },
+        { name: "Task 3 cumulative payment acceptance binding",
+          run: (page) => task3CumulativePaymentAcceptanceBinding(page, task3Fixture) },
       ));
       workflows.push(
         await runWorkflow(

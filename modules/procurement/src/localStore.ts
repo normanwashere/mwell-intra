@@ -249,6 +249,8 @@ function mapPaymentReadinessPack(row: LiveRow): PaymentReadinessPack {
     id: row.id,
     purchaseOrderId: row.purchase_order_id,
     acceptancePackId: row.acceptance_pack_id,
+    acceptancePackIds: Array.isArray(row.acceptance_pack_ids) ? row.acceptance_pack_ids : undefined,
+    acceptedQuantity: row.accepted_quantity == null ? undefined : Number(row.accepted_quantity),
     poMatch: Boolean(row.po_match),
     invoiceOrSiReference: row.invoice_or_si_storage_path ?? undefined,
     milestoneSupportReference: row.milestone_support_storage_path ?? undefined,
@@ -1188,7 +1190,6 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
     if (isLive(live)) {
       return liveRpc<LiveRow>(live, 'procurement', 'prepare_payment_readiness', {
         purchase_order_id: id,
-        acceptance_pack_id: current.acceptancePack.id,
         po_match: input.poMatch,
         invoice_or_si_storage_path: input.invoiceOrSiReference,
         milestone_support_storage_path: input.milestoneSupportReference,
@@ -1200,6 +1201,7 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
     }
     const paymentReadiness: PaymentReadinessPack = {
       id: newId('pay'), purchaseOrderId: id, acceptancePackId: current.acceptancePack.id,
+      acceptancePackIds: [current.acceptancePack.id],
       poMatch: input.poMatch, invoiceOrSiReference: input.invoiceOrSiReference,
       milestoneSupportReference: input.milestoneSupportReference,
       taxWithholdingSupportReference: input.taxWithholdingSupportReference,

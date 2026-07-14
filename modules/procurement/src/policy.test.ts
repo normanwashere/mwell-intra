@@ -20,7 +20,7 @@ import {
   evaluateIssueReadiness,
   evaluatePaymentPackReadiness,
 } from './policy';
-import type { ApprovalStep } from './types';
+import type { AcceptancePack, ApprovalStep, PaymentReadinessPack } from './types';
 
 describe('sourcing policy', () => {
   it('routes emergencies and repeat-continuity cases explicitly', () => {
@@ -179,6 +179,29 @@ describe('binding vendor-to-pay controls', () => {
       paymentTermsRecorded: true,
       taxWithholdingSupport: true,
     })).toContain('accepted Warehouse receipt or service acceptance');
+  });
+
+  it('requires payment readiness to bind every active partial acceptance pack', () => {
+    const acceptances = [
+      { id: 'accept-1', purchaseOrderId: 'po-1', acceptanceType: 'goods',
+        acceptedScope: 'first partial receipt', acceptedAt: '2026-07-15T01:00:00Z',
+        status: 'accepted', exceptions: [] },
+      { id: 'accept-2', purchaseOrderId: 'po-1', acceptanceType: 'goods',
+        acceptedScope: 'second partial receipt', acceptedAt: '2026-07-15T02:00:00Z',
+        status: 'accepted', exceptions: [] },
+    ] satisfies AcceptancePack[];
+    const readiness: PaymentReadinessPack = {
+      id: 'readiness-1', purchaseOrderId: 'po-1', status: 'ready_for_finance',
+      preparedAt: '2026-07-15T03:00:00Z',
+      acceptancePackId: 'accept-2', acceptancePackIds: ['accept-1', 'accept-2'],
+      poMatch: true, invoiceOrSiReference: 'invoice.pdf',
+      milestoneSupportReference: 'delivery.pdf', taxWithholdingSupportReference: 'tax.pdf',
+    };
+
+    expect(evaluatePaymentPackReadiness(acceptances, readiness)).toEqual([]);
+    expect(evaluatePaymentPackReadiness(acceptances, {
+      ...readiness, acceptancePackIds: ['accept-2'],
+    })).toContain('complete active acceptance evidence set');
   });
 
   it('keeps issue lifecycle and Finance handoff checks after retiring Procurement receipts', () => {

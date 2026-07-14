@@ -91,6 +91,14 @@ const REQUIRED_CONTRACTS = [
   ['active holds reduce server reservation availability', /warehouse\.available_to_promise[\s\S]*?inventory_holds[\s\S]*?status='active'/i],
   ['hold release recalculates the locked PO status', /warehouse_release_quality_hold[\s\S]*?purchase_orders[\s\S]*?for update[\s\S]*?status/i],
   ['accepting a later receipt preserves prior current acceptance evidence', /policy_record_acceptance_pack[\s\S]*?warehouse_receipt_reference[\s\S]*?status='superseded'/i],
+  ['approval membership joins the active role catalogue', /warehouse_decide_stock_change[\s\S]*?join core\.roles[\s\S]*?membership\.role[\s\S]*?catalogue_role\.is_active/i],
+  ['active approval-group roles block rename or deactivation', /guard_active_approval_group_role[\s\S]*?core\.approval_groups[\s\S]*?member_roles[\s\S]*?cannot be renamed or deactivated/i],
+  ['quarantine retains its PO-line claim through final hold disposition', /v_outcome\s*<>\s*'quarantine'[\s\S]*?procurement_receipt_exception_lines[\s\S]*?release_procurement_receipt_line_claim[\s\S]*?set active=false[\s\S]*?warehouse_release_quality_hold[\s\S]*?release_procurement_receipt_line_claim/i],
+  ['unidentified mapping reselects the locked PO line with returning', /update procurement\.purchase_order_lines[\s\S]*?warehouse_product_id[\s\S]*?returning \* into v_line/i],
+  ['reservation and every hold transition share the ordered product lock', /lock_warehouse_products[\s\S]*?order by product_id[\s\S]*?warehouse\.product:[\s\S]*?lock_inventory_hold_product[\s\S]*?before insert or update of status/i],
+  ['physical excess has separate governed custody', /create table if not exists warehouse\.procurement_receipt_excess_custody[\s\S]*?ordered_quantity[\s\S]*?excess_quantity[\s\S]*?resolve_procurement_receipt_excess/i],
+  ['payment readiness binds the aggregate active acceptance set', /payment_readiness_packs[\s\S]*?acceptance_pack_ids[\s\S]*?policy_prepare_payment_readiness[\s\S]*?array_agg\(acceptance\.id[\s\S]*?accepted_quantity/i],
+  ['public QC wrapper is narrowly privileged while private QC stays denied', /create or replace function warehouse\.inspect_quality[\s\S]*?security definer[\s\S]*?core\.has_cap\('warehouse',\s*'inspect_quality'\)[\s\S]*?private\.warehouse_inspect_quality[\s\S]*?revoke all on function private\.warehouse_inspect_quality\(jsonb\) from public, anon, authenticated/i],
 ];
 
 export async function verifyPoReceiptAuthority(migrationUrl) {

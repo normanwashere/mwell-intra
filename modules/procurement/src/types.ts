@@ -364,6 +364,8 @@ export interface PaymentReadinessPack {
   id: string;
   purchaseOrderId: string;
   acceptancePackId: string;
+  acceptancePackIds?: string[];
+  acceptedQuantity?: number;
   poMatch: boolean;
   invoiceOrSiReference?: string;
   milestoneSupportReference?: string;

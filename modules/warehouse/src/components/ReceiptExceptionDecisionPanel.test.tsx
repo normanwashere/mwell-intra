@@ -74,3 +74,25 @@ it('requires governed product identification before accepting unidentified custo
     identifications: [{ poLineId: 'line-1', productId: 'known-kit' }],
   }));
 });
+
+it('keeps an escalated Supervisor decision visible for governed final disposition', async () => {
+  const user = userEvent.setup();
+  const onDecision = vi.fn().mockResolvedValue(true);
+  render(<ReceiptExceptionDecisionPanel items={[{
+    decisionId: 'decision-escalated', receiptId: 'receipt-escalated', purchaseOrderId: 'po-1',
+    poNumber: 'PO-ESCALATED', requestedDisposition: 'damaged', status: 'escalated',
+    requestedBy: 'operator-1', requestedAt: '2026-07-15T01:00:00Z',
+    reason: 'Escalated pending evidence', lines: [],
+  }]} onDecision={onDecision} />);
+
+  expect(screen.getByText(/^escalated$/i)).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: /review controlled receipt/i }));
+  const dialog = screen.getByRole('dialog', { name: /supervisor receipt decision/i });
+  await user.type(within(dialog).getByLabelText(/decision reason/i), 'Final vendor-return disposition');
+  await user.type(within(dialog).getByLabelText(/decision evidence/i), 'evidence/final-return.pdf');
+  await user.click(within(dialog).getByRole('button', { name: /reject receipt/i }));
+
+  expect(onDecision).toHaveBeenCalledWith(expect.objectContaining({
+    decisionId: 'decision-escalated', decision: 'reject',
+  }));
+});

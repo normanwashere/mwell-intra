@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Field, ProductSelect, Sheet } from '@/components/ui';
+import { Badge, Field, ProductSelect, Sheet } from '@/components/ui';
 
 export interface ReceiptExceptionDecisionItem {
   decisionId: string;
@@ -7,6 +7,7 @@ export interface ReceiptExceptionDecisionItem {
   purchaseOrderId: string;
   poNumber: string;
   requestedDisposition: 'short' | 'excess' | 'damaged' | 'unidentified';
+  status?: 'pending' | 'escalated';
   requestedBy: string;
   requestedAt: string;
   reason: string;
@@ -83,7 +84,10 @@ export function ReceiptExceptionDecisionPanel({ items, products = [], onDecision
         {items.map((item) => (
           <li key={item.decisionId} className="flex flex-wrap items-center justify-between gap-3 p-3">
             <div>
-              <p className="text-sm font-semibold text-ink">{item.poNumber}</p>
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-semibold text-ink">{item.poNumber}</p>
+                {item.status === 'escalated' && <Badge tone="amber">Escalated</Badge>}
+              </div>
               <p className="text-xs text-muted">{item.requestedDisposition} · {item.reason}</p>
             </div>
             <button type="button" className="btn-outline btn-sm" onClick={() => setSelected(item)}>

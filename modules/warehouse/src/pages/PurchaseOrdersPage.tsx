@@ -116,7 +116,7 @@ export function PurchaseOrdersPage() {
     }
     let active = true;
     void supabaseClient.schema('warehouse').rpc('procurement_receipt_exception_work_items', {
-      payload: { status: 'pending' },
+      payload: {},
     }).then(({ data: rows, error: rpcError }) => {
       if (!active || rpcError) return;
       setExceptionDecisions(((rows ?? []) as Array<Record<string, unknown>>).map((row) => ({
@@ -125,6 +125,7 @@ export function PurchaseOrdersPage() {
         purchaseOrderId: String(row.purchase_order_id),
         poNumber: String(row.po_number),
         requestedDisposition: row.requested_disposition as ReceiptExceptionDecisionItem['requestedDisposition'],
+        status: row.status as ReceiptExceptionDecisionItem['status'],
         requestedBy: String(row.requested_by),
         requestedAt: String(row.requested_at),
         reason: String(row.reason ?? ''),
@@ -150,8 +151,15 @@ export function PurchaseOrdersPage() {
       },
     });
     if (rpcError) { toast.error(rpcError.message); return false; }
-    setExceptionDecisions((items) => items.filter((item) => item.decisionId !== input.decisionId));
-    toast.success('Controlled receipt decision recorded');
+    if (input.decision === 'escalate') {
+      setExceptionDecisions((items) => items.map((item) => item.decisionId === input.decisionId
+        ? { ...item, status: 'escalated', reason: input.reason }
+        : item));
+      toast.success('Receipt remains actionable in the escalated queue');
+    } else {
+      setExceptionDecisions((items) => items.filter((item) => item.decisionId !== input.decisionId));
+      toast.success('Controlled receipt decision recorded');
+    }
     return true;
   };
 

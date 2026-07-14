@@ -148,6 +148,16 @@ test("Task 3 uses browser-role exception receipts and proves transactional clean
   assert.match(source, /expected quantity drift/i);
   assert.match(source, /active hold reservation denial/i);
   assert.match(source, /bounded quarantine posting/i);
+  assert.match(source, /quarantine line claim collision/i);
+  assert.match(source, /unidentified accept identification/i);
+  assert.match(source, /unidentified quarantine identification/i);
+  assert.match(source, /browser escalation final disposition/i);
+  assert.match(source, /hold reservation concurrency/i);
+  assert.match(source, /excess custody remains governed/i);
+  assert.match(source, /cumulative payment acceptance binding/i);
+  assert.match(source, /referenced approval role rename\/deactivate denial/i);
+  assert.match(source, /inactive approval role cannot authorize/i);
+  assert.match(source, /valid public quality inspection/i);
   assert.match(source, /PO status after hold release/i);
   assert.match(source, /cumulative partial acceptance/i);
   assert.match(source, /all-capability admin wrong-step denial/i);
