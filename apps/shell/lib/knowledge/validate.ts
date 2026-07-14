@@ -361,10 +361,20 @@ export function validateKnowledgeContent(content: KnowledgeContent): string[] {
     if (!evidence.sensitiveDataReviewed)
       errors.push(`${evidence.id} has not completed sensitive-data review`);
 
-    const nodeContext = nodeContexts.get(evidence.nodeId);
-    if (!nodeContext)
+    const hasNodeTarget = Boolean(evidence.nodeId);
+    const hasFeatureTarget = Boolean(evidence.featureId);
+    if (hasNodeTarget === hasFeatureTarget)
+      errors.push(`${evidence.id} must reference exactly one node or feature`);
+
+    const nodeContext = evidence.nodeId
+      ? nodeContexts.get(evidence.nodeId)
+      : undefined;
+    const featureContext = evidence.featureId
+      ? content.features.find((feature) => feature.id === evidence.featureId)
+      : undefined;
+    if (evidence.nodeId && !nodeContext)
       errors.push(`${evidence.id} references unknown node ${evidence.nodeId}`);
-    else {
+    else if (nodeContext) {
       if (!nodeContext.node.ownerRoleIds.includes(evidence.roleId))
         errors.push(
           `${evidence.id} role ${evidence.roleId} does not own ${nodeContext.flow.id}:${evidence.nodeId}`,
@@ -375,6 +385,28 @@ export function validateKnowledgeContent(content: KnowledgeContent): string[] {
       )
         errors.push(
           `${evidence.id} does not match its expected database effect`,
+        );
+    }
+    if (evidence.featureId && !featureContext)
+      errors.push(
+        `${evidence.id} references unknown feature ${evidence.featureId}`,
+      );
+    else if (featureContext) {
+      if (featureContext.availability !== "live")
+        errors.push(
+          `${evidence.id} references a non-live feature ${featureContext.id}`,
+        );
+      if (!featureContext.roleIds.includes(evidence.roleId))
+        errors.push(
+          `${evidence.id} role ${evidence.roleId} is not an audience for ${featureContext.id}`,
+        );
+      if (
+        !featureContext.routes.some((route) =>
+          routeMatches(route, evidence.route),
+        )
+      )
+        errors.push(
+          `${evidence.id} route ${evidence.route} does not match ${featureContext.id}`,
         );
     }
     if (!roleCanAccessRoute(content, evidence.roleId, evidence.route))
@@ -645,7 +677,9 @@ interface EvidenceArtifactValidationOptions {
   semanticDistinctPairs?: ReadonlyArray<readonly [string, string]>;
 }
 
-const REQUIRED_SEMANTIC_DISTINCT_PAIRS: ReadonlyArray<readonly [string, string]> = [
+const REQUIRED_SEMANTIC_DISTINCT_PAIRS: ReadonlyArray<
+  readonly [string, string]
+> = [
   ["ev-access-fix", "ev-admin-start"],
   ["ev-event-issue", "ev-allocation-reserve"],
 ];
@@ -658,12 +692,17 @@ interface DecodedPng {
   perceptualSample?: number[];
 }
 
-function paethPredictor(left: number, above: number, upperLeft: number): number {
+function paethPredictor(
+  left: number,
+  above: number,
+  upperLeft: number,
+): number {
   const estimate = left + above - upperLeft;
   const leftDistance = Math.abs(estimate - left);
   const aboveDistance = Math.abs(estimate - above);
   const upperLeftDistance = Math.abs(estimate - upperLeft);
-  if (leftDistance <= aboveDistance && leftDistance <= upperLeftDistance) return left;
+  if (leftDistance <= aboveDistance && leftDistance <= upperLeftDistance)
+    return left;
   return aboveDistance <= upperLeftDistance ? above : upperLeft;
 }
 
@@ -682,7 +721,8 @@ function perceptualSample(
       const raw = decoded[sourceRow + 1 + x]!;
       const left = x >= channels ? raster[y * stride + x - channels]! : 0;
       const above = y > 0 ? raster[(y - 1) * stride + x]! : 0;
-      const upperLeft = y > 0 && x >= channels ? raster[(y - 1) * stride + x - channels]! : 0;
+      const upperLeft =
+        y > 0 && x >= channels ? raster[(y - 1) * stride + x - channels]! : 0;
       const predictor =
         filter === 0
           ? 0
@@ -695,7 +735,8 @@ function perceptualSample(
                 : filter === 4
                   ? paethPredictor(left, above, upperLeft)
                   : Number.NaN;
-      if (!Number.isFinite(predictor)) throw new Error(`unsupported PNG filter ${filter}`);
+      if (!Number.isFinite(predictor))
+        throw new Error(`unsupported PNG filter ${filter}`);
       raster[y * stride + x] = (raw + predictor) & 0xff;
     }
   }
@@ -704,12 +745,19 @@ function perceptualSample(
   const rows = 20;
   const sample: number[] = [];
   for (let sampleY = 0; sampleY < rows; sampleY += 1) {
-    const y = Math.min(height - 1, Math.floor(((sampleY + 0.5) * height) / rows));
+    const y = Math.min(
+      height - 1,
+      Math.floor(((sampleY + 0.5) * height) / rows),
+    );
     for (let sampleX = 0; sampleX < columns; sampleX += 1) {
-      const x = Math.min(width - 1, Math.floor(((sampleX + 0.5) * width) / columns));
+      const x = Math.min(
+        width - 1,
+        Math.floor(((sampleX + 0.5) * width) / columns),
+      );
       const offset = y * stride + x * channels;
       const red = raster[offset]!;
-      const green = channels === 1 || channels === 2 ? red : raster[offset + 1]!;
+      const green =
+        channels === 1 || channels === 2 ? red : raster[offset + 1]!;
       const blue = channels === 1 || channels === 2 ? red : raster[offset + 2]!;
       sample.push(Math.round(0.2126 * red + 0.7152 * green + 0.0722 * blue));
     }
@@ -719,8 +767,13 @@ function perceptualSample(
 
 function perceptualDifference(left: number[], right: number[]): number {
   if (left.length !== right.length || left.length === 0) return 1;
-  return left.reduce((total, value, index) => total + Math.abs(value - right[index]!), 0) /
-    (left.length * 255);
+  return (
+    left.reduce(
+      (total, value, index) => total + Math.abs(value - right[index]!),
+      0,
+    ) /
+    (left.length * 255)
+  );
 }
 
 function decodePng(file: string): DecodedPng {
@@ -775,9 +828,10 @@ function decodePng(file: string): DecodedPng {
   return {
     width,
     height,
-    perceptualSample: bitDepth === 8 && colorType !== 3
-      ? perceptualSample(decoded, width, height, channels)
-      : undefined,
+    perceptualSample:
+      bitDepth === 8 && colorType !== 3
+        ? perceptualSample(decoded, width, height, channels)
+        : undefined,
   };
 }
 
@@ -794,6 +848,12 @@ export function validateKnowledgeEvidenceArtifacts(
   const commits = new Set(
     content.evidence.map((evidence) => evidence.appCommit),
   );
+  const productionEvidence = content.evidence.filter(
+    (evidence) => evidence.provenance === "production",
+  );
+  const productionCommits = new Set(
+    productionEvidence.map((evidence) => evidence.appCommit),
+  );
   for (const commit of commits) validateCommit(commit, repositoryRoot, errors);
   let report: KnowledgeCaptureReport | undefined;
   try {
@@ -804,28 +864,33 @@ export function validateKnowledgeEvidenceArtifacts(
   }
 
   if (!report) {
-    for (const evidence of content.evidence)
+    for (const evidence of productionEvidence)
       errors.push(`${evidence.id} requires capture report schema v1 metadata`);
     return errors;
   }
 
-  if (report.evidenceCount !== content.evidence.length)
+  if (report.evidenceCount !== productionEvidence.length)
     errors.push("capture report evidence count mismatch");
   validateCommit(report.sourceCommit, repositoryRoot, errors);
   if (
-    content.evidence.some(
+    productionEvidence.some(
       (evidence) =>
         evidence.capturedAt !== report.capturedAt ||
         evidence.reviewedAt !== report.reviewedAt,
     )
   )
     errors.push("capture report dates do not match evidence metadata");
-  const expectedIds = new Set(content.evidence.map((evidence) => evidence.id));
+  const expectedIds = new Set(
+    productionEvidence.map((evidence) => evidence.id),
+  );
   for (const id of Object.keys(report.evidence))
     if (!expectedIds.has(id))
       errors.push(`capture report has unknown evidence ${id}`);
 
-  if (commits.size !== 1 || !commits.has(report.sourceCommit))
+  if (
+    productionCommits.size !== 1 ||
+    !productionCommits.has(report.sourceCommit)
+  )
     errors.push(
       "capture report sourceCommit does not match evidence source commit",
     );
@@ -841,14 +906,14 @@ export function validateKnowledgeEvidenceArtifacts(
   }> = [];
   for (const evidence of content.evidence) {
     const entry = report.evidence[evidence.id];
-    if (!entry) {
+    if (!entry && evidence.provenance === "production") {
       errors.push(`${evidence.id} requires capture report schema v1 metadata`);
       continue;
     }
-    validateCaptureSemantics(evidence, entry, errors);
+    if (entry) validateCaptureSemantics(evidence, entry, errors);
     for (const [kind, source, expected] of [
-      ["desktop", evidence.desktopSrc, entry.desktop],
-      ["mobile", evidence.mobileSrc, entry.mobile],
+      ["desktop", evidence.desktopSrc, entry?.desktop],
+      ["mobile", evidence.mobileSrc, entry?.mobile],
     ] as const) {
       const root = path.resolve(publicRoot);
       const file = path.resolve(root, `.${source}`);
@@ -861,13 +926,13 @@ export function validateKnowledgeEvidenceArtifacts(
         const hash = createHash("sha256")
           .update(readFileSync(file))
           .digest("hex");
-        if (expected.file !== source)
+        if (expected && expected.file !== source)
           errors.push(`${evidence.id} ${kind} capture file mismatch`);
-        if (hash !== expected.sha256)
+        if (expected && hash !== expected.sha256)
           errors.push(`${evidence.id} ${kind} SHA-256 mismatch`);
         if (
-          dimensions.width !== expected.width ||
-          dimensions.height !== expected.height
+          (expected && dimensions.width !== expected.width) ||
+          (expected && dimensions.height !== expected.height)
         )
           errors.push(`${evidence.id} ${kind} dimensions mismatch`);
         const viewport =
@@ -886,7 +951,11 @@ export function validateKnowledgeEvidenceArtifacts(
         matches.push({ evidence, kind });
         hashes.set(hashKey, matches);
         if (dimensions.perceptualSample)
-          perceptualCaptures.push({ evidence, kind, sample: dimensions.perceptualSample });
+          perceptualCaptures.push({
+            evidence,
+            kind,
+            sample: dimensions.perceptualSample,
+          });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         errors.push(
@@ -914,18 +983,25 @@ export function validateKnowledgeEvidenceArtifacts(
     }
   }
   const requiredDistinctPairs = new Set(
-    semanticDistinctPairs.map(([left, right]) => [left, right].sort().join("\u0000")),
+    semanticDistinctPairs.map(([left, right]) =>
+      [left, right].sort().join("\u0000"),
+    ),
   );
   for (let index = 0; index < perceptualCaptures.length; index += 1) {
     const first = perceptualCaptures[index]!;
     for (const candidate of perceptualCaptures.slice(index + 1)) {
-      const pairKey = [first.evidence.id, candidate.evidence.id].sort().join("\u0000");
-      if (first.kind !== candidate.kind || !requiredDistinctPairs.has(pairKey)) continue;
+      const pairKey = [first.evidence.id, candidate.evidence.id]
+        .sort()
+        .join("\u0000");
+      if (first.kind !== candidate.kind || !requiredDistinctPairs.has(pairKey))
+        continue;
       const sameGroup =
         Boolean(first.evidence.sharedEvidenceGroup) &&
-        first.evidence.sharedEvidenceGroup === candidate.evidence.sharedEvidenceGroup;
+        first.evidence.sharedEvidenceGroup ===
+          candidate.evidence.sharedEvidenceGroup;
       const sameSemantics =
-        evidenceSharingContext(first.evidence) === evidenceSharingContext(candidate.evidence);
+        evidenceSharingContext(first.evidence) ===
+        evidenceSharingContext(candidate.evidence);
       const difference = perceptualDifference(first.sample, candidate.sample);
       if (
         difference < REQUIRED_PAIR_NEAR_DUPLICATE_THRESHOLD &&

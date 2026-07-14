@@ -140,6 +140,41 @@ export function canAccessFinance(userRoles: Partial<UserRoles>): boolean {
 }
 
 /**
+ * Resolve a requested post-login destination without sending the user into an
+ * area their new session cannot open. Unknown paths fail closed to Home.
+ */
+export function authorizedPostLoginPath(
+  requestedPath: string,
+  userRoles: Partial<UserRoles>,
+  profileKind: "employee" | "vendor",
+): string {
+  if (requestedPath === "/") return "/";
+  if (requestedPath === "/knowledge" || requestedPath.startsWith("/knowledge/"))
+    return requestedPath;
+  if (requestedPath === "/work" || requestedPath.startsWith("/work/"))
+    return profileKind === "employee" ? requestedPath : "/";
+  if (requestedPath === "/vendor" || requestedPath.startsWith("/vendor/"))
+    return profileKind === "vendor" ? requestedPath : "/";
+  if (requestedPath === "/finance" || requestedPath.startsWith("/finance/"))
+    return canAccessFinance(userRoles) ? requestedPath : "/";
+  if (requestedPath === "/admin/doa" || requestedPath.startsWith("/admin/doa/"))
+    return can(userRoles, "core", "manage_rbac") ||
+      can(userRoles, "legal", "manage_doa")
+      ? requestedPath
+      : "/";
+  if (requestedPath === "/admin" || requestedPath.startsWith("/admin/"))
+    return can(userRoles, "core", "manage_rbac") ? requestedPath : "/";
+
+  const requestedModule = MODULE_NAV.find(
+    (item) =>
+      requestedPath === item.href || requestedPath.startsWith(`${item.href}/`),
+  );
+  return requestedModule && hasModuleAccess(userRoles, requestedModule.module)
+    ? requestedPath
+    : "/";
+}
+
+/**
  * Every first-class destination shown on the signed-in dashboard and shell.
  * Keeping this composition in one place prevents the access count, quick links,
  * cards, and navigation from describing different permission sets.
@@ -195,7 +230,10 @@ export function mobileCenterAction(
       label: "Invite vendor",
       icon: "plus",
     };
-  if (pathname.startsWith("/events") && can(userRoles, "events", "create_event"))
+  if (
+    pathname.startsWith("/events") &&
+    can(userRoles, "events", "create_event")
+  )
     return { href: "/events?create=1", label: "New event", icon: "plus" };
   if (pathname.startsWith("/admin") && can(userRoles, "core", "manage_rbac"))
     return { href: "/admin/users", label: "Users", icon: "list" };

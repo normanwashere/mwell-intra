@@ -1,10 +1,58 @@
 import { describe, expect, it } from "vitest";
 import type { UserRoles } from "@intra/rbac";
 import {
+  authorizedPostLoginPath,
   canAccessFinance,
   dashboardAreas,
   mobileCenterAction,
 } from "./navigation";
+
+describe("authorized post-login destinations", () => {
+  it("keeps authorized module and shared destinations", () => {
+    const roles: Partial<UserRoles> = {
+      core: ["staff"],
+      events: ["requester"],
+      insights: ["analyst"],
+      warehouse: ["finance"],
+    };
+    expect(authorizedPostLoginPath("/events", roles, "employee")).toBe(
+      "/events",
+    );
+    expect(
+      authorizedPostLoginPath("/insights/warehouse", roles, "employee"),
+    ).toBe("/insights/warehouse");
+    expect(authorizedPostLoginPath("/finance", roles, "employee")).toBe(
+      "/finance",
+    );
+    expect(authorizedPostLoginPath("/work", roles, "employee")).toBe("/work");
+  });
+
+  it("fails closed instead of opening an unauthorized or unknown destination", () => {
+    const roles: Partial<UserRoles> = {
+      core: ["staff"],
+      warehouse: ["logistics_supervisor"],
+    };
+    expect(authorizedPostLoginPath("/events", roles, "employee")).toBe("/");
+    expect(authorizedPostLoginPath("/admin/users", roles, "employee")).toBe(
+      "/",
+    );
+    expect(
+      authorizedPostLoginPath("/not-a-real-route", roles, "employee"),
+    ).toBe("/");
+  });
+
+  it("keeps employee and vendor shared areas separated", () => {
+    expect(
+      authorizedPostLoginPath("/vendor", { core: ["vendor"] }, "vendor"),
+    ).toBe("/vendor");
+    expect(
+      authorizedPostLoginPath("/work", { core: ["vendor"] }, "vendor"),
+    ).toBe("/");
+    expect(
+      authorizedPostLoginPath("/vendor", { core: ["staff"] }, "employee"),
+    ).toBe("/");
+  });
+});
 
 describe("dashboard areas", () => {
   it("shows every Warehouse Administrator area counted by the dashboard", () => {
@@ -33,7 +81,12 @@ describe("dashboard areas", () => {
       dashboardAreas({ core: ["platform_admin", "staff"] }, "employee").map(
         (area) => area.label,
       ),
-    ).toEqual(["My Work", "Administration", "Delegation of Authority", "Knowledge Base"]);
+    ).toEqual([
+      "My Work",
+      "Administration",
+      "Delegation of Authority",
+      "Knowledge Base",
+    ]);
   });
 
   it.each<[Partial<UserRoles>, string]>([
@@ -84,8 +137,8 @@ describe("mobile contextual actions", () => {
     expect(
       mobileCenterAction("/procurement", { procurement: ["requester"] })?.label,
     ).toBe("New request");
-    expect(mobileCenterAction("/events", { events: ["requester"] })?.label).toBe(
-      "New event",
-    );
+    expect(
+      mobileCenterAction("/events", { events: ["requester"] })?.label,
+    ).toBe("New event");
   });
 });

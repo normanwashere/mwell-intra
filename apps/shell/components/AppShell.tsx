@@ -120,7 +120,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         HOME_ENTRY,
         ...entries.filter((entry) => entry.href === FINANCE_NAV.href),
         ...entries.filter(
-          (entry) => entry.href !== HOME_ENTRY.href && entry.href !== FINANCE_NAV.href,
+          (entry) =>
+            entry.href !== HOME_ENTRY.href && entry.href !== FINANCE_NAV.href,
         ),
       ]
     : entries;
@@ -228,9 +229,9 @@ export function AppShell({ children }: { children: ReactNode }) {
             )}
           >
             <div className="flex min-w-0 flex-1 items-center gap-2 md:hidden">
-              <BrandMark compact />
+              <BrandMark compact showLabel={!scrolled} />
               {scrolled && (
-                <p className="truncate font-display text-sm font-semibold text-ink">
+                <p className="hidden min-w-0 truncate font-display text-sm font-semibold text-ink sm:block">
                   {topBarLabel(pathname, entries) || "Home"}
                 </p>
               )}
@@ -445,11 +446,18 @@ function MobileTab({
   );
 }
 
-function BrandMark({ compact = false }: { compact?: boolean }) {
+function BrandMark({
+  compact = false,
+  showLabel = true,
+}: {
+  compact?: boolean;
+  showLabel?: boolean;
+}) {
   return (
     <MwellIntraLogo
       logoClassName={compact ? "h-5" : "h-7"}
       labelClassName={compact ? "text-[0.65rem]" : "text-xs"}
+      showLabel={showLabel}
     />
   );
 }

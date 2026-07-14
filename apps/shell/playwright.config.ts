@@ -6,94 +6,102 @@
 // against `next start` on :3000. The web server command builds first so the
 // smoke command is self-contained locally and in CI.
 
-import { defineConfig, devices } from '@playwright/test';
+import { defineConfig, devices } from "@playwright/test";
 
 const PORT = Number(process.env.PORT ?? 3000);
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:${PORT}`;
 const IS_CI = Boolean(process.env.CI);
-const REUSE_EXISTING_SERVER = process.env.PLAYWRIGHT_REUSE_SERVER === '1';
+const REUSE_EXISTING_SERVER = process.env.PLAYWRIGHT_REUSE_SERVER === "1";
 
 if (!REUSE_EXISTING_SERVER) {
-  process.env.NEXT_PUBLIC_DATA_SOURCE ??= 'memory';
-  process.env.MWELL_E2E_AUTH_MODE ??= 'memory';
+  process.env.NEXT_PUBLIC_DATA_SOURCE ??= "memory";
+  process.env.MWELL_E2E_AUTH_MODE ??= "memory";
 }
 
 export default defineConfig({
-  testDir: './tests',
-  testIgnore: ['**/*-live.spec.ts', '**/capture-knowledge-evidence.spec.ts'],
+  testDir: "./tests",
+  testIgnore: ["**/*-live.spec.ts", "**/capture-knowledge-evidence.spec.ts"],
   fullyParallel: true,
   forbidOnly: IS_CI,
   retries: IS_CI ? 1 : 0,
   workers: IS_CI ? 2 : undefined,
-  reporter: IS_CI ? [['github'], ['list']] : 'list',
+  reporter: IS_CI ? [["github"], ["list"]] : "list",
   timeout: 30_000,
   expect: { timeout: 10_000 },
 
   use: {
     baseURL: BASE_URL,
-    trace: 'retain-on-failure',
-    locale: 'en-PH',
-    timezoneId: 'Asia/Manila',
-    reducedMotion: 'reduce',
-    colorScheme: 'light',
+    trace: "retain-on-failure",
+    // Functional and visual contexts should not each install the 13 MB PWA
+    // precache before hydration. Dedicated service-worker/evidence coverage
+    // opts back into `allow` explicitly.
+    serviceWorkers: "block",
+    locale: "en-PH",
+    timezoneId: "Asia/Manila",
+    reducedMotion: "reduce",
+    colorScheme: "light",
   },
 
   projects: [
     {
-      name: 'desktop-1440',
+      name: "desktop-1440",
       use: {
-        ...devices['Desktop Chrome'],
+        ...devices["Desktop Chrome"],
         viewport: { width: 1440, height: 900 },
       },
     },
     {
-      name: 'desktop-1280',
+      name: "desktop-1280",
       use: {
-        ...devices['Desktop Chrome'],
+        ...devices["Desktop Chrome"],
         viewport: { width: 1280, height: 800 },
       },
     },
     {
-      name: 'tablet-768',
+      name: "tablet-768",
       use: {
-        ...devices['Desktop Chrome'],
+        ...devices["Desktop Chrome"],
         viewport: { width: 768, height: 1024 },
       },
     },
     {
-      name: 'mobile-390',
+      name: "mobile-390",
       use: {
-        ...devices['Pixel 7'],
+        ...devices["Pixel 7"],
         viewport: { width: 390, height: 844 },
+        deviceScaleFactor: 1,
       },
     },
     {
-      name: 'mobile-360',
+      name: "mobile-360",
       use: {
-        ...devices['Pixel 7'],
+        ...devices["Pixel 7"],
         viewport: { width: 360, height: 800 },
+        deviceScaleFactor: 1,
       },
     },
     {
-      name: 'mobile-320',
+      name: "mobile-320",
       use: {
-        ...devices['Pixel 7'],
+        ...devices["Pixel 7"],
         viewport: { width: 320, height: 720 },
+        deviceScaleFactor: 1,
       },
     },
   ],
 
   webServer: {
-    command: 'pnpm build && pnpm start',
+    command: "pnpm build && pnpm start",
     port: PORT,
     reuseExistingServer: REUSE_EXISTING_SERVER,
     timeout: 120_000,
-    stdout: 'pipe',
-    stderr: 'pipe',
+    stdout: "pipe",
+    stderr: "pipe",
     env: {
-      NEXT_PUBLIC_ALLOW_DEMO_IN_PROD: 'true',
-      NEXT_PUBLIC_DATA_SOURCE: process.env.NEXT_PUBLIC_DATA_SOURCE ?? 'memory',
-      MWELL_E2E_AUTH_MODE: process.env.MWELL_E2E_AUTH_MODE ?? 'memory',
+      NEXT_PUBLIC_ALLOW_DEMO_IN_PROD: "true",
+      NEXT_PUBLIC_DATA_SOURCE: process.env.NEXT_PUBLIC_DATA_SOURCE ?? "memory",
+      NEXT_PUBLIC_ENABLE_SW: "false",
+      MWELL_E2E_AUTH_MODE: process.env.MWELL_E2E_AUTH_MODE ?? "memory",
     },
   },
 });

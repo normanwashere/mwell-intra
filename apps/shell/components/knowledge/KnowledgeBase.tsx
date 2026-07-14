@@ -283,6 +283,9 @@ export function KnowledgeBase() {
           );
           return flow ? [flow] : [];
         })}
+        evidence={KNOWLEDGE_GUIDE_CONTENT.evidence.filter(
+          (item) => item.featureId === guide.feature.id,
+        )}
         onBack={() =>
           setParams({ article: null }, { scroll: "restore" })
         }

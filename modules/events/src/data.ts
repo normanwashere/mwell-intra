@@ -8,6 +8,8 @@ import type { EventDraft, EventLifecycle, EventRecord, EventsData } from './type
 type EventsClient = NonNullable<ReturnType<typeof useSession>['supabaseClient']>;
 type UnknownRow = Record<string, unknown>;
 
+const MEMORY_EVENTS_KEY = 'intra.events-data.v1';
+
 function text(value: unknown, fallback = ''): string {
   return typeof value === 'string' && value.length > 0 ? value : fallback;
 }
@@ -108,6 +110,26 @@ export async function createLiveEvent(client: EventsClient, draft: EventDraft): 
   if (error) throw error;
 }
 
+export function loadMemoryEvents(storage: Pick<Storage, 'getItem'>): EventsData {
+  const stored = storage.getItem(MEMORY_EVENTS_KEY);
+  if (!stored) return EVENTS_DEMO_DATA;
+  try {
+    const parsed = JSON.parse(stored) as Partial<EventsData>;
+    return Array.isArray(parsed.events)
+      ? { events: parsed.events as EventRecord[], warnings: [] }
+      : EVENTS_DEMO_DATA;
+  } catch {
+    return EVENTS_DEMO_DATA;
+  }
+}
+
+export function saveMemoryEvents(
+  storage: Pick<Storage, 'setItem'>,
+  data: EventsData,
+): void {
+  storage.setItem(MEMORY_EVENTS_KEY, JSON.stringify({ events: data.events }));
+}
+
 export function useEventsData() {
   const { mode, supabaseClient } = useSession();
   const live = mode === 'supabase' ? supabaseClient : null;
@@ -117,7 +139,7 @@ export function useEventsData() {
 
   const refresh = useCallback(async () => {
     if (!live) {
-      setData(EVENTS_DEMO_DATA);
+      setData(loadMemoryEvents(window.sessionStorage));
       setLoading(false);
       return;
     }
@@ -148,7 +170,11 @@ export function useEventsData() {
       issuedUnits: 0,
       returnedUnits: 0,
     };
-    setData((current) => ({ ...current, events: [next, ...current.events] }));
+    setData((current) => {
+      const updated = { ...current, events: [next, ...current.events] };
+      saveMemoryEvents(window.sessionStorage, updated);
+      return updated;
+    });
   }, [live, refresh]);
 
   useEffect(() => { void refresh(); }, [refresh]);

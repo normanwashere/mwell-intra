@@ -80,7 +80,6 @@ const nextConfig = {
   async redirects() {
     return [
       { source: '/warehouse/events', destination: '/events', permanent: false },
-      { source: '/warehouse/events/:id', destination: '/events/:id', permanent: false },
       { source: '/warehouse/data', destination: '/insights/warehouse', permanent: false },
       { source: '/warehouse/reports', destination: '/insights/warehouse', permanent: false },
     ];

@@ -7,7 +7,7 @@ import {
 } from "./evidenceContract";
 
 describe("Knowledge Base evidence contract", () => {
-  it("requires desktop and mobile production evidence for every executable live node", () => {
+  it("requires desktop and mobile evidence with explicit provenance", () => {
     const requirements = evidenceRequirements(KNOWLEDGE_CONTENT);
     const executableLiveNodes = KNOWLEDGE_CONTENT.flows.flatMap((flow) =>
       flow.availability === "live"
@@ -17,16 +17,26 @@ describe("Knowledge Base evidence contract", () => {
         : [],
     );
 
-    expect(requirements).toHaveLength(executableLiveNodes.length);
-    expect(requirements).toHaveLength(39);
-    expect(requirements.every((item) => item.environment === "production")).toBe(
+    expect(requirements).toHaveLength(executableLiveNodes.length + 3);
+    expect(requirements).toHaveLength(42);
+    expect(
+      requirements
+        .filter((item) => item.featureId)
+        .map((item) => item.featureId),
+    ).toEqual(["events-workspace", "my-work", "insights-workspace"]);
+    expect(
+      requirements.filter((item) => item.environment === "production"),
+    ).toHaveLength(39);
+    expect(
+      requirements.filter((item) => item.environment === "documentation"),
+    ).toHaveLength(3);
+    expect(requirements.every((item) => item.desktop && item.mobile)).toBe(
       true,
     );
-    expect(requirements.every((item) => item.desktop && item.mobile)).toBe(true);
     expect(requirements.every((item) => item.hotspots.length > 0)).toBe(true);
-    expect(requirements.every((item) => item.expectedLandmark.trim().length > 0)).toBe(
-      true,
-    );
+    expect(
+      requirements.every((item) => item.expectedLandmark.trim().length > 0),
+    ).toBe(true);
     expect(new Set(requirements.map((item) => item.evidenceId)).size).toBe(
       requirements.length,
     );
@@ -44,9 +54,11 @@ describe("Knowledge Base evidence contract", () => {
         .flatMap((flow) => flow.nodes.map((node) => node.id)),
     );
 
-    expect(requirements.some((item) => limitedNodeIds.has(item.nodeId))).toBe(
-      false,
-    );
+    expect(
+      requirements.some(
+        (item) => item.nodeId && limitedNodeIds.has(item.nodeId),
+      ),
+    ).toBe(false);
   });
 
   it("rejects stale or structurally incomplete promoted evidence", () => {

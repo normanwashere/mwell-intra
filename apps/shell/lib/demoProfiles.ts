@@ -118,6 +118,7 @@ export const DEMO_PROFILES: readonly MemoryProfile[] = [
     roles: {
       core: ['staff'],
       warehouse: ['bi_analyst'],
+      insights: ['analyst'],
     },
   },
   {
@@ -129,7 +130,44 @@ export const DEMO_PROFILES: readonly MemoryProfile[] = [
     roles: {
       core: ['staff'],
       warehouse: ['marketing'],
+      events: ['coordinator'],
     },
+  },
+  {
+    id: 'demo-business-unit',
+    email: 'business.unit@mwell.demo',
+    kind: 'employee',
+    name: 'Nina Flores',
+    title: 'Business Unit Requester',
+    roles: {
+      core: ['staff'],
+      warehouse: ['business_unit'],
+      events: ['requester'],
+    },
+  },
+  {
+    id: 'demo-event-viewer',
+    email: 'events.viewer@mwell.demo',
+    kind: 'employee',
+    name: 'Sam Bautista',
+    title: 'Event Viewer',
+    roles: { core: ['staff'], events: ['viewer'] },
+  },
+  {
+    id: 'demo-insights-manager',
+    email: 'insights.manager@mwell.demo',
+    kind: 'employee',
+    name: 'Maya Tan',
+    title: 'Department Manager',
+    roles: { core: ['staff'], insights: ['manager'] },
+  },
+  {
+    id: 'demo-executive',
+    email: 'executive@mwell.demo',
+    kind: 'employee',
+    name: 'Rafael Ong',
+    title: 'Executive',
+    roles: { core: ['staff'], insights: ['executive'] },
   },
   {
     id: 'demo-pricing',
@@ -153,6 +191,8 @@ export const DEMO_PROFILES: readonly MemoryProfile[] = [
     roles: {
       core: ['staff'],
       warehouse: ['warehouse_admin'],
+      events: ['admin'],
+      insights: ['admin'],
     },
   },
   {
@@ -167,6 +207,8 @@ export const DEMO_PROFILES: readonly MemoryProfile[] = [
       // granted that module's role explicitly (via /admin/users). This matches
       // the "roles are earned, not inherited" invariant (spec §4.2).
       core: ['platform_admin', 'staff'],
+      events: ['admin'],
+      insights: ['admin'],
     },
   },
   {

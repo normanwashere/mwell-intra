@@ -4,6 +4,7 @@ import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 import { auditWarehouseLayout } from '../helpers/warehouseLayoutAudit';
 import {
+  CANONICAL_WORKSPACE_ROUTES,
   installWarehouseSession,
   ROLE_ROUTES,
   routeSlug,
@@ -25,12 +26,13 @@ async function auditRoute(
   await installWarehouseSession(page, role, theme);
   await page.goto(route, { waitUntil: 'networkidle' });
   await expect(page).toHaveURL(new RegExp(`${route.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/?$`));
-  await expect(page.locator('body')).not.toContainText(/configuration missing|no warehouse access|access denied/i);
+  await expect(page.locator('body')).not.toContainText(/configuration missing|no (?:warehouse|events|insights) access|access denied/i);
   await expect(page.locator('main')).toBeVisible();
   await expect(page.locator('main h1').first()).toBeVisible();
   await page.waitForTimeout(250);
+  const minimumTarget = route.startsWith('/warehouse') ? 44 : testInfo.project.name.includes('mobile') ? 44 : 32;
   const assertLayout = async (state: 'top' | 'bottom') => {
-    const audit = await auditWarehouseLayout(page, { minimumTarget: 44 });
+    const audit = await auditWarehouseLayout(page, { minimumTarget });
     expect(audit.overflowElements, `${route} ${state} overflowing elements at ${testInfo.project.name}`).toEqual([]);
     expect(audit.scrollWidth, `${route} ${state} document overflow at ${testInfo.project.name}`).toBeLessThanOrEqual(audit.viewportWidth + 2);
     expect(audit.overlaps, `${route} ${state} sticky/mobile overlaps`).toEqual([]);
@@ -89,6 +91,12 @@ test.describe('warehouse W1 strict visual matrix', () => {
   for (const route of ROLE_ROUTES.warehouse_admin.slice(1)) {
     test(`warehouse admin route ${route}`, async ({ page }, testInfo) => {
       await auditRoute(page, testInfo, 'warehouse_admin', 'light', route);
+    });
+  }
+
+  for (const { role, route } of CANONICAL_WORKSPACE_ROUTES) {
+    test(`${role} canonical workspace ${route}`, async ({ page }, testInfo) => {
+      await auditRoute(page, testInfo, role, 'light', route);
     });
   }
 });

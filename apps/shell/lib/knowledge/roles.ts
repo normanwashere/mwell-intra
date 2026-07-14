@@ -383,59 +383,147 @@ const ROLE_OPERATING_DETAILS: Record<string, RoleOperatingDetails> = {
     ],
   },
   events_requester: {
-    dailyTasks: ["Create complete event intent with dates and purpose.", "Monitor the Warehouse fulfillment handoff without changing physical stock."],
+    dailyTasks: [
+      "Create complete event intent with dates and purpose.",
+      "Monitor the Warehouse fulfillment handoff without changing physical stock.",
+    ],
     responsibilityStages: [
-      stage("State event demand", "Create an attributable event and request the needed fulfillment.", "Warehouse receives complete event context."),
-      stage("Confirm handoff", "Track readiness and escalate missing fulfillment ownership.", "The event has a named next operational owner."),
+      stage(
+        "State event demand",
+        "Create an attributable event and request the needed fulfillment.",
+        "Warehouse receives complete event context.",
+      ),
+      stage(
+        "Confirm handoff",
+        "Track readiness and escalate missing fulfillment ownership.",
+        "The event has a named next operational owner.",
+      ),
     ],
   },
   events_coordinator: {
-    dailyTasks: ["Coordinate planned and active event lifecycles.", "Reconcile readiness, issue, return, and closure dependencies with Warehouse."],
+    dailyTasks: [
+      "Coordinate planned and active event lifecycles.",
+      "Reconcile readiness, issue, return, and closure dependencies with Warehouse.",
+    ],
     responsibilityStages: [
-      stage("Coordinate readiness", "Validate event timing, demand, owner, and fulfillment status.", "The activation is ready or has a named blocker."),
-      stage("Close the lifecycle", "Confirm returns and unresolved exceptions before closure.", "Event intent and physical outcomes reconcile."),
+      stage(
+        "Coordinate readiness",
+        "Validate event timing, demand, owner, and fulfillment status.",
+        "The activation is ready or has a named blocker.",
+      ),
+      stage(
+        "Close the lifecycle",
+        "Confirm returns and unresolved exceptions before closure.",
+        "Event intent and physical outcomes reconcile.",
+      ),
     ],
   },
   events_viewer: {
-    dailyTasks: ["Review authorized event plans and lifecycle status.", "Route questions to the coordinator or Warehouse owner."],
+    dailyTasks: [
+      "Review authorized event plans and lifecycle status.",
+      "Route questions to the coordinator or Warehouse owner.",
+    ],
     responsibilityStages: [
-      stage("Review event context", "Read dates, status, and fulfillment totals without editing them.", "The current event state is understood."),
-      stage("Route an observation", "Send discrepancies to the accountable role with the event reference.", "No unauthorized source change is made."),
+      stage(
+        "Review event context",
+        "Read dates, status, and fulfillment totals without editing them.",
+        "The current event state is understood.",
+      ),
+      stage(
+        "Route an observation",
+        "Send discrepancies to the accountable role with the event reference.",
+        "No unauthorized source change is made.",
+      ),
     ],
   },
   events_admin: {
-    dailyTasks: ["Administer event lifecycle access and recover controlled event failures.", "Review event-to-Warehouse ownership and audit consistency."],
+    dailyTasks: [
+      "Administer event lifecycle access and recover controlled event failures.",
+      "Review event-to-Warehouse ownership and audit consistency.",
+    ],
     responsibilityStages: [
-      stage("Validate administration need", "Confirm the requested change, owner, scope, and source impact.", "The least-privilege administrative action is known."),
-      stage("Apply and verify", "Complete the authorized event change and inspect the resulting source trail.", "Event governance remains attributable."),
+      stage(
+        "Validate administration need",
+        "Confirm the requested change, owner, scope, and source impact.",
+        "The least-privilege administrative action is known.",
+      ),
+      stage(
+        "Apply and verify",
+        "Complete the authorized event change and inspect the resulting source trail.",
+        "Event governance remains attributable.",
+      ),
     ],
   },
   insights_analyst: {
-    dailyTasks: ["Validate source freshness and review authorized operational indicators.", "Prepare governed exports without changing source records."],
+    dailyTasks: [
+      "Validate source freshness and review authorized operational indicators.",
+      "Prepare governed exports without changing source records.",
+    ],
     responsibilityStages: [
-      stage("Validate the metric", "Check scope, definition, freshness, target, and source link.", "The indicator is fit for analysis."),
-      stage("Communicate analysis", "Explain the finding with source context and limitations.", "Decision owners receive traceable analysis."),
+      stage(
+        "Validate the metric",
+        "Check scope, definition, freshness, target, and source link.",
+        "The indicator is fit for analysis.",
+      ),
+      stage(
+        "Communicate analysis",
+        "Explain the finding with source context and limitations.",
+        "Decision owners receive traceable analysis.",
+      ),
     ],
   },
   insights_manager: {
-    dailyTasks: ["Review department summaries and cross-functional risks.", "Assign accountable follow-up through source workflows."],
+    dailyTasks: [
+      "Review department summaries and cross-functional risks.",
+      "Assign accountable follow-up through source workflows.",
+    ],
     responsibilityStages: [
-      stage("Assess performance", "Compare authorized indicators with targets and operating context.", "Priority performance gaps are identified."),
-      stage("Route corrective work", "Open the source and assign the accountable owner.", "Follow-up occurs in the governed workflow."),
+      stage(
+        "Assess performance",
+        "Compare authorized indicators with targets and operating context.",
+        "Priority performance gaps are identified.",
+      ),
+      stage(
+        "Route corrective work",
+        "Open the source and assign the accountable owner.",
+        "Follow-up occurs in the governed workflow.",
+      ),
     ],
   },
   insights_executive: {
-    dailyTasks: ["Review executive indicators and priority exceptions.", "Request accountable follow-up without editing operational evidence."],
+    dailyTasks: [
+      "Review executive indicators and priority exceptions.",
+      "Request accountable follow-up without editing operational evidence.",
+    ],
     responsibilityStages: [
-      stage("Review enterprise signal", "Assess summary indicators, targets, and known limitations.", "Material risks and trends are understood."),
-      stage("Set accountability", "Direct the responsible manager to the governed source workflow.", "Executive attention becomes attributable follow-up."),
+      stage(
+        "Review enterprise signal",
+        "Assess summary indicators, targets, and known limitations.",
+        "Material risks and trends are understood.",
+      ),
+      stage(
+        "Set accountability",
+        "Direct the responsible manager to the governed source workflow.",
+        "Executive attention becomes attributable follow-up.",
+      ),
     ],
   },
   insights_admin: {
-    dailyTasks: ["Administer Insights access and governed metric availability.", "Review failed projections, export controls, and source ownership."],
+    dailyTasks: [
+      "Administer Insights access and governed metric availability.",
+      "Review failed projections, export controls, and source ownership.",
+    ],
     responsibilityStages: [
-      stage("Validate analytical access", "Confirm approved audience, scope, and least-privilege metric areas.", "The correct Insights role is identified."),
-      stage("Verify governed delivery", "Confirm the projection, source link, and access behavior after change.", "Insights remain read-only and traceable."),
+      stage(
+        "Validate analytical access",
+        "Confirm approved audience, scope, and least-privilege metric areas.",
+        "The correct Insights role is identified.",
+      ),
+      stage(
+        "Verify governed delivery",
+        "Confirm the projection, source link, and access behavior after change.",
+        "Insights remain read-only and traceable.",
+      ),
     ],
   },
   strategic_sourcing_lead: {
@@ -652,16 +740,19 @@ function liveRole(definition: LiveRoleDefinition): KnowledgeRole {
   const operatingDetails = ROLE_OPERATING_DETAILS[definition.id];
   if (!operatingDetails)
     throw new Error(`missing role operating details for ${definition.id}`);
+  const moduleRoutes =
+    definition.rbacModule === "warehouse"
+      ? warehouseRoutesFor(definition.rbacRole)
+      : (definition.authority.accessibleRoutes ?? []);
   return {
     ...definition,
     ...operatingDetails,
     availability: "live",
     authority: {
       ...definition.authority,
-      accessibleRoutes:
-        definition.rbacModule === "warehouse"
-          ? warehouseRoutesFor(definition.rbacRole)
-          : (definition.authority.accessibleRoutes ?? []),
+      accessibleRoutes: [
+        ...new Set(["/", "/knowledge", "/work", ...moduleRoutes]),
+      ],
       capabilities: capabilitiesFor(definition.rbacModule, definition.rbacRole),
     },
   };
@@ -1315,87 +1406,203 @@ export const LIVE_KNOWLEDGE_ROLES: KnowledgeRole[] = [
     },
   }),
   liveRole({
-    id: "events_requester", rbacModule: "events", rbacRole: "requester", label: "Event requester", module: "events",
-    purpose: "Create event intent and request fulfillment while leaving every physical stock command to Warehouse.",
+    id: "events_requester",
+    rbacModule: "events",
+    rbacRole: "requester",
+    label: "Event requester",
+    module: "events",
+    purpose:
+      "Create event intent and request fulfillment while leaving every physical stock command to Warehouse.",
     authority: {
       accessibleRoutes: ["/events"],
-      canDo: ["View events, create event intent, and request Warehouse fulfillment."],
-      cannotDo: ["Do not reserve, issue, inspect, move, or return stock without the required Warehouse role."],
-      decisions: ["Decide whether event facts are complete enough to create and hand off."],
-      upstreamRoleIds: ["core_staff_only"], downstreamRoleIds: ["events_coordinator", "warehouse_operations"],
-      escalation: "Escalate fulfillment or custody blockers to the Event Coordinator and Warehouse operations owner.",
+      canDo: [
+        "View events, create event intent, and request Warehouse fulfillment.",
+      ],
+      cannotDo: [
+        "Do not reserve, issue, inspect, move, or return stock without the required Warehouse role.",
+      ],
+      decisions: [
+        "Decide whether event facts are complete enough to create and hand off.",
+      ],
+      upstreamRoleIds: ["core_staff_only"],
+      downstreamRoleIds: ["events_coordinator", "warehouse_operations"],
+      escalation:
+        "Escalate fulfillment or custody blockers to the Event Coordinator and Warehouse operations owner.",
     },
   }),
   liveRole({
-    id: "events_coordinator", rbacModule: "events", rbacRole: "coordinator", label: "Event coordinator", module: "events",
-    purpose: "Coordinate event planning, readiness, fulfillment handoffs, reconciliation, and closure.",
+    id: "events_coordinator",
+    rbacModule: "events",
+    rbacRole: "coordinator",
+    label: "Event coordinator",
+    module: "events",
+    purpose:
+      "Coordinate event planning, readiness, fulfillment handoffs, reconciliation, and closure.",
     authority: {
       accessibleRoutes: ["/events"],
-      canDo: ["Create and manage events, request fulfillment, and close a reconciled lifecycle."],
-      cannotDo: ["Do not close an event with unresolved custody or return exceptions; do not execute Warehouse commands without Warehouse authority."],
-      decisions: ["Decide readiness, lifecycle updates, and closure after source reconciliation."],
-      upstreamRoleIds: ["events_requester", "warehouse_marketing"], downstreamRoleIds: ["warehouse_operations", "warehouse_logistics_supervisor"],
-      escalation: "Escalate stock, custody, or variance blockers to the accountable Warehouse supervisor.",
+      canDo: [
+        "Create and manage events, request fulfillment, and close a reconciled lifecycle.",
+      ],
+      cannotDo: [
+        "Do not close an event with unresolved custody or return exceptions; do not execute Warehouse commands without Warehouse authority.",
+      ],
+      decisions: [
+        "Decide readiness, lifecycle updates, and closure after source reconciliation.",
+      ],
+      upstreamRoleIds: ["events_requester", "warehouse_marketing"],
+      downstreamRoleIds: [
+        "warehouse_operations",
+        "warehouse_logistics_supervisor",
+      ],
+      escalation:
+        "Escalate stock, custody, or variance blockers to the accountable Warehouse supervisor.",
     },
   }),
   liveRole({
-    id: "events_viewer", rbacModule: "events", rbacRole: "viewer", label: "Event viewer", module: "events",
-    purpose: "Review authorized event plans, lifecycle, and fulfillment status without changing them.",
+    id: "events_viewer",
+    rbacModule: "events",
+    rbacRole: "viewer",
+    label: "Event viewer",
+    module: "events",
+    purpose:
+      "Review authorized event plans, lifecycle, and fulfillment status without changing them.",
     authority: {
-      accessibleRoutes: ["/events"], canDo: ["View event intent and read-only fulfillment totals."],
-      cannotDo: ["Do not create, manage, close, or fulfill an event."], decisions: ["This role makes no event or stock decision."],
-      upstreamRoleIds: ["events_coordinator"], downstreamRoleIds: ["events_coordinator"],
-      escalation: "Escalate incorrect event data to the Event Coordinator with the event reference.",
+      accessibleRoutes: ["/events"],
+      canDo: ["View event intent and read-only fulfillment totals."],
+      cannotDo: ["Do not create, manage, close, or fulfill an event."],
+      decisions: ["This role makes no event or stock decision."],
+      upstreamRoleIds: ["events_coordinator"],
+      downstreamRoleIds: ["events_coordinator"],
+      escalation:
+        "Escalate incorrect event data to the Event Coordinator with the event reference.",
     },
   }),
   liveRole({
-    id: "events_admin", rbacModule: "events", rbacRole: "admin", label: "Events administrator", module: "events",
-    purpose: "Administer the complete Events workspace while preserving Warehouse custody and source controls.",
+    id: "events_admin",
+    rbacModule: "events",
+    rbacRole: "admin",
+    label: "Events administrator",
+    module: "events",
+    purpose:
+      "Administer the complete Events workspace while preserving Warehouse custody and source controls.",
     authority: {
-      accessibleRoutes: ["/events"], canDo: ["Perform every released Events lifecycle action and recover controlled event failures."],
-      cannotDo: ["Do not use Events administration to bypass Warehouse, Finance, Procurement, or Legal controls."], decisions: ["Decide event administration and lifecycle outcomes within released controls."],
-      upstreamRoleIds: ["platform_admin", "events_coordinator"], downstreamRoleIds: ["events_coordinator", "warehouse_admin"],
-      escalation: "Escalate cross-module control failures to Platform and the accountable department owner.",
+      accessibleRoutes: ["/events"],
+      canDo: [
+        "Perform every released Events lifecycle action and recover controlled event failures.",
+      ],
+      cannotDo: [
+        "Do not use Events administration to bypass Warehouse, Finance, Procurement, or Legal controls.",
+      ],
+      decisions: [
+        "Decide event administration and lifecycle outcomes within released controls.",
+      ],
+      upstreamRoleIds: ["platform_admin", "events_coordinator"],
+      downstreamRoleIds: ["events_coordinator", "warehouse_admin"],
+      escalation:
+        "Escalate cross-module control failures to Platform and the accountable department owner.",
     },
   }),
   liveRole({
-    id: "insights_analyst", rbacModule: "insights", rbacRole: "analyst", label: "Insights data analyst", module: "insights",
-    purpose: "Analyze authorized source-level indicators and prepare governed exports without operational writes.",
+    id: "insights_analyst",
+    rbacModule: "insights",
+    rbacRole: "analyst",
+    label: "Insights data analyst",
+    module: "insights",
+    purpose:
+      "Analyze authorized source-level indicators and prepare governed exports without operational writes.",
     authority: {
       accessibleRoutes: ["/insights"],
-      canDo: ["View department indicators and prepare exports within approved scope."], cannotDo: ["Do not edit source records or claim executive-only access."],
-      decisions: ["Decide whether an analysis is sufficiently defined, fresh, and supported for communication."],
-      upstreamRoleIds: ["warehouse_bi_analyst"], downstreamRoleIds: ["insights_manager"],
-      escalation: "Escalate undefined metrics, stale sources, or access concerns to the Insights Administrator.",
+      canDo: [
+        "View department indicators and prepare exports within approved scope.",
+      ],
+      cannotDo: ["Do not edit source records or claim executive-only access."],
+      decisions: [
+        "Decide whether an analysis is sufficiently defined, fresh, and supported for communication.",
+      ],
+      upstreamRoleIds: ["warehouse_bi_analyst"],
+      downstreamRoleIds: ["insights_manager"],
+      escalation:
+        "Escalate undefined metrics, stale sources, or access concerns to the Insights Administrator.",
     },
   }),
   liveRole({
-    id: "insights_manager", rbacModule: "insights", rbacRole: "manager", label: "Insights department manager", module: "insights",
-    purpose: "Review department and executive indicators and route accountable corrective action to source owners.",
+    id: "insights_manager",
+    rbacModule: "insights",
+    rbacRole: "manager",
+    label: "Insights department manager",
+    module: "insights",
+    purpose:
+      "Review department and executive indicators and route accountable corrective action to source owners.",
     authority: {
       accessibleRoutes: ["/insights"],
-      canDo: ["View released department summaries and executive indicators."], cannotDo: ["Do not change source data or use a KPI as substitute approval evidence."],
-      decisions: ["Decide which source owner must investigate a material indicator."], upstreamRoleIds: ["insights_analyst"], downstreamRoleIds: ["insights_executive", "warehouse_admin", "procurement_admin", "legal_admin"],
-      escalation: "Escalate material cross-department risk to the accountable executive and source owner.",
+      canDo: ["View released department summaries and executive indicators."],
+      cannotDo: [
+        "Do not change source data or use a KPI as substitute approval evidence.",
+      ],
+      decisions: [
+        "Decide which source owner must investigate a material indicator.",
+      ],
+      upstreamRoleIds: ["insights_analyst"],
+      downstreamRoleIds: [
+        "insights_executive",
+        "warehouse_admin",
+        "procurement_admin",
+        "legal_admin",
+      ],
+      escalation:
+        "Escalate material cross-department risk to the accountable executive and source owner.",
     },
   }),
   liveRole({
-    id: "insights_executive", rbacModule: "insights", rbacRole: "executive", label: "Insights executive", module: "insights",
-    purpose: "Review executive-only summaries and assign accountable follow-up without source-level access or writes.",
-    authority: {
-      accessibleRoutes: ["/insights"], canDo: ["View released executive indicators and priority exceptions."],
-      cannotDo: ["Do not access source-level department detail unless separately assigned; do not alter operational evidence."], decisions: ["Decide executive follow-up priority and accountable management owner."],
-      upstreamRoleIds: ["insights_manager"], downstreamRoleIds: ["insights_manager"], escalation: "Escalate material control risk through the accountable executive governance route.",
-    },
-  }),
-  liveRole({
-    id: "insights_admin", rbacModule: "insights", rbacRole: "admin", label: "Insights administrator", module: "insights",
-    purpose: "Administer every released Insights view and export permission while preserving read-only source ownership.",
+    id: "insights_executive",
+    rbacModule: "insights",
+    rbacRole: "executive",
+    label: "Insights executive",
+    module: "insights",
+    purpose:
+      "Review executive-only summaries and assign accountable follow-up without source-level access or writes.",
     authority: {
       accessibleRoutes: ["/insights"],
-      canDo: ["View every released metric area and administer governed Insights access."], cannotDo: ["Do not bypass source RLS, modify operations, or publish undefined metrics."],
-      decisions: ["Decide approved Insights role scope and metric availability."], upstreamRoleIds: ["platform_admin", "insights_manager"], downstreamRoleIds: ["insights_analyst", "insights_manager", "insights_executive"],
-      escalation: "Escalate security, definition, or source-integrity failures to Platform and the accountable data owner.",
+      canDo: ["View released executive indicators and priority exceptions."],
+      cannotDo: [
+        "Do not access source-level department detail unless separately assigned; do not alter operational evidence.",
+      ],
+      decisions: [
+        "Decide executive follow-up priority and accountable management owner.",
+      ],
+      upstreamRoleIds: ["insights_manager"],
+      downstreamRoleIds: ["insights_manager"],
+      escalation:
+        "Escalate material control risk through the accountable executive governance route.",
+    },
+  }),
+  liveRole({
+    id: "insights_admin",
+    rbacModule: "insights",
+    rbacRole: "admin",
+    label: "Insights administrator",
+    module: "insights",
+    purpose:
+      "Administer every released Insights view and export permission while preserving read-only source ownership.",
+    authority: {
+      accessibleRoutes: ["/insights"],
+      canDo: [
+        "View every released metric area and administer governed Insights access.",
+      ],
+      cannotDo: [
+        "Do not bypass source RLS, modify operations, or publish undefined metrics.",
+      ],
+      decisions: [
+        "Decide approved Insights role scope and metric availability.",
+      ],
+      upstreamRoleIds: ["platform_admin", "insights_manager"],
+      downstreamRoleIds: [
+        "insights_analyst",
+        "insights_manager",
+        "insights_executive",
+      ],
+      escalation:
+        "Escalate security, definition, or source-integrity failures to Platform and the accountable data owner.",
     },
   }),
 ];

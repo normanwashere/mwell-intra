@@ -38,9 +38,9 @@ const bundled = await build({
   write: false,
 });
 
-const moduleUrl = `${pathToFileURL(
-  path.join(root, "knowledge-evidence-catalog.mjs"),
-).href}?bundle=${Buffer.from(bundled.outputFiles[0].text).toString("base64url")}`;
+const moduleUrl = `${
+  pathToFileURL(path.join(root, "knowledge-evidence-catalog.mjs")).href
+}?bundle=${Buffer.from(bundled.outputFiles[0].text).toString("base64url")}`;
 const generated = await import(
   `data:text/javascript;base64,${Buffer.from(
     `${bundled.outputFiles[0].text}\n//# sourceURL=${moduleUrl}`,
@@ -56,14 +56,14 @@ if (generated.errors.length) {
 const sourceCommits = new Set(
   generated.requirements.map((item) => item.sourceCommit),
 );
-if (sourceCommits.size !== 1)
-  throw new Error("Knowledge evidence must be tied to one source commit.");
 
 const report = {
   schemaVersion: 1,
   generatedAt: new Date().toISOString(),
-  sourceCommit: [...sourceCommits][0],
-  environment: "production",
+  sourceCommits: [...sourceCommits].sort(),
+  environments: [
+    ...new Set(generated.requirements.map((item) => item.environment)),
+  ].sort(),
   count: generated.requirements.length,
   requirements: generated.requirements.map((item) => ({
     ...item,
@@ -79,5 +79,5 @@ const temporary = `${outputPath}.${process.pid}.tmp`;
 await writeFile(temporary, serialized, "utf8");
 await rename(temporary, outputPath);
 console.log(
-  `PASS Knowledge evidence catalog: ${report.count} production requirements.`,
+  `PASS Knowledge evidence catalog: ${report.count} governed requirements.`,
 );

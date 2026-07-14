@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, screen, within } from '@testing-library/react';
+import { act, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ImportsPage } from './ImportsPage';
 import { renderWithProviders } from '@/test/renderWithProviders';
@@ -60,7 +60,9 @@ describe('ImportsPage', () => {
 
   it('blocks validation while offline', async () => {
     const online = vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
-    renderWithProviders(<ImportsPage />, { role: 'warehouse_admin', source: 'supabase' });
+    await act(async () => {
+      renderWithProviders(<ImportsPage />, { role: 'warehouse_admin', source: 'supabase' });
+    });
     expect(screen.getByText(/connect to the network/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Validate file' })).toBeDisabled();
     online.mockRestore();

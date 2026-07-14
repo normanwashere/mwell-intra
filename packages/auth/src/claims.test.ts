@@ -14,6 +14,8 @@ describe('parseUserRolesFromClaims', () => {
           warehouse: ['logistics_supervisor'],
           procurement: ['approver'],
           legal: ['legal_reviewer'],
+          events: ['coordinator'],
+          insights: ['analyst'],
         },
         kind: 'employee',
       },
@@ -22,6 +24,8 @@ describe('parseUserRolesFromClaims', () => {
       warehouse: ['logistics_supervisor'],
       procurement: ['approver'],
       legal: ['legal_reviewer'],
+      events: ['coordinator'],
+      insights: ['analyst'],
     });
   });
 
@@ -38,6 +42,22 @@ describe('parseUserRolesFromClaims', () => {
     expect(result).toEqual({ warehouse: ['finance'] });
     expect(result.procurement).toBeUndefined();
     expect(result.legal).toBeUndefined();
+    expect(result.events).toBeUndefined();
+    expect(result.insights).toBeUndefined();
+  });
+
+  it('accepts the Events and Insights role namespaces', () => {
+    expect(
+      parseUserRolesFromClaims({
+        roles: {
+          events: ['requester', 'viewer'],
+          insights: ['manager', 'executive'],
+        },
+      }),
+    ).toEqual({
+      events: ['requester', 'viewer'],
+      insights: ['manager', 'executive'],
+    });
   });
 
   it('drops unknown module keys', () => {

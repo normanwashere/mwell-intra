@@ -637,5 +637,100 @@ if (Object.keys(KNOWLEDGE_EVIDENCE_SCENARIOS).length !== executableNodes.length)
     "Evidence scenario count does not match executable flow nodes",
   );
 
-export const KNOWLEDGE_EVIDENCE: KnowledgeEvidence[] =
-  executableNodes.map(buildEvidence);
+export const KNOWLEDGE_EVIDENCE: KnowledgeEvidence[] = executableNodes
+  .map(buildEvidence)
+  .concat([
+    {
+      id: "ev-events-workspace",
+      featureId: "events-workspace",
+      desktopSrc: "/knowledge/screenshots/task8-events-workspace-desktop.png",
+      mobileSrc: "/knowledge/screenshots/task8-events-workspace-mobile.png",
+      route: "/events",
+      roleId: "events_requester",
+      state:
+        "An event requester is reviewing event readiness before creating a governed event intent.",
+      capturedAt: "2026-07-14",
+      reviewedAt: "2026-07-14",
+      appCommit: "798798f25fea91ec9c4a5ccba906f3587feb8b12",
+      provenance: "documentation",
+      environment: "demo",
+      alt: "Events workspace with the New event control identified",
+      expectedLandmark: "New event",
+      sensitiveDataReviewed: true,
+      hotspots: [
+        {
+          id: "primary",
+          number: 1,
+          x: 0.221,
+          y: 0.2849,
+          mobileX: 0.2724,
+          mobileY: 0.336,
+          label: "Create event intent",
+          instruction:
+            "Select New event, then enter the event name, type, and valid operating dates before creation.",
+        },
+      ],
+    },
+    {
+      id: "ev-my-work",
+      featureId: "my-work",
+      desktopSrc: "/knowledge/screenshots/task8-my-work-desktop.png",
+      mobileSrc: "/knowledge/screenshots/task8-my-work-mobile.png",
+      route: "/work",
+      roleId: "events_requester",
+      state:
+        "A requester is reviewing assigned work and the authoritative source action for an event handoff.",
+      capturedAt: "2026-07-14",
+      reviewedAt: "2026-07-14",
+      appCommit: "798798f25fea91ec9c4a5ccba906f3587feb8b12",
+      provenance: "documentation",
+      environment: "demo",
+      alt: "My Work queue with the authoritative source control identified",
+      expectedLandmark: "Open source",
+      sensitiveDataReviewed: true,
+      hotspots: [
+        {
+          id: "primary",
+          number: 1,
+          x: 0.918,
+          y: 0.5704,
+          mobileX: 0.5,
+          mobileY: 0.7353,
+          label: "Open the authoritative source",
+          instruction:
+            "Use Open source to complete the action in the owning module; My Work does not duplicate approval or transaction commands.",
+        },
+      ],
+    },
+    {
+      id: "ev-insights-workspace",
+      featureId: "insights-workspace",
+      desktopSrc: "/knowledge/screenshots/task8-insights-workspace-desktop.png",
+      mobileSrc: "/knowledge/screenshots/task8-insights-workspace-mobile.png",
+      route: "/insights",
+      roleId: "insights_analyst",
+      state:
+        "An Insights analyst is reviewing role-scoped warehouse indicators and their governed source link.",
+      capturedAt: "2026-07-14",
+      reviewedAt: "2026-07-14",
+      appCommit: "798798f25fea91ec9c4a5ccba906f3587feb8b12",
+      provenance: "documentation",
+      environment: "demo",
+      alt: "Insights workspace with the governed source control identified",
+      expectedLandmark: "Open governed source",
+      sensitiveDataReviewed: true,
+      hotspots: [
+        {
+          id: "primary",
+          number: 1,
+          x: 0.2907,
+          y: 0.7271,
+          mobileX: 0.5,
+          mobileY: 0.7649,
+          label: "Investigate at the governed source",
+          instruction:
+            "Open the governed source to investigate or correct a metric; Insights remains read-only.",
+        },
+      ],
+    },
+  ]);

@@ -7,9 +7,11 @@ import type {
   KnowledgeArticle,
   KnowledgeFeature,
   KnowledgeFlow,
+  KnowledgeEvidence,
   KnowledgeRole,
 } from "@shell/lib/knowledge/types";
 import { capabilityGuidance } from "@shell/lib/knowledge/capabilities";
+import { EvidenceViewer } from "./EvidenceViewer";
 
 const availabilityLabel = {
   live: "Live",
@@ -29,6 +31,7 @@ export function FeatureGuide({
   rolesById,
   relatedArticles,
   relatedFlows,
+  evidence = [],
   onBack,
   onOpenArticle,
   onOpenFlow,
@@ -37,6 +40,7 @@ export function FeatureGuide({
   rolesById: Map<string, KnowledgeRole>;
   relatedArticles: KnowledgeArticle[];
   relatedFlows: KnowledgeFlow[];
+  evidence?: KnowledgeEvidence[];
   onBack: () => void;
   onOpenArticle: (id: string) => void;
   onOpenFlow: (id: string) => void;
@@ -87,6 +91,18 @@ export function FeatureGuide({
       </header>
 
       <div className="mt-7 space-y-9">
+        {evidence.length > 0 && (
+          <GuideSection id="feature-screen-guide" title="Screen guide">
+            <p className="mt-2 text-sm leading-6 text-muted">
+              Follow the numbered control on the actual desktop or mobile application screen.
+            </p>
+            <div className="mt-4 space-y-6">
+              {evidence.map((item) => (
+                <EvidenceViewer key={item.id} evidence={item} title={feature.title} />
+              ))}
+            </div>
+          </GuideSection>
+        )}
         <GuideSection id="feature-entry" title="Entry routes and access">
           <div className="mt-3 divide-y divide-line border-y border-line">
             {feature.routes.map((route) => (

@@ -196,7 +196,8 @@ export interface KnowledgeHotspot {
 
 export interface KnowledgeEvidence {
   id: string;
-  nodeId: string;
+  nodeId?: string;
+  featureId?: string;
   desktopSrc: string;
   mobileSrc: string;
   route: string;

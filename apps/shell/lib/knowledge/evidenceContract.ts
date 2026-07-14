@@ -11,8 +11,9 @@ export const KNOWLEDGE_CAPTURE_VIEWPORTS = {
 
 export interface KnowledgeEvidenceRequirement {
   evidenceId: string;
-  workflowId: string;
-  nodeId: string;
+  workflowId?: string;
+  nodeId?: string;
+  featureId?: string;
   module: KnowledgeModule;
   roleId: string;
   route: string;
@@ -20,7 +21,7 @@ export interface KnowledgeEvidenceRequirement {
   expectedLandmark: string;
   targetKey: string;
   sourceCommit: string;
-  environment: "production";
+  environment: "production" | "documentation";
   desktop: {
     src: string;
     width: number;
@@ -43,7 +44,10 @@ function routeModule(route: string): KnowledgeModule {
     segment === "procurement" ||
     segment === "legal" ||
     segment === "vendor" ||
-    segment === "admin"
+    segment === "admin" ||
+    segment === "finance" ||
+    segment === "events" ||
+    segment === "insights"
   )
     return segment;
   return "core";
@@ -54,7 +58,7 @@ export function evidenceRequirements(
 ): KnowledgeEvidenceRequirement[] {
   const evidenceById = new Map(content.evidence.map((item) => [item.id, item]));
 
-  return content.flows.flatMap((workflow) => {
+  const flowRequirements = content.flows.flatMap((workflow) => {
     if (workflow.availability !== "live") return [];
     return workflow.nodes
       .filter((node) => EXECUTABLE_NODE_TYPES.has(node.type))
@@ -77,7 +81,7 @@ export function evidenceRequirements(
           expectedLandmark: evidence.expectedLandmark,
           targetKey: node.id,
           sourceCommit: evidence.appCommit,
-          environment: "production" as const,
+          environment: evidence.provenance,
           desktop: {
             src: evidence.desktopSrc,
             ...KNOWLEDGE_CAPTURE_VIEWPORTS.desktop,
@@ -90,6 +94,32 @@ export function evidenceRequirements(
         };
       });
   });
+
+  const featureRequirements = content.evidence
+    .filter((evidence) => evidence.featureId)
+    .map((evidence) => ({
+      evidenceId: evidence.id,
+      featureId: evidence.featureId,
+      module: routeModule(evidence.route),
+      roleId: evidence.roleId,
+      route: evidence.route,
+      state: evidence.state,
+      expectedLandmark: evidence.expectedLandmark,
+      targetKey: evidence.featureId!,
+      sourceCommit: evidence.appCommit,
+      environment: evidence.provenance,
+      desktop: {
+        src: evidence.desktopSrc,
+        ...KNOWLEDGE_CAPTURE_VIEWPORTS.desktop,
+      },
+      mobile: {
+        src: evidence.mobileSrc,
+        ...KNOWLEDGE_CAPTURE_VIEWPORTS.mobile,
+      },
+      hotspots: evidence.hotspots,
+    }));
+
+  return [...flowRequirements, ...featureRequirements];
 }
 
 export function validateEvidenceRequirements(
@@ -108,7 +138,9 @@ export function validateEvidenceRequirements(
   const nodeKeys = new Set<string>();
 
   for (const item of requirements) {
-    const nodeKey = `${item.workflowId}:${item.nodeId}`;
+    const nodeKey = item.nodeId
+      ? `${item.workflowId}:${item.nodeId}`
+      : `feature:${item.featureId}`;
     if (evidenceIds.has(item.evidenceId))
       errors.push(`${item.evidenceId} is duplicated`);
     if (nodeKeys.has(nodeKey)) errors.push(`${nodeKey} is scheduled twice`);
@@ -130,10 +162,7 @@ export function validateEvidenceRequirements(
       errors.push(`${item.evidenceId} has unsupported capture dimensions`);
     if (!/^[0-9a-f]{40}$/.test(item.sourceCommit))
       errors.push(`${item.evidenceId} has an invalid source commit`);
-    if (
-      options.deployedCommit &&
-      item.sourceCommit !== options.deployedCommit
-    )
+    if (options.deployedCommit && item.sourceCommit !== options.deployedCommit)
       errors.push(
         `${item.evidenceId} source commit does not match the deployed commit`,
       );
@@ -143,7 +172,9 @@ export function validateEvidenceRequirements(
           (coordinate) => coordinate < 0 || coordinate > 1,
         )
       )
-        errors.push(`${item.evidenceId}:${hotspot.id} hotspot is out of bounds`);
+        errors.push(
+          `${item.evidenceId}:${hotspot.id} hotspot is out of bounds`,
+        );
   }
 
   return errors;

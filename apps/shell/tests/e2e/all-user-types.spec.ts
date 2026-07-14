@@ -1,13 +1,17 @@
-import { expect, type Page, test, type TestInfo } from '@playwright/test';
+import { expect, type Page, test, type TestInfo } from "@playwright/test";
+import { DEMO_PROFILES } from "../../lib/demoProfiles";
 
-type ModuleName = 'core' | 'warehouse' | 'procurement' | 'legal';
+type ModuleName =
+  "core" | "warehouse" | "procurement" | "legal" | "events" | "insights";
 type Roles = Partial<Record<ModuleName, readonly string[]>>;
+type ProfileKind = "employee" | "vendor";
 
 interface LoginProfile {
   readonly id: string;
   readonly email: string;
   readonly name: string;
   readonly title: string;
+  readonly kind: ProfileKind;
   readonly roles: Roles;
 }
 
@@ -15,7 +19,13 @@ interface Persona {
   readonly id: string;
   readonly label: string;
   readonly profileId: string;
+  readonly kind: ProfileKind;
   readonly roles: Roles;
+}
+
+interface LoginRedirectExpectation {
+  readonly requestedPath: string;
+  readonly finalPath: string;
 }
 
 interface RouteExpectation {
@@ -44,334 +54,361 @@ interface ConsoleIssue {
   readonly location: string;
 }
 
-const MEMORY_SESSION_KEY = 'intra.memory-session.v1';
-const DEMO_PASSWORD = 'demo';
-const INTERNAL_PROFILE_ID = 'demo-operations';
-const VENDOR_PROFILE_ID = 'demo-vendor';
+const MEMORY_SESSION_KEY = "intra.memory-session.v1";
+const DEMO_PASSWORD = "demo";
+const INTERNAL_PROFILE_ID = "demo-operations";
+const VENDOR_PROFILE_ID = "demo-vendor";
 
-const LOGIN_PROFILES: readonly LoginProfile[] = [
-  {
-    id: 'demo-logistics',
-    email: 'logistics@mwell.demo',
-    name: 'Bea Santos',
-    title: 'Logistics Supervisor',
-    roles: { core: ['staff'], warehouse: ['logistics_supervisor', 'procurement'] },
-  },
-  {
-    id: 'demo-operations',
-    email: 'ops@mwell.demo',
-    name: 'Marco Reyes',
-    title: 'eCommerce / Operations',
-    roles: { core: ['staff'], warehouse: ['operations'] },
-  },
-  {
-    id: 'demo-procurement',
-    email: 'procurement@mwell.demo',
-    name: 'Liza Cruz',
-    title: 'Procurement Officer',
-    roles: { core: ['staff'], procurement: ['procurement_officer'] },
-  },
-  {
-    id: 'demo-procurement-approver',
-    email: 'approver@mwell.demo',
-    name: 'Marta Ramos',
-    title: 'Department Head - Procurement Approver',
-    roles: { core: ['staff'], procurement: ['approver'] },
-  },
-  {
-    id: 'demo-procurement-finance',
-    email: 'finance.procurement@mwell.demo',
-    name: 'Elena Torres',
-    title: 'Finance - Procurement Reviewer',
-    roles: { core: ['staff'], procurement: ['finance'] },
-  },
-  {
-    id: 'demo-procurement-cfo',
-    email: 'cfo@mwell.demo',
-    name: 'Diego Ang',
-    title: 'CFO / DOA Approver',
-    roles: { core: ['staff'], procurement: ['admin'] },
-  },
-  {
-    id: 'demo-legal',
-    email: 'legal@mwell.demo',
-    name: 'Andre Villanueva',
-    title: 'Legal Reviewer',
-    roles: { core: ['staff'], legal: ['legal_reviewer'] },
-  },
-  {
-    id: 'demo-finance',
-    email: 'finance@mwell.demo',
-    name: 'Rina Domingo',
-    title: 'Finance Manager',
-    roles: {
-      core: ['staff'],
-      warehouse: ['finance'],
-      procurement: ['finance'],
-    },
-  },
-  {
-    id: 'demo-bi',
-    email: 'bi@mwell.demo',
-    name: 'Jules Aquino',
-    title: 'BI Analyst',
-    roles: { core: ['staff'], warehouse: ['bi_analyst'] },
-  },
-  {
-    id: 'demo-marketing',
-    email: 'marketing@mwell.demo',
-    name: 'Kai Mendoza',
-    title: 'Marketing Lead',
-    roles: { core: ['staff'], warehouse: ['marketing'] },
-  },
-  {
-    id: 'demo-pricing',
-    email: 'pricing@mwell.demo',
-    name: 'Pia Salcedo',
-    title: 'Pricing Analyst',
-    roles: { core: ['staff'], warehouse: ['pricing'] },
-  },
-  {
-    id: 'demo-warehouse-admin',
-    email: 'warehouse.admin@mwell.demo',
-    name: 'Alex Rivera',
-    title: 'Warehouse Administrator',
-    roles: { core: ['staff'], warehouse: ['warehouse_admin'] },
-  },
-  {
-    id: 'demo-admin',
-    email: 'admin@mwell.demo',
-    name: 'Patricia Lim',
-    title: 'Platform Administrator',
-    roles: { core: ['platform_admin', 'staff'] },
-  },
-  {
-    id: 'demo-vendor',
-    email: 'vendor@acme.demo',
-    name: 'Acme Medical Supplies',
-    title: 'Vendor Portal',
-    roles: { core: ['vendor_portal'] },
-  },
-];
+const LOGIN_PROFILES: readonly LoginProfile[] = DEMO_PROFILES.map(
+  (profile) => ({
+    id: profile.id,
+    email: profile.email,
+    name: profile.name ?? profile.email,
+    title: profile.title ?? profile.email,
+    kind: profile.kind,
+    roles: profile.roles,
+  }),
+);
 
 const CANONICAL_PERSONAS: readonly Persona[] = [
   {
-    id: 'core-staff-only',
-    label: 'Core staff without module roles',
+    id: "core-staff-only",
+    label: "Core staff without module roles",
     profileId: INTERNAL_PROFILE_ID,
-    roles: { core: ['staff'] },
+    kind: "employee",
+    roles: { core: ["staff"] },
   },
   {
-    id: 'core-platform-admin',
-    label: 'Core platform administrator',
-    profileId: 'demo-admin',
-    roles: { core: ['platform_admin', 'staff'] },
+    id: "core-platform-admin",
+    label: "Core platform administrator",
+    profileId: "demo-admin",
+    kind: "employee",
+    roles: { core: ["platform_admin", "staff"] },
   },
   {
-    id: 'core-vendor-portal',
-    label: 'External vendor portal user',
+    id: "core-vendor-portal",
+    label: "External vendor portal user",
     profileId: VENDOR_PROFILE_ID,
-    roles: { core: ['vendor_portal'] },
+    kind: "vendor",
+    roles: { core: ["vendor_portal"] },
   },
   ...[
-    'logistics_supervisor',
-    'operations',
-    'finance',
-    'bi_analyst',
-    'business_unit',
-    'marketing',
-    'procurement',
-    'pricing',
-    'warehouse_admin',
+    "logistics_supervisor",
+    "operations",
+    "finance",
+    "bi_analyst",
+    "business_unit",
+    "marketing",
+    "procurement",
+    "pricing",
+    "warehouse_admin",
   ].map((role) => ({
     id: `warehouse-${role}`,
     label: `Warehouse ${role}`,
     profileId: INTERNAL_PROFILE_ID,
-    roles: { core: ['staff'], warehouse: [role] },
+    kind: "employee" as const,
+    roles: { core: ["staff"], warehouse: [role] },
   })),
-  ...[
-    'requester',
-    'procurement_officer',
-    'approver',
-    'finance',
-    'admin',
-  ].map((role) => ({
-    id: `procurement-${role}`,
-    label: `Procurement ${role}`,
-    profileId: INTERNAL_PROFILE_ID,
-    roles: { core: ['staff'], procurement: [role] },
-  })),
-  ...['legal_reviewer', 'compliance', 'admin'].map((role) => ({
+  ...["requester", "procurement_officer", "approver", "finance", "admin"].map(
+    (role) => ({
+      id: `procurement-${role}`,
+      label: `Procurement ${role}`,
+      profileId: INTERNAL_PROFILE_ID,
+      kind: "employee" as const,
+      roles: { core: ["staff"], procurement: [role] },
+    }),
+  ),
+  ...["legal_reviewer", "compliance", "admin"].map((role) => ({
     id: `legal-${role}`,
     label: `Legal ${role}`,
     profileId: INTERNAL_PROFILE_ID,
-    roles: { core: ['staff'], legal: [role] },
+    kind: "employee" as const,
+    roles: { core: ["staff"], legal: [role] },
+  })),
+  ...["requester", "coordinator", "viewer", "admin"].map((role) => ({
+    id: `events-${role}`,
+    label: `Events ${role}`,
+    profileId: INTERNAL_PROFILE_ID,
+    kind: "employee" as const,
+    roles: { core: ["staff"], events: [role] },
+  })),
+  ...["analyst", "manager", "executive", "admin"].map((role) => ({
+    id: `insights-${role}`,
+    label: `Insights ${role}`,
+    profileId: INTERNAL_PROFILE_ID,
+    kind: "employee" as const,
+    roles: { core: ["staff"], insights: [role] },
   })),
   {
-    id: 'finance-dual-scope',
-    label: 'Finance with Warehouse and Procurement scopes',
-    profileId: 'demo-finance',
+    id: "finance-dual-scope",
+    label: "Finance with Warehouse and Procurement scopes",
+    profileId: "demo-finance",
+    kind: "employee",
     roles: {
-      core: ['staff'],
-      warehouse: ['finance'],
-      procurement: ['finance'],
+      core: ["staff"],
+      warehouse: ["finance"],
+      procurement: ["finance"],
     },
   },
 ];
 
 const WAREHOUSE_CAPS: Record<string, readonly string[]> = {
   logistics_supervisor: [
-    'view_dashboard',
-    'manage_inventory',
-    'receive_stock',
-    'manage_products',
-    'manage_locations',
-    'cycle_count',
-    'manage_returns',
-    'issue_items',
-    'transfer_stock',
-    'manage_operation_routes',
-    'inspect_quality',
-    'release_quality_hold',
-    'approve_stock_adjustment',
-    'view_exceptions',
-    'resolve_exceptions',
-    'import_warehouse_data',
+    "view_dashboard",
+    "manage_inventory",
+    "receive_stock",
+    "manage_products",
+    "manage_locations",
+    "cycle_count",
+    "manage_returns",
+    "issue_items",
+    "transfer_stock",
+    "manage_operation_routes",
+    "inspect_quality",
+    "release_quality_hold",
+    "approve_stock_adjustment",
+    "view_exceptions",
+    "resolve_exceptions",
+    "import_warehouse_data",
   ],
   operations: [
-    'view_dashboard',
-    'manage_inventory',
-    'reserve_allocate',
-    'issue_items',
-    'manage_returns',
-    'transfer_stock',
-    'inspect_quality',
-    'view_exceptions',
+    "view_dashboard",
+    "manage_inventory",
+    "reserve_allocate",
+    "issue_items",
+    "manage_returns",
+    "transfer_stock",
+    "inspect_quality",
+    "view_exceptions",
   ],
   finance: [
-    'view_dashboard',
-    'manage_inventory',
-    'view_finance',
-    'cycle_count',
-    'approve_stock_adjustment',
-    'view_exceptions',
+    "view_dashboard",
+    "manage_inventory",
+    "view_finance",
+    "cycle_count",
+    "approve_stock_adjustment",
+    "view_exceptions",
   ],
   bi_analyst: [
-    'view_dashboard',
-    'manage_inventory',
-    'view_analytics',
-    'view_exceptions',
+    "view_dashboard",
+    "manage_inventory",
+    "view_analytics",
+    "view_exceptions",
   ],
-  business_unit: ['view_dashboard', 'manage_inventory', 'reserve_allocate'],
+  business_unit: ["view_dashboard", "manage_inventory", "reserve_allocate"],
   marketing: [
-    'view_dashboard',
-    'manage_inventory',
-    'reserve_allocate',
-    'manage_returns',
+    "view_dashboard",
+    "manage_inventory",
+    "reserve_allocate",
+    "manage_returns",
   ],
   procurement: [
-    'view_dashboard',
-    'manage_inventory',
-    'view_procurement',
-    'manage_products',
+    "view_dashboard",
+    "manage_inventory",
+    "view_procurement",
+    "manage_products",
   ],
   pricing: [
-    'view_dashboard',
-    'manage_inventory',
-    'view_pricing',
-    'set_pricing',
-    'view_finance',
+    "view_dashboard",
+    "manage_inventory",
+    "view_pricing",
+    "set_pricing",
+    "view_finance",
   ],
   warehouse_admin: [
-    'view_dashboard',
-    'receive_stock',
-    'manage_inventory',
-    'manage_products',
-    'manage_locations',
-    'cycle_count',
-    'manage_returns',
-    'reserve_allocate',
-    'issue_items',
-    'transfer_stock',
-    'view_finance',
-    'view_analytics',
-    'view_procurement',
-    'view_pricing',
-    'set_pricing',
-    'manage_operation_routes',
-    'inspect_quality',
-    'release_quality_hold',
-    'approve_stock_adjustment',
-    'view_exceptions',
-    'resolve_exceptions',
-    'import_warehouse_data',
+    "view_dashboard",
+    "receive_stock",
+    "manage_inventory",
+    "manage_products",
+    "manage_locations",
+    "cycle_count",
+    "manage_returns",
+    "reserve_allocate",
+    "issue_items",
+    "transfer_stock",
+    "view_finance",
+    "view_analytics",
+    "view_procurement",
+    "view_pricing",
+    "set_pricing",
+    "manage_operation_routes",
+    "inspect_quality",
+    "release_quality_hold",
+    "approve_stock_adjustment",
+    "view_exceptions",
+    "resolve_exceptions",
+    "import_warehouse_data",
   ],
 };
 
 const PROCUREMENT_CAPS: Record<string, readonly string[]> = {
-  requester: ['view_dashboard', 'create_request'],
+  requester: ["view_dashboard", "create_request"],
   procurement_officer: [
-    'view_dashboard',
-    'create_request',
-    'manage_rfp',
-    'author_po',
-    'manage_vendors',
-    'approve_request',
+    "view_dashboard",
+    "create_request",
+    "manage_rfp",
+    "author_po",
+    "manage_vendors",
+    "approve_request",
   ],
-  approver: ['view_dashboard', 'approve_request', 'approve_award'],
-  finance: ['view_dashboard', 'view_finance', 'approve_request'],
+  approver: ["view_dashboard", "approve_request", "approve_award"],
+  finance: ["view_dashboard", "view_finance", "approve_request"],
   admin: [
-    'view_dashboard',
-    'create_request',
-    'manage_rfp',
-    'author_po',
-    'approve_request',
-    'approve_award',
-    'manage_vendors',
-    'view_finance',
-    'admin',
+    "view_dashboard",
+    "create_request",
+    "manage_rfp",
+    "author_po",
+    "approve_request",
+    "approve_award",
+    "manage_vendors",
+    "view_finance",
+    "admin",
   ],
 };
 
 const LEGAL_CAPS: Record<string, readonly string[]> = {
   legal_reviewer: [
-    'view_dashboard',
-    'review_accreditation',
-    'manage_checklist',
-    'approve_accreditation',
-    'manage_documents',
+    "view_dashboard",
+    "review_accreditation",
+    "manage_checklist",
+    "approve_accreditation",
+    "manage_documents",
   ],
   compliance: [
-    'view_dashboard',
-    'review_accreditation',
-    'approve_accreditation',
-    'manage_documents',
+    "view_dashboard",
+    "review_accreditation",
+    "approve_accreditation",
+    "manage_documents",
   ],
   admin: [
-    'view_dashboard',
-    'review_accreditation',
-    'manage_checklist',
-    'approve_accreditation',
-    'manage_documents',
-    'admin',
+    "view_dashboard",
+    "review_accreditation",
+    "manage_checklist",
+    "approve_accreditation",
+    "manage_documents",
+    "admin",
   ],
 };
 
-test.describe('full Mwell Intra user-type E2E', () => {
+const EVENTS_CAPS: Record<string, readonly string[]> = {
+  requester: ["view_events", "create_event", "request_fulfillment"],
+  coordinator: [
+    "view_events",
+    "create_event",
+    "manage_events",
+    "request_fulfillment",
+    "close_event",
+  ],
+  viewer: ["view_events"],
+  admin: [
+    "view_events",
+    "create_event",
+    "manage_events",
+    "request_fulfillment",
+    "close_event",
+    "admin",
+  ],
+};
+
+const INSIGHTS_CAPS: Record<string, readonly string[]> = {
+  analyst: [
+    "view_warehouse",
+    "view_procurement",
+    "view_legal",
+    "view_finance",
+    "prepare_exports",
+  ],
+  manager: [
+    "view_warehouse",
+    "view_procurement",
+    "view_legal",
+    "view_finance",
+    "view_executive",
+  ],
+  executive: ["view_executive"],
+  admin: [
+    "view_warehouse",
+    "view_procurement",
+    "view_legal",
+    "view_finance",
+    "view_executive",
+    "prepare_exports",
+    "admin",
+  ],
+};
+
+function loginRedirectExpectation(
+  profile: LoginProfile,
+): LoginRedirectExpectation {
+  if (profile.kind === "vendor") {
+    return { requestedPath: "/work", finalPath: "/" };
+  }
+  if (hasCoreRole(profile.roles, "platform_admin")) {
+    return { requestedPath: "/admin/users", finalPath: "/admin/users" };
+  }
+  if (profile.id === "demo-logistics") {
+    return { requestedPath: "/events", finalPath: "/" };
+  }
+  if (hasEventsCap(profile.roles, "view_events")) {
+    return { requestedPath: "/events", finalPath: "/events" };
+  }
+  if (canAccessInsights(profile.roles)) {
+    return { requestedPath: "/insights", finalPath: "/insights" };
+  }
+  if ((profile.roles.legal?.length ?? 0) > 0) {
+    return { requestedPath: "/legal", finalPath: "/legal" };
+  }
+  if ((profile.roles.procurement?.length ?? 0) > 0) {
+    return {
+      requestedPath: "/procurement/approvals",
+      finalPath: "/procurement/approvals",
+    };
+  }
+  if ((profile.roles.warehouse?.length ?? 0) > 0) {
+    return { requestedPath: "/warehouse/", finalPath: "/warehouse/" };
+  }
+  return { requestedPath: "/work", finalPath: "/work" };
+}
+
+test.describe("full Mwell Intra user-type E2E", () => {
   for (const profile of LOGIN_PROFILES) {
-    test(`demo login: ${profile.title} (${profile.email})`, async ({ page }, testInfo) => {
+    test(`demo login: ${profile.title} (${profile.email})`, async ({
+      page,
+    }, testInfo) => {
       test.setTimeout(60_000);
       const consoleIssues = collectConsoleIssues(page);
-      await page.goto('/login?redirect=%2F', { waitUntil: 'load' });
-      await expect(page.getByRole('button', { name: /^sign in$/i })).toBeEnabled();
-      await page.getByLabel('Email').fill(profile.email);
-      await page.getByLabel('Password').fill(DEMO_PASSWORD);
-      await page.getByRole('button', { name: /^sign in$/i }).click();
+      const redirect = loginRedirectExpectation(profile);
+      await page.goto(
+        `/login?redirect=${encodeURIComponent(redirect.requestedPath)}`,
+        {
+          waitUntil: "load",
+        },
+      );
+      await expect(
+        page.getByRole("button", { name: /^sign in$/i }),
+      ).toBeEnabled();
+      await page.getByLabel("Email").fill(profile.email);
+      await page.getByLabel("Password").fill(DEMO_PASSWORD);
+      await page.getByRole("button", { name: /^sign in$/i }).click();
 
-      await expect(page).toHaveURL(/\/$/);
-      await expect(page.locator('body')).toContainText(profile.name.split(/\s+/)[0]!);
+      await expect
+        .poll(() => new URL(page.url()).pathname)
+        .toBe(redirect.finalPath);
+      const warehouseDestination = redirect.finalPath.startsWith("/warehouse");
+      const accountMenu = page.getByRole("button", {
+        name: warehouseDestination ? "Account" : "Account menu",
+        exact: true,
+      });
+      await accountMenu.click();
+      const accountDetails = warehouseDestination
+        ? page.getByRole("dialog", { name: "Account" })
+        : page.getByRole("menu");
+      await expect(accountDetails).toContainText(profile.name);
+      await expect(accountDetails).toContainText(profile.email);
+      if (warehouseDestination) await page.keyboard.press("Escape");
+      else await accountMenu.click();
       const audit = await auditPage(page);
-      expectUsablePage(audit, '/', testInfo);
+      expectUsablePage(audit, redirect.finalPath, testInfo);
       expect(
         consoleIssues.filter((issue) => !isAllowedConsoleIssue(issue)),
         `${profile.email} should not emit browser console/page errors`,
@@ -380,15 +417,23 @@ test.describe('full Mwell Intra user-type E2E', () => {
   }
 
   for (const persona of CANONICAL_PERSONAS) {
-    test(`route access matrix: ${persona.label}`, async ({ page }, testInfo) => {
+    test(`route access matrix: ${persona.label}`, async ({
+      page,
+    }, testInfo) => {
       test.setTimeout(120_000);
       const consoleIssues = collectConsoleIssues(page);
       await installMemorySession(page, persona);
 
       for (const route of expectationsFor(persona)) {
-        await page.goto(route.path, { waitUntil: 'domcontentloaded' });
-        await page.waitForLoadState('networkidle').catch(() => undefined);
-        await expect.poll(async () => (await page.locator('main').allInnerTexts()).join(' ').trim().length).toBeGreaterThan(20);
+        await page.goto(route.path, { waitUntil: "domcontentloaded" });
+        await page.waitForLoadState("networkidle").catch(() => undefined);
+        await expect
+          .poll(
+            async () =>
+              (await page.locator("main").allInnerTexts()).join(" ").trim()
+                .length,
+          )
+          .toBeGreaterThan(20);
         const audit = await auditPage(page);
         expectUsablePage(audit, route.path, testInfo);
         if (route.finalPath) {
@@ -424,64 +469,89 @@ function expectationsFor(persona: Persona): readonly RouteExpectation[] {
   const roles = persona.roles;
   return [
     {
-      path: '/',
-      label: 'dashboard',
+      path: "/",
+      label: "dashboard",
       allowed: true,
       allowedText: dashboardTextFor(roles),
       allowDeniedCopy: !hasAnyModuleOrPortal(roles),
     },
     {
-      path: '/finance',
-      label: 'unified finance',
+      path: "/work",
+      label: "My Work",
+      allowed: persona.kind === "employee",
+      allowedText: /My Work|Assigned work|All caught up/i,
+      deniedText: /No My Work access|employee workspace/i,
+    },
+    {
+      path: "/events",
+      label: "Events workspace",
+      allowed: hasEventsCap(roles, "view_events"),
+      allowedText: /Events|Activation planning|Event portfolio/i,
+      deniedText: /No Events access/i,
+    },
+    {
+      path: "/insights",
+      label: "Insights workspace",
+      allowed: canAccessInsights(roles),
+      allowedText: /Insights|Operational indicators|Priority exceptions/i,
+      deniedText: /No Insights access/i,
+    },
+    {
+      path: "/finance",
+      label: "unified finance",
       allowed: canAccessFinance(roles),
       allowedText: /Finance|Payment readiness|Cross-module activity/i,
       deniedText: /No Finance access/i,
     },
     {
-      path: '/warehouse',
-      label: 'warehouse home',
-      allowed: hasWarehouseCap(roles, 'view_dashboard'),
+      path: "/warehouse",
+      label: "warehouse home",
+      allowed: hasWarehouseCap(roles, "view_dashboard"),
       allowedText: /Warehouse|Dashboard/i,
       deniedText: /No warehouse access/i,
       finalPath: /\/warehouse\/?$/,
     },
     ...warehouseRoutes(roles),
     {
-      path: '/procurement',
-      label: 'procurement home',
+      path: "/procurement",
+      label: "procurement home",
       allowed: canEnterProcurement(roles),
       allowedText: /Procurement|Approval inbox|Purchase request/i,
       deniedText: /No procurement access/i,
-      finalPath: canEnterProcurement(roles) ? /\/procurement\/?(approvals)?$/ : undefined,
+      finalPath: canEnterProcurement(roles)
+        ? /\/procurement\/?(approvals)?$/
+        : undefined,
     },
     {
-      path: '/procurement/approvals',
-      label: 'procurement approvals',
+      path: "/procurement/approvals",
+      label: "procurement approvals",
       allowed: canApproveProcurement(roles),
       allowedText: /Approval inbox|Waiting on you|Inbox zero/i,
     },
     {
-      path: '/procurement/requests/new',
-      label: 'new procurement request',
-      allowed: hasProcurementCap(roles, 'create_request') || isTierOnlyProcurement(roles),
-      allowedText: hasProcurementCap(roles, 'create_request')
+      path: "/procurement/requests/new",
+      label: "new procurement request",
+      allowed:
+        hasProcurementCap(roles, "create_request") ||
+        isTierOnlyProcurement(roles),
+      allowedText: hasProcurementCap(roles, "create_request")
         ? /Draft a purchase request|New request/i
         : /Approval inbox|Waiting on you|Inbox zero/i,
-      finalPath: hasProcurementCap(roles, 'create_request')
+      finalPath: hasProcurementCap(roles, "create_request")
         ? undefined
         : isTierOnlyProcurement(roles)
           ? /\/procurement\/approvals$/
           : undefined,
     },
     {
-      path: '/procurement/requests/req_seed_001',
-      label: 'procurement request detail',
+      path: "/procurement/requests/req_seed_001",
+      label: "procurement request detail",
       allowed: canEnterProcurement(roles),
       allowedText: /Purchase request|Line items|Activity/i,
     },
     {
-      path: '/procurement/purchase-orders',
-      label: 'procurement purchase orders',
+      path: "/procurement/purchase-orders",
+      label: "procurement purchase orders",
       allowed:
         canViewProcurementPurchaseOrders(roles) || isTierOnlyProcurement(roles),
       allowedText: canViewProcurementPurchaseOrders(roles)
@@ -494,8 +564,8 @@ function expectationsFor(persona: Persona): readonly RouteExpectation[] {
           : undefined,
     },
     {
-      path: '/procurement/purchase-orders/po_seed_001',
-      label: 'procurement PO detail',
+      path: "/procurement/purchase-orders/po_seed_001",
+      label: "procurement PO detail",
       allowed:
         canViewProcurementPurchaseOrders(roles) || isTierOnlyProcurement(roles),
       allowedText: canViewProcurementPurchaseOrders(roles)
@@ -508,42 +578,42 @@ function expectationsFor(persona: Persona): readonly RouteExpectation[] {
           : undefined,
     },
     {
-      path: '/legal',
-      label: 'legal home',
-      allowed: hasLegalCap(roles, 'view_dashboard'),
+      path: "/legal",
+      label: "legal home",
+      allowed: hasLegalCap(roles, "view_dashboard"),
       allowedText: /Accreditation cases|Your application|Legal/i,
       deniedText: /No legal access/i,
     },
     {
-      path: '/legal/cases/case_seed_001',
-      label: 'legal case detail',
-      allowed: hasLegalCap(roles, 'view_dashboard'),
+      path: "/legal/cases/case_seed_001",
+      label: "legal case detail",
+      allowed: hasLegalCap(roles, "view_dashboard"),
       allowedText: /Accreditation|Checklist|Documents|Timeline|Activity/i,
     },
     {
-      path: '/legal/invites/new',
-      label: 'legal invite vendor',
-      allowed: hasLegalCap(roles, 'manage_checklist'),
+      path: "/legal/invites/new",
+      label: "legal invite vendor",
+      allowed: hasLegalCap(roles, "manage_checklist"),
       allowedText: /Invite vendor|Onboard a new vendor/i,
     },
     {
-      path: '/vendor',
-      label: 'vendor portal',
-      allowed: hasCoreRole(roles, 'vendor_portal'),
+      path: "/vendor",
+      label: "vendor portal",
+      allowed: hasCoreRole(roles, "vendor_portal"),
       allowedText: /Your accreditation|Your application|Vendor/i,
       deniedText: /No legal access|not enrolled/i,
     },
     {
-      path: '/vendor/cases/case_seed_001',
-      label: 'vendor case detail',
-      allowed: hasCoreRole(roles, 'vendor_portal'),
+      path: "/vendor/cases/case_seed_001",
+      label: "vendor case detail",
+      allowed: hasCoreRole(roles, "vendor_portal"),
       allowedText: /Accreditation|requirements|documents|application/i,
       deniedText: /No legal access|not enrolled/i,
     },
     {
-      path: '/admin/users',
-      label: 'admin users',
-      allowed: hasCoreRole(roles, 'platform_admin'),
+      path: "/admin/users",
+      label: "admin users",
+      allowed: hasCoreRole(roles, "platform_admin"),
       allowedText: /Users & Roles|Access matrix/i,
     },
   ];
@@ -557,88 +627,81 @@ function warehouseRoutes(roles: Roles): readonly RouteExpectation[] {
     readonly allowedText: RegExp;
   }> = [
     {
-      path: '/warehouse/inventory',
-      label: 'warehouse inventory',
-      caps: ['manage_inventory'],
+      path: "/warehouse/inventory",
+      label: "warehouse inventory",
+      caps: ["manage_inventory"],
       allowedText: /Inventory|SKUs|Low stock/i,
     },
     {
-      path: '/warehouse/inventory/ecg-ring-10',
-      label: 'warehouse product detail',
-      caps: ['manage_inventory'],
+      path: "/warehouse/inventory/ecg-ring-10",
+      label: "warehouse product detail",
+      caps: ["manage_inventory"],
       allowedText: /Traceability|Stock|ECG Ring/i,
     },
     {
-      path: '/warehouse/receiving',
-      label: 'warehouse receiving',
-      caps: ['receive_stock'],
+      path: "/warehouse/receiving",
+      label: "warehouse receiving",
+      caps: ["receive_stock"],
       allowedText: /Receiving|Receive/i,
     },
     {
-      path: '/warehouse/allocations',
-      label: 'warehouse allocations',
-      caps: ['reserve_allocate', 'issue_items'],
+      path: "/warehouse/allocations",
+      label: "warehouse allocations",
+      caps: ["reserve_allocate", "issue_items"],
       allowedText: /Allocations|Reserve|Issue/i,
     },
     {
-      path: '/warehouse/events',
-      label: 'warehouse events',
-      caps: ['reserve_allocate', 'view_finance'],
-      allowedText: /Events|Activations/i,
-    },
-    {
-      path: '/warehouse/cycle-counts',
-      label: 'warehouse cycle counts',
-      caps: ['cycle_count'],
+      path: "/warehouse/cycle-counts",
+      label: "warehouse cycle counts",
+      caps: ["cycle_count"],
       allowedText: /Cycle|Count/i,
     },
     {
-      path: '/warehouse/returns',
-      label: 'warehouse returns',
-      caps: ['manage_returns'],
+      path: "/warehouse/returns",
+      label: "warehouse returns",
+      caps: ["manage_returns"],
       allowedText: /Returns|Record return/i,
     },
     {
-      path: '/warehouse/procurement',
-      label: 'warehouse procurement',
-      caps: ['view_procurement'],
+      path: "/warehouse/procurement",
+      label: "warehouse procurement",
+      caps: ["view_procurement"],
       allowedText: /Procurement|Reorder|Supplier/i,
     },
     {
-      path: '/warehouse/purchase-orders',
-      label: 'warehouse purchase orders',
-      caps: ['view_procurement', 'receive_stock'],
+      path: "/warehouse/purchase-orders",
+      label: "warehouse purchase orders",
+      caps: ["view_procurement", "receive_stock"],
       allowedText: /Purchase Orders|PO/i,
     },
     {
-      path: '/warehouse/suppliers',
-      label: 'warehouse suppliers',
-      caps: ['view_procurement'],
+      path: "/warehouse/suppliers",
+      label: "warehouse suppliers",
+      caps: ["view_procurement"],
       allowedText: /Suppliers|Lead time/i,
     },
     {
-      path: '/warehouse/storage',
-      label: 'warehouse storage',
-      caps: ['receive_stock', 'manage_locations', 'transfer_stock', 'cycle_count'],
+      path: "/warehouse/storage",
+      label: "warehouse storage",
+      caps: [
+        "receive_stock",
+        "manage_locations",
+        "transfer_stock",
+        "cycle_count",
+      ],
       allowedText: /Storage|Bin|Area/i,
     },
     {
-      path: '/warehouse/locations',
-      label: 'warehouse locations',
-      caps: ['manage_locations'],
+      path: "/warehouse/locations",
+      label: "warehouse locations",
+      caps: ["manage_locations"],
       allowedText: /Locations|Warehouse|Site/i,
     },
     {
-      path: '/warehouse/pricing',
-      label: 'warehouse pricing',
-      caps: ['view_pricing'],
+      path: "/warehouse/pricing",
+      label: "warehouse pricing",
+      caps: ["view_pricing"],
       allowedText: /Pricing|Landed cost|Set price/i,
-    },
-    {
-      path: '/warehouse/data',
-      label: 'warehouse data',
-      caps: ['view_analytics'],
-      allowedText: /Data|Reports|Export/i,
     },
   ];
 
@@ -657,8 +720,8 @@ function hasCoreRole(roles: Roles, role: string): boolean {
 
 function canAccessFinance(roles: Roles): boolean {
   return (
-    hasWarehouseCap(roles, 'view_finance') ||
-    hasProcurementCap(roles, 'view_finance')
+    hasWarehouseCap(roles, "view_finance") ||
+    hasProcurementCap(roles, "view_finance")
   );
 }
 
@@ -668,16 +731,21 @@ function hasWarehouseRole(roles: Roles): boolean {
 
 function hasAnyModuleOrPortal(roles: Roles): boolean {
   return (
+    hasCoreRole(roles, "staff") ||
     (roles.warehouse?.length ?? 0) > 0 ||
     (roles.procurement?.length ?? 0) > 0 ||
     (roles.legal?.length ?? 0) > 0 ||
-    hasCoreRole(roles, 'platform_admin') ||
-    hasCoreRole(roles, 'vendor_portal')
+    (roles.events?.length ?? 0) > 0 ||
+    (roles.insights?.length ?? 0) > 0 ||
+    hasCoreRole(roles, "platform_admin") ||
+    hasCoreRole(roles, "vendor_portal")
   );
 }
 
 function hasWarehouseCap(roles: Roles, cap: string): boolean {
-  return (roles.warehouse ?? []).some((role) => WAREHOUSE_CAPS[role]?.includes(cap));
+  return (roles.warehouse ?? []).some((role) =>
+    WAREHOUSE_CAPS[role]?.includes(cap),
+  );
 }
 
 function hasProcurementCap(roles: Roles, cap: string): boolean {
@@ -690,53 +758,88 @@ function hasLegalCap(roles: Roles, cap: string): boolean {
   return (roles.legal ?? []).some((role) => LEGAL_CAPS[role]?.includes(cap));
 }
 
+function hasEventsCap(roles: Roles, cap: string): boolean {
+  return (roles.events ?? []).some((role) => EVENTS_CAPS[role]?.includes(cap));
+}
+
+function hasInsightsCap(roles: Roles, cap: string): boolean {
+  return (roles.insights ?? []).some((role) =>
+    INSIGHTS_CAPS[role]?.includes(cap),
+  );
+}
+
+function canAccessInsights(roles: Roles): boolean {
+  return [
+    "view_warehouse",
+    "view_procurement",
+    "view_legal",
+    "view_finance",
+    "view_executive",
+  ].some((cap) => hasInsightsCap(roles, cap));
+}
+
 function procurementTiers(roles: Roles): readonly string[] {
   const tiers = new Set<string>();
   const proc = roles.procurement ?? [];
   const legal = roles.legal ?? [];
   const warehouse = roles.warehouse ?? [];
-  if (proc.includes('approver')) tiers.add('dept_head');
-  if (proc.includes('procurement_officer')) tiers.add('procurement_head');
-  if (proc.includes('admin')) {
-    tiers.add('procurement_head');
-    tiers.add('final_approver');
+  if (proc.includes("approver")) tiers.add("dept_head");
+  if (proc.includes("procurement_officer")) tiers.add("procurement_head");
+  if (proc.includes("admin")) {
+    tiers.add("procurement_head");
+    tiers.add("final_approver");
   }
-  if (proc.includes('finance') || warehouse.includes('finance')) tiers.add('finance');
-  if (legal.includes('legal_reviewer')) tiers.add('legal');
+  if (proc.includes("finance") || warehouse.includes("finance"))
+    tiers.add("finance");
+  if (legal.includes("legal_reviewer")) tiers.add("legal");
   return [...tiers];
 }
 
 function canEnterProcurement(roles: Roles): boolean {
-  return (roles.procurement?.length ?? 0) > 0 || procurementTiers(roles).length > 0;
+  return (
+    (roles.procurement?.length ?? 0) > 0 || procurementTiers(roles).length > 0
+  );
 }
 
 function isTierOnlyProcurement(roles: Roles): boolean {
-  return !hasProcurementCap(roles, 'view_dashboard') && procurementTiers(roles).length > 0;
+  return (
+    !hasProcurementCap(roles, "view_dashboard") &&
+    procurementTiers(roles).length > 0
+  );
 }
 
 function canApproveProcurement(roles: Roles): boolean {
-  return hasProcurementCap(roles, 'approve_request') || procurementTiers(roles).length > 0;
+  return (
+    hasProcurementCap(roles, "approve_request") ||
+    procurementTiers(roles).length > 0
+  );
 }
 
 function canViewProcurementPurchaseOrders(roles: Roles): boolean {
   return (
-    hasProcurementCap(roles, 'author_po') ||
-    hasProcurementCap(roles, 'approve_award') ||
-    hasProcurementCap(roles, 'view_finance') ||
-    hasProcurementCap(roles, 'admin')
+    hasProcurementCap(roles, "author_po") ||
+    hasProcurementCap(roles, "approve_award") ||
+    hasProcurementCap(roles, "view_finance") ||
+    hasProcurementCap(roles, "admin")
   );
 }
 
 function dashboardTextFor(roles: Roles): RegExp {
-  if (hasCoreRole(roles, 'vendor_portal')) return /Vendor Portal|Your modules/i;
-  if (hasCoreRole(roles, 'platform_admin')) return /Admin|Users & Roles/i;
+  if (hasCoreRole(roles, "vendor_portal")) return /Vendor Portal|Your modules/i;
+  if (hasCoreRole(roles, "platform_admin")) return /Admin|Users & Roles/i;
+  if ((roles.events?.length ?? 0) > 0) return /Events/i;
+  if ((roles.insights?.length ?? 0) > 0) return /Insights/i;
   if ((roles.warehouse?.length ?? 0) > 0) return /Warehouse/i;
   if ((roles.procurement?.length ?? 0) > 0) return /Procurement/i;
   if ((roles.legal?.length ?? 0) > 0) return /Legal/i;
+  if (hasCoreRole(roles, "staff")) return /My Work/i;
   return /Knowledge Base/i;
 }
 
-async function installMemorySession(page: Page, persona: Persona): Promise<void> {
+async function installMemorySession(
+  page: Page,
+  persona: Persona,
+): Promise<void> {
   await page.addInitScript(
     ({ key, session }) => {
       window.sessionStorage.setItem(key, JSON.stringify(session));
@@ -753,8 +856,8 @@ async function auditPage(page: Page): Promise<RouteAudit> {
     const visible = (element: Element): boolean => {
       const style = window.getComputedStyle(element);
       if (
-        style.display === 'none' ||
-        style.visibility === 'hidden' ||
+        style.display === "none" ||
+        style.visibility === "hidden" ||
         Number(style.opacity) === 0 ||
         element.closest('[hidden], [aria-hidden="true"], details:not([open])')
       ) {
@@ -765,13 +868,16 @@ async function auditPage(page: Page): Promise<RouteAudit> {
     };
 
     const viewportWidth = document.documentElement.clientWidth;
-    const overflowThreshold = Math.max(viewportWidth + 2, window.innerWidth + 1);
+    const overflowThreshold = Math.max(
+      viewportWidth + 2,
+      window.innerWidth + 1,
+    );
     const scrollWidth = Math.max(
       document.documentElement.scrollWidth,
       document.body.scrollWidth,
     );
     const overflowOffenders = Array.from(
-      document.body.querySelectorAll<HTMLElement>('*'),
+      document.body.querySelectorAll<HTMLElement>("*"),
     )
       .filter(visible)
       .map((element) => {
@@ -779,12 +885,12 @@ async function auditPage(page: Page): Promise<RouteAudit> {
         const rect = element.getBoundingClientRect();
         return {
           label:
-            element.getAttribute('aria-label') ??
-            element.textContent?.trim().replace(/\s+/g, ' ').slice(0, 64) ??
+            element.getAttribute("aria-label") ??
+            element.textContent?.trim().replace(/\s+/g, " ").slice(0, 64) ??
             element.tagName.toLowerCase(),
           left: Math.round(rect.left),
           right: Math.round(rect.right),
-          chrome: style.position === 'fixed' || style.position === 'sticky',
+          chrome: style.position === "fixed" || style.position === "sticky",
         };
       })
       .filter((item) => !item.chrome)
@@ -792,25 +898,29 @@ async function auditPage(page: Page): Promise<RouteAudit> {
       .map((item) => `${item.label} (${item.left}-${item.right})`)
       .slice(0, 10);
 
-    const links = Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href]'));
+    const links = Array.from(
+      document.querySelectorAll<HTMLAnchorElement>("a[href]"),
+    );
     const deadLinks = links
       .filter((link) => {
-        const href = link.getAttribute('href') ?? '';
-        if (href === '#' || /^javascript:/i.test(href)) return true;
-        if (/^data:/i.test(href)) return !link.hasAttribute('download');
+        const href = link.getAttribute("href") ?? "";
+        if (href === "#" || /^javascript:/i.test(href)) return true;
+        if (/^data:/i.test(href)) return !link.hasAttribute("download");
         return false;
       })
-      .map((link) => link.getAttribute('href') ?? '')
+      .map((link) => link.getAttribute("href") ?? "")
       .slice(0, 10);
 
     const unlabeledControls = Array.from(
-      document.querySelectorAll<HTMLElement>('button, a[href], [role="button"]'),
+      document.querySelectorAll<HTMLElement>(
+        'button, a[href], [role="button"]',
+      ),
     )
       .filter(visible)
       .filter((element) => {
         const label =
-          element.getAttribute('aria-label') ??
-          element.getAttribute('title') ??
+          element.getAttribute("aria-label") ??
+          element.getAttribute("title") ??
           element.textContent;
         return !label || label.trim().length === 0;
       })
@@ -818,13 +928,14 @@ async function auditPage(page: Page): Promise<RouteAudit> {
       .slice(0, 10);
 
     return {
-      bodyText: document.body.innerText.trim().replace(/\s+/g, ' '),
-      mainCount: document.querySelectorAll('main').length,
-      h1: Array.from(document.querySelectorAll('h1'))
-        .map((node) => node.textContent?.trim() ?? '')
+      bodyText: document.body.innerText.trim().replace(/\s+/g, " "),
+      mainCount: document.querySelectorAll("main").length,
+      h1: Array.from(document.querySelectorAll("h1"))
+        .map((node) => node.textContent?.trim() ?? "")
         .filter(Boolean)
         .slice(0, 4),
-      horizontalOverflow: scrollWidth > overflowThreshold && overflowOffenders.length > 0,
+      horizontalOverflow:
+        scrollWidth > overflowThreshold && overflowOffenders.length > 0,
       overflowOffenders,
       deadLinks,
       unlabeledControls,
@@ -837,17 +948,27 @@ function expectUsablePage(
   path: string,
   testInfo: TestInfo,
 ): void {
-  expect(audit.bodyText.length, `${path} should not be blank`).toBeGreaterThan(20);
-  expect(audit.mainCount, `${path} should expose a main landmark`).toBeGreaterThan(0);
+  expect(audit.bodyText.length, `${path} should not be blank`).toBeGreaterThan(
+    20,
+  );
+  expect(
+    audit.mainCount,
+    `${path} should expose a main landmark`,
+  ).toBeGreaterThan(0);
   expect(
     audit.bodyText,
     `${path} should not render a framework runtime error`,
-  ).not.toMatch(/application error|runtime error|hydration failed|500 internal|internal server error/i);
+  ).not.toMatch(
+    /application error|runtime error|hydration failed|500 internal|internal server error/i,
+  );
   expect(
     audit.horizontalOverflow,
-    `${path} should not have page-level horizontal overflow in ${testInfo.project.name}: ${audit.overflowOffenders.join('; ')}`,
+    `${path} should not have page-level horizontal overflow in ${testInfo.project.name}: ${audit.overflowOffenders.join("; ")}`,
   ).toBe(false);
-  expect(audit.deadLinks, `${path} should not expose dead/unsafe links`).toEqual([]);
+  expect(
+    audit.deadLinks,
+    `${path} should not expose dead/unsafe links`,
+  ).toEqual([]);
   expect(
     audit.unlabeledControls,
     `${path} should not expose unlabeled button/link controls`,
@@ -855,24 +976,24 @@ function expectUsablePage(
 }
 
 function deniedPattern(): RegExp {
-  return /Access denied|No (?:warehouse|procurement|legal|admin|module|purchase order) access|don't have access|not available for your role|Page not found|not enrolled/i;
+  return /Access denied|No (?:My Work|Events|Insights|warehouse|procurement|legal|admin|module|purchase order) access|don't have access|not available for your role|Page not found|not enrolled/i;
 }
 
 function collectConsoleIssues(page: Page): ConsoleIssue[] {
   const issues: ConsoleIssue[] = [];
-  page.on('console', (msg) => {
-    if (msg.type() !== 'error' && msg.type() !== 'warning') return;
+  page.on("console", (msg) => {
+    if (msg.type() !== "error" && msg.type() !== "warning") return;
     issues.push({
       type: msg.type(),
       text: msg.text(),
       location: `${msg.location().url}:${msg.location().lineNumber}`,
     });
   });
-  page.on('pageerror', (error) => {
+  page.on("pageerror", (error) => {
     issues.push({
-      type: 'pageerror',
+      type: "pageerror",
       text: error.message,
-      location: error.stack ?? 'pageerror',
+      location: error.stack ?? "pageerror",
     });
   });
   return issues;

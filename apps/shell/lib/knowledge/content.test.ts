@@ -485,7 +485,12 @@ describe("Knowledge Base content", () => {
           true,
         );
       }
-    expect(requirements).toHaveLength(39);
+    expect(requirements).toHaveLength(42);
+    expect(
+      KNOWLEDGE_CONTENT.evidence
+        .filter((item) => item.featureId)
+        .map((item) => item.featureId),
+    ).toEqual(["events-workspace", "my-work", "insights-workspace"]);
     expect(
       KNOWLEDGE_CONTENT.evidence.every((item) => item.sensitiveDataReviewed),
     ).toBe(true);

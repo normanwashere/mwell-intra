@@ -11,6 +11,7 @@ import * as m from "framer-motion/m";
 import { Button, Card, Field, Icon, Input } from "@intra/ui";
 import { useSession } from "@intra/auth";
 import { MwellIntraLogo } from "@shell/components/MwellIntraLogo";
+import { authorizedPostLoginPath } from "@shell/lib/navigation";
 
 /** Only allow local same-origin paths in ?redirect to prevent open-redirect. */
 function safeRedirect(candidate: string | null): string {
@@ -27,6 +28,7 @@ function replaceDocument(path: string): void {
 export default function LoginPage() {
   const {
     profile,
+    userRoles,
     mode,
     signingIn,
     authError,
@@ -50,8 +52,10 @@ export default function LoginPage() {
   useEffect(() => {
     if (!profile || redirecting) return;
     setRedirecting(true);
-    replaceDocument(redirectTo);
-  }, [profile, redirectTo, redirecting]);
+    replaceDocument(
+      authorizedPostLoginPath(redirectTo, userRoles, profile.kind),
+    );
+  }, [profile, redirectTo, redirecting, userRoles]);
 
   const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -62,10 +66,7 @@ export default function LoginPage() {
     setEmail(submittedEmail);
     setPassword(submittedPassword);
     const ok = await signInWithPassword(submittedEmail, submittedPassword);
-    if (ok) {
-      setRedirecting(true);
-      replaceDocument(redirectTo);
-    }
+    if (!ok) setRedirecting(false);
   };
 
   const onReset = async () => {

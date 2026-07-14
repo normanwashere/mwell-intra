@@ -115,7 +115,12 @@ describe("knowledge role authority registry", () => {
           ),
       ).map((route) => route.route);
 
-      expect(guide?.authority.accessibleRoutes, role).toEqual(expectedRoutes);
+      expect(guide?.authority.accessibleRoutes, role).toEqual([
+        "/",
+        "/knowledge",
+        "/work",
+        ...expectedRoutes,
+      ]);
     }
   });
 

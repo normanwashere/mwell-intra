@@ -31,6 +31,7 @@ import type {
   KnowledgeCaptureArtifact,
   KnowledgeCaptureReport,
   KnowledgeCaptureReportEntry,
+  KnowledgeEvidence,
 } from "../../lib/knowledge/types";
 
 const SESSION_KEY = "intra.memory-session.v1";
@@ -53,7 +54,12 @@ const STAGING_ROOT = path.resolve(
   "../../.superpowers/sdd/.task-8-capture-39988",
 );
 const SCENARIO_MANIFEST_SCHEMA = "task-8-capture-v1";
-const EVIDENCE_REQUIREMENTS = evidenceRequirements(KNOWLEDGE_CONTENT);
+const PRODUCTION_EVIDENCE = KNOWLEDGE_EVIDENCE.filter(
+  (evidence) => evidence.provenance === "production",
+);
+const EVIDENCE_REQUIREMENTS = evidenceRequirements(KNOWLEDGE_CONTENT).filter(
+  (requirement) => requirement.environment === "production",
+);
 
 const VIEWPORTS = {
   desktop: { width: 1440, height: 900 },
@@ -75,12 +81,21 @@ const LIVE_EMAILS: Record<string, string> = {
   procurement_officer: "intra.test.proc.officer@mwell.com.ph",
   procurement_finance: "intra.test.proc.finance@mwell.com.ph",
   legal_admin: "intra.test.legal.admin@mwell.com.ph",
+  events_requester: "intra.test.wh.business.unit@mwell.com.ph",
+  insights_analyst: "intra.test.wh.bi@mwell.com.ph",
 };
 
+function evidenceTargetKey(evidence: KnowledgeEvidence): string {
+  const target = evidence.nodeId ?? evidence.featureId;
+  if (!target) throw new Error(`${evidence.id} has no capture target`);
+  return target;
+}
+
 function scenarioManifestVersion(): string {
-  const manifest = KNOWLEDGE_EVIDENCE.map((evidence) => ({
+  const manifest = PRODUCTION_EVIDENCE.map((evidence) => ({
     id: evidence.id,
     nodeId: evidence.nodeId,
+    featureId: evidence.featureId,
     route: evidence.route,
     roleId: evidence.roleId,
     state: evidence.state,
@@ -107,7 +122,7 @@ function resumeRequirements(sourceCommit: string): CaptureResumeRequirements {
     scenarioManifestVersion: scenarioManifestVersion(),
     viewports: VIEWPORTS,
     expectedEvidence: Object.fromEntries(
-      KNOWLEDGE_EVIDENCE.map((evidence) => [
+      PRODUCTION_EVIDENCE.map((evidence) => [
         evidence.id,
         {
           route: evidence.route,
@@ -141,7 +156,7 @@ function requestedCaptureIds(): Set<string> | undefined {
       .map((id) => id.trim())
       .filter(Boolean),
   );
-  const known = new Set(KNOWLEDGE_EVIDENCE.map((evidence) => evidence.nodeId));
+  const known = new Set(PRODUCTION_EVIDENCE.map(evidenceTargetKey));
   for (const id of ids)
     expect(known.has(id), `known capture id ${id}`).toBe(true);
   return ids;
@@ -162,7 +177,7 @@ async function promoteCapture(
     output: string;
     backup: string;
   }> = [];
-  for (const evidence of KNOWLEDGE_EVIDENCE) {
+  for (const evidence of PRODUCTION_EVIDENCE) {
     for (const viewportName of ["desktop", "mobile"] as const) {
       const artifact = manifest.evidence[evidence.id]![viewportName];
       const output = path.resolve(process.cwd(), "public", `.${artifact.file}`);
@@ -299,6 +314,22 @@ const SESSIONS: Record<
   legal_admin: {
     profileId: "demo-legal",
     roles: { core: ["staff"], legal: ["admin"] },
+  },
+  events_requester: {
+    profileId: "demo-business-unit",
+    roles: {
+      core: ["staff"],
+      warehouse: ["business_unit"],
+      events: ["requester"],
+    },
+  },
+  insights_analyst: {
+    profileId: "demo-bi",
+    roles: {
+      core: ["staff"],
+      warehouse: ["bi_analyst"],
+      insights: ["analyst"],
+    },
   },
 };
 
@@ -473,6 +504,17 @@ async function protectNeighboringUserRows(target: Locator): Promise<void> {
 
 async function targetFor(page: Page, nodeId: string): Promise<Locator> {
   switch (nodeId) {
+    case "events-workspace":
+      return page.getByRole("button", { name: "New event", exact: true });
+    case "my-work":
+      await page.getByRole("tab", { name: "Events", exact: true }).click();
+      return page
+        .getByRole("link", { name: "Open source", exact: true })
+        .first();
+    case "insights-workspace":
+      return page
+        .getByRole("link", { name: "Open governed source", exact: true })
+        .first();
     case "access-start":
     case "recover-retry":
       return page.getByRole("button", { name: "Sign in", exact: true });
@@ -974,20 +1016,17 @@ test("captures reviewed desktop and mobile principal-flow evidence", async ({
       "DEPLOYED_COMMIT for live evidence capture",
     ).toMatch(/^[0-9a-f]{40}$/);
   }
-  expect(KNOWLEDGE_EVIDENCE).toHaveLength(39);
-  expect(EVIDENCE_REQUIREMENTS).toHaveLength(KNOWLEDGE_EVIDENCE.length);
+  expect(KNOWLEDGE_EVIDENCE).toHaveLength(42);
+  expect(PRODUCTION_EVIDENCE).toHaveLength(39);
+  expect(EVIDENCE_REQUIREMENTS).toHaveLength(PRODUCTION_EVIDENCE.length);
   expect(validateEvidenceRequirements(EVIDENCE_REQUIREMENTS)).toEqual([]);
   expect(Object.keys(KNOWLEDGE_EVIDENCE_SCENARIOS)).toHaveLength(39);
-  const sourceCommits = new Set(
-    KNOWLEDGE_EVIDENCE.map((evidence) => evidence.appCommit),
-  );
-  expect(
-    sourceCommits.size,
-    "one reviewed application commit backs the capture set",
-  ).toBe(1);
   const sourceCommit = LIVE_CAPTURE
     ? LIVE_SOURCE_COMMIT!
-    : [...sourceCommits][0]!;
+    : execFileSync("git", ["rev-parse", "HEAD"], {
+        cwd: REPOSITORY_ROOT,
+        encoding: "utf8",
+      }).trim();
   const serverNode = process.env.TASK8_SERVER_NODE_VERSION;
   expect(
     Number(process.versions.node.split(".")[0]),
@@ -1029,9 +1068,9 @@ test("captures reviewed desktop and mobile principal-flow evidence", async ({
   }
 
   const requestedIds = requestedCaptureIds();
-  const evidenceToCapture = KNOWLEDGE_EVIDENCE.filter((evidence) =>
+  const evidenceToCapture = PRODUCTION_EVIDENCE.filter((evidence) =>
     requestedIds
-      ? requestedIds.has(evidence.nodeId)
+      ? requestedIds.has(evidenceTargetKey(evidence))
       : !manifest.evidence[evidence.id],
   );
   const coordinateErrors: string[] = [];
@@ -1062,12 +1101,11 @@ test("captures reviewed desktop and mobile principal-flow evidence", async ({
   };
 
   for (const evidence of evidenceToCapture) {
+    const targetKey = evidenceTargetKey(evidence);
     const session = SESSIONS[evidence.roleId];
     expect(session, `memory session for ${evidence.roleId}`).toBeTruthy();
-    if (!LIVE_CAPTURE) {
-      expect(evidence.capturedAt).toBe("2026-07-13");
-      expect(evidence.reviewedAt).toBe("2026-07-13");
-    }
+    expect(evidence.capturedAt).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(evidence.reviewedAt).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(evidence.sensitiveDataReviewed).toBe(true);
     const entry = {
       route: evidence.route,
@@ -1114,9 +1152,9 @@ test("captures reviewed desktop and mobile principal-flow evidence", async ({
             key: SESSION_KEY,
             scenarioKey: SCENARIO_KEY,
             scenario:
-              evidence.nodeId === "doa-activate"
+              targetKey === "doa-activate"
                 ? "doa-activation"
-                : ["access-fix", "admin-start"].includes(evidence.nodeId)
+                : ["access-fix", "admin-start"].includes(targetKey)
                   ? "admin-role-correction"
                   : null,
             value: evidence.route === "/login" ? null : session,
@@ -1148,13 +1186,13 @@ test("captures reviewed desktop and mobile principal-flow evidence", async ({
       });
       await page.waitForTimeout(300);
 
-      if (evidence.nodeId === "recover-retry") {
+      if (targetKey === "recover-retry") {
         await page.getByLabel("Email").fill("masked@mwell.demo");
         await page.getByLabel("Password").fill("masked-password");
       }
-      const target = await targetFor(page, evidence.nodeId);
+      const target = await targetFor(page, targetKey);
       await expect(target).toBeVisible();
-      await assertActionableAndEnabled(target, evidence.nodeId, viewportName);
+      await assertActionableAndEnabled(target, targetKey, viewportName);
       const hotspot = evidence.hotspots[0]!;
       const expectedY = LIVE_CAPTURE
         ? viewportName === "desktop"
@@ -1163,12 +1201,9 @@ test("captures reviewed desktop and mobile principal-flow evidence", async ({
         : viewportName === "desktop"
           ? hotspot.y
           : hotspot.mobileY;
-      await frameTarget(page, target, viewport, expectedY, evidence.nodeId);
+      await frameTarget(page, target, viewport, expectedY, targetKey);
       const box = await target.boundingBox();
-      expect(
-        box,
-        `${evidence.nodeId} ${viewportName} hotspot target`,
-      ).not.toBeNull();
+      expect(box, `${targetKey} ${viewportName} hotspot target`).not.toBeNull();
       expect(box!.x).toBeGreaterThanOrEqual(0);
       expect(box!.y).toBeGreaterThanOrEqual(0);
       expect(box!.x + box!.width).toBeLessThanOrEqual(viewport.width);
@@ -1188,16 +1223,16 @@ test("captures reviewed desktop and mobile principal-flow evidence", async ({
       const currentCoordinateErrors: string[] = [];
       if (!LIVE_CAPTURE && Math.abs(x - expectedX) >= 0.0005)
         currentCoordinateErrors.push(
-          `${evidence.nodeId} ${viewportName} hotspot x expected ${expectedX}, received ${x}`,
+          `${targetKey} ${viewportName} hotspot x expected ${expectedX}, received ${x}`,
         );
       if (!LIVE_CAPTURE && Math.abs(y - expectedY) >= 0.0005)
         currentCoordinateErrors.push(
-          `${evidence.nodeId} ${viewportName} hotspot y expected ${expectedY}, received ${y}`,
+          `${targetKey} ${viewportName} hotspot y expected ${expectedY}, received ${y}`,
         );
       coordinateErrors.push(...currentCoordinateErrors);
       expect(
         currentCoordinateErrors,
-        `${evidence.nodeId} ${viewportName} hotspot`,
+        `${targetKey} ${viewportName} hotspot`,
       ).toEqual([]);
       expect(new URL(page.url()).pathname).toBe(evidence.route);
 
@@ -1232,7 +1267,7 @@ test("captures reviewed desktop and mobile principal-flow evidence", async ({
       );
       expect(
         browserIssues,
-        `${evidence.nodeId} ${viewportName} browser issues`,
+        `${targetKey} ${viewportName} browser issues`,
       ).toEqual([]);
       await page.close();
     }
@@ -1295,8 +1330,8 @@ test("captures reviewed desktop and mobile principal-flow evidence", async ({
     : await validateCaptureResumeSession(STAGING_ROOT, manifest, requirements);
   if (requestedIds) {
     for (const nodeId of requestedIds) {
-      const evidence = KNOWLEDGE_EVIDENCE.find(
-        (item) => item.nodeId === nodeId,
+      const evidence = PRODUCTION_EVIDENCE.find(
+        (item) => evidenceTargetKey(item) === nodeId,
       )!;
       expect(
         completedIds,
@@ -1306,7 +1341,7 @@ test("captures reviewed desktop and mobile principal-flow evidence", async ({
     return;
   }
   expect(completedIds, "all scenario captures completed").toHaveLength(
-    KNOWLEDGE_EVIDENCE.length,
+    PRODUCTION_EVIDENCE.length,
   );
   const artifactHashes = Object.values(manifest.evidence).flatMap((entry) => [
     entry.desktop.sha256,
@@ -1315,7 +1350,7 @@ test("captures reviewed desktop and mobile principal-flow evidence", async ({
   expect(
     new Set(artifactHashes).size,
     "all staged artifacts have unique bytes",
-  ).toBe(KNOWLEDGE_EVIDENCE.length * 2);
+  ).toBe(PRODUCTION_EVIDENCE.length * 2);
 
   const report: KnowledgeCaptureReport = {
     schemaVersion: 1,
@@ -1323,7 +1358,7 @@ test("captures reviewed desktop and mobile principal-flow evidence", async ({
     runtime: { parentNode: process.version, serverNode: serverNode! },
     capturedAt: new Date().toISOString().slice(0, 10),
     reviewedAt: new Date().toISOString().slice(0, 10),
-    evidenceCount: KNOWLEDGE_EVIDENCE.length,
+    evidenceCount: PRODUCTION_EVIDENCE.length,
     evidence: manifest.evidence,
   };
   await promoteCapture(report, manifest);

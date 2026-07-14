@@ -9,9 +9,11 @@ import { nodePresentation } from "@shell/lib/knowledge/semantics";
 export function EvidenceViewer({
   evidence,
   node,
+  title,
 }: {
   evidence?: KnowledgeEvidence;
-  node: KnowledgeFlowNode;
+  node?: KnowledgeFlowNode;
+  title?: string;
 }) {
   const [zoom, setZoom] = useState(1);
   const [active, setActive] = useState(evidence?.hotspots[0]?.id ?? "");
@@ -37,7 +39,9 @@ export function EvidenceViewer({
       document.body.style.overflow = previous;
     };
   }, [expanded]);
-  const presentation = nodePresentation(node, evidence);
+  const presentation = node
+    ? nodePresentation(node, evidence)
+    : { kind: "action", label: "Screen guide", title: title ?? "Application screen", detail: "Follow the numbered interaction guidance on the verified application screen." };
   if (!evidence)
     return (
       <div className="min-h-72 border border-line bg-inset p-6 sm:p-8">
@@ -54,13 +58,13 @@ export function EvidenceViewer({
             <p className="mt-3 max-w-2xl leading-7 text-muted">{presentation.detail}</p>
           </div>
         </div>
-        {node.type === "decision" && (
+        {node?.type === "decision" && (
           <div className="mt-6 border-l-4 border-amber-500 bg-surface p-4">
             <p className="text-xs font-semibold uppercase text-amber-800">Authority required</p>
             <p className="mt-1 text-sm text-muted">The named decision owner must record the supported branch. Documentation does not grant approval authority.</p>
           </div>
         )}
-        {node.type === "terminal" && (
+        {node?.type === "terminal" && (
           <div className="mt-6 border-l-4 border-emerald-500 bg-surface p-4">
             <p className="text-xs font-semibold uppercase text-emerald-800">Evidence to retain</p>
             <p className="mt-1 text-sm text-muted">Confirm the final status, responsible actor, timestamp, source record, and audit history before treating this workflow as complete.</p>
@@ -171,7 +175,7 @@ export function EvidenceViewer({
           <header className="safe-top flex min-h-14 items-center justify-between gap-3 border-b border-line px-4 py-2">
             <div className="min-w-0">
               <p id="evidence-fullscreen-title" className="truncate font-semibold text-ink">
-                {node.title}
+                {node?.title ?? title ?? "Application screen"}
               </p>
               <p className="text-xs text-muted">Follow the numbered controls in order.</p>
             </div>

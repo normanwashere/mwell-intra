@@ -211,7 +211,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <div className="flex items-center gap-1.5">
               <span
                 className={clsx(
-                  'chip hidden min-[390px]:inline-flex md:inline-flex',
+                  'chip hidden sm:inline-flex',
                   source === 'supabase'
                     ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
                     : 'bg-amber-500/15 text-amber-800 dark:text-amber-300',
