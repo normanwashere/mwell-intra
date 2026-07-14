@@ -2,12 +2,17 @@
 
 import { spawn } from 'node:child_process';
 import process from 'node:process';
+import {
+  assertApprovedMutationTarget,
+  projectRefFromSupabaseUrl,
+} from '../lib/target-environment.mjs';
 
 const required = [
   'AUDIT_BASE_URL',
   'AUDIT_PASSWORD',
   'AUDIT_RUN_ID',
-  'POLICY_TEST_PROJECT_REF',
+  'APP_ENV',
+  'SUPABASE_PROJECT_REF',
   'NEXT_PUBLIC_SUPABASE_URL',
   'SUPABASE_SERVICE_ROLE_KEY',
 ];
@@ -18,12 +23,20 @@ if (missing.length > 0) {
 if (!process.env.AUDIT_BASE_URL.startsWith('https://')) {
   throw new Error('AUDIT_BASE_URL must use HTTPS.');
 }
-if (!process.env.NEXT_PUBLIC_SUPABASE_URL.includes(process.env.POLICY_TEST_PROJECT_REF)) {
-  throw new Error('NEXT_PUBLIC_SUPABASE_URL must match POLICY_TEST_PROJECT_REF.');
-}
-if (process.env.AUDIT_MUTATIONS === 'true' && process.env.POLICY_ALLOW_TEST_MUTATIONS !== 'true') {
-  throw new Error('Mutation runs require POLICY_ALLOW_TEST_MUTATIONS=true.');
-}
+assertApprovedMutationTarget({
+  appEnv: process.env.APP_ENV,
+  supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+  expectedProjectRef: process.env.SUPABASE_PROJECT_REF,
+  productionProjectRef: process.env.PRODUCTION_SUPABASE_PROJECT_REF,
+  mutationsRequested: process.env.AUDIT_MUTATIONS === 'true',
+  mutationsApproved: process.env.POLICY_ALLOW_TEST_MUTATIONS === 'true',
+});
+const projectRef = projectRefFromSupabaseUrl(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+);
+console.log(
+  `Live policy target: environment=${process.env.APP_ENV} project=${projectRef}`,
+);
 
 const child = spawn(process.execPath, ['scripts/qa/full-intra-live-e2e.mjs'], {
   stdio: 'inherit',

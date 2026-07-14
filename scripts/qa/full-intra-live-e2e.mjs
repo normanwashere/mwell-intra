@@ -2,6 +2,10 @@ import { createRequire } from "node:module";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
+  assertApprovedMutationTarget,
+  projectRefFromSupabaseUrl,
+} from "../lib/target-environment.mjs";
+import {
   CURRENT_LIVE_ROLES,
   assertAuditRunId,
 } from "./live-e2e-scenarios.mjs";
@@ -19,6 +23,20 @@ const password = process.env.AUDIT_PASSWORD;
 const allowMutations = process.env.AUDIT_MUTATIONS === "true";
 const viewFilter = process.env.AUDIT_VIEWPORT;
 const roleFilter = process.env.AUDIT_ROLE;
+assertApprovedMutationTarget({
+  appEnv: process.env.APP_ENV,
+  supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+  expectedProjectRef: process.env.SUPABASE_PROJECT_REF,
+  productionProjectRef: process.env.PRODUCTION_SUPABASE_PROJECT_REF,
+  mutationsRequested: process.env.AUDIT_MUTATIONS === "true",
+  mutationsApproved: process.env.POLICY_ALLOW_TEST_MUTATIONS === "true",
+});
+const projectRef = projectRefFromSupabaseUrl(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+);
+console.log(
+  `Live audit target: environment=${process.env.APP_ENV} project=${projectRef}`,
+);
 const auditRunId = allowMutations
   ? assertAuditRunId(process.env.AUDIT_RUN_ID ?? "")
   : process.env.AUDIT_RUN_ID || null;
