@@ -8,7 +8,11 @@
 import type { User } from '@supabase/supabase-js';
 import type { UserRoles } from '@intra/rbac';
 import { MODULE_LIST } from '@intra/rbac';
-import type { ProfileKind, SessionProfile } from './contracts';
+import type {
+  ProfileKind,
+  SessionProfile,
+  UserCapabilities,
+} from './contracts';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -28,6 +32,35 @@ function coerceRoleList(value: unknown): string[] {
     return Array.from(new Set(roles));
   }
   return [];
+}
+
+function resolveCapabilitiesSource(
+  claims: Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  if (isRecord(claims.capabilities)) return claims.capabilities;
+  if (
+    isRecord(claims.app_metadata) &&
+    isRecord(claims.app_metadata.capabilities)
+  ) {
+    return claims.app_metadata.capabilities;
+  }
+  return MODULE_LIST.some((module) => module in claims) ? claims : undefined;
+}
+
+/** Parse a claim or core.my_capabilities() projection without trusting unknown modules. */
+export function parseUserCapabilitiesFromClaims(
+  claims: unknown,
+): UserCapabilities {
+  if (!isRecord(claims)) return {};
+  const source = resolveCapabilitiesSource(claims);
+  if (!source) return {};
+
+  const result: UserCapabilities = {};
+  for (const module of MODULE_LIST) {
+    const capabilities = coerceRoleList(source[module]);
+    if (capabilities.length > 0) result[module] = capabilities;
+  }
+  return result;
 }
 
 /**

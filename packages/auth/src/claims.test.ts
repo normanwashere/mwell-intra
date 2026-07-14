@@ -2,9 +2,50 @@ import { describe, expect, it } from 'vitest';
 import type { User } from '@supabase/supabase-js';
 import {
   parseKindFromClaims,
+  parseUserCapabilitiesFromClaims,
   parseUserRolesFromClaims,
   profileFromUser,
 } from './claims';
+
+describe('parseUserCapabilitiesFromClaims', () => {
+  it('parses known module capability snapshots from trusted app metadata', () => {
+    expect(
+      parseUserCapabilitiesFromClaims({
+        app_metadata: {
+          capabilities: {
+            core: ['view_directory'],
+            warehouse: ['receive_stock', ' receive_stock ', 'inspect_quality'],
+            procurement: ['view_dashboard'],
+          },
+        },
+      }),
+    ).toEqual({
+      core: ['view_directory'],
+      warehouse: ['receive_stock', 'inspect_quality'],
+      procurement: ['view_dashboard'],
+    });
+  });
+
+  it('accepts an RPC capability object and drops unknown or invalid values', () => {
+    expect(
+      parseUserCapabilitiesFromClaims({
+        warehouse: ['receive_stock', null, 42],
+        insights: 'view_warehouse',
+        finance: ['approve_payment'],
+      }),
+    ).toEqual({
+      warehouse: ['receive_stock'],
+      insights: ['view_warehouse'],
+    });
+  });
+
+  it.each([null, 'warehouse', [], { capabilities: [] }, { warehouse: [42] }])(
+    'fails closed for malformed capability claims: %j',
+    (claims) => {
+      expect(parseUserCapabilitiesFromClaims(claims)).toEqual({});
+    },
+  );
+});
 
 describe('parseUserRolesFromClaims', () => {
   it('parses the full scoped roles snapshot from app_metadata (spec §5)', () => {

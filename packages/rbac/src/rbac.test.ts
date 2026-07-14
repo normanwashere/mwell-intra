@@ -13,7 +13,7 @@ import {
 } from './index';
 
 describe('warehouse parity vs source roles.ts', () => {
-  it('has the 8 source roles plus Warehouse Administrator', () => {
+  it('has the legacy roles plus canonical Operator and Supervisor bundles', () => {
     expect(Object.keys(warehouseModule.roles).sort()).toEqual(
       [
         'bi_analyst',
@@ -25,6 +25,8 @@ describe('warehouse parity vs source roles.ts', () => {
         'pricing',
         'procurement',
         'warehouse_admin',
+        'warehouse_operator',
+        'warehouse_supervisor',
       ].sort(),
     );
   });
@@ -61,6 +63,37 @@ describe('warehouse parity vs source roles.ts', () => {
 
   // Exact capability sets copied from mwell-intra-warehouse src/auth/roles.ts.
   const EXPECTED: Record<string, string[]> = {
+    warehouse_operator: [
+      'view_dashboard',
+      'receive_stock',
+      'manage_inventory',
+      'cycle_count',
+      'manage_returns',
+      'reserve_allocate',
+      'issue_items',
+      'transfer_stock',
+      'inspect_quality',
+      'view_exceptions',
+    ],
+    warehouse_supervisor: [
+      'view_dashboard',
+      'receive_stock',
+      'manage_inventory',
+      'manage_products',
+      'manage_locations',
+      'cycle_count',
+      'manage_returns',
+      'reserve_allocate',
+      'issue_items',
+      'transfer_stock',
+      'manage_operation_routes',
+      'inspect_quality',
+      'release_quality_hold',
+      'approve_stock_adjustment',
+      'view_exceptions',
+      'resolve_exceptions',
+      'import_warehouse_data',
+    ],
     logistics_supervisor: [
       'view_dashboard',
       'manage_inventory',

@@ -20,8 +20,10 @@ export function useCan<M extends Module>(
   module: M,
   cap: CapabilityFor<M>,
 ): boolean {
-  const { userRoles } = useSession();
-  return can(userRoles, module, cap);
+  const { mode, userRoles, userCapabilities } = useSession();
+  return mode === 'supabase'
+    ? userCapabilities?.[module]?.includes(cap) === true
+    : can(userRoles, module, cap);
 }
 
 export interface GuardProps<M extends Module> {

@@ -98,6 +98,14 @@ export const ADMIN_NAV = {
   tone: "rose",
 } as const satisfies ShellNavItem;
 
+export const DEPARTMENTS_NAV = {
+  href: "/admin/departments",
+  label: "Departments",
+  description: "Maintain the organization hierarchy and effective user scopes.",
+  icon: "building",
+  tone: "cyan",
+} as const satisfies ShellNavItem;
+
 export const DOA_NAV = {
   href: "/admin/doa",
   label: "Delegation of Authority",
@@ -190,7 +198,9 @@ export function dashboardAreas(
 
   if (profileKind === "vendor") areas.push(VENDOR_NAV);
   if (canAccessFinance(userRoles)) areas.push(FINANCE_NAV);
-  if (can(userRoles, "core", "manage_rbac")) areas.push(ADMIN_NAV);
+  if (can(userRoles, "core", "manage_rbac")) {
+    areas.push(ADMIN_NAV, DEPARTMENTS_NAV);
+  }
   if (
     can(userRoles, "core", "manage_rbac") ||
     can(userRoles, "legal", "manage_doa")

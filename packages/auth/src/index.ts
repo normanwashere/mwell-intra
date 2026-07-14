@@ -21,6 +21,7 @@ export type { GuardProps } from './Guard';
 
 export {
   parseUserRolesFromClaims,
+  parseUserCapabilitiesFromClaims,
   parseKindFromClaims,
   profileFromUser,
 } from './claims';
@@ -31,4 +32,5 @@ export type {
   SessionProfile,
   MemoryProfile,
   SessionValue,
+  UserCapabilities,
 } from './contracts';

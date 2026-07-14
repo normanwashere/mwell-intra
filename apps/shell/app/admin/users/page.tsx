@@ -71,16 +71,28 @@ interface RoleAssignment {
   readonly role: string;
 }
 
+interface RoleCatalogRow {
+  readonly module: string;
+  readonly role: string;
+  readonly label: string;
+  readonly description: string | null;
+  readonly is_active: boolean;
+  readonly is_protected: boolean;
+  readonly capabilities: readonly string[];
+  readonly assignment_count: number;
+}
+
 /** module:role pair that identifies one column of the role matrix. */
 interface RoleColumn {
   readonly module: Module;
   readonly role: string;
   readonly key: string; // `${module}:${role}`
   readonly label: string;
+  readonly isActive: boolean;
 }
 
 /** Materialize the full module × role catalogue in stable declaration order. */
-function buildRoleColumns(): readonly RoleColumn[] {
+function buildStaticRoleColumns(): readonly RoleColumn[] {
   const out: RoleColumn[] = [];
   for (const module of MODULE_LIST) {
     // Widen to a plain record so we can iterate module role tables that carry
@@ -94,10 +106,27 @@ function buildRoleColumns(): readonly RoleColumn[] {
         role,
         key: `${module}:${role}`,
         label: roles[role]?.label ?? role,
+        isActive: true,
       });
     }
   }
   return out;
+}
+
+function roleColumnsFromCatalog(
+  rows: readonly RoleCatalogRow[],
+): readonly RoleColumn[] {
+  return rows
+    .filter((row): row is RoleCatalogRow & { module: Module } =>
+      MODULE_LIST.includes(row.module as Module),
+    )
+    .map((row) => ({
+      module: row.module,
+      role: row.role,
+      key: `${row.module}:${row.role}`,
+      label: row.label || row.role,
+      isActive: row.is_active,
+    }));
 }
 
 /** Group a flat list of assignments back into a per-user role matrix. */
@@ -144,7 +173,7 @@ function AdminUsersInner() {
 function MemoryAdminUsers() {
   const [evidenceRoles, setEvidenceRoles] = useState<Set<string> | null>(null);
   const [detailUserId, setDetailUserId] = useState<string | null>(null);
-  const columns = useMemo(buildRoleColumns, []);
+  const columns = useMemo(buildStaticRoleColumns, []);
   const profiles = useMemo<AdminProfile[]>(
     () =>
       DEMO_PROFILES.map((p) => ({
@@ -294,7 +323,6 @@ function MemoryAdminUsers() {
 
 function LiveAdminUsers() {
   const toast = useToast();
-  const columns = useMemo(buildRoleColumns, []);
   const { supabaseClient } = useSession();
   const supabase = useMemo(
     () => supabaseClient?.schema('core') ?? null,
@@ -302,6 +330,7 @@ function LiveAdminUsers() {
   );
 
   const [profiles, setProfiles] = useState<AdminProfile[]>([]);
+  const [columns, setColumns] = useState<readonly RoleColumn[]>([]);
   const [held, setHeld] = useState<Map<string, Set<string>>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -313,18 +342,26 @@ function LiveAdminUsers() {
     setLoading(true);
     setError(null);
     try {
-      const [{ data: profileRows, error: pErr }, { data: roleRows, error: rErr }] =
-        await Promise.all([
+      const [
+        { data: profileRows, error: pErr },
+        { data: roleRows, error: rErr },
+        { data: catalogRows, error: catalogError },
+      ] = await Promise.all([
           supabase
             .from('profiles')
             .select('id,email,full_name,title,kind,vendor_id,status')
             .order('email'),
           supabase.from('user_roles').select('user_id,module,role'),
+          supabase.rpc('list_rbac_catalog'),
         ]);
       if (pErr) throw pErr;
       if (rErr) throw rErr;
+      if (catalogError) throw catalogError;
       setProfiles((profileRows ?? []) as AdminProfile[]);
       setHeld(indexAssignments((roleRows ?? []) as RoleAssignment[]));
+      setColumns(
+        roleColumnsFromCatalog((catalogRows ?? []) as RoleCatalogRow[]),
+      );
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to load users.';
       setError(msg);
@@ -748,6 +785,11 @@ function UserDetail({
                   <div className="min-w-0">
                     <div className="truncate text-sm font-medium text-ink">
                       {c.label}
+                      {!c.isActive && (
+                        <span className="ml-2 inline-flex">
+                          <Badge tone="slate">Inactive</Badge>
+                        </span>
+                      )}
                     </div>
                     <div className="truncate font-mono text-[0.7rem] text-faint">
                       {c.key}
@@ -755,7 +797,7 @@ function UserDetail({
                   </div>
                   <RoleCheckbox
                     checked={checked}
-                    disabled={rowPending}
+                    disabled={rowPending || (!c.isActive && !checked)}
                     label={`${c.key} for ${profile.email}`}
                     onChange={(next) => onToggle(c.module, c.role, next)}
                   />

@@ -2,7 +2,10 @@ import type { Module, RoleCapabilityRow, UserRoles } from './contracts';
 import { MODULE_LIST } from './contracts';
 import type { CoreCapability, CoreRole } from './modules/core';
 import { coreModule } from './modules/core';
-import type { WarehouseCapability, WarehouseRole } from './modules/warehouse';
+import type {
+  WarehouseCapability,
+  WarehouseRegistryRole,
+} from './modules/warehouse';
 import { warehouseModule } from './modules/warehouse';
 import type {
   ProcurementCapability,
@@ -29,7 +32,7 @@ export interface ModuleCapabilityMap {
 /** Maps each module to its own role union. */
 export interface ModuleRoleMap {
   core: CoreRole;
-  warehouse: WarehouseRole;
+  warehouse: WarehouseRegistryRole;
   procurement: ProcurementRole;
   legal: LegalRole;
   events: EventsRole;

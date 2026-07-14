@@ -18,12 +18,17 @@ import {
 import type { ReactNode } from 'react';
 import type { Session, SupabaseClient, User } from '@supabase/supabase-js';
 import type { UserRoles } from '@intra/rbac';
-import { parseUserRolesFromClaims, profileFromUser } from './claims';
+import {
+  parseUserCapabilitiesFromClaims,
+  parseUserRolesFromClaims,
+  profileFromUser,
+} from './claims';
 import type {
   AuthMode,
   MemoryProfile,
   SessionProfile,
   SessionValue,
+  UserCapabilities,
 } from './contracts';
 
 type SupabaseAuthClient = SupabaseClient<Record<string, unknown>, string>;
@@ -76,6 +81,7 @@ export function SessionProvider({
 
   const [profile, setProfile] = useState<SessionProfile | null>(null);
   const [userRoles, setUserRoles] = useState<Partial<UserRoles>>({});
+  const [userCapabilities, setUserCapabilities] = useState<UserCapabilities>({});
   // Always start `loading=true` so first server render matches first client
   // render — hydration-safe. We flip to false after we've consulted
   // sessionStorage (memory) or the supabase session (live).
@@ -120,15 +126,27 @@ export function SessionProvider({
 
   // Project a verified user (or clear). Roles ALWAYS come from the fresh JWT
   // `app_metadata`, so a stale/tampered client value can never elevate access.
-  const applyUser = useCallback((user: User | null) => {
+  const applyUser = useCallback((
+    user: User | null,
+    capabilities: UserCapabilities = {},
+  ) => {
     if (user) {
       setProfile(profileFromUser(user));
       setUserRoles(parseUserRolesFromClaims(user.app_metadata));
+      setUserCapabilities(capabilities);
     } else {
       setProfile(null);
       setUserRoles({});
+      setUserCapabilities({});
     }
   }, []);
+
+  const loadLiveCapabilities = useCallback(async (): Promise<UserCapabilities> => {
+    if (!client) return {};
+    const { data, error } = await client.schema('core').rpc('my_capabilities');
+    if (error) throw error;
+    return parseUserCapabilitiesFromClaims(data);
+  }, [client]);
 
   useEffect(() => {
     if (!client) return;
@@ -142,7 +160,13 @@ export function SessionProvider({
       try {
         const { data, error } = await client.auth.getUser();
         if (error) throw error;
-        applyUser(data.user ?? null);
+        const user = data.user ?? null;
+        if (!user) {
+          applyUser(null);
+          return;
+        }
+        const capabilities = await loadLiveCapabilities();
+        applyUser(user, capabilities);
       } catch {
         applyUser(null);
       }
@@ -173,7 +197,7 @@ export function SessionProvider({
       active = false;
       sub.subscription.unsubscribe();
     };
-  }, [client, applyUser]);
+  }, [client, applyUser, loadLiveCapabilities]);
 
   const signInWithPassword = useCallback(
     async (email: string, password: string) => {
@@ -225,7 +249,8 @@ export function SessionProvider({
         if (!user) {
           throw new Error('Sign-in succeeded, but no session was restored.');
         }
-        applyUser(user);
+        const capabilities = await loadLiveCapabilities();
+        applyUser(user, capabilities);
         return true;
       } catch (e) {
         applyUser(null);
@@ -237,7 +262,7 @@ export function SessionProvider({
         setSigningIn(false);
       }
     },
-    [client, memoryProfiles, applyUser],
+    [client, memoryProfiles, applyUser, loadLiveCapabilities],
   );
 
   const signOut = useCallback(async () => {
@@ -251,6 +276,7 @@ export function SessionProvider({
     }
     setProfile(null);
     setUserRoles({});
+    setUserCapabilities({});
     if (typeof window !== 'undefined') {
       try {
         window.sessionStorage.removeItem(MEMORY_SESSION_KEY);
@@ -299,6 +325,7 @@ export function SessionProvider({
     () => ({
       profile,
       userRoles,
+      userCapabilities,
       mode,
       supabaseClient: client,
       loading,
@@ -313,6 +340,7 @@ export function SessionProvider({
     [
       profile,
       userRoles,
+      userCapabilities,
       mode,
       loading,
       signingIn,

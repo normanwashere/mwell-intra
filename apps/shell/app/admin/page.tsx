@@ -20,6 +20,13 @@ const areas = [
     status: "Live",
   },
   {
+    href: "/admin/departments",
+    icon: "building" as const,
+    title: "Departments",
+    summary: "Add, rename, re-parent, order, and deactivate organization units without changing application code.",
+    status: "Live",
+  },
+  {
     href: "/knowledge?flow=administration&view=flow",
     icon: "shield" as const,
     title: "Governance runbook",

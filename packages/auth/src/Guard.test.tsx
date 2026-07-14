@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import type { Session, SupabaseClient, User } from '@supabase/supabase-js';
 import type { MemoryProfile } from './contracts';
 import { SessionProvider, useSession } from './SessionProvider';
 import { Guard, useCan } from './Guard';
@@ -44,6 +45,47 @@ function CanProbe({
 }) {
   const allowed = useCan('warehouse', cap);
   return <span data-testid="probe">{allowed ? 'yes' : 'no'}</span>;
+}
+
+function LiveSessionProbe() {
+  const { profile, userCapabilities } = useSession();
+  const canReceive = useCan('warehouse', 'receive_stock');
+  const canReserve = useCan('warehouse', 'reserve_allocate');
+  return (
+    <div>
+      <span data-testid="live-user">{profile?.email ?? 'anon'}</span>
+      <span data-testid="live-capabilities">
+        {userCapabilities?.warehouse?.join(',') ?? 'none'}
+      </span>
+      <span data-testid="live-receive">{canReceive ? 'yes' : 'no'}</span>
+      <span data-testid="live-reserve">{canReserve ? 'yes' : 'no'}</span>
+    </div>
+  );
+}
+
+function liveClient() {
+  const user = {
+    id: 'live-user',
+    email: 'live@mwell.test',
+    app_metadata: { roles: { warehouse: ['business_unit'] } },
+    user_metadata: {},
+  } as unknown as User;
+  const session = { user } as Session;
+  const rpc = vi.fn().mockResolvedValue({
+    data: { warehouse: ['receive_stock'] },
+    error: null,
+  });
+  const client = {
+    auth: {
+      getSession: vi.fn().mockResolvedValue({ data: { session } }),
+      getUser: vi.fn().mockResolvedValue({ data: { user }, error: null }),
+      onAuthStateChange: vi.fn().mockReturnValue({
+        data: { subscription: { unsubscribe: vi.fn() } },
+      }),
+    },
+    schema: vi.fn().mockReturnValue({ rpc }),
+  } as unknown as SupabaseClient<Record<string, unknown>, string>;
+  return { client, rpc };
 }
 
 describe('<Guard>', () => {
@@ -109,6 +151,23 @@ describe('<Guard>', () => {
 });
 
 describe('useCan', () => {
+  it('uses the verified live my_capabilities snapshot in Supabase mode', async () => {
+    const { client, rpc } = liveClient();
+    render(
+      <SessionProvider config={{ mode: 'supabase', client }}>
+        <LiveSessionProbe />
+      </SessionProvider>,
+    );
+
+    await screen.findByText('live@mwell.test');
+    expect(rpc).toHaveBeenCalledWith('my_capabilities');
+    expect(screen.getByTestId('live-capabilities').textContent).toBe(
+      'receive_stock',
+    );
+    expect(screen.getByTestId('live-receive').textContent).toBe('yes');
+    expect(screen.getByTestId('live-reserve').textContent).toBe('no');
+  });
+
   it('reflects the scoped capability of the signed-in roles', async () => {
     render(
       <SessionProvider config={{ mode: 'memory', profiles: PROFILES }}>

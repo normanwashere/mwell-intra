@@ -1,5 +1,8 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { UserRoles } from "@intra/rbac";
+import { SHELL_PAGE_ROUTE_CONTRACTS } from "./routes";
 import {
   authorizedPostLoginPath,
   canAccessFinance,
@@ -25,6 +28,23 @@ describe("authorized post-login destinations", () => {
       "/finance",
     );
     expect(authorizedPostLoginPath("/work", roles, "employee")).toBe("/work");
+  });
+
+  it("allows only RBAC administrators into Department Administration", () => {
+    expect(
+      authorizedPostLoginPath(
+        "/admin/departments",
+        { core: ["platform_admin"] },
+        "employee",
+      ),
+    ).toBe("/admin/departments");
+    expect(
+      authorizedPostLoginPath(
+        "/admin/departments",
+        { core: ["staff"] },
+        "employee",
+      ),
+    ).toBe("/");
   });
 
   it("fails closed instead of opening an unauthorized or unknown destination", () => {
@@ -84,6 +104,7 @@ describe("dashboard areas", () => {
     ).toEqual([
       "My Work",
       "Administration",
+      "Departments",
       "Delegation of Authority",
       "Knowledge Base",
     ]);
@@ -121,6 +142,40 @@ describe("dashboard areas", () => {
         (area) => area.label === "Finance",
       ),
     ).toBe(false);
+  });
+});
+
+describe("configurable organization administration", () => {
+  const source = (path: string) =>
+    readFileSync(resolve(process.cwd(), path), "utf8");
+
+  it("registers the governed Department Administration route", () => {
+    expect(
+      SHELL_PAGE_ROUTE_CONTRACTS.find(
+        (item) => item.route === "/admin/departments",
+      ),
+    ).toMatchObject({
+      module: "admin",
+      capabilityIds: ["manage_rbac"],
+      administratorRoleIds: ["platform_admin"],
+    });
+  });
+
+  it("uses the live RBAC catalogue for live user administration", () => {
+    const users = source("app/admin/users/page.tsx");
+    expect(users).toContain("rpc('list_rbac_catalog')");
+    expect(users).toContain("is_active");
+    expect(users).toContain("Inactive");
+  });
+
+  it("provides a sheet-based department tree editor with safe parent choices", () => {
+    const departments = source("app/admin/departments/page.tsx");
+    expect(departments).toContain("rpc('list_departments')");
+    expect(departments).toContain("rpc('upsert_department'");
+    expect(departments).toContain("descendantIds");
+    expect(departments).toContain("deactivation_blocked_reason");
+    expect(departments).toContain("<Sheet");
+    expect(departments).toContain("Sort order");
   });
 });
 

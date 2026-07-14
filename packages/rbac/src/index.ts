@@ -18,7 +18,12 @@ export { MODULE_LIST } from './contracts';
 // Per-module capability + role unions and matrices.
 export type { CoreCapability, CoreRole } from './modules/core';
 export { coreModule } from './modules/core';
-export type { WarehouseCapability, WarehouseRole } from './modules/warehouse';
+export type {
+  WarehouseCapability,
+  WarehouseRole,
+  CanonicalWarehouseRole,
+  WarehouseRegistryRole,
+} from './modules/warehouse';
 export { warehouseModule } from './modules/warehouse';
 export type {
   ProcurementCapability,

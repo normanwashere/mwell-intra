@@ -32,6 +32,7 @@
     "verify:knowledge-base": "node scripts/verify-knowledge-base.mjs",
     "verify:knowledge-evidence-catalog": "node scripts/qa/knowledge-evidence-catalog.mjs",
     "verify:supabase-cutover": "node scripts/verify-supabase-cutover.mjs",
+    "test:organization-contract": "node --test scripts/verify-organization-contract.test.mjs",
     "format": "prettier --write \"**/*.{ts,tsx,md,json}\""
   },
   "devDependencies": {

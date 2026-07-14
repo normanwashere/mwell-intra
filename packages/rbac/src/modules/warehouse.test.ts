@@ -11,6 +11,84 @@ const roles = (warehouse: string[]): UserRoles => ({
 });
 
 describe('warehouse W1 capabilities', () => {
+  it('defines the canonical two-person Warehouse operating roles', () => {
+    expect(warehouseModule.roles.warehouse_operator.capabilities).toEqual([
+      'view_dashboard',
+      'receive_stock',
+      'manage_inventory',
+      'cycle_count',
+      'manage_returns',
+      'reserve_allocate',
+      'issue_items',
+      'transfer_stock',
+      'inspect_quality',
+      'view_exceptions',
+    ]);
+    expect(warehouseModule.roles.warehouse_supervisor.capabilities).toEqual([
+      'view_dashboard',
+      'receive_stock',
+      'manage_inventory',
+      'manage_products',
+      'manage_locations',
+      'cycle_count',
+      'manage_returns',
+      'reserve_allocate',
+      'issue_items',
+      'transfer_stock',
+      'manage_operation_routes',
+      'inspect_quality',
+      'release_quality_hold',
+      'approve_stock_adjustment',
+      'view_exceptions',
+      'resolve_exceptions',
+      'import_warehouse_data',
+    ]);
+  });
+
+  it('keeps controlled exception and configuration capabilities with the Supervisor', () => {
+    const operator = roles(['warehouse_operator']);
+    const supervisor = roles(['warehouse_supervisor']);
+
+    expect(can(operator, 'warehouse', 'receive_stock')).toBe(true);
+    expect(can(operator, 'warehouse', 'inspect_quality')).toBe(true);
+    expect(can(operator, 'warehouse', 'release_quality_hold')).toBe(false);
+    expect(can(operator, 'warehouse', 'approve_stock_adjustment')).toBe(false);
+    expect(can(operator, 'warehouse', 'resolve_exceptions')).toBe(false);
+    expect(can(operator, 'warehouse', 'manage_operation_routes')).toBe(false);
+
+    expect(can(supervisor, 'warehouse', 'release_quality_hold')).toBe(true);
+    expect(can(supervisor, 'warehouse', 'approve_stock_adjustment')).toBe(true);
+    expect(can(supervisor, 'warehouse', 'resolve_exceptions')).toBe(true);
+    expect(can(supervisor, 'warehouse', 'manage_operation_routes')).toBe(true);
+  });
+
+  it.each(['warehouse_operator', 'warehouse_supervisor'])(
+    'keeps %s outside Finance, Procurement, Insights, Marketing/Pricing, Legal, and RBAC administration',
+    (role) => {
+      const user = roles([role]);
+      for (const capability of [
+        'view_finance',
+        'view_analytics',
+        'view_procurement',
+        'view_pricing',
+        'set_pricing',
+      ] as const) {
+        expect(can(user, 'warehouse', capability)).toBe(false);
+      }
+      expect(can(user, 'core', 'manage_rbac')).toBe(false);
+      expect(can(user, 'procurement', 'view_dashboard')).toBe(false);
+      expect(can(user, 'legal', 'view_dashboard')).toBe(false);
+      expect(can(user, 'insights', 'view_warehouse')).toBe(false);
+      expect(can(user, 'events', 'create_event')).toBe(false);
+    },
+  );
+
+  it('preserves legacy Warehouse role aliases', () => {
+    expect(Object.keys(warehouseModule.roles)).toEqual(
+      expect.arrayContaining(['operations', 'logistics_supervisor']),
+    );
+  });
+
   it('adds the Warehouse Administrator role', () => {
     expect(Object.keys(warehouseModule.roles)).toContain('warehouse_admin');
     expect(warehouseModule.roles.warehouse_admin.capabilities).toEqual(
