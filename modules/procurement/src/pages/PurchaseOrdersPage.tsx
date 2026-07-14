@@ -175,7 +175,7 @@ export function PurchaseOrdersPage() {
         ) : undefined}
       />
 
-      <StaggerGrid className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <StaggerGrid className="grid auto-rows-fr grid-cols-2 gap-3 lg:grid-cols-4">
         {filterCards.map((c) => {
           const active = filter === c.key;
           return (
@@ -183,8 +183,8 @@ export function PurchaseOrdersPage() {
               key={c.key}
               className={
                 active
-                  ? 'rounded-2xl ring-2 ring-brand-500 ring-offset-2 ring-offset-app'
-                  : undefined
+                  ? 'h-full min-w-0 rounded-2xl ring-2 ring-brand-500 ring-offset-2 ring-offset-app'
+                  : 'h-full min-w-0'
               }
             >
               <StatCard

@@ -296,7 +296,7 @@ export function StatCard({
 
   // Cramped mobile → tighter padding; roomier from `sm` onwards.
   const shell =
-    'card group flex min-w-0 max-w-full flex-col gap-2 overflow-hidden p-3 sm:gap-2.5 sm:p-4 text-left transition';
+    'card group flex h-full w-full min-w-0 max-w-full flex-col gap-2 overflow-hidden p-3 sm:gap-2.5 sm:p-4 text-left transition';
   const interactiveShell =
     ' hover:-translate-y-0.5 hover:shadow-e3 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500';
 
