@@ -144,5 +144,6 @@ describe('readProcurementPOs (procurement → warehouse bridge)', () => {
     );
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ id: 'live-po-1', totalOrdered: 3, totalReceived: 1 });
+    expect(rows[0]!.warehouseHref).toBe('/warehouse/purchase-orders?po=live-po-1');
   });
 });

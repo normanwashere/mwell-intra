@@ -27,6 +27,7 @@ describe('AppShell navigation', () => {
     for (const label of ['Receive and inspect', 'Put away', 'Pick or issue', 'Returns and counts']) {
       expect(within(sidebar).getByRole('link', { name: label })).toBeInTheDocument();
     }
+    expect(within(sidebar).queryByRole('link', { name: 'Cycle counts' })).not.toBeInTheDocument();
     for (const label of ['Procurement', 'Pricing', 'Data & Reports', 'Events', 'Suppliers']) {
       expect(within(sidebar).queryByRole('link', { name: label })).not.toBeInTheDocument();
     }

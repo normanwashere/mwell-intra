@@ -18,7 +18,6 @@ import type {
   ProcurementRequestLine,
   PurchaseOrder,
   PurchaseOrderLine,
-  PurchaseOrderReceipt,
   RequestCategory,
   SourcingMethod,
 } from './types';
@@ -185,7 +184,7 @@ export function buildProcurementSeed(now: Date = new Date()): ProcurementSeed {
   const lineId = idGen('rl');
   const poId = idGen('po');
   const poLineId = idGen('pl');
-  const rcptId = idGen('rcpt');
+  const warehouseReceiptId = idGen('warehouse_rcpt');
 
   const requests: ProcurementRequest[] = [];
   const approvals: ApprovalDecision[] = [];
@@ -285,8 +284,6 @@ export function buildProcurementSeed(now: Date = new Date()): ProcurementSeed {
     actorEmail?: string;
     approvedDaysAgo?: number;
     lines: Array<{ description: string; quantity: number; uom?: string; unitPrice?: number; received?: number }>;
-    /** Receipt events (append-only history). */
-    receipts?: Array<{ daysAgo: number; byEmail: string; note?: string; closes?: boolean }>;
   }): PurchaseOrder => {
     const lines: PurchaseOrderLine[] = opts.lines.map((l) => ({
       id: poLineId(),
@@ -298,22 +295,8 @@ export function buildProcurementSeed(now: Date = new Date()): ProcurementSeed {
     }));
     const approvedAt =
       opts.approvedDaysAgo !== undefined ? daysAgo(now, opts.approvedDaysAgo, 14) : undefined;
-    const receipts: PurchaseOrderReceipt[] | undefined = opts.receipts?.map((r) => ({
-      id: rcptId(),
-      receivedAt: daysAgo(now, r.daysAgo, 15),
-      receivedByEmail: r.byEmail,
-      note: r.note,
-      // Mirror the received quantities onto the receipt lines (single-receipt
-      // demo simplification; multi-receipt POs split evenly).
-      lines: lines
-        .filter((l) => l.receivedQuantity > 0)
-        .map((l) => ({
-          lineId: l.id,
-          description: l.description,
-          quantity: Math.max(1, Math.round(l.receivedQuantity / (opts.receipts?.length ?? 1))),
-        })),
-      closedPo: r.closes ?? false,
-    }));
+    const orderedQuantity = lines.reduce((sum, line) => sum + line.quantity, 0);
+    const acceptedQuantity = lines.reduce((sum, line) => sum + line.receivedQuantity, 0);
     const po: PurchaseOrder = {
       id: poId(),
       poNumber: nextPoNumber(),
@@ -331,7 +314,15 @@ export function buildProcurementSeed(now: Date = new Date()): ProcurementSeed {
       approvedAt,
       approvedByEmail: approvedAt ? 'cfo@mwell.demo' : undefined,
       approvalSignature: approvedAt ? svgSignature('Diego Ang', approvedAt) : undefined,
-      receipts,
+      receiptStatus: acceptedQuantity > 0 ? {
+        orderedQuantity,
+        acceptedQuantity,
+        rejectedOrQuarantinedQuantity: 0,
+        outstandingQuantity: Math.max(orderedQuantity - acceptedQuantity, 0),
+        latestReceiptReference: warehouseReceiptId(),
+        latestQcStatus: acceptedQuantity >= orderedQuantity ? 'accepted' : 'partial',
+        lastReceiptAt: daysAgo(now, Math.max(0, opts.createdDaysAgo - 1), 15),
+      } : undefined,
       total: totalOf(lines),
     };
     if (approvedAt) {
@@ -654,9 +645,6 @@ export function buildProcurementSeed(now: Date = new Date()): ProcurementSeed {
     expectedDays: 7,
     notes: 'Split delivery agreed: 120 units advance batch, 80 to follow.',
     lines: [{ description: 'ECG ring (assorted sizes 6–11)', quantity: 200, uom: 'pc', unitPrice: 8000, received: 120 }],
-    receipts: [
-      { daysAgo: 9, byEmail: 'logistics@mwell.demo', note: 'Advance batch — 120 units, all serials scanned.' },
-    ],
   });
 
   // Closed — racking fully delivered + installed.
@@ -669,9 +657,6 @@ export function buildProcurementSeed(now: Date = new Date()): ProcurementSeed {
     approvedDaysAgo: 64,
     expectedDays: -20,
     lines: [{ description: 'Selective pallet racking (supply + install)', quantity: 12, uom: 'bay', unitPrice: 62500, received: 12 }],
-    receipts: [
-      { daysAgo: 22, byEmail: 'logistics@mwell.demo', note: 'All 12 bays installed and load-tested.', closes: true },
-    ],
   });
 
   // Cancelled — superseded maintenance contract.

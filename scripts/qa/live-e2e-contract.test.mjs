@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import test from "node:test";
 import {
   CURRENT_LIVE_ROLES,
@@ -107,31 +110,19 @@ test("the mutating harness scopes and removes temporary auth identities", async 
   assert.match(cleanup, /includes\(runId\.toLowerCase\(\)\)/);
 });
 
-test("covers Task 3 policy-negative and two-person Warehouse contracts", async () => {
-  const source = await readFile(
-    new URL("./full-intra-live-e2e.mjs", import.meta.url),
-    "utf8",
-  );
-  for (const contract of [
-    "expired accreditation",
-    "unapproved scoped temporary clearance",
-    "unsupported Direct Award",
-    "split petty-cash use",
-    "missing importation controls",
-    "payment readiness without accepted receipt or service acceptance",
-  ])
-    assert.ok(source.includes(contract), contract);
-  for (const workflow of [
-    "procurementReceiptAuthorityWorkflow",
-    "warehouseOperatorSurfaceWorkflow",
-    "warehouseSupervisorControlWorkflow",
-  ])
-    assert.match(source, new RegExp(`async function ${workflow}\\(`));
-  assert.match(source, /receive_purchase_order/);
-  assert.match(source, /receive_procurement_po/);
-  assert.match(source, /Procurement still exposes a receipt mutation control/);
-  assert.match(source, /Warehouse Operator surface exposes an advanced or authoring workflow/);
-  assert.match(source, /delegation never permits the requester/i);
+test("executes Task 3 receipt and policy contracts against live UAT", {
+  skip: process.env.RUN_TASK3_LIVE_CONTRACT !== "true",
+  timeout: 20 * 60_000,
+}, async () => {
+  const run = promisify(execFile);
+  const { stdout } = await run(process.execPath, [
+    fileURLToPath(new URL("./full-intra-live-e2e.mjs", import.meta.url)),
+  ], {
+    env: { ...process.env, AUDIT_MUTATIONS: "true" },
+    windowsHide: true,
+    maxBuffer: 20 * 1024 * 1024,
+  });
+  assert.match(stdout, /Wrote .*full-intra-live-e2e-results\.json/);
 });
 
 test("the live harness verifies deployed identity before browser launch", async () => {

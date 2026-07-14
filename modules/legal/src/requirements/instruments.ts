@@ -92,6 +92,21 @@ export function technologyMndaReturnOrDestroyDueAt(triggeredAt: string): string 
   return due.toISOString();
 }
 
+export function technologyMndaExpiresAt(
+  executedAt: string,
+  definitiveAgreementExecutedAt?: string,
+): string {
+  const twoYearExpiry = new Date(executedAt);
+  if (!Number.isFinite(twoYearExpiry.getTime())) throw new Error('Invalid MNDA execution timestamp');
+  twoYearExpiry.setUTCFullYear(twoYearExpiry.getUTCFullYear() + 2);
+  if (!definitiveAgreementExecutedAt) return twoYearExpiry.toISOString();
+  const definitiveAgreement = new Date(definitiveAgreementExecutedAt);
+  if (!Number.isFinite(definitiveAgreement.getTime())) {
+    throw new Error('Invalid definitive agreement timestamp');
+  }
+  return (definitiveAgreement < twoYearExpiry ? definitiveAgreement : twoYearExpiry).toISOString();
+}
+
 const TEMPLATE_FIELDS: TechnologyMndaFields = {
   executionDate: '[EXECUTION DATE]',
   serviceProviderName: '[SERVICE PROVIDER LEGAL NAME]',

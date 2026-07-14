@@ -174,6 +174,24 @@ describe('PurchaseOrdersPage', () => {
     expect(within(list).getByText(/Acme Medical Supplies/i)).toBeInTheDocument();
   });
 
+  it('opens the governed receipt detail from the Procurement handoff query', async () => {
+    window.localStorage.setItem(PROCUREMENT_PO_KEY, JSON.stringify([{
+      id: 'ppo-handoff', poNumber: 'PO-HANDOFF-001', vendorName: 'Handoff Vendor',
+      status: 'issued', lines: [{ id: 'line-handoff', productId: 'smart-watch',
+        description: 'Smart watches', quantity: 2, receivedQuantity: 0 }],
+      createdAt: '2026-07-15T00:00:00.000Z', total: 0,
+    }]));
+
+    renderWithProviders(<PurchaseOrdersPage />, {
+      role: 'warehouse_operator',
+      route: '/purchase-orders?po=ppo-handoff',
+    });
+
+    const dialog = await screen.findByRole('dialog', { name: /receive approved procurement po/i });
+    expect(dialog).toBeInTheDocument();
+    expect(within(dialog).getByText('PO-HANDOFF-001')).toBeInTheDocument();
+  });
+
   it('uses the live handoff in Supabase mode and ignores local cached POs', async () => {
     const user = userEvent.setup();
     window.localStorage.setItem(PROCUREMENT_PO_KEY, JSON.stringify([{
@@ -182,7 +200,7 @@ describe('PurchaseOrdersPage', () => {
     }]));
     const repo = new LiveProcurementRepository();
     renderWithProviders(<PurchaseOrdersPage />, {
-      role: 'logistics_supervisor', repo, source: 'supabase',
+      role: 'logistics_supervisor', repo, source: 'supabase', capabilities: ['receive_stock'],
     });
 
     const list = await screen.findByLabelText('Purchase orders');

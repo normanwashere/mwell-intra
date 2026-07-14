@@ -33,6 +33,7 @@ describe('DashboardPage', () => {
     for (const label of ['Receive and inspect', 'Put away', 'Pick or issue', 'Returns and counts']) {
       expect(await screen.findByRole('link', { name: label })).toBeInTheDocument();
     }
+    expect(screen.getByRole('link', { name: 'Cycle counts' })).toHaveAttribute('href', '/cycle-counts');
     expect(screen.queryByText(/consumption by event type/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/inventory value/i)).not.toBeInTheDocument();
   });

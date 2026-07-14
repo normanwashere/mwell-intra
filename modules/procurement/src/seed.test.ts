@@ -77,22 +77,25 @@ describe('buildProcurementSeed', () => {
     expect(seed.purchaseOrders.length).toBeGreaterThanOrEqual(8);
   });
 
-  it('partial receipt: received < ordered with receipt history attached', () => {
+  it('partial receipt: received < ordered with Warehouse status attached', () => {
     const partial = seed.purchaseOrders.find(
       (p) => p.status === 'issued' && p.lines.some((l) => l.receivedQuantity > 0),
     );
     expect(partial).toBeDefined();
     const line = partial!.lines.find((l) => l.receivedQuantity > 0)!;
     expect(line.receivedQuantity).toBeLessThan(line.quantity);
-    expect(partial!.receipts?.length).toBeGreaterThanOrEqual(1);
-    expect(partial!.receipts![0]!.closedPo).toBe(false);
+    expect(partial!.receiptStatus).toMatchObject({ latestQcStatus: 'partial' });
+    expect(partial!.receiptStatus!.outstandingQuantity).toBeGreaterThan(0);
   });
 
-  it('closed PO is fully received and its receipt closes it', () => {
+  it('closed PO is fully received and Warehouse status is accepted', () => {
     const closed = seed.purchaseOrders.find((p) => p.status === 'closed');
     expect(closed).toBeDefined();
     for (const l of closed!.lines) expect(l.receivedQuantity).toBe(l.quantity);
-    expect(closed!.receipts?.some((r) => r.closedPo)).toBe(true);
+    expect(closed!.receiptStatus).toMatchObject({
+      latestQcStatus: 'accepted',
+      outstandingQuantity: 0,
+    });
   });
 
   it('PO-linked requests exist and are approved', () => {

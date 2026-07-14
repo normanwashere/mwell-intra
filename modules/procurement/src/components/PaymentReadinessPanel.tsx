@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Badge, Icon } from '@intra/ui';
 import type { AcceptancePack, PaymentReadinessPack } from '../types';
-import { evaluatePaymentReadiness } from '../receiving';
+import { evaluatePaymentPackReadiness } from '../policy';
 
 export interface PaymentReadinessDraft {
   poMatch: boolean;
@@ -53,7 +53,7 @@ export function PaymentReadinessPanel({
     acceptancePackId: pack?.acceptancePackId ?? acceptance?.id ?? '',
     ...draft, status: pack?.status ?? 'draft', preparedAt: pack?.preparedAt ?? '',
   }), [acceptance?.id, draft, pack]);
-  const blockers = evaluatePaymentReadiness(acceptance, preview);
+  const blockers = evaluatePaymentPackReadiness(acceptance, preview);
   const exceptions = exceptionsText.split('\n').map((value) => value.trim()).filter(Boolean);
 
   return (

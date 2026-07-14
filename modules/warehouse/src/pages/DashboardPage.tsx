@@ -276,11 +276,19 @@ const ROLE_PANELS: Record<Role, PanelId[]> = {
 const WINDOWED_ROLES: Role[] = ['bi_analyst', 'marketing'];
 
 function OperatorDashboard({ name }: { name?: string }) {
-  const actions = [
+  const actions: Array<{
+    label: string;
+    to: string;
+    icon: IconName;
+    secondary?: { label: string; to: string };
+  }> = [
     { label: 'Receive and inspect', to: '/purchase-orders', icon: 'truck' as const },
     { label: 'Put away', to: '/storage', icon: 'pin' as const },
     { label: 'Pick or issue', to: '/allocations', icon: 'tag' as const },
-    { label: 'Returns and counts', to: '/returns', icon: 'rotate' as const },
+    {
+      label: 'Returns and counts', to: '/returns', icon: 'rotate',
+      secondary: { label: 'Cycle counts', to: '/cycle-counts' },
+    },
   ];
   return (
     <div className="space-y-6">
@@ -293,17 +301,27 @@ function OperatorDashboard({ name }: { name?: string }) {
         <h2 id="operator-overview" className="font-display text-lg font-bold text-ink">Overview</h2>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
           {actions.map((action) => (
-            <Link
-              key={action.label}
-              to={action.to}
-              className="flex min-h-20 items-center gap-3 rounded-lg border border-line bg-surface px-4 py-3 shadow-e1 transition hover:border-brand-300"
-            >
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-brand-500/10 text-brand-700">
-                <Icon name={action.icon} className="h-5 w-5" />
-              </span>
-              <span className="font-semibold text-ink">{action.label}</span>
-              <Icon name="chevron" className="ml-auto h-4 w-4 text-faint" />
-            </Link>
+            <div key={action.label} className="rounded-lg border border-line bg-surface shadow-e1">
+              <Link
+                to={action.to}
+                className="flex min-h-20 items-center gap-3 px-4 py-3 transition hover:bg-inset"
+              >
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-brand-500/10 text-brand-700">
+                  <Icon name={action.icon} className="h-5 w-5" />
+                </span>
+                <span className="font-semibold text-ink">{action.label}</span>
+                <Icon name="chevron" className="ml-auto h-4 w-4 text-faint" />
+              </Link>
+              {action.secondary ? (
+                <Link
+                  to={action.secondary.to}
+                  className="flex min-h-11 items-center justify-between border-t border-line px-4 text-sm font-semibold text-brand-700 hover:bg-inset"
+                >
+                  {action.secondary.label}
+                  <Icon name="chevron" className="h-4 w-4" />
+                </Link>
+              ) : null}
+            </div>
           ))}
         </div>
       </section>

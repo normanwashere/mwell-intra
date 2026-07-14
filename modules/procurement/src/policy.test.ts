@@ -17,6 +17,8 @@ import {
   tierLabel,
   evaluateCommitmentReadiness,
   evaluatePaymentReadiness,
+  evaluateIssueReadiness,
+  evaluatePaymentPackReadiness,
 } from './policy';
 import type { ApprovalStep } from './types';
 
@@ -91,7 +93,7 @@ describe('binding vendor-to-pay controls', () => {
     })).toContain('non-recurring and non-split petty-cash attestation');
   });
 
-  it('permits the narrow non-accredited petty-cash path only with Finance, OR/SI, and liquidation controls', () => {
+  it('permits petty-cash commitment before OR/SI and liquidation, which belong to payment', () => {
     const base = {
       sourcingMethod: 'petty_cash' as const,
       vendorEligible: false,
@@ -102,18 +104,19 @@ describe('binding vendor-to-pay controls', () => {
         nonRecurringNonSplitAttested: true,
       },
     };
-    expect(evaluateCommitmentReadiness(base)).toEqual(expect.arrayContaining([
-      'official receipt or sales invoice support',
+    expect(evaluateCommitmentReadiness(base)).toEqual([]);
+    expect(evaluatePaymentReadiness({
+      poOrAgreementApproved: true,
+      invoiceOrOfficialReceipt: false,
+      acceptedWarehouseQuantity: 0,
+      serviceAcceptance: true,
+      paymentTermsRecorded: true,
+      taxWithholdingSupport: true,
+      pettyCashLiquidationRecorded: false,
+    })).toEqual(expect.arrayContaining([
+      'invoice, official receipt, or sales invoice',
       'petty-cash liquidation record',
     ]));
-    expect(evaluateCommitmentReadiness({
-      ...base,
-      exceptionPack: {
-        ...base.exceptionPack,
-        receiptOrInvoiceSupported: true,
-        liquidationRecorded: true,
-      },
-    })).toEqual([]);
   });
 
   it('requires the complete foreign-vendor and importation control record', () => {
@@ -151,6 +154,22 @@ describe('binding vendor-to-pay controls', () => {
     ]));
   });
 
+  it('allows valid Direct Award, manpower, construction, down-payment, and installation paths', () => {
+    expect(evaluateCommitmentReadiness({
+      sourcingMethod: 'direct_award', vendorEligible: true, category: 'construction',
+      downPayment: true, construction: true, equipmentInstallation: true,
+      exceptionPack: {
+        type: 'direct_award', directAwardBasis: 'sole_supplier', supplierSelected: true,
+        justification: 'Only supported manufacturer', priceReasonableness: 'Prior PO benchmark',
+        procurementHeadReviewed: true, doaApproved: true,
+      },
+      protections: {
+        downPaymentBondApproved: true, manpowerProtectionReviewed: true,
+        constructionProtectionsApproved: true, installationProtectionsApproved: true,
+      },
+    })).toEqual([]);
+  });
+
   it('denies payment readiness without accepted receipt or service evidence', () => {
     expect(evaluatePaymentReadiness({
       poOrAgreementApproved: true,
@@ -160,6 +179,22 @@ describe('binding vendor-to-pay controls', () => {
       paymentTermsRecorded: true,
       taxWithholdingSupport: true,
     })).toContain('accepted Warehouse receipt or service acceptance');
+  });
+
+  it('keeps issue lifecycle and Finance handoff checks after retiring Procurement receipts', () => {
+    expect(evaluateIssueReadiness({
+      poApproved: true, sourceAwardApproved: false, vendorEligible: false,
+    })).toEqual([
+      'approved source request',
+      'current vendor accreditation or scoped temporary clearance',
+    ]);
+    expect(evaluatePaymentPackReadiness(undefined, undefined)).toEqual([
+      'requester or Warehouse acceptance',
+      'PO/receipt/invoice match',
+      'invoice, OR, or SI',
+      'delivery or milestone evidence',
+      'tax and withholding support',
+    ]);
   });
 });
 

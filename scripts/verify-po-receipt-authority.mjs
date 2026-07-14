@@ -18,6 +18,24 @@ const REQUIRED_CONTRACTS = [
   ['status view exposes outstanding quantity', /outstanding_quantity/i],
   ['status view exposes the latest Warehouse receipt reference', /latest_warehouse_receipt_reference/i],
   ['status view exposes QC status', /qc_status/i],
+  ['policy evidence records review status', /create table if not exists procurement\.policy_evidence[\s\S]*?review_status/i],
+  ['temporary clearance requires explicit approval', /conditions->>'approved'\)::boolean\s+is\s+true/i],
+  ['one database commitment predicate returns blockers', /create or replace function private\.procurement_commitment_readiness[\s\S]*?blockers/i],
+  ['request submission uses the commitment predicate', /policy_submit_procurement_request[\s\S]*?procurement_commitment_readiness/i],
+  ['PO approval uses the commitment predicate', /policy_approve_purchase_order[\s\S]*?procurement_commitment_readiness/i],
+  ['PO issue uses the commitment predicate', /policy_issue_purchase_order[\s\S]*?procurement_commitment_readiness/i],
+  ['commitment readiness is exposed read-only to the UI', /create or replace function procurement\.commitment_readiness/i],
+  ['goods acceptance reads Warehouse receipts', /policy_record_acceptance_pack[\s\S]*?warehouse\.receipts/i],
+  ['goods acceptance validates accepted PO-line quantities', /policy_record_acceptance_pack[\s\S]*?procurement_po_line_id[\s\S]*?accepted/i],
+  ['legacy Procurement receipt projection is retired', /drop (?:table|view) if exists procurement\.receipts/i],
+  ['quality inspections preserve procurement PO-line identity', /alter table warehouse\.quality_inspections[\s\S]*?procurement_po_line_id/i],
+  ['receipt QC is bound from an ordered transaction-local PO-line queue', /set_config\('warehouse\.procurement_po_line_queue'[\s\S]*?current_setting\('warehouse\.procurement_po_line_queue'/i],
+  ['receipt posting rejects any unbound QC row', /quality_inspections[\s\S]*?procurement_po_line_id is null[\s\S]*?raise exception 'Receipt QC could not be bound/i],
+  ['ordered receipt status includes open lines only', /ordered_quantity[\s\S]*?receiving_status\s*=\s*'open'/i],
+  ['outstanding quantity subtracts accepted quantity only', /ordered_quantity[\s\S]*?-\s*coalesce\(totals\.accepted_quantity,\s*0\)[\s\S]*?outstanding/i],
+  ['PO closure is recalculated under the locked PO', /v_closed[\s\S]*?receiving_status\s*=\s*'open'[\s\S]*?update procurement\.purchase_orders/i],
+  ['technology MNDA uses the earlier expiry trigger', /least\([\s\S]*?definitive_agreement_executed_at/i],
+  ['technology MNDA return or destruction dates are recorded', /return_or_destroy_requested[\s\S]*?due_at/i],
 ];
 
 export async function verifyPoReceiptAuthority(migrationUrl) {
@@ -31,6 +49,15 @@ export async function verifyPoReceiptAuthority(migrationUrl) {
   )?.[0] ?? '';
   if (/evidence_urls|storage_path|object_path/i.test(view)) {
     findings.push('Procurement receipt status leaks private Warehouse evidence paths');
+  }
+  if (/outstanding_quantity[\s\S]*?-\s*coalesce\(totals\.rejected_quantity/i.test(view)) {
+    findings.push('Outstanding quantity incorrectly subtracts rejected or quarantined quantities');
+  }
+  if (/quality\.product_id\s*=\s*receipt_line\.product_id/i.test(view)) {
+    findings.push('Receipt disposition joins by product instead of procurement PO-line identity');
+  }
+  if (/riskFacts,technical|risk_facts,technical/i.test(sql)) {
+    findings.push('Generic technical risk is incorrectly treated as the technology-service-provider axis');
   }
   return findings;
 }

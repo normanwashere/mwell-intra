@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { createElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -30,6 +30,18 @@ const po: PurchaseOrder = {
     latestReceiptReference: 'rcpt-warehouse-1',
     latestQcStatus: 'exception',
     lastReceiptAt: '2026-07-15T09:00:00.000Z',
+  },
+  commitmentReadiness: {
+    ready: false,
+    phase: 'issue',
+    requestId: 'req-approved-1',
+    vendorId: 'vendor-approved-1',
+    route: 'rfq',
+    blockers: ['approved policy evidence RFQ_COMMERCIAL_COMPARISON'],
+    evidence: [{
+      controlCode: 'RFQ_COMMERCIAL_COMPARISON', evidenceType: 'comparison',
+      reviewStatus: 'submitted', facts: {},
+    }],
   },
   createdAt: '2026-07-14T09:00:00.000Z',
   updatedAt: '2026-07-15T09:00:00.000Z',
@@ -84,11 +96,18 @@ vi.mock('../localStore', () => ({
 
 function renderPage() {
   return renderToStaticMarkup(
-    <MemoryRouter initialEntries={['/purchase-orders/po-issued-1']}>
-      <Routes>
-        <Route path="/purchase-orders/:id" element={<PODetailPage />} />
-      </Routes>
-    </MemoryRouter>,
+    createElement(
+      MemoryRouter,
+      { initialEntries: ['/purchase-orders/po-issued-1'] },
+      createElement(
+        Routes,
+        null,
+        createElement(Route, {
+          path: '/purchase-orders/:id',
+          element: createElement(PODetailPage),
+        }),
+      ),
+    ),
   );
 }
 
@@ -105,7 +124,9 @@ describe('PODetailPage Warehouse handoff', () => {
     expect(html).toMatch(/accepted[^]*3/i);
     expect(html).toMatch(/rejected[^]*1/i);
     expect(html).toMatch(/outstanding[^]*6/i);
-    expect(html).toMatch(/href="[^"]*\/warehouse\/purchase-orders[^"]*"[^>]*>[^<]*open warehouse handoff/i);
+    expect(html).toMatch(/approved policy evidence RFQ_COMMERCIAL_COMPARISON/i);
+    expect(html).toMatch(/RFQ_COMMERCIAL_COMPARISON[^]*submitted/i);
+    expect(html).toMatch(/href="[^"]*\/warehouse\/purchase-orders\?po=po-issued-1"[^>]*>[^<]*open warehouse handoff/i);
   });
 
   it('keeps receipt status readable without rendering a dead handoff link', () => {

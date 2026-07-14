@@ -210,16 +210,14 @@ export function RequestDetailPage() {
           }`,
         });
       }
-      for (const rcpt of linkedPo.receipts ?? []) {
-        const units = rcpt.lines.reduce((s, l) => s + l.quantity, 0);
+      if (linkedPo.receiptStatus?.lastReceiptAt) {
+        const units = linkedPo.receiptStatus.acceptedQuantity;
         events.push({
-          key: `receipt-${rcpt.id}`,
-          at: rcpt.receivedAt,
+          key: `warehouse-receipt-${linkedPo.receiptStatus.latestReceiptReference ?? linkedPo.id}`,
+          at: linkedPo.receiptStatus.lastReceiptAt,
           icon: 'box',
           tone: 'emerald',
-          label: `${rcpt.closedPo ? 'Final receipt' : 'Partial receipt'} on PO ${linkedPo.poNumber} — ${units} unit${units === 1 ? '' : 's'}${
-            rcpt.receivedByEmail ? ` (${rcpt.receivedByEmail})` : ''
-          }`,
+          label: `${linkedPo.receiptStatus.outstandingQuantity === 0 ? 'Final Warehouse acceptance' : 'Partial Warehouse acceptance'} on PO ${linkedPo.poNumber} — ${units} unit${units === 1 ? '' : 's'}`,
         });
       }
     }

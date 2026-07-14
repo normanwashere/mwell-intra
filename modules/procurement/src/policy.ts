@@ -25,6 +25,8 @@ import type {
   ImportationPlan,
   ProcurementExceptionPack,
   SourcingMethod,
+  AcceptancePack,
+  PaymentReadinessPack,
 } from './types';
 
 // ---------------------------------------------------------------------------
@@ -507,6 +509,12 @@ export interface CommitmentReadinessInput {
   downPayment?: boolean;
   construction?: boolean;
   equipmentInstallation?: boolean;
+  protections?: {
+    downPaymentBondApproved?: boolean;
+    manpowerProtectionReviewed?: boolean;
+    constructionProtectionsApproved?: boolean;
+    installationProtectionsApproved?: boolean;
+  };
 }
 
 /** Binding controls that must be satisfied before a PO can be issued. */
@@ -518,9 +526,7 @@ export function evaluateCommitmentReadiness(input: CommitmentReadinessInput): st
     pack?.type === 'petty_cash_non_accredited' &&
     Boolean(pack.justification?.trim()) &&
     pack.financeEligibilityConfirmed === true &&
-    pack.nonRecurringNonSplitAttested === true &&
-    pack.receiptOrInvoiceSupported === true &&
-    pack.liquidationRecorded === true;
+    pack.nonRecurringNonSplitAttested === true;
 
   if (!input.vendorEligible && !validPettyCashException) {
     blockers.push('current full accreditation or approved scoped temporary clearance');
@@ -546,8 +552,6 @@ export function evaluateCommitmentReadiness(input: CommitmentReadinessInput): st
     if (!pack?.nonRecurringNonSplitAttested) {
       blockers.push('non-recurring and non-split petty-cash attestation');
     }
-    if (!pack?.receiptOrInvoiceSupported) blockers.push('official receipt or sales invoice support');
-    if (!pack?.liquidationRecorded) blockers.push('petty-cash liquidation record');
   }
 
   if (input.foreignVendor || input.importationRequired) {
@@ -566,12 +570,17 @@ export function evaluateCommitmentReadiness(input: CommitmentReadinessInput): st
     }
   }
 
-  if (input.downPayment) blockers.push('down-payment bond equal to the down payment');
-  if (input.category === 'manpower') blockers.push('manpower payment-bond or equivalent review');
-  if (input.construction || input.category === 'construction') {
+  if (input.downPayment && !input.protections?.downPaymentBondApproved) {
+    blockers.push('down-payment bond equal to the down payment');
+  }
+  if (input.category === 'manpower' && !input.protections?.manpowerProtectionReviewed) {
+    blockers.push('manpower payment-bond or equivalent review');
+  }
+  if ((input.construction || input.category === 'construction') &&
+      !input.protections?.constructionProtectionsApproved) {
     blockers.push('construction performance, warranty, insurance, and regulatory review');
   }
-  if (input.equipmentInstallation) {
+  if (input.equipmentInstallation && !input.protections?.installationProtectionsApproved) {
     blockers.push('installation commissioning, defects, warranty, and acceptance controls');
   }
   return blockers;
@@ -584,6 +593,7 @@ export interface PaymentReadinessInput {
   serviceAcceptance: boolean;
   paymentTermsRecorded: boolean;
   taxWithholdingSupport: boolean;
+  pettyCashLiquidationRecorded?: boolean;
 }
 
 export function evaluatePaymentReadiness(input: PaymentReadinessInput): string[] {
@@ -595,5 +605,32 @@ export function evaluatePaymentReadiness(input: PaymentReadinessInput): string[]
   }
   if (!input.paymentTermsRecorded) blockers.push('recorded payment terms');
   if (!input.taxWithholdingSupport) blockers.push('tax and withholding support');
+  if (input.pettyCashLiquidationRecorded === false) blockers.push('petty-cash liquidation record');
+  return blockers;
+}
+
+export function evaluateIssueReadiness(input: {
+  poApproved: boolean;
+  sourceAwardApproved: boolean;
+  vendorEligible: boolean;
+}): string[] {
+  const blockers: string[] = [];
+  if (!input.poApproved) blockers.push('PO award approval');
+  if (!input.sourceAwardApproved) blockers.push('approved source request');
+  if (!input.vendorEligible) blockers.push('current vendor accreditation or scoped temporary clearance');
+  return blockers;
+}
+
+export function evaluatePaymentPackReadiness(
+  acceptance: AcceptancePack | undefined,
+  pack: PaymentReadinessPack | undefined,
+): string[] {
+  const blockers: string[] = [];
+  if (!acceptance || acceptance.status === 'superseded') blockers.push('requester or Warehouse acceptance');
+  if (acceptance?.exceptions.length) blockers.push('unresolved acceptance exceptions');
+  if (!pack?.poMatch) blockers.push('PO/receipt/invoice match');
+  if (!pack?.invoiceOrSiReference) blockers.push('invoice, OR, or SI');
+  if (!pack?.milestoneSupportReference) blockers.push('delivery or milestone evidence');
+  if (!pack?.taxWithholdingSupportReference) blockers.push('tax and withholding support');
   return blockers;
 }

@@ -294,34 +294,6 @@ export interface PurchaseOrderLine {
   receivedQuantity: number;
 }
 
-/** One line of a goods receipt against a PO. */
-export interface PurchaseOrderReceiptLine {
-  /** Matches PurchaseOrder.lines[*].id. */
-  lineId: string;
-  /** Denormalized so the receipt renders standalone (activity feeds,
-   *  warehouse bridge) without re-joining the PO lines. */
-  description: string;
-  /** Units accepted in THIS receipt (already clamped to outstanding). */
-  quantity: number;
-}
-
-/**
- * A (possibly partial) goods receipt recorded against a PO (PR-24 / J2-7).
- * Receipts are append-only and persisted ON the PurchaseOrder record under
- * `intra.procurement.v2.purchase_orders` so the warehouse module can read
- * procurement-side receipt events from a single key.
- */
-export interface PurchaseOrderReceipt {
-  id: string;
-  /** ISO timestamp the receipt was recorded. */
-  receivedAt: string;
-  receivedByEmail?: string;
-  note?: string;
-  lines: PurchaseOrderReceiptLine[];
-  /** True when this receipt completed the PO (status flipped to `closed`). */
-  closedPo: boolean;
-}
-
 /** Safe, aggregate Warehouse receipt status exposed to Procurement. */
 export interface PurchaseOrderReceiptStatus {
   orderedQuantity: number;
@@ -331,6 +303,25 @@ export interface PurchaseOrderReceiptStatus {
   latestReceiptReference?: string;
   latestQcStatus: 'not_received' | 'partial' | 'accepted' | 'exception';
   lastReceiptAt?: string;
+}
+
+export interface PolicyEvidenceRecord {
+  controlCode: string;
+  evidenceType: string;
+  reviewStatus: 'submitted' | 'approved' | 'rejected' | 'expired';
+  reviewedAt?: string;
+  expiresAt?: string;
+  facts: Record<string, unknown>;
+}
+
+export interface CommitmentReadiness {
+  ready: boolean;
+  phase: 'submit' | 'approve' | 'issue';
+  requestId: string;
+  vendorId?: string;
+  route?: SourcingMethod;
+  blockers: string[];
+  evidence: PolicyEvidenceRecord[];
 }
 
 export interface AcceptancePack {
@@ -382,11 +373,10 @@ export interface PurchaseOrder {
   approvedByEmail?: string;
   /** Electronic signature captured when the PO award was approved. */
   approvalSignature?: ApprovalSignature;
-  /** Append-only goods receipts (partial receipts supported). Optional so
-   *  legacy localStorage rows keep loading. */
-  receipts?: PurchaseOrderReceipt[];
   /** Read-only projection from `procurement.v_purchase_order_receipt_status`. */
   receiptStatus?: PurchaseOrderReceiptStatus;
+  /** Transactional policy result returned by the database commitment predicate. */
+  commitmentReadiness?: CommitmentReadiness;
   /** Latest non-superseded requester/Warehouse acceptance record. */
   acceptancePack?: AcceptancePack;
   /** Latest non-superseded Finance readiness record. */

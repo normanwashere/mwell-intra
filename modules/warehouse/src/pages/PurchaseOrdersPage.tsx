@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useWarehouse } from '@/app/store';
 import { can } from '@/auth/roles';
 import { isWarehouseOperatorRole, isWarehouseSupervisorRole } from '@/app/modules';
@@ -56,6 +56,9 @@ export function PurchaseOrdersPage() {
   } = useWarehouse();
   const toast = useToast();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const handoffPoId = searchParams.get('po');
+  const openedHandoffRef = useRef<string | null>(null);
   const operatingRole = isWarehouseOperatorRole(role) || isWarehouseSupervisorRole(role);
   const canManagePOs = !operatingRole && can(role, 'view_procurement');
   const canReceive = operatingRole && (isWarehouseOperatorRole(role) || can(role, 'receive_stock'));
@@ -90,6 +93,25 @@ export function PurchaseOrdersPage() {
   const [bridgeLocation, setBridgeLocation] = useState('');
   const [bridgeBin, setBridgeBin] = useState('');
   const [bridgeEvidence, setBridgeEvidence] = useState('');
+  const warehouses = useMemo(
+    () => data?.locations.filter((location) => location.type === 'warehouse') ?? [],
+    [data],
+  );
+
+  useEffect(() => {
+    if (!handoffPoId || openedHandoffRef.current === handoffPoId) return;
+    const handoff = bridgedPOs.find((po) => po.id === handoffPoId);
+    if (!handoff) return;
+    openedHandoffRef.current = handoffPoId;
+    setBridgeReceivePO(handoff);
+    setBridgeLocation(warehouses[0]?.id ?? '');
+    setBridgeBin('');
+    setBridgeEvidence('');
+    setBridgeProducts(Object.fromEntries(handoff.lines.map((line) => [line.id, line.productId ?? ''])));
+    setBridgeQty(Object.fromEntries(handoff.lines.map((line) => [
+      line.id, Math.max(0, line.quantity - line.receivedQuantity),
+    ])));
+  }, [bridgedPOs, handoffPoId, warehouses]);
 
   const poNumbers = useMemo(
     () => poNumberMap(data?.purchaseOrders ?? []),
@@ -99,7 +121,6 @@ export function PurchaseOrdersPage() {
   if (!data) return null;
   const supplierName = (id: string) => data.suppliers.find((s) => s.id === id)?.name ?? id;
   const productName = (id: string) => data.products.find((p) => p.id === id)?.name ?? id;
-  const warehouses = data.locations.filter((l) => l.type === 'warehouse');
   const poNo = (po: PurchaseOrder) => poNumbers.get(po.id) ?? po.id;
 
   const isOpenPO = (po: PurchaseOrder) =>

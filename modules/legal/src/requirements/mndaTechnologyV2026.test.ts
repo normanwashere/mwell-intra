@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   generateTechnologyMnda,
+  technologyMndaExpiresAt,
   technologyMndaReturnOrDestroyDueAt,
 } from './instruments';
 
@@ -50,5 +51,15 @@ describe('technology-service MNDA clean master', () => {
     expect(technologyMndaReturnOrDestroyDueAt('2026-07-10T09:00:00.000Z')).toBe(
       '2026-07-17T09:00:00.000Z',
     );
+  });
+
+  it('expires at the earlier of two years or the definitive agreement', () => {
+    expect(technologyMndaExpiresAt('2026-07-10T09:00:00.000Z')).toBe(
+      '2028-07-10T09:00:00.000Z',
+    );
+    expect(technologyMndaExpiresAt(
+      '2026-07-10T09:00:00.000Z',
+      '2027-01-15T03:00:00.000Z',
+    )).toBe('2027-01-15T03:00:00.000Z');
   });
 });

@@ -27,7 +27,7 @@ import {
   useProcurementVendors,
   usePurchaseOrders,
 } from '../localStore';
-import { evaluateIssueReadiness } from '../receiving';
+import { evaluateIssueReadiness } from '../policy';
 import { evaluateCommitmentReadiness } from '../policy';
 import { PaymentReadinessPanel, type PaymentReadinessDraft } from '../components/PaymentReadinessPanel';
 import { ProcurementAccessDenied } from '../components/ProcurementAccessDenied';
@@ -127,11 +127,12 @@ export function PODetailPage() {
 
   const accreditationOk = vendor ? isAccredited(vendor) : false;
   const sourceAwardOk = sourceRequest?.status === 'approved';
+  const databaseCommitmentBlockers = po.commitmentReadiness?.blockers;
   const issueBlockers = [...evaluateIssueReadiness({
     poApproved: po.status === 'approved',
     sourceAwardApproved: sourceAwardOk,
     vendorEligible: accreditationOk,
-  }), ...evaluateCommitmentReadiness({
+  }), ...(databaseCommitmentBlockers ?? evaluateCommitmentReadiness({
     sourcingMethod: sourceRequest?.sourcingMethod ?? 'rfq',
     vendorEligible: accreditationOk,
     category: sourceRequest?.category,
@@ -139,12 +140,16 @@ export function PODetailPage() {
     importationRequired: sourceRequest?.riskFacts?.importation ?? sourceRequest?.compliance?.riskFacts?.importation,
     importationPlan: sourceRequest?.importationPlan ?? sourceRequest?.compliance?.importationPlan,
     construction: sourceRequest?.category === 'construction',
-  })];
+  }))];
   const fullyReceived = po.receiptStatus
     ? po.receiptStatus.outstandingQuantity <= 0
     : po.lines.every((line) => line.receivedQuantity >= line.quantity);
 
   function openApprovalSheet() {
+    if (databaseCommitmentBlockers?.length) {
+      error(`Cannot approve yet: ${databaseCommitmentBlockers.join(', ')}.`);
+      return;
+    }
     if (!accreditationOk) {
       error('Vendor accreditation or scoped temporary clearance must be current to approve this PO.');
       return;
@@ -372,6 +377,40 @@ export function PODetailPage() {
         )}
       </div>
 
+      {po.commitmentReadiness ? (
+        <div>
+          <SectionTitle
+            title="Commitment controls"
+            subtitle="Transactional policy evidence evaluated by the database for this PO."
+          />
+          <Card>
+            <div className="flex items-center justify-between gap-3">
+              <span className="font-semibold text-ink">
+                {po.commitmentReadiness.ready ? 'Ready to commit' : 'Commitment blocked'}
+              </span>
+              <span className={po.commitmentReadiness.ready ? 'chip bg-emerald-500/15 text-emerald-700' : 'chip bg-rose-500/15 text-rose-700'}>
+                {po.commitmentReadiness.phase}
+              </span>
+            </div>
+            {po.commitmentReadiness.blockers.length ? (
+              <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-rose-700">
+                {po.commitmentReadiness.blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}
+              </ul>
+            ) : null}
+            {po.commitmentReadiness.evidence.length ? (
+              <div className="mt-4 divide-y divide-line border-t border-line">
+                {po.commitmentReadiness.evidence.map((evidence) => (
+                  <div key={`${evidence.controlCode}-${evidence.evidenceType}`} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
+                    <span className="font-medium text-ink">{evidence.controlCode}</span>
+                    <span className="text-muted">{evidence.evidenceType} · {evidence.reviewStatus}</span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </Card>
+        </div>
+      ) : null}
+
       {(po.status === 'issued' || po.status === 'closed') && (
         <div>
           <SectionTitle
@@ -410,7 +449,7 @@ export function PODetailPage() {
                   : ''}
               </span>
               {canReceiveInWarehouse && po.status === 'issued' && !fullyReceived ? (
-                <Link to={`/warehouse/purchase-orders/${po.id}`} className="btn-outline">
+              <Link to={`/warehouse/purchase-orders?po=${encodeURIComponent(po.id)}`} className="btn-outline">
                   Open Warehouse handoff
                 </Link>
               ) : null}
