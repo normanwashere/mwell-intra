@@ -1,0 +1,18 @@
+{
+  "name": "@intra/work",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Read-only cross-module work queue for assignments and approvals.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": { "typecheck": "tsc --noEmit", "lint": "eslint .", "test": "vitest run" },
+  "dependencies": { "@intra/auth": "workspace:*", "@intra/ui": "workspace:*" },
+  "peerDependencies": { "react": "^18.2.0 || ^19.0.0", "react-dom": "^18.2.0 || ^19.0.0" },
+  "devDependencies": {
+    "@intra/config": "workspace:*", "@types/node": "^22.7.4", "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0", "eslint": "^9.17.0", "react": "^19.2.0",
+    "react-dom": "^19.2.0", "typescript": "^5.6.3", "vitest": "^3.2.6"
+  }
+}
