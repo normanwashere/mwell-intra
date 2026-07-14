@@ -328,8 +328,8 @@ export function AppShell({ children }: { children: ReactNode }) {
               </li>
             ))}
 
-            <li className="flex w-16 min-w-0 shrink-0 justify-center">
-              {fab ? (
+            {fab && (
+              <li className="flex w-16 min-w-0 shrink-0 justify-center">
                 <Link
                   href={fab.href}
                   className="relative -mt-5 grid h-14 w-14 place-items-center rounded-2xl bg-brand-600 text-white shadow-e3 ring-4 ring-surface transition active:scale-95"
@@ -337,10 +337,8 @@ export function AppShell({ children }: { children: ReactNode }) {
                 >
                   <Icon name={fab.icon} className="h-6 w-6" />
                 </Link>
-              ) : (
-                <span className="h-10 w-14" aria-hidden />
-              )}
-            </li>
+              </li>
+            )}
 
             {mobileRight.map((e) => (
               <li key={e.href} className="min-w-0 flex-1">
@@ -431,7 +429,9 @@ function MobileTab({
         <span className="absolute inset-x-1 inset-y-0.5 rounded-2xl bg-brand-500/10" />
       )}
       <Icon name={entry.icon} className="relative h-5 w-5" />
-      <span className="relative block max-w-full truncate">{entry.label}</span>
+      <span className="relative block max-w-full text-center leading-tight break-words">
+        {entry.label}
+      </span>
     </Link>
   );
 }

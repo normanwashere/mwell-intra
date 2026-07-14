@@ -75,6 +75,16 @@ test.describe("dashboard access and brand truthfulness", () => {
       expect(brandBox).not.toBeNull();
       expect(actionsBox).not.toBeNull();
       expect(brandBox!.x + brandBox!.width).toBeLessThanOrEqual(actionsBox!.x);
+
+      const clippedMobileLabels = await page
+        .getByRole("navigation", { name: "Primary mobile" })
+        .locator("a > span:last-child")
+        .evaluateAll((labels) =>
+          labels
+            .filter((label) => label.scrollWidth > label.clientWidth + 1)
+            .map((label) => label.textContent?.trim()),
+        );
+      expect(clippedMobileLabels).toEqual([]);
     }
 
     if (testInfo.project.name.startsWith("desktop")) {
