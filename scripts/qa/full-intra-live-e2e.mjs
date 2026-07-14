@@ -4,6 +4,7 @@ import path from "node:path";
 import {
   assertApprovedMutationTarget,
   projectRefFromSupabaseUrl,
+  verifyDeployedTargetIdentity,
 } from "../lib/target-environment.mjs";
 import {
   CURRENT_LIVE_ROLES,
@@ -23,6 +24,10 @@ const password = process.env.AUDIT_PASSWORD;
 const allowMutations = process.env.AUDIT_MUTATIONS === "true";
 const viewFilter = process.env.AUDIT_VIEWPORT;
 const roleFilter = process.env.AUDIT_ROLE;
+const protectionBypass = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+const protectionHeaders = protectionBypass
+  ? { "x-vercel-protection-bypass": protectionBypass }
+  : undefined;
 assertApprovedMutationTarget({
   appEnv: process.env.APP_ENV,
   supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -56,6 +61,14 @@ if (!password) {
     "AUDIT_PASSWORD is required; shared credentials are never embedded in the release gate.",
   );
 }
+await verifyDeployedTargetIdentity({
+  baseUrl,
+  appEnv: process.env.APP_ENV,
+  expectedProjectRef: process.env.SUPABASE_PROJECT_REF,
+  productionProjectRef: process.env.PRODUCTION_SUPABASE_PROJECT_REF,
+  mutationsRequested: allowMutations,
+  protectionBypass,
+});
 
 const users = CURRENT_LIVE_ROLES;
 
@@ -956,6 +969,7 @@ async function runWorkflow(browser, viewport, user, workflow) {
   const context = await browser.newContext({
     viewport: viewport.viewport,
     isMobile: viewport.isMobile,
+    extraHTTPHeaders: protectionHeaders,
   });
   const page = await context.newPage();
   const consoleErrors = [];
@@ -1031,6 +1045,7 @@ for (const viewport of viewports.filter(
     const context = await browser.newContext({
       viewport: viewport.viewport,
       isMobile: viewport.isMobile,
+      extraHTTPHeaders: protectionHeaders,
     });
     const page = await context.newPage();
     const consoleErrors = [];

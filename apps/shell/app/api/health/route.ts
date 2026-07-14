@@ -33,6 +33,15 @@ interface StaticAssetProbe {
   readonly contentType?: string;
 }
 
+function deployedSupabaseProjectRef(): string | null {
+  try {
+    const host = new URL(SUPABASE_URL ?? '').hostname.toLowerCase();
+    return /^([a-z0-9]+)\.supabase\.co$/.exec(host)?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+
 function clientAuthStatus(): ClientAuthStatus {
   if (
     DATA_SOURCE === 'memory' &&
@@ -128,6 +137,10 @@ export async function GET(request: NextRequest) {
     {
       status: healthy ? 'ok' : 'degraded',
       timestamp: new Date().toISOString(),
+      deployment: {
+        appEnv: process.env.APP_ENV ?? null,
+        supabaseProjectRef: deployedSupabaseProjectRef(),
+      },
       supabase,
       clientAuth,
       staticAssets,

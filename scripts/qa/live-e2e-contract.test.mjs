@@ -106,3 +106,26 @@ test("the mutating harness scopes and removes temporary auth identities", async 
   assert.match(cleanup, /auth\.admin\.deleteUser/);
   assert.match(cleanup, /includes\(runId\.toLowerCase\(\)\)/);
 });
+
+test("the live harness verifies deployed identity before browser launch", async () => {
+  const source = await readFile(
+    new URL("./full-intra-live-e2e.mjs", import.meta.url),
+    "utf8",
+  );
+  const verification = source.indexOf("await verifyDeployedTargetIdentity(");
+  const browserLaunch = source.indexOf("chromium.launch(");
+
+  assert.ok(verification >= 0, "deployed identity verification is present");
+  assert.ok(browserLaunch >= 0, "browser launch is present");
+  assert.ok(verification < browserLaunch, "identity is verified before launch");
+  assert.match(source, /VERCEL_AUTOMATION_BYPASS_SECRET/);
+  assert.equal(
+    source.match(/extraHTTPHeaders: protectionHeaders/g)?.length,
+    2,
+    "all browser contexts receive optional protection headers",
+  );
+  assert.doesNotMatch(
+    source,
+    /console\.(?:log|warn|error)\([^)]*VERCEL_AUTOMATION_BYPASS_SECRET/,
+  );
+});
