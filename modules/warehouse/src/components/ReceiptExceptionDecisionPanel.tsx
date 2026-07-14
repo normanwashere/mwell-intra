@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Field, Sheet } from '@/components/ui';
+import { Field, ProductSelect, Sheet } from '@/components/ui';
 
 export interface ReceiptExceptionDecisionItem {
   decisionId: string;
@@ -12,7 +12,7 @@ export interface ReceiptExceptionDecisionItem {
   reason: string;
   lines: Array<{
     poLineId: string;
-    productId: string;
+    productId?: string;
     actualQuantity: number;
     expectedQuantity: number;
     rawDescription: string;
@@ -24,27 +24,39 @@ export interface ReceiptExceptionDecisionInput {
   decision: 'accept' | 'reject' | 'quarantine' | 'escalate';
   reason: string;
   evidenceUrls: string[];
+  identifications?: Array<{ poLineId: string; productId: string }>;
 }
 
 interface ReceiptExceptionDecisionPanelProps {
   items: ReceiptExceptionDecisionItem[];
+  products?: Array<{ id: string; name: string; sku: string }>;
   onDecision: (input: ReceiptExceptionDecisionInput) => Promise<boolean>;
 }
 
-export function ReceiptExceptionDecisionPanel({ items, onDecision }: ReceiptExceptionDecisionPanelProps) {
+export function ReceiptExceptionDecisionPanel({ items, products = [], onDecision }: ReceiptExceptionDecisionPanelProps) {
   const [selected, setSelected] = useState<ReceiptExceptionDecisionItem | null>(null);
   const [reason, setReason] = useState('');
   const [evidence, setEvidence] = useState('');
+  const [identifications, setIdentifications] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
 
   const close = () => {
     setSelected(null);
     setReason('');
     setEvidence('');
+    setIdentifications({});
   };
 
   const decide = async (decision: ReceiptExceptionDecisionInput['decision']) => {
     if (!selected || !reason.trim() || !evidence.trim() || submitting) return;
+    const unidentifiedLines = selected.lines.filter((line) => !line.productId);
+    if (
+      (decision === 'accept' || decision === 'quarantine')
+      && unidentifiedLines.some((line) => !identifications[line.poLineId])
+    ) return;
+    const governedIdentifications = unidentifiedLines
+      .map((line) => ({ poLineId: line.poLineId, productId: identifications[line.poLineId] ?? '' }))
+      .filter((identification) => identification.productId);
     setSubmitting(true);
     try {
       if (await onDecision({
@@ -52,6 +64,7 @@ export function ReceiptExceptionDecisionPanel({ items, onDecision }: ReceiptExce
         decision,
         reason: reason.trim(),
         evidenceUrls: [evidence.trim()],
+        ...(governedIdentifications.length > 0 ? { identifications: governedIdentifications } : {}),
       })) close();
     } finally {
       setSubmitting(false);
@@ -59,6 +72,9 @@ export function ReceiptExceptionDecisionPanel({ items, onDecision }: ReceiptExce
   };
 
   if (items.length === 0) return null;
+  const unidentifiedLines = selected?.lines.filter((line) => !line.productId) ?? [];
+  const identificationComplete = unidentifiedLines.every((line) => Boolean(identifications[line.poLineId]));
+  const commonDisabled = !reason.trim() || !evidence.trim() || submitting;
 
   return (
     <section className="space-y-2" aria-label="Controlled receipt decisions">
@@ -83,16 +99,16 @@ export function ReceiptExceptionDecisionPanel({ items, onDecision }: ReceiptExce
         description={selected ? `${selected.poNumber} · ${selected.requestedDisposition}` : undefined}
         footer={(
           <div className="grid grid-cols-2 gap-2">
-            <button type="button" className="btn-outline justify-center" disabled={!reason.trim() || !evidence.trim() || submitting} onClick={() => void decide('accept')}>
+            <button type="button" className="btn-outline justify-center" disabled={commonDisabled || !identificationComplete} onClick={() => void decide('accept')}>
               Accept receipt
             </button>
-            <button type="button" className="btn-ghost justify-center text-rose-600" disabled={!reason.trim() || !evidence.trim() || submitting} onClick={() => void decide('reject')}>
+            <button type="button" className="btn-ghost justify-center text-rose-600" disabled={commonDisabled} onClick={() => void decide('reject')}>
               Reject receipt
             </button>
-            <button type="button" className="btn-primary justify-center" disabled={!reason.trim() || !evidence.trim() || submitting} onClick={() => void decide('quarantine')}>
+            <button type="button" className="btn-primary justify-center" disabled={commonDisabled || !identificationComplete} onClick={() => void decide('quarantine')}>
               Quarantine receipt
             </button>
-            <button type="button" className="btn-outline justify-center" disabled={!reason.trim() || !evidence.trim() || submitting} onClick={() => void decide('escalate')}>
+            <button type="button" className="btn-outline justify-center" disabled={commonDisabled} onClick={() => void decide('escalate')}>
               Escalate receipt
             </button>
           </div>
@@ -108,6 +124,24 @@ export function ReceiptExceptionDecisionPanel({ items, onDecision }: ReceiptExce
           <Field label="Decision evidence" htmlFor="receipt-decision-evidence">
             <input id="receipt-decision-evidence" className="input" value={evidence} onChange={(event) => setEvidence(event.target.value)} />
           </Field>
+          {unidentifiedLines.map((line) => {
+            const inputId = `receipt-identification-${line.poLineId}`;
+            return (
+              <Field key={line.poLineId} label={`Identify ${line.rawDescription}`} htmlFor={inputId}>
+                <ProductSelect
+                  id={inputId}
+                  aria-label={`Identify ${line.rawDescription}`}
+                  products={products}
+                  value={identifications[line.poLineId] ?? ''}
+                  onChange={(productId) => setIdentifications((current) => ({
+                    ...current,
+                    [line.poLineId]: productId,
+                  }))}
+                  placeholder="Select governed product identity"
+                />
+              </Field>
+            );
+          })}
         </div>
       </Sheet>
     </section>

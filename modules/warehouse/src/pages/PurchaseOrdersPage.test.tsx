@@ -197,6 +197,26 @@ describe('PurchaseOrdersPage', () => {
     expect(within(dialog).getByRole('tab', { name: /unidentified/i })).toBeInTheDocument();
   });
 
+  it('captures unidentified custody without forcing a Warehouse product mapping', async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem(PROCUREMENT_PO_KEY, JSON.stringify([{
+      id: 'ppo-unidentified', poNumber: 'PO-UNIDENTIFIED-001', vendorName: 'Unknown Load Vendor',
+      status: 'issued', lines: [{ id: 'line-unidentified',
+        description: 'Expected diagnostic kit', quantity: 2, receivedQuantity: 0 }],
+      createdAt: '2026-07-15T00:00:00.000Z', total: 0,
+    }]));
+
+    renderWithProviders(<PurchaseOrdersPage />, { role: 'warehouse_operator' });
+    const list = await screen.findByLabelText('Purchase orders');
+    await user.click(within(list).getByRole('button', { name: /^receive and inspect$/i }));
+    const dialog = await screen.findByRole('dialog', { name: /receive approved procurement po/i });
+    await user.click(within(dialog).getByRole('tab', { name: /unidentified/i }));
+
+    expect(within(dialog).queryByLabelText(/map expected diagnostic kit/i)).not.toBeInTheDocument();
+    expect(within(dialog).getByLabelText(/observed description for expected diagnostic kit/i)).toHaveValue('Expected diagnostic kit');
+    expect(within(dialog).getByLabelText(/observed identifiers for expected diagnostic kit/i)).toBeInTheDocument();
+  });
+
   it('uses the live handoff in Supabase mode and ignores local cached POs', async () => {
     const user = userEvent.setup();
     window.localStorage.setItem(PROCUREMENT_PO_KEY, JSON.stringify([{

@@ -143,6 +143,15 @@ test("Task 3 uses browser-role exception receipts and proves transactional clean
   assert.match(source, /Task 3 assigned-reviewer goods acceptance/);
   assert.match(source, /cleanupActivityEntityIds/);
   assert.match(source, /cleanupExceptionIds/);
+  assert.match(source, /cleanupHoldIds/);
+  assert.match(source, /same-line receipt decision collision/i);
+  assert.match(source, /expected quantity drift/i);
+  assert.match(source, /active hold reservation denial/i);
+  assert.match(source, /bounded quarantine posting/i);
+  assert.match(source, /PO status after hold release/i);
+  assert.match(source, /cumulative partial acceptance/i);
+  assert.match(source, /all-capability admin wrong-step denial/i);
+  assert.match(source, /cleanupHoldIds[\s\S]*core\.activity_log/);
   assert.match(source, /private quality inspection direct denial/i);
   for (const exceptionClass of ['short', 'excess', 'damaged', 'unidentified']) {
     assert.match(source, new RegExp(`exceptionClass:\\s*["']${exceptionClass}["']`, 'i'));

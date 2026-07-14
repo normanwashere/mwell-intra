@@ -113,6 +113,7 @@ export interface StockChangeRequest {
   status: 'pending_supervisor' | 'pending_finance' | 'approved' | 'rejected';
   requestedBy: string;
   requestedAt: string;
+  supervisorApprovedBy?: string;
   /** Server-authoritative eligibility for the current pending approval step. */
   canDecide: boolean;
 }
@@ -215,6 +216,7 @@ export type StockChangeDecisionCapability =
 export interface WarehouseControlPrincipal {
   actor: string;
   capabilities: readonly string[];
+  approvalGroups: readonly string[];
 }
 
 export interface RequestStockChangeInput {

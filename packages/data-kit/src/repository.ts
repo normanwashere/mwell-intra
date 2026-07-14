@@ -130,6 +130,8 @@ export interface CycleCountInput {
   binId?: string;
   lines: CycleCountLine[];
   actor: string;
+  /** Immutable authenticated profile id; actor remains display/audit context. */
+  requesterId?: string;
 }
 
 export interface TransferInput {

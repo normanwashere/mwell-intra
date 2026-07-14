@@ -362,13 +362,22 @@ export function ProductDetailPage() {
                 <Icon name="pin" className="h-4 w-4" /> Relocate
               </button>
             )}
-            {canAdjust && (
+            {canAdjust && !product.serialized && (
               <button
                 type="button"
                 onClick={openAdjust}
                 className="btn-accent btn-sm min-h-11 w-full justify-center sm:min-h-0 sm:w-auto"
               >
                 <Icon name="clipboard" className="h-4 w-4" /> Adjust
+              </button>
+            )}
+            {can('cycle_count') && product.serialized && (
+              <button
+                type="button"
+                onClick={() => navigate('/cycle-counts')}
+                className="btn-accent btn-sm min-h-11 w-full justify-center sm:min-h-0 sm:w-auto"
+              >
+                <Icon name="clipboard" className="h-4 w-4" /> Count identified units
               </button>
             )}
           </div>

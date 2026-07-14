@@ -44,3 +44,33 @@ it('offers all governed outcomes for short excess damaged and unidentified facts
     expect(within(dialog).getByRole('button', { name: outcome })).toBeInTheDocument();
   }
 });
+
+it('requires governed product identification before accepting unidentified custody', async () => {
+  const user = userEvent.setup();
+  const onDecision = vi.fn().mockResolvedValue(true);
+  render(<ReceiptExceptionDecisionPanel items={[{
+    decisionId: 'decision-unidentified', receiptId: 'receipt-unidentified', purchaseOrderId: 'po-1',
+    poNumber: 'PO-UNIDENTIFIED', requestedDisposition: 'unidentified', requestedBy: 'operator-1',
+    requestedAt: '2026-07-15T01:00:00Z', reason: 'Labels do not identify the delivered stock',
+    lines: [{ poLineId: 'line-1', productId: '', actualQuantity: 1, expectedQuantity: 1,
+      rawDescription: 'Unlabelled sealed carton' }],
+  }]} products={[
+    { id: 'known-kit', name: 'Known diagnostic kit', sku: 'KIT-001' },
+  ]} onDecision={onDecision} />);
+
+  await user.click(screen.getByRole('button', { name: /review controlled receipt/i }));
+  const dialog = screen.getByRole('dialog', { name: /supervisor receipt decision/i });
+  await user.type(within(dialog).getByLabelText(/decision reason/i), 'Identified from sealed carton manifest');
+  await user.type(within(dialog).getByLabelText(/decision evidence/i), 'evidence/identification.pdf');
+  expect(within(dialog).getByRole('button', { name: /accept receipt/i })).toBeDisabled();
+  expect(within(dialog).getByRole('button', { name: /quarantine receipt/i })).toBeDisabled();
+
+  await user.selectOptions(within(dialog).getByLabelText(/identify unlabelled sealed carton/i), 'known-kit');
+  await user.click(within(dialog).getByRole('button', { name: /quarantine receipt/i }));
+
+  expect(onDecision).toHaveBeenCalledWith(expect.objectContaining({
+    decisionId: 'decision-unidentified',
+    decision: 'quarantine',
+    identifications: [{ poLineId: 'line-1', productId: 'known-kit' }],
+  }));
+});

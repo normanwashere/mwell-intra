@@ -94,6 +94,8 @@ export function PurchaseOrdersPage() {
   const [filter, setFilter] = useState<POFilter>('all');
   const [bridgeReceivePO, setBridgeReceivePO] = useState<BridgedPO | null>(null);
   const [bridgeProducts, setBridgeProducts] = useState<Record<string, string>>({});
+  const [bridgeObservedDescriptions, setBridgeObservedDescriptions] = useState<Record<string, string>>({});
+  const [bridgeObservedIdentifiers, setBridgeObservedIdentifiers] = useState<Record<string, string>>({});
   const [bridgeQty, setBridgeQty] = useState<Record<string, number>>({});
   const [bridgeLocation, setBridgeLocation] = useState('');
   const [bridgeBin, setBridgeBin] = useState('');
@@ -141,6 +143,10 @@ export function PurchaseOrdersPage() {
         decision: input.decision,
         reason: input.reason,
         evidence_urls: input.evidenceUrls,
+        identifications: input.identifications?.map((identification) => ({
+          po_line_id: identification.poLineId,
+          product_id: identification.productId,
+        })) ?? [],
       },
     });
     if (rpcError) { toast.error(rpcError.message); return false; }
@@ -161,6 +167,8 @@ export function PurchaseOrdersPage() {
     setBridgeDisposition('clean');
     setBridgeExceptionReason('');
     setBridgeProducts(Object.fromEntries(handoff.lines.map((line) => [line.id, line.productId ?? ''])));
+    setBridgeObservedDescriptions(Object.fromEntries(handoff.lines.map((line) => [line.id, line.description])));
+    setBridgeObservedIdentifiers({});
     setBridgeQty(Object.fromEntries(handoff.lines.map((line) => [
       line.id, Math.max(0, line.quantity - line.receivedQuantity),
     ])));
@@ -269,6 +277,8 @@ export function PurchaseOrdersPage() {
     setBridgeDisposition('clean');
     setBridgeExceptionReason('');
     setBridgeProducts(Object.fromEntries(po.lines.map((line) => [line.id, line.productId ?? ''])));
+    setBridgeObservedDescriptions(Object.fromEntries(po.lines.map((line) => [line.id, line.description])));
+    setBridgeObservedIdentifiers({});
     setBridgeQty(Object.fromEntries(po.lines.map((line) => [
       line.id, Math.max(0, line.quantity - line.receivedQuantity),
     ])));
@@ -282,7 +292,7 @@ export function PurchaseOrdersPage() {
         productId: bridgeProducts[line.id] ?? '',
         quantity: bridgeQty[line.id] ?? 0,
       }))
-      .filter((line) => line.productId && line.quantity > 0);
+      .filter((line) => line.quantity > 0 && (bridgeDisposition === 'unidentified' || line.productId));
     if (lines.length === 0) return;
     const idempotencyKey = crypto.randomUUID();
     if (bridgeDisposition === 'clean') {
@@ -300,10 +310,17 @@ export function PurchaseOrdersPage() {
         idempotency_key: idempotencyKey, po_id: bridgeReceivePO.id, location_id: bridgeLocation,
         lines: lines.map((line) => {
           const source = bridgeReceivePO.lines.find((candidate) => candidate.id === line.lineId)!;
-          return { line_id: line.lineId, product_id: line.productId,
+          return { line_id: line.lineId,
+            product_id: bridgeDisposition === 'unidentified' ? null : line.productId,
             actual_quantity: line.quantity,
             expected_quantity: Math.max(0, source.quantity - source.receivedQuantity),
-            raw_description: source.description, bin_id: bridgeBin || null };
+            raw_description: bridgeDisposition === 'unidentified'
+              ? bridgeObservedDescriptions[line.lineId]?.trim()
+              : source.description,
+            observed_identifiers: bridgeDisposition === 'unidentified'
+              ? { operator_entry: bridgeObservedIdentifiers[line.lineId]?.trim() ?? '' }
+              : {},
+            bin_id: bridgeBin || null };
         }),
         evidence_urls: [bridgeEvidence.trim()], exception_type: bridgeDisposition,
         reason: bridgeExceptionReason.trim(),
@@ -338,7 +355,7 @@ export function PurchaseOrdersPage() {
       </div>
 
       {mayResolveReceiptExceptions && (
-        <ReceiptExceptionDecisionPanel items={exceptionDecisions} onDecision={decideReceiptException} />
+        <ReceiptExceptionDecisionPanel items={exceptionDecisions} products={data.products} onDecision={decideReceiptException} />
       )}
 
       {data.purchaseOrders.length === 0 && bridgedPOs.length === 0 ? (
@@ -839,15 +856,41 @@ export function PurchaseOrdersPage() {
                 return (
                   <li key={line.id} className="space-y-2 rounded-xl bg-inset p-3">
                     <p className="text-sm font-medium text-ink">{line.description}</p>
-                    <ProductSelect
-                      products={data.products}
-                      value={bridgeProducts[line.id] ?? ''}
-                      onChange={(productId) => setBridgeProducts((current) => ({
-                        ...current,
-                        [line.id]: productId,
-                      }))}
-                      placeholder="Map to Warehouse product"
-                    />
+                    {bridgeDisposition === 'unidentified' ? (
+                      <>
+                        <Field label={`Observed description for ${line.description}`} htmlFor={`observed-description-${line.id}`}>
+                          <input
+                            id={`observed-description-${line.id}`}
+                            className="input"
+                            value={bridgeObservedDescriptions[line.id] ?? ''}
+                            onChange={(event) => setBridgeObservedDescriptions((current) => ({
+                              ...current, [line.id]: event.target.value,
+                            }))}
+                          />
+                        </Field>
+                        <Field label={`Observed identifiers for ${line.description}`} htmlFor={`observed-identifiers-${line.id}`}>
+                          <input
+                            id={`observed-identifiers-${line.id}`}
+                            className="input"
+                            value={bridgeObservedIdentifiers[line.id] ?? ''}
+                            onChange={(event) => setBridgeObservedIdentifiers((current) => ({
+                              ...current, [line.id]: event.target.value,
+                            }))}
+                          />
+                        </Field>
+                      </>
+                    ) : (
+                      <ProductSelect
+                        aria-label={`Map ${line.description}`}
+                        products={data.products}
+                        value={bridgeProducts[line.id] ?? ''}
+                        onChange={(productId) => setBridgeProducts((current) => ({
+                          ...current,
+                          [line.id]: productId,
+                        }))}
+                        placeholder="Map to Warehouse product"
+                      />
+                    )}
                     <QuantityStepper
                       aria-label={`Receive ${line.description}`}
                       min={0}

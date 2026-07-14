@@ -129,9 +129,9 @@ interface WarehouseContextValue {
   reserve: (input: Omit<ReserveInput, 'actor'>) => Promise<boolean>;
   issue: (input: Omit<IssueInput, 'actor'>) => Promise<boolean>;
   recordReturn: (input: Omit<ReturnInput, 'actor'>) => Promise<boolean>;
-  recordCycleCount: (input: Omit<CycleCountInput, 'actor'>) => Promise<boolean>;
+  recordCycleCount: (input: Omit<CycleCountInput, 'actor' | 'requesterId'>) => Promise<boolean>;
   submitNewCycleCount: (
-    input: Omit<CycleCountInput, 'actor'> &
+    input: Omit<CycleCountInput, 'actor' | 'requesterId'> &
       Pick<SubmitCycleCountInput, 'reason' | 'evidenceUrls'>,
   ) => Promise<boolean>;
   transfer: (input: Omit<TransferInput, 'actor'>) => Promise<boolean>;
@@ -273,6 +273,10 @@ export function WarehouseProvider({
     [providedCapabilities, role, roleProfile.capabilities, source],
   );
   const capabilitySet = useMemo(() => new Set(capabilities), [capabilities]);
+  const approvalGroups = useMemo(
+    () => Array.from(new Set([roleCode, role])),
+    [role, roleCode],
+  );
   const can = useCallback(
     (capability: Capability) => capabilitySet.has(capability),
     [capabilitySet],
@@ -448,7 +452,7 @@ export function WarehouseProvider({
       runAuthorizedAction(
         'cycle_count',
         'other',
-        () => repo.recordCycleCount({ ...input, actor }),
+        () => repo.recordCycleCount({ ...input, actor, requesterId: identityId }),
       ),
     submitNewCycleCount: (input) =>
       runAuthorizedAction('cycle_count', 'other', async () => {
@@ -458,6 +462,7 @@ export function WarehouseProvider({
           category: input.category,
           lines: input.lines,
           actor,
+          requesterId: identityId,
         });
         await repo.submitCycleCount({
           idempotencyKey: `submit-count-${count.id}`,
@@ -550,7 +555,9 @@ export function WarehouseProvider({
       runAuthorizedAction(
         'manage_inventory',
         'other',
-        () => repo.requestStockChange(input, { actor: identityId, capabilities }),
+        () => repo.requestStockChange(input, {
+          actor: identityId, capabilities, approvalGroups,
+        }),
       ),
     loadQualityInspections: (query) => repo.listQualityInspections(query),
     loadHolds: (query) => repo.listHolds(query),
@@ -564,8 +571,13 @@ export function WarehouseProvider({
         rows: result.rows.map((request) => ({
           ...request,
           canDecide: request.requestedBy !== identityId && (
-            (request.status === 'pending_supervisor' && can('approve_stock_adjustment'))
-            || (request.status === 'pending_finance' && can('approve_stock_adjustment_finance'))
+            (request.status === 'pending_supervisor'
+              && approvalGroups.some((group) => ['warehouse_supervisor', 'logistics_supervisor'].includes(group))
+              && can('approve_stock_adjustment'))
+            || (request.status === 'pending_finance'
+              && approvalGroups.includes('finance')
+              && request.supervisorApprovedBy !== identityId
+              && can('approve_stock_adjustment_finance'))
           ),
         })),
       };
@@ -596,7 +608,9 @@ export function WarehouseProvider({
       runAuthorizedAction(
         STOCK_CHANGE_DECISION_CAPABILITIES,
         'other',
-        () => repo.decideStockChange(input, { actor: identityId, capabilities }),
+        () => repo.decideStockChange(input, {
+          actor: identityId, capabilities, approvalGroups,
+        }),
       ),
     resolveException: (input) =>
       runAuthorizedAction('resolve_exceptions', 'other', () =>

@@ -207,6 +207,22 @@ describe('ProductDetailPage', () => {
     expect(await screen.findByRole('button', { name: /adjust/i })).toBeInTheDocument();
   });
 
+  it('routes serialized corrections to identified cycle-count evidence', async () => {
+    renderWithProviders(
+      <Routes>
+        <Route path="/inventory/:id" element={<ProductDetailPage />} />
+        <Route path="/cycle-counts" element={<h1>Cycle counts</h1>} />
+      </Routes>,
+      {
+        route: '/inventory/ecg-ring-10', role: 'warehouse_supervisor', source: 'supabase',
+        capabilities: ['manage_inventory', 'cycle_count'],
+      },
+    );
+    await screen.findByRole('heading', { name: /ECG Ring \(Size 10\)/i });
+    expect(screen.queryByRole('button', { name: /^adjust$/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /count identified units/i })).toBeInTheDocument();
+  });
+
   it('requires transfer_stock for relocation in a live bundle', async () => {
     renderWithProviders(
       <Routes><Route path="/inventory/:id" element={<ProductDetailPage />} /></Routes>,

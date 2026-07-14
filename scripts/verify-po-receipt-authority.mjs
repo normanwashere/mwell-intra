@@ -79,6 +79,18 @@ const REQUIRED_CONTRACTS = [
   ['quarantine creates active holds in the decision transaction', /warehouse_resolve_procurement_po_exception[\s\S]*?v_outcome='quarantine'[\s\S]*?insert into warehouse\.inventory_holds[\s\S]*?'active'/i],
   ['acceptance quantities bind exact receipt and QC inspection identities', /policy_record_acceptance_pack[\s\S]*?warehouseReceiptId[\s\S]*?qcInspectionIds[\s\S]*?quality\.id[\s\S]*?quality\.source_id=v_receipt_reference/i],
   ['acceptance work item aggregates only its cited accepted receipt', /acceptance_work_items(?=[\s\S]*?accepted_receipt)(?=[\s\S]*?inspection\.source_id\s*=\s*accepted_receipt\.id)(?=[\s\S]*?qcInspectionIds)/i],
+  ['serialized manual stock changes are rejected at submission', /warehouse_request_stock_change[\s\S]*?v_product\.serialized[\s\S]*?identified cycle count/i],
+  ['stock decisions require canonical status-capability pairs and configured membership', /warehouse_decide_stock_change(?=[\s\S]*?pending_supervisor[\s\S]*?approve_stock_adjustment)(?=[\s\S]*?pending_finance[\s\S]*?approve_stock_adjustment_finance)(?=[\s\S]*?member_roles[\s\S]*?core\.user_roles)/i],
+  ['Finance actor must differ from the prior Supervisor actor', /warehouse_decide_stock_change[\s\S]*?pending_finance[\s\S]*?decided_by[\s\S]*?distinct/i],
+  ['exception receipt validates caller drift against locked remaining quantity', /warehouse_receive_procurement_po_exception[\s\S]*?quantity\s*-\s*(?:\w+\.)?received_quantity[\s\S]*?v_expected\s*<>\s*v_remaining[\s\S]*?drift/i],
+  ['only one active exception decision is allowed per PO line', /create unique index[\s\S]*?procurement_receipt_exception[\s\S]*?po_line_id[\s\S]*?where active/i],
+  ['exception decisions revalidate cumulative ordered balance', /warehouse_resolve_procurement_po_exception_v3[\s\S]*?for update[\s\S]*?quantity\s*-\s*(?:\w+\.)?received_quantity[\s\S]*?remaining/i],
+  ['quarantine postings are bounded by the locked ordered balance', /warehouse_resolve_procurement_po_exception_v3[\s\S]*?v_postable\s*:=\s*least\(v_actual,v_remaining\)[\s\S]*?update warehouse\.quality_inspections\s+set quantity=v_postable[\s\S]*?inventory_holds/i],
+  ['unidentified custody defers product mapping until identification', /unidentified_receipt_custody[\s\S]*?observed_description[\s\S]*?identified_product_id/i],
+  ['escalated receipt decisions remain actionable', /warehouse_resolve_procurement_po_exception_v3[\s\S]*?status in \('pending','escalated'\)/i],
+  ['active holds reduce server reservation availability', /warehouse\.available_to_promise[\s\S]*?inventory_holds[\s\S]*?status='active'/i],
+  ['hold release recalculates the locked PO status', /warehouse_release_quality_hold[\s\S]*?purchase_orders[\s\S]*?for update[\s\S]*?status/i],
+  ['accepting a later receipt preserves prior current acceptance evidence', /policy_record_acceptance_pack[\s\S]*?warehouse_receipt_reference[\s\S]*?status='superseded'/i],
 ];
 
 export async function verifyPoReceiptAuthority(migrationUrl) {

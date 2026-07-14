@@ -1014,6 +1014,30 @@ describe('W1 control parity', () => {
     expect(released).toMatchObject({ onHand: 20, held: 0, available: 20 });
   });
 
+  it('denies reservations against quantity protected by an active hold', async () => {
+    const controlled = new InMemoryRepository({
+      ...miniData(),
+      receipts: [{
+        id: 'rcpt-reserved-hold', locationId: 'loc-wh',
+        lines: [{ productId: 'shirt', quantity: 20 }],
+        actor: 'receiver@mwell', createdAt: '2026-07-10T00:00:00Z',
+      }],
+    }, {
+      now: () => '2026-07-10T01:00:00Z',
+      id: (prefix) => `${prefix}-reserved-hold`,
+    });
+    await controlled.inspectQuality({
+      idempotencyKey: 'quality-reserved-hold', sourceType: 'receipt',
+      sourceId: 'rcpt-reserved-hold', productId: 'shirt', quantity: 20,
+      disposition: 'hold', reason: 'Awaiting governed release',
+    });
+
+    await expect(controlled.reserve({
+      eventId: 'e1', productId: 'shirt', quantity: 1, actor: 'operator@mwell',
+    })).rejects.toThrow(/available|hold|insufficient/i);
+    expect((await controlled.getData()).allocations).toHaveLength(0);
+  });
+
   it('does not mutate stock until final count approval and posts only once', async () => {
     const controlled = new InMemoryRepository({
       ...miniData(),
@@ -1038,6 +1062,7 @@ describe('W1 control parity', () => {
     };
     const supervisor = {
       actor: 'supervisor@mwell', capabilities: ['approve_stock_adjustment'] as const,
+      approvalGroups: ['warehouse_supervisor'] as const,
     };
     await controlled.decideStockChange(decision, supervisor);
     await controlled.decideStockChange(decision, supervisor);
@@ -1085,7 +1110,7 @@ describe('W1 control parity', () => {
     expect((await controlled.getData()).units.find((unit) => unit.serialNumber === 'SN2')?.status).toBe('in_stock');
     await controlled.decideStockChange({
       idempotencyKey: 'serialized-missing-approve', requestId: request!.id, decision: 'approved',
-    }, { actor: 'supervisor@mwell', capabilities: ['approve_stock_adjustment'] });
+    }, { actor: 'supervisor@mwell', capabilities: ['approve_stock_adjustment'], approvalGroups: ['warehouse_supervisor'] });
     expect((await controlled.getData()).units.find((unit) => unit.serialNumber === 'SN2')?.status).toBe('lost');
   });
 
@@ -1107,23 +1132,23 @@ describe('W1 control parity', () => {
 
     await expect(controlled.decideStockChange({
       idempotencyKey: 'tiered-finance-early', requestId: request!.id, decision: 'approved',
-    }, { actor: 'finance@mwell', capabilities: ['approve_stock_adjustment_finance'] }))
-      .rejects.toThrow(/warehouse supervisor/i);
+    }, { actor: 'finance@mwell', capabilities: ['approve_stock_adjustment_finance'], approvalGroups: ['finance'] }))
+      .rejects.toThrow(/approval group/i);
     await expect(controlled.decideStockChange({
       idempotencyKey: 'tiered-requester', requestId: request!.id, decision: 'approved',
-    }, { actor: 'counter@mwell', capabilities: ['approve_stock_adjustment'] }))
+    }, { actor: 'counter@mwell', capabilities: ['approve_stock_adjustment'], approvalGroups: ['warehouse_supervisor'] }))
       .rejects.toThrow(/requester/i);
     const afterSupervisor = await controlled.decideStockChange({
       idempotencyKey: 'tiered-supervisor', requestId: request!.id, decision: 'approved',
-    }, { actor: 'supervisor@mwell', capabilities: ['approve_stock_adjustment'] });
+    }, { actor: 'supervisor@mwell', capabilities: ['approve_stock_adjustment'], approvalGroups: ['warehouse_supervisor'] });
     expect(afterSupervisor.status).toBe('pending_finance');
     await expect(controlled.decideStockChange({
       idempotencyKey: 'tiered-supervisor-late', requestId: request!.id, decision: 'approved',
-    }, { actor: 'supervisor@mwell', capabilities: ['approve_stock_adjustment'] }))
-      .rejects.toThrow(/finance/i);
+    }, { actor: 'supervisor@mwell', capabilities: ['approve_stock_adjustment'], approvalGroups: ['warehouse_supervisor'] }))
+      .rejects.toThrow(/approval group/i);
     await controlled.decideStockChange({
       idempotencyKey: 'tiered-finance', requestId: request!.id, decision: 'approved',
-    }, { actor: 'finance@mwell', capabilities: ['approve_stock_adjustment_finance'] });
+    }, { actor: 'finance@mwell', capabilities: ['approve_stock_adjustment_finance'], approvalGroups: ['finance'] });
     expect((await controlled.getData()).stockLevels[0]!.quantity).toBe(18);
   });
 
@@ -1135,18 +1160,36 @@ describe('W1 control parity', () => {
       idempotencyKey: 'manual-request-001', sourceType: 'write_off',
       productId: 'shirt', locationId: 'loc-wh', quantityDelta: -2,
       reason: 'Damaged during storage', evidenceUrls: ['evidence/damage.jpg'],
-    }, { actor: 'operator@mwell', capabilities: ['manage_inventory'] });
+    }, { actor: 'operator@mwell', capabilities: ['manage_inventory'], approvalGroups: ['warehouse_operator'] });
     expect(request.status).toBe('pending_supervisor');
     expect((await controlled.getData()).stockLevels[0]!.quantity).toBe(20);
 
     await expect(controlled.decideStockChange({
       idempotencyKey: 'manual-self-approval', requestId: request.id, decision: 'approved',
-    }, { actor: 'operator@mwell', capabilities: ['approve_stock_adjustment'] }))
+    }, { actor: 'operator@mwell', capabilities: ['approve_stock_adjustment'], approvalGroups: ['warehouse_supervisor'] }))
       .rejects.toThrow(/requester/i);
     await controlled.decideStockChange({
       idempotencyKey: 'manual-supervisor-approval', requestId: request.id, decision: 'approved',
-    }, { actor: 'supervisor@mwell', capabilities: ['approve_stock_adjustment'] });
+    }, { actor: 'supervisor@mwell', capabilities: ['approve_stock_adjustment'], approvalGroups: ['warehouse_supervisor'] });
     expect((await controlled.getData()).stockLevels[0]!.quantity).toBe(18);
+  });
+
+  it('rejects every serialized manual stock change at submission', async () => {
+    const controlled = new InMemoryRepository(miniData(), {
+      now: () => '2026-07-10T01:00:00Z', id: (prefix) => `${prefix}-serialized-manual`,
+    });
+    for (const [sourceType, quantityDelta] of [
+      ['adjustment', 1],
+      ['write_off', -1],
+    ] as const) {
+      await expect(controlled.requestStockChange({
+        idempotencyKey: `serialized-${sourceType}`, sourceType,
+        productId: 'ring', locationId: 'loc-wh', quantityDelta,
+        reason: 'Manual serialized correction', evidenceUrls: [],
+      }, { actor: 'operator-profile-id', capabilities: ['manage_inventory'], approvalGroups: ['warehouse_operator'] }))
+        .rejects.toThrow(/identified cycle count/i);
+    }
+    expect((await controlled.listStockChangeRequests({})).rows).toHaveLength(0);
   });
 
   it('rejects an approved signed delta when locked stock is insufficient', async () => {
@@ -1157,12 +1200,61 @@ describe('W1 control parity', () => {
       idempotencyKey: 'insufficient-request', sourceType: 'adjustment',
       productId: 'shirt', locationId: 'loc-wh', quantityDelta: -21,
       reason: 'Reconciliation correction', evidenceUrls: [],
-    }, { actor: 'operator@mwell', capabilities: ['manage_inventory'] });
+    }, { actor: 'operator@mwell', capabilities: ['manage_inventory'], approvalGroups: ['warehouse_operator'] });
     await expect(controlled.decideStockChange({
       idempotencyKey: 'insufficient-approve', requestId: request.id, decision: 'approved',
-    }, { actor: 'supervisor@mwell', capabilities: ['approve_stock_adjustment'] }))
+    }, { actor: 'supervisor@mwell', capabilities: ['approve_stock_adjustment'], approvalGroups: ['warehouse_supervisor'] }))
       .rejects.toThrow(/negative|insufficient/i);
-    expect((await controlled.getData()).stockLevels[0]!.quantity).toBe(20);
+    const data = await controlled.getData();
+    expect(data.stockLevels[0]!.quantity).toBe(20);
+    expect((await controlled.listStockChangeRequests({})).rows[0]?.status).toBe('pending_supervisor');
+    expect(data.movements.filter((movement) => movement.reference === request.id)).toHaveLength(0);
+    expect((await controlled.listExceptions({})).rows.find((row) => row.sourceId === request.id)?.status)
+      .toBe('open');
+  });
+
+  it('requires configured groups and distinct requester Supervisor and Finance actors', async () => {
+    const data = miniData();
+    data.products.find((product) => product.id === 'shirt')!.unitCost = 6_000;
+    const controlled = new InMemoryRepository(data, {
+      now: () => '2026-07-10T01:00:00Z', id: (prefix) => `${prefix}-distinct-tier`,
+    });
+    const request = await controlled.requestStockChange({
+      idempotencyKey: 'distinct-tier-request', sourceType: 'adjustment',
+      productId: 'shirt', locationId: 'loc-wh', quantityDelta: -2,
+      reason: 'Material reconciliation', evidenceUrls: [],
+    }, { actor: 'requester-profile-id', capabilities: ['manage_inventory'], approvalGroups: ['warehouse_operator'] });
+
+    await expect(controlled.decideStockChange({
+      idempotencyKey: 'all-cap-admin-wrong-group', requestId: request.id, decision: 'approved',
+    }, {
+      actor: 'admin-profile-id',
+      capabilities: ['approve_stock_adjustment', 'approve_stock_adjustment_finance'],
+      approvalGroups: ['warehouse_admin'],
+    })).rejects.toThrow(/approval group/i);
+
+    const supervisor = await controlled.decideStockChange({
+      idempotencyKey: 'distinct-tier-supervisor', requestId: request.id, decision: 'approved',
+    }, {
+      actor: 'supervisor-profile-id', capabilities: ['approve_stock_adjustment'],
+      approvalGroups: ['warehouse_supervisor'],
+    });
+    expect(supervisor.status).toBe('pending_finance');
+
+    await expect(controlled.decideStockChange({
+      idempotencyKey: 'same-person-finance', requestId: request.id, decision: 'approved',
+    }, {
+      actor: 'supervisor-profile-id', capabilities: ['approve_stock_adjustment_finance'],
+      approvalGroups: ['finance'],
+    })).rejects.toThrow(/distinct|supervisor/i);
+
+    await controlled.decideStockChange({
+      idempotencyKey: 'distinct-tier-finance', requestId: request.id, decision: 'approved',
+    }, {
+      actor: 'finance-profile-id', capabilities: ['approve_stock_adjustment_finance'],
+      approvalGroups: ['finance'],
+    });
+    expect((await controlled.getData()).stockLevels[0]!.quantity).toBe(18);
   });
 
   it('moves a vendor-return hold into supplier custody exactly once', async () => {

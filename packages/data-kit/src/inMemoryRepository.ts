@@ -12,7 +12,11 @@ import type {
   Supplier,
   WarehouseEvent,
 } from './domain/types';
-import { returnClosesAllocation, validateReservation } from './domain/allocations';
+import {
+  returnClosesAllocation,
+  uncommittedAvailable,
+  validateReservation,
+} from './domain/allocations';
 import { primaryStockLocation, validateTransfer } from './domain/transfers';
 import { poStatusAfterReceipt } from './domain/purchaseOrders';
 import { applyProductPatch, buildNewProduct } from './domain/products';
@@ -331,6 +335,16 @@ export class InMemoryRepository implements WarehouseControlRepository {
       input.quantity,
     );
     if (!result.ok) throw new Error(result.error);
+    const held = this.holds
+      .filter((hold) => hold.status === 'active' && hold.productId === input.productId)
+      .reduce((sum, hold) => sum + hold.quantity, 0);
+    const available = Math.max(
+      0,
+      uncommittedAvailable(state, this.data.allocations, input.productId) - held,
+    );
+    if (input.quantity > available) {
+      throw new Error(`Cannot reserve ${input.quantity} - only ${available} available after active holds.`);
+    }
 
     const allocation: Allocation = {
       id: uid('alloc'),
@@ -546,7 +560,7 @@ export class InMemoryRepository implements WarehouseControlRepository {
       category: input.category,
       lines: input.lines,
       status: 'draft',
-      requestedBy: input.actor,
+      requestedBy: input.requesterId ?? input.actor,
       actor: input.actor,
       createdAt,
     };
@@ -1309,8 +1323,10 @@ export class InMemoryRepository implements WarehouseControlRepository {
         row.id === input.binId && row.locationId === input.locationId)) {
         throw new Error('Stock-change storage area does not belong to the location.');
       }
-      if (product.serialized && input.quantityDelta > 0) {
-        throw new Error('Serialized stock cannot be added without identified units.');
+      if (product.serialized) {
+        throw new Error(
+          'Serialized stock changes require identified cycle count evidence.',
+        );
       }
       const requestId = this.newId('scr');
       const request: StockChangeRequest = {
@@ -1352,8 +1368,18 @@ export class InMemoryRepository implements WarehouseControlRepository {
       if (!request || !['pending_supervisor', 'pending_finance'].includes(request.status)) {
         throw new Error('Pending stock-change request not found.');
       }
-      request.status = stockChangeStatusAfterDecision({
-        currentStatus: request.status as 'pending_supervisor' | 'pending_finance',
+      const currentStatus = request.status as 'pending_supervisor' | 'pending_finance';
+      const requiredGroups = currentStatus === 'pending_supervisor'
+        ? ['warehouse_supervisor', 'logistics_supervisor']
+        : ['finance'];
+      if (!principal.approvalGroups.some((group) => requiredGroups.includes(group))) {
+        throw new Error('The actor is not a member of the configured approval group for this step.');
+      }
+      if (currentStatus === 'pending_finance' && request.supervisorApprovedBy === principal.actor) {
+        throw new Error('Finance must be a distinct actor from the Warehouse Supervisor.');
+      }
+      const nextStatus = stockChangeStatusAfterDecision({
+        currentStatus,
         decision: input.decision,
         financialImpact: request.financialImpact,
         requestedBy: request.requestedBy,
@@ -1365,11 +1391,39 @@ export class InMemoryRepository implements WarehouseControlRepository {
           >,
         note: input.note,
       });
-      request.canDecide = ['pending_supervisor', 'pending_finance'].includes(request.status);
       const count = this.data.cycleCounts.find((row) => row.id === request.sourceId);
-      if (request.status === 'rejected') {
+
+      if (nextStatus === 'approved') {
+        const product = this.data.products.find((row) => row.id === request.productId);
+        if (!product) throw new Error('Stock-change product not found.');
+        if (product.serialized) {
+          if (request.sourceType !== 'cycle_count' || !count) {
+            throw new Error('Serialized stock changes require identified cycle count evidence.');
+          }
+          const scanned = count.lines.find((line) => line.productId === product.id)?.serialNumbers ?? [];
+          const missing = this.data.units.filter((unit) =>
+            unit.productId === product.id && unit.locationId === request.locationId
+            && (unit.binId ?? undefined) === (request.binId ?? undefined)
+            && unit.status === 'in_stock' && !scanned.includes(unit.serialNumber));
+          if (missing.length < Math.abs(request.quantityDelta)) {
+            throw new Error('Identified cycle count does not support the serialized variance.');
+          }
+        } else {
+          const level = this.stockRow(product.id, request.locationId, request.binId, false);
+          if ((level?.quantity ?? 0) + request.quantityDelta < 0) {
+            throw new Error('Stock cannot become negative due to insufficient stock.');
+          }
+        }
+      }
+
+      request.status = nextStatus;
+      if (currentStatus === 'pending_supervisor' && nextStatus === 'pending_finance') {
+        request.supervisorApprovedBy = principal.actor;
+      }
+      request.canDecide = ['pending_supervisor', 'pending_finance'].includes(nextStatus);
+      if (nextStatus === 'rejected') {
         if (count) count.status = 'rejected';
-      } else if (request.status === 'approved') {
+      } else if (nextStatus === 'approved') {
         const product = this.data.products.find((row) => row.id === request.productId)!;
         if (product.serialized) {
           const scanned = count?.lines.find((line) => line.productId === product.id)?.serialNumbers ?? [];

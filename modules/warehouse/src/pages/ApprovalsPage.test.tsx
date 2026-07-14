@@ -92,7 +92,7 @@ describe('ApprovalsPage', () => {
       idempotencyKey: 'supervisor-high-value',
       requestId: request.id,
       decision: 'approved',
-    }, { actor: 'supervisor@mwell', capabilities: ['approve_stock_adjustment'] });
+    }, { actor: 'supervisor@mwell', capabilities: ['approve_stock_adjustment'], approvalGroups: ['warehouse_supervisor'] });
     renderWithProviders(<ApprovalsPage />, { repo, role: 'finance' });
 
     const queue = await screen.findByLabelText('Waiting on you approvals');
@@ -111,7 +111,7 @@ describe('ApprovalsPage', () => {
     await repo.decideStockChange({
       idempotencyKey: 'supervisor-tier-transition', requestId: request.id,
       decision: 'approved',
-    }, { actor: 'supervisor@mwell', capabilities: ['approve_stock_adjustment'] });
+    }, { actor: 'supervisor@mwell', capabilities: ['approve_stock_adjustment'], approvalGroups: ['warehouse_supervisor'] });
     renderWithProviders(<ApprovalsPage />, { repo, role: 'logistics_supervisor' });
     expect(await screen.findByText('No approvals in this view')).toBeInTheDocument();
     await userEvent.setup().click(screen.getByRole('tab', { name: 'In review' }));
