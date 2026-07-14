@@ -121,11 +121,12 @@ test("the live harness verifies deployed identity before browser launch", async 
   assert.match(source, /VERCEL_AUTOMATION_BYPASS_SECRET/);
   assert.doesNotMatch(source, /extraHTTPHeaders\s*:/);
   assert.equal(
-    source.match(/await installScopedProtectionBypass\(context\)/g)?.length,
+    source.match(/await installScopedProtectionBypass\(\{/g)?.length,
     2,
     "all browser contexts install exact-origin bypass routing",
   );
-  assert.match(source, /await routeWithScopedProtectionBypass\(\{/);
+  assert.doesNotMatch(source, /context\.route\(["']\*\*\/\*["']/);
+  assert.match(source, /installScopedProtectionBypass,/);
   assert.doesNotMatch(
     source,
     /console\.(?:log|warn|error)\([^)]*VERCEL_AUTOMATION_BYPASS_SECRET/,
@@ -169,6 +170,67 @@ test("Vercel protection bypass headers are scoped to the exact app origin", asyn
     );
     assert.equal(headers.accept, "application/json");
   }
+});
+
+test("route registration intercepts only the exact app origin", async () => {
+  const { installScopedProtectionBypass } = await import(
+    "../lib/target-environment.mjs"
+  );
+  const registrations = [];
+  const context = {
+    route: async (matcher, handler) => registrations.push({ matcher, handler }),
+  };
+
+  await installScopedProtectionBypass({
+    context,
+    appOrigin: "https://uat.example.com:8443",
+    protectionBypass: "bypass-secret",
+  });
+
+  assert.equal(registrations.length, 1);
+  const [{ matcher, handler }] = registrations;
+  assert.equal(typeof matcher, "function", "registration uses a URL predicate");
+
+  for (const requestUrl of [
+    "https://uat.example.com:8443/",
+    "https://uat.example.com:8443/api/health?probe=deployed%20identity",
+    "https://uat.example.com:8443/deep/path?next=%2Fdashboard&tab=2",
+  ]) {
+    assert.equal(matcher(new URL(requestUrl)), true, requestUrl);
+  }
+  for (const requestUrl of [
+    "https://uat.example.com/without-required-port",
+    "https://uat.example.com:9443/different-port",
+    "https://assets.uat.example.com:8443/app.js",
+    "https://uat.example.com.evil.test:8443/collect",
+    "https://uatref.supabase.co/rest/v1/items",
+    "https://analytics.example.net/collect",
+  ]) {
+    assert.equal(matcher(new URL(requestUrl)), false, requestUrl);
+  }
+
+  const appRequest = fakeRoute({
+    url: "https://uat.example.com:8443/start?source=audit",
+    headers: { cookie: "session=abc" },
+    response: { status: 200 },
+  });
+  if (matcher(new URL(appRequest.route.request().url()))) {
+    await handler(appRequest.route);
+  }
+  assert.equal(appRequest.calls.fetch.length, 1);
+
+  const nonAppRequest = fakeRoute({
+    url: "https://uatref.supabase.co/rest/v1/items?select=*",
+    headers: { authorization: "Bearer session-token" },
+  });
+  if (matcher(new URL(nonAppRequest.route.request().url()))) {
+    await handler(nonAppRequest.route);
+  }
+  assert.deepEqual(nonAppRequest.calls, {
+    continue: [],
+    fetch: [],
+    fulfill: [],
+  });
 });
 
 function fakeRoute({ url, headers, method = "GET", postData = null, response }) {

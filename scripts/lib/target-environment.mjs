@@ -71,6 +71,24 @@ export async function routeWithScopedProtectionBypass({
   await route.fulfill({ response });
 }
 
+export async function installScopedProtectionBypass({
+  context,
+  appOrigin,
+  protectionBypass,
+}) {
+  if (!protectionBypass) return;
+  await context.route(
+    (url) => url.origin === appOrigin,
+    async (route) => {
+      await routeWithScopedProtectionBypass({
+        route,
+        appOrigin,
+        protectionBypass,
+      });
+    },
+  );
+}
+
 export function assertApprovedMutationTarget({
   appEnv,
   supabaseUrl,

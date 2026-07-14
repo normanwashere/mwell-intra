@@ -3,8 +3,8 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   assertApprovedMutationTarget,
+  installScopedProtectionBypass,
   projectRefFromSupabaseUrl,
-  routeWithScopedProtectionBypass,
   verifyDeployedTargetIdentity,
 } from "../lib/target-environment.mjs";
 import {
@@ -70,17 +70,6 @@ await verifyDeployedTargetIdentity({
 });
 
 const users = CURRENT_LIVE_ROLES;
-
-async function installScopedProtectionBypass(context) {
-  if (!protectionBypass) return;
-  await context.route("**/*", async (route) => {
-    await routeWithScopedProtectionBypass({
-      route,
-      appOrigin,
-      protectionBypass,
-    });
-  });
-}
 
 const viewports = [
   {
@@ -980,7 +969,11 @@ async function runWorkflow(browser, viewport, user, workflow) {
     viewport: viewport.viewport,
     isMobile: viewport.isMobile,
   });
-  await installScopedProtectionBypass(context);
+  await installScopedProtectionBypass({
+    context,
+    appOrigin,
+    protectionBypass,
+  });
   const page = await context.newPage();
   const consoleErrors = [];
   const networkErrors = [];
@@ -1056,7 +1049,11 @@ for (const viewport of viewports.filter(
       viewport: viewport.viewport,
       isMobile: viewport.isMobile,
     });
-    await installScopedProtectionBypass(context);
+    await installScopedProtectionBypass({
+      context,
+      appOrigin,
+      protectionBypass,
+    });
     const page = await context.newPage();
     const consoleErrors = [];
     const networkErrors = [];
