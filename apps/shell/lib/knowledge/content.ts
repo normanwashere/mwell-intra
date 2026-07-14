@@ -21,6 +21,7 @@ const moduleRoute: Record<KnowledgeModule, string> = {
   vendor: "/vendor",
   warehouse: "/warehouse",
   procurement: "/procurement",
+  finance: "/finance",
   legal: "/legal",
 };
 
@@ -278,6 +279,7 @@ const processArticle = (
       vendor: "Legal",
       warehouse: "Warehouse",
       procurement: "Procurement",
+      finance: "Finance",
       legal: "Legal",
     } satisfies Record<KnowledgeModule, string>
   )[module],

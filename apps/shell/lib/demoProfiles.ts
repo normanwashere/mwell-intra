@@ -106,6 +106,7 @@ export const DEMO_PROFILES: readonly MemoryProfile[] = [
     roles: {
       core: ['staff'],
       warehouse: ['finance'],
+      procurement: ['finance'],
     },
   },
   {

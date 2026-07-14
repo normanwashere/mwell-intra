@@ -20,6 +20,7 @@ const config: Config = {
     '../../modules/warehouse/src/**/*.{ts,tsx}',
     '../../modules/procurement/src/**/*.{ts,tsx}',
     '../../modules/legal/src/**/*.{ts,tsx}',
+    '../../modules/finance/src/**/*.{ts,tsx}',
   ],
   // Font stacks come from the shared preset (var(--font-inter) /
   // var(--font-grotesk) / var(--font-jbmono)) — layout.tsx loads them via

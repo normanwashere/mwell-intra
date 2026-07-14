@@ -399,6 +399,7 @@ const ownerFor: Record<KnowledgeModule, string> = {
   admin: "Platform",
   warehouse: "Warehouse",
   procurement: "Procurement",
+  finance: "Finance",
   legal: "Legal",
   vendor: "Legal",
 };
@@ -934,21 +935,29 @@ const definitions: FeatureDefinition[] = [
   },
   {
     id: "warehouse-finance",
-    title: "Warehouse finance",
-    module: "warehouse",
-    route: "/warehouse/finance",
+    title: "Finance control center",
+    module: "finance",
+    route: "/finance",
+    roleIds: [
+      "warehouse_finance",
+      "warehouse_pricing",
+      "warehouse_admin",
+      "procurement_finance",
+      "procurement_admin",
+      "platform_admin",
+    ],
     purpose:
-      "Reviews inventory valuation, receipt costing, reconciliation, write-offs, and asset-register context.",
+      "Combines authorized procurement commitments, payment readiness, warehouse receipts, returns, and inventory valuation in one review workspace.",
     reads:
-      "Stock ledger, landed cost, receipts, adjustments, write-offs, assets, and reconciliation aggregates.",
+      "Purchase orders, payment-readiness packs, receipt evidence, returns, stock valuation, and cross-module activity permitted by the user's scoped Finance roles.",
     writes:
-      "No ledger entry is created from this analytical page; exports record governed download activity where enabled.",
+      "No procurement or warehouse transaction is created here; Finance opens the owning source record to perform an authorized decision.",
     statuses:
-      "Current, unreconciled, variance, pending cost, written off, exported, or data unavailable.",
+      "Ready for Finance, returned, accepted, issued, received, unavailable, or partially available.",
     exception:
-      "Trace a discrepancy to source receipts and movements before approving any correcting transaction.",
+      "When a source is unavailable or values disagree, retain the visible data, open the owning record, and resolve the discrepancy without duplicating or overriding source transactions.",
     completionEvidence:
-      "Displayed valuation reconciles to posted quantity and cost sources for the selected period.",
+      "The review links to attributable procurement and warehouse source records, with status, value, and timestamps visible for reconciliation.",
   },
   {
     id: "warehouse-pricing",

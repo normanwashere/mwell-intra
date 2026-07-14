@@ -781,6 +781,7 @@ export const LIVE_KNOWLEDGE_ROLES: KnowledgeRole[] = [
     purpose:
       "Review inventory valuation, count variance, adjustment evidence, reconciliation, and financial warehouse controls.",
     authority: {
+      accessibleRoutes: ["/finance", "/warehouse/cycle-counts"],
       canDo: [
         "Review valuation and inventory evidence, perform count-related control review, and approve supported stock adjustments.",
         "Investigate financial warehouse exceptions and hand the outcome back through the recorded ledger workflow.",
@@ -1088,6 +1089,7 @@ export const LIVE_KNOWLEDGE_ROLES: KnowledgeRole[] = [
       "Review financial approval, commercial evidence, receipt and acceptance context, and payment readiness for procurement records.",
     authority: {
       accessibleRoutes: [
+        "/finance",
         "/procurement",
         "/procurement/approvals",
         "/procurement/purchase-orders",

@@ -19,6 +19,7 @@
   "dependencies": {
     "@intra/auth": "workspace:*",
     "@intra/data-kit": "workspace:*",
+    "@intra/finance": "workspace:*",
     "@intra/legal": "workspace:*",
     "@intra/procurement": "workspace:*",
     "@intra/rbac": "workspace:*",

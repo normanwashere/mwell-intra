@@ -104,7 +104,11 @@ const LOGIN_PROFILES: readonly LoginProfile[] = [
     email: 'finance@mwell.demo',
     name: 'Rina Domingo',
     title: 'Finance Manager',
-    roles: { core: ['staff'], warehouse: ['finance'] },
+    roles: {
+      core: ['staff'],
+      warehouse: ['finance'],
+      procurement: ['finance'],
+    },
   },
   {
     id: 'demo-bi',
@@ -203,6 +207,16 @@ const CANONICAL_PERSONAS: readonly Persona[] = [
     profileId: INTERNAL_PROFILE_ID,
     roles: { core: ['staff'], legal: [role] },
   })),
+  {
+    id: 'finance-dual-scope',
+    label: 'Finance with Warehouse and Procurement scopes',
+    profileId: 'demo-finance',
+    roles: {
+      core: ['staff'],
+      warehouse: ['finance'],
+      procurement: ['finance'],
+    },
+  },
 ];
 
 const WAREHOUSE_CAPS: Record<string, readonly string[]> = {
@@ -417,6 +431,13 @@ function expectationsFor(persona: Persona): readonly RouteExpectation[] {
       allowDeniedCopy: !hasAnyModuleOrPortal(roles),
     },
     {
+      path: '/finance',
+      label: 'unified finance',
+      allowed: canAccessFinance(roles),
+      allowedText: /Finance|Payment readiness|Cross-module activity/i,
+      deniedText: /No Finance access/i,
+    },
+    {
       path: '/warehouse',
       label: 'warehouse home',
       allowed: hasWarehouseCap(roles, 'view_dashboard'),
@@ -608,12 +629,6 @@ function warehouseRoutes(roles: Roles): readonly RouteExpectation[] {
       allowedText: /Locations|Warehouse|Site/i,
     },
     {
-      path: '/warehouse/finance',
-      label: 'warehouse finance',
-      caps: ['view_finance'],
-      allowedText: /Finance|Valuation|Reconciliation/i,
-    },
-    {
       path: '/warehouse/pricing',
       label: 'warehouse pricing',
       caps: ['view_pricing'],
@@ -638,6 +653,13 @@ function warehouseRoutes(roles: Roles): readonly RouteExpectation[] {
 
 function hasCoreRole(roles: Roles, role: string): boolean {
   return roles.core?.includes(role) ?? false;
+}
+
+function canAccessFinance(roles: Roles): boolean {
+  return (
+    hasWarehouseCap(roles, 'view_finance') ||
+    hasProcurementCap(roles, 'view_finance')
+  );
 }
 
 function hasWarehouseRole(roles: Roles): boolean {

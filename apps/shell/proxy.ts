@@ -46,6 +46,12 @@ function sanitizeRedirectPath(pathname: string): string {
 }
 
 export async function proxy(request: NextRequest) {
+  if (request.nextUrl.pathname === '/warehouse/finance') {
+    const destination = request.nextUrl.clone();
+    destination.pathname = '/finance';
+    return NextResponse.redirect(destination, 308);
+  }
+
   let response = NextResponse.next({ request });
 
   // No live backend configured — the shell runs in memory/demo mode.

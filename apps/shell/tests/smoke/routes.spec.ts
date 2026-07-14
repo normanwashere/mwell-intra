@@ -49,6 +49,7 @@ const ROUTES: readonly RouteCase[] = [
   { path: "/login", label: "sign-in" },
   { path: "/reset-password", label: "reset-password" },
   { path: "/warehouse", label: "warehouse module" },
+  { path: "/finance", label: "finance module" },
   { path: "/procurement", label: "procurement module" },
   { path: "/legal", label: "legal module" },
   { path: "/vendor", label: "vendor portal" },
@@ -73,7 +74,15 @@ const FIXTURES = {
   },
   finance: {
     profileId: "demo-finance",
-    roles: { core: ["staff"], warehouse: ["finance"] },
+    roles: {
+      core: ["staff"],
+      warehouse: ["finance"],
+      procurement: ["finance"],
+    },
+  },
+  procurementFinance: {
+    profileId: "demo-procurement-finance",
+    roles: { core: ["staff"], procurement: ["finance"] },
   },
   procurement: {
     profileId: "demo-procurement",
@@ -126,11 +135,25 @@ const AUTHENTICATED_ROUTES: readonly AuthenticatedRouteCase[] = [
     expectedText: /Users & Roles|Access matrix/i,
   },
   {
-    path: "/warehouse/finance",
-    label: "warehouse finance",
+    path: "/finance",
+    label: "dual-scope finance",
     fixture: FIXTURES.finance,
-    expectedPath: "/warehouse/finance",
-    expectedText: /Finance|Valuation|Reconciliation/i,
+    expectedPath: "/finance",
+    expectedText: /Finance|Payment readiness|Cross-module activity/i,
+  },
+  {
+    path: "/finance",
+    label: "procurement-only finance",
+    fixture: FIXTURES.procurementFinance,
+    expectedPath: "/finance",
+    expectedText: /Finance|Payment readiness|Procurement Finance/i,
+  },
+  {
+    path: "/warehouse/finance",
+    label: "legacy warehouse finance redirect",
+    fixture: FIXTURES.finance,
+    expectedPath: "/finance",
+    expectedText: /Finance|Payment readiness|Cross-module activity/i,
   },
   {
     path: "/procurement/approvals",
@@ -185,7 +208,7 @@ const COMMAND_ROUTES: readonly CommandRouteCase[] = [
     fixture: FIXTURES.finance,
     query: "finance",
     option: /^Finance/i,
-    expectedPath: "/warehouse/finance",
+    expectedPath: "/finance",
   },
 ];
 

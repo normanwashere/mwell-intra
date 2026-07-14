@@ -23,7 +23,6 @@ export type WarehouseRouteId =
   | "quality"
   | "approvals"
   | "exceptions"
-  | "finance"
   | "pricing"
   | "data"
   | "reports"
@@ -222,15 +221,6 @@ export const MODULES: ModuleDef[] = [
     group: "control",
   },
   {
-    id: "finance",
-    label: "Finance",
-    path: "/finance",
-    capabilities: ["view_finance"],
-    description: "Valuation and reconciliation.",
-    icon: "coins",
-    group: "analyze",
-  },
-  {
     id: "pricing",
     label: "Pricing",
     path: "/pricing",
@@ -324,7 +314,6 @@ const ROUTE_CONTENT_DEPTH: Record<WarehouseModuleId, [number, number]> = {
   quality: [5, 5],
   approvals: [4, 3],
   exceptions: [4, 4],
-  finance: [4, 4],
   pricing: [4, 5],
   data: [6, 3],
   reports: [5, 6],

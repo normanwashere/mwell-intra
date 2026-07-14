@@ -38,7 +38,7 @@ describe('ExceptionsPage', () => {
 
     expect(await screen.findByLabelText('Severity')).toHaveValue('P1');
     expect(screen.getByLabelText('Status')).toHaveValue('open');
-    const queue = screen.getByLabelText('Warehouse exceptions');
+    const queue = await screen.findByLabelText('Warehouse exceptions');
     expect(within(queue).getByText('P1')).toBeInTheDocument();
     expect(within(queue).queryByRole('button', { name: /waive/i })).not.toBeInTheDocument();
   });

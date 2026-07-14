@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { dashboardAreas, mobileCenterAction } from "./navigation";
+import type { UserRoles } from "@intra/rbac";
+import {
+  canAccessFinance,
+  dashboardAreas,
+  mobileCenterAction,
+} from "./navigation";
 
 describe("dashboard areas", () => {
   it("shows every Warehouse Administrator area counted by the dashboard", () => {
@@ -17,6 +22,40 @@ describe("dashboard areas", () => {
         (area) => area.label,
       ),
     ).toEqual(["Administration", "Delegation of Authority", "Knowledge Base"]);
+  });
+
+  it.each<[Partial<UserRoles>, string]>([
+    [{ core: ["staff"], warehouse: ["finance"] }, "Warehouse Finance"],
+    [{ core: ["staff"], procurement: ["finance"] }, "Procurement Finance"],
+    [
+      {
+        core: ["staff"],
+        warehouse: ["finance"],
+        procurement: ["finance"],
+      },
+      "dual Finance",
+    ],
+  ])("gives %s one first-class Finance area", (roles) => {
+    const finance = dashboardAreas(roles, "employee").filter(
+      (area) => area.label === "Finance",
+    );
+    expect(finance).toHaveLength(1);
+    expect(finance[0]?.href).toBe("/finance");
+    expect(canAccessFinance(roles)).toBe(true);
+  });
+
+  it("does not grant Finance through unrelated roles", () => {
+    const roles = {
+      core: ["staff"],
+      warehouse: ["operations"],
+      procurement: ["requester"],
+    };
+    expect(canAccessFinance(roles)).toBe(false);
+    expect(
+      dashboardAreas(roles, "employee").some(
+        (area) => area.label === "Finance",
+      ),
+    ).toBe(false);
   });
 });
 

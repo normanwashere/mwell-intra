@@ -62,9 +62,6 @@ const StorageAreasPage = lazy(() =>
     default: m.StorageAreasPage,
   })),
 );
-const FinancePage = lazy(() =>
-  import("@/pages/FinancePage").then((m) => ({ default: m.FinancePage })),
-);
 const PricingPage = lazy(() =>
   import("@/pages/PricingPage").then((m) => ({ default: m.PricingPage })),
 );
@@ -396,14 +393,6 @@ export function App() {
             element={
               <Guard anyOf={WAREHOUSE_ROUTE_BY_ID.locations.gateCapabilityIds}>
                 <LocationsPage />
-              </Guard>
-            }
-          />
-          <Route
-            path={WAREHOUSE_ROUTE_BY_ID.finance.path}
-            element={
-              <Guard anyOf={WAREHOUSE_ROUTE_BY_ID.finance.gateCapabilityIds}>
-                <FinancePage />
               </Guard>
             }
           />

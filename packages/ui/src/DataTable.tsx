@@ -140,7 +140,7 @@ export function DataTable<T>({
                           type="button"
                           onClick={() => toggleSort(c.key)}
                           className={clsx(
-                            'inline-flex items-center gap-1 transition hover:text-ink',
+                            'inline-flex min-h-11 items-center gap-1 py-1 transition hover:text-ink sm:min-h-8',
                             active && 'text-ink',
                           )}
                           aria-sort={

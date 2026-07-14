@@ -32,7 +32,7 @@ export const CONTEXTUAL_FEATURE_GUIDES: ContextualFeatureGuide[] = [
   guide("warehouse-quality", "Quality control", "/warehouse/quality"),
   guide("warehouse-approvals", "Stock approvals", "/warehouse/approvals"),
   guide("warehouse-exceptions", "Warehouse exceptions", "/warehouse/exceptions"),
-  guide("warehouse-finance", "Warehouse finance", "/warehouse/finance"),
+  guide("warehouse-finance", "Finance control center", "/finance"),
   guide("warehouse-pricing", "Warehouse pricing", "/warehouse/pricing"),
   guide("warehouse-data", "Warehouse data and analytics", "/warehouse/data"),
   guide("warehouse-reports", "Inventory reports", "/warehouse/reports"),

@@ -566,13 +566,7 @@ export function DashboardPage() {
               <li key={`${r.productId}|${r.locationId}|${r.binId ?? ''}`}>
                 <button
                   type="button"
-                  onClick={() =>
-                    navigate(
-                      can(role, 'view_finance')
-                        ? '/finance'
-                        : '/cycle-counts?filter=variances',
-                    )
-                  }
+                  onClick={() => navigate('/cycle-counts?filter=variances')}
                   className="flex w-full items-center justify-between gap-3 py-2.5 text-left transition hover:opacity-80"
                 >
                   <div className="min-w-0">
@@ -890,12 +884,18 @@ export function DashboardPage() {
         roleLabel={ROLES[role].label}
         icon={heroCta.icon}
         action={
-          <HeroChipButton
-            icon={heroCta.icon}
-            onClick={() => navigate(heroCta.to)}
-          >
-            {heroCta.label}
-          </HeroChipButton>
+          heroCta.to === '/finance' ? (
+            <HeroChipButton icon={heroCta.icon} href="/finance">
+              {heroCta.label}
+            </HeroChipButton>
+          ) : (
+            <HeroChipButton
+              icon={heroCta.icon}
+              onClick={() => navigate(heroCta.to)}
+            >
+              {heroCta.label}
+            </HeroChipButton>
+          )
         }
       >
         <IssuedMetricDock
@@ -915,7 +915,9 @@ export function DashboardPage() {
               icon={k.icon}
               tone={k.tone}
               hint={k.hint}
-              onClick={() => navigate(k.to)}
+              {...(k.to === '/finance'
+                ? { href: '/finance' }
+                : { onClick: () => navigate(k.to) })}
             />
           </StaggerItem>
         ))}

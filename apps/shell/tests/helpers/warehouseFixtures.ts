@@ -21,12 +21,12 @@ const THEME_KEY = 'intra-theme';
 export const ROLE_ROUTES: Record<WarehouseRole, readonly string[]> = {
   logistics_supervisor: ['/warehouse', '/warehouse/receiving', '/warehouse/storage', '/warehouse/cycle-counts', '/warehouse/quality', '/warehouse/approvals', '/warehouse/exceptions', '/warehouse/imports', '/warehouse/reports', '/warehouse/operation-routes', '/warehouse/scan'],
   operations: ['/warehouse', '/warehouse/inventory', '/warehouse/allocations', '/warehouse/events', '/warehouse/returns', '/warehouse/quality', '/warehouse/exceptions', '/warehouse/scan'],
-  finance: ['/warehouse', '/warehouse/inventory', '/warehouse/events', '/warehouse/cycle-counts', '/warehouse/finance', '/warehouse/approvals', '/warehouse/exceptions', '/warehouse/reports'],
+  finance: ['/warehouse', '/warehouse/inventory', '/warehouse/events', '/warehouse/cycle-counts', '/finance', '/warehouse/approvals', '/warehouse/exceptions', '/warehouse/reports'],
   bi_analyst: ['/warehouse', '/warehouse/inventory', '/warehouse/data', '/warehouse/reports', '/warehouse/exceptions'],
   business_unit: ['/warehouse', '/warehouse/inventory', '/warehouse/allocations'],
   marketing: ['/warehouse', '/warehouse/inventory', '/warehouse/allocations', '/warehouse/returns'],
   procurement: ['/warehouse', '/warehouse/inventory', '/warehouse/procurement', '/warehouse/purchase-orders', '/warehouse/suppliers', '/warehouse/reports'],
-  pricing: ['/warehouse', '/warehouse/inventory', '/warehouse/pricing', '/warehouse/finance'],
+  pricing: ['/warehouse', '/warehouse/inventory', '/warehouse/pricing', '/finance'],
   warehouse_admin: ['/warehouse', '/warehouse/inventory', '/warehouse/receiving', '/warehouse/storage', '/warehouse/allocations', '/warehouse/events', '/warehouse/cycle-counts', '/warehouse/returns', '/warehouse/quality', '/warehouse/approvals', '/warehouse/exceptions', '/warehouse/imports', '/warehouse/reports', '/warehouse/operation-routes', '/warehouse/scan'],
 };
 

@@ -24,11 +24,11 @@ describe('AppShell navigation', () => {
     }
   });
 
-  it('hides receiving for the finance role', async () => {
+  it('keeps Warehouse operations scoped and leaves Finance to the Intra shell', async () => {
     renderWithProviders(<AppShell>content</AppShell>, { role: 'finance' });
     const sidebar = await screen.findByRole('navigation', { name: 'Primary' });
     expect(within(sidebar).queryByRole('link', { name: /receiving/i })).not.toBeInTheDocument();
-    expect(within(sidebar).getByRole('link', { name: /finance/i })).toBeInTheDocument();
+    expect(within(sidebar).queryByRole('link', { name: /^finance$/i })).not.toBeInTheDocument();
   });
 
   it('opens the account menu with a sign-out action', async () => {

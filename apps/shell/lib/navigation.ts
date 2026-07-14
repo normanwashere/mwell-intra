@@ -54,11 +54,12 @@ export const VENDOR_NAV = {
   tone: "emerald",
 } as const satisfies ShellNavItem;
 
-/** Cross-module finance landing, hosted by Warehouse until Finance has a shell module. */
+/** Cross-module Finance control center. */
 export const FINANCE_NAV = {
-  href: "/warehouse/finance",
+  href: "/finance",
   label: "Finance",
-  description: "Inventory valuation, costing, reconciliation & asset register.",
+  description:
+    "Procurement commitments, payment readiness, inventory value, and reconciliation.",
   icon: "coins",
   tone: "emerald",
 } as const satisfies ShellNavItem;
@@ -106,6 +107,14 @@ export function accessibleModules(
   return MODULE_NAV.filter((item) => hasModuleAccess(userRoles, item.module));
 }
 
+/** Finance is an Intra-wide area backed by scoped module capabilities. */
+export function canAccessFinance(userRoles: Partial<UserRoles>): boolean {
+  return (
+    can(userRoles, "warehouse", "view_finance") ||
+    can(userRoles, "procurement", "view_finance")
+  );
+}
+
 /**
  * Every first-class destination shown on the signed-in dashboard and shell.
  * Keeping this composition in one place prevents the access count, quick links,
@@ -118,7 +127,7 @@ export function dashboardAreas(
   const areas: ShellNavItem[] = [...accessibleModules(userRoles)];
 
   if (profileKind === "vendor") areas.push(VENDOR_NAV);
-  if (can(userRoles, "warehouse", "view_finance")) areas.push(FINANCE_NAV);
+  if (canAccessFinance(userRoles)) areas.push(FINANCE_NAV);
   if (can(userRoles, "core", "manage_rbac")) areas.push(ADMIN_NAV);
   if (
     can(userRoles, "core", "manage_rbac") ||

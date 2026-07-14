@@ -115,11 +115,20 @@ export function AppShell({ children }: { children: ReactNode }) {
   };
 
   const fab = mobileCenterAction(pathname, userRoles);
-  const mobileLeft = entries.slice(0, 2);
-  const hasMobileOverflow = entries.length > 4;
+  const mobileEntries = entries.some((entry) => entry.href === FINANCE_NAV.href)
+    ? [
+        HOME_ENTRY,
+        ...entries.filter((entry) => entry.href === FINANCE_NAV.href),
+        ...entries.filter(
+          (entry) => entry.href !== HOME_ENTRY.href && entry.href !== FINANCE_NAV.href,
+        ),
+      ]
+    : entries;
+  const mobileLeft = mobileEntries.slice(0, 2);
+  const hasMobileOverflow = mobileEntries.length > 4;
   const mobileRight = hasMobileOverflow
-    ? entries.slice(2, 3)
-    : entries.slice(2, 4);
+    ? mobileEntries.slice(2, 3)
+    : mobileEntries.slice(2, 4);
 
   return (
     <div className="min-h-screen bg-app md:flex">
@@ -280,7 +289,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                       ? `Help for ${pageGuide.title}`
                       : "Open the Knowledge Base"
                   }
-                  className="grid h-10 w-10 place-items-center rounded-xl text-faint transition hover:bg-inset hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                  className="grid h-11 w-11 place-items-center rounded-xl text-faint transition hover:bg-inset hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
                 >
                   <Icon name="info" className="h-5 w-5" />
                 </Link>

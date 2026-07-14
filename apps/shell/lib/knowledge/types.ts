@@ -1,5 +1,5 @@
 export type KnowledgeModule =
-  "core" | "warehouse" | "procurement" | "legal" | "vendor" | "admin";
+  "core" | "warehouse" | "procurement" | "finance" | "legal" | "vendor" | "admin";
 
 export type KnowledgeAvailability = "live" | "limited" | "coming_soon";
 

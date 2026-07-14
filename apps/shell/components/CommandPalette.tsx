@@ -13,6 +13,7 @@ import {
   KNOWLEDGE_NAV,
   VENDOR_NAV,
   accessibleModules,
+  canAccessFinance,
 } from "@shell/lib/navigation";
 import { cx } from "@shell/lib/cx";
 
@@ -120,14 +121,15 @@ export function CommandPalette() {
       });
     }
 
-    if (can(userRoles, "warehouse", "view_finance")) {
+    if (canAccessFinance(userRoles)) {
       out.push({
         id: "finance",
         label: FINANCE_NAV.label,
         hint: FINANCE_NAV.description,
         icon: FINANCE_NAV.icon,
         href: FINANCE_NAV.href,
-        keywords: "valuation costing reconciliation assets",
+        keywords:
+          "valuation commitments payment readiness costing reconciliation receipts returns",
       });
     }
 

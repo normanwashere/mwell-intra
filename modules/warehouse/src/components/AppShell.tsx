@@ -43,7 +43,6 @@ const WAREHOUSE_GUIDES = [
   { path: '/quality', articleId: 'feature-warehouse-quality', title: 'Quality control' },
   { path: '/approvals', articleId: 'feature-warehouse-approvals', title: 'Stock approvals' },
   { path: '/exceptions', articleId: 'feature-warehouse-exceptions', title: 'Warehouse exceptions' },
-  { path: '/finance', articleId: 'feature-warehouse-finance', title: 'Warehouse finance' },
   { path: '/pricing', articleId: 'feature-warehouse-pricing', title: 'Warehouse pricing' },
   { path: '/data', articleId: 'feature-warehouse-data', title: 'Warehouse data and analytics' },
   { path: '/reports', articleId: 'feature-warehouse-reports', title: 'Inventory reports' },
