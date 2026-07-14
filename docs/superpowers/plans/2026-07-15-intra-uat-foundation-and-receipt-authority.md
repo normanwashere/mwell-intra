@@ -17,6 +17,8 @@
 - Product owns client/product go-live approval. Client & Product Implementation coordinates delivery under Operations.
 - Procurement is an independent enterprise department.
 - Warehouse is the only authority for physical PO receipt.
+- The supplied Procurement Policy, LGL004 Vendor Accreditation Form v2025, and Technology Service Provider MNDA are executable acceptance sources.
+- Routine Warehouse operations must be executable by one Operator plus one Supervisor without permitting self-approval.
 - Production remains unchanged throughout this plan.
 
 ---
@@ -175,6 +177,8 @@ Product is the recorded go-live authority. Operations is the parent of Warehouse
 
 `upsert_role_bundle` may create or rename a role and replace its grants only with rows already present in `core.capabilities`. It cannot create capabilities, alter protected bootstrap roles, grant itself `core:manage_rbac`, or modify the caller's own assignment. Record before/after values in `core.activity_log`.
 
+Seed `warehouse_operator` and `warehouse_supervisor` as the canonical two-person operating bundles. Keep existing Operations and Logistics Supervisor assignments as migration aliases until active users are remapped. Finance, Procurement, BI/Insights, Marketing/Events, and Pricing responsibilities must not be bundled into either Warehouse operating role.
+
 - [ ] **Step 5: Project effective capabilities to the authenticated client**
 
 Add `parseUserCapabilitiesFromClaims` and a verified `my_capabilities()` refresh after `auth.getUser()`. `useCan` should prefer the live capability snapshot and use static role matrices only in memory mode. Database RPC/RLS remains authoritative.
@@ -215,7 +219,7 @@ Commit: `feat: add configurable departments and role bundles`
 
 ---
 
-### Task 3: Make Warehouse the Sole Physical Receipt Authority
+### Task 3: Enforce Policy Eligibility and Make Warehouse the Sole Receipt Authority
 
 **Files:**
 - Create with `supabase migration new single_po_receipt_authority`: `supabase/migrations/*_single_po_receipt_authority.sql`
@@ -225,6 +229,11 @@ Commit: `feat: add configurable departments and role bundles`
 - Create: `modules/procurement/src/pages/PODetailPage.test.tsx`
 - Modify: `modules/procurement/src/localStore.ts`
 - Modify: `modules/procurement/src/types.ts`
+- Modify: `modules/procurement/src/policy.ts`
+- Modify: `modules/procurement/src/policy.test.ts`
+- Modify: `modules/legal/src/requirements/vendorAccreditationV2025.ts`
+- Modify: `modules/legal/src/requirements/vendorAccreditationV2025.test.ts`
+- Modify: `modules/legal/src/requirements/mndaTechnologyV2026.test.ts`
 - Modify: `modules/warehouse/src/data/procurementBridge.ts`
 - Modify: `modules/warehouse/src/data/procurementBridge.test.ts`
 - Modify: `modules/warehouse/src/pages/PurchaseOrdersPage.tsx`
@@ -236,6 +245,8 @@ Commit: `feat: add configurable departments and role bundles`
 - Keeps command: `warehouse.receive_procurement_po(payload jsonb)`.
 - Produces read model: `procurement.v_purchase_order_receipt_status` with accepted, rejected/quarantined, outstanding, receipt reference, QC status, and last receipt time.
 - Procurement reads receipt state but never writes it.
+- Preserves RFQ below PHP 1,000,000 and RFP at/above PHP 1,000,000 or for complex/high-risk/data-sensitive work.
+- Blocks award/issue without full accreditation or a current scoped temporary clearance.
 
 - [ ] **Step 1: Write contract and UI tests first**
 
@@ -265,23 +276,35 @@ Expected: FAIL because Procurement still exposes receipt.
 
 Run `supabase migration new single_po_receipt_authority`. Revoke all execution from `procurement.receive_purchase_order`, remove it after confirming no governed caller remains, and create a security-invoker receipt-status view sourced from Warehouse receipt/QC records and Procurement ordered quantities. Do not expose private evidence paths.
 
-- [ ] **Step 4: Remove the Procurement receipt mutation**
+- [ ] **Step 4: Lock policy and accreditation requirements to the supplied sources**
+
+Add fixtures for RFQ, RFP threshold, complex/high-risk RFP, Direct Award, repeat order, emergency, petty cash, importation, foreign vendor, down payment, manpower, construction, equipment installation, and payment readiness. Confirm entity-type document branching, foreign equivalents, privacy/cybersecurity conditional evidence, manpower/technology qualifications, declarations, authorized signatory, and current NDA.
+
+Technology-provider NDA tests must cover need-to-know handling, Data Privacy Act obligations, the two-year or definitive-agreement expiry rule, and the five-business-day return/destruction obligation. Do not invent a signature authority or legal conclusion not present in the approved source.
+
+- [ ] **Step 5: Remove the Procurement receipt mutation**
 
 Delete `ReceiveInput`, the `receive` API method, local memory receipt mutation, receive sheet state, and button. Keep receipts as a read-only mapped projection populated by Warehouse status in live mode.
 
-- [ ] **Step 5: Replace the control with an explicit handoff panel**
+- [ ] **Step 6: Replace the control with an explicit handoff panel**
 
 For issued or partially received POs, show ordered, accepted, rejected/quarantined, and outstanding quantities plus latest QC state. Procurement roles see `Open Warehouse handoff`; users without Warehouse access see read-only status without a dead link.
 
-- [ ] **Step 6: Harden Warehouse receiving**
+- [ ] **Step 7: Simplify Warehouse for two-person operation**
+
+Give the Operator four primary flows only: `Receive and inspect`, `Put away`, `Pick or issue`, and `Returns and counts`. A clean, expected receipt can move from scan to putaway without Supervisor approval. Require Supervisor action for excess/short/damaged/unidentified receipt, rejection/quarantine disposition, hold release, manual adjustment, material count variance, write-off, and override.
+
+No actor may both perform and approve a controlled transaction. Temporary delegation may substitute personnel but cannot collapse the two actors into one account.
+
+- [ ] **Step 8: Harden Warehouse receiving**
 
 Verify only `warehouse:receive_stock` can execute the RPC. Repeated idempotency keys return the original receipt. Excess quantities, cancelled POs, rejected lines, and concurrent final receipt attempts must fail without partial stock posting.
 
-- [ ] **Step 7: Add cross-role negative E2E**
+- [ ] **Step 9: Add cross-role and policy-negative E2E**
 
-The Procurement officer test must prove no receipt control exists and direct RPC execution is denied. The Warehouse receiver test performs partial acceptance plus quarantine, reloads Procurement and Finance, and verifies consistent quantities and no premature payment readiness.
+The Procurement officer test must prove no receipt control exists and direct RPC execution is denied. The Warehouse Operator test performs clean and partial receipts. The Supervisor resolves quarantine and a count variance. Tests must reject self-approval, expired accreditation, unapproved temporary clearance, unsupported Direct Award, split petty-cash use, missing importation controls, and payment readiness without accepted receipt or service evidence.
 
-- [ ] **Step 8: Verify and commit**
+- [ ] **Step 10: Verify and commit**
 
 Run:
 
@@ -338,6 +361,8 @@ Replace UAT environment variables, redeploy, and verify `/api/health` reports th
 - [ ] **Step 6: Run three certification passes**
 
 Each pass covers desktop 1440/1280, tablet 768, mobile 390/360/320, all roles, access denial, vendor invite lifecycle, Procurement-to-Warehouse receipt handoff, cleanup, accessibility, console/network errors, and database readback.
+
+The role matrix must include the two-person Warehouse pair and prove the complete clean path, every controlled Supervisor decision, and self-approval denial. The procurement matrix must include RFQ, RFP, Direct Award, petty cash, importation, temporary clearance, expired accreditation, technology-provider MNDA, partial/rejected Warehouse receipt, acceptance, and Finance payment readiness.
 
 - [ ] **Step 7: Run Supabase advisors and verify cleanup**
 

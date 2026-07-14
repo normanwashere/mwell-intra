@@ -206,6 +206,42 @@ The Procurement `Receive items` mutation is removed. Procurement PO detail displ
 
 Partial, excess, rejected, quarantined, damaged, missing-evidence, and duplicate-delivery outcomes produce explicit assigned exceptions. Finance cannot mark payment-ready beyond accepted quantity.
 
+## Policy and Accreditation Control Baseline
+
+The implementation treats these supplied documents as governing sources:
+
+- `mWell Procurement Policy and Procedures - Revised Modern Visual Updated.docx`.
+- `LGL004-Vendor Accreditation Form 2.0 (3).pdf`.
+- `[MNDA]- Tech Service Provider.docx` for technology-service-provider confidentiality and privacy requirements.
+
+The system must preserve the following procurement rules:
+
+- RFQ/canvassing applies below PHP 1,000,000 when the requirement is simple and comparable.
+- RFP/bidding applies at PHP 1,000,000 and above, or for complex, technical, strategic, high-risk, or data-sensitive work regardless of amount.
+- Direct Award requires an allowed basis, requested supplier, business justification, price-reasonableness support, accreditation or approved clearance path, Procurement Head review, and final DOA approval.
+- A non-accredited vendor requires written justification, approved temporary clearance, and accreditation follow-up. A one-time petty-cash exception additionally requires Finance eligibility, no splitting or recurrence, OR/SI or liquidation evidence, and Procurement visibility.
+- PO, contract, or approved written agreement must exist before work starts except for a documented emergency path.
+- Material scope, price, vendor, delivery, or term changes return to Procurement and the applicable DOA route.
+- Imported or foreign-vendor transactions capture shipping terms, importer of record, permits, total landed cost, duties/taxes, insurance, currency/payment risk, and acceptance location.
+- Payment readiness requires the approved PO/agreement, invoice or OR/SI, accepted Warehouse receipt or service acceptance, payment terms, and tax/withholding support before Finance release.
+
+Vendor accreditation uses conditional requirements by entity type and risk. The baseline captures company identity and contacts, incorporation and tax details, business type, product/service category, manpower and expertise, certifications, completed projects, client references, bank proof, declarations, authorized signatory, and foreign-document equivalents. Required evidence includes the applicable DTI/SEC registration, BIR 2303, business permit, three-year audited financial statements, partnership/board/secretary authorization where applicable, GIS where applicable, company profile, client/transaction proof, privacy impact or compliance evidence when applicable, cybersecurity policies when applicable, official receipt evidence, bank proof, and NDA.
+
+Technology-service-provider accreditation also records the applicable technology pool, delivery capabilities, named or evidenced UI/UX, project management, business analysis, QA, agile delivery, security standards, and technical team. The MNDA workflow captures authorized parties/signatories, purpose, execution/effective dates, two-year or definitive-agreement expiry rule, need-to-know handling, Data Privacy Act obligations, and the five-business-day return/destruction obligation after written request or termination.
+
+Vendor Management Office owns accreditation when established. Until then, Legal coordinates accreditation and temporary clearance with Procurement, consistent with the supplied policy. Requesters provide facts but cannot approve risk, accreditation, Direct Award, or clearance.
+
+## Two-Person Warehouse Operating Model
+
+Routine Warehouse operation must be possible with two distinct personnel accounts:
+
+- **Warehouse Operator:** receives against issued Procurement POs, scans products/serials/lots, records quantities, captures evidence, performs standard inspection, puts accepted stock away, picks/issues stock, receives returns, and performs assigned cycle counts.
+- **Warehouse Supervisor:** owns the queue, confirms discrepancies, decides exception dispositions, releases holds when evidence permits, approves stock adjustments and count variances, manages bins/routes, and reviews operational closure.
+
+The Operator completes a clean receipt from scan through putaway without unnecessary approval. The Supervisor is required for excess/short/damaged or unidentified receipt, rejection/quarantine disposition, hold release, manual stock adjustment, material cycle-count variance, write-off, and override. No user may execute and approve the same controlled transaction, including during temporary delegation.
+
+The Warehouse UI prioritizes four daily flows: `Receive and inspect`, `Put away`, `Pick or issue`, and `Returns and counts`. Advanced configuration, analytics, Finance, Procurement authoring, and administration do not appear in the Operator's primary navigation. Existing Warehouse role names remain migration aliases while `warehouse_operator` and `warehouse_supervisor` become the canonical operating bundles.
+
 ## My Work Contract
 
 My Work is generated from assignment-scoped, RLS-preserving projections. Each item contains the actual assignee or eligible role pool, department/location scope, approval tier, source state/version, due date, canonical route, and safe display fields.
