@@ -12,6 +12,31 @@ function isCanonicalProjectRef(value) {
   return typeof value === "string" && /^[a-z0-9]+$/.test(value);
 }
 
+export function scopedProtectionHeaders({
+  requestUrl,
+  appOrigin,
+  requestHeaders,
+  protectionBypass,
+}) {
+  const headerName = "x-vercel-protection-bypass";
+  const headers = Object.fromEntries(
+    Object.entries(requestHeaders).filter(
+      ([name]) => name.toLowerCase() !== headerName,
+    ),
+  );
+  try {
+    if (
+      protectionBypass &&
+      new URL(requestUrl).origin === appOrigin
+    ) {
+      headers[headerName] = protectionBypass;
+    }
+  } catch {
+    // Malformed or non-network request URLs never receive the bypass.
+  }
+  return headers;
+}
+
 export function assertApprovedMutationTarget({
   appEnv,
   supabaseUrl,

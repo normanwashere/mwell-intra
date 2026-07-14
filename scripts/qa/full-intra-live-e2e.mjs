@@ -4,6 +4,7 @@ import path from "node:path";
 import {
   assertApprovedMutationTarget,
   projectRefFromSupabaseUrl,
+  scopedProtectionHeaders,
   verifyDeployedTargetIdentity,
 } from "../lib/target-environment.mjs";
 import {
@@ -25,9 +26,6 @@ const allowMutations = process.env.AUDIT_MUTATIONS === "true";
 const viewFilter = process.env.AUDIT_VIEWPORT;
 const roleFilter = process.env.AUDIT_ROLE;
 const protectionBypass = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
-const protectionHeaders = protectionBypass
-  ? { "x-vercel-protection-bypass": protectionBypass }
-  : undefined;
 assertApprovedMutationTarget({
   appEnv: process.env.APP_ENV,
   supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -61,6 +59,7 @@ if (!password) {
     "AUDIT_PASSWORD is required; shared credentials are never embedded in the release gate.",
   );
 }
+const appOrigin = new URL(baseUrl).origin;
 await verifyDeployedTargetIdentity({
   baseUrl,
   appEnv: process.env.APP_ENV,
@@ -71,6 +70,21 @@ await verifyDeployedTargetIdentity({
 });
 
 const users = CURRENT_LIVE_ROLES;
+
+async function installScopedProtectionBypass(context) {
+  if (!protectionBypass) return;
+  await context.route("**/*", async (route) => {
+    const request = route.request();
+    await route.continue({
+      headers: scopedProtectionHeaders({
+        requestUrl: request.url(),
+        appOrigin,
+        requestHeaders: await request.allHeaders(),
+        protectionBypass,
+      }),
+    });
+  });
+}
 
 const viewports = [
   {
@@ -969,8 +983,8 @@ async function runWorkflow(browser, viewport, user, workflow) {
   const context = await browser.newContext({
     viewport: viewport.viewport,
     isMobile: viewport.isMobile,
-    extraHTTPHeaders: protectionHeaders,
   });
+  await installScopedProtectionBypass(context);
   const page = await context.newPage();
   const consoleErrors = [];
   const networkErrors = [];
@@ -1045,8 +1059,8 @@ for (const viewport of viewports.filter(
     const context = await browser.newContext({
       viewport: viewport.viewport,
       isMobile: viewport.isMobile,
-      extraHTTPHeaders: protectionHeaders,
     });
+    await installScopedProtectionBypass(context);
     const page = await context.newPage();
     const consoleErrors = [];
     const networkErrors = [];

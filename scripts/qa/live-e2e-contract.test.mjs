@@ -119,13 +119,54 @@ test("the live harness verifies deployed identity before browser launch", async 
   assert.ok(browserLaunch >= 0, "browser launch is present");
   assert.ok(verification < browserLaunch, "identity is verified before launch");
   assert.match(source, /VERCEL_AUTOMATION_BYPASS_SECRET/);
+  assert.doesNotMatch(source, /extraHTTPHeaders\s*:/);
   assert.equal(
-    source.match(/extraHTTPHeaders: protectionHeaders/g)?.length,
+    source.match(/await installScopedProtectionBypass\(context\)/g)?.length,
     2,
-    "all browser contexts receive optional protection headers",
+    "all browser contexts install exact-origin bypass routing",
   );
+  assert.match(source, /await request\.allHeaders\(\)/);
   assert.doesNotMatch(
     source,
     /console\.(?:log|warn|error)\([^)]*VERCEL_AUTOMATION_BYPASS_SECRET/,
   );
+});
+
+test("Vercel protection bypass headers are scoped to the exact app origin", async () => {
+  const { scopedProtectionHeaders } = await import(
+    "../lib/target-environment.mjs"
+  );
+  const input = {
+    appOrigin: "https://uat.example.com",
+    protectionBypass: "bypass-secret",
+    requestHeaders: {
+      accept: "application/json",
+      "x-vercel-protection-bypass": "stale-secret",
+    },
+  };
+
+  assert.deepEqual(
+    scopedProtectionHeaders({
+      ...input,
+      requestUrl: "https://uat.example.com/api/health",
+    }),
+    {
+      accept: "application/json",
+      "x-vercel-protection-bypass": "bypass-secret",
+    },
+  );
+
+  for (const requestUrl of [
+    "https://uatref.supabase.co/rest/v1/items",
+    "https://analytics.example.net/collect",
+    "https://assets.uat.example.com/app.js",
+  ]) {
+    const headers = scopedProtectionHeaders({ ...input, requestUrl });
+    assert.equal(
+      headers["x-vercel-protection-bypass"],
+      undefined,
+      `${new URL(requestUrl).origin} must not receive the bypass`,
+    );
+    assert.equal(headers.accept, "application/json");
+  }
 });
