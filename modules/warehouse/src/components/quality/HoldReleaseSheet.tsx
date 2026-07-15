@@ -18,6 +18,7 @@ interface HoldReleaseSheetProps {
   onOpenChange: (open: boolean) => void;
   onRelease: (input: ReleaseHoldInput) => Promise<boolean>;
   onCreateVendorReturn: (input: CreateVendorReturnInput) => Promise<boolean>;
+  onRejectToVendor?: (input: CreateVendorReturnInput) => Promise<boolean>;
 }
 
 export function HoldReleaseSheet({
@@ -30,7 +31,9 @@ export function HoldReleaseSheet({
   onOpenChange,
   onRelease,
   onCreateVendorReturn,
+  onRejectToVendor,
 }: HoldReleaseSheetProps) {
+  const [reviewMode, setReviewMode] = useState<'release' | 'vendor_return'>('release');
   const [reason, setReason] = useState('');
   const [evidenceUrls, setEvidenceUrls] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -38,6 +41,7 @@ export function HoldReleaseSheet({
   const [reference, setReference] = useState('');
   const [vendorReason, setVendorReason] = useState('');
   const [vendorEvidenceUrls, setVendorEvidenceUrls] = useState<string[]>([]);
+  const [vendorEvidenceUrl, setVendorEvidenceUrl] = useState('');
 
   useEffect(() => {
     if (!hold) return;
@@ -47,12 +51,14 @@ export function HoldReleaseSheet({
     setReference('');
     setVendorReason('');
     setVendorEvidenceUrls([]);
-  }, [defaultSupplierId, hold]);
+    setVendorEvidenceUrl('');
+    setReviewMode(mode === 'vendor_return' ? 'vendor_return' : 'release');
+  }, [defaultSupplierId, hold, mode]);
 
   const selfRelease = Boolean(hold && hold.createdBy === actor);
   const invalid = !hold || selfRelease || !reason.trim() || evidenceUrls.length === 0;
   const vendorInvalid = !hold || selfRelease || !supplierId || !reference.trim()
-    || !vendorReason.trim() || vendorEvidenceUrls.length === 0;
+    || !vendorReason.trim() || (vendorEvidenceUrls.length === 0 && !vendorEvidenceUrl.trim());
 
   const release = async () => {
     if (!hold || invalid) return;
@@ -75,13 +81,13 @@ export function HoldReleaseSheet({
     if (!hold || vendorInvalid) return;
     setSubmitting(true);
     try {
-      const ok = await onCreateVendorReturn({
+      const ok = await (mode === 'vendor_return' || !onRejectToVendor ? onCreateVendorReturn : onRejectToVendor)({
         idempotencyKey: `vendor-return-${Date.now()}-${Math.random().toString(36).slice(2)}`,
         holdId: hold.id,
         supplierId,
         reason: vendorReason.trim(),
         reference: reference.trim(),
-        evidenceUrls: vendorEvidenceUrls,
+        evidenceUrls: [...vendorEvidenceUrls, vendorEvidenceUrl.trim()].filter(Boolean),
       });
       if (ok) onOpenChange(false);
     } finally {
@@ -96,14 +102,14 @@ export function HoldReleaseSheet({
       title="Review inventory hold"
       description={hold ? `${productName} · ${hold.quantity} unit(s)` : undefined}
       footer={
-        mode === 'vendor_return' ? (
+        reviewMode === 'vendor_return' ? (
           <button
             type="button"
             className="btn-primary w-full justify-center"
             disabled={vendorInvalid || submitting}
             onClick={() => void createVendorReturn()}
           >
-            {submitting ? 'Creating...' : 'Create vendor return'}
+            {submitting ? 'Recording...' : mode === 'vendor_return' ? 'Create vendor return' : 'Reject and create vendor return'}
           </button>
         ) : (
           <button
@@ -133,7 +139,11 @@ export function HoldReleaseSheet({
               Ask another authorized supervisor to review this hold.
             </p>
           )}
-          {mode === 'vendor_return' ? (
+          {mode !== 'vendor_return' && <div role="tablist" aria-label="Hold disposition" className="grid grid-cols-2 gap-2">
+            <button type="button" role="tab" aria-selected={reviewMode === 'release'} className={reviewMode === 'release' ? 'btn-primary' : 'btn-ghost'} onClick={() => setReviewMode('release')}>Release as accepted</button>
+            <button type="button" role="tab" aria-selected={reviewMode === 'vendor_return'} className={reviewMode === 'vendor_return' ? 'btn-primary' : 'btn-ghost'} onClick={() => setReviewMode('vendor_return')}>Reject to vendor</button>
+          </div>}
+          {reviewMode === 'vendor_return' ? (
             <>
               <Field label="Supplier" htmlFor="vendor-return-supplier">
                 <select id="vendor-return-supplier" className="input" value={supplierId} onChange={(event) => setSupplierId(event.target.value)}>
@@ -148,6 +158,9 @@ export function HoldReleaseSheet({
                 <textarea id="vendor-return-reason" className="input min-h-24 resize-y" value={vendorReason} onChange={(event) => setVendorReason(event.target.value)} />
               </Field>
               <EvidenceCapture onChange={setVendorEvidenceUrls} label="Attach vendor return evidence" />
+              <Field label="Vendor return evidence URL" htmlFor="vendor-return-evidence-url">
+                <input id="vendor-return-evidence-url" className="input" value={vendorEvidenceUrl} onChange={(event) => setVendorEvidenceUrl(event.target.value)} />
+              </Field>
             </>
           ) : (
             <>

@@ -241,7 +241,7 @@ create table if not exists warehouse.procurement_receipt_excess_custody (
   decision_id uuid not null references warehouse.procurement_receipt_exception_decisions(id) on delete restrict,
   receipt_id text not null references warehouse.receipts(id) on delete restrict,
   po_line_id text not null references procurement.purchase_order_lines(id) on delete restrict,
-  product_id text not null references warehouse.products(id) on delete restrict,
+  product_id text references warehouse.products(id) on delete restrict,
   ordered_quantity integer not null check (ordered_quantity >= 0),
   excess_quantity integer not null check (excess_quantity > 0),
   status text not null default 'pending'
@@ -372,6 +372,10 @@ begin
       if not found then
         raise exception 'Governed product identification conflicts with the PO-line mapping';
       end if;
+      update warehouse.procurement_receipt_excess_custody
+         set product_id=v_product_id
+       where decision_id=v_decision.id and po_line_id=v_line.id
+         and product_id is null;
     end if;
 
     if v_outcome in ('accept','quarantine') then
@@ -2605,7 +2609,11 @@ $$;
 
 alter table procurement.payment_readiness_packs
   add column if not exists acceptance_pack_ids uuid[] not null default '{}'::uuid[],
-  add column if not exists accepted_quantity numeric not null default 0;
+  add column if not exists accepted_quantity numeric not null default 0,
+  add column if not exists acceptance_evidence_version bigint not null default 0;
+
+alter table procurement.purchase_orders
+  add column if not exists acceptance_evidence_version bigint not null default 0;
 
 update procurement.payment_readiness_packs
 set acceptance_pack_ids=array[acceptance_pack_id]
@@ -2657,31 +2665,31 @@ begin
   ) then
     raise exception 'Every active acceptance record must be exception-free';
   end if;
-  select array_agg(acceptance.id order by acceptance.accepted_at,acceptance.id),
-    coalesce(sum(coalesce(scope_line.quantity,0)),0)
+  select array_agg(active_acceptance.id order by active_acceptance.accepted_at,active_acceptance.id),
+    coalesce(sum(active_acceptance.accepted_quantity),0)
     into v_acceptance_pack_ids,v_accepted_quantity
-  from procurement.acceptance_packs acceptance
-  left join lateral (
-    select (line->>'quantity')::numeric as quantity
-    from jsonb_array_elements(case
-      when jsonb_typeof(acceptance.accepted_scope->'lines')='array'
-        then acceptance.accepted_scope->'lines'
-      else '[]'::jsonb end) line
-  ) scope_line on true
-  where acceptance.purchase_order_id=v_po.id
-    and acceptance.status='accepted'
-    and jsonb_array_length(acceptance.exceptions)=0;
+  from (
+    select acceptance.id,acceptance.accepted_at,coalesce((
+      select sum((scope_line->>'quantity')::numeric)
+      from jsonb_array_elements(case
+        when jsonb_typeof(acceptance.accepted_scope->'lines')='array'
+          then acceptance.accepted_scope->'lines' else '[]'::jsonb end) scope_line
+    ),0) as accepted_quantity
+    from procurement.acceptance_packs acceptance
+    where acceptance.purchase_order_id=v_po.id and acceptance.status='accepted'
+      and jsonb_array_length(acceptance.exceptions)=0
+  ) active_acceptance;
   if coalesce(cardinality(v_acceptance_pack_ids),0)=0 then
     raise exception 'The complete active acceptance evidence set is required';
   end if;
   update procurement.payment_readiness_packs set status='superseded'
    where purchase_order_id=v_po.id and status in ('draft','returned','ready_for_finance');
   insert into procurement.payment_readiness_packs(
-    purchase_order_id,acceptance_pack_id,acceptance_pack_ids,accepted_quantity,
+    purchase_order_id,acceptance_pack_id,acceptance_pack_ids,accepted_quantity,acceptance_evidence_version,
     policy_version,po_match,invoice_or_si_storage_path,milestone_support_storage_path,
     tax_withholding_support_storage_path,status,corrected_from
   ) values (
-    v_po.id,v_acceptance_pack_ids[1],v_acceptance_pack_ids,v_accepted_quantity,
+    v_po.id,v_acceptance_pack_ids[1],v_acceptance_pack_ids,v_accepted_quantity,v_po.acceptance_evidence_version,
     'procurement-policy-revised-2026',true,payload->>'invoice_or_si_storage_path',
     payload->>'milestone_support_storage_path',payload->>'tax_withholding_support_storage_path',
     'ready_for_finance',nullif(payload->>'corrected_from','')::uuid
@@ -2705,6 +2713,8 @@ create or replace function private.policy_review_payment_readiness(payload jsonb
 returns jsonb language plpgsql security definer set search_path='' as $$
 declare
   v_pack procurement.payment_readiness_packs;
+  v_po procurement.purchase_orders;
+  v_purchase_order_id text;
   v_status text:=payload->>'status';
   v_current_acceptance_ids uuid[];
   v_current_accepted_quantity numeric;
@@ -2715,26 +2725,36 @@ begin
   if v_status not in ('returned','accepted','released') then
     raise exception 'Invalid Finance readiness decision';
   end if;
-  select * into v_pack from procurement.payment_readiness_packs
-   where id=(payload->>'id')::uuid for update;
+  select purchase_order_id into v_purchase_order_id
+  from procurement.payment_readiness_packs
+  where id=(payload->>'id')::uuid;
   if not found then raise exception 'Payment readiness pack not found'; end if;
+  select * into v_po from procurement.purchase_orders
+   where id=v_purchase_order_id for update;
+  if not found then raise exception 'Purchase order not found'; end if;
+  select * into v_pack from procurement.payment_readiness_packs
+   where id=(payload->>'id')::uuid and purchase_order_id=v_po.id for update;
+  if not found then raise exception 'Payment readiness pack not found'; end if;
+  if v_pack.acceptance_evidence_version<>v_po.acceptance_evidence_version then
+    raise exception 'Payment readiness acceptance evidence version is stale';
+  end if;
   if v_pack.status not in ('ready_for_finance','accepted') then
     raise exception 'Payment readiness pack cannot transition from %',v_pack.status;
   end if;
-  select array_agg(acceptance.id order by acceptance.accepted_at,acceptance.id),
-    coalesce(sum(coalesce(scope_line.quantity,0)),0)
+  select array_agg(active_acceptance.id order by active_acceptance.accepted_at,active_acceptance.id),
+    coalesce(sum(active_acceptance.accepted_quantity),0)
     into v_current_acceptance_ids,v_current_accepted_quantity
-  from procurement.acceptance_packs acceptance
-  left join lateral (
-    select (line->>'quantity')::numeric as quantity
-    from jsonb_array_elements(case
-      when jsonb_typeof(acceptance.accepted_scope->'lines')='array'
-        then acceptance.accepted_scope->'lines'
-      else '[]'::jsonb end) line
-  ) scope_line on true
-  where acceptance.purchase_order_id=v_pack.purchase_order_id
-    and acceptance.status='accepted'
-    and jsonb_array_length(acceptance.exceptions)=0;
+  from (
+    select acceptance.id,acceptance.accepted_at,coalesce((
+      select sum((scope_line->>'quantity')::numeric)
+      from jsonb_array_elements(case
+        when jsonb_typeof(acceptance.accepted_scope->'lines')='array'
+          then acceptance.accepted_scope->'lines' else '[]'::jsonb end) scope_line
+    ),0) as accepted_quantity
+    from procurement.acceptance_packs acceptance
+    where acceptance.purchase_order_id=v_pack.purchase_order_id and acceptance.status='accepted'
+      and jsonb_array_length(acceptance.exceptions)=0
+  ) active_acceptance;
   if v_pack.acceptance_pack_ids is distinct from v_current_acceptance_ids
      or v_pack.accepted_quantity is distinct from v_current_accepted_quantity
      or exists (
@@ -3457,7 +3477,7 @@ begin
     v_facts:=v_facts||jsonb_build_array(jsonb_build_object(
       'po_line_id',v_line.id,'product_id',v_product_id,
       'actual_quantity',v_actual,'expected_quantity',v_expected,
-      'remaining_at_request',v_remaining,
+      'remaining_at_request',v_remaining,'ordered_quantity_at_request',v_line.quantity,
       'raw_description',coalesce(v_input->>'raw_description',v_line.description),
       'observed_identifiers',coalesce(v_input->'observed_identifiers','{}'::jsonb),
       'bin_id',nullif(v_input->>'bin_id',''),
@@ -3489,12 +3509,12 @@ begin
   for v_input in select value from jsonb_array_elements(v_facts) loop
     insert into warehouse.procurement_receipt_exception_lines(decision_id,po_line_id)
     values(v_decision.id,v_input->>'po_line_id');
-    if v_type='excess' then
+    if (v_input->>'actual_quantity')::integer>(v_input->>'remaining_at_request')::integer then
       insert into warehouse.procurement_receipt_excess_custody(
         decision_id,receipt_id,po_line_id,product_id,ordered_quantity,excess_quantity
       ) values (
         v_decision.id,v_receipt.id,v_input->>'po_line_id',v_input->>'product_id',
-        (v_input->>'remaining_at_request')::integer,
+        (v_input->>'ordered_quantity_at_request')::integer,
         (v_input->>'actual_quantity')::integer-(v_input->>'remaining_at_request')::integer
       );
     end if;
@@ -3641,6 +3661,27 @@ begin
 end;
 $$;
 
+create table if not exists procurement.purchase_order_amendments (
+  id uuid primary key default gen_random_uuid(),
+  purchase_order_id text not null references procurement.purchase_orders(id) on delete restrict,
+  po_line_id text not null references procurement.purchase_order_lines(id) on delete restrict,
+  previous_quantity numeric not null check (previous_quantity > 0),
+  amended_quantity numeric not null check (amended_quantity > previous_quantity),
+  reason text not null,
+  evidence_urls jsonb not null default '[]'::jsonb,
+  status text not null default 'requested'
+    check (status in ('requested','approved','rejected','superseded')),
+  requested_by uuid not null default auth.uid() references core.profiles(id) on delete restrict,
+  requested_at timestamptz not null default now(),
+  approved_by uuid references core.profiles(id) on delete restrict,
+  approved_at timestamptz,
+  decision_reason text
+);
+
+alter table warehouse.procurement_receipt_excess_custody
+  add column if not exists approved_amendment_id uuid
+    references procurement.purchase_order_amendments(id) on delete restrict;
+
 create or replace function private.warehouse_resolve_procurement_receipt_excess(payload jsonb)
 returns jsonb language plpgsql security definer set search_path='' as $$
 declare
@@ -3652,6 +3693,7 @@ declare
   v_po procurement.purchase_orders;
   v_line procurement.purchase_order_lines;
   v_product warehouse.products;
+  v_amendment procurement.purchase_order_amendments;
   v_outcome text:=payload->>'outcome';
   v_reason text:=nullif(pg_catalog.btrim(coalesce(payload->>'reason','')),'');
   v_evidence jsonb:=coalesce(payload->'evidence_urls','[]'::jsonb);
@@ -3691,11 +3733,29 @@ begin
    where id=v_custody.po_line_id and purchase_order_id=v_po.id
      and receiving_status='open' for update;
   if not found then raise exception 'Excess custody PO line is no longer open'; end if;
-  perform private.lock_warehouse_products(array[v_custody.product_id]);
+  if v_custody.product_id is not null then
+    perform private.lock_warehouse_products(array[v_custody.product_id]);
+  end if;
 
   if v_outcome='accepted_amendment' then
-    if v_line.quantity-v_line.received_quantity<v_custody.excess_quantity then
-      raise exception 'A governed PO amendment must cover the full excess custody quantity';
+    if v_custody.status<>'held' or v_decision.status<>'decided'
+       or v_decision.decision<>'quarantine' then
+      raise exception 'Accepted excess requires held custody after a decided quarantine';
+    end if;
+    if v_custody.product_id is null then
+      raise exception 'Governed product identification is required before accepting excess custody';
+    end if;
+    select * into v_amendment from procurement.purchase_order_amendments amendment
+     where amendment.id=nullif(payload->>'approved_amendment_id','')::uuid
+       and amendment.purchase_order_id=v_po.id
+       and amendment.po_line_id=v_line.id
+       and amendment.status='approved' for share;
+    if not found
+       or v_amendment.previous_quantity<>v_custody.ordered_quantity
+       or v_amendment.amended_quantity-v_amendment.previous_quantity<v_custody.excess_quantity
+       or v_line.quantity<v_amendment.amended_quantity
+       or v_line.quantity-v_line.received_quantity<v_custody.excess_quantity then
+      raise exception 'An approved PO amendment must prove ordered quantity growth covering the full excess custody quantity';
     end if;
     select * into v_product from warehouse.products where id=v_custody.product_id for share;
     if v_product.serialized then
@@ -3729,6 +3789,7 @@ begin
 
   update warehouse.procurement_receipt_excess_custody set
     status=v_outcome,resolution_reason=v_reason,resolution_evidence_urls=v_evidence,
+    approved_amendment_id=case when v_outcome='accepted_amendment' then v_amendment.id else null end,
     resolved_by=auth.uid(),resolved_at=now()
    where id=v_custody.id returning * into v_custody;
   perform private.release_procurement_receipt_line_claim(v_receipt.id,v_line.id);
@@ -3771,4 +3832,524 @@ revoke all on function private.guard_active_procurement_receipt_decision()
 grant execute on function private.warehouse_resolve_procurement_po_exception_v3(jsonb)
   to service_role;
 grant execute on function private.warehouse_receipt_exception_work_items_v3(jsonb)
+  to service_role;
+
+-- Fifth-review convergence: exact excess custody, amendment proof, line-exact QC,
+-- and versioned acceptance evidence.
+create index if not exists procurement_po_amendments_line_idx
+  on procurement.purchase_order_amendments(purchase_order_id,po_line_id,status,requested_at desc);
+alter table procurement.purchase_order_amendments enable row level security;
+alter table procurement.purchase_order_amendments force row level security;
+revoke all on procurement.purchase_order_amendments from public,anon,authenticated;
+grant select on procurement.purchase_order_amendments to authenticated;
+grant all on procurement.purchase_order_amendments to service_role;
+
+create or replace function private.policy_request_po_line_quantity_amendment(payload jsonb)
+returns jsonb language plpgsql security definer set search_path='' as $$
+declare
+  v_po procurement.purchase_orders;
+  v_line procurement.purchase_order_lines;
+  v_amendment procurement.purchase_order_amendments;
+  v_quantity numeric;
+  v_reason text:=nullif(pg_catalog.btrim(coalesce(payload->>'reason','')),'');
+  v_evidence jsonb:=coalesce(payload->'evidence_urls','[]'::jsonb);
+begin
+  if not core.has_cap('procurement','author_po') and not core.has_cap('procurement','admin') then
+    raise exception 'Not authorized to request a PO quantity amendment';
+  end if;
+  if v_reason is null or jsonb_typeof(v_evidence)<>'array' or jsonb_array_length(v_evidence)=0 then
+    raise exception 'PO amendment reason and evidence are required';
+  end if;
+  begin v_quantity:=(payload->>'amended_quantity')::numeric;
+  exception when others then raise exception 'Amended quantity is invalid'; end;
+  select * into v_po from procurement.purchase_orders
+   where id=payload->>'purchase_order_id' for update;
+  if not found or v_po.status not in ('approved','issued') then
+    raise exception 'Only an approved or issued PO can be amended';
+  end if;
+  select * into v_line from procurement.purchase_order_lines
+   where id=payload->>'po_line_id' and purchase_order_id=v_po.id
+     and receiving_status='open' for update;
+  if not found then raise exception 'Open PO line not found'; end if;
+  if v_quantity<=v_line.quantity then raise exception 'PO quantity amendment must increase the ordered line quantity'; end if;
+  if exists (select 1 from procurement.purchase_order_amendments amendment
+    where amendment.po_line_id=v_line.id and amendment.status='requested') then
+    raise exception 'A PO line quantity amendment is already pending';
+  end if;
+  insert into procurement.purchase_order_amendments(
+    purchase_order_id,po_line_id,previous_quantity,amended_quantity,reason,evidence_urls
+  ) values(v_po.id,v_line.id,v_line.quantity,v_quantity,v_reason,v_evidence)
+  returning * into v_amendment;
+  return to_jsonb(v_amendment);
+end;
+$$;
+
+create or replace function private.policy_approve_po_line_quantity_amendment(payload jsonb)
+returns jsonb language plpgsql security definer set search_path='' as $$
+declare
+  v_po procurement.purchase_orders;
+  v_line procurement.purchase_order_lines;
+  v_amendment procurement.purchase_order_amendments;
+  v_decision text:=payload->>'decision';
+  v_reason text:=nullif(pg_catalog.btrim(coalesce(payload->>'reason','')),'');
+begin
+  if not core.has_cap('procurement','approve_award') and not core.has_cap('procurement','admin') then
+    raise exception 'Not authorized to approve a PO quantity amendment';
+  end if;
+  if v_decision not in ('approved','rejected') or v_reason is null then
+    raise exception 'PO amendment decision and reason are required';
+  end if;
+  select * into v_amendment from procurement.purchase_order_amendments
+   where id=(payload->>'amendment_id')::uuid and status='requested' for update;
+  if not found then raise exception 'Pending PO amendment not found'; end if;
+  if v_amendment.requested_by=auth.uid() then
+    raise exception 'The PO amendment requester cannot approve their own change';
+  end if;
+  select * into v_po from procurement.purchase_orders
+   where id=v_amendment.purchase_order_id for update;
+  select * into v_line from procurement.purchase_order_lines
+   where id=v_amendment.po_line_id and purchase_order_id=v_po.id
+     and receiving_status='open' for update;
+  if not found or v_line.quantity is distinct from v_amendment.previous_quantity then
+    raise exception 'PO line quantity changed after the amendment was requested';
+  end if;
+  if v_decision='approved' then
+    update procurement.purchase_order_lines set quantity=v_amendment.amended_quantity
+     where id=v_line.id and quantity=v_amendment.previous_quantity;
+    if not found then raise exception 'Concurrent PO line amendment conflict'; end if;
+  end if;
+  update procurement.purchase_order_amendments set status=v_decision,
+    approved_by=auth.uid(),approved_at=now(),decision_reason=v_reason
+   where id=v_amendment.id returning * into v_amendment;
+  return to_jsonb(v_amendment);
+end;
+$$;
+
+create or replace function procurement.request_po_line_quantity_amendment(payload jsonb)
+returns jsonb language sql security definer set search_path='' as $$
+  select private.policy_request_po_line_quantity_amendment(payload)
+$$;
+create or replace function procurement.approve_po_line_quantity_amendment(payload jsonb)
+returns jsonb language sql security definer set search_path='' as $$
+  select private.policy_approve_po_line_quantity_amendment(payload)
+$$;
+revoke all on function private.policy_request_po_line_quantity_amendment(jsonb) from public,anon,authenticated;
+revoke all on function private.policy_approve_po_line_quantity_amendment(jsonb) from public,anon,authenticated;
+revoke all on function procurement.request_po_line_quantity_amendment(jsonb) from public,anon;
+revoke all on function procurement.approve_po_line_quantity_amendment(jsonb) from public,anon;
+grant execute on function private.policy_request_po_line_quantity_amendment(jsonb) to service_role;
+grant execute on function private.policy_approve_po_line_quantity_amendment(jsonb) to service_role;
+grant execute on function procurement.request_po_line_quantity_amendment(jsonb) to authenticated,service_role;
+grant execute on function procurement.approve_po_line_quantity_amendment(jsonb) to authenticated,service_role;
+
+create or replace function warehouse.procurement_receipt_excess_work_items(payload jsonb default '{}'::jsonb)
+returns table(custody_id uuid,receipt_id text,purchase_order_id text,po_line_id text,
+  po_number text,product_id text,product_name text,ordered_quantity integer,
+  excess_quantity integer,status text,requested_at timestamptz)
+language plpgsql stable security definer set search_path='' as $$
+begin
+  if not core.has_cap('warehouse','resolve_exceptions')
+     or not core.has_cap('warehouse','release_quality_hold') then
+    raise exception 'Not authorized to view governed excess custody';
+  end if;
+  return query
+  select custody.id,custody.receipt_id,decision.purchase_order_id,custody.po_line_id,
+    po.po_number,custody.product_id,product.name,custody.ordered_quantity,
+    custody.excess_quantity,custody.status,decision.requested_at
+  from warehouse.procurement_receipt_excess_custody custody
+  join warehouse.procurement_receipt_exception_decisions decision on decision.id=custody.decision_id
+  join procurement.purchase_orders po on po.id=decision.purchase_order_id
+  left join warehouse.products product on product.id=custody.product_id
+  where custody.status in ('pending','held')
+    and (nullif(payload->>'purchase_order_id','') is null
+      or decision.purchase_order_id=payload->>'purchase_order_id')
+  order by decision.requested_at,custody.id;
+end;
+$$;
+revoke all on function warehouse.procurement_receipt_excess_work_items(jsonb) from public,anon;
+grant execute on function warehouse.procurement_receipt_excess_work_items(jsonb) to authenticated,service_role;
+
+create or replace function private.warehouse_inspect_quality_v2(payload jsonb)
+returns jsonb language plpgsql security definer set search_path='' as $$
+declare
+  v_started jsonb;
+  v_command_id uuid;
+  v_receipt warehouse.receipts;
+  v_inspection warehouse.quality_inspections;
+  v_hold warehouse.inventory_holds;
+  v_exception warehouse.exceptions;
+  v_line_id text:=nullif(payload->>'procurement_po_line_id','');
+  v_product_id text:=payload->>'product_id';
+  v_bin_id text:=nullif(payload->>'bin_id','');
+  v_lot_id text:=nullif(payload->>'lot_id','');
+  v_serial text:=nullif(payload->>'serial_number','');
+  v_quantity integer:=coalesce((payload->>'quantity')::integer,0);
+  v_disposition text:=payload->>'disposition';
+  v_reason text:=nullif(pg_catalog.btrim(coalesce(payload->>'reason','')),'');
+  v_evidence jsonb:=coalesce(payload->'evidence_urls','[]'::jsonb);
+  v_source_quantity integer;
+  v_bin_count integer;
+  v_source_total integer;
+  v_inspected_total integer;
+  v_previously_inspected integer;
+  v_response jsonb;
+begin
+  if payload->>'source_type'<>'receipt' then
+    return private.warehouse_inspect_quality(payload);
+  end if;
+  select * into v_receipt from warehouse.receipts
+   where id=payload->>'source_id' for update;
+  if not found then raise exception 'Receipt not found'; end if;
+  if v_receipt.procurement_po_id is null then
+    return private.warehouse_inspect_quality(payload);
+  end if;
+  if not core.has_cap('warehouse','inspect_quality') then
+    raise exception 'Not authorized: warehouse.inspect_quality';
+  end if;
+  if v_line_id is null then
+    raise exception 'Procurement PO-line identity is required for receipt quality disposition';
+  end if;
+  if exists (
+    select 1
+    from warehouse.procurement_receipt_exception_lines claim
+    join warehouse.procurement_receipt_exception_decisions decision on decision.id=claim.decision_id
+    where claim.active
+      and (decision.receipt_id=v_receipt.id or claim.po_line_id=v_line_id)
+  ) then
+    raise exception 'Active controlled receipt exception must be finalized by the controlled exception resolver';
+  end if;
+  if v_disposition not in ('accepted','damaged','hold','vendor_return','unavailable') then
+    raise exception 'Invalid quality disposition';
+  end if;
+  if v_quantity<=0 then raise exception 'Inspection quantity must be positive'; end if;
+  if v_disposition<>'accepted' and v_reason is null then
+    raise exception 'A reason is required for non-accepted stock';
+  end if;
+  if jsonb_typeof(v_evidence)<>'array' then raise exception 'Evidence must be an array'; end if;
+
+  select coalesce(sum(coalesce((receipt_line->>'quantity')::integer,
+      (receipt_line->>'actual_quantity')::integer,0)),0),
+    count(distinct coalesce(nullif(receipt_line->>'binId',''),
+      nullif(receipt_line->>'bin_id',''),'__general__')),
+    max(coalesce(nullif(receipt_line->>'binId',''),nullif(receipt_line->>'bin_id','')))
+    into v_source_quantity,v_bin_count,v_bin_id
+  from jsonb_array_elements(v_receipt.lines) receipt_line
+  where receipt_line->>'procurementLineId'=v_line_id
+    and receipt_line->>'productId'=v_product_id
+    and (v_serial is null or exists (
+      select 1 from jsonb_array_elements_text(coalesce(receipt_line->'serialNumbers',
+        receipt_line->'serial_numbers','[]'::jsonb)) serial where serial=v_serial
+    ))
+    and (nullif(payload->>'bin_id','') is null or
+      coalesce(nullif(receipt_line->>'binId',''),nullif(receipt_line->>'bin_id',''))
+        is not distinct from nullif(payload->>'bin_id',''));
+  if coalesce(v_source_quantity,0)=0 then
+    raise exception 'Product or serial is not part of the exact receipt PO line';
+  end if;
+  if nullif(payload->>'bin_id','') is null and v_bin_count>1 then
+    raise exception 'A bin is required when the product spans multiple exact receipt PO-line bins';
+  end if;
+  if v_serial is not null then v_source_quantity:=1; end if;
+
+  v_started:=private.begin_idempotent_command('inspect_quality',payload->>'idempotency_key',payload);
+  if (v_started->>'replayed')::boolean then return v_started->'response'; end if;
+  v_command_id:=(v_started->>'command_id')::uuid;
+
+  delete from warehouse.quality_inspections quality
+   where quality.source_type='receipt' and quality.source_id=v_receipt.id
+     and quality.product_id=v_product_id
+     and quality.procurement_po_line_id=v_line_id
+     and quality.bin_id is not distinct from v_bin_id
+     and quality.disposition='pending';
+  select coalesce(sum(quality.quantity),0) into v_previously_inspected
+  from warehouse.quality_inspections quality
+  where quality.source_type='receipt' and quality.source_id=v_receipt.id
+    and quality.product_id=v_product_id
+    and quality.procurement_po_line_id=v_line_id
+    and quality.bin_id is not distinct from v_bin_id
+    and quality.disposition<>'pending'
+    and coalesce(quality.serial_number,'')=coalesce(v_serial,'');
+  if v_previously_inspected+v_quantity>v_source_quantity then
+    raise exception 'Inspection quantity exceeds the remaining exact PO-line source quantity';
+  end if;
+
+  insert into warehouse.quality_inspections(
+    source_type,source_id,product_id,lot_id,serial_number,location_id,bin_id,
+    quantity,disposition,reason,evidence_urls,inspected_by,inspected_by_email,
+    procurement_po_line_id
+  ) values(
+    'receipt',v_receipt.id,v_product_id,v_lot_id,v_serial,v_receipt.location_id,v_bin_id,
+    v_quantity,v_disposition,v_reason,v_evidence,auth.uid(),
+    coalesce(auth.jwt()->>'email',''),v_line_id
+  ) returning * into v_inspection;
+  if v_disposition<>'accepted' then
+    insert into warehouse.inventory_holds(
+      inspection_id,product_id,location_id,bin_id,lot_id,serial_number,quantity,status,
+      reason,evidence_urls,created_by
+    ) values(
+      v_inspection.id,v_product_id,v_receipt.location_id,v_bin_id,v_lot_id,v_serial,
+      v_quantity,'active',v_reason,v_evidence,auth.uid()
+    ) returning * into v_hold;
+    insert into warehouse.exceptions(
+      exception_type,severity,source_type,source_id,status,due_at,created_by
+    ) values('quality','P2','quality_inspection',v_inspection.id::text,'open',now()+interval '1 day',auth.uid())
+    returning * into v_exception;
+  end if;
+
+  select coalesce(sum(coalesce((receipt_line->>'quantity')::integer,
+    (receipt_line->>'actual_quantity')::integer,0)),0)
+    into v_source_total from jsonb_array_elements(v_receipt.lines) receipt_line;
+  select coalesce(sum(quality.quantity),0) into v_inspected_total
+  from warehouse.quality_inspections quality
+  where quality.source_type='receipt' and quality.source_id=v_receipt.id
+    and quality.disposition<>'pending';
+  update warehouse.receipts set quality_status=case
+    when exists (
+      select 1 from warehouse.inventory_holds active_hold
+      join warehouse.quality_inspections quality on quality.id=active_hold.inspection_id
+      where quality.source_type='receipt' and quality.source_id=v_receipt.id
+        and active_hold.status='active'
+    ) then 'hold'
+    when v_inspected_total>=v_source_total then 'accepted'
+    else 'partial' end
+   where id=v_receipt.id;
+  insert into core.activity_log(module,entity_type,entity_id,action,actor,detail)
+  values('warehouse','quality_inspection',v_inspection.id,'inspected',auth.uid(),
+    jsonb_build_object('source_id',v_receipt.id,'procurement_po_line_id',v_line_id,
+      'quantity',v_quantity,'disposition',v_disposition,'hold_id',v_hold.id));
+  v_response:=jsonb_build_object('inspection',to_jsonb(v_inspection),
+    'hold',case when v_hold.id is null then null else to_jsonb(v_hold) end,
+    'exception',case when v_exception.id is null then null else to_jsonb(v_exception) end);
+  return private.finish_idempotent_command(v_command_id,v_response);
+end;
+$$;
+
+create or replace function warehouse.inspect_quality(payload jsonb)
+returns jsonb language plpgsql security definer set search_path='' as $$
+declare
+  v_receipt warehouse.receipts;
+  v_line_id text:=nullif(payload->>'procurement_po_line_id','');
+begin
+  if not core.has_cap('warehouse','inspect_quality') then
+    raise exception 'Not authorized: warehouse.inspect_quality';
+  end if;
+  if payload->>'source_type'='receipt' then
+    select * into v_receipt from warehouse.receipts where id=payload->>'source_id';
+    if v_receipt.procurement_po_id is not null then
+      if v_line_id is null then
+        raise exception 'Procurement PO-line identity is required for receipt quality disposition';
+      end if;
+      if not exists (
+        select 1 from jsonb_array_elements(v_receipt.lines) receipt_line
+        where receipt_line->>'procurementLineId'=v_line_id
+          and receipt_line->>'productId'=payload->>'product_id'
+      ) then raise exception 'Quality disposition PO line does not belong to the receipt'; end if;
+      if exists (
+        select 1 from warehouse.procurement_receipt_exception_lines claim
+        join warehouse.procurement_receipt_exception_decisions decision on decision.id=claim.decision_id
+        where claim.active
+          and (decision.receipt_id=v_receipt.id or claim.po_line_id=v_line_id)
+      ) then
+        raise exception 'Active controlled receipt exception must be finalized by the controlled exception resolver';
+      end if;
+    end if;
+  end if;
+  return private.warehouse_inspect_quality_v2(payload);
+end;
+$$;
+revoke all on function private.warehouse_inspect_quality_v2(jsonb) from public,anon,authenticated;
+revoke all on function private.warehouse_inspect_quality(jsonb) from public,anon,authenticated;
+revoke all on function warehouse.inspect_quality(jsonb) from public,anon;
+grant execute on function private.warehouse_inspect_quality_v2(jsonb) to service_role;
+grant execute on function private.warehouse_inspect_quality(jsonb) to service_role;
+grant execute on function warehouse.inspect_quality(jsonb) to authenticated,service_role;
+
+create or replace function private.warehouse_reject_quality_hold_to_vendor(payload jsonb)
+returns jsonb language plpgsql security definer set search_path='' as $$
+declare
+  v_started jsonb;
+  v_command_id uuid;
+  v_hold warehouse.inventory_holds;
+  v_inspection warehouse.quality_inspections;
+  v_receipt warehouse.receipts;
+  v_po procurement.purchase_orders;
+  v_line procurement.purchase_order_lines;
+  v_vendor_return warehouse.vendor_returns;
+  v_reason text:=nullif(pg_catalog.btrim(coalesce(payload->>'reason','')),'');
+  v_reference text:=nullif(pg_catalog.btrim(coalesce(payload->>'reference','')),'');
+  v_evidence jsonb:=coalesce(payload->'evidence_urls','[]'::jsonb);
+  v_response jsonb;
+begin
+  v_started:=private.begin_idempotent_command(
+    'reject_quality_hold_to_vendor',payload->>'idempotency_key',payload
+  );
+  if (v_started->>'replayed')::boolean then return v_started->'response'; end if;
+  v_command_id:=(v_started->>'command_id')::uuid;
+  if not core.has_cap('warehouse','release_quality_hold')
+     or not core.has_cap('warehouse','manage_returns') then
+    raise exception 'Not authorized: controlled hold rejection requires Supervisor returns authority';
+  end if;
+  if v_reason is null or v_reference is null
+     or jsonb_typeof(v_evidence)<>'array' or jsonb_array_length(v_evidence)=0 then
+    raise exception 'Hold rejection reason, reference, and evidence are required';
+  end if;
+  select * into v_hold from warehouse.inventory_holds
+   where id=(payload->>'hold_id')::uuid and status='active' for update;
+  if not found then raise exception 'Active hold not found'; end if;
+  if v_hold.created_by=auth.uid() then
+    raise exception 'The hold creator cannot reject their own hold to a vendor';
+  end if;
+  perform private.lock_warehouse_products(array[v_hold.product_id]);
+  select * into v_inspection from warehouse.quality_inspections
+   where id=v_hold.inspection_id for update;
+  if not found or v_inspection.disposition not in ('hold','damaged','unavailable','vendor_return') then
+    raise exception 'Held inspection is not eligible for vendor rejection';
+  end if;
+  if not exists (select 1 from warehouse.suppliers where id=payload->>'supplier_id') then
+    raise exception 'Supplier not found';
+  end if;
+  if v_inspection.source_type='receipt' then
+    select * into v_receipt from warehouse.receipts
+     where id=v_inspection.source_id for update;
+    if v_receipt.supplier_id is distinct from payload->>'supplier_id' then
+      raise exception 'Vendor return supplier must match the source receipt';
+    end if;
+    if v_receipt.procurement_po_id is not null and v_inspection.procurement_po_line_id is not null then
+      select * into v_po from procurement.purchase_orders
+       where id=v_receipt.procurement_po_id for update;
+      select * into v_line from procurement.purchase_order_lines
+       where id=v_inspection.procurement_po_line_id and purchase_order_id=v_po.id for update;
+      if not found then raise exception 'Held receipt PO-line binding is invalid'; end if;
+    end if;
+  end if;
+  if v_hold.serial_number is not null then
+    update warehouse.inventory_units set status='vendor_return',assigned_to=null
+     where product_id=v_hold.product_id and serial_number=v_hold.serial_number
+       and location_id=v_hold.location_id and status in ('in_stock','returned');
+    if not found then raise exception 'Held serialized unit is not available for vendor return'; end if;
+  else
+    update warehouse.stock_levels set quantity=quantity-v_hold.quantity
+     where product_id=v_hold.product_id and location_id=v_hold.location_id
+       and bin_id is not distinct from v_hold.bin_id
+       and lot_id is not distinct from v_hold.lot_id
+       and quantity>=v_hold.quantity;
+    if not found then raise exception 'Held quantity is not available for vendor return'; end if;
+  end if;
+  insert into warehouse.vendor_returns(
+    hold_id,supplier_id,source_receipt_id,source_return_id,product_id,lot_id,
+    serial_number,quantity,reason,reference,status,evidence_urls,created_by
+  ) values(
+    v_hold.id,payload->>'supplier_id',
+    case when v_inspection.source_type='receipt' then v_inspection.source_id end,
+    case when v_inspection.source_type='return' then v_inspection.source_id end,
+    v_hold.product_id,v_hold.lot_id,v_hold.serial_number,v_hold.quantity,
+    v_reason,v_reference,'ready',v_evidence,auth.uid()
+  ) returning * into v_vendor_return;
+  update warehouse.inventory_holds set status='vendor_return',released_by=auth.uid(),
+    released_at=now(),release_reason=v_reason,release_evidence_urls=v_evidence
+   where id=v_hold.id returning * into v_hold;
+  update warehouse.quality_inspections set disposition='vendor_return',reason=v_reason,
+    evidence_urls=v_evidence where id=v_inspection.id returning * into v_inspection;
+  insert into warehouse.movements(
+    id,type,product_id,quantity,from_location_id,from_bin_id,lot_id,serial_number,
+    reason,reference,evidence_urls,actor,created_at
+  ) values(
+    'mv-'||replace(gen_random_uuid()::text,'-',''),'vendor_return',v_hold.product_id,
+    v_hold.quantity,v_hold.location_id,v_hold.bin_id,v_hold.lot_id,v_hold.serial_number,
+    v_reason,v_vendor_return.id::text,v_evidence,
+    coalesce(auth.jwt()->>'email',auth.uid()::text),now()
+  );
+  update warehouse.exceptions set status='resolved',
+    resolution='Vendor return '||v_reference||' created',evidence_urls=v_evidence,updated_at=now()
+   where source_type='quality_inspection' and source_id=v_inspection.id::text
+     and status in ('open','in_progress');
+  if v_inspection.source_type='receipt' and v_inspection.procurement_po_line_id is not null then
+    update warehouse.procurement_receipt_excess_custody custody
+       set status='vendor_return',resolution_reason=v_reason,resolution_evidence_urls=v_evidence,
+           resolved_by=auth.uid(),resolved_at=now()
+      from warehouse.procurement_receipt_exception_decisions decision
+     where custody.decision_id=decision.id and decision.receipt_id=v_inspection.source_id
+       and custody.po_line_id=v_inspection.procurement_po_line_id
+       and custody.status in ('pending','held');
+    perform private.release_procurement_receipt_line_claim(
+      v_inspection.source_id,v_inspection.procurement_po_line_id
+    );
+  end if;
+  if v_inspection.source_type='receipt' then
+    update warehouse.receipts set quality_status=case when exists (
+      select 1 from warehouse.inventory_holds active_hold
+      join warehouse.quality_inspections quality on quality.id=active_hold.inspection_id
+      where quality.source_type='receipt' and quality.source_id=v_inspection.source_id
+        and active_hold.status='active'
+    ) then 'hold' else 'closed' end where id=v_inspection.source_id returning * into v_receipt;
+  end if;
+  if v_po.id is not null then
+    update procurement.purchase_orders set status=case when not exists (
+      select 1 from procurement.purchase_order_lines open_line
+      where open_line.purchase_order_id=v_po.id and open_line.receiving_status='open'
+        and open_line.received_quantity<open_line.quantity
+    ) and not exists (
+      select 1 from warehouse.procurement_receipt_exception_lines active_line
+      join warehouse.procurement_receipt_exception_decisions decision on decision.id=active_line.decision_id
+      where active_line.active and decision.purchase_order_id=v_po.id
+    ) then 'closed' else 'issued' end,updated_at=now()
+     where id=v_po.id returning * into v_po;
+  end if;
+  insert into core.activity_log(module,entity_type,entity_id,action,actor,detail)
+  values('warehouse','inventory_hold',v_hold.id,'rejected_to_vendor',auth.uid(),
+    jsonb_build_object('inspection_id',v_inspection.id,'vendor_return_id',v_vendor_return.id,
+      'purchase_order_id',v_po.id,'po_line_id',v_inspection.procurement_po_line_id,
+      'reason',v_reason));
+  v_response:=jsonb_build_object('hold',to_jsonb(v_hold),'inspection',to_jsonb(v_inspection),
+    'vendor_return',to_jsonb(v_vendor_return),'receipt',to_jsonb(v_receipt),'purchase_order',to_jsonb(v_po));
+  return private.finish_idempotent_command(v_command_id,v_response);
+end;
+$$;
+
+create or replace function warehouse.reject_quality_hold_to_vendor(payload jsonb)
+returns jsonb language sql security definer set search_path='' as $$
+  select private.warehouse_reject_quality_hold_to_vendor(payload)
+$$;
+revoke all on function private.warehouse_reject_quality_hold_to_vendor(jsonb) from public,anon,authenticated;
+revoke all on function warehouse.reject_quality_hold_to_vendor(jsonb) from public,anon;
+grant execute on function private.warehouse_reject_quality_hold_to_vendor(jsonb) to service_role;
+grant execute on function warehouse.reject_quality_hold_to_vendor(jsonb) to authenticated,service_role;
+
+create or replace function private.invalidate_payment_readiness_for_acceptance_change()
+returns trigger language plpgsql security definer set search_path='' as $$
+declare
+  v_po_id text;
+begin
+  v_po_id:=case when tg_op='DELETE' then old.purchase_order_id else new.purchase_order_id end;
+  if not (
+    (tg_op='INSERT' and new.status in ('accepted','accepted_with_exceptions'))
+    or (tg_op='DELETE' and old.status in ('accepted','accepted_with_exceptions'))
+    or (tg_op='UPDATE' and (
+      old.status in ('accepted','accepted_with_exceptions')
+      or new.status in ('accepted','accepted_with_exceptions')
+    ) and to_jsonb(old) is distinct from to_jsonb(new))
+  ) then
+    if tg_op='DELETE' then return old; end if;
+    return new;
+  end if;
+  perform 1 from procurement.purchase_orders where id=v_po_id for update;
+  update procurement.purchase_orders
+     set acceptance_evidence_version=acceptance_evidence_version+1,updated_at=now()
+   where id=v_po_id;
+  update procurement.payment_readiness_packs
+     set status='superseded'
+   where purchase_order_id=v_po_id and status<>'superseded';
+  if tg_op='DELETE' then return old; end if;
+  return new;
+end;
+$$;
+drop trigger if exists invalidate_payment_readiness_for_acceptance_change
+  on procurement.acceptance_packs;
+create trigger invalidate_payment_readiness_for_acceptance_change
+after insert or delete or update of status,accepted_scope,exceptions
+on procurement.acceptance_packs for each row
+execute function private.invalidate_payment_readiness_for_acceptance_change();
+revoke all on function private.invalidate_payment_readiness_for_acceptance_change()
+  from public,anon,authenticated;
+grant execute on function private.invalidate_payment_readiness_for_acceptance_change()
   to service_role;

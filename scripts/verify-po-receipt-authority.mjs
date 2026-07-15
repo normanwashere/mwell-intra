@@ -97,8 +97,18 @@ const REQUIRED_CONTRACTS = [
   ['unidentified mapping reselects the locked PO line with returning', /update procurement\.purchase_order_lines[\s\S]*?warehouse_product_id[\s\S]*?returning \* into v_line/i],
   ['reservation and every hold transition share the ordered product lock', /lock_warehouse_products[\s\S]*?order by product_id[\s\S]*?warehouse\.product:[\s\S]*?lock_inventory_hold_product[\s\S]*?before insert or update of status/i],
   ['physical excess has separate governed custody', /create table if not exists warehouse\.procurement_receipt_excess_custody[\s\S]*?ordered_quantity[\s\S]*?excess_quantity[\s\S]*?resolve_procurement_receipt_excess/i],
-  ['payment readiness binds the aggregate active acceptance set', /payment_readiness_packs[\s\S]*?acceptance_pack_ids[\s\S]*?policy_prepare_payment_readiness[\s\S]*?array_agg\(acceptance\.id[\s\S]*?accepted_quantity/i],
+  ['payment readiness binds the aggregate active acceptance set', /payment_readiness_packs[\s\S]*?acceptance_pack_ids[\s\S]*?policy_prepare_payment_readiness[\s\S]*?array_agg\(active_acceptance\.id[\s\S]*?accepted_quantity/i],
   ['public QC wrapper is narrowly privileged while private QC stays denied', /create or replace function warehouse\.inspect_quality[\s\S]*?security definer[\s\S]*?core\.has_cap\('warehouse',\s*'inspect_quality'\)[\s\S]*?private\.warehouse_inspect_quality[\s\S]*?revoke all on function private\.warehouse_inspect_quality\(jsonb\) from public, anon, authenticated/i],
+  ['public QC denies active controlled receipt exception claims', /warehouse\.inspect_quality[\s\S]*?procurement_receipt_exception_lines[\s\S]*?active[\s\S]*?controlled exception resolver/i],
+  ['accepted excess binds a held custody row to an approved quantity-growing PO amendment', /warehouse_resolve_procurement_receipt_excess[\s\S]*?v_custody\.status<>'held'[\s\S]*?purchase_order_amendments[\s\S]*?approved_amendment_id[\s\S]*?status='approved'[\s\S]*?amended_quantity[\s\S]*?previous_quantity[\s\S]*?excess_quantity/i],
+  ['every observed overage creates excess custody independent of its primary exception label', /actual_quantity'\)::integer>\(v_input->>'remaining_at_request'\)::integer[\s\S]*?procurement_receipt_excess_custody/i],
+  ['unidentified excess custody does not require a product mapping', /procurement_receipt_excess_custody[\s\S]*?product_id text references warehouse\.products/i],
+  ['Supervisor excess work items are capability scoped', /warehouse\.procurement_receipt_excess_work_items[\s\S]*?resolve_exceptions[\s\S]*?release_quality_hold[\s\S]*?pending[\s\S]*?held/i],
+  ['payment readiness aggregates one distinct identity and one quantity total per active acceptance pack', /policy_prepare_payment_readiness[\s\S]*?array_agg\(active_acceptance\.id[\s\S]*?sum\(active_acceptance\.accepted_quantity\)/i],
+  ['acceptance evidence changes invalidate versioned payment readiness under a PO lock', /acceptance_evidence_version[\s\S]*?invalidate_payment_readiness_for_acceptance_change[\s\S]*?purchase_orders[\s\S]*?for update[\s\S]*?payment_readiness_packs[\s\S]*?superseded/i],
+  ['Finance review locks the PO and rejects stale acceptance evidence versions', /policy_review_payment_readiness[\s\S]*?purchase_orders[\s\S]*?for update[\s\S]*?acceptance_evidence_version/i],
+  ['public receipt QC accounting is exact to procurement PO-line identity', /warehouse_inspect_quality_v2[\s\S]*?procurement_po_line_id[\s\S]*?receipt_line->>'procurementLineId'=v_line_id[\s\S]*?quality\.procurement_po_line_id=v_line_id/i],
+  ['Supervisor hold rejection atomically creates vendor return custody and releases the line claim', /warehouse_reject_quality_hold_to_vendor[\s\S]*?inventory_holds[\s\S]*?vendor_return[\s\S]*?quality_inspections[\s\S]*?warehouse\.vendor_returns[\s\S]*?warehouse\.movements[\s\S]*?release_procurement_receipt_line_claim/i],
 ];
 
 export async function verifyPoReceiptAuthority(migrationUrl) {

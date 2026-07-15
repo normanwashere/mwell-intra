@@ -37,6 +37,11 @@ import {
   type ReceiptExceptionDecisionInput,
   type ReceiptExceptionDecisionItem,
 } from '@/components/ReceiptExceptionDecisionPanel';
+import {
+  ExcessCustodyDecisionPanel,
+  type ExcessCustodyDecisionInput,
+  type ExcessCustodyWorkItem,
+} from '@/components/ExcessCustodyDecisionPanel';
 
 type POFilter = 'all' | 'open' | 'closed';
 type ReceiptDisposition = 'clean' | 'short' | 'excess' | 'damaged' | 'unidentified';
@@ -103,6 +108,7 @@ export function PurchaseOrdersPage() {
   const [bridgeDisposition, setBridgeDisposition] = useState<ReceiptDisposition>('clean');
   const [bridgeExceptionReason, setBridgeExceptionReason] = useState('');
   const [exceptionDecisions, setExceptionDecisions] = useState<ReceiptExceptionDecisionItem[]>([]);
+  const [excessCustodyItems, setExcessCustodyItems] = useState<ExcessCustodyWorkItem[]>([]);
   const warehouses = useMemo(
     () => data?.locations.filter((location) => location.type === 'warehouse') ?? [],
     [data],
@@ -135,6 +141,31 @@ export function PurchaseOrdersPage() {
     return () => { active = false; };
   }, [mayResolveReceiptExceptions, mode, supabaseClient]);
 
+  useEffect(() => {
+    if (mode !== 'supabase' || !supabaseClient || !mayResolveReceiptExceptions) {
+      setExcessCustodyItems([]);
+      return;
+    }
+    let active = true;
+    void supabaseClient.schema('warehouse').rpc('procurement_receipt_excess_work_items', {
+      payload: {},
+    }).then(({ data: rows, error: rpcError }) => {
+      if (!active || rpcError) return;
+      setExcessCustodyItems(((rows ?? []) as Array<Record<string, unknown>>).map((row) => ({
+        custodyId: String(row.custody_id),
+        receiptId: String(row.receipt_id),
+        purchaseOrderId: String(row.purchase_order_id),
+        poLineId: String(row.po_line_id),
+        poNumber: String(row.po_number),
+        productName: row.product_name ? String(row.product_name) : undefined,
+        orderedQuantity: Number(row.ordered_quantity),
+        excessQuantity: Number(row.excess_quantity),
+        status: row.status as ExcessCustodyWorkItem['status'],
+      })));
+    });
+    return () => { active = false; };
+  }, [mayResolveReceiptExceptions, mode, supabaseClient]);
+
   const decideReceiptException = async (input: ReceiptExceptionDecisionInput) => {
     if (!supabaseClient) return false;
     const { error: rpcError } = await supabaseClient.schema('warehouse').rpc('resolve_procurement_po_exception', {
@@ -160,6 +191,21 @@ export function PurchaseOrdersPage() {
       setExceptionDecisions((items) => items.filter((item) => item.decisionId !== input.decisionId));
       toast.success('Controlled receipt decision recorded');
     }
+    return true;
+  };
+
+  const decideExcessCustody = async (input: ExcessCustodyDecisionInput) => {
+    if (!supabaseClient) return false;
+    const { error: rpcError } = await supabaseClient.schema('warehouse').rpc('resolve_procurement_receipt_excess', {
+      payload: {
+        idempotency_key: crypto.randomUUID(), custody_id: input.custodyId,
+        outcome: input.outcome, approved_amendment_id: input.approvedAmendmentId ?? null,
+        reason: input.reason, evidence_urls: input.evidenceUrls,
+      },
+    });
+    if (rpcError) { toast.error(rpcError.message); return false; }
+    setExcessCustodyItems((items) => items.filter((item) => item.custodyId !== input.custodyId));
+    toast.success('Excess custody disposition recorded');
     return true;
   };
 
@@ -363,7 +409,10 @@ export function PurchaseOrdersPage() {
       </div>
 
       {mayResolveReceiptExceptions && (
-        <ReceiptExceptionDecisionPanel items={exceptionDecisions} products={data.products} onDecision={decideReceiptException} />
+        <>
+          <ReceiptExceptionDecisionPanel items={exceptionDecisions} products={data.products} onDecision={decideReceiptException} />
+          <ExcessCustodyDecisionPanel items={excessCustodyItems} onDecision={decideExcessCustody} />
+        </>
       )}
 
       {data.purchaseOrders.length === 0 && bridgedPOs.length === 0 ? (

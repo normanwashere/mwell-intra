@@ -403,6 +403,8 @@ export interface PurchaseOrder {
   commitmentReadiness?: CommitmentReadiness;
   /** Latest non-superseded requester/Warehouse acceptance record. */
   acceptancePack?: AcceptancePack;
+  /** All active exact requester/Warehouse acceptance records. */
+  acceptancePacks?: AcceptancePack[];
   /** Latest non-superseded Finance readiness record. */
   paymentReadiness?: PaymentReadinessPack;
   /** sum(qty * unitPrice ?? 0). */

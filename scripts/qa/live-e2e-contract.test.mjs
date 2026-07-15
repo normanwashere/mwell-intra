@@ -152,8 +152,8 @@ test("Task 3 uses browser-role exception receipts and proves transactional clean
   assert.match(source, /unidentified accept identification/i);
   assert.match(source, /unidentified quarantine identification/i);
   assert.match(source, /browser escalation final disposition/i);
-  assert.match(source, /hold reservation concurrency/i);
-  assert.match(source, /excess custody remains governed/i);
+  assert.match(source, /authoritative hold race readback/i);
+  assert.match(source, /accepted excess without approved amendment/i);
   assert.match(source, /cumulative payment acceptance binding/i);
   assert.match(source, /referenced approval role rename\/deactivate denial/i);
   assert.match(source, /inactive approval role cannot authorize/i);
@@ -163,6 +163,18 @@ test("Task 3 uses browser-role exception receipts and proves transactional clean
   assert.match(source, /all-capability admin wrong-step denial/i);
   assert.match(source, /cleanupHoldIds[\s\S]*core\.activity_log/);
   assert.match(source, /private quality inspection direct denial/i);
+  assert.match(source, /active exception public quality denial/i);
+  assert.match(source, /approved amendment quantity growth/i);
+  assert.match(source, /unidentified excess custody/i);
+  assert.match(source, /authenticated excess custody work items/i);
+  assert.match(source, /Supervisor excess custody final disposition/i);
+  assert.match(source, /distinct active acceptance packs/i);
+  assert.match(source, /stale payment readiness invalidation/i);
+  assert.match(source, /same-product PO-line quality isolation/i);
+  assert.match(source, /atomic hold rejection vendor return/i);
+  assert.match(source, /authoritative hold race readback/i);
+  assert.doesNotMatch(source, /if \(!concurrentReservation\.ok[\s\S]*available after active inventory holds/i,
+    'hold races must assert one deterministic authoritative state');
   for (const exceptionClass of ['short', 'excess', 'damaged', 'unidentified']) {
     assert.match(source, new RegExp(`exceptionClass:\\s*["']${exceptionClass}["']`, 'i'));
   }

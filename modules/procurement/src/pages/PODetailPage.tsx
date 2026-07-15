@@ -556,13 +556,14 @@ export function PODetailPage() {
           <Card>
             <PaymentReadinessPanel
               acceptance={po.acceptancePack}
+              acceptances={po.acceptancePacks}
               acceptanceLines={(po.receiptStatus?.acceptedLines ?? []).map((line) => ({
                 poLineId: line.poLineId,
                 description: po.lines.find((poLine) => poLine.id === line.poLineId)?.description ?? line.poLineId,
                 qcAcceptedQuantity: line.acceptedQuantity,
               }))}
               pack={po.paymentReadiness}
-              canAccept={Boolean(po.commitmentReadiness?.canRecordAcceptance ?? isSourceRequester) && !po.acceptancePack}
+              canAccept={Boolean(po.commitmentReadiness?.canRecordAcceptance ?? isSourceRequester) && (po.receiptStatus?.acceptedLines?.length ?? 0) > 0}
               canPrepare={canAuthorPo}
               canReview={canViewFinance}
               onAccept={handleAcceptance}

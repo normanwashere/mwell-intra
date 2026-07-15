@@ -268,7 +268,7 @@ function mapPaymentReadinessPack(row: LiveRow): PaymentReadinessPack {
 function mapPurchaseOrder(
   row: LiveRow,
   receiptStatus?: PurchaseOrderReceiptStatus,
-  acceptancePack?: AcceptancePack,
+  acceptancePacks: AcceptancePack[] = [],
   paymentReadiness?: PaymentReadinessPack,
   commitmentReadiness?: PurchaseOrder['commitmentReadiness'],
 ): PurchaseOrder {
@@ -291,7 +291,8 @@ function mapPurchaseOrder(
     approvalSignature: row.approval_signature ?? undefined,
     receiptStatus,
     commitmentReadiness,
-    acceptancePack,
+    acceptancePack: acceptancePacks.at(-1),
+    acceptancePacks,
     paymentReadiness,
     total: Number(row.total ?? 0),
   } as PurchaseOrder;
@@ -981,7 +982,8 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
     mapPurchaseOrder(
       row,
       liveReceiptStatuses.find((status) => status.purchaseOrderId === row.id),
-      liveAcceptances.find((pack) => pack.purchaseOrderId === row.id && pack.status !== 'superseded'),
+      liveAcceptances.filter((pack) => pack.purchaseOrderId === row.id && pack.status !== 'superseded')
+        .sort((left, right) => left.acceptedAt.localeCompare(right.acceptedAt)),
       livePaymentPacks.find((pack) => pack.purchaseOrderId === row.id && pack.status !== 'superseded'),
       liveCommitmentReadiness.find((readiness) => readiness.purchaseOrderId === row.id),
     ),
@@ -1153,7 +1155,8 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
       exceptions: input.exceptions, acceptedByEmail: input.actorEmail,
       acceptedAt: nowIso(), status: input.exceptions.length ? 'accepted_with_exceptions' : 'accepted',
     };
-    return patch(id, { acceptancePack });
+    const acceptancePacks = [...(current.acceptancePacks ?? (current.acceptancePack ? [current.acceptancePack] : [])), acceptancePack];
+    return patch(id, { acceptancePack, acceptancePacks });
   }, [live, patch, refreshLive, rows]);
 
   const createPolicyEvidence = useCallback(async (requestId: string, input: { controlCode: string; evidenceType: string; facts?: Record<string, unknown> }) => {
@@ -1186,7 +1189,8 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
 
   const preparePayment = useCallback((id: string, input: { poMatch: boolean; invoiceOrSiReference: string; milestoneSupportReference: string; taxWithholdingSupportReference: string; actorEmail?: string }): MaybePromise<PurchaseOrder | null> => {
     const current = rows.find((row) => row.id === id);
-    if (!current?.acceptancePack) return null;
+    const activeAcceptances = current?.acceptancePacks ?? (current?.acceptancePack ? [current.acceptancePack] : []);
+    if (!current || activeAcceptances.length === 0) return null;
     if (isLive(live)) {
       return liveRpc<LiveRow>(live, 'procurement', 'prepare_payment_readiness', {
         purchase_order_id: id,
@@ -1200,8 +1204,8 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
       }).then(() => refreshLive().then(() => current));
     }
     const paymentReadiness: PaymentReadinessPack = {
-      id: newId('pay'), purchaseOrderId: id, acceptancePackId: current.acceptancePack.id,
-      acceptancePackIds: [current.acceptancePack.id],
+      id: newId('pay'), purchaseOrderId: id, acceptancePackId: activeAcceptances[0]!.id,
+      acceptancePackIds: activeAcceptances.map((acceptance) => acceptance.id),
       poMatch: input.poMatch, invoiceOrSiReference: input.invoiceOrSiReference,
       milestoneSupportReference: input.milestoneSupportReference,
       taxWithholdingSupportReference: input.taxWithholdingSupportReference,

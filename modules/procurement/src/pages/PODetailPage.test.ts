@@ -57,6 +57,17 @@ const po: PurchaseOrder = {
     }],
     canRecordAcceptance: true,
   },
+  acceptancePacks: [{
+    id: 'acceptance-pack-1', purchaseOrderId: 'po-issued-1', requestId: 'req-approved-1',
+    warehouseReceiptReference: 'rcpt-warehouse-1', acceptanceType: 'goods',
+    acceptedScope: 'First partial receipt', exceptions: [], acceptedAt: '2026-07-15T08:00:00.000Z',
+    status: 'accepted',
+  }, {
+    id: 'acceptance-pack-2', purchaseOrderId: 'po-issued-1', requestId: 'req-approved-1',
+    warehouseReceiptReference: 'rcpt-warehouse-2', acceptanceType: 'goods',
+    acceptedScope: 'Second partial receipt', exceptions: [], acceptedAt: '2026-07-15T09:00:00.000Z',
+    status: 'accepted',
+  }],
   createdAt: '2026-07-14T09:00:00.000Z',
   updatedAt: '2026-07-15T09:00:00.000Z',
   total: 1_000,
@@ -146,6 +157,9 @@ describe('PODetailPage Warehouse handoff', () => {
     expect(html).not.toMatch(/>Waive<\/button>/i);
     expect(html).toMatch(/waive with evidence/i);
     expect(html).toMatch(/Approved risk classification[^]*Equivalent escrow is active[^]*escrow-review\.pdf/i);
+    expect(html).toMatch(/2 active acceptance packs/i);
+    expect(html).toMatch(/First partial receipt/i);
+    expect(html).toMatch(/Second partial receipt/i);
   });
 
   it('keeps receipt status readable without rendering a dead handoff link', () => {

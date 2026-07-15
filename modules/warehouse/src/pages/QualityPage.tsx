@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { InventoryHold, QualityInspection, VendorReturn } from '@intra/data-kit';
+import { useSession } from '@intra/auth';
 import { useWarehouse } from '@/app/store';
 import { WAREHOUSE_MUTATION_CAPABILITIES } from '@/app/authorization';
 import { Badge, EmptyState, PageHeader, SegmentedControl } from '@/components/ui';
@@ -16,6 +17,7 @@ interface PendingInspection {
   quantity: number;
   binId?: string;
   recordedAt: string;
+  procurementPoLineId?: string;
 }
 
 export function QualityPage() {
@@ -30,6 +32,7 @@ export function QualityPage() {
     releaseHold,
     createVendorReturn,
   } = useWarehouse();
+  const { mode, supabaseClient } = useSession();
   const [tab, setTab] = useState<QualityTab>('pending');
   const [inspections, setInspections] = useState<QualityInspection[]>([]);
   const [holds, setHolds] = useState<InventoryHold[]>([]);
@@ -66,6 +69,7 @@ export function QualityPage() {
         && inspection.productId === productId)
       .reduce((sum, inspection) => sum + inspection.quantity, 0);
     const receipts = data.receipts.flatMap((receipt) => receipt.lines.flatMap((line, lineIndex) => {
+      const procurementPoLineId = (line as typeof line & { procurementLineId?: string }).procurementLineId;
       const inspected = inspections
         .filter((inspection) => inspection.sourceType === 'receipt'
           && inspection.sourceId === receipt.id
@@ -80,6 +84,7 @@ export function QualityPage() {
         quantity,
         ...(line.binId ? { binId: line.binId } : {}),
         recordedAt: receipt.createdAt,
+        ...(procurementPoLineId ? { procurementPoLineId } : {}),
       }] : [];
     }));
     const returns = data.returns.flatMap((returned) => returned.lines.flatMap((line, lineIndex) => {
@@ -114,6 +119,21 @@ export function QualityPage() {
     holdMode(hold) === 'vendor_return' ? mayCreateVendorReturn : mayRelease;
 
   const inspect = async (input: Parameters<typeof inspectQuality>[0]) => {
+    if (mode === 'supabase' && supabaseClient && selectedPending?.procurementPoLineId) {
+      const { error } = await supabaseClient.schema('warehouse').rpc('inspect_quality', {
+        payload: {
+          idempotency_key: input.idempotencyKey, source_type: input.sourceType,
+          source_id: input.sourceId, product_id: input.productId,
+          procurement_po_line_id: selectedPending.procurementPoLineId,
+          bin_id: input.binId ?? null, lot_id: input.lotId ?? null,
+          serial_number: input.serialNumber ?? null, quantity: input.quantity,
+          disposition: input.disposition, reason: input.reason ?? null,
+          evidence_urls: input.evidenceUrls ?? [],
+        },
+      });
+      if (!error) await reloadControls();
+      return !error;
+    }
     const ok = await inspectQuality(input);
     if (ok) await reloadControls();
     return ok;
@@ -127,6 +147,22 @@ export function QualityPage() {
     const ok = await createVendorReturn(input);
     if (ok) await reloadControls();
     return ok;
+  };
+  const rejectToVendor = async (input: Parameters<typeof createVendorReturn>[0]) => {
+    if (mode !== 'supabase' || !supabaseClient) return false;
+    const { error } = await supabaseClient.schema('warehouse').rpc('reject_quality_hold_to_vendor', {
+      payload: {
+        idempotency_key: input.idempotencyKey,
+        hold_id: input.holdId,
+        supplier_id: input.supplierId,
+        reason: input.reason,
+        reference: input.reference,
+        evidence_urls: input.evidenceUrls ?? [],
+      },
+    });
+    if (error) return false;
+    await reloadControls();
+    return true;
   };
 
   return (
@@ -233,6 +269,7 @@ export function QualityPage() {
         onOpenChange={(open) => { if (!open) setSelectedHold(null); }}
         onRelease={release}
         onCreateVendorReturn={createReturn}
+        onRejectToVendor={rejectToVendor}
       />
     </div>
   );

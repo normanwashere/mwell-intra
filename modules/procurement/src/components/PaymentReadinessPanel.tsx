@@ -20,6 +20,7 @@ export interface AcceptanceLineDraft {
 
 export function PaymentReadinessPanel({
   acceptance,
+  acceptances,
   acceptanceLines = [],
   pack,
   canAccept,
@@ -30,6 +31,7 @@ export function PaymentReadinessPanel({
   onReview,
 }: {
   acceptance?: AcceptancePack;
+  acceptances?: AcceptancePack[];
   acceptanceLines?: AcceptanceLineDraft[];
   pack?: PaymentReadinessPack;
   canAccept: boolean;
@@ -62,12 +64,14 @@ export function PaymentReadinessPanel({
       acceptanceLines.map((line) => [line.poLineId, line.qcAcceptedQuantity]),
     ));
   }, [acceptanceLines]);
+  const activeAcceptances = useMemo(() => (acceptances ?? (acceptance ? [acceptance] : []))
+    .filter((item) => item.status !== 'superseded'), [acceptance, acceptances]);
   const preview = useMemo<PaymentReadinessPack>(() => ({
     id: pack?.id ?? 'draft', purchaseOrderId: pack?.purchaseOrderId ?? '',
-    acceptancePackId: pack?.acceptancePackId ?? acceptance?.id ?? '',
+    acceptancePackId: pack?.acceptancePackId ?? activeAcceptances[0]?.id ?? '',
     ...draft, status: pack?.status ?? 'draft', preparedAt: pack?.preparedAt ?? '',
-  }), [acceptance?.id, draft, pack]);
-  const blockers = evaluatePaymentPackReadiness(acceptance, preview);
+  }), [activeAcceptances, draft, pack]);
+  const blockers = evaluatePaymentPackReadiness(activeAcceptances, preview);
   const exceptions = exceptionsText.split('\n').map((value) => value.trim()).filter(Boolean);
 
   return (
@@ -84,7 +88,7 @@ export function PaymentReadinessPanel({
         </Badge>
       </div>
 
-      {canAccept && !acceptance && (
+      {canAccept && (
         <section className="space-y-3 rounded-lg border border-line p-4">
           {acceptanceLines.map((line) => (
             <label key={line.poLineId} className="block text-sm font-semibold text-ink">
@@ -105,15 +109,18 @@ export function PaymentReadinessPanel({
         </section>
       )}
 
-      {acceptance && (
-        <div className="rounded-lg border border-line bg-inset p-3 text-sm">
-          <p className="font-semibold text-ink">Acceptance recorded</p>
-          <p className="text-xs text-muted">{acceptance.acceptedScope}</p>
-          {acceptance.exceptions.length > 0 && <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">{acceptance.exceptions.length} exception(s) must be resolved before Finance acceptance.</p>}
-        </div>
-      )}
+      {activeAcceptances.length > 0 && <section className="space-y-2" aria-label="Active acceptance packs">
+        <p className="text-sm font-semibold text-ink">{activeAcceptances.length} active acceptance pack{activeAcceptances.length === 1 ? '' : 's'}</p>
+        <ul className="divide-y divide-line rounded-lg border border-line bg-inset px-3">
+          {activeAcceptances.map((item) => <li key={item.id} className="py-2 text-sm">
+            <p className="font-semibold text-ink">{item.warehouseReceiptReference ?? item.acceptanceType}</p>
+            <p className="text-xs text-muted">{item.acceptedScope}</p>
+            {item.exceptions.length > 0 && <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">{item.exceptions.length} exception(s) must be resolved before Finance acceptance.</p>}
+          </li>)}
+        </ul>
+      </section>}
 
-      {canPrepare && acceptance && (
+      {canPrepare && activeAcceptances.length > 0 && (
         <section className="space-y-3 rounded-lg border border-line p-4">
           <label className="flex min-h-11 items-center gap-3 text-sm font-semibold text-ink"><input type="checkbox" className="h-5 w-5" checked={draft.poMatch} onChange={(event) => setDraft({ ...draft, poMatch: event.target.checked })} />PO, receipt/acceptance, and invoice amounts match</label>
           {([
