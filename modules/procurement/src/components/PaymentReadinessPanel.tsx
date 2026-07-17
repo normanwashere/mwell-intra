@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Badge, Icon } from '@intra/ui';
-import type { AcceptancePack, PaymentReadinessPack } from '../types';
+import type { AcceptancePack, PaymentReadinessPack, PaymentReadinessStalenessEvent } from '../types';
 import { evaluatePaymentPackReadiness } from '../policy';
 
 export interface PaymentReadinessDraft {
@@ -23,6 +23,7 @@ export function PaymentReadinessPanel({
   acceptances,
   acceptanceLines = [],
   pack,
+  stalenessEvents = [],
   canAccept,
   canPrepare,
   canReview,
@@ -34,6 +35,7 @@ export function PaymentReadinessPanel({
   acceptances?: AcceptancePack[];
   acceptanceLines?: AcceptanceLineDraft[];
   pack?: PaymentReadinessPack;
+  stalenessEvents?: PaymentReadinessStalenessEvent[];
   canAccept: boolean;
   canPrepare: boolean;
   canReview: boolean;
@@ -69,6 +71,9 @@ export function PaymentReadinessPanel({
   const preview = useMemo<PaymentReadinessPack>(() => ({
     id: pack?.id ?? 'draft', purchaseOrderId: pack?.purchaseOrderId ?? '',
     acceptancePackId: pack?.acceptancePackId ?? activeAcceptances[0]?.id ?? '',
+    acceptancePackIds: activeAcceptances.map((item) => item.id),
+    acceptedQuantity: pack?.acceptedQuantity
+      ?? activeAcceptances.reduce((sum, item) => sum + (item.acceptedQuantity ?? 0), 0),
     ...draft, status: pack?.status ?? 'draft', preparedAt: pack?.preparedAt ?? '',
   }), [activeAcceptances, draft, pack]);
   const blockers = evaluatePaymentPackReadiness(activeAcceptances, preview);
@@ -110,7 +115,7 @@ export function PaymentReadinessPanel({
       )}
 
       {activeAcceptances.length > 0 && <section className="space-y-2" aria-label="Active acceptance packs">
-        <p className="text-sm font-semibold text-ink">{activeAcceptances.length} active acceptance pack{activeAcceptances.length === 1 ? '' : 's'}</p>
+        <p className="text-sm font-semibold text-ink">{activeAcceptances.length} active acceptance pack{activeAcceptances.length === 1 ? '' : 's'} · {preview.acceptedQuantity ?? 0} accepted unit(s)</p>
         <ul className="divide-y divide-line rounded-lg border border-line bg-inset px-3">
           {activeAcceptances.map((item) => <li key={item.id} className="py-2 text-sm">
             <p className="font-semibold text-ink">{item.warehouseReceiptReference ?? item.acceptanceType}</p>
@@ -118,6 +123,21 @@ export function PaymentReadinessPanel({
             {item.exceptions.length > 0 && <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">{item.exceptions.length} exception(s) must be resolved before Finance acceptance.</p>}
           </li>)}
         </ul>
+      </section>}
+
+      {(pack?.evidenceStale || stalenessEvents.length > 0) && <section className="space-y-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-3 text-sm text-amber-900 dark:text-amber-200" aria-label="Finance evidence staleness history">
+        <p className="font-semibold">Finalized Finance decision preserved</p>
+        <p>Later acceptance evidence changed. Prepare a linked replacement; this decision remains immutable for audit.</p>
+        {pack?.correctedFrom && <p className="font-semibold">Replacement for {pack.correctedFrom}</p>}
+        {stalenessEvents.length > 0 && <ol className="space-y-3 border-t border-amber-500/20 pt-2">
+          {stalenessEvents.map((event) => <li key={event.id} className="space-y-0.5">
+            <span className="font-semibold">Evidence v{event.priorAcceptanceEvidenceVersion} to v{event.acceptanceEvidenceVersion}</span>
+            <span className="block text-xs">Prior decision: {event.priorStatus.charAt(0).toUpperCase() + event.priorStatus.slice(1)}</span>
+            {event.financeReviewedByEmail && <span className="block text-xs">Reviewed by {event.financeReviewedByEmail}{event.financeReviewedAt ? ` / ${new Date(event.financeReviewedAt).toLocaleString()}` : ''}</span>}
+            {event.financeNote && <span className="block text-xs">Review note: {event.financeNote}</span>}
+            <span className="block text-xs">{event.reason} / {new Date(event.recordedAt).toLocaleString()}</span>
+          </li>)}
+        </ol>}
       </section>}
 
       {canPrepare && activeAcceptances.length > 0 && (

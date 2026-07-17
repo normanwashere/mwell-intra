@@ -88,6 +88,33 @@ test("the mutating harness waits for quality data and uses unambiguous DOA contr
   assert.match(source, /No inspections waiting/);
 });
 
+test("PO amendment browser approval submits the governed snake-case signature contract", async () => {
+  const source = await readFile(
+    new URL("../../modules/procurement/src/pages/PurchaseOrdersPage.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /signature_png:\s*signature\.dataUrl/);
+  assert.match(source, /signer_name:\s*signature\.signerName/);
+  assert.match(source, /signature_method:\s*signature\.method/);
+  assert.match(source, /signed_at:\s*signature\.signedAt/);
+  assert.doesNotMatch(source, /signature:\s*makeTypedSignature\(/);
+});
+
+test("Task 3 asserts current DOA, PNG signatures, exact held-stock issue denial, and both race outcomes", async () => {
+  const [harness, migration] = await Promise.all([
+    readFile(new URL("./full-intra-live-e2e.mjs", import.meta.url), "utf8"),
+    readFile(new URL("../../supabase/migrations/20260714175318_single_po_receipt_authority.sql", import.meta.url), "utf8"),
+  ]);
+  assert.match(harness, /data:image\/png;base64,/);
+  assert.match(harness, /holdRace\.ok\s*\?\s*atpBeforeRace\s*-\s*1\s*:\s*0/);
+  assert.match(harness, /revoked current DOA assignment denial/i);
+  assert.match(harness, /held serialized unit issue denial/i);
+  assert.match(harness, /held exact lot issue denial/i);
+  assert.match(migration, /Only a currently active DOA assignment and matrix may decide the next amendment step/i);
+  assert.match(migration, /data:image\/png;base64,/);
+  assert.match(migration, /create or replace function warehouse\.issue\(payload jsonb\)[\s\S]*inventory_holds[\s\S]*serial_number/is);
+});
+
 test("the invite workflow verifies the persisted delivery state", async () => {
   const source = await readFile(
     new URL("./full-intra-live-e2e.mjs", import.meta.url),
@@ -456,4 +483,77 @@ test("same-origin redirect hops receive a freshly scoped bypass", async () => {
     );
     assert.equal(hop.calls.fulfill.length, 1);
   }
+});
+
+test("receipt authority harness proves hold creation versus reservation with authoritative readbacks", async () => {
+  const source = await readFile(new URL("./full-intra-live-e2e.mjs", import.meta.url), "utf8");
+  assert.match(source, /hold creation versus reservation/i);
+  assert.match(source, /Promise\.allSettled/);
+  assert.match(source, /available_to_promise/);
+  assert.match(source, /inventory_holds/);
+  assert.match(source, /allocations/);
+  assert.match(source, /quality_inspections/);
+  assert.match(source, /purchase_order_lines/);
+  assert.match(source, /exactly one concurrent hold or reservation may consume availability/i);
+});
+
+test("Warehouse excess E2E selects the exact governed amendment", async () => {
+  const harness = await readFile(new URL("./full-intra-live-e2e.mjs", import.meta.url), "utf8");
+  assert.match(harness, /getByLabel\("Approved quantity amendment"\)\.selectOption\(fixture\.ids\.excessAmendment\)/);
+  assert.doesNotMatch(harness, /getByLabel\("Approved amendment ID"\)\.fill/);
+});
+
+test("Warehouse resolvers reconcile both receipt authority queues", async () => {
+  const source = await readFile(
+    new URL("../../modules/warehouse/src/pages/PurchaseOrdersPage.tsx", import.meta.url), "utf8",
+  );
+  assert.match(source, /procurement_receipt_exception_work_items/);
+  assert.match(source, /procurement_receipt_excess_work_items/);
+  assert.match(source, /reconcile both receipt authority queues/i);
+});
+
+
+test("Task 3 ships an idempotent forward migration for already-versioned databases", async () => {
+  const source = await readFile(
+    new URL(
+      "../../supabase/migrations/20260717143000_task3_receipt_authority_forward_convergence.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.match(source, /Forward convergence for databases that already applied/i);
+  assert.match(source, /add column if not exists doa_matrix_id/i);
+  assert.match(source, /legacy_record[\s\S]*?status='superseded'/i);
+  assert.match(source, /purchase_order_amendments_governed_snapshot_check/i);
+  assert.match(source, /purchase_order_amendments_legacy_terminal_check/i);
+  assert.match(source, /purchase_order_amendment_steps/);
+  assert.match(source, /create or replace function private\.policy_approve_po_line_quantity_amendment/);
+  assert.match(source, /create or replace function procurement\.purchase_order_amendment_work_items/);
+  assert.match(source, /create or replace function warehouse\.issue/);
+});
+
+test("department-only amendment approvers can reach their narrowly scoped queue", async () => {
+  const app = await readFile(
+    new URL("../../modules/procurement/src/ProcurementApp.tsx", import.meta.url),
+    "utf8",
+  );
+  const page = await readFile(
+    new URL("../../modules/procurement/src/pages/PurchaseOrdersPage.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(app, /amendmentQueueDeepLink/);
+  assert.match(app, /amendmentOnly[\s\S]*?<PurchaseOrdersPage/);
+  assert.match(page, /hasAssignedAmendmentWork/);
+  assert.match(page, /Loading assigned amendment work/);
+});
+
+test("the issue client excludes exact holds and can select another valid source", async () => {
+  const source = await readFile(
+    new URL("../../packages/data-kit/src/supabase/SupabaseRepository.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /from\('inventory_holds'\)[\s\S]*?eq\('status', 'active'\)/);
+  assert.match(source, /isHeldSerializedUnit/);
+  assert.match(source, /unheldBulkQuantity/);
+  assert.match(source, /locationIds\.find\(\(locationId\) => availableAt\(locationId\) >= allocation\.quantity\)/);
 });

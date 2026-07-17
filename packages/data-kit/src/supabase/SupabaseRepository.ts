@@ -11,6 +11,8 @@ import type {
   ReturnRecord,
   StorageArea,
   Supplier,
+  InventoryUnit,
+  StockLevel,
   WarehouseEvent,
 } from '../domain/types';
 import {
@@ -633,11 +635,81 @@ export class SupabaseRepository implements WarehouseControlRepository {
       throw new Error('Allocation already issued.');
     const product = data.products.find((p) => p.id === allocation.productId);
     if (!product) throw new Error('Product not found.');
+    const holdProjection = TABLE_PROJECTIONS.inventory_holds;
+    const holdQuery = await this.db
+      .from('inventory_holds')
+      .select(holdProjection)
+      .eq('status', 'active')
+      .eq('product_id', product.id);
+    if (holdQuery.error) {
+      throw new Error(`inventory_holds: ${holdQuery.error.message}`);
+    }
+    const activeHolds = ((holdQuery.data ?? []) as unknown as Row[]).map((row) =>
+      rowToHold(row as never),
+    );
     const createdAt = new Date().toISOString();
+    const isHeldSerializedUnit = (unit: InventoryUnit) =>
+      activeHolds.some(
+        (hold) =>
+          hold.productId === unit.productId &&
+          hold.locationId === unit.locationId &&
+          (hold.binId ?? undefined) === (unit.binId ?? undefined) &&
+          (hold.lotId ?? undefined) === (unit.lotId ?? undefined) &&
+          hold.serialNumber === unit.serialNumber,
+      );
+    const unheldBulkQuantity = (level: StockLevel) => {
+      const held = activeHolds
+        .filter(
+          (hold) =>
+            hold.serialNumber === undefined &&
+            hold.productId === level.productId &&
+            hold.locationId === level.locationId &&
+            (hold.binId ?? undefined) === (level.binId ?? undefined) &&
+            (hold.lotId ?? undefined) === (level.lotId ?? undefined),
+        )
+        .reduce((sum, hold) => sum + hold.quantity, 0);
+      return Math.max(0, level.quantity - held);
+    };
 
-    const sourceLocationId =
-      input.sourceLocationId ??
-      primaryStockLocation(toStockState(data), product.id);
+    let sourceLocationId = input.sourceLocationId;
+    if (sourceLocationId === undefined) {
+      const preferred = primaryStockLocation(toStockState(data), product.id);
+      const requestedSerials = new Set(input.serialNumbers ?? []);
+      const locationIds = Array.from(new Set(
+        product.serialized
+          ? data.units
+              .filter((unit) => unit.productId === product.id)
+              .map((unit) => unit.locationId)
+          : data.stockLevels
+              .filter((level) => level.productId === product.id)
+              .map((level) => level.locationId),
+      ));
+      const availableAt = (locationId: string) =>
+        product.serialized
+          ? data.units.filter(
+              (unit) =>
+                unit.productId === product.id &&
+                unit.locationId === locationId &&
+                unit.status === 'in_stock' &&
+                (input.sourceBinId === undefined || unit.binId === input.sourceBinId) &&
+                (requestedSerials.size === 0 || requestedSerials.has(unit.serialNumber)) &&
+                !isHeldSerializedUnit(unit),
+            ).length
+          : data.stockLevels
+              .filter(
+                (level) =>
+                  level.productId === product.id &&
+                  level.locationId === locationId &&
+                  (input.sourceBinId === undefined ||
+                    (level.binId ?? undefined) === input.sourceBinId),
+              )
+              .reduce((sum, level) => sum + unheldBulkQuantity(level), 0);
+      sourceLocationId =
+        (preferred && availableAt(preferred) >= allocation.quantity
+          ? preferred
+          : locationIds.find((locationId) => availableAt(locationId) >= allocation.quantity)) ??
+        preferred;
+    }
 
     const unitIds: string[] = [];
     const stockDeltas: Row[] = [];
@@ -648,7 +720,8 @@ export class SupabaseRepository implements WarehouseControlRepository {
           u.productId === product.id &&
           u.status === 'in_stock' &&
           (sourceLocationId === undefined || u.locationId === sourceLocationId) &&
-          (input.sourceBinId === undefined || u.binId === input.sourceBinId),
+          (input.sourceBinId === undefined || u.binId === input.sourceBinId) &&
+          !isHeldSerializedUnit(u),
       );
       let toIssue = allocation.quantity;
       for (const unit of candidates) {
@@ -673,21 +746,26 @@ export class SupabaseRepository implements WarehouseControlRepository {
           (input.sourceBinId === undefined ||
             (s.binId ?? undefined) === input.sourceBinId),
       );
-      const total = levels.reduce((sum, s) => sum + s.quantity, 0);
+      const availableLevels = levels.map((level) => ({
+        level,
+        available: unheldBulkQuantity(level),
+      }));
+      const total = availableLevels.reduce((sum, row) => sum + row.available, 0);
       if (total < allocation.quantity) {
         throw new Error(
           `Insufficient stock to issue ${allocation.quantity} at the selected source.`,
         );
       }
       let remaining = allocation.quantity;
-      for (const level of levels) {
+      for (const { level, available } of availableLevels) {
         if (remaining <= 0) break;
-        const take = Math.min(level.quantity, remaining);
+        const take = Math.min(available, remaining);
         if (take <= 0) continue;
         stockDeltas.push({
           product_id: product.id,
           location_id: level.locationId,
           bin_id: level.binId ?? null,
+          lot_id: level.lotId ?? null,
           delta: -take,
         });
         remaining -= take;

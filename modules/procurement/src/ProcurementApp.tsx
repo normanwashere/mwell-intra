@@ -60,10 +60,15 @@ export function ProcurementApp({
     [userRoles],
   );
   const canViewDashboard = can(userRoles, "procurement", "view_dashboard");
-  const acceptanceDeepLink = typeof window !== "undefined"
-    && window.location.pathname.startsWith(`${basename}/purchase-orders/`);
+  const currentPath = typeof window !== "undefined"
+    ? window.location.pathname.replace(/\/+$/, "")
+    : "";
+  const acceptanceDeepLink = currentPath.startsWith(`${basename}/purchase-orders/`);
+  const amendmentQueueDeepLink = currentPath === `${basename}/purchase-orders`;
   const acceptanceOnly = !canViewDashboard && myTiers.length === 0 && acceptanceDeepLink;
-  const hasAccess = canViewDashboard || myTiers.length > 0 || acceptanceOnly;
+  const amendmentOnly = !canViewDashboard && myTiers.length === 0 && amendmentQueueDeepLink;
+  const hasAccess =
+    canViewDashboard || myTiers.length > 0 || acceptanceOnly || amendmentOnly;
   const approvalsOnly = !canViewDashboard && myTiers.length > 0;
   const canApprove =
     can(userRoles, "procurement", "approve_request") || myTiers.length > 0;
@@ -118,7 +123,7 @@ export function ProcurementApp({
       {/* No nested ToastProvider — the shell's root Providers already mounts
           one; nesting a second rendered a duplicate toast viewport. */}
       <ScrollToTopOnRouteChange />
-      {!acceptanceOnly && (
+      {!acceptanceOnly && !amendmentOnly && (
         <ProcurementTabs
           canApprove={canApprove}
           showRequests={!approvalsOnly}
@@ -126,7 +131,15 @@ export function ProcurementApp({
         />
       )}
       <Routes>
-        {acceptanceOnly ? (
+        {amendmentOnly ? (
+          <>
+            <Route
+              path={PROCUREMENT_ROUTE_BY_ID["purchase-orders"].path}
+              element={<PurchaseOrdersPage />}
+            />
+            <Route path="*" element={<Navigate to="/purchase-orders" replace />} />
+          </>
+        ) : acceptanceOnly ? (
           <>
             <Route path={PROCUREMENT_ROUTE_BY_ID["po-detail"].path} element={<AcceptanceWorkItemPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />

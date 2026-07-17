@@ -353,11 +353,26 @@ export interface AcceptancePack {
   warehouseReceiptReference?: string;
   acceptanceType: 'goods' | 'service' | 'milestone';
   acceptedScope: string;
+  acceptedQuantity?: number;
   exceptions: string[];
   acceptedByEmail?: string;
   acceptedAt: string;
   documentHash?: string;
   status: 'accepted' | 'accepted_with_exceptions' | 'superseded';
+}
+
+export interface PaymentReadinessStalenessEvent {
+  id: string;
+  paymentReadinessPackId: string;
+  purchaseOrderId: string;
+  priorStatus: 'accepted' | 'released';
+  priorAcceptanceEvidenceVersion: number;
+  acceptanceEvidenceVersion: number;
+  reason: string;
+  recordedAt: string;
+  financeReviewedByEmail?: string;
+  financeReviewedAt?: string;
+  financeNote?: string;
 }
 
 export interface PaymentReadinessPack {
@@ -377,6 +392,8 @@ export interface PaymentReadinessPack {
   financeReviewedAt?: string;
   financeNote?: string;
   correctedFrom?: string;
+  evidenceStale?: boolean;
+  evidenceStaleAt?: string;
 }
 
 export interface PurchaseOrder {
@@ -407,6 +424,8 @@ export interface PurchaseOrder {
   acceptancePacks?: AcceptancePack[];
   /** Latest non-superseded Finance readiness record. */
   paymentReadiness?: PaymentReadinessPack;
+  /** Immutable evidence-version changes that occurred after a finalized Finance decision. */
+  paymentReadinessStalenessEvents?: PaymentReadinessStalenessEvent[];
   /** sum(qty * unitPrice ?? 0). */
   total: number;
 }

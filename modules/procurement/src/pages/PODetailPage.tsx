@@ -563,6 +563,7 @@ export function PODetailPage() {
                 qcAcceptedQuantity: line.acceptedQuantity,
               }))}
               pack={po.paymentReadiness}
+              stalenessEvents={po.paymentReadinessStalenessEvents}
               canAccept={Boolean(po.commitmentReadiness?.canRecordAcceptance ?? isSourceRequester) && (po.receiptStatus?.acceptedLines?.length ?? 0) > 0}
               canPrepare={canAuthorPo}
               canReview={canViewFinance}

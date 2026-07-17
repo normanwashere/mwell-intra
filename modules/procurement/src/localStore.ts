@@ -24,6 +24,7 @@ import type {
   ApproverTier,
   AcceptancePack,
   PaymentReadinessPack,
+  PaymentReadinessStalenessEvent,
   ProcurementRequest,
   ProcurementRequestLine,
   ProcurementVendor,
@@ -229,6 +230,10 @@ function mapAcceptancePack(row: LiveRow): AcceptancePack {
     : acceptedScope && typeof acceptedScope === 'object' && 'summary' in acceptedScope
       ? String((acceptedScope as { summary: unknown }).summary)
       : JSON.stringify(acceptedScope ?? {});
+  const acceptedQuantity = acceptedScope && typeof acceptedScope === 'object' && 'lines' in acceptedScope
+    ? ((acceptedScope as { lines?: Array<{ quantity?: unknown }> }).lines ?? [])
+      .reduce((sum, line) => sum + Number(line.quantity ?? 0), 0)
+    : undefined;
   return {
     id: row.id,
     purchaseOrderId: row.purchase_order_id,
@@ -236,6 +241,7 @@ function mapAcceptancePack(row: LiveRow): AcceptancePack {
     warehouseReceiptReference: row.warehouse_receipt_reference ?? undefined,
     acceptanceType: row.acceptance_type as unknown as AcceptancePack['acceptanceType'],
     acceptedScope: acceptedScopeText,
+    acceptedQuantity,
     exceptions: Array.isArray(exceptions) ? exceptions.map(String) : [],
     acceptedByEmail: row.accepted_by_email ?? undefined,
     acceptedAt: row.accepted_at,
@@ -262,6 +268,8 @@ function mapPaymentReadinessPack(row: LiveRow): PaymentReadinessPack {
     financeReviewedAt: row.finance_reviewed_at ?? undefined,
     financeNote: row.finance_note ?? undefined,
     correctedFrom: row.corrected_from ?? undefined,
+    evidenceStale: Boolean(row.evidence_stale),
+    evidenceStaleAt: row.evidence_stale_at ?? undefined,
   } as unknown as PaymentReadinessPack;
 }
 
@@ -271,6 +279,7 @@ function mapPurchaseOrder(
   acceptancePacks: AcceptancePack[] = [],
   paymentReadiness?: PaymentReadinessPack,
   commitmentReadiness?: PurchaseOrder['commitmentReadiness'],
+  paymentReadinessStalenessEvents: PaymentReadinessStalenessEvent[] = [],
 ): PurchaseOrder {
   return {
     id: row.id,
@@ -294,6 +303,7 @@ function mapPurchaseOrder(
     acceptancePack: acceptancePacks.at(-1),
     acceptancePacks,
     paymentReadiness,
+    paymentReadinessStalenessEvents,
     total: Number(row.total ?? 0),
   } as PurchaseOrder;
 }
@@ -978,6 +988,33 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
     live, 'procurement', 'payment_readiness_packs', mapPaymentReadinessPack,
     { column: 'prepared_at', ascending: false },
   );
+  const [liveStalenessEvents, setLiveStalenessEvents] = useState<PaymentReadinessStalenessEvent[]>([]);
+  const [liveStalenessLoading, setLiveStalenessLoading] = useState(Boolean(live));
+  const refreshStalenessEvents = useCallback(async () => {
+    if (!live) { setLiveStalenessEvents([]); setLiveStalenessLoading(false); return; }
+    setLiveStalenessLoading(true);
+    try {
+      const rows = await liveRpc<Array<Record<string, unknown>>>(
+        live, 'procurement', 'payment_readiness_staleness_work_items', {},
+      );
+      setLiveStalenessEvents(rows.map((row) => ({
+        id: String(row.event_id),
+        paymentReadinessPackId: String(row.payment_readiness_pack_id),
+        purchaseOrderId: String(row.purchase_order_id),
+        priorStatus: row.prior_status as PaymentReadinessStalenessEvent['priorStatus'],
+        priorAcceptanceEvidenceVersion: Number(row.prior_acceptance_evidence_version),
+        acceptanceEvidenceVersion: Number(row.acceptance_evidence_version),
+        reason: String(row.reason),
+        recordedAt: String(row.recorded_at),
+        financeReviewedByEmail: row.finance_reviewed_by_email
+          ? String(row.finance_reviewed_by_email) : undefined,
+        financeReviewedAt: row.finance_reviewed_at ? String(row.finance_reviewed_at) : undefined,
+        financeNote: row.finance_note ? String(row.finance_note) : undefined,
+      })));
+    } catch { setLiveStalenessEvents([]); }
+    finally { setLiveStalenessLoading(false); }
+  }, [live]);
+  useEffect(() => { void refreshStalenessEvents(); }, [refreshStalenessEvents]);
   const liveRows = liveBaseRows.map((row) =>
     mapPurchaseOrder(
       row,
@@ -986,15 +1023,16 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
         .sort((left, right) => left.acceptedAt.localeCompare(right.acceptedAt)),
       livePaymentPacks.find((pack) => pack.purchaseOrderId === row.id && pack.status !== 'superseded'),
       liveCommitmentReadiness.find((readiness) => readiness.purchaseOrderId === row.id),
+      liveStalenessEvents.filter((event) => event.purchaseOrderId === row.id),
     ),
   );
   const rows = isLive(live) ? liveRows : localRows;
   const loading = isLive(live)
-    ? liveRowsLoading || liveReceiptStatusesLoading || liveAcceptancesLoading || livePaymentPacksLoading || liveCommitmentLoading
+    ? liveRowsLoading || liveReceiptStatusesLoading || liveAcceptancesLoading || livePaymentPacksLoading || liveCommitmentLoading || liveStalenessLoading
     : localLoading;
   const refreshLive = useCallback(async () => {
-    await Promise.all([refreshPos(), refreshReceiptStatuses(), refreshAcceptances(), refreshPaymentPacks(), refreshCommitmentReadiness()]);
-  }, [refreshPos, refreshReceiptStatuses, refreshAcceptances, refreshPaymentPacks, refreshCommitmentReadiness]);
+    await Promise.all([refreshPos(), refreshReceiptStatuses(), refreshAcceptances(), refreshPaymentPacks(), refreshCommitmentReadiness(), refreshStalenessEvents()]);
+  }, [refreshPos, refreshReceiptStatuses, refreshAcceptances, refreshPaymentPacks, refreshCommitmentReadiness, refreshStalenessEvents]);
 
   const add = useCallback(
     (input: NewPOInput): MaybePromise<PurchaseOrder> => {
@@ -1153,7 +1191,8 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
       warehouseReceiptReference: current.receiptStatus?.latestReceiptReference,
       acceptanceType: input.acceptanceType, acceptedScope: input.acceptedScope,
       exceptions: input.exceptions, acceptedByEmail: input.actorEmail,
-      acceptedAt: nowIso(), status: input.exceptions.length ? 'accepted_with_exceptions' : 'accepted',
+      acceptedAt: nowIso(), acceptedQuantity: (input.acceptedLines ?? []).reduce((sum, line) => sum + line.quantity, 0),
+      status: input.exceptions.length ? 'accepted_with_exceptions' : 'accepted',
     };
     const acceptancePacks = [...(current.acceptancePacks ?? (current.acceptancePack ? [current.acceptancePack] : [])), acceptancePack];
     return patch(id, { acceptancePack, acceptancePacks });
@@ -1198,7 +1237,7 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
         invoice_or_si_storage_path: input.invoiceOrSiReference,
         milestone_support_storage_path: input.milestoneSupportReference,
         tax_withholding_support_storage_path: input.taxWithholdingSupportReference,
-        corrected_from: current.paymentReadiness?.status === 'returned'
+        corrected_from: current.paymentReadiness?.status === 'returned' || current.paymentReadiness?.evidenceStale
           ? current.paymentReadiness.id
           : undefined,
       }).then(() => refreshLive().then(() => current));
@@ -1210,7 +1249,8 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
       milestoneSupportReference: input.milestoneSupportReference,
       taxWithholdingSupportReference: input.taxWithholdingSupportReference,
       status: 'ready_for_finance', preparedByEmail: input.actorEmail, preparedAt: nowIso(),
-      correctedFrom: current.paymentReadiness?.status === 'returned' ? current.paymentReadiness.id : undefined,
+      correctedFrom: current.paymentReadiness?.status === 'returned' || current.paymentReadiness?.evidenceStale
+        ? current.paymentReadiness.id : undefined,
     };
     return patch(id, { paymentReadiness });
   }, [live, patch, refreshLive, rows]);

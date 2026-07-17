@@ -11,6 +11,12 @@ export interface ExcessCustodyWorkItem {
   orderedQuantity: number;
   excessQuantity: number;
   status: 'pending' | 'held';
+  eligibleApprovedAmendments: Array<{
+    id: string;
+    previousQuantity: number;
+    amendedQuantity: number;
+    approvedAt: string;
+  }>;
 }
 
 export interface ExcessCustodyDecisionInput {
@@ -101,9 +107,16 @@ export function ExcessCustodyDecisionPanel({
               <option value="written_off">Write off</option>
             </select>
           </Field>
-          {outcome === 'accepted_amendment' && <Field label="Approved amendment ID" htmlFor="approved-amendment-id">
-            <input id="approved-amendment-id" className="input" value={approvedAmendmentId}
-              onChange={(event) => setApprovedAmendmentId(event.target.value)} />
+          {outcome === 'accepted_amendment' && <Field label="Approved quantity amendment" htmlFor="approved-amendment-id">
+            <select id="approved-amendment-id" className="input" value={approvedAmendmentId}
+              onChange={(event) => setApprovedAmendmentId(event.target.value)}>
+              <option value="">Select an eligible approved amendment</option>
+              {selected.eligibleApprovedAmendments.map((amendment) => (
+                <option key={amendment.id} value={amendment.id}>
+                  {amendment.previousQuantity} to {amendment.amendedQuantity} units · approved {new Date(amendment.approvedAt).toLocaleDateString()}
+                </option>
+              ))}
+            </select>
           </Field>}
           <Field label="Decision reason" htmlFor="excess-decision-reason">
             <textarea id="excess-decision-reason" className="input min-h-24 resize-y" value={reason}

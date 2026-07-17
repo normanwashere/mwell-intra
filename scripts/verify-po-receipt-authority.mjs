@@ -109,6 +109,24 @@ const REQUIRED_CONTRACTS = [
   ['Finance review locks the PO and rejects stale acceptance evidence versions', /policy_review_payment_readiness[\s\S]*?purchase_orders[\s\S]*?for update[\s\S]*?acceptance_evidence_version/i],
   ['public receipt QC accounting is exact to procurement PO-line identity', /warehouse_inspect_quality_v2[\s\S]*?procurement_po_line_id[\s\S]*?receipt_line->>'procurementLineId'=v_line_id[\s\S]*?quality\.procurement_po_line_id=v_line_id/i],
   ['Supervisor hold rejection atomically creates vendor return custody and releases the line claim', /warehouse_reject_quality_hold_to_vendor[\s\S]*?inventory_holds[\s\S]*?vendor_return[\s\S]*?quality_inspections[\s\S]*?warehouse\.vendor_returns[\s\S]*?warehouse\.movements[\s\S]*?release_procurement_receipt_line_claim/i],
+  ['excess custody requires the already-terminal Supervisor quarantine parent before releasing a line claim', /warehouse_resolve_procurement_receipt_excess[\s\S]*?status<>'decided'[\s\S]*?decision<>'quarantine'[\s\S]*?quarantine the parent receipt first[\s\S]*?release_procurement_receipt_line_claim/i],
+  ['only one active amendment may snapshot a purchase order commitment version', /purchase_order_amendments[\s\S]*?purchase_order_id=v_po\.id[\s\S]*?status in \('requested','under_review'\)[\s\S]*?Only one active quantity amendment/i],
+  ['amendment approvals require complete typed or drawn signature evidence', /signature_png[\s\S]*?signer_name[\s\S]*?signature_method[\s\S]*?drawn[\s\S]*?typed[\s\S]*?signed_at/i],
+  ['line-exact receipt QC accounting includes lot and serial identity', /quality\.lot_id is not distinct from v_lot_id[\s\S]*?quality\.serial_number is not distinct from v_serial/i],
+  ['finalized stale Finance evidence requires a governed corrected-from replacement', /finalized stale Finance evidence[\s\S]*?corrected_from/i],
+  ['line claim release requires a locked terminal parent decision', /release_procurement_receipt_line_claim[\s\S]*?decision\.status='decided'[\s\S]*?decision\.decision in \('accept','reject','quarantine'\)[\s\S]*?for update of decision,claim[\s\S]*?if not found then[\s\S]*?terminal parent decision/i],
+  ['PO amendments snapshot immutable before and after commitment versions', /purchase_order_amendments[\s\S]*?before_commitment_version[\s\S]*?after_commitment_version[\s\S]*?before_commitment[\s\S]*?after_commitment/i],
+  ['PO amendment approval uses current effective DOA and ordered named steps', /purchase_order_amendment_steps[\s\S]*?doa_matrices[\s\S]*?effective_at[\s\S]*?doa_assignments[\s\S]*?department[\s\S]*?category[\s\S]*?min_amount[\s\S]*?max_amount[\s\S]*?assigned_user_id[\s\S]*?step_order/i],
+  ['goods PO quantity amendments require positive whole numbers', /policy_request_po_line_quantity_amendment[\s\S]*?amended_quantity[\s\S]*?trunc\([\s\S]*?whole number/i],
+  ['amendment work items are requester or assigned-approver scoped', /purchase_order_amendment_work_items[\s\S]*?requested_by=auth\.uid\(\)[\s\S]*?assigned_user_id=auth\.uid\(\)/i],
+  ['Warehouse excess work items return eligible approved amendment choices', /procurement_receipt_excess_work_items[\s\S]*?eligible_approved_amendments[\s\S]*?jsonb_agg[\s\S]*?status='approved'/i],
+  ['line-exact receipt QC locks and validates serialized units and lot stock', /warehouse_inspect_quality_v2[\s\S]*?inventory_units[\s\S]*?for update[\s\S]*?serial_number[\s\S]*?stock_levels[\s\S]*?lot_id[\s\S]*?for update/i],
+  ['acceptance changes preserve finalized Finance decisions and append immutable staleness events', /payment_readiness_staleness_events[\s\S]*?payment_readiness_pack_id[\s\S]*?prior_status[\s\S]*?acceptance_evidence_version[\s\S]*?status in \('draft','returned','ready_for_finance'\)/i],
+  ['approval revalidates the currently effective matrix assignment and active employee profile', /policy_approve_po_line_quantity_amendment[\s\S]*?doa_assignments[\s\S]*?doa_matrices[\s\S]*?current_matrix[\s\S]*?approver\.kind='employee'[\s\S]*?approver\.status='active'/i],
+  ['approval signature is a fresh PNG bound to the active profile name', /policy_approve_po_line_quantity_amendment[\s\S]*?data:image\/png;base64[\s\S]*?v_profile\.full_name[\s\S]*?10 minutes[\s\S]*?5 minutes/i],
+  ['amendment rejection records decision fields without false approval fields', /status='rejected'[\s\S]*?decision='rejected'[\s\S]*?decided_by=auth\.uid\(\)[\s\S]*?decided_at=now\(\)/i],
+  ['Finance staleness work items preserve prior reviewer timestamp and note', /payment_readiness_staleness_work_items[\s\S]*?finance_reviewed_by_email[\s\S]*?finance_reviewed_at[\s\S]*?finance_note/i],
+  ['receipt QC excludes exact active serial and lot holds', /warehouse_inspect_quality_v2[\s\S]*?Exact serialized receipt unit is already held[\s\S]*?v_stock\.quantity-v_exact_held/i],
 ];
 
 export async function verifyPoReceiptAuthority(migrationUrl) {
@@ -138,6 +156,52 @@ export async function verifyPoReceiptAuthority(migrationUrl) {
   if (/riskFacts,technical|risk_facts,technical/i.test(sql)) {
     findings.push('Generic technical risk is incorrectly treated as the technology-service-provider axis');
   }
+  const approvalFunctions = [...sql.matchAll(
+    /create or replace function private\.policy_approve_po_line_quantity_amendment\(payload jsonb\)[\s\S]*?\n\$\$;/gi,
+  )];
+  const latestApproval = approvalFunctions.at(-1)?.[0] ?? '';
+  if (!/(?=[\s\S]*current_matrix)(?=[\s\S]*doa_assignments)(?=[\s\S]*approver\.status='active')/i.test(latestApproval)) {
+    findings.push('Latest amendment approval does not revalidate current DOA and employee status');
+  }
+  if (!/data:image\/png;base64[\s\S]*v_profile\.full_name[\s\S]*signing window/i.test(latestApproval)) {
+    findings.push('Latest amendment approval does not bind a fresh PNG signature to the active profile');
+  }
+  const approvalOnlyBranch = latestApproval.indexOf("if v_decision='approved' then");
+  const currentDoaCheck = latestApproval.indexOf('from procurement.doa_assignments assignment');
+  if (currentDoaCheck < 0 || (approvalOnlyBranch >= 0 && currentDoaCheck > approvalOnlyBranch)) {
+    findings.push('Latest amendment rejection bypasses current DOA revalidation');
+  }
+  if (!/(?=[\s\S]*decode\([\s\S]*base64)(?=[\s\S]*89504e470d0a1a0a)(?=[\s\S]*2097152)/i.test(latestApproval)) {
+    findings.push('Latest amendment approval does not verify decoded PNG bytes and size');
+  }
+
+  const amendmentQueue = sql.match(
+    /create or replace function procurement\.purchase_order_amendment_work_items[\s\S]*?\$\$;/i,
+  )?.[0] ?? '';
+  if (!/purchase_order_amendment_steps assigned_step[\s\S]*?assigned_user_id=auth\.uid\(\)/i.test(amendmentQueue)) {
+    findings.push('Assigned departmental approvers cannot independently open their amendment queue');
+  }
+
+  const issueFunctions = [...sql.matchAll(
+    /create or replace function warehouse\.issue\(payload jsonb\)[\s\S]*?\n\$\$;/gi,
+  )];
+  const latestIssue = issueFunctions.at(-1)?.[0] ?? '';
+  if (!/inventory_holds[\s\S]*serial_number=unit\.serial_number/i.test(latestIssue)
+      || !/v_stock\.quantity-v_exact_held<abs\(v_delta\)/i.test(latestIssue)) {
+    findings.push('Latest Warehouse issue mutation does not exclude exact active serial and lot holds');
+  }
+  if (/greatest\(0,\s*(?:s\.|warehouse\.stock_levels\.)?quantity\s*\+/i.test(latestIssue)) {
+    findings.push('Latest Warehouse issue mutation silently clamps an insufficient stock drawdown');
+  }
+  if (!/event_id=v_alloc\.event_id[\s\S]*?jsonb_build_object\([\s\S]*?'event_id',v_alloc\.event_id[\s\S]*?'reference',v_alloc\.id[\s\S]*?'created_at',now\(\)/i.test(latestIssue)) {
+    findings.push('Latest Warehouse issue leaves authoritative movement identity caller-controlled');
+  }
+  const stockMutation = latestIssue.indexOf('update warehouse.stock_levels set quantity=quantity+v_delta');
+  const allocationMutation = latestIssue.indexOf("update warehouse.allocations set status='issued'");
+  if (stockMutation < 0 || allocationMutation < stockMutation) {
+    findings.push('Latest Warehouse issue marks the allocation issued before exact stock mutation succeeds');
+  }
+
   const acceptanceProjection = sql.match(
     /create or replace function procurement\.acceptance_work_items[\s\S]*?\$\$;/i,
   )?.[0] ?? '';

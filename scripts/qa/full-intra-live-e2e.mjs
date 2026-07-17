@@ -905,9 +905,16 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
   const { data: reviewerProfiles, error: reviewerError } = await client.schema("core").from("profiles")
     .select("id").eq("email", "intra.test.legal.reviewer@mwell.com.ph").limit(1);
   if (reviewerError || !reviewerProfiles?.[0]) throw new Error("Assigned technical reviewer profile is required.");
+  const { data: approverProfiles, error: approverError } = await client.schema("core").from("profiles")
+    .select("id").eq("email", "intra.test.proc.approver@mwell.com.ph").limit(1);
+  if (approverError || !approverProfiles?.[0]) throw new Error("Procurement amendment approver profile is required.");
   const ids = {
     vendor: crypto.randomUUID(),
     product: `${marker}-product`,
+    serializedIssueProduct: `${marker}-serialized-issue-product`,
+    serializedIssueUnit: `${marker}-serialized-issue-unit`,
+    serializedIssueSerial: `${marker}-SERIAL-HELD`,
+    serializedIssueReceipt: `${marker}-serialized-issue-receipt`,
     request: `${marker}-receipt-request`,
     cleanPo: `${marker}-po-clean`,
     partialPo: `${marker}-po-partial`,
@@ -945,6 +952,8 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
     accreditationCase: `${marker}-temporary-clearance-case`,
     activeApprovalRole: `task3_ref_${crypto.randomUUID().replaceAll("-", "")}`,
     inactiveApprovalRole: `task3_inactive_${crypto.randomUUID().replaceAll("-", "")}`,
+    amendmentDoaMatrix: crypto.randomUUID(),
+    amendmentDoaAssignments: [crypto.randomUUID(), crypto.randomUUID(), crypto.randomUUID()],
   };
   const { data: approvalGroup, error: approvalGroupError } = await client.schema("core")
     .from("approval_groups").select("member_roles")
@@ -991,11 +1000,16 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
   await insertAuditRows(client, "warehouse", "products", [{
     id: ids.product, sku: `${marker}-SKU`, name: `${marker} Receipt Product`,
     category: "qa", serialized: false, unit_cost: 100, reorder_point: 0,
+  }, {
+    id: ids.serializedIssueProduct, sku: `${marker}-SERIAL-SKU`,
+    name: `${marker} Held Serial Product`, category: "qa", serialized: true,
+    unit_cost: 150, reorder_point: 0,
   }]);
   await insertAuditRows(client, "procurement", "requests", [{
     id: ids.request, title: `${marker} Receipt authority request`, status: "approved",
     requester_id: requesterProfiles[0].id,
-    category: "goods", sourcing_method: "rfq", core_vendor_id: ids.vendor,
+    department: `${marker} Receipt Department`, category: "goods",
+    sourcing_method: "rfq", core_vendor_id: ids.vendor,
     vendor_name: `${marker} Receipt Vendor`, estimated_amount: 500,
   }, ...[
     [ids.policyRfq, "rfq", {}],
@@ -1011,6 +1025,18 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
   await insertAuditRows(client, "procurement", "acceptance_reviewer_assignments", [{
     request_id: ids.request, reviewer_id: reviewerProfiles[0].id, assigned_by: officerProfiles[0].id,
   }]);
+  await insertAuditRows(client, "procurement", "doa_matrices", [{
+    id: ids.amendmentDoaMatrix, version: `${marker}-AMENDMENT-DOA-V1`,
+    department: `${marker} Receipt Department`, source_document: `${marker} controlled amendment DOA`,
+    approved_by_name: "Task 3 governed fixture", approved_at: new Date().toISOString(),
+    effective_at: "2026-07-14T00:00:00.000Z", active: true, status: "active",
+  }]);
+  await insertAuditRows(client, "procurement", "doa_assignments",
+    ["dept_head", "procurement_head", "final_approver"].map((tier, index) => ({
+      id: ids.amendmentDoaAssignments[index], matrix_id: ids.amendmentDoaMatrix,
+      department: `${marker} Receipt Department`, category: "goods", min_amount: 0,
+      max_amount: 100000, tier, approver_user_id: approverProfiles[0].id, active: true,
+    })));
   await insertAuditRows(client, "warehouse", "events", [{
     id: ids.event, name: `${marker} Hold ATP event`, type: "qa",
     site_location_id: locations[0].id, start_date: "2026-07-15",
@@ -1249,6 +1275,30 @@ async function task3OperatorReceiptTransactions(page, fixture) {
   if (!routineQualityReceipt.ok)
     throw new Error(`Routine public quality receipt failed: ${routineQualityReceipt.body}`);
 
+  const serializedIssueReceipt = await callRpcAsBrowserUser(page, "warehouse", "receive_stock", {
+    lots: [],
+    units: [{ id: fixture.ids.serializedIssueUnit,
+      product_id: fixture.ids.serializedIssueProduct,
+      serial_number: fixture.ids.serializedIssueSerial,
+      location_id: fixture.locationId, status: "in_stock" }],
+    stock_deltas: [],
+    movements: [{ id: `${fixture.marker}-serialized-receipt-movement`,
+      type: "receipt", product_id: fixture.ids.serializedIssueProduct, quantity: 1,
+      to_location_id: fixture.locationId, reference: fixture.ids.serializedIssueReceipt,
+      evidence_urls: [`audit/${fixture.marker}/serialized-receipt.jpg`],
+      actor: "browser-role Warehouse Operator", created_at: new Date().toISOString() }],
+    receipt: {
+      id: fixture.ids.serializedIssueReceipt, supplier_id: `proc-${fixture.ids.vendor}`,
+      location_id: fixture.locationId,
+      lines: [{ productId: fixture.ids.serializedIssueProduct, quantity: 1,
+        serialNumbers: [fixture.ids.serializedIssueSerial] }],
+      evidence_urls: [`audit/${fixture.marker}/serialized-receipt.jpg`],
+      actor: "browser-role Warehouse Operator",
+    },
+  });
+  if (!serializedIssueReceipt.ok)
+    throw new Error(`Serialized issue receipt failed: ${serializedIssueReceipt.body}`);
+
   const collisionPayload = (suffix) => ({
     idempotency_key: `${fixture.marker}-same-line-${suffix}`,
     po_id: fixture.ids.collisionPo, location_id: fixture.locationId,
@@ -1349,6 +1399,21 @@ async function task3OperatorReceiptTransactions(page, fixture) {
     concurrentDenied: concurrent.find((result) => !result.ok)?.status };
 }
 
+async function callRpcArgsAsBrowserUser(page, schema, fn, args) {
+  const accessToken = await browserAccessToken(page);
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "");
+  if (!accessToken || !anonKey || !supabaseUrl)
+    throw new Error("Authenticated browser session and public Supabase configuration are required.");
+  const response = await fetch(`${supabaseUrl}/rest/v1/rpc/${fn}`, {
+    method: "POST",
+    headers: { apikey: anonKey, authorization: `Bearer ${accessToken}`,
+      "content-type": "application/json", "accept-profile": schema, "content-profile": schema },
+    body: JSON.stringify(args),
+  });
+  return { ok: response.ok, status: response.status, body: await response.text() };
+}
+
 async function task3RequestExcessAmendment(page, fixture) {
   const requested = await callRpcAsBrowserUser(
     page, "procurement", "request_po_line_quantity_amendment", {
@@ -1367,15 +1432,45 @@ async function task3RequestExcessAmendment(page, fixture) {
     amendedQuantity: Number(amendment.amended_quantity) };
 }
 
+const TASK3_SIGNATURE_PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+
 async function task3ApproveExcessAmendment(page, fixture) {
-  const approved = await callRpcAsBrowserUser(
-    page, "procurement", "approve_po_line_quantity_amendment", {
-      amendment_id: fixture.ids.excessAmendment,
-      decision: "approved",
-      reason: `${fixture.marker} independently approved excess amendment`,
-    },
-  );
-  if (!approved.ok) throw new Error(`Approved amendment decision failed: ${approved.body}`);
+  const queue = await callRpcAsBrowserUser(page, "procurement", "purchase_order_amendment_work_items", {});
+  if (!queue.ok || !queue.body.includes(fixture.ids.excessAmendment))
+    throw new Error(`Scoped amendment approval queue is missing the assigned item: ${queue.body}`);
+  let approved;
+  const { error: revokeDoaError } = await fixture.client.schema("procurement")
+    .from("doa_assignments").update({ active: false })
+    .eq("id", fixture.ids.amendmentDoaAssignments[0]);
+  if (revokeDoaError) throw new Error(`Current DOA revocation setup failed: ${revokeDoaError.message}`);
+  try {
+    requireRpcFailure(await callRpcAsBrowserUser(
+      page, "procurement", "approve_po_line_quantity_amendment", {
+        amendment_id: fixture.ids.excessAmendment, decision: "approved",
+        reason: `${fixture.marker} revoked current DOA assignment denial`,
+        signature: { signature_png: TASK3_SIGNATURE_PNG,
+          signer_name: "Task 3 Procurement Approver", signature_method: "typed",
+          signed_at: new Date().toISOString() },
+      },
+    ), /currently active DOA assignment and matrix/i, "revoked current DOA assignment denial");
+  } finally {
+    const { error: restoreDoaError } = await fixture.client.schema("procurement")
+      .from("doa_assignments").update({ active: true })
+      .eq("id", fixture.ids.amendmentDoaAssignments[0]);
+    if (restoreDoaError) throw new Error(`Current DOA restoration failed: ${restoreDoaError.message}`);
+  }
+  for (let step = 1; step <= 3; step += 1) {
+    approved = await callRpcAsBrowserUser(
+      page, "procurement", "approve_po_line_quantity_amendment", {
+        amendment_id: fixture.ids.excessAmendment, decision: "approved",
+        reason: `${fixture.marker} independently approved excess amendment step ${step}`,
+        signature: { signature_png: TASK3_SIGNATURE_PNG,
+          signer_name: "Task 3 Procurement Approver", signature_method: "typed",
+          signed_at: new Date().toISOString() },
+      },
+    );
+    if (!approved.ok) throw new Error(`Approved amendment step ${step} failed: ${approved.body}`);
+  }
   await verifyCheckpoint({ schema: "procurement", table: "purchase_order_amendments",
     filters: { id: fixture.ids.excessAmendment },
     expected: { purchase_order_id: fixture.ids.excessPo, po_line_id: fixture.ids.excessLine,
@@ -1395,6 +1490,47 @@ async function task3SupervisorTransactions(page, fixture) {
     if (error) throw new Error(`Stock approval readback failed: ${error.message}`);
     return (data ?? []).reduce((total, row) => total + Number(row.quantity ?? 0), 0);
   };
+  const serializedHoldResult = await callRpcAsBrowserUser(page, "warehouse", "inspect_quality", {
+    idempotency_key: `${fixture.marker}-held-serial-qc`, source_type: "receipt",
+    source_id: fixture.ids.serializedIssueReceipt,
+    product_id: fixture.ids.serializedIssueProduct,
+    serial_number: fixture.ids.serializedIssueSerial, quantity: 1, disposition: "hold",
+    reason: `${fixture.marker} held serialized unit issue denial`,
+    evidence_urls: [`audit/${fixture.marker}/held-serial.jpg`],
+  });
+  if (!serializedHoldResult.ok)
+    throw new Error(`Serialized hold creation failed: ${serializedHoldResult.body}`);
+  const serializedHold = JSON.parse(serializedHoldResult.body).hold;
+  if (!serializedHold?.id) throw new Error("Serialized hold readback is missing");
+  fixture.cleanupHoldIds.push(serializedHold.id);
+  const serializedAllocationId = `${fixture.marker}-held-serial-allocation`;
+  await insertAuditRows(fixture.client, "warehouse", "allocations", [{
+    id: serializedAllocationId, event_id: fixture.ids.event,
+    product_id: fixture.ids.serializedIssueProduct, quantity: 1,
+    status: "reserved", promotional: false, created_at: new Date().toISOString(),
+  }]);
+  requireRpcFailure(await callRpcAsBrowserUser(page, "warehouse", "issue", {
+    allocation_id: serializedAllocationId, unit_ids: [fixture.ids.serializedIssueUnit],
+    assigned_to: "Task 3 denied assignee", event_id: fixture.ids.event,
+    stock_deltas: [], movement: {
+      id: `${fixture.marker}-held-serial-movement`, type: "issue",
+      product_id: fixture.ids.serializedIssueProduct, quantity: 1,
+      from_location_id: fixture.locationId, event_id: fixture.ids.event,
+      reference: serializedAllocationId, evidence_urls: [], actor: "caller-supplied",
+      created_at: new Date().toISOString(),
+    },
+  }), /held serialized units cannot be issued/i, "held serialized unit issue denial");
+  await verifyCheckpoint({ schema: "warehouse", table: "inventory_units",
+    filters: { id: fixture.ids.serializedIssueUnit }, expected: { status: "in_stock" },
+    select: "id,status,serial_number" }, fixture.client);
+  await verifyCheckpoint({ schema: "warehouse", table: "allocations",
+    filters: { id: serializedAllocationId }, expected: { status: "reserved" },
+    select: "id,status,product_id" }, fixture.client);
+  const { error: serializedAllocationCleanupError } = await fixture.client.schema("warehouse")
+    .from("allocations").delete().eq("id", serializedAllocationId);
+  if (serializedAllocationCleanupError)
+    throw new Error(`Held serial allocation cleanup failed: ${serializedAllocationCleanupError.message}`);
+
   requireRpcFailure(await callRpcAsBrowserUser(page, "private", "warehouse_inspect_quality", {
     idempotency_key: `${fixture.marker}-private-quality-denial`, source_type: "receipt",
     source_id: fixture.ids.quarantineReceipt, product_id: fixture.ids.product,
@@ -1415,6 +1551,74 @@ async function task3SupervisorTransactions(page, fixture) {
     evidence_urls: [`audit/${fixture.marker}/active-exception-qc-denial.jpg`],
   }), /active controlled receipt exception|controlled exception resolver/i,
   "active exception public quality denial");
+  // Deterministic hold creation versus reservation: both browser-role transactions
+  // share the product lock, so exactly one concurrent hold or reservation may consume availability.
+  const atpBeforeRaceResult = await callRpcArgsAsBrowserUser(page, "warehouse", "available_to_promise", {
+    p_product_id: fixture.ids.product,
+  });
+  if (!atpBeforeRaceResult.ok) throw new Error(`Hold-create race ATP pre-read failed: ${atpBeforeRaceResult.body}`);
+  const atpBeforeRace = Number(JSON.parse(atpBeforeRaceResult.body));
+  const raceAllocationId = `${fixture.marker}-hold-create-race-allocation`;
+  const raceResults = await Promise.allSettled([
+    callRpcAsBrowserUser(page, "warehouse", "inspect_quality", {
+      idempotency_key: `${fixture.marker}-hold-create-race`, source_type: "receipt",
+      source_id: fixture.ids.cleanReceipt, product_id: fixture.ids.product,
+      procurement_po_line_id: fixture.ids.cleanLine, quantity: 1, disposition: "hold",
+      reason: `${fixture.marker} hold creation versus reservation`,
+      evidence_urls: [`audit/${fixture.marker}/hold-create-race.jpg`],
+    }),
+    callRpcAsBrowserUser(page, "warehouse", "reserve", {
+      product_id: fixture.ids.product, quantity: atpBeforeRace,
+      allocation: { id: raceAllocationId, event_id: fixture.ids.event,
+        product_id: fixture.ids.product, quantity: atpBeforeRace, status: "reserved",
+        promotional: false, created_at: new Date().toISOString() },
+    }),
+  ]);
+  const [holdRace, reserveRace] = raceResults.map((result) => result.status === "fulfilled"
+    ? result.value : ({ ok: false, status: 500, body: String(result.reason) }));
+  if (Number(holdRace.ok) + Number(reserveRace.ok) !== 1)
+    throw new Error(`exactly one concurrent hold or reservation may consume availability: ${JSON.stringify({ holdRace, reserveRace })}`);
+  const { data: raceHolds, error: raceHoldError } = await fixture.client.schema("warehouse")
+    .from("inventory_holds").select("id,status,quantity,inspection_id")
+    .eq("reason", `${fixture.marker} hold creation versus reservation`);
+  if (raceHoldError) throw new Error(`Hold-create race hold readback failed: ${raceHoldError.message}`);
+  const { data: raceAllocations, error: raceAllocationError } = await fixture.client.schema("warehouse")
+    .from("allocations").select("id,status,quantity,product_id").eq("id", raceAllocationId);
+  if (raceAllocationError) throw new Error(`Hold-create race allocation readback failed: ${raceAllocationError.message}`);
+  if ((raceHolds?.length ?? 0) + (raceAllocations?.length ?? 0) !== 1)
+    throw new Error(`Hold-create race authoritative rows diverged: ${JSON.stringify({ raceHolds, raceAllocations })}`);
+  await verifyCheckpoint({ schema: "warehouse", table: "receipts",
+    filters: { id: fixture.ids.cleanReceipt }, expected: { procurement_po_id: fixture.ids.cleanPo },
+    select: "id,quality_status,procurement_po_id" }, fixture.client);
+  await verifyCheckpoint({ schema: "procurement", table: "purchase_order_lines",
+    filters: { id: fixture.ids.cleanLine }, expected: { received_quantity: 1 },
+    select: "id,quantity,received_quantity,receiving_status" }, fixture.client);
+  const atpAfterRace = await callRpcArgsAsBrowserUser(page, "warehouse", "available_to_promise", {
+    p_product_id: fixture.ids.product,
+  });
+  const expectedAtpAfterRace = holdRace.ok ? atpBeforeRace - 1 : 0;
+  if (!atpAfterRace.ok || Number(JSON.parse(atpAfterRace.body)) !== expectedAtpAfterRace)
+    throw new Error(`Hold-create race authoritative ATP readback failed: ${atpAfterRace.body}`);
+  if (reserveRace.ok) {
+    const cancelled = await callRpcAsBrowserUser(page, "warehouse", "cancel_allocation", {
+      allocation_id: raceAllocationId,
+    });
+    if (!cancelled.ok) throw new Error(`Hold-create race allocation cleanup failed: ${cancelled.body}`);
+    const acceptedQc = await callRpcAsBrowserUser(page, "warehouse", "inspect_quality", {
+      idempotency_key: `${fixture.marker}-post-race-clean-qc`, source_type: "receipt",
+      source_id: fixture.ids.cleanReceipt, product_id: fixture.ids.product,
+      procurement_po_line_id: fixture.ids.cleanLine, quantity: 1, disposition: "accepted",
+      evidence_urls: [`audit/${fixture.marker}/post-race-clean-qc.jpg`],
+    });
+    if (!acceptedQc.ok) throw new Error(`Post-race clean QC failed: ${acceptedQc.body}`);
+  } else {
+    const released = await callRpcAsBrowserUser(page, "warehouse", "release_quality_hold", {
+      idempotency_key: `${fixture.marker}-hold-create-race-release`, hold_id: raceHolds[0].id,
+      target_disposition: "accepted", reason: `${fixture.marker} race hold released after readback`,
+      evidence_urls: [`audit/${fixture.marker}/hold-create-race-release.jpg`],
+    });
+    if (!released.ok) throw new Error(`Hold-create race hold cleanup failed: ${released.body}`);
+  }
   const validPublicQuality = await callRpcAsBrowserUser(page, "warehouse", "inspect_quality", {
     idempotency_key: `${fixture.marker}-valid-public-quality-inspection`, source_type: "receipt",
     source_id: fixture.ids.routineQualityReceipt, product_id: fixture.ids.product,
@@ -1536,13 +1740,38 @@ async function task3SupervisorTransactions(page, fixture) {
       if (Number(qualityRows[0].quantity) !== postableQuantity)
         throw new Error(`bounded quarantine posting expected ${postableQuantity}, got ${qualityRows[0].quantity}.`);
       const { data: holdRows, error: holdError } = await fixture.client.schema("warehouse")
-        .from("inventory_holds").select("id,status,quantity").eq("inspection_id", qualityRows[0].id)
+        .from("inventory_holds").select("id,status,quantity,location_id,bin_id,lot_id").eq("inspection_id", qualityRows[0].id)
         .eq("status", "active").limit(1);
       if (holdError || !holdRows?.[0]) throw new Error("Quarantine did not create an active inventory hold.");
       if (Number(holdRows[0].quantity) !== postableQuantity)
         throw new Error(`bounded quarantine posting created hold ${holdRows[0].quantity}, expected ${postableQuantity}.`);
       fixture.cleanupHoldIds.push(holdRows[0].id);
       fixture.cleanupActivityEntityIds.push(holdRows[0].id);
+      const heldLotAllocationId = `${fixture.marker}-held-lot-issue-${scenario.decisionId}`;
+      await insertAuditRows(fixture.client, "warehouse", "allocations", [{
+        id: heldLotAllocationId, event_id: fixture.ids.event,
+        product_id: fixture.ids.product, quantity: 1, status: "reserved",
+        promotional: false, created_at: new Date().toISOString(),
+      }]);
+      requireRpcFailure(await callRpcAsBrowserUser(page, "warehouse", "issue", {
+        allocation_id: heldLotAllocationId, unit_ids: [], event_id: fixture.ids.event,
+        stock_deltas: [{ product_id: fixture.ids.product,
+          location_id: holdRows[0].location_id, bin_id: holdRows[0].bin_id,
+          lot_id: holdRows[0].lot_id, delta: -1 }],
+        movement: { id: `${fixture.marker}-held-lot-movement-${scenario.decisionId}`,
+          type: "issue", product_id: fixture.ids.product, quantity: 1,
+          from_location_id: holdRows[0].location_id, from_bin_id: holdRows[0].bin_id,
+          lot_id: holdRows[0].lot_id, event_id: fixture.ids.event,
+          reference: heldLotAllocationId, evidence_urls: [], actor: "caller-supplied",
+          created_at: new Date().toISOString() },
+      }), /held exact lot stock cannot be issued/i, "held exact lot issue denial");
+      await verifyCheckpoint({ schema: "warehouse", table: "allocations",
+        filters: { id: heldLotAllocationId }, expected: { status: "reserved" },
+        select: "id,status,product_id" }, fixture.client);
+      const { error: heldLotAllocationCleanupError } = await fixture.client.schema("warehouse")
+        .from("allocations").delete().eq("id", heldLotAllocationId);
+      if (heldLotAllocationCleanupError)
+        throw new Error(`Held lot allocation cleanup failed: ${heldLotAllocationCleanupError.message}`);
       if (scenario.actualQuantity > scenario.expectedQuantity) {
         await verifyCheckpoint({ schema: "warehouse",
           table: "procurement_receipt_excess_custody",
@@ -1645,7 +1874,7 @@ async function task3SupervisorTransactions(page, fixture) {
         filters: { id: allocationId }, expected: { product_id: fixture.ids.product,
           quantity: heldStock, status: "reserved" },
         select: "id,product_id,quantity,status,event_id" }, fixture.client);
-      const atp = await callRpcAsBrowserUser(page, "warehouse", "available_to_promise", {
+      const atp = await callRpcArgsAsBrowserUser(page, "warehouse", "available_to_promise", {
         p_product_id: fixture.ids.product,
       });
       if (!atp.ok || Number(JSON.parse(atp.body)) !== 0)
@@ -1743,7 +1972,7 @@ async function task3SupervisorExcessFinalDisposition(page, fixture) {
     .locator("xpath=ancestor::li[1]");
   await custodyRow.getByRole("button", { name: "Review excess custody" }).click();
   await page.getByLabel("Governed outcome").selectOption("accepted_amendment");
-  await page.getByLabel("Approved amendment ID").fill(fixture.ids.excessAmendment);
+  await page.getByLabel("Approved quantity amendment").selectOption(fixture.ids.excessAmendment);
   await page.getByLabel("Decision reason").fill(`${fixture.marker} Supervisor excess custody final disposition`);
   await page.getByLabel("Evidence URL").fill(`audit/${fixture.marker}/accepted-excess-amendment.jpg`);
   await page.getByRole("button", { name: "Record final disposition" }).click();
@@ -1947,11 +2176,28 @@ async function task3InvalidateReadinessWithAcceptanceChange(page, fixture) {
   if (poError || Number(po?.acceptance_evidence_version) <= 0)
     throw new Error(`Acceptance evidence version did not advance: ${poError?.message ?? JSON.stringify(po)}`);
   await verifyCheckpoint({ schema: "procurement", table: "payment_readiness_packs",
-    filters: { id: fixture.ids.paymentReadinessPack }, expected: { status: "superseded" },
-    select: "id,status,acceptance_evidence_version,acceptance_pack_ids" }, fixture.client);
+    filters: { id: fixture.ids.paymentReadinessPack }, expected: { status: "accepted", evidence_stale: true },
+    select: "id,status,evidence_stale,evidence_stale_at,acceptance_evidence_version,acceptance_pack_ids" }, fixture.client);
+  await verifyCheckpoint({ schema: "procurement", table: "payment_readiness_staleness_events",
+    filters: { payment_readiness_pack_id: fixture.ids.paymentReadinessPack },
+    expected: { prior_status: "accepted" },
+    select: "id,payment_readiness_pack_id,prior_status,prior_acceptance_evidence_version,acceptance_evidence_version" }, fixture.client);
   return { name: "Task 3 stale payment readiness invalidation", ok: true,
     replacementAcceptancePackId: replacement.acceptancePackId,
     acceptanceEvidenceVersion: Number(po.acceptance_evidence_version) };
+}
+
+async function task3FinalizePaymentReadiness(page, fixture) {
+  const accepted = await callRpcAsBrowserUser(page, "procurement", "review_payment_readiness", {
+    id: fixture.ids.paymentReadinessPack, status: "accepted",
+    note: `${fixture.marker} finalized Finance decision before later acceptance evidence`,
+  });
+  if (!accepted.ok) throw new Error(`Finance readiness finalization failed: ${accepted.body}`);
+  await verifyCheckpoint({ schema: "procurement", table: "payment_readiness_packs",
+    filters: { id: fixture.ids.paymentReadinessPack }, expected: { status: "accepted", evidence_stale: false },
+    select: "id,status,evidence_stale,acceptance_pack_ids,accepted_quantity" }, fixture.client);
+  return { name: "Task 3 finalized Finance readiness preservation", ok: true,
+    readinessPackId: fixture.ids.paymentReadinessPack };
 }
 
 async function task3RejectStalePaymentReadiness(page, fixture) {
@@ -1979,7 +2225,11 @@ async function assertTask3ZeroResidualRows(fixture) {
     ["procurement.policy_evidence", client.schema("procurement").from("policy_evidence").select("id", { count: "exact", head: true }).like("request_id", `${marker}%`)],
     ["procurement.acceptance_packs", client.schema("procurement").from("acceptance_packs").select("id", { count: "exact", head: true }).in("purchase_order_id", poIds)],
     ["procurement.payment_readiness_packs", client.schema("procurement").from("payment_readiness_packs").select("id", { count: "exact", head: true }).in("purchase_order_id", poIds)],
+    ["procurement.payment_readiness_staleness_events", client.schema("procurement").from("payment_readiness_staleness_events").select("id", { count: "exact", head: true }).in("purchase_order_id", poIds)],
     ["procurement.purchase_order_amendments", client.schema("procurement").from("purchase_order_amendments").select("id", { count: "exact", head: true }).in("purchase_order_id", poIds)],
+    ["procurement.purchase_order_amendment_steps", client.schema("procurement").from("purchase_order_amendment_steps").select("id", { count: "exact", head: true }).eq("amendment_id", ids.excessAmendment)],
+    ["procurement.doa_assignments Task 3 amendment", client.schema("procurement").from("doa_assignments").select("id", { count: "exact", head: true }).in("id", ids.amendmentDoaAssignments)],
+    ["procurement.doa_matrices Task 3 amendment", client.schema("procurement").from("doa_matrices").select("id", { count: "exact", head: true }).eq("id", ids.amendmentDoaMatrix)],
     ["legal.accreditation_cases", client.schema("legal").from("accreditation_cases").select("id", { count: "exact", head: true }).eq("id", ids.accreditationCase)],
     ["legal.accreditation_dispositions", client.schema("legal").from("accreditation_dispositions").select("id", { count: "exact", head: true }).eq("case_id", ids.accreditationCase)],
     ["warehouse.products", client.schema("warehouse").from("products").select("id", { count: "exact", head: true }).eq("id", ids.product)],
@@ -2038,6 +2288,7 @@ async function cleanupTask3ReceiptFixture(fixture) {
   if (receiptError) throw new Error(`Warehouse receipt cleanup lookup failed: ${receiptError.message}`);
   const receiptIds = [...new Set([
     ...(receiptRows ?? []).map((row) => row.id), ids.quarantineReceipt, ids.routineQualityReceipt,
+    ids.serializedIssueReceipt,
   ].filter(Boolean))];
   let qualityRows = [];
   if (receiptIds.length) {
@@ -2106,7 +2357,8 @@ async function cleanupTask3ReceiptFixture(fixture) {
   if (exceptionIds.length) await remove("warehouse", "exceptions", (query) => query.in("id", exceptionIds));
   await remove("core", "documents", (query) => query.like("storage_path", `audit/${marker}/%`));
   await remove("warehouse", "command_log", (query) => query.like("idempotency_key", `${marker}%`));
-  await remove("warehouse", "movements", (query) => query.eq("product_id", ids.product));
+  await remove("warehouse", "movements", (query) => query.in("product_id",
+    [ids.product, ids.serializedIssueProduct]));
   if (receiptIds.length) {
     await remove("warehouse", "quality_inspections", (query) => query.in("source_id", receiptIds));
     await remove("warehouse", "receipts", (query) => query.in("id", receiptIds));
@@ -2116,11 +2368,15 @@ async function cleanupTask3ReceiptFixture(fixture) {
   await remove("warehouse", "cycle_counts", (query) => query.in("id", [ids.cycleCount, ids.selfCycleCount]));
   await remove("warehouse", "stock_levels", (query) => query.eq("product_id", ids.product));
   await remove("warehouse", "allocations", (query) => query.eq("event_id", ids.event));
+  await remove("warehouse", "inventory_units", (query) => query.in("product_id",
+    [ids.product, ids.serializedIssueProduct]));
   await remove("warehouse", "events", (query) => query.eq("id", ids.event));
   await remove("warehouse", "suppliers", (query) => query.eq("id", `proc-${ids.vendor}`));
+  await remove("procurement", "payment_readiness_staleness_events", (query) => query.in("purchase_order_id", poIds));
   await remove("procurement", "payment_readiness_packs", (query) => query.in("purchase_order_id", poIds));
   await remove("procurement", "acceptance_packs", (query) => query.in("purchase_order_id", poIds));
   await remove("procurement", "acceptance_reviewer_assignments", (query) => query.eq("request_id", ids.request));
+  if (ids.excessAmendment) await remove("procurement", "purchase_order_amendment_steps", (query) => query.eq("amendment_id", ids.excessAmendment));
   await remove("procurement", "purchase_order_amendments", (query) => query.in("purchase_order_id", poIds));
   await remove("procurement", "purchase_order_lines", (query) => query.in("purchase_order_id", poIds));
   await remove("procurement", "purchase_orders", (query) => query.in("id", poIds));
@@ -2130,7 +2386,10 @@ async function cleanupTask3ReceiptFixture(fixture) {
   await remove("legal", "accreditation_dispositions", (query) => query.eq("case_id", ids.accreditationCase));
   await remove("legal", "accreditation_cases", (query) => query.eq("id", ids.accreditationCase));
   await remove("procurement", "requests", (query) => query.like("id", `${marker}%`));
-  await remove("warehouse", "products", (query) => query.eq("id", ids.product));
+  await remove("procurement", "doa_assignments", (query) => query.in("id", ids.amendmentDoaAssignments));
+  await remove("procurement", "doa_matrices", (query) => query.eq("id", ids.amendmentDoaMatrix));
+  await remove("warehouse", "products", (query) => query.in("id",
+    [ids.product, ids.serializedIssueProduct]));
   await remove("core", "user_roles", (query) => query.eq("module", "warehouse")
     .in("role", [ids.activeApprovalRole, ids.inactiveApprovalRole]));
   await remove("core", "role_capabilities", (query) => query.eq("module", "warehouse")
@@ -2693,6 +2952,11 @@ try {
         browser, viewport, { email: "intra.test.proc.officer@mwell.com.ph" },
         { name: "Task 3 cumulative payment acceptance binding",
           run: (page) => task3CumulativePaymentAcceptanceBinding(page, task3Fixture) },
+      ));
+      workflows.push(await runWorkflow(
+        browser, viewport, { email: "intra.test.proc.finance@mwell.com.ph" },
+        { name: "Task 3 finalized Finance readiness preservation",
+          run: (page) => task3FinalizePaymentReadiness(page, task3Fixture) },
       ));
       workflows.push(await runWorkflow(
         browser, viewport, { email: "intra.test.legal.reviewer@mwell.com.ph" },

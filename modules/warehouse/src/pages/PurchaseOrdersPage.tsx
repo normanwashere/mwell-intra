@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useSession } from '@intra/auth';
 import { useWarehouse } from '@/app/store';
@@ -70,6 +70,11 @@ export function PurchaseOrdersPage() {
   const [searchParams] = useSearchParams();
   const handoffPoId = searchParams.get('po');
   const openedHandoffRef = useRef<string | null>(null);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
   const canManagePOs = can('view_procurement');
   const canReceive = can('receive_stock');
 
@@ -115,16 +120,24 @@ export function PurchaseOrdersPage() {
   );
 
   const mayResolveReceiptExceptions = can('release_quality_hold') && can('resolve_exceptions');
-  useEffect(() => {
+  const refreshReceiptAuthorityQueues = useCallback(async (): Promise<boolean> => {
     if (mode !== 'supabase' || !supabaseClient || !mayResolveReceiptExceptions) {
-      setExceptionDecisions([]);
-      return;
+      if (mountedRef.current) { setExceptionDecisions([]); setExcessCustodyItems([]); }
+      return true;
     }
-    let active = true;
-    void supabaseClient.schema('warehouse').rpc('procurement_receipt_exception_work_items', {
-      payload: {},
-    }).then(({ data: rows, error: rpcError }) => {
-      if (!active || rpcError) return;
+    const [parentQueue, custodyQueue] = await Promise.all([
+      supabaseClient.schema('warehouse').rpc('procurement_receipt_exception_work_items', { payload: {} }),
+      supabaseClient.schema('warehouse').rpc('procurement_receipt_excess_work_items', { payload: {} }),
+    ]);
+    if (!mountedRef.current) return false;
+    if (parentQueue.error || custodyQueue.error) {
+      setExceptionDecisions([]);
+      setExcessCustodyItems([]);
+      toast.error(parentQueue.error?.message ?? custodyQueue.error?.message ?? 'Receipt authority readback failed');
+      return false;
+    }
+    {
+      const rows = parentQueue.data;
       setExceptionDecisions(((rows ?? []) as Array<Record<string, unknown>>).map((row) => ({
         decisionId: String(row.decision_id),
         receiptId: String(row.receipt_id),
@@ -137,20 +150,9 @@ export function PurchaseOrdersPage() {
         reason: String(row.reason ?? ''),
         lines: ((row.lines ?? []) as ReceiptExceptionDecisionItem['lines']),
       })));
-    });
-    return () => { active = false; };
-  }, [mayResolveReceiptExceptions, mode, supabaseClient]);
-
-  useEffect(() => {
-    if (mode !== 'supabase' || !supabaseClient || !mayResolveReceiptExceptions) {
-      setExcessCustodyItems([]);
-      return;
     }
-    let active = true;
-    void supabaseClient.schema('warehouse').rpc('procurement_receipt_excess_work_items', {
-      payload: {},
-    }).then(({ data: rows, error: rpcError }) => {
-      if (!active || rpcError) return;
+    {
+      const rows = custodyQueue.data;
       setExcessCustodyItems(((rows ?? []) as Array<Record<string, unknown>>).map((row) => ({
         custodyId: String(row.custody_id),
         receiptId: String(row.receipt_id),
@@ -161,10 +163,20 @@ export function PurchaseOrdersPage() {
         orderedQuantity: Number(row.ordered_quantity),
         excessQuantity: Number(row.excess_quantity),
         status: row.status as ExcessCustodyWorkItem['status'],
+        eligibleApprovedAmendments: ((row.eligible_approved_amendments ?? []) as Array<Record<string, unknown>>).map((amendment) => ({
+          id: String(amendment.id),
+          previousQuantity: Number(amendment.previousQuantity),
+          amendedQuantity: Number(amendment.amendedQuantity),
+          approvedAt: String(amendment.approvedAt),
+        })),
       })));
-    });
-    return () => { active = false; };
-  }, [mayResolveReceiptExceptions, mode, supabaseClient]);
+    }
+    return true;
+  }, [mayResolveReceiptExceptions, mode, supabaseClient, toast]);
+
+  useEffect(() => {
+    void refreshReceiptAuthorityQueues();
+  }, [refreshReceiptAuthorityQueues]);
 
   const decideReceiptException = async (input: ReceiptExceptionDecisionInput) => {
     if (!supabaseClient) return false;
@@ -182,15 +194,12 @@ export function PurchaseOrdersPage() {
       },
     });
     if (rpcError) { toast.error(rpcError.message); return false; }
-    if (input.decision === 'escalate') {
-      setExceptionDecisions((items) => items.map((item) => item.decisionId === input.decisionId
-        ? { ...item, status: 'escalated', reason: input.reason }
-        : item));
-      toast.success('Receipt remains actionable in the escalated queue');
-    } else {
-      setExceptionDecisions((items) => items.filter((item) => item.decisionId !== input.decisionId));
-      toast.success('Controlled receipt decision recorded');
-    }
+    // Reconcile both receipt authority queues after either resolver; parent and custody
+    // lifecycle transitions can make the other queue stale in the same transaction.
+    if (!await refreshReceiptAuthorityQueues()) return false;
+    toast.success(input.decision === 'escalate'
+      ? 'Receipt remains actionable in the escalated queue'
+      : 'Controlled receipt decision recorded');
     return true;
   };
 
@@ -204,7 +213,7 @@ export function PurchaseOrdersPage() {
       },
     });
     if (rpcError) { toast.error(rpcError.message); return false; }
-    setExcessCustodyItems((items) => items.filter((item) => item.custodyId !== input.custodyId));
+    if (!await refreshReceiptAuthorityQueues()) return false;
     toast.success('Excess custody disposition recorded');
     return true;
   };

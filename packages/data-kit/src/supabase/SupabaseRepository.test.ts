@@ -21,7 +21,10 @@ import {
 //     seed / repository from the runtime-agnostic package root (no `@/` alias).
 //   * the RPC gate now lives at `core.has_cap('warehouse', <cap>')`, but the
 //     wire payload envelope is identical — these assertions stay valid.
-function makeMockClient(seed: WarehouseData) {
+function makeMockClient(
+  seed: WarehouseData,
+  options: { inventoryHolds?: Record<string, unknown>[] } = {},
+) {
   const calls: { fn: string; payload: Record<string, unknown> }[] = [];
   const queries: { table: string; projection: string; limit?: number; orders: string[] }[] = [];
   const locationRows = seed.locations.map((l) => ({
@@ -104,7 +107,7 @@ function makeMockClient(seed: WarehouseData) {
       disposition: 'accepted', reason: null, evidence_urls: [], inspected_by: 'user-1',
       inspected_at: '2026-07-10T00:00:00Z',
     }],
-    inventory_holds: [{
+    inventory_holds: options.inventoryHolds ?? [{
       id: 'hold-1', inspection_id: 'qi-1', product_id: 'shirt', location_id: 'loc-wh',
       bin_id: null, lot_id: null, serial_number: null, quantity: 1, status: 'active',
       reason: 'Damage', created_by: 'user-1', created_at: '2026-07-10T00:00:00Z',
@@ -390,11 +393,49 @@ describe('SupabaseRepository concurrency-safe payloads (warehouse.* v8 RPCs)', (
     // Every delta targets the allocation product and is a negative draw-down.
     for (const d of deltas!) {
       expect(d.product_id).toBe(token.id);
+      expect(d).toHaveProperty('lot_id');
       expect(d.delta).toBeLessThan(0);
     }
     // The magnitudes sum to the allocation quantity (a delta, not an absolute).
     const sum = deltas!.reduce((s, d) => s + Math.abs(d.delta), 0);
     expect(sum).toBe(alloc.quantity);
+  });
+
+  it('avoids exact held stock and selects another unheld source location', async () => {
+    const heldSeed = buildSeed();
+    const heldToken = heldSeed.products.find((product) => product.sku === 'TOKEN-DOC')!;
+    const heldAllocation = heldSeed.allocations.find(
+      (allocation) => allocation.productId === heldToken.id && allocation.status === 'reserved',
+    )!;
+    const { client, calls } = makeMockClient(heldSeed, {
+      inventoryHolds: [{
+        id: 'hold-token-primary',
+        inspection_id: 'qi-token',
+        product_id: heldToken.id,
+        location_id: 'loc-wh',
+        bin_id: null,
+        lot_id: null,
+        serial_number: null,
+        quantity: 40,
+        status: 'active',
+        reason: 'Controlled hold',
+        created_by: 'user-1',
+        created_at: '2026-07-10T00:00:00Z',
+        released_by: null,
+        released_at: null,
+      }],
+    });
+    const repo = new SupabaseRepository(client);
+
+    await repo.issue({ allocationId: heldAllocation.id, actor: 'test' });
+
+    const call = calls.find((entry) => entry.fn === 'issue')!;
+    const deltas = call.payload.stock_deltas as { location_id: string; delta: number }[];
+    expect(deltas).toHaveLength(1);
+    expect(deltas[0]).toMatchObject({
+      location_id: 'loc-cebu',
+      delta: -heldAllocation.quantity,
+    });
   });
 
   it('issue wraps its payload in the { payload } RPC envelope', async () => {
