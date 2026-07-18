@@ -885,6 +885,35 @@ test("mobile transaction checks target visible records and unobstructed actions"
   assert.match(audit, /slice\(0, 1_200\)/);
 });
 
+test("receipt escalation checks are scoped to their accessible decision region", async () => {
+  const audit = await readFile(
+    new URL("./full-intra-live-e2e.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    audit,
+    /name: "Controlled receipt decisions"[\s\S]*decisionPanel[\s\S]*getByRole\("listitem"\)/,
+  );
+  assert.doesNotMatch(
+    audit,
+    /getByText\(`\$\{fixture\.marker\}-PO-UNIDENTIFIED`[^;]+ancestor::li/,
+  );
+});
+
+test("the DOA editor cannot submit while asynchronous workspace data shifts the form", async () => {
+  const page = await readFile(
+    new URL("../../apps/shell/app/admin/doa/page.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(page, /const \[workspaceLoading, setWorkspaceLoading\]/);
+  assert.match(page, /setWorkspaceLoading\(true\);[\s\S]*finally/);
+  assert.match(page, /disabled=\{saving \|\| workspaceLoading\}/);
+  assert.doesNotMatch(
+    page,
+    /\[captureActivationDraft, core, effectiveAt, mode, procurement, toast\]/,
+  );
+});
+
 test("already-versioned Warehouse databases restore governed receive_stock", async () => {
   const source = await readFile(
     new URL(

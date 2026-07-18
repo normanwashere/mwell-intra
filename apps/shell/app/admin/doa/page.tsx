@@ -99,6 +99,7 @@ function DoaWorkspace() {
     assignment(),
     assignment("final_approver"),
   ]);
+  const [workspaceLoading, setWorkspaceLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loadingRevision, setLoadingRevision] = useState<string | null>(null);
   const [captureActivationDraft, setCaptureActivationDraft] = useState(false);
@@ -111,45 +112,50 @@ function DoaWorkspace() {
   }, []);
 
   const load = useCallback(async () => {
-    if (mode !== "supabase" || !procurement || !core) {
-      setMatrices([
-        {
-          id: captureActivationDraft ? "evidence-draft" : "preview",
-          department: "Operations",
-          version: captureActivationDraft ? "OPS-DOA-2026.2" : "Preview 1",
-          status: "draft",
-          effective_at: effectiveAt,
-          active: false,
-          source_document: "Preview source",
-        },
+    setWorkspaceLoading(true);
+    try {
+      if (mode !== "supabase" || !procurement || !core) {
+        setMatrices([
+          {
+            id: captureActivationDraft ? "evidence-draft" : "preview",
+            department: "Operations",
+            version: captureActivationDraft ? "OPS-DOA-2026.2" : "Preview 1",
+            status: "draft",
+            effective_at: new Date().toISOString().slice(0, 10),
+            active: false,
+            source_document: "Preview source",
+          },
+        ]);
+        return;
+      }
+      const [matrixResult, profileResult] = await Promise.all([
+        procurement
+          .from("doa_matrices")
+          .select(
+            "id,department,version,status,effective_at,active,source_document",
+          )
+          .order("department"),
+        core
+          .from("profiles")
+          .select("id,full_name,title")
+          .eq("kind", "employee")
+          .eq("status", "active")
+          .order("full_name"),
       ]);
-      return;
+      if (matrixResult.error || profileResult.error) {
+        toast.error(
+          matrixResult.error?.message ??
+            profileResult.error?.message ??
+            "Unable to load DOA configuration",
+        );
+        return;
+      }
+      setMatrices((matrixResult.data ?? []) as unknown as MatrixRow[]);
+      setProfiles((profileResult.data ?? []) as unknown as ProfileRow[]);
+    } finally {
+      setWorkspaceLoading(false);
     }
-    const [matrixResult, profileResult] = await Promise.all([
-      procurement
-        .from("doa_matrices")
-        .select(
-          "id,department,version,status,effective_at,active,source_document",
-        )
-        .order("department"),
-      core
-        .from("profiles")
-        .select("id,full_name,title")
-        .eq("kind", "employee")
-        .eq("status", "active")
-        .order("full_name"),
-    ]);
-    if (matrixResult.error || profileResult.error) {
-      toast.error(
-        matrixResult.error?.message ??
-          profileResult.error?.message ??
-          "Unable to load DOA configuration",
-      );
-      return;
-    }
-    setMatrices((matrixResult.data ?? []) as unknown as MatrixRow[]);
-    setProfiles((profileResult.data ?? []) as unknown as ProfileRow[]);
-  }, [captureActivationDraft, core, effectiveAt, mode, procurement, toast]);
+  }, [captureActivationDraft, core, mode, procurement, toast]);
   useEffect(() => {
     void load();
   }, [load]);
@@ -484,7 +490,7 @@ function DoaWorkspace() {
           <div className="mt-5 flex justify-end">
             <Button
               className="w-full sm:w-auto"
-              disabled={saving}
+              disabled={saving || workspaceLoading}
               onClick={() => void save()}
             >
               {saving ? "Saving..." : "Save draft"}

@@ -3145,9 +3145,14 @@ async function task3SupervisorTransactions(page, fixture) {
         },
       );
       await waitForMeaningfulRoute(page);
-      const escalatedRow = page
-        .getByText(`${fixture.marker}-PO-UNIDENTIFIED`, { exact: true })
-        .locator("xpath=ancestor::li[1]");
+      const decisionPanel = page.getByRole("region", {
+        name: "Controlled receipt decisions",
+      });
+      const escalatedRow = decisionPanel.getByRole("listitem").filter({
+        has: page.getByText(`${fixture.marker}-PO-UNIDENTIFIED`, {
+          exact: true,
+        }),
+      });
       await escalatedRow
         .getByText("Escalated", { exact: true })
         .waitFor({ state: "visible" });
