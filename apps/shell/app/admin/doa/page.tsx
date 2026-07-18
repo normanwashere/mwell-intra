@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Badge,
   Button,
@@ -103,8 +104,10 @@ function DoaWorkspace() {
   const [saving, setSaving] = useState(false);
   const [loadingRevision, setLoadingRevision] = useState<string | null>(null);
   const [captureActivationDraft, setCaptureActivationDraft] = useState(false);
+  const [portalReady, setPortalReady] = useState(false);
 
   useEffect(() => {
+    setPortalReady(true);
     setCaptureActivationDraft(
       window.sessionStorage.getItem("intra.evidence-scenario") ===
         "doa-activation",
@@ -487,12 +490,8 @@ function DoaWorkspace() {
               </div>
             ))}
           </div>
-          <div
-            data-mobile-action-bar="true"
-            className="fixed inset-x-4 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] isolate z-40 flex justify-end rounded-md border border-line bg-surface px-4 pb-3 pt-4 shadow-[0_-10px_24px_rgba(15,23,42,0.12)] sm:inset-x-5 sm:px-5 md:static md:mt-5 md:rounded-none md:border-0 md:bg-transparent md:p-0 md:shadow-none"
-          >
+          <div className="mt-5 hidden justify-end md:flex">
             <Button
-              className="relative z-10 w-full sm:w-auto"
               disabled={saving || workspaceLoading}
               onClick={() => void save()}
             >
@@ -501,6 +500,22 @@ function DoaWorkspace() {
           </div>
         </Card>
       </div>
+      {portalReady &&
+        createPortal(
+          <div
+            data-mobile-action-bar="true"
+            className="fixed inset-x-4 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] z-40 flex justify-end rounded-md border border-line bg-surface px-4 pb-3 pt-4 shadow-[0_-10px_24px_rgba(15,23,42,0.12)] sm:inset-x-5 sm:px-5 md:hidden"
+          >
+            <Button
+              className="w-full sm:w-auto"
+              disabled={saving || workspaceLoading}
+              onClick={() => void save()}
+            >
+              {saving ? "Saving..." : "Save draft"}
+            </Button>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

@@ -925,6 +925,10 @@ test("mobile transaction checks target visible records and unobstructed actions"
     new URL("./full-intra-live-e2e.mjs", import.meta.url),
     "utf8",
   );
+  const doaPage = await readFile(
+    new URL("../../apps/shell/app/admin/doa/page.tsx", import.meta.url),
+    "utf8",
+  );
   assert.match(audit, /\.filter\(\{ visible: true \}\)/);
   assert.match(audit, /const clickSaveDraft = async \(\) =>/);
   assert.equal(
@@ -940,6 +944,9 @@ test("mobile transaction checks target visible records and unobstructed actions"
     audit,
     /if \(await mobileNavigation\.count\(\)\)[\s\S]*?else \{[\s\S]*?await saveDraft\.scrollIntoViewIfNeeded\(\)/,
   );
+  assert.match(doaPage, /createPortal\(/);
+  assert.match(doaPage, /data-mobile-action-bar="true"/);
+  assert.match(doaPage, /document\.body/);
   assert.match(audit, /slice\(0, 1_200\)/);
 });
 
@@ -1003,8 +1010,9 @@ test("the DOA editor cannot submit while asynchronous workspace data shifts the 
   assert.match(page, /data-mobile-action-bar="true"/);
   assert.match(
     page,
-    /fixed inset-x-4 bottom-\[calc\(5\.25rem\+env\(safe-area-inset-bottom\)\)\][\s\S]*isolate z-40[\s\S]*md:static/,
+    /createPortal\([\s\S]*fixed inset-x-4 bottom-\[calc\(5\.25rem\+env\(safe-area-inset-bottom\)\)\] z-40[\s\S]*md:hidden[\s\S]*document\.body/,
   );
+  assert.match(page, /mt-5 hidden justify-end md:flex/);
   assert.doesNotMatch(
     page,
     /\[captureActivationDraft, core, effectiveAt, mode, procurement, toast\]/,

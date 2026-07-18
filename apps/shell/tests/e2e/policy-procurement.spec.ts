@@ -66,6 +66,47 @@ async function expectNoPageOverflow(page: Page) {
   ).toBe(true);
 }
 
+test("mobile DOA save action remains tappable above shell navigation", async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(!isMobile, "Mobile action-bar contract");
+  await installSession(page, {
+    profileId: "demo-admin",
+    roles: { core: ["platform_admin", "staff"] },
+  });
+  await page.goto("/admin/doa");
+
+  const saveDraft = page.getByRole("button", {
+    name: "Save draft",
+    exact: true,
+  });
+  await expect(saveDraft).toBeVisible();
+  await expect(saveDraft).toBeEnabled();
+  const geometry = await saveDraft.evaluate((button) => {
+    const actionRect = button.getBoundingClientRect();
+    const navigationRect = document
+      .querySelector<HTMLElement>('nav[aria-label="Primary mobile"]')
+      ?.getBoundingClientRect();
+    const hitTarget = document.elementFromPoint(
+      actionRect.left + actionRect.width / 2,
+      actionRect.top + actionRect.height / 2,
+    );
+    return {
+      height: actionRect.height,
+      clearsNavigation:
+        !navigationRect || actionRect.bottom <= navigationRect.top + 1,
+      ownsHitTarget: hitTarget === button || button.contains(hitTarget),
+    };
+  });
+  expect(geometry.height).toBeGreaterThanOrEqual(44);
+  expect(geometry.clearsNavigation).toBe(true);
+  expect(geometry.ownsHitTarget).toBe(true);
+
+  await saveDraft.click();
+  await expect(page.getByText("Department and version are required.")).toBeVisible();
+});
+
 test("requester supplies routing facts but cannot self-confirm the sourcing route", async ({
   page,
 }) => {
