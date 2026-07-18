@@ -868,6 +868,17 @@ test("transaction fixtures and UI checks preserve the acting persona and rendere
   assert.match(source, /replacementAcceptanceFacts/);
 });
 
+test("mobile transaction checks target visible records and unobstructed actions", async () => {
+  const audit = await readFile(
+    new URL("./full-intra-live-e2e.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.match(audit, /\.filter\(\{ visible: true \}\)/);
+  assert.match(audit, /saveDraft\.scrollIntoViewIfNeeded\(\)/);
+  assert.match(audit, /name: "Primary mobile"/);
+  assert.match(audit, /Save draft remains obstructed/);
+});
+
 test("already-versioned Warehouse databases restore governed receive_stock", async () => {
   const source = await readFile(
     new URL(

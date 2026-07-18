@@ -1059,7 +1059,11 @@ async function adminCreateDoaWorkflow(page, marker) {
     timeout: 20_000,
   });
   await waitForMeaningfulRoute(page);
-  await page.getByRole("button", { name: "Save draft" }).click();
+  const saveDraft = page.getByRole("button", {
+    name: "Save draft",
+    exact: true,
+  });
+  await saveDraft.click();
   await page.getByText("Department and version are required.").waitFor({
     state: "visible",
   });
@@ -1076,7 +1080,26 @@ async function adminCreateDoaWorkflow(page, marker) {
     await page
       .getByLabel(`Tier ${index + 1} named approver`)
       .selectOption({ index: 1 });
-  await page.getByRole("button", { name: "Save draft" }).click();
+  await saveDraft.scrollIntoViewIfNeeded();
+  const mobileNavigation = page.getByRole("navigation", {
+    name: "Primary mobile",
+  });
+  if (await mobileNavigation.count()) {
+    const [actionBox, navigationBox] = await Promise.all([
+      saveDraft.boundingBox(),
+      mobileNavigation.boundingBox(),
+    ]);
+    if (
+      actionBox &&
+      navigationBox &&
+      actionBox.y + actionBox.height > navigationBox.y - 2
+    ) {
+      throw new Error(
+        "Save draft remains obstructed by the primary mobile navigation.",
+      );
+    }
+  }
+  await saveDraft.click();
   const departmentHeading = page.getByRole("heading", {
     name: department,
     exact: true,
@@ -5657,9 +5680,11 @@ async function singleScopeFinanceDenialWorkflow(page, fixture, scope) {
     throw new Error(`${scope} Finance received the other Finance scope badge.`);
   }
   await page.getByRole("tab", { name: filter, exact: true }).click();
-  await page.getByText(visibleReference, { exact: true }).first().waitFor({
-    state: "visible",
-  });
+  await page
+    .getByText(visibleReference, { exact: true })
+    .filter({ visible: true })
+    .first()
+    .waitFor({ state: "visible" });
   if (await page.getByText(forbiddenReference, { exact: true }).count()) {
     throw new Error(
       `${scope} Finance received a forbidden cross-scope record.`,
