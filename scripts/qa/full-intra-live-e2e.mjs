@@ -1064,11 +1064,11 @@ async function adminCreateDoaWorkflow(page, marker) {
     exact: true,
   });
   const clickSaveDraft = async () => {
-    await saveDraft.scrollIntoViewIfNeeded();
     const mobileNavigation = page.getByRole("navigation", {
       name: "Primary mobile",
     });
     if (await mobileNavigation.count()) {
+      await saveDraft.waitFor({ state: "visible" });
       const [actionBox, navigationBox] = await Promise.all([
         saveDraft.boundingBox(),
         mobileNavigation.boundingBox(),
@@ -1082,6 +1082,21 @@ async function adminCreateDoaWorkflow(page, marker) {
           "Save draft remains obstructed by the primary mobile navigation.",
         );
       }
+      const ownsHitTarget = await saveDraft.evaluate((button) => {
+        const rect = button.getBoundingClientRect();
+        const hitTarget = document.elementFromPoint(
+          rect.left + rect.width / 2,
+          rect.top + rect.height / 2,
+        );
+        return hitTarget === button || button.contains(hitTarget);
+      });
+      if (!ownsHitTarget) {
+        throw new Error(
+          "Save draft does not own its center mobile hit target.",
+        );
+      }
+    } else {
+      await saveDraft.scrollIntoViewIfNeeded();
     }
     await saveDraft.click();
   };

@@ -934,6 +934,12 @@ test("mobile transaction checks target visible records and unobstructed actions"
   );
   assert.match(audit, /name: "Primary mobile"/);
   assert.match(audit, /Save draft remains obstructed/);
+  assert.match(audit, /document\.elementFromPoint/);
+  assert.match(audit, /Save draft does not own its center mobile hit target/);
+  assert.match(
+    audit,
+    /if \(await mobileNavigation\.count\(\)\)[\s\S]*?else \{[\s\S]*?await saveDraft\.scrollIntoViewIfNeeded\(\)/,
+  );
   assert.match(audit, /slice\(0, 1_200\)/);
 });
 
