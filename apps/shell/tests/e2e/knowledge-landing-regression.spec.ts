@@ -34,6 +34,49 @@ test("legacy future URLs render roadmap entries", async ({ page }) => {
   ).toBeVisible();
 });
 
+test("lean operating model exposes all personas and opens governed decision trees", async ({
+  page,
+}) => {
+  await page.goto("/knowledge");
+
+  await expect(
+    page.getByRole("heading", {
+      name: "See who acts, decides, and receives the handoff",
+    }),
+  ).toBeVisible();
+  await expect(page.getByText("11 personas", { exact: true })).toBeVisible();
+
+  const workflowTabs = page.getByRole("tablist", {
+    name: "Cross-department workflow",
+  });
+  const tabs = workflowTabs.getByRole("tab");
+  await expect(tabs).toHaveCount(5);
+  for (const label of [
+    "Procure to pay",
+    "Vendor accreditation",
+    "Receive to issue",
+    "Event fulfillment",
+    "Governance and insights",
+  ]) {
+    await workflowTabs.getByRole("tab", { name: label }).click();
+    await expect(
+      workflowTabs.getByRole("tab", { name: label }),
+    ).toHaveAttribute("aria-selected", "true");
+  }
+
+  await page
+    .getByText("View all 11 personas and responsibilities", { exact: true })
+    .click();
+  await expect(page.getByText("Vendor Representative", { exact: true })).toBeVisible();
+  await expect(page.getByText("Operations Associate", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: /Open full decision tree/ }).click();
+  await expect(page).toHaveURL(/flow=doa-governance/);
+  await expect(
+    page.getByRole("heading", { name: /DOA governance/i }),
+  ).toBeVisible();
+});
+
 test("landing interactions preserve URL state and accessible targets", async ({
   page,
 }) => {

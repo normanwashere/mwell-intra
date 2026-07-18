@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 
-import { createHmac } from "node:crypto";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -60,19 +59,13 @@ function configuredPassword(personaPasswords, persona) {
   );
 }
 
-export function derivePersonaPassword(masterPassword, persona) {
+export function resolveSharedUatPassword(masterPassword) {
   if (!REQUIRED_PASSWORD_PATTERN.test(masterPassword ?? "")) {
     throw new Error(
       "MWELL_UAT_TEST_PASSWORD must be at least 16 characters and include upper, lower, numeric, and symbol characters.",
     );
   }
-  const securityClass = getPersonaSecurityClass(persona);
-  const digest = createHmac("sha256", masterPassword)
-    .update(
-      `mwell-intra-uat:v1:${securityClass}:${persona.role}:${persona.email.toLowerCase()}`,
-    )
-    .digest("base64url");
-  return `Ua1!${securityClass.charAt(0).toUpperCase()}${digest.slice(0, 27)}`;
+  return masterPassword;
 }
 
 export function buildPersonaPasswords({
@@ -80,29 +73,77 @@ export function buildPersonaPasswords({
   masterPassword,
   personaPasswords,
 }) {
+  const sharedPassword = resolveSharedUatPassword(masterPassword);
   const resolved = new Map();
-  const ownersByPassword = new Map();
 
   for (const persona of personas) {
-    const password =
-      configuredPassword(personaPasswords, persona) ??
-      derivePersonaPassword(masterPassword, persona);
+    const configured = configuredPassword(personaPasswords, persona);
+    if (configured && configured !== sharedPassword) {
+      throw new Error(
+        `Password configured for ${persona.role} must match the shared UAT password.`,
+      );
+    }
+    const password = sharedPassword;
     if (!REQUIRED_PASSWORD_PATTERN.test(password)) {
       throw new Error(
         `Password configured for ${persona.role} does not meet the UAT password policy.`,
       );
     }
-    const priorOwner = ownersByPassword.get(password);
-    if (priorOwner) {
-      throw new Error(
-        `UAT personas ${priorOwner} and ${persona.role} must not share a password.`,
-      );
-    }
-    ownersByPassword.set(password, persona.role);
     resolved.set(persona.email.toLowerCase(), password);
   }
 
   return resolved;
+}
+
+async function retireObsoleteTestPersona({
+  request,
+  schemaHeaders,
+  user,
+  log,
+}) {
+  const originalEmail = user.email?.toLowerCase() ?? "unknown";
+  try {
+    await request(`/auth/v1/admin/users/${user.id}`, { method: "DELETE" });
+    log(`Removed obsolete UAT identity ${originalEmail}.`);
+    return;
+  } catch (error) {
+    // Historical workflow records can intentionally restrict hard deletion.
+    // In that case anonymize and disable the identity while preserving audit FKs.
+    const retiredEmail = `retired.${user.id}@invalid.mwell.local`;
+    await request(`/rest/v1/user_roles?user_id=eq.${user.id}`, {
+      method: "DELETE",
+      headers: schemaHeaders("core"),
+    });
+    await request(
+      `/rest/v1/profile_department_scopes?profile_id=eq.${user.id}`,
+      {
+        method: "DELETE",
+        headers: schemaHeaders("core"),
+      },
+    );
+    await request(`/rest/v1/profiles?id=eq.${user.id}`, {
+      method: "PATCH",
+      headers: schemaHeaders("core", "return=minimal"),
+      body: JSON.stringify({
+        email: retiredEmail,
+        full_name: "Retired UAT identity",
+        title: "Retired UAT identity",
+        status: "inactive",
+      }),
+    });
+    await request(`/auth/v1/admin/users/${user.id}`, {
+      method: "PUT",
+      body: JSON.stringify({
+        email: retiredEmail,
+        ban_duration: "876000h",
+        app_metadata: { kind: "employee", roles: {} },
+        user_metadata: { full_name: "Retired UAT identity" },
+      }),
+    });
+    log(
+      `Disabled obsolete UAT identity ${originalEmail}; hard deletion was restricted by retained audit history.`,
+    );
+  }
 }
 
 export function validateProvisioningInputs({
@@ -557,7 +598,34 @@ export async function provisionUatIntraUsers({
     log(`Provisioned and verified ${email} as ${persona.role}.`);
   }
 
-  return { provisioned, vendorId };
+  const desiredEmails = new Set(
+    personas.map((persona) => persona.email.toLowerCase()),
+  );
+  const obsoleteTestUsers = listedUsers.filter((user) => {
+    const email = user.email?.toLowerCase() ?? "";
+    return email.startsWith("intra.test.") && !desiredEmails.has(email);
+  });
+  for (const user of obsoleteTestUsers) {
+    await retireObsoleteTestPersona({ request, schemaHeaders, user, log });
+  }
+
+  const finalTestEmails = (await listAllAuthUsers(request))
+    .map((user) => user.email?.toLowerCase() ?? "")
+    .filter((email) => email.startsWith("intra.test."));
+  if (
+    finalTestEmails.length !== desiredEmails.size ||
+    finalTestEmails.some((email) => !desiredEmails.has(email))
+  ) {
+    throw new Error(
+      `UAT identity roster does not match the ${desiredEmails.size} approved personas.`,
+    );
+  }
+
+  return {
+    provisioned,
+    retired: obsoleteTestUsers.map((user) => user.email?.toLowerCase()),
+    vendorId,
+  };
 }
 
 async function main() {

@@ -11,8 +11,8 @@ import {
 } from "./live-e2e-scenarios.mjs";
 
 test("declares every current live role exactly once", () => {
-  assert.equal(CURRENT_LIVE_ROLES.length, 31);
-  assert.equal(new Set(CURRENT_LIVE_ROLES.map((item) => item.role)).size, 31);
+  assert.equal(CURRENT_LIVE_ROLES.length, 11);
+  assert.equal(new Set(CURRENT_LIVE_ROLES.map((item) => item.role)).size, 11);
   for (const role of CURRENT_LIVE_ROLES) {
     assert.match(role.email, /^intra\.test\..+@mwell\.com\.ph$/);
     assert.ok(!("password" in role));
@@ -20,58 +20,46 @@ test("declares every current live role exactly once", () => {
     assert.equal(typeof role.kind, "string");
   }
   const unifiedFinance = CURRENT_LIVE_ROLES.find(
-    (item) => item.role === "finance_unified",
+    (item) => item.role === "finance_controller",
   );
   assert.deepEqual(unifiedFinance?.assignments.warehouse, ["finance"]);
   assert.deepEqual(unifiedFinance?.assignments.procurement, ["finance"]);
   assert.deepEqual(
-    CURRENT_LIVE_ROLES.find((item) => item.role === "warehouse_bi_analyst")
+    CURRENT_LIVE_ROLES.find((item) => item.role === "leadership_insights")
       ?.assignments.insights,
-    ["analyst"],
+    ["analyst", "manager", "executive"],
   );
   assert.deepEqual(
-    CURRENT_LIVE_ROLES.find((item) => item.role === "warehouse_business_unit")
+    CURRENT_LIVE_ROLES.find((item) => item.role === "general_employee")
       ?.assignments.events,
     ["requester"],
   );
   assert.deepEqual(
-    CURRENT_LIVE_ROLES.find((item) => item.role === "warehouse_marketing")
+    CURRENT_LIVE_ROLES.find((item) => item.role === "marketing_events_lead")
       ?.assignments.events,
-    ["coordinator"],
+    ["coordinator", "admin"],
   );
   assert.ok(
-    CURRENT_LIVE_ROLES.some((item) => item.role === "warehouse_operator"),
+    CURRENT_LIVE_ROLES.some((item) => item.role === "operations_associate"),
   );
-  assert.ok(
-    CURRENT_LIVE_ROLES.some((item) => item.role === "warehouse_supervisor"),
-  );
+  assert.ok(CURRENT_LIVE_ROLES.some((item) => item.role === "operations_lead"));
 });
 
-test("live authentication derives a distinct credential for each persona", async () => {
+test("live authentication uses the vaulted shared UAT credential", async () => {
   const source = await readFile(
     new URL("./full-intra-live-e2e.mjs", import.meta.url),
     "utf8",
   );
-  assert.match(
-    source,
-    /derivePersonaPassword\(masterPassword, credentialPersona\)/,
-  );
+  assert.match(source, /resolveSharedUatPassword\(masterPassword\)/);
   assert.doesNotMatch(source, /fill\("#password", password\)/);
 });
 
-test("transaction logins resolve partial workflow users to the full persona catalog", async () => {
+test("transaction logins use the same shared UAT credential", async () => {
   const source = await readFile(
     new URL("./full-intra-live-e2e.mjs", import.meta.url),
     "utf8",
   );
-  assert.match(
-    source,
-    /users\.find\(\(persona\) => persona\.email === user\.email\)/,
-  );
-  assert.match(
-    source,
-    /derivePersonaPassword\(masterPassword, credentialPersona\)/,
-  );
+  assert.match(source, /page\.fill\("#password", sharedUatPassword\)/);
 });
 
 test("browser-role RPCs recover Supabase SSR cookie sessions without logging tokens", async () => {
@@ -266,7 +254,6 @@ test("cross-module scenarios are imported and executed as browser/database contr
     "warehouseEventHandoffWorkflow",
     "insightsGovernanceWorkflow",
     "unifiedFinanceReadbackWorkflow",
-    "singleScopeFinanceDenialWorkflow",
   ]) {
     assert.match(
       source,
@@ -287,7 +274,6 @@ test("cross-module scenarios are imported and executed as browser/database contr
   assert.match(source, /sources\.has\("warehouse_receipt"\)/);
   assert.match(source, /Unified Finance PO source link is incorrect/);
   assert.match(source, /Unified Finance receipt source link is incorrect/);
-  assert.match(source, /forbidden cross-scope record/);
   assert.match(
     source,
     /EXECUTABLE_CROSS_MODULE_SCENARIOS[\s\S]*executable scenario \$\{scenarioId\} was not run/,
@@ -473,7 +459,7 @@ test("Task 3 uses browser-role exception receipts and proves transactional clean
   assert.match(source, /Material stock change bypassed Finance handoff/);
   assert.match(
     source,
-    /Task 3 Finance insufficient locked-stock denial[\s\S]*intra\.test\.wh\.finance@mwell\.com\.ph/,
+    /Task 3 Finance insufficient locked-stock denial[\s\S]*intra\.test\.finance@mwell\.com\.ph/,
   );
   assert.match(
     source,
@@ -929,7 +915,7 @@ test("mobile transaction checks target visible records and unobstructed actions"
     new URL("../../apps/shell/app/admin/doa/page.tsx", import.meta.url),
     "utf8",
   );
-  assert.match(audit, /\.filter\(\{ visible: true \}\)/);
+  assert.match(audit, /saveDraft\.scrollIntoViewIfNeeded\(\)/);
   assert.match(audit, /const clickSaveDraft = async \(\) =>/);
   assert.equal(
     (audit.match(/await clickSaveDraft\(\);/g) ?? []).length,
@@ -1178,7 +1164,7 @@ test("manual stock governance converges its exception type and approval boundary
   assert.match(harness, /openPersonaPageFrom/);
   assert.match(
     harness,
-    /intra\.test\.wh\.operations@mwell\.com\.ph[\s\S]*?hold creation versus reservation/,
+    /intra\.test\.operations\.associate@mwell\.com\.ph[\s\S]*?hold creation versus reservation/,
   );
   assert.match(
     harness,

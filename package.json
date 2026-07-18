@@ -21,7 +21,7 @@
     "test:warehouse-w1:live": "pnpm --filter @intra/shell run test:e2e:live",
     "test:warehouse-w1:performance": "pnpm --filter @intra/shell exec playwright test tests/e2e/warehouse-w1-performance.spec.ts",
     "report:warehouse-w1:visual": "node scripts/qa/build-warehouse-contact-sheet.mjs",
-    "provision:test:warehouse-w1": "node scripts/qa/provision-warehouse-w1-test-users.mjs",
+    "provision:test:warehouse-w1": "pnpm provision:test:uat",
     "provision:test:uat": "node scripts/qa/provision-uat-intra-test-users.mjs",
     "test:provision:uat": "node --test scripts/qa/provision-uat-intra-test-users.test.mjs",
     "verify:procurement-contract": "node scripts/verify-effective-procurement-contract.mjs",

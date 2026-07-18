@@ -12,15 +12,19 @@ import type {
   KnowledgeModule,
   KnowledgeRole,
 } from "@shell/lib/knowledge/types";
+import { OperatingModel } from "./OperatingModel";
 
 const MODULES = [
   "all",
   "core",
   "warehouse",
   "procurement",
+  "finance",
   "legal",
   "vendor",
   "admin",
+  "events",
+  "insights",
 ] as const;
 
 const MODES: Array<{
@@ -79,9 +83,25 @@ const taskResultTypes: HandbookSearchResult["type"][] = [
 ];
 
 const flowPhase = (id: string) => {
-  if (["identity-and-access", "administration", "doa-governance", "access-recertification-offboarding", "audit-incident-handling"].includes(id))
+  if (
+    [
+      "identity-and-access",
+      "administration",
+      "doa-governance",
+      "access-recertification-offboarding",
+      "audit-incident-handling",
+    ].includes(id)
+  )
     return "Govern and secure";
-  if (["procure-to-pay", "vendor-accreditation", "product-master-data-lifecycle", "po-amendment-cancellation", "finance-export-reconciliation"].includes(id))
+  if (
+    [
+      "procure-to-pay",
+      "vendor-accreditation",
+      "product-master-data-lifecycle",
+      "po-amendment-cancellation",
+      "finance-export-reconciliation",
+    ].includes(id)
+  )
     return "Source and control";
   if (["exception-and-recovery"].includes(id)) return "Recover and improve";
   return "Operate inventory";
@@ -170,6 +190,14 @@ export function HandbookLanding({
           </span>
         </div>
       </header>
+
+      {!query && !filtersActive && mode === "task" && (
+        <OperatingModel
+          onOpenFlow={(flowId) =>
+            onSetParams({ flow: flowId, step: null, view: "flow" })
+          }
+        />
+      )}
 
       <section
         aria-labelledby="handbook-search-title"
@@ -433,7 +461,10 @@ function PrincipalFlowLibrary({
   const [openPhase, setOpenPhase] = useState<string | null>(null);
 
   return (
-    <section aria-labelledby="principal-flow-title" className="border-t border-line pt-7">
+    <section
+      aria-labelledby="principal-flow-title"
+      className="border-t border-line pt-7"
+    >
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 id="principal-flow-title" className="text-lg font-bold text-ink">
@@ -469,7 +500,8 @@ function PrincipalFlowLibrary({
                     {phase}
                   </span>
                   <span className="mt-0.5 block text-xs text-muted">
-                    {flows.length} {flows.length === 1 ? "workflow" : "workflows"}
+                    {flows.length}{" "}
+                    {flows.length === 1 ? "workflow" : "workflows"}
                   </span>
                 </span>
                 <Icon
@@ -477,62 +509,67 @@ function PrincipalFlowLibrary({
                   className={`h-4 w-4 text-faint transition ${expanded ? "rotate-90" : "-rotate-90"}`}
                 />
               </button>
-              {expanded && <div
-                id={panelId}
-                data-testid="principal-flow-carousel"
-                className="grid gap-3 pb-5 sm:grid-cols-2 xl:grid-cols-3"
-              >
-                {flows.map((flow) => {
-                  const decisions = flow.nodes.filter(
-                    (node) => node.type === "decision",
-                  ).length;
-                  const outcomes = flow.nodes.filter(
-                    (node) => node.type === "terminal",
-                  ).length;
-                  return (
-                    <button
-                      key={flow.id}
-                      type="button"
-                      onClick={() =>
-                        onSetParams({
-                          flow: flow.id,
-                          step: null,
-                          view: "flow",
-                        })
-                      }
-                      className="group/flow min-h-32 w-full border border-line bg-surface p-4 text-left transition hover:border-brand-500 hover:bg-inset focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-                    >
-                      <span className="flex items-center justify-between gap-2">
-                        <Badge
-                          tone={
-                            flow.availability === "limited"
-                              ? "amber"
-                              : "emerald"
-                          }
-                        >
-                          {flow.availability === "limited" ? "Limited" : "Live"}
-                        </Badge>
-                        <Icon
-                          name="arrowRight"
-                          className="h-4 w-4 text-faint transition group-hover/flow:translate-x-0.5 group-hover/flow:text-brand-700"
-                        />
-                      </span>
-                      <span className="mt-3 block font-semibold text-ink">
-                        {flow.title}
-                      </span>
-                      <span className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-faint">
-                        <span>{flow.nodes.length} steps</span>
-                        <span>
-                          {decisions} {decisions === 1 ? "decision" : "decisions"}
+              {expanded && (
+                <div
+                  id={panelId}
+                  data-testid="principal-flow-carousel"
+                  className="grid gap-3 pb-5 sm:grid-cols-2 xl:grid-cols-3"
+                >
+                  {flows.map((flow) => {
+                    const decisions = flow.nodes.filter(
+                      (node) => node.type === "decision",
+                    ).length;
+                    const outcomes = flow.nodes.filter(
+                      (node) => node.type === "terminal",
+                    ).length;
+                    return (
+                      <button
+                        key={flow.id}
+                        type="button"
+                        onClick={() =>
+                          onSetParams({
+                            flow: flow.id,
+                            step: null,
+                            view: "flow",
+                          })
+                        }
+                        className="group/flow min-h-32 w-full border border-line bg-surface p-4 text-left transition hover:border-brand-500 hover:bg-inset focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                      >
+                        <span className="flex items-center justify-between gap-2">
+                          <Badge
+                            tone={
+                              flow.availability === "limited"
+                                ? "amber"
+                                : "emerald"
+                            }
+                          >
+                            {flow.availability === "limited"
+                              ? "Limited"
+                              : "Live"}
+                          </Badge>
+                          <Icon
+                            name="arrowRight"
+                            className="h-4 w-4 text-faint transition group-hover/flow:translate-x-0.5 group-hover/flow:text-brand-700"
+                          />
                         </span>
-                        <span>
-                          {outcomes} {outcomes === 1 ? "outcome" : "outcomes"}
+                        <span className="mt-3 block font-semibold text-ink">
+                          {flow.title}
                         </span>
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>}
+                        <span className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-faint">
+                          <span>{flow.nodes.length} steps</span>
+                          <span>
+                            {decisions}{" "}
+                            {decisions === 1 ? "decision" : "decisions"}
+                          </span>
+                          <span>
+                            {outcomes} {outcomes === 1 ? "outcome" : "outcomes"}
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </section>
           );
         })}

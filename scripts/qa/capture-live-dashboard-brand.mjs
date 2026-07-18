@@ -23,10 +23,7 @@ const viewports = [
   ["mobile-360", 360, 800],
   ["mobile-320", 320, 720],
 ];
-const outputDirectory = path.resolve(
-  "test-results",
-  "live-dashboard-brand",
-);
+const outputDirectory = path.resolve("test-results", "live-dashboard-brand");
 await mkdir(outputDirectory, { recursive: true });
 
 const browser = await chromium.launch({ headless: true });
@@ -49,7 +46,9 @@ try {
     page.on("pageerror", (error) => consoleErrors.push(error.message));
 
     await page.goto(`${baseUrl}/login`, { waitUntil: "domcontentloaded" });
-    await page.getByLabel("Email").fill("intra.test.wh.warehouse.admin@mwell.com.ph");
+    await page
+      .getByLabel("Email")
+      .fill("intra.test.operations.lead@mwell.com.ph");
     await page.getByLabel("Password").fill(password);
     await page.getByRole("button", { name: /^Sign in$/i }).click();
     await page.waitForURL((url) => !url.pathname.startsWith("/login"), {
@@ -80,11 +79,11 @@ try {
         .map((label) => label.textContent?.trim());
       const logoOverlapsActions = Boolean(
         logoBox &&
-          actionBox &&
-          logoBox.right > actionBox.left &&
-          logoBox.left < actionBox.right &&
-          logoBox.bottom > actionBox.top &&
-          logoBox.top < actionBox.bottom,
+        actionBox &&
+        logoBox.right > actionBox.left &&
+        logoBox.left < actionBox.right &&
+        logoBox.bottom > actionBox.top &&
+        logoBox.top < actionBox.bottom,
       );
 
       return {
@@ -113,7 +112,15 @@ try {
       audit.clippedMobileLabels.length === 0 &&
       consoleErrors.length === 0;
 
-    results.push({ name, width, height, ok, ...audit, consoleErrors, screenshot });
+    results.push({
+      name,
+      width,
+      height,
+      ok,
+      ...audit,
+      consoleErrors,
+      screenshot,
+    });
     console.log(
       JSON.stringify({
         viewport: name,

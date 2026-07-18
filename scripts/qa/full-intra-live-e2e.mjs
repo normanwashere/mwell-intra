@@ -17,7 +17,7 @@ import {
   verifyCheckpoint,
 } from "./live-e2e-db-verify.mjs";
 import { cleanupRun } from "./live-e2e-cleanup.mjs";
-import { derivePersonaPassword } from "./provision-uat-intra-test-users.mjs";
+import { resolveSharedUatPassword } from "./provision-uat-intra-test-users.mjs";
 
 const require = createRequire(path.resolve("apps/shell/package.json"));
 const { chromium } = require("@playwright/test");
@@ -66,9 +66,10 @@ if (!baseUrl || !/^https:\/\//.test(baseUrl)) {
 }
 if (!masterPassword) {
   throw new Error(
-    "AUDIT_PASSWORD is required as the vaulted derivation secret; persona credentials remain unique.",
+    "AUDIT_PASSWORD is required as the vaulted shared UAT credential.",
   );
 }
+const sharedUatPassword = resolveSharedUatPassword(masterPassword);
 const appOrigin = new URL(baseUrl).origin;
 await verifyDeployedTargetIdentity({
   baseUrl,
@@ -382,6 +383,47 @@ const roleRoutes = {
     { path: "/insights", text: /Insights|Indicators|Warehouse|Procurement/i },
   ],
 };
+
+roleRoutes.platform_administrator = roleRoutes.platform_admin;
+roleRoutes.vendor_representative = roleRoutes.vendor_portal;
+roleRoutes.general_employee = [
+  ...roleRoutes.procurement_requester,
+  ...roleRoutes.warehouse_business_unit,
+  ...roleRoutes.events_requester,
+];
+roleRoutes.operations_associate = [
+  ...roleRoutes.warehouse_operator,
+  ...roleRoutes.warehouse_operations,
+];
+roleRoutes.operations_lead = [
+  ...roleRoutes.warehouse_supervisor,
+  ...roleRoutes.warehouse_logistics_supervisor,
+  ...roleRoutes.procurement_approver,
+];
+roleRoutes.procurement_lead = [
+  ...roleRoutes.procurement_officer,
+  ...roleRoutes.procurement_admin,
+  ...roleRoutes.warehouse_procurement,
+];
+roleRoutes.finance_controller = roleRoutes.finance_unified;
+roleRoutes.legal_compliance_lead = [
+  ...roleRoutes.legal_reviewer,
+  ...roleRoutes.legal_compliance,
+  ...roleRoutes.legal_admin,
+];
+roleRoutes.marketing_events_lead = [
+  ...roleRoutes.events_coordinator,
+  ...roleRoutes.events_admin,
+  ...roleRoutes.warehouse_marketing,
+];
+roleRoutes.product_owner = [
+  ...roleRoutes.events_viewer,
+  ...roleRoutes.warehouse_pricing,
+];
+roleRoutes.leadership_insights = [
+  ...roleRoutes.insights_analyst,
+  ...roleRoutes.warehouse_bi_analyst,
+];
 
 function routesFor(user) {
   const exactRoutes = ROUTE_AUTHORIZATION_MATRIX.map((route) => {
@@ -719,8 +761,6 @@ async function pageAudit(page) {
 }
 
 async function login(page, user) {
-  const credentialPersona =
-    users.find((persona) => persona.email === user.email) ?? user;
   await page.goto(`${baseUrl}/login?redirect=%2F&audit=${Date.now()}`, {
     waitUntil: "domcontentloaded",
     timeout: 20_000,
@@ -728,10 +768,7 @@ async function login(page, user) {
   const submit = page.getByRole("button", { name: /^sign in$/i });
   await submit.waitFor({ state: "visible", timeout: 10_000 });
   await page.fill("#email", user.email);
-  await page.fill(
-    "#password",
-    derivePersonaPassword(masterPassword, credentialPersona),
-  );
+  await page.fill("#password", sharedUatPassword);
   await submit.click();
   await page
     .waitForFunction(
@@ -1328,7 +1365,7 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
     .schema("core")
     .from("profiles")
     .select("id")
-    .eq("email", "intra.test.proc.officer@mwell.com.ph")
+    .eq("email", "intra.test.procurement.lead@mwell.com.ph")
     .limit(1);
   if (officerError || !officerProfiles?.[0])
     throw new Error("Procurement Officer profile is required.");
@@ -1336,7 +1373,7 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
     .schema("core")
     .from("profiles")
     .select("id")
-    .eq("email", "intra.test.proc.requester@mwell.com.ph")
+    .eq("email", "intra.test.employee@mwell.com.ph")
     .limit(1);
   if (requesterError || !requesterProfiles?.[0])
     throw new Error("Procurement requester profile is required.");
@@ -1344,7 +1381,7 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
     .schema("core")
     .from("profiles")
     .select("id")
-    .eq("email", "intra.test.legal.reviewer@mwell.com.ph")
+    .eq("email", "intra.test.legal.lead@mwell.com.ph")
     .limit(1);
   if (reviewerError || !reviewerProfiles?.[0])
     throw new Error("Assigned technical reviewer profile is required.");
@@ -1352,7 +1389,7 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
     .schema("core")
     .from("profiles")
     .select("id,full_name")
-    .eq("email", "intra.test.proc.approver@mwell.com.ph")
+    .eq("email", "intra.test.operations.lead@mwell.com.ph")
     .limit(1);
   if (approverError || !approverProfiles?.[0])
     throw new Error("Procurement amendment approver profile is required.");
@@ -2839,7 +2876,7 @@ async function task3SupervisorTransactions(page, fixture) {
   const raceAllocationId = `${fixture.marker}-hold-create-race-allocation`;
   const holdCreator = await openPersonaPageFrom(
     page,
-    "intra.test.wh.operations@mwell.com.ph",
+    "intra.test.operations.associate@mwell.com.ph",
   );
   let raceResults;
   try {
@@ -5685,6 +5722,10 @@ async function warehouseEventHandoffWorkflow(page, state) {
 }
 
 const INSIGHT_ROLE_AREAS = {
+  leadership_insights: {
+    visible: ["Warehouse", "Procurement", "Legal", "Finance", "Executive"],
+    hidden: [],
+  },
   insights_analyst: {
     visible: ["Warehouse", "Procurement", "Legal", "Finance"],
     hidden: ["Executive"],
@@ -5850,51 +5891,6 @@ async function unifiedFinanceReadbackWorkflow(page, fixture) {
       matched: rows.length,
       expectedSources: ["procurement_po", "warehouse_receipt"],
     },
-  };
-}
-
-async function singleScopeFinanceDenialWorkflow(page, fixture, scope) {
-  const warehouseScope = scope === "warehouse";
-  const expectedBadge = warehouseScope
-    ? "Warehouse Finance"
-    : "Procurement Finance";
-  const forbiddenBadge = warehouseScope
-    ? "Procurement Finance"
-    : "Warehouse Finance";
-  const visibleReference = warehouseScope
-    ? fixture.ids.cleanReceipt
-    : fixture.ids.cleanPo;
-  const forbiddenReference = warehouseScope
-    ? fixture.ids.cleanPo
-    : fixture.ids.cleanReceipt;
-  const filter = warehouseScope ? "Receipts" : "POs";
-  await page.goto(`${baseUrl}/finance?scope=${scope}&workflow=${Date.now()}`, {
-    waitUntil: "domcontentloaded",
-    timeout: 20_000,
-  });
-  await waitForMeaningfulRoute(page);
-  await page
-    .getByText(expectedBadge, { exact: true })
-    .waitFor({ state: "visible" });
-  if (await page.getByText(forbiddenBadge, { exact: true }).count()) {
-    throw new Error(`${scope} Finance received the other Finance scope badge.`);
-  }
-  await page.getByRole("tab", { name: filter, exact: true }).click();
-  await page
-    .getByText(visibleReference, { exact: true })
-    .filter({ visible: true })
-    .first()
-    .waitFor({ state: "visible" });
-  if (await page.getByText(forbiddenReference, { exact: true }).count()) {
-    throw new Error(
-      `${scope} Finance received a forbidden cross-scope record.`,
-    );
-  }
-  return {
-    name: `${scope} Finance source isolation`,
-    ok: true,
-    visibleReference,
-    forbiddenReference,
   };
 }
 
@@ -6200,17 +6196,17 @@ try {
     for (const viewport of transactionViewports) {
       for (const [email, name, run] of [
         [
-          "intra.test.proc.officer@mwell.com.ph",
+          "intra.test.procurement.lead@mwell.com.ph",
           "procurement receipt authority denial",
           procurementReceiptAuthorityWorkflow,
         ],
         [
-          "intra.test.wh.operations@mwell.com.ph",
+          "intra.test.operations.associate@mwell.com.ph",
           "warehouse operator routine surface",
           warehouseOperatorSurfaceWorkflow,
         ],
         [
-          "intra.test.wh.logistics@mwell.com.ph",
+          "intra.test.operations.lead@mwell.com.ph",
           "warehouse supervisor controlled exceptions",
           warehouseSupervisorControlWorkflow,
         ],
@@ -6225,7 +6221,7 @@ try {
         const locationSetup = await runWorkflow(
           browser,
           viewport,
-          { email: "intra.test.wh.warehouse.admin@mwell.com.ph" },
+          { email: "intra.test.operations.lead@mwell.com.ph" },
           {
             name: "warehouse location creation",
             run: (page) => warehouseCreateLocationWorkflow(page, marker),
@@ -6239,7 +6235,7 @@ try {
         const binSetup = await runWorkflow(
           browser,
           viewport,
-          { email: "intra.test.wh.warehouse.admin@mwell.com.ph" },
+          { email: "intra.test.operations.lead@mwell.com.ph" },
           {
             name: "warehouse bin creation",
             run: (page) => warehouseCreateBinWorkflow(page, marker),
@@ -6259,7 +6255,7 @@ try {
           await runWorkflow(
             browser,
             viewport,
-            { email: "intra.test.wh.operations@mwell.com.ph" },
+            { email: "intra.test.operations.associate@mwell.com.ph" },
             {
               name: "Task 3 operator receipt transactions",
               run: (page) =>
@@ -6271,7 +6267,7 @@ try {
           await runWorkflow(
             browser,
             viewport,
-            { email: "intra.test.proc.officer@mwell.com.ph" },
+            { email: "intra.test.procurement.lead@mwell.com.ph" },
             {
               name: "Task 3 payment readiness without acceptance denial",
               run: (page) =>
@@ -6283,7 +6279,7 @@ try {
           await runWorkflow(
             browser,
             viewport,
-            { email: "intra.test.events.requester@mwell.com.ph" },
+            { email: "intra.test.employee@mwell.com.ph" },
             {
               name: "Events request creation and persistence readback",
               scenarioId: "events-request-to-warehouse-handoff",
@@ -6296,7 +6292,7 @@ try {
           await runWorkflow(
             browser,
             viewport,
-            { email: "intra.test.events.viewer@mwell.com.ph" },
+            { email: "intra.test.product.owner@mwell.com.ph" },
             {
               name: "Events viewer create denial",
               scenarioId: "events-request-to-warehouse-handoff",
@@ -6308,7 +6304,7 @@ try {
           await runWorkflow(
             browser,
             viewport,
-            { email: "intra.test.events.coordinator@mwell.com.ph" },
+            { email: "intra.test.marketing.events@mwell.com.ph" },
             {
               name: "Events coordinator refresh and Warehouse handoff",
               scenarioId: "events-request-to-warehouse-handoff",
@@ -6321,7 +6317,7 @@ try {
           await runWorkflow(
             browser,
             viewport,
-            { email: "intra.test.wh.operations@mwell.com.ph" },
+            { email: "intra.test.operations.associate@mwell.com.ph" },
             {
               name: "Events-to-Warehouse operational handoff",
               scenarioId: "events-request-to-warehouse-handoff",
@@ -6331,10 +6327,7 @@ try {
           ),
         );
         for (const [role, email] of [
-          ["insights_analyst", "intra.test.insights.analyst@mwell.com.ph"],
-          ["insights_manager", "intra.test.insights.manager@mwell.com.ph"],
-          ["insights_executive", "intra.test.insights.executive@mwell.com.ph"],
-          ["insights_admin", "intra.test.insights.admin@mwell.com.ph"],
+          ["leadership_insights", "intra.test.leadership@mwell.com.ph"],
         ]) {
           workflows.push(
             await runWorkflow(
@@ -6365,41 +6358,7 @@ try {
           await runWorkflow(
             browser,
             viewport,
-            { email: "intra.test.proc.finance@mwell.com.ph" },
-            {
-              name: "Procurement Finance source isolation",
-              scenarioId: "unified-finance-control-center",
-              run: (page) =>
-                singleScopeFinanceDenialWorkflow(
-                  page,
-                  task3Fixture,
-                  "procurement",
-                ),
-            },
-          ),
-        );
-        workflows.push(
-          await runWorkflow(
-            browser,
-            viewport,
-            { email: "intra.test.wh.finance@mwell.com.ph" },
-            {
-              name: "Warehouse Finance source isolation",
-              scenarioId: "unified-finance-control-center",
-              run: (page) =>
-                singleScopeFinanceDenialWorkflow(
-                  page,
-                  task3Fixture,
-                  "warehouse",
-                ),
-            },
-          ),
-        );
-        workflows.push(
-          await runWorkflow(
-            browser,
-            viewport,
-            { email: "intra.test.proc.officer@mwell.com.ph" },
+            { email: "intra.test.procurement.lead@mwell.com.ph" },
             {
               name: "Task 3 approved amendment quantity growth request",
               run: (page) => task3RequestExcessAmendment(page, task3Fixture),
@@ -6434,7 +6393,7 @@ try {
           await runWorkflow(
             browser,
             viewport,
-            { email: "intra.test.proc.officer@mwell.com.ph" },
+            { email: "intra.test.procurement.lead@mwell.com.ph" },
             {
               name: "Task 3 inactive approval role denial",
               run: (page) =>
@@ -6446,7 +6405,7 @@ try {
           await runWorkflow(
             browser,
             viewport,
-            { email: "intra.test.wh.logistics@mwell.com.ph" },
+            { email: "intra.test.operations.lead@mwell.com.ph" },
             {
               name: "Task 3 supervisor quarantine and variance transactions",
               run: (page) => task3SupervisorTransactions(page, task3Fixture),
@@ -6457,7 +6416,7 @@ try {
           await runWorkflow(
             browser,
             viewport,
-            { email: "intra.test.wh.finance@mwell.com.ph" },
+            { email: "intra.test.finance@mwell.com.ph" },
             {
               name: "Task 3 Finance insufficient locked-stock denial",
               run: (page) =>
@@ -6469,7 +6428,7 @@ try {
           await runWorkflow(
             browser,
             viewport,
-            { email: "intra.test.proc.approver@mwell.com.ph" },
+            { email: "intra.test.operations.lead@mwell.com.ph" },
             {
               name: "Task 3 approved amendment quantity growth approval",
               run: (page) => task3ApproveExcessAmendment(page, task3Fixture),
@@ -6480,7 +6439,7 @@ try {
           await runWorkflow(
             browser,
             viewport,
-            { email: "intra.test.wh.logistics@mwell.com.ph" },
+            { email: "intra.test.operations.lead@mwell.com.ph" },
             {
               name: "Task 3 Supervisor excess custody final disposition",
               run: (page) =>
@@ -6492,7 +6451,7 @@ try {
           await runWorkflow(
             browser,
             viewport,
-            { email: "intra.test.proc.requester@mwell.com.ph" },
+            { email: "intra.test.employee@mwell.com.ph" },
             {
               name: "Task 3 policy-negative database transactions",
               run: (page) =>
@@ -6504,7 +6463,7 @@ try {
           await runWorkflow(
             browser,
             viewport,
-            { email: "intra.test.proc.requester@mwell.com.ph" },
+            { email: "intra.test.employee@mwell.com.ph" },
             {
               name: "Task 3 requester goods acceptance",
               run: (page) =>
@@ -6522,7 +6481,7 @@ try {
           await runWorkflow(
             browser,
             viewport,
-            { email: "intra.test.legal.reviewer@mwell.com.ph" },
+            { email: "intra.test.legal.lead@mwell.com.ph" },
             {
               name: "Task 3 cumulative partial acceptance",
               run: (page) =>
@@ -6534,7 +6493,7 @@ try {
           await runWorkflow(
             browser,
             viewport,
-            { email: "intra.test.proc.officer@mwell.com.ph" },
+            { email: "intra.test.procurement.lead@mwell.com.ph" },
             {
               name: "Task 3 cumulative payment acceptance binding",
               run: (page) =>
@@ -6546,7 +6505,7 @@ try {
           await runWorkflow(
             browser,
             viewport,
-            { email: "intra.test.proc.finance@mwell.com.ph" },
+            { email: "intra.test.finance@mwell.com.ph" },
             {
               name: "Task 3 finalized Finance readiness preservation",
               run: (page) => task3FinalizePaymentReadiness(page, task3Fixture),
@@ -6557,7 +6516,7 @@ try {
           await runWorkflow(
             browser,
             viewport,
-            { email: "intra.test.legal.reviewer@mwell.com.ph" },
+            { email: "intra.test.legal.lead@mwell.com.ph" },
             {
               name: "Task 3 stale payment readiness invalidation",
               run: (page) =>
@@ -6572,7 +6531,7 @@ try {
           await runWorkflow(
             browser,
             viewport,
-            { email: "intra.test.proc.finance@mwell.com.ph" },
+            { email: "intra.test.finance@mwell.com.ph" },
             {
               name: "Task 3 stale Finance readiness denial",
               run: (page) =>
@@ -6584,7 +6543,7 @@ try {
           await runWorkflow(
             browser,
             viewport,
-            { email: "intra.test.proc.requester@mwell.com.ph" },
+            { email: "intra.test.employee@mwell.com.ph" },
             {
               name: "procurement request draft",
               run: (page) => procurementCreateRequestWorkflow(page, marker),
@@ -6595,7 +6554,7 @@ try {
           await runWorkflow(
             browser,
             viewport,
-            { email: "intra.test.legal.reviewer@mwell.com.ph" },
+            { email: "intra.test.legal.lead@mwell.com.ph" },
             {
               name: "legal vendor invite",
               run: (page) => legalInviteVendorWorkflow(page, marker),
@@ -6606,7 +6565,7 @@ try {
           await runWorkflow(
             browser,
             viewport,
-            { email: "intra.test.wh.logistics@mwell.com.ph" },
+            { email: "intra.test.operations.lead@mwell.com.ph" },
             {
               name: "warehouse bin role handoff",
               run: (page) =>
@@ -6623,7 +6582,7 @@ try {
           await runWorkflow(
             browser,
             viewport,
-            { email: "intra.test.wh.business.unit@mwell.com.ph" },
+            { email: "intra.test.employee@mwell.com.ph" },
             {
               name: "warehouse event creation",
               run: (page) => warehouseCreateEventWorkflow(page, marker),
@@ -6634,7 +6593,7 @@ try {
           await runWorkflow(
             browser,
             viewport,
-            { email: "intra.test.wh.marketing@mwell.com.ph" },
+            { email: "intra.test.marketing.events@mwell.com.ph" },
             {
               name: "warehouse event role handoff",
               run: (page) =>
@@ -6662,7 +6621,7 @@ try {
           await runWorkflow(
             browser,
             viewport,
-            { email: "intra.test.legal.admin@mwell.com.ph" },
+            { email: "intra.test.legal.lead@mwell.com.ph" },
             {
               name: "department DOA role handoff",
               run: (page) =>
@@ -6677,22 +6636,22 @@ try {
         );
         for (const [email, name, run] of [
           [
-            "intra.test.wh.logistics@mwell.com.ph",
+            "intra.test.operations.lead@mwell.com.ph",
             "warehouse receiving validation",
             warehouseReceivingValidationWorkflow,
           ],
           [
-            "intra.test.wh.logistics@mwell.com.ph",
+            "intra.test.operations.lead@mwell.com.ph",
             "warehouse quality validation",
             warehouseQualityValidationWorkflow,
           ],
           [
-            "intra.test.wh.finance@mwell.com.ph",
+            "intra.test.finance@mwell.com.ph",
             "warehouse cycle count validation",
             warehouseCycleCountValidationWorkflow,
           ],
           [
-            "intra.test.wh.operations@mwell.com.ph",
+            "intra.test.operations.associate@mwell.com.ph",
             "warehouse return validation",
             warehouseReturnValidationWorkflow,
           ],

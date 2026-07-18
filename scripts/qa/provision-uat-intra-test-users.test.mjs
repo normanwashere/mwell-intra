@@ -54,7 +54,10 @@ function jsonResponse(body, status = 200) {
   });
 }
 
-function createProvisioningFetch({ wrongFinalRoles = false } = {}) {
+function createProvisioningFetch({
+  wrongFinalRoles = false,
+  includeObsolete = false,
+} = {}) {
   const calls = [];
   const synced = new Set();
   const passwords = new Map();
@@ -65,6 +68,12 @@ function createProvisioningFetch({ wrongFinalRoles = false } = {}) {
       { id: `user-${index + 1}`, email: persona.email },
     ]),
   );
+  if (includeObsolete) {
+    users.set("obsolete-user", {
+      id: "obsolete-user",
+      email: "intra.test.obsolete@mwell.com.ph",
+    });
+  }
   const personaById = new Map(
     [...users.entries()].map(([id, user]) => [
       id,
@@ -121,6 +130,11 @@ function createProvisioningFetch({ wrongFinalRoles = false } = {}) {
         email: body.email,
         app_metadata: body.app_metadata,
       });
+    }
+    if (method === "DELETE" && endpoint.startsWith("/auth/v1/admin/users/")) {
+      const id = endpoint.split("/").at(-1);
+      users.delete(id);
+      return jsonResponse(null, 204);
     }
     if (method === "POST" && endpoint === "/auth/v1/admin/users") {
       return jsonResponse({ message: "unexpected create" }, 500);
@@ -238,7 +252,8 @@ function createProvisioningFetch({ wrongFinalRoles = false } = {}) {
   return { fetchImpl, calls, passwords };
 }
 
-test("covers every active role family plus unified Finance", () => {
+test("covers the implemented workflow role families with eleven lean personas", () => {
+  assert.equal(CURRENT_LIVE_ROLES.length, 11);
   const assignments = new Set(
     CURRENT_LIVE_ROLES.flatMap((persona) =>
       Object.entries(persona.assignments).flatMap(([module, roles]) =>
@@ -252,7 +267,6 @@ test("covers every active role family plus unified Finance", () => {
     "core:vendor_portal",
     "warehouse:warehouse_operator",
     "warehouse:warehouse_supervisor",
-    "warehouse:warehouse_admin",
     "procurement:requester",
     "procurement:procurement_officer",
     "procurement:approver",
@@ -268,12 +282,11 @@ test("covers every active role family plus unified Finance", () => {
     "insights:analyst",
     "insights:manager",
     "insights:executive",
-    "insights:admin",
   ]) {
     assert.ok(assignments.has(key), `missing ${key}`);
   }
   const unified = CURRENT_LIVE_ROLES.find(
-    (persona) => persona.role === "finance_unified",
+    (persona) => persona.role === "finance_controller",
   );
   assert.deepEqual(unified?.assignments, {
     core: ["staff"],
@@ -282,16 +295,18 @@ test("covers every active role family plus unified Finance", () => {
   });
 });
 
-test("derives a unique password for every persona and separates security classes", () => {
+test("uses one policy-compliant password for all eleven UAT personas", () => {
   const passwords = buildPersonaPasswords({
     personas: CURRENT_LIVE_ROLES,
     masterPassword: valid.password,
   });
-  assert.equal(passwords.size, 31);
-  assert.equal(new Set(passwords.values()).size, 31);
+  assert.equal(passwords.size, 11);
+  assert.deepEqual([...new Set(passwords.values())], [valid.password]);
   assert.equal(
     getPersonaSecurityClass(
-      CURRENT_LIVE_ROLES.find((persona) => persona.role === "platform_admin"),
+      CURRENT_LIVE_ROLES.find(
+        (persona) => persona.role === "platform_administrator",
+      ),
     ),
     "privileged",
   );
@@ -303,37 +318,36 @@ test("derives a unique password for every persona and separates security classes
   );
   assert.equal(
     getPersonaSecurityClass(
-      CURRENT_LIVE_ROLES.find((persona) => persona.role === "core_staff_only"),
+      CURRENT_LIVE_ROLES.find((persona) => persona.role === "general_employee"),
     ),
     "employee",
   );
 });
 
-test("accepts explicit per-persona passwords and rejects any shared override", () => {
-  const distinct = Object.fromEntries(
-    focusedPersonas.map((persona, index) => [
-      persona.role,
-      `Distinct-${persona.kind}-${index}-Password!A7`,
-    ]),
+test("accepts only overrides matching the shared UAT password", () => {
+  const shared = Object.fromEntries(
+    focusedPersonas.map((persona) => [persona.role, valid.password]),
   );
   const resolved = buildPersonaPasswords({
     personas: focusedPersonas,
-    personaPasswords: distinct,
+    masterPassword: valid.password,
+    personaPasswords: shared,
   });
-  assert.equal(new Set(resolved.values()).size, focusedPersonas.length);
+  assert.deepEqual([...new Set(resolved.values())], [valid.password]);
 
   assert.throws(
     () =>
       buildPersonaPasswords({
         personas: focusedPersonas,
+        masterPassword: valid.password,
         personaPasswords: Object.fromEntries(
           focusedPersonas.map((persona) => [
             persona.role,
-            "Shared-UAT-Password-2026!A",
+            "Different-UAT-Password-2026!A",
           ]),
         ),
       }),
-    /must not share a password/i,
+    /must match the shared UAT password/i,
   );
 });
 
@@ -366,7 +380,7 @@ test("paginates Auth users, reconciles add-before-prune, verifies state, and nev
 
   assert.equal(result.provisioned.length, focusedPersonas.length);
   assert.equal(mock.passwords.size, focusedPersonas.length);
-  assert.equal(new Set(mock.passwords.values()).size, focusedPersonas.length);
+  assert.deepEqual([...new Set(mock.passwords.values())], [valid.password]);
   assert.ok(
     mock.calls.some(
       (call) => call.endpoint === "/auth/v1/admin/users?page=2&per_page=1000",
@@ -419,6 +433,25 @@ test("paginates Auth users, reconciles add-before-prune, verifies state, and nev
       "scope must be added before stale scope is pruned",
     );
   }
+});
+
+test("retires obsolete intra.test identities after the approved roster verifies", async () => {
+  const mock = createProvisioningFetch({ includeObsolete: true });
+  const result = await provisionUatIntraUsers({
+    ...valid,
+    personas: focusedPersonas,
+    fetchImpl: mock.fetchImpl,
+    log: () => {},
+  });
+
+  assert.deepEqual(result.retired, ["intra.test.obsolete@mwell.com.ph"]);
+  assert.ok(
+    mock.calls.some(
+      (call) =>
+        call.method === "DELETE" &&
+        call.endpoint === "/auth/v1/admin/users/obsolete-user",
+    ),
+  );
 });
 
 test("fails provisioning when exact postcondition verification detects role drift", async () => {

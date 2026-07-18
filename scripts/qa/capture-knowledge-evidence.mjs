@@ -50,22 +50,22 @@ async function login(page, email) {
 }
 
 const memoryRoles = {
-  "intra.test.proc.requester@mwell.com.ph": {
+  "intra.test.employee@mwell.com.ph": {
     profileId: "demo-logistics",
     core: ["staff"],
     procurement: ["requester"],
   },
-  "intra.test.wh.logistics@mwell.com.ph": {
+  "intra.test.operations.lead@mwell.com.ph": {
     profileId: "demo-logistics",
     core: ["staff"],
     warehouse: ["logistics_supervisor"],
   },
-  "intra.test.wh.warehouse.admin@mwell.com.ph": {
+  "intra.test.operations.associate@mwell.com.ph": {
     profileId: "demo-warehouse-admin",
     core: ["staff"],
     warehouse: ["warehouse_admin"],
   },
-  "intra.test.proc.officer@mwell.com.ph": {
+  "intra.test.procurement.lead@mwell.com.ph": {
     profileId: "demo-procurement",
     core: ["staff"],
     procurement: ["procurement_officer"],
@@ -231,7 +231,7 @@ await capture({
   name: "flowchart-procure-to-pay-desktop",
   route: "/knowledge?flow=procure-to-pay",
   viewport: { width: 1440, height: 900 },
-  email: "intra.test.proc.requester@mwell.com.ph",
+  email: "intra.test.employee@mwell.com.ph",
   expectedText: "Complete decision tree",
   verifyFlowInteraction: true,
 });
@@ -239,7 +239,7 @@ await capture({
   name: "knowledge-home-desktop",
   route: "/knowledge",
   viewport: { width: 1440, height: 900 },
-  email: "intra.test.proc.requester@mwell.com.ph",
+  email: "intra.test.employee@mwell.com.ph",
   expectedText: "What do you need to complete?",
   output: manualOutput,
   fullPage: false,
@@ -248,7 +248,7 @@ await capture({
   name: "knowledge-home-mobile",
   route: "/knowledge",
   viewport: { width: 390, height: 844 },
-  email: "intra.test.proc.requester@mwell.com.ph",
+  email: "intra.test.employee@mwell.com.ph",
   expectedText: "What do you need to complete?",
   output: manualOutput,
   fullPage: false,
@@ -257,7 +257,7 @@ await capture({
   name: "flowchart-procure-to-pay-mobile",
   route: "/knowledge?flow=procure-to-pay",
   viewport: { width: 390, height: 844 },
-  email: "intra.test.proc.requester@mwell.com.ph",
+  email: "intra.test.employee@mwell.com.ph",
   expectedText: "Guided workflow",
   verifyFlowInteraction: true,
   fullPage: false,
@@ -266,7 +266,7 @@ await capture({
   name: "flowchart-receive-to-putaway-mobile",
   route: "/knowledge?flow=receive-to-putaway",
   viewport: { width: 320, height: 720 },
-  email: "intra.test.wh.logistics@mwell.com.ph",
+  email: "intra.test.operations.lead@mwell.com.ph",
   expectedText: "Guided workflow",
   verifyFlowInteraction: true,
   fullPage: false,
@@ -275,7 +275,7 @@ await capture({
   name: "step-receiving-desktop",
   route: "/knowledge?flow=receive-to-putaway&step=receive-record",
   viewport: { width: 1280, height: 800 },
-  email: "intra.test.wh.logistics@mwell.com.ph",
+  email: "intra.test.operations.lead@mwell.com.ph",
   expectedText: "Record receipt lines",
   scrollToText: "Verified 2026-07-11",
   fullPage: false,
@@ -284,7 +284,7 @@ await capture({
   name: "step-receiving-mobile",
   route: "/knowledge?flow=receive-to-putaway&step=receive-record",
   viewport: { width: 390, height: 844 },
-  email: "intra.test.wh.logistics@mwell.com.ph",
+  email: "intra.test.operations.lead@mwell.com.ph",
   expectedText: "Record receipt lines",
   scrollToText: "Verified 2026-07-11",
   fullPage: false,
@@ -293,7 +293,7 @@ await capture({
   name: "warehouse-storage-desktop",
   route: "/warehouse/storage",
   viewport: { width: 1440, height: 900 },
-  email: "intra.test.wh.warehouse.admin@mwell.com.ph",
+  email: "intra.test.operations.lead@mwell.com.ph",
   expectedText: "Storage",
   output: publicOutput,
 });
@@ -322,7 +322,7 @@ for (const item of [
     name: item[0],
     route: item[1],
     viewport: { width: 1440, height: 900 },
-    email: "intra.test.wh.warehouse.admin@mwell.com.ph",
+    email: "intra.test.operations.lead@mwell.com.ph",
     expectedText: item[2],
     output: publicOutput,
     fullPage: false,
@@ -332,7 +332,7 @@ await capture({
   name: "procurement-approvals-desktop",
   route: "/procurement/approvals",
   viewport: { width: 1440, height: 900 },
-  email: "intra.test.proc.officer@mwell.com.ph",
+  email: "intra.test.procurement.lead@mwell.com.ph",
   expectedText: "Approvals",
   output: publicOutput,
   fullPage: false,
@@ -341,7 +341,7 @@ await capture({
   name: "procurement-purchase-orders-desktop",
   route: "/procurement/purchase-orders",
   viewport: { width: 1440, height: 900 },
-  email: "intra.test.proc.officer@mwell.com.ph",
+  email: "intra.test.procurement.lead@mwell.com.ph",
   expectedText: "Purchase orders",
   output: publicOutput,
   fullPage: false,
@@ -368,7 +368,7 @@ await capture({
   name: "warehouse-receiving-desktop",
   route: "/warehouse/receiving",
   viewport: { width: 1440, height: 900 },
-  email: "intra.test.wh.logistics@mwell.com.ph",
+  email: "intra.test.operations.lead@mwell.com.ph",
   expectedText: "Receiving",
   output: publicOutput,
 });

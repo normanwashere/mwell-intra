@@ -67,22 +67,22 @@ const VIEWPORTS = {
 } as const;
 
 const LIVE_EMAILS: Record<string, string> = {
-  core_staff_only: "intra.test.staff@mwell.com.ph",
+  core_staff_only: "intra.test.employee@mwell.com.ph",
   platform_admin: "intra.test.admin@mwell.com.ph",
   vendor_portal: "intra.test.vendor@mwell.com.ph",
-  warehouse_logistics_supervisor: "intra.test.wh.logistics@mwell.com.ph",
-  warehouse_operations: "intra.test.wh.operations@mwell.com.ph",
-  warehouse_finance: "intra.test.wh.finance@mwell.com.ph",
-  warehouse_business_unit: "intra.test.wh.business.unit@mwell.com.ph",
-  warehouse_procurement: "intra.test.wh.procurement@mwell.com.ph",
-  warehouse_pricing: "intra.test.wh.pricing@mwell.com.ph",
-  warehouse_admin: "intra.test.wh.warehouse.admin@mwell.com.ph",
-  procurement_requester: "intra.test.proc.requester@mwell.com.ph",
-  procurement_officer: "intra.test.proc.officer@mwell.com.ph",
-  procurement_finance: "intra.test.proc.finance@mwell.com.ph",
-  legal_admin: "intra.test.legal.admin@mwell.com.ph",
-  events_requester: "intra.test.wh.business.unit@mwell.com.ph",
-  insights_analyst: "intra.test.wh.bi@mwell.com.ph",
+  warehouse_logistics_supervisor: "intra.test.operations.lead@mwell.com.ph",
+  warehouse_operations: "intra.test.operations.associate@mwell.com.ph",
+  warehouse_finance: "intra.test.finance@mwell.com.ph",
+  warehouse_business_unit: "intra.test.employee@mwell.com.ph",
+  warehouse_procurement: "intra.test.procurement.lead@mwell.com.ph",
+  warehouse_pricing: "intra.test.product.owner@mwell.com.ph",
+  warehouse_admin: "intra.test.operations.lead@mwell.com.ph",
+  procurement_requester: "intra.test.employee@mwell.com.ph",
+  procurement_officer: "intra.test.procurement.lead@mwell.com.ph",
+  procurement_finance: "intra.test.finance@mwell.com.ph",
+  legal_admin: "intra.test.legal.lead@mwell.com.ph",
+  events_requester: "intra.test.employee@mwell.com.ph",
+  insights_analyst: "intra.test.leadership@mwell.com.ph",
 };
 
 function evidenceTargetKey(evidence: KnowledgeEvidence): string {

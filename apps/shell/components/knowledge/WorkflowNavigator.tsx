@@ -56,7 +56,7 @@ export function WorkflowNavigator({
               key={view.id}
               onClick={() => onSelectView(view.id)}
               onKeyDown={(event) => move(event, index)}
-              className={`min-h-11 border-b-2 px-2 text-sm font-semibold min-[640px]:px-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500 ${selected ? "border-brand-600 text-brand-800" : "border-transparent text-muted hover:text-ink"}`}
+              className={`min-h-12 w-full whitespace-normal border-b-2 px-2 py-2 text-sm font-semibold leading-5 min-[640px]:w-auto min-[640px]:px-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500 ${selected ? "border-brand-600 text-brand-800" : "border-transparent text-muted hover:text-ink"}`}
             >
               {view.label}
             </button>
