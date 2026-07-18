@@ -759,7 +759,13 @@ async function login(page, user) {
 async function openPersonaPageFrom(page, email) {
   const browser = page.context().browser();
   if (!browser) throw new Error("The audit browser is unavailable.");
-  const context = await browser.newContext({ viewport: page.viewportSize() });
+  const sourceViewport = page.viewportSize();
+  const emulateTouch = Boolean(sourceViewport && sourceViewport.width < 768);
+  const context = await browser.newContext({
+    viewport: sourceViewport,
+    isMobile: emulateTouch,
+    hasTouch: emulateTouch,
+  });
   await installScopedProtectionBypass({
     context,
     appOrigin,
@@ -1095,6 +1101,14 @@ async function adminCreateDoaWorkflow(page, marker) {
           "Save draft does not own its center mobile hit target.",
         );
       }
+      if (!actionBox) {
+        throw new Error("Save draft has no measurable mobile hit target.");
+      }
+      await page.touchscreen.tap(
+        actionBox.x + actionBox.width / 2,
+        actionBox.y + actionBox.height / 2,
+      );
+      return;
     } else {
       await saveDraft.scrollIntoViewIfNeeded();
     }
@@ -5888,6 +5902,7 @@ async function runWorkflow(browser, viewport, user, workflow) {
   const context = await browser.newContext({
     viewport: viewport.viewport,
     isMobile: viewport.isMobile,
+    hasTouch: viewport.isMobile,
   });
   await installScopedProtectionBypass({
     context,
@@ -5972,6 +5987,7 @@ if (runRouteAudit) {
       const context = await browser.newContext({
         viewport: viewport.viewport,
         isMobile: viewport.isMobile,
+        hasTouch: viewport.isMobile,
       });
       await installScopedProtectionBypass({
         context,

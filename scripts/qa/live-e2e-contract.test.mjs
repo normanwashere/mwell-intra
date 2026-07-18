@@ -940,6 +940,8 @@ test("mobile transaction checks target visible records and unobstructed actions"
   assert.match(audit, /Save draft remains obstructed/);
   assert.match(audit, /document\.elementFromPoint/);
   assert.match(audit, /Save draft does not own its center mobile hit target/);
+  assert.match(audit, /await page\.touchscreen\.tap\(/);
+  assert.match(audit, /hasTouch: viewport\.isMobile/);
   assert.match(
     audit,
     /if \(await mobileNavigation\.count\(\)\)[\s\S]*?else \{[\s\S]*?await saveDraft\.scrollIntoViewIfNeeded\(\)/,
