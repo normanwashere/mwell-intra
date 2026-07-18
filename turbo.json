@@ -2,6 +2,12 @@
   "$schema": "https://turbo.build/schema.json",
   "ui": "stream",
   "globalDependencies": ["tsconfig.base.json", ".env"],
+  "globalPassThroughEnv": [
+    "APP_ENV",
+    "PRODUCTION_SUPABASE_PROJECT_REF",
+    "SUPABASE_PROJECT_REF",
+    "SUPABASE_SECRET_KEY"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
