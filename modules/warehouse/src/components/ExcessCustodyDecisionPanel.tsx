@@ -91,7 +91,7 @@ export function ExcessCustodyDecisionPanel({
         ))}
       </ul>
       <Sheet open={Boolean(selected)} onOpenChange={(open) => { if (!open) setSelected(null); }}
-        title="Resolve excess custody" description={selected ? `${selected.poNumber} · line ${selected.poLineId}` : undefined}
+        title="Final excess custody disposition" description={selected ? `${selected.poNumber} · line ${selected.poLineId}` : undefined}
         footer={<button type="button" className="btn-primary w-full justify-center" disabled={invalid || submitting}
           onClick={() => void submit()}>{submitting ? 'Recording...' : 'Record final disposition'}</button>}>
         {selected && <div className="space-y-4">

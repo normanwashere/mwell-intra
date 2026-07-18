@@ -1288,11 +1288,12 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
     .schema("warehouse")
     .from("locations")
     .select("id")
+    .eq("id", marker)
     .eq("type", "warehouse")
     .limit(1);
   if (locationError || !locations?.[0])
     throw new Error(
-      "A Warehouse location is required for Task 3 transactions.",
+      `The run-scoped Warehouse location ${marker} is required for Task 3 transactions.`,
     );
   const { data: officerProfiles, error: officerError } = await client
     .schema("core")
@@ -3419,6 +3420,9 @@ async function task3SupervisorTransactions(page, fixture) {
         await page
           .getByRole("button", { name: "Reject and create vendor return" })
           .click();
+        await page
+          .getByRole("dialog", { name: "Review inventory hold" })
+          .waitFor({ state: "detached" });
         await verifyCheckpoint(
           {
             schema: "warehouse",
@@ -3796,7 +3800,7 @@ async function task3SupervisorExcessFinalDisposition(page, fixture) {
     .getByRole("button", { name: "Review excess custody" })
     .click();
   const custodyDialog = page.getByRole("dialog", {
-    name: "Final excess-custody disposition",
+    name: "Final excess custody disposition",
   });
   await custodyDialog
     .getByLabel("Governed outcome")
@@ -5067,6 +5071,94 @@ async function cleanupTask3ReceiptFixture(fixture) {
   await assertTask3ZeroResidualRows(fixture);
   return {
     entity: "task3-receipt-fixture",
+    marker,
+    removed: true,
+    remaining: 0,
+  };
+}
+
+async function cleanupGovernedWorkflowActivity(marker) {
+  const client = createAuditDatabaseClient();
+  const { data: requestRows, error: requestError } = await client
+    .schema("procurement")
+    .from("requests")
+    .select("id")
+    .eq("title", `${marker} Procurement draft`);
+  if (requestError)
+    throw new Error(
+      `Procurement activity cleanup lookup failed: ${requestError.message}`,
+    );
+
+  const { data: matrixRows, error: matrixError } = await client
+    .schema("procurement")
+    .from("doa_matrices")
+    .select("id")
+    .eq("department", `${marker} Department`)
+    .eq("version", `${marker}-V1`);
+  if (matrixError)
+    throw new Error(
+      `DOA activity cleanup lookup failed: ${matrixError.message}`,
+    );
+
+  const entityIds = [
+    ...new Set([
+      ...(requestRows ?? []).map((row) => String(row.id)),
+      ...(matrixRows ?? []).map((row) => String(row.id)),
+    ]),
+  ];
+  if (!entityIds.length)
+    return {
+      entity: "governed-workflow-activity",
+      marker,
+      removed: true,
+      remaining: 0,
+    };
+
+  const { data: activityRows, error: activityError } = await client
+    .schema("core")
+    .from("activity_log")
+    .select("id,entity_id,detail")
+    .in("entity_id", entityIds);
+  if (activityError)
+    throw new Error(
+      `Governed activity cleanup lookup failed: ${activityError.message}`,
+    );
+
+  const unexpectedRows = (activityRows ?? []).filter(
+    (row) =>
+      !entityIds.includes(String(row.entity_id)) ||
+      !JSON.stringify(row.detail ?? {}).includes(marker),
+  );
+  if (unexpectedRows.length)
+    throw new Error(
+      `Governed activity cleanup refused ${unexpectedRows.length} row(s) without run-marker proof.`,
+    );
+
+  const activityIds = (activityRows ?? []).map((row) => row.id);
+  if (activityIds.length) {
+    const { error: deleteError } = await client
+      .schema("core")
+      .from("activity_log")
+      .delete()
+      .in("id", activityIds);
+    if (deleteError)
+      throw new Error(
+        `Governed activity cleanup failed: ${deleteError.message}`,
+      );
+  }
+
+  const { count, error: verificationError } = await client
+    .schema("core")
+    .from("activity_log")
+    .select("id", { count: "exact", head: true })
+    .in("entity_id", entityIds);
+  if (verificationError || count !== 0)
+    throw new Error(
+      `Governed activity cleanup left ${count ?? "unknown"} row(s): ${verificationError?.message ?? ""}`,
+    );
+
+  return {
+    entity: "governed-workflow-activity",
     marker,
     removed: true,
     remaining: 0,
@@ -6520,6 +6612,22 @@ try {
   } finally {
     if (mutatingPhase) {
       const task3Results = [];
+      const governedActivityResults = [];
+      for (const marker of auditMarkers) {
+        try {
+          governedActivityResults.push(
+            await cleanupGovernedWorkflowActivity(marker),
+          );
+        } catch (error) {
+          governedActivityResults.push({
+            entity: "governed-workflow-activity",
+            marker,
+            removed: false,
+            remaining: null,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
       for (const fixture of [...task3Fixtures].reverse()) {
         try {
           task3Results.push(await cleanupTask3ReceiptFixture(fixture));
@@ -6536,9 +6644,12 @@ try {
       cleanup = await cleanupRun(auditRunId, cleanupTargets, {
         authEmails: auditMarkers.map((marker) => vendorAuditEmail(marker)),
       });
-      cleanup.results.push(...task3Results);
+      cleanup.results.push(...governedActivityResults, ...task3Results);
       cleanup.complete =
         cleanup.complete &&
+        governedActivityResults.every(
+          (result) => result.remaining === 0 && !result.error,
+        ) &&
         task3Results.every((result) => result.remaining === 0 && !result.error);
     }
   }

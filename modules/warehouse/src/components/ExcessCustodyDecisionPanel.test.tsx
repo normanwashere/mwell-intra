@@ -19,7 +19,7 @@ it('requires an approved amendment identity for excess acceptance', async () => 
   render(<ExcessCustodyDecisionPanel items={[item]} onDecision={onDecision} />);
 
   await user.click(screen.getByRole('button', { name: /review excess custody/i }));
-  const dialog = screen.getByRole('dialog', { name: /resolve excess custody/i });
+  const dialog = screen.getByRole('dialog', { name: /final excess custody disposition/i });
   await user.selectOptions(within(dialog).getByLabelText(/governed outcome/i), 'accepted_amendment');
   await user.type(within(dialog).getByLabelText(/decision reason/i), 'Approved PO line growth covers custody');
   await user.type(within(dialog).getByLabelText(/evidence url/i), 'evidence/amendment.pdf');
@@ -38,7 +38,7 @@ it.each(['vendor_return', 'written_off'] as const)('offers Supervisor %s final d
   const onDecision = vi.fn().mockResolvedValue(true);
   render(<ExcessCustodyDecisionPanel items={[item]} onDecision={onDecision} />);
   await user.click(screen.getByRole('button', { name: /review excess custody/i }));
-  const dialog = screen.getByRole('dialog', { name: /resolve excess custody/i });
+  const dialog = screen.getByRole('dialog', { name: /final excess custody disposition/i });
   await user.selectOptions(within(dialog).getByLabelText(/governed outcome/i), outcome);
   expect(within(dialog).queryByLabelText(/approved quantity amendment/i)).not.toBeInTheDocument();
 });

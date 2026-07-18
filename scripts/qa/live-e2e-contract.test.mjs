@@ -141,6 +141,30 @@ test("the mutating harness is run-scoped and always invokes cleanup", async () =
   assert.doesNotMatch(source, /AUDIT_PASSWORD\s*[=:]\s*["'][^"']+/);
 });
 
+test("governed workflow activity cleanup resolves generated IDs from exact run markers", async () => {
+  const source = await readFile(
+    new URL("./full-intra-live-e2e.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /cleanupGovernedWorkflowActivity/);
+  assert.match(
+    source,
+    /from\("requests"\)[\s\S]*\.eq\("title", `\$\{marker\} Procurement draft`\)/,
+  );
+  assert.match(
+    source,
+    /from\("doa_matrices"\)[\s\S]*\.eq\("department", `\$\{marker\} Department`\)[\s\S]*\.eq\("version", `\$\{marker\}-V1`\)/,
+  );
+  assert.match(
+    source,
+    /from\("activity_log"\)[\s\S]*JSON\.stringify\(row\.detail \?\? \{\}\)\.includes\(marker\)[\s\S]*\.delete\(\)[\s\S]*\.in\("id", activityIds\)/,
+  );
+  assert.match(
+    source,
+    /cleanupGovernedWorkflowActivity\(marker\)[\s\S]*cleanupRun\(auditRunId/,
+  );
+});
+
 test("Warehouse certification creates its editable baseline before receiving and cleans it last", async () => {
   const source = await readFile(
     new URL("./full-intra-live-e2e.mjs", import.meta.url),
@@ -782,6 +806,25 @@ test("Warehouse excess E2E selects the exact governed amendment", async () => {
     /getByLabel\("Approved quantity amendment"\)\s*\.selectOption\(fixture\.ids\.excessAmendment\)/,
   );
   assert.doesNotMatch(harness, /getByLabel\("Approved amendment ID"\)\.fill/);
+  assert.match(
+    harness,
+    /getByRole\("dialog", \{\s*name: "Final excess custody disposition",\s*\}\)/,
+  );
+});
+
+test("governed Warehouse fixtures use the run-scoped location and await hold disposition", async () => {
+  const source = await readFile(
+    new URL("./full-intra-live-e2e.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    source,
+    /from\("locations"\)[\s\S]*?\.eq\("id", marker\)[\s\S]*?\.eq\("type", "warehouse"\)/,
+  );
+  assert.match(
+    source,
+    /name: "Reject and create vendor return"[\s\S]*?name: "Review inventory hold"[\s\S]*?state: "detached"/,
+  );
 });
 
 test("Warehouse resolvers reconcile both receipt authority queues", async () => {
@@ -915,7 +958,7 @@ test("excess-custody readback waits for the governed dialog mutation", async () 
   );
   assert.match(
     audit,
-    /const custodyDialog = page\.getByRole\("dialog", \{[\s\S]*name: "Final excess-custody disposition"[\s\S]*custodyDialog\.waitFor\(\{ state: "detached" \}\)[\s\S]*procurement_receipt_excess_custody/,
+    /const custodyDialog = page\.getByRole\("dialog", \{[\s\S]*name: "Final excess custody disposition"[\s\S]*custodyDialog\.waitFor\(\{ state: "detached" \}\)[\s\S]*procurement_receipt_excess_custody/,
   );
 });
 
@@ -945,7 +988,7 @@ test("the DOA editor cannot submit while asynchronous workspace data shifts the 
   assert.match(page, /data-mobile-action-bar="true"/);
   assert.match(
     page,
-    /relative z-30[\s\S]*scroll-mb-\[calc\(6rem\+env\(safe-area-inset-bottom\)\)\]/,
+    /relative isolate z-40[\s\S]*scroll-mb-\[calc\(6rem\+env\(safe-area-inset-bottom\)\)\]/,
   );
   assert.doesNotMatch(
     page,
