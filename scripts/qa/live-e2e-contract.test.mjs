@@ -1069,6 +1069,28 @@ test("quality holds serialize with reservations on the shared product lock", asy
   assert.match(migration, /security definer/i);
 });
 
+test("availability refreshes after the product lock for every quality path", async () => {
+  const migration = await readFile(
+    new URL(
+      "../../supabase/migrations/20260718201000_refresh_atp_inside_product_lock.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const productLock = migration.indexOf("private.lock_warehouse_products");
+  const availabilityCheck = migration.indexOf(
+    "warehouse.available_to_promise(v_product_id)",
+  );
+  assert.match(migration, /returns integer\s+language sql\s+volatile/i);
+  assert.ok(productLock >= 0, "quality wrapper acquires the product lock");
+  assert.ok(availabilityCheck >= 0, "quality wrapper checks current ATP");
+  assert.ok(
+    productLock < availabilityCheck,
+    "availability is refreshed only after the product lock is held",
+  );
+  assert.match(migration, /v_disposition<>'accepted'/);
+});
+
 test("department-only amendment approvers can reach their narrowly scoped queue", async () => {
   const app = await readFile(
     new URL(
