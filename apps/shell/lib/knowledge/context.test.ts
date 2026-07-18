@@ -31,6 +31,19 @@ describe("contextual Knowledge Base guidance", () => {
     ).toBe("procurement-request-detail");
   });
 
+  it("falls back to the nearest documented workspace for nested views", () => {
+    expect(
+      featureGuideForPathname(CONTEXTUAL_FEATURE_GUIDES, "/insights/warehouse")
+        ?.id,
+    ).toBe("insights-workspace");
+    expect(
+      featureGuideForPathname(CONTEXTUAL_FEATURE_GUIDES, "/events/EVT-42")?.id,
+    ).toBe("events-workspace");
+    expect(
+      featureGuideForPathname(CONTEXTUAL_FEATURE_GUIDES, "/unknown/view"),
+    ).toBeUndefined();
+  });
+
   it("documents contextual guidance as part of the live Knowledge Base", () => {
     const library = KNOWLEDGE_CONTENT.features.find(
       (feature) => feature.id === "knowledge-library",

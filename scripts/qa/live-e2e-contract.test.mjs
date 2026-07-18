@@ -24,6 +24,21 @@ test("declares every current live role exactly once", () => {
   );
   assert.deepEqual(unifiedFinance?.assignments.warehouse, ["finance"]);
   assert.deepEqual(unifiedFinance?.assignments.procurement, ["finance"]);
+  assert.deepEqual(
+    CURRENT_LIVE_ROLES.find((item) => item.role === "warehouse_bi_analyst")
+      ?.assignments.insights,
+    ["analyst"],
+  );
+  assert.deepEqual(
+    CURRENT_LIVE_ROLES.find((item) => item.role === "warehouse_business_unit")
+      ?.assignments.events,
+    ["requester"],
+  );
+  assert.deepEqual(
+    CURRENT_LIVE_ROLES.find((item) => item.role === "warehouse_marketing")
+      ?.assignments.events,
+    ["coordinator"],
+  );
   assert.ok(
     CURRENT_LIVE_ROLES.some((item) => item.role === "warehouse_operator"),
   );
@@ -659,6 +674,19 @@ test("Task 3 ships an idempotent forward migration for already-versioned databas
   assert.match(source, /create or replace function private\.policy_approve_po_line_quantity_amendment/);
   assert.match(source, /create or replace function procurement\.purchase_order_amendment_work_items/);
   assert.match(source, /create or replace function warehouse\.issue/);
+});
+
+test("stock approval projection casts UUID entity identifiers into the shared ledger key", async () => {
+  const source = await readFile(
+    new URL(
+      "../../supabase/migrations/20260718150000_fix_stock_approval_projection_uuid_join.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.match(source, /supervisor_step\.entity_id=request\.id::text/i);
+  assert.match(source, /approval\.entity_id=request\.id::text/i);
+  assert.doesNotMatch(source, /entity_id=request\.id(?!::text)/i);
 });
 
 test("department-only amendment approvers can reach their narrowly scoped queue", async () => {

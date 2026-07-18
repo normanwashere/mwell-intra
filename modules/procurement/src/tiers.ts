@@ -29,7 +29,6 @@ export function resolveTiers(
   const tiers = new Set<ApproverTier>();
   const proc = userRoles.procurement ?? [];
   const legal = userRoles.legal ?? [];
-  const warehouse = userRoles.warehouse ?? [];
 
   // procurement:approver acts as the Department Head / BU SPOC tier — the
   // first sign-off on the ladder (policy §3).
@@ -46,9 +45,9 @@ export function resolveTiers(
     tiers.add('procurement_head');
     tiers.add('final_approver');
   }
-  // Finance seat — dedicated procurement:finance is preferred; warehouse:
-  // finance is the legacy fallback for demos that predate procurement roles.
-  if (proc.includes('finance') || warehouse.includes('finance')) {
+  // Procurement Finance authority must be assigned explicitly. Warehouse
+  // Finance remains source-scoped; the unified Finance persona carries both.
+  if (proc.includes('finance')) {
     tiers.add('finance');
   }
   // Legal reviewers pick up the contract-review tier.

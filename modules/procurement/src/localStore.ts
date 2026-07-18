@@ -16,7 +16,7 @@
 // procurement.submit_request / procurement.decide_request RPCs when they land.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useSession } from '@intra/auth';
+import { useCan, useSession } from '@intra/auth';
 import type {
   ApprovalDecision,
   ApprovalSignature,
@@ -946,6 +946,7 @@ export interface PurchaseOrdersAPI {
 
 export function usePurchaseOrders(): PurchaseOrdersAPI {
   const live = useLiveClient();
+  const canViewFinance = useCan('procurement', 'view_finance');
   const [localRows, set, localLoading] = useTrackedRows<PurchaseOrder>(
     PO_KEY,
     !isLive(live),
@@ -991,7 +992,7 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
   const [liveStalenessEvents, setLiveStalenessEvents] = useState<PaymentReadinessStalenessEvent[]>([]);
   const [liveStalenessLoading, setLiveStalenessLoading] = useState(Boolean(live));
   const refreshStalenessEvents = useCallback(async () => {
-    if (!live) { setLiveStalenessEvents([]); setLiveStalenessLoading(false); return; }
+    if (!live || !canViewFinance) { setLiveStalenessEvents([]); setLiveStalenessLoading(false); return; }
     setLiveStalenessLoading(true);
     try {
       const rows = await liveRpc<Array<Record<string, unknown>>>(
@@ -1013,7 +1014,7 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
       })));
     } catch { setLiveStalenessEvents([]); }
     finally { setLiveStalenessLoading(false); }
-  }, [live]);
+  }, [canViewFinance, live]);
   useEffect(() => { void refreshStalenessEvents(); }, [refreshStalenessEvents]);
   const liveRows = liveBaseRows.map((row) =>
     mapPurchaseOrder(

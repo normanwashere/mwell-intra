@@ -12,7 +12,8 @@ const normalizePath = (value: string) => {
 const routeMatches = (pattern: string, pathname: string) => {
   const expected = normalizePath(pattern).split("/").filter(Boolean);
   const actual = normalizePath(pathname).split("/").filter(Boolean);
-  if (expected.length !== actual.length) return false;
+  if (expected.length === 0) return actual.length === 0;
+  if (expected.length > actual.length) return false;
   return expected.every(
     (segment, index) => segment.startsWith(":") || segment === actual[index],
   );

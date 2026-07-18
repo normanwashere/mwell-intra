@@ -122,6 +122,13 @@ function hasAssignedModule(user, module) {
   return (user.assignments[module]?.length ?? 0) > 0;
 }
 
+function hasProcurementWorkflowAccess(user) {
+  return (
+    hasAssignedModule(user, "procurement") ||
+    (user.assignments.legal ?? []).includes("legal_reviewer")
+  );
+}
+
 function hasFinanceAccess(user) {
   return (
     (user.assignments.warehouse ?? []).some((role) =>
@@ -147,7 +154,7 @@ const ROUTE_AUTHORIZATION_MATRIX = [
   },
   {
     path: "/procurement",
-    allowed: (user) => hasAssignedModule(user, "procurement"),
+    allowed: hasProcurementWorkflowAccess,
     allowedText: /Procurement|Approval inbox|Purchase request/i,
     deniedText: /No procurement access|Access denied/i,
   },

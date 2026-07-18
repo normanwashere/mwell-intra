@@ -21,8 +21,8 @@ describe('resolveTiers', () => {
     expect(tiers).toHaveLength(2);
   });
 
-  it('warehouse:finance is the legacy fallback for the finance tier', () => {
-    expect(resolveTiers({ warehouse: ['finance'] })).toEqual(['finance']);
+  it('does not infer Procurement Finance authority from Warehouse Finance', () => {
+    expect(resolveTiers({ warehouse: ['finance'] })).toEqual([]);
   });
 
   it('does not grant department approval authority to platform administrators', () => {
@@ -46,7 +46,7 @@ describe('canEnterProcurement (module gate, PR-11)', () => {
   it('admits tier-eligible users without a procurement role (Andre the legal reviewer)', () => {
     expect(canEnterProcurement({ legal: ['legal_reviewer'], core: ['staff'] })).toBe(true);
     expect(canEnterProcurement({ core: ['platform_admin'] })).toBe(false);
-    expect(canEnterProcurement({ warehouse: ['finance'] })).toBe(true);
+    expect(canEnterProcurement({ warehouse: ['finance'] })).toBe(false);
   });
 
   it('rejects users with neither a procurement role nor a tier', () => {
