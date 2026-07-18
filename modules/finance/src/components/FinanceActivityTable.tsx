@@ -118,12 +118,12 @@ export function FinanceActivityTable({ activity }: { activity: FinanceActivity[]
 
   return (
     <section aria-labelledby="finance-activity-title" className="space-y-3">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <SectionTitle
           title="Cross-module activity"
           subtitle="One financial trail across approved POs, receipts, and returns"
         />
-        <div className="w-full sm:w-auto sm:min-w-[24rem]">
+        <div className="w-full lg:w-auto lg:min-w-[24rem]">
           <SegmentedControl
             ariaLabel="Filter financial activity"
             options={FILTERS}

@@ -843,6 +843,7 @@ async function auditRoute(page, route) {
     overflow: audit.horizontalOverflow,
     scrollWidth: audit.scrollWidth,
     viewportWidth: audit.viewportWidth,
+    overflowOffenders: audit.overflowOffenders,
     overlaps: audit.overlaps,
     deadLinks: audit.deadLinks,
     unlabeledControls: audit.unlabeledControls,
@@ -6747,7 +6748,12 @@ const aggregate = results.map((item) => ({
     })),
   overflowRoutes: item.routes
     .filter((route) => route.overflow)
-    .map((route) => route.route),
+    .map((route) => ({
+      route: route.route,
+      scrollWidth: route.scrollWidth,
+      viewportWidth: route.viewportWidth,
+      examples: route.overflowOffenders?.slice(0, 3) ?? [],
+    })),
   overlapRoutes: item.routes
     .filter((route) => route.overlaps?.length)
     .map((route) => ({
@@ -6801,7 +6807,7 @@ const routeFailures = aggregate.flatMap((item) => [
     (entry) => `${item.viewport}/${item.role}${entry.route}: ${entry.class}`,
   ),
   ...item.overflowRoutes.map(
-    (route) => `${item.viewport}/${item.role}${route}: overflow`,
+    (entry) => `${item.viewport}/${item.role}${entry.route}: overflow`,
   ),
   ...item.overlapRoutes.map(
     (entry) => `${item.viewport}/${item.role}${entry.route}: overlap`,

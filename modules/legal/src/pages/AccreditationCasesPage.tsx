@@ -63,7 +63,6 @@ import {
 import { visibleCasesForVendor } from '../vendorAccess';
 
 function columns(
-  basePath: string,
   bucketOf: Map<string, InboxBucket | null>,
 ): Column<AccreditationCase>[] {
   return [
@@ -73,9 +72,9 @@ function columns(
       primary: true,
       render: (r) => (
         <div className="min-w-0">
-          <Link to={`${basePath}/cases/${r.id}`} className="font-semibold text-ink hover:underline">
+          <span className="font-semibold text-ink">
             {r.vendorName}
-          </Link>
+          </span>
           {r.jurisdiction && (
             <span className="ml-2 inline-flex items-center rounded-full bg-inset px-2 py-0.5 text-[0.65rem] font-semibold text-muted">
               {r.jurisdiction === 'OTHER' && r.originCountry
@@ -171,8 +170,6 @@ export function AccreditationCasesPage() {
     if (filter === 'all') return visible;
     return visible.filter((r) => bucketOf.get(r.id) === filter);
   }, [visible, filter, bucketOf]);
-
-  const basePath = isVendor ? '/vendor' : '/legal';
 
   const applyFilter = (next: CaseFilter) => {
     if (next === 'all') params.delete('filter');
@@ -327,7 +324,7 @@ export function AccreditationCasesPage() {
         ) : (
           <DataTable
             rows={filteredVisible}
-            columns={columns(basePath, bucketOf)}
+            columns={columns(bucketOf)}
             keyOf={(r) => r.id}
             onRowClick={(r) => navigate(`/cases/${r.id}`)}
           />
