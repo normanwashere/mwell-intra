@@ -877,14 +877,15 @@ async function procurementCreateRequestWorkflow(page, marker) {
     .fill("Testing would not cover procurement draft creation.");
   await page.getByRole("button", { name: /continue/i }).click();
   await page.getByRole("button", { name: /save draft/i }).click();
+  await page.waitForURL(
+    (url) =>
+      url.pathname.startsWith("/procurement/requests/") &&
+      !url.pathname.endsWith("/new"),
+    { timeout: 15_000 },
+  );
   await page
-    .waitForURL(
-      (url) =>
-        url.pathname.startsWith("/procurement/requests/") &&
-        !url.pathname.endsWith("/new"),
-      { timeout: 15_000 },
-    )
-    .catch(() => {});
+    .getByRole("heading", { name: title, exact: true })
+    .waitFor({ state: "visible", timeout: 15_000 });
   await waitForMeaningfulRoute(page);
   const audit = await pageAudit(page);
   const path = new URL(page.url()).pathname;
