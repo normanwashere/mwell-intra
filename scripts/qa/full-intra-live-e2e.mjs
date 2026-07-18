@@ -3159,14 +3159,19 @@ async function task3SupervisorTransactions(page, fixture) {
       await escalatedRow
         .getByRole("button", { name: "Review controlled receipt" })
         .click();
-      await page
+      const decisionDialog = page.getByRole("dialog", {
+        name: "Supervisor receipt decision",
+      });
+      await decisionDialog
         .getByLabel("Decision reason")
         .fill(`${fixture.marker} browser escalation final disposition`);
-      await page
+      await decisionDialog
         .getByLabel("Decision evidence")
         .fill(`audit/${fixture.marker}/escalated-final.jpg`);
-      await page.getByRole("button", { name: "Reject receipt" }).click();
-      await escalatedRow.waitFor({ state: "detached" });
+      await decisionDialog
+        .getByRole("button", { name: "Reject receipt" })
+        .click();
+      await decisionDialog.waitFor({ state: "detached" });
       await verifyCheckpoint(
         {
           schema: "warehouse",
@@ -3790,17 +3795,25 @@ async function task3SupervisorExcessFinalDisposition(page, fixture) {
   await custodyRow
     .getByRole("button", { name: "Review excess custody" })
     .click();
-  await page.getByLabel("Governed outcome").selectOption("accepted_amendment");
-  await page
+  const custodyDialog = page.getByRole("dialog", {
+    name: "Final excess-custody disposition",
+  });
+  await custodyDialog
+    .getByLabel("Governed outcome")
+    .selectOption("accepted_amendment");
+  await custodyDialog
     .getByLabel("Approved quantity amendment")
     .selectOption(fixture.ids.excessAmendment);
-  await page
+  await custodyDialog
     .getByLabel("Decision reason")
     .fill(`${fixture.marker} Supervisor excess custody final disposition`);
-  await page
+  await custodyDialog
     .getByLabel("Evidence URL")
     .fill(`audit/${fixture.marker}/accepted-excess-amendment.jpg`);
-  await page.getByRole("button", { name: "Record final disposition" }).click();
+  await custodyDialog
+    .getByRole("button", { name: "Record final disposition" })
+    .click();
+  await custodyDialog.waitFor({ state: "detached" });
   await verifyCheckpoint(
     {
       schema: "warehouse",

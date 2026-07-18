@@ -487,7 +487,10 @@ function DoaWorkspace() {
               </div>
             ))}
           </div>
-          <div className="mt-5 flex justify-end">
+          <div
+            data-mobile-action-bar="true"
+            className="relative z-30 -mx-4 mt-5 flex scroll-mb-[calc(6rem+env(safe-area-inset-bottom))] justify-end border-t border-line bg-surface px-4 pb-1 pt-4 sm:-mx-5 sm:px-5 md:mx-0 md:border-0 md:bg-transparent md:p-0"
+          >
             <Button
               className="w-full sm:w-auto"
               disabled={saving || workspaceLoading}

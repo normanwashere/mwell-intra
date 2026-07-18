@@ -898,6 +898,25 @@ test("receipt escalation checks are scoped to their accessible decision region",
     audit,
     /getByText\(`\$\{fixture\.marker\}-PO-UNIDENTIFIED`[^;]+ancestor::li/,
   );
+  assert.match(
+    audit,
+    /const decisionDialog = page\.getByRole\("dialog", \{[\s\S]*name: "Supervisor receipt decision"[\s\S]*decisionDialog\.waitFor\(\{ state: "detached" \}\)/,
+  );
+  assert.doesNotMatch(
+    audit,
+    /escalatedRow\.waitFor\(\{ state: "detached" \}\)/,
+  );
+});
+
+test("excess-custody readback waits for the governed dialog mutation", async () => {
+  const audit = await readFile(
+    new URL("./full-intra-live-e2e.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    audit,
+    /const custodyDialog = page\.getByRole\("dialog", \{[\s\S]*name: "Final excess-custody disposition"[\s\S]*custodyDialog\.waitFor\(\{ state: "detached" \}\)[\s\S]*procurement_receipt_excess_custody/,
+  );
 });
 
 test("the DOA editor cannot submit while asynchronous workspace data shifts the form", async () => {
@@ -908,6 +927,11 @@ test("the DOA editor cannot submit while asynchronous workspace data shifts the 
   assert.match(page, /const \[workspaceLoading, setWorkspaceLoading\]/);
   assert.match(page, /setWorkspaceLoading\(true\);[\s\S]*finally/);
   assert.match(page, /disabled=\{saving \|\| workspaceLoading\}/);
+  assert.match(page, /data-mobile-action-bar="true"/);
+  assert.match(
+    page,
+    /relative z-30[\s\S]*scroll-mb-\[calc\(6rem\+env\(safe-area-inset-bottom\)\)\]/,
+  );
   assert.doesNotMatch(
     page,
     /\[captureActivationDraft, core, effectiveAt, mode, procurement, toast\]/,
