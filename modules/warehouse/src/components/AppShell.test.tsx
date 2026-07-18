@@ -33,6 +33,14 @@ describe('AppShell navigation', () => {
     }
   });
 
+  it('presents Warehouse as an Mwell Intra workspace on desktop and mobile', async () => {
+    renderWithProviders(<AppShell>content</AppShell>, { role: 'warehouse_admin' });
+
+    const home = await screen.findByRole('link', { name: 'Mwell Intra home' });
+    expect(home).toHaveTextContent(/Intra/);
+    expect(home).toHaveTextContent(/Warehouse/);
+    expect(screen.getByLabelText('Mwell Intra Warehouse')).toHaveTextContent(/Intra/);
+  });
   it('shows logistics modules including Receiving', async () => {
     renderWithProviders(<AppShell>content</AppShell>, {
       role: 'logistics_supervisor',

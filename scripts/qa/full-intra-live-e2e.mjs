@@ -27,13 +27,21 @@ const masterPassword = process.env.AUDIT_PASSWORD;
 const allowMutations = process.env.AUDIT_MUTATIONS === "true";
 const viewFilter = process.env.AUDIT_VIEWPORT;
 const roleFilter = process.env.AUDIT_ROLE;
+const auditPhase = process.env.AUDIT_PHASE ?? "all";
+if (!["all", "routes", "transactions"].includes(auditPhase)) {
+  throw new Error("AUDIT_PHASE must be all, routes, or transactions.");
+}
+const runRouteAudit = auditPhase !== "transactions";
+const runTransactionAudit = auditPhase !== "routes";
+const mutatingPhase = allowMutations && runTransactionAudit;
+
 const protectionBypass = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
 assertApprovedMutationTarget({
   appEnv: process.env.APP_ENV,
   supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
   expectedProjectRef: process.env.SUPABASE_PROJECT_REF,
   productionProjectRef: process.env.PRODUCTION_SUPABASE_PROJECT_REF,
-  mutationsRequested: process.env.AUDIT_MUTATIONS === "true",
+  mutationsRequested: mutatingPhase,
   mutationsApproved: process.env.POLICY_ALLOW_TEST_MUTATIONS === "true",
 });
 const projectRef = projectRefFromSupabaseUrl(
@@ -42,11 +50,11 @@ const projectRef = projectRefFromSupabaseUrl(
 console.log(
   `Live audit target: environment=${process.env.APP_ENV} project=${projectRef}`,
 );
-const auditRunId = allowMutations
+const auditRunId = mutatingPhase
   ? assertAuditRunId(process.env.AUDIT_RUN_ID ?? "")
   : process.env.AUDIT_RUN_ID || null;
 
-if (allowMutations && !process.env.SUPABASE_SERVICE_ROLE_KEY)
+if (mutatingPhase && !process.env.SUPABASE_SERVICE_ROLE_KEY)
   throw new Error(
     "SUPABASE_SERVICE_ROLE_KEY is required for persistence verification and governed cleanup.",
   );
@@ -67,7 +75,7 @@ await verifyDeployedTargetIdentity({
   appEnv: process.env.APP_ENV,
   expectedProjectRef: process.env.SUPABASE_PROJECT_REF,
   productionProjectRef: process.env.PRODUCTION_SUPABASE_PROJECT_REF,
-  mutationsRequested: allowMutations,
+  mutationsRequested: mutatingPhase,
   protectionBypass,
 });
 
@@ -3210,6 +3218,7 @@ async function runWorkflow(browser, viewport, user, workflow) {
 const browser = await chromium.launch({ headless: true });
 const results = [];
 
+if (runRouteAudit) {
 for (const viewport of viewports.filter(
   (item) => !viewFilter || item.name === viewFilter,
 )) {
@@ -3325,6 +3334,7 @@ for (const viewport of viewports.filter(
     await context.close();
   }
 }
+}
 
 const workflows = [];
 let cleanup = { runId: auditRunId, complete: true, results: [] };
@@ -3340,7 +3350,7 @@ const transactionViewports = viewports.filter(
 const auditMarkers = transactionViewports.map(
   (viewport) => `${auditRunId}-${viewport.name}`,
 );
-const cleanupTargets = allowMutations
+const cleanupTargets = mutatingPhase
   ? auditMarkers.flatMap((marker) => [
       {
         runId: auditRunId,
@@ -3412,6 +3422,7 @@ const cleanupTargets = allowMutations
   : [];
 
 try {
+  if (runTransactionAudit) {
   for (const viewport of transactionViewports) {
     for (const [email, name, run] of [
       [
@@ -3434,7 +3445,7 @@ try {
         await runWorkflow(browser, viewport, { email }, { name, run }),
       );
   }
-  if (allowMutations) {
+  if (mutatingPhase) {
     for (const viewport of transactionViewports) {
       const marker = `${auditRunId}-${viewport.name}`;
       const task3Fixture = await createTask3ReceiptFixture(marker, registerTask3Cleanup);
@@ -3741,11 +3752,12 @@ try {
       "AUDIT_MUTATIONS is not true; write/read-back workflows were skipped.",
     );
   }
+  }
 } finally {
   try {
     await browser.close();
   } finally {
-    if (allowMutations) {
+    if (mutatingPhase) {
       const task3Results = [];
       for (const fixture of [...task3Fixtures].reverse()) {
         try {
@@ -3817,8 +3829,7 @@ const aggregate = results.map((item) => ({
 }));
 
 const outputPath = path.resolve(
-  "test-results",
-  "full-intra-live-e2e-results.json",
+  process.env.AUDIT_OUTPUT_PATH ?? "test-results/full-intra-live-e2e-results.json",
 );
 await mkdir(path.dirname(outputPath), { recursive: true });
 await writeFile(
@@ -3828,6 +3839,7 @@ await writeFile(
     baseUrl,
     runId: auditRunId,
     task3Transactions: workflows.filter((workflow) => workflow.workflow?.startsWith("Task 3")),
+    phase: auditPhase,
     aggregate,
     workflows,
     cleanup,
@@ -3872,7 +3884,7 @@ const workflowFailures = workflows
     (workflow) =>
       `${workflow.viewport}/${workflow.workflow}: ${workflow.error ?? "failed"}`,
   );
-if (allowMutations) {
+if (mutatingPhase) {
   for (const scenarioId of EXECUTABLE_CROSS_MODULE_SCENARIOS) {
     if (!workflows.some((workflow) => workflow.scenarioId === scenarioId)) {
       workflowFailures.push(`${auditRunId}: executable scenario ${scenarioId} was not run`);

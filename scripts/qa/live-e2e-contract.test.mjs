@@ -97,6 +97,36 @@ test("the mutating harness is run-scoped and always invokes cleanup", async () =
   assert.doesNotMatch(source, /AUDIT_PASSWORD\s*[=:]\s*["'][^"']+/);
 });
 
+test("supports bounded route and transaction certification phases", async () => {
+  const source = await readFile(
+    new URL("./full-intra-live-e2e.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /AUDIT_PHASE/);
+  assert.match(source, /runRouteAudit = auditPhase !== "transactions"/);
+  assert.match(source, /runTransactionAudit = auditPhase !== "routes"/);
+  assert.match(source, /mutatingPhase = allowMutations && runTransactionAudit/);
+  assert.match(source, /AUDIT_OUTPUT_PATH/);
+  assert.match(source, /phase: auditPhase/);
+  assert.match(source, /if \(mutatingPhase\)[\s\S]*cleanupRun/);
+});
+
+test("shards UAT certification into bounded least-privilege jobs", async () => {
+  const workflow = await readFile(
+    new URL("../../.github/workflows/uat-live-certification.yml", import.meta.url),
+    "utf8",
+  );
+  assert.match(workflow, /environment: uat/);
+  assert.match(workflow, /AUDIT_PHASE: routes/);
+  assert.match(workflow, /AUDIT_PHASE: transactions/);
+  assert.match(workflow, /AUDIT_OUTPUT_PATH/);
+  assert.match(workflow, /max-parallel: 2/);
+  assert.match(workflow, /max-parallel: 1/);
+  assert.match(workflow, /pnpm provision:test:uat/);
+  assert.match(workflow, /secrets\.UAT_SUPABASE_SERVICE_ROLE_KEY/);
+  assert.doesNotMatch(workflow, /service_role\s*[=:]\s*["'][^"']+/i);
+});
+
 test("cross-module scenarios are imported and executed as browser/database contracts", async () => {
   const source = await readFile(
     new URL("./full-intra-live-e2e.mjs", import.meta.url),

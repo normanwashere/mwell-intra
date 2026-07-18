@@ -152,9 +152,17 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* Desktop sidebar */}
       <aside className="hidden w-60 shrink-0 flex-col border-r border-line bg-surface md:flex lg:w-64">
         <div className="safe-top flex items-center gap-2 px-5 py-5">
-          <a href="/" className="flex min-w-0 items-center gap-2 transition hover:opacity-80" title="Mwell Intra home">
+          <a
+            href="/"
+            aria-label="Mwell Intra home"
+            className="flex min-w-0 items-center gap-2 transition hover:opacity-80"
+            title="Mwell Intra home"
+          >
             <Logo className="h-7 w-auto" />
-            <span className="text-xs font-semibold text-faint">Warehouse</span>
+            <span className="text-xs font-bold text-ink">Intra</span>
+            <span className="rounded-md bg-inset px-1.5 py-1 text-[0.65rem] font-semibold text-muted">
+              Warehouse
+            </span>
           </a>
         </div>
         <nav className="flex-1 space-y-5 overflow-y-auto px-3 pb-4" aria-label="Primary">
@@ -209,8 +217,12 @@ export function AppShell({ children }: { children: ReactNode }) {
               scrolled ? 'py-2' : 'py-3',
             )}
           >
-            <div className="flex items-center gap-2 md:hidden">
+            <div
+              className="flex min-w-0 items-center gap-1.5 md:hidden"
+              aria-label="Mwell Intra Warehouse"
+            >
               <Logo className="h-6 w-auto" />
+              <span className="text-[0.65rem] font-bold text-ink">Intra</span>
             </div>
             {/* Visual brand only — the semantic <h1> belongs to each page's
                 header so documents never carry two level-1 headings (WH-1). */}

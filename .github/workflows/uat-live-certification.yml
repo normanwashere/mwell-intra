@@ -1,0 +1,185 @@
+name: UAT Live Certification
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: uat-live-certification
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    name: Verify contracts and reconcile UAT personas
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: uat
+    env:
+      APP_ENV: uat
+      NEXT_PUBLIC_SUPABASE_URL: https://kkoitlvydytdhlpxhuah.supabase.co
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.UAT_SUPABASE_SERVICE_ROLE_KEY }}
+      AUDIT_PASSWORD: ${{ secrets.UAT_AUDIT_MASTER_PASSWORD }}
+      SUPABASE_PROJECT_REF: kkoitlvydytdhlpxhuah
+      PRODUCTION_SUPABASE_PROJECT_REF: abbfziukjalyqtcuskhi
+      POLICY_ALLOW_TEST_MUTATIONS: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.23.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Verify live audit contracts
+        run: pnpm test:intra-live-contract
+      - name: Verify UAT persona provisioner contract
+        run: pnpm test:provision:uat
+      - name: Reconcile guarded UAT personas
+        run: pnpm provision:test:uat
+
+  routes:
+    name: Route and visual audit (${{ matrix.viewport }})
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: uat
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - viewport: desktop-1440
+            ordinal: 1
+          - viewport: desktop-1280
+            ordinal: 2
+          - viewport: tablet-768
+            ordinal: 3
+          - viewport: mobile-390
+            ordinal: 4
+          - viewport: mobile-360
+            ordinal: 5
+          - viewport: mobile-320
+            ordinal: 6
+    env:
+      APP_ENV: uat
+      AUDIT_BASE_URL: https://mwell-intra-uat.vercel.app
+      AUDIT_PHASE: routes
+      AUDIT_VIEWPORT: ${{ matrix.viewport }}
+      AUDIT_MUTATIONS: "false"
+      AUDIT_OUTPUT_PATH: test-results/routes-${{ matrix.viewport }}.json
+      NEXT_PUBLIC_SUPABASE_URL: https://kkoitlvydytdhlpxhuah.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.UAT_SUPABASE_ANON_KEY }}
+      AUDIT_PASSWORD: ${{ secrets.UAT_AUDIT_MASTER_PASSWORD }}
+      SUPABASE_PROJECT_REF: kkoitlvydytdhlpxhuah
+      PRODUCTION_SUPABASE_PROJECT_REF: abbfziukjalyqtcuskhi
+      POLICY_ALLOW_TEST_MUTATIONS: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.23.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Install Chromium
+        run: pnpm --filter @intra/shell exec playwright install --with-deps chromium
+      - name: Run guarded route and visual audit
+        shell: bash
+        run: |
+          suffix="$(printf '%08X' "$((GITHUB_RUN_NUMBER * 100 + ${{ matrix.ordinal }}))")"
+          export AUDIT_RUN_ID="QA-$(date -u +%Y%m%d)-${suffix}"
+          pnpm test:intra-live
+      - name: Upload route artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: uat-routes-${{ matrix.viewport }}-${{ github.run_number }}
+          path: test-results/routes-${{ matrix.viewport }}.json
+          if-no-files-found: error
+          retention-days: 30
+
+  transactions:
+    name: Governed transactions (${{ matrix.viewport }})
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    environment: uat
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - viewport: desktop-1440
+            ordinal: 91
+          - viewport: mobile-390
+            ordinal: 92
+    env:
+      APP_ENV: uat
+      AUDIT_BASE_URL: https://mwell-intra-uat.vercel.app
+      AUDIT_PHASE: transactions
+      AUDIT_VIEWPORT: ${{ matrix.viewport }}
+      AUDIT_MUTATIONS: "true"
+      AUDIT_OUTPUT_PATH: test-results/transactions-${{ matrix.viewport }}.json
+      NEXT_PUBLIC_SUPABASE_URL: https://kkoitlvydytdhlpxhuah.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.UAT_SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.UAT_SUPABASE_SERVICE_ROLE_KEY }}
+      AUDIT_PASSWORD: ${{ secrets.UAT_AUDIT_MASTER_PASSWORD }}
+      SUPABASE_PROJECT_REF: kkoitlvydytdhlpxhuah
+      PRODUCTION_SUPABASE_PROJECT_REF: abbfziukjalyqtcuskhi
+      POLICY_ALLOW_TEST_MUTATIONS: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.23.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Install Chromium
+        run: pnpm --filter @intra/shell exec playwright install --with-deps chromium
+      - name: Run guarded write, readback, handoff, and cleanup audit
+        shell: bash
+        run: |
+          suffix="$(printf '%08X' "$((GITHUB_RUN_NUMBER * 100 + ${{ matrix.ordinal }}))")"
+          export AUDIT_RUN_ID="QA-$(date -u +%Y%m%d)-${suffix}"
+          pnpm test:intra-live
+      - name: Upload transaction artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: uat-transactions-${{ matrix.viewport }}-${{ github.run_number }}
+          path: test-results/transactions-${{ matrix.viewport }}.json
+          if-no-files-found: error
+          retention-days: 30
+
+  bundle:
+    name: Bundle certification evidence
+    if: always()
+    needs: [routes, transactions]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: uat-*-${{ github.run_number }}
+          path: certification-artifacts
+          merge-multiple: true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: uat-live-certification-${{ github.run_number }}
+          path: certification-artifacts
+          if-no-files-found: error
+          retention-days: 30
+      - name: Enforce upstream certification status
+        if: needs.routes.result != 'success' || needs.transactions.result != 'success'
+        run: exit 1
