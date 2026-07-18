@@ -2,6 +2,9 @@ name: UAT Live Certification
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - codex/unified-finance-module
 
 concurrency:
   group: uat-live-certification
