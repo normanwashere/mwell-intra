@@ -470,6 +470,15 @@ test("Task 3 uses browser-role exception receipts and proves transactional clean
   assert.match(source, /cumulative payment acceptance binding/i);
   assert.match(source, /referenced approval role rename\/deactivate denial/i);
   assert.match(source, /inactive approval role cannot authorize/i);
+  assert.match(source, /Material stock change bypassed Finance handoff/);
+  assert.match(
+    source,
+    /Task 3 Finance insufficient locked-stock denial[\s\S]*intra\.test\.wh\.finance@mwell\.com\.ph/,
+  );
+  assert.match(
+    source,
+    /Finance insufficient locked stock-change approval[\s\S]*expected: \{ status: "pending_finance" \}/,
+  );
   assert.match(source, /valid public quality inspection/i);
   assert.match(
     source,
@@ -988,7 +997,7 @@ test("the DOA editor cannot submit while asynchronous workspace data shifts the 
   assert.match(page, /data-mobile-action-bar="true"/);
   assert.match(
     page,
-    /relative isolate z-40[\s\S]*scroll-mb-\[calc\(6rem\+env\(safe-area-inset-bottom\)\)\]/,
+    /sticky bottom-\[calc\(5\.25rem\+env\(safe-area-inset-bottom\)\)\][\s\S]*isolate z-40[\s\S]*md:static/,
   );
   assert.doesNotMatch(
     page,

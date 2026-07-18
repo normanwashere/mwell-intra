@@ -3694,16 +3694,26 @@ async function task3SupervisorTransactions(page, fixture) {
         `Governed ${name} stock approval applied ${after - before}, expected ${expectedDelta}.`,
       );
   }
-  requireRpcFailure(
-    await callRpcAsBrowserUser(page, "warehouse", "decide_stock_change", {
+  const insufficientEscalation = await callRpcAsBrowserUser(
+    page,
+    "warehouse",
+    "decide_stock_change",
+    {
       idempotency_key: `${fixture.marker}-manual-insufficient-approval`,
       request_id: fixture.manualStockRequests.insufficient,
       decision: "approved",
-      note: `${fixture.marker} insufficient stock denial`,
-    }),
-    /negative|insufficient/i,
-    "insufficient locked stock-change approval",
+      note: `${fixture.marker} Supervisor escalation to Finance`,
+    },
   );
+  if (!insufficientEscalation.ok)
+    throw new Error(
+      `Insufficient stock-change Finance escalation failed: ${insufficientEscalation.body}`,
+    );
+  const insufficientRequest = JSON.parse(insufficientEscalation.body);
+  if (insufficientRequest.status !== "pending_finance")
+    throw new Error(
+      `Material stock change bypassed Finance handoff (${insufficientEscalation.body}).`,
+    );
 
   const approveVariance = await callRpcAsBrowserUser(
     page,
@@ -3771,6 +3781,54 @@ async function task3SupervisorTransactions(page, fixture) {
     ok: true,
     varianceRequestId: fixture.cycleRequestId,
     selfApprovalDenied: true,
+  };
+}
+
+async function task3FinanceInsufficientStockDenial(page, fixture) {
+  const inventoryQuantity = async () => {
+    const { data, error } = await fixture.client
+      .schema("warehouse")
+      .from("stock_levels")
+      .select("quantity")
+      .eq("product_id", fixture.ids.product)
+      .eq("location_id", fixture.locationId);
+    if (error)
+      throw new Error(`Finance stock readback failed: ${error.message}`);
+    return (data ?? []).reduce(
+      (total, row) => total + Number(row.quantity ?? 0),
+      0,
+    );
+  };
+  const before = await inventoryQuantity();
+  requireRpcFailure(
+    await callRpcAsBrowserUser(page, "warehouse", "decide_stock_change", {
+      idempotency_key: `${fixture.marker}-manual-insufficient-finance-denial`,
+      request_id: fixture.manualStockRequests.insufficient,
+      decision: "approved",
+      note: `${fixture.marker} Finance locked-stock denial`,
+    }),
+    /negative|insufficient/i,
+    "Finance insufficient locked stock-change approval",
+  );
+  const after = await inventoryQuantity();
+  if (after !== before)
+    throw new Error(
+      `Failed Finance stock approval changed inventory from ${before} to ${after}.`,
+    );
+  const checkpoint = await verifyCheckpoint(
+    {
+      schema: "warehouse",
+      table: "stock_change_requests",
+      filters: { id: fixture.manualStockRequests.insufficient },
+      expected: { status: "pending_finance" },
+      select: "id,status,quantity_delta,financial_impact",
+    },
+    fixture.client,
+  );
+  return {
+    name: "Task 3 Finance insufficient locked-stock denial",
+    ok: true,
+    checkpoint,
   };
 }
 
@@ -6361,6 +6419,18 @@ try {
             {
               name: "Task 3 supervisor quarantine and variance transactions",
               run: (page) => task3SupervisorTransactions(page, task3Fixture),
+            },
+          ),
+        );
+        workflows.push(
+          await runWorkflow(
+            browser,
+            viewport,
+            { email: "intra.test.wh.finance@mwell.com.ph" },
+            {
+              name: "Task 3 Finance insufficient locked-stock denial",
+              run: (page) =>
+                task3FinanceInsufficientStockDenial(page, task3Fixture),
             },
           ),
         );
