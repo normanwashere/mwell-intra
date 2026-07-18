@@ -997,7 +997,7 @@ test("the DOA editor cannot submit while asynchronous workspace data shifts the 
   assert.match(page, /data-mobile-action-bar="true"/);
   assert.match(
     page,
-    /sticky bottom-\[calc\(5\.25rem\+env\(safe-area-inset-bottom\)\)\][\s\S]*isolate z-40[\s\S]*md:static/,
+    /fixed inset-x-4 bottom-\[calc\(5\.25rem\+env\(safe-area-inset-bottom\)\)\][\s\S]*isolate z-40[\s\S]*md:static/,
   );
   assert.doesNotMatch(
     page,

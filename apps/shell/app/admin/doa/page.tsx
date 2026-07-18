@@ -264,7 +264,7 @@ function DoaWorkspace() {
   };
 
   return (
-    <div className="space-y-6 pb-24 md:pb-8">
+    <div className="space-y-6 pb-44 md:pb-8">
       <ModuleHero
         eyebrow="Intra governance"
         title="Delegation of Authority"
@@ -489,7 +489,7 @@ function DoaWorkspace() {
           </div>
           <div
             data-mobile-action-bar="true"
-            className="sticky bottom-[calc(5.25rem+env(safe-area-inset-bottom))] isolate z-40 -mx-4 mt-5 flex scroll-mb-[calc(6rem+env(safe-area-inset-bottom))] justify-end border-t border-line bg-surface px-4 pb-3 pt-4 shadow-[0_-10px_24px_rgba(15,23,42,0.12)] sm:-mx-5 sm:px-5 md:static md:mx-0 md:border-0 md:bg-transparent md:p-0 md:shadow-none"
+            className="fixed inset-x-4 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] isolate z-40 flex justify-end rounded-md border border-line bg-surface px-4 pb-3 pt-4 shadow-[0_-10px_24px_rgba(15,23,42,0.12)] sm:inset-x-5 sm:px-5 md:static md:mt-5 md:rounded-none md:border-0 md:bg-transparent md:p-0 md:shadow-none"
           >
             <Button
               className="relative z-10 w-full sm:w-auto"
