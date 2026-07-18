@@ -9,6 +9,7 @@ import {
 } from "../lib/target-environment.mjs";
 import {
   CURRENT_LIVE_ROLES,
+  CURRENT_LIVE_SCENARIOS,
   assertAuditRunId,
 } from "./live-e2e-scenarios.mjs";
 import {
@@ -16,12 +17,13 @@ import {
   verifyCheckpoint,
 } from "./live-e2e-db-verify.mjs";
 import { cleanupRun } from "./live-e2e-cleanup.mjs";
+import { derivePersonaPassword } from "./provision-uat-intra-test-users.mjs";
 
 const require = createRequire(path.resolve("apps/shell/package.json"));
 const { chromium } = require("@playwright/test");
 
 const baseUrl = process.env.AUDIT_BASE_URL?.replace(/\/$/, "");
-const password = process.env.AUDIT_PASSWORD;
+const masterPassword = process.env.AUDIT_PASSWORD;
 const allowMutations = process.env.AUDIT_MUTATIONS === "true";
 const viewFilter = process.env.AUDIT_VIEWPORT;
 const roleFilter = process.env.AUDIT_ROLE;
@@ -54,9 +56,9 @@ if (!baseUrl || !/^https:\/\//.test(baseUrl)) {
     "AUDIT_BASE_URL must be the HTTPS URL of the live deployment.",
   );
 }
-if (!password) {
+if (!masterPassword) {
   throw new Error(
-    "AUDIT_PASSWORD is required; shared credentials are never embedded in the release gate.",
+    "AUDIT_PASSWORD is required as the vaulted derivation secret; persona credentials remain unique.",
   );
 }
 const appOrigin = new URL(baseUrl).origin;
@@ -70,6 +72,17 @@ await verifyDeployedTargetIdentity({
 });
 
 const users = CURRENT_LIVE_ROLES;
+
+const EXECUTABLE_CROSS_MODULE_SCENARIOS = new Set([
+  "events-request-to-warehouse-handoff",
+  "insights-read-only-governance",
+  "unified-finance-control-center",
+]);
+for (const scenarioId of EXECUTABLE_CROSS_MODULE_SCENARIOS) {
+  if (!CURRENT_LIVE_SCENARIOS.some((scenario) => scenario.id === scenarioId)) {
+    throw new Error(`Executable scenario ${scenarioId} is missing from the live contract.`);
+  }
+}
 
 const viewports = [
   {
@@ -92,31 +105,90 @@ const viewports = [
   { name: "mobile-320", viewport: { width: 320, height: 720 }, isMobile: true },
 ];
 
-const commonRoutes = [
-  { path: "/", text: /Your areas|No areas yet|Vendor Portal|Admin/i },
+const DENIED_ROUTE_TEXT = /No (?:warehouse|procurement|legal|vendor|admin|My Work|Events|Insights|Finance) access|Access denied|doesn't include|not authorized|reserved for enrolled|employee workspace/i;
+
+const FINANCE_WAREHOUSE_ROLES = new Set(["finance", "pricing", "warehouse_admin"]);
+const FINANCE_PROCUREMENT_ROLES = new Set(["finance", "admin"]);
+
+function hasAssignedModule(user, module) {
+  return (user.assignments[module]?.length ?? 0) > 0;
+}
+
+function hasFinanceAccess(user) {
+  return (
+    (user.assignments.warehouse ?? []).some((role) =>
+      FINANCE_WAREHOUSE_ROLES.has(role),
+    ) ||
+    (user.assignments.procurement ?? []).some((role) =>
+      FINANCE_PROCUREMENT_ROLES.has(role),
+    )
+  );
+}
+
+const ROUTE_AUTHORIZATION_MATRIX = [
+  {
+    path: "/",
+    allowed: () => true,
+    allowedText: /Your areas|No areas yet|Vendor Portal|Admin/i,
+  },
   {
     path: "/warehouse",
-    text: /Warehouse|Dashboard|No warehouse access|Access denied/i,
+    allowed: (user) => hasAssignedModule(user, "warehouse"),
+    allowedText: /Warehouse|Dashboard/i,
+    deniedText: /No warehouse access|Access denied/i,
   },
   {
     path: "/procurement",
-    text: /Procurement|No procurement access|Approval inbox|Purchase request|Access denied/i,
+    allowed: (user) => hasAssignedModule(user, "procurement"),
+    allowedText: /Procurement|Approval inbox|Purchase request/i,
+    deniedText: /No procurement access|Access denied/i,
   },
   {
     path: "/legal",
-    text: /Legal|Accreditation|No legal access|Access denied/i,
+    allowed: (user) => hasAssignedModule(user, "legal"),
+    allowedText: /Legal|Accreditation/i,
+    deniedText: /No legal access|Access denied/i,
   },
   {
     path: "/vendor",
-    text: /Vendor|accreditation|No legal access|enrolled vendor|Access denied/i,
+    allowed: (user) => user.kind === "vendor",
+    allowedText: /Vendor|accreditation|enrolled vendor/i,
+    deniedText: /reserved for enrolled|No vendor access|Access denied/i,
   },
   {
     path: "/admin/users",
-    text: /Users & Roles|Access matrix|No admin access|don't have access|No modules|Access denied/i,
+    allowed: (user) => (user.assignments.core ?? []).includes("platform_admin"),
+    allowedText: /Users & Roles|Access matrix/i,
+    deniedText: /No admin access|don't have access|No modules|Access denied/i,
   },
   {
     path: "/knowledge",
-    text: /Start with the flow|MWELL INTRA OPERATING HANDBOOK|Knowledge Base/i,
+    allowed: () => true,
+    allowedText: /Start with the flow|MWELL INTRA OPERATING HANDBOOK|Knowledge Base/i,
+  },
+  {
+    path: "/work",
+    allowed: (user) => user.kind === "employee",
+    allowedText: /My Work|Assignments|Your areas/i,
+    deniedText: /No My Work access|employee workspace|Access denied/i,
+  },
+  {
+    path: "/events",
+    allowed: (user) => hasAssignedModule(user, "events"),
+    allowedText: /Events|Event operations/i,
+    deniedText: /No Events access|Access denied/i,
+  },
+  {
+    path: "/insights",
+    allowed: (user) => hasAssignedModule(user, "insights"),
+    allowedText: /Insights|Operational indicators|Decision support/i,
+    deniedText: /No Insights access|Access denied/i,
+  },
+  {
+    path: "/finance",
+    allowed: hasFinanceAccess,
+    allowedText: /Finance|Payment readiness|Cross-module activity/i,
+    deniedText: /No Finance access|Access denied/i,
   },
 ];
 
@@ -213,10 +285,71 @@ const roleRoutes = {
     { path: "/legal", text: /Accreditation cases|Legal/i },
     { path: "/legal/invites/new", text: /Invite vendor|Onboard a new vendor/i },
   ],
+  warehouse_operator: [
+    { path: "/warehouse/receiving", text: /Receiving|Receive/i },
+    { path: "/warehouse/storage", text: /Put away|Storage|Bin/i },
+    { path: "/warehouse/allocations", text: /Pick or issue|Allocations|Issue/i },
+    { path: "/warehouse/returns", text: /Returns|Record return/i },
+  ],
+  warehouse_supervisor: [
+    { path: "/warehouse/receiving", text: /Receiving|Receive/i },
+    { path: "/warehouse/quality", text: /Quality|Controlled exception disposition/i },
+    { path: "/warehouse/approvals", text: /Controlled exceptions|Approvals/i },
+    { path: "/warehouse/cycle-counts", text: /Cycle|Count|variance/i },
+  ],
+  warehouse_business_unit: [
+    { path: "/warehouse/events", text: /Events|Activations|access/i },
+  ],
+  warehouse_procurement: [
+    { path: "/warehouse/purchase-orders", text: /Purchase Orders|Receive and inspect/i },
+  ],
+  finance_unified: [
+    { path: "/finance", text: /Finance|Payment readiness|Valuation|Reconciliation/i },
+    { path: "/procurement/approvals", text: /Approval inbox|Waiting on you|Inbox zero/i },
+    { path: "/warehouse/cycle-counts", text: /Cycle|Count/i },
+  ],
+  events_requester: [
+    { path: "/events", text: /Events|New event|Create/i },
+  ],
+  events_coordinator: [
+    { path: "/events", text: /Events|New event|Readiness|Fulfillment/i },
+  ],
+  events_viewer: [
+    { path: "/events", text: /Events|Readiness|Fulfillment/i },
+  ],
+  events_admin: [
+    { path: "/events", text: /Events|New event|Readiness|Fulfillment/i },
+  ],
+  insights_analyst: [
+    { path: "/insights", text: /Insights|Indicators|Warehouse|Procurement/i },
+  ],
+  insights_manager: [
+    { path: "/insights", text: /Insights|Indicators|Warehouse|Procurement/i },
+  ],
+  insights_executive: [
+    { path: "/insights", text: /Insights|Executive|Indicators/i },
+  ],
+  insights_admin: [
+    { path: "/insights", text: /Insights|Indicators|Warehouse|Procurement/i },
+  ],
 };
 
-function routesFor(role) {
-  return [...commonRoutes, ...(roleRoutes[role] ?? [])];
+function routesFor(user) {
+  const exactRoutes = ROUTE_AUTHORIZATION_MATRIX.map((route) => {
+    const allowed = route.allowed(user);
+    return {
+      path: route.path,
+      expectedAccess: allowed ? "allowed" : "denied",
+      text: allowed ? route.allowedText : route.deniedText ?? DENIED_ROUTE_TEXT,
+    };
+  });
+  const scopedRoutes = (roleRoutes[user.role] ?? []).map((route) => ({
+    ...route,
+    expectedAccess: "allowed",
+  }));
+  return [...new Map(
+    [...exactRoutes, ...scopedRoutes].map((route) => [route.path, route]),
+  ).values()];
 }
 
 function classify(text, url) {
@@ -235,6 +368,7 @@ function classify(text, url) {
     lower.includes("doesn't include") ||
     lower.includes("not authorized") ||
     lower.includes("no access") ||
+    /\bno (?:warehouse|procurement|legal|vendor|admin|my work|events|insights|finance) access\b/.test(lower) ||
     lower.includes("reserved for enrolled")
   ) {
     return "access-denied";
@@ -277,17 +411,7 @@ async function waitForRouteExpectation(page, expected) {
     .waitForFunction(
       ({ source, flags }) => {
         const text = document.body.innerText.trim().replace(/\s+/g, " ");
-        const lower = text.toLowerCase();
-        return (
-          new RegExp(source, flags).test(text) ||
-          lower.includes("access denied") ||
-          lower.includes("doesn't include") ||
-          lower.includes("not authorized") ||
-          lower.includes("no access") ||
-          lower.includes("reserved for enrolled") ||
-          lower.includes("application error") ||
-          lower.includes("runtime error")
-        );
+        return new RegExp(source, flags).test(text);
       },
       { source: expected.source, flags: expected.flags },
       { timeout: 10_000 },
@@ -547,7 +671,7 @@ async function login(page, user) {
   const submit = page.getByRole("button", { name: /^sign in$/i });
   await submit.waitFor({ state: "visible", timeout: 10_000 });
   await page.fill("#email", user.email);
-  await page.fill("#password", password);
+  await page.fill("#password", derivePersonaPassword(masterPassword, user));
   await submit.click();
   await page
     .waitForFunction(
@@ -580,11 +704,18 @@ async function auditRoute(page, route) {
   await waitForMeaningfulRoute(page);
   await waitForRouteExpectation(page, route.text);
   const audit = await pageAudit(page);
-  const expectationMet = route.text ? route.text.test(audit.text) : true;
+  const routeClass = classify(audit.text, page.url());
+  const expectedClass = route.expectedAccess === "denied"
+    ? "access-denied"
+    : "rendered";
+  const expectationMet =
+    routeClass === expectedClass &&
+    (route.text ? route.text.test(audit.text) : true);
   return {
     route: route.path,
     finalUrl: page.url().replace(baseUrl, ""),
-    class: classify(audit.text, page.url()),
+    class: routeClass,
+    expectedAccess: route.expectedAccess,
     expectationMet,
     h1: audit.h1,
     mainCount: audit.mainCount,
@@ -878,6 +1009,39 @@ async function callRpcAsBrowserUser(page, schema, fn, payload) {
     body: JSON.stringify({ payload }),
   });
   return { ok: response.ok, status: response.status, body: await response.text() };
+}
+
+async function callRestAsBrowserUser(
+  page,
+  schema,
+  table,
+  { method = "POST", body },
+) {
+  const accessToken = await browserAccessToken(page);
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "");
+  if (!accessToken || !anonKey || !supabaseUrl) {
+    throw new Error(
+      "Authenticated browser session and public Supabase configuration are required.",
+    );
+  }
+  const response = await fetch(`${supabaseUrl}/rest/v1/${table}`, {
+    method,
+    headers: {
+      apikey: anonKey,
+      authorization: `Bearer ${accessToken}`,
+      "content-type": "application/json",
+      "accept-profile": schema,
+      "content-profile": schema,
+      prefer: "return=representation",
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  return {
+    ok: response.ok,
+    status: response.status,
+    body: await response.text(),
+  };
 }
 
 function requireRpcFailure(result, pattern, contract) {
@@ -2598,6 +2762,376 @@ async function roleHandoffReadbackWorkflow(page, route, expectedText, name) {
   return { name, ok: true, finalUrl: page.url().replace(baseUrl, "") };
 }
 
+async function eventsCreateAndReadbackWorkflow(page, marker, state) {
+  const eventName = `${marker} Intra Event`;
+  await page.goto(`${baseUrl}/events?workflow=${Date.now()}`, {
+    waitUntil: "domcontentloaded",
+    timeout: 20_000,
+  });
+  await waitForMeaningfulRoute(page);
+  await page.getByRole("button", { name: "New event", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Create event" });
+  await dialog.getByRole("button", { name: "Create event", exact: true }).click();
+  await dialog.getByText("Event name is required.").waitFor({ state: "visible" });
+  await dialog.getByLabel("Event name").fill(eventName);
+  await dialog.getByLabel("Start date").fill("2027-08-15");
+  await dialog.getByLabel("End date").fill("2027-08-14");
+  await dialog.getByRole("button", { name: "Create event", exact: true }).click();
+  await dialog
+    .getByText("End date cannot be before the start date.")
+    .waitFor({ state: "visible" });
+  await dialog.getByLabel("End date").fill("2027-08-16");
+  await dialog.getByRole("button", { name: "Create event", exact: true }).click();
+  await page.getByText(eventName, { exact: true }).first().waitFor({
+    state: "visible",
+  });
+  const checkpoint = await verifyCheckpoint({
+    schema: "warehouse",
+    table: "events",
+    filters: { name: eventName },
+    expected: {
+      name: eventName,
+      type: "corporate",
+      start_date: "2027-08-15",
+      end_date: "2027-08-16",
+    },
+    select: "id,name,type,start_date,end_date",
+  });
+  const db = createAuditDatabaseClient();
+  const { data: rows, error } = await db
+    .schema("warehouse")
+    .from("events")
+    .select("id")
+    .eq("name", eventName)
+    .limit(1);
+  if (error || !rows?.[0]?.id) {
+    throw new Error(`Events readback failed: ${error?.message ?? "missing id"}`);
+  }
+  state.eventId = rows[0].id;
+  state.eventName = eventName;
+  const duplicate = await callRpcAsBrowserUser(
+    page,
+    "warehouse",
+    "create_event",
+    {
+      event: {
+        id: state.eventId,
+        name: eventName,
+        type: "corporate",
+        start_date: "2027-08-15",
+        end_date: "2027-08-16",
+        site_location_id: null,
+      },
+    },
+  );
+  if (duplicate.ok) {
+    throw new Error("Duplicate Events replay created a second event.");
+  }
+  const { count: duplicateCount, error: duplicateError } = await db
+    .schema("warehouse")
+    .from("events")
+    .select("id", { count: "exact", head: true })
+    .eq("id", state.eventId);
+  if (duplicateError) {
+    throw new Error(`Duplicate Events readback failed: ${duplicateError.message}`);
+  }
+  if (duplicateCount !== 1) {
+    throw new Error(`Duplicate Events replay left ${duplicateCount} rows.`);
+  }
+  return {
+    name: "Events request creation and persistence readback",
+    ok: true,
+    checkpoint,
+    eventId: state.eventId,
+    finalUrl: page.url().replace(baseUrl, ""),
+  };
+}
+
+async function eventsViewerMutationDenialWorkflow(page, marker) {
+  const deniedName = `${marker} Viewer Forbidden Event`;
+  await page.goto(`${baseUrl}/events?workflow=${Date.now()}`, {
+    waitUntil: "domcontentloaded",
+    timeout: 20_000,
+  });
+  await waitForMeaningfulRoute(page);
+  if (await page.getByRole("button", { name: "New event", exact: true }).count()) {
+    throw new Error("Events viewer was shown the create-event control.");
+  }
+  const result = await callRpcAsBrowserUser(page, "warehouse", "create_event", {
+    event: {
+      id: `evt-${marker.toLowerCase()}-viewer-denied`,
+      name: deniedName,
+      type: "corporate",
+      start_date: "2027-08-15",
+      end_date: "2027-08-16",
+      site_location_id: null,
+    },
+  });
+  if (result.ok) {
+    throw new Error("Events viewer created an event through the governed RPC.");
+  }
+  const db = createAuditDatabaseClient();
+  const { count, error } = await db
+    .schema("warehouse")
+    .from("events")
+    .select("id", { count: "exact", head: true })
+    .eq("name", deniedName);
+  if (error) throw new Error(`Denied event readback failed: ${error.message}`);
+  if (count !== 0) throw new Error("Denied Events mutation persisted a row.");
+  return {
+    name: "Events viewer create denial",
+    ok: true,
+    denialStatus: result.status,
+  };
+}
+
+async function eventsCoordinatorReadbackWorkflow(page, state) {
+  if (!state.eventId || !state.eventName) {
+    throw new Error("Events coordinator handoff requires a created event.");
+  }
+  await page.goto(`${baseUrl}/events/${encodeURIComponent(state.eventId)}`, {
+    waitUntil: "domcontentloaded",
+    timeout: 20_000,
+  });
+  await waitForMeaningfulRoute(page);
+  await page.getByRole("heading", { name: state.eventName, exact: true }).waitFor({
+    state: "visible",
+  });
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await waitForMeaningfulRoute(page);
+  await page.getByRole("heading", { name: state.eventName, exact: true }).waitFor({
+    state: "visible",
+  });
+  const fulfillmentLink = page.getByRole("link", {
+    name: /Warehouse fulfillment/i,
+  });
+  if ((await fulfillmentLink.count()) === 0) {
+    throw new Error("Events coordinator cannot hand the event to Warehouse.");
+  }
+  return {
+    name: "Events coordinator refresh and Warehouse handoff",
+    ok: true,
+    finalUrl: page.url().replace(baseUrl, ""),
+  };
+}
+
+async function warehouseEventHandoffWorkflow(page, state) {
+  if (!state.eventId || !state.eventName) {
+    throw new Error("Warehouse handoff requires a created event.");
+  }
+  await page.goto(
+    `${baseUrl}/warehouse/events/${encodeURIComponent(state.eventId)}?handoff=${Date.now()}`,
+    { waitUntil: "domcontentloaded", timeout: 20_000 },
+  );
+  await waitForMeaningfulRoute(page);
+  await page.getByText(state.eventName, { exact: true }).first().waitFor({
+    state: "visible",
+  });
+  const text = (await page.locator("body").innerText()).replace(/\s+/g, " ");
+  if (!/reserve|allocation|fulfillment|issue/i.test(text)) {
+    throw new Error("Warehouse handoff does not expose fulfillment controls.");
+  }
+  return {
+    name: "Events-to-Warehouse operational handoff",
+    ok: true,
+    finalUrl: page.url().replace(baseUrl, ""),
+  };
+}
+
+const INSIGHT_ROLE_AREAS = {
+  insights_analyst: {
+    visible: ["Warehouse", "Procurement", "Legal", "Finance"],
+    hidden: ["Executive"],
+  },
+  insights_manager: {
+    visible: ["Warehouse", "Procurement", "Legal", "Finance", "Executive"],
+    hidden: [],
+  },
+  insights_executive: {
+    visible: ["Executive"],
+    hidden: ["Warehouse", "Procurement", "Legal", "Finance"],
+  },
+  insights_admin: {
+    visible: ["Warehouse", "Procurement", "Legal", "Finance", "Executive"],
+    hidden: [],
+  },
+};
+
+async function insightsGovernanceWorkflow(page, role) {
+  const contract = INSIGHT_ROLE_AREAS[role];
+  if (!contract) throw new Error(`No Insights area contract for ${role}.`);
+  await page.goto(`${baseUrl}/insights?governance=${Date.now()}`, {
+    waitUntil: "domcontentloaded",
+    timeout: 20_000,
+  });
+  await waitForMeaningfulRoute(page);
+  for (const area of contract.visible) {
+    await page.getByRole("button", { name: area, exact: true }).waitFor({
+      state: "visible",
+    });
+  }
+  for (const area of contract.hidden) {
+    if (await page.getByRole("button", { name: area, exact: true }).count()) {
+      throw new Error(`${role} received forbidden ${area} Insights scope.`);
+    }
+  }
+  const indicator = page.locator('[aria-label="Operational indicators"]');
+  await indicator.waitFor({ state: "visible" });
+  const beforeRefresh = (await indicator.innerText()).replace(/\s+/g, " ").trim();
+  const sourceLinks = indicator.getByRole("link", {
+    name: "Open governed source",
+    exact: true,
+  });
+  if ((await sourceLinks.count()) === 0) {
+    throw new Error(`${role} has no governed source links.`);
+  }
+  for (const href of await sourceLinks.evaluateAll((links) =>
+    links.map((link) => link.getAttribute("href")),
+  )) {
+    if (!href || href === "#" || href.startsWith("javascript:")) {
+      throw new Error(`${role} has a dead governed source link.`);
+    }
+  }
+  const denied = await callRestAsBrowserUser(
+    page,
+    "core",
+    "v_insights_snapshot",
+    {
+      body: {
+        id: `${auditRunId}-forbidden-insight`,
+        area: "executive",
+        label: "Forbidden write",
+        value: 1,
+      },
+    },
+  );
+  if (denied.ok) {
+    throw new Error(`${role} mutated the read-only Insights snapshot.`);
+  }
+  const db = createAuditDatabaseClient();
+  const { count: forbiddenCount, error: forbiddenError } = await db
+    .schema("core")
+    .from("v_insights_snapshot")
+    .select("id", { count: "exact", head: true })
+    .eq("id", `${auditRunId}-forbidden-insight`);
+  if (forbiddenError) {
+    throw new Error(`Insights denial readback failed: ${forbiddenError.message}`);
+  }
+  if (forbiddenCount !== 0) {
+    throw new Error(`${role} denied Insights write persisted a row.`);
+  }
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await waitForMeaningfulRoute(page);
+  const afterRefresh = (
+    await page.locator('[aria-label="Operational indicators"]').innerText()
+  )
+    .replace(/\s+/g, " ")
+    .trim();
+  if (beforeRefresh !== afterRefresh) {
+    throw new Error(`${role} Insights snapshot changed across an immediate refresh.`);
+  }
+  return {
+    name: `${role} Insights governance`,
+    ok: true,
+    visibleAreas: contract.visible,
+    mutationDenialStatus: denied.status,
+    sourceLinkCount: await sourceLinks.count().catch(() => 0),
+  };
+}
+
+async function unifiedFinanceReadbackWorkflow(page, fixture) {
+  const receiptId = fixture.ids.cleanReceipt;
+  if (!receiptId) throw new Error("Unified Finance requires the governed receipt.");
+  const db = createAuditDatabaseClient();
+  const references = [fixture.ids.cleanPo, receiptId];
+  const { data: rows, error } = await db
+    .schema("core")
+    .from("v_finance_activity")
+    .select("source,ref_id,po_id,status")
+    .in("ref_id", references);
+  if (error) throw new Error(`Finance readback failed: ${error.message}`);
+  const sources = new Set((rows ?? []).map((row) => row.source));
+  if (!sources.has("procurement_po") || !sources.has("warehouse_receipt")) {
+    throw new Error(
+      `Unified Finance source readback incomplete: ${JSON.stringify(rows)}`,
+    );
+  }
+  await page.goto(`${baseUrl}/finance?workflow=${Date.now()}`, {
+    waitUntil: "domcontentloaded",
+    timeout: 20_000,
+  });
+  await waitForMeaningfulRoute(page);
+  await page.getByText("Warehouse Finance", { exact: true }).waitFor({
+    state: "visible",
+  });
+  await page.getByText("Procurement Finance", { exact: true }).waitFor({
+    state: "visible",
+  });
+  await page.getByRole("button", { name: "POs", exact: true }).click();
+  const poLink = page.getByRole("link", {
+    name: fixture.ids.cleanPo,
+    exact: true,
+  });
+  await poLink.waitFor({ state: "visible" });
+  const poHref = await poLink.getAttribute("href");
+  if (poHref !== `/procurement/purchase-orders/${encodeURIComponent(fixture.ids.cleanPo)}`) {
+    throw new Error(`Unified Finance PO source link is incorrect: ${poHref}`);
+  }
+  await page.getByRole("button", { name: "Receipts", exact: true }).click();
+  const receiptLink = page.getByRole("link", { name: receiptId, exact: true });
+  await receiptLink.waitFor({ state: "visible" });
+  const receiptHref = await receiptLink.getAttribute("href");
+  if (receiptHref !== "/warehouse/receiving") {
+    throw new Error(
+      `Unified Finance receipt source link is incorrect: ${receiptHref}`,
+    );
+  }
+  return {
+    name: "Unified Finance cross-module readback",
+    ok: true,
+    checkpoint: {
+      entity: "core.v_finance_activity",
+      matched: rows.length,
+      expectedSources: ["procurement_po", "warehouse_receipt"],
+    },
+  };
+}
+
+async function singleScopeFinanceDenialWorkflow(page, fixture, scope) {
+  const warehouseScope = scope === "warehouse";
+  const expectedBadge = warehouseScope ? "Warehouse Finance" : "Procurement Finance";
+  const forbiddenBadge = warehouseScope ? "Procurement Finance" : "Warehouse Finance";
+  const visibleReference = warehouseScope
+    ? fixture.ids.cleanReceipt
+    : fixture.ids.cleanPo;
+  const forbiddenReference = warehouseScope
+    ? fixture.ids.cleanPo
+    : fixture.ids.cleanReceipt;
+  const filter = warehouseScope ? "Receipts" : "POs";
+  await page.goto(`${baseUrl}/finance?scope=${scope}&workflow=${Date.now()}`, {
+    waitUntil: "domcontentloaded",
+    timeout: 20_000,
+  });
+  await waitForMeaningfulRoute(page);
+  await page.getByText(expectedBadge, { exact: true }).waitFor({ state: "visible" });
+  if (await page.getByText(forbiddenBadge, { exact: true }).count()) {
+    throw new Error(`${scope} Finance received the other Finance scope badge.`);
+  }
+  await page.getByRole("button", { name: filter, exact: true }).click();
+  await page.getByText(visibleReference, { exact: true }).first().waitFor({
+    state: "visible",
+  });
+  if (await page.getByText(forbiddenReference, { exact: true }).count()) {
+    throw new Error(`${scope} Finance received a forbidden cross-scope record.`);
+  }
+  return {
+    name: `${scope} Finance source isolation`,
+    ok: true,
+    visibleReference,
+    forbiddenReference,
+  };
+}
+
 async function runWorkflow(browser, viewport, user, workflow) {
   const context = await browser.newContext({
     viewport: viewport.viewport,
@@ -2642,6 +3176,7 @@ async function runWorkflow(browser, viewport, user, workflow) {
         viewport: viewport.name,
         user: user.email,
         workflow: workflow.name,
+        scenarioId: workflow.scenarioId ?? null,
         ok: false,
         login: loginResult,
       };
@@ -2651,6 +3186,7 @@ async function runWorkflow(browser, viewport, user, workflow) {
       viewport: viewport.name,
       user: user.email,
       workflow: workflow.name,
+      scenarioId: workflow.scenarioId ?? null,
       ...result,
       consoleErrors: Array.from(new Set(consoleErrors)).slice(0, 12),
       networkErrors: networkErrors.slice(0, 12),
@@ -2660,6 +3196,7 @@ async function runWorkflow(browser, viewport, user, workflow) {
       viewport: viewport.name,
       user: user.email,
       workflow: workflow.name,
+      scenarioId: workflow.scenarioId ?? null,
       ok: false,
       error: String(error.message || error).slice(0, 300),
       consoleErrors: Array.from(new Set(consoleErrors)).slice(0, 12),
@@ -2724,7 +3261,7 @@ for (const viewport of viewports.filter(
     try {
       loginResult = await login(page, user);
       if (loginResult.status === "signed-in") {
-        for (const route of routesFor(user.role)) {
+        for (const route of routesFor(user)) {
           try {
             routeResults.push(await auditRoute(page, route));
           } catch (error) {
@@ -2849,6 +3386,13 @@ const cleanupTargets = allowMutations
       },
       {
         runId: auditRunId,
+        schema: "warehouse",
+        table: "events",
+        filters: { name: `${marker} Intra Event` },
+        proofColumn: "name",
+      },
+      {
+        runId: auditRunId,
         schema: "procurement",
         table: "doa_assignments",
         filters: { department: `${marker} Department` },
@@ -2894,9 +3438,101 @@ try {
     for (const viewport of transactionViewports) {
       const marker = `${auditRunId}-${viewport.name}`;
       const task3Fixture = await createTask3ReceiptFixture(marker, registerTask3Cleanup);
+      const crossModuleState = {};
       workflows.push(await runWorkflow(
         browser, viewport, { email: "intra.test.wh.operations@mwell.com.ph" },
         { name: "Task 3 operator receipt transactions", run: (page) => task3OperatorReceiptTransactions(page, task3Fixture) },
+      ));
+      workflows.push(await runWorkflow(
+        browser,
+        viewport,
+        { email: "intra.test.events.requester@mwell.com.ph" },
+        {
+          name: "Events request creation and persistence readback",
+          scenarioId: "events-request-to-warehouse-handoff",
+          run: (page) =>
+            eventsCreateAndReadbackWorkflow(page, marker, crossModuleState),
+        },
+      ));
+      workflows.push(await runWorkflow(
+        browser,
+        viewport,
+        { email: "intra.test.events.viewer@mwell.com.ph" },
+        {
+          name: "Events viewer create denial",
+          scenarioId: "events-request-to-warehouse-handoff",
+          run: (page) => eventsViewerMutationDenialWorkflow(page, marker),
+        },
+      ));
+      workflows.push(await runWorkflow(
+        browser,
+        viewport,
+        { email: "intra.test.events.coordinator@mwell.com.ph" },
+        {
+          name: "Events coordinator refresh and Warehouse handoff",
+          scenarioId: "events-request-to-warehouse-handoff",
+          run: (page) =>
+            eventsCoordinatorReadbackWorkflow(page, crossModuleState),
+        },
+      ));
+      workflows.push(await runWorkflow(
+        browser,
+        viewport,
+        { email: "intra.test.wh.operations@mwell.com.ph" },
+        {
+          name: "Events-to-Warehouse operational handoff",
+          scenarioId: "events-request-to-warehouse-handoff",
+          run: (page) => warehouseEventHandoffWorkflow(page, crossModuleState),
+        },
+      ));
+      for (const [role, email] of [
+        ["insights_analyst", "intra.test.insights.analyst@mwell.com.ph"],
+        ["insights_manager", "intra.test.insights.manager@mwell.com.ph"],
+        ["insights_executive", "intra.test.insights.executive@mwell.com.ph"],
+        ["insights_admin", "intra.test.insights.admin@mwell.com.ph"],
+      ]) {
+        workflows.push(await runWorkflow(
+          browser,
+          viewport,
+          { email },
+          {
+            name: `${role} Insights governance`,
+            scenarioId: "insights-read-only-governance",
+            run: (page) => insightsGovernanceWorkflow(page, role),
+          },
+        ));
+      }
+      workflows.push(await runWorkflow(
+        browser,
+        viewport,
+        { email: "intra.test.finance@mwell.com.ph" },
+        {
+          name: "Unified Finance cross-module readback",
+          scenarioId: "unified-finance-control-center",
+          run: (page) => unifiedFinanceReadbackWorkflow(page, task3Fixture),
+        },
+      ));
+      workflows.push(await runWorkflow(
+        browser,
+        viewport,
+        { email: "intra.test.proc.finance@mwell.com.ph" },
+        {
+          name: "Procurement Finance source isolation",
+          scenarioId: "unified-finance-control-center",
+          run: (page) =>
+            singleScopeFinanceDenialWorkflow(page, task3Fixture, "procurement"),
+        },
+      ));
+      workflows.push(await runWorkflow(
+        browser,
+        viewport,
+        { email: "intra.test.wh.finance@mwell.com.ph" },
+        {
+          name: "Warehouse Finance source isolation",
+          scenarioId: "unified-finance-control-center",
+          run: (page) =>
+            singleScopeFinanceDenialWorkflow(page, task3Fixture, "warehouse"),
+        },
       ));
       workflows.push(await runWorkflow(
         browser, viewport, { email: "intra.test.proc.officer@mwell.com.ph" },
@@ -3236,6 +3872,13 @@ const workflowFailures = workflows
     (workflow) =>
       `${workflow.viewport}/${workflow.workflow}: ${workflow.error ?? "failed"}`,
   );
+if (allowMutations) {
+  for (const scenarioId of EXECUTABLE_CROSS_MODULE_SCENARIOS) {
+    if (!workflows.some((workflow) => workflow.scenarioId === scenarioId)) {
+      workflowFailures.push(`${auditRunId}: executable scenario ${scenarioId} was not run`);
+    }
+  }
+}
 if (!cleanup.complete) workflowFailures.push(`${auditRunId}: cleanup incomplete`);
 
 console.log(`Wrote ${outputPath}`);

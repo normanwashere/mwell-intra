@@ -4,6 +4,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { projectRefFromSupabaseUrl } from './lib/target-environment.mjs';
+
 const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const ENV_FILES = [
   resolve(ROOT, '.env'),
@@ -14,48 +16,109 @@ const ENV_FILES = [
 
 const REQUIRED = {
   core: [
-    'profiles',
-    'user_roles',
-    'vendors',
-    'documents',
-    'approvals',
-    'activity_log',
-    'notifications',
-    'role_capabilities',
+    "activity_log",
+    "approval_groups",
+    "approvals",
+    "capabilities",
+    "departments",
+    "documents",
+    "notifications",
+    "policy_remediation_queue",
+    "profile_department_scopes",
+    "profiles",
+    "role_capabilities",
+    "roles",
+    "user_roles",
+    "vendors",
   ],
-  legal: ['accreditation_cases', 'requirement_checklist_items'],
+  legal: [
+    "accreditation_cases",
+    "accreditation_dispositions",
+    "accreditation_docs",
+    "case_timeline",
+    "instrument_documents",
+    "instrument_lifecycle_events",
+    "instrument_signatures",
+    "policy_definitions",
+    "requirement_checklist_items",
+    "signed_instruments",
+    "vendor_application_snapshots",
+    "vendor_invites",
+    "vendor_technology_qualifications",
+  ],
   procurement: [
-    'requests',
-    'approval_steps',
-    'purchase_orders',
-    'purchase_order_lines',
-    'receipts',
+    "acceptance_packs",
+    "acceptance_reviewer_assignments",
+    "approval_steps",
+    "doa_assignments",
+    "doa_matrices",
+    "exception_packs",
+    "financial_protection_requirements",
+    "payment_readiness_packs",
+    "payment_readiness_staleness_events",
+    "policy_evidence",
+    "purchase_order_amendment_steps",
+    "purchase_order_amendments",
+    "purchase_order_lines",
+    "purchase_orders",
+    "receipt_reconciliations",
+    "receipts",
+    "request_attachments",
+    "requests",
+    "route_decisions",
+    "sourcing_events",
+    "sourcing_responses",
   ],
   warehouse: [
-    'products',
-    'locations',
-    'suppliers',
-    'purchase_orders',
-    'receipts',
-    'stock_levels',
-    'inventory_units',
-    'movements',
-    'operation_types',
-    'operation_routes',
-    'quality_inspections',
-    'inventory_holds',
-    'vendor_returns',
-    'exceptions',
-    'stock_change_requests',
-    'command_log',
-    'import_jobs',
-    'import_errors',
+    "allocations",
+    "command_log",
+    "cycle_counts",
+    "events",
+    "exceptions",
+    "export_jobs",
+    "import_errors",
+    "import_jobs",
+    "inventory_holds",
+    "inventory_units",
+    "locations",
+    "lots",
+    "movements",
+    "operation_routes",
+    "operation_types",
+    "procurement_receipt_exception_decisions",
+    "procurement_receipt_exception_lines",
+    "procurement_receipt_excess_custody",
+    "products",
+    "profiles",
+    "purchase_orders",
+    "quality_inspections",
+    "receipts",
+    "returns",
+    "role_capabilities",
+    "stock_change_requests",
+    "stock_levels",
+    "storage_areas",
+    "suppliers",
+    "unidentified_receipt_custody",
+    "vendor_returns",
   ],
 };
 
-// These tables are part of the deployed schema contract but deliberately have
-// no authenticated-user policy. A successful read would be a security failure.
-const SERVICE_ONLY_TABLES = new Set(['warehouse.command_log']);
+// These internal ledgers deliberately have no direct authenticated SELECT grant.
+// Governed RPCs expose only the role-scoped work items needed by the app.
+const SERVICE_ONLY_TABLES = new Set([
+  "core.approval_groups",
+  "procurement.acceptance_reviewer_assignments",
+  "procurement.payment_readiness_staleness_events",
+  "procurement.purchase_order_amendment_steps",
+  "procurement.receipt_reconciliations",
+  "warehouse.command_log",
+  "warehouse.procurement_receipt_exception_decisions",
+  "warehouse.procurement_receipt_exception_lines",
+  "warehouse.procurement_receipt_excess_custody",
+  "warehouse.role_capabilities",
+  "warehouse.unidentified_receipt_custody",
+]);
 
 function readEnvFile(path) {
   if (!existsSync(path)) return {};
@@ -80,6 +143,29 @@ function readEnv(key) {
     if (value) return value;
   }
   return undefined;
+}
+
+export function validateCutoverTarget({ appEnv, url, expectedProjectRef }) {
+  if (!['local', 'uat', 'production'].includes(appEnv)) {
+    throw new Error(
+      'APP_ENV must be explicitly set to local, uat, or production for a cutover check.',
+    );
+  }
+  if (!/^[a-z0-9]+$/.test(expectedProjectRef ?? '')) {
+    throw new Error(
+      'SUPABASE_PROJECT_REF must be explicitly set to a canonical project ref.',
+    );
+  }
+  const actualProjectRef = projectRefFromSupabaseUrl(url);
+  if (!actualProjectRef) {
+    throw new Error('NEXT_PUBLIC_SUPABASE_URL must be a canonical Supabase project URL.');
+  }
+  if (actualProjectRef !== expectedProjectRef) {
+    throw new Error(
+      'NEXT_PUBLIC_SUPABASE_URL project ref does not match SUPABASE_PROJECT_REF.',
+    );
+  }
+  return actualProjectRef;
 }
 
 async function signInVerifier({ url, anonKey, email, password }) {
@@ -163,8 +249,10 @@ async function callRpc({ url, anonKey, accessToken, schema, fn, body }) {
 }
 
 async function main() {
+  const appEnv = readEnv('APP_ENV');
   const url = readEnv('NEXT_PUBLIC_SUPABASE_URL');
   const anonKey = readEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY');
+  const expectedProjectRef = readEnv('SUPABASE_PROJECT_REF');
   const verifierEmail = readEnv('SUPABASE_VERIFY_EMAIL') ?? readEnv('AUDIT_EMAIL');
   const verifierPassword =
     readEnv('SUPABASE_VERIFY_PASSWORD') ?? readEnv('AUDIT_PASSWORD');
@@ -175,6 +263,13 @@ async function main() {
     );
     process.exit(1);
   }
+  try {
+    validateCutoverTarget({ appEnv, url, expectedProjectRef });
+  } catch (error) {
+    console.error(`FAIL ${error instanceof Error ? error.message : String(error)}`);
+    process.exit(1);
+  }
+
   if (!verifierEmail || !verifierPassword) {
     console.error(
       'FAIL Supabase verifier credentials missing. Set SUPABASE_VERIFY_EMAIL and SUPABASE_VERIFY_PASSWORD for an authenticated cutover check.',
@@ -283,7 +378,9 @@ async function main() {
   console.log('\nSupabase cutover check passed.');
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
-});
+if (fileURLToPath(import.meta.url) === resolve(process.argv[1] ?? '')) {
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  });
+}

@@ -377,6 +377,19 @@ function run() {
 
   const sql = readFileSync(resolve(migrationDirectory, migrationName), 'utf8');
   const errors = verifyOrganizationSql(sql);
+  const convergenceSql = [
+    '20260718004000_current_rls_and_fk_indexes.sql',
+    '20260718006000_historical_migration_forward_convergence.sql',
+  ].map((name) => readFileSync(resolve(migrationDirectory, name), 'utf8')).join('\n');
+  if (!convergenceSql.includes('profile_id = (select auth.uid())')) {
+    errors.push('Department scope RLS must evaluate auth.uid once per statement in a forward migration.');
+  }
+  if (
+    !convergenceSql.includes('departments_code_check') ||
+    !convergenceSql.includes('[a-z][a-z0-9_]*(')
+  ) {
+    errors.push('A forward migration must allow stable underscore and dotted department identifiers.');
+  }
   if (errors.length > 0) throw new Error(errors.join('\n'));
 
   for (const code of [

@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 
 const REQUIRED_CONTRACTS = [
@@ -20,7 +20,9 @@ const REQUIRED_CONTRACTS = [
   ['status view exposes QC status', /qc_status/i],
   ['policy evidence records review status', /create table if not exists procurement\.policy_evidence[\s\S]*?review_status/i],
   ['legacy Procurement receipt history is archived and reconciled', /alter table procurement\.receipts[\s\S]*?authority_status[\s\S]*?receipt_reconciliations/i],
+  ['legacy reconciliation ledger is forced behind service-only RLS', /alter table procurement\.receipt_reconciliations enable row level security[\s\S]*?force row level security[\s\S]*?revoke all on procurement\.receipt_reconciliations from public, anon, authenticated/i],
   ['legacy Procurement receipt writes are revoked', /revoke (?:insert,\s*update,\s*delete|all) on procurement\.receipts from authenticated/i],
+  ['legacy Procurement receipt scope uses one auth init plan', /procurement_legacy_receipts_read[\s\S]*?request\.requester_id=\(select auth\.uid\(\)\)/i],
   ['temporary clearance requires explicit approval', /conditions->>'approved'\)::boolean\s+is\s+true/i],
   ['one database commitment predicate returns blockers', /create or replace function private\.procurement_commitment_readiness[\s\S]*?blockers/i],
   ['commitment readiness has authoritative submit award and issue stages', /create or replace function private\.procurement_commitment_readiness(?=[\s\S]*?p_phase\s+not in \('submit','award','issue'\))(?=[\s\S]*?p_phase\s*=\s*'submit')(?=[\s\S]*?p_phase\s+in\s*\('award','issue'\))(?=[\s\S]*?p_phase\s*=\s*'issue')/i],
@@ -130,7 +132,16 @@ const REQUIRED_CONTRACTS = [
 ];
 
 export async function verifyPoReceiptAuthority(migrationUrl) {
-  const sql = await readFile(migrationUrl, 'utf8');
+  const directoryUrl = new URL('./', migrationUrl);
+  const baseName = migrationUrl.pathname.split('/').at(-1);
+  const migrationNames = (await readdir(directoryUrl))
+    .filter((name) => name.endsWith('.sql') && name >= baseName)
+    .sort();
+  const sql = (
+    await Promise.all(
+      migrationNames.map((name) => readFile(new URL(name, directoryUrl), 'utf8')),
+    )
+  ).join('\n');
   const findings = REQUIRED_CONTRACTS
     .filter(([, pattern]) => !pattern.test(sql))
     .map(([message]) => message);
@@ -173,6 +184,10 @@ export async function verifyPoReceiptAuthority(migrationUrl) {
   }
   if (!/(?=[\s\S]*decode\([\s\S]*base64)(?=[\s\S]*89504e470d0a1a0a)(?=[\s\S]*2097152)/i.test(latestApproval)) {
     findings.push('Latest amendment approval does not verify decoded PNG bytes and size');
+  }
+
+  if (!/substring\(v_signature_data,\s*23\)[\s\S]*substring\(v_signature_bytes,\s*1,\s*8\)/i.test(latestApproval)) {
+    findings.push('Latest amendment approval must use callable schema-qualified substring syntax');
   }
 
   const amendmentQueue = sql.match(

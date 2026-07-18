@@ -11,14 +11,35 @@ import {
 } from "./live-e2e-scenarios.mjs";
 
 test("declares every current live role exactly once", () => {
-  assert.equal(CURRENT_LIVE_ROLES.length, 20);
-  assert.equal(new Set(CURRENT_LIVE_ROLES.map((item) => item.role)).size, 20);
+  assert.equal(CURRENT_LIVE_ROLES.length, 31);
+  assert.equal(new Set(CURRENT_LIVE_ROLES.map((item) => item.role)).size, 31);
   for (const role of CURRENT_LIVE_ROLES) {
     assert.match(role.email, /^intra\.test\..+@mwell\.com\.ph$/);
     assert.ok(!("password" in role));
+    assert.ok(Object.keys(role.assignments).length > 0);
+    assert.equal(typeof role.kind, "string");
   }
+  const unifiedFinance = CURRENT_LIVE_ROLES.find(
+    (item) => item.role === "finance_unified",
+  );
+  assert.deepEqual(unifiedFinance?.assignments.warehouse, ["finance"]);
+  assert.deepEqual(unifiedFinance?.assignments.procurement, ["finance"]);
+  assert.ok(
+    CURRENT_LIVE_ROLES.some((item) => item.role === "warehouse_operator"),
+  );
+  assert.ok(
+    CURRENT_LIVE_ROLES.some((item) => item.role === "warehouse_supervisor"),
+  );
 });
 
+test("live authentication derives a distinct credential for each persona", async () => {
+  const source = await readFile(
+    new URL("./full-intra-live-e2e.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /derivePersonaPassword\(masterPassword, user\)/);
+  assert.doesNotMatch(source, /fill\("#password", password\)/);
+});
 test("requires canonical desktop and mobile transaction viewports", () => {
   assert.deepEqual(REQUIRED_TRANSACTION_VIEWPORTS, [
     { name: "desktop-1440", width: 1440, height: 900 },
@@ -36,6 +57,9 @@ test("covers current cross-role workflows and negative paths", () => {
     "warehouse-cycle-count",
     "warehouse-allocation-event-return",
     "admin-doa",
+    "events-request-to-warehouse-handoff",
+    "insights-read-only-governance",
+    "unified-finance-control-center",
   ];
   assert.deepEqual(
     CURRENT_LIVE_SCENARIOS.map((item) => item.id),
@@ -71,6 +95,81 @@ test("the mutating harness is run-scoped and always invokes cleanup", async () =
   assert.match(source, /finally\s*\{[\s\S]*cleanupRun/);
   assert.doesNotMatch(source, /service_role\s*[=:]\s*["']/i);
   assert.doesNotMatch(source, /AUDIT_PASSWORD\s*[=:]\s*["'][^"']+/);
+});
+
+test("cross-module scenarios are imported and executed as browser/database contracts", async () => {
+  const source = await readFile(
+    new URL("./full-intra-live-e2e.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /CURRENT_LIVE_SCENARIOS,/);
+  for (const scenarioId of [
+    "events-request-to-warehouse-handoff",
+    "insights-read-only-governance",
+    "unified-finance-control-center",
+  ]) {
+    assert.match(
+      source,
+      new RegExp(`scenarioId:\\s*["']${scenarioId}["']`),
+      `${scenarioId} is attached to executable workflow results`,
+    );
+  }
+  for (const workflow of [
+    "eventsCreateAndReadbackWorkflow",
+    "eventsViewerMutationDenialWorkflow",
+    "eventsCoordinatorReadbackWorkflow",
+    "warehouseEventHandoffWorkflow",
+    "insightsGovernanceWorkflow",
+    "unifiedFinanceReadbackWorkflow",
+    "singleScopeFinanceDenialWorkflow",
+  ]) {
+    assert.match(
+      source,
+      new RegExp(`run:\\s*\\(page\\)[\\s\\S]{0,120}${workflow}\\(`),
+      `${workflow} is passed to runWorkflow`,
+    );
+  }
+  assert.match(
+    source,
+    /verifyCheckpoint\(\{[\s\S]*schema: "warehouse",[\s\S]*table: "events"/,
+  );
+  assert.match(source, /Duplicate Events replay left/);
+  assert.match(source, /Denied Events mutation persisted a row/);
+  assert.match(source, /mutated the read-only Insights snapshot/);
+  assert.match(source, /denied Insights write persisted a row/);
+  assert.match(source, /beforeRefresh !== afterRefresh/);
+  assert.match(source, /sources\.has\("procurement_po"\)/);
+  assert.match(source, /sources\.has\("warehouse_receipt"\)/);
+  assert.match(source, /Unified Finance PO source link is incorrect/);
+  assert.match(source, /Unified Finance receipt source link is incorrect/);
+  assert.match(source, /forbidden cross-scope record/);
+  assert.match(
+    source,
+    /EXECUTABLE_CROSS_MODULE_SCENARIOS[\s\S]*executable scenario \$\{scenarioId\} was not run/,
+  );
+});
+
+test("route crawl enforces an exact role-to-route authorization matrix", async () => {
+  const source = await readFile(
+    new URL("./full-intra-live-e2e.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /const ROUTE_AUTHORIZATION_MATRIX = \[/);
+  assert.match(source, /expectedAccess: allowed \? "allowed" : "denied"/);
+  assert.match(source, /routeClass === expectedClass/);
+  assert.match(source, /no \(\?:warehouse\|procurement[\s\S]*finance\) access/);
+  assert.match(source, /for \(const route of routesFor\(user\)\)/);
+  assert.match(source, /allowed: \(user\) => hasAssignedModule\(user, "events"\)/);
+  assert.match(source, /allowed: \(user\) => hasAssignedModule\(user, "insights"\)/);
+  assert.match(source, /allowed: hasFinanceAccess/);
+  assert.doesNotMatch(
+    source,
+    /text: \/Warehouse\|Dashboard\|No warehouse access\|Access denied\/i/,
+  );
+  assert.doesNotMatch(
+    source,
+    /text: \/Finance\|Payment readiness\|Valuation\|Your areas\|Vendor Portal\|Access denied\/i/,
+  );
 });
 
 test("the mutating harness waits for quality data and uses unambiguous DOA controls", async () => {
