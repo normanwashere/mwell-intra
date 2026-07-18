@@ -1063,7 +1063,29 @@ async function adminCreateDoaWorkflow(page, marker) {
     name: "Save draft",
     exact: true,
   });
-  await saveDraft.click();
+  const clickSaveDraft = async () => {
+    await saveDraft.scrollIntoViewIfNeeded();
+    const mobileNavigation = page.getByRole("navigation", {
+      name: "Primary mobile",
+    });
+    if (await mobileNavigation.count()) {
+      const [actionBox, navigationBox] = await Promise.all([
+        saveDraft.boundingBox(),
+        mobileNavigation.boundingBox(),
+      ]);
+      if (
+        actionBox &&
+        navigationBox &&
+        actionBox.y + actionBox.height > navigationBox.y - 2
+      ) {
+        throw new Error(
+          "Save draft remains obstructed by the primary mobile navigation.",
+        );
+      }
+    }
+    await saveDraft.click();
+  };
+  await clickSaveDraft();
   await page.getByText("Department and version are required.").waitFor({
     state: "visible",
   });
@@ -1080,26 +1102,7 @@ async function adminCreateDoaWorkflow(page, marker) {
     await page
       .getByLabel(`Tier ${index + 1} named approver`)
       .selectOption({ index: 1 });
-  await saveDraft.scrollIntoViewIfNeeded();
-  const mobileNavigation = page.getByRole("navigation", {
-    name: "Primary mobile",
-  });
-  if (await mobileNavigation.count()) {
-    const [actionBox, navigationBox] = await Promise.all([
-      saveDraft.boundingBox(),
-      mobileNavigation.boundingBox(),
-    ]);
-    if (
-      actionBox &&
-      navigationBox &&
-      actionBox.y + actionBox.height > navigationBox.y - 2
-    ) {
-      throw new Error(
-        "Save draft remains obstructed by the primary mobile navigation.",
-      );
-    }
-  }
-  await saveDraft.click();
+  await clickSaveDraft();
   const departmentHeading = page.getByRole("heading", {
     name: department,
     exact: true,
@@ -5764,7 +5767,7 @@ async function runWorkflow(browser, viewport, user, workflow) {
       workflow: workflow.name,
       scenarioId: workflow.scenarioId ?? null,
       ok: false,
-      error: String(error.message || error).slice(0, 300),
+      error: String(error.message || error).slice(0, 1_200),
       consoleErrors: Array.from(new Set(consoleErrors)).slice(0, 12),
       networkErrors: networkErrors.slice(0, 12),
     };

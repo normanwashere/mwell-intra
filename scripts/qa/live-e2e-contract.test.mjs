@@ -874,9 +874,15 @@ test("mobile transaction checks target visible records and unobstructed actions"
     "utf8",
   );
   assert.match(audit, /\.filter\(\{ visible: true \}\)/);
-  assert.match(audit, /saveDraft\.scrollIntoViewIfNeeded\(\)/);
+  assert.match(audit, /const clickSaveDraft = async \(\) =>/);
+  assert.equal(
+    (audit.match(/await clickSaveDraft\(\);/g) ?? []).length,
+    2,
+    "both DOA save attempts use the unobstructed mobile action",
+  );
   assert.match(audit, /name: "Primary mobile"/);
   assert.match(audit, /Save draft remains obstructed/);
+  assert.match(audit, /slice\(0, 1_200\)/);
 });
 
 test("already-versioned Warehouse databases restore governed receive_stock", async () => {
