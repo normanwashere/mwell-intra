@@ -1091,6 +1091,27 @@ test("availability refreshes after the product lock for every quality path", asy
   assert.match(migration, /v_disposition<>'accepted'/);
 });
 
+test("the issue RPC blocks every exact source identity carrying an active hold", async () => {
+  const migration = await readFile(
+    new URL(
+      "../../supabase/migrations/20260718202000_block_issue_from_held_stock_identity.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const productLock = migration.indexOf("private.lock_warehouse_products");
+  const holdCheck = migration.indexOf("from warehouse.inventory_holds");
+  const delegate = migration.lastIndexOf("private.warehouse_issue_v1(payload)");
+  assert.match(migration, /set schema private/i);
+  assert.match(migration, /rename to warehouse_issue_v1/i);
+  assert.ok(productLock >= 0, "issue wrapper acquires the product lock");
+  assert.ok(holdCheck > productLock, "exact holds are checked inside the lock");
+  assert.ok(delegate > holdCheck, "the issue mutation follows the hold check");
+  assert.match(migration, /active_hold\.location_id=v_delta->>'location_id'/);
+  assert.match(migration, /Held exact lot stock cannot be issued/);
+  assert.match(migration, /from public, anon;/);
+});
+
 test("department-only amendment approvers can reach their narrowly scoped queue", async () => {
   const app = await readFile(
     new URL(
