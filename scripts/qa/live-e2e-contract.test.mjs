@@ -919,6 +919,21 @@ test("excess-custody readback waits for the governed dialog mutation", async () 
   );
 });
 
+test("quality hold navigation follows the segmented-control tab contract", async () => {
+  const audit = await readFile(
+    new URL("./full-intra-live-e2e.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    audit,
+    /getByRole\("tab", \{ name: "Holds", exact: true \}\)\.click\(\)/,
+  );
+  assert.doesNotMatch(
+    audit,
+    /getByRole\("button", \{ name: "Holds", exact: true \}\)/,
+  );
+});
+
 test("the DOA editor cannot submit while asynchronous workspace data shifts the form", async () => {
   const page = await readFile(
     new URL("../../apps/shell/app/admin/doa/page.tsx", import.meta.url),

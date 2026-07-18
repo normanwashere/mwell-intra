@@ -3395,7 +3395,7 @@ async function task3SupervisorTransactions(page, fixture) {
           timeout: 20_000,
         });
         await waitForMeaningfulRoute(page);
-        await page.getByRole("button", { name: "Holds", exact: true }).click();
+        await page.getByRole("tab", { name: "Holds", exact: true }).click();
         const holdRow = page
           .getByText(
             `${fixture.marker} exception outcome quarantine ${scenario.key}`,
