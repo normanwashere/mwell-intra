@@ -1036,6 +1036,28 @@ test("manual stock governance converges its exception type and approval boundary
   assert.match(identityMigration, /pg_catalog\.replace/);
 });
 
+test("quality holds serialize with reservations on the shared product lock", async () => {
+  const migration = await readFile(
+    new URL(
+      "../../supabase/migrations/20260718200000_serialize_quality_holds_with_reservations.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const productLock = migration.indexOf("private.lock_warehouse_products");
+  const delegatedInspection = migration.indexOf(
+    "private.warehouse_inspect_quality_v2",
+  );
+  assert.ok(productLock >= 0, "quality wrapper acquires the product lock");
+  assert.ok(delegatedInspection >= 0, "quality wrapper delegates inspection");
+  assert.ok(
+    productLock < delegatedInspection,
+    "the product lock is acquired before the quality mutation",
+  );
+  assert.match(migration, /array\[v_product_id\]/);
+  assert.match(migration, /security definer/i);
+});
+
 test("department-only amendment approvers can reach their narrowly scoped queue", async () => {
   const app = await readFile(
     new URL(
