@@ -31,6 +31,10 @@ export async function POST(request: NextRequest) {
   } catch {
     return jsonError("Invalid JSON request.", 400);
   }
+  const deliveryBody =
+    body && typeof body === "object" && !Array.isArray(body)
+      ? { ...body, redirect_origin: request.nextUrl.origin }
+      : body;
 
   const response = await fetch(
     `${SUPABASE_URL}/functions/v1/vendor-invite-delivery`,
@@ -41,7 +45,7 @@ export async function POST(request: NextRequest) {
         authorization: `Bearer ${sessionData.session.access_token}`,
         "content-type": "application/json",
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(deliveryBody),
       cache: "no-store",
     },
   );

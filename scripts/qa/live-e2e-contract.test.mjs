@@ -52,8 +52,37 @@ test("live authentication derives a distinct credential for each persona", async
     new URL("./full-intra-live-e2e.mjs", import.meta.url),
     "utf8",
   );
-  assert.match(source, /derivePersonaPassword\(masterPassword, user\)/);
+  assert.match(
+    source,
+    /derivePersonaPassword\(masterPassword, credentialPersona\)/,
+  );
   assert.doesNotMatch(source, /fill\("#password", password\)/);
+});
+
+test("transaction logins resolve partial workflow users to the full persona catalog", async () => {
+  const source = await readFile(
+    new URL("./full-intra-live-e2e.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    source,
+    /users\.find\(\(persona\) => persona\.email === user\.email\)/,
+  );
+  assert.match(
+    source,
+    /derivePersonaPassword\(masterPassword, credentialPersona\)/,
+  );
+});
+
+test("browser-role RPCs recover Supabase SSR cookie sessions without logging tokens", async () => {
+  const source = await readFile(
+    new URL("./full-intra-live-e2e.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /document\.cookie/);
+  assert.match(source, /decoded\.startsWith\("base64-"\)/);
+  assert.match(source, /findAccessToken/);
+  assert.doesNotMatch(source, /console\.log\([^\n]*accessToken/);
 });
 test("requires canonical desktop and mobile transaction viewports", () => {
   assert.deepEqual(REQUIRED_TRANSACTION_VIEWPORTS, [
@@ -112,6 +141,50 @@ test("the mutating harness is run-scoped and always invokes cleanup", async () =
   assert.doesNotMatch(source, /AUDIT_PASSWORD\s*[=:]\s*["'][^"']+/);
 });
 
+test("Warehouse certification creates its editable baseline before receiving and cleans it last", async () => {
+  const source = await readFile(
+    new URL("./full-intra-live-e2e.mjs", import.meta.url),
+    "utf8",
+  );
+  const setup = source.indexOf('name: "warehouse location creation"');
+  const receivingFixture = source.indexOf(
+    "const task3Fixture = await createTask3ReceiptFixture",
+  );
+  assert.ok(setup >= 0 && setup < receivingFixture);
+  assert.match(
+    source,
+    /warehouseCreateLocationWorkflow[\s\S]*table: "locations"/,
+  );
+  assert.match(source, /table: "storage_areas"[\s\S]*table: "locations"/);
+});
+
+test("the approval-group fixture has an explicit service-role grant", async () => {
+  const migration = await readFile(
+    new URL(
+      "../../supabase/migrations/20260718160000_grant_approval_groups_to_service_role.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.match(
+    migration,
+    /grant all on table core\.approval_groups to service_role/i,
+  );
+});
+
+test("service verification and hardened policy hashing converge explicitly", async () => {
+  const migration = await readFile(
+    new URL(
+      "../../supabase/migrations/20260718170000_harden_service_verification_and_digest_resolution.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.match(migration, /auth\.role\(\) = 'service_role'/);
+  assert.match(migration, /extensions\.digest/);
+  assert.match(migration, /private\.policy_record_acceptance_pack/);
+});
+
 test("supports bounded route and transaction certification phases", async () => {
   const source = await readFile(
     new URL("./full-intra-live-e2e.mjs", import.meta.url),
@@ -128,7 +201,10 @@ test("supports bounded route and transaction certification phases", async () => 
 
 test("shards UAT certification into bounded least-privilege jobs", async () => {
   const workflow = await readFile(
-    new URL("../../.github/workflows/uat-live-certification.yml", import.meta.url),
+    new URL(
+      "../../.github/workflows/uat-live-certification.yml",
+      import.meta.url,
+    ),
     "utf8",
   );
   assert.match(workflow, /environment: uat/);
@@ -204,8 +280,14 @@ test("route crawl enforces an exact role-to-route authorization matrix", async (
   assert.match(source, /routeClass === expectedClass/);
   assert.match(source, /no \(\?:warehouse\|procurement[\s\S]*finance\) access/);
   assert.match(source, /for \(const route of routesFor\(user\)\)/);
-  assert.match(source, /allowed: \(user\) => hasAssignedModule\(user, "events"\)/);
-  assert.match(source, /allowed: \(user\) => hasAssignedModule\(user, "insights"\)/);
+  assert.match(
+    source,
+    /allowed: \(user\) => hasAssignedModule\(user, "events"\)/,
+  );
+  assert.match(
+    source,
+    /allowed: \(user\) => hasAssignedModule\(user, "insights"\)/,
+  );
   assert.match(source, /allowed: hasFinanceAccess/);
   assert.doesNotMatch(
     source,
@@ -234,7 +316,10 @@ test("the mutating harness waits for quality data and uses unambiguous DOA contr
 
 test("PO amendment browser approval submits the governed snake-case signature contract", async () => {
   const source = await readFile(
-    new URL("../../modules/procurement/src/pages/PurchaseOrdersPage.tsx", import.meta.url),
+    new URL(
+      "../../modules/procurement/src/pages/PurchaseOrdersPage.tsx",
+      import.meta.url,
+    ),
     "utf8",
   );
   assert.match(source, /signature_png:\s*signature\.dataUrl/);
@@ -247,16 +332,29 @@ test("PO amendment browser approval submits the governed snake-case signature co
 test("Task 3 asserts current DOA, PNG signatures, exact held-stock issue denial, and both race outcomes", async () => {
   const [harness, migration] = await Promise.all([
     readFile(new URL("./full-intra-live-e2e.mjs", import.meta.url), "utf8"),
-    readFile(new URL("../../supabase/migrations/20260714175318_single_po_receipt_authority.sql", import.meta.url), "utf8"),
+    readFile(
+      new URL(
+        "../../supabase/migrations/20260714175318_single_po_receipt_authority.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
   ]);
   assert.match(harness, /data:image\/png;base64,/);
+  assert.match(harness, /signer_name: fixture\.approverName/);
   assert.match(harness, /holdRace\.ok\s*\?\s*atpBeforeRace\s*-\s*1\s*:\s*0/);
   assert.match(harness, /revoked current DOA assignment denial/i);
   assert.match(harness, /held serialized unit issue denial/i);
   assert.match(harness, /held exact lot issue denial/i);
-  assert.match(migration, /Only a currently active DOA assignment and matrix may decide the next amendment step/i);
+  assert.match(
+    migration,
+    /Only a currently active DOA assignment and matrix may decide the next amendment step/i,
+  );
   assert.match(migration, /data:image\/png;base64,/);
-  assert.match(migration, /create or replace function warehouse\.issue\(payload jsonb\)[\s\S]*inventory_holds[\s\S]*serial_number/is);
+  assert.match(
+    migration,
+    /create or replace function warehouse\.issue\(payload jsonb\)[\s\S]*inventory_holds[\s\S]*serial_number/is,
+  );
 });
 
 test("the invite workflow verifies the persisted delivery state", async () => {
@@ -281,32 +379,52 @@ test("the mutating harness scopes and removes temporary auth identities", async 
   assert.match(cleanup, /includes\(runId\.toLowerCase\(\)\)/);
 });
 
-test("executes Task 3 receipt and policy contracts against live UAT", {
-  skip: process.env.RUN_TASK3_LIVE_CONTRACT !== "true",
-  timeout: 20 * 60_000,
-}, async () => {
-  const run = promisify(execFile);
-  const { stdout } = await run(process.execPath, [
-    fileURLToPath(new URL("./full-intra-live-e2e.mjs", import.meta.url)),
-  ], {
-    env: { ...process.env, AUDIT_MUTATIONS: "true" },
-    windowsHide: true,
-    maxBuffer: 20 * 1024 * 1024,
-  });
-  assert.match(stdout, /Wrote .*full-intra-live-e2e-results\.json/);
-});
+test(
+  "executes Task 3 receipt and policy contracts against live UAT",
+  {
+    skip: process.env.RUN_TASK3_LIVE_CONTRACT !== "true",
+    timeout: 20 * 60_000,
+  },
+  async () => {
+    const run = promisify(execFile);
+    const { stdout } = await run(
+      process.execPath,
+      [fileURLToPath(new URL("./full-intra-live-e2e.mjs", import.meta.url))],
+      {
+        env: { ...process.env, AUDIT_MUTATIONS: "true" },
+        windowsHide: true,
+        maxBuffer: 20 * 1024 * 1024,
+      },
+    );
+    assert.match(stdout, /Wrote .*full-intra-live-e2e-results\.json/);
+  },
+);
 
 test("Task 3 uses browser-role exception receipts and proves transactional cleanup", async () => {
-  const source = await readFile(new URL("./full-intra-live-e2e.mjs", import.meta.url), "utf8");
+  const source = await readFile(
+    new URL("./full-intra-live-e2e.mjs", import.meta.url),
+    "utf8",
+  );
   assert.match(source, /receive_procurement_po_exception/);
-  assert.doesNotMatch(source, /insertAuditRows\([^)]*"warehouse"\s*,\s*"(?:receipts|quality_inspections)"/s,
-    "receipt and QC fixtures must be created through browser-role RPCs");
+  assert.doesNotMatch(
+    source,
+    /insertAuditRows\([^)]*"warehouse"\s*,\s*"(?:receipts|quality_inspections)"/s,
+    "receipt and QC fixtures must be created through browser-role RPCs",
+  );
   const cleanupRegistration = source.indexOf("registerTask3Cleanup");
-  const firstTask3Insert = source.indexOf('insertAuditRows(client, "core", "vendors"');
+  const firstTask3Insert = source.indexOf(
+    'insertAuditRows(client, "core", "vendors"',
+  );
   assert.ok(cleanupRegistration >= 0 && cleanupRegistration < firstTask3Insert);
-  assert.match(source, /finally\s*\{\s*try\s*\{[\s\S]*browser\.close\(\)[\s\S]*finally\s*\{[\s\S]*cleanupTask3ReceiptFixture/);
+  assert.match(
+    source,
+    /finally\s*\{\s*try\s*\{[\s\S]*browser\.close\(\)[\s\S]*finally\s*\{[\s\S]*cleanupTask3ReceiptFixture/,
+  );
   assert.match(source, /assertTask3ZeroResidualRows/);
-  assert.match(source, /inventoryBefore[\s\S]*inventoryAfter[\s\S]*ledgerBefore[\s\S]*ledgerAfter/);
+  assert.match(
+    source,
+    /inventoryBefore[\s\S]*inventoryAfter[\s\S]*ledgerBefore[\s\S]*ledgerAfter/,
+  );
   assert.match(source, /resolve_procurement_po_exception/);
   assert.match(source, /requested_by[\s\S]*different Warehouse Supervisor/i);
   assert.match(source, /acceptance_work_items/);
@@ -329,6 +447,10 @@ test("Task 3 uses browser-role exception receipts and proves transactional clean
   assert.match(source, /referenced approval role rename\/deactivate denial/i);
   assert.match(source, /inactive approval role cannot authorize/i);
   assert.match(source, /valid public quality inspection/i);
+  assert.match(
+    source,
+    /\.map\(\(line\) => \(\{ receiving_status: "open", \.\.\.line \}\)\)/,
+  );
   assert.match(source, /PO status after hold release/i);
   assert.match(source, /cumulative partial acceptance/i);
   assert.match(source, /all-capability admin wrong-step denial/i);
@@ -344,13 +466,19 @@ test("Task 3 uses browser-role exception receipts and proves transactional clean
   assert.match(source, /same-product PO-line quality isolation/i);
   assert.match(source, /atomic hold rejection vendor return/i);
   assert.match(source, /authoritative hold race readback/i);
-  assert.doesNotMatch(source, /if \(!concurrentReservation\.ok[\s\S]*available after active inventory holds/i,
-    'hold races must assert one deterministic authoritative state');
-  for (const exceptionClass of ['short', 'excess', 'damaged', 'unidentified']) {
-    assert.match(source, new RegExp(`exceptionClass:\\s*["']${exceptionClass}["']`, 'i'));
+  assert.doesNotMatch(
+    source,
+    /if \(!concurrentReservation\.ok[\s\S]*available after active inventory holds/i,
+    "hold races must assert one deterministic authoritative state",
+  );
+  for (const exceptionClass of ["short", "excess", "damaged", "unidentified"]) {
+    assert.match(
+      source,
+      new RegExp(`exceptionClass:\\s*["']${exceptionClass}["']`, "i"),
+    );
   }
-  for (const outcome of ['accept', 'reject', 'quarantine', 'escalate']) {
-    assert.match(source, new RegExp(`outcome:\\s*["']${outcome}["']`, 'i'));
+  for (const outcome of ["accept", "reject", "quarantine", "escalate"]) {
+    assert.match(source, new RegExp(`outcome:\\s*["']${outcome}["']`, "i"));
   }
   assert.match(source, /inventory_holds[\s\S]*status[\s\S]*active/i);
   assert.match(source, /release_quality_hold[\s\S]*status[\s\S]*released/i);
@@ -374,7 +502,7 @@ test("the live harness verifies deployed identity before browser launch", async 
   assert.doesNotMatch(source, /extraHTTPHeaders\s*:/);
   assert.equal(
     source.match(/await installScopedProtectionBypass\(\{/g)?.length,
-    2,
+    3,
     "all browser contexts install exact-origin bypass routing",
   );
   assert.doesNotMatch(source, /context\.route\(["']\*\*\/\*["']/);
@@ -386,9 +514,8 @@ test("the live harness verifies deployed identity before browser launch", async 
 });
 
 test("Vercel protection bypass headers are scoped to the exact app origin", async () => {
-  const { scopedProtectionHeaders } = await import(
-    "../lib/target-environment.mjs"
-  );
+  const { scopedProtectionHeaders } =
+    await import("../lib/target-environment.mjs");
   const input = {
     appOrigin: "https://uat.example.com",
     protectionBypass: "bypass-secret",
@@ -425,9 +552,8 @@ test("Vercel protection bypass headers are scoped to the exact app origin", asyn
 });
 
 test("route registration intercepts only the exact app origin", async () => {
-  const { installScopedProtectionBypass } = await import(
-    "../lib/target-environment.mjs"
-  );
+  const { installScopedProtectionBypass } =
+    await import("../lib/target-environment.mjs");
   const registrations = [];
   const context = {
     route: async (matcher, handler) => registrations.push({ matcher, handler }),
@@ -485,7 +611,13 @@ test("route registration intercepts only the exact app origin", async () => {
   });
 });
 
-function fakeRoute({ url, headers, method = "GET", postData = null, response }) {
+function fakeRoute({
+  url,
+  headers,
+  method = "GET",
+  postData = null,
+  response,
+}) {
   const calls = { continue: [], fetch: [], fulfill: [] };
   return {
     calls,
@@ -507,9 +639,8 @@ function fakeRoute({ url, headers, method = "GET", postData = null, response }) 
 }
 
 test("app-origin interception preserves request and redirect response semantics", async () => {
-  const { routeWithScopedProtectionBypass } = await import(
-    "../lib/target-environment.mjs"
-  );
+  const { routeWithScopedProtectionBypass } =
+    await import("../lib/target-environment.mjs");
   const postData = Buffer.from("important-body");
   const redirectResponse = {
     status: 307,
@@ -545,15 +676,12 @@ test("app-origin interception preserves request and redirect response semantics"
     method: "POST",
     postData,
   });
-  assert.deepEqual(intercepted.calls.fulfill, [
-    { response: redirectResponse },
-  ]);
+  assert.deepEqual(intercepted.calls.fulfill, [{ response: redirectResponse }]);
 });
 
 test("redirect hops to non-app origins never receive the bypass", async () => {
-  const { routeWithScopedProtectionBypass } = await import(
-    "../lib/target-environment.mjs"
-  );
+  const { routeWithScopedProtectionBypass } =
+    await import("../lib/target-environment.mjs");
   for (const redirectUrl of [
     "https://uatref.supabase.co/rest/v1/items",
     "https://analytics.example.net/collect",
@@ -587,9 +715,7 @@ test("redirect hops to non-app origins never receive the bypass", async () => {
     assert.equal(redirectedHop.calls.fetch.length, 0);
     assert.equal(redirectedHop.calls.continue.length, 1);
     assert.equal(
-      redirectedHop.calls.continue[0].headers[
-        "x-vercel-protection-bypass"
-      ],
+      redirectedHop.calls.continue[0].headers["x-vercel-protection-bypass"],
       undefined,
       `${new URL(redirectUrl).origin} must not receive the bypass`,
     );
@@ -601,9 +727,8 @@ test("redirect hops to non-app origins never receive the bypass", async () => {
 });
 
 test("same-origin redirect hops receive a freshly scoped bypass", async () => {
-  const { routeWithScopedProtectionBypass } = await import(
-    "../lib/target-environment.mjs"
-  );
+  const { routeWithScopedProtectionBypass } =
+    await import("../lib/target-environment.mjs");
   for (const url of [
     "https://uat.example.com/start",
     "https://uat.example.com/next",
@@ -630,7 +755,10 @@ test("same-origin redirect hops receive a freshly scoped bypass", async () => {
 });
 
 test("receipt authority harness proves hold creation versus reservation with authoritative readbacks", async () => {
-  const source = await readFile(new URL("./full-intra-live-e2e.mjs", import.meta.url), "utf8");
+  const source = await readFile(
+    new URL("./full-intra-live-e2e.mjs", import.meta.url),
+    "utf8",
+  );
   assert.match(source, /hold creation versus reservation/i);
   assert.match(source, /Promise\.allSettled/);
   assert.match(source, /available_to_promise/);
@@ -638,24 +766,36 @@ test("receipt authority harness proves hold creation versus reservation with aut
   assert.match(source, /allocations/);
   assert.match(source, /quality_inspections/);
   assert.match(source, /purchase_order_lines/);
-  assert.match(source, /exactly one concurrent hold or reservation may consume availability/i);
+  assert.match(
+    source,
+    /exactly one concurrent hold or reservation may consume availability/i,
+  );
 });
 
 test("Warehouse excess E2E selects the exact governed amendment", async () => {
-  const harness = await readFile(new URL("./full-intra-live-e2e.mjs", import.meta.url), "utf8");
-  assert.match(harness, /getByLabel\("Approved quantity amendment"\)\.selectOption\(fixture\.ids\.excessAmendment\)/);
+  const harness = await readFile(
+    new URL("./full-intra-live-e2e.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    harness,
+    /getByLabel\("Approved quantity amendment"\)\s*\.selectOption\(fixture\.ids\.excessAmendment\)/,
+  );
   assert.doesNotMatch(harness, /getByLabel\("Approved amendment ID"\)\.fill/);
 });
 
 test("Warehouse resolvers reconcile both receipt authority queues", async () => {
   const source = await readFile(
-    new URL("../../modules/warehouse/src/pages/PurchaseOrdersPage.tsx", import.meta.url), "utf8",
+    new URL(
+      "../../modules/warehouse/src/pages/PurchaseOrdersPage.tsx",
+      import.meta.url,
+    ),
+    "utf8",
   );
   assert.match(source, /procurement_receipt_exception_work_items/);
   assert.match(source, /procurement_receipt_excess_work_items/);
   assert.match(source, /reconcile both receipt authority queues/i);
 });
-
 
 test("Task 3 ships an idempotent forward migration for already-versioned databases", async () => {
   const source = await readFile(
@@ -665,14 +805,23 @@ test("Task 3 ships an idempotent forward migration for already-versioned databas
     ),
     "utf8",
   );
-  assert.match(source, /Forward convergence for databases that already applied/i);
+  assert.match(
+    source,
+    /Forward convergence for databases that already applied/i,
+  );
   assert.match(source, /add column if not exists doa_matrix_id/i);
   assert.match(source, /legacy_record[\s\S]*?status='superseded'/i);
   assert.match(source, /purchase_order_amendments_governed_snapshot_check/i);
   assert.match(source, /purchase_order_amendments_legacy_terminal_check/i);
   assert.match(source, /purchase_order_amendment_steps/);
-  assert.match(source, /create or replace function private\.policy_approve_po_line_quantity_amendment/);
-  assert.match(source, /create or replace function procurement\.purchase_order_amendment_work_items/);
+  assert.match(
+    source,
+    /create or replace function private\.policy_approve_po_line_quantity_amendment/,
+  );
+  assert.match(
+    source,
+    /create or replace function procurement\.purchase_order_amendment_work_items/,
+  );
   assert.match(source, /create or replace function warehouse\.issue/);
 });
 
@@ -689,13 +838,217 @@ test("stock approval projection casts UUID entity identifiers into the shared le
   assert.doesNotMatch(source, /entity_id=request\.id(?!::text)/i);
 });
 
+test("governed receipt quantities and service Finance readback converge safely", async () => {
+  const source = await readFile(
+    new URL(
+      "../../supabase/migrations/20260718180000_fix_receipt_quantity_and_service_finance_readback.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.match(source, /auth\.role\(\) = 'service_role'/);
+  assert.match(source, /ordered_quantity_at_request''\)\:\:numeric\:\:integer/);
+});
+
+test("transaction fixtures and UI checks preserve the acting persona and rendered state", async () => {
+  const source = await readFile(
+    new URL("./full-intra-live-e2e.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /requester_id: requesterProfiles\[0\]\.id/);
+  assert.match(
+    source,
+    /getByText\(expected\)[\s\S]*?waitFor\(\{ state: "visible", timeout: 20_000 \}\)/,
+  );
+  assert.match(
+    source,
+    /page[\s\S]*?getByText\("Event name is required\."\)[\s\S]*?waitFor/,
+  );
+  assert.match(source, /phase: "award"/);
+  assert.match(source, /replacementAcceptanceFacts/);
+});
+
+test("already-versioned Warehouse databases restore governed receive_stock", async () => {
+  const source = await readFile(
+    new URL(
+      "../../supabase/migrations/20260718190000_restore_governed_receive_stock.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.match(source, /core\.has_cap\('warehouse','receive_stock'\)/);
+  assert.match(source, /warehouse\.authoritative_actor\(\)/);
+  assert.match(source, /warehouse\.force_actor_on_object/);
+  assert.match(source, /warehouse\.force_actor_on_array/);
+  assert.match(source, /\{receipt,created_at\}/);
+  assert.match(source, /\{receipt,quality_status\}/);
+  assert.match(source, /set search_path = ''/);
+  assert.doesNotMatch(source, /warehouse\.has_cap\(/);
+});
+
+test("Warehouse actor helpers converge before trusting receipt audit identity", async () => {
+  const source = await readFile(
+    new URL(
+      "../../supabase/migrations/20260718191000_restore_warehouse_actor_helpers.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.match(
+    source,
+    /create or replace function warehouse\.authoritative_actor/,
+  );
+  assert.match(source, /core\.profiles/);
+  assert.match(
+    source,
+    /create or replace function warehouse\.force_actor_on_array/,
+  );
+  assert.match(
+    source,
+    /create or replace function warehouse\.force_actor_on_object/,
+  );
+  assert.match(source, /revoke all on function warehouse\.authoritative_actor/);
+});
+
+test("policy exceptions and raw receipts retain authoritative audit metadata", async () => {
+  const exceptionSource = await readFile(
+    new URL(
+      "../../supabase/migrations/20260718192000_restore_exception_pack_audit_timestamp.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const receiptSource = await readFile(
+    new URL(
+      "../../supabase/migrations/20260718193000_harden_receive_stock_server_defaults.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.match(
+    exceptionSource,
+    /created_at timestamptz not null default now\(\)/,
+  );
+  assert.match(exceptionSource, /request_id,created_at desc/);
+  assert.match(receiptSource, /receipt,created_at/);
+  assert.match(receiptSource, /receipt,quality_status/);
+  assert.match(receiptSource, /pending/);
+});
+
+test("Warehouse evidence registration converges as an internal governed helper", async () => {
+  const source = await readFile(
+    new URL(
+      "../../supabase/migrations/20260718194000_restore_warehouse_evidence_registration.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.match(
+    source,
+    /create or replace function warehouse\.register_evidence_docs/,
+  );
+  assert.match(source, /insert into core\.documents/);
+  assert.match(source, /v_entity_id text/);
+  assert.match(source, /v_entity_id := p_entity_id/);
+  assert.match(source, /uploaded_by/);
+  assert.match(source, /auth\.uid\(\)/);
+  assert.match(
+    source,
+    /revoke all on function warehouse\.register_evidence_docs/,
+  );
+});
+
+test("Warehouse evidence keeps the shared text entity identity", async () => {
+  const source = await readFile(
+    new URL(
+      "../../supabase/migrations/20260718195000_align_evidence_document_entity_identity.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.match(source, /v_entity_id uuid/);
+  assert.match(source, /v_entity_id text/);
+  assert.match(source, /v_entity_id := p_entity_id/);
+});
+
+test("cycle-count defaults and Warehouse RPCs converge to shared RBAC", async () => {
+  const cycleSource = await readFile(
+    new URL(
+      "../../supabase/migrations/20260718196000_harden_cycle_count_server_defaults.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const rbacSource = await readFile(
+    new URL(
+      "../../supabase/migrations/20260718197000_converge_warehouse_rbac_gates.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.match(cycleSource, /\{created_at\}/);
+  assert.match(cycleSource, /to_jsonb\(now\(\)\)/);
+  assert.match(rbacSource, /function\.proname<>'has_cap'/);
+  assert.match(rbacSource, /core\.has_cap\(''warehouse''/);
+  assert.match(rbacSource, /regexp_replace/);
+});
+
+test("manual stock governance converges its exception type and approval boundary", async () => {
+  const migration = await readFile(
+    new URL(
+      "../../supabase/migrations/20260718198000_converge_stock_change_governance.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const identityMigration = await readFile(
+    new URL(
+      "../../supabase/migrations/20260718199000_align_stock_approval_entity_identity.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const harness = await readFile(
+    new URL("./full-intra-live-e2e.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.match(migration, /'stock_variance'/);
+  assert.match(
+    migration,
+    /function warehouse\.decide_stock_change\(payload jsonb\)[\s\S]*?security definer/i,
+  );
+  assert.match(
+    migration,
+    /revoke all on function private\.warehouse_decide_stock_change\(jsonb\)[\s\S]*?authenticated/,
+  );
+  assert.match(harness, /qualityRaceReceipt/);
+  assert.match(harness, /openPersonaPageFrom/);
+  assert.match(
+    harness,
+    /intra\.test\.wh\.operations@mwell\.com\.ph[\s\S]*?hold creation versus reservation/,
+  );
+  assert.match(
+    harness,
+    /source_id: fixture\.ids\.qualityRaceReceipt[\s\S]*?hold creation versus reservation/,
+  );
+  assert.doesNotMatch(harness, /Post-race clean QC failed/);
+  assert.match(identityMigration, /entity_id=v_request\.id::text/);
+  assert.match(identityMigration, /pg_catalog\.replace/);
+});
+
 test("department-only amendment approvers can reach their narrowly scoped queue", async () => {
   const app = await readFile(
-    new URL("../../modules/procurement/src/ProcurementApp.tsx", import.meta.url),
+    new URL(
+      "../../modules/procurement/src/ProcurementApp.tsx",
+      import.meta.url,
+    ),
     "utf8",
   );
   const page = await readFile(
-    new URL("../../modules/procurement/src/pages/PurchaseOrdersPage.tsx", import.meta.url),
+    new URL(
+      "../../modules/procurement/src/pages/PurchaseOrdersPage.tsx",
+      import.meta.url,
+    ),
     "utf8",
   );
   assert.match(app, /amendmentQueueDeepLink/);
@@ -706,11 +1059,20 @@ test("department-only amendment approvers can reach their narrowly scoped queue"
 
 test("the issue client excludes exact holds and can select another valid source", async () => {
   const source = await readFile(
-    new URL("../../packages/data-kit/src/supabase/SupabaseRepository.ts", import.meta.url),
+    new URL(
+      "../../packages/data-kit/src/supabase/SupabaseRepository.ts",
+      import.meta.url,
+    ),
     "utf8",
   );
-  assert.match(source, /from\('inventory_holds'\)[\s\S]*?eq\('status', 'active'\)/);
+  assert.match(
+    source,
+    /from\('inventory_holds'\)[\s\S]*?eq\('status', 'active'\)/,
+  );
   assert.match(source, /isHeldSerializedUnit/);
   assert.match(source, /unheldBulkQuantity/);
-  assert.match(source, /locationIds\.find\(\(locationId\) => availableAt\(locationId\) >= allocation\.quantity\)/);
+  assert.match(
+    source,
+    /locationIds\.find\(\(locationId\) => availableAt\(locationId\) >= allocation\.quantity\)/,
+  );
 });

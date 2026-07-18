@@ -8,6 +8,29 @@ interface InviteBody {
   category?: string;
   profile?: Record<string, unknown>;
   origin_country?: string;
+  redirect_origin?: string;
+}
+
+function inviteRedirectOrigin(value?: string): string {
+  const configured = (Deno.env.get("INVITE_REDIRECT_ORIGINS") ?? "")
+    .split(",")
+    .map((origin) => origin.trim().replace(/\/$/, ""))
+    .filter(Boolean);
+  const allowed = new Set([
+    "https://mwell-intra.vercel.app",
+    "https://mwell-intra-uat.vercel.app",
+    ...configured,
+  ]);
+  try {
+    const candidate = new URL(value ?? "");
+    const local =
+      candidate.protocol === "http:" &&
+      ["localhost", "127.0.0.1"].includes(candidate.hostname);
+    if (allowed.has(candidate.origin) || local) return candidate.origin;
+  } catch {
+    // Fall through to the production origin for malformed or absent input.
+  }
+  return "https://mwell-intra.vercel.app";
 }
 
 const json = (body: unknown, status = 200) =>
@@ -131,8 +154,7 @@ Deno.serve(async (request) => {
         ) ?? null;
       if (data.users.length < 1000) break;
     }
-    const redirectTo =
-      "https://mwell-intra.vercel.app/reset-password?next=/vendor";
+    const redirectTo = `${inviteRedirectOrigin(body?.redirect_origin)}/reset-password?next=/vendor`;
     if (authUser) {
       const { error } = await admin.auth.resetPasswordForEmail(email, {
         redirectTo,
