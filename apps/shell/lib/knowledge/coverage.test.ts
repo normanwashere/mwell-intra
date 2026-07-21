@@ -66,7 +66,7 @@ describe("Knowledge Base live coverage", () => {
   });
 
   it("documents every router page with complete plain-language feature content", () => {
-    expect(KNOWLEDGE_CONTENT.features).toHaveLength(62);
+    expect(KNOWLEDGE_CONTENT.features).toHaveLength(63);
     const liveFeatures = KNOWLEDGE_CONTENT.features.filter(
       (feature) => feature.availability !== "coming_soon",
     );

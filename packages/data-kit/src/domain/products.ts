@@ -1,7 +1,8 @@
-import type { Product } from './types';
+import type { Product } from "./types";
+import { requiredSerializationPolicy, type ItemClass } from "./wms";
 // Adaptation note (Step 1d): the source imported these DTOs from `@/data/repository`.
 // Inside data-kit the repository port lives one level up at `../repository`.
-import type { CreateProductInput, ProductPatch } from '../repository';
+import type { CreateProductInput, ProductPatch } from "../repository";
 
 /**
  * Validate and normalise a new product master record (shared by both repository
@@ -14,26 +15,39 @@ export function buildNewProduct(
 ): Product {
   const sku = input.sku.trim();
   const name = input.name.trim();
-  if (!sku) throw new Error('SKU is required.');
-  if (!name) throw new Error('Name is required.');
+  if (!sku) throw new Error("SKU is required.");
+  if (!name) throw new Error("Name is required.");
   if (existing.some((p) => p.sku.toLowerCase() === sku.toLowerCase())) {
     throw new Error(`SKU "${sku}" already exists.`);
   }
   if (Number.isNaN(input.unitCost) || input.unitCost < 0) {
-    throw new Error('Unit cost must be zero or more.');
+    throw new Error("Unit cost must be zero or more.");
   }
   if (Number.isNaN(input.reorderPoint) || input.reorderPoint < 0) {
-    throw new Error('Reorder point must be zero or more.');
+    throw new Error("Reorder point must be zero or more.");
   }
+  const itemClass: ItemClass =
+    input.itemClass ??
+    (input.category === "device" ? "sellable_sku" : "merchandise");
+  const serializationPolicy = requiredSerializationPolicy(itemClass);
+  const serialized =
+    serializationPolicy === "required" || serializationPolicy === "asset_tag"
+      ? true
+      : serializationPolicy === "none"
+        ? false
+        : input.serialized;
   return {
     id,
     sku,
     name,
     category: input.category,
-    deviceType: input.category === 'device' ? input.deviceType : undefined,
+    itemClass,
+    serializationPolicy,
+    uom: input.uom?.trim() || "piece",
+    deviceType: input.category === "device" ? input.deviceType : undefined,
     merchandiseType:
-      input.category === 'merchandise' ? input.merchandiseType : undefined,
-    serialized: input.serialized,
+      input.category === "merchandise" ? input.merchandiseType : undefined,
+    serialized,
     attributes: input.attributes ?? {},
     unitCost: input.unitCost,
     price: input.price,
@@ -47,27 +61,30 @@ export function buildNewProduct(
  * Apply an editable-field patch to a product, returning the next product.
  * Throws on invalid values. Pure — callers persist the result.
  */
-export function applyProductPatch(product: Product, patch: ProductPatch): Product {
+export function applyProductPatch(
+  product: Product,
+  patch: ProductPatch,
+): Product {
   const next: Product = { ...product };
   if (patch.name !== undefined) {
-    if (!patch.name.trim()) throw new Error('Name is required.');
+    if (!patch.name.trim()) throw new Error("Name is required.");
     next.name = patch.name.trim();
   }
   if (patch.unitCost !== undefined) {
     if (Number.isNaN(patch.unitCost) || patch.unitCost < 0) {
-      throw new Error('Unit cost must be zero or more.');
+      throw new Error("Unit cost must be zero or more.");
     }
     next.unitCost = patch.unitCost;
   }
   if (patch.reorderPoint !== undefined) {
     if (Number.isNaN(patch.reorderPoint) || patch.reorderPoint < 0) {
-      throw new Error('Reorder point must be zero or more.');
+      throw new Error("Reorder point must be zero or more.");
     }
     next.reorderPoint = patch.reorderPoint;
   }
   if (patch.price !== undefined) {
     if (Number.isNaN(patch.price) || patch.price < 0) {
-      throw new Error('Price must be zero or more.');
+      throw new Error("Price must be zero or more.");
     }
     next.price = patch.price;
   }
@@ -76,5 +93,13 @@ export function applyProductPatch(product: Product, patch: ProductPatch): Produc
   }
   if (patch.promotional !== undefined) next.promotional = patch.promotional;
   if (patch.attributes !== undefined) next.attributes = patch.attributes;
+  if (patch.itemClass !== undefined) {
+    next.itemClass = patch.itemClass;
+    next.serializationPolicy = requiredSerializationPolicy(patch.itemClass);
+    next.serialized = ["required", "asset_tag"].includes(
+      next.serializationPolicy,
+    );
+  }
+  if (patch.uom !== undefined) next.uom = patch.uom.trim() || "piece";
   return next;
 }

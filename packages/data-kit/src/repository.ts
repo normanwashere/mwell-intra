@@ -14,14 +14,15 @@ import type {
   Profile,
   PurchaseOrder,
   Receipt,
+  ReceiptLine,
   ReturnDisposition,
   ReturnRecord,
   StockLevel,
   StorageArea,
   Supplier,
   WarehouseEvent,
-} from './domain/types';
-import type { StockState } from './domain/stock';
+} from "./domain/types";
+import type { StockState } from "./domain/stock";
 import type {
   DecideStockChangeInput,
   CreateVendorReturnInput,
@@ -45,7 +46,19 @@ import type {
   WarehouseException,
   WarehouseTask,
   VendorReturn,
-} from './domain/warehouseControls';
+} from "./domain/warehouseControls";
+import type {
+  CustomerReturnCase,
+  DepartmentStockRequest,
+  FulfillmentAction,
+  FulfillmentOrder,
+  FulfillmentSource,
+  KitComponent,
+  KitDefinition,
+  PackagingConsumption,
+  ReKitWorkOrder,
+  ReturnResolution,
+} from "./domain/wms";
 
 /** Full snapshot of the warehouse read model. */
 export interface WarehouseData {
@@ -63,17 +76,27 @@ export interface WarehouseData {
   cycleCounts: CycleCount[];
   receipts: Receipt[];
   purchaseOrders: PurchaseOrder[];
+  fulfillmentOrders: FulfillmentOrder[];
+  departmentStockRequests: DepartmentStockRequest[];
+  customerReturnCases: CustomerReturnCase[];
+  kitDefinitions: KitDefinition[];
+  reKitWorkOrders: ReKitWorkOrder[];
   operationTypes?: OperationType[];
   operationRoutes?: OperationRoute[];
 }
 
 export interface ReceiveStockInput {
   supplierId?: string;
+  actualDeliveryDate?: string;
+  deliveryReference?: string;
+  courierOrDriver?: string;
   locationId: string;
   lines: {
     productId: string;
     quantity: number;
     lotCode?: string;
+    batchNumber?: string;
+    deviceTestStatus?: ReceiptLine["deviceTestStatus"];
     expiryDate?: string;
     serialNumbers?: string[];
     unitCost?: number;
@@ -105,7 +128,7 @@ export interface IssueInput {
 }
 
 export interface ReturnInput {
-  source: ReturnRecord['source'];
+  source: ReturnRecord["source"];
   eventId?: string;
   /** When set, the matching allocation is closed out (status -> 'returned'). */
   allocationId?: string;
@@ -125,7 +148,7 @@ export interface ReturnInput {
 
 export interface CycleCountInput {
   locationId: string;
-  category?: 'device' | 'merchandise';
+  category?: "device" | "merchandise";
   /** Storage area being counted (undefined = general area). */
   binId?: string;
   lines: CycleCountLine[];
@@ -199,13 +222,13 @@ export interface CreateSupplierInput {
 export interface CreateLocationInput {
   id?: string;
   name: string;
-  type: Location['type'];
+  type: Location["type"];
 }
 
 export interface UpdateLocationInput {
   locationId: string;
   name: string;
-  type: Location['type'];
+  type: Location["type"];
 }
 
 export interface CreateStorageAreaInput {
@@ -240,6 +263,8 @@ export interface CreateProductInput {
   sku: string;
   name: string;
   category: ItemCategory;
+  itemClass?: import("./domain/wms").ItemClass;
+  uom?: string;
   deviceType?: DeviceType;
   merchandiseType?: MerchandiseType;
   serialized: boolean;
@@ -261,11 +286,105 @@ export interface ProductPatch {
   promotional?: boolean;
   attributes?: Record<string, string>;
   price?: number;
+  itemClass?: import("./domain/wms").ItemClass;
+  uom?: string;
 }
 
 export interface UpdateProductInput {
   productId: string;
   patch: ProductPatch;
+  actor: string;
+}
+
+export interface CreateFulfillmentOrderInput {
+  source: FulfillmentSource;
+  externalReference: string;
+  requestingDepartment?: string;
+  customerReference?: string;
+  eventId?: string;
+  thirdPartyLocationId?: string;
+  grossSalesAmount?: number;
+  sourceLocationId?: string;
+  sourceBinId?: string;
+  lines: Array<{
+    productId: string;
+    quantity: number;
+    bundleSetCodes?: string[];
+  }>;
+  actor: string;
+}
+
+export interface AdvanceFulfillmentOrderInput {
+  orderId: string;
+  action: FulfillmentAction;
+  actor: string;
+  pickedLines?: Array<{
+    productId: string;
+    quantity: number;
+    serialNumbers?: string[];
+  }>;
+  packaging?: PackagingConsumption[];
+  courier?: string;
+  waybillNumber?: string;
+}
+
+export interface CreateDepartmentStockRequestInput {
+  requestingDepartment: string;
+  purpose: string;
+  costCenter: string;
+  requiredDate: string;
+  expenseTreatment: DepartmentStockRequest["expenseTreatment"];
+  lines: DepartmentStockRequest["lines"];
+  actor: string;
+}
+
+export interface DecideDepartmentStockRequestInput {
+  requestId: string;
+  decision: "approved" | "rejected";
+  actor: string;
+}
+
+export interface CreateCustomerReturnCaseInput {
+  sourceOrderId?: string;
+  productId: string;
+  serialNumber?: string;
+  defectDescription: string;
+  actor: string;
+}
+
+export interface ResolveCustomerReturnCaseInput {
+  returnCaseId: string;
+  resolution: Exclude<ReturnResolution, "pending">;
+  quarantineBinId?: string;
+  replacementOrderId?: string;
+  refundReference?: string;
+  supplierReference?: string;
+  actor: string;
+}
+
+export interface CreateKitDefinitionInput {
+  productId: string;
+  name: string;
+  components: KitComponent[];
+  status: KitDefinition["status"];
+  ownerDepartment: string;
+  productApprovalReference: string;
+  actor: string;
+}
+
+export interface CreateReKitWorkOrderInput {
+  sourceReturnCaseId: string;
+  kitDefinitionId: string;
+  outputSerialNumber: string;
+  componentSerialNumbers: string[];
+  condition: ReKitWorkOrder["condition"];
+  actor: string;
+}
+
+export interface CompleteReKitWorkOrderInput {
+  workOrderId: string;
+  locationId: string;
+  binId: string;
   actor: string;
 }
 
@@ -302,21 +421,54 @@ export interface WarehouseRepository {
   setProductPrice(input: SetProductPriceInput): Promise<Product>;
   createProduct(input: CreateProductInput): Promise<Product>;
   updateProduct(input: UpdateProductInput): Promise<Product>;
+  createFulfillmentOrder(
+    input: CreateFulfillmentOrderInput,
+  ): Promise<FulfillmentOrder>;
+  advanceFulfillmentOrder(
+    input: AdvanceFulfillmentOrderInput,
+  ): Promise<FulfillmentOrder>;
+  createDepartmentStockRequest(
+    input: CreateDepartmentStockRequestInput,
+  ): Promise<DepartmentStockRequest>;
+  decideDepartmentStockRequest(
+    input: DecideDepartmentStockRequestInput,
+  ): Promise<DepartmentStockRequest>;
+  createCustomerReturnCase(
+    input: CreateCustomerReturnCaseInput,
+  ): Promise<CustomerReturnCase>;
+  resolveCustomerReturnCase(
+    input: ResolveCustomerReturnCaseInput,
+  ): Promise<CustomerReturnCase>;
+  createKitDefinition(input: CreateKitDefinitionInput): Promise<KitDefinition>;
+  createReKitWorkOrder(
+    input: CreateReKitWorkOrderInput,
+  ): Promise<ReKitWorkOrder>;
+  completeReKitWorkOrder(
+    input: CompleteReKitWorkOrderInput,
+  ): Promise<ReKitWorkOrder>;
 }
 
 /** W1 control extension implemented by live and memory adapters in Task 5. */
 export interface WarehouseControlRepository extends WarehouseRepository {
-  listQualityInspections(query: PageQuery): Promise<PageResult<QualityInspection>>;
+  listQualityInspections(
+    query: PageQuery,
+  ): Promise<PageResult<QualityInspection>>;
   listHolds(query: PageQuery): Promise<PageResult<InventoryHold>>;
   listVendorReturns(query: PageQuery): Promise<PageResult<VendorReturn>>;
   listExceptions(query: PageQuery): Promise<PageResult<WarehouseException>>;
-  listStockChangeRequests(query: PageQuery): Promise<PageResult<StockChangeRequest>>;
+  listStockChangeRequests(
+    query: PageQuery,
+  ): Promise<PageResult<StockChangeRequest>>;
   listWarehouseTasks(query: PageQuery): Promise<PageResult<WarehouseTask>>;
-  listInventoryPositions(query: PageQuery): Promise<PageResult<InventoryPosition>>;
+  listInventoryPositions(
+    query: PageQuery,
+  ): Promise<PageResult<InventoryPosition>>;
   inspectQuality(input: InspectQualityInput): Promise<QualityInspection>;
   releaseHold(input: ReleaseHoldInput): Promise<InventoryHold>;
   createVendorReturn(input: CreateVendorReturnInput): Promise<VendorReturn>;
-  updateOperationRoute(input: UpdateOperationRouteInput): Promise<OperationRoute>;
+  updateOperationRoute(
+    input: UpdateOperationRouteInput,
+  ): Promise<OperationRoute>;
   submitCycleCount(input: SubmitCycleCountInput): Promise<StockChangeRequest[]>;
   requestStockChange(
     input: RequestStockChangeInput,

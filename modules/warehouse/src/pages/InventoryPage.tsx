@@ -1,10 +1,15 @@
-import { useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useWarehouse } from '@/app/store';
-import { toStockState } from '@/data/repository';
-import { availableForProduct, isBelowReorder } from '@/domain/stock';
-import { groupProductsByFamily, variantLabel } from '@/domain/inventory';
-import type { ItemCategory, Product } from '@/domain/types';
+import { useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { useWarehouse } from "@/app/store";
+import { toStockState } from "@/data/repository";
+import { availableForProduct, isBelowReorder } from "@/domain/stock";
+import { groupProductsByFamily, variantLabel } from "@/domain/inventory";
+import {
+  requiredSerializationPolicy,
+  type ItemCategory,
+  type ItemClass,
+  type Product,
+} from "@/domain/types";
 import {
   Badge,
   Card,
@@ -17,53 +22,61 @@ import {
   StaggerGrid,
   StaggerItem,
   useToast,
-} from '@/components/ui';
-import { Icon } from '@/components/Icon';
-import { ProductThumb } from '@/components/ProductThumb';
-import { ExpiryBadge } from '@/components/ExpiryStatus';
-import { clsx } from 'clsx';
+} from "@/components/ui";
+import { Icon } from "@/components/Icon";
+import { ProductThumb } from "@/components/ProductThumb";
+import { ExpiryBadge } from "@/components/ExpiryStatus";
+import { BarcodeLabelSheet } from "@/components/BarcodeLabelSheet";
+import { clsx } from "clsx";
 
-type Filter = 'all' | ItemCategory;
+type Filter = "all" | ItemCategory;
 
 export function InventoryPage() {
   const { data, createProduct, can } = useWarehouse();
   const navigate = useNavigate();
   const toast = useToast();
-  const canManageProducts = can('manage_products');
+  const canManageProducts = can("manage_products");
   // Support dashboard deep-links: /inventory?filter=low|device|merchandise
   const [searchParams] = useSearchParams();
-  const initialFilter = searchParams.get('filter');
-  const [query, setQuery] = useState('');
+  const initialFilter = searchParams.get("filter");
+  const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>(
-    initialFilter === 'device' || initialFilter === 'merchandise'
+    initialFilter === "device" || initialFilter === "merchandise"
       ? initialFilter
-      : 'all',
+      : "all",
   );
-  const [lowOnly, setLowOnly] = useState(initialFilter === 'low');
+  const [lowOnly, setLowOnly] = useState(initialFilter === "low");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const [addOpen, setAddOpen] = useState(false);
-  const [sku, setSku] = useState('');
-  const [name, setName] = useState('');
-  const [category, setCategory] = useState<ItemCategory>('merchandise');
+  const [labelsOpen, setLabelsOpen] = useState(false);
+  const [sku, setSku] = useState("");
+  const [name, setName] = useState("");
+  const [category, setCategory] = useState<ItemCategory>("merchandise");
+  const [itemClass, setItemClass] = useState<ItemClass>("merchandise");
+  const [uom, setUom] = useState("piece");
   const [serialized, setSerialized] = useState(false);
-  const [unitCost, setUnitCost] = useState('0');
-  const [reorderPoint, setReorderPoint] = useState('0');
-  const [barcode, setBarcode] = useState('');
+  const [unitCost, setUnitCost] = useState("0");
+  const [reorderPoint, setReorderPoint] = useState("0");
+  const [barcode, setBarcode] = useState("");
   const [promotional, setPromotional] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
 
   const submitAdd = async () => {
     setAddError(null);
     if (!sku.trim()) {
-      setAddError('SKU is required.');
+      setAddError("SKU is required.");
       return;
     }
     if (!name.trim()) {
-      setAddError('Name is required.');
+      setAddError("Name is required.");
       return;
     }
-    if (data?.products.some((p) => p.sku.toLowerCase() === sku.trim().toLowerCase())) {
+    if (
+      data?.products.some(
+        (p) => p.sku.toLowerCase() === sku.trim().toLowerCase(),
+      )
+    ) {
       setAddError(`SKU "${sku.trim()}" already exists.`);
       return;
     }
@@ -71,6 +84,8 @@ export function InventoryPage() {
       sku: sku.trim(),
       name: name.trim(),
       category,
+      itemClass,
+      uom,
       serialized,
       unitCost: Number(unitCost) || 0,
       reorderPoint: Number(reorderPoint) || 0,
@@ -80,13 +95,15 @@ export function InventoryPage() {
     if (!ok) return;
     toast.success(`Added ${name.trim()}`);
     setAddOpen(false);
-    setSku('');
-    setName('');
-    setCategory('merchandise');
+    setSku("");
+    setName("");
+    setCategory("merchandise");
+    setItemClass("merchandise");
+    setUom("piece");
     setSerialized(false);
-    setUnitCost('0');
-    setReorderPoint('0');
-    setBarcode('');
+    setUnitCost("0");
+    setReorderPoint("0");
+    setBarcode("");
     setPromotional(false);
   };
 
@@ -96,7 +113,7 @@ export function InventoryPage() {
     if (!data || !state) return [];
     const q = query.trim().toLowerCase();
     const inScope = data.products.filter(
-      (p) => filter === 'all' || p.category === filter,
+      (p) => filter === "all" || p.category === filter,
     );
     return groupProductsByFamily(inScope)
       .map((fam) => {
@@ -105,7 +122,7 @@ export function InventoryPage() {
               (p) =>
                 p.name.toLowerCase().includes(q) ||
                 p.sku.toLowerCase().includes(q) ||
-                (p.barcode ?? '').includes(q),
+                (p.barcode ?? "").includes(q),
             )
           : fam.variants;
         if (lowOnly) {
@@ -142,15 +159,26 @@ export function InventoryPage() {
         icon="box"
         subtitle="Grouped by product family, with sizes & serials"
         action={
-          canManageProducts ? (
-            <button
-              type="button"
-              className="btn-primary btn-sm"
-              onClick={() => setAddOpen(true)}
-            >
-              <Icon name="plus" className="h-4 w-4" /> Add product
-            </button>
-          ) : undefined
+          <div className="flex flex-wrap justify-end gap-2">
+            {can("manage_inventory") && (
+              <button
+                type="button"
+                className="btn-outline btn-sm"
+                onClick={() => setLabelsOpen(true)}
+              >
+                <Icon name="tag" className="h-4 w-4" /> Print barcode sheet
+              </button>
+            )}
+            {canManageProducts && (
+              <button
+                type="button"
+                className="btn-primary btn-sm"
+                onClick={() => setAddOpen(true)}
+              >
+                <Icon name="plus" className="h-4 w-4" /> Add product
+              </button>
+            )}
+          </div>
         }
       />
 
@@ -174,9 +202,9 @@ export function InventoryPage() {
           value={filter}
           onChange={setFilter}
           options={[
-            { value: 'all', label: 'All' },
-            { value: 'device', label: 'Devices' },
-            { value: 'merchandise', label: 'Merch' },
+            { value: "all", label: "All" },
+            { value: "device", label: "Devices" },
+            { value: "merchandise", label: "Merch" },
           ]}
         />
         <div className="flex items-center justify-between gap-3">
@@ -185,19 +213,19 @@ export function InventoryPage() {
             aria-pressed={lowOnly}
             onClick={() => setLowOnly((v) => !v)}
             className={clsx(
-              'inline-flex min-h-11 items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition',
+              "inline-flex min-h-11 items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition",
               lowOnly
-                ? 'bg-amber-500/20 text-amber-800 dark:text-amber-200'
-                : 'bg-inset text-muted hover:text-ink',
+                ? "bg-amber-500/20 text-amber-800 dark:text-amber-200"
+                : "bg-inset text-muted hover:text-ink",
             )}
           >
             <Icon name="alert" className="h-4 w-4" /> Low stock only
           </button>
           <p className="text-xs text-faint">
-            {skuCount} SKU{skuCount === 1 ? '' : 's'}
+            {skuCount} SKU{skuCount === 1 ? "" : "s"}
             {lowCount > 0 && (
               <>
-                {' • '}
+                {" • "}
                 <span className="font-semibold text-rose-600 dark:text-rose-300">
                   {lowCount} low
                 </span>
@@ -210,7 +238,7 @@ export function InventoryPage() {
       {families.length === 0 ? (
         <EmptyState
           icon="search"
-          title={lowOnly ? 'No low-stock items' : 'No matching items'}
+          title={lowOnly ? "No low-stock items" : "No matching items"}
         />
       ) : (
         <StaggerGrid
@@ -238,18 +266,26 @@ export function InventoryPage() {
                       className="h-10 w-10 sm:h-11 sm:w-11"
                     />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate font-semibold text-ink">{single.name}</p>
+                      <p className="truncate font-semibold text-ink">
+                        {single.name}
+                      </p>
                       <div className="mt-1 flex flex-wrap items-center gap-1.5">
                         <Badge tone="slate">
                           <span className="block max-w-[7rem] truncate font-mono sm:max-w-none">
                             {single.sku}
                           </span>
                         </Badge>
-                        <Badge tone={single.category === 'device' ? 'brand' : 'cyan'}>
+                        <Badge
+                          tone={single.category === "device" ? "brand" : "cyan"}
+                        >
                           {single.category}
                         </Badge>
-                        {single.serialized && <Badge tone="slate">serialized</Badge>}
-                        {single.promotional && <Badge tone="amber">promo</Badge>}
+                        {single.serialized && (
+                          <Badge tone="slate">serialized</Badge>
+                        )}
+                        {single.promotional && (
+                          <Badge tone="amber">promo</Badge>
+                        )}
                         <ExpiryBadge product={single} lots={data.lots} />
                       </div>
                     </div>
@@ -257,10 +293,10 @@ export function InventoryPage() {
                       <div>
                         <p
                           className={clsx(
-                            'tnum text-lg font-extrabold',
+                            "tnum text-lg font-extrabold",
                             isBelowReorder(single, available)
-                              ? 'text-rose-600 dark:text-rose-300'
-                              : 'text-ink',
+                              ? "text-rose-600 dark:text-rose-300"
+                              : "text-ink",
                           )}
                         >
                           {available}
@@ -289,9 +325,13 @@ export function InventoryPage() {
                       className="h-10 w-10 sm:h-11 sm:w-11"
                     />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate font-semibold text-ink">{fam.label}</p>
+                      <p className="truncate font-semibold text-ink">
+                        {fam.label}
+                      </p>
                       <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                        <Badge tone={fam.category === 'device' ? 'brand' : 'cyan'}>
+                        <Badge
+                          tone={fam.category === "device" ? "brand" : "cyan"}
+                        >
                           {fam.category}
                         </Badge>
                         <Badge tone="slate">{`${fam.variants.length} sizes`}</Badge>
@@ -300,15 +340,17 @@ export function InventoryPage() {
                     </div>
                     <div className="flex shrink-0 items-center gap-1.5 text-right sm:gap-2">
                       <div>
-                        <p className="tnum text-lg font-extrabold text-ink">{total}</p>
+                        <p className="tnum text-lg font-extrabold text-ink">
+                          {total}
+                        </p>
                         {/* One stock noun module-wide (WH-23). */}
                         <p className="text-xs text-faint">available</p>
                       </div>
                       <Icon
                         name="chevron"
                         className={clsx(
-                          'h-4 w-4 text-faint transition-transform',
-                          isOpen && 'rotate-90',
+                          "h-4 w-4 text-faint transition-transform",
+                          isOpen && "rotate-90",
                         )}
                       />
                     </div>
@@ -337,8 +379,10 @@ export function InventoryPage() {
                                 </span>
                                 <span
                                   className={clsx(
-                                    'tnum shrink-0 text-base font-extrabold',
-                                    low ? 'text-rose-600 dark:text-rose-300' : 'text-ink',
+                                    "tnum shrink-0 text-base font-extrabold",
+                                    low
+                                      ? "text-rose-600 dark:text-rose-300"
+                                      : "text-ink",
                                   )}
                                 >
                                   {a}
@@ -363,7 +407,11 @@ export function InventoryPage() {
         title="Add product"
         description="Create a new SKU in the product master."
         footer={
-          <button type="button" className="btn-primary w-full" onClick={() => void submitAdd()}>
+          <button
+            type="button"
+            className="btn-primary w-full"
+            onClick={() => void submitAdd()}
+          >
             Create product
           </button>
         }
@@ -387,6 +435,52 @@ export function InventoryPage() {
                 onChange={(e) => setBarcode(e.target.value)}
                 placeholder="EAN / UPC"
               />
+            </Field>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Item class" htmlFor="ap-item-class">
+              <select
+                id="ap-item-class"
+                className="input"
+                value={itemClass}
+                onChange={(event) => {
+                  const next = event.target.value as ItemClass;
+                  const policy = requiredSerializationPolicy(next);
+                  setItemClass(next);
+                  setSerialized(
+                    policy === "required" || policy === "asset_tag",
+                  );
+                  setCategory(
+                    next === "sellable_sku" || next === "re_kitted_item"
+                      ? "device"
+                      : "merchandise",
+                  );
+                }}
+              >
+                <option value="sellable_sku">Sellable SKU</option>
+                <option value="merchandise">Merchandise / giveaway</option>
+                <option value="event_material">Event material</option>
+                <option value="fulfillment_supply">Fulfillment supply</option>
+                <option value="warehouse_tool">Warehouse tool</option>
+                <option value="re_kitted_item">
+                  Re-kitted / open-box item
+                </option>
+              </select>
+            </Field>
+            <Field label="Unit of measure" htmlFor="ap-uom">
+              <select
+                id="ap-uom"
+                className="input"
+                value={uom}
+                onChange={(event) => setUom(event.target.value)}
+              >
+                <option value="piece">Piece</option>
+                <option value="set">Set</option>
+                <option value="box">Box</option>
+                <option value="pouch">Pouch</option>
+                <option value="roll">Roll</option>
+                <option value="sheet">Sheet</option>
+              </select>
             </Field>
           </div>
           <Field label="Name" htmlFor="ap-name">
@@ -420,7 +514,11 @@ export function InventoryPage() {
               />
             </Field>
           </div>
-          <Field label="Unit cost (₱)" htmlFor="ap-cost" hint="Landed cost per unit">
+          <Field
+            label="Unit cost (₱)"
+            htmlFor="ap-cost"
+            hint="Landed cost per unit"
+          >
             <input
               id="ap-cost"
               type="number"
@@ -432,15 +530,13 @@ export function InventoryPage() {
               onChange={(e) => setUnitCost(e.target.value)}
             />
           </Field>
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              className="h-4 w-4 rounded"
-              checked={serialized}
-              onChange={(e) => setSerialized(e.target.checked)}
-            />
-            <span className="text-sm text-muted">Serialized device (unique serial per unit)</span>
-          </label>
+          <p className="rounded-lg bg-inset px-3 py-2 text-sm text-muted">
+            {requiredSerializationPolicy(itemClass) === "required"
+              ? "One serial is required for every unit in this item class."
+              : requiredSerializationPolicy(itemClass) === "asset_tag"
+                ? "Every reusable tool requires its own asset tag."
+                : "This item is monitored by quantity and barcode."}
+          </p>
           <label className="flex items-center gap-2">
             <input
               type="checkbox"
@@ -448,10 +544,17 @@ export function InventoryPage() {
               checked={promotional}
               onChange={(e) => setPromotional(e.target.checked)}
             />
-            <span className="text-sm text-muted">Promotional / give-away item</span>
+            <span className="text-sm text-muted">
+              Promotional / give-away item
+            </span>
           </label>
         </div>
       </Sheet>
+      <BarcodeLabelSheet
+        open={labelsOpen}
+        onOpenChange={setLabelsOpen}
+        products={data.products}
+      />
     </div>
   );
 }

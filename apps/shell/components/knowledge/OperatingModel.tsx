@@ -71,7 +71,7 @@ export function OperatingModel({
         ))}
       </div>
 
-      <div className="mt-5 bg-inset p-4 sm:p-5">
+      <div className="mt-5 rounded-lg border border-line bg-inset p-4 sm:p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h3 className="text-base font-bold text-ink">{selected.label}</h3>
@@ -87,13 +87,20 @@ export function OperatingModel({
           </button>
         </div>
 
-        <ol className="mt-5 grid gap-3 lg:grid-cols-4">
+        <ol
+          className="mt-5 flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+          aria-label={`${selected.label} handoff sequence`}
+          tabIndex={0}
+        >
           {selected.steps.map((step, index) => {
             const persona = personas.get(step.personaId)!;
             return (
-              <li key={`${selected.id}-${index}`} className="relative min-w-0">
+              <li
+                key={`${selected.id}-${index}`}
+                className="relative w-[min(17rem,82vw)] shrink-0 snap-start"
+              >
                 <div
-                  className={`h-full border bg-surface p-3 shadow-e1 ${
+                  className={`h-full rounded-md border bg-surface p-3 shadow-e1 ${
                     step.decision ? "border-amber-500" : "border-line"
                   }`}
                 >
@@ -122,9 +129,9 @@ export function OperatingModel({
                 {index < selected.steps.length - 1 && (
                   <span
                     aria-hidden="true"
-                    className="mx-auto grid h-7 w-7 place-items-center text-brand-600 lg:absolute lg:-right-5 lg:top-1/2 lg:z-10 lg:-translate-y-1/2 lg:bg-inset"
+                    className="absolute -right-5 top-1/2 z-10 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full border border-line bg-inset text-brand-600"
                   >
-                    <Icon name="chevron" className="h-4 w-4 lg:-rotate-90" />
+                    <Icon name="chevron" className="h-4 w-4 -rotate-90" />
                   </span>
                 )}
               </li>

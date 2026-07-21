@@ -11,8 +11,10 @@ import {
 import { ROLE_LIST } from "@/auth/roles";
 
 describe("warehouse navigation metadata", () => {
-  it("gives the Operator only the four routine floor flows plus Home", () => {
-    expect(modulesForRole("operations").map((module) => module.label)).toEqual([
+  it("gives the canonical Operator only the four routine floor flows plus Home", () => {
+    expect(
+      modulesForRole("warehouse_operator").map((module) => module.label),
+    ).toEqual([
       "Home",
       "Receive and inspect",
       "Put away",
@@ -21,41 +23,69 @@ describe("warehouse navigation metadata", () => {
     ]);
   });
 
-  it("maps the canonical Operator and Supervisor roles while preserving aliases", () => {
-    expect(modulesForRole("warehouse_operator").map((module) => module.label)).toEqual(
-      modulesForRole("operations").map((module) => module.label),
-    );
-    expect(modulesForRole("warehouse_supervisor").map((module) => module.id)).toEqual(
+  it("keeps Operations separate from the canonical warehouse floor roles", () => {
+    expect(modulesForRole("operations").map((module) => module.id)).toEqual([
+      "dashboard",
+      "inventory",
+      "fulfillment",
+      "events",
+    ]);
+    expect(
+      modulesForRole("warehouse_supervisor").map((module) => module.id),
+    ).toEqual(
       modulesForRole("logistics_supervisor").map((module) => module.id),
     );
   });
 
   it("keeps advanced cross-functional tools out of the Operator workflow", () => {
-    expect(modulesForRole("operations").map((module) => module.id)).not.toEqual(
+    expect(
+      modulesForRole("warehouse_operator").map((module) => module.id),
+    ).not.toEqual(
       expect.arrayContaining([
-        "procurement", "pricing", "data", "reports", "events", "suppliers",
-        "imports", "operation-routes", "approvals", "quality",
+        "procurement",
+        "pricing",
+        "data",
+        "reports",
+        "events",
+        "suppliers",
+        "imports",
+        "operation-routes",
+        "approvals",
+        "quality",
       ]),
     );
   });
 
   it("intersects live Operator capabilities with the canonical four-flow projection", () => {
     const capabilities = new Set([
-      "view_dashboard", "receive_stock", "view_pricing", "set_pricing",
-      "manage_locations", "reserve_allocate", "manage_returns",
+      "view_dashboard",
+      "receive_stock",
+      "view_pricing",
+      "set_pricing",
+      "manage_locations",
+      "reserve_allocate",
+      "manage_returns",
     ]);
     const visible = modulesForWarehouseAccess(
-      "supabase", "warehouse_operator", (capability) => capabilities.has(capability),
+      "supabase",
+      "warehouse_operator",
+      (capability) => capabilities.has(capability),
     );
     expect(visible.map((module) => module.label)).toEqual([
-      "Home", "Receive and inspect", "Put away", "Pick or issue", "Returns and counts",
+      "Home",
+      "Receive and inspect",
+      "Put away",
+      "Pick or issue",
+      "Returns and counts",
     ]);
     expect(visible.map((module) => module.id)).not.toContain("pricing");
-    expect(primaryModulesForWarehouseAccess(
-      "supabase", "operations", (capability) => capabilities.has(capability),
-    ).map((module) => module.label)).toEqual([
-      "Home", "Receive and inspect", "Put away", "Pick or issue",
-    ]);
+    expect(
+      primaryModulesForWarehouseAccess(
+        "supabase",
+        "warehouse_operator",
+        (capability) => capabilities.has(capability),
+      ).map((module) => module.label),
+    ).toEqual(["Home", "Receive and inspect", "Put away", "Pick or issue"]);
   });
 
   it("assigns every route to exactly one desktop group", () => {
@@ -100,9 +130,9 @@ describe("warehouse navigation metadata", () => {
 
   it("only includes modules authorized for the role", () => {
     const visible = new Set(
-      modulesForRole("operations").map((module) => module.id),
+      modulesForRole("warehouse_operator").map((module) => module.id),
     );
-    for (const module of primaryModulesForRole("operations"))
+    for (const module of primaryModulesForRole("warehouse_operator"))
       expect(visible.has(module.id)).toBe(true);
   });
 
@@ -133,7 +163,9 @@ describe("warehouse navigation metadata", () => {
       modulesForRole("operations").find((module) => module.id === "approvals"),
     ).toBeUndefined();
     expect(
-      modulesForRole("logistics_supervisor").find((module) => module.id === "exceptions"),
+      modulesForRole("logistics_supervisor").find(
+        (module) => module.id === "exceptions",
+      ),
     ).toMatchObject({ path: "/exceptions", group: "control" });
   });
 

@@ -3,10 +3,10 @@ import { Route, Routes } from 'react-router-dom';
 import { screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { EventDetailPage } from './EventDetailPage';
-import type { Role } from '@/domain/types';
+import type { WarehouseUiRole } from '@/app/modules';
 import { renderWithProviders } from '@/test/renderWithProviders';
 
-function renderEvent(role: Role = 'finance') {
+function renderEvent(role: WarehouseUiRole = 'finance') {
   return renderWithProviders(
     <Routes>
       <Route path="/events/:id" element={<EventDetailPage />} />
@@ -34,7 +34,7 @@ describe('EventDetailPage', () => {
 
   it('reserves stock for the event via the CTA', async () => {
     const user = userEvent.setup();
-    renderEvent('operations');
+    renderEvent('warehouse_operator');
     await screen.findByRole('heading', { name: /Makati Corporate/i });
 
     await user.click(screen.getByRole('button', { name: /reserve for this event/i }));

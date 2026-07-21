@@ -40,7 +40,7 @@ export function EventsPage() {
   const { data, createEvent, can } = useWarehouse();
   const navigate = useNavigate();
   const toast = useToast();
-  const canCreate = can('reserve_allocate');
+  const canCreate = can('request_fulfillment');
 
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');

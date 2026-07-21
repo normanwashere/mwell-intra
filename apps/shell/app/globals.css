@@ -20,3 +20,23 @@
     outline: 2px solid rgb(var(--c-line));
   }
 }
+
+@media print {
+  body * {
+    visibility: hidden !important;
+  }
+
+  .barcode-print-surface,
+  .barcode-print-surface * {
+    visibility: visible !important;
+  }
+
+  .barcode-print-surface {
+    position: absolute;
+    inset: 0;
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8mm;
+    padding: 8mm;
+  }
+}

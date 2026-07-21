@@ -9,17 +9,21 @@
 //   • Dates: en-PH "d MMM yyyy" everywhere; relative time only for recent
 //     activity (< 7 days), falling back to the absolute date.
 
-import type { MovementType, POStatus } from './types';
+import type { MovementType, POStatus } from "./types";
 
 export const MOVEMENT_TYPE_LABELS: Record<MovementType, string> = {
-  receipt: 'Receipt',
-  allocation: 'Allocation',
-  issue: 'Issue',
-  return: 'Return',
-  vendor_return: 'Vendor return',
-  transfer: 'Transfer',
-  adjustment: 'Adjustment',
-  cycle_count: 'Cycle count',
+  receipt: "Receipt",
+  allocation: "Allocation",
+  issue: "Issue",
+  return: "Return",
+  vendor_return: "Vendor return",
+  transfer: "Transfer",
+  adjustment: "Adjustment",
+  cycle_count: "Cycle count",
+  fulfillment_release: "Fulfillment release",
+  packaging_consumption: "Packaging consumption",
+  department_issue: "Department issue",
+  re_kit: "Re-kit",
 };
 
 /** Human label for a movement type (never a raw slug). */
@@ -28,9 +32,16 @@ export function movementTypeLabel(type: MovementType): string {
 }
 
 /** Outbound movement types — stock leaving the warehouse. */
-const OUTBOUND: ReadonlySet<MovementType> = new Set(['issue', 'allocation', 'vendor_return']);
+const OUTBOUND: ReadonlySet<MovementType> = new Set([
+  "issue",
+  "allocation",
+  "vendor_return",
+  "fulfillment_release",
+  "packaging_consumption",
+  "department_issue",
+]);
 /** Inbound movement types — stock coming back / arriving. */
-const INBOUND: ReadonlySet<MovementType> = new Set(['receipt', 'return']);
+const INBOUND: ReadonlySet<MovementType> = new Set(["receipt", "return"]);
 
 /**
  * Direction-signed quantity for a movement. Issues are outbound and render
@@ -42,29 +53,29 @@ export function signedQuantity(type: MovementType, quantity: number): string {
   const abs = Math.abs(quantity);
   if (OUTBOUND.has(type)) return `\u2212${abs}`;
   if (INBOUND.has(type)) return `+${abs}`;
-  if (type === 'transfer') return `${abs}`;
+  if (type === "transfer") return `${abs}`;
   // adjustment / cycle_count: the stored quantity is a delta and keeps its sign.
   if (quantity < 0) return `\u2212${abs}`;
   if (quantity > 0) return `+${abs}`;
-  return '0';
+  return "0";
 }
 
 /** Generic slug → sentence-case label ("partially_received" → "Partially received"). */
 export function statusLabel(slug: string): string {
-  const words = slug.replace(/[_-]+/g, ' ').trim();
+  const words = slug.replace(/[_-]+/g, " ").trim();
   if (!words) return slug;
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
 export const PO_STATUS_LABELS: Record<POStatus, string> = {
-  draft: 'Draft',
-  ordered: 'Ordered',
-  partially_received: 'Partially received',
-  received: 'Received',
-  cancelled: 'Cancelled',
+  draft: "Draft",
+  ordered: "Ordered",
+  partially_received: "Partially received",
+  received: "Received",
+  cancelled: "Cancelled",
 };
 
-const MONTH_FMT = new Intl.DateTimeFormat('en-PH', { month: 'short' });
+const MONTH_FMT = new Intl.DateTimeFormat("en-PH", { month: "short" });
 
 /**
  * en-PH medium date, always "d MMM yyyy" (e.g. "10 Jun 2026") regardless of
@@ -72,7 +83,7 @@ const MONTH_FMT = new Intl.DateTimeFormat('en-PH', { month: 'short' });
  */
 export function formatDate(iso: string): string {
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
+  if (Number.isNaN(d.getTime())) return "";
   return `${d.getDate()} ${MONTH_FMT.format(d)} ${d.getFullYear()}`;
 }
 
@@ -84,11 +95,11 @@ const WEEK_MS = 7 * 86_400_000;
  */
 export function formatWhen(iso: string): string {
   const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return '';
+  if (Number.isNaN(then)) return "";
   const diff = Date.now() - then;
   if (Math.abs(diff) >= WEEK_MS) return formatDate(iso);
   const mins = Math.round(diff / 60000);
-  if (Math.abs(mins) < 1) return 'just now';
+  if (Math.abs(mins) < 1) return "just now";
   if (Math.abs(mins) < 60) return `${mins}m ago`;
   const hrs = Math.round(mins / 60);
   if (Math.abs(hrs) < 24) return `${hrs}h ago`;
@@ -101,13 +112,13 @@ export function formatWhen(iso: string): string {
  * actors fall back to the raw identifier (never truncated).
  */
 const DEMO_ACTOR_NAMES: Record<string, string> = {
-  'logistics@mwell.demo': 'Bea Santos',
-  'ops@mwell.demo': 'Marco Reyes',
-  'finance@mwell.demo': 'Rina Domingo',
-  'bi@mwell.demo': 'Jules Aquino',
-  'marketing@mwell.demo': 'Kai Mendoza',
-  'pricing@mwell.demo': 'Pia Salcedo',
-  'admin@mwell.demo': 'Patricia Lim',
+  "logistics@mwell.demo": "Bea Santos",
+  "ops@mwell.demo": "Marco Reyes",
+  "finance@mwell.demo": "Rina Domingo",
+  "bi@mwell.demo": "Jules Aquino",
+  "marketing@mwell.demo": "Kai Mendoza",
+  "pricing@mwell.demo": "Pia Salcedo",
+  "admin@mwell.demo": "Patricia Lim",
 };
 
 export function actorName(actor: string): string {
@@ -126,11 +137,12 @@ export function poNumberMap(
   pos: readonly { id: string; createdAt: string }[],
 ): Map<string, string> {
   const sorted = [...pos].sort(
-    (a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id),
+    (a, b) =>
+      a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id),
   );
   const map = new Map<string, string>();
   sorted.forEach((po, i) => {
-    map.set(po.id, `PO-${String(i + 1).padStart(4, '0')}`);
+    map.set(po.id, `PO-${String(i + 1).padStart(4, "0")}`);
   });
   return map;
 }

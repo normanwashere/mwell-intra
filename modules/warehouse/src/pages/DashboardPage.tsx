@@ -1,49 +1,46 @@
-import { useState, type ReactNode } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useWarehouse } from '@/app/store';
-import { toStockState } from '@/data/repository';
+import { useState, type ReactNode } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useWarehouse } from "@/app/store";
+import { toStockState } from "@/data/repository";
 import {
   availableForProduct,
   inventoryValuation,
   lowStockProducts,
   onHand,
-} from '@/domain/stock';
+} from "@/domain/stock";
 import {
   consumptionByEventType,
   deviceUtilization,
   fastMovingSkus,
   returnRate,
-} from '@/domain/analytics';
+} from "@/domain/analytics";
 import {
   consumptionRatePerDay,
   projectedStockout,
-} from '@/domain/procurementAnalytics';
-import { eventCosting } from '@/domain/events';
-import { reconciliationRows } from '@/domain/reconciliation';
-import { serializedAssetRegister } from '@/domain/assets';
-import { inventoryTurnover, landedCost } from '@/domain/pricing';
+} from "@/domain/procurementAnalytics";
+import { eventCosting } from "@/domain/events";
+import { reconciliationRows } from "@/domain/reconciliation";
+import { serializedAssetRegister } from "@/domain/assets";
+import { inventoryTurnover, landedCost } from "@/domain/pricing";
 import {
   allocationsToCsv,
   inventoryToCsv,
   movementsToCsv,
-} from '@/domain/export';
-import type { WarehouseExportKind } from '@/domain/export';
-import { downloadText, downloadUrl } from '@/app/download';
-import { prepareWarehouseExport } from '@/app/governedExports';
+} from "@/domain/export";
+import type { WarehouseExportKind } from "@/domain/export";
+import { downloadText, downloadUrl } from "@/app/download";
+import { prepareWarehouseExport } from "@/app/governedExports";
 import {
   PO_STATUS_LABELS,
   formatWhen,
   movementTypeLabel,
   signedQuantity,
-} from '@/domain/format';
-import {
-  normalizeWarehouseRole,
-  type WarehouseRouteId,
-} from '@/app/modules';
-import { warehouseRouteIdForPath } from '@/app/authorization';
-import { useSession } from '@/auth/session';
-import type { Role } from '@/domain/types';
-import { Icon, type IconName } from '@/components/Icon';
+} from "@/domain/format";
+import { normalizeWarehouseRole, type WarehouseRouteId } from "@/app/modules";
+import { warehouseRouteIdForPath } from "@/app/authorization";
+import { useSession } from "@/auth/session";
+import type { Role } from "@/domain/types";
+import { Icon, type IconName } from "@/components/Icon";
 import {
   BarRow,
   Badge,
@@ -63,17 +60,17 @@ import {
   useToast,
   type Column,
   type Tone,
-} from '@/components/ui';
-import type { Movement } from '@/domain/types';
-import type { DeviceUtilizationRow } from '@/domain/analytics';
+} from "@/components/ui";
+import type { Movement } from "@/domain/types";
+import type { DeviceUtilizationRow } from "@/domain/analytics";
 
 const EVENT_TYPE_LABELS: Record<string, string> = {
-  corporate: 'Corporate',
-  government_lgu: 'Government / LGU',
-  medical_mission: 'Medical Mission',
-  vip_activation: 'VIP Activation',
-  b2c: 'B2C',
-  b2b: 'B2B',
+  corporate: "Corporate",
+  government_lgu: "Government / LGU",
+  medical_mission: "Medical Mission",
+  vip_activation: "VIP Activation",
+  b2c: "B2C",
+  b2b: "B2B",
 };
 
 function issuedSeries(
@@ -83,19 +80,26 @@ function issuedSeries(
   const today = new Date();
   const buckets: number[] = Array(days).fill(0);
   for (const m of movements) {
-    if (m.type !== 'issue') continue;
+    if (m.type !== "issue") continue;
     const d = new Date(m.createdAt);
-    const idx = days - 1 - Math.floor((today.getTime() - d.getTime()) / 86_400_000);
+    const idx =
+      days - 1 - Math.floor((today.getTime() - d.getTime()) / 86_400_000);
     if (idx >= 0 && idx < days) buckets[idx] = (buckets[idx] ?? 0) + m.quantity;
   }
   return buckets;
 }
 
-function IssuedComparison({ recent, prior }: { recent: number; prior: number }) {
+function IssuedComparison({
+  recent,
+  prior,
+}: {
+  recent: number;
+  prior: number;
+}) {
   const max = Math.max(recent, prior, 1);
   const rows = [
-    { label: 'Last 5d', value: recent, tone: 'bg-brand-600' },
-    { label: 'Prior 5d', value: prior, tone: 'bg-brand-300' },
+    { label: "Last 5d", value: recent, tone: "bg-brand-600" },
+    { label: "Prior 5d", value: prior, tone: "bg-brand-300" },
   ];
 
   return (
@@ -115,7 +119,9 @@ function IssuedComparison({ recent, prior }: { recent: number; prior: number }) 
             <span className="h-1.5 overflow-hidden rounded-full bg-inset">
               <span
                 className={`block h-full rounded-full ${tone}`}
-                style={{ width: value === 0 ? '0%' : `${Math.max(8, ratio * 100)}%` }}
+                style={{
+                  width: value === 0 ? "0%" : `${Math.max(8, ratio * 100)}%`,
+                }}
               />
             </span>
             <span className="tnum text-right font-bold text-ink">{value}</span>
@@ -204,18 +210,20 @@ function IssuedMetricDock({
             10-day issued
           </p>
           <div className="mt-1 flex items-baseline gap-1">
-            <span className="tnum text-2xl font-extrabold text-ink">{total}</span>
+            <span className="tnum text-2xl font-extrabold text-ink">
+              {total}
+            </span>
             <span className="text-xs font-medium text-faint">units</span>
           </div>
         </div>
         <span
           className={
             trendPct >= 0
-              ? 'chip bg-emerald-500/15 text-emerald-800 dark:text-emerald-300'
-              : 'chip bg-rose-500/15 text-rose-700 dark:text-rose-300'
+              ? "chip bg-emerald-500/15 text-emerald-800 dark:text-emerald-300"
+              : "chip bg-rose-500/15 text-rose-700 dark:text-rose-300"
           }
         >
-          {trendPct >= 0 ? '+' : ''}
+          {trendPct >= 0 ? "+" : ""}
           {trendPct}%
         </span>
       </div>
@@ -228,7 +236,7 @@ function IssuedMetricDock({
   );
 }
 
-type Window = '30' | '90' | 'all';
+type Window = "30" | "90" | "all";
 
 interface Kpi {
   label: string;
@@ -243,36 +251,36 @@ interface Kpi {
 
 /** Panels available to compose role dashboards. */
 type PanelId =
-  | 'lowStock'
-  | 'reconciliation'
-  | 'recentActivity'
-  | 'reservations'
-  | 'events'
-  | 'consumption'
-  | 'fastMoving'
-  | 'utilization'
-  | 'valuation'
-  | 'assets'
-  | 'reorder'
-  | 'openPOs'
-  | 'topValue';
+  | "lowStock"
+  | "reconciliation"
+  | "recentActivity"
+  | "reservations"
+  | "events"
+  | "consumption"
+  | "fastMoving"
+  | "utilization"
+  | "valuation"
+  | "assets"
+  | "reorder"
+  | "openPOs"
+  | "topValue";
 
 const ROLE_PANELS: Record<Role, PanelId[]> = {
-  logistics_supervisor: ['lowStock', 'reconciliation', 'recentActivity'],
-  warehouse_supervisor: ['lowStock', 'reconciliation', 'recentActivity'],
-  operations: ['reservations', 'events', 'consumption'],
-  warehouse_operator: ['reservations', 'events', 'consumption'],
-  finance: ['valuation', 'reconciliation', 'assets'],
-  bi_analyst: ['fastMoving', 'consumption', 'utilization'],
-  business_unit: ['lowStock', 'reservations', 'events'],
-  marketing: ['consumption', 'events', 'fastMoving'],
-  procurement: ['reorder', 'openPOs', 'lowStock'],
-  pricing: ['topValue', 'valuation', 'fastMoving'],
-  warehouse_admin: ['lowStock', 'reconciliation', 'recentActivity'],
+  logistics_supervisor: ["lowStock", "reconciliation", "recentActivity"],
+  warehouse_supervisor: ["lowStock", "reconciliation", "recentActivity"],
+  operations: ["reservations", "events", "consumption"],
+  warehouse_operator: ["reservations", "events", "consumption"],
+  finance: ["valuation", "reconciliation", "assets"],
+  bi_analyst: ["fastMoving", "consumption", "utilization"],
+  business_unit: ["lowStock", "reservations", "events"],
+  marketing: ["consumption", "events", "fastMoving"],
+  procurement: ["reorder", "openPOs", "lowStock"],
+  pricing: ["topValue", "valuation", "fastMoving"],
+  warehouse_admin: ["lowStock", "reconciliation", "recentActivity"],
 };
 
 /** Roles whose dashboard is analytics-driven get the date-window control. */
-const WINDOWED_ROLES: Role[] = ['bi_analyst', 'marketing'];
+const WINDOWED_ROLES: Role[] = ["bi_analyst", "marketing"];
 
 function OperatorDashboard({
   name,
@@ -287,12 +295,18 @@ function OperatorDashboard({
     icon: IconName;
     secondary?: { label: string; to: string };
   }> = [
-    { label: 'Receive and inspect', to: '/purchase-orders', icon: 'truck' as const },
-    { label: 'Put away', to: '/storage', icon: 'pin' as const },
-    { label: 'Pick or issue', to: '/allocations', icon: 'tag' as const },
     {
-      label: 'Returns and counts', to: '/returns', icon: 'rotate',
-      secondary: { label: 'Cycle counts', to: '/cycle-counts' },
+      label: "Receive and inspect",
+      to: "/purchase-orders",
+      icon: "truck" as const,
+    },
+    { label: "Put away", to: "/storage", icon: "pin" as const },
+    { label: "Pick or issue", to: "/allocations", icon: "tag" as const },
+    {
+      label: "Returns and counts",
+      to: "/returns",
+      icon: "rotate",
+      secondary: { label: "Cycle counts", to: "/cycle-counts" },
     },
   ];
   const canOpenPath = (path: string) => {
@@ -303,22 +317,37 @@ function OperatorDashboard({
     .filter((action) => canOpenPath(action.to))
     .map((action) => ({
       ...action,
-      secondary: action.secondary && canOpenPath(action.secondary.to)
-        ? action.secondary
-        : undefined,
+      secondary:
+        action.secondary && canOpenPath(action.secondary.to)
+          ? action.secondary
+          : undefined,
     }));
   return (
     <div className="space-y-6">
       <section className="border-b border-line pb-5">
-        <p className="text-caption font-semibold uppercase text-faint">Warehouse floor</p>
-        <h1 className="mt-1 font-display text-title text-ink">{name ?? 'Warehouse Operator'}</h1>
-        <p className="mt-1 text-sm text-muted">Routine work ready for this shift.</p>
+        <p className="text-caption font-semibold uppercase text-faint">
+          Warehouse floor
+        </p>
+        <h1 className="mt-1 font-display text-title text-ink">
+          {name ?? "Warehouse Operator"}
+        </h1>
+        <p className="mt-1 text-sm text-muted">
+          Routine work ready for this shift.
+        </p>
       </section>
       <section aria-labelledby="operator-overview">
-        <h2 id="operator-overview" className="font-display text-lg font-bold text-ink">Overview</h2>
+        <h2
+          id="operator-overview"
+          className="font-display text-lg font-bold text-ink"
+        >
+          Overview
+        </h2>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
           {availableActions.map((action) => (
-            <div key={action.label} className="rounded-lg border border-line bg-surface shadow-e1">
+            <div
+              key={action.label}
+              className="rounded-lg border border-line bg-surface shadow-e1"
+            >
               <Link
                 to={action.to}
                 className="flex min-h-20 items-center gap-3 px-4 py-3 transition hover:bg-inset"
@@ -353,53 +382,67 @@ export function DashboardPage() {
   const toast = useToast();
   const [exportOpen, setExportOpen] = useState(false);
   const [exporting, setExporting] = useState<WarehouseExportKind | null>(null);
-  const [window, setWindow] = useState<Window>('all');
+  const [window, setWindow] = useState<Window>("all");
   if (!data) return null;
   const operatorExperience =
-    can('receive_stock') && can('issue_items') && !can('approve_stock_adjustment');
+    can("receive_stock") &&
+    can("issue_items") &&
+    !can("approve_stock_adjustment");
   if (operatorExperience) {
-    return <OperatorDashboard name={profile?.name?.split(/\s+/)[0]} canOpenRoute={canOpenRoute} />;
+    return (
+      <OperatorDashboard
+        name={profile?.name?.split(/\s+/)[0]}
+        canOpenRoute={canOpenRoute}
+      />
+    );
   }
-  const liveDashboardRole: Role = can('manage_operation_routes') || can('resolve_exceptions')
-    ? 'logistics_supervisor'
-    : can('set_pricing') || can('view_pricing')
-      ? 'pricing'
-      : can('view_procurement')
-        ? 'procurement'
-        : can('view_analytics')
-          ? 'bi_analyst'
-          : can('view_finance')
-            ? 'finance'
-            : can('reserve_allocate')
-              ? 'operations'
-              : 'business_unit';
-  const dashboardRole = source === 'memory' ? normalizeWarehouseRole(role) : liveDashboardRole;
+  const liveDashboardRole: Role =
+    can("manage_operation_routes") || can("resolve_exceptions")
+      ? "logistics_supervisor"
+      : can("set_pricing") || can("view_pricing")
+        ? "pricing"
+        : can("view_procurement")
+          ? "procurement"
+          : can("view_analytics")
+            ? "bi_analyst"
+            : can("view_finance")
+              ? "finance"
+              : can("reserve_allocate")
+                ? "operations"
+                : "business_unit";
+  const dashboardRole =
+    source === "memory" ? normalizeWarehouseRole(role) : liveDashboardRole;
   const rolePresentation = { label: roleLabel };
   const state = toStockState(data);
   const showWindow = WINDOWED_ROLES.includes(dashboardRole);
 
-  const canExport = can('view_analytics') || can('view_finance');
+  const canExport = can("view_analytics") || can("view_finance");
   const exportCsv = async (kind: WarehouseExportKind, content: string) => {
     setExporting(kind);
     try {
-      const prepared = await prepareWarehouseExport({ source, kind, demoContent: content });
-      if (prepared.downloadUrl) downloadUrl(prepared.filename, prepared.downloadUrl);
-      else downloadText(prepared.filename, prepared.demoContent ?? '');
+      const prepared = await prepareWarehouseExport({
+        source,
+        kind,
+        demoContent: content,
+      });
+      if (prepared.downloadUrl)
+        downloadUrl(prepared.filename, prepared.downloadUrl);
+      else downloadText(prepared.filename, prepared.demoContent ?? "");
       toast.success(
-        source === 'memory'
+        source === "memory"
           ? `Downloaded demo export ${prepared.filename}`
           : `Recorded and downloaded ${prepared.filename}`,
       );
       setExportOpen(false);
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : 'Export failed.');
+      toast.error(cause instanceof Error ? cause.message : "Export failed.");
     } finally {
       setExporting(null);
     }
   };
 
   const mv: Movement[] =
-    window === 'all' || !showWindow
+    window === "all" || !showWindow
       ? data.movements
       : data.movements.filter(
           (m) =>
@@ -410,8 +453,8 @@ export function DashboardPage() {
   // --- shared metrics ---
   const low = lowStockProducts(state);
   const value = inventoryValuation(state);
-  const devicesValue = inventoryValuation(state, 'device');
-  const merchValue = inventoryValuation(state, 'merchandise');
+  const devicesValue = inventoryValuation(state, "device");
+  const merchValue = inventoryValuation(state, "merchandise");
   const util = deviceUtilization(mv, data.products);
   const totalIssued = util.reduce((s, u) => s + u.issued, 0);
   const totalReturned = util.reduce((s, u) => s + u.returned, 0);
@@ -431,16 +474,18 @@ export function DashboardPage() {
         : 0
       : Math.round(((recentHalf - priorHalf) / priorHalf) * 100);
   const valuationSlices = [
-    { label: 'Devices', value: devicesValue, tone: 'brand' as const },
-    { label: 'Merchandise', value: merchValue, tone: 'accent' as const },
+    { label: "Devices", value: devicesValue, tone: "brand" as const },
+    { label: "Merchandise", value: merchValue, tone: "accent" as const },
   ].filter((s) => s.value > 0);
   const consumptionSlices = consumption.map((c, i) => ({
     label: EVENT_TYPE_LABELS[c.eventType] ?? c.eventType,
     value: c.issued,
-    tone: (['accent', 'brand', 'amber', 'emerald', 'rose', 'slate'] as const)[i % 6],
+    tone: (["accent", "brand", "amber", "emerald", "rose", "slate"] as const)[
+      i % 6
+    ],
   }));
 
-  const reserved = data.allocations.filter((a) => a.status === 'reserved');
+  const reserved = data.allocations.filter((a) => a.status === "reserved");
   const reservedCount = reserved.length;
   const reconciliation = reconciliationRows(
     data.cycleCounts,
@@ -449,7 +494,7 @@ export function DashboardPage() {
   );
   const assets = serializedAssetRegister(data.units, data.products);
   const promoSpend = data.movements
-    .filter((m) => m.type === 'issue')
+    .filter((m) => m.type === "issue")
     .reduce((sum, m) => {
       const p = data.products.find((x) => x.id === m.productId);
       return p?.promotional ? sum + m.quantity * p.unitCost : sum;
@@ -458,7 +503,7 @@ export function DashboardPage() {
     (p) => availableForProduct(state, p.id) > 0,
   ).length;
   const openPOs = data.purchaseOrders.filter(
-    (po) => po.status !== 'received' && po.status !== 'cancelled',
+    (po) => po.status !== "received" && po.status !== "cancelled",
   );
   const recent = data.movements
     .slice()
@@ -472,12 +517,24 @@ export function DashboardPage() {
         data.lots.some((l) => l.productId === p.id && l.supplierId === s.id),
       );
       const rate = consumptionRatePerDay(data.movements, p.id, 90);
-      const lead = supplier?.leadTimeDays ?? data.suppliers[0]?.leadTimeDays ?? 14;
-      const { atRisk } = projectedStockout({ available, ratePerDay: rate, leadTimeDays: lead });
-      return { product: p, available, deficit: Math.max(0, p.reorderPoint - available), atRisk };
+      const lead =
+        supplier?.leadTimeDays ?? data.suppliers[0]?.leadTimeDays ?? 14;
+      const { atRisk } = projectedStockout({
+        available,
+        ratePerDay: rate,
+        leadTimeDays: lead,
+      });
+      return {
+        product: p,
+        available,
+        deficit: Math.max(0, p.reorderPoint - available),
+        atRisk,
+      };
     })
     .filter((r) => r.deficit > 0 || r.atRisk)
-    .sort((a, b) => Number(b.atRisk) - Number(a.atRisk) || b.deficit - a.deficit);
+    .sort(
+      (a, b) => Number(b.atRisk) - Number(a.atRisk) || b.deficit - a.deficit,
+    );
   const stockoutRisk = reorderRows.filter((r) => r.atRisk).length;
   const avgLead = Math.round(
     data.suppliers.reduce((s, x) => s + x.leadTimeDays, 0) /
@@ -500,133 +557,480 @@ export function DashboardPage() {
   const turnovers = priceRows.filter((r) => r.turnover > 0);
   const avgTurnover =
     Math.round(
-      (turnovers.reduce((s, r) => s + r.turnover, 0) / Math.max(1, turnovers.length)) * 100,
+      (turnovers.reduce((s, r) => s + r.turnover, 0) /
+        Math.max(1, turnovers.length)) *
+        100,
     ) / 100;
   const multiSupplier = data.products.filter(
     (p) => data.lots.filter((l) => l.productId === p.id).length > 1,
   ).length;
 
-  const productName = (id: string) => data.products.find((p) => p.id === id)?.name ?? id;
+  const productName = (id: string) =>
+    data.products.find((p) => p.id === id)?.name ?? id;
   const eventName = (id?: string) =>
-    id ? (data.events.find((e) => e.id === id)?.name ?? id) : '—';
+    id ? (data.events.find((e) => e.id === id)?.name ?? id) : "—";
 
   // --- per-role hero ---
   // One KPI surface (WH-8): the StatCards below are THE numbers; the hero
   // carries a live one-line status (WH-9) + the role's primary verb (WH-10)
   // + the "Issued (10d)" sparkline, which is not duplicated by any StatCard.
   const HERO_STATUS: Record<Role, string> = {
-    logistics_supervisor: `${low.length} SKU${low.length === 1 ? '' : 's'} need reorder · ${reconciliation.length} variance${reconciliation.length === 1 ? '' : 's'} open`,
-    warehouse_supervisor: `${low.length} SKU${low.length === 1 ? '' : 's'} need reorder · ${reconciliation.length} variance${reconciliation.length === 1 ? '' : 's'} open`,
-    operations: `${reservedCount} reservation${reservedCount === 1 ? '' : 's'} pending · ${data.events.length} event${data.events.length === 1 ? '' : 's'}`,
-    warehouse_operator: `${reservedCount} reservation${reservedCount === 1 ? '' : 's'} pending · ${data.events.length} event${data.events.length === 1 ? '' : 's'}`,
-    finance: `${compactMoney(value)} on hand · ${reconciliation.length} variance${reconciliation.length === 1 ? '' : 's'} open`,
+    logistics_supervisor: `${low.length} SKU${low.length === 1 ? "" : "s"} need reorder · ${reconciliation.length} variance${reconciliation.length === 1 ? "" : "s"} open`,
+    warehouse_supervisor: `${low.length} SKU${low.length === 1 ? "" : "s"} need reorder · ${reconciliation.length} variance${reconciliation.length === 1 ? "" : "s"} open`,
+    operations: `${reservedCount} reservation${reservedCount === 1 ? "" : "s"} pending · ${data.events.length} event${data.events.length === 1 ? "" : "s"}`,
+    warehouse_operator: `${reservedCount} reservation${reservedCount === 1 ? "" : "s"} pending · ${data.events.length} event${data.events.length === 1 ? "" : "s"}`,
+    finance: `${compactMoney(value)} on hand · ${reconciliation.length} variance${reconciliation.length === 1 ? "" : "s"} open`,
     bi_analyst: `${data.products.length} active SKUs · ${totalIssued} units issued`,
-    business_unit: `${inStockSkus} SKUs in stock · ${reservedCount} reservation${reservedCount === 1 ? '' : 's'} pending`,
-    marketing: `${compactMoney(promoSpend)} promo spend · ${data.events.length} event${data.events.length === 1 ? '' : 's'}`,
-    procurement: `${reorderRows.length} SKU${reorderRows.length === 1 ? '' : 's'} to reorder · ${openPOs.length} open PO${openPOs.length === 1 ? '' : 's'}`,
+    business_unit: `${inStockSkus} SKUs in stock · ${reservedCount} reservation${reservedCount === 1 ? "" : "s"} pending`,
+    marketing: `${compactMoney(promoSpend)} promo spend · ${data.events.length} event${data.events.length === 1 ? "" : "s"}`,
+    procurement: `${reorderRows.length} SKU${reorderRows.length === 1 ? "" : "s"} to reorder · ${openPOs.length} open PO${openPOs.length === 1 ? "" : "s"}`,
     pricing: `${compactMoney(totalLanded)} at landed cost · ${multiSupplier} multi-supplier SKUs`,
-    warehouse_admin: `${low.length} SKU${low.length === 1 ? '' : 's'} need reorder · ${reconciliation.length} variance${reconciliation.length === 1 ? '' : 's'} open`,
+    warehouse_admin: `${low.length} SKU${low.length === 1 ? "" : "s"} need reorder · ${reconciliation.length} variance${reconciliation.length === 1 ? "" : "s"} open`,
   };
 
-  const HERO_CTA: Record<Role, { label: string; icon: IconName; to: string }> = {
-    logistics_supervisor: { label: 'Receive stock', icon: 'truck', to: '/receiving' },
-    warehouse_supervisor: { label: 'Receive stock', icon: 'truck', to: '/receiving' },
-    operations: { label: 'Allocations', icon: 'tag', to: '/allocations' },
-    warehouse_operator: { label: 'Receive and inspect', icon: 'truck', to: '/purchase-orders' },
-    finance: { label: 'Finance workspace', icon: 'coins', to: '/finance' },
-    bi_analyst: { label: 'Data & reports', icon: 'history', to: '/data' },
-    business_unit: { label: 'Browse inventory', icon: 'box', to: '/inventory' },
-    marketing: { label: 'Events', icon: 'calendar', to: '/events' },
-    procurement: { label: 'Reorders & POs', icon: 'cart', to: '/procurement' },
-    pricing: { label: 'Pricing workspace', icon: 'trend', to: '/pricing' },
-    warehouse_admin: { label: 'Receive stock', icon: 'truck', to: '/receiving' },
-  };
+  const HERO_CTA: Record<Role, { label: string; icon: IconName; to: string }> =
+    {
+      logistics_supervisor: {
+        label: "Receive stock",
+        icon: "truck",
+        to: "/receiving",
+      },
+      warehouse_supervisor: {
+        label: "Receive stock",
+        icon: "truck",
+        to: "/receiving",
+      },
+      operations: { label: "New demand", icon: "list", to: "/fulfillment" },
+      warehouse_operator: {
+        label: "Receive and inspect",
+        icon: "truck",
+        to: "/purchase-orders",
+      },
+      finance: { label: "Finance workspace", icon: "coins", to: "/finance" },
+      bi_analyst: { label: "Data & reports", icon: "history", to: "/data" },
+      business_unit: {
+        label: "Request stock",
+        icon: "list",
+        to: "/fulfillment",
+      },
+      marketing: {
+        label: "Request campaign stock",
+        icon: "list",
+        to: "/fulfillment",
+      },
+      procurement: {
+        label: "Reorders & POs",
+        icon: "cart",
+        to: "/procurement",
+      },
+      pricing: { label: "Pricing workspace", icon: "trend", to: "/pricing" },
+      warehouse_admin: {
+        label: "Receive stock",
+        icon: "truck",
+        to: "/receiving",
+      },
+    };
 
   const KPIS: Record<Role, Kpi[]> = {
     logistics_supervisor: [
-      { label: 'Low-stock items', value: low.length, icon: 'alert', tone: low.length ? 'amber' : 'emerald', to: '/inventory?filter=low', hint: 'At or below reorder point' },
-      { label: 'Serialized in field', value: assets.length, icon: 'tag', tone: 'brand', to: '/inventory?filter=device', hint: 'Serialized devices issued' },
-      { label: 'Open variances', value: reconciliation.length, icon: 'clipboard', tone: reconciliation.length ? 'rose' : 'emerald', to: '/cycle-counts?filter=variances', hint: 'Variance from last count' },
-      { label: 'Active SKUs', value: data.products.length, icon: 'box', to: '/inventory', hint: 'Products in the catalog' },
+      {
+        label: "Low-stock items",
+        value: low.length,
+        icon: "alert",
+        tone: low.length ? "amber" : "emerald",
+        to: "/inventory?filter=low",
+        hint: "At or below reorder point",
+      },
+      {
+        label: "Serialized in field",
+        value: assets.length,
+        icon: "tag",
+        tone: "brand",
+        to: "/inventory?filter=device",
+        hint: "Serialized devices issued",
+      },
+      {
+        label: "Open variances",
+        value: reconciliation.length,
+        icon: "clipboard",
+        tone: reconciliation.length ? "rose" : "emerald",
+        to: "/cycle-counts?filter=variances",
+        hint: "Variance from last count",
+      },
+      {
+        label: "Active SKUs",
+        value: data.products.length,
+        icon: "box",
+        to: "/inventory",
+        hint: "Products in the catalog",
+      },
     ],
     warehouse_supervisor: [
-      { label: 'Low-stock items', value: low.length, icon: 'alert', tone: low.length ? 'amber' : 'emerald', to: '/inventory?filter=low', hint: 'At or below reorder point' },
-      { label: 'Serialized in field', value: assets.length, icon: 'tag', tone: 'brand', to: '/inventory?filter=device', hint: 'Serialized devices issued' },
-      { label: 'Open variances', value: reconciliation.length, icon: 'clipboard', tone: reconciliation.length ? 'rose' : 'emerald', to: '/cycle-counts?filter=variances', hint: 'Variance from last count' },
-      { label: 'Active SKUs', value: data.products.length, icon: 'box', to: '/inventory', hint: 'Products in the catalog' },
+      {
+        label: "Low-stock items",
+        value: low.length,
+        icon: "alert",
+        tone: low.length ? "amber" : "emerald",
+        to: "/inventory?filter=low",
+        hint: "At or below reorder point",
+      },
+      {
+        label: "Serialized in field",
+        value: assets.length,
+        icon: "tag",
+        tone: "brand",
+        to: "/inventory?filter=device",
+        hint: "Serialized devices issued",
+      },
+      {
+        label: "Open variances",
+        value: reconciliation.length,
+        icon: "clipboard",
+        tone: reconciliation.length ? "rose" : "emerald",
+        to: "/cycle-counts?filter=variances",
+        hint: "Variance from last count",
+      },
+      {
+        label: "Active SKUs",
+        value: data.products.length,
+        icon: "box",
+        to: "/inventory",
+        hint: "Products in the catalog",
+      },
     ],
     operations: [
-      { label: 'Pending reservations', value: reservedCount, icon: 'tag', tone: 'amber', to: '/allocations', hint: 'Reserved, awaiting issue' },
-      { label: 'Events', value: data.events.length, icon: 'calendar', tone: 'brand', to: '/events', hint: 'Activations & campaigns' },
-      { label: 'Units issued', value: totalIssued, icon: 'truck', tone: 'accent', to: '/allocations', hint: 'Issued to events' },
-      { label: 'Device return rate', value: `${returnRate(totalIssued, totalReturned)}%`, icon: 'trend', to: '/returns', hint: 'Returned vs issued' },
+      {
+        label: "Pending reservations",
+        value: reservedCount,
+        icon: "tag",
+        tone: "amber",
+        to: "/allocations",
+        hint: "Reserved, awaiting issue",
+      },
+      {
+        label: "Events",
+        value: data.events.length,
+        icon: "calendar",
+        tone: "brand",
+        to: "/events",
+        hint: "Activations & campaigns",
+      },
+      {
+        label: "Units issued",
+        value: totalIssued,
+        icon: "truck",
+        tone: "accent",
+        to: "/allocations",
+        hint: "Issued to events",
+      },
+      {
+        label: "Device return rate",
+        value: `${returnRate(totalIssued, totalReturned)}%`,
+        icon: "trend",
+        to: "/returns",
+        hint: "Returned vs issued",
+      },
     ],
     warehouse_operator: [
-      { label: 'Pending reservations', value: reservedCount, icon: 'tag', tone: 'amber', to: '/allocations', hint: 'Reserved, awaiting issue' },
-      { label: 'Events', value: data.events.length, icon: 'calendar', tone: 'brand', to: '/events', hint: 'Activations & campaigns' },
-      { label: 'Units issued', value: totalIssued, icon: 'truck', tone: 'accent', to: '/allocations', hint: 'Issued to events' },
-      { label: 'Device return rate', value: `${returnRate(totalIssued, totalReturned)}%`, icon: 'trend', to: '/returns', hint: 'Returned vs issued' },
+      {
+        label: "Pending reservations",
+        value: reservedCount,
+        icon: "tag",
+        tone: "amber",
+        to: "/allocations",
+        hint: "Reserved, awaiting issue",
+      },
+      {
+        label: "Events",
+        value: data.events.length,
+        icon: "calendar",
+        tone: "brand",
+        to: "/events",
+        hint: "Activations & campaigns",
+      },
+      {
+        label: "Units issued",
+        value: totalIssued,
+        icon: "truck",
+        tone: "accent",
+        to: "/allocations",
+        hint: "Issued to events",
+      },
+      {
+        label: "Device return rate",
+        value: `${returnRate(totalIssued, totalReturned)}%`,
+        icon: "trend",
+        to: "/returns",
+        hint: "Returned vs issued",
+      },
     ],
     finance: [
-      { label: 'Inventory Value', value: compactMoney(value), icon: 'coins', tone: 'emerald', to: '/finance', hint: 'Valuation at cost' },
-      { label: 'Promo give-aways', value: compactMoney(promoSpend), icon: 'trend', tone: 'amber', to: '/finance', hint: 'Promotional issuance cost' },
-      { label: 'Open variances', value: reconciliation.length, icon: 'clipboard', tone: reconciliation.length ? 'rose' : 'emerald', to: '/finance', hint: 'Reconciliation needed' },
-      { label: 'Assets in field', value: assets.length, icon: 'tag', tone: 'brand', to: '/finance', hint: 'Serialized devices issued' },
+      {
+        label: "Inventory Value",
+        value: compactMoney(value),
+        icon: "coins",
+        tone: "emerald",
+        to: "/finance",
+        hint: "Valuation at cost",
+      },
+      {
+        label: "Promo give-aways",
+        value: compactMoney(promoSpend),
+        icon: "trend",
+        tone: "amber",
+        to: "/finance",
+        hint: "Promotional issuance cost",
+      },
+      {
+        label: "Open variances",
+        value: reconciliation.length,
+        icon: "clipboard",
+        tone: reconciliation.length ? "rose" : "emerald",
+        to: "/finance",
+        hint: "Reconciliation needed",
+      },
+      {
+        label: "Assets in field",
+        value: assets.length,
+        icon: "tag",
+        tone: "brand",
+        to: "/finance",
+        hint: "Serialized devices issued",
+      },
     ],
     bi_analyst: [
-      { label: 'Active SKUs', value: data.products.length, icon: 'box', to: '/inventory', hint: 'Products in the catalog' },
-      { label: 'Inventory Value', value: compactMoney(value), icon: 'coins', tone: 'emerald', to: '/data', hint: 'Valuation at cost' },
-      { label: 'Device return rate', value: `${returnRate(totalIssued, totalReturned)}%`, icon: 'trend', tone: 'accent', to: '/data', hint: 'Returned vs issued' },
-      { label: 'Units issued', value: totalIssued, icon: 'truck', tone: 'brand', to: '/data', hint: 'Total issued' },
+      {
+        label: "Active SKUs",
+        value: data.products.length,
+        icon: "box",
+        to: "/inventory",
+        hint: "Products in the catalog",
+      },
+      {
+        label: "Inventory Value",
+        value: compactMoney(value),
+        icon: "coins",
+        tone: "emerald",
+        to: "/data",
+        hint: "Valuation at cost",
+      },
+      {
+        label: "Device return rate",
+        value: `${returnRate(totalIssued, totalReturned)}%`,
+        icon: "trend",
+        tone: "accent",
+        to: "/data",
+        hint: "Returned vs issued",
+      },
+      {
+        label: "Units issued",
+        value: totalIssued,
+        icon: "truck",
+        tone: "brand",
+        to: "/data",
+        hint: "Total issued",
+      },
     ],
     business_unit: [
-      { label: 'Available SKUs', value: inStockSkus, icon: 'box', tone: 'emerald', to: '/inventory', hint: 'With stock on hand' },
-      { label: 'Pending reservations', value: reservedCount, icon: 'tag', tone: 'amber', to: '/allocations', hint: 'Reserved, awaiting issue' },
-      { label: 'Low-stock items', value: low.length, icon: 'alert', tone: low.length ? 'amber' : 'emerald', to: '/inventory?filter=low', hint: 'At or below reorder point' },
-      { label: 'Events', value: data.events.length, icon: 'calendar', tone: 'brand', to: '/events', hint: 'Activations & campaigns' },
+      {
+        label: "Available SKUs",
+        value: inStockSkus,
+        icon: "box",
+        tone: "emerald",
+        to: "/inventory",
+        hint: "With stock on hand",
+      },
+      {
+        label: "Pending reservations",
+        value: reservedCount,
+        icon: "tag",
+        tone: "amber",
+        to: "/allocations",
+        hint: "Reserved, awaiting issue",
+      },
+      {
+        label: "Low-stock items",
+        value: low.length,
+        icon: "alert",
+        tone: low.length ? "amber" : "emerald",
+        to: "/inventory?filter=low",
+        hint: "At or below reorder point",
+      },
+      {
+        label: "Events",
+        value: data.events.length,
+        icon: "calendar",
+        tone: "brand",
+        to: "/events",
+        hint: "Activations & campaigns",
+      },
     ],
     marketing: [
-      { label: 'Events', value: data.events.length, icon: 'calendar', tone: 'brand', to: '/events', hint: 'Activations & campaigns' },
-      { label: 'Promo give-aways', value: compactMoney(promoSpend), icon: 'trend', tone: 'amber', to: '/allocations', hint: 'Promotional issuance' },
-      { label: 'Units issued', value: totalIssued, icon: 'truck', tone: 'accent', to: '/allocations', hint: 'Issued to events' },
-      { label: 'Device return rate', value: `${returnRate(totalIssued, totalReturned)}%`, icon: 'rotate', to: '/returns', hint: 'Returned vs issued' },
+      {
+        label: "Events",
+        value: data.events.length,
+        icon: "calendar",
+        tone: "brand",
+        to: "/events",
+        hint: "Activations & campaigns",
+      },
+      {
+        label: "Promo give-aways",
+        value: compactMoney(promoSpend),
+        icon: "trend",
+        tone: "amber",
+        to: "/allocations",
+        hint: "Promotional issuance",
+      },
+      {
+        label: "Units issued",
+        value: totalIssued,
+        icon: "truck",
+        tone: "accent",
+        to: "/allocations",
+        hint: "Issued to events",
+      },
+      {
+        label: "Device return rate",
+        value: `${returnRate(totalIssued, totalReturned)}%`,
+        icon: "rotate",
+        to: "/returns",
+        hint: "Returned vs issued",
+      },
     ],
     procurement: [
-      { label: 'SKUs to reorder', value: low.length, icon: 'cart', tone: 'amber', to: '/procurement', hint: 'Below reorder point' },
-      { label: 'Stockout risk', value: stockoutRisk, icon: 'alert', tone: stockoutRisk ? 'rose' : 'emerald', to: '/procurement', hint: 'Projected to run out' },
-      { label: 'Open POs', value: openPOs.length, icon: 'list', tone: 'brand', to: '/purchase-orders', hint: 'In progress' },
-      { label: 'Avg lead time', value: `${avgLead}d`, icon: 'calendar', tone: 'accent', to: '/suppliers', hint: 'Across suppliers' },
+      {
+        label: "SKUs to reorder",
+        value: low.length,
+        icon: "cart",
+        tone: "amber",
+        to: "/procurement",
+        hint: "Below reorder point",
+      },
+      {
+        label: "Stockout risk",
+        value: stockoutRisk,
+        icon: "alert",
+        tone: stockoutRisk ? "rose" : "emerald",
+        to: "/procurement",
+        hint: "Projected to run out",
+      },
+      {
+        label: "Open POs",
+        value: openPOs.length,
+        icon: "list",
+        tone: "brand",
+        to: "/purchase-orders",
+        hint: "In progress",
+      },
+      {
+        label: "Avg lead time",
+        value: `${avgLead}d`,
+        icon: "calendar",
+        tone: "accent",
+        to: "/suppliers",
+        hint: "Across suppliers",
+      },
     ],
     pricing: [
-      { label: 'Landed value', value: compactMoney(totalLanded), icon: 'coins', tone: 'emerald', to: '/pricing', hint: 'Inventory at landed cost' },
-      { label: 'Avg turnover', value: `${avgTurnover}×`, icon: 'trend', tone: 'accent', to: '/pricing', hint: 'Inventory turns (90d)' },
-      { label: 'Multi-supplier SKUs', value: multiSupplier, icon: 'building', tone: 'amber', to: '/pricing', hint: 'Sourced from 2+ suppliers' },
-      { label: 'Promo spend', value: compactMoney(promoSpend), icon: 'tag', tone: 'brand', to: '/pricing', hint: 'Promotional cost' },
+      {
+        label: "Landed value",
+        value: compactMoney(totalLanded),
+        icon: "coins",
+        tone: "emerald",
+        to: "/pricing",
+        hint: "Inventory at landed cost",
+      },
+      {
+        label: "Avg turnover",
+        value: `${avgTurnover}×`,
+        icon: "trend",
+        tone: "accent",
+        to: "/pricing",
+        hint: "Inventory turns (90d)",
+      },
+      {
+        label: "Multi-supplier SKUs",
+        value: multiSupplier,
+        icon: "building",
+        tone: "amber",
+        to: "/pricing",
+        hint: "Sourced from 2+ suppliers",
+      },
+      {
+        label: "Promo spend",
+        value: compactMoney(promoSpend),
+        icon: "tag",
+        tone: "brand",
+        to: "/pricing",
+        hint: "Promotional cost",
+      },
     ],
     warehouse_admin: [
-      { label: 'Low-stock items', value: low.length, icon: 'alert', tone: low.length ? 'amber' : 'emerald', to: '/inventory?filter=low', hint: 'At or below reorder point' },
-      { label: 'Serialized in field', value: assets.length, icon: 'tag', tone: 'brand', to: '/inventory?filter=device', hint: 'Serialized devices issued' },
-      { label: 'Open variances', value: reconciliation.length, icon: 'clipboard', tone: reconciliation.length ? 'rose' : 'emerald', to: '/cycle-counts?filter=variances', hint: 'Variance from last count' },
-      { label: 'Active SKUs', value: data.products.length, icon: 'box', to: '/inventory', hint: 'Products in the catalog' },
+      {
+        label: "Low-stock items",
+        value: low.length,
+        icon: "alert",
+        tone: low.length ? "amber" : "emerald",
+        to: "/inventory?filter=low",
+        hint: "At or below reorder point",
+      },
+      {
+        label: "Serialized in field",
+        value: assets.length,
+        icon: "tag",
+        tone: "brand",
+        to: "/inventory?filter=device",
+        hint: "Serialized devices issued",
+      },
+      {
+        label: "Open variances",
+        value: reconciliation.length,
+        icon: "clipboard",
+        tone: reconciliation.length ? "rose" : "emerald",
+        to: "/cycle-counts?filter=variances",
+        hint: "Variance from last count",
+      },
+      {
+        label: "Active SKUs",
+        value: data.products.length,
+        icon: "box",
+        to: "/inventory",
+        hint: "Products in the catalog",
+      },
     ],
   };
 
   const utilColumns: Column<DeviceUtilizationRow>[] = [
-    { key: 'name', header: 'Device', primary: true, render: (r) => r.name },
-    { key: 'issued', header: 'Issued', align: 'right', render: (r) => r.issued },
-    { key: 'returned', header: 'Ret.', align: 'right', render: (r) => r.returned },
-    { key: 'out', header: 'Out', align: 'right', render: (r) => r.outstanding },
+    { key: "name", header: "Device", primary: true, render: (r) => r.name },
     {
-      key: 'rate',
-      header: 'Rate',
-      align: 'right',
+      key: "issued",
+      header: "Issued",
+      align: "right",
+      render: (r) => r.issued,
+    },
+    {
+      key: "returned",
+      header: "Ret.",
+      align: "right",
+      render: (r) => r.returned,
+    },
+    { key: "out", header: "Out", align: "right", render: (r) => r.outstanding },
+    {
+      key: "rate",
+      header: "Rate",
+      align: "right",
       render: (r) => (
-        <Badge tone={r.returnRate > 30 ? 'amber' : 'emerald'}>{r.returnRate}%</Badge>
+        <Badge tone={r.returnRate > 30 ? "amber" : "emerald"}>
+          {r.returnRate}%
+        </Badge>
       ),
     },
   ];
 
-  const upcomingEvents = data.events.slice().sort((a, b) => a.startDate.localeCompare(b.startDate));
+  const upcomingEvents = data.events
+    .slice()
+    .sort((a, b) => a.startDate.localeCompare(b.startDate));
 
   const PANELS: Record<PanelId, ReactNode> = {
     lowStock: (
@@ -634,10 +1038,18 @@ export function DashboardPage() {
         <SectionTitle
           title="Low-stock alerts"
           subtitle="At or below reorder point"
-          action={low.length > 0 ? <Badge tone="amber">{low.length}</Badge> : undefined}
+          action={
+            low.length > 0 ? (
+              <Badge tone="amber">{low.length}</Badge>
+            ) : undefined
+          }
         />
         {low.length === 0 ? (
-          <EmptyState icon="check" title="All stocked up" message="No SKUs below reorder threshold." />
+          <EmptyState
+            icon="check"
+            title="All stocked up"
+            message="No SKUs below reorder threshold."
+          />
         ) : (
           <ul className="divide-y divide-line">
             {low.slice(0, 6).map(({ product, available }) => (
@@ -648,10 +1060,16 @@ export function DashboardPage() {
                   className="flex w-full items-center justify-between gap-3 py-2.5 text-left transition hover:opacity-80"
                 >
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-ink">{product.name}</p>
-                    <p className="font-mono text-xs text-faint">{product.sku}</p>
+                    <p className="truncate text-sm font-medium text-ink">
+                      {product.name}
+                    </p>
+                    <p className="font-mono text-xs text-faint">
+                      {product.sku}
+                    </p>
                   </div>
-                  <Badge tone={available === 0 ? 'rose' : 'amber'}>{available} left</Badge>
+                  <Badge tone={available === 0 ? "rose" : "amber"}>
+                    {available} left
+                  </Badge>
                 </button>
               </li>
             ))}
@@ -677,17 +1095,19 @@ export function DashboardPage() {
         ) : (
           <ul className="divide-y divide-line">
             {reconciliation.slice(0, 6).map((r) => (
-              <li key={`${r.productId}|${r.locationId}|${r.binId ?? ''}`}>
+              <li key={`${r.productId}|${r.locationId}|${r.binId ?? ""}`}>
                 <button
                   type="button"
-                  onClick={() => navigate('/cycle-counts?filter=variances')}
+                  onClick={() => navigate("/cycle-counts?filter=variances")}
                   className="flex w-full items-center justify-between gap-3 py-2.5 text-left transition hover:opacity-80"
                 >
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-ink">{r.name}</p>
+                    <p className="truncate text-sm font-medium text-ink">
+                      {r.name}
+                    </p>
                     <p className="font-mono text-xs text-faint">{r.sku}</p>
                   </div>
-                  <Badge tone={r.variance < 0 ? 'rose' : 'amber'}>
+                  <Badge tone={r.variance < 0 ? "rose" : "amber"}>
                     {r.variance > 0 ? `+${r.variance}` : r.variance}
                   </Badge>
                 </button>
@@ -699,21 +1119,29 @@ export function DashboardPage() {
     ),
     recentActivity: (
       <Card key="recentActivity">
-        <SectionTitle title="Recent activity" subtitle="Latest stock movements" />
+        <SectionTitle
+          title="Recent activity"
+          subtitle="Latest stock movements"
+        />
         {recent.length === 0 ? (
           <EmptyState icon="history" title="No activity yet" />
         ) : (
           <ul className="divide-y divide-line">
             {recent.map((m) => (
-              <li key={m.id} className="flex items-center justify-between gap-3 py-2.5">
+              <li
+                key={m.id}
+                className="flex items-center justify-between gap-3 py-2.5"
+              >
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-ink">
                     <span className="font-semibold text-brand-700 dark:text-brand-300">
                       {movementTypeLabel(m.type)}
-                    </span>{' '}
+                    </span>{" "}
                     {productName(m.productId)}
                   </p>
-                  <p className="text-xs text-faint">{formatWhen(m.createdAt)}</p>
+                  <p className="text-xs text-faint">
+                    {formatWhen(m.createdAt)}
+                  </p>
                 </div>
                 <span className="tnum text-sm font-semibold text-ink">
                   {signedQuantity(m.type, m.quantity)}
@@ -729,16 +1157,25 @@ export function DashboardPage() {
         <SectionTitle
           title="Pending reservations"
           subtitle="Awaiting issue"
-          action={reservedCount > 0 ? <Badge tone="amber">{reservedCount}</Badge> : undefined}
+          action={
+            reservedCount > 0 ? (
+              <Badge tone="amber">{reservedCount}</Badge>
+            ) : undefined
+          }
         />
         {reserved.length === 0 ? (
           <EmptyState icon="tag" title="No pending reservations" />
         ) : (
           <ul className="divide-y divide-line">
             {reserved.slice(0, 6).map((a) => (
-              <li key={a.id} className="flex items-center justify-between gap-3 py-2.5">
+              <li
+                key={a.id}
+                className="flex items-center justify-between gap-3 py-2.5"
+              >
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-ink">{productName(a.productId)}</p>
+                  <p className="truncate text-sm font-medium text-ink">
+                    {productName(a.productId)}
+                  </p>
                   <p className="text-xs text-faint">{eventName(a.eventId)}</p>
                 </div>
                 <Badge tone="amber">{a.quantity}</Badge>
@@ -765,8 +1202,12 @@ export function DashboardPage() {
                     className="flex w-full items-center justify-between gap-3 py-2.5 text-left transition hover:opacity-80"
                   >
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-ink">{ev.name}</p>
-                      <p className="text-xs text-faint">{EVENT_TYPE_LABELS[ev.type] ?? ev.type}</p>
+                      <p className="truncate text-sm font-medium text-ink">
+                        {ev.name}
+                      </p>
+                      <p className="text-xs text-faint">
+                        {EVENT_TYPE_LABELS[ev.type] ?? ev.type}
+                      </p>
                     </div>
                     <span className="tnum text-sm font-semibold text-ink">
                       {money(c.consumedValue)}
@@ -781,13 +1222,20 @@ export function DashboardPage() {
     ),
     consumption: (
       <Card key="consumption">
-        <SectionTitle title="Consumption by event type" subtitle="Issued units per engagement" />
+        <SectionTitle
+          title="Consumption by event type"
+          subtitle="Issued units per engagement"
+        />
         {consumption.length === 0 ? (
           <EmptyState icon="calendar" title="No events recorded" />
         ) : (
           <div className="flex items-center gap-4">
             {consumptionSlices.length > 0 && (
-              <DonutChart slices={consumptionSlices} size={96} className="shrink-0" />
+              <DonutChart
+                slices={consumptionSlices}
+                size={96}
+                className="shrink-0"
+              />
             )}
             <div className="min-w-0 flex-1 space-y-3">
               {consumption.map((c) => (
@@ -813,7 +1261,13 @@ export function DashboardPage() {
         ) : (
           <div className="space-y-3">
             {fast.map((f) => (
-              <BarRow key={f.productId} label={f.name} value={f.issued} max={maxFast} suffix=" pcs" />
+              <BarRow
+                key={f.productId}
+                label={f.name}
+                value={f.issued}
+                max={maxFast}
+                suffix=" pcs"
+              />
             ))}
           </div>
         )}
@@ -821,7 +1275,10 @@ export function DashboardPage() {
     ),
     utilization: (
       <Card key="utilization">
-        <SectionTitle title="Device utilization" subtitle="Issued vs returned" />
+        <SectionTitle
+          title="Device utilization"
+          subtitle="Issued vs returned"
+        />
         {util.length === 0 ? (
           <EmptyState icon="trend" title="No device activity" />
         ) : (
@@ -837,10 +1294,17 @@ export function DashboardPage() {
     ),
     valuation: (
       <Card key="valuation">
-        <SectionTitle title="Valuation by category" subtitle="Devices vs merchandise" />
+        <SectionTitle
+          title="Valuation by category"
+          subtitle="Devices vs merchandise"
+        />
         <div className="flex items-center gap-4">
           {valuationSlices.length > 0 && (
-            <DonutChart slices={valuationSlices} size={96} className="shrink-0" />
+            <DonutChart
+              slices={valuationSlices}
+              size={96}
+              className="shrink-0"
+            />
           )}
           <div className="min-w-0 flex-1 space-y-3">
             <BarRow
@@ -882,10 +1346,16 @@ export function DashboardPage() {
                   className="flex w-full items-center justify-between gap-3 py-2.5 text-left transition hover:opacity-80"
                 >
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-ink">{a.productName}</p>
-                    <p className="font-mono text-xs text-faint">{a.serialNumber}</p>
+                    <p className="truncate text-sm font-medium text-ink">
+                      {a.productName}
+                    </p>
+                    <p className="font-mono text-xs text-faint">
+                      {a.serialNumber}
+                    </p>
                   </div>
-                  <span className="text-sm text-ink">{a.assignedTo ?? 'Unassigned'}</span>
+                  <span className="text-sm text-ink">
+                    {a.assignedTo ?? "Unassigned"}
+                  </span>
                 </button>
               </li>
             ))}
@@ -899,7 +1369,11 @@ export function DashboardPage() {
           title="Reorder worklist"
           subtitle="At-risk first"
           action={
-            <button type="button" className="min-h-11 rounded-lg px-2 text-xs font-semibold text-brand-700 dark:text-brand-300" onClick={() => navigate('/procurement')}>
+            <button
+              type="button"
+              className="min-h-11 rounded-lg px-2 text-xs font-semibold text-brand-700 dark:text-brand-300"
+              onClick={() => navigate("/procurement")}
+            >
               View all
             </button>
           }
@@ -916,10 +1390,16 @@ export function DashboardPage() {
                   className="flex w-full items-center justify-between gap-3 py-2.5 text-left transition hover:opacity-80"
                 >
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-ink">{r.product.name}</p>
-                    <p className="font-mono text-xs text-faint">{r.product.sku}</p>
+                    <p className="truncate text-sm font-medium text-ink">
+                      {r.product.name}
+                    </p>
+                    <p className="font-mono text-xs text-faint">
+                      {r.product.sku}
+                    </p>
                   </div>
-                  <Badge tone={r.atRisk ? 'rose' : 'amber'}>{r.available} left</Badge>
+                  <Badge tone={r.atRisk ? "rose" : "amber"}>
+                    {r.available} left
+                  </Badge>
                 </button>
               </li>
             ))}
@@ -933,7 +1413,11 @@ export function DashboardPage() {
           title="Open purchase orders"
           subtitle="In progress"
           action={
-            <button type="button" className="min-h-11 rounded-lg px-2 text-xs font-semibold text-brand-700 dark:text-brand-300" onClick={() => navigate('/purchase-orders')}>
+            <button
+              type="button"
+              className="min-h-11 rounded-lg px-2 text-xs font-semibold text-brand-700 dark:text-brand-300"
+              onClick={() => navigate("/purchase-orders")}
+            >
               View all
             </button>
           }
@@ -946,16 +1430,23 @@ export function DashboardPage() {
               <li key={po.id}>
                 <button
                   type="button"
-                  onClick={() => navigate('/purchase-orders')}
+                  onClick={() => navigate("/purchase-orders")}
                   className="flex w-full items-center justify-between gap-3 py-2.5 text-left transition hover:opacity-80"
                 >
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-ink">
-                      {data.suppliers.find((s) => s.id === po.supplierId)?.name ?? po.supplierId}
+                      {data.suppliers.find((s) => s.id === po.supplierId)
+                        ?.name ?? po.supplierId}
                     </p>
-                    <p className="text-xs text-faint">{po.lines.length} line(s)</p>
+                    <p className="text-xs text-faint">
+                      {po.lines.length} line(s)
+                    </p>
                   </div>
-                  <Badge tone={po.status === 'partially_received' ? 'amber' : 'brand'}>
+                  <Badge
+                    tone={
+                      po.status === "partially_received" ? "amber" : "brand"
+                    }
+                  >
                     {PO_STATUS_LABELS[po.status]}
                   </Badge>
                 </button>
@@ -967,15 +1458,25 @@ export function DashboardPage() {
     ),
     topValue: (
       <Card key="topValue">
-        <SectionTitle title="Top SKUs by value" subtitle="Landed cost × on hand" />
+        <SectionTitle
+          title="Top SKUs by value"
+          subtitle="Landed cost × on hand"
+        />
         <ul className="divide-y divide-line">
           {priceRows.slice(0, 6).map((r) => (
-            <li key={r.product.id} className="flex items-center justify-between gap-3 py-2.5">
+            <li
+              key={r.product.id}
+              className="flex items-center justify-between gap-3 py-2.5"
+            >
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-ink">{r.product.name}</p>
+                <p className="truncate text-sm font-medium text-ink">
+                  {r.product.name}
+                </p>
                 <p className="text-xs text-faint">{r.turnover}× turnover</p>
               </div>
-              <span className="tnum text-sm font-semibold text-ink">{money(r.value)}</span>
+              <span className="tnum text-sm font-semibold text-ink">
+                {money(r.value)}
+              </span>
             </li>
           ))}
         </ul>
@@ -983,15 +1484,16 @@ export function DashboardPage() {
     ),
   };
 
-  const PANEL_ROUTE_REQUIREMENTS: Partial<Record<PanelId, WarehouseRouteId[]>> = {
-    lowStock: ['product-detail'],
-    reconciliation: ['cycle-counts'],
-    events: ['event-detail'],
-    utilization: ['product-detail'],
-    assets: ['product-detail'],
-    reorder: ['procurement', 'product-detail'],
-    openPOs: ['purchase-orders'],
-  };
+  const PANEL_ROUTE_REQUIREMENTS: Partial<Record<PanelId, WarehouseRouteId[]>> =
+    {
+      lowStock: ["product-detail"],
+      reconciliation: ["cycle-counts"],
+      events: ["event-detail"],
+      utilization: ["product-detail"],
+      assets: ["product-detail"],
+      reorder: ["procurement", "product-detail"],
+      openPOs: ["purchase-orders"],
+    };
   const panels = ROLE_PANELS[dashboardRole].filter((panel) =>
     (PANEL_ROUTE_REQUIREMENTS[panel] ?? []).every(canOpenRoute),
   );
@@ -1000,7 +1502,7 @@ export function DashboardPage() {
   const firstName = profile?.name?.split(/\s+/)[0];
   const heroCta = HERO_CTA[dashboardRole];
   const canOpenPath = (path: string) => {
-    if (path === '/finance') return can('view_finance');
+    if (path === "/finance") return can("view_finance");
     const routeId = warehouseRouteIdForPath(path);
     return routeId ? canOpenRoute(routeId) : false;
   };
@@ -1015,20 +1517,22 @@ export function DashboardPage() {
         description={HERO_STATUS[dashboardRole]}
         roleLabel={rolePresentation.label}
         icon={heroCta.icon}
-        action={canOpenHeroCta ? (
-          heroCta.to === '/finance' ? (
-            <HeroChipButton icon={heroCta.icon} href="/finance">
-              {heroCta.label}
-            </HeroChipButton>
-          ) : (
-            <HeroChipButton
-              icon={heroCta.icon}
-              onClick={() => navigate(heroCta.to)}
-            >
-              {heroCta.label}
-            </HeroChipButton>
-          )
-        ) : null}
+        action={
+          canOpenHeroCta ? (
+            heroCta.to === "/finance" ? (
+              <HeroChipButton icon={heroCta.icon} href="/finance">
+                {heroCta.label}
+              </HeroChipButton>
+            ) : (
+              <HeroChipButton
+                icon={heroCta.icon}
+                onClick={() => navigate(heroCta.to)}
+              >
+                {heroCta.label}
+              </HeroChipButton>
+            )
+          ) : null
+        }
       >
         <IssuedMetricDock
           total={recentIssuedTotal}
@@ -1047,8 +1551,8 @@ export function DashboardPage() {
               icon={k.icon}
               tone={k.tone}
               hint={k.hint}
-              {...(k.to === '/finance'
-                ? { href: '/finance' }
+              {...(k.to === "/finance"
+                ? { href: "/finance" }
                 : { onClick: () => navigate(k.to) })}
             />
           </StaggerItem>
@@ -1067,9 +1571,9 @@ export function DashboardPage() {
                 value={window}
                 onChange={setWindow}
                 options={[
-                  { value: '30', label: '30d' },
-                  { value: '90', label: '90d' },
-                  { value: 'all', label: 'All' },
+                  { value: "30", label: "30d" },
+                  { value: "90", label: "90d" },
+                  { value: "all", label: "All" },
                 ]}
               />
             </div>
@@ -1099,19 +1603,47 @@ export function DashboardPage() {
         description="Download CSVs for offline analysis & reconciliation."
       >
         <div className="space-y-2">
-          <button type="button" disabled={exporting !== null} className="btn-outline w-full justify-between" onClick={() => void exportCsv('inventory', inventoryToCsv(state))}>
-            {exporting === 'inventory' ? 'Preparing...' : 'Inventory snapshot'} <Icon name="download" className="h-4 w-4" />
+          <button
+            type="button"
+            disabled={exporting !== null}
+            className="btn-outline w-full justify-between"
+            onClick={() => void exportCsv("inventory", inventoryToCsv(state))}
+          >
+            {exporting === "inventory" ? "Preparing..." : "Inventory snapshot"}{" "}
+            <Icon name="download" className="h-4 w-4" />
           </button>
-          <button type="button" disabled={exporting !== null} className="btn-outline w-full justify-between" onClick={() => void exportCsv('movements', movementsToCsv(data.movements, data.products))}>
-            {exporting === 'movements' ? 'Preparing...' : 'Movement ledger'} <Icon name="download" className="h-4 w-4" />
+          <button
+            type="button"
+            disabled={exporting !== null}
+            className="btn-outline w-full justify-between"
+            onClick={() =>
+              void exportCsv(
+                "movements",
+                movementsToCsv(data.movements, data.products),
+              )
+            }
+          >
+            {exporting === "movements" ? "Preparing..." : "Movement ledger"}{" "}
+            <Icon name="download" className="h-4 w-4" />
           </button>
-          <button type="button" disabled={exporting !== null} className="btn-outline w-full justify-between" onClick={() => void exportCsv('allocations', allocationsToCsv(data.allocations, data.products, data.events))}>
-            {exporting === 'allocations' ? 'Preparing...' : 'Allocations'} <Icon name="download" className="h-4 w-4" />
+          <button
+            type="button"
+            disabled={exporting !== null}
+            className="btn-outline w-full justify-between"
+            onClick={() =>
+              void exportCsv(
+                "allocations",
+                allocationsToCsv(data.allocations, data.products, data.events),
+              )
+            }
+          >
+            {exporting === "allocations" ? "Preparing..." : "Allocations"}{" "}
+            <Icon name="download" className="h-4 w-4" />
           </button>
           <p className="pt-2 text-xs text-faint">
-            {source === 'memory'
-              ? 'Demo exports stay on this device.'
-              : 'Live exports are checksummed and recorded before download.'}
+            {source === "memory"
+              ? "Demo exports stay on this device."
+              : "Live exports are checksummed and recorded before download."}
           </p>
         </div>
       </Sheet>

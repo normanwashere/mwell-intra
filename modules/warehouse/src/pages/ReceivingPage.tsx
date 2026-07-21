@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react';
-import { clsx } from 'clsx';
-import { Link } from 'react-router-dom';
-import { useWarehouse } from '@/app/store';
-import { actorName, formatWhen } from '@/domain/format';
+import { useMemo, useState } from "react";
+import { clsx } from "clsx";
+import { Link } from "react-router-dom";
+import { useWarehouse } from "@/app/store";
+import { actorName, formatWhen } from "@/domain/format";
 import {
   Badge,
   Card,
@@ -13,11 +13,11 @@ import {
   QuantityStepper,
   SectionTitle,
   useToast,
-} from '@/components/ui';
-import { Icon } from '@/components/Icon';
-import { BarcodeScanner } from '@/components/camera/BarcodeScanner';
-import { EvidenceCapture } from '@/components/camera/EvidenceCapture';
-import { EvidenceGallery } from '@/components/EvidenceGallery';
+} from "@/components/ui";
+import { Icon } from "@/components/Icon";
+import { BarcodeScanner } from "@/components/camera/BarcodeScanner";
+import { EvidenceCapture } from "@/components/camera/EvidenceCapture";
+import { EvidenceGallery } from "@/components/EvidenceGallery";
 
 interface Line {
   productId: string;
@@ -25,6 +25,8 @@ interface Line {
   serials: string[];
   unitCost: string;
   lotCode: string;
+  batchNumber: string;
+  deviceTestStatus: "not_tested" | "passed" | "failed" | "not_required";
   expiryDate: string;
 }
 
@@ -32,16 +34,21 @@ export function ReceivingPage() {
   const { data, receiveStock, canOpenRoute } = useWarehouse();
   const toast = useToast();
   const warehouses = useMemo(
-    () => data?.locations.filter((l) => l.type === 'warehouse') ?? [],
+    () => data?.locations.filter((l) => l.type === "warehouse") ?? [],
     [data],
   );
-  const [locationId, setLocationId] = useState('');
-  const [supplierId, setSupplierId] = useState('');
-  const [binId, setBinId] = useState('');
+  const [locationId, setLocationId] = useState("");
+  const [supplierId, setSupplierId] = useState("");
+  const [actualDeliveryDate, setActualDeliveryDate] = useState(() =>
+    new Date().toISOString().slice(0, 10),
+  );
+  const [deliveryReference, setDeliveryReference] = useState("");
+  const [courierOrDriver, setCourierOrDriver] = useState("");
+  const [binId, setBinId] = useState("");
   // 390px is scan-first (WH-11): context selects collapse into a summary chip
   // so "Scan to receive" sits above the fold. Desktop always shows them.
   const [contextOpen, setContextOpen] = useState(false);
-  const [selectedProductId, setSelectedProductId] = useState('');
+  const [selectedProductId, setSelectedProductId] = useState("");
   const [newQty, setNewQty] = useState(1);
   const [lines, setLines] = useState<Line[]>([]);
   const [evidence, setEvidence] = useState<string[]>([]);
@@ -49,12 +56,12 @@ export function ReceivingPage() {
 
   if (!data) return null;
   const products = data.products;
-  const activeLocation = locationId || warehouses[0]?.id || '';
+  const activeLocation = locationId || warehouses[0]?.id || "";
   const bins = (data.storageAreas ?? []).filter(
     (b) => b.locationId === activeLocation,
   );
   // Guard against a bin selected for a different warehouse after switching.
-  const activeBin = bins.some((b) => b.id === binId) ? binId : '';
+  const activeBin = bins.some((b) => b.id === binId) ? binId : "";
   const productById = (id: string) => products.find((p) => p.id === id);
   const selectedProduct = productById(selectedProductId);
   const totalItems = lines.reduce((s, l) => s + l.quantity, 0);
@@ -67,13 +74,36 @@ export function ReceivingPage() {
           l.productId === productId ? { ...l, quantity: l.quantity + qty } : l,
         );
       }
-      return [...prev, { productId, quantity: qty, serials: [], unitCost: '', lotCode: '', expiryDate: '' }];
+      return [
+        ...prev,
+        {
+          productId,
+          quantity: qty,
+          serials: [],
+          unitCost: "",
+          lotCode: "",
+          batchNumber: "",
+          deviceTestStatus: "not_tested",
+          expiryDate: "",
+        },
+      ];
     });
   };
 
-  const setLineField = (productId: string, field: 'unitCost' | 'lotCode' | 'expiryDate', value: string) => {
+  const setLineField = (
+    productId: string,
+    field:
+      | "unitCost"
+      | "lotCode"
+      | "batchNumber"
+      | "deviceTestStatus"
+      | "expiryDate",
+    value: string,
+  ) => {
     setLines((prev) =>
-      prev.map((l) => (l.productId === productId ? { ...l, [field]: value } : l)),
+      prev.map((l) =>
+        l.productId === productId ? { ...l, [field]: value } : l,
+      ),
     );
   };
 
@@ -98,10 +128,24 @@ export function ReceivingPage() {
         if (existing.serials.includes(serial)) return prev;
         const serials = [...existing.serials, serial];
         return prev.map((l) =>
-          l.productId === productId ? { ...l, serials, quantity: serials.length } : l,
+          l.productId === productId
+            ? { ...l, serials, quantity: serials.length }
+            : l,
         );
       }
-      return [...prev, { productId, quantity: 1, serials: [serial], unitCost: '', lotCode: '', expiryDate: '' }];
+      return [
+        ...prev,
+        {
+          productId,
+          quantity: 1,
+          serials: [serial],
+          unitCost: "",
+          lotCode: "",
+          batchNumber: "",
+          deviceTestStatus: "not_tested",
+          expiryDate: "",
+        },
+      ];
     });
   };
 
@@ -130,16 +174,21 @@ export function ReceivingPage() {
     const ok = await receiveStock({
       locationId: activeLocation,
       supplierId: supplierId || undefined,
+      actualDeliveryDate: actualDeliveryDate || undefined,
+      deliveryReference: deliveryReference.trim() || undefined,
+      courierOrDriver: courierOrDriver.trim() || undefined,
       evidenceUrls: evidence,
       lines: lines.map((l) => ({
         productId: l.productId,
         quantity: l.quantity,
         serialNumbers: l.serials.length ? l.serials : undefined,
         unitCost:
-          l.unitCost.trim() !== '' && !Number.isNaN(Number(l.unitCost))
+          l.unitCost.trim() !== "" && !Number.isNaN(Number(l.unitCost))
             ? Number(l.unitCost)
             : undefined,
         lotCode: l.lotCode.trim() || undefined,
+        batchNumber: l.batchNumber.trim() || undefined,
+        deviceTestStatus: l.deviceTestStatus,
         expiryDate: l.expiryDate || undefined,
         binId: activeBin || undefined,
       })),
@@ -154,38 +203,62 @@ export function ReceivingPage() {
   return (
     <div
       className={clsx(
-        'space-y-4 overflow-x-clip',
-        lines.length > 0 && 'pb-24 md:pb-0',
+        "space-y-4 overflow-x-clip",
+        lines.length > 0 && "pb-24 md:pb-0",
       )}
     >
       <PageHeader
         title="Receiving"
         icon="truck"
         subtitle="Scan & tag incoming inventory"
-        action={canOpenRoute('purchase-orders') ? (
-          <Link to="/purchase-orders" className="btn-ghost btn-sm">
-            <Icon name="cart" className="h-4 w-4" /> Approved POs
-          </Link>
-        ) : undefined}
+        action={
+          canOpenRoute("purchase-orders") ? (
+            <Link to="/purchase-orders" className="btn-ghost btn-sm">
+              <Icon name="cart" className="h-4 w-4" /> Approved POs
+            </Link>
+          ) : undefined
+        }
       />
 
       <div className="flex flex-col gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-950 dark:border-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-100 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="font-semibold">Clean receipt</p>
-          <p className="text-xs opacity-80">Accepted quantity and condition need no supervisor approval.</p>
+          <p className="text-xs opacity-80">
+            Accepted quantity and condition need no supervisor approval.
+          </p>
         </div>
-        {canOpenRoute('storage') && <Link to="/storage" className="btn-ghost btn-sm shrink-0 justify-center">Continue to put away</Link>}
+        {canOpenRoute("storage") && (
+          <Link
+            to="/storage"
+            className="btn-ghost btn-sm shrink-0 justify-center"
+          >
+            Continue to put away
+          </Link>
+        )}
       </div>
 
       <div className="flex flex-col gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="font-semibold">Inspection required</p>
-          <p className="text-xs opacity-80">Damage, shortage, unidentified stock, rejection, or quarantine routes to Supervisor control.</p>
+          <p className="text-xs opacity-80">
+            Damage, shortage, unidentified stock, rejection, or quarantine
+            routes to Supervisor control.
+          </p>
         </div>
-        {canOpenRoute('quality') && <Link to="/quality" className="btn-ghost btn-sm shrink-0 justify-center">Open quality queue</Link>}
+        {canOpenRoute("quality") && (
+          <Link
+            to="/quality"
+            className="btn-ghost btn-sm shrink-0 justify-center"
+          >
+            Open quality queue
+          </Link>
+        )}
       </div>
       {lastReceiptStaged && (
-        <p role="status" className="rounded-xl bg-brand-500/10 px-4 py-3 text-sm font-medium text-brand-800 dark:text-brand-200">
+        <p
+          role="status"
+          className="rounded-xl bg-brand-500/10 px-4 py-3 text-sm font-medium text-brand-800 dark:text-brand-200"
+        >
           Receipt saved in inspection staging and is ready for quality review.
         </p>
       )}
@@ -201,23 +274,23 @@ export function ReceivingPage() {
             onClick={() => setContextOpen((v) => !v)}
           >
             <span className="min-w-0 break-words leading-snug text-muted">
-              Receiving into:{' '}
+              Receiving into:{" "}
               <span className="font-semibold text-ink">
-                {warehouses.find((l) => l.id === activeLocation)?.name ?? '—'}
-                {' · '}
+                {warehouses.find((l) => l.id === activeLocation)?.name ?? "—"}
+                {" · "}
                 {activeBin
                   ? bins.find((b) => b.id === activeBin)?.code
-                  : 'General area'}
+                  : "General area"}
               </span>
               {supplierId
-                ? ` · ${data.suppliers.find((s) => s.id === supplierId)?.name ?? ''}`
-                : ''}
+                ? ` · ${data.suppliers.find((s) => s.id === supplierId)?.name ?? ""}`
+                : ""}
             </span>
             <Icon
               name="chevron"
               className={clsx(
-                'h-4 w-4 shrink-0 text-faint transition',
-                contextOpen ? '-rotate-90' : 'rotate-90',
+                "h-4 w-4 shrink-0 text-faint transition",
+                contextOpen ? "-rotate-90" : "rotate-90",
               )}
             />
           </button>
@@ -269,8 +342,8 @@ export function ReceivingPage() {
 
           <Card
             className={clsx(
-              'grid gap-3 sm:grid-cols-2',
-              !contextOpen && 'hidden lg:grid',
+              "grid gap-3 sm:grid-cols-2",
+              !contextOpen && "hidden lg:grid",
             )}
           >
             <Field label="Receive into" htmlFor="rcv-location">
@@ -302,14 +375,43 @@ export function ReceivingPage() {
                 ))}
               </select>
             </Field>
+            <Field label="Actual delivery date" htmlFor="rcv-delivery-date">
+              <input
+                id="rcv-delivery-date"
+                type="date"
+                className="input"
+                value={actualDeliveryDate}
+                onChange={(event) => setActualDeliveryDate(event.target.value)}
+              />
+            </Field>
+            <Field label="Delivery reference" htmlFor="rcv-delivery-reference">
+              <input
+                id="rcv-delivery-reference"
+                className="input"
+                value={deliveryReference}
+                onChange={(event) => setDeliveryReference(event.target.value)}
+                placeholder="DR / invoice / shipment number"
+              />
+            </Field>
+            <div className="sm:col-span-2">
+              <Field label="Courier or driver" htmlFor="rcv-courier-driver">
+                <input
+                  id="rcv-courier-driver"
+                  className="input"
+                  value={courierOrDriver}
+                  onChange={(event) => setCourierOrDriver(event.target.value)}
+                  placeholder="Courier, driver, or vehicle reference"
+                />
+              </Field>
+            </div>
             <div className="sm:col-span-2">
               <Field
                 label="Put away to"
                 htmlFor="rcv-bin"
                 hint={
                   bins.length === 0
-                    ? 'No storage areas set up for this warehouse — stock goes to the general area.'
-                    : 'Scannable bin/shelf where this delivery is stored.'
+                    ? "No storage areas set up for this warehouse — stock goes to the general area."
+                    : "Scannable bin/shelf where this delivery is stored."
                 }
               >
                 <select
@@ -323,7 +425,7 @@ export function ReceivingPage() {
                   {bins.map((b) => (
                     <option key={b.id} value={b.id}>
                       {b.code}
-                      {b.label ? ` · ${b.label}` : ''}
+                      {b.label ? ` · ${b.label}` : ""}
                     </option>
                   ))}
                 </select>
@@ -337,7 +439,11 @@ export function ReceivingPage() {
           <Card>
             <SectionTitle
               title="Receipt lines"
-              action={totalItems > 0 ? <Badge tone="brand">{totalItems} pcs</Badge> : undefined}
+              action={
+                totalItems > 0 ? (
+                  <Badge tone="brand">{totalItems} pcs</Badge>
+                ) : undefined
+              }
             />
             {lines.length === 0 ? (
               <EmptyState icon="truck" title="Nothing scanned yet" />
@@ -351,7 +457,9 @@ export function ReceivingPage() {
                       className="flex items-start justify-between gap-3 rounded-xl bg-inset p-3"
                     >
                       <div className="min-w-0">
-                        <p className="truncate font-medium text-ink">{p.name}</p>
+                        <p className="truncate font-medium text-ink">
+                          {p.name}
+                        </p>
                         <p className="font-mono text-xs text-faint">{p.sku}</p>
                         {p.serialized ? (
                           <p className="mt-0.5 text-xs text-faint">
@@ -376,8 +484,11 @@ export function ReceivingPage() {
                             ))}
                           </div>
                         )}
-                          <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                          <Field label="Unit cost (₱)" htmlFor={`rcv-cost-${l.productId}`}>
+                        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                          <Field
+                            label="Unit cost (₱)"
+                            htmlFor={`rcv-cost-${l.productId}`}
+                          >
                             <input
                               id={`rcv-cost-${l.productId}`}
                               type="number"
@@ -387,31 +498,93 @@ export function ReceivingPage() {
                               className="input"
                               value={l.unitCost}
                               onChange={(e) =>
-                                setLineField(l.productId, 'unitCost', e.target.value)
+                                setLineField(
+                                  l.productId,
+                                  "unitCost",
+                                  e.target.value,
+                                )
                               }
                               placeholder={String(p.unitCost)}
                             />
                           </Field>
-                          <Field label="Lot code" htmlFor={`rcv-lot-${l.productId}`}>
+                          <Field
+                            label="Lot code"
+                            htmlFor={`rcv-lot-${l.productId}`}
+                          >
                             <input
                               id={`rcv-lot-${l.productId}`}
                               className="input"
                               value={l.lotCode}
                               onChange={(e) =>
-                                setLineField(l.productId, 'lotCode', e.target.value)
+                                setLineField(
+                                  l.productId,
+                                  "lotCode",
+                                  e.target.value,
+                                )
                               }
                               placeholder="optional"
                             />
                           </Field>
+                          <Field
+                            label="Batch number"
+                            htmlFor={`rcv-batch-${l.productId}`}
+                          >
+                            <input
+                              id={`rcv-batch-${l.productId}`}
+                              className="input"
+                              value={l.batchNumber}
+                              onChange={(event) =>
+                                setLineField(
+                                  l.productId,
+                                  "batchNumber",
+                                  event.target.value,
+                                )
+                              }
+                              placeholder="Supplier batch"
+                            />
+                          </Field>
+                          <Field
+                            label="Device test result"
+                            htmlFor={`rcv-test-${l.productId}`}
+                          >
+                            <select
+                              id={`rcv-test-${l.productId}`}
+                              className="input"
+                              value={l.deviceTestStatus}
+                              onChange={(event) =>
+                                setLineField(
+                                  l.productId,
+                                  "deviceTestStatus",
+                                  event.target.value,
+                                )
+                              }
+                            >
+                              <option value="not_tested">Not tested</option>
+                              <option value="passed">Passed</option>
+                              <option value="failed">
+                                Failed - send to hold
+                              </option>
+                              <option value="not_required">Not required</option>
+                            </select>
+                          </Field>
                           {p.expiryTracked && (
                             <div className="sm:col-span-2">
-                              <Field label={`Expiry date for ${p.name}`} htmlFor={`rcv-expiry-${l.productId}`}>
+                              <Field
+                                label={`Expiry date for ${p.name}`}
+                                htmlFor={`rcv-expiry-${l.productId}`}
+                              >
                                 <input
                                   id={`rcv-expiry-${l.productId}`}
                                   type="date"
                                   className="input"
                                   value={l.expiryDate}
-                                  onChange={(event) => setLineField(l.productId, 'expiryDate', event.target.value)}
+                                  onChange={(event) =>
+                                    setLineField(
+                                      l.productId,
+                                      "expiryDate",
+                                      event.target.value,
+                                    )
+                                  }
                                 />
                               </Field>
                             </div>
@@ -434,7 +607,10 @@ export function ReceivingPage() {
           </Card>
 
           <Card className="space-y-3">
-            <SectionTitle title="Photo evidence" subtitle="Delivery / packing proof" />
+            <SectionTitle
+              title="Photo evidence"
+              subtitle="Delivery / packing proof"
+            />
             <EvidenceCapture onChange={setEvidence} />
           </Card>
         </div>
@@ -455,7 +631,10 @@ export function ReceivingPage() {
 
       {/* Receipt history — parity with the Returns recent list. */}
       <Card>
-        <SectionTitle title="Recent receipts" subtitle="Latest deliveries & their evidence" />
+        <SectionTitle
+          title="Recent receipts"
+          subtitle="Latest deliveries & their evidence"
+        />
         {data.receipts.length === 0 ? (
           <EmptyState icon="truck" title="No receipts recorded yet" />
         ) : (
@@ -479,17 +658,24 @@ export function ReceivingPage() {
                       </span>
                     </div>
                     <p className="mt-0.5 text-xs text-faint">
-                      {sup ? sup.name : 'No supplier'} · by {actorName(r.actor)}
+                      {sup ? sup.name : "No supplier"} · by {actorName(r.actor)}
                     </p>
                     <ul className="mt-2 space-y-1 text-sm text-muted">
                       {r.lines.map((l, i) => {
-                        const p = data.products.find((x) => x.id === l.productId);
+                        const p = data.products.find(
+                          (x) => x.id === l.productId,
+                        );
                         return (
-                          <li key={i} className="flex items-center justify-between gap-2">
+                          <li
+                            key={i}
+                            className="flex items-center justify-between gap-2"
+                          >
                             <span className="min-w-0 truncate">
                               {l.quantity}× {p?.name ?? l.productId}
                             </span>
-                            {l.lotCode && <Badge tone="slate">{l.lotCode}</Badge>}
+                            {l.lotCode && (
+                              <Badge tone="slate">{l.lotCode}</Badge>
+                            )}
                           </li>
                         );
                       })}

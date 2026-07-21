@@ -129,7 +129,7 @@ describe('App routing & guards', () => {
 
   it('allows inspection roles to open quality control', async () => {
     renderWithProviders(<App />, {
-      role: 'operations',
+      role: 'warehouse_operator',
       route: '/quality',
     });
     expect(await screen.findByRole('heading', { name: 'Quality control' })).toBeInTheDocument();
@@ -145,7 +145,7 @@ describe('App routing & guards', () => {
     approval.unmount();
 
     renderWithProviders(<App />, {
-      role: 'operations',
+      role: 'warehouse_operator',
       route: '/exceptions',
     });
     expect(await screen.findByRole('heading', { name: 'Warehouse exceptions' })).toBeInTheDocument();

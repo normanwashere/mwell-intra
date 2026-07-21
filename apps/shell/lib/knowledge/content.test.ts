@@ -219,8 +219,8 @@ describe("Knowledge Base content", () => {
     ).toBe(36);
   });
 
-  it("defines exact policy and flow relationships for all 62 feature profiles", () => {
-    expect(KNOWLEDGE_CONTENT.features).toHaveLength(62);
+  it("defines exact policy and flow relationships for all 63 feature profiles", () => {
+    expect(KNOWLEDGE_CONTENT.features).toHaveLength(63);
     const flowIds = new Set(KNOWLEDGE_CONTENT.flows.map((flow) => flow.id));
     for (const feature of KNOWLEDGE_CONTENT.features) {
       expect(

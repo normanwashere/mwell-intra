@@ -572,6 +572,52 @@ const procedureArticles: KnowledgeArticle[] = [
     ],
   ),
   processArticle(
+    "warehouse-order-to-release",
+    "Fulfill an order or department stock request",
+    "Move approved demand through allocation, serialized picking, packaging, courier handoff, release, and exception recovery.",
+    "warehouse",
+    [
+      "warehouse_operations",
+      "warehouse_business_unit",
+      "warehouse_marketing",
+      "warehouse_procurement",
+      "warehouse_finance",
+      "warehouse_logistics_supervisor",
+    ],
+    "/warehouse/fulfillment",
+    "outbound-fulfillment",
+    [
+      [
+        "Record demand",
+        "Sales or ecommerce creates an order; Operations links third-party sales to an event, external location, and PHP value; or a department submits purpose, cost center, due date, treatment, product, and quantity.",
+      ],
+      [
+        "Approve when required",
+        "A different authorized owner approves or rejects department demand; rejected requests do not create fulfillment work.",
+      ],
+      [
+        "Validate product and bundle rules",
+        "Confirm item class, serialization, source bin, and Product approval reference for active bundles.",
+      ],
+      [
+        "Allocate and pick",
+        "Reserve unheld availability, scan the rack/bin and every serialized unit, and preserve bundle-set identity.",
+      ],
+      [
+        "Pack and record waybill",
+        "Scan quantity-controlled packing supplies and enter the courier and waybill before marking the order ready.",
+      ],
+      [
+        "Release once",
+        "Verify the Ready state, hand off to the courier or recipient, and confirm stock and packaging movements were posted.",
+      ],
+      [
+        "Resolve returns separately",
+        "Customer Service records the issue, Warehouse quarantines and selects the physical outcome, Finance records refund evidence, and approved open-box work is completed into a scanned rack or bin.",
+      ],
+    ],
+  ),
+  processArticle(
     "cycle-count",
     "Run a cycle count and adjustment",
     "Count physical stock and correct approved variance without direct edits.",

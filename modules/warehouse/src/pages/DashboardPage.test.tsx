@@ -1,78 +1,109 @@
-import { describe, it, expect } from 'vitest';
-import { screen, fireEvent } from '@testing-library/react';
-import { axe } from 'jest-axe';
-import { DashboardPage } from './DashboardPage';
-import { renderWithProviders } from '@/test/renderWithProviders';
-import type { Role } from '@/domain/types';
+import { describe, it, expect } from "vitest";
+import { screen, fireEvent } from "@testing-library/react";
+import { axe } from "jest-axe";
+import { DashboardPage } from "./DashboardPage";
+import { renderWithProviders } from "@/test/renderWithProviders";
+import type { Role } from "@/domain/types";
 
 const ALL_ROLES: Role[] = [
-  'logistics_supervisor',
-  'operations',
-  'finance',
-  'bi_analyst',
-  'business_unit',
-  'marketing',
-  'procurement',
-  'pricing',
-  'warehouse_admin',
+  "logistics_supervisor",
+  "operations",
+  "finance",
+  "bi_analyst",
+  "business_unit",
+  "marketing",
+  "procurement",
+  "pricing",
+  "warehouse_admin",
 ];
 
 const FIRST_RENDER_TIMEOUT = 10_000;
 
-describe('DashboardPage', () => {
-  it('does not render dead-end dashboard navigation for a minimal live bundle', async () => {
+describe("DashboardPage", () => {
+  it("does not render dead-end dashboard navigation for a minimal live bundle", async () => {
     renderWithProviders(<DashboardPage />, {
-      role: 'warehouse_operator',
-      source: 'supabase',
-      capabilities: ['view_dashboard'],
+      role: "warehouse_operator",
+      source: "supabase",
+      capabilities: ["view_dashboard"],
     });
 
-    await screen.findByTestId('warehouse-dashboard-hero');
-    expect(screen.queryByRole('button', { name: /browse inventory/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /view product/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /view event/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /view all/i })).not.toBeInTheDocument();
+    await screen.findByTestId("warehouse-dashboard-hero");
+    expect(
+      screen.queryByRole("button", { name: /browse inventory/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /view product/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /view event/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /view all/i }),
+    ).not.toBeInTheDocument();
   });
 
   it.each([
-    ['warehouse_operator', /receive and inspect/i],
-    ['warehouse_supervisor', /low-stock alerts/i],
-  ] as const)('renders the canonical %s dashboard without undefined map access', async (role, expectedContent) => {
-    renderWithProviders(<DashboardPage />, { role });
-    expect(await screen.findByText(expectedContent)).toBeInTheDocument();
-  });
+    ["warehouse_operator", /receive and inspect/i],
+    ["warehouse_supervisor", /low-stock alerts/i],
+  ] as const)(
+    "renders the canonical %s dashboard without undefined map access",
+    async (role, expectedContent) => {
+      renderWithProviders(<DashboardPage />, { role });
+      expect(await screen.findByText(expectedContent)).toBeInTheDocument();
+    },
+  );
 
-  it('gives the Operator four direct routine floor actions without cross-functional analytics', async () => {
-    renderWithProviders(<DashboardPage />, { role: 'operations' });
-    for (const label of ['Receive and inspect', 'Put away', 'Pick or issue', 'Returns and counts']) {
-      expect(await screen.findByRole('link', { name: label })).toBeInTheDocument();
+  it("gives the Operator four direct routine floor actions without cross-functional analytics", async () => {
+    renderWithProviders(<DashboardPage />, { role: "warehouse_operator" });
+    for (const label of [
+      "Receive and inspect",
+      "Put away",
+      "Pick or issue",
+      "Returns and counts",
+    ]) {
+      expect(
+        await screen.findByRole("link", { name: label }),
+      ).toBeInTheDocument();
     }
-    expect(screen.getByRole('link', { name: 'Cycle counts' })).toHaveAttribute('href', '/cycle-counts');
-    expect(screen.queryByText(/consumption by event type/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Cycle counts" })).toHaveAttribute(
+      "href",
+      "/cycle-counts",
+    );
+    expect(
+      screen.queryByText(/consumption by event type/i),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText(/inventory value/i)).not.toBeInTheDocument();
   });
 
-  it('shows the active role and its KPIs (BI analyst)', async () => {
-    renderWithProviders(<DashboardPage />, { role: 'bi_analyst' });
-    expect(
-      await screen.findByRole('heading', { name: 'BI Analyst' }),
-    ).toBeInTheDocument();
-    expect(screen.getByText('Active SKUs')).toBeInTheDocument();
-    expect(screen.getByText('Inventory Value')).toBeInTheDocument();
-    expect(screen.getByText('Device return rate')).toBeInTheDocument();
-  }, FIRST_RENDER_TIMEOUT);
+  it(
+    "shows the active role and its KPIs (BI analyst)",
+    async () => {
+      renderWithProviders(<DashboardPage />, { role: "bi_analyst" });
+      expect(
+        await screen.findByRole("heading", { name: "BI Analyst" }),
+      ).toBeInTheDocument();
+      expect(screen.getByText("Active SKUs")).toBeInTheDocument();
+      expect(screen.getByText("Inventory Value")).toBeInTheDocument();
+      expect(screen.getByText("Device return rate")).toBeInTheDocument();
+    },
+    FIRST_RENDER_TIMEOUT,
+  );
 
-  it('renders analytics panels for the BI analyst', async () => {
-    renderWithProviders(<DashboardPage />, { role: 'bi_analyst' });
+  it("renders analytics panels for the BI analyst", async () => {
+    renderWithProviders(<DashboardPage />, { role: "bi_analyst" });
     expect(
-      await screen.findByRole('heading', { name: /fast-moving skus/i }),
+      await screen.findByRole("heading", { name: /fast-moving skus/i }),
     ).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /consumption by event type/i })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /device utilization/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /consumption by event type/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /device utilization/i }),
+    ).toBeInTheDocument();
   });
 
-  it('tailors the dashboard to the logistics supervisor', async () => {
-    renderWithProviders(<DashboardPage />, { role: 'logistics_supervisor' });
+  it("tailors the dashboard to the logistics supervisor", async () => {
+    renderWithProviders(<DashboardPage />, { role: "logistics_supervisor" });
     expect(await screen.findByText(/low-stock alerts/i)).toBeInTheDocument();
     expect(screen.getByText(/reconciliation/i)).toBeInTheDocument();
     expect(screen.getByText(/recent activity/i)).toBeInTheDocument();
@@ -80,79 +111,110 @@ describe('DashboardPage', () => {
     expect(screen.queryByText(/device utilization/i)).not.toBeInTheDocument();
   });
 
-  it('tailors the dashboard to procurement', async () => {
-    renderWithProviders(<DashboardPage />, { role: 'procurement' });
+  it("tailors the dashboard to procurement", async () => {
+    renderWithProviders(<DashboardPage />, { role: "procurement" });
     expect(await screen.findByText(/reorder worklist/i)).toBeInTheDocument();
     expect(screen.getByText(/open purchase orders/i)).toBeInTheDocument();
-    expect(screen.getByText('Stockout risk')).toBeInTheDocument();
+    expect(screen.getByText("Stockout risk")).toBeInTheDocument();
   });
 
-  it('tailors the dashboard to finance', async () => {
-    renderWithProviders(<DashboardPage />, { role: 'finance' });
-    expect(await screen.findByText(/valuation by category/i)).toBeInTheDocument();
+  it("tailors the dashboard to finance", async () => {
+    renderWithProviders(<DashboardPage />, { role: "finance" });
+    expect(
+      await screen.findByText(/valuation by category/i),
+    ).toBeInTheDocument();
     expect(screen.getByText(/asset register/i)).toBeInTheDocument();
   });
 
-  it('keeps the operations alias on the routine floor dashboard', async () => {
-    renderWithProviders(<DashboardPage />, { role: 'operations' });
-    expect(await screen.findByRole('link', { name: /receive and inspect/i })).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: /^events$/i })).not.toBeInTheDocument();
-  });
-
-  it('tailors the dashboard to pricing', async () => {
-    renderWithProviders(<DashboardPage />, { role: 'pricing' });
-    expect(await screen.findByText(/top skus by value/i)).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /valuation by category/i })).toBeInTheDocument();
-  });
-
-  it('tailors the dashboard to marketing', async () => {
-    renderWithProviders(<DashboardPage />, { role: 'marketing' });
-    expect(await screen.findByRole('heading', { name: /consumption by event type/i })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /^events$/i })).toBeInTheDocument();
-  });
-
-  it('tailors the dashboard to business unit', async () => {
-    renderWithProviders(<DashboardPage />, { role: 'business_unit' });
-    expect(await screen.findByText(/low-stock alerts/i)).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /pending reservations/i })).toBeInTheDocument();
-  });
-
-  it('gives the Warehouse Administrator an operational control overview', async () => {
-    renderWithProviders(<DashboardPage />, { role: 'warehouse_admin' });
+  it("gives Operations demand handoffs without physical custody actions", async () => {
+    renderWithProviders(<DashboardPage />, { role: "operations" });
     expect(
-      await screen.findByRole('heading', { name: 'Warehouse Administrator' }),
+      await screen.findByRole("heading", { name: /ecommerce \/ operations/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /new demand/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /^events:/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /receive and inspect/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("tailors the dashboard to pricing", async () => {
+    renderWithProviders(<DashboardPage />, { role: "pricing" });
+    expect(await screen.findByText(/top skus by value/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /valuation by category/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("tailors the dashboard to marketing", async () => {
+    renderWithProviders(<DashboardPage />, { role: "marketing" });
+    expect(
+      await screen.findByRole("heading", {
+        name: /consumption by event type/i,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /request campaign stock/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /^events:/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /receive and inspect/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("tailors the dashboard to business unit", async () => {
+    renderWithProviders(<DashboardPage />, { role: "business_unit" });
+    expect(await screen.findByText(/low-stock alerts/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /request stock/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /pending reservations/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("gives the Warehouse Administrator an operational control overview", async () => {
+    renderWithProviders(<DashboardPage />, { role: "warehouse_admin" });
+    expect(
+      await screen.findByRole("heading", { name: "Warehouse Administrator" }),
     ).toBeInTheDocument();
     expect(screen.getByText(/low-stock alerts/i)).toBeInTheDocument();
     expect(screen.getByText(/reconciliation/i)).toBeInTheDocument();
   });
 
-  it('lists low-stock items for logistics', async () => {
-    renderWithProviders(<DashboardPage />, { role: 'logistics_supervisor' });
+  it("lists low-stock items for logistics", async () => {
+    renderWithProviders(<DashboardPage />, { role: "logistics_supervisor" });
     expect(await screen.findByText(/low-stock alerts/i)).toBeInTheDocument();
     expect(screen.getAllByText(/left$/i).length).toBeGreaterThan(0);
   });
 
-  it(
-    'renders an overview and interactive panels for every role',
-    async () => {
-      for (const role of ALL_ROLES) {
-        const { unmount } = renderWithProviders(<DashboardPage />, { role });
-        expect(await screen.findByRole('heading', { name: /overview$/i })).toBeInTheDocument();
-        const buttons = screen
-          .queryAllByRole('button')
-          .filter((b) => !/export data/i.test(b.textContent ?? ''));
-        buttons.forEach((b) => fireEvent.click(b));
-        unmount();
-      }
-    },
-    // Renders every role against the full 90-day seed history — needs more
-    // headroom than the 5s default.
-    15_000,
-  );
+  it("renders an overview and interactive panels for every role", async () => {
+    for (const role of ALL_ROLES) {
+      const { unmount } = renderWithProviders(<DashboardPage />, { role });
+      expect(
+        await screen.findByRole("heading", { name: /overview$/i }),
+      ).toBeInTheDocument();
+      const buttons = screen
+        .queryAllByRole("button")
+        .filter((b) => !/export data/i.test(b.textContent ?? ""));
+      buttons.forEach((b) => fireEvent.click(b));
+      unmount();
+    }
+  }, // Renders every role against the full 90-day seed history — needs more
+  // headroom than the 5s default.
+  15_000);
 
-  it('has no accessibility violations', async () => {
-    const { container } = renderWithProviders(<DashboardPage />, { role: 'bi_analyst' });
-    await screen.findByRole('heading', { name: /fast-moving skus/i });
+  it("has no accessibility violations", async () => {
+    const { container } = renderWithProviders(<DashboardPage />, {
+      role: "bi_analyst",
+    });
+    await screen.findByRole("heading", { name: /fast-moving skus/i });
     expect(await axe(container)).toHaveNoViolations();
   });
 });

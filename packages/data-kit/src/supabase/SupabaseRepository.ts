@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
   Allocation,
   CycleCount,
@@ -14,7 +14,7 @@ import type {
   InventoryUnit,
   StockLevel,
   WarehouseEvent,
-} from '../domain/types';
+} from "../domain/types";
 import {
   normalizePageQuery,
   type CreateVendorReturnInput,
@@ -38,16 +38,28 @@ import {
   type WarehouseException,
   type WarehouseTask,
   type VendorReturn,
-} from '../domain/warehouseControls';
-import { returnClosesAllocation, validateReservation } from '../domain/allocations';
-import { primaryStockLocation, validateTransfer } from '../domain/transfers';
-import { poStatusAfterReceipt } from '../domain/purchaseOrders';
-import { applyProductPatch, buildNewProduct } from '../domain/products';
+} from "../domain/warehouseControls";
+import {
+  returnClosesAllocation,
+  validateReservation,
+} from "../domain/allocations";
+import { primaryStockLocation, validateTransfer } from "../domain/transfers";
+import { poStatusAfterReceipt } from "../domain/purchaseOrders";
+import { applyProductPatch, buildNewProduct } from "../domain/products";
 import {
   toStockState,
   type CancelAllocationInput,
   type CancelPurchaseOrderInput,
   type CreateEventInput,
+  type CreateFulfillmentOrderInput,
+  type AdvanceFulfillmentOrderInput,
+  type CreateDepartmentStockRequestInput,
+  type DecideDepartmentStockRequestInput,
+  type CreateCustomerReturnCaseInput,
+  type ResolveCustomerReturnCaseInput,
+  type CreateKitDefinitionInput,
+  type CreateReKitWorkOrderInput,
+  type CompleteReKitWorkOrderInput,
   type CreateLocationInput,
   type CreateProductInput,
   type CreatePurchaseOrderInput,
@@ -68,7 +80,7 @@ import {
   type UpdateSupplierInput,
   type WarehouseData,
   type WarehouseControlRepository,
-} from '../repository';
+} from "../repository";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {
   allocationToRow,
@@ -101,10 +113,15 @@ import {
   rowToUnit,
   rowToWarehouseTask,
   rowToVendorReturn,
+  rowToFulfillmentOrder,
+  rowToDepartmentStockRequest,
+  rowToCustomerReturnCase,
+  rowToKitDefinition,
+  rowToReKitWorkOrder,
   storageAreaToRow,
   supplierToRow,
   unitToRow,
-} from './mappers';
+} from "./mappers";
 
 function uid(prefix: string): string {
   return `${prefix}-${crypto.randomUUID()}`;
@@ -114,43 +131,70 @@ function uid(prefix: string): string {
 type Row = Record<string, unknown>;
 
 const TABLE_PROJECTIONS: Record<string, string> = {
-  products: 'id,sku,name,category,device_type,merchandise_type,serialized,attributes,unit_cost,price,reorder_point,promotional,barcode,expiry_tracked,shelf_life_warning_days',
-  locations: 'id,name,type',
-  storage_areas: 'id,location_id,code,label,zone,active',
-  suppliers: 'id,name,lead_time_days',
-  lots: 'id,product_id,lot_code,supplier_id,unit_cost,received_at,expiry_date',
-  inventory_units: 'id,product_id,serial_number,lot_id,location_id,bin_id,status,assigned_to,event_id',
-  stock_levels: 'product_id,location_id,bin_id,lot_id,quantity',
-  movements: 'id,type,product_id,quantity,from_location_id,to_location_id,from_bin_id,to_bin_id,lot_id,serial_number,event_id,reason,reference,evidence_urls,actor,created_at',
-  allocations: 'id,event_id,product_id,quantity,status,promotional,created_at',
-  events: 'id,name,type,site_location_id,start_date,end_date',
-  returns: 'id,source,event_id,lines,evidence_urls,actor,created_at',
-  cycle_counts: 'id,location_id,bin_id,category,lines,status,requested_by,submitted_at,actor,created_at',
-  receipts: 'id,supplier_id,location_id,lines,evidence_urls,operation_route_id,procurement_po_id,quality_status,actor,created_at',
-  purchase_orders: 'id,supplier_id,status,lines,expected_date,actor,created_at',
-  profiles: 'id,role,name,email,title',
-  operation_types: 'id,code,label,active',
-  operation_routes: 'id,operation_type_id,source_location_types,destination_location_types,requires_evidence,requires_approval,requires_online,active',
-  quality_inspections: 'id,source_type,source_id,product_id,bin_id,lot_id,serial_number,quantity,disposition,reason,evidence_urls,inspected_by,inspected_at',
-  inventory_holds: 'id,inspection_id,product_id,location_id,bin_id,lot_id,serial_number,quantity,status,reason,created_by,created_at,released_by,released_at',
-  vendor_returns: 'id,hold_id,supplier_id,source_receipt_id,source_return_id,product_id,lot_id,serial_number,quantity,reason,reference,status,evidence_urls,created_by,created_at,handed_off_by,handed_off_at,completed_at',
-  exceptions: 'id,exception_type,severity,source_type,source_id,status,owner_id,due_at,resolution,created_at',
-  stock_change_requests: 'id,source_type,source_id,product_id,location_id,bin_id,quantity_delta,unit_cost,financial_impact,reason,evidence_urls,status,requested_by,requested_at,created_at',
-  warehouse_tasks: 'id,task_type,source_id,title,status,assignee_id,due_at,completed_at,created_at',
-  inventory_position_v1: 'id,product_id,location_id,bin_id,on_hand,committed,held,unavailable,available,created_at',
-  procurement_po_handoff: 'id,po_number,vendor_name,status,expected_date,lines',
+  products:
+    "id,sku,name,category,item_class,serialization_policy,uom,device_type,merchandise_type,serialized,attributes,unit_cost,price,reorder_point,promotional,barcode,expiry_tracked,shelf_life_warning_days",
+  locations: "id,name,type",
+  storage_areas: "id,location_id,code,label,zone,active",
+  suppliers: "id,name,lead_time_days",
+  lots: "id,product_id,lot_code,supplier_id,unit_cost,received_at,expiry_date",
+  inventory_units:
+    "id,product_id,serial_number,lot_id,location_id,bin_id,status,assigned_to,event_id",
+  stock_levels: "product_id,location_id,bin_id,lot_id,quantity",
+  movements:
+    "id,type,product_id,quantity,from_location_id,to_location_id,from_bin_id,to_bin_id,lot_id,serial_number,event_id,reason,reference,evidence_urls,actor,created_at",
+  allocations: "id,event_id,product_id,quantity,status,promotional,created_at",
+  events: "id,name,type,site_location_id,start_date,end_date",
+  returns: "id,source,event_id,lines,evidence_urls,actor,created_at",
+  cycle_counts:
+    "id,location_id,bin_id,category,lines,status,requested_by,submitted_at,actor,created_at",
+  receipts:
+    "id,supplier_id,location_id,actual_delivery_date,delivery_reference,courier_or_driver,lines,evidence_urls,operation_route_id,procurement_po_id,quality_status,actor,created_at",
+  purchase_orders: "id,supplier_id,status,lines,expected_date,actor,created_at",
+  profiles: "id,role,name,email,title",
+  operation_types: "id,code,label,active",
+  operation_routes:
+    "id,operation_type_id,source_location_types,destination_location_types,requires_evidence,requires_approval,requires_online,active",
+  quality_inspections:
+    "id,source_type,source_id,product_id,bin_id,lot_id,serial_number,quantity,disposition,reason,evidence_urls,inspected_by,inspected_at",
+  inventory_holds:
+    "id,inspection_id,product_id,location_id,bin_id,lot_id,serial_number,quantity,status,reason,created_by,created_at,released_by,released_at",
+  vendor_returns:
+    "id,hold_id,supplier_id,source_receipt_id,source_return_id,product_id,lot_id,serial_number,quantity,reason,reference,status,evidence_urls,created_by,created_at,handed_off_by,handed_off_at,completed_at",
+  exceptions:
+    "id,exception_type,severity,source_type,source_id,status,owner_id,due_at,resolution,created_at",
+  stock_change_requests:
+    "id,source_type,source_id,product_id,location_id,bin_id,quantity_delta,unit_cost,financial_impact,reason,evidence_urls,status,requested_by,requested_at,created_at",
+  warehouse_tasks:
+    "id,task_type,source_id,title,status,assignee_id,due_at,completed_at,created_at",
+  inventory_position_v1:
+    "id,product_id,location_id,bin_id,on_hand,committed,held,unavailable,available,created_at",
+  procurement_po_handoff: "id,po_number,vendor_name,status,expected_date,lines",
+  fulfillment_orders:
+    "id,source,external_reference,requesting_department,source_location_id,source_bin_id,customer_reference,event_id,third_party_location_id,gross_sales_amount,courier,waybill_number,status,lines,packaging,created_by,created_at,updated_at,released_by,released_at",
+  department_stock_requests:
+    "id,requesting_department,purpose,cost_center,required_date,expense_treatment,status,lines,requested_by,requested_at,approved_by,approved_at,fulfillment_order_id",
+  customer_return_cases:
+    "id,source_order_id,serial_number,product_id,defect_description,requesting_department,status,resolution,quarantine_bin_id,replacement_order_id,refund_reference,supplier_reference,created_by,created_at,resolved_by,resolved_at",
+  kit_definitions:
+    "id,product_id,version,name,components,status,owner_department,product_approval_reference,created_by,created_at",
+  rekit_work_orders:
+    "id,source_return_case_id,kit_definition_id,output_serial_number,component_serial_numbers,condition,status,created_by,created_at,completed_by,completed_at",
 };
 
 const BOUNDED_HISTORY = new Set([
-  'movements',
-  'returns',
-  'cycle_counts',
-  'receipts',
-  'purchase_orders',
+  "movements",
+  "returns",
+  "cycle_counts",
+  "receipts",
+  "purchase_orders",
+  "fulfillment_orders",
+  "department_stock_requests",
+  "customer_return_cases",
+  "rekit_work_orders",
 ]);
 const OPERATIONAL_HISTORY_LIMIT = 5000;
 const CONTROL_TIMESTAMP_COLUMNS: Record<string, string> = {
-  quality_inspections: 'inspected_at',
+  quality_inspections: "inspected_at",
 };
 
 /**
@@ -162,10 +206,13 @@ export class SupabaseRepository implements WarehouseControlRepository {
 
   private async select<T>(table: string, map: (r: never) => T): Promise<T[]> {
     const projection = TABLE_PROJECTIONS[table];
-    if (!projection) throw new Error(`No safe projection configured for ${table}.`);
+    if (!projection)
+      throw new Error(`No safe projection configured for ${table}.`);
     let query: any = this.db.from(table).select(projection);
     if (BOUNDED_HISTORY.has(table)) {
-      query = query.order('created_at', { ascending: false }).limit(OPERATIONAL_HISTORY_LIMIT);
+      query = query
+        .order("created_at", { ascending: false })
+        .limit(OPERATIONAL_HISTORY_LIMIT);
     }
     const { data, error } = await query;
     if (error) throw new Error(`${table}: ${error.message}`);
@@ -190,23 +237,33 @@ export class SupabaseRepository implements WarehouseControlRepository {
       purchaseOrders,
       operationTypes,
       operationRoutes,
+      fulfillmentOrders,
+      departmentStockRequests,
+      customerReturnCases,
+      kitDefinitions,
+      reKitWorkOrders,
     ] = await Promise.all([
-      this.select('products', rowToProduct),
-      this.select('locations', rowToLocation),
-      this.select('storage_areas', rowToStorageArea),
-      this.select('suppliers', rowToSupplier),
-      this.select('lots', rowToLot),
-      this.select('inventory_units', rowToUnit),
-      this.select('stock_levels', rowToStockLevel),
-      this.select('movements', rowToMovement),
-      this.select('allocations', rowToAllocation),
-      this.select('events', rowToEvent),
-      this.select('returns', rowToReturn),
-      this.select('cycle_counts', rowToCycleCount),
-      this.select('receipts', rowToReceipt),
-      this.select('purchase_orders', rowToPurchaseOrder),
-      this.select('operation_types', rowToOperationType),
-      this.select('operation_routes', rowToOperationRoute),
+      this.select("products", rowToProduct),
+      this.select("locations", rowToLocation),
+      this.select("storage_areas", rowToStorageArea),
+      this.select("suppliers", rowToSupplier),
+      this.select("lots", rowToLot),
+      this.select("inventory_units", rowToUnit),
+      this.select("stock_levels", rowToStockLevel),
+      this.select("movements", rowToMovement),
+      this.select("allocations", rowToAllocation),
+      this.select("events", rowToEvent),
+      this.select("returns", rowToReturn),
+      this.select("cycle_counts", rowToCycleCount),
+      this.select("receipts", rowToReceipt),
+      this.select("purchase_orders", rowToPurchaseOrder),
+      this.select("operation_types", rowToOperationType),
+      this.select("operation_routes", rowToOperationRoute),
+      this.select("fulfillment_orders", rowToFulfillmentOrder),
+      this.select("department_stock_requests", rowToDepartmentStockRequest),
+      this.select("customer_return_cases", rowToCustomerReturnCase),
+      this.select("kit_definitions", rowToKitDefinition),
+      this.select("rekit_work_orders", rowToReKitWorkOrder),
     ]);
     return {
       products,
@@ -225,6 +282,11 @@ export class SupabaseRepository implements WarehouseControlRepository {
       purchaseOrders,
       operationTypes,
       operationRoutes,
+      fulfillmentOrders,
+      departmentStockRequests,
+      customerReturnCases,
+      kitDefinitions,
+      reKitWorkOrders,
     };
   }
 
@@ -233,7 +295,7 @@ export class SupabaseRepository implements WarehouseControlRepository {
   }
 
   async getProfiles() {
-    return this.select('profiles', rowToProfile);
+    return this.select("profiles", rowToProfile);
   }
 
   /**
@@ -255,12 +317,13 @@ export class SupabaseRepository implements WarehouseControlRepository {
     table: string,
     query: PageQuery,
     map: (row: never) => T,
-    statusColumn: string | null = 'status',
+    statusColumn: string | null = "status",
   ): Promise<PageResult<T>> {
     const normalized = normalizePageQuery(query);
     const projection = TABLE_PROJECTIONS[table];
-    if (!projection) throw new Error(`No safe projection configured for ${table}.`);
-    const timestampColumn = CONTROL_TIMESTAMP_COLUMNS[table] ?? 'created_at';
+    if (!projection)
+      throw new Error(`No safe projection configured for ${table}.`);
+    const timestampColumn = CONTROL_TIMESTAMP_COLUMNS[table] ?? "created_at";
     let request: any = this.db.from(table).select(projection);
     if (normalized.status && statusColumn) {
       request = request.eq(statusColumn, normalized.status);
@@ -270,14 +333,17 @@ export class SupabaseRepository implements WarehouseControlRepository {
       try {
         decoded = JSON.parse(decodeURIComponent(normalized.cursor));
       } catch {
-        throw new Error('Invalid page cursor.');
+        throw new Error("Invalid page cursor.");
       }
       if (
-        !Array.isArray(decoded) || decoded.length !== 2 ||
-        typeof decoded[0] !== 'string' || Number.isNaN(Date.parse(decoded[0])) ||
-        typeof decoded[1] !== 'string' || !/^[A-Za-z0-9_|-]{1,200}$/.test(decoded[1])
+        !Array.isArray(decoded) ||
+        decoded.length !== 2 ||
+        typeof decoded[0] !== "string" ||
+        Number.isNaN(Date.parse(decoded[0])) ||
+        typeof decoded[1] !== "string" ||
+        !/^[A-Za-z0-9_|-]{1,200}$/.test(decoded[1])
       ) {
-        throw new Error('Invalid page cursor.');
+        throw new Error("Invalid page cursor.");
       }
       request = request.or(
         `${timestampColumn}.lt.${decoded[0]},and(${timestampColumn}.eq.${decoded[0]},id.lt.${decoded[1]})`,
@@ -285,7 +351,7 @@ export class SupabaseRepository implements WarehouseControlRepository {
     }
     request = request
       .order(timestampColumn, { ascending: false })
-      .order('id', { ascending: false })
+      .order("id", { ascending: false })
       .limit(normalized.limit + 1);
     const { data, error } = await request;
     if (error) throw new Error(`${table}: ${error.message}`);
@@ -304,48 +370,66 @@ export class SupabaseRepository implements WarehouseControlRepository {
     };
   }
 
-  listQualityInspections(query: PageQuery): Promise<PageResult<QualityInspection>> {
-    return this.listControl('quality_inspections', query, rowToQualityInspection, 'disposition');
+  listQualityInspections(
+    query: PageQuery,
+  ): Promise<PageResult<QualityInspection>> {
+    return this.listControl(
+      "quality_inspections",
+      query,
+      rowToQualityInspection,
+      "disposition",
+    );
   }
 
   listHolds(query: PageQuery): Promise<PageResult<InventoryHold>> {
-    return this.listControl('inventory_holds', query, rowToHold);
+    return this.listControl("inventory_holds", query, rowToHold);
   }
 
   listVendorReturns(query: PageQuery): Promise<PageResult<VendorReturn>> {
-    return this.listControl('vendor_returns', query, rowToVendorReturn);
+    return this.listControl("vendor_returns", query, rowToVendorReturn);
   }
 
   listExceptions(query: PageQuery): Promise<PageResult<WarehouseException>> {
-    return this.listControl('exceptions', query, rowToException);
+    return this.listControl("exceptions", query, rowToException);
   }
 
-  async listStockChangeRequests(query: PageQuery): Promise<PageResult<StockChangeRequest>> {
+  async listStockChangeRequests(
+    query: PageQuery,
+  ): Promise<PageResult<StockChangeRequest>> {
     const normalized = normalizePageQuery(query);
-    const response = await this.callRpc('list_stock_change_requests', {
+    const response = await this.callRpc("list_stock_change_requests", {
       limit: normalized.limit,
       ...(normalized.status ? { status: normalized.status } : {}),
       ...(normalized.search ? { search: normalized.search } : {}),
       ...(normalized.cursor ? { cursor: normalized.cursor } : {}),
     });
-    const rows = Array.isArray(response.rows) ? response.rows as Row[] : [];
+    const rows = Array.isArray(response.rows) ? (response.rows as Row[]) : [];
     return {
       rows: rows.map(rowToStockChangeRequest),
-      ...(typeof response.next_cursor === 'string' ? { nextCursor: response.next_cursor } : {}),
-      ...(typeof response.total === 'number' ? { total: response.total } : {}),
+      ...(typeof response.next_cursor === "string"
+        ? { nextCursor: response.next_cursor }
+        : {}),
+      ...(typeof response.total === "number" ? { total: response.total } : {}),
     };
   }
 
   listWarehouseTasks(query: PageQuery): Promise<PageResult<WarehouseTask>> {
-    return this.listControl('warehouse_tasks', query, rowToWarehouseTask);
+    return this.listControl("warehouse_tasks", query, rowToWarehouseTask);
   }
 
-  listInventoryPositions(query: PageQuery): Promise<PageResult<InventoryPosition>> {
-    return this.listControl('inventory_position_v1', query, rowToInventoryPosition, null);
+  listInventoryPositions(
+    query: PageQuery,
+  ): Promise<PageResult<InventoryPosition>> {
+    return this.listControl(
+      "inventory_position_v1",
+      query,
+      rowToInventoryPosition,
+      null,
+    );
   }
 
   async inspectQuality(input: InspectQualityInput): Promise<QualityInspection> {
-    const response = await this.callRpc('inspect_quality', {
+    const response = await this.callRpc("inspect_quality", {
       idempotency_key: input.idempotencyKey,
       source_type: input.sourceType,
       source_id: input.sourceId,
@@ -362,43 +446,55 @@ export class SupabaseRepository implements WarehouseControlRepository {
   }
 
   async releaseHold(input: ReleaseHoldInput): Promise<InventoryHold> {
-    return rowToHold(await this.callRpc('release_quality_hold', {
-      idempotency_key: input.idempotencyKey,
-      hold_id: input.holdId,
-      target_disposition: input.targetDisposition,
-      reason: input.reason,
-      evidence_urls: input.evidenceUrls ?? [],
-    }) as never);
+    return rowToHold(
+      (await this.callRpc("release_quality_hold", {
+        idempotency_key: input.idempotencyKey,
+        hold_id: input.holdId,
+        target_disposition: input.targetDisposition,
+        reason: input.reason,
+        evidence_urls: input.evidenceUrls ?? [],
+      })) as never,
+    );
   }
 
-  async createVendorReturn(input: CreateVendorReturnInput): Promise<VendorReturn> {
-    return rowToVendorReturn(await this.callRpc('create_vendor_return', {
-      idempotency_key: input.idempotencyKey,
-      hold_id: input.holdId,
-      supplier_id: input.supplierId,
-      reason: input.reason,
-      reference: input.reference,
-      evidence_urls: input.evidenceUrls ?? [],
-    }) as never);
+  async createVendorReturn(
+    input: CreateVendorReturnInput,
+  ): Promise<VendorReturn> {
+    return rowToVendorReturn(
+      (await this.callRpc("create_vendor_return", {
+        idempotency_key: input.idempotencyKey,
+        hold_id: input.holdId,
+        supplier_id: input.supplierId,
+        reason: input.reason,
+        reference: input.reference,
+        evidence_urls: input.evidenceUrls ?? [],
+      })) as never,
+    );
   }
 
-  async updateOperationRoute(input: UpdateOperationRouteInput): Promise<OperationRoute> {
-    return rowToOperationRoute(await this.callRpc('update_operation_route', {
-      idempotency_key: input.idempotencyKey,
-      route_id: input.routeId,
-      patch: {
-        source_location_types: input.patch.sourceLocationTypes,
-        destination_location_types: input.patch.destinationLocationTypes,
-        requires_evidence: input.patch.requiresEvidence,
-        requires_approval: input.patch.requiresApproval,
-        requires_online: input.patch.requiresOnline,
-        active: input.patch.active,
-      },
-    }) as never);
+  async updateOperationRoute(
+    input: UpdateOperationRouteInput,
+  ): Promise<OperationRoute> {
+    return rowToOperationRoute(
+      (await this.callRpc("update_operation_route", {
+        idempotency_key: input.idempotencyKey,
+        route_id: input.routeId,
+        patch: {
+          source_location_types: input.patch.sourceLocationTypes,
+          destination_location_types: input.patch.destinationLocationTypes,
+          requires_evidence: input.patch.requiresEvidence,
+          requires_approval: input.patch.requiresApproval,
+          requires_online: input.patch.requiresOnline,
+          active: input.patch.active,
+        },
+      })) as never,
+    );
   }
 
-  async submitCycleCount(input: SubmitCycleCountInput): Promise<StockChangeRequest[]> {
-    const response = await this.callRpc('submit_cycle_count', {
+  async submitCycleCount(
+    input: SubmitCycleCountInput,
+  ): Promise<StockChangeRequest[]> {
+    const response = await this.callRpc("submit_cycle_count", {
       idempotency_key: input.idempotencyKey,
       cycle_count_id: input.cycleCountId,
       reason: input.reason,
@@ -413,61 +509,72 @@ export class SupabaseRepository implements WarehouseControlRepository {
     input: RequestStockChangeInput,
     _principal?: WarehouseControlPrincipal,
   ): Promise<StockChangeRequest> {
-    return rowToStockChangeRequest(await this.callRpc('request_stock_change', {
-      idempotency_key: input.idempotencyKey,
-      source_type: input.sourceType,
-      product_id: input.productId,
-      location_id: input.locationId,
-      bin_id: input.binId ?? null,
-      quantity_delta: input.quantityDelta,
-      reason: input.reason,
-      evidence_urls: input.evidenceUrls ?? [],
-    }) as never);
+    return rowToStockChangeRequest(
+      (await this.callRpc("request_stock_change", {
+        idempotency_key: input.idempotencyKey,
+        source_type: input.sourceType,
+        product_id: input.productId,
+        location_id: input.locationId,
+        bin_id: input.binId ?? null,
+        quantity_delta: input.quantityDelta,
+        reason: input.reason,
+        evidence_urls: input.evidenceUrls ?? [],
+      })) as never,
+    );
   }
 
   async decideStockChange(
     input: DecideStockChangeInput,
     _principal?: WarehouseControlPrincipal,
   ): Promise<StockChangeRequest> {
-    return rowToStockChangeRequest(await this.callRpc('decide_stock_change', {
-      idempotency_key: input.idempotencyKey,
-      request_id: input.requestId,
-      decision: input.decision,
-      note: input.note ?? null,
-    }) as never);
+    return rowToStockChangeRequest(
+      (await this.callRpc("decide_stock_change", {
+        idempotency_key: input.idempotencyKey,
+        request_id: input.requestId,
+        decision: input.decision,
+        note: input.note ?? null,
+      })) as never,
+    );
   }
 
-  async resolveException(input: ResolveExceptionInput): Promise<WarehouseException> {
-    return rowToException(await this.callRpc('resolve_exception', {
-      idempotency_key: input.idempotencyKey,
-      exception_id: input.exceptionId,
-      action: input.action,
-      owner_id: input.ownerId ?? null,
-      resolution: input.resolution ?? null,
-      evidence_urls: input.evidenceUrls ?? [],
-    }) as never);
+  async resolveException(
+    input: ResolveExceptionInput,
+  ): Promise<WarehouseException> {
+    return rowToException(
+      (await this.callRpc("resolve_exception", {
+        idempotency_key: input.idempotencyKey,
+        exception_id: input.exceptionId,
+        action: input.action,
+        owner_id: input.ownerId ?? null,
+        resolution: input.resolution ?? null,
+        evidence_urls: input.evidenceUrls ?? [],
+      })) as never,
+    );
   }
 
   async getReceivableProcurementPOs(): Promise<ProcurementPOHandoff[]> {
     const projection = TABLE_PROJECTIONS.procurement_po_handoff!;
     const { data, error } = await this.db
-      .from('procurement_po_handoff')
+      .from("procurement_po_handoff")
       .select(projection)
-      .order('expected_date', { ascending: true })
+      .order("expected_date", { ascending: true })
       .limit(500);
     if (error) throw new Error(`procurement_po_handoff: ${error.message}`);
     return ((data ?? []) as unknown as Row[]).map((row) => ({
       id: String(row.id),
       poNumber: String(row.po_number),
       vendorName: String(row.vendor_name),
-      status: row.status as ProcurementPOHandoff['status'],
-      expectedDate: row.expected_date == null ? undefined : String(row.expected_date),
-      lines: (row.lines ?? []) as ProcurementPOHandoff['lines'],
+      status: row.status as ProcurementPOHandoff["status"],
+      expectedDate:
+        row.expected_date == null ? undefined : String(row.expected_date),
+      lines: (row.lines ?? []) as ProcurementPOHandoff["lines"],
     }));
   }
 
-  async receiveProcurementPO(input: ReceiveProcurementPOInput): Promise<Receipt> {
-    const response = await this.callRpc('receive_procurement_po', {
+  async receiveProcurementPO(
+    input: ReceiveProcurementPOInput,
+  ): Promise<Receipt> {
+    const response = await this.callRpc("receive_procurement_po", {
       idempotency_key: input.idempotencyKey,
       po_id: input.poId,
       location_id: input.locationId,
@@ -489,9 +596,12 @@ export class SupabaseRepository implements WarehouseControlRepository {
     const createdAt = new Date().toISOString();
     const data = await this.getData();
     const receipt: Receipt = {
-      id: uid('rcpt'),
+      id: uid("rcpt"),
       supplierId: input.supplierId,
       locationId: input.locationId,
+      actualDeliveryDate: input.actualDeliveryDate,
+      deliveryReference: input.deliveryReference,
+      courierOrDriver: input.courierOrDriver,
       lines: input.lines,
       evidenceUrls: input.evidenceUrls,
       actor: input.actor,
@@ -514,7 +624,7 @@ export class SupabaseRepository implements WarehouseControlRepository {
       let lotId: string | undefined;
       if (line.unitCost != null || line.lotCode || line.expiryDate) {
         const lot: Lot = {
-          id: uid('lot'),
+          id: uid("lot"),
           productId: product.id,
           lotCode: line.lotCode ?? `LOT-${product.sku}-${Date.now()}`,
           supplierId: input.supplierId,
@@ -536,18 +646,18 @@ export class SupabaseRepository implements WarehouseControlRepository {
         for (const serialNumber of serials) {
           units.push(
             unitToRow({
-              id: uid('unit'),
+              id: uid("unit"),
               productId: product.id,
               serialNumber,
               lotId,
               locationId: input.locationId,
               binId: line.binId,
-              status: 'in_stock',
+              status: "in_stock",
             }),
           );
         }
       } else {
-        const key = `${product.id}|${input.locationId}|${line.binId ?? ''}`;
+        const key = `${product.id}|${input.locationId}|${line.binId ?? ""}`;
         let entry = stockByKey.get(key);
         if (!entry) {
           entry = {
@@ -564,8 +674,8 @@ export class SupabaseRepository implements WarehouseControlRepository {
 
       movements.push(
         movementToRow({
-          id: uid('mv'),
-          type: 'receipt',
+          id: uid("mv"),
+          type: "receipt",
           productId: product.id,
           quantity: line.quantity,
           toLocationId: input.locationId,
@@ -579,7 +689,7 @@ export class SupabaseRepository implements WarehouseControlRepository {
       );
     }
 
-    const row = await this.callRpc('receive_stock', {
+    const row = await this.callRpc("receive_stock", {
       lots,
       units,
       stock_deltas: [...stockByKey.values()],
@@ -588,6 +698,9 @@ export class SupabaseRepository implements WarehouseControlRepository {
         id: receipt.id,
         supplier_id: receipt.supplierId ?? null,
         location_id: receipt.locationId,
+        actual_delivery_date: receipt.actualDeliveryDate ?? null,
+        delivery_reference: receipt.deliveryReference ?? null,
+        courier_or_driver: receipt.courierOrDriver ?? null,
         lines: receipt.lines,
         evidence_urls: receipt.evidenceUrls ?? [],
         actor: receipt.actor,
@@ -611,15 +724,15 @@ export class SupabaseRepository implements WarehouseControlRepository {
     if (!result.ok) throw new Error(result.error);
 
     const allocation: Allocation = {
-      id: uid('alloc'),
+      id: uid("alloc"),
       eventId: input.eventId,
       productId: input.productId,
       quantity: input.quantity,
-      status: 'reserved',
+      status: "reserved",
       promotional: input.promotional,
       createdAt: new Date().toISOString(),
     };
-    const row = await this.callRpc('reserve', {
+    const row = await this.callRpc("reserve", {
       product_id: input.productId,
       quantity: input.quantity,
       allocation: allocationToRow(allocation),
@@ -629,23 +742,25 @@ export class SupabaseRepository implements WarehouseControlRepository {
 
   async issue(input: IssueInput): Promise<Allocation> {
     const data = await this.getData();
-    const allocation = data.allocations.find((a) => a.id === input.allocationId);
-    if (!allocation) throw new Error('Allocation not found.');
-    if (allocation.status === 'issued')
-      throw new Error('Allocation already issued.');
+    const allocation = data.allocations.find(
+      (a) => a.id === input.allocationId,
+    );
+    if (!allocation) throw new Error("Allocation not found.");
+    if (allocation.status === "issued")
+      throw new Error("Allocation already issued.");
     const product = data.products.find((p) => p.id === allocation.productId);
-    if (!product) throw new Error('Product not found.');
+    if (!product) throw new Error("Product not found.");
     const holdProjection = TABLE_PROJECTIONS.inventory_holds;
     const holdQuery = await this.db
-      .from('inventory_holds')
+      .from("inventory_holds")
       .select(holdProjection)
-      .eq('status', 'active')
-      .eq('product_id', product.id);
+      .eq("status", "active")
+      .eq("product_id", product.id);
     if (holdQuery.error) {
       throw new Error(`inventory_holds: ${holdQuery.error.message}`);
     }
-    const activeHolds = ((holdQuery.data ?? []) as unknown as Row[]).map((row) =>
-      rowToHold(row as never),
+    const activeHolds = ((holdQuery.data ?? []) as unknown as Row[]).map(
+      (row) => rowToHold(row as never),
     );
     const createdAt = new Date().toISOString();
     const isHeldSerializedUnit = (unit: InventoryUnit) =>
@@ -675,24 +790,28 @@ export class SupabaseRepository implements WarehouseControlRepository {
     if (sourceLocationId === undefined) {
       const preferred = primaryStockLocation(toStockState(data), product.id);
       const requestedSerials = new Set(input.serialNumbers ?? []);
-      const locationIds = Array.from(new Set(
-        product.serialized
-          ? data.units
-              .filter((unit) => unit.productId === product.id)
-              .map((unit) => unit.locationId)
-          : data.stockLevels
-              .filter((level) => level.productId === product.id)
-              .map((level) => level.locationId),
-      ));
+      const locationIds = Array.from(
+        new Set(
+          product.serialized
+            ? data.units
+                .filter((unit) => unit.productId === product.id)
+                .map((unit) => unit.locationId)
+            : data.stockLevels
+                .filter((level) => level.productId === product.id)
+                .map((level) => level.locationId),
+        ),
+      );
       const availableAt = (locationId: string) =>
         product.serialized
           ? data.units.filter(
               (unit) =>
                 unit.productId === product.id &&
                 unit.locationId === locationId &&
-                unit.status === 'in_stock' &&
-                (input.sourceBinId === undefined || unit.binId === input.sourceBinId) &&
-                (requestedSerials.size === 0 || requestedSerials.has(unit.serialNumber)) &&
+                unit.status === "in_stock" &&
+                (input.sourceBinId === undefined ||
+                  unit.binId === input.sourceBinId) &&
+                (requestedSerials.size === 0 ||
+                  requestedSerials.has(unit.serialNumber)) &&
                 !isHeldSerializedUnit(unit),
             ).length
           : data.stockLevels
@@ -707,8 +826,9 @@ export class SupabaseRepository implements WarehouseControlRepository {
       sourceLocationId =
         (preferred && availableAt(preferred) >= allocation.quantity
           ? preferred
-          : locationIds.find((locationId) => availableAt(locationId) >= allocation.quantity)) ??
-        preferred;
+          : locationIds.find(
+              (locationId) => availableAt(locationId) >= allocation.quantity,
+            )) ?? preferred;
     }
 
     const unitIds: string[] = [];
@@ -718,15 +838,17 @@ export class SupabaseRepository implements WarehouseControlRepository {
       const candidates = data.units.filter(
         (u) =>
           u.productId === product.id &&
-          u.status === 'in_stock' &&
-          (sourceLocationId === undefined || u.locationId === sourceLocationId) &&
+          u.status === "in_stock" &&
+          (sourceLocationId === undefined ||
+            u.locationId === sourceLocationId) &&
           (input.sourceBinId === undefined || u.binId === input.sourceBinId) &&
           !isHeldSerializedUnit(u),
       );
       let toIssue = allocation.quantity;
       for (const unit of candidates) {
         if (toIssue <= 0) break;
-        if (serials.length > 0 && !serials.includes(unit.serialNumber)) continue;
+        if (serials.length > 0 && !serials.includes(unit.serialNumber))
+          continue;
         unitIds.push(unit.id);
         toIssue--;
       }
@@ -742,7 +864,8 @@ export class SupabaseRepository implements WarehouseControlRepository {
       const levels = data.stockLevels.filter(
         (s) =>
           s.productId === product.id &&
-          (sourceLocationId === undefined || s.locationId === sourceLocationId) &&
+          (sourceLocationId === undefined ||
+            s.locationId === sourceLocationId) &&
           (input.sourceBinId === undefined ||
             (s.binId ?? undefined) === input.sourceBinId),
       );
@@ -750,7 +873,10 @@ export class SupabaseRepository implements WarehouseControlRepository {
         level,
         available: unheldBulkQuantity(level),
       }));
-      const total = availableLevels.reduce((sum, row) => sum + row.available, 0);
+      const total = availableLevels.reduce(
+        (sum, row) => sum + row.available,
+        0,
+      );
       if (total < allocation.quantity) {
         throw new Error(
           `Insufficient stock to issue ${allocation.quantity} at the selected source.`,
@@ -773,8 +899,8 @@ export class SupabaseRepository implements WarehouseControlRepository {
     }
 
     const movement = movementToRow({
-      id: uid('mv'),
-      type: 'issue',
+      id: uid("mv"),
+      type: "issue",
       productId: product.id,
       quantity: allocation.quantity,
       fromLocationId: sourceLocationId,
@@ -786,7 +912,7 @@ export class SupabaseRepository implements WarehouseControlRepository {
       createdAt,
     });
 
-    const row = await this.callRpc('issue', {
+    const row = await this.callRpc("issue", {
       unit_ids: unitIds,
       assigned_to: input.assignedTo ?? null,
       event_id: allocation.eventId,
@@ -801,7 +927,7 @@ export class SupabaseRepository implements WarehouseControlRepository {
     const createdAt = new Date().toISOString();
     const data = await this.getData();
     const record: ReturnRecord = {
-      id: uid('ret'),
+      id: uid("ret"),
       source: input.source,
       eventId: input.eventId,
       lines: input.lines,
@@ -818,28 +944,29 @@ export class SupabaseRepository implements WarehouseControlRepository {
     for (const line of input.lines) {
       const product = data.products.find((p) => p.id === line.productId);
       if (!product) throw new Error(`Unknown product: ${line.productId}`);
-      const disposition = line.disposition ?? 'restock';
+      const disposition = line.disposition ?? "restock";
 
       if (product.serialized && line.serialNumber) {
         const status =
-          disposition === 'restock'
-            ? 'in_stock'
-            : disposition === 'lost'
-              ? 'lost'
-              : 'returned';
+          disposition === "restock"
+            ? "in_stock"
+            : disposition === "lost"
+              ? "lost"
+              : "returned";
         const update: Row = { serial_number: line.serialNumber, status };
         // A restocked unit physically re-enters the warehouse at the chosen
         // location/bin — persist that so it's found by scan-to-bin.
-        if (disposition === 'restock' && line.locationId) {
+        if (disposition === "restock" && line.locationId) {
           update.location_id = line.locationId;
           update.bin_id = line.binId ?? null;
         }
         unitUpdates.push(update);
-      } else if (!product.serialized && disposition === 'restock') {
+      } else if (!product.serialized && disposition === "restock") {
         const targetLoc =
-          line.locationId ?? primaryStockLocation(toStockState(data), product.id);
+          line.locationId ??
+          primaryStockLocation(toStockState(data), product.id);
         if (targetLoc) {
-          const key = `${product.id}|${targetLoc}|${line.binId ?? ''}`;
+          const key = `${product.id}|${targetLoc}|${line.binId ?? ""}`;
           let entry = stockByKey.get(key);
           if (!entry) {
             entry = {
@@ -856,8 +983,8 @@ export class SupabaseRepository implements WarehouseControlRepository {
       }
       movements.push(
         movementToRow({
-          id: uid('mv'),
-          type: 'return',
+          id: uid("mv"),
+          type: "return",
           productId: product.id,
           quantity: line.quantity,
           toLocationId: line.locationId,
@@ -880,15 +1007,19 @@ export class SupabaseRepository implements WarehouseControlRepository {
       const allocation = data.allocations.find(
         (a) => a.id === input.allocationId,
       );
-      if (allocation && allocation.status === 'issued') {
-        const product = data.products.find((p) => p.id === allocation.productId);
-        if (returnClosesAllocation(allocation, product, input.lines, data.units)) {
+      if (allocation && allocation.status === "issued") {
+        const product = data.products.find(
+          (p) => p.id === allocation.productId,
+        );
+        if (
+          returnClosesAllocation(allocation, product, input.lines, data.units)
+        ) {
           allocationId = allocation.id;
         }
       }
     }
 
-    const row = await this.callRpc('record_return', {
+    const row = await this.callRpc("record_return", {
       unit_updates: unitUpdates,
       stock_deltas: [...stockByKey.values()],
       movements,
@@ -909,25 +1040,25 @@ export class SupabaseRepository implements WarehouseControlRepository {
   async recordCycleCount(input: CycleCountInput): Promise<CycleCount> {
     const createdAt = new Date().toISOString();
     const count: CycleCount = {
-      id: uid('cc'),
+      id: uid("cc"),
       locationId: input.locationId,
       binId: input.binId,
       category: input.category,
       lines: input.lines,
-      status: 'draft',
+      status: "draft",
       requestedBy: input.actor,
       actor: input.actor,
       createdAt,
     };
 
-    const row = await this.callRpc('record_cycle_count', {
+    const row = await this.callRpc("record_cycle_count", {
       cycle_count: {
         id: count.id,
         location_id: count.locationId,
         bin_id: count.binId ?? null,
         category: count.category ?? null,
         lines: count.lines,
-        status: 'draft',
+        status: "draft",
         created_at: createdAt,
       },
     });
@@ -957,14 +1088,15 @@ export class SupabaseRepository implements WarehouseControlRepository {
       const candidates = data.units.filter(
         (u) =>
           u.productId === product.id &&
-          u.status === 'in_stock' &&
+          u.status === "in_stock" &&
           u.locationId === input.fromLocationId &&
           (input.fromBinId === undefined || u.binId === input.fromBinId),
       );
       let toMove = input.quantity;
       for (const unit of candidates) {
         if (toMove <= 0) break;
-        if (serials.length > 0 && !serials.includes(unit.serialNumber)) continue;
+        if (serials.length > 0 && !serials.includes(unit.serialNumber))
+          continue;
         unitIds.push(unit.id);
         toMove--;
       }
@@ -1003,8 +1135,8 @@ export class SupabaseRepository implements WarehouseControlRepository {
     }
 
     const movement: Movement = {
-      id: uid('mv'),
-      type: 'transfer',
+      id: uid("mv"),
+      type: "transfer",
       productId: product.id,
       quantity: input.quantity,
       fromLocationId: input.fromLocationId,
@@ -1014,7 +1146,7 @@ export class SupabaseRepository implements WarehouseControlRepository {
       actor: input.actor,
       createdAt,
     };
-    const row = await this.callRpc('transfer', {
+    const row = await this.callRpc("transfer", {
       unit_ids: unitIds,
       from_location_id: input.fromLocationId,
       to_location_id: input.toLocationId,
@@ -1030,9 +1162,9 @@ export class SupabaseRepository implements WarehouseControlRepository {
     input: CreatePurchaseOrderInput,
   ): Promise<PurchaseOrder> {
     const po: PurchaseOrder = {
-      id: uid('po'),
+      id: uid("po"),
       supplierId: input.supplierId,
-      status: 'ordered',
+      status: "ordered",
       lines: input.lines.map((l) => ({
         productId: l.productId,
         quantityOrdered: l.quantityOrdered,
@@ -1042,7 +1174,7 @@ export class SupabaseRepository implements WarehouseControlRepository {
       actor: input.actor,
       createdAt: new Date().toISOString(),
     };
-    await this.callRpc('create_purchase_order', {
+    await this.callRpc("create_purchase_order", {
       purchase_order: poToRow(po),
     });
     return po;
@@ -1051,9 +1183,9 @@ export class SupabaseRepository implements WarehouseControlRepository {
   async receiveAgainstPO(input: ReceiveAgainstPOInput): Promise<PurchaseOrder> {
     const data = await this.getData();
     const po = data.purchaseOrders.find((p) => p.id === input.poId);
-    if (!po) throw new Error('Purchase order not found.');
-    if (po.status === 'cancelled')
-      throw new Error('Cannot receive against a cancelled purchase order.');
+    if (!po) throw new Error("Purchase order not found.");
+    if (po.status === "cancelled")
+      throw new Error("Cannot receive against a cancelled purchase order.");
     const createdAt = new Date().toISOString();
 
     const units: Row[] = [];
@@ -1072,7 +1204,9 @@ export class SupabaseRepository implements WarehouseControlRepository {
 
       const poLine = projectedLines.find((l) => l.productId === line.productId);
       if (!poLine)
-        throw new Error(`Received product is not on this PO: ${line.productId}`);
+        throw new Error(
+          `Received product is not on this PO: ${line.productId}`,
+        );
       poLine.quantityReceived = Math.min(
         poLine.quantityOrdered,
         poLine.quantityReceived + line.quantityReceived,
@@ -1082,17 +1216,17 @@ export class SupabaseRepository implements WarehouseControlRepository {
         for (let i = 0; i < line.quantityReceived; i++) {
           units.push(
             unitToRow({
-              id: uid('unit'),
+              id: uid("unit"),
               productId: product.id,
               serialNumber: `${product.sku}-SN${Date.now()}${i}`,
               locationId: input.locationId,
               binId: input.binId,
-              status: 'in_stock',
+              status: "in_stock",
             }),
           );
         }
       } else {
-        const key = `${product.id}|${input.locationId}|${input.binId ?? ''}`;
+        const key = `${product.id}|${input.locationId}|${input.binId ?? ""}`;
         let entry = stockByKey.get(key);
         if (!entry) {
           entry = {
@@ -1109,8 +1243,8 @@ export class SupabaseRepository implements WarehouseControlRepository {
 
       movements.push(
         movementToRow({
-          id: uid('mv'),
-          type: 'receipt',
+          id: uid("mv"),
+          type: "receipt",
           productId: product.id,
           quantity: line.quantityReceived,
           toLocationId: input.locationId,
@@ -1123,7 +1257,7 @@ export class SupabaseRepository implements WarehouseControlRepository {
     }
 
     const status = poStatusAfterReceipt({ ...po, lines: projectedLines });
-    const row = await this.callRpc('receive_against_po', {
+    const row = await this.callRpc("receive_against_po", {
       units,
       stock_deltas: [...stockByKey.values()],
       movements,
@@ -1139,66 +1273,70 @@ export class SupabaseRepository implements WarehouseControlRepository {
   ): Promise<PurchaseOrder> {
     const data = await this.getData();
     const po = data.purchaseOrders.find((p) => p.id === input.poId);
-    if (!po) throw new Error('Purchase order not found.');
-    if (po.status === 'received')
-      throw new Error('Cannot cancel a fully received purchase order.');
-    if (po.status === 'cancelled')
-      throw new Error('Purchase order already cancelled.');
-    await this.callRpc('cancel_purchase_order', { po_id: po.id });
-    return { ...po, status: 'cancelled' };
+    if (!po) throw new Error("Purchase order not found.");
+    if (po.status === "received")
+      throw new Error("Cannot cancel a fully received purchase order.");
+    if (po.status === "cancelled")
+      throw new Error("Purchase order already cancelled.");
+    await this.callRpc("cancel_purchase_order", { po_id: po.id });
+    return { ...po, status: "cancelled" };
   }
 
   async createEvent(input: CreateEventInput): Promise<WarehouseEvent> {
     const event: WarehouseEvent = {
-      id: uid('evt'),
+      id: uid("evt"),
       name: input.name,
       type: input.type,
       siteLocationId: input.siteLocationId,
       startDate: input.startDate,
       endDate: input.endDate,
     };
-    const row = await this.callRpc('create_event', { event: eventToRow(event) });
+    const row = await this.callRpc("create_event", {
+      event: eventToRow(event),
+    });
     return rowToEvent(row);
   }
 
   async cancelAllocation(input: CancelAllocationInput): Promise<Allocation> {
     const data = await this.getData();
-    const allocation = data.allocations.find((a) => a.id === input.allocationId);
-    if (!allocation) throw new Error('Allocation not found.');
-    if (allocation.status === 'issued')
-      throw new Error('Cannot cancel an issued allocation.');
+    const allocation = data.allocations.find(
+      (a) => a.id === input.allocationId,
+    );
+    if (!allocation) throw new Error("Allocation not found.");
+    if (allocation.status === "issued")
+      throw new Error("Cannot cancel an issued allocation.");
 
-    const row = await this.callRpc('cancel_allocation', {
+    const row = await this.callRpc("cancel_allocation", {
       allocation_id: allocation.id,
     });
     return rowToAllocation(row);
   }
 
   async createSupplier(input: CreateSupplierInput): Promise<Supplier> {
-    if (!input.name.trim()) throw new Error('Supplier name is required.');
+    if (!input.name.trim()) throw new Error("Supplier name is required.");
     const supplier: Supplier = {
-      id: uid('sup'),
+      id: uid("sup"),
       name: input.name.trim(),
       leadTimeDays: input.leadTimeDays,
     };
     const { error } = await this.db
-      .from('suppliers')
+      .from("suppliers")
       .insert(supplierToRow(supplier));
     if (error) throw new Error(error.message);
     return supplier;
   }
 
   async updateSupplier(input: UpdateSupplierInput): Promise<Supplier> {
-    if (!input.name.trim()) throw new Error('Supplier name is required.');
+    if (!input.name.trim()) throw new Error("Supplier name is required.");
     const supplier: Supplier = {
       id: input.supplierId,
       name: input.name.trim(),
       leadTimeDays: input.leadTimeDays,
     };
     const { data, error } = await this.db
-      .from('suppliers')
+      .from("suppliers")
       .update(supplierToRow(supplier))
-      .eq('id', input.supplierId)
+      .eq("id", input.supplierId)
       .select(TABLE_PROJECTIONS.suppliers)
       .single();
     if (error) throw new Error(error.message);
@@ -1206,11 +1344,11 @@ export class SupabaseRepository implements WarehouseControlRepository {
   }
 
   async createLocation(input: CreateLocationInput): Promise<Location> {
-    if (!input.name.trim()) throw new Error('Location name is required.');
-    const id = input.id?.trim() || uid('loc');
+    if (!input.name.trim()) throw new Error("Location name is required.");
+    const id = input.id?.trim() || uid("loc");
     const row = { id, name: input.name.trim(), type: input.type };
     const { data, error } = await this.db
-      .from('locations')
+      .from("locations")
       .insert(row)
       .select(TABLE_PROJECTIONS.locations)
       .single();
@@ -1219,11 +1357,11 @@ export class SupabaseRepository implements WarehouseControlRepository {
   }
 
   async updateLocation(input: UpdateLocationInput): Promise<Location> {
-    if (!input.name.trim()) throw new Error('Location name is required.');
+    if (!input.name.trim()) throw new Error("Location name is required.");
     const { data, error } = await this.db
-      .from('locations')
+      .from("locations")
       .update({ name: input.name.trim(), type: input.type })
-      .eq('id', input.locationId)
+      .eq("id", input.locationId)
       .select(TABLE_PROJECTIONS.locations)
       .single();
     if (error) throw new Error(error.message);
@@ -1235,34 +1373,34 @@ export class SupabaseRepository implements WarehouseControlRepository {
     // client-side check gives a clearer message before the round-trip.
     const [{ data: levels }, { data: units }] = await Promise.all([
       this.db
-        .from('stock_levels')
-        .select('quantity')
-        .eq('location_id', input.locationId)
-        .gt('quantity', 0)
+        .from("stock_levels")
+        .select("quantity")
+        .eq("location_id", input.locationId)
+        .gt("quantity", 0)
         .limit(1),
       this.db
-        .from('inventory_units')
-        .select('id')
-        .eq('location_id', input.locationId)
-        .eq('status', 'in_stock')
+        .from("inventory_units")
+        .select("id")
+        .eq("location_id", input.locationId)
+        .eq("status", "in_stock")
         .limit(1),
     ]);
     if ((levels?.length ?? 0) > 0 || (units?.length ?? 0) > 0) {
       throw new Error(
-        'Cannot delete a location that still holds stock. Transfer or write off its stock first.',
+        "Cannot delete a location that still holds stock. Transfer or write off its stock first.",
       );
     }
     const { error } = await this.db
-      .from('locations')
+      .from("locations")
       .delete()
-      .eq('id', input.locationId);
+      .eq("id", input.locationId);
     if (error) throw new Error(error.message);
   }
 
   async setProductPrice(input: SetProductPriceInput): Promise<Product> {
     if (Number.isNaN(input.price) || input.price < 0)
-      throw new Error('Price must be zero or more.');
-    const row = await this.callRpc('set_product_price', {
+      throw new Error("Price must be zero or more.");
+    const row = await this.callRpc("set_product_price", {
       product_id: input.productId,
       price: input.price,
     });
@@ -1271,9 +1409,9 @@ export class SupabaseRepository implements WarehouseControlRepository {
 
   async createProduct(input: CreateProductInput): Promise<Product> {
     const data = await this.getData();
-    const product = buildNewProduct(uid('prod'), input, data.products);
+    const product = buildNewProduct(uid("prod"), input, data.products);
     const { error } = await this.db
-      .from('products')
+      .from("products")
       .insert(productToRow(product));
     if (error) throw new Error(error.message);
     return product;
@@ -1282,44 +1420,180 @@ export class SupabaseRepository implements WarehouseControlRepository {
   async updateProduct(input: UpdateProductInput): Promise<Product> {
     const data = await this.getData();
     const current = data.products.find((p) => p.id === input.productId);
-    if (!current) throw new Error('Product not found.');
+    if (!current) throw new Error("Product not found.");
     // Validate + compute the next product, then persist the changed columns.
     const next = applyProductPatch(current, input.patch);
     const { data: row, error } = await this.db
-      .from('products')
+      .from("products")
       .update(productToRow(next))
-      .eq('id', input.productId)
+      .eq("id", input.productId)
       .select(TABLE_PROJECTIONS.products)
       .single();
     if (error) throw new Error(error.message);
     return rowToProduct(row as never);
   }
 
+  async createFulfillmentOrder(input: CreateFulfillmentOrderInput) {
+    const id = crypto.randomUUID();
+    const row = await this.callRpc("create_fulfillment_order", {
+      idempotency_key: `create_fulfillment_order-${id}`,
+      order_id: id,
+      source: input.source,
+      external_reference: input.externalReference.trim(),
+      requesting_department: input.requestingDepartment?.trim() || null,
+      customer_reference: input.customerReference?.trim() || null,
+      event_id: input.eventId ?? null,
+      third_party_location_id: input.thirdPartyLocationId ?? null,
+      gross_sales_amount: input.grossSalesAmount ?? null,
+      source_location_id: input.sourceLocationId ?? null,
+      source_bin_id: input.sourceBinId ?? null,
+      lines: input.lines.map((line) => ({
+        productId: line.productId,
+        quantity: line.quantity,
+        pickedQuantity: 0,
+        pickedSerialNumbers: [],
+        ...(line.bundleSetCodes ? { bundleSetCodes: line.bundleSetCodes } : {}),
+      })),
+    });
+    return rowToFulfillmentOrder(row);
+  }
+
+  async advanceFulfillmentOrder(input: AdvanceFulfillmentOrderInput) {
+    const row = await this.callRpc("advance_fulfillment_order", {
+      idempotency_key: `advance_${input.action}-${input.orderId}`,
+      order_id: input.orderId,
+      action: input.action,
+      picked_lines:
+        input.pickedLines?.map((line) => ({
+          productId: line.productId,
+          quantity: line.quantity,
+          serialNumbers: line.serialNumbers ?? [],
+        })) ?? [],
+      packaging: input.packaging ?? [],
+      courier: input.courier?.trim() || null,
+      waybill_number: input.waybillNumber?.trim() || null,
+    });
+    return rowToFulfillmentOrder(row);
+  }
+
+  async createDepartmentStockRequest(input: CreateDepartmentStockRequestInput) {
+    const id = crypto.randomUUID();
+    const row = await this.callRpc("create_department_stock_request", {
+      idempotency_key: `create_department_request-${id}`,
+      request_id: id,
+      requesting_department: input.requestingDepartment.trim(),
+      purpose: input.purpose.trim(),
+      cost_center: input.costCenter.trim(),
+      required_date: input.requiredDate,
+      expense_treatment: input.expenseTreatment,
+      lines: input.lines,
+    });
+    return rowToDepartmentStockRequest(row);
+  }
+
+  async decideDepartmentStockRequest(input: DecideDepartmentStockRequestInput) {
+    const row = await this.callRpc("decide_department_stock_request", {
+      idempotency_key: `decide_${input.decision}-${input.requestId}`,
+      request_id: input.requestId,
+      decision: input.decision,
+      // UUID namespaces are table-local; reusing the request UUID makes an
+      // approval retry byte-for-byte idempotent without trusting the caller.
+      fulfillment_order_id:
+        input.decision === "approved" ? input.requestId : null,
+    });
+    return rowToDepartmentStockRequest(row);
+  }
+
+  async createCustomerReturnCase(input: CreateCustomerReturnCaseInput) {
+    const id = crypto.randomUUID();
+    const row = await this.callRpc("create_customer_return_case", {
+      idempotency_key: `create_customer_return-${id}`,
+      return_case_id: id,
+      source_order_id: input.sourceOrderId ?? null,
+      product_id: input.productId,
+      serial_number: input.serialNumber?.trim() || null,
+      defect_description: input.defectDescription.trim(),
+    });
+    return rowToCustomerReturnCase(row);
+  }
+
+  async resolveCustomerReturnCase(input: ResolveCustomerReturnCaseInput) {
+    const row = await this.callRpc("resolve_customer_return_case", {
+      idempotency_key: `resolve_${input.resolution}-${input.returnCaseId}`,
+      return_case_id: input.returnCaseId,
+      resolution: input.resolution,
+      quarantine_bin_id: input.quarantineBinId ?? null,
+      replacement_order_id: input.replacementOrderId ?? null,
+      refund_reference: input.refundReference?.trim() || null,
+      supplier_reference: input.supplierReference?.trim() || null,
+    });
+    return rowToCustomerReturnCase(row);
+  }
+
+  async createKitDefinition(input: CreateKitDefinitionInput) {
+    const id = crypto.randomUUID();
+    const row = await this.callRpc("create_kit_definition", {
+      idempotency_key: `create_kit_definition-${id}`,
+      kit_definition_id: id,
+      product_id: input.productId,
+      name: input.name.trim(),
+      components: input.components,
+      status: input.status,
+      owner_department: input.ownerDepartment,
+      product_approval_reference: input.productApprovalReference.trim(),
+    });
+    return rowToKitDefinition(row);
+  }
+
+  async createReKitWorkOrder(input: CreateReKitWorkOrderInput) {
+    const id = crypto.randomUUID();
+    const row = await this.callRpc("create_rekit_work_order", {
+      idempotency_key: `create_rekit_work_order-${id}`,
+      rekit_work_order_id: id,
+      source_return_case_id: input.sourceReturnCaseId,
+      kit_definition_id: input.kitDefinitionId,
+      output_serial_number: input.outputSerialNumber.trim(),
+      component_serial_numbers: input.componentSerialNumbers,
+      condition: input.condition,
+    });
+    return rowToReKitWorkOrder(row);
+  }
+
+  async completeReKitWorkOrder(input: CompleteReKitWorkOrderInput) {
+    const row = await this.callRpc("complete_rekit_work_order", {
+      idempotency_key: `complete_rekit_work_order-${input.workOrderId}`,
+      work_order_id: input.workOrderId,
+      location_id: input.locationId,
+      bin_id: input.binId,
+    });
+    return rowToReKitWorkOrder(row);
+  }
+
   async createStorageArea(input: CreateStorageAreaInput): Promise<StorageArea> {
-    if (!input.code.trim()) throw new Error('A bin code is required.');
+    if (!input.code.trim()) throw new Error("A bin code is required.");
     const area: StorageArea = {
-      id: input.id?.trim() || uid('bin'),
+      id: input.id?.trim() || uid("bin"),
       locationId: input.locationId,
       code: input.code.trim(),
       label: input.label?.trim() || undefined,
       zone: input.zone?.trim() || undefined,
       active: true,
     };
-    const row = await this.callRpc('create_storage_area', {
+    const row = await this.callRpc("create_storage_area", {
       storage_area: storageAreaToRow(area),
     });
     return rowToStorageArea(row);
   }
 
   async updateStorageArea(input: UpdateStorageAreaInput): Promise<StorageArea> {
-    if (!input.code.trim()) throw new Error('A bin code is required.');
+    if (!input.code.trim()) throw new Error("A bin code is required.");
     const patch: Row = {
       code: input.code.trim(),
       label: input.label?.trim() || null,
       zone: input.zone?.trim() || null,
     };
     if (input.active !== undefined) patch.active = input.active;
-    const row = await this.callRpc('update_storage_area', {
+    const row = await this.callRpc("update_storage_area", {
       storage_area_id: input.storageAreaId,
       patch,
     });
@@ -1329,19 +1603,20 @@ export class SupabaseRepository implements WarehouseControlRepository {
   async deleteStorageArea(input: { storageAreaId: string }): Promise<void> {
     // Atomic + capability-checked: the RPC deletes the bin and the FK
     // (on delete set null) detaches it from any stock/units in one transaction.
-    await this.callRpc('delete_storage_area', {
+    await this.callRpc("delete_storage_area", {
       storage_area_id: input.storageAreaId,
     });
   }
 
   async relocate(input: RelocateInput): Promise<Movement[]> {
-    if (input.quantity <= 0) throw new Error('Quantity must be greater than zero.');
+    if (input.quantity <= 0)
+      throw new Error("Quantity must be greater than zero.");
     if ((input.fromBinId ?? undefined) === (input.toBinId ?? undefined)) {
-      throw new Error('Source and destination bins must differ.');
+      throw new Error("Source and destination bins must differ.");
     }
     const data = await this.getData();
     const product = data.products.find((p) => p.id === input.productId);
-    if (!product) throw new Error('Product not found.');
+    if (!product) throw new Error("Product not found.");
     const createdAt = new Date().toISOString();
 
     const unitIds: string[] = [];
@@ -1352,14 +1627,15 @@ export class SupabaseRepository implements WarehouseControlRepository {
       const candidates = data.units.filter(
         (u) =>
           u.productId === product.id &&
-          u.status === 'in_stock' &&
+          u.status === "in_stock" &&
           u.locationId === input.locationId &&
           (u.binId ?? undefined) === (input.fromBinId ?? undefined),
       );
       let toMove = input.quantity;
       for (const unit of candidates) {
         if (toMove <= 0) break;
-        if (serials.length > 0 && !serials.includes(unit.serialNumber)) continue;
+        if (serials.length > 0 && !serials.includes(unit.serialNumber))
+          continue;
         unitIds.push(unit.id);
         toMove--;
       }
@@ -1396,19 +1672,19 @@ export class SupabaseRepository implements WarehouseControlRepository {
     }
 
     const movement: Movement = {
-      id: uid('mv'),
-      type: 'transfer',
+      id: uid("mv"),
+      type: "transfer",
       productId: product.id,
       quantity: input.quantity,
       fromLocationId: input.locationId,
       toLocationId: input.locationId,
       fromBinId: input.fromBinId,
       toBinId: input.toBinId,
-      reason: 'bin relocation',
+      reason: "bin relocation",
       actor: input.actor,
       createdAt,
     };
-    const row = await this.callRpc('transfer', {
+    const row = await this.callRpc("transfer", {
       unit_ids: unitIds,
       from_location_id: input.locationId,
       to_location_id: input.locationId,
@@ -1423,10 +1699,11 @@ export class SupabaseRepository implements WarehouseControlRepository {
 
 /** Factory shape compatible with createRepository (spec ADR-003 seam). */
 export function createSupabaseWarehouseRepository(
-  client: import('@supabase/supabase-js').SupabaseClient<any, any>,
+  client: import("@supabase/supabase-js").SupabaseClient<any, any>,
 ): WarehouseControlRepository {
   return new SupabaseRepository(
-    client.schema('warehouse') as unknown as import('@supabase/supabase-js').SupabaseClient,
+    client.schema(
+      "warehouse",
+    ) as unknown as import("@supabase/supabase-js").SupabaseClient,
   );
 }
-

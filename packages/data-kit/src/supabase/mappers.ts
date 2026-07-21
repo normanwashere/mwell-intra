@@ -21,7 +21,7 @@ import type {
   StorageArea,
   Supplier,
   WarehouseEvent,
-} from '../domain/types';
+} from "../domain/types";
 import type {
   InventoryHold,
   InventoryPosition,
@@ -32,7 +32,14 @@ import type {
   WarehouseException,
   WarehouseTask,
   VendorReturn,
-} from '../domain/warehouseControls';
+} from "../domain/warehouseControls";
+import type {
+  CustomerReturnCase,
+  DepartmentStockRequest,
+  FulfillmentOrder,
+  KitDefinition,
+  ReKitWorkOrder,
+} from "../domain/wms";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Row = Record<string, any>;
@@ -43,6 +50,9 @@ export function rowToProduct(r: Row): Product {
     sku: r.sku,
     name: r.name,
     category: r.category,
+    itemClass: r.item_class ?? undefined,
+    serializationPolicy: r.serialization_policy ?? undefined,
+    uom: r.uom ?? undefined,
     deviceType: r.device_type ?? undefined,
     merchandiseType: r.merchandise_type ?? undefined,
     serialized: r.serialized,
@@ -53,9 +63,10 @@ export function rowToProduct(r: Row): Product {
     promotional: r.promotional ?? undefined,
     barcode: r.barcode ?? undefined,
     expiryTracked: r.expiry_tracked ?? undefined,
-    shelfLifeWarningDays: r.shelf_life_warning_days == null
-      ? undefined
-      : Number(r.shelf_life_warning_days),
+    shelfLifeWarningDays:
+      r.shelf_life_warning_days == null
+        ? undefined
+        : Number(r.shelf_life_warning_days),
   };
 }
 
@@ -65,6 +76,9 @@ export function productToRow(p: Product): Row {
     sku: p.sku,
     name: p.name,
     category: p.category,
+    item_class: p.itemClass ?? null,
+    serialization_policy: p.serializationPolicy ?? null,
+    uom: p.uom ?? "piece",
     device_type: p.deviceType ?? null,
     merchandise_type: p.merchandiseType ?? null,
     serialized: p.serialized,
@@ -94,7 +108,13 @@ export function rowToProfile(r: Row): Profile {
 }
 
 export function profileToRow(p: Profile): Row {
-  return { id: p.id, role: p.role, name: p.name, email: p.email, title: p.title };
+  return {
+    id: p.id,
+    role: p.role,
+    name: p.name,
+    email: p.email,
+    title: p.title,
+  };
 }
 
 export function rowToSupplier(r: Row): Supplier {
@@ -313,6 +333,9 @@ export function rowToReceipt(r: Row): Receipt {
     id: r.id,
     supplierId: r.supplier_id ?? undefined,
     locationId: r.location_id,
+    actualDeliveryDate: r.actual_delivery_date ?? undefined,
+    deliveryReference: r.delivery_reference ?? undefined,
+    courierOrDriver: r.courier_or_driver ?? undefined,
     lines: r.lines ?? [],
     evidenceUrls: r.evidence_urls ?? [],
     operationRouteId: r.operation_route_id ?? undefined,
@@ -344,6 +367,103 @@ export function poToRow(po: PurchaseOrder): Row {
     expected_date: po.expectedDate ?? null,
     actor: po.actor,
     created_at: po.createdAt,
+  };
+}
+
+export function rowToFulfillmentOrder(r: Row): FulfillmentOrder {
+  return {
+    id: r.id,
+    source: r.source,
+    externalReference: r.external_reference,
+    requestingDepartment: r.requesting_department ?? undefined,
+    sourceLocationId: r.source_location_id ?? undefined,
+    sourceBinId: r.source_bin_id ?? undefined,
+    customerReference: r.customer_reference ?? undefined,
+    eventId: r.event_id ?? undefined,
+    thirdPartyLocationId: r.third_party_location_id ?? undefined,
+    grossSalesAmount:
+      r.gross_sales_amount == null ? undefined : Number(r.gross_sales_amount),
+    currency: r.gross_sales_amount == null ? undefined : "PHP",
+    courier: r.courier ?? undefined,
+    waybillNumber: r.waybill_number ?? undefined,
+    status: r.status,
+    lines: r.lines ?? [],
+    packaging: r.packaging ?? [],
+    createdBy: r.created_by,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    releasedBy: r.released_by ?? undefined,
+    releasedAt: r.released_at ?? undefined,
+  };
+}
+
+export function rowToDepartmentStockRequest(r: Row): DepartmentStockRequest {
+  return {
+    id: r.id,
+    requestingDepartment: r.requesting_department,
+    purpose: r.purpose,
+    costCenter: r.cost_center,
+    requiredDate: r.required_date,
+    expenseTreatment: r.expense_treatment,
+    status: r.status,
+    lines: r.lines ?? [],
+    requestedBy: r.requested_by,
+    requestedAt: r.requested_at,
+    approvedBy: r.approved_by ?? undefined,
+    approvedAt: r.approved_at ?? undefined,
+    fulfillmentOrderId: r.fulfillment_order_id ?? undefined,
+  };
+}
+
+export function rowToCustomerReturnCase(r: Row): CustomerReturnCase {
+  return {
+    id: r.id,
+    sourceOrderId: r.source_order_id ?? undefined,
+    serialNumber: r.serial_number ?? undefined,
+    productId: r.product_id,
+    defectDescription: r.defect_description,
+    requestingDepartment: r.requesting_department,
+    status: r.status,
+    resolution: r.resolution,
+    quarantineBinId: r.quarantine_bin_id ?? undefined,
+    replacementOrderId: r.replacement_order_id ?? undefined,
+    refundReference: r.refund_reference ?? undefined,
+    supplierReference: r.supplier_reference ?? undefined,
+    createdBy: r.created_by,
+    createdAt: r.created_at,
+    resolvedBy: r.resolved_by ?? undefined,
+    resolvedAt: r.resolved_at ?? undefined,
+  };
+}
+
+export function rowToKitDefinition(r: Row): KitDefinition {
+  return {
+    id: r.id,
+    productId: r.product_id,
+    version: Number(r.version),
+    name: r.name,
+    components: r.components ?? [],
+    status: r.status,
+    ownerDepartment: r.owner_department,
+    productApprovalReference: r.product_approval_reference,
+    createdBy: r.created_by,
+    createdAt: r.created_at,
+  };
+}
+
+export function rowToReKitWorkOrder(r: Row): ReKitWorkOrder {
+  return {
+    id: r.id,
+    sourceReturnCaseId: r.source_return_case_id,
+    kitDefinitionId: r.kit_definition_id,
+    outputSerialNumber: r.output_serial_number,
+    componentSerialNumbers: r.component_serial_numbers ?? [],
+    condition: r.condition,
+    status: r.status,
+    createdBy: r.created_by,
+    createdAt: r.created_at,
+    completedBy: r.completed_by ?? undefined,
+    completedAt: r.completed_at ?? undefined,
   };
 }
 

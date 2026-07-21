@@ -1,3 +1,4 @@
+import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
 const MEMORY_SESSION_KEY = "intra.memory-session.v1";
@@ -29,7 +30,7 @@ test("legacy future URLs render roadmap entries", async ({ page }) => {
   await expect(page.locator("#principal-flow-title")).toBeHidden();
   await expect(
     page.getByRole("button", {
-      name: /Roadmap Coming soon Offline Knowledge Base/,
+      name: /Offline Knowledge Base.*Roadmap.*Coming soon/,
     }),
   ).toBeVisible();
 });
@@ -67,8 +68,12 @@ test("lean operating model exposes all personas and opens governed decision tree
   await page
     .getByText("View all 11 personas and responsibilities", { exact: true })
     .click();
-  await expect(page.getByText("Vendor Representative", { exact: true })).toBeVisible();
-  await expect(page.getByText("Operations Associate", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("Vendor Representative", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Operations Associate", { exact: true }),
+  ).toBeVisible();
 
   await page.getByRole("button", { name: /Open full decision tree/ }).click();
   await expect(page).toHaveURL(/flow=doa-governance/);
@@ -127,7 +132,7 @@ test("landing interactions preserve URL state and accessible targets", async ({
   await expect(page).toHaveURL(/\?q=Place\+hold$/);
   await expect(flowSection).toBeHidden();
   const qualityResult = page.getByRole("button", {
-    name: /Feature Live warehouse Quality control/,
+    name: /Quality control.*Feature.*Live/,
   });
   await expect(qualityResult).toBeVisible();
 
@@ -162,6 +167,7 @@ test("tablet workflow carousel keeps visible card centers reachable", async ({
   await page.goto("/knowledge");
 
   const carousel = page.getByTestId("principal-flow-carousel");
+  await carousel.scrollIntoViewIfNeeded();
   const cards = carousel.getByRole("button");
   const unreachable = await cards.evaluateAll((elements) => {
     const bounds = elements[0]?.parentElement?.getBoundingClientRect();
@@ -171,7 +177,13 @@ test("tablet workflow carousel keeps visible card centers reachable", async ({
       const rect = element.getBoundingClientRect();
       const x = rect.left + rect.width / 2;
       const y = rect.top + rect.height / 2;
-      if (x < bounds.left || x > bounds.right) return [];
+      if (
+        x < bounds.left ||
+        x > bounds.right ||
+        y < 0 ||
+        y > window.innerHeight
+      )
+        return [];
       const target = document.elementFromPoint(x, y);
       return target && (target === element || element.contains(target))
         ? []
@@ -180,4 +192,85 @@ test("tablet workflow carousel keeps visible card centers reachable", async ({
   });
 
   expect(unreachable).toEqual([]);
+});
+
+test("knowledge landing stays accessible, reachable, and free of horizontal overflow", async ({
+  page,
+}) => {
+  await page.goto("/knowledge");
+  await expect(
+    page.getByRole("heading", { name: "Find the right next step" }),
+  ).toBeVisible();
+
+  const geometry = await page.locator("main").evaluate((main) => {
+    const controls = [
+      ...main.querySelectorAll<HTMLElement>("a, button, input, select"),
+    ].filter((element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    });
+
+    return {
+      horizontalOverflow:
+        document.documentElement.scrollWidth >
+        document.documentElement.clientWidth,
+      undersized: controls.flatMap((element) => {
+        const rect = element.getBoundingClientRect();
+        return rect.width < 44 || rect.height < 44
+          ? [
+              {
+                label:
+                  element.getAttribute("aria-label") ??
+                  element.textContent?.trim(),
+                width: rect.width,
+                height: rect.height,
+              },
+            ]
+          : [];
+      }),
+      unreachable: controls.flatMap((element) => {
+        const rect = element.getBoundingClientRect();
+        const x = Math.max(
+          0,
+          Math.min(window.innerWidth - 1, rect.left + rect.width / 2),
+        );
+        const y = Math.max(
+          0,
+          Math.min(window.innerHeight - 1, rect.top + rect.height / 2),
+        );
+        if (
+          rect.top < 0 ||
+          rect.bottom > window.innerHeight - 80 ||
+          rect.right < 0 ||
+          rect.left > window.innerWidth
+        )
+          return [];
+        const target = document.elementFromPoint(x, y);
+        return target && (target === element || element.contains(target))
+          ? []
+          : [
+              element.getAttribute("aria-label") ??
+                element.textContent?.trim() ??
+                "unlabeled control",
+            ];
+      }),
+    };
+  });
+
+  expect(geometry).toEqual({
+    horizontalOverflow: false,
+    undersized: [],
+    unreachable: [],
+  });
+
+  const accessibility = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa"])
+    .analyze();
+  expect(
+    accessibility.violations.map(({ id, impact, nodes }) => ({
+      id,
+      impact,
+      nodes: nodes.length,
+    })),
+  ).toEqual([]);
 });

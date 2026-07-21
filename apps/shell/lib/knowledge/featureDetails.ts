@@ -939,6 +939,162 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
       ],
     },
+    "warehouse-fulfillment": {
+      controls: [
+        control(
+          "Create ecommerce order",
+          "Records ecommerce, internal-event, or third-party sales demand with its external order reference and requested products.",
+          "The reference must be unique; event demand needs an event, and third-party demand also needs its external location and reported PHP sales value.",
+          "A received fulfillment order enters the Warehouse queue.",
+        ),
+        control(
+          "Print barcode sheet",
+          "Generates one scannable master label for each quantity-controlled merchandise, event-material, or fulfillment-supply item.",
+          "The product must have a barcode and must not be a serialized unit.",
+          "A print-ready label sheet opens without exposing serialized-device product labels.",
+        ),
+        control(
+          "Submit department request",
+          "Records a department's stock need, business purpose, cost center, required date, and treatment.",
+          "The requester must provide all required business context and cannot approve the same request.",
+          "A pending request is visible to the requester and decision owner.",
+        ),
+        control(
+          "Decide request",
+          "Approves or rejects an eligible department request as a separate accountable action.",
+          "A different authorized user must decide a request that is still pending.",
+          "Approval creates a linked fulfillment order; rejection records the terminal decision.",
+        ),
+        control(
+          "Allocate stock",
+          "Checks unheld available stock at the selected warehouse and bin before reserving the order.",
+          "Every order line must remain fully available after other active commitments.",
+          "The order advances to Allocated without changing physical stock.",
+        ),
+        control(
+          "Confirm pick",
+          "Records picked quantities and required unit serials for every order line.",
+          "Every line must be complete; serialized products require one unique eligible serial per unit.",
+          "The order advances to Packing with traceable picked identities.",
+        ),
+        control(
+          "Confirm pack",
+          "Records courier, waybill, and quantity-controlled fulfillment supplies used for the shipment.",
+          "Courier and waybill are required and packaging products must be available fulfillment supplies.",
+          "The order becomes Ready and packaging remains reserved for release.",
+        ),
+        control(
+          "Release order",
+          "Posts final serialized or quantity stock issue and packaging-consumption movements.",
+          "The order must be Ready, fully picked, and still have eligible stock and packaging.",
+          "The order becomes Released with attributable warehouse movements.",
+        ),
+        control(
+          "Create return or re-kit work",
+          "Records Customer Service intake, warehouse resolution, and Product-approved open-box re-kit lineage.",
+          "Returns require a recognized product and serial when applicable; active kits require a Product approval reference.",
+          "The return receives a controlled resolution or a traceable re-kit work order.",
+        ),
+        control(
+          "Complete re-kit",
+          "Consumes the inspected component identities and posts the approved output serial to an active warehouse rack or bin.",
+          "The work order must be under inspection, its Product-approved definition must remain active, and the output serial must be unique.",
+          "A completed work order, serialized open-box stock unit, and re-kit movement share the same reference.",
+        ),
+      ],
+      fields: [
+        field(
+          "External reference",
+          "Links ecommerce or source demand to fulfillment.",
+          true,
+          "It must be non-empty and unique.",
+        ),
+        field(
+          "Event",
+          "Links third-party selling demand to the accountable Intra event.",
+          false,
+          "Required for third-party event sales and must identify an existing event.",
+        ),
+        field(
+          "External location",
+          "Names the third-party site that physically holds or sells the event stock.",
+          false,
+          "Required for third-party event sales so custody and reported sales can be reconciled by site.",
+        ),
+        field(
+          "Gross sales",
+          "Records the PHP value reported by a third-party selling channel for reconciliation.",
+          false,
+          "Required for third-party event sales and cannot be negative.",
+        ),
+        field(
+          "Requesting department",
+          "Identifies the department accountable for demand.",
+          false,
+          "Use an active configured department code for department work.",
+        ),
+        field(
+          "Business purpose",
+          "Explains why department stock is needed.",
+          false,
+          "Required for department requests and must be specific enough for review.",
+        ),
+        field(
+          "Cost center",
+          "Routes expense or custody accountability.",
+          false,
+          "Required for department requests and must match the approved finance structure.",
+        ),
+        field(
+          "Required date",
+          "Sets operational due timing.",
+          false,
+          "Required for department requests and must be a valid date.",
+        ),
+        field(
+          "Product",
+          "Identifies the sellable SKU, merchandise, event material, or approved re-kitted item on the demand line.",
+          true,
+          "The product must exist and be eligible for the selected demand source.",
+        ),
+        field(
+          "Quantity",
+          "Sets how many units or customer-facing bundle sets the line requires.",
+          true,
+          "The quantity must be a positive whole number and must agree with any supplied bundle-set codes.",
+        ),
+        field(
+          "Serial or bundle-set identity",
+          "Preserves unit and customer-facing set lineage.",
+          false,
+          "Required per unit for serialized SKUs and per set when bundle codes are used.",
+        ),
+        field(
+          "Courier",
+          "Names the dispatch carrier or accountable courier.",
+          true,
+          "Required before packing can complete.",
+        ),
+        field(
+          "Waybill number",
+          "Links physical dispatch to shipment evidence.",
+          true,
+          "Required before packing can complete and release can occur.",
+        ),
+        field(
+          "Product approval reference",
+          "Proves Product approved the active kit recipe or go-live definition.",
+          false,
+          "Required before an active kit definition can be published.",
+        ),
+        field(
+          "Return resolution",
+          "Records replacement, refund, vendor return, re-kit, or write-off outcome.",
+          false,
+          "Refund needs Finance authority and reference; replacement, refund, and re-kit need quarantine.",
+        ),
+      ],
+    },
     "warehouse-returns": {
       controls: [
         control(

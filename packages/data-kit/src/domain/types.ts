@@ -7,24 +7,19 @@
 
 export type Id = string;
 
-export type ItemCategory = 'device' | 'merchandise';
+export type ItemCategory = "device" | "merchandise";
 
-export type DeviceType = 'smart_watch' | 'sleep_ring' | 'ecg_ring' | 'otg_bag';
+export type DeviceType = "smart_watch" | "sleep_ring" | "ecg_ring" | "otg_bag";
 
-export type MerchandiseType =
-  | 'shirt'
-  | 'jacket'
-  | 'token'
-  | 'kit'
-  | 'other';
+export type MerchandiseType = "shirt" | "jacket" | "token" | "kit" | "other";
 
 export type EventType =
-  | 'corporate'
-  | 'government_lgu'
-  | 'medical_mission'
-  | 'vip_activation'
-  | 'b2c'
-  | 'b2b';
+  | "corporate"
+  | "government_lgu"
+  | "medical_mission"
+  | "vip_activation"
+  | "b2c"
+  | "b2b";
 
 /** Master record for a stock-keeping unit. */
 export interface Product {
@@ -32,6 +27,12 @@ export interface Product {
   sku: string;
   name: string;
   category: ItemCategory;
+  /** Operational WMS classification. Legacy rows derive this from category. */
+  itemClass?: import("./wms").ItemClass;
+  /** Required physical identity policy for this product class. */
+  serializationPolicy?: import("./wms").SerializationPolicy;
+  /** Stocking/issuing unit, e.g. piece, roll, box, or set. */
+  uom?: string;
   /** Present when category === 'device'. */
   deviceType?: DeviceType;
   /** Present when category === 'merchandise'. */
@@ -55,7 +56,7 @@ export interface Product {
   shelfLifeWarningDays?: number;
 }
 
-export type LocationType = 'warehouse' | 'event_site' | 'vendor';
+export type LocationType = "warehouse" | "event_site" | "vendor";
 
 export interface Location {
   id: Id;
@@ -98,12 +99,7 @@ export interface Lot {
 }
 
 export type UnitStatus =
-  | 'in_stock'
-  | 'allocated'
-  | 'issued'
-  | 'returned'
-  | 'vendor_return'
-  | 'lost';
+  "in_stock" | "allocated" | "issued" | "returned" | "vendor_return" | "lost";
 
 /** A single serialized physical unit (e.g. one ECG ring). */
 export interface InventoryUnit {
@@ -131,14 +127,18 @@ export interface StockLevel {
 }
 
 export type MovementType =
-  | 'receipt'
-  | 'allocation'
-  | 'issue'
-  | 'return'
-  | 'vendor_return'
-  | 'transfer'
-  | 'adjustment'
-  | 'cycle_count';
+  | "receipt"
+  | "allocation"
+  | "issue"
+  | "return"
+  | "vendor_return"
+  | "transfer"
+  | "adjustment"
+  | "cycle_count"
+  | "fulfillment_release"
+  | "packaging_consumption"
+  | "department_issue"
+  | "re_kit";
 
 /** Immutable ledger entry — the audit trail backbone. */
 export interface Movement {
@@ -161,9 +161,9 @@ export interface Movement {
   createdAt: string;
 }
 
-export type ReturnSource = 'customer' | 'vendor';
+export type ReturnSource = "customer" | "vendor";
 
-export type ReturnDisposition = 'restock' | 'lost' | 'vendor_return';
+export type ReturnDisposition = "restock" | "lost" | "vendor_return";
 
 export interface ReturnLine {
   productId: Id;
@@ -189,11 +189,7 @@ export interface ReturnRecord {
 }
 
 export type AllocationStatus =
-  | 'reserved'
-  | 'allocated'
-  | 'issued'
-  | 'returned'
-  | 'cancelled';
+  "reserved" | "allocated" | "issued" | "returned" | "cancelled";
 
 export interface Allocation {
   id: Id;
@@ -219,6 +215,10 @@ export interface ReceiptLine {
   productId: Id;
   quantity: number;
   lotCode?: string;
+  /** Supplier/manufacturer batch identifier, distinct from the internal lot. */
+  batchNumber?: string;
+  /** Structured incoming device test result. */
+  deviceTestStatus?: "not_tested" | "passed" | "failed" | "not_required";
   /** Expiry date captured for expiry-tracked lots. */
   expiryDate?: string;
   serialNumbers?: string[];
@@ -230,12 +230,15 @@ export interface ReceiptLine {
 export interface Receipt {
   id: Id;
   supplierId?: Id;
+  actualDeliveryDate?: string;
+  deliveryReference?: string;
+  courierOrDriver?: string;
   locationId: Id;
   lines: ReceiptLine[];
   evidenceUrls?: string[];
   operationRouteId?: string;
   procurementPoId?: string;
-  qualityStatus?: 'pending' | 'partial' | 'accepted' | 'hold' | 'closed';
+  qualityStatus?: "pending" | "partial" | "accepted" | "hold" | "closed";
   actor: string;
   createdAt: string;
 }
@@ -255,7 +258,7 @@ export interface CycleCount {
   binId?: Id;
   category?: ItemCategory;
   lines: CycleCountLine[];
-  status?: 'draft' | 'submitted' | 'pending_approval' | 'approved' | 'rejected';
+  status?: "draft" | "submitted" | "pending_approval" | "approved" | "rejected";
   requestedBy?: string;
   submittedAt?: string;
   actor: string;
@@ -263,11 +266,7 @@ export interface CycleCount {
 }
 
 export type POStatus =
-  | 'draft'
-  | 'ordered'
-  | 'partially_received'
-  | 'received'
-  | 'cancelled';
+  "draft" | "ordered" | "partially_received" | "received" | "cancelled";
 
 export interface PurchaseOrderLine {
   productId: Id;
@@ -288,17 +287,17 @@ export interface PurchaseOrder {
 
 /** Warehouse roles exposed by the module, including canonical live bundles. */
 export const WAREHOUSE_ROLES = [
-  'warehouse_operator',
-  'warehouse_supervisor',
-  'logistics_supervisor',
-  'operations',
-  'finance',
-  'bi_analyst',
-  'business_unit',
-  'marketing',
-  'procurement',
-  'pricing',
-  'warehouse_admin',
+  "warehouse_operator",
+  "warehouse_supervisor",
+  "logistics_supervisor",
+  "operations",
+  "finance",
+  "bi_analyst",
+  "business_unit",
+  "marketing",
+  "procurement",
+  "pricing",
+  "warehouse_admin",
 ] as const;
 
 export type Role = (typeof WAREHOUSE_ROLES)[number];
@@ -307,7 +306,7 @@ const WAREHOUSE_ROLE_SET = new Set<string>(WAREHOUSE_ROLES);
 
 /** Narrow untrusted JWT/demo role values before using them as domain roles. */
 export function isWarehouseRole(value: unknown): value is Role {
-  return typeof value === 'string' && WAREHOUSE_ROLE_SET.has(value);
+  return typeof value === "string" && WAREHOUSE_ROLE_SET.has(value);
 }
 
 /** A demo/staff user that signs in by picking their role. */

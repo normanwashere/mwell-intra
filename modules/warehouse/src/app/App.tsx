@@ -33,6 +33,11 @@ const AllocationsPage = lazy(() =>
     default: m.AllocationsPage,
   })),
 );
+const FulfillmentPage = lazy(() =>
+  import("@/pages/FulfillmentPage").then((m) => ({
+    default: m.FulfillmentPage,
+  })),
+);
 const CycleCountsPage = lazy(() =>
   import("@/pages/CycleCountsPage").then((m) => ({
     default: m.CycleCountsPage,
@@ -327,6 +332,16 @@ export function App() {
                 anyOf={WAREHOUSE_ROUTE_BY_ID.allocations.gateCapabilityIds}
               >
                 <AllocationsPage />
+              </Guard>
+            }
+          />
+          <Route
+            path={WAREHOUSE_ROUTE_BY_ID.fulfillment.path}
+            element={
+              <Guard
+                anyOf={WAREHOUSE_ROUTE_BY_ID.fulfillment.gateCapabilityIds}
+              >
+                <FulfillmentPage />
               </Guard>
             }
           />

@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 // WarehouseProvider — the React binding over the framework-agnostic data-kit
 // pipeline (spec §12 step 2, LLD §6/§7).
@@ -19,8 +19,8 @@ import {
   useRef,
   useState,
   type ReactNode,
-} from 'react';
-import { useToast } from '@intra/ui';
+} from "react";
+import { useToast } from "@intra/ui";
 import {
   applyOverlay,
   createRepository,
@@ -36,12 +36,18 @@ import {
   pendingCount as outboxPendingCount,
   removeEntry as outboxRemove,
   DATA_STORAGE_KEY,
-} from '@intra/data-kit';
-import type { SupabaseClient } from '@supabase/supabase-js';
+} from "@intra/data-kit";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
   CancelAllocationInput,
   CancelPurchaseOrderInput,
+  CreateCustomerReturnCaseInput,
+  CreateDepartmentStockRequestInput,
   CreateEventInput,
+  CreateFulfillmentOrderInput,
+  CreateKitDefinitionInput,
+  CreateReKitWorkOrderInput,
+  CompleteReKitWorkOrderInput,
   CreateVendorReturnInput,
   CreateLocationInput,
   CreateProductInput,
@@ -50,6 +56,7 @@ import type {
   CreateSupplierInput,
   CycleCountInput,
   DataSource,
+  DecideDepartmentStockRequestInput,
   DecideStockChangeInput,
   InspectQualityInput,
   InventoryHold,
@@ -66,6 +73,7 @@ import type {
   ProcurementPOHandoff,
   ReleaseHoldInput,
   ResolveExceptionInput,
+  ResolveCustomerReturnCaseInput,
   RelocateInput,
   ReserveInput,
   ReturnInput,
@@ -86,14 +94,15 @@ import type {
   QualityInspection,
   StockChangeRequest,
   SubmitCycleCountInput,
-} from '@intra/data-kit';
-import { ROLES, type Capability } from '@/auth/roles';
+  AdvanceFulfillmentOrderInput,
+} from "@intra/data-kit";
+import { ROLES, type Capability } from "@/auth/roles";
 import {
   canOpenWarehouseRoute,
   STOCK_CHANGE_DECISION_CAPABILITIES,
   WAREHOUSE_MUTATION_CAPABILITIES,
-} from '@/app/authorization';
-import type { WarehouseRouteId } from '@/app/modules';
+} from "@/app/authorization";
+import type { WarehouseRouteId } from "@/app/modules";
 
 interface WarehouseContextValue {
   data: WarehouseData | null;
@@ -125,28 +134,30 @@ interface WarehouseContextValue {
    * queued for offline sync). On a hard failure they show an error toast and
    * resolve to `false` so callers never run success UI on top of a lost write.
    */
-  receiveStock: (input: Omit<ReceiveStockInput, 'actor'>) => Promise<boolean>;
-  reserve: (input: Omit<ReserveInput, 'actor'>) => Promise<boolean>;
-  issue: (input: Omit<IssueInput, 'actor'>) => Promise<boolean>;
-  recordReturn: (input: Omit<ReturnInput, 'actor'>) => Promise<boolean>;
-  recordCycleCount: (input: Omit<CycleCountInput, 'actor' | 'requesterId'>) => Promise<boolean>;
-  submitNewCycleCount: (
-    input: Omit<CycleCountInput, 'actor' | 'requesterId'> &
-      Pick<SubmitCycleCountInput, 'reason' | 'evidenceUrls'>,
+  receiveStock: (input: Omit<ReceiveStockInput, "actor">) => Promise<boolean>;
+  reserve: (input: Omit<ReserveInput, "actor">) => Promise<boolean>;
+  issue: (input: Omit<IssueInput, "actor">) => Promise<boolean>;
+  recordReturn: (input: Omit<ReturnInput, "actor">) => Promise<boolean>;
+  recordCycleCount: (
+    input: Omit<CycleCountInput, "actor" | "requesterId">,
   ) => Promise<boolean>;
-  transfer: (input: Omit<TransferInput, 'actor'>) => Promise<boolean>;
+  submitNewCycleCount: (
+    input: Omit<CycleCountInput, "actor" | "requesterId"> &
+      Pick<SubmitCycleCountInput, "reason" | "evidenceUrls">,
+  ) => Promise<boolean>;
+  transfer: (input: Omit<TransferInput, "actor">) => Promise<boolean>;
   createPurchaseOrder: (
-    input: Omit<CreatePurchaseOrderInput, 'actor'>,
+    input: Omit<CreatePurchaseOrderInput, "actor">,
   ) => Promise<boolean>;
   receiveAgainstPO: (
-    input: Omit<ReceiveAgainstPOInput, 'actor'>,
+    input: Omit<ReceiveAgainstPOInput, "actor">,
   ) => Promise<boolean>;
   cancelPurchaseOrder: (
-    input: Omit<CancelPurchaseOrderInput, 'actor'>,
+    input: Omit<CancelPurchaseOrderInput, "actor">,
   ) => Promise<boolean>;
   createEvent: (input: CreateEventInput) => Promise<boolean>;
   cancelAllocation: (
-    input: Omit<CancelAllocationInput, 'actor'>,
+    input: Omit<CancelAllocationInput, "actor">,
   ) => Promise<boolean>;
   createSupplier: (input: CreateSupplierInput) => Promise<boolean>;
   updateSupplier: (input: UpdateSupplierInput) => Promise<boolean>;
@@ -156,20 +167,53 @@ interface WarehouseContextValue {
   createStorageArea: (input: CreateStorageAreaInput) => Promise<boolean>;
   updateStorageArea: (input: UpdateStorageAreaInput) => Promise<boolean>;
   deleteStorageArea: (input: { storageAreaId: string }) => Promise<boolean>;
-  relocate: (input: Omit<RelocateInput, 'actor'>) => Promise<boolean>;
+  relocate: (input: Omit<RelocateInput, "actor">) => Promise<boolean>;
   setProductPrice: (
-    input: Omit<SetProductPriceInput, 'actor'>,
+    input: Omit<SetProductPriceInput, "actor">,
   ) => Promise<boolean>;
-  createProduct: (input: Omit<CreateProductInput, 'actor'>) => Promise<boolean>;
-  updateProduct: (input: Omit<UpdateProductInput, 'actor'>) => Promise<boolean>;
+  createProduct: (input: Omit<CreateProductInput, "actor">) => Promise<boolean>;
+  updateProduct: (input: Omit<UpdateProductInput, "actor">) => Promise<boolean>;
+  createFulfillmentOrder: (
+    input: Omit<CreateFulfillmentOrderInput, "actor">,
+  ) => Promise<boolean>;
+  advanceFulfillmentOrder: (
+    input: Omit<AdvanceFulfillmentOrderInput, "actor">,
+  ) => Promise<boolean>;
+  createDepartmentStockRequest: (
+    input: Omit<CreateDepartmentStockRequestInput, "actor">,
+  ) => Promise<boolean>;
+  decideDepartmentStockRequest: (
+    input: Omit<DecideDepartmentStockRequestInput, "actor">,
+  ) => Promise<boolean>;
+  createCustomerReturnCase: (
+    input: Omit<CreateCustomerReturnCaseInput, "actor">,
+  ) => Promise<boolean>;
+  resolveCustomerReturnCase: (
+    input: Omit<ResolveCustomerReturnCaseInput, "actor">,
+  ) => Promise<boolean>;
+  createKitDefinition: (
+    input: Omit<CreateKitDefinitionInput, "actor">,
+  ) => Promise<boolean>;
+  createReKitWorkOrder: (
+    input: Omit<CreateReKitWorkOrderInput, "actor">,
+  ) => Promise<boolean>;
+  completeReKitWorkOrder: (
+    input: Omit<CompleteReKitWorkOrderInput, "actor">,
+  ) => Promise<boolean>;
   requestStockChange: (input: RequestStockChangeInput) => Promise<boolean>;
-  loadQualityInspections: (query: PageQuery) => Promise<PageResult<QualityInspection>>;
+  loadQualityInspections: (
+    query: PageQuery,
+  ) => Promise<PageResult<QualityInspection>>;
   loadHolds: (query: PageQuery) => Promise<PageResult<InventoryHold>>;
   loadVendorReturns: (query: PageQuery) => Promise<PageResult<VendorReturn>>;
   loadExceptions: (query: PageQuery) => Promise<PageResult<WarehouseException>>;
-  loadStockChangeRequests: (query: PageQuery) => Promise<PageResult<StockChangeRequest>>;
+  loadStockChangeRequests: (
+    query: PageQuery,
+  ) => Promise<PageResult<StockChangeRequest>>;
   loadWarehouseTasks: (query: PageQuery) => Promise<PageResult<WarehouseTask>>;
-  loadInventoryPositions: (query: PageQuery) => Promise<PageResult<InventoryPosition>>;
+  loadInventoryPositions: (
+    query: PageQuery,
+  ) => Promise<PageResult<InventoryPosition>>;
   inspectQuality: (input: InspectQualityInput) => Promise<boolean>;
   releaseHold: (input: ReleaseHoldInput) => Promise<boolean>;
   createVendorReturn: (input: CreateVendorReturnInput) => Promise<boolean>;
@@ -185,7 +229,7 @@ interface WarehouseContextValue {
 
 const WarehouseContext = createContext<WarehouseContextValue | null>(null);
 
-export const ROLE_KEY = 'mwell-intra-warehouse:role';
+export const ROLE_KEY = "mwell-intra-warehouse:role";
 
 /**
  * The UI role is derived ONLY from the authenticated profile (JWT app_metadata
@@ -202,7 +246,7 @@ export function WarehouseProvider({
   repo: injectedRepo,
   source: injectedSource,
   supabaseClient,
-  initialRole = 'logistics_supervisor',
+  initialRole = "logistics_supervisor",
   roleCode: providedRoleCode,
   capabilities: providedCapabilities,
   actor: providedActor,
@@ -222,12 +266,13 @@ export function WarehouseProvider({
   /** Auth profile id used for separation-of-duties comparisons. */
   identityId?: string;
 }) {
-  const created = useRef<{ repo: WarehouseControlRepository; source: DataSource } | null>(
-    null,
-  );
+  const created = useRef<{
+    repo: WarehouseControlRepository;
+    source: DataSource;
+  } | null>(null);
   if (!created.current) {
     created.current = injectedRepo
-      ? { repo: injectedRepo, source: injectedSource ?? 'memory' }
+      ? { repo: injectedRepo, source: injectedSource ?? "memory" }
       : createRepository({
           dataSource: injectedSource,
           supabaseClient,
@@ -240,7 +285,9 @@ export function WarehouseProvider({
   const [data, setData] = useState<WarehouseData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [role, setRoleState] = useState<Role>(() => loadInitialRole(initialRole));
+  const [role, setRoleState] = useState<Role>(() =>
+    loadInitialRole(initialRole),
+  );
   const [pendingSync, setPendingSync] = useState(0);
   const [conflicts, setConflicts] = useState<OutboxEntry[]>([]);
 
@@ -255,20 +302,23 @@ export function WarehouseProvider({
     roleCode === role
       ? roleProfile.label
       : roleCode
-          .split('_')
+          .split("_")
           .filter(Boolean)
           .map((part) => part[0]?.toUpperCase() + part.slice(1))
-          .join(' ');
+          .join(" ");
   const roleDescription =
     roleCode === role
       ? roleProfile.description
-      : 'Runtime Warehouse access bundle managed by an administrator.';
+      : "Runtime Warehouse access bundle managed by an administrator.";
   const capabilities = useMemo<readonly Capability[]>(
     () =>
-      source === 'supabase'
+      source === "supabase"
         ? Array.from(new Set(providedCapabilities ?? []))
-        : roleProfile.capabilities.filter((capability) =>
-            !(role === 'finance' && capability === 'approve_stock_adjustment'),
+        : roleProfile.capabilities.filter(
+            (capability) =>
+              !(
+                role === "finance" && capability === "approve_stock_adjustment"
+              ),
           ),
     [providedCapabilities, role, roleProfile.capabilities, source],
   );
@@ -294,7 +344,7 @@ export function WarehouseProvider({
       setData(await repo.getData());
       setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load data.');
+      setError(e instanceof Error ? e.message : "Failed to load data.");
     } finally {
       setLoading(false);
     }
@@ -319,12 +369,12 @@ export function WarehouseProvider({
 
   // Replay on reconnect and once on mount (in case the app was closed offline).
   useEffect(() => {
-    if (source !== 'supabase') return;
+    if (source !== "supabase") return;
     const onOnline = () => void syncNow();
-    if (typeof window !== 'undefined') {
-      window.addEventListener('online', onOnline);
+    if (typeof window !== "undefined") {
+      window.addEventListener("online", onOnline);
       void syncNow();
-      return () => window.removeEventListener('online', onOnline);
+      return () => window.removeEventListener("online", onOnline);
     }
   }, [source, syncNow]);
 
@@ -343,7 +393,7 @@ export function WarehouseProvider({
    */
   const runAction = useCallback(
     (
-      method: QueueableMethod | 'other',
+      method: QueueableMethod | "other",
       fn: () => Promise<unknown>,
       overlay?: WarehousePatch,
       queueInput?: Record<string, unknown>,
@@ -355,7 +405,7 @@ export function WarehouseProvider({
             setData((prev) => (prev ? applyOverlay(prev, o) : prev)),
           refresh,
           refreshPending,
-          notifyQueuedOffline: (m) => toast.toast(m, 'info'),
+          notifyQueuedOffline: (m) => toast.toast(m, "info"),
           notifyError: (m) => toast.error(m),
         },
         method,
@@ -369,14 +419,18 @@ export function WarehouseProvider({
   const runAuthorizedAction = useCallback(
     (
       required: Capability | readonly Capability[],
-      method: QueueableMethod | 'other',
+      method: QueueableMethod | "other",
       fn: () => Promise<unknown>,
       overlay?: WarehousePatch,
       queueInput?: Record<string, unknown>,
     ): Promise<boolean> => {
-      const requiredCapabilities = Array.isArray(required) ? required : [required];
-      if (source === 'supabase' && !requiredCapabilities.some(can)) {
-        toast.error(`Not authorized: warehouse.${requiredCapabilities.join('|')}`);
+      const requiredCapabilities = Array.isArray(required)
+        ? required
+        : [required];
+      if (source === "supabase" && !requiredCapabilities.some(can)) {
+        toast.error(
+          `Not authorized: warehouse.${requiredCapabilities.join("|")}`,
+        );
         return Promise.resolve(false);
       }
       return runAction(method, fn, overlay, queueInput);
@@ -420,42 +474,38 @@ export function WarehouseProvider({
     syncNow,
     receiveStock: (input) =>
       runAuthorizedAction(
-        'receive_stock',
-        'receiveStock',
+        "receive_stock",
+        "receiveStock",
         () => repo.receiveStock({ ...input, actor }),
         receiveOverlay(input, actor),
         input as Record<string, unknown>,
       ),
     reserve: (input) =>
-      runAuthorizedAction(
-        'reserve_allocate',
-        'other',
-        () => repo.reserve({ ...input, actor }),
+      runAuthorizedAction("reserve_allocate", "other", () =>
+        repo.reserve({ ...input, actor }),
       ),
     issue: (input) =>
       runAuthorizedAction(
-        'issue_items',
-        'issue',
+        "issue_items",
+        "issue",
         () => repo.issue({ ...input, actor }),
         issueOverlay(input, data),
         input as Record<string, unknown>,
       ),
     recordReturn: (input) =>
       runAuthorizedAction(
-        'manage_returns',
-        'recordReturn',
+        "manage_returns",
+        "recordReturn",
         () => repo.recordReturn({ ...input, actor }),
         returnOverlay(input, actor, data),
         input as Record<string, unknown>,
       ),
     recordCycleCount: (input) =>
-      runAuthorizedAction(
-        'cycle_count',
-        'other',
-        () => repo.recordCycleCount({ ...input, actor, requesterId: identityId }),
+      runAuthorizedAction("cycle_count", "other", () =>
+        repo.recordCycleCount({ ...input, actor, requesterId: identityId }),
       ),
     submitNewCycleCount: (input) =>
-      runAuthorizedAction('cycle_count', 'other', async () => {
+      runAuthorizedAction("cycle_count", "other", async () => {
         const count = await repo.recordCycleCount({
           locationId: input.locationId,
           binId: input.binId,
@@ -473,90 +523,132 @@ export function WarehouseProvider({
       }),
     transfer: (input) =>
       runAuthorizedAction(
-        'transfer_stock',
-        'transfer',
+        "transfer_stock",
+        "transfer",
         () => repo.transfer({ ...input, actor }),
         transferOverlay(input, actor),
         input as Record<string, unknown>,
       ),
     createPurchaseOrder: (input) =>
-      runAuthorizedAction('view_procurement', 'other', () =>
+      runAuthorizedAction("view_procurement", "other", () =>
         repo.createPurchaseOrder({ ...input, actor }),
       ),
     receiveAgainstPO: (input) =>
-      runAuthorizedAction('receive_stock', 'other', () =>
+      runAuthorizedAction("receive_stock", "other", () =>
         repo.receiveAgainstPO({ ...input, actor }),
       ),
     cancelPurchaseOrder: (input) =>
-      runAuthorizedAction('view_procurement', 'other', () =>
+      runAuthorizedAction("view_procurement", "other", () =>
         repo.cancelPurchaseOrder({ ...input, actor }),
       ),
     createEvent: (input) =>
-      runAuthorizedAction('reserve_allocate', 'other', () =>
+      runAuthorizedAction("request_fulfillment", "other", () =>
         repo.createEvent(input),
       ),
     cancelAllocation: (input) =>
-      runAuthorizedAction('reserve_allocate', 'other', () =>
+      runAuthorizedAction("reserve_allocate", "other", () =>
         repo.cancelAllocation({ ...input, actor }),
       ),
     createSupplier: (input) =>
-      runAuthorizedAction('view_procurement', 'other', () =>
+      runAuthorizedAction("view_procurement", "other", () =>
         repo.createSupplier(input),
       ),
     updateSupplier: (input) =>
-      runAuthorizedAction('view_procurement', 'other', () =>
+      runAuthorizedAction("view_procurement", "other", () =>
         repo.updateSupplier(input),
       ),
     createLocation: (input) =>
-      runAuthorizedAction('manage_locations', 'other', () =>
+      runAuthorizedAction("manage_locations", "other", () =>
         repo.createLocation(input),
       ),
     updateLocation: (input) =>
-      runAuthorizedAction('manage_locations', 'other', () =>
+      runAuthorizedAction("manage_locations", "other", () =>
         repo.updateLocation(input),
       ),
     deleteLocation: (input) =>
-      runAuthorizedAction('manage_locations', 'other', () =>
+      runAuthorizedAction("manage_locations", "other", () =>
         repo.deleteLocation(input),
       ),
     createStorageArea: (input) =>
-      runAuthorizedAction('manage_locations', 'other', () =>
+      runAuthorizedAction("manage_locations", "other", () =>
         repo.createStorageArea(input),
       ),
     updateStorageArea: (input) =>
-      runAuthorizedAction('manage_locations', 'other', () =>
+      runAuthorizedAction("manage_locations", "other", () =>
         repo.updateStorageArea(input),
       ),
     deleteStorageArea: (input) =>
-      runAuthorizedAction('manage_locations', 'other', () =>
+      runAuthorizedAction("manage_locations", "other", () =>
         repo.deleteStorageArea(input),
       ),
     relocate: (input) =>
       runAuthorizedAction(
         WAREHOUSE_MUTATION_CAPABILITIES.relocate,
-        'relocate',
+        "relocate",
         () => repo.relocate({ ...input, actor }),
         relocateOverlay(input, actor),
         input as Record<string, unknown>,
       ),
     setProductPrice: (input) =>
-      runAuthorizedAction('set_pricing', 'other', () =>
+      runAuthorizedAction("set_pricing", "other", () =>
         repo.setProductPrice({ ...input, actor }),
       ),
     createProduct: (input) =>
-      runAuthorizedAction('manage_products', 'other', () =>
+      runAuthorizedAction("manage_products", "other", () =>
         repo.createProduct({ ...input, actor }),
       ),
     updateProduct: (input) =>
-      runAuthorizedAction('manage_products', 'other', () =>
+      runAuthorizedAction("manage_products", "other", () =>
         repo.updateProduct({ ...input, actor }),
       ),
-    requestStockChange: (input) =>
+    createFulfillmentOrder: (input) =>
+      runAuthorizedAction("request_fulfillment", "other", () =>
+        repo.createFulfillmentOrder({ ...input, actor }),
+      ),
+    advanceFulfillmentOrder: (input) =>
       runAuthorizedAction(
-        'manage_inventory',
-        'other',
-        () => repo.requestStockChange(input, {
-          actor: identityId, capabilities, approvalGroups,
+        WAREHOUSE_MUTATION_CAPABILITIES.advanceFulfillment,
+        "other",
+        () => repo.advanceFulfillmentOrder({ ...input, actor }),
+      ),
+    createDepartmentStockRequest: (input) =>
+      runAuthorizedAction("request_stock", "other", () =>
+        repo.createDepartmentStockRequest({ ...input, actor }),
+      ),
+    decideDepartmentStockRequest: (input) =>
+      runAuthorizedAction("reserve_allocate", "other", () =>
+        repo.decideDepartmentStockRequest({ ...input, actor }),
+      ),
+    createCustomerReturnCase: (input) =>
+      runAuthorizedAction("submit_return_case", "other", () =>
+        repo.createCustomerReturnCase({ ...input, actor }),
+      ),
+    resolveCustomerReturnCase: (input) =>
+      runAuthorizedAction(
+        input.resolution === "refund"
+          ? "approve_stock_adjustment_finance"
+          : "manage_returns",
+        "other",
+        () => repo.resolveCustomerReturnCase({ ...input, actor }),
+      ),
+    createKitDefinition: (input) =>
+      runAuthorizedAction("manage_products", "other", () =>
+        repo.createKitDefinition({ ...input, actor }),
+      ),
+    createReKitWorkOrder: (input) =>
+      runAuthorizedAction(["manage_products", "manage_returns"], "other", () =>
+        repo.createReKitWorkOrder({ ...input, actor }),
+      ),
+    completeReKitWorkOrder: (input) =>
+      runAuthorizedAction(["manage_products", "manage_returns"], "other", () =>
+        repo.completeReKitWorkOrder({ ...input, actor }),
+      ),
+    requestStockChange: (input) =>
+      runAuthorizedAction("manage_inventory", "other", () =>
+        repo.requestStockChange(input, {
+          actor: identityId,
+          capabilities,
+          approvalGroups,
         }),
       ),
     loadQualityInspections: (query) => repo.listQualityInspections(query),
@@ -565,60 +657,70 @@ export function WarehouseProvider({
     loadExceptions: (query) => repo.listExceptions(query),
     loadStockChangeRequests: async (query) => {
       const result = await repo.listStockChangeRequests(query);
-      if (source === 'supabase') return result;
+      if (source === "supabase") return result;
       return {
         ...result,
         rows: result.rows.map((request) => ({
           ...request,
-          canDecide: request.requestedBy !== identityId && (
-            (request.status === 'pending_supervisor'
-              && approvalGroups.some((group) => ['warehouse_supervisor', 'logistics_supervisor'].includes(group))
-              && can('approve_stock_adjustment'))
-            || (request.status === 'pending_finance'
-              && approvalGroups.includes('finance')
-              && request.supervisorApprovedBy !== identityId
-              && can('approve_stock_adjustment_finance'))
-          ),
+          canDecide:
+            request.requestedBy !== identityId &&
+            ((request.status === "pending_supervisor" &&
+              approvalGroups.some((group) =>
+                ["warehouse_supervisor", "logistics_supervisor"].includes(
+                  group,
+                ),
+              ) &&
+              can("approve_stock_adjustment")) ||
+              (request.status === "pending_finance" &&
+                approvalGroups.includes("finance") &&
+                request.supervisorApprovedBy !== identityId &&
+                can("approve_stock_adjustment_finance"))),
         })),
       };
     },
     loadWarehouseTasks: (query) => repo.listWarehouseTasks(query),
     loadInventoryPositions: (query) => repo.listInventoryPositions(query),
     inspectQuality: (input) =>
-      runAuthorizedAction(WAREHOUSE_MUTATION_CAPABILITIES.inspectQuality, 'other', () =>
-        repo.inspectQuality(input),
+      runAuthorizedAction(
+        WAREHOUSE_MUTATION_CAPABILITIES.inspectQuality,
+        "other",
+        () => repo.inspectQuality(input),
       ),
     releaseHold: (input) =>
-      runAuthorizedAction(WAREHOUSE_MUTATION_CAPABILITIES.releaseHold, 'other', () =>
-        repo.releaseHold(input),
+      runAuthorizedAction(
+        WAREHOUSE_MUTATION_CAPABILITIES.releaseHold,
+        "other",
+        () => repo.releaseHold(input),
       ),
     createVendorReturn: (input) =>
-      runAuthorizedAction(WAREHOUSE_MUTATION_CAPABILITIES.createVendorReturn, 'other', () =>
-        repo.createVendorReturn(input),
+      runAuthorizedAction(
+        WAREHOUSE_MUTATION_CAPABILITIES.createVendorReturn,
+        "other",
+        () => repo.createVendorReturn(input),
       ),
     updateOperationRoute: (input) =>
-      runAuthorizedAction('manage_operation_routes', 'other', () =>
+      runAuthorizedAction("manage_operation_routes", "other", () =>
         repo.updateOperationRoute(input),
       ),
     submitCycleCount: (input) =>
-      runAuthorizedAction('cycle_count', 'other', () =>
+      runAuthorizedAction("cycle_count", "other", () =>
         repo.submitCycleCount(input),
       ),
     decideStockChange: (input) =>
-      runAuthorizedAction(
-        STOCK_CHANGE_DECISION_CAPABILITIES,
-        'other',
-        () => repo.decideStockChange(input, {
-          actor: identityId, capabilities, approvalGroups,
+      runAuthorizedAction(STOCK_CHANGE_DECISION_CAPABILITIES, "other", () =>
+        repo.decideStockChange(input, {
+          actor: identityId,
+          capabilities,
+          approvalGroups,
         }),
       ),
     resolveException: (input) =>
-      runAuthorizedAction('resolve_exceptions', 'other', () =>
+      runAuthorizedAction("resolve_exceptions", "other", () =>
         repo.resolveException(input),
       ),
     loadReceivableProcurementPOs: () => repo.getReceivableProcurementPOs(),
     receiveProcurementPO: (input) =>
-      runAuthorizedAction('receive_stock', 'other', () =>
+      runAuthorizedAction("receive_stock", "other", () =>
         repo.receiveProcurementPO(input),
       ),
     resetDemo,
@@ -634,7 +736,7 @@ export function WarehouseProvider({
 export function useWarehouse(): WarehouseContextValue {
   const ctx = useContext(WarehouseContext);
   if (!ctx) {
-    throw new Error('useWarehouse must be used within a WarehouseProvider');
+    throw new Error("useWarehouse must be used within a WarehouseProvider");
   }
   return ctx;
 }
