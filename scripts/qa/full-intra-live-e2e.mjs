@@ -254,20 +254,19 @@ const ROUTE_AUTHORIZATION_MATRIX = [
     allowedText: /Finance|Payment readiness|Cross-module activity/i,
     deniedText: /No Finance access|Access denied/i,
   },
+  {
+    path: "/product",
+    allowed: (user) => hasAssignedModule(user, "product"),
+    allowedText: /Product readiness|Pricing governance|go-live/i,
+    deniedText: /No Product access|Access denied/i,
+  },
 ];
 
 const roleRoutes = {
   platform_admin: [
     { path: "/admin/users", text: /Users & Roles|Access matrix/i },
   ],
-  vendor_portal: [
-    { path: "/vendor", text: /Vendor|accreditation|Acme/i },
-    {
-      path: "/vendor/cases/case_seed_001",
-      text: /Accreditation|Checklist|Documents|requirements/i,
-      recordText: /Acme Medical Supplies/i,
-    },
-  ],
+  vendor_portal: [{ path: "/vendor", text: /Vendor|accreditation|Acme/i }],
   warehouse_logistics_supervisor: [
     { path: "/warehouse/receiving", text: /Receiving|Receive/i },
     { path: "/warehouse/quality", text: /Controlled exception disposition/i },
@@ -300,14 +299,13 @@ const roleRoutes = {
   ],
   warehouse_finance: [
     { path: "/warehouse/finance", text: /Finance|Valuation|Reconciliation/i },
-    { path: "/warehouse/cycle-counts", text: /Cycle|Count/i },
+    { path: "/warehouse/approvals", text: /Approvals|adjustment/i },
   ],
   warehouse_bi_analyst: [
-    { path: "/warehouse/data", text: /Data|Reports|Export/i },
+    { path: "/insights/warehouse", text: /Insights|Warehouse|Indicators/i },
   ],
   warehouse_marketing: [
-    { path: "/warehouse/events", text: /Events|Activations|access/i },
-    { path: "/warehouse/returns", text: /Returns|Record return/i },
+    { path: "/events", text: /Events|Activations|Event operations/i },
   ],
   warehouse_pricing: [
     { path: "/warehouse/pricing", text: /Pricing|Landed cost|Set price/i },
@@ -317,11 +315,6 @@ const roleRoutes = {
     {
       path: "/procurement/requests/new",
       text: /Draft a purchase request|New request/i,
-    },
-    {
-      path: "/procurement/requests/req_seed_001",
-      text: /Purchase request|Line items|Activity/i,
-      recordText: /Emergency aircon repair/i,
     },
   ],
   procurement_officer: [
@@ -349,21 +342,9 @@ const roleRoutes = {
   ],
   legal_reviewer: [
     { path: "/legal", text: /Accreditation cases|Legal/i },
-    {
-      path: "/legal/cases/case_seed_001",
-      text: /Accreditation|Checklist|Documents|Activity/i,
-      recordText: /Acme Medical Supplies/i,
-    },
     { path: "/legal/invites/new", text: /Invite vendor|Onboard a new vendor/i },
   ],
-  legal_compliance: [
-    { path: "/legal", text: /Accreditation cases|Legal/i },
-    {
-      path: "/legal/cases/case_seed_001",
-      text: /Accreditation|Checklist|Documents|Activity/i,
-      recordText: /Acme Medical Supplies/i,
-    },
-  ],
+  legal_compliance: [{ path: "/legal", text: /Accreditation cases|Legal/i }],
   legal_admin: [
     { path: "/legal", text: /Accreditation cases|Legal/i },
     { path: "/legal/invites/new", text: /Invite vendor|Onboard a new vendor/i },
@@ -387,7 +368,7 @@ const roleRoutes = {
     { path: "/warehouse/cycle-counts", text: /Cycle|Count|variance/i },
   ],
   warehouse_business_unit: [
-    { path: "/warehouse/events", text: /Events|Activations|access/i },
+    { path: "/events", text: /Events|Activations|Event operations/i },
   ],
   warehouse_procurement: [
     {
@@ -462,7 +443,7 @@ roleRoutes.marketing_events_lead = [
 ];
 roleRoutes.product_owner = [
   ...roleRoutes.events_viewer,
-  ...roleRoutes.warehouse_pricing,
+  { path: "/product", text: /Product readiness|Pricing governance|go-live/i },
 ];
 roleRoutes.leadership_insights = [
   ...roleRoutes.insights_analyst,
@@ -504,8 +485,13 @@ function canonicalPath(pathname) {
 }
 
 function finalPathMatches(expectedPath, currentUrl) {
+  const actualPath = canonicalPath(new URL(currentUrl).pathname);
+  const acceptedPaths = new Map([
+    ["/procurement", new Set(["/procurement", "/procurement/approvals"])],
+  ]);
   return (
-    canonicalPath(new URL(currentUrl).pathname) === canonicalPath(expectedPath)
+    actualPath === canonicalPath(expectedPath) ||
+    acceptedPaths.get(canonicalPath(expectedPath))?.has(actualPath) === true
   );
 }
 
@@ -551,6 +537,10 @@ function classify(text, url) {
   }
   if (
     lower.includes("access denied") ||
+    lower.includes("access required") ||
+    lower.includes("employee workspace") ||
+    lower.includes("you don't have access to this page") ||
+    lower.includes("not available for your role") ||
     lower.includes("doesn't include") ||
     lower.includes("not authorized") ||
     lower.includes("no access") ||

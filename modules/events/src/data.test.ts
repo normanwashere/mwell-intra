@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import {
   createLiveEvent,
   lifecycleForDates,
+  loadLiveEvents,
   loadMemoryEvents,
   manageLiveEvent,
   requestEventFulfillment,
@@ -14,6 +15,31 @@ import {
 import { EVENTS_DEMO_DATA } from './seed';
 
 describe('event lifecycle rules', () => {
+  it('loads fulfillment products without filtering on a non-existent active column', async () => {
+    const filters: Array<[string, unknown]> = [];
+    const query = {
+      select: () => query,
+      order: () => query,
+      limit: async () => ({ data: [], error: null }),
+      in: (column: string, value: unknown) => {
+        filters.push([column, value]);
+        return query;
+      },
+      eq: (column: string, value: unknown) => {
+        filters.push([column, value]);
+        return query;
+      },
+    };
+    const client = {
+      schema: () => ({ from: () => query }),
+    };
+
+    await loadLiveEvents(client as never);
+
+    expect(filters).toContainEqual(['item_class', ['sellable_sku', 'merchandise']]);
+    expect(filters.some(([column]) => column === 'active')).toBe(false);
+  });
+
   it('exposes controlled lifecycle and fulfillment operations', async () => {
     const module = await import('./data');
 
@@ -30,8 +56,21 @@ describe('event lifecycle rules', () => {
 
   it('rejects incomplete or reversed event dates', () => {
     expect(validateEventDraft({ name: '', type: 'corporate', startDate: '' })).toBe('Event name is required.');
-    expect(validateEventDraft({ name: 'Town hall', type: 'corporate', startDate: '' })).toBe('Start date is required.');
-    expect(validateEventDraft({ name: 'Town hall', type: 'corporate', startDate: '2026-07-15', endDate: '2026-07-14' })).toBe('End date cannot be before the start date.');
+    expect(
+      validateEventDraft({
+        name: 'Town hall',
+        type: 'corporate',
+        startDate: '',
+      }),
+    ).toBe('Start date is required.');
+    expect(
+      validateEventDraft({
+        name: 'Town hall',
+        type: 'corporate',
+        startDate: '2026-07-15',
+        endDate: '2026-07-14',
+      }),
+    ).toBe('End date cannot be before the start date.');
   });
 
   it('returns field-specific date validation', () => {
@@ -39,12 +78,14 @@ describe('event lifecycle rules', () => {
       name: 'Event name is required.',
       startDate: 'Start date is required.',
     });
-    expect(validateEventDraftFields({
-      name: 'Town hall',
-      type: 'corporate',
-      startDate: '2026-07-15',
-      endDate: '2026-07-14',
-    })).toEqual({ endDate: 'End date cannot be before the start date.' });
+    expect(
+      validateEventDraftFields({
+        name: 'Town hall',
+        type: 'corporate',
+        startDate: '2026-07-15',
+        endDate: '2026-07-14',
+      }),
+    ).toEqual({ endDate: 'End date cannot be before the start date.' });
   });
 
   it('rejects an empty start date before calling Supabase', async () => {
@@ -58,11 +99,13 @@ describe('event lifecycle rules', () => {
       }),
     };
 
-    await expect(createLiveEvent(client as never, {
-      name: 'Town hall',
-      type: 'corporate',
-      startDate: '',
-    })).rejects.toThrow('Start date is required.');
+    await expect(
+      createLiveEvent(client as never, {
+        name: 'Town hall',
+        type: 'corporate',
+        startDate: '',
+      }),
+    ).rejects.toThrow('Start date is required.');
     expect(calls).toEqual([]);
   });
 
@@ -74,9 +117,14 @@ describe('event lifecycle rules', () => {
           calls.push({ name, payload: args.payload });
           return {
             data: {
-              id: 'evt-1', name: 'Moved event', type: 'corporate',
-              start_date: '2026-08-02', end_date: null, status: 'planned',
-              owner_email: 'owner@mwell.com.ph', updated_at: '2026-07-22T03:00:00Z',
+              id: 'evt-1',
+              name: 'Moved event',
+              type: 'corporate',
+              start_date: '2026-08-02',
+              end_date: null,
+              status: 'planned',
+              owner_email: 'owner@mwell.com.ph',
+              updated_at: '2026-07-22T03:00:00Z',
             },
             error: null,
           };
@@ -84,21 +132,31 @@ describe('event lifecycle rules', () => {
       }),
     };
 
-    await expect(manageLiveEvent(client as never, {
-      eventId: 'evt-1',
-      action: 'reschedule',
-      reason: 'Venue conflict',
-      expectedUpdatedAt: '2026-07-22T02:00:00Z',
-      changes: { startDate: '2026-08-02' },
-    })).resolves.toMatchObject({ id: 'evt-1', name: 'Moved event', lifecycle: 'planned' });
-    expect(calls).toEqual([{
-      name: 'manage_event',
-      payload: {
-        event_id: 'evt-1', action: 'reschedule', reason: 'Venue conflict',
-        expected_updated_at: '2026-07-22T02:00:00Z',
-        changes: { start_date: '2026-08-02' },
+    await expect(
+      manageLiveEvent(client as never, {
+        eventId: 'evt-1',
+        action: 'reschedule',
+        reason: 'Venue conflict',
+        expectedUpdatedAt: '2026-07-22T02:00:00Z',
+        changes: { startDate: '2026-08-02' },
+      }),
+    ).resolves.toMatchObject({
+      id: 'evt-1',
+      name: 'Moved event',
+      lifecycle: 'planned',
+    });
+    expect(calls).toEqual([
+      {
+        name: 'manage_event',
+        payload: {
+          event_id: 'evt-1',
+          action: 'reschedule',
+          reason: 'Venue conflict',
+          expected_updated_at: '2026-07-22T02:00:00Z',
+          changes: { start_date: '2026-08-02' },
+        },
       },
-    }]);
+    ]);
   });
 
   it('preserves event identity in a warehouse fulfillment request', async () => {
@@ -112,13 +170,20 @@ describe('event lifecycle rules', () => {
       }),
     };
     const input = {
-      eventId: 'evt-1', requestingDepartment: 'marketing', purpose: 'Launch kits',
-      costCenter: 'MKT-100', requiredDate: '2026-08-01', expenseTreatment: 'expense' as const,
-      productId: 'merch-1', quantity: 25, idempotencyKey: 'event-request-1',
+      eventId: 'evt-1',
+      requestingDepartment: 'marketing',
+      purpose: 'Launch kits',
+      costCenter: 'MKT-100',
+      requiredDate: '2026-08-01',
+      expenseTreatment: 'expense' as const,
+      productId: 'merch-1',
+      quantity: 25,
+      idempotencyKey: 'event-request-1',
     };
 
     await expect(requestEventFulfillment(client as never, input)).resolves.toEqual({
-      id: 'request-1', eventId: 'evt-1',
+      id: 'request-1',
+      eventId: 'evt-1',
     });
     expect(calls[0]).toMatchObject({
       name: 'request_event_fulfillment',
@@ -127,10 +192,10 @@ describe('event lifecycle rules', () => {
   });
 
   it('defines audited lifecycle and event-linked handoff database controls', () => {
-    const sql = readFileSync(resolve(
-      process.cwd(),
-      '../../supabase/migrations/20260722120500_procurement_event_workflow_remediation.sql',
-    ), 'utf8');
+    const sql = readFileSync(
+      resolve(process.cwd(), '../../supabase/migrations/20260722120500_procurement_event_workflow_remediation.sql'),
+      'utf8',
+    );
 
     expect(sql).toContain('warehouse.event_lifecycle_events');
     expect(sql).toContain('warehouse.manage_event');
@@ -170,7 +235,9 @@ describe('event demo repository', () => {
     let stored: string | null = null;
     const storage = {
       getItem: () => stored,
-      setItem: (_key: string, value: string) => { stored = value; },
+      setItem: (_key: string, value: string) => {
+        stored = value;
+      },
     };
     const created = {
       ...EVENTS_DEMO_DATA,

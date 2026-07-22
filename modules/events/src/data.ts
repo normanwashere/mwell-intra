@@ -74,10 +74,7 @@ function mapEventRow(row: UnknownRow, totals = { reserved: 0, issued: 0, returne
   };
 }
 
-export async function manageLiveEvent(
-  client: EventsClient,
-  input: EventManagementInput,
-): Promise<EventRecord> {
+export async function manageLiveEvent(client: EventsClient, input: EventManagementInput): Promise<EventRecord> {
   if (!input.reason.trim()) throw new Error('A reason is required.');
   const changes = input.changes ?? {};
   const { data, error } = await client.schema('warehouse').rpc('manage_event', {
@@ -135,16 +132,11 @@ export async function loadLiveEvents(client: EventsClient): Promise<EventsData> 
       .select('id,name,type,site_location_id,start_date,end_date,status,owner_email,updated_at')
       .order('start_date', { ascending: false })
       .limit(1000),
-    client
-      .schema('warehouse')
-      .from('allocations')
-      .select('event_id,quantity,status')
-      .limit(10000),
+    client.schema('warehouse').from('allocations').select('event_id,quantity,status').limit(10000),
     client
       .schema('warehouse')
       .from('products')
       .select('id,name,item_class')
-      .eq('active', true)
       .in('item_class', ['sellable_sku', 'merchandise'])
       .order('name', { ascending: true })
       .limit(1000),
@@ -153,13 +145,15 @@ export async function loadLiveEvents(client: EventsClient): Promise<EventsData> 
   if (eventResult.error) warnings.push(`Events: ${eventResult.error.message}`);
   if (allocationResult.error) warnings.push(`Fulfillment: ${allocationResult.error.message}`);
   if (productResult.error) warnings.push(`Products: ${productResult.error.message}`);
-  const allocations = Array.isArray(allocationResult.data)
-    ? (allocationResult.data as UnknownRow[])
-    : [];
+  const allocations = Array.isArray(allocationResult.data) ? (allocationResult.data as UnknownRow[]) : [];
   const totals = new Map<string, { reserved: number; issued: number; returned: number }>();
   for (const row of allocations) {
     const eventId = text(row.event_id);
-    const current = totals.get(eventId) ?? { reserved: 0, issued: 0, returned: 0 };
+    const current = totals.get(eventId) ?? {
+      reserved: 0,
+      issued: 0,
+      returned: 0,
+    };
     const quantity = count(row.quantity);
     const status = text(row.status);
     if (status === 'reserved' || status === 'allocated') current.reserved += quantity;
@@ -174,12 +168,11 @@ export async function loadLiveEvents(client: EventsClient): Promise<EventsData> 
       const total = totals.get(id) ?? { reserved: 0, issued: 0, returned: 0 };
       return mapEventRow(row, total);
     }),
-    products: (Array.isArray(productResult.data) ? productResult.data as UnknownRow[] : [])
-      .map((row) => ({
-        id: text(row.id),
-        name: text(row.name, 'Unnamed product'),
-        itemClass: text(row.item_class),
-      })),
+    products: (Array.isArray(productResult.data) ? (productResult.data as UnknownRow[]) : []).map((row) => ({
+      id: text(row.id),
+      name: text(row.name, 'Unnamed product'),
+      itemClass: text(row.item_class),
+    })),
     warnings,
   };
 }
@@ -208,18 +201,13 @@ export function loadMemoryEvents(storage: Pick<Storage, 'getItem'>): EventsData 
   if (!stored) return EVENTS_DEMO_DATA;
   try {
     const parsed = JSON.parse(stored) as Partial<EventsData>;
-    return Array.isArray(parsed.events)
-      ? { events: parsed.events as EventRecord[], warnings: [] }
-      : EVENTS_DEMO_DATA;
+    return Array.isArray(parsed.events) ? { events: parsed.events as EventRecord[], warnings: [] } : EVENTS_DEMO_DATA;
   } catch {
     return EVENTS_DEMO_DATA;
   }
 }
 
-export function saveMemoryEvents(
-  storage: Pick<Storage, 'setItem'>,
-  data: EventsData,
-): void {
+export function saveMemoryEvents(storage: Pick<Storage, 'setItem'>, data: EventsData): void {
   storage.setItem(MEMORY_EVENTS_KEY, JSON.stringify({ events: data.events }));
 }
 
@@ -248,40 +236,59 @@ export function useEventsData() {
     }
   }, [live]);
 
-  const createEvent = useCallback(async (draft: EventDraft) => {
-    if (live) {
-      await createLiveEvent(live, draft);
+  const createEvent = useCallback(
+    async (draft: EventDraft) => {
+      if (live) {
+        await createLiveEvent(live, draft);
+        await refresh();
+        return;
+      }
+      const next: EventRecord = {
+        id: `evt-demo-${Date.now()}`,
+        ...draft,
+        name: draft.name.trim(),
+        lifecycle: lifecycleForDates(draft.startDate, draft.endDate),
+        reservedUnits: 0,
+        issuedUnits: 0,
+        returnedUnits: 0,
+      };
+      setData((current) => {
+        const updated = { ...current, events: [next, ...current.events] };
+        saveMemoryEvents(window.sessionStorage, updated);
+        return updated;
+      });
+    },
+    [live, refresh],
+  );
+
+  const manageEvent = useCallback(
+    async (input: EventManagementInput) => {
+      if (!live) throw new Error('Event lifecycle changes require Supabase mode.');
+      const updated = await manageLiveEvent(live, input);
       await refresh();
-      return;
-    }
-    const next: EventRecord = {
-      id: `evt-demo-${Date.now()}`,
-      ...draft,
-      name: draft.name.trim(),
-      lifecycle: lifecycleForDates(draft.startDate, draft.endDate),
-      reservedUnits: 0,
-      issuedUnits: 0,
-      returnedUnits: 0,
-    };
-    setData((current) => {
-      const updated = { ...current, events: [next, ...current.events] };
-      saveMemoryEvents(window.sessionStorage, updated);
       return updated;
-    });
-  }, [live, refresh]);
+    },
+    [live, refresh],
+  );
 
-  const manageEvent = useCallback(async (input: EventManagementInput) => {
-    if (!live) throw new Error('Event lifecycle changes require Supabase mode.');
-    const updated = await manageLiveEvent(live, input);
-    await refresh();
-    return updated;
-  }, [live, refresh]);
+  const requestFulfillment = useCallback(
+    async (input: EventFulfillmentRequest) => {
+      if (!live) throw new Error('Warehouse fulfillment requests require Supabase mode.');
+      return requestEventFulfillment(live, input);
+    },
+    [live],
+  );
 
-  const requestFulfillment = useCallback(async (input: EventFulfillmentRequest) => {
-    if (!live) throw new Error('Warehouse fulfillment requests require Supabase mode.');
-    return requestEventFulfillment(live, input);
-  }, [live]);
-
-  useEffect(() => { void refresh(); }, [refresh]);
-  return { data, loading, error, refresh, createEvent, manageEvent, requestFulfillment };
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+  return {
+    data,
+    loading,
+    error,
+    refresh,
+    createEvent,
+    manageEvent,
+    requestFulfillment,
+  };
 }

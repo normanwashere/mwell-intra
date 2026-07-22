@@ -301,6 +301,10 @@ test("route crawl enforces an exact role-to-route authorization matrix", async (
     source,
     /allowed: \(user\) => hasAssignedModule\(user, "insights"\)/,
   );
+  assert.match(
+    source,
+    /allowed: \(user\) => hasAssignedModule\(user, "product"\)/,
+  );
   assert.match(source, /allowed: hasFinanceAccess/);
   assert.doesNotMatch(
     source,
@@ -312,7 +316,7 @@ test("route crawl enforces an exact role-to-route authorization matrix", async (
   );
 });
 
-test("route crawl rejects silent redirects and verifies record-specific detail content", async () => {
+test("route crawl rejects silent redirects without depending on permanent QA records", async () => {
   const source = await readFile(
     new URL("./full-intra-live-e2e.mjs", import.meta.url),
     "utf8",
@@ -322,14 +326,10 @@ test("route crawl rejects silent redirects and verifies record-specific detail c
     source,
     /route\.recordText\s*\?\s*route\.recordText\.test\(audit\.text\)/,
   );
-  assert.match(
-    source,
-    /path: "\/procurement\/requests\/req_seed_001"[\s\S]*recordText: \/Emergency aircon repair/,
-  );
-  assert.match(
-    source,
-    /path: "\/legal\/cases\/case_seed_001"[\s\S]*recordText: \/Acme Medical Supplies/,
-  );
+  assert.match(source, /acceptedPaths\.get\(canonicalPath\(expectedPath\)\)/);
+  assert.doesNotMatch(source, /path: "\/procurement\/requests\/req_seed_001"/);
+  assert.doesNotMatch(source, /path: "\/legal\/cases\/case_seed_001"/);
+  assert.doesNotMatch(source, /path: "\/vendor\/cases\/case_seed_001"/);
 });
 
 test("route crawl covers visible same-origin navigation discovered from the shell DOM", async () => {

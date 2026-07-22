@@ -28,7 +28,7 @@ export async function GET(request: Request) {
     pathname,
   );
 
-  if (!feature) return NextResponse.json({ guide: null }, { status: 404 });
+  if (!feature) return NextResponse.json({ guide: null });
 
   return NextResponse.json({
     guide: {

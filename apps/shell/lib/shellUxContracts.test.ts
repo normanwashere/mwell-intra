@@ -35,6 +35,9 @@ describe("server-enforced Knowledge Base audience", () => {
     expect(page).toContain("<KnowledgeBase content={content}");
     expect(contextApi).toContain("client.auth.getUser()");
     expect(contextApi).toContain("knowledgeContentForAudience");
+    expect(contextApi).toContain(
+      "if (!feature) return NextResponse.json({ guide: null })",
+    );
   });
 });
 

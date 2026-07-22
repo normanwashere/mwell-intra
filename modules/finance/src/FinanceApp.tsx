@@ -1,15 +1,6 @@
 'use client';
 
-import {
-  Badge,
-  Card,
-  HeroChipButton,
-  Icon,
-  ModuleHero,
-  SignInPrompt,
-  SkeletonList,
-  SkeletonStats,
-} from '@intra/ui';
+import { Badge, Card, HeroChipButton, Icon, ModuleHero, SignInPrompt, SkeletonList, SkeletonStats } from '@intra/ui';
 import { useSession } from '@intra/auth';
 import { can } from '@intra/rbac';
 import { canAccessFinanceRoles } from './access';
@@ -40,9 +31,12 @@ export function FinanceApp() {
           <Icon name="lock" className="mx-auto h-8 w-8 text-faint" />
           <h1 className="font-display text-lg font-bold text-ink">No Finance access</h1>
           <p className="text-sm text-muted">
-            Your account needs Warehouse Finance or Procurement Finance access. Ask an administrator to assign the appropriate scoped role.
+            Your account needs Warehouse Finance or Procurement Finance access. Ask an administrator to assign the
+            appropriate scoped role.
           </p>
-          <a href="/" className="btn-primary">Back to dashboard</a>
+          <a href="/" className="btn-primary">
+            Back to dashboard
+          </a>
         </div>
       </div>
     );
@@ -110,7 +104,8 @@ export function FinanceApp() {
             <p className="text-xs font-semibold uppercase text-faint">Control ownership</p>
             <h2 className="mt-1 font-display text-lg font-bold text-ink">Review here, execute at source</h2>
             <p className="mt-1 text-sm text-muted">
-              Finance sees the combined trail. Procurement still owns requests and POs; Warehouse owns receiving, inspection, counts, and custody.
+              Finance sees the combined trail. Procurement still owns requests and POs; Warehouse owns receiving,
+              inspection, counts, and custody.
             </p>
           </div>
           <div className="grid gap-2">
@@ -125,8 +120,8 @@ export function FinanceApp() {
               </a>
             )}
             {warehouseFinance && (
-              <a href="/warehouse/cycle-counts" className="btn-ghost justify-between">
-                Cycle-count variances <Icon name="arrowRight" className="h-4 w-4" />
+              <a href="/warehouse/approvals" className="btn-ghost justify-between">
+                Stock adjustment approvals <Icon name="arrowRight" className="h-4 w-4" />
               </a>
             )}
           </div>

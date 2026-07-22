@@ -70,9 +70,14 @@ describe('FinanceApp', () => {
     expect(screen.getByText('Procurement Finance')).toBeInTheDocument();
     expect(screen.getByText('Payment readiness')).toBeInTheDocument();
     expect(screen.getByText('Cross-module activity')).toBeInTheDocument();
-    expect(
-      screen.getByRole('link', { name: /review next payment pack/i }),
-    ).toHaveAttribute('href', '/procurement/purchase-orders/po-demo-1042');
+    expect(screen.getByRole('link', { name: /stock adjustment approvals/i })).toHaveAttribute(
+      'href',
+      '/warehouse/approvals',
+    );
+    expect(screen.getByRole('link', { name: /review next payment pack/i })).toHaveAttribute(
+      'href',
+      '/procurement/purchase-orders/po-demo-1042',
+    );
   });
 
   it('admits Procurement Finance without inventing Warehouse access', () => {
@@ -80,7 +85,7 @@ describe('FinanceApp', () => {
     render(<FinanceApp />);
     expect(screen.getByText('Procurement Finance')).toBeInTheDocument();
     expect(screen.queryByText('Warehouse Finance')).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /cycle-count variances/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /stock adjustment approvals/i })).not.toBeInTheDocument();
   });
 
   it('keeps a Warehouse-only Finance user in Warehouse-owned workflows', () => {
@@ -90,9 +95,7 @@ describe('FinanceApp', () => {
       data: {
         ...FINANCE_DEMO_DATA,
         payments: [],
-        activity: FINANCE_DEMO_DATA.activity.filter(
-          (item) => item.source !== 'procurement_po',
-        ),
+        activity: FINANCE_DEMO_DATA.activity.filter((item) => item.source !== 'procurement_po'),
       },
     };
     render(<FinanceApp />);
