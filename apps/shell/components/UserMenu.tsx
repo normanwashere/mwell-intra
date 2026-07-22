@@ -1,27 +1,27 @@
-'use client';
+"use client";
 
 // Signed-in identity + sign-out control. Reads the session from @intra/auth and
 // shows a compact popover (name, email, tier, active modules, sign out). When
 // signed out it renders a "Sign in" link instead.
 
-import { useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { Icon } from '@intra/ui';
-import { useSession } from '@intra/auth';
-import { MODULE_LIST } from '@intra/rbac';
-import { cx } from '@shell/lib/cx';
-import { resetDemoData } from '@shell/lib/demoData';
-import { hasCapability, hasModuleAccess } from '@shell/lib/navigation';
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { Icon } from "@intra/ui";
+import { useSession } from "@intra/auth";
+import { MODULE_LIST } from "@intra/rbac";
+import { cx } from "@shell/lib/cx";
+import { resetDemoData } from "@shell/lib/demoData";
+import { hasCapability, hasModuleAccess } from "@shell/lib/navigation";
 
 function initials(nameOrEmail: string): string {
   const source = nameOrEmail.trim();
-  if (!source) return '?';
+  if (!source) return "?";
   const parts = source.split(/\s+/).filter(Boolean);
   const first = parts[0] ?? source;
   const second = parts[1];
   if (second) {
-    return ((first[0] ?? '') + (second[0] ?? '')).toUpperCase();
+    return ((first[0] ?? "") + (second[0] ?? "")).toUpperCase();
   }
   return source.slice(0, 2).toUpperCase();
 }
@@ -32,16 +32,28 @@ export function UserMenu() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!open) return;
-    const onClick = (e: MouseEvent) => {
+    const onPointerDown = (e: PointerEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) {
         setOpen(false);
       }
     };
-    document.addEventListener('mousedown', onClick);
-    return () => document.removeEventListener('mousedown', onClick);
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setOpen(false);
+        window.requestAnimationFrame(() => triggerRef.current?.focus());
+      }
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
   }, [open]);
 
   // Hydration-safe: while the session restores, render an empty slot on both
@@ -65,17 +77,18 @@ export function UserMenu() {
   const activeModules = MODULE_LIST.filter((module) =>
     hasModuleAccess(access, module),
   );
-  const isAdmin = hasCapability(access, 'core', 'manage_rbac');
+  const isAdmin = hasCapability(access, "core", "manage_rbac");
 
   const handleSignOut = async () => {
     setOpen(false);
     await signOut();
-    router.push('/login');
+    router.push("/login");
   };
 
   return (
     <div className="relative" ref={ref}>
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
@@ -103,15 +116,15 @@ export function UserMenu() {
 
           <div className="border-t border-line pt-2">
             <p className="px-1 text-[0.65rem] font-semibold uppercase tracking-wide text-faint">
-              {profile.kind === 'vendor' ? 'External vendor' : 'Employee'}
-              {profile.title ? ` · ${profile.title}` : ''}
+              {profile.kind === "vendor" ? "External vendor" : "Employee"}
+              {profile.title ? ` · ${profile.title}` : ""}
             </p>
             <div className="mt-1.5 flex flex-wrap gap-1 px-1">
               {activeModules.length > 0 ? (
                 activeModules.map((m) => (
                   <span
                     key={m}
-                    className={cx('chip bg-inset capitalize text-muted')}
+                    className={cx("chip bg-inset capitalize text-muted")}
                   >
                     {m}
                   </span>
@@ -134,14 +147,14 @@ export function UserMenu() {
             </Link>
           )}
 
-          {mode === 'memory' && (
+          {mode === "memory" && (
             <button
               type="button"
               role="menuitem"
               onClick={() => {
                 if (
                   window.confirm(
-                    'Reset all demo data? Every module goes back to the seeded dataset.',
+                    "Reset all demo data? Every module goes back to the seeded dataset.",
                   )
                 ) {
                   setOpen(false);
@@ -149,8 +162,8 @@ export function UserMenu() {
                 }
               }}
               className={cx(
-                'btn-ghost w-full justify-start',
-                isAdmin ? 'mt-1' : 'mt-3',
+                "btn-ghost w-full justify-start",
+                isAdmin ? "mt-1" : "mt-3",
               )}
             >
               <Icon name="rotate" className="h-4 w-4" />
@@ -163,8 +176,8 @@ export function UserMenu() {
             role="menuitem"
             onClick={() => void handleSignOut()}
             className={cx(
-              'btn-ghost w-full justify-start',
-              isAdmin || mode === 'memory' ? 'mt-1' : 'mt-3',
+              "btn-ghost w-full justify-start",
+              isAdmin || mode === "memory" ? "mt-1" : "mt-3",
             )}
           >
             <Icon name="logout" className="h-4 w-4" />

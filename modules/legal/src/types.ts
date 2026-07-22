@@ -337,6 +337,10 @@ export interface AccreditationCase {
   submissionSignature?: CaseSignature;
   /** Legal reviewer's sign-off signature captured on approve / reject. */
   decisionSignature?: CaseSignature;
+  /** A high-risk disposition proposed by one Legal actor and awaiting another. */
+  decisionPending?: boolean;
+  pendingDecisionStatus?: 'approved' | 'rejected' | 'provisional';
+  pendingDecisionProposedByEmail?: string;
 }
 
 export type ChecklistDecision = 'pending' | 'approved' | 'rejected' | 'na';
@@ -418,6 +422,10 @@ export interface VendorInvite {
   createdAt: string;
   createdByEmail?: string;
   acceptedAt?: string;
+  expiresAt?: string;
+  linkGeneration?: number;
+  lastLinkIssuedAt?: string;
+  replayRejectedAt?: string;
   status: 'sent' | 'accepted' | 'expired' | 'delivery_failed';
   /** Delivery is separate from case creation so a mail outage cannot orphan work. */
   deliveryStatus?: 'sent' | 'delivery_failed';

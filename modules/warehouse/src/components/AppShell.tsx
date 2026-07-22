@@ -67,6 +67,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     source,
     data,
     can,
+    canOpenDestination,
     canOpenRoute,
     resetDemo,
     pendingSync,
@@ -77,7 +78,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const toast = useToast();
-  const modules = modulesForWarehouseAccess(source, role, can);
+  const modules = modulesForWarehouseAccess(
+    source,
+    role,
+    can,
+    canOpenDestination,
+  );
   const rolePresentation = { label: roleLabel, description: roleDescription };
   const pageGuide = WAREHOUSE_GUIDES.find((guide) =>
     routeMatches(guide.path, location.pathname),
@@ -126,7 +132,12 @@ export function AppShell({ children }: { children: ReactNode }) {
     [canOpenRoute, data],
   );
 
-  const primary = primaryModulesForWarehouseAccess(source, role, can);
+  const primary = primaryModulesForWarehouseAccess(
+    source,
+    role,
+    can,
+    canOpenDestination,
+  );
   const canScan = primary.some((module) => module.id === 'scan');
   const primaryIds = new Set(primary.map((module) => module.id));
   const remainingModules = modules.filter((module) => !primaryIds.has(module.id));

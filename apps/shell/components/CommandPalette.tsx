@@ -262,7 +262,7 @@ export function CommandPalette() {
                   onMouseEnter={() => setActive(idx)}
                   onClick={() => run(item.href)}
                   className={cx(
-                    "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition",
+                    "flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition",
                     idx === active
                       ? "bg-brand-500/10 text-ink"
                       : "text-muted hover:bg-inset hover:text-ink",

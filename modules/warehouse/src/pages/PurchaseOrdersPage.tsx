@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useSession } from '@intra/auth';
 import { useWarehouse } from '@/app/store';
 import {
@@ -54,19 +54,13 @@ const STATUS_TONE: Record<POStatus, Tone> = {
   cancelled: 'rose',
 };
 
-interface DraftLine {
-  productId: string;
-  quantityOrdered: number;
-}
-
 export function PurchaseOrdersPage() {
   const {
-    data, source, can, createPurchaseOrder, receiveAgainstPO, cancelPurchaseOrder,
+    data, source, can, receiveAgainstPO, cancelPurchaseOrder,
     loadReceivableProcurementPOs, receiveProcurementPO, canOpenRoute,
   } = useWarehouse();
   const toast = useToast();
   const { mode, supabaseClient } = useSession();
-  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const handoffPoId = searchParams.get('po');
   const openedHandoffRef = useRef<string | null>(null);
@@ -86,12 +80,6 @@ export function PurchaseOrdersPage() {
     loadReceivableProcurementPOs,
     bridgeReload,
   );
-
-  const [createOpen, setCreateOpen] = useState(false);
-  const [supplierId, setSupplierId] = useState('');
-  const [draftLines, setDraftLines] = useState<DraftLine[]>([]);
-  const [lineProduct, setLineProduct] = useState('');
-  const [lineQty, setLineQty] = useState(10);
 
   // Row-as-target (WH-27): tapping a PO opens its detail sheet; Receive and
   // Cancel live INSIDE the sheet instead of repeating on every card.
@@ -243,6 +231,9 @@ export function PurchaseOrdersPage() {
   );
 
   if (!data) return null;
+  // Live Warehouse consumes the governed Procurement handoff only. Seeded
+  // Warehouse-origin POs remain available solely in memory-mode demonstrations.
+  const warehousePOs = source === 'memory' ? data.purchaseOrders : [];
   const supplierName = (id: string) => data.suppliers.find((s) => s.id === id)?.name ?? id;
   const productName = (id: string) => data.products.find((p) => p.id === id)?.name ?? id;
   const poNo = (po: PurchaseOrder) => poNumbers.get(po.id) ?? po.id;
@@ -253,11 +244,11 @@ export function PurchaseOrdersPage() {
     // A draft was never ordered — receiving against it would fake supply
     // (WH-25). Receivable = ordered or partially received.
     po.status === 'ordered' || po.status === 'partially_received';
-  const openCount = data.purchaseOrders.filter(isOpenPO).length;
-  const openValue = data.purchaseOrders
+  const openCount = warehousePOs.filter(isOpenPO).length;
+  const openValue = warehousePOs
     .filter(isOpenPO)
     .reduce((s, po) => s + poValue(po, data.products), 0);
-  const shownPOs = data.purchaseOrders
+  const shownPOs = warehousePOs
     .slice()
     .sort((a, b) => Number(isOpenPO(b)) - Number(isOpenPO(a)))
     .filter((po) =>
@@ -267,33 +258,8 @@ export function PurchaseOrdersPage() {
   const shownBridged: BridgedPO[] = filter === 'closed' ? [] : bridgedPOs;
 
   const detailPO = detailPOId
-    ? data.purchaseOrders.find((po) => po.id === detailPOId) ?? null
+    ? warehousePOs.find((po) => po.id === detailPOId) ?? null
     : null;
-
-  const addDraftLine = () => {
-    if (!lineProduct) return;
-    setDraftLines((prev) => {
-      if (prev.some((l) => l.productId === lineProduct)) return prev;
-      return [...prev, { productId: lineProduct, quantityOrdered: lineQty }];
-    });
-    setLineProduct('');
-    setLineQty(10);
-  };
-
-  const submitCreate = async () => {
-    const supplier = supplierId || data.suppliers[0]?.id;
-    if (!supplier) {
-      toast.error('Add a supplier first.');
-      return;
-    }
-    if (draftLines.length === 0) return;
-    const ok = await createPurchaseOrder({ supplierId: supplier, lines: draftLines });
-    if (!ok) return;
-    toast.success('Purchase order created');
-    setCreateOpen(false);
-    setDraftLines([]);
-    setSupplierId('');
-  };
 
   const openReceive = (po: PurchaseOrder) => {
     setDetailPOId(null);
@@ -403,9 +369,9 @@ export function PurchaseOrdersPage() {
         subtitle={canManagePOs ? 'Supplier sourcing & receiving' : 'Receive incoming supplier orders'}
         action={
           canManagePOs ? (
-            <button type="button" className="btn-primary btn-sm" onClick={() => setCreateOpen(true)}>
-              <Icon name="plus" className="h-4 w-4" /> New PO
-            </button>
+            <a href="/procurement/requests" className="btn-primary btn-sm">
+              <Icon name="cart" className="h-4 w-4" /> Open Procurement requests
+            </a>
           ) : undefined
         }
       />
@@ -424,20 +390,20 @@ export function PurchaseOrdersPage() {
         </>
       )}
 
-      {data.purchaseOrders.length === 0 && bridgedPOs.length === 0 ? (
+      {warehousePOs.length === 0 && bridgedPOs.length === 0 ? (
         <EmptyState
           icon="cart"
           title="No purchase orders"
           message={
             canManagePOs
-              ? 'Create a PO to plan replenishment with suppliers.'
+              ? 'Approved Procurement POs appear here for controlled receiving.'
               : 'When procurement raises a PO it will appear here to receive against.'
           }
           action={
             canManagePOs ? (
-              <button type="button" className="btn-primary" onClick={() => setCreateOpen(true)}>
-                <Icon name="plus" className="h-4 w-4" /> New PO
-              </button>
+              <a href="/procurement/requests" className="btn-primary">
+                <Icon name="cart" className="h-4 w-4" /> Open Procurement requests
+              </a>
             ) : undefined
           }
         />
@@ -658,94 +624,6 @@ export function PurchaseOrdersPage() {
             </ul>
           </div>
         )}
-      </Sheet>
-
-      {/* Create PO sheet */}
-      <Sheet
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-        title="New purchase order"
-        description="Order stock from a supplier."
-        footer={
-          <button
-            type="button"
-            className="btn-primary w-full"
-            disabled={draftLines.length === 0}
-            onClick={() => void submitCreate()}
-          >
-            Create PO
-          </button>
-        }
-      >
-        <div className="space-y-3">
-          {data.suppliers.length === 0 ? (
-            <div className="rounded-xl bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
-              <p>You need a supplier before raising a PO.</p>
-              <button
-                type="button"
-                className="btn-primary btn-sm mt-2"
-                onClick={() => {
-                  setCreateOpen(false);
-                  navigate('/suppliers');
-                }}
-              >
-                Add a supplier
-              </button>
-            </div>
-          ) : (
-            <Field label="Supplier" htmlFor="po-supplier">
-              <select
-                id="po-supplier"
-                className="input"
-                value={supplierId || data.suppliers[0]?.id || ''}
-                onChange={(e) => setSupplierId(e.target.value)}
-              >
-                {data.suppliers.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          )}
-          <div className="grid grid-cols-[1fr_auto] gap-2">
-            <Field label="Product" htmlFor="po-line-product">
-              <ProductSelect
-                id="po-line-product"
-                products={data.products}
-                value={lineProduct}
-                onChange={setLineProduct}
-                placeholder="Select…"
-              />
-            </Field>
-            <Field label="Qty" htmlFor="po-line-qty">
-              <QuantityStepper
-                id="po-line-qty"
-                aria-label="Order quantity"
-                value={lineQty}
-                onChange={setLineQty}
-                min={1}
-              />
-            </Field>
-          </div>
-          <button type="button" className="btn-ghost w-full" onClick={addDraftLine} disabled={!lineProduct}>
-            <Icon name="plus" className="h-4 w-4" /> Add line
-          </button>
-
-          {draftLines.length > 0 && (
-            <ul className="space-y-2" aria-label="Draft lines">
-              {draftLines.map((l) => (
-                <li
-                  key={l.productId}
-                  className="flex items-center justify-between rounded-xl bg-inset p-3 text-sm"
-                >
-                  <span className="font-medium text-ink">{productName(l.productId)}</span>
-                  <span className="text-muted">×{l.quantityOrdered}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
       </Sheet>
 
       {/* Receive against PO sheet */}

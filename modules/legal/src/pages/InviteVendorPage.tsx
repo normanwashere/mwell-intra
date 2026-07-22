@@ -69,6 +69,7 @@ export function InviteVendorPage() {
   );
   const [originCountry, setOriginCountry] = useState("");
   const [busy, setBusy] = useState(false);
+  const [validationMessage, setValidationMessage] = useState<string | null>(null);
   // Step-3 preview groups collapse to their count line by default (§2.4) so
   // the review step stays a short scroll at 390px.
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
@@ -103,18 +104,20 @@ export function InviteVendorPage() {
 
   function next() {
     if (step === 1 && !identityValid) {
-      error("Fill in the company, a valid email, and the jurisdiction first.");
+      setValidationMessage("Fill in the company, a valid email, and the jurisdiction first.");
       return;
     }
+    setValidationMessage(null);
     setStep((s) => (s < 3 ? ((s + 1) as 2 | 3) : s));
   }
 
   async function submit() {
     if (!identityValid) {
-      error("Company name and a valid contact email are required.");
+      setValidationMessage("Company name and a valid contact email are required.");
       setStep(1);
       return;
     }
+    setValidationMessage(null);
     setBusy(true);
     try {
       const inv = await invite({
@@ -473,25 +476,31 @@ export function InviteVendorPage() {
           </div>
         )}
 
+        {validationMessage && (
+          <div role="alert" className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-800 dark:text-rose-200">
+            {validationMessage}
+          </div>
+        )}
+
         <div
           data-mobile-action-bar="true"
-          className="sticky bottom-[calc(8.5rem+env(safe-area-inset-bottom))] z-30 -mx-1 flex flex-wrap items-center justify-between gap-3 border-t border-line bg-app/95 px-1 py-3 backdrop-blur md:static md:mx-0 md:border-0 md:bg-transparent md:p-0 md:backdrop-blur-none"
+          className="flex flex-col-reverse gap-2 rounded-lg border border-line bg-surface p-3 shadow-e1 sm:flex-row sm:items-center sm:justify-between"
         >
           {step > 1 ? (
             <button
               type="button"
               onClick={() => setStep((s) => (s - 1) as 1 | 2)}
-              className="btn-ghost"
+              className="btn-ghost min-h-11 w-full sm:w-auto"
             >
               Back
             </button>
           ) : (
-            <Link to="/" className="btn-ghost">
+            <Link to="/" className="btn-ghost min-h-11 w-full sm:w-auto">
               Cancel
             </Link>
           )}
           {step < 3 ? (
-            <Button type="button" variant="primary" onClick={next}>
+            <Button className="min-h-11 w-full sm:w-auto" type="button" variant="primary" onClick={next}>
               Continue
               <Icon name="arrowRight" className="h-4 w-4" />
             </Button>
@@ -501,6 +510,7 @@ export function InviteVendorPage() {
               variant="primary"
               onClick={submit}
               disabled={busy}
+              className="min-h-11 w-full sm:w-auto"
             >
               <Icon name="plus" className="h-4 w-4" />
               {busy ? "Sending…" : "Send invite & open case"}

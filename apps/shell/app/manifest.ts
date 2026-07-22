@@ -5,11 +5,10 @@ export default function manifest(): MetadataRoute.Manifest {
     name: 'Mwell Intra',
     short_name: 'Mwell Intra',
     description:
-      'Mwell Intra — one internal operating system for Warehouse, Procurement and Legal.',
+      'Mwell Intra — one governed operating system for Warehouse, Procurement, Legal, Finance, Events, Product, Insights and Administration.',
     start_url: '/',
     scope: '/',
     display: 'standalone',
-    orientation: 'portrait',
     theme_color: '#004f9d',
     background_color: '#004f9d',
     icons: [

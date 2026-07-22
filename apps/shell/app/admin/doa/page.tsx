@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
 import {
   Badge,
   Button,
@@ -104,10 +103,8 @@ function DoaWorkspace() {
   const [saving, setSaving] = useState(false);
   const [loadingRevision, setLoadingRevision] = useState<string | null>(null);
   const [captureActivationDraft, setCaptureActivationDraft] = useState(false);
-  const [portalReady, setPortalReady] = useState(false);
 
   useEffect(() => {
-    setPortalReady(true);
     setCaptureActivationDraft(
       window.sessionStorage.getItem("intra.evidence-scenario") ===
         "doa-activation",
@@ -399,7 +396,7 @@ function DoaWorkspace() {
                 >
                   <select
                     id={`doa-tier-${row.key}`}
-                    className="input-base w-full"
+                    className="input-base min-h-11 w-full"
                     value={row.tier}
                     onChange={(e) =>
                       updateAssignment(row.key, {
@@ -458,7 +455,7 @@ function DoaWorkspace() {
                   <select
                     id={`doa-approver-${row.key}`}
                     aria-label={`Tier ${index + 1} named approver`}
-                    className="input-base w-full"
+                    className="input-base min-h-11 w-full"
                     value={row.approverUserId}
                     onChange={(e) =>
                       updateAssignment(row.key, {
@@ -500,22 +497,18 @@ function DoaWorkspace() {
           </div>
         </Card>
       </div>
-      {portalReady &&
-        createPortal(
-          <div
-            data-mobile-action-bar="true"
-            className="fixed inset-x-4 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] z-40 flex justify-end rounded-md border border-line bg-surface px-4 pb-3 pt-4 shadow-[0_-10px_24px_rgba(15,23,42,0.12)] sm:inset-x-5 sm:px-5 md:hidden"
-          >
-            <Button
-              className="w-full sm:w-auto"
-              disabled={saving || workspaceLoading}
-              onClick={() => void save()}
-            >
-              {saving ? "Saving..." : "Save draft"}
-            </Button>
-          </div>,
-          document.body,
-        )}
+      <div
+        data-mobile-action-bar="true"
+        className="sticky bottom-[calc(5.25rem+env(safe-area-inset-bottom))] z-20 rounded-md border border-line bg-surface/95 p-3 shadow-[0_-8px_20px_rgba(15,23,42,0.1)] backdrop-blur md:hidden"
+      >
+        <Button
+          className="w-full"
+          disabled={saving || workspaceLoading}
+          onClick={() => void save()}
+        >
+          {saving ? "Saving..." : "Save draft"}
+        </Button>
+      </div>
     </div>
   );
 }

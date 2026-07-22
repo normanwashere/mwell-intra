@@ -205,7 +205,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 new KeyboardEvent("keydown", { key: "k", metaKey: true }),
               );
             }}
-            className="flex h-10 w-10 items-center justify-center gap-3 rounded-xl border border-line bg-inset text-faint transition hover:text-ink lg:w-full lg:justify-start lg:px-3"
+            className="flex h-11 w-11 items-center justify-center gap-3 rounded-xl border border-line bg-inset text-faint transition hover:text-ink lg:w-full lg:justify-start lg:px-3"
             aria-label="Open command palette"
             title="Command palette (⌘K)"
           >
@@ -253,7 +253,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                     new KeyboardEvent("keydown", { key: "k", metaKey: true }),
                   );
                 }}
-                className="hidden items-center gap-2 rounded-xl border border-line bg-inset px-2.5 py-1.5 text-xs text-faint transition hover:text-muted md:inline-flex"
+                className="hidden items-center gap-2 rounded-xl border border-line bg-inset px-2.5 py-1.5 text-xs text-faint transition hover:text-muted md:inline-flex md:min-h-11"
                 aria-label="Open command palette"
               >
                 <Icon name="search" className="h-3.5 w-3.5" />
@@ -305,7 +305,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         </header>
 
         <main
-          className="mx-auto w-full max-w-6xl flex-1 px-4 py-5 pb-[calc(11rem+env(safe-area-inset-bottom))] sm:px-6 md:pb-10 xl:max-w-7xl"
+          data-shell-content="true"
+          className="shell-content mx-auto w-full max-w-6xl flex-1 px-4 py-5 sm:px-6 md:pb-10 xl:max-w-7xl"
           style={{ "--shell-header": "4.5rem" } as CSSProperties}
         >
           {loading ? (

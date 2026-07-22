@@ -1713,19 +1713,22 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
       "warehouse_finance",
       "warehouse_procurement",
       "warehouse_bi_analyst",
+      "product_contributor",
+      "product_owner",
+      "product_operations_partner",
     ],
     [
       process(
         "price-start",
         "start",
         "Prepare landed-cost basis",
-        ["warehouse_pricing", "warehouse_finance"],
+        ["warehouse_pricing", "warehouse_finance", "product_contributor"],
         "Confirm source PO, supplier lots, freight, duties, allocation basis, and effective date.",
       ),
       decision(
         "price-approval",
         "Is the price proposal approved?",
-        ["warehouse_finance", "warehouse_pricing"],
+        ["warehouse_finance", "warehouse_pricing", "product_owner"],
         "Review margin, valuation impact, evidence, and effective-date controls.",
         "warehouse_finance",
         "Warehouse finance control: price changes require supported landed-cost basis and finance approval without rewriting history.",
@@ -1740,7 +1743,12 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
       terminal(
         "price-complete",
         "Pricing report available",
-        ["warehouse_pricing", "warehouse_bi_analyst"],
+        [
+          "warehouse_pricing",
+          "warehouse_bi_analyst",
+          "product_owner",
+          "product_operations_partner",
+        ],
         "Current and historical pricing basis is reportable.",
         "complete",
       ),

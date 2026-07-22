@@ -9,11 +9,18 @@ describe("roles", () => {
     expect(ROLES.warehouse_supervisor).toBeDefined();
   });
 
-  it("grants every role the dashboard and inventory view", () => {
+  it("grants every role the dashboard and read-only inventory view", () => {
     for (const role of ROLE_LIST) {
       expect(can(role.id, "view_dashboard")).toBe(true);
-      expect(can(role.id, "manage_inventory")).toBe(true);
+      expect(can(role.id, "view_inventory")).toBe(true);
     }
+  });
+
+  it("keeps physical inventory mutation with Warehouse custody roles", () => {
+    expect(can("warehouse_operator", "manage_inventory")).toBe(true);
+    expect(can("warehouse_supervisor", "manage_inventory")).toBe(true);
+    expect(can("finance", "manage_inventory")).toBe(false);
+    expect(can("pricing", "manage_inventory")).toBe(false);
   });
 
   it("keeps physical receiving with warehouse roles", () => {

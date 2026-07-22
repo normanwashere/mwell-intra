@@ -24,6 +24,7 @@
     "@intra/insights": "workspace:*",
     "@intra/legal": "workspace:*",
     "@intra/procurement": "workspace:*",
+    "@intra/product": "workspace:*",
     "@intra/rbac": "workspace:*",
     "@intra/ui": "workspace:*",
     "@intra/warehouse": "workspace:*",

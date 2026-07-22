@@ -14,7 +14,7 @@
 // required-documents preview from the single-page version survive on step 3.
 
 import type { ChangeEvent, FormEvent } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   Badge,
@@ -58,6 +58,13 @@ import {
   validateRequestAttachment,
   type PendingRequestAttachment,
 } from "../attachments";
+import {
+  discardRequestDraft,
+  loadLatestRequestDraft,
+  saveRequestDraft,
+  type RequestDraftClient,
+} from "../requestDrafts";
+import { validateRequestStep } from "../requestForm";
 
 interface LineDraft {
   key: string;
@@ -65,6 +72,36 @@ interface LineDraft {
   quantity: string;
   uom: string;
   unitPrice: string;
+}
+
+interface PurchaseRequestDraftSnapshot {
+  step: StepN;
+  title: string;
+  category: RequestCategory | "";
+  department: string;
+  costCenter: string;
+  projectCode: string;
+  budgetCode: string;
+  neededBy: string;
+  description: string;
+  vendorId: string;
+  lines: LineDraft[];
+  needDesc: string;
+  alternatives: string;
+  riskIfNot: string;
+  sourcingMethod: SourcingMethod | "";
+  sourcingOverride: boolean;
+  emergency: boolean;
+  repeat: boolean;
+  routeConfirmed: boolean;
+  riskFacts: ProcurementRiskFacts;
+  philgeps: string;
+  directAwardReason: string;
+  priceReasonableness: string;
+  exceptionPack: ProcurementExceptionPack;
+  importationPlan: ImportationPlan;
+  evaluation: EvaluationMatrixValue;
+  requesterName?: string;
 }
 
 function blankLine(): LineDraft {
@@ -107,7 +144,7 @@ export function CreateRequestPage() {
   const { success, error } = useToast();
   const { add } = useProcurementRequests();
   const vendors = useProcurementVendors();
-  const { profile } = useSession();
+  const { profile, mode, supabaseClient } = useSession();
   const canConfirmRoute = useCan("procurement", "manage_rfp");
   const [compactLineEditor, setCompactLineEditor] = useState(false);
 
@@ -132,6 +169,13 @@ export function CreateRequestPage() {
   const [vendorId, setVendorId] = useState<string>("");
   const [lines, setLines] = useState<LineDraft[]>([blankLine()]);
   const [submitting, setSubmitting] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [serverDraftId, setServerDraftId] = useState<string>();
+  const [serverDraftKey, setServerDraftKey] = useState("");
+  const [serverDraftVersion, setServerDraftVersion] = useState(0);
+  const [serverDraftReady, setServerDraftReady] = useState(false);
+  const [serverDraftStatus, setServerDraftStatus] = useState("");
+  const lastSavedPayloadRef = useRef("");
 
   // Justification (Award Recommendation §9)
   const [needDesc, setNeedDesc] = useState("");
@@ -183,6 +227,133 @@ export function CreateRequestPage() {
   const [attachments, setAttachments] = useState<PendingRequestAttachment[]>(
     [],
   );
+
+  const liveDraftClient = mode === "supabase"
+    ? (supabaseClient as RequestDraftClient | null)
+    : null;
+  const draftSnapshot = useMemo<PurchaseRequestDraftSnapshot>(() => ({
+    step,
+    title,
+    category,
+    department,
+    costCenter,
+    projectCode,
+    budgetCode,
+    neededBy,
+    description,
+    vendorId,
+    lines,
+    needDesc,
+    alternatives,
+    riskIfNot,
+    sourcingMethod,
+    sourcingOverride,
+    emergency,
+    repeat,
+    routeConfirmed,
+    riskFacts,
+    philgeps,
+    directAwardReason,
+    priceReasonableness,
+    exceptionPack,
+    importationPlan,
+    evaluation,
+    requesterName: profile?.name,
+  }), [
+    alternatives, budgetCode, category, costCenter, department, description,
+    directAwardReason, emergency, evaluation, exceptionPack, importationPlan,
+    lines, needDesc, neededBy, philgeps, priceReasonableness, profile?.name,
+    projectCode, repeat, riskFacts, riskIfNot, routeConfirmed, sourcingMethod,
+    sourcingOverride, step, title, vendorId,
+  ]);
+
+  useEffect(() => {
+    let active = true;
+    if (!liveDraftClient || !profile) {
+      setServerDraftReady(true);
+      return;
+    }
+    setServerDraftReady(false);
+    void loadLatestRequestDraft<PurchaseRequestDraftSnapshot>(liveDraftClient)
+      .then((record) => {
+        if (!active) return;
+        if (record) {
+          const saved = record.payload;
+          setStep(saved.step ?? 1);
+          setTitle(saved.title ?? "");
+          setCategory(saved.category ?? "");
+          setDepartment(saved.department ?? "");
+          setCostCenter(saved.costCenter ?? "");
+          setProjectCode(saved.projectCode ?? "");
+          setBudgetCode(saved.budgetCode ?? "");
+          setNeededBy(saved.neededBy ?? "");
+          setDescription(saved.description ?? "");
+          setVendorId(saved.vendorId ?? "");
+          setLines(saved.lines?.length ? saved.lines : [blankLine()]);
+          setNeedDesc(saved.needDesc ?? "");
+          setAlternatives(saved.alternatives ?? "");
+          setRiskIfNot(saved.riskIfNot ?? "");
+          setSourcingMethod(saved.sourcingMethod ?? "");
+          setSourcingOverride(saved.sourcingOverride ?? false);
+          setEmergency(saved.emergency ?? false);
+          setRepeat(saved.repeat ?? false);
+          setRouteConfirmed(saved.routeConfirmed ?? false);
+          if (saved.riskFacts) setRiskFacts(saved.riskFacts);
+          setPhilgeps(saved.philgeps ?? "");
+          setDirectAwardReason(saved.directAwardReason ?? "");
+          setPriceReasonableness(saved.priceReasonableness ?? "");
+          if (saved.exceptionPack) setExceptionPack(saved.exceptionPack);
+          if (saved.importationPlan) setImportationPlan(saved.importationPlan);
+          if (saved.evaluation) setEvaluation(saved.evaluation);
+          setServerDraftId(record.id);
+          setServerDraftKey(record.clientKey);
+          setServerDraftVersion(record.version);
+          lastSavedPayloadRef.current = JSON.stringify(saved);
+          setServerDraftStatus("Draft restored from the server.");
+        } else {
+          setServerDraftKey(globalThis.crypto?.randomUUID?.() ?? `draft-${Date.now()}`);
+        }
+        setServerDraftReady(true);
+      })
+      .catch((cause) => {
+        if (!active) return;
+        setServerDraftStatus(
+          cause instanceof Error ? cause.message : "Draft recovery is unavailable.",
+        );
+        setServerDraftReady(true);
+      });
+    return () => { active = false; };
+  }, [liveDraftClient, profile]);
+
+  useEffect(() => {
+    if (!liveDraftClient || !serverDraftReady || !serverDraftKey || submitting) return;
+    const serialized = JSON.stringify(draftSnapshot);
+    const hasContent = Boolean(
+      title.trim() || category || lines.some((line) => line.description.trim()),
+    );
+    if (!hasContent || serialized === lastSavedPayloadRef.current) return;
+    const timer = window.setTimeout(() => {
+      setServerDraftStatus("Saving draft...");
+      void saveRequestDraft(liveDraftClient, {
+        clientKey: serverDraftKey,
+        expectedVersion: serverDraftVersion,
+        payload: draftSnapshot,
+      }).then((record) => {
+        setServerDraftId(record.id);
+        setServerDraftVersion(record.version);
+        lastSavedPayloadRef.current = JSON.stringify(record.payload);
+        setServerDraftStatus("Draft saved to the server.");
+      }).catch((cause) => {
+        setServerDraftStatus(
+          cause instanceof Error ? cause.message : "Draft autosave failed.",
+        );
+      });
+    }, 800);
+    return () => window.clearTimeout(timer);
+  }, [
+    category, draftSnapshot, lines, liveDraftClient, serverDraftKey,
+    serverDraftReady, serverDraftVersion, submitting, title,
+  ]);
 
   const total = useMemo(
     () =>
@@ -312,7 +483,60 @@ export function CreateRequestPage() {
     );
   }
 
+  function focusFirstInvalid(firstInvalidSelector?: string) {
+    if (!firstInvalidSelector) return;
+    window.setTimeout(() => {
+      const target = document.querySelector<HTMLElement>(firstInvalidSelector);
+      target?.scrollIntoView({ block: "center", behavior: "smooth" });
+      if (target) target.focus();
+    });
+  }
+
+  async function discardServerDraft() {
+    if (!liveDraftClient || !serverDraftId) return;
+    setServerDraftStatus("Discarding draft...");
+    try {
+      await discardRequestDraft(liveDraftClient, serverDraftId);
+      lastSavedPayloadRef.current = "";
+      setServerDraftId(undefined);
+      setServerDraftVersion(0);
+      setServerDraftKey(globalThis.crypto?.randomUUID?.() ?? `draft-${Date.now()}`);
+      setTitle("");
+      setCategory("");
+      setDescription("");
+      setDepartment("");
+      setCostCenter("");
+      setProjectCode("");
+      setBudgetCode("");
+      setNeededBy("");
+      setVendorId("");
+      setLines([blankLine()]);
+      setNeedDesc("");
+      setAlternatives("");
+      setRiskIfNot("");
+      setStep(1);
+      setFieldErrors({});
+      setServerDraftStatus("Draft discarded.");
+    } catch (cause) {
+      setServerDraftStatus(
+        cause instanceof Error ? cause.message : "The draft could not be discarded.",
+      );
+    }
+  }
+
   function goNext() {
+    const validation = validateRequestStep(step, {
+      title,
+      category,
+      lines,
+      needDescription: needDesc,
+    });
+    setFieldErrors(validation.fieldErrors);
+    if (validation.firstInvalidSelector) {
+      error("Complete the highlighted fields before continuing.");
+      focusFirstInvalid(validation.firstInvalidSelector);
+      return;
+    }
     if (step === 1 && !step1Valid) {
       error(
         "Pick a category, give the request a title, and describe at least one line item.",
@@ -335,6 +559,16 @@ export function CreateRequestPage() {
   async function handleSubmit(event: FormEvent, andSubmit = false) {
     event.preventDefault();
     if (!canSubmit) {
+      const invalidStep: StepN = step1Valid ? 2 : 1;
+      const validation = validateRequestStep(invalidStep, {
+        title,
+        category,
+        lines,
+        needDescription: needDesc,
+      });
+      setStep(invalidStep);
+      setFieldErrors(validation.fieldErrors);
+      focusFirstInvalid(validation.firstInvalidSelector);
       error(
         "Give the request a title, category, need description, and at least one line item.",
       );
@@ -418,6 +652,7 @@ export function CreateRequestPage() {
       }
 
       const created = await add({
+        draftId: serverDraftId,
         title: title.trim(),
         description: description.trim() || undefined,
         department: department.trim() || undefined,
@@ -528,6 +763,26 @@ export function CreateRequestPage() {
           Step {step} of 3 — {STEPS[step - 1]!.label}
         </p>
 
+        {liveDraftClient && (serverDraftStatus || !serverDraftReady) && (
+          <div
+            role="status"
+            className="flex min-h-11 flex-col gap-2 rounded-xl border border-line bg-surface px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between"
+          >
+            <span className="text-muted">
+              {!serverDraftReady ? "Checking for a saved draft..." : serverDraftStatus}
+            </span>
+            {serverDraftId && (
+              <button
+                type="button"
+                className="btn-ghost btn-sm self-start sm:self-auto"
+                onClick={() => void discardServerDraft()}
+              >
+                <Icon name="x" className="h-4 w-4" /> Discard draft
+              </button>
+            )}
+          </div>
+        )}
+
         <form className="space-y-6" onSubmit={(e) => handleSubmit(e, false)}>
           {/* ==================== STEP 1 — What ==================== */}
           {step === 1 && (
@@ -542,7 +797,7 @@ export function CreateRequestPage() {
                     documents.
                   </p>
                 </div>
-                <fieldset>
+                <fieldset aria-describedby={fieldErrors.category ? "category-error" : undefined}>
                   <legend className="sr-only">Category</legend>
                   {/* PR-10: compact 2-col chips at 390px; descriptions appear
                       from sm upward. */}
@@ -565,6 +820,7 @@ export function CreateRequestPage() {
                             value={c.code}
                             checked={active}
                             onChange={() => setCategory(c.code)}
+                            aria-invalid={Boolean(fieldErrors.category)}
                             className="sr-only"
                           />
                           <div className="flex min-w-0 flex-wrap items-center justify-between gap-1.5">
@@ -583,6 +839,11 @@ export function CreateRequestPage() {
                     })}
                   </div>
                 </fieldset>
+                {fieldErrors.category && (
+                  <p id="category-error" role="alert" className="text-sm font-semibold text-rose-600">
+                    {fieldErrors.category}
+                  </p>
+                )}
               </section>
 
               <section className="card space-y-4 p-4 sm:p-5">
@@ -591,9 +852,10 @@ export function CreateRequestPage() {
                     Title & context
                   </h2>
                 </div>
-                <Field label="Title" htmlFor="title">
+                <Field label="Title" htmlFor="title" error={fieldErrors.title}>
                   <Input
                     id="title"
+                    aria-invalid={Boolean(fieldErrors.title)}
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
                     placeholder="e.g. Salesforce Enterprise seats — FY26"
@@ -657,6 +919,8 @@ export function CreateRequestPage() {
                           Description
                           <input
                             aria-label={`Line ${index + 1} description`}
+                            data-request-line-description="true"
+                            aria-invalid={Boolean(fieldErrors.lines)}
                             className="input mt-1"
                             value={line.description}
                             onChange={(event) => updateLine(line.key, { description: event.target.value })}
@@ -744,6 +1008,8 @@ export function CreateRequestPage() {
                             <td className="py-2 pr-3">
                               <input
                                 aria-label={`Line ${i + 1} description`}
+                                data-request-line-description="true"
+                                aria-invalid={Boolean(fieldErrors.lines)}
                                 className="input"
                                 value={l.description}
                                 onChange={(e) =>
@@ -838,6 +1104,11 @@ export function CreateRequestPage() {
                     </tfoot>
                   </table>
                 </div>}
+                {fieldErrors.lines && (
+                  <p role="alert" className="text-sm font-semibold text-rose-600">
+                    {fieldErrors.lines}
+                  </p>
+                )}
               </section>
             </>
           )}
@@ -913,9 +1184,10 @@ export function CreateRequestPage() {
                     procured&rdquo; first.
                   </p>
                 </div>
-                <Field label="Need description *" htmlFor="needDesc">
+                <Field label="Need description *" htmlFor="need-description" error={fieldErrors.needDescription}>
                   <Textarea
-                    id="needDesc"
+                    id="need-description"
+                    aria-invalid={Boolean(fieldErrors.needDescription)}
                     value={needDesc}
                     onChange={(e) => setNeedDesc(e.target.value)}
                     rows={3}

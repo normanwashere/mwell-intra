@@ -6,7 +6,7 @@ import {
   evidenceRequirements,
   validateEvidenceRequirements,
 } from "./evidenceContract";
-import { KNOWLEDGE_GUIDE_CONTENT } from "@shell/components/knowledge/KnowledgeBase";
+import { KNOWLEDGE_GUIDE_CONTENT } from "./guideContent";
 import { ROLE_ROUTE_PARENT_PATHS } from "./roles";
 import { DOA_CONFIGURATION_ROLE_IDS, DOA_REVIEW_ROLE_IDS } from "./workflows";
 import { ADMINISTRATOR_GUIDES } from "./admin";
@@ -190,8 +190,8 @@ describe("Knowledge Base content", () => {
       ),
     ).toMatchObject({ availability: "live" });
   });
-  it("defines explicit operating data for all 36 role profiles", () => {
-    expect(KNOWLEDGE_GUIDE_CONTENT.roles).toHaveLength(36);
+  it("defines explicit operating data for all 39 role profiles", () => {
+    expect(KNOWLEDGE_GUIDE_CONTENT.roles).toHaveLength(39);
     for (const role of KNOWLEDGE_GUIDE_CONTENT.roles) {
       expect(role.dailyTasks.length, `${role.id} daily tasks`).toBeGreaterThan(
         0,
@@ -216,11 +216,11 @@ describe("Knowledge Base content", () => {
           JSON.stringify([role.dailyTasks, role.responsibilityStages]),
         ),
       ).size,
-    ).toBe(36);
+    ).toBe(39);
   });
 
-  it("defines exact policy and flow relationships for all 63 feature profiles", () => {
-    expect(KNOWLEDGE_CONTENT.features).toHaveLength(63);
+  it("defines exact policy and flow relationships for all 65 feature profiles", () => {
+    expect(KNOWLEDGE_CONTENT.features).toHaveLength(65);
     const flowIds = new Set(KNOWLEDGE_CONTENT.flows.map((flow) => flow.id));
     for (const feature of KNOWLEDGE_CONTENT.features) {
       expect(
@@ -329,7 +329,7 @@ describe("Knowledge Base content", () => {
     }
   });
   it("covers every production persona with valid articles and flows", () => {
-    expect(KNOWLEDGE_CONTENT.roles).toHaveLength(30);
+    expect(KNOWLEDGE_CONTENT.roles).toHaveLength(33);
     expect(validateKnowledgeBase(KNOWLEDGE_CONTENT)).toEqual([]);
     expect(validateKnowledgeContent(KNOWLEDGE_CONTENT)).toEqual([]);
   });

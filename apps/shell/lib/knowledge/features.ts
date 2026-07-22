@@ -40,6 +40,8 @@ const POLICY = {
     "Warehouse custody policy requires attributable reservation, issue, transfer, consumption, return, and event reconciliation.",
   pricing:
     "Pricing and valuation policy requires supported cost basis, effective dating, independent review, and immutable price history.",
+  product:
+    "Product governance requires complete readiness evidence, an independent Product go-live decision, an attributable Operations handoff, and independently approved effective-dated pricing.",
   procurement:
     "Procurement policy requires threshold- and risk-appropriate sourcing, competition evidence, vendor eligibility, budget evidence, and active approval authority.",
   payment:
@@ -97,6 +99,14 @@ const FEATURE_RELATIONSHIPS: Record<string, FeatureRelationship> = {
     policyBasis: [POLICY.identity],
     relatedFlowIds: ["identity-and-access", "administration"],
   },
+  "admin-audit": {
+    policyBasis: [POLICY.identity, POLICY.doa],
+    relatedFlowIds: [
+      "administration",
+      "identity-and-access",
+      "audit-incident-handling",
+    ],
+  },
   "admin-departments": {
     policyBasis: [POLICY.identity, POLICY.doa],
     relatedFlowIds: ["administration", "identity-and-access", "doa-governance"],
@@ -104,6 +114,10 @@ const FEATURE_RELATIONSHIPS: Record<string, FeatureRelationship> = {
   "admin-doa": {
     policyBasis: [POLICY.doa],
     relatedFlowIds: ["doa-governance", "administration", "procure-to-pay"],
+  },
+  "product-governance": {
+    policyBasis: [POLICY.product, POLICY.pricing],
+    relatedFlowIds: ["pricing-and-costing", "exception-and-recovery"],
   },
   "warehouse-dashboard": {
     policyBasis: [POLICY.warehouse],
@@ -436,6 +450,7 @@ const ownerFor: Record<KnowledgeModule, string> = {
   vendor: "Legal",
   events: "Events Operations",
   insights: "Data and Insights",
+  product: "Product",
 };
 
 const auditedNotification = (definition: FeatureDefinition): string => {
@@ -464,10 +479,14 @@ const auditedNotification = (definition: FeatureDefinition): string => {
       "The landing page only navigates to governed administration controls and does not write records.",
     "admin-users":
       "Role assignment and revocation use local success or error toasts; the page does not write core.notifications.",
+    "admin-audit":
+      "Audit review is read-only; filters and load failures appear inline and the page does not write core.notifications.",
     "admin-departments":
       "Department saves and deactivation failures use local success or error feedback; the governed RPC records the audit history instead of writing core.notifications.",
     "admin-doa":
       "Revision load, draft save, activation, and failures use local toasts; the page does not write core.notifications.",
+    "product-governance":
+      "Readiness, go-live, handoff, and pricing outcomes appear inline after governed RPC completion; the workspace does not write core.notifications directly.",
   };
   return (
     coreFeedback[definition.id] ??
@@ -676,6 +695,29 @@ const definitions: FeatureDefinition[] = [
       "The metric's source link opens the permitted operational record or queue with current data and ownership.",
   },
   {
+    id: "product-governance",
+    title: "Product readiness and go-live",
+    module: "product",
+    route: "/product",
+    roleIds: [
+      "product_contributor",
+      "product_owner",
+      "product_operations_partner",
+    ],
+    purpose:
+      "Coordinates readiness evidence, the Product-owned go-live decision, Operations acknowledgement, and independently governed price proposals.",
+    reads:
+      "Product readiness records, launch criteria, current decision, Operations handoff state, and effective-dated price proposals.",
+    writes:
+      "Contributors prepare evidence and proposals; Product Owners decide go-live and pricing; Operations Partners acknowledge the approved handoff through governed RPCs.",
+    statuses:
+      "Draft, ready for decision, approved, rejected, handed off, acknowledged, pricing proposed, pricing approved, or pricing rejected.",
+    exception:
+      "Do not approve incomplete readiness, acknowledge an unapproved launch, or let the proposal author approve the same price change; return the record with a reason.",
+    completionEvidence:
+      "The record shows complete criteria, a named Product decision, an attributable Operations acknowledgement, and an independently decided effective price where applicable.",
+  },
+  {
     id: "admin-governance",
     title: "Administration governance",
     module: "admin",
@@ -712,6 +754,25 @@ const definitions: FeatureDefinition[] = [
       "Stop if identity kind or approved responsibility is unclear and obtain authorization before changing access.",
     completionEvidence:
       "The intended role appears on the profile after the live assignments reload; the RPC owns any database audit side effect.",
+  },
+  {
+    id: "admin-audit",
+    title: "Administration audit trail",
+    module: "admin",
+    route: "/admin/audit",
+    roleIds: ["platform_admin"],
+    purpose:
+      "Lets an authorized platform administrator investigate attributable role changes without modifying the evidence.",
+    reads:
+      "Role-change evidence, actor, subject, module, role, scope, approval reference, reason, effective window, and creation time.",
+    writes:
+      "No audit evidence is changed; search, action, and module filters only change the current view.",
+    statuses:
+      "Loading, ready, filtered, no matching evidence, source unavailable, or access denied.",
+    exception:
+      "If expected evidence is missing, stop the access change, preserve the reference, and escalate to Platform Security before retrying.",
+    completionEvidence:
+      "The selected role change displays its actor, subject, approval basis, reason, effective window, and immutable timestamp.",
   },
   {
     id: "admin-departments",

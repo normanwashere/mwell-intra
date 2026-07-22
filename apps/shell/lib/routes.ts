@@ -1,6 +1,6 @@
 export interface ShellPageRouteContract {
   route: string;
-  module: "core" | "warehouse" | "procurement" | "finance" | "legal" | "vendor" | "admin" | "events" | "insights";
+  module: "core" | "warehouse" | "procurement" | "finance" | "legal" | "vendor" | "admin" | "events" | "insights" | "product";
   capabilityIds: string[];
   administratorRoleIds?: string[];
   minimumControls: number;
@@ -58,6 +58,13 @@ export const SHELL_PAGE_ROUTE_CONTRACTS: ShellPageRouteContract[] = [
     minimumFields: 4,
   },
   {
+    route: "/product",
+    module: "product",
+    capabilityIds: ["view_readiness"],
+    minimumControls: 3,
+    minimumFields: 0,
+  },
+  {
     route: "/insights",
     module: "insights",
     capabilityIds: ["view_warehouse", "view_procurement", "view_legal", "view_finance", "view_executive"],
@@ -79,6 +86,14 @@ export const SHELL_PAGE_ROUTE_CONTRACTS: ShellPageRouteContract[] = [
     administratorRoleIds: ["platform_admin"],
     minimumControls: 3,
     minimumFields: 3,
+  },
+  {
+    route: "/admin/audit",
+    module: "admin",
+    capabilityIds: ["manage_rbac"],
+    administratorRoleIds: ["platform_admin"],
+    minimumControls: 3,
+    minimumFields: 2,
   },
   {
     route: "/admin/departments",

@@ -26,6 +26,7 @@ const moduleRoute: Record<KnowledgeModule, string> = {
   legal: "/legal",
   events: "/events",
   insights: "/insights",
+  product: "/product",
 };
 
 const SCREENSHOTS: Record<
@@ -286,6 +287,7 @@ const processArticle = (
       legal: "Legal",
       events: "Events Operations",
       insights: "Data and Insights",
+      product: "Product",
     } satisfies Record<KnowledgeModule, string>
   )[module],
   reviewedAt: "2026-07-11",

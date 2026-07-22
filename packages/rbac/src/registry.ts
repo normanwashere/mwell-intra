@@ -18,6 +18,8 @@ import type { EventsCapability, EventsRole } from './modules/events';
 import { eventsModule } from './modules/events';
 import type { InsightsCapability, InsightsRole } from './modules/insights';
 import { insightsModule } from './modules/insights';
+import type { ProductCapability, ProductRole } from './modules/product';
+import { productModule } from './modules/product';
 
 /** Maps each module to its own capability union (used for type-safe `can()`). */
 export interface ModuleCapabilityMap {
@@ -27,6 +29,7 @@ export interface ModuleCapabilityMap {
   legal: LegalCapability;
   events: EventsCapability;
   insights: InsightsCapability;
+  product: ProductCapability;
 }
 
 /** Maps each module to its own role union. */
@@ -37,6 +40,7 @@ export interface ModuleRoleMap {
   legal: LegalRole;
   events: EventsRole;
   insights: InsightsRole;
+  product: ProductRole;
 }
 
 /** The capability union valid within a given module. */
@@ -56,6 +60,7 @@ export const MODULES = {
   legal: legalModule,
   events: eventsModule,
   insights: insightsModule,
+  product: productModule,
 } as const;
 
 /**
@@ -139,5 +144,6 @@ export function emptyUserRoles(): UserRoles {
     legal: [],
     events: [],
     insights: [],
+    product: [],
   };
 }

@@ -7,6 +7,7 @@ import {
   modulesForRole,
   primaryModulesForWarehouseAccess,
   primaryModulesForRole,
+  warehouseRolePresentation,
 } from "./modules";
 import { ROLE_LIST } from "@/auth/roles";
 
@@ -35,6 +36,25 @@ describe("warehouse navigation metadata", () => {
     ).toEqual(
       modulesForRole("logistics_supervisor").map((module) => module.id),
     );
+  });
+
+  it("presents the combined Operations and Operator assignment as Operations Associate", () => {
+    expect(
+      warehouseRolePresentation(
+        ["operations", "warehouse_operator"] as unknown as "operations",
+      ),
+    ).toEqual({
+      label: "Operations Associate",
+      description:
+        "Demand intake plus routine receiving, putaway, issue, returns, and count work.",
+    });
+  });
+
+  it("returns a safe presentation while a role assignment is unavailable", () => {
+    expect(warehouseRolePresentation([])).toEqual({
+      label: "Warehouse access",
+      description: "Warehouse responsibilities are assigned by an administrator.",
+    });
   });
 
   it("keeps advanced cross-functional tools out of the Operator workflow", () => {
@@ -86,6 +106,24 @@ describe("warehouse navigation metadata", () => {
         (capability) => capabilities.has(capability),
       ).map((module) => module.label),
     ).toEqual(["Home", "Receive and inspect", "Put away", "Pick or issue"]);
+  });
+
+  it("hides cross-module destinations when their destination capability is absent", () => {
+    const capabilities = new Set([
+      "view_dashboard",
+      "view_inventory",
+      "request_fulfillment",
+      "view_analytics",
+    ]);
+    const visible = modulesForWarehouseAccess(
+      "supabase",
+      "operations",
+      (capability) => capabilities.has(capability),
+      (destination) => destination !== "events" && destination !== "insights",
+    );
+    expect(visible.map((module) => module.id)).not.toEqual(
+      expect.arrayContaining(["events", "reports"]),
+    );
   });
 
   it("assigns every route to exactly one desktop group", () => {

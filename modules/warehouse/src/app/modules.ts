@@ -17,10 +17,36 @@ export function normalizeWarehouseRole(role: WarehouseUiRole): Role {
   return role;
 }
 
-export function warehouseRolePresentation(role: WarehouseUiRole): {
+export function warehouseRolePresentation(role: WarehouseUiRole | readonly WarehouseUiRole[]): {
   label: string;
   description: string;
 } {
+  if (typeof role !== "string") {
+    const roles = new Set(role);
+    if (roles.size === 0) {
+      return {
+        label: "Warehouse access",
+        description:
+          "Warehouse responsibilities are assigned by an administrator.",
+      };
+    }
+    if (roles.has("operations") && roles.has("warehouse_operator")) {
+      return {
+        label: "Operations Associate",
+        description:
+          "Demand intake plus routine receiving, putaway, issue, returns, and count work.",
+      };
+    }
+    const presentations = [...roles].map((entry) =>
+      warehouseRolePresentation(entry),
+    );
+    return {
+      label: presentations.map((entry) => entry.label).join(" + "),
+      description: presentations
+        .map((entry) => entry.description)
+        .join(" "),
+    };
+  }
   if (role === "warehouse_operator") {
     return {
       label: "Warehouse Operator",
@@ -82,7 +108,10 @@ export interface ModuleDef {
   icon: string;
   group: ModuleGroup;
   mobile?: MobileSlot;
+  destination?: WarehouseDestination;
 }
+
+export type WarehouseDestination = "events" | "insights";
 
 export interface WarehouseRouteContract {
   id: WarehouseRouteId;
@@ -143,7 +172,7 @@ export const MODULES: ModuleDef[] = [
     id: "inventory",
     label: "Inventory",
     path: "/inventory",
-    capabilities: ["manage_inventory"],
+    capabilities: ["view_inventory"],
     description: "Browse SKUs, serials, batches and locations.",
     icon: "box",
     group: "operate",
@@ -213,6 +242,7 @@ export const MODULES: ModuleDef[] = [
     description: "Activation planning and reporting.",
     icon: "calendar",
     group: "plan",
+    destination: "events",
   },
   {
     id: "procurement",
@@ -302,6 +332,7 @@ export const MODULES: ModuleDef[] = [
     description: "Committed inventory positions and governed exports.",
     icon: "history",
     group: "analyze",
+    destination: "insights",
   },
   {
     id: "suppliers",
@@ -383,8 +414,9 @@ export const WAREHOUSE_DETAIL_ROUTES: WarehouseRouteContract[] = [
   {
     id: "product-detail",
     path: "/inventory/:id",
-    gateCapabilityIds: ["manage_inventory"],
+    gateCapabilityIds: ["view_inventory"],
     capabilityIds: [
+      "view_inventory",
       "manage_inventory",
       "manage_products",
       "transfer_stock",
@@ -500,15 +532,24 @@ export function primaryModulesForRole(role: WarehouseUiRole): ModuleDef[] {
 }
 
 type CapabilityPredicate = (capability: Capability) => boolean;
+type DestinationPredicate = (destination: WarehouseDestination) => boolean;
 
-function modulesForCapabilities(canAccess: CapabilityPredicate): ModuleDef[] {
-  return MODULES.filter((module) => module.capabilities.some(canAccess));
+function modulesForCapabilities(
+  canAccess: CapabilityPredicate,
+  canOpenDestination: DestinationPredicate,
+): ModuleDef[] {
+  return MODULES.filter(
+    (module) =>
+      module.capabilities.some(canAccess) &&
+      (!module.destination || canOpenDestination(module.destination)),
+  );
 }
 
 export function modulesForWarehouseAccess(
   source: "memory" | "supabase",
   role: WarehouseUiRole,
   canAccess: CapabilityPredicate,
+  canOpenDestination: DestinationPredicate = () => true,
 ): ModuleDef[] {
   if (source === "memory") return modulesForRole(role);
   if (isWarehouseOperatorRole(role)) {
@@ -516,13 +557,14 @@ export function modulesForWarehouseAccess(
       module.capabilities.some(canAccess),
     );
   }
-  return modulesForCapabilities(canAccess);
+  return modulesForCapabilities(canAccess, canOpenDestination);
 }
 
 export function primaryModulesForWarehouseAccess(
   source: "memory" | "supabase",
   role: WarehouseUiRole,
   canAccess: CapabilityPredicate,
+  canOpenDestination: DestinationPredicate = () => true,
 ): ModuleDef[] {
   if (source === "memory") return primaryModulesForRole(role);
   if (isWarehouseOperatorRole(role)) {
@@ -531,11 +573,19 @@ export function primaryModulesForWarehouseAccess(
     );
   }
   const order: MobileSlot[] = ["home", "scan", "tasks", "inventory"];
-  return modulesForCapabilities(canAccess)
+  return modulesForCapabilities(canAccess, canOpenDestination)
     .filter((module): module is ModuleDef & { mobile: MobileSlot } =>
       Boolean(module.mobile),
     )
     .sort(
       (left, right) => order.indexOf(left.mobile) - order.indexOf(right.mobile),
     );
+}
+
+export function warehouseDestinationForRoute(
+  routeId: WarehouseRouteId,
+): WarehouseDestination | undefined {
+  if (routeId === "events" || routeId === "event-detail") return "events";
+  if (routeId === "reports") return "insights";
+  return undefined;
 }

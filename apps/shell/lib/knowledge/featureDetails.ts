@@ -291,6 +291,48 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
       ],
     },
+    "admin-audit": {
+      controls: [
+        control(
+          "Search evidence",
+          "Filters role-change evidence by actor, subject, approval reference, reason, module, or role.",
+          "Search is read-only and operates only on evidence visible to the authorized administrator.",
+          "Matching immutable evidence remains visible without changing the audit record.",
+        ),
+        control(
+          "Filter action",
+          "Limits the trail to assignments or revocations.",
+          "Only released action values may be selected.",
+          "The list shows the chosen action class with its original timestamps.",
+        ),
+        control(
+          "Filter module",
+          "Limits the trail to one governed module.",
+          "The module must come from the canonical role registry.",
+          "The list shows role changes for the selected module without altering scope.",
+        ),
+      ],
+      fields: [
+        field(
+          "Approval reference",
+          "Links the role change to its approved access request or authority record.",
+          true,
+          "Every governed role change must retain a non-empty attributable reference.",
+        ),
+        field(
+          "Change reason",
+          "Explains why the assignment or revocation was necessary.",
+          true,
+          "The reason must be specific enough for independent audit review.",
+        ),
+        field(
+          "Effective window",
+          "Shows when temporary or permanent authority applies.",
+          false,
+          "An expiry, when present, must be after the effective date.",
+        ),
+      ],
+    },
     "admin-departments": {
       controls: [
         control(
@@ -3198,6 +3240,60 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "Shows the operating threshold when one is defined.",
           false,
           "The target is descriptive and cannot grant approval authority.",
+        ),
+      ],
+    },
+    "product-governance": {
+      controls: [
+        control(
+          "Save readiness evidence",
+          "Records launch criteria and supporting facts without making the final decision.",
+          "Only Product Contributors with prepare_readiness can update criteria, and required criteria must be complete before decision.",
+          "The readiness record is versioned and becomes available to the Product Owner.",
+        ),
+        control(
+          "Decide go-live",
+          "Approves or rejects launch readiness as the Product-owned final decision.",
+          "The Product Owner needs decide_go_live, complete criteria, and an attributable decision reason.",
+          "The named decision and timestamp are stored; approval enables the Operations handoff.",
+        ),
+        control(
+          "Acknowledge Operations handoff",
+          "Confirms that Operations accepted the approved launch conditions.",
+          "Only an Operations Partner can acknowledge, and the Product decision must already be approved.",
+          "The handoff records the accepting actor and time without changing Product's decision.",
+        ),
+        control(
+          "Submit pricing proposal",
+          "Creates an effective-dated price proposal with its commercial basis.",
+          "The Product Contributor needs propose_pricing; amount, basis, and effective date are required.",
+          "The proposal records its author and enters independent review.",
+        ),
+        control(
+          "Decide pricing proposal",
+          "Lets a Product Owner approve or reject a submitted price proposal.",
+          "The decision requires approve_pricing, a reason, and a different actor from the proposer.",
+          "The proposal keeps its independent decision, reason, and effective date.",
+        ),
+      ],
+      fields: [
+        field(
+          "Readiness criterion",
+          "Captures one required operational, commercial, compliance, or support condition.",
+          true,
+          "Every required criterion needs a current result and attributable evidence before approval.",
+        ),
+        field(
+          "Decision reason",
+          "Explains the Product Owner's go-live or pricing decision.",
+          true,
+          "A non-empty reason is required for both approval and rejection.",
+        ),
+        field(
+          "Effective date",
+          "Sets when an independently approved price may take effect.",
+          true,
+          "The date must be valid and cannot silently overwrite historical price evidence.",
         ),
       ],
     },

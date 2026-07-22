@@ -1,11 +1,9 @@
-import { useEffect, useState } from 'react';
-import { useWarehouse } from '@/app/store';
 import type { Product } from '@/domain/types';
-import { Field, Sheet, money } from './ui';
+import { Sheet, money } from './ui';
 
 /**
- * Bottom-sheet editor for a product's sell price. Shows landed cost and a live
- * margin preview. Gated by the caller (Pricing role only).
+ * Warehouse keeps price and landed-cost context read-only. Every revision is
+ * proposed and independently approved in the Product governance workspace.
  */
 export function PriceEditorSheet({
   product,
@@ -16,44 +14,27 @@ export function PriceEditorSheet({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { setProductPrice } = useWarehouse();
-  const [value, setValue] = useState('');
-
-  useEffect(() => {
-    if (open && product) setValue(product.price != null ? String(product.price) : '');
-  }, [open, product]);
-
   if (!product) return null;
 
-  const numeric = Number(value);
-  const valid = value.trim() !== '' && !Number.isNaN(numeric) && numeric >= 0;
+  const currentPrice = product.price ?? 0;
   const margin =
-    valid && numeric > 0
-      ? Math.round(((numeric - product.unitCost) / numeric) * 100)
+    currentPrice > 0
+      ? Math.round(((currentPrice - product.unitCost) / currentPrice) * 100)
       : null;
-
-  const save = async () => {
-    if (!valid) return;
-    const ok = await setProductPrice({ productId: product.id, price: numeric });
-    if (!ok) return;
-    onOpenChange(false);
-  };
 
   return (
     <Sheet
       open={open}
       onOpenChange={onOpenChange}
-      title="Set price"
+      title="Pricing governance"
       description={`${product.name} · ${product.sku}`}
       footer={
-        <button
-          type="button"
-          className="btn-primary w-full"
-          disabled={!valid}
-          onClick={() => void save()}
+        <a
+          className="btn-primary min-h-11 w-full"
+          href={`/product/pricing?productId=${encodeURIComponent(product.id)}`}
         >
-          Save price
-        </button>
+          Open governed pricing
+        </a>
       }
     >
       <div className="space-y-4">
@@ -65,7 +46,13 @@ export function PriceEditorSheet({
             </p>
           </div>
           <div className="rounded-xl bg-inset p-3">
-            <p className="text-xs text-faint">Margin</p>
+            <p className="text-xs text-faint">Current price</p>
+            <p className="tnum mt-0.5 text-lg font-bold text-ink">
+              {money(currentPrice)}
+            </p>
+          </div>
+          <div className="rounded-xl bg-inset p-3">
+            <p className="text-xs text-faint">Current margin</p>
             <p
               className={
                 margin == null
@@ -80,23 +67,10 @@ export function PriceEditorSheet({
           </div>
         </div>
 
-        <Field
-          label="Sell price (₱)"
-          htmlFor="price-input"
-          hint="Price charged per unit. Margin is vs landed cost."
-        >
-          <input
-            id="price-input"
-            type="number"
-            inputMode="decimal"
-            min={0}
-            step="any"
-            className="input text-lg font-semibold"
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            placeholder={String(product.unitCost)}
-          />
-        </Field>
+        <p className="rounded-xl border border-line bg-surface p-3 text-sm text-muted">
+          Price revisions require an effective date, cost basis, reason, and
+          independent approval in Product.
+        </p>
       </div>
     </Sheet>
   );

@@ -241,6 +241,9 @@ function mapCase(row: LiveRow): AccreditationCase {
     lastReminderAt: row.last_reminder_at ?? undefined,
     invitedByEmail: row.invited_by_email ?? undefined,
     contactEmail: row.contact_email ?? undefined,
+    decisionPending: Boolean(row.decision_pending ?? row.pending_decision_status),
+    pendingDecisionStatus: row.pending_decision_status ?? undefined,
+    pendingDecisionProposedByEmail: row.pending_decision_proposed_by_email ?? undefined,
   } as AccreditationCase;
 }
 
@@ -311,6 +314,10 @@ function mapInvite(row: LiveRow): VendorInvite {
     createdAt: row.created_at,
     createdByEmail: row.created_by_email ?? undefined,
     acceptedAt: row.accepted_at ?? undefined,
+    expiresAt: row.expires_at ?? undefined,
+    linkGeneration: Number(row.link_generation ?? 0),
+    lastLinkIssuedAt: row.last_link_issued_at ?? undefined,
+    replayRejectedAt: row.replay_rejected_at ?? undefined,
     status: row.status,
     deliveryStatus,
     deliveryError: row.delivery_error ?? undefined,

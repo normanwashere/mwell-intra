@@ -102,7 +102,7 @@ import {
   STOCK_CHANGE_DECISION_CAPABILITIES,
   WAREHOUSE_MUTATION_CAPABILITIES,
 } from "@/app/authorization";
-import type { WarehouseRouteId } from "@/app/modules";
+import type { WarehouseDestination, WarehouseRouteId } from "@/app/modules";
 
 interface WarehouseContextValue {
   data: WarehouseData | null;
@@ -117,6 +117,7 @@ interface WarehouseContextValue {
   setRole: (role: Role) => void;
   capabilities: readonly Capability[];
   can: (capability: Capability) => boolean;
+  canOpenDestination: (destination: WarehouseDestination) => boolean;
   canOpenRoute: (routeId: WarehouseRouteId) => boolean;
   actor: string;
   identityId: string;
@@ -248,6 +249,9 @@ export function WarehouseProvider({
   supabaseClient,
   initialRole = "logistics_supervisor",
   roleCode: providedRoleCode,
+  roleLabel: providedRoleLabel,
+  roleDescription: providedRoleDescription,
+  destinationAccess,
   capabilities: providedCapabilities,
   actor: providedActor,
   identityId: providedIdentityId,
@@ -259,6 +263,9 @@ export function WarehouseProvider({
   initialRole?: Role;
   /** Runtime bundle code used only for display and audit context. */
   roleCode?: string;
+  roleLabel?: string;
+  roleDescription?: string;
+  destinationAccess?: Partial<Record<WarehouseDestination, boolean>>;
   /** Fresh core.my_capabilities() projection for live authorization. */
   capabilities?: readonly Capability[];
   /** Overrides the default `${role}@mwell` actor (e.g. the signed-in user's email). */
@@ -298,18 +305,20 @@ export function WarehouseProvider({
   const identityId = providedIdentityId ?? actor;
   const roleCode = providedRoleCode ?? role;
   const roleProfile = ROLES[role];
-  const roleLabel =
+  const roleLabel = providedRoleLabel ?? (
     roleCode === role
       ? roleProfile.label
       : roleCode
           .split("_")
           .filter(Boolean)
           .map((part) => part[0]?.toUpperCase() + part.slice(1))
-          .join(" ");
-  const roleDescription =
+          .join(" ")
+  );
+  const roleDescription = providedRoleDescription ?? (
     roleCode === role
       ? roleProfile.description
-      : "Runtime Warehouse access bundle managed by an administrator.";
+      : "Runtime Warehouse access bundle managed by an administrator."
+  );
   const capabilities = useMemo<readonly Capability[]>(
     () =>
       source === "supabase"
@@ -330,6 +339,10 @@ export function WarehouseProvider({
   const can = useCallback(
     (capability: Capability) => capabilitySet.has(capability),
     [capabilitySet],
+  );
+  const canOpenDestination = useCallback(
+    (destination: WarehouseDestination) => destinationAccess?.[destination] !== false,
+    [destinationAccess],
   );
 
   const refreshPending = useCallback(async () => {
@@ -448,8 +461,9 @@ export function WarehouseProvider({
   }, []);
 
   const canOpenRoute = useCallback(
-    (routeId: WarehouseRouteId) => canOpenWarehouseRoute(routeId, can),
-    [can],
+    (routeId: WarehouseRouteId) =>
+      canOpenWarehouseRoute(routeId, can, canOpenDestination),
+    [can, canOpenDestination],
   );
 
   const value: WarehouseContextValue = {
@@ -464,6 +478,7 @@ export function WarehouseProvider({
     setRole,
     capabilities,
     can,
+    canOpenDestination,
     canOpenRoute,
     actor,
     identityId,

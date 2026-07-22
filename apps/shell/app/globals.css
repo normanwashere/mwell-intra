@@ -3,12 +3,16 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --shell-mobile-nav-clearance: calc(5.5rem + env(safe-area-inset-bottom));
+  }
+
   html {
     -webkit-text-size-adjust: 100%;
     /* Keep scrolled-into-view / focused controls clear of the fixed mobile
        bottom nav (Exec #3 — tap-intercept fix). Harmless on desktop where
        the nav is hidden. */
-    scroll-padding-bottom: calc(11rem + env(safe-area-inset-bottom));
+    scroll-padding-bottom: var(--shell-mobile-nav-clearance);
   }
 
   body {
@@ -18,6 +22,17 @@
   /* Roomy, accessible focus rings across the shell. */
   :focus-visible {
     outline: 2px solid rgb(var(--c-line));
+  }
+}
+
+@media (max-width: 767px) {
+  .shell-content {
+    padding-bottom: calc(var(--shell-mobile-nav-clearance) + 2rem);
+    scroll-padding-bottom: var(--shell-mobile-nav-clearance);
+  }
+
+  .shell-content :is(a, button, input, select, textarea, [tabindex]) {
+    scroll-margin-bottom: var(--shell-mobile-nav-clearance);
   }
 }
 

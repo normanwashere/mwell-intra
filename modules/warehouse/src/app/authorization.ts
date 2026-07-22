@@ -1,5 +1,10 @@
 import type { Capability } from "@/auth/roles";
-import { WAREHOUSE_ROUTE_BY_ID, type WarehouseRouteId } from "@/app/modules";
+import {
+  WAREHOUSE_ROUTE_BY_ID,
+  warehouseDestinationForRoute,
+  type WarehouseDestination,
+  type WarehouseRouteId,
+} from "@/app/modules";
 
 export const WAREHOUSE_MUTATION_CAPABILITIES = {
   relocate: "transfer_stock",
@@ -17,8 +22,13 @@ export const STOCK_CHANGE_DECISION_CAPABILITIES = [
 export function canOpenWarehouseRoute(
   routeId: WarehouseRouteId,
   canAccess: (capability: Capability) => boolean,
+  canOpenDestination: (destination: WarehouseDestination) => boolean = () => true,
 ): boolean {
-  return WAREHOUSE_ROUTE_BY_ID[routeId].gateCapabilityIds.some(canAccess);
+  const destination = warehouseDestinationForRoute(routeId);
+  return (
+    (!destination || canOpenDestination(destination)) &&
+    WAREHOUSE_ROUTE_BY_ID[routeId].gateCapabilityIds.some(canAccess)
+  );
 }
 
 export function warehouseRouteIdForPath(

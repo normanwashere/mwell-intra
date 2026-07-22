@@ -29,11 +29,10 @@ describe('BarcodeScanner', () => {
     expect(onDetected).toHaveBeenCalledWith('4800010001');
   });
 
-  it('does not emit empty manual input', async () => {
+  it('disables empty manual submission so the control cannot fail silently', () => {
     const onDetected = vi.fn();
-    const user = userEvent.setup();
     render(<BarcodeScanner onDetected={onDetected} engineFactory={fakeEngine} />);
-    await user.click(screen.getByRole('button', { name: /^add$/i }));
+    expect(screen.getByRole('button', { name: /^add$/i })).toBeDisabled();
     expect(onDetected).not.toHaveBeenCalled();
   });
 

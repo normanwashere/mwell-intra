@@ -46,6 +46,15 @@ export function hasCapability<M extends Module>(
 /** Internal, employee-facing module routes (in nav order). */
 export const MODULE_NAV: readonly ModuleNav[] = [
   {
+    module: "product",
+    href: "/product",
+    label: "Product",
+    description:
+      "Go-live readiness, governed pricing, and Operations handoffs.",
+    icon: "clipboard",
+    tone: "emerald",
+  },
+  {
     module: "events",
     href: "/events",
     label: "Events",
@@ -159,7 +168,35 @@ export function hasModuleAccess(access: ShellAccess, module: Module): boolean {
 
 /** The internal module routes the user can see, in nav order. */
 export function accessibleModules(access: ShellAccess): readonly ModuleNav[] {
-  return MODULE_NAV.filter((item) => hasModuleAccess(access, item.module));
+  return MODULE_NAV.filter((item) => hasModuleAccess(access, item.module)).map(
+    (item) => ({ ...item, description: moduleDescription(item, access) }),
+  );
+}
+
+function moduleDescription(item: ModuleNav, access: ShellAccess): string {
+  if (
+    item.module === "procurement" &&
+    hasCapability(access, "procurement", "create_request") &&
+    !hasCapability(access, "procurement", "approve_request")
+  ) {
+    return "Create and track your purchase requests.";
+  }
+  if (
+    item.module === "warehouse" &&
+    hasCapability(access, "warehouse", "request_stock") &&
+    !hasCapability(access, "warehouse", "receive_stock") &&
+    !hasCapability(access, "warehouse", "issue_items")
+  ) {
+    return "View inventory and request stock.";
+  }
+  if (
+    item.module === "warehouse" &&
+    hasCapability(access, "warehouse", "view_finance") &&
+    !hasCapability(access, "warehouse", "receive_stock")
+  ) {
+    return "Review inventory value, exceptions, and financial approvals.";
+  }
+  return item.description;
 }
 
 /** Finance is an Intra-wide area backed by scoped module capabilities. */
@@ -170,6 +207,24 @@ export function canAccessFinance(access: ShellAccess): boolean {
   );
 }
 
+export type WorkSource =
+  "warehouse" | "procurement" | "legal" | "events" | "finance";
+
+/** Work filters are limited to authoritative areas assigned to this account. */
+export function workSources(access: ShellAccess): readonly WorkSource[] {
+  const sources: WorkSource[] = [];
+  for (const source of [
+    "warehouse",
+    "procurement",
+    "legal",
+    "events",
+  ] as const) {
+    if (hasModuleAccess(access, source)) sources.push(source);
+  }
+  if (canAccessFinance(access)) sources.push("finance");
+  return sources;
+}
+
 /**
  * Resolve a requested post-login destination without sending the user into an
  * area their new session cannot open. Unknown paths fail closed to Home.
@@ -178,7 +233,9 @@ export function authorizedPostLoginPath(
   requestedPath: string,
   access: ShellAccess,
   profileKind: "employee" | "vendor",
-): string {
+  authorizationReady = true,
+): string | null {
+  if (!authorizationReady) return null;
   if (requestedPath === "/") return "/";
   if (requestedPath === "/knowledge" || requestedPath.startsWith("/knowledge/"))
     return requestedPath;
@@ -248,6 +305,12 @@ export function mobileCenterAction(
   pathname: string,
   access: ShellAccess,
 ): MobileContextAction | null {
+  if (
+    pathname.startsWith("/procurement/requests/new") ||
+    pathname.startsWith("/legal/invites/new")
+  ) {
+    return null;
+  }
   if (
     pathname.startsWith("/procurement") &&
     hasCapability(access, "procurement", "create_request")

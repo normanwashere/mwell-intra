@@ -137,7 +137,11 @@ export function BarcodeScanner({
           value={manual}
           onChange={(e) => setManual(e.target.value)}
         />
-        <button type="submit" className="btn-primary shrink-0">
+        <button
+          type="submit"
+          className="btn-primary shrink-0"
+          disabled={!manual.trim()}
+        >
           {manualActionLabel}
         </button>
       </form>

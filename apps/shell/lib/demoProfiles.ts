@@ -170,16 +170,14 @@ export const DEMO_PROFILES: readonly MemoryProfile[] = [
     roles: { core: ['staff'], insights: ['executive'] },
   },
   {
-    id: 'demo-pricing',
-    email: 'pricing@mwell.demo',
+    id: 'demo-product-owner',
+    email: 'product.owner@mwell.demo',
     kind: 'employee',
     name: 'Pia Salcedo',
-    title: 'Pricing Analyst',
+    title: 'Product Owner',
     roles: {
-      // Covers /warehouse/pricing, which no other persona could reach
-      // (UX review WH-2).
       core: ['staff'],
-      warehouse: ['pricing'],
+      product: ['product_owner'],
     },
   },
   {

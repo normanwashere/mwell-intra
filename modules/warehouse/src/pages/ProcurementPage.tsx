@@ -16,10 +16,8 @@ import {
   StatCard,
   StaggerGrid,
   StaggerItem,
-  useToast,
   type Column,
 } from '@/components/ui';
-import { Icon } from '@/components/Icon';
 
 interface ReorderRow {
   product: Product;
@@ -32,8 +30,7 @@ interface ReorderRow {
 }
 
 export function ProcurementPage() {
-  const { data, createPurchaseOrder } = useWarehouse();
-  const toast = useToast();
+  const { data } = useWarehouse();
   if (!data) return null;
   const state = toStockState(data);
   const low = lowStockProducts(state);
@@ -69,45 +66,6 @@ export function ProcurementPage() {
   const openPOs = data.purchaseOrders.filter(
     (po) => po.status !== 'received' && po.status !== 'cancelled',
   ).length;
-
-  const reorder = async (row: ReorderRow) => {
-    const supplier = row.supplier ?? fallbackSupplier;
-    if (!supplier) {
-      toast.error('Add a supplier first.');
-      return;
-    }
-    const ok = await createPurchaseOrder({
-      supplierId: supplier.id,
-      lines: [{ productId: row.product.id, quantityOrdered: row.suggest }],
-    });
-    if (!ok) return;
-    toast.success(`PO drafted: ${row.suggest}× ${row.product.name}`);
-  };
-
-  const draftAll = async () => {
-    const bySupplier = new Map<
-      string,
-      { productId: string; quantityOrdered: number }[]
-    >();
-    for (const r of reorderRows) {
-      const sup = r.supplier ?? fallbackSupplier;
-      if (!sup) continue;
-      const lines = bySupplier.get(sup.id) ?? [];
-      lines.push({ productId: r.product.id, quantityOrdered: r.suggest });
-      bySupplier.set(sup.id, lines);
-    }
-    if (bySupplier.size === 0) {
-      toast.error('Add a supplier first.');
-      return;
-    }
-    let drafted = 0;
-    for (const [supplierId, lines] of bySupplier) {
-      const ok = await createPurchaseOrder({ supplierId, lines });
-      if (ok) drafted++;
-    }
-    if (drafted === 0) return;
-    toast.success(`Drafted ${drafted} PO(s) for ${reorderRows.length} item(s)`);
-  };
 
   const cover = (r: ReorderRow) =>
     r.daysOfCover === Infinity ? '∞' : `${Math.round(r.daysOfCover)}d`;
@@ -146,23 +104,6 @@ export function ProcurementPage() {
       align: 'right',
       render: (r) => <Badge tone="amber">+{r.suggest}</Badge>,
     },
-    {
-      key: 'action',
-      header: '',
-      align: 'right',
-      render: (r) => (
-        <button
-          type="button"
-          className="btn-primary btn-sm"
-          onClick={(e) => {
-            e.stopPropagation();
-            void reorder(r);
-          }}
-        >
-          Reorder
-        </button>
-      ),
-    },
   ];
 
   return (
@@ -198,9 +139,9 @@ export function ProcurementPage() {
           subtitle="At-risk first; cover = days until stockout"
           action={
             reorderRows.length > 0 ? (
-              <button type="button" className="btn-primary btn-sm" onClick={() => void draftAll()}>
-                <Icon name="cart" className="h-4 w-4" /> Draft all
-              </button>
+              <a href="/procurement/requests/new" className="btn-primary btn-sm">
+                Create Procurement request
+              </a>
             ) : undefined
           }
         />

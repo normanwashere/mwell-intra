@@ -101,7 +101,7 @@ describe('App routing & guards', () => {
     renderWithProviders(<App />, {
       role: 'finance',
       source: 'supabase',
-      capabilities: ['manage_inventory'],
+      capabilities: ['view_inventory'],
       route: '/inventory',
     });
     expect(

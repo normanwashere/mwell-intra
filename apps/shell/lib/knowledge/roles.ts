@@ -562,6 +562,60 @@ const ROLE_OPERATING_DETAILS: Record<string, RoleOperatingDetails> = {
       ),
     ],
   },
+  product_contributor: {
+    dailyTasks: [
+      "Prepare launch criteria and attach current readiness evidence.",
+      "Submit effective-dated price proposals with a documented commercial basis.",
+    ],
+    responsibilityStages: [
+      stage(
+        "Prepare readiness",
+        "Complete each required launch criterion with attributable evidence and identified blockers.",
+        "The Product Owner receives a complete decision package.",
+      ),
+      stage(
+        "Propose governed pricing",
+        "Record the amount, basis, and effective date without approving the contributor's own proposal.",
+        "An independent Product Owner receives the proposal for decision.",
+      ),
+    ],
+  },
+  product_owner: {
+    dailyTasks: [
+      "Review launch readiness and make the final Product go-live decision.",
+      "Independently approve or reject submitted price proposals.",
+    ],
+    responsibilityStages: [
+      stage(
+        "Decide go-live",
+        "Review every required criterion, blocker, and supporting record before approving or rejecting launch.",
+        "A named, reasoned Product decision enables or stops the Operations handoff.",
+      ),
+      stage(
+        "Decide pricing",
+        "Confirm proposal independence, value, basis, and effective date before deciding.",
+        "The price history retains the proposal and independent outcome.",
+      ),
+    ],
+  },
+  product_operations_partner: {
+    dailyTasks: [
+      "Review Product-approved launch conditions and operational dependencies.",
+      "Acknowledge the Operations handoff or return a concrete operational blocker.",
+    ],
+    responsibilityStages: [
+      stage(
+        "Review the approved handoff",
+        "Confirm the Product decision, required operating conditions, named owners, and launch timing.",
+        "Operations can accept the handoff or identify a governed blocker.",
+      ),
+      stage(
+        "Acknowledge accountability",
+        "Record acceptance without changing Product's decision or readiness evidence.",
+        "The launch record shows its accountable Operations owner and timestamp.",
+      ),
+    ],
+  },
   strategic_sourcing_lead: {
     dailyTasks: [
       "Define the planned category-strategy and complex-sourcing governance model.",
@@ -1691,6 +1745,81 @@ export const LIVE_KNOWLEDGE_ROLES: KnowledgeRole[] = [
       ],
       escalation:
         "Escalate security, definition, or source-integrity failures to Platform and the accountable data owner.",
+    },
+  }),
+  liveRole({
+    id: "product_contributor",
+    rbacModule: "product",
+    rbacRole: "contributor",
+    label: "Product contributor",
+    module: "product",
+    purpose:
+      "Prepare launch-readiness evidence and governed price proposals without making the final decision.",
+    authority: {
+      accessibleRoutes: ["/product"],
+      canDo: [
+        "Create and update readiness criteria and submit effective-dated price proposals with supporting basis.",
+      ],
+      cannotDo: [
+        "Do not decide go-live, acknowledge the Operations handoff, or approve your own price proposal.",
+      ],
+      decisions: [
+        "Decide whether the readiness evidence and proposal facts are complete enough to submit for independent decision.",
+      ],
+      upstreamRoleIds: ["core_staff_only"],
+      downstreamRoleIds: ["product_owner"],
+      escalation:
+        "Escalate incomplete criteria, unresolved dependencies, or conflicting pricing evidence to the Product Owner before submission.",
+    },
+  }),
+  liveRole({
+    id: "product_owner",
+    rbacModule: "product",
+    rbacRole: "product_owner",
+    label: "Product owner",
+    module: "product",
+    purpose:
+      "Own the final go-live decision and independently decide submitted Product pricing proposals.",
+    authority: {
+      accessibleRoutes: ["/product"],
+      canDo: [
+        "Approve or reject a complete launch-readiness package and independently approve or reject price proposals.",
+      ],
+      cannotDo: [
+        "Do not approve incomplete readiness, impersonate the Operations acknowledgement, or decide a price proposal you authored.",
+      ],
+      decisions: [
+        "Make the final Product go-live decision and the independent Product pricing decision with an attributable reason.",
+      ],
+      upstreamRoleIds: ["product_contributor"],
+      downstreamRoleIds: ["product_operations_partner"],
+      escalation:
+        "Escalate unresolved Legal, Finance, Technology, Sales, or Operations blockers to their accountable owner and keep go-live unapproved.",
+    },
+  }),
+  liveRole({
+    id: "product_operations_partner",
+    rbacModule: "product",
+    rbacRole: "operations_partner",
+    label: "Product Operations partner",
+    module: "product",
+    purpose:
+      "Accept the approved Product launch into Operations while preserving Product's final decision ownership.",
+    authority: {
+      accessibleRoutes: ["/product"],
+      canDo: [
+        "Review approved launch conditions and acknowledge the attributable Operations handoff.",
+      ],
+      cannotDo: [
+        "Do not edit Product readiness, make the Product go-live decision, or propose or approve pricing through this role.",
+      ],
+      decisions: [
+        "Decide whether Operations can acknowledge the already approved launch conditions or must return a specific blocker.",
+      ],
+      upstreamRoleIds: ["product_owner"],
+      downstreamRoleIds: ["warehouse_operations", "events_coordinator"],
+      escalation:
+        "Escalate an unowned or unsafe operational dependency to the Product Owner and Operations leadership before acknowledgement.",
     },
   }),
 ];

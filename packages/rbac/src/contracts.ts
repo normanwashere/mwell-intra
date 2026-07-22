@@ -12,7 +12,8 @@ export type Module =
   | 'procurement'
   | 'legal'
   | 'events'
-  | 'insights';
+  | 'insights'
+  | 'product';
 
 /** Ordered list of every module; `core` first to match migration order (§6.8). */
 export const MODULE_LIST = [
@@ -22,6 +23,7 @@ export const MODULE_LIST = [
   'legal',
   'events',
   'insights',
+  'product',
 ] as const satisfies readonly Module[];
 
 /** One role's capability grant within a module. */

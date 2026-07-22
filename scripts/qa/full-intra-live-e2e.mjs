@@ -225,6 +225,7 @@ const roleRoutes = {
     {
       path: "/vendor/cases/case_seed_001",
       text: /Accreditation|Checklist|Documents|requirements/i,
+      recordText: /Acme Medical Supplies/i,
     },
   ],
   warehouse_logistics_supervisor: [
@@ -280,6 +281,7 @@ const roleRoutes = {
     {
       path: "/procurement/requests/req_seed_001",
       text: /Purchase request|Line items|Activity/i,
+      recordText: /Emergency aircon repair/i,
     },
   ],
   procurement_officer: [
@@ -310,6 +312,7 @@ const roleRoutes = {
     {
       path: "/legal/cases/case_seed_001",
       text: /Accreditation|Checklist|Documents|Activity/i,
+      recordText: /Acme Medical Supplies/i,
     },
     { path: "/legal/invites/new", text: /Invite vendor|Onboard a new vendor/i },
   ],
@@ -318,6 +321,7 @@ const roleRoutes = {
     {
       path: "/legal/cases/case_seed_001",
       text: /Accreditation|Checklist|Documents|Activity/i,
+      recordText: /Acme Medical Supplies/i,
     },
   ],
   legal_admin: [
@@ -425,7 +429,7 @@ roleRoutes.leadership_insights = [
   ...roleRoutes.warehouse_bi_analyst,
 ];
 
-function routesFor(user) {
+function routesFor(user, discoveredRoutes = []) {
   const exactRoutes = ROUTE_AUTHORIZATION_MATRIX.map((route) => {
     const allowed = route.allowed(user);
     return {
@@ -440,11 +444,58 @@ function routesFor(user) {
     ...route,
     expectedAccess: "allowed",
   }));
+  const renderedNavigationRoutes = discoveredRoutes.map((path) => ({
+    path,
+    expectedAccess: "allowed",
+    source: "rendered-navigation",
+  }));
   return [
     ...new Map(
-      [...exactRoutes, ...scopedRoutes].map((route) => [route.path, route]),
+      [...exactRoutes, ...scopedRoutes, ...renderedNavigationRoutes].map(
+        (route) => [route.path, route],
+      ),
     ).values(),
   ];
+}
+
+function canonicalPath(pathname) {
+  if (pathname === "/") return pathname;
+  return pathname.replace(/\/+$/, "");
+}
+
+function finalPathMatches(expectedPath, currentUrl) {
+  return (
+    canonicalPath(new URL(currentUrl).pathname) === canonicalPath(expectedPath)
+  );
+}
+
+async function discoverVisibleNavigationRoutes(page) {
+  return page
+    .locator('nav a[href], aside a[href], [role="navigation"] a[href]')
+    .evaluateAll((links) => {
+      const paths = links.flatMap((link) => {
+        const style = getComputedStyle(link);
+        const rect = link.getBoundingClientRect();
+        const visible =
+          style.display !== "none" &&
+          style.visibility !== "hidden" &&
+          rect.width > 0 &&
+          rect.height > 0;
+        const href = link.getAttribute("href");
+        if (!visible || !href) return [];
+        const target = new URL(href, location.origin);
+        if (target.origin !== location.origin) return [];
+        if (
+          target.pathname.startsWith("/login") ||
+          target.pathname.startsWith("/api/") ||
+          target.pathname.startsWith("/_next/")
+        ) {
+          return [];
+        }
+        return [target.pathname];
+      });
+      return [...new Set(paths)];
+    });
 }
 
 function classify(text, url) {
@@ -828,8 +879,14 @@ async function auditRoute(page, route) {
   const routeClass = classify(audit.text, page.url());
   const expectedClass =
     route.expectedAccess === "denied" ? "access-denied" : "rendered";
+  const finalPathMet = finalPathMatches(route.path, page.url());
+  const recordExpectationMet = route.recordText
+    ? route.recordText.test(audit.text)
+    : true;
   const expectationMet =
     routeClass === expectedClass &&
+    finalPathMet &&
+    recordExpectationMet &&
     (route.text ? route.text.test(audit.text) : true);
   return {
     route: route.path,
@@ -837,6 +894,8 @@ async function auditRoute(page, route) {
     class: routeClass,
     expectedAccess: route.expectedAccess,
     expectationMet,
+    finalPathMet,
+    recordExpectationMet,
     h1: audit.h1,
     mainCount: audit.mainCount,
     controls: audit.visibleControls,
@@ -6030,7 +6089,8 @@ if (runRouteAudit) {
       try {
         loginResult = await login(page, user);
         if (loginResult.status === "signed-in") {
-          for (const route of routesFor(user)) {
+          const discoveredRoutes = await discoverVisibleNavigationRoutes(page);
+          for (const route of routesFor(user, discoveredRoutes)) {
             try {
               routeResults.push(await auditRoute(page, route));
             } catch (error) {

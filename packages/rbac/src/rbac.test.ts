@@ -8,6 +8,7 @@ import {
   listModuleRoles,
   roleCapabilities,
   toRoleCapabilityRows,
+  productModule,
   warehouseModule,
   type UserRoles,
 } from "./index";
@@ -32,10 +33,11 @@ describe("warehouse parity vs source roles.ts", () => {
   });
 
   it("has the source capabilities, W1 controls, and request-only handoffs", () => {
-    expect(warehouseModule.capabilities).toHaveLength(26);
+    expect(warehouseModule.capabilities).toHaveLength(27);
     expect([...warehouseModule.capabilities].sort()).toEqual(
       [
         "view_dashboard",
+        "view_inventory",
         "receive_stock",
         "manage_inventory",
         "manage_products",
@@ -69,6 +71,7 @@ describe("warehouse parity vs source roles.ts", () => {
   const EXPECTED: Record<string, string[]> = {
     warehouse_operator: [
       "view_dashboard",
+      "view_inventory",
       "receive_stock",
       "manage_inventory",
       "cycle_count",
@@ -81,6 +84,7 @@ describe("warehouse parity vs source roles.ts", () => {
     ],
     warehouse_supervisor: [
       "view_dashboard",
+      "view_inventory",
       "receive_stock",
       "manage_inventory",
       "manage_products",
@@ -100,6 +104,7 @@ describe("warehouse parity vs source roles.ts", () => {
     ],
     logistics_supervisor: [
       "view_dashboard",
+      "view_inventory",
       "manage_inventory",
       "receive_stock",
       "manage_products",
@@ -119,41 +124,41 @@ describe("warehouse parity vs source roles.ts", () => {
     ],
     operations: [
       "view_dashboard",
-      "manage_inventory",
+      "view_inventory",
       "request_fulfillment",
       "request_stock",
       "submit_return_case",
     ],
     finance: [
       "view_dashboard",
-      "manage_inventory",
+      "view_inventory",
       "view_finance",
-      "cycle_count",
       "approve_stock_adjustment_finance",
       "view_exceptions",
     ],
     bi_analyst: [
       "view_dashboard",
-      "manage_inventory",
+      "view_inventory",
       "view_analytics",
       "view_exceptions",
     ],
-    business_unit: ["view_dashboard", "manage_inventory", "request_stock"],
-    marketing: ["view_dashboard", "manage_inventory", "request_stock"],
+    business_unit: ["view_dashboard", "view_inventory", "request_stock"],
+    marketing: ["view_dashboard", "view_inventory", "request_stock"],
     procurement: [
       "view_dashboard",
-      "manage_inventory",
+      "view_inventory",
       "view_procurement",
       "manage_products",
     ],
     pricing: [
       "view_dashboard",
-      "manage_inventory",
+      "view_inventory",
       "view_pricing",
-      "set_pricing",
       "view_finance",
     ],
-    warehouse_admin: [...warehouseModule.capabilities],
+    warehouse_admin: warehouseModule.capabilities.filter(
+      (capability) => capability !== "set_pricing",
+    ),
   };
 
   it.each(Object.entries(EXPECTED))(
@@ -192,7 +197,7 @@ describe("can() — capability checks", () => {
       warehouse: ["bi_analyst", "pricing"],
     };
     expect(can(multi, "warehouse", "view_analytics")).toBe(true); // from bi_analyst
-    expect(can(multi, "warehouse", "set_pricing")).toBe(true); // from pricing
+    expect(can(multi, "warehouse", "set_pricing")).toBe(false);
     expect(can(multi, "warehouse", "receive_stock")).toBe(false); // neither
   });
 });
@@ -206,6 +211,7 @@ describe("can() — per-module scoping (spec §4.2)", () => {
     legal: [],
     events: [],
     insights: [],
+    product: [],
   };
 
   it("applies warehouse roles only in the warehouse module", () => {
@@ -235,7 +241,7 @@ describe("can() — per-module scoping (spec §4.2)", () => {
 
 describe("hasCapInModule()", () => {
   it("checks a concrete role directly", () => {
-    expect(hasCapInModule("warehouse", "pricing", "set_pricing")).toBe(true);
+    expect(hasCapInModule("warehouse", "pricing", "set_pricing")).toBe(false);
     expect(hasCapInModule("warehouse", "pricing", "receive_stock")).toBe(false);
   });
 
@@ -370,7 +376,61 @@ describe("events and insights workspace matrices", () => {
       legal: [],
       events: [],
       insights: [],
+      product: [],
     });
+  });
+});
+
+describe("product governance matrix", () => {
+  it("separates contribution, final decision, and operations handoff duties", () => {
+    expect(listModuleRoles("product").sort()).toEqual(
+      ["contributor", "operations_partner", "product_owner"].sort(),
+    );
+    expect(productModule.capabilities).toEqual([
+      "view_readiness",
+      "prepare_readiness",
+      "decide_go_live",
+      "acknowledge_operations_handoff",
+      "view_pricing",
+      "propose_pricing",
+      "approve_pricing",
+    ]);
+    expect(
+      hasCapInModule("product", "contributor", "prepare_readiness"),
+    ).toBe(true);
+    expect(
+      hasCapInModule("product", "contributor", "decide_go_live"),
+    ).toBe(false);
+    expect(
+      hasCapInModule("product", "product_owner", "decide_go_live"),
+    ).toBe(true);
+    expect(
+      hasCapInModule(
+        "product",
+        "operations_partner",
+        "acknowledge_operations_handoff",
+      ),
+    ).toBe(true);
+    expect(
+      hasCapInModule("product", "operations_partner", "approve_pricing"),
+    ).toBe(false);
+  });
+
+  it("does not grant Product roles Warehouse custody mutations", () => {
+    const roles = {
+      ...emptyUserRoles(),
+      product: ["product_owner"],
+    };
+    expect(can(roles, "product", "decide_go_live")).toBe(true);
+    expect(can(roles, "product", "approve_pricing")).toBe(true);
+    expect(can(roles, "warehouse", "manage_inventory")).toBe(false);
+    expect(can(roles, "warehouse", "cycle_count")).toBe(false);
+  });
+
+  it("retires direct Warehouse price mutation for every role", () => {
+    for (const role of listModuleRoles("warehouse")) {
+      expect(hasCapInModule("warehouse", role, "set_pricing")).toBe(false);
+    }
   });
 });
 

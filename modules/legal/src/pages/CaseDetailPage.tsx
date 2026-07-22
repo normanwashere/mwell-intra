@@ -328,7 +328,9 @@ export function CaseDetailPage() {
     });
     if (ok) {
       success(
-        decisionOpen === 'provisional'
+        ok.decisionPending
+          ? 'Independent Legal confirmation required'
+          : decisionOpen === 'provisional'
           ? 'Temporary clearance granted'
           : `Accreditation ${decisionOpen}`,
       );
@@ -494,6 +496,23 @@ export function CaseDetailPage() {
         </div>
       )}
 
+      {!isVendor && kase.pendingDecisionStatus && (
+        <Card className="border-cyan-500/40 bg-cyan-500/10 p-4">
+          <div className="flex items-start gap-3">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-cyan-500/15 text-cyan-800 dark:text-cyan-200">
+              <Icon name="shield" className="h-5 w-5" />
+            </span>
+            <div>
+              <p className="font-semibold text-ink">Awaiting independent Legal confirmation</p>
+              <p className="mt-1 text-sm text-muted">
+                {kase.pendingDecisionProposedByEmail ?? 'A Legal approver'} proposed {kase.pendingDecisionStatus.replace('_', ' ')}.
+                A different authorized Legal approver must confirm the same disposition.
+              </p>
+            </div>
+          </div>
+        </Card>
+      )}
+
       {/* Meta demoted to one muted line; full record behind (i) (§2.2.4). */}
       <div className="-mt-3 flex flex-wrap items-center gap-2 px-1">
         <p className="min-w-0 truncate text-sm text-muted">{metaLine}</p>
@@ -632,7 +651,7 @@ export function CaseDetailPage() {
             <p className="text-xs font-semibold uppercase tracking-wide text-faint">
               Legal decision
             </p>
-            <div className="flex flex-wrap gap-2">
+            <div className="grid grid-cols-1 gap-2">
               <button
                 type="button"
                 onClick={() => {
@@ -719,7 +738,7 @@ export function CaseDetailPage() {
                     setDecisionNote('');
                     setDecisionSignature(null);
                   }}
-                  className="btn-outline"
+                  className="btn-outline w-full"
                 >
                   Reject
                 </button>
@@ -735,7 +754,7 @@ export function CaseDetailPage() {
                       setDecisionScope(kase.category ?? '');
                       setDecisionSignature(null);
                     }}
-                    className="btn-ghost"
+                    className="btn-ghost w-full"
                   >
                     <Icon name="rotate" className="h-4 w-4" />
                     Grant temporary clearance
@@ -750,7 +769,7 @@ export function CaseDetailPage() {
                       setDecisionScope(kase.category ?? '');
                       setDecisionSignature(null);
                     }}
-                    className="btn-primary"
+                    className="btn-primary w-full"
                   >
                     <Icon name="signature" className="h-4 w-4" />
                     Approve accreditation
@@ -1081,7 +1100,7 @@ export function CaseDetailPage() {
               placeholder="What did you check? Any conditions?"
             />
           </div>
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="grid grid-cols-1 gap-2 pt-2 sm:flex sm:justify-end">
             <button type="button" onClick={() => setReviewingItem(null)} className="btn-ghost">
               Cancel
             </button>
@@ -1173,14 +1192,14 @@ export function CaseDetailPage() {
               onChange={setDecisionSignature}
             />
           </div>
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="grid grid-cols-1 gap-2 pt-2 sm:flex sm:justify-end">
             <button
               type="button"
               onClick={() => {
                 setDecisionOpen(null);
                 setDecisionSignature(null);
               }}
-              className="btn-ghost"
+              className="btn-ghost w-full sm:w-auto"
             >
               Cancel
             </button>
@@ -1190,8 +1209,8 @@ export function CaseDetailPage() {
               disabled={!decisionSignature}
               className={
                 decisionOpen === 'rejected'
-                  ? 'btn-outline text-rose-700 disabled:cursor-not-allowed disabled:opacity-60 dark:text-rose-300'
-                  : 'btn-primary disabled:cursor-not-allowed disabled:opacity-60'
+                  ? 'btn-outline w-full text-rose-700 disabled:cursor-not-allowed disabled:opacity-60 dark:text-rose-300 sm:w-auto'
+                  : 'btn-primary w-full disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto'
               }
             >
               <Icon name="signature" className="h-4 w-4" />

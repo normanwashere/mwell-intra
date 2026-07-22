@@ -73,6 +73,12 @@ Deno.serve(async (request) => {
   let invite: Record<string, unknown>;
 
   if (body?.invite_id) {
+    const { error: reconcileError } = await admin
+      .schema("legal")
+      .rpc("reconcile_vendor_invite_lifecycle", {
+        payload: { invite_id: body.invite_id },
+      });
+    if (reconcileError) return json({ error: reconcileError.message }, 502);
     const { data: existing, error } = await userClient
       .from("vendor_invites")
       .select("*")
@@ -80,11 +86,15 @@ Deno.serve(async (request) => {
       .single();
     if (error || !existing)
       return json({ error: error?.message ?? "Vendor invite not found." }, 404);
-    if (existing.status === "accepted" || existing.status === "expired")
+    if (existing.status === "accepted" || existing.status === "expired") {
+      await admin.schema("legal").rpc("finalize_vendor_invite_delivery", {
+        payload: { invite_id: body.invite_id, status: "replay_rejected" },
+      });
       return json(
         { error: `A ${existing.status} invite cannot be retried.` },
         409,
       );
+    }
     email = existing.email?.trim().toLowerCase();
     companyName = existing.company_name?.trim();
     invite = {
@@ -139,6 +149,7 @@ Deno.serve(async (request) => {
       .rpc("finalize_vendor_invite_delivery", { payload });
     if (error) throw error;
   };
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
   try {
     let authUser: User | null = null;
@@ -193,6 +204,7 @@ Deno.serve(async (request) => {
       invite_id: inviteId,
       status: "sent",
       auth_user_id: authUser.id,
+      expires_at: expiresAt,
     });
     return json(
       { ...invite, delivery_status: "sent" },

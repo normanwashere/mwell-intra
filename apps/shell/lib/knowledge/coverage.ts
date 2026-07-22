@@ -1,7 +1,7 @@
 import type { KnowledgeContent, KnowledgeModule } from "./types";
 import { WAREHOUSE_ROUTE_CONTRACTS } from "@intra/warehouse";
-import { PROCUREMENT_ROUTE_CONTRACTS } from "@intra/procurement";
-import { mountLegalRouteContracts } from "@intra/legal";
+import { PROCUREMENT_ROUTE_CONTRACTS } from "@intra/procurement/routes";
+import { mountLegalRouteContracts } from "@intra/legal/routes";
 import { SHELL_PAGE_ROUTE_CONTRACTS } from "../routes";
 
 export interface LiveRouteManifestEntry {

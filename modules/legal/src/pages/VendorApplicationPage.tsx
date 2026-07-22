@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router-dom';
 import {
   Badge,
@@ -29,8 +29,10 @@ import { useAccreditationCases, useVendorAliases } from '../localStore';
 import { shouldBlockVendorAccess } from '../vendorAccess';
 import { TechnologyQualificationForm } from '../components/TechnologyQualificationForm';
 import { AccreditationDeclaration } from '../components/AccreditationDeclaration';
-
-const LOCAL_KEY = 'intra.legal.v3.vendor_applications';
+import {
+  createVendorApplicationDraftRepository,
+  type LegalDraftClient,
+} from '../vendorApplicationDraft';
 type SupportedEntity = Extract<EntityType, 'corporation' | 'sole_prop' | 'partnership'>;
 
 function supportedEntity(value: EntityType | undefined): SupportedEntity {
@@ -77,26 +79,6 @@ function blankApplication(entityType: SupportedEntity, vendorName: string): Vend
   };
 }
 
-function readLocal(caseId: string): VendorApplicationSnapshot | undefined {
-  try {
-    const rows = JSON.parse(localStorage.getItem(LOCAL_KEY) ?? '{}') as Record<string, VendorApplicationSnapshot>;
-    return rows[caseId];
-  } catch {
-    return undefined;
-  }
-}
-
-function writeLocal(caseId: string, application: VendorApplicationSnapshot): void {
-  const rows = (() => {
-    try {
-      return JSON.parse(localStorage.getItem(LOCAL_KEY) ?? '{}') as Record<string, VendorApplicationSnapshot>;
-    } catch {
-      return {};
-    }
-  })();
-  localStorage.setItem(LOCAL_KEY, JSON.stringify({ ...rows, [caseId]: application }));
-}
-
 const COMPANY_FIELDS: Array<{
   key: keyof VendorCompanyDetails;
   label: string;
@@ -134,32 +116,59 @@ export function VendorApplicationPage() {
   const [signature, setSignature] = useState<SignaturePayload | null>(null);
   const [busy, setBusy] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [draftVersion, setDraftVersion] = useState(0);
+  const [draftState, setDraftState] = useState<'loading' | 'saved' | 'unsaved' | 'saving' | 'error'>('loading');
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const editRevision = useRef(0);
+  const repository = useMemo(() => {
+    if (mode === 'supabase' && !supabaseClient) return null;
+    return createVendorApplicationDraftRepository({
+      mode,
+      client: supabaseClient as unknown as LegalDraftClient | null,
+    });
+  }, [mode, supabaseClient]);
 
   useEffect(() => {
-    if (!kase || application) return;
-    const local = readLocal(kase.id);
-    setApplication(local ?? blankApplication(supportedEntity(kase.entityType), kase.vendorName));
-  }, [kase, application]);
-
-  useEffect(() => {
-    if (mode !== 'supabase' || !supabaseClient || !kase || isVendor) return;
+    if (!kase || !repository) return;
     let active = true;
-    void supabaseClient
-      .schema('legal')
-      .from('vendor_application_snapshots')
-      .select('payload,status')
-      .eq('case_id', kase.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (active && data?.payload) {
-          setApplication(data.payload as unknown as VendorApplicationSnapshot);
-          setSubmitted(data.status === 'submitted');
-        }
+    setApplication(null);
+    setLoadError(null);
+    setDraftState('loading');
+    const acceptInvite = isVendor ? repository.acceptInvitation() : Promise.resolve();
+    void acceptInvite.then(() => repository.load(kase.id))
+      .then((draft) => {
+        if (!active) return;
+        setApplication(draft?.application ?? blankApplication(supportedEntity(kase.entityType), kase.vendorName));
+        setDraftVersion(draft?.version ?? 0);
+        setSubmitted(draft?.status === 'submitted');
+        setDraftState('saved');
+        editRevision.current = 0;
+      })
+      .catch((cause: unknown) => {
+        if (!active) return;
+        setLoadError(cause instanceof Error ? cause.message : 'The application could not be loaded.');
+        setDraftState('error');
       });
     return () => { active = false; };
-  }, [mode, supabaseClient, kase?.id, isVendor]);
+  }, [isVendor, kase?.id, repository]);
+
+  useEffect(() => {
+    if (!kase || !application || !repository || !isVendor || readOnly || draftState !== 'unsaved') return;
+    const revision = editRevision.current;
+    const timer = window.setTimeout(() => {
+      setDraftState('saving');
+      void repository.save(
+        kase.id,
+        application,
+        draftVersion,
+        globalThis.crypto?.randomUUID?.() ?? `${kase.id}-${Date.now()}`,
+      ).then((saved) => {
+        setDraftVersion(saved.version);
+        setDraftState(editRevision.current === revision ? 'saved' : 'unsaved');
+      }).catch(() => setDraftState('error'));
+    }, 1200);
+    return () => window.clearTimeout(timer);
+  }, [application, draftState, draftVersion, isVendor, kase, readOnly, repository]);
 
   const checklist = useMemo(
     () => application
@@ -172,19 +181,51 @@ export function VendorApplicationPage() {
     [application, kase?.handlesPersonalData],
   );
 
-  if (loading || !application) return <div className="mx-auto max-w-5xl p-6"><div className="h-64 animate-pulse rounded-lg bg-inset" /></div>;
-  if (!kase) return <Navigate to="/" replace />;
+  if (loading) return <div className="mx-auto max-w-5xl p-6"><div className="h-64 animate-pulse rounded-lg bg-inset" /></div>;
+  if (!kase) {
+    return (
+      <div className="mx-auto max-w-xl py-8">
+        <Card>
+          <div className="space-y-3 text-center">
+            <Icon name="alert" className="mx-auto h-8 w-8 text-amber-600" />
+            <h1 className="font-display text-2xl font-bold text-ink">Application not available</h1>
+            <p className="text-sm text-muted">This accreditation application may have expired, been removed, or belong to another vendor.</p>
+            <Link to="/" className="btn-primary">Return to vendor portal</Link>
+          </div>
+        </Card>
+      </div>
+    );
+  }
   if (shouldBlockVendorAccess(profile, kase, aliases)) return <Navigate to="/" replace />;
+  if (loadError) {
+    return (
+      <div role="alert">
+        <Card className="mx-auto max-w-xl">
+          <h1 className="font-display text-xl font-bold text-ink">Application could not be loaded</h1>
+          <p className="mt-2 text-sm text-muted">{loadError}</p>
+          <Link to={`/cases/${kase.id}`} className="btn-primary mt-4">Return to case</Link>
+        </Card>
+      </div>
+    );
+  }
+  if (!application) return <div className="mx-auto max-w-5xl p-6"><div className="h-64 animate-pulse rounded-lg bg-inset" /></div>;
 
+  const activeCase = kase;
+  const currentApplication = application;
   const validation = validateV2025Application(application);
 
   function updateCompany(key: keyof VendorCompanyDetails, value: string) {
-    setApplication((current) => current ? { ...current, company: { ...current.company, [key]: value } } : current);
+    updateApplication((current) => ({ ...current, company: { ...current.company, [key]: value } }));
+  }
+
+  function updateApplication(change: (current: VendorApplicationSnapshot) => VendorApplicationSnapshot) {
+    editRevision.current += 1;
+    setDraftState('unsaved');
+    setApplication((current) => current ? change(current) : current);
   }
 
   function setDisposition(path: string, disposition?: AccreditationFieldDisposition) {
-    setApplication((current) => {
-      if (!current) return current;
+    updateApplication((current) => {
       const next = { ...current.fieldDispositions };
       if (disposition) next[path] = disposition;
       else delete next[path];
@@ -192,10 +233,39 @@ export function VendorApplicationPage() {
     });
   }
 
-  function saveDraft() {
-    if (!kase || !application) return;
-    writeLocal(kase.id, application);
-    success('Application draft saved on this device');
+  async function saveDraft() {
+    if (!repository) return;
+    setDraftState('saving');
+    try {
+      const saved = await repository.save(
+        activeCase.id,
+        currentApplication,
+        draftVersion,
+        globalThis.crypto?.randomUUID?.() ?? `${activeCase.id}-${Date.now()}`,
+      );
+      setDraftVersion(saved.version);
+      setDraftState('saved');
+      success(mode === 'supabase' ? 'Application draft saved securely' : 'Application draft saved on this device');
+    } catch (cause) {
+      setDraftState('error');
+      error(cause instanceof Error ? cause.message : 'Could not save the draft.');
+    }
+  }
+
+  async function discardDraft() {
+    if (!repository || !window.confirm('Discard the current application draft? This action is recorded.')) return;
+    setBusy(true);
+    try {
+      await repository.discard(activeCase.id, draftVersion);
+      setApplication(blankApplication(supportedEntity(activeCase.entityType), activeCase.vendorName));
+      editRevision.current = 0;
+      setDraftState('saved');
+      success('Draft discarded');
+    } catch (cause) {
+      error(cause instanceof Error ? cause.message : 'Could not discard the draft.');
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function submitApplication() {
@@ -226,7 +296,12 @@ export function VendorApplicationPage() {
         });
         if (rpcError) throw new Error(rpcError.message);
       } else {
-        writeLocal(kase.id, next);
+        await repository?.save(
+          kase.id,
+          next,
+          draftVersion,
+          globalThis.crypto?.randomUUID?.() ?? `${kase.id}-${Date.now()}`,
+        );
         await submitCase(kase.id, profile?.email, {
           method: signature.method,
           dataUrl: signature.dataUrl,
@@ -293,7 +368,7 @@ export function VendorApplicationPage() {
               ['qualifications', 'Qualifications or certifications'],
               ['completedProjects', 'Completed projects'],
             ] as const).map(([key, label]) => (
-              <label key={key} className="text-sm font-semibold text-ink">{label}<textarea rows={4} className="input mt-1.5" value={application.manpower[key]} disabled={readOnly} onChange={(event) => setApplication({ ...application, manpower: { ...application.manpower, [key]: event.target.value } })} /></label>
+              <label key={key} className="text-sm font-semibold text-ink">{label}<textarea rows={4} className="input mt-1.5" value={application.manpower[key]} disabled={readOnly} onChange={(event) => updateApplication((current) => ({ ...current, manpower: { ...current.manpower, [key]: event.target.value } }))} /></label>
             ))}
           </div>
         </Card>
@@ -302,8 +377,8 @@ export function VendorApplicationPage() {
       <section>
         <SectionTitle title="Technology qualification" subtitle="Applicable only to technology service providers." />
         <Card>
-          <label className="mb-4 flex min-h-11 items-center gap-3 font-semibold text-ink"><input type="checkbox" className="h-5 w-5" checked={application.technologyServiceProvider} disabled={readOnly} onChange={(event) => setApplication({ ...application, technologyServiceProvider: event.target.checked, technologyQualifications: event.target.checked ? application.technologyQualifications : [] })} />This is a technology service provider</label>
-          {application.technologyServiceProvider && <TechnologyQualificationForm value={application.technologyQualifications} readOnly={readOnly} onChange={(technologyQualifications) => setApplication({ ...application, technologyQualifications })} />}
+          <label className="mb-4 flex min-h-11 items-center gap-3 font-semibold text-ink"><input type="checkbox" className="h-5 w-5" checked={application.technologyServiceProvider} disabled={readOnly} onChange={(event) => updateApplication((current) => ({ ...current, technologyServiceProvider: event.target.checked, technologyQualifications: event.target.checked ? current.technologyQualifications : [] }))} />This is a technology service provider</label>
+          {application.technologyServiceProvider && <TechnologyQualificationForm value={application.technologyQualifications} readOnly={readOnly} onChange={(technologyQualifications) => updateApplication((current) => ({ ...current, technologyQualifications }))} />}
         </Card>
       </section>
 
@@ -320,15 +395,21 @@ export function VendorApplicationPage() {
       <section>
         <SectionTitle title="Declaration" subtitle={`Controlling source: ${VENDOR_ACCREDITATION_V2025.sourceDocument}`} />
         <Card>
-          <AccreditationDeclaration value={application.declaration} readOnly={readOnly} onChange={(declaration) => setApplication({ ...application, declaration })} />
+          <AccreditationDeclaration value={application.declaration} readOnly={readOnly} onChange={(declaration) => updateApplication((current) => ({ ...current, declaration }))} />
           {!readOnly && <div className="mt-5 border-t border-line pt-5"><SignaturePad defaultSignerName={application.declaration.signerName} onChange={setSignature} /></div>}
         </Card>
       </section>
 
       {!readOnly && (
-        <div className="safe-bottom flex flex-wrap justify-end gap-2 rounded-lg border border-line bg-surface p-3 shadow-e1 md:sticky md:bottom-4 md:z-10 md:bg-surface/95 md:shadow-e2 md:backdrop-blur">
-          <button type="button" className="btn-ghost" onClick={saveDraft}>Save draft</button>
+        <div className="safe-bottom flex flex-col gap-3 rounded-lg border border-line bg-surface p-3 shadow-e1 sm:flex-row sm:items-center sm:justify-between md:sticky md:bottom-4 md:z-10 md:bg-surface/95 md:shadow-e2 md:backdrop-blur">
+          <p className="text-sm text-muted" aria-live="polite">
+            {draftState === 'saving' ? 'Saving securely...' : draftState === 'saved' ? 'Saved securely' : draftState === 'error' ? 'Draft could not be saved' : 'Unsaved changes'}
+          </p>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row">
+          <button type="button" className="btn-ghost min-h-11" disabled={busy} onClick={() => void discardDraft()}>Discard draft</button>
+          <button type="button" className="btn-ghost min-h-11" disabled={busy || draftState === 'saving'} onClick={() => void saveDraft()}>Save now</button>
           <button type="button" className="btn-primary" disabled={busy || !validation.ok || !signature} onClick={() => void submitApplication()}><Icon name="signature" className="h-4 w-4" />{busy ? 'Submitting...' : 'Sign and submit'}</button>
+          </div>
         </div>
       )}
     </div>

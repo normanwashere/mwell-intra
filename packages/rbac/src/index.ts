@@ -36,6 +36,8 @@ export type { EventsCapability, EventsRole } from './modules/events';
 export { eventsModule } from './modules/events';
 export type { InsightsCapability, InsightsRole } from './modules/insights';
 export { insightsModule } from './modules/insights';
+export type { ProductCapability, ProductRole } from './modules/product';
+export { productModule } from './modules/product';
 
 // Registry, predicates, and DB-seed helpers.
 export type {

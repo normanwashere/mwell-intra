@@ -1,3 +1,9 @@
-export { WorkApp } from './WorkApp';
-export { filterWorkItems, sortWorkItems } from './data';
-export type { WorkData, WorkFilter, WorkItem, WorkPriority, WorkSource } from './types';
+export { WorkApp } from "./WorkApp";
+export { availableWorkFilters, filterWorkItems, sortWorkItems } from "./data";
+export type {
+  WorkData,
+  WorkFilter,
+  WorkItem,
+  WorkPriority,
+  WorkSource,
+} from "./types";

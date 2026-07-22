@@ -17,9 +17,15 @@ import {
   StatCard,
   useToast,
 } from '@intra/ui';
-import { canAccessEvents, canCreateEvents } from './access';
-import { useEventsData, validateEventDraft } from './data';
-import type { EventDraft, EventLifecycle } from './types';
+import {
+  canAccessEvents,
+  canCloseEvents,
+  canCreateEvents,
+  canManageEvents,
+  canRequestEventFulfillment,
+} from './access';
+import { useEventsData, validateEventDraftFields } from './data';
+import type { EventDraft, EventLifecycle, EventManagementAction } from './types';
 
 const TYPE_OPTIONS = [
   ['corporate', 'Corporate'],
@@ -30,10 +36,12 @@ const TYPE_OPTIONS = [
   ['b2b', 'B2B'],
 ] as const;
 
-const LIFECYCLE_TONE: Record<EventLifecycle, 'brand' | 'emerald' | 'slate'> = {
+const LIFECYCLE_TONE: Record<EventLifecycle, 'brand' | 'emerald' | 'slate' | 'rose'> = {
   planned: 'brand',
   active: 'emerald',
   completed: 'slate',
+  closed: 'slate',
+  cancelled: 'rose',
 };
 
 function formatDate(value: string) {
@@ -49,12 +57,30 @@ export function EventsApp({
   openCreate?: boolean;
 }) {
   const { profile, userRoles, loading: sessionLoading } = useSession();
-  const { data, loading, error, refresh, createEvent } = useEventsData();
+  const {
+    data,
+    loading,
+    error,
+    refresh,
+    createEvent,
+    manageEvent,
+    requestFulfillment,
+  } = useEventsData();
   const toast = useToast();
   const [open, setOpen] = useState(openCreate);
   const [draft, setDraft] = useState<EventDraft>({ name: '', type: 'corporate', startDate: '' });
-  const [formError, setFormError] = useState<string | null>(null);
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [manageOpen, setManageOpen] = useState(false);
+  const [manageAction, setManageAction] = useState<EventManagementAction>('edit');
+  const [manageReason, setManageReason] = useState('');
+  const [manageDraft, setManageDraft] = useState<EventDraft>({ name: '', type: 'corporate', startDate: '' });
+  const [ownerEmail, setOwnerEmail] = useState('');
+  const [fulfillmentOpen, setFulfillmentOpen] = useState(false);
+  const [fulfillment, setFulfillment] = useState({
+    department: 'marketing', purpose: '', costCenter: '', requiredDate: '',
+    treatment: 'expense' as 'expense' | 'custody' | 'sale', productId: '', quantity: 1,
+  });
 
   const summary = useMemo(() => ({
     planned: data.events.filter((event) => event.lifecycle === 'planned').length,
@@ -82,6 +108,79 @@ export function EventsApp({
   const selectedEvent = eventId
     ? data.events.find((event) => event.id === eventId)
     : undefined;
+  const mayManage = canManageEvents(userRoles);
+  const mayClose = canCloseEvents(userRoles);
+  const mayRequest = canRequestEventFulfillment(userRoles);
+
+  const openManagement = (action: EventManagementAction) => {
+    if (!selectedEvent) return;
+    setManageAction(action);
+    setManageReason('');
+    setOwnerEmail(selectedEvent.ownerEmail ?? '');
+    setManageDraft({
+      name: selectedEvent.name,
+      type: selectedEvent.type,
+      startDate: selectedEvent.startDate,
+      endDate: selectedEvent.endDate,
+      siteLocationId: selectedEvent.siteLocationId,
+    });
+    setManageOpen(true);
+  };
+
+  const submitManagement = async () => {
+    if (!selectedEvent) return;
+    if (!manageReason.trim()) {
+      toast.error('Enter a reason for the event history.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const changes = manageAction === 'transfer_owner'
+        ? { ownerEmail }
+        : manageAction === 'reschedule'
+          ? { startDate: manageDraft.startDate, endDate: manageDraft.endDate }
+          : manageAction === 'edit'
+            ? manageDraft
+            : undefined;
+      await manageEvent({
+        eventId: selectedEvent.id,
+        action: manageAction,
+        reason: manageReason,
+        expectedUpdatedAt: selectedEvent.updatedAt,
+        changes,
+      });
+      toast.success('Event history updated.');
+      setManageOpen(false);
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'The event could not be updated.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const submitFulfillment = async () => {
+    if (!selectedEvent) return;
+    setSaving(true);
+    try {
+      await requestFulfillment({
+        eventId: selectedEvent.id,
+        requestingDepartment: fulfillment.department,
+        purpose: fulfillment.purpose,
+        costCenter: fulfillment.costCenter,
+        requiredDate: fulfillment.requiredDate,
+        expenseTreatment: fulfillment.treatment,
+        productId: fulfillment.productId,
+        quantity: fulfillment.quantity,
+        idempotencyKey: globalThis.crypto?.randomUUID?.() ?? `event-request-${Date.now()}`,
+      });
+      toast.success('Warehouse stock request sent for approval.');
+      setFulfillmentOpen(false);
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'The stock request could not be sent.');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   if (eventId) {
     if (!selectedEvent) {
@@ -102,7 +201,18 @@ export function EventsApp({
           title={selectedEvent.name}
           description={`${formatDate(selectedEvent.startDate)}${selectedEvent.endDate ? ` to ${formatDate(selectedEvent.endDate)}` : ''}. Event intent is managed here; Warehouse remains accountable for physical stock.`}
           icon="calendar"
-          action={<HeroChipButton href={`/warehouse/events/${encodeURIComponent(selectedEvent.id)}`} icon="box">Open Warehouse fulfillment</HeroChipButton>}
+          action={mayRequest ? (
+            <button type="button" className="btn-primary" onClick={() => {
+              setFulfillment((current) => ({
+                ...current,
+                productId: current.productId || data.products?.[0]?.id || '',
+                requiredDate: current.requiredDate || selectedEvent.startDate,
+              }));
+              setFulfillmentOpen(true);
+            }}>
+              <Icon name="box" className="h-4 w-4" /> Request warehouse stock
+            </button>
+          ) : undefined}
           accessory={<Badge tone={LIFECYCLE_TONE[selectedEvent.lifecycle]}>{selectedEvent.lifecycle}</Badge>}
         />
         <div className="grid grid-cols-3 gap-3">
@@ -113,19 +223,73 @@ export function EventsApp({
         <Card className="space-y-4">
           <div>
             <p className="text-xs font-semibold uppercase text-faint">Next operational step</p>
-            <h2 className="mt-1 font-display text-lg font-bold text-ink">Complete fulfillment at the source</h2>
-            <p className="mt-1 text-sm text-muted">Reserve products, select bins, issue serialized units, and record returns inside Warehouse. The resulting totals flow back into this event.</p>
+            <h2 className="mt-1 font-display text-lg font-bold text-ink">Govern the event, then hand off demand</h2>
+            <p className="mt-1 text-sm text-muted">Event owners request the products and required date here. Warehouse remains responsible for allocation, picking, issue, and returns.</p>
           </div>
-          <a href={`/warehouse/events/${encodeURIComponent(selectedEvent.id)}`} className="btn-primary w-full sm:w-fit">Continue in Warehouse <Icon name="arrowRight" className="h-4 w-4" /></a>
+          <div className="flex flex-wrap gap-2">
+            {mayManage && <button type="button" className="btn-outline" onClick={() => openManagement('edit')}>Edit details</button>}
+            {mayManage && <button type="button" className="btn-outline" onClick={() => openManagement('reschedule')}>Reschedule</button>}
+            {mayManage && <button type="button" className="btn-outline" onClick={() => openManagement('transfer_owner')}>Transfer owner</button>}
+            {mayClose && !['closed', 'cancelled'].includes(selectedEvent.lifecycle) && (
+              <>
+                <button type="button" className="btn-outline" onClick={() => openManagement('close')}>Close event</button>
+                <button type="button" className="btn-ghost text-rose-600" onClick={() => openManagement('cancel')}>Cancel event</button>
+              </>
+            )}
+            {mayClose && ['closed', 'cancelled'].includes(selectedEvent.lifecycle) && (
+              <button type="button" className="btn-primary" onClick={() => openManagement('reopen')}>Reopen event</button>
+            )}
+          </div>
         </Card>
+
+        <Sheet
+          open={manageOpen}
+          onOpenChange={setManageOpen}
+          title={{ edit: 'Edit event', reschedule: 'Reschedule event', transfer_owner: 'Transfer owner', close: 'Close event', cancel: 'Cancel event', reopen: 'Reopen event' }[manageAction]}
+          description="Every lifecycle change requires a reason and is written to the event audit history."
+          footer={<button type="button" className="btn-primary w-full" disabled={saving} onClick={() => void submitManagement()}>{saving ? 'Saving...' : 'Confirm change'}</button>}
+        >
+          <div className="space-y-4">
+            {manageAction === 'edit' && (
+              <>
+                <Field label="Event name" htmlFor="manage-event-name"><input id="manage-event-name" className="input" value={manageDraft.name} onChange={(event) => setManageDraft((current) => ({ ...current, name: event.target.value }))} /></Field>
+                <Field label="Event type" htmlFor="manage-event-type"><select id="manage-event-type" className="input" value={manageDraft.type} onChange={(event) => setManageDraft((current) => ({ ...current, type: event.target.value }))}>{TYPE_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
+                <Field label="Venue or site" htmlFor="manage-event-site"><input id="manage-event-site" className="input" value={manageDraft.siteLocationId ?? ''} onChange={(event) => setManageDraft((current) => ({ ...current, siteLocationId: event.target.value || undefined }))} /></Field>
+              </>
+            )}
+            {manageAction === 'reschedule' && <div className="grid gap-4 sm:grid-cols-2"><Field label="Start date" htmlFor="manage-event-start"><input id="manage-event-start" type="date" className="input" value={manageDraft.startDate} onChange={(event) => setManageDraft((current) => ({ ...current, startDate: event.target.value }))} /></Field><Field label="End date" htmlFor="manage-event-end"><input id="manage-event-end" type="date" className="input" value={manageDraft.endDate ?? ''} onChange={(event) => setManageDraft((current) => ({ ...current, endDate: event.target.value || undefined }))} /></Field></div>}
+            {manageAction === 'transfer_owner' && <Field label="New owner email" htmlFor="manage-event-owner"><input id="manage-event-owner" type="email" className="input" value={ownerEmail} onChange={(event) => setOwnerEmail(event.target.value)} /></Field>}
+            <Field label="Reason" htmlFor="manage-event-reason"><textarea id="manage-event-reason" className="input min-h-24" value={manageReason} onChange={(event) => setManageReason(event.target.value)} required /></Field>
+          </div>
+        </Sheet>
+
+        <Sheet
+          open={fulfillmentOpen}
+          onOpenChange={setFulfillmentOpen}
+          title="Request warehouse stock"
+          description="The event reference stays attached through approval and Warehouse fulfillment."
+          footer={<button type="button" className="btn-primary w-full" disabled={saving} onClick={() => void submitFulfillment()}>{saving ? 'Submitting...' : 'Submit for approval'}</button>}
+        >
+          <div className="space-y-4">
+            <Field label="Department" htmlFor="event-request-department"><input id="event-request-department" className="input" value={fulfillment.department} onChange={(event) => setFulfillment((current) => ({ ...current, department: event.target.value }))} /></Field>
+            <Field label="Business purpose" htmlFor="event-request-purpose"><textarea id="event-request-purpose" className="input min-h-24" value={fulfillment.purpose} onChange={(event) => setFulfillment((current) => ({ ...current, purpose: event.target.value }))} required /></Field>
+            <div className="grid gap-4 sm:grid-cols-2"><Field label="Cost center" htmlFor="event-request-cost"><input id="event-request-cost" className="input" value={fulfillment.costCenter} onChange={(event) => setFulfillment((current) => ({ ...current, costCenter: event.target.value }))} required /></Field><Field label="Required date" htmlFor="event-request-date"><input id="event-request-date" type="date" className="input" value={fulfillment.requiredDate} onChange={(event) => setFulfillment((current) => ({ ...current, requiredDate: event.target.value }))} required /></Field></div>
+            <Field label="Product" htmlFor="event-request-product"><select id="event-request-product" className="input" value={fulfillment.productId} onChange={(event) => setFulfillment((current) => ({ ...current, productId: event.target.value }))}>{(data.products ?? []).map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}</select></Field>
+            <div className="grid gap-4 sm:grid-cols-2"><Field label="Quantity" htmlFor="event-request-quantity"><input id="event-request-quantity" type="number" min="1" step="1" className="input" value={fulfillment.quantity} onChange={(event) => setFulfillment((current) => ({ ...current, quantity: Number(event.target.value) }))} /></Field><Field label="Cost treatment" htmlFor="event-request-treatment"><select id="event-request-treatment" className="input" value={fulfillment.treatment} onChange={(event) => setFulfillment((current) => ({ ...current, treatment: event.target.value as typeof current.treatment }))}><option value="expense">Expense</option><option value="custody">Custody</option><option value="sale">Sale</option></select></Field></div>
+          </div>
+        </Sheet>
       </div>
     );
   }
 
   const submit = async () => {
-    const validation = validateEventDraft(draft);
-    setFormError(validation);
-    if (validation) return;
+    const validation = validateEventDraftFields(draft);
+    setFormErrors(validation);
+    const firstField = validation.name ? 'event-name' : validation.startDate ? 'event-start' : validation.endDate ? 'event-end' : undefined;
+    if (firstField) {
+      window.setTimeout(() => document.getElementById(firstField)?.focus());
+      return;
+    }
     setSaving(true);
     try {
       await createEvent(draft);
@@ -133,7 +297,7 @@ export function EventsApp({
       setOpen(false);
       setDraft({ name: '', type: 'corporate', startDate: '' });
     } catch (cause) {
-      setFormError(cause instanceof Error ? cause.message : 'The event could not be created.');
+      setFormErrors({ form: cause instanceof Error ? cause.message : 'The event could not be created.' });
     } finally {
       setSaving(false);
     }
@@ -189,8 +353,7 @@ export function EventsApp({
                   <div><p className="text-lg font-bold text-ink">{event.returnedUnits}</p><p className="text-xs text-muted">Returned</p></div>
                 </div>
                 <div className="flex flex-col gap-2 sm:flex-row">
-                  <a href={`/warehouse/events/${encodeURIComponent(event.id)}`} className="btn-primary flex-1">Open fulfillment <Icon name="arrowRight" className="h-4 w-4" /></a>
-                  <a href={`/events/${encodeURIComponent(event.id)}`} className="btn-ghost flex-1">View event</a>
+                  <a href={`/events/${encodeURIComponent(event.id)}`} className="btn-primary flex-1">View event <Icon name="arrowRight" className="h-4 w-4" /></a>
                 </div>
               </Card>
             ))}
@@ -206,8 +369,9 @@ export function EventsApp({
         footer={<button type="button" className="btn-primary w-full" disabled={saving} onClick={() => void submit()}>{saving ? 'Creating...' : 'Create event'}</button>}
       >
         <div className="space-y-4">
-          <Field label="Event name" htmlFor="event-name" error={formError ?? undefined}>
-            <input id="event-name" className="input" value={draft.name} onChange={(e) => setDraft((current) => ({ ...current, name: e.target.value }))} />
+          {formErrors.form && <p role="alert" className="text-sm font-semibold text-rose-600">{formErrors.form}</p>}
+          <Field label="Event name" htmlFor="event-name" error={formErrors.name}>
+            <input id="event-name" className="input" aria-invalid={Boolean(formErrors.name)} value={draft.name} onChange={(e) => setDraft((current) => ({ ...current, name: e.target.value }))} />
           </Field>
           <Field label="Event type" htmlFor="event-type">
             <select id="event-type" className="input" value={draft.type} onChange={(e) => setDraft((current) => ({ ...current, type: e.target.value }))}>
@@ -215,8 +379,8 @@ export function EventsApp({
             </select>
           </Field>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Start date" htmlFor="event-start"><input id="event-start" type="date" className="input" value={draft.startDate} onChange={(e) => setDraft((current) => ({ ...current, startDate: e.target.value }))} /></Field>
-            <Field label="End date" htmlFor="event-end"><input id="event-end" type="date" className="input" value={draft.endDate ?? ''} onChange={(e) => setDraft((current) => ({ ...current, endDate: e.target.value || undefined }))} /></Field>
+            <Field label="Start date" htmlFor="event-start" error={formErrors.startDate}><input id="event-start" type="date" className="input" aria-invalid={Boolean(formErrors.startDate)} required value={draft.startDate} onChange={(e) => setDraft((current) => ({ ...current, startDate: e.target.value }))} /></Field>
+            <Field label="End date" htmlFor="event-end" error={formErrors.endDate}><input id="event-end" type="date" className="input" aria-invalid={Boolean(formErrors.endDate)} value={draft.endDate ?? ''} onChange={(e) => setDraft((current) => ({ ...current, endDate: e.target.value || undefined }))} /></Field>
           </div>
         </div>
       </Sheet>

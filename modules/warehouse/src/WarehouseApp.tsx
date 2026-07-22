@@ -22,6 +22,7 @@ import { ThemeProvider } from '@/app/theme';
 import { WarehouseProvider } from '@/app/store';
 import { App } from '@/app/App';
 import { PwaPrompts } from '@/components/PwaPrompts';
+import { warehouseRolePresentation } from '@/app/modules';
 
 /**
  * React Router v6 refuses to match an exact basename URL before the trailing
@@ -88,6 +89,17 @@ export function WarehouseApp({ basename = '/warehouse' }: WarehouseAppProps) {
   const initialRole: Role | undefined =
     warehouseRoles[0] ?? (hasLiveAccess ? 'warehouse_operator' : undefined);
   const roleCode = claimedRoleCodes[0] ?? initialRole;
+  const rolePresentation = warehouseRolePresentation(
+    warehouseRoles.length > 0
+      ? warehouseRoles
+      : initialRole
+        ? [initialRole]
+        : [],
+  );
+  const destinationAccess = {
+    events: mode !== 'supabase' || (userCapabilities?.events ?? []).includes('view_events'),
+    insights: mode !== 'supabase' || (userCapabilities?.insights ?? []).includes('view_warehouse'),
+  };
 
   // Session still restoring → paint a lightweight skeleton instead of a
   // blank frame (or, worse, a flash of the access-denied notice).
@@ -141,6 +153,9 @@ export function WarehouseApp({ basename = '/warehouse' }: WarehouseAppProps) {
           key={profile?.id ?? initialRole}
           initialRole={initialRole}
           roleCode={mode === 'supabase' ? roleCode : undefined}
+          roleLabel={rolePresentation.label}
+          roleDescription={rolePresentation.description}
+          destinationAccess={destinationAccess}
           capabilities={mode === 'supabase' ? liveCapabilities : undefined}
           actor={profile?.email}
           identityId={profile?.id}

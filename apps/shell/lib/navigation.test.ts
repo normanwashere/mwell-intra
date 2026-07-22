@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { UserRoles } from "@intra/rbac";
+import type { ShellAccess } from "./navigation";
 import { SHELL_PAGE_ROUTE_CONTRACTS } from "./routes";
 import {
   authorizedPostLoginPath,
@@ -9,9 +10,31 @@ import {
   dashboardAreas,
   memoryAccess,
   mobileCenterAction,
+  workSources,
 } from "./navigation";
 
 describe("authorized post-login destinations", () => {
+  it("defers an allowed deep link until live authorization is ready", () => {
+    const access = {
+      mode: "supabase" as const,
+      userRoles: {} satisfies Partial<UserRoles>,
+      userCapabilities: { core: ["manage_rbac"] },
+    };
+    const resolveWhenReady = authorizedPostLoginPath as unknown as (
+      path: string,
+      access: ShellAccess,
+      kind: "employee" | "vendor",
+      ready: boolean,
+    ) => string | null;
+
+    expect(
+      resolveWhenReady("/admin/users", access, "employee", false),
+    ).toBeNull();
+    expect(resolveWhenReady("/admin/users", access, "employee", true)).toBe(
+      "/admin/users",
+    );
+  });
+
   it("uses only live capabilities in Supabase mode", () => {
     const staleRoleSnapshot = {
       mode: "supabase" as const,
@@ -118,6 +141,41 @@ describe("authorized post-login destinations", () => {
 });
 
 describe("dashboard areas", () => {
+  it("describes only the actions a requester can actually perform", () => {
+    const areas = dashboardAreas(
+      memoryAccess({
+        core: ["staff"],
+        procurement: ["requester"],
+        warehouse: ["business_unit"],
+      }),
+      "employee",
+    );
+
+    expect(
+      areas.find((area) => area.href === "/procurement")?.description,
+    ).toBe("Create and track your purchase requests.");
+    expect(areas.find((area) => area.href === "/warehouse")?.description).toBe(
+      "View inventory and request stock.",
+    );
+  });
+
+  it("publishes Product as a first-class governed workspace", () => {
+    const access = memoryAccess({
+      core: ["staff"],
+      product: ["product_owner"],
+    });
+
+    expect(
+      dashboardAreas(access, "employee").map((area) => ({
+        label: area.label,
+        href: area.href,
+      })),
+    ).toContainEqual({ label: "Product", href: "/product" });
+    expect(
+      authorizedPostLoginPath("/product/readiness/pkg-1", access, "employee"),
+    ).toBe("/product/readiness/pkg-1");
+  });
+
   it("shows every Warehouse Administrator area counted by the dashboard", () => {
     expect(
       dashboardAreas(
@@ -191,6 +249,24 @@ describe("dashboard areas", () => {
   });
 });
 
+describe("My Work sources", () => {
+  it("shows only assigned operational areas, with Finance derived from finance access", () => {
+    expect(
+      workSources(
+        memoryAccess({
+          core: ["staff"],
+          events: ["requester"],
+          procurement: ["requester"],
+        }),
+      ),
+    ).toEqual(["procurement", "events"]);
+
+    expect(
+      workSources(memoryAccess({ core: ["staff"], warehouse: ["finance"] })),
+    ).toEqual(["warehouse", "finance"]);
+  });
+});
+
 describe("configurable organization administration", () => {
   const source = (path: string) =>
     readFileSync(resolve(process.cwd(), path), "utf8");
@@ -258,5 +334,20 @@ describe("mobile contextual actions", () => {
       mobileCenterAction("/events", memoryAccess({ events: ["requester"] }))
         ?.label,
     ).toBe("New event");
+  });
+
+  it("does not duplicate the action for a workflow already being created", () => {
+    expect(
+      mobileCenterAction(
+        "/procurement/requests/new",
+        memoryAccess({ procurement: ["requester"] }),
+      ),
+    ).toBeNull();
+    expect(
+      mobileCenterAction(
+        "/legal/invites/new",
+        memoryAccess({ legal: ["admin"] }),
+      ),
+    ).toBeNull();
   });
 });

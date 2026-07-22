@@ -102,7 +102,7 @@ export const CURRENT_LIVE_ROLES = [
     {
       core: ["staff"],
       events: ["viewer"],
-      warehouse: ["pricing"],
+      product: ["product_owner"],
     },
     "product",
     { title: "Product Owner" },

@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 // Client provider tree for the shell (spec §5, ADR-003). Owns Supabase browser
 // client construction + env resolution (the @intra/auth package never builds a
@@ -6,23 +6,24 @@
 // contract; otherwise we fall back to `memory` mode with demo profiles so the
 // app builds and runs with NO live backend.
 
-import { useEffect, useMemo, type ReactNode } from 'react';
-import { SerwistProvider } from '@serwist/turbopack/react';
-import { SessionProvider, type AuthConfig } from '@intra/auth';
-import { ToastProvider, MotionProvider } from '@intra/ui';
-import { createSupabaseBrowserClient } from '@shell/lib/supabase/client';
-import { DEMO_PROFILES } from '@shell/lib/demoProfiles';
-import { DemoSeeder } from '@shell/components/DemoSeeder';
-import { StorageFullToast } from '@shell/components/StorageFullToast';
+import { useEffect, useMemo, type ReactNode } from "react";
+import { SerwistProvider } from "@serwist/turbopack/react";
+import { SessionProvider, type AuthConfig } from "@intra/auth";
+import { ToastProvider, MotionProvider } from "@intra/ui";
+import { createSupabaseBrowserClient } from "@shell/lib/supabase/client";
+import { DEMO_PROFILES } from "@shell/lib/demoProfiles";
+import { DemoSeeder } from "@shell/components/DemoSeeder";
+import { StorageFullToast } from "@shell/components/StorageFullToast";
+import { ConnectivityProvider } from "@shell/components/ConnectivityProvider";
 
 // Prod-safety guard: if a production build somehow ships without Supabase env
 // (spec §9), we render a hard error instead of silently using demo profiles.
 // A forced memory data source is never valid for a production build.
 function isDemoAllowed(): boolean {
-  if (process.env.NODE_ENV !== 'production') return true;
+  if (process.env.NODE_ENV !== "production") return true;
   return (
-    process.env.NEXT_PUBLIC_DATA_SOURCE === 'memory' &&
-    process.env.NEXT_PUBLIC_ALLOW_DEMO_IN_PROD === 'true'
+    process.env.NEXT_PUBLIC_DATA_SOURCE === "memory" &&
+    process.env.NEXT_PUBLIC_ALLOW_DEMO_IN_PROD === "true"
   );
 }
 
@@ -48,22 +49,24 @@ function MissingSupabaseConfig() {
 // Operators can explicitly disable registration for incident recovery.
 function isServiceWorkerEnabled(): boolean {
   return (
-    process.env.NODE_ENV === 'production' &&
-    process.env.NEXT_PUBLIC_ENABLE_SW !== 'false'
+    process.env.NODE_ENV === "production" &&
+    process.env.NEXT_PUBLIC_ENABLE_SW !== "false"
   );
 }
 
 function ServiceWorkerDevCleanup() {
   useEffect(() => {
-    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) {
+    if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) {
       return;
     }
     navigator.serviceWorker.getRegistrations().then((regs) => {
       if (regs.length === 0) return;
       void Promise.all([
         ...regs.map((r) => r.unregister()),
-        typeof caches !== 'undefined'
-          ? caches.keys().then((ks) => Promise.all(ks.map((k) => caches.delete(k))))
+        typeof caches !== "undefined"
+          ? caches
+              .keys()
+              .then((ks) => Promise.all(ks.map((k) => caches.delete(k))))
           : Promise.resolve(),
       ]).then(() => {
         // Reload once so the page is served fresh from the dev server instead
@@ -81,13 +84,13 @@ export function Providers({ children }: { children: ReactNode }) {
     const client = createSupabaseBrowserClient();
     if (client) {
       return {
-        mode: 'supabase',
+        mode: "supabase",
         client,
-        resetRedirectPath: '/reset-password',
+        resetRedirectPath: "/reset-password",
       };
     }
     if (!isDemoAllowed()) return null;
-    return { mode: 'memory', profiles: DEMO_PROFILES };
+    return { mode: "memory", profiles: DEMO_PROFILES };
   }, []);
 
   if (config === null) return <MissingSupabaseConfig />;
@@ -97,11 +100,13 @@ export function Providers({ children }: { children: ReactNode }) {
   const tree = (
     <MotionProvider>
       <SessionProvider config={config}>
-        <DemoSeeder />
-        <ToastProvider>
-          <StorageFullToast />
-          {children}
-        </ToastProvider>
+        <ConnectivityProvider>
+          <DemoSeeder />
+          <ToastProvider>
+            <StorageFullToast />
+            {children}
+          </ToastProvider>
+        </ConnectivityProvider>
       </SessionProvider>
     </MotionProvider>
   );

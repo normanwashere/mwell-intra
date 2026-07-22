@@ -8,6 +8,7 @@ import type { ModuleDefinition } from "../contracts";
 /** Warehouse capability catalogue mirrored by `core.role_capabilities`. */
 export type WarehouseCapability =
   | "view_dashboard"
+  | "view_inventory"
   | "receive_stock"
   | "manage_inventory"
   | "manage_products"
@@ -53,11 +54,12 @@ export type WarehouseRegistryRole = WarehouseRole | CanonicalWarehouseRole;
 
 const ALL_INVENTORY = [
   "view_dashboard",
-  "manage_inventory",
+  "view_inventory",
 ] as const satisfies readonly WarehouseCapability[];
 
 const WAREHOUSE_CAPABILITIES = [
   "view_dashboard",
+  "view_inventory",
   "receive_stock",
   "manage_inventory",
   "manage_products",
@@ -85,8 +87,13 @@ const WAREHOUSE_CAPABILITIES = [
   "import_warehouse_data",
 ] as const satisfies readonly WarehouseCapability[];
 
+const WAREHOUSE_ADMIN_CAPABILITIES = WAREHOUSE_CAPABILITIES.filter(
+  (capability) => capability !== "set_pricing",
+);
+
 const WAREHOUSE_OPERATOR_CAPABILITIES = [
   "view_dashboard",
+  "view_inventory",
   "receive_stock",
   "manage_inventory",
   "cycle_count",
@@ -100,6 +107,7 @@ const WAREHOUSE_OPERATOR_CAPABILITIES = [
 
 const WAREHOUSE_SUPERVISOR_CAPABILITIES = [
   "view_dashboard",
+  "view_inventory",
   "receive_stock",
   "manage_inventory",
   "manage_products",
@@ -163,7 +171,6 @@ export const warehouseModule: ModuleDefinition<
       capabilities: [
         ...ALL_INVENTORY,
         "view_finance",
-        "cycle_count",
         "approve_stock_adjustment_finance",
         "view_exceptions",
       ],
@@ -193,11 +200,11 @@ export const warehouseModule: ModuleDefinition<
     },
     pricing: {
       label: "Pricing",
-      description: "Landed cost, valuation, turnover & bundle pricing.",
+      description:
+        "Read-only landed cost, valuation, turnover, and governed price context.",
       capabilities: [
         ...ALL_INVENTORY,
         "view_pricing",
-        "set_pricing",
         "view_finance",
       ],
     },
@@ -205,7 +212,7 @@ export const warehouseModule: ModuleDefinition<
       label: "Warehouse Administrator",
       description:
         "Warehouse configuration, controls, imports, quality and operational oversight.",
-      capabilities: WAREHOUSE_CAPABILITIES,
+      capabilities: WAREHOUSE_ADMIN_CAPABILITIES,
     },
   },
 };

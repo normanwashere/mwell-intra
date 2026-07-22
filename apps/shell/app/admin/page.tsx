@@ -27,6 +27,13 @@ const areas = [
     status: "Live",
   },
   {
+    href: "/admin/audit",
+    icon: "shield" as const,
+    title: "Audit history",
+    summary: "Search retained access, department, DOA, and workflow changes by actor and record.",
+    status: "Live",
+  },
+  {
     href: "/knowledge?flow=administration&view=flow",
     icon: "shield" as const,
     title: "Governance runbook",

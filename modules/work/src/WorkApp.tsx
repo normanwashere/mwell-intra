@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useSession } from "@intra/auth";
 import {
   Badge,
+  AccessDenied,
   Card,
   EmptyState,
   HeroChipButton,
@@ -14,24 +15,32 @@ import {
   SkeletonList,
   relativeTime,
 } from "@intra/ui";
-import { filterWorkItems, sortWorkItems, useWorkData } from "./data";
-import type { WorkFilter, WorkPriority } from "./types";
+import {
+  availableWorkFilters,
+  filterWorkItems,
+  sortWorkItems,
+  useWorkData,
+} from "./data";
+import type { WorkFilter, WorkPriority, WorkSource } from "./types";
 
 const PRIORITY_TONE: Record<WorkPriority, "rose" | "amber" | "slate"> = {
   critical: "rose",
   high: "amber",
   normal: "slate",
 };
-const FILTERS = [
-  { value: "all", label: "All" },
-  { value: "warehouse", label: "Warehouse" },
-  { value: "procurement", label: "Procurement" },
-  { value: "legal", label: "Legal" },
-  { value: "events", label: "Events" },
-  { value: "finance", label: "Finance" },
-] as const;
+const ALL_SOURCES: readonly WorkSource[] = [
+  "warehouse",
+  "procurement",
+  "legal",
+  "events",
+  "finance",
+];
 
-export function WorkApp() {
+export function WorkApp({
+  allowedSources = ALL_SOURCES,
+}: {
+  allowedSources?: readonly WorkSource[];
+}) {
   const { profile, loading: sessionLoading } = useSession();
   if (sessionLoading)
     return (
@@ -42,30 +51,22 @@ export function WorkApp() {
   if (!profile) return <SignInPrompt module="My Work" basename="/work" />;
   if (profile.kind !== "employee") {
     return (
-      <div
-        role="alert"
-        className="grid min-h-[60vh] place-items-center p-6 text-center"
-      >
-        <div className="max-w-sm space-y-3">
-          <Icon name="lock" className="mx-auto h-8 w-8 text-faint" />
-          <h1 className="font-display text-lg font-bold text-ink">
-            No My Work access
-          </h1>
-          <p className="text-sm text-muted">
-            My Work is an employee workspace. Use Vendor Portal for your
-            organization&apos;s accreditation tasks.
-          </p>
-          <a href="/vendor" className="btn-primary">
-            Open Vendor Portal
-          </a>
-        </div>
-      </div>
+      <AccessDenied
+        module="My Work"
+        message="My Work is an employee workspace. Use Vendor Portal for your organization's accreditation tasks."
+        returnHref="/vendor"
+        returnLabel="Open Vendor Portal"
+      />
     );
   }
-  return <EmployeeWorkApp />;
+  return <EmployeeWorkApp allowedSources={allowedSources} />;
 }
 
-function EmployeeWorkApp() {
+function EmployeeWorkApp({
+  allowedSources,
+}: {
+  allowedSources: readonly WorkSource[];
+}) {
   const { data, loading, error, refresh } = useWorkData();
   const [filter, setFilter] = useState<WorkFilter>("all");
   if (loading)
@@ -74,7 +75,10 @@ function EmployeeWorkApp() {
         <SkeletonList rows={6} />
       </div>
     );
-  const visible = sortWorkItems(filterWorkItems(data.items, filter));
+  const scopedItems = data.items.filter((item) =>
+    allowedSources.includes(item.source),
+  );
+  const visible = sortWorkItems(filterWorkItems(scopedItems, filter));
   const urgentCount = data.items.filter(
     (item) => item.priority !== "normal",
   ).length;
@@ -116,7 +120,7 @@ function EmployeeWorkApp() {
       <div className="overflow-x-auto pb-1">
         <SegmentedControl
           ariaLabel="Filter work by source"
-          options={[...FILTERS]}
+          options={availableWorkFilters(allowedSources)}
           value={filter}
           onChange={(value) => setFilter(value as WorkFilter)}
         />

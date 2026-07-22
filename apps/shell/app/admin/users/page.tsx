@@ -28,9 +28,11 @@ import {
   Card,
   DataTable,
   EmptyState,
+  Field,
   HeroChipButton,
   HeroStat,
   Icon,
+  Input,
   ModuleHero,
   SectionTitle,
   Sheet,
@@ -50,6 +52,11 @@ import {
 } from '@intra/rbac';
 import { DEMO_PROFILES } from '@shell/lib/demoProfiles';
 import { cx } from '@shell/lib/cx';
+import {
+  filterAndPageProfiles,
+  validateRoleChangeEvidence,
+  type RoleChangeEvidence,
+} from '@shell/lib/adminGovernance';
 
 // ---------------------------------------------------------------------------
 // Types + helpers
@@ -327,7 +334,7 @@ function MemoryAdminUsers() {
 
 function LiveAdminUsers() {
   const toast = useToast();
-  const { supabaseClient } = useSession();
+  const { profile, supabaseClient } = useSession();
   const supabase = useMemo(
     () => supabaseClient?.schema('core') ?? null,
     [supabaseClient],
@@ -340,6 +347,25 @@ function LiveAdminUsers() {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<Set<string>>(new Set());
   const [detailUserId, setDetailUserId] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('active');
+  const [kindFilter, setKindFilter] = useState<'all' | 'employee' | 'vendor'>('all');
+  const [page, setPage] = useState(1);
+  const [roleChange, setRoleChange] = useState<{
+    userId: string;
+    moduleName: Module;
+    role: string;
+    next: boolean;
+  } | null>(null);
+  const [roleEvidence, setRoleEvidence] = useState<RoleChangeEvidence>({
+    approvalReference: '',
+    reason: '',
+    effectiveAt: new Date().toISOString().slice(0, 10),
+    expiresAt: '',
+  });
+  const [roleEvidenceErrors, setRoleEvidenceErrors] = useState<
+    Partial<Record<keyof RoleChangeEvidence, string>>
+  >({});
 
   const refresh = useCallback(async () => {
     if (!supabase) return;
@@ -380,7 +406,13 @@ function LiveAdminUsers() {
   }, [refresh]);
 
   const toggle = useCallback(
-    async (userId: string, moduleName: Module, role: string, next: boolean) => {
+    async (
+      userId: string,
+      moduleName: Module,
+      role: string,
+      next: boolean,
+      evidence: RoleChangeEvidence,
+    ) => {
       if (!supabase) return;
       const key = `${userId}::${moduleName}:${role}`;
       // Optimistic update.
@@ -398,7 +430,21 @@ function LiveAdminUsers() {
       try {
         const fn = next ? 'assign_user_role' : 'revoke_user_role';
         const { error: rpcErr } = await supabase.rpc(fn, {
-          payload: { user_id: userId, module: moduleName, role },
+          payload: {
+            user_id: userId,
+            module: moduleName,
+            role,
+            approval_reference: evidence.approvalReference.trim(),
+            reason: evidence.reason.trim(),
+            effective_at: new Date(
+              `${evidence.effectiveAt}T00:00:00+08:00`,
+            ).toISOString(),
+            expires_at: evidence.expiresAt
+              ? new Date(
+                  `${evidence.expiresAt}T23:59:59+08:00`,
+                ).toISOString()
+              : null,
+          },
         });
         if (rpcErr) throw rpcErr;
         toast.success(
@@ -431,6 +477,56 @@ function LiveAdminUsers() {
   const detailUser = detailUserId
     ? profiles.find((p) => p.id === detailUserId)
     : null;
+  const directory = useMemo(
+    () =>
+      filterAndPageProfiles(profiles, {
+        query,
+        status: statusFilter,
+        kind: kindFilter,
+        page,
+        pageSize: 20,
+      }),
+    [profiles, query, statusFilter, kindFilter, page],
+  );
+
+  useEffect(() => {
+    setPage(1);
+  }, [query, statusFilter, kindFilter]);
+
+  const requestRoleChange = useCallback(
+    (userId: string, moduleName: Module, role: string, next: boolean) => {
+      if (userId === profile?.id) {
+        toast.error(
+          'You cannot change your own roles. Ask another platform administrator.',
+        );
+        return;
+      }
+      setRoleEvidence({
+        approvalReference: '',
+        reason: '',
+        effectiveAt: new Date().toISOString().slice(0, 10),
+        expiresAt: '',
+      });
+      setRoleEvidenceErrors({});
+      setRoleChange({ userId, moduleName, role, next });
+    },
+    [profile?.id, toast],
+  );
+
+  const confirmRoleChange = useCallback(async () => {
+    if (!roleChange) return;
+    const errors = validateRoleChangeEvidence(roleEvidence);
+    setRoleEvidenceErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+    await toggle(
+      roleChange.userId,
+      roleChange.moduleName,
+      roleChange.role,
+      roleChange.next,
+      roleEvidence,
+    );
+    setRoleChange(null);
+  }, [roleChange, roleEvidence, toggle]);
 
   const totalGrants = Array.from(held.values()).reduce((n, s) => n + s.size, 0);
   const vendors = profiles.filter((p) => p.kind === 'vendor').length;
@@ -501,16 +597,90 @@ function LiveAdminUsers() {
           message="Users appear here after they sign in for the first time."
         />
       ) : (
-        <UserRoleTable
-          profiles={profiles}
-          held={held}
-          roleColumns={columns}
-          pending={pending}
-          onToggle={(userId, moduleName, role, next) =>
-            void toggle(userId, moduleName, role, next)
-          }
-          onOpenDetail={(id) => setDetailUserId(id)}
-        />
+        <>
+          <Card className="p-4 sm:p-5">
+            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_12rem_12rem]">
+              <Field label="Search users" htmlFor="admin-user-search">
+                <Input
+                  id="admin-user-search"
+                  type="search"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Name or email"
+                />
+              </Field>
+              <Field label="Status" htmlFor="admin-user-status">
+                <select
+                  id="admin-user-status"
+                  className="input-base min-h-11 w-full"
+                  value={statusFilter}
+                  onChange={(event) => setStatusFilter(event.target.value)}
+                >
+                  <option value="active">Active</option>
+                  <option value="all">All statuses</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </Field>
+              <Field label="User type" htmlFor="admin-user-kind">
+                <select
+                  id="admin-user-kind"
+                  className="input-base min-h-11 w-full"
+                  value={kindFilter}
+                  onChange={(event) =>
+                    setKindFilter(
+                      event.target.value as 'all' | 'employee' | 'vendor',
+                    )
+                  }
+                >
+                  <option value="all">Employees and vendors</option>
+                  <option value="employee">Employees</option>
+                  <option value="vendor">Vendors</option>
+                </select>
+              </Field>
+            </div>
+          </Card>
+          {directory.total === 0 ? (
+            <EmptyState
+              icon="search"
+              title="No matching users"
+              message="Adjust the search or filters to find another profile."
+            />
+          ) : (
+            <UserRoleTable
+              profiles={directory.rows as AdminProfile[]}
+              held={held}
+              roleColumns={columns}
+              pending={pending}
+              onToggle={requestRoleChange}
+              onOpenDetail={(id) => setDetailUserId(id)}
+            />
+          )}
+          {directory.pages > 1 && (
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm text-muted">
+                Page {page} of {directory.pages} · {directory.total} users
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  disabled={page <= 1}
+                  onClick={() => setPage((value) => Math.max(1, value - 1))}
+                >
+                  Previous
+                </Button>
+                <Button
+                  variant="outline"
+                  disabled={page >= directory.pages}
+                  onClick={() =>
+                    setPage((value) => Math.min(directory.pages, value + 1))
+                  }
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       <Sheet
@@ -529,10 +699,104 @@ function LiveAdminUsers() {
             roleColumns={columns}
             pending={pending}
             onToggle={(moduleName, role, next) =>
-              void toggle(detailUser.id, moduleName, role, next)
+              requestRoleChange(detailUser.id, moduleName, role, next)
             }
+            selfManaged={detailUser.id === profile?.id}
           />
         )}
+      </Sheet>
+      <Sheet
+        open={Boolean(roleChange)}
+        onOpenChange={(open) => {
+          if (!open) setRoleChange(null);
+        }}
+        title={roleChange?.next ? 'Grant governed access' : 'Revoke governed access'}
+        description={
+          roleChange
+            ? `${roleChange.moduleName}:${roleChange.role}`
+            : undefined
+        }
+        side="right"
+        footer={
+          <Button className="w-full" onClick={() => void confirmRoleChange()}>
+            {roleChange?.next ? 'Grant access' : 'Revoke access'}
+          </Button>
+        }
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-muted">
+            Record the approved request before changing access. This evidence is
+            retained in the audit trail.
+          </p>
+          <Field
+            label="Approval reference"
+            htmlFor="role-change-approval"
+            error={roleEvidenceErrors.approvalReference}
+          >
+            <Input
+              id="role-change-approval"
+              value={roleEvidence.approvalReference}
+              onChange={(event) =>
+                setRoleEvidence((value) => ({
+                  ...value,
+                  approvalReference: event.target.value,
+                }))
+              }
+              placeholder="e.g. IAM-2026-001"
+            />
+          </Field>
+          <Field
+            label="Business reason"
+            htmlFor="role-change-reason"
+            error={roleEvidenceErrors.reason}
+          >
+            <textarea
+              id="role-change-reason"
+              className="input-base min-h-28 w-full resize-y"
+              value={roleEvidence.reason}
+              onChange={(event) =>
+                setRoleEvidence((value) => ({
+                  ...value,
+                  reason: event.target.value,
+                }))
+              }
+            />
+          </Field>
+          <Field
+            label="Effective date"
+            htmlFor="role-change-effective"
+            error={roleEvidenceErrors.effectiveAt}
+          >
+            <Input
+              id="role-change-effective"
+              type="date"
+              value={roleEvidence.effectiveAt}
+              onChange={(event) =>
+                setRoleEvidence((value) => ({
+                  ...value,
+                  effectiveAt: event.target.value,
+                }))
+              }
+            />
+          </Field>
+          <Field
+            label="Expiry date (optional)"
+            htmlFor="role-change-expiry"
+            error={roleEvidenceErrors.expiresAt}
+          >
+            <Input
+              id="role-change-expiry"
+              type="date"
+              value={roleEvidence.expiresAt}
+              onChange={(event) =>
+                setRoleEvidence((value) => ({
+                  ...value,
+                  expiresAt: event.target.value,
+                }))
+              }
+            />
+          </Field>
+        </div>
       </Sheet>
     </div>
   );
@@ -717,6 +981,7 @@ interface UserDetailProps {
   readonly roleColumns: readonly RoleColumn[];
   readonly pending: ReadonlySet<string>;
   readonly onToggle: (moduleName: Module, role: string, next: boolean) => void;
+  readonly selfManaged?: boolean;
 }
 
 function UserDetail({
@@ -725,6 +990,7 @@ function UserDetail({
   roleColumns,
   pending,
   onToggle,
+  selfManaged,
 }: UserDetailProps) {
   const grouped = useMemo(() => {
     const g = new Map<Module, RoleColumn[]>();
@@ -801,7 +1067,9 @@ function UserDetail({
                   </div>
                   <RoleCheckbox
                     checked={checked}
-                    disabled={rowPending || (!c.isActive && !checked)}
+                    disabled={
+                      selfManaged || rowPending || (!c.isActive && !checked)
+                    }
                     label={`${c.key} for ${profile.email}`}
                     onChange={(next) => onToggle(c.module, c.role, next)}
                   />

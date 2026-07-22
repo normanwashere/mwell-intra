@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import { screen, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { ProcurementPage } from './ProcurementPage';
 import { renderWithProviders } from '@/test/renderWithProviders';
 
@@ -20,12 +19,11 @@ describe('ProcurementPage', () => {
     expect(within(table).getByText(/On-The-Go Bag/i)).toBeInTheDocument();
   });
 
-  it('drafts purchase orders for all reorder items at once', async () => {
-    const user = userEvent.setup();
+  it('hands reorder planning to the governed Procurement request flow', async () => {
     renderWithProviders(<ProcurementPage />, { role: 'procurement' });
     await screen.findByText(/reorder worklist/i);
-
-    await user.click(screen.getByRole('button', { name: /draft all/i }));
-    expect(await screen.findByText(/drafted .*po/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /draft all/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /create procurement request/i }))
+      .toHaveAttribute('href', '/procurement/requests/new');
   });
 });

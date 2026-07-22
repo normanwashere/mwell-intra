@@ -3,7 +3,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useSession } from '@intra/auth';
 import { EVENTS_DEMO_DATA } from './seed';
-import type { EventDraft, EventLifecycle, EventRecord, EventsData } from './types';
+import type {
+  EventDraft,
+  EventFulfillmentRequest,
+  EventLifecycle,
+  EventManagementInput,
+  EventRecord,
+  EventsData,
+} from './types';
 
 type EventsClient = NonNullable<ReturnType<typeof useSession>['supabaseClient']>;
 type UnknownRow = Record<string, unknown>;
@@ -30,20 +37,102 @@ export function lifecycleForDates(
 }
 
 export function validateEventDraft(draft: EventDraft): string | null {
-  if (!draft.name.trim()) return 'Event name is required.';
-  if (!draft.startDate) return 'Start date is required.';
-  if (draft.endDate && draft.endDate < draft.startDate) {
-    return 'End date cannot be before the start date.';
+  const fields = validateEventDraftFields(draft);
+  return fields.name ?? fields.startDate ?? fields.endDate ?? null;
+}
+
+export function validateEventDraftFields(draft: EventDraft): Record<string, string> {
+  const errors: Record<string, string> = {};
+  if (!draft.name.trim()) errors.name = 'Event name is required.';
+  if (!draft.startDate) errors.startDate = 'Start date is required.';
+  if (draft.startDate && draft.endDate && draft.endDate < draft.startDate) {
+    errors.endDate = 'End date cannot be before the start date.';
   }
-  return null;
+  return errors;
+}
+
+function lifecycleForRow(row: UnknownRow): EventLifecycle {
+  const status = text(row.status);
+  if (status === 'cancelled' || status === 'closed') return status;
+  return lifecycleForDates(text(row.start_date), text(row.end_date) || undefined);
+}
+
+function mapEventRow(row: UnknownRow, totals = { reserved: 0, issued: 0, returned: 0 }): EventRecord {
+  return {
+    id: text(row.id),
+    name: text(row.name, 'Untitled event'),
+    type: text(row.type, 'corporate'),
+    startDate: text(row.start_date),
+    endDate: text(row.end_date) || undefined,
+    siteLocationId: text(row.site_location_id) || undefined,
+    ownerEmail: text(row.owner_email) || undefined,
+    updatedAt: text(row.updated_at) || undefined,
+    lifecycle: lifecycleForRow(row),
+    reservedUnits: totals.reserved,
+    issuedUnits: totals.issued,
+    returnedUnits: totals.returned,
+  };
+}
+
+export async function manageLiveEvent(
+  client: EventsClient,
+  input: EventManagementInput,
+): Promise<EventRecord> {
+  if (!input.reason.trim()) throw new Error('A reason is required.');
+  const changes = input.changes ?? {};
+  const { data, error } = await client.schema('warehouse').rpc('manage_event', {
+    payload: {
+      event_id: input.eventId,
+      action: input.action,
+      reason: input.reason.trim(),
+      expected_updated_at: input.expectedUpdatedAt,
+      changes: {
+        ...(changes.name !== undefined ? { name: changes.name.trim() } : {}),
+        ...(changes.type !== undefined ? { type: changes.type } : {}),
+        ...(changes.startDate !== undefined ? { start_date: changes.startDate } : {}),
+        ...(changes.endDate !== undefined ? { end_date: changes.endDate || null } : {}),
+        ...(changes.siteLocationId !== undefined ? { site_location_id: changes.siteLocationId || null } : {}),
+        ...(changes.ownerEmail !== undefined ? { owner_email: changes.ownerEmail.trim() } : {}),
+      },
+    },
+  });
+  if (error) throw error;
+  return mapEventRow((data ?? {}) as UnknownRow);
+}
+
+export async function requestEventFulfillment(
+  client: EventsClient,
+  input: EventFulfillmentRequest,
+): Promise<{ id: string; eventId: string }> {
+  if (!input.eventId || !input.purpose.trim() || !input.costCenter.trim() || !input.requiredDate) {
+    throw new Error('Event, purpose, cost center, and required date are required.');
+  }
+  if (!input.productId || !Number.isInteger(input.quantity) || input.quantity < 1) {
+    throw new Error('A product and positive whole-number quantity are required.');
+  }
+  const { data, error } = await client.schema('warehouse').rpc('request_event_fulfillment', {
+    payload: {
+      event_id: input.eventId,
+      requesting_department: input.requestingDepartment.trim(),
+      purpose: input.purpose.trim(),
+      cost_center: input.costCenter.trim(),
+      required_date: input.requiredDate,
+      expense_treatment: input.expenseTreatment,
+      lines: [{ productId: input.productId, quantity: input.quantity }],
+      idempotency_key: input.idempotencyKey,
+    },
+  });
+  if (error) throw error;
+  const row = (data ?? {}) as UnknownRow;
+  return { id: text(row.id), eventId: text(row.event_id) };
 }
 
 export async function loadLiveEvents(client: EventsClient): Promise<EventsData> {
-  const [eventResult, allocationResult] = await Promise.all([
+  const [eventResult, allocationResult, productResult] = await Promise.all([
     client
       .schema('warehouse')
       .from('events')
-      .select('id,name,type,site_location_id,start_date,end_date')
+      .select('id,name,type,site_location_id,start_date,end_date,status,owner_email,updated_at')
       .order('start_date', { ascending: false })
       .limit(1000),
     client
@@ -51,10 +140,19 @@ export async function loadLiveEvents(client: EventsClient): Promise<EventsData> 
       .from('allocations')
       .select('event_id,quantity,status')
       .limit(10000),
+    client
+      .schema('warehouse')
+      .from('products')
+      .select('id,name,item_class')
+      .eq('active', true)
+      .in('item_class', ['sellable_sku', 'merchandise'])
+      .order('name', { ascending: true })
+      .limit(1000),
   ]);
   const warnings: string[] = [];
   if (eventResult.error) warnings.push(`Events: ${eventResult.error.message}`);
   if (allocationResult.error) warnings.push(`Fulfillment: ${allocationResult.error.message}`);
+  if (productResult.error) warnings.push(`Products: ${productResult.error.message}`);
   const allocations = Array.isArray(allocationResult.data)
     ? (allocationResult.data as UnknownRow[])
     : [];
@@ -73,27 +171,22 @@ export async function loadLiveEvents(client: EventsClient): Promise<EventsData> 
   return {
     events: rows.map((row): EventRecord => {
       const id = text(row.id);
-      const startDate = text(row.start_date);
-      const endDate = text(row.end_date) || undefined;
       const total = totals.get(id) ?? { reserved: 0, issued: 0, returned: 0 };
-      return {
-        id,
-        name: text(row.name, 'Untitled event'),
-        type: text(row.type, 'corporate'),
-        startDate,
-        endDate,
-        siteLocationId: text(row.site_location_id) || undefined,
-        lifecycle: lifecycleForDates(startDate, endDate),
-        reservedUnits: total.reserved,
-        issuedUnits: total.issued,
-        returnedUnits: total.returned,
-      };
+      return mapEventRow(row, total);
     }),
+    products: (Array.isArray(productResult.data) ? productResult.data as UnknownRow[] : [])
+      .map((row) => ({
+        id: text(row.id),
+        name: text(row.name, 'Unnamed product'),
+        itemClass: text(row.item_class),
+      })),
     warnings,
   };
 }
 
 export async function createLiveEvent(client: EventsClient, draft: EventDraft): Promise<void> {
+  const validation = validateEventDraft(draft);
+  if (validation) throw new Error(validation);
   const id = `evt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const { error } = await client.schema('warehouse').rpc('create_event', {
     payload: {
@@ -177,6 +270,18 @@ export function useEventsData() {
     });
   }, [live, refresh]);
 
+  const manageEvent = useCallback(async (input: EventManagementInput) => {
+    if (!live) throw new Error('Event lifecycle changes require Supabase mode.');
+    const updated = await manageLiveEvent(live, input);
+    await refresh();
+    return updated;
+  }, [live, refresh]);
+
+  const requestFulfillment = useCallback(async (input: EventFulfillmentRequest) => {
+    if (!live) throw new Error('Warehouse fulfillment requests require Supabase mode.');
+    return requestEventFulfillment(live, input);
+  }, [live]);
+
   useEffect(() => { void refresh(); }, [refresh]);
-  return { data, loading, error, refresh, createEvent };
+  return { data, loading, error, refresh, createEvent, manageEvent, requestFulfillment };
 }

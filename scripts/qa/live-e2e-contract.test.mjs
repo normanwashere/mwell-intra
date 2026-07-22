@@ -289,7 +289,10 @@ test("route crawl enforces an exact role-to-route authorization matrix", async (
   assert.match(source, /expectedAccess: allowed \? "allowed" : "denied"/);
   assert.match(source, /routeClass === expectedClass/);
   assert.match(source, /no \(\?:warehouse\|procurement[\s\S]*finance\) access/);
-  assert.match(source, /for \(const route of routesFor\(user\)\)/);
+  assert.match(
+    source,
+    /for \(const route of routesFor\(user, discoveredRoutes\)\)/,
+  );
   assert.match(
     source,
     /allowed: \(user\) => hasAssignedModule\(user, "events"\)/,
@@ -307,6 +310,44 @@ test("route crawl enforces an exact role-to-route authorization matrix", async (
     source,
     /text: \/Finance\|Payment readiness\|Valuation\|Your areas\|Vendor Portal\|Access denied\/i/,
   );
+});
+
+test("route crawl rejects silent redirects and verifies record-specific detail content", async () => {
+  const source = await readFile(
+    new URL("./full-intra-live-e2e.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /finalPathMatches\(route\.path, page\.url\(\)\)/);
+  assert.match(
+    source,
+    /route\.recordText\s*\?\s*route\.recordText\.test\(audit\.text\)/,
+  );
+  assert.match(
+    source,
+    /path: "\/procurement\/requests\/req_seed_001"[\s\S]*recordText: \/Emergency aircon repair/,
+  );
+  assert.match(
+    source,
+    /path: "\/legal\/cases\/case_seed_001"[\s\S]*recordText: \/Acme Medical Supplies/,
+  );
+});
+
+test("route crawl covers visible same-origin navigation discovered from the shell DOM", async () => {
+  const source = await readFile(
+    new URL("./full-intra-live-e2e.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    source,
+    /async function discoverVisibleNavigationRoutes\(page\)/,
+  );
+  assert.match(
+    source,
+    /nav a\[href\][\s\S]*\[role=["']navigation["']\] a\[href\]/,
+  );
+  assert.match(source, /const target = new URL\(href, location\.origin\)/);
+  assert.match(source, /target\.origin !== location\.origin/);
+  assert.match(source, /routesFor\(user, discoveredRoutes\)/);
 });
 
 test("the mutating harness waits for quality data and uses unambiguous DOA controls", async () => {
@@ -932,9 +973,12 @@ test("mobile transaction checks target visible records and unobstructed actions"
     audit,
     /if \(await mobileNavigation\.count\(\)\)[\s\S]*?else \{[\s\S]*?await saveDraft\.scrollIntoViewIfNeeded\(\)/,
   );
-  assert.match(doaPage, /createPortal\(/);
   assert.match(doaPage, /data-mobile-action-bar="true"/);
-  assert.match(doaPage, /document\.body/);
+  assert.match(
+    doaPage,
+    /sticky bottom-\[calc\(5\.25rem\+env\(safe-area-inset-bottom\)\)\]/,
+  );
+  assert.doesNotMatch(doaPage, /createPortal\(/);
   assert.match(audit, /slice\(0, 1_200\)/);
 });
 
@@ -998,8 +1042,9 @@ test("the DOA editor cannot submit while asynchronous workspace data shifts the 
   assert.match(page, /data-mobile-action-bar="true"/);
   assert.match(
     page,
-    /createPortal\([\s\S]*fixed inset-x-4 bottom-\[calc\(5\.25rem\+env\(safe-area-inset-bottom\)\)\] z-40[\s\S]*md:hidden[\s\S]*document\.body/,
+    /sticky bottom-\[calc\(5\.25rem\+env\(safe-area-inset-bottom\)\)\][\s\S]*md:hidden/,
   );
+  assert.doesNotMatch(page, /createPortal\(/);
   assert.match(page, /mt-5 hidden justify-end md:flex/);
   assert.doesNotMatch(
     page,
@@ -1262,21 +1307,34 @@ test("department-only amendment approvers can reach their narrowly scoped queue"
 });
 
 test("the issue client excludes exact holds and can select another valid source", async () => {
-  const source = await readFile(
-    new URL(
-      "../../packages/data-kit/src/supabase/SupabaseRepository.ts",
-      import.meta.url,
+  const [source, behaviorTests] = await Promise.all([
+    readFile(
+      new URL(
+        "../../packages/data-kit/src/supabase/SupabaseRepository.ts",
+        import.meta.url,
+      ),
+      "utf8",
     ),
-    "utf8",
-  );
+    readFile(
+      new URL(
+        "../../packages/data-kit/src/supabase/SupabaseRepository.test.ts",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  ]);
   assert.match(
     source,
-    /from\('inventory_holds'\)[\s\S]*?eq\('status', 'active'\)/,
+    /from\(["']inventory_holds["']\)[\s\S]*?eq\(["']status["'],\s*["']active["']\)/,
   );
   assert.match(source, /isHeldSerializedUnit/);
   assert.match(source, /unheldBulkQuantity/);
   assert.match(
     source,
-    /locationIds\.find\(\(locationId\) => availableAt\(locationId\) >= allocation\.quantity\)/,
+    /locationIds\.find\(\s*\(locationId\) => availableAt\(locationId\) >= allocation\.quantity,?\s*\)/,
+  );
+  assert.match(
+    behaviorTests,
+    /avoids exact held stock and selects another unheld source location/,
   );
 });

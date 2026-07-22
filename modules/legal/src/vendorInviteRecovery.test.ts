@@ -44,4 +44,12 @@ describe("vendor invitation delivery recovery", () => {
     expect(page).toContain("Retry invitation email");
     expect(page).toContain("invite.status === 'delivery_failed'");
   });
+
+  it('reconciles expiry before retry and records replay attempts', () => {
+    const edge = rootSource('supabase/functions/vendor-invite-delivery/index.ts');
+
+    expect(edge).toContain('reconcile_vendor_invite_lifecycle');
+    expect(edge).toContain('status: "replay_rejected"');
+    expect(edge).toContain('expires_at: expiresAt');
+  });
 });

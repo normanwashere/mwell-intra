@@ -4,11 +4,8 @@ import { useEffect, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { Badge, EmptyState, Icon } from "@intra/ui";
 import { useSession } from "@intra/auth";
-import { KNOWLEDGE_CONTENT } from "@shell/lib/knowledge/content";
-import {
-  COMING_SOON_ROLES,
-  knowledgeRoleIdsForAssignments,
-} from "@shell/lib/knowledge/roles";
+import { knowledgeRoleIdsForAssignments } from "@shell/lib/knowledge/roles";
+import { knowledgeContentForAudience } from "@shell/lib/knowledge/audience";
 import {
   searchKnowledge,
   type HandbookEntryMode,
@@ -33,11 +30,6 @@ const AVAILABILITY_FILTERS = new Set<KnowledgeAvailability | "all">([
   "coming_soon",
 ]);
 
-export const KNOWLEDGE_GUIDE_CONTENT: KnowledgeContent = {
-  ...KNOWLEDGE_CONTENT,
-  roles: [...KNOWLEDGE_CONTENT.roles, ...COMING_SOON_ROLES],
-};
-
 export function resolveKnowledgeGuide(
   content: KnowledgeContent,
   articleId: string | null,
@@ -52,7 +44,7 @@ export function resolveKnowledgeGuide(
   return null;
 }
 
-export function KnowledgeBase() {
+export function KnowledgeBase({ content }: { content: KnowledgeContent }) {
   const { profile, loading, userRoles } = useSession();
   const params = useSearchParams();
   const paramKey = params.toString();
@@ -83,22 +75,25 @@ export function KnowledgeBase() {
   const flowId = params.get("flow");
   const stepId = params.get("step");
   const glossaryTerm = params.get("glossary");
+  const scopedContent = useMemo(
+    () => knowledgeContentForAudience(content, profile?.kind ?? "vendor"),
+    [content, profile?.kind],
+  );
   const rolesById = useMemo(
-    () => new Map(KNOWLEDGE_GUIDE_CONTENT.roles.map((role) => [role.id, role])),
-    [],
+    () => new Map(scopedContent.roles.map((role) => [role.id, role])),
+    [scopedContent],
   );
   const articlesById = useMemo(
-    () =>
-      new Map(KNOWLEDGE_GUIDE_CONTENT.articles.map((item) => [item.id, item])),
-    [],
+    () => new Map(scopedContent.articles.map((item) => [item.id, item])),
+    [scopedContent],
   );
   const results = useMemo(
     () =>
-      searchKnowledge(KNOWLEDGE_GUIDE_CONTENT, query, {
+      searchKnowledge(scopedContent, query, {
         module,
         roleId: roleId || undefined,
       }),
-    [module, query, roleId],
+    [module, query, roleId, scopedContent],
   );
 
   const setParams = (
@@ -173,11 +168,11 @@ export function KnowledgeBase() {
       />
     );
 
-  const glossary = KNOWLEDGE_GUIDE_CONTENT.glossary.find(
+  const glossary = scopedContent.glossary.find(
     (item) => item.term.toLowerCase() === glossaryTerm?.toLowerCase(),
   );
   if (glossary) {
-    const relatedFlows = KNOWLEDGE_GUIDE_CONTENT.flows.filter((item) =>
+    const relatedFlows = scopedContent.flows.filter((item) =>
       `${item.title} ${item.summary} ${item.nodes.map((node) => `${node.title} ${node.body}`).join(" ")}`
         .toLowerCase()
         .includes(glossary.term.toLowerCase()),
@@ -187,9 +182,7 @@ export function KnowledgeBase() {
         <button
           type="button"
           className="btn-ghost btn-sm"
-          onClick={() =>
-            setParams({ glossary: null }, { scroll: "restore" })
-          }
+          onClick={() => setParams({ glossary: null }, { scroll: "restore" })}
         >
           <Icon name="chevron" className="h-4 w-4 rotate-90" />
           Back to Knowledge Base
@@ -233,7 +226,7 @@ export function KnowledgeBase() {
     );
   }
 
-  const guide = resolveKnowledgeGuide(KNOWLEDGE_GUIDE_CONTENT, articleId);
+  const guide = resolveKnowledgeGuide(scopedContent, articleId);
   const openArticle = (id: string) =>
     setParams({ article: id, flow: null, step: null, view: null });
   const openFlow = (id: string) =>
@@ -244,21 +237,19 @@ export function KnowledgeBase() {
       <KnowledgeRoleGuide
         role={guide.role}
         rolesById={rolesById}
-        relatedFeatures={KNOWLEDGE_GUIDE_CONTENT.features.filter((feature) =>
+        relatedFeatures={scopedContent.features.filter((feature) =>
           feature.roleIds.includes(roleId),
         )}
-        relatedArticles={KNOWLEDGE_GUIDE_CONTENT.articles.filter(
+        relatedArticles={scopedContent.articles.filter(
           (item) =>
             item.id !== `role-${roleId}` &&
             !item.id.startsWith("feature-") &&
             item.roles.includes(roleId),
         )}
-        relatedFlows={KNOWLEDGE_GUIDE_CONTENT.flows.filter((item) =>
+        relatedFlows={scopedContent.flows.filter((item) =>
           item.roles.includes(roleId),
         )}
-        onBack={() =>
-          setParams({ article: null }, { scroll: "restore" })
-        }
+        onBack={() => setParams({ article: null }, { scroll: "restore" })}
         onOpenArticle={openArticle}
         onOpenFlow={openFlow}
       />
@@ -269,7 +260,7 @@ export function KnowledgeBase() {
       <FeatureGuide
         feature={guide.feature}
         rolesById={rolesById}
-        relatedArticles={KNOWLEDGE_GUIDE_CONTENT.articles.filter(
+        relatedArticles={scopedContent.articles.filter(
           (item) =>
             !item.id.startsWith("role-") &&
             !item.id.startsWith("feature-") &&
@@ -278,39 +269,31 @@ export function KnowledgeBase() {
             ),
         )}
         relatedFlows={guide.feature.relatedFlowIds.flatMap((flowId) => {
-          const flow = KNOWLEDGE_GUIDE_CONTENT.flows.find(
-            (item) => item.id === flowId,
-          );
+          const flow = scopedContent.flows.find((item) => item.id === flowId);
           return flow ? [flow] : [];
         })}
-        evidence={KNOWLEDGE_GUIDE_CONTENT.evidence.filter(
+        evidence={scopedContent.evidence.filter(
           (item) => item.featureId === guide.feature.id,
         )}
-        onBack={() =>
-          setParams({ article: null }, { scroll: "restore" })
-        }
+        onBack={() => setParams({ article: null }, { scroll: "restore" })}
         onOpenArticle={openArticle}
         onOpenFlow={openFlow}
       />
     );
 
-  const article = KNOWLEDGE_GUIDE_CONTENT.articles.find(
-    (item) => item.id === articleId,
-  );
+  const article = scopedContent.articles.find((item) => item.id === articleId);
   if (article)
     return (
       <KnowledgeArticle
         article={article}
         rolesById={rolesById}
         articlesById={articlesById}
-        onBack={() =>
-          setParams({ article: null }, { scroll: "restore" })
-        }
+        onBack={() => setParams({ article: null }, { scroll: "restore" })}
         onOpenArticle={openArticle}
         onOpenFlow={openFlow}
       />
     );
-  const flow = KNOWLEDGE_GUIDE_CONTENT.flows.find((item) => item.id === flowId);
+  const flow = scopedContent.flows.find((item) => item.id === flowId);
   if (flow)
     return (
       <div className="space-y-5">
@@ -333,11 +316,9 @@ export function KnowledgeBase() {
               ? stepId!
               : flow.startNodeId
           }
-          evidence={KNOWLEDGE_GUIDE_CONTENT.evidence}
+          evidence={scopedContent.evidence}
           rolesById={rolesById}
-          onSelectNode={(id) =>
-            setParams({ step: id }, { scroll: "preserve" })
-          }
+          onSelectNode={(id) => setParams({ step: id }, { scroll: "preserve" })}
         />
       </div>
     );
@@ -364,7 +345,7 @@ export function KnowledgeBase() {
 
   return (
     <HandbookLanding
-      content={KNOWLEDGE_GUIDE_CONTENT}
+      content={scopedContent}
       results={results}
       query={query}
       mode={mode}

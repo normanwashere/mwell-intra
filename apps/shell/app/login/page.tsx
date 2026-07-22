@@ -31,6 +31,7 @@ export default function LoginPage() {
     userRoles,
     userCapabilities,
     mode,
+    loading,
     signingIn,
     authError,
     memoryProfiles,
@@ -51,16 +52,25 @@ export default function LoginPage() {
   }, []);
 
   useEffect(() => {
-    if (!profile || redirecting) return;
-    setRedirecting(true);
-    replaceDocument(
-      authorizedPostLoginPath(
-        redirectTo,
-        { mode, userRoles, userCapabilities },
-        profile.kind,
-      ),
+    if (!profile || loading || redirecting) return;
+    const destination = authorizedPostLoginPath(
+      redirectTo,
+      { mode, userRoles, userCapabilities },
+      profile.kind,
+      !loading,
     );
-  }, [mode, profile, redirectTo, redirecting, userCapabilities, userRoles]);
+    if (!destination) return;
+    setRedirecting(true);
+    replaceDocument(destination);
+  }, [
+    loading,
+    mode,
+    profile,
+    redirectTo,
+    redirecting,
+    userCapabilities,
+    userRoles,
+  ]);
 
   const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();

@@ -79,28 +79,12 @@ describe("PurchaseOrdersPage", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("creates a new purchase order", async () => {
-    const user = userEvent.setup();
+  it("never exposes raw Warehouse PO authoring", async () => {
     renderWithProviders(<PurchaseOrdersPage />, { role: "procurement" });
     await screen.findByLabelText("Purchase orders");
-
-    await user.click(screen.getByRole("button", { name: /new po/i }));
-    const dialog = await screen.findByRole("dialog", {
-      name: /new purchase order/i,
-    });
-    await user.selectOptions(
-      within(dialog).getByLabelText("Product"),
-      "smart-watch",
-    );
-    await user.click(within(dialog).getByRole("button", { name: /add line/i }));
-    expect(within(dialog).getByLabelText("Draft lines")).toBeInTheDocument();
-    await user.click(
-      within(dialog).getByRole("button", { name: /create po/i }),
-    );
-
-    await waitFor(() => {
-      expect(screen.getByText(/purchase order created/i)).toBeInTheDocument();
-    });
+    expect(screen.queryByRole("button", { name: /new po/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /open procurement requests/i }))
+      .toHaveAttribute("href", "/procurement/requests");
   });
 
   it("receives stock via the PO detail sheet (row is the target)", async () => {
@@ -352,6 +336,7 @@ describe("PurchaseOrdersPage", () => {
       screen.queryByRole("link", { name: /open quality queue/i }),
     ).not.toBeInTheDocument();
     expect(within(list).getByText("PO-LIVE-001")).toBeInTheDocument();
+    expect(within(list).queryByText(/mWellness Wearables/i)).not.toBeInTheDocument();
     expect(within(list).queryByText("PO-CACHED")).not.toBeInTheDocument();
     await user.click(
       within(list).getByRole("button", { name: /^receive and inspect$/i }),

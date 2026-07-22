@@ -50,6 +50,7 @@ import {
   uploadRequestAttachments,
   type PendingRequestAttachment,
 } from './attachments';
+import { requestCreationRpc } from './requestDrafts';
 
 type MaybePromise<T> = T | Promise<T>;
 type LiveClient = NonNullable<ReturnType<typeof useSession>['supabaseClient']>;
@@ -551,6 +552,7 @@ export function isProvisional(v: ProcurementVendor): boolean {
 // ---------------------------------------------------------------------------
 
 export interface NewRequestInput {
+  draftId?: string;
   title: string;
   description?: string;
   department?: string;
@@ -654,7 +656,7 @@ export function useProcurementRequests(): ProcurementRequestsAPI {
         category: input.category,
         amount: estimatedAmount,
       });
-      const requestId = newId('req');
+      const requestId = input.draftId ?? newId('req');
       const attachments: RequestAttachment[] = isLive(live)
         ? await uploadRequestAttachments(live, requestId, input.attachments ?? [])
         : await materializeMemoryAttachments(input.attachments ?? []);
@@ -686,7 +688,7 @@ export function useProcurementRequests(): ProcurementRequestsAPI {
       };
       if (isLive(live)) {
         try {
-          const row = await liveRpc<LiveRow>(live, 'procurement', 'create_request', {
+          const row = await liveRpc<LiveRow>(live, 'procurement', requestCreationRpc(input.draftId), {
             id: next.id,
             title: next.title,
             description: next.description,

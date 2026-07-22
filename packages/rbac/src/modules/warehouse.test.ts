@@ -8,12 +8,14 @@ const roles = (warehouse: string[]): UserRoles => ({
   legal: [],
   events: [],
   insights: [],
+  product: [],
 });
 
 describe("warehouse W1 capabilities", () => {
   it("defines the canonical two-person Warehouse operating roles", () => {
     expect(warehouseModule.roles.warehouse_operator.capabilities).toEqual([
       "view_dashboard",
+      "view_inventory",
       "receive_stock",
       "manage_inventory",
       "cycle_count",
@@ -26,6 +28,7 @@ describe("warehouse W1 capabilities", () => {
     ]);
     expect(warehouseModule.roles.warehouse_supervisor.capabilities).toEqual([
       "view_dashboard",
+      "view_inventory",
       "receive_stock",
       "manage_inventory",
       "manage_products",
@@ -115,7 +118,12 @@ describe("warehouse W1 capabilities", () => {
   it("adds the Warehouse Administrator role", () => {
     expect(Object.keys(warehouseModule.roles)).toContain("warehouse_admin");
     expect(warehouseModule.roles.warehouse_admin.capabilities).toEqual(
-      warehouseModule.capabilities,
+      warehouseModule.capabilities.filter(
+        (capability) => capability !== "set_pricing",
+      ),
+    );
+    expect(warehouseModule.roles.warehouse_admin.capabilities).not.toContain(
+      "set_pricing",
     );
   });
 
@@ -149,6 +157,17 @@ describe("warehouse W1 capabilities", () => {
     expect(can(bi, "warehouse", "view_exceptions")).toBe(true);
     expect(can(bi, "warehouse", "resolve_exceptions")).toBe(false);
   });
+
+  it.each(["finance", "pricing"] as const)(
+    "keeps %s inventory access read-only",
+    (role) => {
+      const capabilities = warehouseModule.roles[role].capabilities;
+      expect(capabilities).toContain("view_inventory");
+      expect(capabilities).not.toContain("manage_inventory");
+      expect(capabilities).not.toContain("cycle_count");
+      expect(capabilities).not.toContain("transfer_stock");
+    },
+  );
 
   it("does not grant import access to a Business Unit user", () => {
     expect(

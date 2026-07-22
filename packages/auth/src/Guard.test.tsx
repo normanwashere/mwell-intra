@@ -13,7 +13,7 @@ beforeEach(() => {
 });
 
 // logistics_supervisor grants `receive_stock` (not `reserve_allocate`);
-// business_unit grants `reserve_allocate` (not `receive_stock`).
+// business_unit grants governed stock requests (not custody or receiving).
 const PROFILES: MemoryProfile[] = [
   {
     id: 'sup',
@@ -38,7 +38,11 @@ function SignInOnMount({ email }: { email: string }) {
   return <span data-testid="who">{profile?.email ?? 'anon'}</span>;
 }
 
-function CanProbe({ cap }: { cap: 'receive_stock' | 'reserve_allocate' }) {
+function CanProbe({
+  cap,
+}: {
+  cap: 'receive_stock' | 'reserve_allocate' | 'request_stock';
+}) {
   const allowed = useCan('warehouse', cap);
   return <span data-testid="probe">{allowed ? 'yes' : 'no'}</span>;
 }
@@ -303,7 +307,7 @@ describe('useCan', () => {
     render(
       <SessionProvider config={{ mode: 'memory', profiles: PROFILES }}>
         <SignInOnMount email="bu@mwell.test" />
-        <CanProbe cap="reserve_allocate" />
+        <CanProbe cap="request_stock" />
       </SessionProvider>,
     );
     await screen.findByText('bu@mwell.test');

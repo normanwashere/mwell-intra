@@ -30,10 +30,8 @@ const plainText = (markup: string) =>
     .replaceAll("&gt;", ">");
 import { FeatureGuide } from "@shell/components/knowledge/FeatureGuide";
 import { KnowledgeRoleGuide } from "@shell/components/knowledge/KnowledgeRoleGuide";
-import {
-  KNOWLEDGE_GUIDE_CONTENT,
-  resolveKnowledgeGuide,
-} from "@shell/components/knowledge/KnowledgeBase";
+import { resolveKnowledgeGuide } from "@shell/components/knowledge/KnowledgeBase";
+import { KNOWLEDGE_GUIDE_CONTENT } from "./guideContent";
 import { KNOWLEDGE_CONTENT } from "./content";
 import { ROLE_ROUTE_PARENT_PATHS } from "./roles";
 import { searchKnowledge } from "./search";
