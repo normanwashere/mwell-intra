@@ -424,6 +424,7 @@ test("the invite workflow verifies the persisted delivery state", async () => {
   assert.match(source, /AUDIT_REQUIRE_VENDOR_DELIVERY/);
   assert.match(source, /AUDIT_VENDOR_EMAIL/);
   assert.match(source, /controlled mailbox template containing \{marker\}/);
+  assert.match(source, /vendorDeliveryConfigurationError/);
   assert.match(source, /replaceAll\("\{marker\}", marker\.toLowerCase\(\)\)/);
   assert.match(source, /deliveryStatus !== "sent"/);
   assert.match(source, /auth_user_id,expires_at,link_generation/);

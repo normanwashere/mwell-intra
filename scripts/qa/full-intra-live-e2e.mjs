@@ -90,16 +90,12 @@ const requireVendorDelivery =
   process.env.AUDIT_REQUIRE_VENDOR_DELIVERY === "true";
 const controlledVendorEmail =
   process.env.AUDIT_VENDOR_EMAIL?.trim().toLowerCase();
-
-if (
+const vendorDeliveryConfigurationError =
   mutatingPhase &&
   requireVendorDelivery &&
   !controlledVendorEmail?.includes("{marker}")
-) {
-  throw new Error(
-    "AUDIT_VENDOR_EMAIL must be a controlled mailbox template containing {marker} when AUDIT_REQUIRE_VENDOR_DELIVERY=true.",
-  );
-}
+    ? "AUDIT_VENDOR_EMAIL must be a controlled mailbox template containing {marker} when AUDIT_REQUIRE_VENDOR_DELIVERY=true."
+    : null;
 
 const protectionBypass = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
 assertApprovedMutationTarget({
@@ -1029,6 +1025,8 @@ async function procurementCreateRequestWorkflow(page, marker) {
 }
 
 async function legalInviteVendorWorkflow(page, marker) {
+  if (vendorDeliveryConfigurationError)
+    throw new Error(vendorDeliveryConfigurationError);
   const unique = Date.now();
   const companyName = `${marker} Vendor`;
   const vendorEmail = vendorAuditEmail(marker);
