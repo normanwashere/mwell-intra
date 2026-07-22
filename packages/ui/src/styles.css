@@ -320,6 +320,17 @@ select.input {
   background-size: 1.1rem;
 }
 
+/* Native controls without a component class still need a complete touch
+   target. This covers operational forms mounted by individual Intra modules
+   while leaving compact checkboxes, radios, and hidden fields unchanged. */
+@media (max-width: 767px) {
+  input:not([type='checkbox']):not([type='radio']):not([type='hidden']),
+  select,
+  textarea {
+    min-height: 2.75rem;
+  }
+}
+
 .label {
   display: block;
   margin-bottom: 0.375rem;

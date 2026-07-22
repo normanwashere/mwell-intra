@@ -233,7 +233,7 @@ export function EventsApp({
             {mayClose && !['closed', 'cancelled'].includes(selectedEvent.lifecycle) && (
               <>
                 <button type="button" className="btn-outline" onClick={() => openManagement('close')}>Close event</button>
-                <button type="button" className="btn-ghost text-rose-600" onClick={() => openManagement('cancel')}>Cancel event</button>
+                <button type="button" className="btn-ghost text-rose-700 dark:text-rose-300" onClick={() => openManagement('cancel')}>Cancel event</button>
               </>
             )}
             {mayClose && ['closed', 'cancelled'].includes(selectedEvent.lifecycle) && (

@@ -8,6 +8,8 @@ describe("MwellIntraLogo", () => {
     const markup = renderToStaticMarkup(<MwellIntraLogo />);
 
     expect(markup).toContain("mwell-wordmark.png");
+    expect(markup).toContain('role="img"');
+    expect(markup).toContain('aria-label="mWell Intra"');
     expect(markup).toContain(">Intra<");
   });
 
@@ -15,6 +17,8 @@ describe("MwellIntraLogo", () => {
     const markup = renderToStaticMarkup(<MwellIntraLogo showLabel={false} />);
 
     expect(markup).toContain("mwell-wordmark.png");
+    expect(markup).toContain('role="img"');
+    expect(markup).toContain('aria-label="mWell"');
     expect(markup).not.toContain(">Intra<");
   });
 });

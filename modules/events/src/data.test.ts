@@ -219,6 +219,7 @@ describe('event lifecycle rules', () => {
     expect(app).toContain('Reschedule');
     expect(app).toContain('Close event');
     expect(app).toContain('Cancel event');
+    expect(app).toContain('btn-ghost text-rose-700 dark:text-rose-300');
     expect(app).toContain('Reopen event');
     expect(app).toContain('Request warehouse stock');
     expect(app).toContain('error={formErrors.startDate}');

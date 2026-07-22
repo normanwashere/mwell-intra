@@ -23,6 +23,7 @@ export function MwellIntraLogo({
         "inline-flex min-w-0 select-none items-center gap-2",
         className,
       )}
+      role="img"
       aria-label={showLabel ? "mWell Intra" : "mWell"}
     >
       <Image
