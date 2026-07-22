@@ -43,7 +43,7 @@ export interface VendorInvitationAcceptance {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 export function readPendingVendorInvitation(
@@ -54,9 +54,9 @@ export function readPendingVendorInvitation(
   const inviteId = pending.invite_id;
   const linkGeneration = pending.link_generation;
   if (
-    typeof inviteId !== 'string' ||
+    typeof inviteId !== "string" ||
     inviteId.length === 0 ||
-    typeof linkGeneration !== 'number' ||
+    typeof linkGeneration !== "number" ||
     !Number.isInteger(linkGeneration) ||
     linkGeneration < 1
   )
@@ -69,9 +69,9 @@ export function readVendorInvitationEvidence(
   pending: PendingVendorInvitation,
 ): VendorInvitationEvidence | null {
   const params = new URLSearchParams(locationSearch);
-  const inviteId = params.get('invite_id');
-  const linkGeneration = Number(params.get('generation'));
-  const acceptanceToken = params.get('acceptance_token');
+  const inviteId = params.get("invite_id");
+  const linkGeneration = Number(params.get("generation"));
+  const acceptanceToken = params.get("acceptance_token");
   if (
     inviteId !== pending.inviteId ||
     linkGeneration !== pending.linkGeneration ||
@@ -80,6 +80,22 @@ export function readVendorInvitationEvidence(
   )
     return null;
   return { inviteId, linkGeneration, acceptanceToken };
+}
+
+export function hasVendorInvitationLinkEvidence(
+  locationSearch: string,
+): boolean {
+  const params = new URLSearchParams(locationSearch);
+  const inviteId = params.get("invite_id");
+  const linkGeneration = Number(params.get("generation"));
+  const acceptanceToken = params.get("acceptance_token");
+  return Boolean(
+    inviteId &&
+    Number.isInteger(linkGeneration) &&
+    linkGeneration > 0 &&
+    acceptanceToken &&
+    acceptanceToken.length >= 32,
+  );
 }
 
 export async function acceptPendingVendorInvitation(options: {
@@ -92,25 +108,33 @@ export async function acceptPendingVendorInvitation(options: {
   const pending = readPendingVendorInvitation(data.user?.app_metadata);
   if (!pending) return { accepted: false };
   const evidence = readVendorInvitationEvidence(
-    options.locationSearch ?? (typeof window === 'undefined' ? '' : window.location.search),
+    options.locationSearch ??
+      (typeof window === "undefined" ? "" : window.location.search),
     pending,
   );
   if (!evidence) return { accepted: false };
 
-  const response = await (options.fetcher ?? fetch)('/api/legal/vendor-invites', {
-    method: 'POST',
-    credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      action: 'accept',
-      invite_id: evidence.inviteId,
-      expected_generation: evidence.linkGeneration,
-      acceptance_token: evidence.acceptanceToken,
-    }),
-  });
-  const result = (await response.json().catch(() => ({}))) as AcceptanceResponse;
+  const response = await (options.fetcher ?? fetch)(
+    "/api/legal/vendor-invites",
+    {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "accept",
+        invite_id: evidence.inviteId,
+        expected_generation: evidence.linkGeneration,
+        acceptance_token: evidence.acceptanceToken,
+      }),
+    },
+  );
+  const result = (await response
+    .json()
+    .catch(() => ({}))) as AcceptanceResponse;
   if (!response.ok || result.accepted !== true) {
-    throw new Error(result.error ?? 'This vendor invitation could not be accepted.');
+    throw new Error(
+      result.error ?? "This vendor invitation could not be accepted.",
+    );
   }
 
   const { error: refreshError } = await options.client.auth.refreshSession();

@@ -23,7 +23,10 @@ import { SignInstrumentPage } from "./pages/SignInstrumentPage";
 import { VendorApplicationPage } from "./pages/VendorApplicationPage";
 import { LegalTabs } from "./components/LegalTabs";
 import { LEGAL_ROUTE_BY_ID } from "./routes";
-import { acceptPendingVendorInvitation } from "./vendorInviteAuthority";
+import {
+  acceptPendingVendorInvitation,
+  hasVendorInvitationLinkEvidence,
+} from "./vendorInviteAuthority";
 
 export interface LegalAppProps {
   /** Path prefix the shell mounts this module under (default `/legal`). */
@@ -54,6 +57,12 @@ export function LegalApp({ basename = "/legal" }: LegalAppProps) {
   const { userRoles, profile, loading, signOut, mode, supabaseClient } =
     useSession();
   const isVendorSurface = basename.startsWith("/vendor");
+  const [vendorInviteSearch, setVendorInviteSearch] = useState<string | null>(
+    null,
+  );
+  useEffect(() => {
+    setVendorInviteSearch(isVendorSurface ? window.location.search : "");
+  }, [isVendorSurface]);
   const isVendor = isVendorSurface && profile?.kind === "vendor";
   const hasInternalAccess = can(userRoles, "legal", "view_dashboard");
   // External vendor tier lives in core (reconciled 2026-07-05, ADR-002 #3).
@@ -80,7 +89,23 @@ export function LegalApp({ basename = "/legal" }: LegalAppProps) {
     isVendorSurface &&
     !canUseVendorSurface &&
     mode === "supabase" &&
-    supabaseClient
+    supabaseClient &&
+    vendorInviteSearch === null
+  ) {
+    return (
+      <main className="mx-auto max-w-5xl space-y-6 p-4 md:p-6" aria-busy="true">
+        <SkeletonStats />
+        <SkeletonList rows={5} />
+      </main>
+    );
+  }
+
+  if (
+    isVendorSurface &&
+    !canUseVendorSurface &&
+    mode === "supabase" &&
+    supabaseClient &&
+    hasVendorInvitationLinkEvidence(vendorInviteSearch ?? "")
   ) {
     return (
       <VendorInvitationAcceptanceGate

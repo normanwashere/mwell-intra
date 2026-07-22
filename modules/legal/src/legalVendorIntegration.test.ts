@@ -30,6 +30,7 @@ describe('Legal/vendor lifecycle UI integration', () => {
     expect(page).not.toContain('repository.acceptInvitation()');
     expect(app).toContain('VendorInvitationAcceptanceGate');
     expect(app).toContain('acceptPendingVendorInvitation');
+    expect(app).toContain('hasVendorInvitationLinkEvidence');
     expect(store).toContain('expiresAt: row.expires_at');
     expect(store).toContain('linkGeneration: Number(row.link_generation');
   });
