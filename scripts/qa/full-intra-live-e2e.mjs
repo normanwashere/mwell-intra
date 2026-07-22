@@ -510,6 +510,10 @@ function canonicalPath(pathname) {
   return pathname.replace(/\/+$/, "");
 }
 
+function isEphemeralAuditPath(pathname) {
+  return /\/(?:QA-\d{8}-[A-F0-9]{8})(?:-|\/|$)/i.test(pathname);
+}
+
 function finalPathMatches(expectedPath, currentUrl) {
   const actualPath = canonicalPath(new URL(currentUrl).pathname);
   const acceptedPaths = new Map([
@@ -524,7 +528,7 @@ function finalPathMatches(expectedPath, currentUrl) {
 }
 
 async function collectVisibleSameOriginRoutes(page, selector) {
-  return page.locator(selector).evaluateAll((links) => {
+  const routes = await page.locator(selector).evaluateAll((links) => {
     const paths = links.flatMap((link) => {
       const style = getComputedStyle(link);
       const rect = link.getBoundingClientRect();
@@ -550,6 +554,7 @@ async function collectVisibleSameOriginRoutes(page, selector) {
     });
     return [...new Set(paths)];
   });
+  return routes.filter((pathname) => !isEphemeralAuditPath(pathname));
 }
 
 async function discoverVisibleNavigationRoutes(page) {
@@ -983,7 +988,8 @@ async function auditKeyboardAndHotspots(page) {
     );
     const undersizedTargets = controls
       .map((element) => {
-        const associatedLabel = "labels" in element ? element.labels?.[0] : null;
+        const associatedLabel =
+          "labels" in element ? element.labels?.[0] : null;
         const enclosingLabel = associatedLabel?.contains(element)
           ? associatedLabel
           : element.closest("label");

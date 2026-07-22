@@ -411,6 +411,11 @@ test("route crawl covers visible same-origin navigation discovered from the shel
   assert.match(source, /getByRole\("dialog", \{ name: "All areas"/);
   assert.match(source, /discoverSafeDetailRoutes\(page\)/);
   assert.match(source, /recursive-rendered-link/);
+  assert.match(
+    source,
+    /routes\.filter\(\(pathname\) => !isEphemeralAuditPath\(pathname\)\)/,
+  );
+  assert.match(source, /QA-\\d\{8\}-\[A-F0-9\]\{8\}/);
 });
 
 test("the mutating harness waits for quality data and uses unambiguous DOA controls", async () => {
