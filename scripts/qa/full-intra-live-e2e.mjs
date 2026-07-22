@@ -1,4 +1,5 @@
 import { createRequire } from "node:module";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
@@ -21,6 +22,45 @@ import { resolveSharedUatPassword } from "./provision-uat-intra-test-users.mjs";
 
 const require = createRequire(path.resolve("apps/shell/package.json"));
 const { chromium } = require("@playwright/test");
+
+function preserveFatalAuditEvidence(error) {
+  const outputPath = path.resolve(
+    process.env.AUDIT_OUTPUT_PATH ??
+      "test-results/full-intra-live-e2e-results.json",
+  );
+  try {
+    mkdirSync(path.dirname(outputPath), { recursive: true });
+    writeFileSync(
+      outputPath,
+      `${JSON.stringify(
+        {
+          generatedAt: new Date().toISOString(),
+          baseUrl: process.env.AUDIT_BASE_URL ?? null,
+          runId: process.env.AUDIT_RUN_ID ?? null,
+          phase: process.env.AUDIT_PHASE ?? "all",
+          fatal: {
+            message: error instanceof Error ? error.message : String(error),
+          },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+  } catch (evidenceError) {
+    console.error("Unable to preserve fatal audit evidence:", evidenceError);
+  }
+}
+
+process.once("uncaughtException", (error) => {
+  preserveFatalAuditEvidence(error);
+  console.error(error);
+  process.exit(1);
+});
+process.once("unhandledRejection", (error) => {
+  preserveFatalAuditEvidence(error);
+  console.error(error);
+  process.exit(1);
+});
 
 const baseUrl = process.env.AUDIT_BASE_URL?.replace(/\/$/, "");
 const masterPassword = process.env.AUDIT_PASSWORD;
@@ -1621,6 +1661,8 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
       sku: `${marker}-SKU`,
       name: `${marker} Receipt Product`,
       category: "qa",
+      item_class: "merchandise",
+      serialization_policy: "none",
       serialized: false,
       unit_cost: 100,
       reorder_point: 0,
@@ -1630,6 +1672,8 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
       sku: `${marker}-SERIAL-SKU`,
       name: `${marker} Held Serial Product`,
       category: "qa",
+      item_class: "sellable_sku",
+      serialization_policy: "required",
       serialized: true,
       unit_cost: 150,
       reorder_point: 0,

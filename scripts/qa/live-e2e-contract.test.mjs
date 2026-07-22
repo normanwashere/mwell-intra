@@ -863,6 +863,22 @@ test("governed Warehouse fixtures use the run-scoped location and await hold dis
   );
 });
 
+test("Warehouse audit products satisfy the governed serialization contract", async () => {
+  const source = await readFile(
+    new URL("./full-intra-live-e2e.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    source,
+    /id: ids\.product[\s\S]*?item_class: "merchandise"[\s\S]*?serialization_policy: "none"[\s\S]*?serialized: false/,
+  );
+  assert.match(
+    source,
+    /id: ids\.serializedIssueProduct[\s\S]*?item_class: "sellable_sku"[\s\S]*?serialization_policy: "required"[\s\S]*?serialized: true/,
+  );
+  assert.match(source, /preserveFatalAuditEvidence/);
+});
+
 test("Warehouse resolvers reconcile both receipt authority queues", async () => {
   const source = await readFile(
     new URL(
