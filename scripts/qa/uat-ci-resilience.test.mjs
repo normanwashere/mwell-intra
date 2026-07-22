@@ -140,6 +140,11 @@ test("UAT certification workflow gates deployment and always certifies cleanup",
   );
   assert.match(workflow, /wait-for-uat-deployment\.mjs/);
   assert.match(workflow, /GITHUB_SHA:\s*\$\{\{ github\.sha \}\}/);
+  assert.equal(
+    (workflow.match(/fetch-depth:\s*0/g) ?? []).length,
+    5,
+    "every certification job must fetch provenance history",
+  );
   for (const gate of [
     "pnpm lint",
     "pnpm typecheck",

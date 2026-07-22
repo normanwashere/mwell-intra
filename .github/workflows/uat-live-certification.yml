@@ -34,6 +34,8 @@ jobs:
       DEPLOYMENT_EVIDENCE_PATH: test-results/deployment-readiness.json
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Establish deterministic certification date
         id: audit_identity
         run: node scripts/qa/uat-ci-run-id.mjs --github-output "$GITHUB_OUTPUT"
@@ -113,6 +115,8 @@ jobs:
       POLICY_ALLOW_TEST_MUTATIONS: "false"
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4
         with:
           version: 10.23.0
@@ -175,6 +179,8 @@ jobs:
       POLICY_ALLOW_TEST_MUTATIONS: "true"
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4
         with:
           version: 10.23.0
@@ -232,6 +238,8 @@ jobs:
       CLEANUP_OUTPUT_PATH: test-results/cleanup-${{ matrix.viewport }}.json
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4
         with:
           version: 10.23.0
@@ -268,6 +276,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/download-artifact@v4
         with:
           pattern: uat-*-${{ github.run_number }}
