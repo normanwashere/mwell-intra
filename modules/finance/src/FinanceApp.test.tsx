@@ -69,6 +69,14 @@ describe('FinanceApp', () => {
     expect(screen.getByText('Warehouse Finance')).toBeInTheDocument();
     expect(screen.getByText('Procurement Finance')).toBeInTheDocument();
     expect(screen.getByText('Payment readiness')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Payment readiness' })).toHaveClass(
+      'min-w-0',
+      'max-w-full',
+      'overflow-hidden',
+    );
+    for (const purchaseOrderLink of screen.getAllByRole('link', { name: 'PO-2026-1042' })) {
+      expect(purchaseOrderLink).toHaveClass('break-all', 'sm:break-normal');
+    }
     expect(screen.getByText('Cross-module activity')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /stock adjustment approvals/i })).toHaveAttribute(
       'href',

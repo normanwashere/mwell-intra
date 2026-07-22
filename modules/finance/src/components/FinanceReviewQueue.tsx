@@ -46,7 +46,7 @@ const columns: Column<FinancePaymentItem>[] = [
       <span className="block min-w-0">
         <a
           href={`/procurement/purchase-orders/${encodeURIComponent(row.purchaseOrderId)}`}
-          className="font-semibold text-brand-700 hover:underline dark:text-brand-300"
+          className="block max-w-full break-all font-semibold text-brand-700 hover:underline sm:break-normal dark:text-brand-300"
         >
           {row.poNumber}
         </a>
@@ -103,7 +103,7 @@ export function FinanceReviewQueue({ items }: { items: FinancePaymentItem[] }) {
     .sort((a, b) => priority(a) - priority(b) || b.preparedAt.localeCompare(a.preparedAt));
 
   return (
-    <section aria-labelledby="finance-review-queue">
+    <section aria-label="Payment readiness" className="min-w-0 max-w-full overflow-hidden">
       <SectionTitle
         title="Payment readiness"
         subtitle="Prioritized evidence packs handed off by Procurement"
