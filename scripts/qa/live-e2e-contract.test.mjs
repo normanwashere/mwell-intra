@@ -288,7 +288,10 @@ test("route crawl enforces an exact role-to-route authorization matrix", async (
   assert.match(source, /const ROUTE_AUTHORIZATION_MATRIX = \[/);
   assert.match(source, /expectedAccess: allowed \? "allowed" : "denied"/);
   assert.match(source, /routeClass === expectedClass/);
-  assert.match(source, /no \(\?:warehouse\|procurement[\s\S]*finance\) access/);
+  assert.match(
+    source,
+    /no \(\?:warehouse\|procurement[\s\S]*finance\|product\) access/,
+  );
   assert.match(
     source,
     /for \(const route of routesFor\(user, discoveredRoutes\)\)/,
@@ -877,6 +880,58 @@ test("Warehouse audit products satisfy the governed serialization contract", asy
     /id: ids\.serializedIssueProduct[\s\S]*?item_class: "sellable_sku"[\s\S]*?serialization_policy: "required"[\s\S]*?serialized: true/,
   );
   assert.match(source, /preserveFatalAuditEvidence/);
+});
+
+test("live certification recognizes Product denials and keeps Finance out of cycle counts", async () => {
+  const source = await readFile(
+    new URL("./full-intra-live-e2e.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /Finance\|Product/);
+  assert.match(
+    source,
+    /finance_unified:[\s\S]*?path: "\/warehouse\/approvals"/,
+  );
+  assert.match(
+    source,
+    /"intra\.test\.operations\.lead@mwell\.com\.ph",\s*"warehouse cycle count validation"/,
+  );
+});
+
+test("Events certification submits and cleans the governed Warehouse handoff", async () => {
+  const source = await readFile(
+    new URL("./full-intra-live-e2e.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /name: "Request warehouse stock"/);
+  assert.match(source, /from\("department_stock_requests"\)/);
+  assert.match(source, /state\.fulfillmentRequestId/);
+  assert.match(source, /cleanupEventWorkflowDependencies/);
+  assert.match(source, /from\("event_lifecycle_events"\)[\s\S]*?\.delete\(\)/);
+});
+
+test("governed Warehouse wrappers retain private-schema isolation", async () => {
+  const migration = await readFile(
+    new URL(
+      "../../supabase/migrations/20260722174500_restore_governed_warehouse_wrapper_execution.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  for (const name of ["release_quality_hold", "submit_cycle_count"]) {
+    assert.match(
+      migration,
+      new RegExp(
+        `function warehouse\\.${name}\\(payload jsonb\\)[\\s\\S]*?security definer`,
+      ),
+    );
+    assert.match(
+      migration,
+      new RegExp(
+        `revoke all on function private\\.warehouse_${name}\\(jsonb\\)[\\s\\S]*?authenticated`,
+      ),
+    );
+  }
 });
 
 test("Warehouse resolvers reconcile both receipt authority queues", async () => {

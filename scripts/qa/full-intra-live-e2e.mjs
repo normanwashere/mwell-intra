@@ -157,7 +157,7 @@ const viewports = [
 ];
 
 const DENIED_ROUTE_TEXT =
-  /No (?:warehouse|procurement|legal|vendor|admin|My Work|Events|Insights|Finance) access|Access denied|doesn't include|not authorized|reserved for enrolled|employee workspace/i;
+  /No (?:warehouse|procurement|legal|vendor|admin|My Work|Events|Insights|Finance|Product) access|Access denied|doesn't include|not authorized|reserved for enrolled|employee workspace/i;
 
 const FINANCE_WAREHOUSE_ROLES = new Set([
   "finance",
@@ -385,7 +385,10 @@ const roleRoutes = {
       path: "/procurement/approvals",
       text: /Approval inbox|Waiting on you|Inbox zero/i,
     },
-    { path: "/warehouse/cycle-counts", text: /Cycle|Count/i },
+    {
+      path: "/warehouse/approvals",
+      text: /Approvals|Stock adjustment approvals|Controlled exceptions/i,
+    },
   ],
   events_requester: [{ path: "/events", text: /Events|New event|Create/i }],
   events_coordinator: [
@@ -544,7 +547,7 @@ function classify(text, url) {
     lower.includes("doesn't include") ||
     lower.includes("not authorized") ||
     lower.includes("no access") ||
-    /\bno (?:warehouse|procurement|legal|vendor|admin|my work|events|insights|finance) access\b/.test(
+    /\bno (?:warehouse|procurement|legal|vendor|admin|my work|events|insights|finance|product) access\b/.test(
       lower,
     ) ||
     lower.includes("reserved for enrolled")
@@ -5384,6 +5387,66 @@ async function cleanupGovernedWorkflowActivity(marker) {
   };
 }
 
+async function cleanupEventWorkflowDependencies(marker) {
+  const client = createAuditDatabaseClient();
+  const eventNames = [`${marker} Event`, `${marker} Intra Event`];
+  const { data: events, error: eventError } = await client
+    .schema("warehouse")
+    .from("events")
+    .select("id,name")
+    .in("name", eventNames);
+  if (eventError)
+    throw new Error(`Event cleanup lookup failed: ${eventError.message}`);
+  if ((events ?? []).some((event) => !String(event.name).includes(marker)))
+    throw new Error("Event cleanup refused a row without run-marker proof.");
+
+  const { data: requests, error: requestError } = await client
+    .schema("warehouse")
+    .from("department_stock_requests")
+    .select("id,purpose")
+    .eq("purpose", `${marker} event fulfillment`);
+  if (requestError)
+    throw new Error(
+      `Event request cleanup lookup failed: ${requestError.message}`,
+    );
+  if (
+    (requests ?? []).some(
+      (request) => !String(request.purpose).includes(marker),
+    )
+  )
+    throw new Error(
+      "Event request cleanup refused a row without run-marker proof.",
+    );
+
+  const eventIds = (events ?? []).map((event) => event.id);
+  const requestIds = (requests ?? []).map((request) => request.id);
+  if (eventIds.length) {
+    const { error } = await client
+      .schema("warehouse")
+      .from("event_lifecycle_events")
+      .delete()
+      .in("event_id", eventIds);
+    if (error)
+      throw new Error(`Event lifecycle cleanup failed: ${error.message}`);
+  }
+  const activityEntityIds = [...eventIds, ...requestIds];
+  if (activityEntityIds.length) {
+    const { error } = await client
+      .schema("core")
+      .from("activity_log")
+      .delete()
+      .in("entity_id", activityEntityIds);
+    if (error)
+      throw new Error(`Event activity cleanup failed: ${error.message}`);
+  }
+  return {
+    entity: "event-workflow-dependencies",
+    marker,
+    removed: true,
+    remaining: 0,
+  };
+}
+
 async function procurementReceiptAuthorityWorkflow(page) {
   await page.goto(
     `${baseUrl}/procurement/purchase-orders?workflow=${Date.now()}`,
@@ -5780,35 +5843,71 @@ async function eventsCoordinatorReadbackWorkflow(page, state) {
     .waitFor({
       state: "visible",
     });
-  const fulfillmentLink = page.getByRole("link", {
-    name: /Warehouse fulfillment/i,
+  const requestButton = page.getByRole("button", {
+    name: "Request warehouse stock",
+    exact: true,
   });
-  if ((await fulfillmentLink.count()) === 0) {
-    throw new Error("Events coordinator cannot hand the event to Warehouse.");
-  }
+  if ((await requestButton.count()) === 0)
+    throw new Error("Events coordinator cannot request Warehouse stock.");
+  await requestButton.click();
+  const requestDialog = page.getByRole("dialog", {
+    name: "Request warehouse stock",
+  });
+  state.fulfillmentPurpose = `${state.marker} event fulfillment`;
+  await requestDialog.getByLabel("Department").fill("Marketing");
+  await requestDialog
+    .getByLabel("Business purpose")
+    .fill(state.fulfillmentPurpose);
+  await requestDialog.getByLabel("Cost center").fill("MKT-UAT");
+  const product = requestDialog.getByLabel("Product");
+  if (!(await product.inputValue()))
+    throw new Error("Events handoff has no eligible Warehouse product.");
+  await requestDialog
+    .getByRole("button", { name: "Submit for approval", exact: true })
+    .click();
+  await requestDialog.waitFor({ state: "detached" });
+  const db = createAuditDatabaseClient();
+  const { data: requests, error } = await db
+    .schema("warehouse")
+    .from("department_stock_requests")
+    .select("id,event_id,requesting_department,purpose,status")
+    .eq("event_id", state.eventId)
+    .eq("purpose", state.fulfillmentPurpose)
+    .limit(1);
+  if (error || !requests?.[0])
+    throw new Error(
+      `Events Warehouse handoff readback failed: ${error?.message ?? "missing request"}`,
+    );
+  if (requests[0].status !== "pending_approval")
+    throw new Error(`Events Warehouse handoff entered ${requests[0].status}.`);
+  state.fulfillmentRequestId = requests[0].id;
   return {
     name: "Events coordinator refresh and Warehouse handoff",
     ok: true,
+    requestId: state.fulfillmentRequestId,
     finalUrl: page.url().replace(baseUrl, ""),
   };
 }
 
 async function warehouseEventHandoffWorkflow(page, state) {
-  if (!state.eventId || !state.eventName) {
-    throw new Error("Warehouse handoff requires a created event.");
+  if (!state.eventId || !state.eventName || !state.fulfillmentPurpose) {
+    throw new Error("Warehouse handoff requires a persisted stock request.");
   }
-  await page.goto(
-    `${baseUrl}/warehouse/events/${encodeURIComponent(state.eventId)}?handoff=${Date.now()}`,
-    { waitUntil: "domcontentloaded", timeout: 20_000 },
-  );
-  await waitForMeaningfulRoute(page);
-  await page.getByText(state.eventName, { exact: true }).first().waitFor({
-    state: "visible",
+  await page.goto(`${baseUrl}/warehouse/fulfillment?handoff=${Date.now()}`, {
+    waitUntil: "domcontentloaded",
+    timeout: 20_000,
   });
+  await waitForMeaningfulRoute(page);
+  await page.getByRole("tab", { name: "Department requests" }).click();
+  await page
+    .getByText(state.fulfillmentPurpose, { exact: true })
+    .first()
+    .waitFor({
+      state: "visible",
+    });
   const text = (await page.locator("body").innerText()).replace(/\s+/g, " ");
-  if (!/reserve|allocation|fulfillment|issue/i.test(text)) {
-    throw new Error("Warehouse handoff does not expose fulfillment controls.");
-  }
+  if (!/pending|approval|department request/i.test(text))
+    throw new Error("Warehouse handoff does not expose the approval state.");
   return {
     name: "Events-to-Warehouse operational handoff",
     ok: true,
@@ -6256,6 +6355,13 @@ const cleanupTargets = mutatingPhase
       {
         runId: auditRunId,
         schema: "warehouse",
+        table: "department_stock_requests",
+        filters: { purpose: `${marker} event fulfillment` },
+        proofColumn: "purpose",
+      },
+      {
+        runId: auditRunId,
+        schema: "warehouse",
         table: "events",
         filters: { name: `${marker} Event` },
         proofColumn: "name",
@@ -6346,7 +6452,7 @@ try {
           marker,
           registerTask3Cleanup,
         );
-        const crossModuleState = {};
+        const crossModuleState = { marker };
         workflows.push(
           await runWorkflow(
             browser,
@@ -6742,7 +6848,7 @@ try {
             warehouseQualityValidationWorkflow,
           ],
           [
-            "intra.test.finance@mwell.com.ph",
+            "intra.test.operations.lead@mwell.com.ph",
             "warehouse cycle count validation",
             warehouseCycleCountValidationWorkflow,
           ],
@@ -6769,6 +6875,7 @@ try {
     if (mutatingPhase) {
       const task3Results = [];
       const governedActivityResults = [];
+      const eventDependencyResults = [];
       for (const marker of auditMarkers) {
         try {
           governedActivityResults.push(
@@ -6777,6 +6884,19 @@ try {
         } catch (error) {
           governedActivityResults.push({
             entity: "governed-workflow-activity",
+            marker,
+            removed: false,
+            remaining: null,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+        try {
+          eventDependencyResults.push(
+            await cleanupEventWorkflowDependencies(marker),
+          );
+        } catch (error) {
+          eventDependencyResults.push({
+            entity: "event-workflow-dependencies",
             marker,
             removed: false,
             remaining: null,
@@ -6800,10 +6920,17 @@ try {
       cleanup = await cleanupRun(auditRunId, cleanupTargets, {
         authEmails: auditMarkers.map((marker) => vendorAuditEmail(marker)),
       });
-      cleanup.results.push(...governedActivityResults, ...task3Results);
+      cleanup.results.push(
+        ...governedActivityResults,
+        ...eventDependencyResults,
+        ...task3Results,
+      );
       cleanup.complete =
         cleanup.complete &&
         governedActivityResults.every(
+          (result) => result.remaining === 0 && !result.error,
+        ) &&
+        eventDependencyResults.every(
           (result) => result.remaining === 0 && !result.error,
         ) &&
         task3Results.every((result) => result.remaining === 0 && !result.error);
