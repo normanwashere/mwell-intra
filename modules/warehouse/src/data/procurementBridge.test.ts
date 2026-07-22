@@ -136,14 +136,14 @@ describe('readProcurementPOs (procurement → warehouse bridge)', () => {
       'supabase',
       async () => [{
         id: 'live-po-1', poNumber: 'PO-LIVE-001', vendorName: 'Live Vendor',
-        status: 'issued', lines: [{
-          id: 'line-1', description: 'Live stock', quantity: 3, receivedQuantity: 1,
+        status: 'issued', createdAt: '2026-07-20T08:00:00Z', total: 700, lines: [{
+          id: 'line-1', description: 'Live stock', quantity: 3, receivedQuantity: 1, unitPrice: 250,
         }],
       }],
       storage,
     );
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ id: 'live-po-1', totalOrdered: 3, totalReceived: 1 });
+    expect(rows[0]).toMatchObject({ id: 'live-po-1', createdAt: '2026-07-20T08:00:00Z', totalOrdered: 3, totalReceived: 1, value: 700 });
     expect(rows[0]!.warehouseHref).toBe('/warehouse/purchase-orders?po=live-po-1');
   });
 });

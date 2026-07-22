@@ -54,6 +54,14 @@ const STATUS_TONE: Record<POStatus, Tone> = {
   cancelled: 'rose',
 };
 
+function bridgedPoDateLabel(po: BridgedPO): string {
+  if (po.expectedDate) return `Expected ${formatDate(po.expectedDate)}`;
+  if (po.createdAt && Date.parse(po.createdAt) > Date.UTC(2000, 0, 1)) {
+    return `Created ${formatWhen(po.createdAt)}`;
+  }
+  return 'Expected date not set';
+}
+
 export function PurchaseOrdersPage() {
   const {
     data, source, can, receiveAgainstPO, cancelPurchaseOrder,
@@ -485,16 +493,14 @@ export function PurchaseOrdersPage() {
                         <div className="min-w-0">
                           <a
                             href={po.href}
-                            className="truncate font-semibold text-brand-700 underline-offset-2 hover:underline dark:text-brand-300"
+                            className="block max-w-full truncate font-semibold text-brand-700 underline-offset-2 hover:underline dark:text-brand-300"
                             title="Open in procurement"
                           >
                             {po.poNumber}
                           </a>
                           <p className="truncate text-sm text-ink">{po.vendorName}</p>
                           <p className="text-xs text-faint">
-                            {po.expectedDate
-                              ? `Expected ${formatDate(po.expectedDate)}`
-                              : formatWhen(po.createdAt)}
+                            {bridgedPoDateLabel(po)}
                           </p>
                         </div>
                         <div className="flex shrink-0 flex-col items-end gap-1">

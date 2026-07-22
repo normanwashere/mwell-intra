@@ -168,7 +168,8 @@ const TABLE_PROJECTIONS: Record<string, string> = {
     "id,task_type,source_id,title,status,assignee_id,due_at,completed_at,created_at",
   inventory_position_v1:
     "id,product_id,location_id,bin_id,on_hand,committed,held,unavailable,available,created_at",
-  procurement_po_handoff: "id,po_number,vendor_name,status,expected_date,lines",
+  procurement_po_handoff:
+    "id,po_number,vendor_name,status,expected_date,total,lines,created_at",
   fulfillment_orders:
     "id,source,external_reference,requesting_department,source_location_id,source_bin_id,customer_reference,event_id,third_party_location_id,gross_sales_amount,courier,waybill_number,status,lines,packaging,created_by,created_at,updated_at,released_by,released_at",
   department_stock_requests:
@@ -567,6 +568,11 @@ export class SupabaseRepository implements WarehouseControlRepository {
       status: row.status as ProcurementPOHandoff["status"],
       expectedDate:
         row.expected_date == null ? undefined : String(row.expected_date),
+      total:
+        typeof row.total === "number" && Number.isFinite(row.total)
+          ? row.total
+          : undefined,
+      createdAt: row.created_at == null ? undefined : String(row.created_at),
       lines: (row.lines ?? []) as ProcurementPOHandoff["lines"],
     }));
   }

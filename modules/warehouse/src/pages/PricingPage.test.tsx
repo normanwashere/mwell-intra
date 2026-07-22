@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { screen, within, waitFor } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { PricingPage } from './PricingPage';
 import { renderWithProviders } from '@/test/renderWithProviders';
@@ -14,22 +14,18 @@ describe('PricingPage', () => {
     expect(screen.getByText('Wellness Starter Kit')).toBeInTheDocument();
   });
 
-  it('sets a product sell price from a table row', async () => {
+  it('routes product price changes to Product governance', async () => {
     const user = userEvent.setup();
     renderWithProviders(<PricingPage />, { role: 'pricing' });
     const table = await screen.findByLabelText('Pricing table');
 
     await user.click(within(table).getByText(/Doctor Token/i));
-    const dialog = await screen.findByRole('dialog', { name: /set price/i });
-    const input = within(dialog).getByLabelText(/sell price/i);
-    await user.clear(input);
-    await user.type(input, '999');
-    await user.click(within(dialog).getByRole('button', { name: /save price/i }));
-
-    await waitFor(() => {
-      expect(
-        within(screen.getByLabelText('Pricing table')).getByText('₱999'),
-      ).toBeInTheDocument();
+    const dialog = await screen.findByRole('dialog', {
+      name: /pricing governance/i,
     });
+    expect(within(dialog).queryByLabelText(/sell price/i)).not.toBeInTheDocument();
+    expect(
+      within(dialog).getByRole('link', { name: /open governed pricing/i }),
+    ).toHaveAttribute('href', '/product/pricing?productId=doctor-token');
   });
 });

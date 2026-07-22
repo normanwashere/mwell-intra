@@ -144,14 +144,14 @@ describe("ProductDetailPage", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("lets the pricing role set a price", async () => {
-    const user = userEvent.setup();
+  it("keeps warehouse pricing read-only for the pricing role", async () => {
     renderDetail("shirt-l", "pricing");
     await screen.findByRole("heading", { name: /Event Shirt \(L\)/i });
 
-    await user.click(screen.getByRole("button", { name: /set price/i }));
-    const dialog = await screen.findByRole("dialog", { name: /set price/i });
-    expect(within(dialog).getByLabelText(/sell price/i)).toBeInTheDocument();
+    expect(screen.getByText(/Price ₱350/i)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /set price/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("hides set price for non-pricing roles", async () => {

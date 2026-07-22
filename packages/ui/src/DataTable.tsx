@@ -128,6 +128,15 @@ export function DataTable<T>({
                     <th
                       key={c.key}
                       scope="col"
+                      aria-sort={
+                        c.sortable
+                          ? active
+                            ? sortDir === 'asc'
+                              ? 'ascending'
+                              : 'descending'
+                            : 'none'
+                          : undefined
+                      }
                       className={clsx(
                         headPad,
                         'font-semibold',
@@ -143,9 +152,6 @@ export function DataTable<T>({
                             'inline-flex min-h-11 items-center gap-1 py-1 transition hover:text-ink sm:min-h-8',
                             active && 'text-ink',
                           )}
-                          aria-sort={
-                            active ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
-                          }
                         >
                           {c.header}
                           <Icon

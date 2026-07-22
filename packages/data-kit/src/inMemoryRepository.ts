@@ -2509,6 +2509,7 @@ export class InMemoryRepository implements WarehouseControlRepository {
             ?.name ?? po.supplierId,
         status: "issued" as const,
         expectedDate: po.expectedDate,
+        createdAt: po.createdAt,
         lines: po.lines.map((line, index) => ({
           id: `${po.id}-${index}`,
           description:

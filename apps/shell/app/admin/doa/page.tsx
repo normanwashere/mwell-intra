@@ -280,13 +280,13 @@ function DoaWorkspace() {
         </h2>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {matrices.map((matrix) => (
-            <Card key={matrix.id} className="p-4">
+            <Card key={matrix.id} className="min-w-0 overflow-hidden p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <h3 className="truncate font-semibold text-ink">
                     {matrix.department}
                   </h3>
-                  <p className="mt-1 text-sm text-muted">
+                  <p className="mt-1 break-words text-sm text-muted">
                     {matrix.version} · Effective{" "}
                     {new Date(matrix.effective_at).toLocaleDateString("en-PH")}
                   </p>
@@ -298,7 +298,7 @@ function DoaWorkspace() {
               {matrix.id !== "preview" && (
                 <div className="mt-4 flex flex-col gap-2 sm:flex-row">
                   <Button
-                    className="w-full sm:w-auto"
+                    className="scroll-mt-24 w-full sm:w-auto"
                     size="sm"
                     variant="outline"
                     disabled={loadingRevision === matrix.id}
@@ -310,7 +310,7 @@ function DoaWorkspace() {
                   </Button>
                   {matrix.status === "draft" && (
                     <Button
-                      className="w-full sm:w-auto"
+                      className="scroll-mt-24 w-full sm:w-auto"
                       size="sm"
                       variant="outline"
                       onClick={() => void activate(matrix)}
@@ -388,7 +388,7 @@ function DoaWorkspace() {
             {assignments.map((row, index) => (
               <div
                 key={row.key}
-                className="grid gap-3 rounded-lg border border-line bg-inset p-3 md:grid-cols-[1.1fr_1fr_.7fr_.7fr_1.4fr_auto] md:items-end"
+                className="grid min-w-0 gap-3 rounded-lg border border-line bg-inset p-3 md:grid-cols-[1.1fr_1fr_.7fr_.7fr_1.4fr_auto] md:items-end"
               >
                 <Field
                   label={`Tier ${index + 1}`}
@@ -396,7 +396,7 @@ function DoaWorkspace() {
                 >
                   <select
                     id={`doa-tier-${row.key}`}
-                    className="input-base min-h-11 w-full"
+                    className="input-base min-h-11 w-full min-w-0 max-w-full"
                     value={row.tier}
                     onChange={(e) =>
                       updateAssignment(row.key, {
@@ -455,7 +455,7 @@ function DoaWorkspace() {
                   <select
                     id={`doa-approver-${row.key}`}
                     aria-label={`Tier ${index + 1} named approver`}
-                    className="input-base min-h-11 w-full"
+                    className="input-base min-h-11 w-full min-w-0 max-w-full"
                     value={row.approverUserId}
                     onChange={(e) =>
                       updateAssignment(row.key, {

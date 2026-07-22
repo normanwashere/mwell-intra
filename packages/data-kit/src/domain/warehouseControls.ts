@@ -252,6 +252,8 @@ export interface ProcurementPOHandoff {
   vendorName: string;
   status: 'approved' | 'issued';
   expectedDate?: string;
+  createdAt?: string;
+  total?: number;
   lines: Array<{
     id: string;
     productId?: string;
@@ -259,6 +261,7 @@ export interface ProcurementPOHandoff {
     quantity: number;
     receivedQuantity: number;
     uom?: string;
+    unitPrice?: number;
   }>;
 }
 

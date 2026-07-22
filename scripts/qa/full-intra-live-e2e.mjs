@@ -6485,6 +6485,11 @@ async function runWorkflow(browser, viewport, user, workflow) {
         impact: violation.impact,
         help: violation.help,
         nodes: violation.nodes.length,
+        examples: violation.nodes.slice(0, 3).map((node) => ({
+          target: node.target,
+          html: node.html.slice(0, 500),
+          failureSummary: node.failureSummary,
+        })),
       }));
     const undersizedMobileTargets = viewport.isMobile
       ? await page.evaluate(() => {
@@ -6509,7 +6514,13 @@ async function runWorkflow(browser, viewport, user, workflow) {
               );
             })
             .map((element) => {
-              const rect = element.getBoundingClientRect();
+              const controlRect = element.getBoundingClientRect();
+              const label = "labels" in element ? element.labels?.[0] : null;
+              const labelRect = label?.getBoundingClientRect();
+              const rect =
+                labelRect && labelRect.width > 0 && labelRect.height > 0
+                  ? labelRect
+                  : controlRect;
               return {
                 label: (
                   element.getAttribute("aria-label") ||
@@ -6530,6 +6541,10 @@ async function runWorkflow(browser, viewport, user, workflow) {
       : [];
     return {
       overflow: layout.horizontalOverflow,
+      scrollWidth: layout.scrollWidth,
+      viewportWidth: layout.viewportWidth,
+      layoutWidth: layout.layoutWidth,
+      overflowOffenders: layout.overflowOffenders,
       overlaps: layout.overlaps,
       deadLinks: layout.deadLinks,
       unlabeledControls: layout.unlabeledControls,
@@ -6731,7 +6746,7 @@ let cleanup = { runId: auditRunId, complete: true, results: [] };
 const task3Fixtures = [];
 const registerTask3Cleanup = (fixture) => task3Fixtures.push(fixture);
 const vendorAuditEmail = (marker) =>
-  controlledVendorEmail?.replaceAll("{marker}", marker.toLowerCase()) ??
+  controlledVendorEmail?.replaceAll("{marker}", marker.toLowerCase()) ||
   `audit.vendor.${marker.toLowerCase()}@example.com`;
 const transactionViewports = viewports.filter(
   (item) =>

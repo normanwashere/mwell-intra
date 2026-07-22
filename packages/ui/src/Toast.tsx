@@ -32,11 +32,14 @@ interface ToastContextValue {
 
 const ToastContext = createContext<ToastContextValue | null>(null);
 
-const TONE_STYLES: Record<ToastTone, { cls: string; icon: IconName }> = {
-  success: { cls: 'border-emerald-500/30 bg-emerald-600 text-white', icon: 'check' },
-  error: { cls: 'border-rose-500/30 bg-rose-600 text-white', icon: 'alert' },
+export const TOAST_TONE_STYLES: Record<ToastTone, { cls: string; icon: IconName }> = {
+  success: { cls: 'border-emerald-500/30 bg-emerald-700 text-white', icon: 'check' },
+  error: { cls: 'border-rose-500/30 bg-rose-700 text-white', icon: 'alert' },
   info: { cls: 'border-brand-500/30 bg-brand-700 text-white', icon: 'info' },
 };
+
+export const TOAST_DISMISS_CLASS =
+  'grid min-h-11 min-w-11 shrink-0 place-items-center rounded-lg text-white transition hover:bg-white/10';
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -87,7 +90,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       >
         <AnimatePresence mode="popLayout">
           {toasts.map((t) => {
-            const tone = TONE_STYLES[t.tone] ?? TONE_STYLES.info;
+            const tone = TOAST_TONE_STYLES[t.tone] ?? TOAST_TONE_STYLES.info;
             return (
               <m.div
                 key={t.id}
@@ -108,7 +111,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                   type="button"
                   aria-label="Dismiss"
                   onClick={() => remove(t.id)}
-                  className="rounded-lg p-0.5 opacity-80 transition hover:bg-white/10 hover:opacity-100"
+                  className={TOAST_DISMISS_CLASS}
                 >
                   <Icon name="x" className="h-4 w-4" />
                 </button>

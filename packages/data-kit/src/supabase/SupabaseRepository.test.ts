@@ -233,6 +233,8 @@ function makeMockClient(
         vendor_name: "Live Vendor",
         status: "issued",
         expected_date: "2026-07-20",
+        total: 625,
+        created_at: "2026-07-18T08:00:00Z",
         lines: [
           {
             id: "line-1",
@@ -240,6 +242,7 @@ function makeMockClient(
             description: "Shirts",
             quantity: 5,
             receivedQuantity: 1,
+            unitPrice: 125,
           },
         ],
       },
@@ -874,12 +877,16 @@ describe("SupabaseRepository W1 control boundary", () => {
         id: "live-po-1",
         poNumber: "PO-LIVE-001",
         status: "issued",
+        total: 625,
+        createdAt: "2026-07-18T08:00:00Z",
       }),
     ]);
     const query = queries.find(
       (item) => item.table === "procurement_po_handoff",
     )!;
     expect(query.projection).not.toBe("*");
+    expect(query.projection).toContain("created_at");
+    expect(query.projection).toContain("total");
     expect(query.limit).toBe(500);
   });
 });

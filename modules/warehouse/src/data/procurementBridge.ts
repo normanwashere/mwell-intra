@@ -169,11 +169,17 @@ export async function loadProcurementPOs(
         vendorName: po.vendorName,
         status: po.status,
         expectedDate: po.expectedDate,
-        createdAt: new Date(0).toISOString(),
+        createdAt: po.createdAt ?? '',
         lines,
         totalOrdered: lines.reduce((sum, line) => sum + line.quantity, 0),
         totalReceived: lines.reduce((sum, line) => sum + line.receivedQuantity, 0),
-        value: 0,
+        value:
+          typeof po.total === 'number' && Number.isFinite(po.total)
+            ? po.total
+            : lines.reduce(
+                (sum, line) => sum + line.quantity * (line.unitPrice ?? 0),
+                0,
+              ),
         href: `/procurement/purchase-orders/${encodeURIComponent(po.id)}`,
         warehouseHref: `/warehouse/purchase-orders?po=${encodeURIComponent(po.id)}`,
       };
