@@ -1498,6 +1498,20 @@ async function adminCreateDoaWorkflow(page, marker) {
   await page
     .getByText(`${department} DOA activated.`)
     .waitFor({ state: "visible" });
+  await page.waitForFunction(() => {
+    const visibleSaveButton = Array.from(
+      document.querySelectorAll("button"),
+    ).find((button) => {
+      const rect = button.getBoundingClientRect();
+      return (
+        button.textContent?.trim() === "Save draft" &&
+        rect.width > 0 &&
+        rect.height > 0
+      );
+    });
+    return visibleSaveButton instanceof HTMLButtonElement && !visibleSaveButton.disabled;
+  });
+  await page.waitForTimeout(200);
   const checkpoint = await verifyCheckpoint({
     schema: "procurement",
     table: "doa_matrices",

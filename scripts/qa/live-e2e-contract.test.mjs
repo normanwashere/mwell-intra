@@ -369,6 +369,8 @@ test("the mutating harness waits for quality data and uses unambiguous DOA contr
     /getByLabel\("Tier 1", \{ exact: true \}\)\s*\.selectOption\("final_approver"\)/,
   );
   assert.match(source, /getByLabel\(`Tier \$\{index \+ 1\} named approver`\)/);
+  assert.match(source, /visibleSaveButton instanceof HTMLButtonElement/);
+  assert.match(source, /!visibleSaveButton\.disabled/);
   assert.match(source, /Loading quality controls/);
   assert.match(source, /No inspections waiting/);
 });
