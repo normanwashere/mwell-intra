@@ -140,12 +140,26 @@ test("UAT certification workflow gates deployment and always certifies cleanup",
   );
   assert.match(workflow, /wait-for-uat-deployment\.mjs/);
   assert.match(workflow, /GITHUB_SHA:\s*\$\{\{ github\.sha \}\}/);
+  for (const gate of [
+    "pnpm lint",
+    "pnpm typecheck",
+    "pnpm test",
+    "pnpm build",
+    "pnpm verify:launch-artifacts",
+  ]) {
+    assert.match(workflow, new RegExp(gate.replace(" ", "\\s+")));
+  }
   assert.match(workflow, /outputs:[\s\S]*audit_date:/);
   assert.match(workflow, /cleanup:[\s\S]*if:\s*\$\{\{ always\(\)/);
   assert.match(workflow, /cleanup-uat-live-run\.mjs/);
   assert.match(workflow, /uat-cleanup-\$\{\{ matrix\.viewport \}\}/);
   assert.match(workflow, /needs:\s*\[prepare, routes, transactions, cleanup\]/);
   assert.match(workflow, /needs\.cleanup\.result != 'success'/);
+  assert.match(
+    workflow,
+    /verify-launch-artifacts\.mjs --certification-dir certification-artifacts/,
+  );
+  assert.match(workflow, /Verify complete cross-shard certification evidence/);
   assert.match(
     workflow,
     /uat-ci-run-id\.mjs[\s\S]*--ordinal "\$\{\{ matrix\.ordinal \}\}"/,

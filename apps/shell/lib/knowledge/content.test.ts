@@ -612,6 +612,68 @@ describe("Knowledge Base content", () => {
     expect(accreditation?.href).toBe("/knowledge?glossary=Accreditation");
   });
 
+  it("documents the live Product launch and pricing decision trees", () => {
+    const launch = KNOWLEDGE_CONTENT.flows.find(
+      (flow) => flow.id === "product-launch-governance",
+    );
+    const pricing = KNOWLEDGE_CONTENT.flows.find(
+      (flow) => flow.id === "pricing-and-costing",
+    );
+    const article = KNOWLEDGE_CONTENT.articles.find(
+      (item) => item.id === "product-launch-and-pricing",
+    );
+
+    expect(launch?.roles).toEqual([
+      "product_contributor",
+      "product_owner",
+      "product_operations_partner",
+    ]);
+    expect(
+      launch?.nodes.filter((node) => node.type === "decision").map((node) => node.id),
+    ).toEqual([
+      "product-readiness-complete",
+      "product-go-live-decision",
+      "product-operations-acceptance",
+    ]);
+    expect(
+      launch?.edges.map((edge) => edge.label).filter(Boolean),
+    ).toEqual(
+      expect.arrayContaining([
+        "Evidence complete",
+        "Missing, stale, or incomplete",
+        "Approved",
+        "Rejected",
+        "Accepted",
+        "Operational blocker",
+      ]),
+    );
+    expect(pricing?.roles).toEqual(
+      expect.arrayContaining(["product_contributor", "product_owner"]),
+    );
+    expect(pricing?.roles).not.toContain("product_operations_partner");
+    expect(pricing?.nodes.map((node) => node.id)).toEqual(
+      expect.arrayContaining([
+        "price-start",
+        "price-submit",
+        "price-valid",
+        "price-approval",
+        "price-post",
+      ]),
+    );
+    expect(
+      pricing?.nodes.find((node) => node.id === "price-approval"),
+    ).toMatchObject({ type: "decision", authorityRoleId: "product_owner" });
+    expect(article?.flowIds).toEqual([
+      "product-launch-governance",
+      "pricing-and-costing",
+    ]);
+    expect(article?.screenshots).toBeUndefined();
+    expect(
+      article?.sections.find((section) => section.id === "current-evidence-status")
+        ?.body,
+    ).toMatch(/no Product-specific desktop or mobile screenshot set/i);
+  });
+
   it("contains no credential-like documentation content", () => {
     const rendered = JSON.stringify(KNOWLEDGE_CONTENT);
     expect(rendered).not.toMatch(

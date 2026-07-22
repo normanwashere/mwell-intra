@@ -12,6 +12,9 @@ import {
   CURRENT_LIVE_ROLES,
   CURRENT_LIVE_SCENARIOS,
   assertAuditRunId,
+  evaluateScenarioCoverage,
+  scenarioCoverageFailures,
+  workflowScenarioEvidence,
 } from "./live-e2e-scenarios.mjs";
 import {
   createAuditDatabaseClient,
@@ -518,33 +521,64 @@ function finalPathMatches(expectedPath, currentUrl) {
   );
 }
 
-async function discoverVisibleNavigationRoutes(page) {
-  return page
-    .locator('nav a[href], aside a[href], [role="navigation"] a[href]')
-    .evaluateAll((links) => {
-      const paths = links.flatMap((link) => {
-        const style = getComputedStyle(link);
-        const rect = link.getBoundingClientRect();
-        const visible =
-          style.display !== "none" &&
-          style.visibility !== "hidden" &&
-          rect.width > 0 &&
-          rect.height > 0;
-        const href = link.getAttribute("href");
-        if (!visible || !href) return [];
-        const target = new URL(href, location.origin);
-        if (target.origin !== location.origin) return [];
-        if (
-          target.pathname.startsWith("/login") ||
-          target.pathname.startsWith("/api/") ||
-          target.pathname.startsWith("/_next/")
-        ) {
-          return [];
-        }
-        return [target.pathname];
-      });
-      return [...new Set(paths)];
+async function collectVisibleSameOriginRoutes(page, selector) {
+  return page.locator(selector).evaluateAll((links) => {
+    const paths = links.flatMap((link) => {
+      const style = getComputedStyle(link);
+      const rect = link.getBoundingClientRect();
+      const visible =
+        style.display !== "none" &&
+        style.visibility !== "hidden" &&
+        rect.width > 0 &&
+        rect.height > 0;
+      const href = link.getAttribute("href");
+      if (!visible || !href || link.hasAttribute("download")) return [];
+      const target = new URL(href, location.origin);
+      if (target.origin !== location.origin) return [];
+      if (
+        target.pathname.startsWith("/login") ||
+        target.pathname.startsWith("/reset-password") ||
+        target.pathname.startsWith("/api/") ||
+        target.pathname.startsWith("/_next/") ||
+        /\.[a-z0-9]{2,5}$/i.test(target.pathname)
+      ) {
+        return [];
+      }
+      return [target.pathname];
     });
+    return [...new Set(paths)];
+  });
+}
+
+async function discoverVisibleNavigationRoutes(page) {
+  const routes = new Set(
+    await collectVisibleSameOriginRoutes(
+      page,
+      'nav a[href], aside a[href], [role="navigation"] a[href]',
+    ),
+  );
+  const more = page.getByRole("button", { name: "More", exact: true });
+  if ((await more.count()) && (await more.first().isVisible())) {
+    await more.first().click();
+    const allAreas = page.getByRole("dialog", { name: "All areas" });
+    await allAreas.waitFor({ state: "visible", timeout: 5_000 });
+    for (const route of await collectVisibleSameOriginRoutes(
+      page,
+      '[role="dialog"] nav a[href], [role="dialog"] [role="navigation"] a[href]',
+    )) {
+      routes.add(route);
+    }
+    await page.keyboard.press("Escape");
+    await allAreas.waitFor({ state: "hidden", timeout: 5_000 }).catch(() => {});
+  }
+  return [...routes];
+}
+
+async function discoverSafeDetailRoutes(page) {
+  return collectVisibleSameOriginRoutes(
+    page,
+    'main a[href], [data-shell-content="true"] a[href]',
+  );
 }
 
 function classify(text, url) {
@@ -866,6 +900,127 @@ async function pageAudit(page) {
         .slice(0, 10),
     };
   });
+}
+
+async function auditKeyboardAndHotspots(page) {
+  const before = await page.evaluate(() => {
+    const active = document.activeElement;
+    return {
+      tag: active?.tagName?.toLowerCase() ?? null,
+      label:
+        active?.getAttribute?.("aria-label") ??
+        active?.textContent?.trim().replace(/\s+/g, " ").slice(0, 80) ??
+        null,
+    };
+  });
+  await page.keyboard.press("Tab");
+  const result = await page.evaluate(() => {
+    const selector =
+      'a[href],button,input:not([type="hidden"]):not([type="file"]),select,textarea,[role="button"],[role="link"],[tabindex]:not([tabindex="-1"])';
+    const visible = (element) => {
+      const style = getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      return (
+        style.display !== "none" &&
+        style.visibility !== "hidden" &&
+        Number(style.opacity) !== 0 &&
+        rect.width > 0 &&
+        rect.height > 0
+      );
+    };
+    const controls = [...document.querySelectorAll(selector)].filter(visible);
+    const active = document.activeElement;
+    const dialog = document.querySelector('[role="dialog"]');
+    const focusEscapedDialog = Boolean(
+      dialog && visible(dialog) && active && !dialog.contains(active),
+    );
+    const undersizedTargets = controls
+      .map((element) => {
+        const rect = element.getBoundingClientRect();
+        return {
+          label: (
+            element.getAttribute("aria-label") ||
+            element.textContent ||
+            element.getAttribute("name") ||
+            element.tagName
+          )
+            .trim()
+            .replace(/\s+/g, " ")
+            .slice(0, 80),
+          width: Math.round(rect.width),
+          height: Math.round(rect.height),
+        };
+      })
+      .filter((target) => target.width < 44 || target.height < 44)
+      .slice(0, 16);
+    const interceptedTargets = controls
+      .flatMap((element) => {
+        const rect = element.getBoundingClientRect();
+        if (
+          element.matches(":disabled") ||
+          rect.bottom <= 0 ||
+          rect.right <= 0 ||
+          rect.top >= innerHeight ||
+          rect.left >= innerWidth
+        ) {
+          return [];
+        }
+        const x = Math.min(
+          innerWidth - 1,
+          Math.max(0, rect.left + rect.width / 2),
+        );
+        const y = Math.min(
+          innerHeight - 1,
+          Math.max(0, rect.top + rect.height / 2),
+        );
+        if (x < 0 || y < 0 || x > innerWidth || y > innerHeight) return [];
+        const hit = document.elementFromPoint(x, y);
+        if (!hit || hit === element || element.contains(hit)) return [];
+        const hitControl = hit.closest(selector);
+        if (
+          !hitControl ||
+          hitControl === element ||
+          element.contains(hitControl)
+        )
+          return [];
+        return [
+          {
+            target: (
+              element.getAttribute("aria-label") ||
+              element.textContent ||
+              element.tagName
+            )
+              .trim()
+              .replace(/\s+/g, " ")
+              .slice(0, 80),
+            blocker: (
+              hitControl.getAttribute("aria-label") ||
+              hitControl.textContent ||
+              hitControl.tagName
+            )
+              .trim()
+              .replace(/\s+/g, " ")
+              .slice(0, 80),
+          },
+        ];
+      })
+      .slice(0, 12);
+    return {
+      focusAfterTab: {
+        tag: active?.tagName?.toLowerCase() ?? null,
+        label:
+          active?.getAttribute?.("aria-label") ??
+          active?.textContent?.trim().replace(/\s+/g, " ").slice(0, 80) ??
+          null,
+      },
+      focusEscapedDialog,
+      focusableCount: controls.length,
+      undersizedTargets,
+      interceptedTargets,
+    };
+  });
+  await page.keyboard.press("Shift+Tab").catch(() => {});
+  return { before, ...result };
 }
 
 async function login(page, user) {
@@ -1412,7 +1567,7 @@ async function warehouseCreateEventWorkflow(page, marker) {
   };
 }
 
-async function adminCreateDoaWorkflow(page, marker) {
+async function adminCreateDoaWorkflow(page, marker, { captureState }) {
   const department = `${marker} Department`;
   const version = `${marker}-V1`;
   await page.goto(`${baseUrl}/admin/doa?workflow=${Date.now()}`, {
@@ -1473,6 +1628,7 @@ async function adminCreateDoaWorkflow(page, marker) {
   await page.getByText("Department and version are required.").waitFor({
     state: "visible",
   });
+  await captureState("DOA required-field validation");
   await page.getByLabel("Department", { exact: true }).fill(department);
   await page.getByLabel("Version", { exact: true }).fill(version);
   await page
@@ -1502,6 +1658,7 @@ async function adminCreateDoaWorkflow(page, marker) {
   await page
     .getByText(`${department} DOA activated.`)
     .waitFor({ state: "visible" });
+  await captureState("DOA activation success");
   await page.waitForFunction(() => {
     const visibleSaveButton = Array.from(
       document.querySelectorAll("button"),
@@ -1513,7 +1670,10 @@ async function adminCreateDoaWorkflow(page, marker) {
         rect.height > 0
       );
     });
-    return visibleSaveButton instanceof HTMLButtonElement && !visibleSaveButton.disabled;
+    return (
+      visibleSaveButton instanceof HTMLButtonElement &&
+      !visibleSaveButton.disabled
+    );
   });
   await page.waitForTimeout(200);
   const checkpoint = await verifyCheckpoint({
@@ -1601,7 +1761,13 @@ async function browserAccessToken(page) {
   });
 }
 
-async function callRpcAsBrowserUser(page, schema, fn, payload) {
+async function callRpcAsBrowserUser(
+  page,
+  schema,
+  fn,
+  payload,
+  { wrapPayload = true } = {},
+) {
   const accessToken = await browserAccessToken(page);
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "");
@@ -1618,7 +1784,7 @@ async function callRpcAsBrowserUser(page, schema, fn, payload) {
       "accept-profile": schema,
       "content-profile": schema,
     },
-    body: JSON.stringify({ payload }),
+    body: JSON.stringify(wrapPayload ? { payload } : payload),
   });
   return {
     ok: response.ok,
@@ -5838,7 +6004,7 @@ async function warehouseSupervisorControlWorkflow(page) {
   };
 }
 
-async function warehouseReceivingValidationWorkflow(page) {
+async function warehouseReceivingValidationWorkflow(page, { captureState }) {
   await page.goto(`${baseUrl}/warehouse/receiving?workflow=${Date.now()}`, {
     waitUntil: "domcontentloaded",
     timeout: 20_000,
@@ -5850,6 +6016,7 @@ async function warehouseReceivingValidationWorkflow(page) {
   await page.getByLabel("Enter barcode manually").fill("QA-UNKNOWN-STOCK");
   await page.getByRole("button", { name: "Add", exact: true }).click();
   await page.locator('[role="alert"]').first().waitFor({ state: "visible" });
+  await captureState("Receiving unknown barcode validation");
   await page.reload({ waitUntil: "domcontentloaded" });
   await waitForMeaningfulRoute(page);
   return {
@@ -5859,7 +6026,7 @@ async function warehouseReceivingValidationWorkflow(page) {
   };
 }
 
-async function warehouseQualityValidationWorkflow(page) {
+async function warehouseQualityValidationWorkflow(page, { captureState }) {
   await page.goto(`${baseUrl}/warehouse/quality?workflow=${Date.now()}`, {
     waitUntil: "domcontentloaded",
     timeout: 20_000,
@@ -5897,9 +6064,11 @@ async function warehouseQualityValidationWorkflow(page) {
   const submit = dialog.getByRole("button", { name: "Submit inspection" });
   if (!(await submit.isDisabled()))
     throw new Error("Quality inspection bypassed required evidence.");
+  await captureState("Quality evidence-required dialog");
   await dialog.getByLabel("Disposition").selectOption("hold");
   if (!(await submit.isDisabled()))
     throw new Error("Quality hold bypassed reason and evidence validation.");
+  await captureState("Quality hold validation");
   await dialog.getByRole("button", { name: "Close" }).click();
   return {
     name: "warehouse quality validation",
@@ -5908,7 +6077,7 @@ async function warehouseQualityValidationWorkflow(page) {
   };
 }
 
-async function warehouseCycleCountValidationWorkflow(page) {
+async function warehouseCycleCountValidationWorkflow(page, { captureState }) {
   await page.goto(`${baseUrl}/warehouse/cycle-counts?workflow=${Date.now()}`, {
     waitUntil: "domcontentloaded",
     timeout: 20_000,
@@ -5918,6 +6087,7 @@ async function warehouseCycleCountValidationWorkflow(page) {
   await page.getByLabel("Enter barcode manually").fill("QA-UNKNOWN-UNIT");
   await page.getByRole("button", { name: "Add", exact: true }).click();
   await page.locator('p[role="alert"]').waitFor({ state: "visible" });
+  await captureState("Cycle count unknown unit validation");
   await page.reload({ waitUntil: "domcontentloaded" });
   await waitForMeaningfulRoute(page);
   return {
@@ -5927,7 +6097,7 @@ async function warehouseCycleCountValidationWorkflow(page) {
   };
 }
 
-async function warehouseReturnValidationWorkflow(page) {
+async function warehouseReturnValidationWorkflow(page, { captureState }) {
   await page.goto(`${baseUrl}/warehouse/returns?workflow=${Date.now()}`, {
     waitUntil: "domcontentloaded",
     timeout: 20_000,
@@ -5940,6 +6110,7 @@ async function warehouseReturnValidationWorkflow(page) {
     await serialInput.fill("QA-UNKNOWN-RETURN");
     await page.getByRole("button", { name: "Add", exact: true }).click();
     await page.locator('p[role="alert"]').waitFor({ state: "visible" });
+    await captureState("Return unknown serial validation");
   }
   await page.reload({ waitUntil: "domcontentloaded" });
   await waitForMeaningfulRoute(page);
@@ -5967,7 +6138,12 @@ async function roleHandoffReadbackWorkflow(page, route, expectedText, name) {
   return { name, ok: true, finalUrl: page.url().replace(baseUrl, "") };
 }
 
-async function eventsCreateAndReadbackWorkflow(page, marker, state) {
+async function eventsCreateAndReadbackWorkflow(
+  page,
+  marker,
+  state,
+  { captureState },
+) {
   const eventName = `${marker} Intra Event`;
   await page.goto(`${baseUrl}/events?workflow=${Date.now()}`, {
     waitUntil: "domcontentloaded",
@@ -5980,6 +6156,7 @@ async function eventsCreateAndReadbackWorkflow(page, marker, state) {
     .getByRole("button", { name: "Create event", exact: true })
     .click();
   await page.getByText("Event name is required.").waitFor({ state: "visible" });
+  await captureState("Event required-field validation");
   await dialog.getByLabel("Event name").fill(eventName);
   await dialog.getByLabel("Start date").fill("2027-08-15");
   await dialog.getByLabel("End date").fill("2027-08-14");
@@ -5989,6 +6166,7 @@ async function eventsCreateAndReadbackWorkflow(page, marker, state) {
   await page
     .getByText("End date cannot be before the start date.")
     .waitFor({ state: "visible" });
+  await captureState("Event date validation");
   await dialog.getByLabel("End date").fill("2027-08-16");
   await dialog
     .getByRole("button", { name: "Create event", exact: true })
@@ -5996,6 +6174,7 @@ async function eventsCreateAndReadbackWorkflow(page, marker, state) {
   await page.getByText(eventName, { exact: true }).first().waitFor({
     state: "visible",
   });
+  await captureState("Event creation success");
   const checkpoint = await verifyCheckpoint({
     schema: "warehouse",
     table: "events",
@@ -6387,6 +6566,423 @@ async function unifiedFinanceReadbackWorkflow(page, fixture) {
   };
 }
 
+async function productContributorWorkflow(
+  page,
+  marker,
+  fixture,
+  state,
+  { captureState },
+) {
+  const readinessTitle = `${marker} launch readiness`;
+  const pricingReason = `${marker} governed pricing proposal`;
+  await page.goto(`${baseUrl}/product?workflow=${Date.now()}`, {
+    waitUntil: "domcontentloaded",
+    timeout: 20_000,
+  });
+  await waitForMeaningfulRoute(page);
+  await page.getByRole("heading", { name: "Product readiness" }).waitFor({
+    state: "visible",
+  });
+  if (await page.getByRole("button", { name: "Approve go-live" }).count()) {
+    throw new Error("Product contributor was offered the go-live decision.");
+  }
+
+  await page.getByRole("button", { name: "New readiness package" }).click();
+  const readinessDialog = page.getByRole("dialog", {
+    name: "New readiness package",
+  });
+  const readinessSubmit = readinessDialog.getByRole("button", {
+    name: "Submit package",
+  });
+  if (!(await readinessSubmit.isDisabled())) {
+    throw new Error("Incomplete Product readiness package was enabled.");
+  }
+  await captureState("Product readiness validation");
+  await readinessDialog.getByLabel("Product ID").fill(fixture.ids.product);
+  await readinessDialog.getByLabel("Readiness title").fill(readinessTitle);
+  await readinessDialog.getByLabel("Evidence name").fill("UAT launch controls");
+  await readinessDialog
+    .getByLabel("Evidence reference")
+    .fill(`audit://${marker}/product-readiness`);
+  await readinessDialog
+    .getByLabel("Launch conditions")
+    .fill("Operations acknowledgement is required before launch.");
+  await captureState("Product readiness ready to submit");
+  await readinessSubmit.click();
+  await page.getByRole("heading", { name: readinessTitle }).waitFor({
+    state: "visible",
+    timeout: 15_000,
+  });
+
+  await page.getByRole("button", { name: "Propose price" }).click();
+  const priceDialog = page.getByRole("dialog", { name: "Propose price" });
+  const priceSubmit = priceDialog.getByRole("button", {
+    name: "Submit price proposal",
+  });
+  if (!(await priceSubmit.isDisabled())) {
+    throw new Error("Incomplete Product price proposal was enabled.");
+  }
+  await priceDialog.getByLabel("Product ID").fill(fixture.ids.product);
+  await priceDialog.getByLabel("Proposed price").fill("1250");
+  await priceDialog.getByLabel("Cost basis").fill("800");
+  await priceDialog.getByLabel("Reason").fill(pricingReason);
+  await priceDialog
+    .getByLabel("Effective date and time")
+    .fill("2027-08-15T09:00");
+  await captureState("Product pricing ready to submit");
+  await priceSubmit.click();
+  await page.getByText(pricingReason, { exact: true }).waitFor({
+    state: "visible",
+    timeout: 15_000,
+  });
+
+  const db = createAuditDatabaseClient();
+  const [
+    { data: readinessRows, error: readinessError },
+    { data: priceRows, error: priceError },
+  ] = await Promise.all([
+    db
+      .schema("product")
+      .from("readiness_packages")
+      .select("id,title,status,product_id,version")
+      .eq("title", readinessTitle),
+    db
+      .schema("product")
+      .from("price_proposals")
+      .select("id,reason,status,product_id,version")
+      .eq("reason", pricingReason),
+  ]);
+  if (readinessError || readinessRows?.length !== 1) {
+    throw new Error(
+      `Product readiness readback failed: ${readinessError?.message ?? JSON.stringify(readinessRows)}`,
+    );
+  }
+  if (priceError || priceRows?.length !== 1) {
+    throw new Error(
+      `Product pricing readback failed: ${priceError?.message ?? JSON.stringify(priceRows)}`,
+    );
+  }
+  state.readinessId = readinessRows[0].id;
+  state.priceProposalId = priceRows[0].id;
+  state.productId = fixture.ids.product;
+  state.readinessTitle = readinessTitle;
+  state.pricingReason = pricingReason;
+
+  const unauthorized = await callRpcAsBrowserUser(
+    page,
+    "product",
+    "decide_readiness_package",
+    {
+      id: state.readinessId,
+      decision: "approved",
+      note: "Unauthorized decision",
+    },
+  );
+  if (unauthorized.ok || !/not authorized/i.test(unauthorized.body)) {
+    throw new Error(
+      `Product contributor decision was not denied (${unauthorized.status}: ${unauthorized.body}).`,
+    );
+  }
+  await captureState("Product contributor submission success");
+  return {
+    name: "Product contributor readiness and pricing submission",
+    ok: true,
+    checkpoints: [
+      {
+        entity: "product.readiness_packages",
+        id: state.readinessId,
+        status: "submitted",
+      },
+      {
+        entity: "product.price_proposals",
+        id: state.priceProposalId,
+        status: "submitted",
+      },
+    ],
+    unauthorizedStatus: unauthorized.status,
+  };
+}
+
+async function productOwnerDecisionWorkflow(page, state, { captureState }) {
+  if (!state.readinessId || !state.priceProposalId) {
+    throw new Error("Product owner workflow requires contributor submissions.");
+  }
+  await page.goto(`${baseUrl}/product?workflow=${Date.now()}`, {
+    waitUntil: "domcontentloaded",
+    timeout: 20_000,
+  });
+  await waitForMeaningfulRoute(page);
+  const readinessHeading = page.getByRole("heading", {
+    name: state.readinessTitle,
+  });
+  await readinessHeading.waitFor({ state: "visible" });
+  const readinessCard = readinessHeading.locator(
+    "xpath=ancestor::div[.//button[normalize-space()='Approve go-live']][1]",
+  );
+  await readinessCard.getByRole("button", { name: "Approve go-live" }).click();
+  const readinessDecision = page.getByRole("dialog", {
+    name: "Approve go-live",
+  });
+  const readinessSubmit = readinessDecision.getByRole("button", {
+    name: "Approve go-live",
+  });
+  if (!(await readinessSubmit.isDisabled())) {
+    throw new Error("Product go-live decision note was not required.");
+  }
+  await captureState("Product go-live decision validation");
+  await readinessDecision
+    .getByLabel("Decision note")
+    .fill("Approved after verified UAT launch evidence.");
+  await readinessSubmit.click();
+  await readinessCard.getByText("approved", { exact: true }).waitFor({
+    state: "visible",
+    timeout: 15_000,
+  });
+
+  const priceReason = page.getByText(state.pricingReason, { exact: true });
+  await priceReason.waitFor({ state: "visible" });
+  const priceCard = priceReason.locator(
+    "xpath=ancestor::div[.//button[normalize-space()='Approve price']][1]",
+  );
+  await priceCard.getByRole("button", { name: "Approve price" }).click();
+  const priceDecision = page.getByRole("dialog", { name: "Approve price" });
+  await priceDecision
+    .getByLabel("Decision note")
+    .fill("Approved under governed pricing review.");
+  await captureState("Product pricing decision ready");
+  await priceDecision.getByRole("button", { name: "Approve price" }).click();
+  await priceCard.getByText("approved", { exact: true }).waitFor({
+    state: "visible",
+    timeout: 15_000,
+  });
+
+  const stale = await callRpcAsBrowserUser(
+    page,
+    "product",
+    "decide_readiness_package",
+    {
+      id: state.readinessId,
+      decision: "approved",
+      note: "Duplicate stale Product decision",
+    },
+  );
+  if (stale.ok || !/not awaiting decision/i.test(stale.body)) {
+    throw new Error(
+      `Stale Product decision was not denied (${stale.status}: ${stale.body}).`,
+    );
+  }
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await waitForMeaningfulRoute(page);
+  await page.getByRole("heading", { name: state.readinessTitle }).waitFor({
+    state: "visible",
+  });
+  const readinessCheckpoint = await verifyCheckpoint({
+    schema: "product",
+    table: "readiness_packages",
+    filters: { id: state.readinessId },
+    expected: { status: "approved", is_current: true },
+    select: "id,status,is_current,decided_by,decided_at",
+  });
+  const pricingCheckpoint = await verifyCheckpoint({
+    schema: "product",
+    table: "price_proposals",
+    filters: { id: state.priceProposalId },
+    expected: { status: "approved" },
+    select: "id,status,decided_by,decided_at",
+  });
+  await captureState("Product owner decisions persisted after refresh");
+  return {
+    name: "Product owner go-live and pricing decision",
+    ok: true,
+    checkpoints: [readinessCheckpoint, pricingCheckpoint],
+    staleDenialStatus: stale.status,
+  };
+}
+
+async function productOperationsHandoffWorkflow(page, state, { captureState }) {
+  await page.goto(`${baseUrl}/product?workflow=${Date.now()}`, {
+    waitUntil: "domcontentloaded",
+    timeout: 20_000,
+  });
+  await waitForMeaningfulRoute(page);
+  const readinessHeading = page.getByRole("heading", {
+    name: state.readinessTitle,
+  });
+  await readinessHeading.waitFor({ state: "visible" });
+  if (
+    (await page.getByRole("button", { name: "Approve go-live" }).count()) ||
+    (await page.getByRole("button", { name: "New readiness package" }).count())
+  ) {
+    throw new Error(
+      "Operations partner was offered a Product authoring decision.",
+    );
+  }
+  const card = readinessHeading.locator(
+    "xpath=ancestor::div[.//button[normalize-space()='Acknowledge Operations handoff']][1]",
+  );
+  await captureState("Operations Product handoff ready");
+  await card
+    .getByRole("button", { name: "Acknowledge Operations handoff" })
+    .click();
+  await page
+    .getByRole("button", { name: "Acknowledge Operations handoff" })
+    .waitFor({ state: "hidden", timeout: 15_000 });
+
+  const duplicate = await callRpcAsBrowserUser(
+    page,
+    "product",
+    "acknowledge_operations_handoff",
+    { id: state.readinessId },
+  );
+  if (
+    duplicate.ok ||
+    !/unavailable|already acknowledged/i.test(duplicate.body)
+  ) {
+    throw new Error(
+      `Duplicate Operations handoff was not denied (${duplicate.status}: ${duplicate.body}).`,
+    );
+  }
+  const unauthorized = await callRpcAsBrowserUser(
+    page,
+    "product",
+    "decide_readiness_package",
+    {
+      id: state.readinessId,
+      decision: "rejected",
+      note: "Unauthorized Operations decision",
+    },
+  );
+  if (unauthorized.ok || !/not authorized/i.test(unauthorized.body)) {
+    throw new Error("Operations partner Product decision was not denied.");
+  }
+  const canLaunch = await callRpcAsBrowserUser(
+    page,
+    "product",
+    "can_launch",
+    { p_product_id: state.productId },
+    { wrapPayload: false },
+  );
+  if (!canLaunch.ok || canLaunch.body !== "true") {
+    throw new Error(
+      `Product launch readback did not converge (${canLaunch.status}: ${canLaunch.body}).`,
+    );
+  }
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await waitForMeaningfulRoute(page);
+  const checkpoint = await verifyCheckpoint({
+    schema: "product",
+    table: "readiness_packages",
+    filters: { id: state.readinessId },
+    expected: { status: "approved", is_current: true },
+    select:
+      "id,status,is_current,operations_acknowledged_by,operations_acknowledged_at",
+  });
+  const db = createAuditDatabaseClient();
+  const { data: handoffRows, error } = await db
+    .schema("product")
+    .from("readiness_packages")
+    .select("operations_acknowledged_by,operations_acknowledged_at")
+    .eq("id", state.readinessId);
+  if (
+    error ||
+    !handoffRows?.[0]?.operations_acknowledged_by ||
+    !handoffRows?.[0]?.operations_acknowledged_at
+  ) {
+    throw new Error(
+      `Operations handoff readback failed: ${error?.message ?? "missing acknowledgement"}.`,
+    );
+  }
+  await captureState("Operations Product handoff persisted");
+  return {
+    name: "Operations Product handoff acknowledgement",
+    ok: true,
+    checkpoint,
+    duplicateStatus: duplicate.status,
+    unauthorizedStatus: unauthorized.status,
+    canLaunch: true,
+  };
+}
+
+async function cleanupProductGovernance(marker) {
+  const db = createAuditDatabaseClient();
+  const readinessTitle = `${marker} launch readiness`;
+  const pricingReason = `${marker} governed pricing proposal`;
+  const [
+    { data: readiness, error: readinessError },
+    { data: pricing, error: pricingError },
+  ] = await Promise.all([
+    db
+      .schema("product")
+      .from("readiness_packages")
+      .select("id,title")
+      .eq("title", readinessTitle),
+    db
+      .schema("product")
+      .from("price_proposals")
+      .select("id,reason")
+      .eq("reason", pricingReason),
+  ]);
+  if (readinessError || pricingError) {
+    throw new Error(
+      `Product cleanup discovery failed: ${readinessError?.message ?? pricingError?.message}`,
+    );
+  }
+  if (
+    (readiness ?? []).some((row) => row.title !== readinessTitle) ||
+    (pricing ?? []).some((row) => row.reason !== pricingReason)
+  ) {
+    throw new Error(
+      "Product cleanup refused a row without exact marker proof.",
+    );
+  }
+  const readinessIds = (readiness ?? []).map((row) => row.id);
+  const priceIds = (pricing ?? []).map((row) => row.id);
+  const removeIds = async (schema, table, column, ids) => {
+    if (!ids.length) return;
+    const { error } = await db
+      .schema(schema)
+      .from(table)
+      .delete()
+      .in(column, ids);
+    if (error)
+      throw new Error(`${schema}.${table} cleanup failed: ${error.message}`);
+  };
+  await removeIds("core", "notifications", "entity_id", readinessIds);
+  await removeIds("product", "readiness_events", "readiness_id", readinessIds);
+  await removeIds("product", "price_events", "proposal_id", priceIds);
+  await removeIds("product", "readiness_packages", "id", readinessIds);
+  await removeIds("product", "price_proposals", "id", priceIds);
+  const [
+    { count: readinessRemaining, error: readinessVerify },
+    { count: priceRemaining, error: priceVerify },
+  ] = await Promise.all([
+    db
+      .schema("product")
+      .from("readiness_packages")
+      .select("id", { count: "exact", head: true })
+      .eq("title", readinessTitle),
+    db
+      .schema("product")
+      .from("price_proposals")
+      .select("id", { count: "exact", head: true })
+      .eq("reason", pricingReason),
+  ]);
+  if (
+    readinessVerify ||
+    priceVerify ||
+    readinessRemaining !== 0 ||
+    priceRemaining !== 0
+  ) {
+    throw new Error("Product governance cleanup left run-scoped records.");
+  }
+  return {
+    entity: "product-governance",
+    marker,
+    removed: readinessIds.length + priceIds.length,
+    remaining: 0,
+  };
+}
+
 async function identityAccessWorkflow(page, { allowedPath, deniedPath }) {
   await page.goto(`${baseUrl}${allowedPath}?identityAudit=${Date.now()}`, {
     waitUntil: "domcontentloaded",
@@ -6558,6 +7154,20 @@ async function runWorkflow(browser, viewport, user, workflow) {
             .slice(0, 12);
         })
       : [];
+    const keyboardHotspots = await auditKeyboardAndHotspots(page);
+    const allUndersizedMobileTargets = viewport.isMobile
+      ? [...undersizedMobileTargets, ...keyboardHotspots.undersizedTargets]
+          .filter(
+            (target, index, items) =>
+              items.findIndex(
+                (candidate) =>
+                  candidate.label === target.label &&
+                  candidate.width === target.width &&
+                  candidate.height === target.height,
+              ) === index,
+          )
+          .slice(0, 16)
+      : [];
     return {
       overflow: layout.horizontalOverflow,
       scrollWidth: layout.scrollWidth,
@@ -6568,8 +7178,38 @@ async function runWorkflow(browser, viewport, user, workflow) {
       deadLinks: layout.deadLinks,
       unlabeledControls: layout.unlabeledControls,
       seriousAccessibility,
-      undersizedMobileTargets,
+      undersizedMobileTargets: allUndersizedMobileTargets,
+      keyboardHotspots,
     };
+  }
+
+  const intermediateEvidence = [];
+  async function captureState(label) {
+    const stateLabel = String(label)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 64);
+    const audit = await auditInteractiveState();
+    const statePath = path.join(
+      auditEvidenceDir,
+      `${evidenceName}-${stateLabel || "state"}.jpg`,
+    );
+    await mkdir(auditEvidenceDir, { recursive: true });
+    await page.screenshot({
+      path: statePath,
+      type: "jpeg",
+      quality: 72,
+      fullPage: true,
+    });
+    const record = {
+      label,
+      url: page.url().replace(baseUrl, ""),
+      screenshot: path.relative(process.cwd(), statePath).replaceAll("\\", "/"),
+      audit,
+    };
+    intermediateEvidence.push(record);
+    return record;
   }
 
   try {
@@ -6584,7 +7224,7 @@ async function runWorkflow(browser, viewport, user, workflow) {
         login: loginResult,
       };
     }
-    const result = await workflow.run(page);
+    const result = await workflow.run(page, { captureState });
     const interactionAudit = await auditInteractiveState();
     const evidenceScreenshot = await captureEvidence();
     const interactionProblems = [
@@ -6598,6 +7238,12 @@ async function runWorkflow(browser, viewport, user, workflow) {
       interactionAudit.undersizedMobileTargets.length
         ? "mobile targets smaller than 44px"
         : null,
+      interactionAudit.keyboardHotspots.focusEscapedDialog
+        ? "keyboard focus escaped the active dialog"
+        : null,
+      interactionAudit.keyboardHotspots.interceptedTargets.length
+        ? "intercepted interactive hotspots"
+        : null,
     ].filter(Boolean);
     return {
       viewport: viewport.name,
@@ -6608,6 +7254,8 @@ async function runWorkflow(browser, viewport, user, workflow) {
       ok: result.ok !== false && interactionProblems.length === 0,
       interactionProblems,
       interactionAudit,
+      intermediateEvidence,
+      scenarioEvidence: workflowScenarioEvidence(workflow.name),
       evidenceScreenshot,
       consoleErrors: Array.from(new Set(consoleErrors)).slice(0, 12),
       networkErrors: networkErrors.slice(0, 12),
@@ -6621,6 +7269,8 @@ async function runWorkflow(browser, viewport, user, workflow) {
       scenarioId: workflow.scenarioId ?? null,
       ok: false,
       error: String(error.message || error).slice(0, 1_200),
+      intermediateEvidence,
+      scenarioEvidence: workflowScenarioEvidence(workflow.name),
       evidenceScreenshot,
       consoleErrors: Array.from(new Set(consoleErrors)).slice(0, 12),
       networkErrors: networkErrors.slice(0, 12),
@@ -6689,9 +7339,32 @@ if (runRouteAudit) {
         loginResult = await login(page, user);
         if (loginResult.status === "signed-in") {
           const discoveredRoutes = await discoverVisibleNavigationRoutes(page);
-          for (const route of routesFor(user, discoveredRoutes)) {
+          const routeQueue = routesFor(user, discoveredRoutes);
+          const queuedPaths = new Set(routeQueue.map((route) => route.path));
+          const recursiveRouteLimit = 32;
+          let recursivelyDiscovered = 0;
+          while (routeQueue.length) {
+            const route = routeQueue.shift();
             try {
-              routeResults.push(await auditRoute(page, route));
+              const routeResult = await auditRoute(page, route);
+              routeResults.push(routeResult);
+              if (
+                route.expectedAccess === "allowed" &&
+                routeResult.class === "rendered" &&
+                recursivelyDiscovered < recursiveRouteLimit
+              ) {
+                for (const path of await discoverSafeDetailRoutes(page)) {
+                  if (queuedPaths.has(path)) continue;
+                  queuedPaths.add(path);
+                  routeQueue.push({
+                    path,
+                    expectedAccess: "allowed",
+                    source: "recursive-rendered-link",
+                  });
+                  recursivelyDiscovered += 1;
+                  if (recursivelyDiscovered >= recursiveRouteLimit) break;
+                }
+              }
             } catch (error) {
               routeResults.push({
                 route: route.path,
@@ -6955,6 +7628,52 @@ try {
           registerTask3Cleanup,
         );
         const crossModuleState = { marker };
+        const productState = { marker };
+        workflows.push(
+          await runWorkflow(
+            browser,
+            viewport,
+            { email: "intra.test.employee@mwell.com.ph" },
+            {
+              name: "Product contributor readiness and pricing submission",
+              scenarioId: "product-readiness-go-live-pricing",
+              run: (page, hooks) =>
+                productContributorWorkflow(
+                  page,
+                  marker,
+                  task3Fixture,
+                  productState,
+                  hooks,
+                ),
+            },
+          ),
+        );
+        workflows.push(
+          await runWorkflow(
+            browser,
+            viewport,
+            { email: "intra.test.product.owner@mwell.com.ph" },
+            {
+              name: "Product owner go-live and pricing decision",
+              scenarioId: "product-readiness-go-live-pricing",
+              run: (page, hooks) =>
+                productOwnerDecisionWorkflow(page, productState, hooks),
+            },
+          ),
+        );
+        workflows.push(
+          await runWorkflow(
+            browser,
+            viewport,
+            { email: "intra.test.operations.lead@mwell.com.ph" },
+            {
+              name: "Operations Product handoff acknowledgement",
+              scenarioId: "product-readiness-go-live-pricing",
+              run: (page, hooks) =>
+                productOperationsHandoffWorkflow(page, productState, hooks),
+            },
+          ),
+        );
         workflows.push(
           await runWorkflow(
             browser,
@@ -6989,8 +7708,13 @@ try {
             {
               name: "Events request creation and persistence readback",
               scenarioId: "events-request-to-warehouse-handoff",
-              run: (page) =>
-                eventsCreateAndReadbackWorkflow(page, marker, crossModuleState),
+              run: (page, hooks) =>
+                eventsCreateAndReadbackWorkflow(
+                  page,
+                  marker,
+                  crossModuleState,
+                  hooks,
+                ),
             },
           ),
         );
@@ -7326,7 +8050,7 @@ try {
             {
               name: "department DOA creation",
               scenarioId: "admin-doa",
-              run: (page) => adminCreateDoaWorkflow(page, marker),
+              run: (page, hooks) => adminCreateDoaWorkflow(page, marker, hooks),
             },
           ),
         );
@@ -7389,6 +8113,7 @@ try {
       const governedActivityResults = [];
       const eventDependencyResults = [];
       const vendorInviteCommandResults = [];
+      const productGovernanceResults = [];
       for (const marker of auditMarkers) {
         try {
           vendorInviteCommandResults.push(
@@ -7429,6 +8154,17 @@ try {
             error: error instanceof Error ? error.message : String(error),
           });
         }
+        try {
+          productGovernanceResults.push(await cleanupProductGovernance(marker));
+        } catch (error) {
+          productGovernanceResults.push({
+            entity: "product-governance",
+            marker,
+            removed: false,
+            remaining: null,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
       }
       for (const fixture of [...task3Fixtures].reverse()) {
         try {
@@ -7450,6 +8186,7 @@ try {
         ...vendorInviteCommandResults,
         ...governedActivityResults,
         ...eventDependencyResults,
+        ...productGovernanceResults,
         ...task3Results,
       );
       cleanup.complete =
@@ -7461,6 +8198,9 @@ try {
           (result) => result.remaining === 0 && !result.error,
         ) &&
         eventDependencyResults.every(
+          (result) => result.remaining === 0 && !result.error,
+        ) &&
+        productGovernanceResults.every(
           (result) => result.remaining === 0 && !result.error,
         ) &&
         task3Results.every((result) => result.remaining === 0 && !result.error);
@@ -7524,25 +8264,13 @@ const aggregate = results.map((item) => ({
   consoleErrors: item.consoleErrors,
 }));
 
-const scenarioCoverage = CURRENT_LIVE_SCENARIOS.map((scenario) => {
-  const runs = workflows.filter(
-    (workflow) => workflow.scenarioId === scenario.id,
-  );
-  return {
-    id: scenario.id,
-    requiredViewports: scenario.viewports,
-    coveredViewports: Array.from(new Set(runs.map((run) => run.viewport))),
-    actors: scenario.actors,
-    successfulRuns: runs.filter((run) => run.ok).length,
-    failedRuns: runs.filter((run) => !run.ok).length,
-    workflows: runs.map((run) => ({
-      viewport: run.viewport,
-      user: run.user,
-      workflow: run.workflow,
-      ok: run.ok,
-    })),
-  };
-});
+const shardCoverageViewports = mutatingPhase
+  ? transactionViewports.map((viewport) => viewport.name)
+  : [];
+const scenarioCoverage = evaluateScenarioCoverage(
+  workflows,
+  shardCoverageViewports,
+);
 
 const outputPath = path.resolve(
   process.env.AUDIT_OUTPUT_PATH ??
@@ -7609,24 +8337,11 @@ const workflowFailures = workflows
       `${workflow.viewport}/${workflow.workflow}: ${workflow.error ?? "failed"}`,
   );
 if (mutatingPhase) {
-  for (const scenario of scenarioCoverage) {
-    for (const viewport of scenario.requiredViewports) {
-      if (
-        !scenario.workflows.some(
-          (workflow) => workflow.viewport === viewport && workflow.ok,
-        )
-      ) {
-        workflowFailures.push(
-          `${auditRunId}: scenario ${scenario.id} has no successful ${viewport} workflow`,
-        );
-      }
-    }
-    if (!scenario.workflows.length) {
-      workflowFailures.push(
-        `${auditRunId}: executable scenario ${scenario.id} was not run`,
-      );
-    }
-  }
+  workflowFailures.push(
+    ...scenarioCoverageFailures(scenarioCoverage).map(
+      (failure) => `${auditRunId}: ${failure}`,
+    ),
+  );
 }
 if (!cleanup.complete)
   workflowFailures.push(`${auditRunId}: cleanup incomplete`);

@@ -51,6 +51,63 @@ export function validateEventDraftFields(draft: EventDraft): Record<string, stri
   return errors;
 }
 
+export function validateEventManagementFields(
+  action: EventManagementInput['action'],
+  draft: Partial<EventDraft>,
+  reason: string,
+  ownerEmail: string,
+  minimumDate?: string,
+): Record<string, string> {
+  const errors: Record<string, string> = {};
+  if (action === 'edit' && !draft.name?.trim()) {
+    errors.name = 'Event name is required.';
+  }
+  if (action === 'reschedule') {
+    if (!draft.startDate) {
+      errors.startDate = 'Start date is required.';
+    } else if (minimumDate && draft.startDate < minimumDate) {
+      errors.startDate = 'Start date cannot be in the past.';
+    }
+    if (draft.startDate && draft.endDate && draft.endDate < draft.startDate) {
+      errors.endDate = 'End date cannot be before the start date.';
+    }
+  }
+  if (action === 'transfer_owner') {
+    if (!ownerEmail.trim()) {
+      errors.ownerEmail = 'New owner email is required.';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ownerEmail.trim())) {
+      errors.ownerEmail = 'Enter a valid email address.';
+    }
+  }
+  if (!reason.trim()) errors.reason = 'A reason is required for the event history.';
+  return errors;
+}
+
+export function validateEventFulfillmentFields(
+  input: EventFulfillmentRequest,
+  options: { minimumDate?: string; maximumDate?: string; itemClass?: string } = {},
+): Record<string, string> {
+  const errors: Record<string, string> = {};
+  if (!input.requestingDepartment.trim()) errors.department = 'Department is required.';
+  if (!input.purpose.trim()) errors.purpose = 'Business purpose is required.';
+  if (!input.costCenter.trim()) errors.costCenter = 'Cost center is required.';
+  if (!input.requiredDate) {
+    errors.requiredDate = 'Required date is required.';
+  } else if (options.minimumDate && input.requiredDate < options.minimumDate) {
+    errors.requiredDate = 'Required date cannot be in the past.';
+  } else if (options.maximumDate && input.requiredDate > options.maximumDate) {
+    errors.requiredDate = 'Required date cannot be after the event end date.';
+  }
+  if (!input.productId) errors.productId = 'Select a product.';
+  if (!Number.isInteger(input.quantity) || input.quantity < 1) {
+    errors.quantity = 'Enter a positive whole-number quantity.';
+  }
+  if (options.itemClass === 'merchandise' && input.expenseTreatment !== 'expense') {
+    errors.treatment = 'Merchandise must be treated as an expense.';
+  }
+  return errors;
+}
+
 function lifecycleForRow(row: UnknownRow): EventLifecycle {
   const status = text(row.status);
   if (status === 'cancelled' || status === 'closed') return status;
@@ -75,7 +132,14 @@ function mapEventRow(row: UnknownRow, totals = { reserved: 0, issued: 0, returne
 }
 
 export async function manageLiveEvent(client: EventsClient, input: EventManagementInput): Promise<EventRecord> {
-  if (!input.reason.trim()) throw new Error('A reason is required.');
+  const validation = validateEventManagementFields(
+    input.action,
+    input.changes ?? { name: '', type: 'corporate', startDate: '' },
+    input.reason,
+    input.changes?.ownerEmail ?? '',
+  );
+  const firstError = Object.values(validation)[0];
+  if (firstError) throw new Error(firstError);
   const changes = input.changes ?? {};
   const { data, error } = await client.schema('warehouse').rpc('manage_event', {
     payload: {
@@ -101,12 +165,10 @@ export async function requestEventFulfillment(
   client: EventsClient,
   input: EventFulfillmentRequest,
 ): Promise<{ id: string; eventId: string }> {
-  if (!input.eventId || !input.purpose.trim() || !input.costCenter.trim() || !input.requiredDate) {
-    throw new Error('Event, purpose, cost center, and required date are required.');
-  }
-  if (!input.productId || !Number.isInteger(input.quantity) || input.quantity < 1) {
-    throw new Error('A product and positive whole-number quantity are required.');
-  }
+  if (!input.eventId) throw new Error('Event is required.');
+  const validation = validateEventFulfillmentFields(input);
+  const firstError = Object.values(validation)[0];
+  if (firstError) throw new Error(firstError);
   const { data, error } = await client.schema('warehouse').rpc('request_event_fulfillment', {
     payload: {
       event_id: input.eventId,

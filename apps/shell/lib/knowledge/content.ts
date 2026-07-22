@@ -682,6 +682,151 @@ const procedureArticles: KnowledgeArticle[] = [
   ),
 ];
 
+const productOperatingArticles: KnowledgeArticle[] = [
+  {
+    id: "product-launch-and-pricing",
+    slug: "procedures/product-launch-and-pricing",
+    title: "Run Product launch and pricing governance",
+    summary:
+      "Prepare current evidence, make independent Product decisions, complete the Operations handoff, and govern effective-dated pricing without duplicate actions.",
+    module: "product",
+    availability: "live",
+    roles: [
+      "product_contributor",
+      "product_owner",
+      "product_operations_partner",
+    ],
+    keywords: [
+      "product launch",
+      "go-live",
+      "readiness package",
+      "operations handoff",
+      "price proposal",
+      "stale record",
+      "duplicate activation",
+    ],
+    sections: [
+      {
+        id: "roles-and-separation",
+        title: "Roles and separation",
+        body: "The Product Contributor submits readiness evidence and price proposals. The Product Owner independently approves or rejects the current submitted versions. The Product Operations Partner acknowledges only an approved launch and cannot change Product's decision. A proposal author cannot approve the same price proposal.",
+      },
+      {
+        id: "launch-decision-tree",
+        title: "Launch decision tree",
+        body: "Use the current record version throughout. Every decision branch keeps its reason and outcome in Intra.",
+        steps: [
+          {
+            title: "Submit current readiness",
+            ownerRoleIds: ["product_contributor"],
+            instruction:
+              "Open Product, select New readiness package, identify the product, add a current evidence name and reference, record launch conditions, and submit once.",
+            expectedOutcome:
+              "A submitted version appears in the go-live queue for Product review.",
+            exception:
+              "If submission fails, keep the form open, verify whether the record saved, then retry only if no record exists.",
+          },
+          {
+            title: "Check evidence completeness",
+            ownerRoleIds: ["product_owner"],
+            instruction:
+              "Confirm every required reference is current and verified and that Legal, Finance, Technology, Sales, and Operations dependencies have accountable owners.",
+            expectedOutcome: "The current version is ready for a decision.",
+            exception:
+              "If evidence is missing, stale, or unverifiable, do not approve; return the package for a new corrected version.",
+          },
+          {
+            title: "Decide go-live",
+            ownerRoleIds: ["product_owner"],
+            instruction:
+              "Select Approve go-live or Reject go-live, enter a specific decision note, and submit once.",
+            expectedOutcome:
+              "The actor, decision, note, version, and timestamp remain together.",
+            exception:
+              "If the record changed, close the stale decision, review the refreshed status, and do not repeat an already completed decision.",
+          },
+          {
+            title: "Accept the Operations handoff",
+            ownerRoleIds: ["product_operations_partner"],
+            instruction:
+              "Review the approved version and conditions, then acknowledge the Operations handoff once when capacity and ownership are confirmed.",
+            expectedOutcome:
+              "The approved launch records the accepting Operations actor and time.",
+            exception:
+              "If an operational blocker remains, do not acknowledge. Escalate it to Product and Operations leadership with the record ID and condition at risk.",
+          },
+        ],
+      },
+      {
+        id: "pricing-decision-tree",
+        title: "Pricing decision tree",
+        body: "The controlled price does not change when a proposal is submitted. It changes only after an independent approval and when the effective time is due.",
+        steps: [
+          {
+            title: "Submit a price proposal",
+            ownerRoleIds: ["product_contributor"],
+            instruction:
+              "Select Propose price and enter the product, positive proposed price, non-negative cost basis, commercial reason, and effective date.",
+            expectedOutcome:
+              "A submitted proposal records its author, version, basis, and effective date.",
+            exception:
+              "Correct validation errors in the retained form; do not create a second proposal while the first submission is pending.",
+          },
+          {
+            title: "Verify independent review",
+            ownerRoleIds: ["product_owner"],
+            instruction:
+              "Confirm the proposal is current, complete, submitted, and authored by a different person.",
+            expectedOutcome: "The proposal is eligible for Product decision.",
+            exception:
+              "A self-authored, stale, already decided, or incomplete proposal cannot proceed.",
+          },
+          {
+            title: "Decide the price",
+            ownerRoleIds: ["product_owner"],
+            instruction:
+              "Approve or reject with a specific note. Submit the decision once and wait for the refreshed status.",
+            expectedOutcome:
+              "The independent decision is retained without rewriting historical prices.",
+            exception:
+              "Rejection leaves the current price unchanged; the contributor must create a new corrected proposal.",
+          },
+          {
+            title: "Confirm due activation",
+            ownerRoleIds: ["product_owner"],
+            instruction:
+              "After the effective time, verify the proposal is activated and the current price matches the approved value.",
+            expectedOutcome:
+              "One activation is visible with preserved prior price history.",
+            exception:
+              "Never repeat activation manually. Escalate a due approved proposal that remains unapplied with its proposal ID and effective time.",
+          },
+        ],
+      },
+      {
+        id: "failure-and-recovery",
+        title: "Failure, stale state, and safe retry",
+        body: "While an action is pending, its command is locked. An error remains beside the originating form or record and entered values are retained. A stale-state response triggers a quiet readback; review the refreshed version before taking another action. When saved state is uncertain, stop and verify the record instead of clicking again.",
+      },
+      {
+        id: "current-evidence-status",
+        title: "Current evidence status",
+        body: "Reviewed against the Product workspace implementation on 2026-07-23. Current operational evidence is the persisted record metadata: record ID, product ID, version, status, evidence references, conditions or commercial basis, proposer or preparer, independent decision actor, decision note, effective date, Operations acknowledgement, and timestamps. No Product-specific desktop or mobile screenshot set has completed capture and independent review, so this article intentionally presents no screenshots and makes no screenshot certification claim.",
+      },
+    ],
+    relatedArticleIds: [
+      "feature-product-governance",
+      "role-product_contributor",
+      "role-product_owner",
+      "role-product_operations_partner",
+    ],
+    flowIds: ["product-launch-governance", "pricing-and-costing"],
+    liveRoutes: ["/product"],
+    owner: "Product",
+    reviewedAt: "2026-07-23",
+  },
+];
+
 export const KNOWLEDGE_CONTENT: KnowledgeContent = {
   roles: KNOWLEDGE_ROLES,
   features: KNOWLEDGE_FEATURES,
@@ -689,6 +834,7 @@ export const KNOWLEDGE_CONTENT: KnowledgeContent = {
     ...roleArticles,
     ...featureArticles,
     ...procedureArticles,
+    ...productOperatingArticles,
     ...ADMINISTRATOR_ARTICLES,
     ...GOVERNANCE_ARTICLES,
     ...TROUBLESHOOTING_ARTICLES,

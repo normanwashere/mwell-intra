@@ -16,12 +16,13 @@ import { clsx } from 'clsx';
 import { Icon, type IconName } from './Icon';
 import { SPRING_SNAPPY } from './motion/tokens';
 
-type ToastTone = 'success' | 'error' | 'info';
+export type ToastTone = 'success' | 'error' | 'info';
 
-interface Toast {
+export interface ToastRecord {
   id: number;
   message: string;
   tone: ToastTone;
+  count: number;
 }
 
 interface ToastContextValue {
@@ -41,8 +42,27 @@ export const TOAST_TONE_STYLES: Record<ToastTone, { cls: string; icon: IconName 
 export const TOAST_DISMISS_CLASS =
   'grid min-h-11 min-w-11 shrink-0 place-items-center rounded-lg text-white transition hover:bg-white/10';
 
+export const MAX_VISIBLE_TOASTS = 3;
+
+export function coalesceToastQueue(
+  current: readonly ToastRecord[],
+  incoming: ToastRecord,
+  limit = MAX_VISIBLE_TOASTS,
+): ToastRecord[] {
+  const duplicate = current.find(
+    (item) => item.message === incoming.message && item.tone === incoming.tone,
+  );
+  const next = duplicate
+    ? current.map((item) =>
+        item.id === duplicate.id ? { ...item, count: item.count + 1 } : item,
+      )
+    : [...current, incoming];
+  return next.slice(-Math.max(1, limit));
+}
+
 export function ToastProvider({ children }: { children: ReactNode }) {
-  const [toasts, setToasts] = useState<Toast[]>([]);
+  const [toasts, setToasts] = useState<ToastRecord[]>([]);
+  const toastsRef = useRef<ToastRecord[]>([]);
   const counter = useRef(0);
   const timers = useRef(new Map<number, ReturnType<typeof setTimeout>>());
   const reduced = useReducedMotion();
@@ -51,14 +71,39 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     const timer = timers.current.get(id);
     if (timer) clearTimeout(timer);
     timers.current.delete(id);
-    setToasts((prev) => prev.filter((t) => t.id !== id));
+    const next = toastsRef.current.filter((item) => item.id !== id);
+    toastsRef.current = next;
+    setToasts(next);
   }, []);
 
   const toast = useCallback(
     (message: string, tone: ToastTone = 'info') => {
-      const id = ++counter.current;
-      setToasts((prev) => [...prev, { id, message, tone }]);
+      const normalizedMessage = message.trim();
+      if (!normalizedMessage) return;
+      const candidate = {
+        id: ++counter.current,
+        message: normalizedMessage,
+        tone,
+        count: 1,
+      };
+      const next = coalesceToastQueue(toastsRef.current, candidate);
+      const active = next.find(
+        (item) => item.message === normalizedMessage && item.tone === tone,
+      );
+      const id = active?.id ?? candidate.id;
+      const removed = toastsRef.current.filter(
+        (item) => !next.some((nextItem) => nextItem.id === item.id),
+      );
+      for (const item of removed) {
+        const timer = timers.current.get(item.id);
+        if (timer) clearTimeout(timer);
+        timers.current.delete(item.id);
+      }
+      const existingTimer = timers.current.get(id);
+      if (existingTimer) clearTimeout(existingTimer);
       timers.current.set(id, setTimeout(() => remove(id), 3800));
+      toastsRef.current = next;
+      setToasts(next);
     },
     [remove],
   );
@@ -84,9 +129,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     <ToastContext.Provider value={value}>
       {children}
       <div
-        className="pointer-events-none fixed inset-x-0 top-[calc(4.75rem+env(safe-area-inset-top))] z-[60] flex flex-col items-center gap-2 px-4 sm:top-auto sm:bottom-0 sm:pb-6"
+        className="pointer-events-none fixed inset-x-0 top-[calc(4.75rem+env(safe-area-inset-top))] z-[60] flex max-h-[calc(100dvh-var(--shell-mobile-nav-clearance,5.5rem)-6rem)] flex-col items-center gap-2 overflow-y-auto px-3 sm:top-auto sm:bottom-0 sm:max-h-[calc(100dvh-2rem)] sm:px-4 sm:pb-6"
         role="region"
         aria-label="Notifications"
+        aria-live="polite"
       >
         <AnimatePresence mode="popLayout">
           {toasts.map((t) => {
@@ -106,7 +152,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 )}
               >
                 <Icon name={tone.icon} className="h-5 w-5 shrink-0" />
-                <span className="flex-1">{t.message}</span>
+                <span className="min-w-0 flex-1 break-words">{t.message}</span>
+                {t.count > 1 && (
+                  <span className="shrink-0 rounded-full bg-white/15 px-2 py-0.5 text-xs" aria-label={`Repeated ${t.count} times`}>
+                    {t.count}
+                  </span>
+                )}
                 <button
                   type="button"
                   aria-label="Dismiss"

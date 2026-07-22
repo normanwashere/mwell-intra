@@ -11,6 +11,8 @@ import {
   saveMemoryEvents,
   validateEventDraft,
   validateEventDraftFields,
+  validateEventFulfillmentFields,
+  validateEventManagementFields,
 } from './data';
 import { EVENTS_DEMO_DATA } from './seed';
 
@@ -86,6 +88,59 @@ describe('event lifecycle rules', () => {
         endDate: '2026-07-14',
       }),
     ).toEqual({ endDate: 'End date cannot be before the start date.' });
+  });
+
+  it('validates management fields and date constraints before lifecycle writes', () => {
+    expect(
+      validateEventManagementFields(
+        'reschedule',
+        { name: 'Town hall', type: 'corporate', startDate: '2026-07-22', endDate: '2026-07-21' },
+        '',
+        '',
+        '2026-07-23',
+      ),
+    ).toEqual({
+      startDate: 'Start date cannot be in the past.',
+      endDate: 'End date cannot be before the start date.',
+      reason: 'A reason is required for the event history.',
+    });
+    expect(
+      validateEventManagementFields(
+        'transfer_owner',
+        { name: 'Town hall', type: 'corporate', startDate: '2026-07-24' },
+        'Coverage change',
+        'not-an-email',
+      ),
+    ).toEqual({ ownerEmail: 'Enter a valid email address.' });
+  });
+
+  it('validates every fulfillment field, event date boundary, and merchandise treatment', () => {
+    const base = {
+      eventId: 'evt-1',
+      requestingDepartment: '',
+      purpose: '',
+      costCenter: '',
+      requiredDate: '2026-08-03',
+      expenseTreatment: 'custody' as const,
+      productId: '',
+      quantity: 0,
+      idempotencyKey: 'request-1',
+    };
+    expect(
+      validateEventFulfillmentFields(base, {
+        minimumDate: '2026-07-23',
+        maximumDate: '2026-08-02',
+        itemClass: 'merchandise',
+      }),
+    ).toEqual({
+      department: 'Department is required.',
+      purpose: 'Business purpose is required.',
+      costCenter: 'Cost center is required.',
+      requiredDate: 'Required date cannot be after the event end date.',
+      productId: 'Select a product.',
+      quantity: 'Enter a positive whole-number quantity.',
+      treatment: 'Merchandise must be treated as an expense.',
+    });
   });
 
   it('rejects an empty start date before calling Supabase', async () => {
@@ -223,6 +278,10 @@ describe('event lifecycle rules', () => {
     expect(app).toContain('Reopen event');
     expect(app).toContain('Request warehouse stock');
     expect(app).toContain('error={formErrors.startDate}');
+    expect(app).toContain('focusFirstInvalidField');
+    expect(app).toContain('error={manageErrors.reason}');
+    expect(app).toContain('error={fulfillmentErrors.requiredDate}');
+    expect(app).toContain('max={selectedEvent.endDate}');
   });
 });
 

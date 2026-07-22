@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useSession } from "@intra/auth";
 import { can } from "@intra/rbac";
 import {
@@ -26,6 +26,46 @@ import type { PriceProposal, ReadinessPackage } from "./types";
 
 type Decision = "approved" | "rejected";
 
+interface ActionIssue {
+  message: string;
+  stale: boolean;
+}
+
+function actionIssue(cause: unknown, action: string): ActionIssue {
+  const detail = cause instanceof Error ? cause.message.trim() : "";
+  if (/action was saved|saved, but/i.test(detail)) {
+    return {
+      stale: true,
+      message: `The action to ${action} was saved, but confirmation could not be loaded. Do not submit it again. Refresh the workspace and verify the record status. Your entries remain available for reference.`,
+    };
+  }
+  if (/not authorized|permission|row-level security|rls/i.test(detail)) {
+    return {
+      stale: false,
+      message: `Could not ${action} because your current role is not authorized. Ask an administrator to verify your Product responsibility. Your entries were not cleared.`,
+    };
+  }
+  const stale = /already|changed|conflict|no longer|not found|stale|unexpected status|must be (submitted|approved)/i.test(
+    detail,
+  );
+  if (stale) {
+    return {
+      stale: true,
+      message: `Could not ${action} because this record changed. The latest state has been loaded; review it before trying another action. Your entries are still available.`,
+    };
+  }
+  if (/fetch|network|offline|timeout|timed out/i.test(detail)) {
+    return {
+      stale: false,
+      message: `Could not ${action}. Check your connection, confirm the record was not saved, then try once. Your entries were not cleared.`,
+    };
+  }
+  return {
+    stale: false,
+    message: `Could not ${action}. ${detail || "Review the required fields and try again."} Your entries were not cleared.`,
+  };
+}
+
 export function ProductApp() {
   const { profile, userRoles, loading: sessionLoading } = useSession();
   const workspace = useProductWorkspace();
@@ -40,6 +80,11 @@ export function ProductApp() {
   const [note, setNote] = useState("");
   const [readinessOpen, setReadinessOpen] = useState(false);
   const [priceOpen, setPriceOpen] = useState(false);
+  const [pendingActions, setPendingActions] = useState<Record<string, true>>({});
+  const [actionIssues, setActionIssues] = useState<Record<string, ActionIssue>>(
+    {},
+  );
+  const inFlightActions = useRef(new Set<string>());
 
   if (sessionLoading || (profile && workspace.loading)) {
     return (
@@ -84,6 +129,70 @@ export function ProductApp() {
     setNote("");
   };
 
+  const clearActionIssue = (key: string) => {
+    setActionIssues((current) => {
+      if (!current[key]) return current;
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+  };
+
+  const runProductAction = async (
+    key: string,
+    label: string,
+    action: () => Promise<void>,
+  ): Promise<boolean> => {
+    if (inFlightActions.current.has(key)) return false;
+    inFlightActions.current.add(key);
+    setPendingActions((current) => ({ ...current, [key]: true }));
+    clearActionIssue(key);
+    try {
+      await action();
+      return true;
+    } catch (cause) {
+      const issue = actionIssue(cause, label);
+      if (issue.stale) await workspace.refresh({ background: true });
+      setActionIssues((current) => ({ ...current, [key]: issue }));
+      return false;
+    } finally {
+      inFlightActions.current.delete(key);
+      setPendingActions((current) => {
+        const next = { ...current };
+        delete next[key];
+        return next;
+      });
+    }
+  };
+
+  const readinessDecisionKey = readinessDecision
+    ? `readiness:${readinessDecision.item.id}:decision`
+    : "readiness:decision";
+  const currentReadinessDecision = readinessDecision
+    ? workspace.data.readiness.find(
+        (item) => item.id === readinessDecision.item.id,
+      )
+    : null;
+  const readinessDecisionStale = Boolean(
+    readinessDecision &&
+      (!currentReadinessDecision ||
+        currentReadinessDecision.version !== readinessDecision.item.version ||
+        currentReadinessDecision.updatedAt !== readinessDecision.item.updatedAt ||
+        currentReadinessDecision.status !== "submitted"),
+  );
+  const priceDecisionKey = priceDecision
+    ? `pricing:${priceDecision.item.id}:decision`
+    : "pricing:decision";
+  const currentPriceDecision = priceDecision
+    ? workspace.data.pricing.find((item) => item.id === priceDecision.item.id)
+    : null;
+  const priceDecisionStale = Boolean(
+    priceDecision &&
+      (!currentPriceDecision ||
+        currentPriceDecision.version !== priceDecision.item.version ||
+        currentPriceDecision.status !== "submitted"),
+  );
+
   return (
     <div className="space-y-6">
       <ModuleHero
@@ -93,7 +202,14 @@ export function ProductApp() {
         icon="shield"
         action={
           prepareReadiness ? (
-            <HeroChipButton icon="plus" onClick={() => setReadinessOpen(true)}>
+            <HeroChipButton
+              icon="plus"
+              onClick={() => {
+                if (!actionIssues["readiness:create"]?.stale)
+                  clearActionIssue("readiness:create");
+                setReadinessOpen(true);
+              }}
+            >
               New readiness package
             </HeroChipButton>
           ) : undefined
@@ -142,9 +258,20 @@ export function ProductApp() {
                 canAcknowledge={acknowledgeHandoff}
                 onDecide={(decision) => {
                   setNote("");
+                  clearActionIssue(`readiness:${item.id}:decision`);
                   setReadinessDecision({ item, decision });
                 }}
-                onAcknowledge={() => void workspace.acknowledgeHandoff(item.id)}
+                handoffPending={Boolean(
+                  pendingActions[`readiness:${item.id}:handoff`],
+                )}
+                handoffIssue={actionIssues[`readiness:${item.id}:handoff`]}
+                onAcknowledge={() =>
+                  runProductAction(
+                    `readiness:${item.id}:handoff`,
+                    "acknowledge the Operations handoff",
+                    () => workspace.acknowledgeHandoff(item.id),
+                  )
+                }
               />
             ))}
           </div>
@@ -161,7 +288,15 @@ export function ProductApp() {
               <p className="text-sm text-muted">Effective-dated proposals retain cost basis, reason, independent approval, and history.</p>
             </div>
             {proposePricing && (
-              <button type="button" className="btn-secondary min-h-11" onClick={() => setPriceOpen(true)}>
+              <button
+                type="button"
+                className="btn-secondary min-h-11"
+                onClick={() => {
+                  if (!actionIssues["pricing:create"]?.stale)
+                    clearActionIssue("pricing:create");
+                  setPriceOpen(true);
+                }}
+              >
                 <Icon name="plus" className="h-4 w-4" /> Propose price
               </button>
             )}
@@ -181,6 +316,7 @@ export function ProductApp() {
                   canDecide={approvePricing && canDecidePriceProposal(item, profile.id)}
                   onDecide={(decision) => {
                     setNote("");
+                    clearActionIssue(`pricing:${item.id}:decision`);
                     setPriceDecision({ item, decision });
                   }}
                 />
@@ -194,28 +330,85 @@ export function ProductApp() {
         open={Boolean(readinessDecision)}
         title={readinessDecision?.decision === "approved" ? "Approve go-live" : "Reject go-live"}
         note={note}
+        pending={Boolean(pendingActions[readinessDecisionKey])}
+        issue={actionIssues[readinessDecisionKey]}
+        stale={
+          readinessDecisionStale ||
+          Boolean(actionIssues[readinessDecisionKey]?.stale)
+        }
         onNoteChange={setNote}
-        onOpenChange={(open) => { if (!open) closeDecision(); }}
+        onOpenChange={(open) => {
+          if (!open && !pendingActions[readinessDecisionKey]) closeDecision();
+        }}
         onSubmit={async () => {
           if (!readinessDecision || note.trim().length < 8) return;
-          await workspace.decideReadiness(readinessDecision.item.id, readinessDecision.decision, note.trim());
-          closeDecision();
+          const succeeded = await runProductAction(
+            readinessDecisionKey,
+            `${readinessDecision.decision === "approved" ? "approve" : "reject"} go-live`,
+            () =>
+              workspace.decideReadiness(
+                readinessDecision.item.id,
+                readinessDecision.decision,
+                note.trim(),
+              ),
+          );
+          if (succeeded) closeDecision();
         }}
       />
       <DecisionSheet
         open={Boolean(priceDecision)}
         title={priceDecision?.decision === "approved" ? "Approve price" : "Reject price"}
         note={note}
+        pending={Boolean(pendingActions[priceDecisionKey])}
+        issue={actionIssues[priceDecisionKey]}
+        stale={
+          priceDecisionStale || Boolean(actionIssues[priceDecisionKey]?.stale)
+        }
         onNoteChange={setNote}
-        onOpenChange={(open) => { if (!open) closeDecision(); }}
+        onOpenChange={(open) => {
+          if (!open && !pendingActions[priceDecisionKey]) closeDecision();
+        }}
         onSubmit={async () => {
           if (!priceDecision || note.trim().length < 8) return;
-          await workspace.decidePrice(priceDecision.item.id, priceDecision.decision, note.trim());
-          closeDecision();
+          const succeeded = await runProductAction(
+            priceDecisionKey,
+            `${priceDecision.decision === "approved" ? "approve" : "reject"} the price proposal`,
+            () =>
+              workspace.decidePrice(
+                priceDecision.item.id,
+                priceDecision.decision,
+                note.trim(),
+              ),
+          );
+          if (succeeded) closeDecision();
         }}
       />
-      <ReadinessSheet open={readinessOpen} onOpenChange={setReadinessOpen} onSubmit={workspace.createReadiness} />
-      <PriceProposalSheet open={priceOpen} onOpenChange={setPriceOpen} onSubmit={workspace.proposePrice} />
+      <ReadinessSheet
+        open={readinessOpen}
+        pending={Boolean(pendingActions["readiness:create"])}
+        issue={actionIssues["readiness:create"]}
+        onOpenChange={(open) => {
+          if (!open && !pendingActions["readiness:create"]) setReadinessOpen(false);
+        }}
+        onSubmit={(draft) =>
+          runProductAction("readiness:create", "submit the readiness package", () =>
+            workspace.createReadiness(draft),
+          )
+        }
+      />
+      <PriceProposalSheet
+        open={priceOpen}
+        pending={Boolean(pendingActions["pricing:create"])}
+        issue={actionIssues["pricing:create"]}
+        onOpenChange={(open) => {
+          if (!open && !pendingActions["pricing:create"]) setPriceOpen(false);
+        }}
+        onSubmit={(draft) =>
+          runProductAction("pricing:create", "submit the price proposal", () =>
+            workspace.proposePrice(draft),
+          )
+        }
+      />
     </div>
   );
 }
@@ -227,12 +420,22 @@ function statusTone(status: ReadinessPackage["status"] | PriceProposal["status"]
   return "slate";
 }
 
-function ReadinessCard({ item, canDecide, canAcknowledge, onDecide, onAcknowledge }: {
+function ReadinessCard({
+  item,
+  canDecide,
+  canAcknowledge,
+  handoffPending,
+  handoffIssue,
+  onDecide,
+  onAcknowledge,
+}: {
   item: ReadinessPackage;
   canDecide: boolean;
   canAcknowledge: boolean;
+  handoffPending: boolean;
+  handoffIssue?: ActionIssue;
   onDecide: (decision: Decision) => void;
-  onAcknowledge: () => void;
+  onAcknowledge: () => Promise<boolean>;
 }) {
   const handoffReady = canAcknowledge && canAcknowledgeOperationsHandoff(item);
   return (
@@ -261,10 +464,19 @@ function ReadinessCard({ item, canDecide, canAcknowledge, onDecide, onAcknowledg
         </div>
       )}
       {handoffReady && (
-        <button type="button" className="btn-primary min-h-11 w-full" onClick={onAcknowledge}>
-          Acknowledge Operations handoff
+        <button
+          type="button"
+          className="btn-primary min-h-11 w-full"
+          disabled={handoffPending || handoffIssue?.stale}
+          aria-busy={handoffPending}
+          onClick={() => void onAcknowledge()}
+        >
+          {handoffPending
+            ? "Acknowledging Operations handoff..."
+            : "Acknowledge Operations handoff"}
         </button>
       )}
+      {handoffIssue && <ActionFeedback issue={handoffIssue} />}
     </Card>
   );
 }
@@ -298,29 +510,75 @@ function PriceCard({ item, canDecide, onDecide }: {
   );
 }
 
-function DecisionSheet({ open, title, note, onNoteChange, onOpenChange, onSubmit }: {
+function ActionFeedback({ issue }: { issue: ActionIssue }) {
+  return (
+    <div
+      role="alert"
+      className={`rounded-lg border px-3 py-2 text-sm ${
+        issue.stale
+          ? "border-amber-300 bg-amber-50 text-amber-950"
+          : "border-rose-300 bg-rose-50 text-rose-950"
+      }`}
+    >
+      {issue.message}
+    </div>
+  );
+}
+
+function DecisionSheet({ open, title, note, pending, issue, stale, onNoteChange, onOpenChange, onSubmit }: {
   open: boolean;
   title: string;
   note: string;
+  pending: boolean;
+  issue?: ActionIssue;
+  stale: boolean;
   onNoteChange: (value: string) => void;
   onOpenChange: (open: boolean) => void;
   onSubmit: () => Promise<void>;
 }) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange} title={title} description="The actor, timestamp, version, and decision note are retained in the audit history." footer={
-      <button type="button" className="btn-primary min-h-11 w-full" disabled={note.trim().length < 8} onClick={() => void onSubmit()}>{title}</button>
+      <button
+        type="button"
+        className="btn-primary min-h-11 w-full"
+        disabled={note.trim().length < 8 || pending || stale}
+        aria-busy={pending}
+        onClick={() => void onSubmit()}
+      >
+        {pending ? `${title}...` : title}
+      </button>
     }>
-      <Field label="Decision note" htmlFor={`${title.replace(/\s+/g, "-").toLowerCase()}-note`} hint="Required · at least 8 characters">
-        <textarea id={`${title.replace(/\s+/g, "-").toLowerCase()}-note`} className="input min-h-28" value={note} onChange={(event) => onNoteChange(event.target.value)} />
-      </Field>
+      <div className="space-y-4" aria-busy={pending}>
+        <Field label="Decision note" htmlFor={`${title.replace(/\s+/g, "-").toLowerCase()}-note`} hint="Required - at least 8 characters">
+          <textarea
+            id={`${title.replace(/\s+/g, "-").toLowerCase()}-note`}
+            className="input min-h-28"
+            value={note}
+            disabled={pending}
+            onChange={(event) => onNoteChange(event.target.value)}
+          />
+        </Field>
+        {stale && !issue && (
+          <ActionFeedback
+            issue={{
+              stale: true,
+              message:
+                "This record no longer matches the version you opened. Close this decision and review the latest status before taking another action. Your note remains available until you close it.",
+            }}
+          />
+        )}
+        {issue && <ActionFeedback issue={issue} />}
+      </div>
     </Sheet>
   );
 }
 
-function ReadinessSheet({ open, onOpenChange, onSubmit }: {
+function ReadinessSheet({ open, pending, issue, onOpenChange, onSubmit }: {
   open: boolean;
+  pending: boolean;
+  issue?: ActionIssue;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (draft: Parameters<ReturnType<typeof useProductWorkspace>["createReadiness"]>[0]) => Promise<void>;
+  onSubmit: (draft: Parameters<ReturnType<typeof useProductWorkspace>["createReadiness"]>[0]) => Promise<boolean>;
 }) {
   const [productId, setProductId] = useState("");
   const [title, setTitle] = useState("");
@@ -328,25 +586,59 @@ function ReadinessSheet({ open, onOpenChange, onSubmit }: {
   const [evidenceLabel, setEvidenceLabel] = useState("");
   const [evidenceReference, setEvidenceReference] = useState("");
   const valid = productId.trim() && title.trim().length >= 6 && evidenceLabel.trim() && evidenceReference.trim();
+  const submit = async () => {
+    const succeeded = await onSubmit({
+      productId: productId.trim(),
+      title: title.trim(),
+      conditions: conditions.trim(),
+      evidence: [
+        {
+          id: crypto.randomUUID(),
+          label: evidenceLabel.trim(),
+          reference: evidenceReference.trim(),
+          required: true,
+          verified: true,
+        },
+      ],
+    });
+    if (!succeeded) return;
+    setProductId("");
+    setTitle("");
+    setConditions("");
+    setEvidenceLabel("");
+    setEvidenceReference("");
+    onOpenChange(false);
+  };
   return (
     <Sheet open={open} onOpenChange={onOpenChange} title="New readiness package" description="Submit verified evidence for an independent Product go-live decision." footer={
-      <button type="button" className="btn-primary min-h-11 w-full" disabled={!valid} onClick={() => void onSubmit({ productId: productId.trim(), title: title.trim(), conditions: conditions.trim(), evidence: [{ id: crypto.randomUUID(), label: evidenceLabel.trim(), reference: evidenceReference.trim(), required: true, verified: true }] }).then(() => onOpenChange(false))}>Submit package</button>
+      <button
+        type="button"
+        className="btn-primary min-h-11 w-full"
+        disabled={!valid || pending || issue?.stale}
+        aria-busy={pending}
+        onClick={() => void submit()}
+      >
+        {pending ? "Submitting package..." : "Submit package"}
+      </button>
     }>
-      <div className="space-y-4">
+      <fieldset className="space-y-4" disabled={pending} aria-busy={pending}>
         <Field label="Product ID" htmlFor="readiness-product"><input id="readiness-product" className="input" value={productId} onChange={(event) => setProductId(event.target.value)} /></Field>
         <Field label="Readiness title" htmlFor="readiness-title"><input id="readiness-title" className="input" value={title} onChange={(event) => setTitle(event.target.value)} /></Field>
         <Field label="Evidence name" htmlFor="readiness-evidence"><input id="readiness-evidence" className="input" value={evidenceLabel} onChange={(event) => setEvidenceLabel(event.target.value)} /></Field>
         <Field label="Evidence reference" htmlFor="readiness-reference"><input id="readiness-reference" className="input" value={evidenceReference} onChange={(event) => setEvidenceReference(event.target.value)} /></Field>
         <Field label="Launch conditions" htmlFor="readiness-conditions"><textarea id="readiness-conditions" className="input min-h-24" value={conditions} onChange={(event) => setConditions(event.target.value)} /></Field>
-      </div>
+        {issue && <ActionFeedback issue={issue} />}
+      </fieldset>
     </Sheet>
   );
 }
 
-function PriceProposalSheet({ open, onOpenChange, onSubmit }: {
+function PriceProposalSheet({ open, pending, issue, onOpenChange, onSubmit }: {
   open: boolean;
+  pending: boolean;
+  issue?: ActionIssue;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (draft: Parameters<ReturnType<typeof useProductWorkspace>["proposePrice"]>[0]) => Promise<void>;
+  onSubmit: (draft: Parameters<ReturnType<typeof useProductWorkspace>["proposePrice"]>[0]) => Promise<boolean>;
 }) {
   const [productId, setProductId] = useState("");
   const [price, setPrice] = useState("");
@@ -354,11 +646,35 @@ function PriceProposalSheet({ open, onOpenChange, onSubmit }: {
   const [reason, setReason] = useState("");
   const [effectiveAt, setEffectiveAt] = useState("");
   const valid = productId.trim() && Number(price) > 0 && Number(costBasis) >= 0 && reason.trim().length >= 12 && effectiveAt;
+  const submit = async () => {
+    const succeeded = await onSubmit({
+      productId: productId.trim(),
+      proposedPrice: Number(price),
+      costBasis: Number(costBasis),
+      reason: reason.trim(),
+      effectiveAt: new Date(effectiveAt).toISOString(),
+    });
+    if (!succeeded) return;
+    setProductId("");
+    setPrice("");
+    setCostBasis("");
+    setReason("");
+    setEffectiveAt("");
+    onOpenChange(false);
+  };
   return (
     <Sheet open={open} onOpenChange={onOpenChange} title="Propose price" description="The current price is unchanged until another authorized person approves this revision." footer={
-      <button type="button" className="btn-primary min-h-11 w-full" disabled={!valid} onClick={() => void onSubmit({ productId: productId.trim(), proposedPrice: Number(price), costBasis: Number(costBasis), reason: reason.trim(), effectiveAt: new Date(effectiveAt).toISOString() }).then(() => onOpenChange(false))}>Submit price proposal</button>
+      <button
+        type="button"
+        className="btn-primary min-h-11 w-full"
+        disabled={!valid || pending || issue?.stale}
+        aria-busy={pending}
+        onClick={() => void submit()}
+      >
+        {pending ? "Submitting price proposal..." : "Submit price proposal"}
+      </button>
     }>
-      <div className="space-y-4">
+      <fieldset className="space-y-4" disabled={pending} aria-busy={pending}>
         <Field label="Product ID" htmlFor="price-product"><input id="price-product" className="input" value={productId} onChange={(event) => setProductId(event.target.value)} /></Field>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Proposed price" htmlFor="price-value"><input id="price-value" type="number" min="0.01" step="0.01" className="input" value={price} onChange={(event) => setPrice(event.target.value)} /></Field>
@@ -366,7 +682,8 @@ function PriceProposalSheet({ open, onOpenChange, onSubmit }: {
         </div>
         <Field label="Reason" htmlFor="price-reason"><textarea id="price-reason" className="input min-h-24" value={reason} onChange={(event) => setReason(event.target.value)} /></Field>
         <Field label="Effective date and time" htmlFor="price-effective"><input id="price-effective" type="datetime-local" className="input" value={effectiveAt} onChange={(event) => setEffectiveAt(event.target.value)} /></Field>
-      </div>
+        {issue && <ActionFeedback issue={issue} />}
+      </fieldset>
     </Sheet>
   );
 }

@@ -3246,10 +3246,10 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
     "product-governance": {
       controls: [
         control(
-          "Save readiness evidence",
-          "Records launch criteria and supporting facts without making the final decision.",
-          "Only Product Contributors with prepare_readiness can update criteria, and required criteria must be complete before decision.",
-          "The readiness record is versioned and becomes available to the Product Owner.",
+          "Submit readiness package",
+          "Creates a submitted launch-readiness package with required evidence references and launch conditions without making the final decision.",
+          "Only Product Contributors with prepare_readiness can submit; Product ID, title, evidence name, and evidence reference are required.",
+          "The submitted record receives a version and becomes available to the Product Owner.",
         ),
         control(
           "Decide go-live",
@@ -3261,7 +3261,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "Acknowledge Operations handoff",
           "Confirms that Operations accepted the approved launch conditions.",
           "Only an Operations Partner can acknowledge, and the Product decision must already be approved.",
-          "The handoff records the accepting actor and time without changing Product's decision.",
+          "The handoff records the accepting actor and time once without changing Product's decision; repeated or stale acknowledgement attempts are rejected.",
         ),
         control(
           "Submit pricing proposal",
@@ -3273,7 +3273,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "Decide pricing proposal",
           "Lets a Product Owner approve or reject a submitted price proposal.",
           "The decision requires approve_pricing, a reason, and a different actor from the proposer.",
-          "The proposal keeps its independent decision, reason, and effective date.",
+          "The proposal keeps its independent decision, reason, and effective date; an approved price activates only when due.",
         ),
       ],
       fields: [

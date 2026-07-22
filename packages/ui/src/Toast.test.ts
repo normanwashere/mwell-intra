@@ -1,7 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { TOAST_DISMISS_CLASS, TOAST_TONE_STYLES } from './Toast';
+import {
+  MAX_VISIBLE_TOASTS,
+  TOAST_DISMISS_CLASS,
+  TOAST_TONE_STYLES,
+  coalesceToastQueue,
+  type ToastRecord,
+} from './Toast';
 
-describe('Toast accessibility contracts', () => {
+const item = (id: number, message: string, tone: ToastRecord['tone'] = 'info'): ToastRecord => ({
+  id,
+  message,
+  tone,
+  count: 1,
+});
+
+describe('toast queue ergonomics', () => {
   it('uses contrast-safe status tones', () => {
     expect(TOAST_TONE_STYLES.success.cls).toContain('bg-emerald-700');
     expect(TOAST_TONE_STYLES.error.cls).toContain('bg-rose-700');
@@ -11,5 +24,27 @@ describe('Toast accessibility contracts', () => {
   it('keeps the dismiss target at least 44px in both dimensions', () => {
     expect(TOAST_DISMISS_CLASS).toContain('min-h-11');
     expect(TOAST_DISMISS_CLASS).toContain('min-w-11');
+  });
+
+  it('coalesces an identical message and tone instead of stacking duplicates', () => {
+    expect(coalesceToastQueue([item(1, 'Saved')], item(2, 'Saved'))).toEqual([
+      { ...item(1, 'Saved'), count: 2 },
+    ]);
+  });
+
+  it('does not merge the same message across different tones', () => {
+    expect(
+      coalesceToastQueue([item(1, 'Updated', 'success')], item(2, 'Updated', 'error')),
+    ).toHaveLength(2);
+  });
+
+  it('caps the queue and retains the newest notifications', () => {
+    const queue = [item(1, 'One'), item(2, 'Two'), item(3, 'Three')];
+    expect(coalesceToastQueue(queue, item(4, 'Four'))).toEqual([
+      item(2, 'Two'),
+      item(3, 'Three'),
+      item(4, 'Four'),
+    ]);
+    expect(MAX_VISIBLE_TOASTS).toBe(3);
   });
 });

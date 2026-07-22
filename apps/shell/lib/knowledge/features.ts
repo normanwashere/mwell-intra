@@ -117,7 +117,11 @@ const FEATURE_RELATIONSHIPS: Record<string, FeatureRelationship> = {
   },
   "product-governance": {
     policyBasis: [POLICY.product, POLICY.pricing],
-    relatedFlowIds: ["pricing-and-costing", "exception-and-recovery"],
+    relatedFlowIds: [
+      "product-launch-governance",
+      "pricing-and-costing",
+      "exception-and-recovery",
+    ],
   },
   "warehouse-dashboard": {
     policyBasis: [POLICY.warehouse],
@@ -711,11 +715,11 @@ const definitions: FeatureDefinition[] = [
     writes:
       "Contributors prepare evidence and proposals; Product Owners decide go-live and pricing; Operations Partners acknowledge the approved handoff through governed RPCs.",
     statuses:
-      "Draft, ready for decision, approved, rejected, handed off, acknowledged, pricing proposed, pricing approved, or pricing rejected.",
+      "Readiness submitted, approved, rejected, or Operations acknowledged; pricing submitted, approved, activated, or rejected.",
     exception:
       "Do not approve incomplete readiness, acknowledge an unapproved launch, or let the proposal author approve the same price change; return the record with a reason.",
     completionEvidence:
-      "The record shows complete criteria, a named Product decision, an attributable Operations acknowledgement, and an independently decided effective price where applicable.",
+      "The current record version shows required evidence references, a named Product decision and note, an attributable Operations acknowledgement when approved, and an independently decided effective price where applicable.",
   },
   {
     id: "admin-governance",

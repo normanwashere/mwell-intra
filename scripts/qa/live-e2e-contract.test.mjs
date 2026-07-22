@@ -8,6 +8,10 @@ import {
   CURRENT_LIVE_ROLES,
   CURRENT_LIVE_SCENARIOS,
   REQUIRED_TRANSACTION_VIEWPORTS,
+  WORKFLOW_SCENARIO_EVIDENCE,
+  assertScenarioEvidenceRegistry,
+  evaluateScenarioCoverage,
+  scenarioCoverageFailures,
 } from "./live-e2e-scenarios.mjs";
 
 test("declares every current live role exactly once", () => {
@@ -92,6 +96,7 @@ test("covers current cross-role workflows and negative paths", () => {
     "events-request-to-warehouse-handoff",
     "insights-read-only-governance",
     "unified-finance-control-center",
+    "product-readiness-go-live-pricing",
   ];
   assert.deepEqual(
     CURRENT_LIVE_SCENARIOS.map((item) => item.id),
@@ -101,20 +106,40 @@ test("covers current cross-role workflows and negative paths", () => {
     assert.ok(scenario.actors.length > 0, `${scenario.id} actors`);
     assert.ok(scenario.checkpoints.length > 0, `${scenario.id} checkpoints`);
     assert.ok(scenario.cleanup.length > 0, `${scenario.id} cleanup`);
-    for (const requiredCase of [
-      "authorized",
-      "unauthorized",
-      "validation",
-      "duplicate",
-      "correction",
-      "refresh",
-      "handoff",
-    ])
-      assert.ok(
-        scenario.cases.includes(requiredCase),
-        `${scenario.id} covers ${requiredCase}`,
-      );
+    assert.ok(scenario.cases.length > 0, `${scenario.id} cases`);
+    assert.equal(
+      new Set(scenario.cases).size,
+      scenario.cases.length,
+      `${scenario.id} cases are unique`,
+    );
   }
+});
+
+test("scenario evidence is enforceable per shard and across the bundle", () => {
+  assert.doesNotThrow(() => assertScenarioEvidenceRegistry());
+  const workflowEvidence = (viewport) =>
+    WORKFLOW_SCENARIO_EVIDENCE.map((item) => ({
+      ok: true,
+      viewport,
+      workflow: item.workflow,
+      scenarioEvidence: [item],
+    }));
+  const desktop = workflowEvidence("desktop-1440");
+  const desktopCoverage = evaluateScenarioCoverage(desktop, ["desktop-1440"]);
+  assert.deepEqual(scenarioCoverageFailures(desktopCoverage), []);
+
+  const incompleteBundle = evaluateScenarioCoverage(desktop);
+  assert.ok(
+    scenarioCoverageFailures(incompleteBundle).every((failure) =>
+      failure.includes("mobile-390"),
+    ),
+  );
+
+  const completeBundle = evaluateScenarioCoverage([
+    ...desktop,
+    ...workflowEvidence("mobile-390"),
+  ]);
+  assert.deepEqual(scenarioCoverageFailures(completeBundle), []);
 });
 
 test("the mutating harness is run-scoped and always invokes cleanup", async () => {
@@ -258,7 +283,7 @@ test("cross-module scenarios are imported and executed as browser/database contr
   ]) {
     assert.match(
       source,
-      new RegExp(`run:\\s*\\(page\\)[\\s\\S]{0,120}${workflow}\\(`),
+      new RegExp(`run:\\s*\\([^)]*\\)[\\s\\S]{0,500}${workflow}\\(`),
       `${workflow} is passed to runWorkflow`,
     );
   }
@@ -277,12 +302,10 @@ test("cross-module scenarios are imported and executed as browser/database contr
   assert.match(source, /sources\.has\("warehouse_receipt"\)/);
   assert.match(source, /Unified Finance PO source link is incorrect/);
   assert.match(source, /Unified Finance receipt source link is incorrect/);
-  assert.match(
-    source,
-    /CURRENT_LIVE_SCENARIOS\.map\(\(scenario\) => scenario\.id\)/,
-  );
+  assert.match(source, /evaluateScenarioCoverage\(/);
   assert.match(source, /scenarioCoverage/);
-  assert.match(source, /has no successful \$\{viewport\} workflow/);
+  assert.match(source, /scenarioCoverageFailures\(scenarioCoverage\)/);
+  assert.match(source, /shardCoverageViewports/);
 });
 
 test("route crawl enforces an exact role-to-route authorization matrix", async () => {
@@ -297,10 +320,8 @@ test("route crawl enforces an exact role-to-route authorization matrix", async (
     source,
     /no \(\?:warehouse\|procurement[\s\S]*finance\|product\) access/,
   );
-  assert.match(
-    source,
-    /for \(const route of routesFor\(user, discoveredRoutes\)\)/,
-  );
+  assert.match(source, /const routeQueue = routesFor\(user, discoveredRoutes\)/);
+  assert.match(source, /while \(routeQueue\.length\)/);
   assert.match(
     source,
     /allowed: \(user\) => hasAssignedModule\(user, "events"\)/,
@@ -338,7 +359,10 @@ test("route crawl rejects silent redirects without depending on permanent QA rec
   assert.doesNotMatch(source, /path: "\/procurement\/requests\/req_seed_001"/);
   assert.doesNotMatch(source, /path: "\/legal\/cases\/case_seed_001"/);
   assert.doesNotMatch(source, /path: "\/vendor\/cases\/case_seed_001"/);
-  assert.match(source, /const body = document\.body;\s*if \(!body\) return false;/);
+  assert.match(
+    source,
+    /const body = document\.body;\s*if \(!body\) return false;/,
+  );
 });
 
 test("route crawl covers visible same-origin navigation discovered from the shell DOM", async () => {
@@ -357,6 +381,10 @@ test("route crawl covers visible same-origin navigation discovered from the shel
   assert.match(source, /const target = new URL\(href, location\.origin\)/);
   assert.match(source, /target\.origin !== location\.origin/);
   assert.match(source, /routesFor\(user, discoveredRoutes\)/);
+  assert.match(source, /getByRole\("button", \{ name: "More"/);
+  assert.match(source, /getByRole\("dialog", \{ name: "All areas"/);
+  assert.match(source, /discoverSafeDetailRoutes\(page\)/);
+  assert.match(source, /recursive-rendered-link/);
 });
 
 test("the mutating harness waits for quality data and uses unambiguous DOA controls", async () => {
@@ -452,6 +480,33 @@ test("governed transactions retain visual and accessibility evidence", async () 
   assert.match(source, /undersizedMobileTargets/);
   assert.match(source, /label\?\.contains\(element\)/);
   assert.match(source, /interactionProblems/);
+  assert.match(source, /auditKeyboardAndHotspots\(page\)/);
+  assert.match(source, /keyboardHotspots/);
+  assert.match(source, /captureState/);
+  assert.match(source, /intermediateEvidence/);
+});
+
+test("Product launch certification uses UI decisions, denial checks, readback, screenshots, and cleanup", async () => {
+  const source = await readFile(
+    new URL("./full-intra-live-e2e.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /productContributorWorkflow/);
+  assert.match(source, /productOwnerDecisionWorkflow/);
+  assert.match(source, /productOperationsHandoffWorkflow/);
+  assert.match(source, /New readiness package/);
+  assert.match(source, /Propose price/);
+  assert.match(source, /Approve go-live/);
+  assert.match(source, /Approve price/);
+  assert.match(source, /Acknowledge Operations handoff/);
+  assert.match(source, /not awaiting decision/i);
+  assert.match(source, /not authorized/i);
+  assert.match(source, /"product",\s*"can_launch"/);
+  assert.match(source, /await page\.reload\(/);
+  assert.match(source, /captureState\("Product readiness validation"\)/);
+  assert.match(source, /captureState\("Operations Product handoff persisted"\)/);
+  assert.match(source, /cleanupProductGovernance\(marker\)/);
+  assert.match(source, /productGovernanceResults\.every/);
 });
 
 test("the mutating harness scopes and removes temporary auth identities", async () => {

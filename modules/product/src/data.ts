@@ -31,6 +31,10 @@ export interface ProductSourceAccess {
   pricing: boolean;
 }
 
+export interface ProductRefreshOptions {
+  background?: boolean;
+}
+
 const EMPTY_DATA: ProductWorkspaceData = {
   readiness: [],
   pricing: [],
@@ -178,27 +182,34 @@ export function useProductWorkspace() {
   };
   const [data, setData] = useState<ProductWorkspaceData>(EMPTY_DATA);
   const [loading, setLoading] = useState(Boolean(supabaseClient));
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (options: ProductRefreshOptions = {}) => {
+    const background = options.background === true;
     if (!supabaseClient) {
       setData(EMPTY_DATA);
       setLoading(false);
-      return;
+      setRefreshing(false);
+      return true;
     }
-    setLoading(true);
+    if (background) setRefreshing(true);
+    else setLoading(true);
     try {
       const next = await loadLiveProductWorkspace(supabaseClient, sourceAccess);
       setData(next);
       setError(next.warnings.length ? next.warnings.join(" ") : null);
+      return true;
     } catch (cause) {
       setError(
         cause instanceof Error
           ? cause.message
           : "Product workspace could not be loaded.",
       );
+      return false;
     } finally {
-      setLoading(false);
+      if (background) setRefreshing(false);
+      else setLoading(false);
     }
   }, [sourceAccess.pricing, sourceAccess.readiness, supabaseClient]);
 
@@ -207,7 +218,12 @@ export function useProductWorkspace() {
       if (!supabaseClient)
         throw new Error("Live Product actions require Supabase.");
       await callProductRpc(supabaseClient, fn, payload);
-      await refresh();
+      const readbackSucceeded = await refresh({ background: true });
+      if (!readbackSucceeded) {
+        throw new Error(
+          "The Product action was saved, but the latest state could not be loaded.",
+        );
+      }
     },
     [refresh, supabaseClient],
   );
@@ -219,6 +235,7 @@ export function useProductWorkspace() {
   return {
     data,
     loading,
+    refreshing,
     error,
     refresh,
     createReadiness: (draft: ReadinessDraft) =>

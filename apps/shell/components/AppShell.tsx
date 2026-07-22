@@ -42,6 +42,8 @@ function topBarLabel(pathname: string, entries: readonly NavEntry[]): string {
   if (pathname.startsWith(FINANCE_NAV.href)) return FINANCE_NAV.label;
   if (pathname.startsWith(KNOWLEDGE_NAV.href)) return KNOWLEDGE_NAV.label;
   if (pathname.startsWith("/admin/users")) return "Admin · Users & Roles";
+  if (pathname.startsWith("/admin/departments"))
+    return "Admin · Departments";
   if (pathname.startsWith("/admin/doa"))
     return "Admin · Delegation of Authority";
   if (pathname.startsWith("/admin")) return "Admin";
@@ -111,6 +113,13 @@ export function AppShell({ children }: { children: ReactNode }) {
         !pathname.startsWith(FINANCE_NAV.href)
       );
     }
+    if (href === "/admin") {
+      return (
+        pathname === "/admin" ||
+        pathname.startsWith("/admin/users") ||
+        pathname.startsWith("/admin/audit")
+      );
+    }
     return pathname.startsWith(href);
   };
 
@@ -125,11 +134,25 @@ export function AppShell({ children }: { children: ReactNode }) {
         ),
       ]
     : entries;
-  const mobileLeft = mobileEntries.slice(0, 2);
-  const hasMobileOverflow = mobileEntries.length > 4;
-  const mobileRight = hasMobileOverflow
-    ? mobileEntries.slice(2, 3)
-    : mobileEntries.slice(2, 4);
+  const governanceEntries = mobileEntries.filter((entry) =>
+    ["/admin/departments", "/admin/doa"].includes(entry.href),
+  );
+  const governancePrimary = mobileEntries.filter((entry) =>
+    ["/admin", "/legal"].includes(entry.href),
+  );
+  const prioritizedMobileEntries = governanceEntries.length
+    ? [HOME_ENTRY, ...governancePrimary, ...governanceEntries, ...mobileEntries].filter(
+        (entry, index, all) =>
+          all.findIndex((candidate) => candidate.href === entry.href) === index,
+      )
+    : mobileEntries;
+  const directMobileLimit = fab ? 3 : 4;
+  const hasMobileOverflow = prioritizedMobileEntries.length > directMobileLimit;
+  const directMobileEntries = hasMobileOverflow
+    ? prioritizedMobileEntries.slice(0, directMobileLimit)
+    : prioritizedMobileEntries.slice(0, 4);
+  const mobileLeft = directMobileEntries.slice(0, 2);
+  const mobileRight = directMobileEntries.slice(2);
 
   return (
     <div className="min-h-screen bg-app md:flex">
@@ -325,6 +348,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         {/* Mobile bottom navigation */}
         <nav
+          data-shell-mobile-nav="true"
           className="safe-bottom fixed inset-x-0 bottom-0 z-20 border-t border-line bg-surface/95 backdrop-blur-md md:hidden"
           aria-label="Primary mobile"
         >

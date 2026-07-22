@@ -80,7 +80,7 @@ describe("DashboardPage", () => {
     async () => {
       renderWithProviders(<DashboardPage />, { role: "bi_analyst" });
       expect(
-        await screen.findByRole("heading", { name: "BI Analyst" }),
+        await screen.findByRole("heading", { name: "BI Analyst warehouse dashboard" }),
       ).toBeInTheDocument();
       expect(screen.getByText("Active SKUs")).toBeInTheDocument();
       expect(screen.getByText("Inventory Value")).toBeInTheDocument();
@@ -182,7 +182,7 @@ describe("DashboardPage", () => {
   it("gives the Warehouse Administrator an operational control overview", async () => {
     renderWithProviders(<DashboardPage />, { role: "warehouse_admin" });
     expect(
-      await screen.findByRole("heading", { name: "Warehouse Administrator" }),
+      await screen.findByRole("heading", { name: "Warehouse Administrator warehouse dashboard" }),
     ).toBeInTheDocument();
     expect(screen.getByText(/low-stock alerts/i)).toBeInTheDocument();
     expect(screen.getByText(/reconciliation/i)).toBeInTheDocument();
@@ -198,7 +198,7 @@ describe("DashboardPage", () => {
     for (const role of ALL_ROLES) {
       const { unmount } = renderWithProviders(<DashboardPage />, { role });
       expect(
-        await screen.findByRole("heading", { name: /overview$/i }),
+        await screen.findByRole("heading", { name: /warehouse dashboard$/i }),
       ).toBeInTheDocument();
       const buttons = screen
         .queryAllByRole("button")

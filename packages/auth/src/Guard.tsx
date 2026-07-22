@@ -64,7 +64,7 @@ function AccessDenied() {
       aria-live="polite"
       className="intra-access-denied grid place-items-center gap-3 rounded-2xl border border-black/10 bg-black/[0.02] p-6 text-center dark:border-white/10 dark:bg-white/[0.03]"
     >
-      <h2 className="text-base font-semibold">Access denied</h2>
+      <h1 className="text-lg font-semibold">Access denied for this page</h1>
       <p className="max-w-sm text-sm opacity-70">
         This isn&apos;t part of your role. Head back to your dashboard to pick
         something you can access, or contact your administrator.

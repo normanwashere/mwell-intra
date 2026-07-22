@@ -46,6 +46,16 @@ jobs:
           cache: pnpm
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
+      - name: Lint all workspaces
+        run: pnpm lint
+      - name: Typecheck all workspaces
+        run: pnpm typecheck
+      - name: Run unit and contract tests
+        run: pnpm test
+      - name: Build all workspaces
+        run: pnpm build
+      - name: Verify launch artifacts
+        run: pnpm verify:launch-artifacts
       - name: Verify live audit contracts
         run: pnpm test:intra-live-contract
       - name: Verify CI resilience contracts
@@ -257,17 +267,21 @@ jobs:
     needs: [prepare, routes, transactions, cleanup]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           pattern: uat-*-${{ github.run_number }}
           path: certification-artifacts
           merge-multiple: true
+      - name: Verify complete cross-shard certification evidence
+        run: node scripts/verify-launch-artifacts.mjs --certification-dir certification-artifacts
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: uat-live-certification-${{ github.run_number }}
           path: certification-artifacts
           if-no-files-found: error
           retention-days: 30
       - name: Enforce upstream certification status
-        if: needs.prepare.result != 'success' || needs.routes.result != 'success' || needs.transactions.result != 'success' || needs.cleanup.result != 'success'
+        if: always() && (needs.prepare.result != 'success' || needs.routes.result != 'success' || needs.transactions.result != 'success' || needs.cleanup.result != 'success')
         run: exit 1

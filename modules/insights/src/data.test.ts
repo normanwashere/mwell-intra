@@ -9,6 +9,8 @@ import {
   scopeInsights,
   visibleInsightAreas,
 } from "./data";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { INSIGHTS_DEMO_DATA } from "./seed";
 import type { InsightMetric } from "./types";
 
@@ -224,5 +226,16 @@ describe("Insights source access and priority", () => {
         metric("check", "review"),
       ]).map(({ id }) => id),
     ).toEqual(["urgent", "missing", "check", "healthy"]);
+  });
+});
+
+describe("Insights read-only UX contract", () => {
+  it("uses a descriptive heading and exposes no client mutation path", () => {
+    const app = readFileSync(resolve(process.cwd(), "src/InsightsApp.tsx"), "utf8");
+    const data = readFileSync(resolve(process.cwd(), "src/data.ts"), "utf8");
+
+    expect(app).toContain('title="Operational and executive insights"');
+    expect(app).toContain('<Badge tone="slate">Read-only</Badge>');
+    expect(data).not.toMatch(/\.(insert|update|delete|upsert)\s*\(/);
   });
 });

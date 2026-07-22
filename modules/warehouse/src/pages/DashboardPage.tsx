@@ -329,10 +329,10 @@ function OperatorDashboard({
           Warehouse floor
         </p>
         <h1 className="mt-1 font-display text-title text-ink">
-          {name ?? "Warehouse Operator"}
+          Warehouse floor operations
         </h1>
         <p className="mt-1 text-sm text-muted">
-          Routine work ready for this shift.
+          {name ? `Welcome back, ${name}. ` : ""}Routine work ready for this shift.
         </p>
       </section>
       <section aria-labelledby="operator-overview">
@@ -1497,8 +1497,6 @@ export function DashboardPage() {
   const panels = ROLE_PANELS[dashboardRole].filter((panel) =>
     (PANEL_ROUTE_REQUIREMENTS[panel] ?? []).every(canOpenRoute),
   );
-  // Greet by name like the shell home does (WH-7/J3-3); the role already
-  // shows in the sidebar caption + account menu.
   const firstName = profile?.name?.split(/\s+/)[0];
   const heroCta = HERO_CTA[dashboardRole];
   const canOpenPath = (path: string) => {
@@ -1512,9 +1510,9 @@ export function DashboardPage() {
   return (
     <div className="space-y-6">
       <DashboardHero
-        eyebrow="Warehouse dashboard"
-        title={firstName ?? rolePresentation.label}
-        description={HERO_STATUS[dashboardRole]}
+        eyebrow="Inventory operations"
+        title={`${rolePresentation.label} warehouse dashboard`}
+        description={`${firstName ? `Welcome back, ${firstName}. ` : ""}${HERO_STATUS[dashboardRole]}`}
         roleLabel={rolePresentation.label}
         icon={heroCta.icon}
         action={

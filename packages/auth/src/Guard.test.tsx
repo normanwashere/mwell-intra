@@ -148,6 +148,9 @@ describe('<Guard>', () => {
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toContain('Access denied');
     expect(alert.textContent).toContain('Back to dashboard');
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Access denied for this page' }),
+    ).not.toBeNull();
     expect(screen.queryByText('secret content')).toBeNull();
   });
 

@@ -4,7 +4,10 @@
 
 @layer base {
   :root {
-    --shell-mobile-nav-clearance: calc(5.5rem + env(safe-area-inset-bottom));
+    --shell-mobile-nav-height: 5rem;
+    --shell-mobile-nav-clearance: calc(
+      var(--shell-mobile-nav-height) + env(safe-area-inset-bottom) + 1rem
+    );
   }
 
   html {
@@ -29,6 +32,10 @@
   .shell-content {
     padding-bottom: calc(var(--shell-mobile-nav-clearance) + 2rem);
     scroll-padding-bottom: var(--shell-mobile-nav-clearance);
+  }
+
+  [data-shell-mobile-nav="true"] {
+    min-height: calc(var(--shell-mobile-nav-height) + env(safe-area-inset-bottom));
   }
 
   .shell-content :is(a, button, input, select, textarea, [tabindex]) {

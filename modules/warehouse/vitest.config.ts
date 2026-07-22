@@ -13,5 +13,10 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
+    // User-event-heavy page tests contend for one jsdom process when the
+    // monorepo runs in parallel. Keep the release gate bounded and repeatable.
+    maxWorkers: 4,
+    testTimeout: 15_000,
+    hookTimeout: 15_000,
   },
 });

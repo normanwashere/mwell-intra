@@ -150,9 +150,9 @@ export function RequestsPage() {
   return (
     <div className="space-y-6">
       <ModuleHero
-        eyebrow="Welcome back,"
-        title={firstName}
-        description="Raise, route and track purchase requests."
+        eyebrow="Procurement workspace"
+        title="Purchase requests"
+        description={`Welcome back, ${firstName}. Raise, route and track governed purchase requests.`}
         icon="cart"
         action={
           <Guard module="procurement" cap="create_request" fallback={null}>

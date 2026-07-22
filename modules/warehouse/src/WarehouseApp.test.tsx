@@ -53,9 +53,11 @@ describe('WarehouseApp basename handling', () => {
         expect(window.location.pathname).toBe('/warehouse/');
       });
       expect(
-        await screen.findByRole('heading', { name: 'Grace' }),
+        await screen.findByRole('heading', {
+          name: /procurement warehouse dashboard/i,
+        }),
       ).toBeInTheDocument();
-      expect(screen.getByText(/warehouse dashboard/i)).toBeInTheDocument();
+      expect(screen.getByText(/welcome back, grace/i)).toBeInTheDocument();
     },
     FIRST_RENDER_TIMEOUT,
   );
@@ -66,8 +68,11 @@ describe('WarehouseApp basename handling', () => {
       renderSignedInWarehouse('/warehouse/', ['warehouse_operator']);
 
       expect(
-        await screen.findByRole('heading', { name: 'Grace' }),
+        await screen.findByRole('heading', {
+          name: /warehouse floor operations/i,
+        }),
       ).toBeInTheDocument();
+      expect(screen.getByText(/welcome back, grace/i)).toBeInTheDocument();
     },
     FIRST_RENDER_TIMEOUT,
   );

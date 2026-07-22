@@ -99,7 +99,7 @@ export function InsightsApp({ initialArea }: { initialArea?: InsightArea }) {
     <div className="space-y-6">
       <ModuleHero
         eyebrow="Decision support"
-        title="Insights"
+        title="Operational and executive insights"
         description="Role-scoped indicators with explicit targets, coverage, reporting periods, and source freshness."
         icon="trend"
         action={
@@ -109,6 +109,7 @@ export function InsightsApp({ initialArea }: { initialArea?: InsightArea }) {
         }
         accessory={
           <div className="flex flex-wrap gap-2">
+            <Badge tone="slate">Read-only</Badge>
             <Badge tone="brand">{areas.length} views available</Badge>
             <Badge tone={snapshot.tone}>{snapshot.label}</Badge>
           </div>

@@ -1758,13 +1758,13 @@ export const LIVE_KNOWLEDGE_ROLES: KnowledgeRole[] = [
     authority: {
       accessibleRoutes: ["/product"],
       canDo: [
-        "Create and update readiness criteria and submit effective-dated price proposals with supporting basis.",
+        "Submit versioned readiness packages and effective-dated price proposals with supporting evidence and commercial basis.",
       ],
       cannotDo: [
         "Do not decide go-live, acknowledge the Operations handoff, or approve your own price proposal.",
       ],
       decisions: [
-        "Decide whether the readiness evidence and proposal facts are complete enough to submit for independent decision.",
+        "Decide whether the readiness evidence, launch conditions, and proposal facts are complete enough to submit for independent decision.",
       ],
       upstreamRoleIds: ["core_staff_only"],
       downstreamRoleIds: ["product_owner"],

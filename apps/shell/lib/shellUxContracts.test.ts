@@ -13,6 +13,15 @@ describe("shared shell interaction geometry", () => {
     expect(appShell).toContain('data-shell-content="true"');
     expect(styles).toContain("--shell-mobile-nav-clearance");
     expect(styles).toContain("scroll-margin-bottom");
+    expect(appShell).toContain('data-shell-mobile-nav="true"');
+  });
+
+  it("prioritizes Department and DOA destinations for mobile governance users", () => {
+    const appShell = source("components/AppShell.tsx");
+
+    expect(appShell).toContain('"/admin/departments", "/admin/doa"');
+    expect(appShell).toContain("prioritizedMobileEntries");
+    expect(appShell).toContain('pathname.startsWith("/admin/departments")');
   });
 
   it("keeps every command trigger at least 44px high", () => {
