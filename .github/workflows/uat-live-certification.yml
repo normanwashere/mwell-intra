@@ -33,7 +33,7 @@ jobs:
       GITHUB_SHA: ${{ github.sha }}
       DEPLOYMENT_EVIDENCE_PATH: test-results/deployment-readiness.json
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - name: Establish deterministic certification date
@@ -42,7 +42,7 @@ jobs:
       - uses: pnpm/action-setup@v4
         with:
           version: 10.23.0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "24"
           cache: pnpm
@@ -70,7 +70,7 @@ jobs:
         run: node scripts/qa/wait-for-uat-deployment.mjs
       - name: Upload deployment readiness evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: uat-deployment-readiness-${{ github.run_number }}
           path: test-results/deployment-readiness.json
@@ -114,13 +114,13 @@ jobs:
       PRODUCTION_SUPABASE_PROJECT_REF: abbfziukjalyqtcuskhi
       POLICY_ALLOW_TEST_MUTATIONS: "false"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - uses: pnpm/action-setup@v4
         with:
           version: 10.23.0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "24"
           cache: pnpm
@@ -138,7 +138,7 @@ jobs:
           pnpm test:intra-live
       - name: Upload route artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: uat-routes-${{ matrix.viewport }}-${{ github.run_number }}
           path: test-results/routes-${{ matrix.viewport }}.json
@@ -178,13 +178,13 @@ jobs:
       PRODUCTION_SUPABASE_PROJECT_REF: abbfziukjalyqtcuskhi
       POLICY_ALLOW_TEST_MUTATIONS: "true"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - uses: pnpm/action-setup@v4
         with:
           version: 10.23.0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "24"
           cache: pnpm
@@ -202,7 +202,7 @@ jobs:
           pnpm test:intra-live
       - name: Upload transaction artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: uat-transactions-${{ matrix.viewport }}-${{ github.run_number }}
           path: |
@@ -237,13 +237,13 @@ jobs:
       POLICY_ALLOW_TEST_MUTATIONS: "true"
       CLEANUP_OUTPUT_PATH: test-results/cleanup-${{ matrix.viewport }}.json
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - uses: pnpm/action-setup@v4
         with:
           version: 10.23.0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "24"
           cache: pnpm
@@ -262,7 +262,7 @@ jobs:
             --output "$CLEANUP_OUTPUT_PATH"
       - name: Upload independent cleanup evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: uat-cleanup-${{ matrix.viewport }}-${{ github.run_number }}
           path: test-results/cleanup-${{ matrix.viewport }}.json
@@ -275,17 +275,17 @@ jobs:
     needs: [prepare, routes, transactions, cleanup]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           pattern: uat-*-${{ github.run_number }}
           path: certification-artifacts
           merge-multiple: true
       - name: Verify complete cross-shard certification evidence
         run: node scripts/verify-launch-artifacts.mjs --certification-dir certification-artifacts
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: uat-live-certification-${{ github.run_number }}
