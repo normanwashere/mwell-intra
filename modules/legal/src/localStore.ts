@@ -32,10 +32,7 @@ import { cleanupCases } from './hygiene';
 import { buildLegalSeed } from './seed';
 import type { VendorLoginAlias } from './vendorAccess';
 import type { TailoringProfile } from './requirements/policy';
-import {
-  resolveVendorInviteDelivery,
-  type VendorInviteDeliveryEnvelope,
-} from './vendorInviteDelivery';
+import { resolveVendorInviteDelivery, type VendorInviteDeliveryEnvelope } from './vendorInviteDelivery';
 
 type MaybePromise<T> = T | Promise<T>;
 type LiveClient = NonNullable<ReturnType<typeof useSession>['supabaseClient']>;
@@ -115,17 +112,16 @@ async function liveRpc<T>(
 }
 
 function storageSafeSegment(value: string): string {
-  return value
-    .trim()
-    .replace(/[^a-zA-Z0-9._-]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 120) || 'document';
+  return (
+    value
+      .trim()
+      .replace(/[^a-zA-Z0-9._-]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 120) || 'document'
+  );
 }
 
-async function uploadLiveAccreditationDocument(
-  client: LiveClient,
-  input: UploadDocInput,
-): Promise<string | undefined> {
+async function uploadLiveAccreditationDocument(client: LiveClient, input: UploadDocInput): Promise<string | undefined> {
   if (!input.dataUrl?.startsWith('data:')) return input.storagePath;
 
   const objectPath =
@@ -172,7 +168,9 @@ function useLiveRows<T>(
     try {
       let query = client.schema('legal').from(table).select('*');
       if (order) {
-        query = query.order(order.column, { ascending: order.ascending ?? false });
+        query = query.order(order.column, {
+          ascending: order.ascending ?? false,
+        });
       }
       const { data, error } = await query;
       if (error) throw new Error(error.message);
@@ -194,7 +192,9 @@ function useLiveRows<T>(
     setLoading(true);
     let query = client.schema('legal').from(table).select('*');
     if (order) {
-      query = query.order(order.column, { ascending: order.ascending ?? false });
+      query = query.order(order.column, {
+        ascending: order.ascending ?? false,
+      });
     }
     Promise.resolve(query)
       .then(({ data, error }: { data: LiveRow[] | null; error: LiveQueryError | null }) => {
@@ -305,7 +305,12 @@ function mapTimeline(row: LiveRow): CaseTimelineEntry {
 }
 
 function mapInvite(row: LiveRow): VendorInvite {
-  const deliveryStatus = row.status === 'delivery_failed' ? 'delivery_failed' : 'sent';
+  const deliveryStatus =
+    row.status === 'delivery_failed'
+      ? 'delivery_failed'
+      : row.status === 'pending_delivery'
+        ? 'pending_delivery'
+        : 'sent';
   return {
     id: row.id,
     email: row.email,
@@ -368,8 +373,8 @@ const MIGRATED_KEY = 'intra.legal.v2.checklist_migrated';
 const CHANGE_EVT = 'intra.legal.change';
 
 function newId(prefix: string): string {
-  const rand = globalThis.crypto?.randomUUID?.() ??
-    `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+  const rand =
+    globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
   return `${prefix}_${rand}`;
 }
 function nowIso(): string {
@@ -395,9 +400,7 @@ function safeRead<T>(key: string): T[] {
 function isQuotaError(err: unknown): boolean {
   return (
     err instanceof DOMException &&
-    (err.name === 'QuotaExceededError' ||
-      err.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
-      err.code === 22)
+    (err.name === 'QuotaExceededError' || err.name === 'NS_ERROR_DOM_QUOTA_REACHED' || err.code === 22)
   );
 }
 function safeWrite<T>(key: string, rows: T[]): void {
@@ -408,9 +411,7 @@ function safeWrite<T>(key: string, rows: T[]): void {
   } catch (err) {
     // Surface quota failures instead of silently dropping the write.
     if (isQuotaError(err)) {
-      window.dispatchEvent(
-        new CustomEvent('intra:storage-full', { detail: { key } }),
-      );
+      window.dispatchEvent(new CustomEvent('intra:storage-full', { detail: { key } }));
     }
   }
 }
@@ -421,14 +422,54 @@ function safeWrite<T>(key: string, rows: T[]): void {
 // legal keys are wiped and reseeded so everyone lands on the same rich story.
 // ---------------------------------------------------------------------------
 const DEFAULT_REQUIREMENTS: Array<Omit<RequirementChecklistItem, 'id' | 'caseId' | 'documentIds'>> = [
-  { requirement: 'SEC Registration', description: 'Latest SEC certificate of registration.', required: true, decision: 'pending' },
-  { requirement: 'BIR Form 2303', description: 'Certificate of registration.', required: true, decision: 'pending' },
-  { requirement: 'Mayor\u2019s / Business Permit', description: 'Current-year permit from the LGU.', required: true, decision: 'pending' },
-  { requirement: 'GIS (latest)', description: 'General Information Sheet filed at SEC.', required: true, decision: 'pending' },
-  { requirement: 'Audited Financial Statements', description: 'Most recent AFS.', required: true, decision: 'pending' },
-  { requirement: 'Tax Clearance', description: 'From BIR — valid for the year.', required: false, decision: 'pending' },
-  { requirement: 'PhilGEPS Registration', description: 'If bidding for government-adjacent work.', required: false, decision: 'pending' },
-  { requirement: 'Sample Contract / MSA', description: 'Draft or executed master service agreement.', required: false, decision: 'pending' },
+  {
+    requirement: 'SEC Registration',
+    description: 'Latest SEC certificate of registration.',
+    required: true,
+    decision: 'pending',
+  },
+  {
+    requirement: 'BIR Form 2303',
+    description: 'Certificate of registration.',
+    required: true,
+    decision: 'pending',
+  },
+  {
+    requirement: 'Mayor\u2019s / Business Permit',
+    description: 'Current-year permit from the LGU.',
+    required: true,
+    decision: 'pending',
+  },
+  {
+    requirement: 'GIS (latest)',
+    description: 'General Information Sheet filed at SEC.',
+    required: true,
+    decision: 'pending',
+  },
+  {
+    requirement: 'Audited Financial Statements',
+    description: 'Most recent AFS.',
+    required: true,
+    decision: 'pending',
+  },
+  {
+    requirement: 'Tax Clearance',
+    description: 'From BIR — valid for the year.',
+    required: false,
+    decision: 'pending',
+  },
+  {
+    requirement: 'PhilGEPS Registration',
+    description: 'If bidding for government-adjacent work.',
+    required: false,
+    decision: 'pending',
+  },
+  {
+    requirement: 'Sample Contract / MSA',
+    description: 'Draft or executed master service agreement.',
+    required: false,
+    decision: 'pending',
+  },
 ];
 
 /**
@@ -443,10 +484,7 @@ export function ensureLegalSeed(): void {
     if (hadV1) {
       // v1-seeded browser: wipe the thin single-case dataset so the rich
       // v2 story replaces it wholesale (demo store — no user data contract).
-      for (const key of [
-        CASES_KEY, CHECKLIST_KEY, DOCS_KEY, TIMELINE_KEY,
-        INVITES_KEY, SIGNED_KEY, ALIASES_KEY,
-      ]) {
+      for (const key of [CASES_KEY, CHECKLIST_KEY, DOCS_KEY, TIMELINE_KEY, INVITES_KEY, SIGNED_KEY, ALIASES_KEY]) {
         window.localStorage.removeItem(key);
       }
       window.localStorage.removeItem(MIGRATED_KEY);
@@ -511,10 +549,7 @@ function cleanupOnce(): void {
 // ---------------------------------------------------------------------------
 // Shared hook wiring
 // ---------------------------------------------------------------------------
-function useTrackedRows<T>(
-  key: string,
-  enabled = true,
-): [T[], (rows: T[]) => void, boolean] {
+function useTrackedRows<T>(key: string, enabled = true): [T[], (rows: T[]) => void, boolean] {
   const [rows, setRows] = useState<T[]>([]);
   const [loading, setLoading] = useState(enabled);
 
@@ -555,10 +590,7 @@ function useTrackedRows<T>(
 
 function appendTimeline(entry: Omit<CaseTimelineEntry, 'id' | 'at'>): void {
   const current = safeRead<CaseTimelineEntry>(TIMELINE_KEY);
-  safeWrite(TIMELINE_KEY, [
-    { ...entry, id: newId('tl'), at: nowIso() },
-    ...current,
-  ]);
+  safeWrite(TIMELINE_KEY, [{ ...entry, id: newId('tl'), at: nowIso() }, ...current]);
 }
 
 // ---------------------------------------------------------------------------
@@ -585,11 +617,7 @@ export interface CasesAPI {
     actor?: string,
     opts?: AddCaseOptions,
   ) => MaybePromise<AccreditationCase>;
-  submitCase: (
-    id: string,
-    actor?: string,
-    signature?: CaseSignature,
-  ) => MaybePromise<AccreditationCase | null>;
+  submitCase: (id: string, actor?: string, signature?: CaseSignature) => MaybePromise<AccreditationCase | null>;
   decideCase: (
     id: string,
     decision: 'approved' | 'rejected' | 'provisional',
@@ -607,16 +635,11 @@ export interface CasesAPI {
 
 export function useAccreditationCases(): CasesAPI {
   const live = useLiveClient();
-  const [localRows, set, localLoading] = useTrackedRows<AccreditationCase>(
-    CASES_KEY,
-    !isLive(live),
-  );
-  const [liveRows, liveLoading, refreshLive] = useLiveRows<AccreditationCase>(
-    live,
-    'accreditation_cases',
-    mapCase,
-    { column: 'opened_at', ascending: false },
-  );
+  const [localRows, set, localLoading] = useTrackedRows<AccreditationCase>(CASES_KEY, !isLive(live));
+  const [liveRows, liveLoading, refreshLive] = useLiveRows<AccreditationCase>(live, 'accreditation_cases', mapCase, {
+    column: 'opened_at',
+    ascending: false,
+  });
   const rows = isLive(live) ? liveRows : localRows;
   const loading = isLive(live) ? liveLoading : localLoading;
 
@@ -641,10 +664,7 @@ export function useAccreditationCases(): CasesAPI {
       const profile = opts?.profile;
       // Renewal continuity (F2.3): link the vendor's latest prior case so
       // reviewers can reach last cycle's documents from the new case.
-      const previousCaseId = derivePreviousCaseId(
-        safeRead<AccreditationCase>(CASES_KEY),
-        vendorId,
-      );
+      const previousCaseId = derivePreviousCaseId(safeRead<AccreditationCase>(CASES_KEY), vendorId);
       const next: AccreditationCase = {
         id: newId('case'),
         vendorId,
@@ -762,21 +782,13 @@ export function useAccreditationCases(): CasesAPI {
       // required checklist item is still unresolved. Signing an instrument
       // marks its item approved (see signInstrument), so this stays reachable.
       if (decision === 'approved') {
-        const items = safeRead<RequirementChecklistItem>(CHECKLIST_KEY).filter(
-          (i) => i.caseId === id,
-        );
+        const items = safeRead<RequirementChecklistItem>(CHECKLIST_KEY).filter((i) => i.caseId === id);
         const required = items.filter((i) => i.required);
-        const allResolved = required.every(
-          (i) => i.decision === 'approved' || i.decision === 'na',
-        );
+        const allResolved = required.every((i) => i.decision === 'approved' || i.decision === 'na');
         if (required.length === 0 || !allResolved) return null;
       }
       const status: AccreditationCase['status'] =
-        decision === 'approved'
-          ? 'approved'
-          : decision === 'provisional'
-            ? 'provisional'
-            : 'rejected';
+        decision === 'approved' ? 'approved' : decision === 'provisional' ? 'provisional' : 'rejected';
       const patch: Partial<AccreditationCase> = {
         status,
         decidedAt: nowIso(),
@@ -795,9 +807,7 @@ export function useAccreditationCases(): CasesAPI {
       }
       const merged = patchCase(id, patch);
       if (merged) {
-        const signedBy = opts.signature
-          ? ` E-signed by ${opts.signature.signerName}.`
-          : '';
+        const signedBy = opts.signature ? ` E-signed by ${opts.signature.signerName}.` : '';
         const detail =
           decision === 'approved'
             ? `Accreditation approved${opts.scope ? ` — scope: ${opts.scope}` : ''}${patch.expiresAt ? `, expires ${patch.expiresAt}` : ''}.${signedBy}`
@@ -841,7 +851,15 @@ export function useAccreditationCases(): CasesAPI {
     [patchCase, live, refreshLive],
   );
 
-  return { rows, loading, getById, addCase, submitCase, decideCase, sendReminder };
+  return {
+    rows,
+    loading,
+    getById,
+    addCase,
+    submitCase,
+    decideCase,
+    sendReminder,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -861,24 +879,17 @@ export interface ChecklistAPI {
 
 export function useChecklist(): ChecklistAPI {
   const live = useLiveClient();
-  const [localRows, set, localLoading] = useTrackedRows<RequirementChecklistItem>(
-    CHECKLIST_KEY,
-    !isLive(live),
+  const [localRows, set, localLoading] = useTrackedRows<RequirementChecklistItem>(CHECKLIST_KEY, !isLive(live));
+  const [liveRows, liveLoading, refreshLive] = useLiveRows<RequirementChecklistItem>(
+    live,
+    'requirement_checklist_items',
+    mapChecklist,
+    { column: 'created_at', ascending: true },
   );
-  const [liveRows, liveLoading, refreshLive] =
-    useLiveRows<RequirementChecklistItem>(
-      live,
-      'requirement_checklist_items',
-      mapChecklist,
-      { column: 'created_at', ascending: true },
-    );
   const rows = isLive(live) ? liveRows : localRows;
   const loading = isLive(live) ? liveLoading : localLoading;
 
-  const forCase = useCallback(
-    (caseId: string) => rows.filter((r) => r.caseId === caseId),
-    [rows],
-  );
+  const forCase = useCallback((caseId: string) => rows.filter((r) => r.caseId === caseId), [rows]);
 
   const patchItem = useCallback(
     (itemId: string, patch: Partial<RequirementChecklistItem>) => {
@@ -957,32 +968,26 @@ export interface DocsAPI {
   forCase: (caseId: string) => AccreditationDoc[];
   forRequirement: (itemId: string) => AccreditationDoc[];
   upload: (input: UploadDocInput) => MaybePromise<AccreditationDoc>;
-  setStatus: (docId: string, status: DocumentStatus, actor?: string, note?: string) => MaybePromise<AccreditationDoc | null>;
+  setStatus: (
+    docId: string,
+    status: DocumentStatus,
+    actor?: string,
+    note?: string,
+  ) => MaybePromise<AccreditationDoc | null>;
 }
 
 export function useAccreditationDocs(): DocsAPI {
   const live = useLiveClient();
-  const [localRows, set, localLoading] = useTrackedRows<AccreditationDoc>(
-    DOCS_KEY,
-    !isLive(live),
-  );
-  const [liveRows, liveLoading, refreshLive] = useLiveRows<AccreditationDoc>(
-    live,
-    'accreditation_docs',
-    mapDoc,
-    { column: 'uploaded_at', ascending: false },
-  );
+  const [localRows, set, localLoading] = useTrackedRows<AccreditationDoc>(DOCS_KEY, !isLive(live));
+  const [liveRows, liveLoading, refreshLive] = useLiveRows<AccreditationDoc>(live, 'accreditation_docs', mapDoc, {
+    column: 'uploaded_at',
+    ascending: false,
+  });
   const rows = isLive(live) ? liveRows : localRows;
   const loading = isLive(live) ? liveLoading : localLoading;
 
-  const forCase = useCallback(
-    (caseId: string) => rows.filter((r) => r.caseId === caseId),
-    [rows],
-  );
-  const forRequirement = useCallback(
-    (itemId: string) => rows.filter((r) => r.requirementId === itemId),
-    [rows],
-  );
+  const forCase = useCallback((caseId: string) => rows.filter((r) => r.caseId === caseId), [rows]);
+  const forRequirement = useCallback((itemId: string) => rows.filter((r) => r.requirementId === itemId), [rows]);
 
   const upload = useCallback<DocsAPI['upload']>(
     async (input) => {
@@ -1200,26 +1205,17 @@ export function signInstrument(input: SignInstrumentInput): SignedInstrument {
 
 export function useSignedInstruments(): SignedInstrumentsAPI {
   const live = useLiveClient();
-  const [localRows, , localLoading] = useTrackedRows<SignedInstrument>(
-    SIGNED_KEY,
-    !isLive(live),
-  );
-  const [liveRows, liveLoading, refreshLive] = useLiveRows<SignedInstrument>(
-    live,
-    'signed_instruments',
-    mapSigned,
-    { column: 'signed_at', ascending: false },
-  );
+  const [localRows, , localLoading] = useTrackedRows<SignedInstrument>(SIGNED_KEY, !isLive(live));
+  const [liveRows, liveLoading, refreshLive] = useLiveRows<SignedInstrument>(live, 'signed_instruments', mapSigned, {
+    column: 'signed_at',
+    ascending: false,
+  });
   const rows = isLive(live) ? liveRows : localRows;
   const loading = isLive(live) ? liveLoading : localLoading;
 
-  const forCase = useCallback(
-    (caseId: string) => rows.filter((r) => r.caseId === caseId),
-    [rows],
-  );
+  const forCase = useCallback((caseId: string) => rows.filter((r) => r.caseId === caseId), [rows]);
   const findSigned = useCallback(
-    (caseId: string, code: string) =>
-      rows.find((r) => r.caseId === caseId && r.code === code && !r.revokedAt),
+    (caseId: string, code: string) => rows.find((r) => r.caseId === caseId && r.code === code && !r.revokedAt),
     [rows],
   );
   const sign = useCallback(
@@ -1255,24 +1251,19 @@ export function useSignedInstruments(): SignedInstrumentsAPI {
 // ---------------------------------------------------------------------------
 // Timeline
 // ---------------------------------------------------------------------------
-export function useCaseTimeline(caseId?: string): { rows: CaseTimelineEntry[]; loading: boolean } {
+export function useCaseTimeline(caseId?: string): {
+  rows: CaseTimelineEntry[];
+  loading: boolean;
+} {
   const live = useLiveClient();
-  const [localRows, , localLoading] = useTrackedRows<CaseTimelineEntry>(
-    TIMELINE_KEY,
-    !isLive(live),
-  );
-  const [liveRows, liveLoading] = useLiveRows<CaseTimelineEntry>(
-    live,
-    'case_timeline',
-    mapTimeline,
-    { column: 'at', ascending: false },
-  );
+  const [localRows, , localLoading] = useTrackedRows<CaseTimelineEntry>(TIMELINE_KEY, !isLive(live));
+  const [liveRows, liveLoading] = useLiveRows<CaseTimelineEntry>(live, 'case_timeline', mapTimeline, {
+    column: 'at',
+    ascending: false,
+  });
   const rows = isLive(live) ? liveRows : localRows;
   const loading = isLive(live) ? liveLoading : localLoading;
-  const filtered = useMemo(
-    () => (caseId ? rows.filter((r) => r.caseId === caseId) : rows),
-    [rows, caseId],
-  );
+  const filtered = useMemo(() => (caseId ? rows.filter((r) => r.caseId === caseId) : rows), [rows, caseId]);
   return { rows: filtered, loading };
 }
 
@@ -1287,6 +1278,7 @@ export interface InviteInput {
   /** v2: tailoring axes captured by the invite wizard. */
   profile?: TailoringProfile;
   originCountry?: string;
+  idempotencyKey: string;
 }
 
 export interface InvitesAPI {
@@ -1296,23 +1288,13 @@ export interface InvitesAPI {
   retry: (inviteId: string) => MaybePromise<VendorInvite>;
 }
 
-async function mapInviteDeliveryResponse(
-  response: Response,
-  refresh: () => Promise<void>,
-): Promise<VendorInvite> {
+async function mapInviteDeliveryResponse(response: Response, refresh: () => Promise<void>): Promise<VendorInvite> {
   const result = (await response.json().catch(() => ({}))) as
-    | (InviteVendorRpcResult & VendorInviteDeliveryEnvelope)
-    | { error?: string };
+    (InviteVendorRpcResult & VendorInviteDeliveryEnvelope) | { error?: string };
   if (!response.ok) {
-    throw new Error(
-      'error' in result && result.error
-        ? result.error
-        : 'Vendor invitation delivery failed.',
-    );
+    throw new Error('error' in result && result.error ? result.error : 'Vendor invitation delivery failed.');
   }
-  const resolved = resolveVendorInviteDelivery(
-    result as InviteVendorRpcResult & VendorInviteDeliveryEnvelope,
-  );
+  const resolved = resolveVendorInviteDelivery(result as InviteVendorRpcResult & VendorInviteDeliveryEnvelope);
   const mapped: VendorInvite = {
     ...mapInvite(resolved.inviteRow as LiveRow),
     caseId: resolved.caseId,
@@ -1327,16 +1309,11 @@ async function mapInviteDeliveryResponse(
 
 export function useVendorInvites(): InvitesAPI {
   const live = useLiveClient();
-  const [localRows, set, localLoading] = useTrackedRows<VendorInvite>(
-    INVITES_KEY,
-    !isLive(live),
-  );
-  const [liveRows, liveLoading, refreshLive] = useLiveRows<VendorInvite>(
-    live,
-    'vendor_invites',
-    mapInvite,
-    { column: 'created_at', ascending: false },
-  );
+  const [localRows, set, localLoading] = useTrackedRows<VendorInvite>(INVITES_KEY, !isLive(live));
+  const [liveRows, liveLoading, refreshLive] = useLiveRows<VendorInvite>(live, 'vendor_invites', mapInvite, {
+    column: 'created_at',
+    ascending: false,
+  });
   const rows = isLive(live) ? liveRows : localRows;
   const loading = isLive(live) ? liveLoading : localLoading;
   const invite = useCallback<InvitesAPI['invite']>(
@@ -1353,6 +1330,7 @@ export function useVendorInvites(): InvitesAPI {
             actor_email: input.actor,
             profile: input.profile,
             origin_country: input.originCountry,
+            idempotency_key: input.idempotencyKey,
           }),
         }).then((response) => mapInviteDeliveryResponse(response, refreshLive));
       }
@@ -1404,9 +1382,7 @@ export function useVendorInvites(): InvitesAPI {
   const retry = useCallback<InvitesAPI['retry']>(
     (inviteId) => {
       if (!isLive(live)) {
-        const existing = safeRead<VendorInvite>(INVITES_KEY).find(
-          (row) => row.id === inviteId,
-        );
+        const existing = safeRead<VendorInvite>(INVITES_KEY).find((row) => row.id === inviteId);
         if (!existing) throw new Error('Vendor invite not found.');
         return existing;
       }
@@ -1430,10 +1406,7 @@ export function useVendorAliases(): {
   loading: boolean;
 } {
   const live = useLiveClient();
-  const [rows, , loading] = useTrackedRows<VendorLoginAlias>(
-    ALIASES_KEY,
-    !isLive(live),
-  );
+  const [rows, , loading] = useTrackedRows<VendorLoginAlias>(ALIASES_KEY, !isLive(live));
   return { rows, loading };
 }
 

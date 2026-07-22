@@ -16,9 +16,15 @@ const application = {
 
 function liveClient(latest: Record<string, unknown> | null = null) {
   const rpc = vi.fn(async (name: string) => ({
-    data: name === 'save_vendor_application_draft'
-      ? { case_id: 'case-1', payload: application, version: 3, status: 'draft' as const }
-      : { case_id: 'case-1', version: 3, status: 'superseded' as const },
+    data:
+      name === 'save_vendor_application_draft'
+        ? {
+            case_id: 'case-1',
+            payload: application,
+            version: 3,
+            status: 'draft' as const,
+          }
+        : { case_id: 'case-1', version: 3, status: 'superseded' as const },
     error: null,
   }));
   const maybeSingle = vi.fn(async () => ({ data: latest, error: null }));
@@ -40,7 +46,11 @@ function liveClient(latest: Record<string, unknown> | null = null) {
 describe('vendor application draft repository', () => {
   it('loads a vendor-scoped server draft in Supabase mode without reading localStorage', async () => {
     const storage = { getItem: vi.fn(), setItem: vi.fn(), removeItem: vi.fn() };
-    const live = liveClient({ payload: application, version: 2, status: 'draft' });
+    const live = liveClient({
+      payload: application,
+      version: 2,
+      status: 'draft',
+    });
     const repository = createVendorApplicationDraftRepository({
       mode: 'supabase',
       client: live.client,
@@ -90,23 +100,16 @@ describe('vendor application draft repository', () => {
     });
   });
 
-  it('accepts the current vendor invitation from the vendor-facing session', async () => {
-    const live = liveClient();
-    const repository = createVendorApplicationDraftRepository({
-      mode: 'supabase',
-      client: live.client,
-    });
-
-    await repository.acceptInvitation();
-
-    expect(live.rpc).toHaveBeenCalledWith('accept_current_vendor_invite', {
-      payload: {},
-    });
-  });
-
   it('keeps memory-mode drafts local and removable', async () => {
-    const storage = { getItem: vi.fn(() => '{}'), setItem: vi.fn(), removeItem: vi.fn() };
-    const repository = createVendorApplicationDraftRepository({ mode: 'memory', storage });
+    const storage = {
+      getItem: vi.fn(() => '{}'),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+    };
+    const repository = createVendorApplicationDraftRepository({
+      mode: 'memory',
+      storage,
+    });
 
     await repository.save('case-1', application, 0, 'ignored');
     expect(storage.setItem).toHaveBeenCalledOnce();

@@ -2,7 +2,11 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, type User } from "jsr:@supabase/supabase-js@2";
 
 interface InviteBody {
+  action?: "dispatch" | "accept";
   invite_id?: string;
+  expected_generation?: number;
+  acceptance_token?: string;
+  idempotency_key?: string;
   email?: string;
   company_name?: string;
   category?: string;
@@ -10,6 +14,8 @@ interface InviteBody {
   origin_country?: string;
   redirect_origin?: string;
 }
+
+type JsonRecord = Record<string, unknown>;
 
 function inviteRedirectOrigin(value?: string): string {
   const configured = (Deno.env.get("INVITE_REDIRECT_ORIGINS") ?? "")
@@ -38,6 +44,38 @@ const json = (body: unknown, status = 200) =>
     status,
     headers: { "content-type": "application/json" },
   });
+
+function rejectionMessage(code: unknown): string {
+  switch (code) {
+    case "expired":
+      return "This invitation has expired. Ask your Mwell contact to send a new invitation.";
+    case "superseded":
+    case "superseded_generation":
+      return "This invitation was replaced by a newer email. Use the latest invitation.";
+    case "replayed":
+    case "accepted":
+      return "This invitation has already been used.";
+    case "identity_mismatch":
+      return "This invitation belongs to a different signed-in account.";
+    case "not_delivered":
+      return "This invitation is not ready for acceptance.";
+    default:
+      return "This vendor invitation could not be accepted.";
+  }
+}
+
+function metadataRoles(value: unknown): Record<string, string[]> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const roles: Record<string, string[]> = {};
+  for (const [module, assigned] of Object.entries(value)) {
+    if (Array.isArray(assigned)) {
+      roles[module] = assigned.filter(
+        (role): role is string => typeof role === "string",
+      );
+    }
+  }
+  return roles;
+}
 
 Deno.serve(async (request) => {
   if (request.method !== "POST")
@@ -68,17 +106,86 @@ Deno.serve(async (request) => {
   const admin = createClient(url, service, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
+
+  if (body?.action === "accept") {
+    if (
+      !body.invite_id ||
+      !Number.isInteger(body.expected_generation) ||
+      Number(body.expected_generation) < 1 ||
+      !body.acceptance_token ||
+      body.acceptance_token.length < 32
+    ) {
+      return json(
+        {
+          error:
+            "invite_id, expected_generation, and acceptance_token are required.",
+        },
+        400,
+      );
+    }
+    const { data, error } = await userClient.rpc(
+      "accept_current_vendor_invite",
+      {
+        payload: {
+          invite_id: body.invite_id,
+          expected_generation: body.expected_generation,
+          acceptance_token: body.acceptance_token,
+        },
+      },
+    );
+    if (error) return json({ error: error.message }, 403);
+    const acceptance = (data ?? {}) as JsonRecord;
+    if (acceptance.accepted !== true) {
+      return json(
+        {
+          ...acceptance,
+          error: rejectionMessage(acceptance.rejection_code),
+        },
+        409,
+      );
+    }
+
+    const currentMetadata = (verifiedUser.app_metadata ?? {}) as JsonRecord;
+    const currentRoles = metadataRoles(currentMetadata.roles);
+    const coreRoles = [
+      ...new Set([...(currentRoles.core ?? []), "vendor_portal"]),
+    ];
+    const { pending_vendor_invite: _pending, ...metadataWithoutPending } =
+      currentMetadata;
+    const { error: metadataError } = await admin.auth.admin.updateUserById(
+      verifiedUser.id,
+      {
+        app_metadata: {
+          ...metadataWithoutPending,
+          kind: "vendor",
+          vendor_id: acceptance.vendor_id,
+          roles: { ...currentRoles, core: coreRoles },
+        },
+      },
+    );
+    if (metadataError) {
+      await admin.schema("legal").rpc("rollback_vendor_invite_acceptance", {
+        payload: {
+          invite_id: acceptance.invite_id,
+          acceptance_nonce: acceptance.acceptance_nonce,
+        },
+      });
+      return json(
+        {
+          error:
+            "Vendor access could not be activated. Please try the invitation again.",
+        },
+        502,
+      );
+    }
+    return json(acceptance, 200);
+  }
+
   let email = body?.email?.trim().toLowerCase();
   let companyName = body?.company_name?.trim();
-  let invite: Record<string, unknown>;
+  let invite: JsonRecord;
 
   if (body?.invite_id) {
-    const { error: reconcileError } = await admin
-      .schema("legal")
-      .rpc("reconcile_vendor_invite_lifecycle", {
-        payload: { invite_id: body.invite_id },
-      });
-    if (reconcileError) return json({ error: reconcileError.message }, 502);
     const { data: existing, error } = await userClient
       .from("vendor_invites")
       .select("*")
@@ -86,15 +193,6 @@ Deno.serve(async (request) => {
       .single();
     if (error || !existing)
       return json({ error: error?.message ?? "Vendor invite not found." }, 404);
-    if (existing.status === "accepted" || existing.status === "expired") {
-      await admin.schema("legal").rpc("finalize_vendor_invite_delivery", {
-        payload: { invite_id: body.invite_id, status: "replay_rejected" },
-      });
-      return json(
-        { error: `A ${existing.status} invite cannot be retried.` },
-        409,
-      );
-    }
     email = existing.email?.trim().toLowerCase();
     companyName = existing.company_name?.trim();
     invite = {
@@ -106,6 +204,31 @@ Deno.serve(async (request) => {
     if (!email || !/^\S+@\S+\.\S+$/.test(email))
       return json({ error: "A valid vendor email is required." }, 400);
     if (!companyName) return json({ error: "Company name is required." }, 400);
+    if (
+      !body?.idempotency_key ||
+      !/^[A-Za-z0-9_-]{12,128}$/.test(body.idempotency_key)
+    ) {
+      return json({ error: "A valid idempotency key is required." }, 400);
+    }
+    const { data: existingProfile, error: profileError } = await admin
+      .schema("core")
+      .from("profiles")
+      .select("kind,status")
+      .eq("email", email)
+      .maybeSingle();
+    if (profileError) return json({ error: profileError.message }, 502);
+    if (
+      existingProfile?.kind === "employee" ||
+      existingProfile?.status === "active"
+    ) {
+      return json(
+        {
+          error:
+            "This email already belongs to an active account and cannot receive this vendor invitation.",
+        },
+        409,
+      );
+    }
     const { data, error } = await userClient.rpc("invite_vendor", {
       payload: {
         email,
@@ -114,45 +237,86 @@ Deno.serve(async (request) => {
         actor: verifiedUser.email,
         profile: body?.profile,
         origin_country: body?.origin_country,
+        idempotency_key: body?.idempotency_key,
       },
     });
     if (error) return json({ error: error.message }, 403);
-    invite = data as Record<string, unknown>;
+    invite = data as JsonRecord;
   }
 
   if (!email || !companyName)
     return json({ error: "Vendor invite is missing delivery details." }, 422);
-  const { data: profile, error: profileError } = await admin
-    .schema("core")
-    .from("profiles")
-    .select("kind")
-    .eq("email", email)
-    .maybeSingle();
-  if (profileError) return json({ error: profileError.message }, 502);
-  if (profile?.kind === "employee") {
+  const inviteRow = (invite.invite ?? invite) as JsonRecord;
+  const inviteId = typeof inviteRow.id === "string" ? inviteRow.id : null;
+  if (!inviteId)
+    return json({ error: "Invitation service returned no invite id." }, 502);
+
+  const { data: prepared, error: prepareError } = await admin
+    .schema("legal")
+    .rpc("prepare_vendor_invite_delivery", {
+      payload: {
+        invite_id: inviteId,
+        ...(body?.invite_id
+          ? {}
+          : {
+              creation_idempotency_key: body?.idempotency_key,
+              actor_id: verifiedUser.id,
+            }),
+      },
+    });
+  if (prepareError) return json({ error: prepareError.message }, 502);
+  const preparedInvite = (prepared ?? {}) as JsonRecord;
+  if (preparedInvite.prepared !== true) {
+    if (preparedInvite.rejection_code === "already_claimed") {
+      const status = preparedInvite.status;
+      const deliveryStatus =
+        status === "delivery_failed"
+          ? "delivery_failed"
+          : status === "pending_delivery"
+            ? "pending_delivery"
+            : "sent";
+      return json(
+        {
+          ...invite,
+          invite: preparedInvite,
+          delivery_status: deliveryStatus,
+          idempotent_replay: true,
+        },
+        deliveryStatus === "sent" ? 200 : 202,
+      );
+    }
     return json(
       {
-        error:
-          "This email belongs to an employee account and cannot be invited as a vendor.",
+        error: rejectionMessage(preparedInvite.rejection_code),
+        rejection_code: preparedInvite.rejection_code,
       },
       409,
     );
   }
+  const expectedGeneration = Number(preparedInvite.link_generation);
+  if (!Number.isInteger(expectedGeneration) || expectedGeneration < 1) {
+    return json({ error: "Invitation generation was not prepared." }, 502);
+  }
+  if (typeof preparedInvite.expires_at !== "string") {
+    return json({ error: "Invitation expiry policy was not applied." }, 502);
+  }
+  if (typeof preparedInvite.acceptance_token !== "string") {
+    return json(
+      { error: "Invitation acceptance evidence was not prepared." },
+      502,
+    );
+  }
 
-  const inviteRow = (invite.invite ?? invite) as { id?: string };
-  const inviteId = inviteRow.id;
-  if (!inviteId)
-    return json({ error: "Invitation service returned no invite id." }, 502);
-  const markDelivery = async (payload: Record<string, unknown>) => {
-    const { error } = await admin
+  const markDelivery = async (payload: JsonRecord): Promise<JsonRecord> => {
+    const { data, error } = await admin
       .schema("legal")
       .rpc("finalize_vendor_invite_delivery", { payload });
     if (error) throw error;
+    return (data ?? {}) as JsonRecord;
   };
-  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
+  let authUser: User | null = null;
   try {
-    let authUser: User | null = null;
     for (let page = 1; page <= 20 && !authUser; page += 1) {
       const { data, error } = await admin.auth.admin.listUsers({
         page,
@@ -165,8 +329,43 @@ Deno.serve(async (request) => {
         ) ?? null;
       if (data.users.length < 1000) break;
     }
-    const redirectTo = `${inviteRedirectOrigin(body?.redirect_origin)}/reset-password?next=/vendor`;
+
+    const vendorQuery = new URLSearchParams({
+      invite_id: inviteId,
+      generation: String(expectedGeneration),
+      acceptance_token: preparedInvite.acceptance_token,
+    });
+    const redirectQuery = new URLSearchParams({
+      next: `/vendor?${vendorQuery}`,
+    });
+    const redirectTo = `${inviteRedirectOrigin(body?.redirect_origin)}/reset-password?${redirectQuery}`;
     if (authUser) {
+      const appMetadata = (authUser.app_metadata ?? {}) as JsonRecord;
+      const roles = metadataRoles(appMetadata.roles);
+      const coreRoles = (roles.core ?? []).filter(
+        (role) => role !== "vendor_portal",
+      );
+      const {
+        kind: _kind,
+        vendor_id: _vendorId,
+        pending_vendor_invite: _previousPending,
+        ...metadataWithoutVendorAuthority
+      } = appMetadata;
+      const { error: pendingError } = await admin.auth.admin.updateUserById(
+        authUser.id,
+        {
+          app_metadata: {
+            ...metadataWithoutVendorAuthority,
+            roles: { ...roles, core: coreRoles },
+            pending_vendor_invite: {
+              invite_id: inviteId,
+              link_generation: expectedGeneration,
+              expires_at: preparedInvite.expires_at,
+            },
+          },
+        },
+      );
+      if (pendingError) throw pendingError;
       const { error } = await admin.auth.resetPasswordForEmail(email, {
         redirectTo,
       });
@@ -178,36 +377,41 @@ Deno.serve(async (request) => {
       });
       if (error) throw error;
       authUser = data.user;
+      if (!authUser)
+        throw new Error("Supabase Auth did not return the invited user.");
+      const { error: pendingError } = await admin.auth.admin.updateUserById(
+        authUser.id,
+        {
+          app_metadata: {
+            ...authUser.app_metadata,
+            pending_vendor_invite: {
+              invite_id: inviteId,
+              link_generation: expectedGeneration,
+              expires_at: preparedInvite.expires_at,
+            },
+          },
+        },
+      );
+      if (pendingError) throw pendingError;
     }
     if (!authUser)
       throw new Error("Supabase Auth did not return the invited user.");
 
-    const currentRoles =
-      authUser.app_metadata?.roles &&
-      typeof authUser.app_metadata.roles === "object"
-        ? (authUser.app_metadata.roles as Record<string, string[]>)
-        : {};
-    const coreRoles = [
-      ...new Set([...(currentRoles.core ?? []), "vendor_portal"]),
-    ];
-    const { error: metadataError } = await admin.auth.admin.updateUserById(
-      authUser.id,
-      {
-        app_metadata: {
-          ...authUser.app_metadata,
-          roles: { ...currentRoles, core: coreRoles },
-        },
-      },
-    );
-    if (metadataError) throw metadataError;
-    await markDelivery({
+    const deliveredInvite = await markDelivery({
       invite_id: inviteId,
       status: "sent",
       auth_user_id: authUser.id,
-      expires_at: expiresAt,
+      expected_generation: expectedGeneration,
     });
+    if (deliveredInvite.updated !== true) {
+      throw new Error("The prepared invitation generation was not finalized.");
+    }
     return json(
-      { ...invite, delivery_status: "sent" },
+      {
+        ...invite,
+        invite: deliveredInvite,
+        delivery_status: "sent",
+      },
       body?.invite_id ? 200 : 201,
     );
   } catch (cause) {
@@ -215,14 +419,17 @@ Deno.serve(async (request) => {
       cause instanceof Error
         ? cause.message
         : "Vendor invitation delivery failed.";
-    await markDelivery({
+    const failedInvite = await markDelivery({
       invite_id: inviteId,
       status: "delivery_failed",
+      auth_user_id: authUser?.id,
+      expected_generation: expectedGeneration,
       error: message,
-    }).catch(() => undefined);
+    }).catch(() => null);
     return json(
       {
         ...invite,
+        ...(failedInvite ? { invite: failedInvite } : {}),
         delivery_status: "delivery_failed",
         delivery_error:
           "The case was opened, but the invitation email was not delivered. Verify the address and retry delivery.",

@@ -227,6 +227,9 @@ test("shards UAT certification into bounded least-privilege jobs", async () => {
   assert.match(workflow, /max-parallel: 1/);
   assert.match(workflow, /pnpm provision:test:uat/);
   assert.match(workflow, /secrets\.UAT_SUPABASE_SERVICE_ROLE_KEY/);
+  assert.match(workflow, /AUDIT_REQUIRE_VENDOR_DELIVERY: "true"/);
+  assert.match(workflow, /secrets\.UAT_VENDOR_AUDIT_EMAIL/);
+  assert.match(workflow, /test-results\/evidence/);
   assert.doesNotMatch(workflow, /service_role\s*[=:]\s*["'][^"']+/i);
 });
 
@@ -236,11 +239,9 @@ test("cross-module scenarios are imported and executed as browser/database contr
     "utf8",
   );
   assert.match(source, /CURRENT_LIVE_SCENARIOS,/);
-  for (const scenarioId of [
-    "events-request-to-warehouse-handoff",
-    "insights-read-only-governance",
-    "unified-finance-control-center",
-  ]) {
+  for (const scenarioId of CURRENT_LIVE_SCENARIOS.map(
+    (scenario) => scenario.id,
+  )) {
     assert.match(
       source,
       new RegExp(`scenarioId:\\s*["']${scenarioId}["']`),
@@ -278,8 +279,10 @@ test("cross-module scenarios are imported and executed as browser/database contr
   assert.match(source, /Unified Finance receipt source link is incorrect/);
   assert.match(
     source,
-    /EXECUTABLE_CROSS_MODULE_SCENARIOS[\s\S]*executable scenario \$\{scenarioId\} was not run/,
+    /CURRENT_LIVE_SCENARIOS\.map\(\(scenario\) => scenario\.id\)/,
   );
+  assert.match(source, /scenarioCoverage/);
+  assert.match(source, /has no successful \$\{viewport\} workflow/);
 });
 
 test("route crawl enforces an exact role-to-route authorization matrix", async () => {
@@ -418,9 +421,32 @@ test("the invite workflow verifies the persisted delivery state", async () => {
     new URL("./full-intra-live-e2e.mjs", import.meta.url),
     "utf8",
   );
-  assert.match(source, /delivery_failed/);
+  assert.match(source, /AUDIT_REQUIRE_VENDOR_DELIVERY/);
+  assert.match(source, /AUDIT_VENDOR_EMAIL/);
+  assert.match(source, /controlled mailbox template containing \{marker\}/);
+  assert.match(source, /replaceAll\("\{marker\}", marker\.toLowerCase\(\)\)/);
+  assert.match(source, /deliveryStatus !== "sent"/);
+  assert.match(source, /auth_user_id,expires_at,link_generation/);
+  assert.match(source, /acceptance_token_hash/);
+  assert.match(source, /Vendor access was active before invitation acceptance/);
+  assert.match(source, /Accepted invitation replay was not rejected/);
+  assert.match(source, /acceptanceEvidenceScreenshot/);
   assert.match(source, /table: "vendor_invites"/);
   assert.match(source, /filters: \{ company_name: companyName \}/);
+});
+
+test("governed transactions retain visual and accessibility evidence", async () => {
+  const source = await readFile(
+    new URL("./full-intra-live-e2e.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /AUDIT_EVIDENCE_DIR/);
+  assert.match(source, /page\.screenshot/);
+  assert.match(source, /new AxeBuilder\(\{ page \}\)/);
+  assert.match(source, /overflow: layout\.horizontalOverflow/);
+  assert.match(source, /seriousAccessibility/);
+  assert.match(source, /undersizedMobileTargets/);
+  assert.match(source, /interactionProblems/);
 });
 
 test("the mutating harness scopes and removes temporary auth identities", async () => {

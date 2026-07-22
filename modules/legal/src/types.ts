@@ -13,26 +13,13 @@
 // ---------------------------------------------------------------------------
 
 export type CaseStatus =
-  | 'draft'
-  | 'submitted'
-  | 'under_review'
-  | 'approved'
-  | 'provisional'
-  | 'rejected'
-  | 'expired'
-  | 'renewal_due';
+  'draft' | 'submitted' | 'under_review' | 'approved' | 'provisional' | 'rejected' | 'expired' | 'renewal_due';
 
 /** ISO 3166 style; `OTHER` = free-text country captured on originCountry. */
 export type Jurisdiction = 'PH' | 'US' | 'EU' | 'UK' | 'SG' | 'HK' | 'OTHER';
 
 /** Legal form of the vendor entity. */
-export type EntityType =
-  | 'corporation'
-  | 'sole_prop'
-  | 'partnership'
-  | 'cooperative'
-  | 'branch_foreign'
-  | 'other';
+export type EntityType = 'corporation' | 'sole_prop' | 'partnership' | 'cooperative' | 'branch_foreign' | 'other';
 
 /** Sourcing category — drives sector-specific docs (FDA, PCAB, etc.). */
 export type VendorCategory =
@@ -52,21 +39,10 @@ export type VendorCategory =
 export type RiskTier = 'low' | 'medium' | 'high';
 
 /** Contract type — drives bond / SLA obligations. */
-export type ContractType =
-  | 'spot_po'
-  | 'master_supply'
-  | 'sla'
-  | 'retainer'
-  | 'project'
-  | 'manpower_supply';
+export type ContractType = 'spot_po' | 'master_supply' | 'sla' | 'retainer' | 'project' | 'manpower_supply';
 
 /** Expected annual spend band — drives insurance / bond prompts. */
-export type SpendBand =
-  | 'below_100k'
-  | '100k_1m'
-  | '1m_10m'
-  | '10m_50m'
-  | 'above_50m';
+export type SpendBand = 'below_100k' | '100k_1m' | '1m_10m' | '10m_50m' | 'above_50m';
 
 /** Domain grouping used to bucket the checklist on the vendor portal. */
 export type RequirementGroup =
@@ -237,7 +213,12 @@ export interface CaseSignature {
 
 export type AccreditationFieldDisposition =
   | { status: 'not_applicable'; reason: string }
-  | { status: 'foreign_equivalent'; reason: string; reviewerEmail?: string; reviewedAt?: string };
+  | {
+      status: 'foreign_equivalent';
+      reason: string;
+      reviewerEmail?: string;
+      reviewedAt?: string;
+    };
 
 export interface VendorCompanyDetails {
   tradeName: string;
@@ -426,9 +407,9 @@ export interface VendorInvite {
   linkGeneration?: number;
   lastLinkIssuedAt?: string;
   replayRejectedAt?: string;
-  status: 'sent' | 'accepted' | 'expired' | 'delivery_failed';
+  status: 'pending_delivery' | 'sent' | 'accepted' | 'expired' | 'delivery_failed';
   /** Delivery is separate from case creation so a mail outage cannot orphan work. */
-  deliveryStatus?: 'sent' | 'delivery_failed';
+  deliveryStatus?: 'pending_delivery' | 'sent' | 'delivery_failed';
   /** User-safe delivery guidance; provider diagnostics remain server-side. */
   deliveryError?: string;
   // v2 additions carried over from the invite wizard
@@ -529,11 +510,7 @@ export interface CaseProgressSummary {
 }
 
 /** Which "bucket" of the reviewer inbox a case belongs to. */
-export type InboxBucket =
-  | 'waiting_on_vendor'
-  | 'waiting_on_legal'
-  | 'ready_for_decision'
-  | 'renewal_due';
+export type InboxBucket = 'waiting_on_vendor' | 'waiting_on_legal' | 'ready_for_decision' | 'renewal_due';
 
 /** Descriptive labels for RequirementGroup keys. */
 export const REQUIREMENT_GROUP_LABEL: Record<RequirementGroup, string> = {

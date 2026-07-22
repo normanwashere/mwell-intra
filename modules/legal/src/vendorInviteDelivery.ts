@@ -8,14 +8,13 @@ export interface VendorInviteDeliveryEnvelope extends DeliveryRow {
   invite?: DeliveryRow;
   case?: DeliveryRow;
   vendor?: DeliveryRow;
-  delivery_status?: 'sent' | 'delivery_failed';
+  delivery_status?: 'pending_delivery' | 'sent' | 'delivery_failed';
   delivery_error?: string;
 }
 
 export function resolveVendorInviteDelivery(payload: VendorInviteDeliveryEnvelope) {
   const inviteRow = payload.invite ?? payload;
-  if (typeof inviteRow.id !== 'string')
-    throw new Error('Vendor invitation service returned no valid invite record.');
+  if (typeof inviteRow.id !== 'string') throw new Error('Vendor invitation service returned no valid invite record.');
 
   const caseId =
     typeof inviteRow.case_id === 'string'

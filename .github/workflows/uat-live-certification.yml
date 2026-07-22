@@ -17,18 +17,26 @@ jobs:
   prepare:
     name: Verify contracts and reconcile UAT personas
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
     environment: uat
+    outputs:
+      audit_date: ${{ steps.audit_identity.outputs.audit_date }}
     env:
       APP_ENV: uat
+      AUDIT_BASE_URL: https://mwell-intra-uat.vercel.app
       NEXT_PUBLIC_SUPABASE_URL: https://kkoitlvydytdhlpxhuah.supabase.co
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.UAT_SUPABASE_SERVICE_ROLE_KEY }}
       AUDIT_PASSWORD: ${{ secrets.UAT_AUDIT_MASTER_PASSWORD }}
       SUPABASE_PROJECT_REF: kkoitlvydytdhlpxhuah
       PRODUCTION_SUPABASE_PROJECT_REF: abbfziukjalyqtcuskhi
       POLICY_ALLOW_TEST_MUTATIONS: "true"
+      GITHUB_SHA: ${{ github.sha }}
+      DEPLOYMENT_EVIDENCE_PATH: test-results/deployment-readiness.json
     steps:
       - uses: actions/checkout@v4
+      - name: Establish deterministic certification date
+        id: audit_identity
+        run: node scripts/qa/uat-ci-run-id.mjs --github-output "$GITHUB_OUTPUT"
       - uses: pnpm/action-setup@v4
         with:
           version: 10.23.0
@@ -40,10 +48,22 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Verify live audit contracts
         run: pnpm test:intra-live-contract
+      - name: Verify CI resilience contracts
+        run: node --test scripts/qa/uat-ci-resilience.test.mjs
       - name: Verify UAT persona provisioner contract
         run: pnpm test:provision:uat
       - name: Reconcile guarded UAT personas
         run: pnpm provision:test:uat
+      - name: Wait for the exact commit to be deployed
+        run: node scripts/qa/wait-for-uat-deployment.mjs
+      - name: Upload deployment readiness evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: uat-deployment-readiness-${{ github.run_number }}
+          path: test-results/deployment-readiness.json
+          if-no-files-found: error
+          retention-days: 30
 
   routes:
     name: Route and visual audit (${{ matrix.viewport }})
@@ -97,8 +117,10 @@ jobs:
       - name: Run guarded route and visual audit
         shell: bash
         run: |
-          suffix="$(printf '%08X' "$((GITHUB_RUN_NUMBER * 100 + ${{ matrix.ordinal }}))")"
-          export AUDIT_RUN_ID="QA-$(date -u +%Y%m%d)-${suffix}"
+          export AUDIT_RUN_ID="$(node scripts/qa/uat-ci-run-id.mjs \
+            --date "${{ needs.prepare.outputs.audit_date }}" \
+            --run-number "${{ github.run_number }}" \
+            --ordinal "${{ matrix.ordinal }}")"
           pnpm test:intra-live
       - name: Upload route artifact
         if: always()
@@ -131,6 +153,9 @@ jobs:
       AUDIT_VIEWPORT: ${{ matrix.viewport }}
       AUDIT_MUTATIONS: "true"
       AUDIT_OUTPUT_PATH: test-results/transactions-${{ matrix.viewport }}.json
+      AUDIT_EVIDENCE_DIR: test-results/evidence
+      AUDIT_REQUIRE_VENDOR_DELIVERY: "true"
+      AUDIT_VENDOR_EMAIL: ${{ secrets.UAT_VENDOR_AUDIT_EMAIL }}
       NEXT_PUBLIC_SUPABASE_URL: https://kkoitlvydytdhlpxhuah.supabase.co
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.UAT_SUPABASE_ANON_KEY }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.UAT_SUPABASE_SERVICE_ROLE_KEY }}
@@ -154,22 +179,82 @@ jobs:
       - name: Run guarded write, readback, handoff, and cleanup audit
         shell: bash
         run: |
-          suffix="$(printf '%08X' "$((GITHUB_RUN_NUMBER * 100 + ${{ matrix.ordinal }}))")"
-          export AUDIT_RUN_ID="QA-$(date -u +%Y%m%d)-${suffix}"
+          export AUDIT_RUN_ID="$(node scripts/qa/uat-ci-run-id.mjs \
+            --date "${{ needs.prepare.outputs.audit_date }}" \
+            --run-number "${{ github.run_number }}" \
+            --ordinal "${{ matrix.ordinal }}")"
           pnpm test:intra-live
       - name: Upload transaction artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: uat-transactions-${{ matrix.viewport }}-${{ github.run_number }}
-          path: test-results/transactions-${{ matrix.viewport }}.json
+          path: |
+            test-results/transactions-${{ matrix.viewport }}.json
+            test-results/evidence
+          if-no-files-found: error
+          retention-days: 30
+
+  cleanup:
+    name: Independent residue cleanup (${{ matrix.viewport }})
+    if: ${{ always() && needs.prepare.result == 'success' }}
+    needs: [prepare, transactions]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: uat
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - viewport: desktop-1440
+            ordinal: 91
+          - viewport: mobile-390
+            ordinal: 92
+    env:
+      APP_ENV: uat
+      AUDIT_VIEWPORT: ${{ matrix.viewport }}
+      NEXT_PUBLIC_SUPABASE_URL: https://kkoitlvydytdhlpxhuah.supabase.co
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.UAT_SUPABASE_SERVICE_ROLE_KEY }}
+      SUPABASE_PROJECT_REF: kkoitlvydytdhlpxhuah
+      PRODUCTION_SUPABASE_PROJECT_REF: abbfziukjalyqtcuskhi
+      POLICY_ALLOW_TEST_MUTATIONS: "true"
+      CLEANUP_OUTPUT_PATH: test-results/cleanup-${{ matrix.viewport }}.json
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.23.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Remove and certify all run-scoped residue
+        shell: bash
+        run: |
+          export AUDIT_RUN_ID="$(node scripts/qa/uat-ci-run-id.mjs \
+            --date "${{ needs.prepare.outputs.audit_date }}" \
+            --run-number "${{ github.run_number }}" \
+            --ordinal "${{ matrix.ordinal }}")"
+          node scripts/qa/cleanup-uat-live-run.mjs \
+            --run-id "$AUDIT_RUN_ID" \
+            --viewport "${{ matrix.viewport }}" \
+            --output "$CLEANUP_OUTPUT_PATH"
+      - name: Upload independent cleanup evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: uat-cleanup-${{ matrix.viewport }}-${{ github.run_number }}
+          path: test-results/cleanup-${{ matrix.viewport }}.json
           if-no-files-found: error
           retention-days: 30
 
   bundle:
     name: Bundle certification evidence
     if: always()
-    needs: [routes, transactions]
+    needs: [prepare, routes, transactions, cleanup]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -184,5 +269,5 @@ jobs:
           if-no-files-found: error
           retention-days: 30
       - name: Enforce upstream certification status
-        if: needs.routes.result != 'success' || needs.transactions.result != 'success'
+        if: needs.prepare.result != 'success' || needs.routes.result != 'success' || needs.transactions.result != 'success' || needs.cleanup.result != 'success'
         run: exit 1

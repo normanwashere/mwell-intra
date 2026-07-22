@@ -21,14 +21,17 @@ interface DraftQuery {
   in(column: string, values: string[]): DraftQuery;
   order(column: string, options: { ascending: boolean }): DraftQuery;
   limit(value: number): DraftQuery;
-  maybeSingle(): Promise<{ data: DraftRow | null; error: { message: string } | null }>;
+  maybeSingle(): Promise<{
+    data: DraftRow | null;
+    error: { message: string } | null;
+  }>;
 }
 
 interface LegalDraftClient {
   schema(name: 'legal'): {
     from(table: 'vendor_application_snapshots'): DraftQuery;
     rpc(
-      name: 'save_vendor_application_draft' | 'discard_vendor_application_draft' | 'accept_current_vendor_invite',
+      name: 'save_vendor_application_draft' | 'discard_vendor_application_draft',
       args: { payload: Record<string, unknown> },
     ): Promise<{ data: DraftRow | null; error: { message: string } | null }>;
   };
@@ -41,7 +44,6 @@ export interface VendorApplicationDraftRecord {
 }
 
 export interface VendorApplicationDraftRepository {
-  acceptInvitation(): Promise<void>;
   load(caseId: string): Promise<VendorApplicationDraftRecord | null>;
   save(
     caseId: string,
@@ -87,14 +89,6 @@ export function createVendorApplicationDraftRepository(options: {
   }
 
   return {
-    async acceptInvitation() {
-      if (options.mode === 'memory') return;
-      const { error } = await client!.schema('legal').rpc('accept_current_vendor_invite', {
-        payload: {},
-      });
-      if (error) throw new Error(error.message);
-    },
-
     async load(caseId) {
       if (options.mode === 'memory') {
         const application = readMemory(storage)[caseId];
@@ -118,7 +112,11 @@ export function createVendorApplicationDraftRepository(options: {
         if (!storage) throw new Error('Browser storage is unavailable.');
         const rows = readMemory(storage);
         storage.setItem(LOCAL_KEY, JSON.stringify({ ...rows, [caseId]: application }));
-        return { application, version: Math.max(expectedVersion + 1, 1), status: 'draft' };
+        return {
+          application,
+          version: Math.max(expectedVersion + 1, 1),
+          status: 'draft',
+        };
       }
       const { data, error } = await client!.schema('legal').rpc('save_vendor_application_draft', {
         payload: {

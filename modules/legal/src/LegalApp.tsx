@@ -23,6 +23,7 @@ import { SignInstrumentPage } from "./pages/SignInstrumentPage";
 import { VendorApplicationPage } from "./pages/VendorApplicationPage";
 import { LegalTabs } from "./components/LegalTabs";
 import { LEGAL_ROUTE_BY_ID } from "./routes";
+import { acceptPendingVendorInvitation } from "./vendorInviteAuthority";
 
 export interface LegalAppProps {
   /** Path prefix the shell mounts this module under (default `/legal`). */
@@ -50,7 +51,8 @@ function ScrollToTopOnRouteChange() {
 
 export function LegalApp({ basename = "/legal" }: LegalAppProps) {
   useNormalizeBasenamePath(basename);
-  const { userRoles, profile, loading, signOut } = useSession();
+  const { userRoles, profile, loading, signOut, mode, supabaseClient } =
+    useSession();
   const isVendorSurface = basename.startsWith("/vendor");
   const isVendor = isVendorSurface && profile?.kind === "vendor";
   const hasInternalAccess = can(userRoles, "legal", "view_dashboard");
@@ -72,6 +74,24 @@ export function LegalApp({ basename = "/legal" }: LegalAppProps) {
   if (!profile) {
     const prompt = <SignInPrompt module="Legal" basename={basename} />;
     return isVendorSurface ? <main>{prompt}</main> : prompt;
+  }
+
+  if (
+    isVendorSurface &&
+    !canUseVendorSurface &&
+    mode === "supabase" &&
+    supabaseClient
+  ) {
+    return (
+      <VendorInvitationAcceptanceGate
+        client={
+          supabaseClient as unknown as Parameters<
+            typeof acceptPendingVendorInvitation
+          >[0]["client"]
+        }
+        basename={basename}
+      />
+    );
   }
 
   if (isVendorSurface ? !canUseVendorSurface : !hasInternalAccess) {
@@ -155,6 +175,76 @@ export function LegalApp({ basename = "/legal" }: LegalAppProps) {
   );
 }
 
+function VendorInvitationAcceptanceGate({
+  client,
+  basename,
+}: {
+  client: Parameters<typeof acceptPendingVendorInvitation>[0]["client"];
+  basename: string;
+}) {
+  const [state, setState] = useState<
+    "checking" | "accepted" | "unavailable" | "error"
+  >("checking");
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void acceptPendingVendorInvitation({ client })
+      .then((result) => {
+        if (!active) return;
+        if (!result.accepted) {
+          setState("unavailable");
+          return;
+        }
+        setState("accepted");
+        window.location.replace(`${basename}/`);
+      })
+      .catch((cause: unknown) => {
+        if (!active) return;
+        setMessage(
+          cause instanceof Error
+            ? cause.message
+            : "This invitation could not be accepted.",
+        );
+        setState("error");
+      });
+    return () => {
+      active = false;
+    };
+  }, [basename, client]);
+
+  return (
+    <main className="grid min-h-[60vh] place-items-center bg-app p-6 text-center">
+      <div
+        className="max-w-md space-y-3"
+        role={state === "error" ? "alert" : "status"}
+      >
+        <h1 className="font-display text-xl font-bold text-ink">
+          {state === "checking" || state === "accepted"
+            ? "Activating vendor access"
+            : "Vendor invitation unavailable"}
+        </h1>
+        <p className="text-sm text-muted">
+          {state === "checking"
+            ? "We are validating this invitation before opening the vendor portal."
+            : state === "accepted"
+              ? "Access is ready. Opening your vendor workspace..."
+              : (message ??
+                "This invitation is missing, expired, superseded, or already used.")}
+        </p>
+        {(state === "error" || state === "unavailable") && (
+          <a
+            href="/login"
+            className="btn-primary inline-flex min-h-11 items-center justify-center"
+          >
+            Return to sign in
+          </a>
+        )}
+      </div>
+    </main>
+  );
+}
+
 /**
  * Vendor-tier chrome: the shell's AppShell is intentionally hidden for
  * `/vendor/*` (ChromeGate skips it), so this component gives external vendors
@@ -172,9 +262,15 @@ function VendorChrome({
   const pageGuide = /\/cases\/[^/]+\/application$/.test(pathname)
     ? { articleId: "feature-vendor-application", title: "Vendor application" }
     : /\/cases\/[^/]+\/sign\/[^/]+$/.test(pathname)
-      ? { articleId: "feature-vendor-sign-instrument", title: "Vendor instrument signature" }
+      ? {
+          articleId: "feature-vendor-sign-instrument",
+          title: "Vendor instrument signature",
+        }
       : /^\/cases\/[^/]+$/.test(pathname)
-        ? { articleId: "feature-vendor-case-detail", title: "Vendor portal case detail" }
+        ? {
+            articleId: "feature-vendor-case-detail",
+            title: "Vendor portal case detail",
+          }
         : { articleId: "feature-vendor-cases", title: "Vendor portal cases" };
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {

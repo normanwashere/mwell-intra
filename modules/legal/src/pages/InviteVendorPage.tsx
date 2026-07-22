@@ -10,7 +10,7 @@
 // (requirements/policy.ts), so what Legal sees on step 3 is exactly what the
 // vendor receives.
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   Badge,
@@ -69,7 +69,12 @@ export function InviteVendorPage() {
   );
   const [originCountry, setOriginCountry] = useState("");
   const [busy, setBusy] = useState(false);
-  const [validationMessage, setValidationMessage] = useState<string | null>(null);
+  const inviteAttemptKey = useRef(
+    globalThis.crypto?.randomUUID?.() ?? `vendor-invite-${Date.now()}`,
+  );
+  const [validationMessage, setValidationMessage] = useState<string | null>(
+    null,
+  );
   // Step-3 preview groups collapse to their count line by default (§2.4) so
   // the review step stays a short scroll at 390px.
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
@@ -104,7 +109,9 @@ export function InviteVendorPage() {
 
   function next() {
     if (step === 1 && !identityValid) {
-      setValidationMessage("Fill in the company, a valid email, and the jurisdiction first.");
+      setValidationMessage(
+        "Fill in the company, a valid email, and the jurisdiction first.",
+      );
       return;
     }
     setValidationMessage(null);
@@ -113,7 +120,9 @@ export function InviteVendorPage() {
 
   async function submit() {
     if (!identityValid) {
-      setValidationMessage("Company name and a valid contact email are required.");
+      setValidationMessage(
+        "Company name and a valid contact email are required.",
+      );
       setStep(1);
       return;
     }
@@ -127,6 +136,7 @@ export function InviteVendorPage() {
         actor: session?.email,
         profile: tailoring,
         originCountry: originCountry.trim() || undefined,
+        idempotencyKey: inviteAttemptKey.current,
       });
       const kase = inv.caseId
         ? { id: inv.caseId }
@@ -144,6 +154,11 @@ export function InviteVendorPage() {
       if (inv.deliveryStatus === "delivery_failed") {
         toast(
           `Case opened, but the invitation email was not delivered. Verify the address before resending.`,
+          "info",
+        );
+      } else if (inv.deliveryStatus === "pending_delivery") {
+        toast(
+          "This invitation is already being sent. The existing vendor case was opened.",
           "info",
         );
       } else {
@@ -477,7 +492,10 @@ export function InviteVendorPage() {
         )}
 
         {validationMessage && (
-          <div role="alert" className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-800 dark:text-rose-200">
+          <div
+            role="alert"
+            className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-800 dark:text-rose-200"
+          >
             {validationMessage}
           </div>
         )}
@@ -500,7 +518,12 @@ export function InviteVendorPage() {
             </Link>
           )}
           {step < 3 ? (
-            <Button className="min-h-11 w-full sm:w-auto" type="button" variant="primary" onClick={next}>
+            <Button
+              className="min-h-11 w-full sm:w-auto"
+              type="button"
+              variant="primary"
+              onClick={next}
+            >
               Continue
               <Icon name="arrowRight" className="h-4 w-4" />
             </Button>

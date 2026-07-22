@@ -22,6 +22,18 @@ import { resolveSharedUatPassword } from "./provision-uat-intra-test-users.mjs";
 
 const require = createRequire(path.resolve("apps/shell/package.json"));
 const { chromium } = require("@playwright/test");
+const AxeBuilder = require("@axe-core/playwright").default;
+
+const auditEvidenceDir = path.resolve(
+  process.env.AUDIT_EVIDENCE_DIR ??
+    path.join(
+      path.dirname(
+        process.env.AUDIT_OUTPUT_PATH ??
+          "test-results/full-intra-live-e2e-results.json",
+      ),
+      "evidence",
+    ),
+);
 
 function preserveFatalAuditEvidence(error) {
   const outputPath = path.resolve(
@@ -74,6 +86,20 @@ if (!["all", "routes", "transactions"].includes(auditPhase)) {
 const runRouteAudit = auditPhase !== "transactions";
 const runTransactionAudit = auditPhase !== "routes";
 const mutatingPhase = allowMutations && runTransactionAudit;
+const requireVendorDelivery =
+  process.env.AUDIT_REQUIRE_VENDOR_DELIVERY === "true";
+const controlledVendorEmail =
+  process.env.AUDIT_VENDOR_EMAIL?.trim().toLowerCase();
+
+if (
+  mutatingPhase &&
+  requireVendorDelivery &&
+  !controlledVendorEmail?.includes("{marker}")
+) {
+  throw new Error(
+    "AUDIT_VENDOR_EMAIL must be a controlled mailbox template containing {marker} when AUDIT_REQUIRE_VENDOR_DELIVERY=true.",
+  );
+}
 
 const protectionBypass = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
 assertApprovedMutationTarget({
@@ -122,11 +148,9 @@ await verifyDeployedTargetIdentity({
 
 const users = CURRENT_LIVE_ROLES;
 
-const EXECUTABLE_CROSS_MODULE_SCENARIOS = new Set([
-  "events-request-to-warehouse-handoff",
-  "insights-read-only-governance",
-  "unified-finance-control-center",
-]);
+const EXECUTABLE_CROSS_MODULE_SCENARIOS = new Set(
+  CURRENT_LIVE_SCENARIOS.map((scenario) => scenario.id),
+);
 for (const scenarioId of EXECUTABLE_CROSS_MODULE_SCENARIOS) {
   if (!CURRENT_LIVE_SCENARIOS.some((scenario) => scenario.id === scenarioId)) {
     throw new Error(
@@ -1043,7 +1067,7 @@ async function legalInviteVendorWorkflow(page, marker) {
   const { data: deliveryRows, error: deliveryError } = await db
     .schema("legal")
     .from("vendor_invites")
-    .select("status")
+    .select("id,status,delivery_error,auth_user_id,expires_at,link_generation")
     .eq("company_name", companyName);
   if (deliveryError) throw new Error(deliveryError.message);
   const deliveryStatus = deliveryRows?.[0]?.status;
@@ -1051,6 +1075,200 @@ async function legalInviteVendorWorkflow(page, marker) {
     throw new Error(
       `Unexpected vendor invite delivery status: ${deliveryStatus}`,
     );
+  if (requireVendorDelivery && deliveryStatus !== "sent") {
+    throw new Error(
+      `Vendor invitation delivery certification failed: ${deliveryRows?.[0]?.delivery_error ?? deliveryStatus}.`,
+    );
+  }
+  if (
+    deliveryStatus === "sent" &&
+    (!deliveryRows?.[0]?.auth_user_id ||
+      !deliveryRows?.[0]?.expires_at ||
+      Number(deliveryRows?.[0]?.link_generation ?? 0) < 1)
+  ) {
+    throw new Error(
+      "Delivered vendor invitation is missing Auth identity, expiry, or generation evidence.",
+    );
+  }
+  let acceptanceCheckpoint = null;
+  let replayStatus = null;
+  let acceptanceEvidenceScreenshot = null;
+  let acceptanceUsedAuditToken = false;
+  if (deliveryStatus === "sent") {
+    const invite = deliveryRows[0];
+    const authUserId = invite.auth_user_id;
+    const generation = Number(invite.link_generation);
+    const auditAcceptanceToken = `${crypto.randomUUID()}${crypto.randomUUID()}`;
+    const tokenDigest = await crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode(auditAcceptanceToken),
+    );
+    const tokenHash = Array.from(new Uint8Array(tokenDigest), (byte) =>
+      byte.toString(16).padStart(2, "0"),
+    ).join("");
+    const { error: tokenOverrideError } = await db
+      .schema("legal")
+      .from("vendor_invites")
+      .update({ acceptance_token_hash: tokenHash })
+      .eq("id", invite.id)
+      .eq("link_generation", generation)
+      .eq("status", "sent");
+    if (tokenOverrideError) throw new Error(tokenOverrideError.message);
+    acceptanceUsedAuditToken = true;
+    const [profileAccessBefore, roleAccessBefore] = await Promise.all([
+      db
+        .schema("core")
+        .from("profiles")
+        .select("id", { count: "exact", head: true })
+        .eq("id", authUserId)
+        .eq("status", "active"),
+      db
+        .schema("core")
+        .from("user_roles")
+        .select("user_id", { count: "exact", head: true })
+        .eq("user_id", authUserId)
+        .eq("module", "core")
+        .eq("role", "vendor_portal"),
+    ]);
+    if (profileAccessBefore.error) {
+      throw new Error(profileAccessBefore.error.message);
+    }
+    if (roleAccessBefore.error) throw new Error(roleAccessBefore.error.message);
+    const profileBefore = profileAccessBefore.count;
+    const roleBefore = roleAccessBefore.count;
+    if ((profileBefore ?? 0) !== 0 || (roleBefore ?? 0) !== 0) {
+      throw new Error("Vendor access was active before invitation acceptance.");
+    }
+
+    const { error: passwordError } = await db.auth.admin.updateUserById(
+      authUserId,
+      { password: sharedUatPassword, email_confirm: true },
+    );
+    if (passwordError) throw new Error(passwordError.message);
+
+    const { context, page: vendorPage } = await openPersonaPageFrom(
+      page,
+      vendorEmail,
+    );
+    try {
+      const acceptanceQuery = new URLSearchParams({
+        invite_id: invite.id,
+        generation: String(generation),
+        acceptance_token: auditAcceptanceToken,
+      });
+      await vendorPage.goto(`${baseUrl}/vendor?${acceptanceQuery}`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000,
+      });
+      await vendorPage
+        .getByText("Vendor portal", { exact: true })
+        .waitFor({ state: "visible", timeout: 25_000 });
+      const vendorLayout = await pageAudit(vendorPage);
+      const vendorAccessibility = await new AxeBuilder({ page: vendorPage })
+        .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+        .analyze();
+      const seriousVendorAccessibility = vendorAccessibility.violations.filter(
+        (violation) => ["critical", "serious"].includes(violation.impact),
+      );
+      if (
+        vendorLayout.horizontalOverflow ||
+        vendorLayout.overlaps.length ||
+        vendorLayout.deadLinks.length ||
+        vendorLayout.unlabeledControls.length ||
+        seriousVendorAccessibility.length
+      ) {
+        throw new Error(
+          `Accepted vendor portal failed its visual/accessibility audit: ${JSON.stringify(
+            {
+              overflow: vendorLayout.horizontalOverflow,
+              overlaps: vendorLayout.overlaps.length,
+              deadLinks: vendorLayout.deadLinks.length,
+              unlabeledControls: vendorLayout.unlabeledControls.length,
+              seriousAccessibility: seriousVendorAccessibility.map(
+                (violation) => violation.id,
+              ),
+            },
+          )}`,
+        );
+      }
+      const acceptanceEvidencePath = path.join(
+        auditEvidenceDir,
+        `${marker.toLowerCase()}-vendor-acceptance.jpg`,
+      );
+      await mkdir(auditEvidenceDir, { recursive: true });
+      await vendorPage.screenshot({
+        path: acceptanceEvidencePath,
+        type: "jpeg",
+        quality: 72,
+        fullPage: true,
+      });
+      acceptanceEvidenceScreenshot = path
+        .relative(process.cwd(), acceptanceEvidencePath)
+        .replaceAll("\\", "/");
+      acceptanceCheckpoint = await verifyCheckpoint({
+        schema: "legal",
+        table: "vendor_invites",
+        filters: { id: invite.id },
+        expected: {
+          status: "accepted",
+          accepted_generation: generation,
+          auth_user_id: authUserId,
+        },
+        select:
+          "id,status,accepted_generation,auth_user_id,accepted_at,acceptance_nonce",
+      });
+      await verifyCheckpoint({
+        schema: "core",
+        table: "profiles",
+        filters: { id: authUserId },
+        expected: { kind: "vendor", status: "active" },
+        select: "id,email,kind,vendor_id,status",
+      });
+      await verifyCheckpoint({
+        schema: "core",
+        table: "user_roles",
+        filters: {
+          user_id: authUserId,
+          module: "core",
+          role: "vendor_portal",
+        },
+        expected: { role: "vendor_portal" },
+        select: "user_id,module,role",
+      });
+      const replay = await vendorPage.evaluate(
+        async ({ inviteId, expectedGeneration, acceptanceToken }) => {
+          const response = await fetch("/api/legal/vendor-invites", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "accept",
+              invite_id: inviteId,
+              expected_generation: expectedGeneration,
+              acceptance_token: acceptanceToken,
+            }),
+          });
+          return { status: response.status, body: await response.text() };
+        },
+        {
+          inviteId: invite.id,
+          expectedGeneration: generation,
+          acceptanceToken: auditAcceptanceToken,
+        },
+      );
+      replayStatus = replay.status;
+      if (
+        replay.status !== 409 ||
+        !/already been used|replayed/i.test(replay.body)
+      ) {
+        throw new Error(
+          `Accepted invitation replay was not rejected (${replay.status}: ${replay.body}).`,
+        );
+      }
+    } finally {
+      await context.close();
+    }
+  }
   return {
     name: "legal vendor invite",
     ok: audit.text.includes(companyName) && /\/legal\/cases\//.test(page.url()),
@@ -1059,6 +1277,10 @@ async function legalInviteVendorWorkflow(page, marker) {
     checkpoint,
     inviteCheckpoint,
     deliveryStatus,
+    acceptanceCheckpoint,
+    replayStatus,
+    acceptanceEvidenceScreenshot,
+    acceptanceUsedAuditToken,
   };
 }
 
@@ -5387,6 +5609,48 @@ async function cleanupGovernedWorkflowActivity(marker) {
   };
 }
 
+async function cleanupVendorInviteCommands(marker) {
+  const client = createAuditDatabaseClient();
+  const { data: invites, error: lookupError } = await client
+    .schema("legal")
+    .from("vendor_invites")
+    .select("id,company_name")
+    .eq("company_name", `${marker} Vendor`);
+  if (lookupError) throw new Error(lookupError.message);
+  if (
+    (invites ?? []).some((invite) => invite.company_name !== `${marker} Vendor`)
+  ) {
+    throw new Error("Vendor invite cleanup refused an unscoped command.");
+  }
+  const inviteIds = (invites ?? []).map((invite) => invite.id);
+  if (inviteIds.length) {
+    const { error: deleteError } = await client
+      .schema("legal")
+      .from("vendor_invite_commands")
+      .delete()
+      .in("invite_id", inviteIds);
+    if (deleteError) throw new Error(deleteError.message);
+  }
+  const { count, error: verifyError } = inviteIds.length
+    ? await client
+        .schema("legal")
+        .from("vendor_invite_commands")
+        .select("id", { count: "exact", head: true })
+        .in("invite_id", inviteIds)
+    : { count: 0, error: null };
+  if (verifyError || count !== 0) {
+    throw new Error(
+      `Vendor invite command cleanup left ${count ?? "unknown"} row(s): ${verifyError?.message ?? ""}`,
+    );
+  }
+  return {
+    entity: "legal.vendor_invite_commands",
+    marker,
+    removed: true,
+    remaining: 0,
+  };
+}
+
 async function cleanupEventWorkflowDependencies(marker) {
   const client = createAuditDatabaseClient();
   const eventNames = [`${marker} Event`, `${marker} Intra Event`];
@@ -6107,6 +6371,52 @@ async function unifiedFinanceReadbackWorkflow(page, fixture) {
   };
 }
 
+async function identityAccessWorkflow(page, { allowedPath, deniedPath }) {
+  await page.goto(`${baseUrl}${allowedPath}?identityAudit=${Date.now()}`, {
+    waitUntil: "domcontentloaded",
+    timeout: 20_000,
+  });
+  await waitForMeaningfulRoute(page);
+  const allowedAudit = await pageAudit(page);
+  if (classify(allowedAudit.text, page.url()) !== "rendered") {
+    throw new Error(`Authorized identity route did not render: ${allowedPath}`);
+  }
+
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await waitForMeaningfulRoute(page);
+  const refreshedAudit = await pageAudit(page);
+  if (
+    page.url().includes("/login") ||
+    classify(refreshedAudit.text, page.url()) !== "rendered"
+  ) {
+    throw new Error(
+      `Session was not restored after refreshing ${allowedPath}.`,
+    );
+  }
+
+  if (deniedPath) {
+    await page.goto(`${baseUrl}${deniedPath}?identityAudit=${Date.now()}`, {
+      waitUntil: "domcontentloaded",
+      timeout: 20_000,
+    });
+    await waitForMeaningfulRoute(page);
+    const deniedAudit = await pageAudit(page);
+    if (classify(deniedAudit.text, page.url()) !== "access-denied") {
+      throw new Error(`Least-privilege route was not denied: ${deniedPath}`);
+    }
+  }
+
+  return {
+    name: "Identity access and session restoration",
+    ok: true,
+    checkpoints: [
+      "session-restored",
+      "least-privilege-route-result",
+      "refresh-restored",
+    ],
+  };
+}
+
 async function runWorkflow(browser, viewport, user, workflow) {
   const context = await browser.newContext({
     viewport: viewport.viewport,
@@ -6145,6 +6455,91 @@ async function runWorkflow(browser, viewport, user, workflow) {
     }
   });
 
+  const evidenceName = [viewport.name, workflow.name, user.email]
+    .join("-")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 160);
+  const screenshotPath = path.join(auditEvidenceDir, `${evidenceName}.jpg`);
+
+  async function captureEvidence() {
+    await mkdir(auditEvidenceDir, { recursive: true });
+    await page.screenshot({
+      path: screenshotPath,
+      type: "jpeg",
+      quality: 72,
+      fullPage: true,
+    });
+    return path.relative(process.cwd(), screenshotPath).replaceAll("\\", "/");
+  }
+
+  async function auditInteractiveState() {
+    await page.waitForTimeout(250);
+    const layout = await pageAudit(page);
+    const accessibility = await new AxeBuilder({ page })
+      .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+      .analyze();
+    const seriousAccessibility = accessibility.violations
+      .filter((violation) => ["critical", "serious"].includes(violation.impact))
+      .map((violation) => ({
+        id: violation.id,
+        impact: violation.impact,
+        help: violation.help,
+        nodes: violation.nodes.length,
+      }));
+    const undersizedMobileTargets = viewport.isMobile
+      ? await page.evaluate(() => {
+          const selector = [
+            "button",
+            "input:not([type='hidden']):not([type='file'])",
+            "select",
+            "textarea",
+            "[role='button']",
+            "a.btn",
+            "a[class*='btn-']",
+          ].join(",");
+          return Array.from(document.querySelectorAll(selector))
+            .filter((element) => {
+              const style = getComputedStyle(element);
+              const rect = element.getBoundingClientRect();
+              return (
+                style.display !== "none" &&
+                style.visibility !== "hidden" &&
+                rect.width > 0 &&
+                rect.height > 0
+              );
+            })
+            .map((element) => {
+              const rect = element.getBoundingClientRect();
+              return {
+                label: (
+                  element.getAttribute("aria-label") ||
+                  element.textContent ||
+                  element.getAttribute("name") ||
+                  element.tagName
+                )
+                  .trim()
+                  .replace(/\s+/g, " ")
+                  .slice(0, 80),
+                width: Math.round(rect.width),
+                height: Math.round(rect.height),
+              };
+            })
+            .filter((target) => target.width < 44 || target.height < 44)
+            .slice(0, 12);
+        })
+      : [];
+    return {
+      overflow: layout.horizontalOverflow,
+      overlaps: layout.overlaps,
+      deadLinks: layout.deadLinks,
+      unlabeledControls: layout.unlabeledControls,
+      seriousAccessibility,
+      undersizedMobileTargets,
+    };
+  }
+
   try {
     const loginResult = await login(page, user);
     if (loginResult.status !== "signed-in") {
@@ -6158,16 +6553,35 @@ async function runWorkflow(browser, viewport, user, workflow) {
       };
     }
     const result = await workflow.run(page);
+    const interactionAudit = await auditInteractiveState();
+    const evidenceScreenshot = await captureEvidence();
+    const interactionProblems = [
+      interactionAudit.overflow ? "horizontal overflow" : null,
+      interactionAudit.overlaps.length ? "overlapping controls" : null,
+      interactionAudit.deadLinks.length ? "dead links" : null,
+      interactionAudit.unlabeledControls.length ? "unlabeled controls" : null,
+      interactionAudit.seriousAccessibility.length
+        ? "serious accessibility violations"
+        : null,
+      interactionAudit.undersizedMobileTargets.length
+        ? "mobile targets smaller than 44px"
+        : null,
+    ].filter(Boolean);
     return {
       viewport: viewport.name,
       user: user.email,
       workflow: workflow.name,
       scenarioId: workflow.scenarioId ?? null,
       ...result,
+      ok: result.ok !== false && interactionProblems.length === 0,
+      interactionProblems,
+      interactionAudit,
+      evidenceScreenshot,
       consoleErrors: Array.from(new Set(consoleErrors)).slice(0, 12),
       networkErrors: networkErrors.slice(0, 12),
     };
   } catch (error) {
+    const evidenceScreenshot = await captureEvidence().catch(() => null);
     return {
       viewport: viewport.name,
       user: user.email,
@@ -6175,6 +6589,7 @@ async function runWorkflow(browser, viewport, user, workflow) {
       scenarioId: workflow.scenarioId ?? null,
       ok: false,
       error: String(error.message || error).slice(0, 1_200),
+      evidenceScreenshot,
       consoleErrors: Array.from(new Set(consoleErrors)).slice(0, 12),
       networkErrors: networkErrors.slice(0, 12),
     };
@@ -6318,6 +6733,7 @@ let cleanup = { runId: auditRunId, complete: true, results: [] };
 const task3Fixtures = [];
 const registerTask3Cleanup = (fixture) => task3Fixtures.push(fixture);
 const vendorAuditEmail = (marker) =>
+  controlledVendorEmail?.replaceAll("{marker}", marker.toLowerCase()) ??
   `audit.vendor.${marker.toLowerCase()}@example.com`;
 const transactionViewports = viewports.filter(
   (item) =>
@@ -6439,12 +6855,46 @@ try {
     if (mutatingPhase) {
       for (const viewport of transactionViewports) {
         const marker = `${auditRunId}-${viewport.name}`;
+        for (const identityCase of [
+          {
+            email: "intra.test.employee@mwell.com.ph",
+            name: "general employee identity and least privilege",
+            allowedPath: "/",
+            deniedPath: "/admin/doa",
+          },
+          {
+            email: "intra.test.admin@mwell.com.ph",
+            name: "platform administrator identity and session restoration",
+            allowedPath: "/admin/doa",
+            deniedPath: null,
+          },
+          {
+            email: "intra.test.vendor@mwell.com.ph",
+            name: "vendor identity and least privilege",
+            allowedPath: "/vendor",
+            deniedPath: "/warehouse",
+          },
+        ]) {
+          workflows.push(
+            await runWorkflow(
+              browser,
+              viewport,
+              { email: identityCase.email },
+              {
+                name: identityCase.name,
+                scenarioId: "identity-access",
+                run: (page) => identityAccessWorkflow(page, identityCase),
+              },
+            ),
+          );
+        }
         const locationSetup = await runWorkflow(
           browser,
           viewport,
           { email: "intra.test.operations.lead@mwell.com.ph" },
           {
             name: "warehouse location creation",
+            scenarioId: "warehouse-setup-receive-putaway",
             run: (page) => warehouseCreateLocationWorkflow(page, marker),
           },
         );
@@ -6459,6 +6909,7 @@ try {
           { email: "intra.test.operations.lead@mwell.com.ph" },
           {
             name: "warehouse bin creation",
+            scenarioId: "warehouse-setup-receive-putaway",
             run: (page) => warehouseCreateBinWorkflow(page, marker),
           },
         );
@@ -6479,6 +6930,7 @@ try {
             { email: "intra.test.operations.associate@mwell.com.ph" },
             {
               name: "Task 3 operator receipt transactions",
+              scenarioId: "warehouse-setup-receive-putaway",
               run: (page) =>
                 task3OperatorReceiptTransactions(page, task3Fixture),
             },
@@ -6491,6 +6943,7 @@ try {
             { email: "intra.test.procurement.lead@mwell.com.ph" },
             {
               name: "Task 3 payment readiness without acceptance denial",
+              scenarioId: "procurement-request-to-po",
               run: (page) =>
                 task3PaymentReadinessWithoutAcceptance(page, task3Fixture),
             },
@@ -6629,6 +7082,7 @@ try {
             { email: "intra.test.operations.lead@mwell.com.ph" },
             {
               name: "Task 3 supervisor quarantine and variance transactions",
+              scenarioId: "warehouse-cycle-count",
               run: (page) => task3SupervisorTransactions(page, task3Fixture),
             },
           ),
@@ -6663,6 +7117,7 @@ try {
             { email: "intra.test.operations.lead@mwell.com.ph" },
             {
               name: "Task 3 Supervisor excess custody final disposition",
+              scenarioId: "warehouse-quality-and-return",
               run: (page) =>
                 task3SupervisorExcessFinalDisposition(page, task3Fixture),
             },
@@ -6767,6 +7222,7 @@ try {
             { email: "intra.test.employee@mwell.com.ph" },
             {
               name: "procurement request draft",
+              scenarioId: "procurement-request-to-po",
               run: (page) => procurementCreateRequestWorkflow(page, marker),
             },
           ),
@@ -6778,6 +7234,7 @@ try {
             { email: "intra.test.legal.lead@mwell.com.ph" },
             {
               name: "legal vendor invite",
+              scenarioId: "vendor-accreditation",
               run: (page) => legalInviteVendorWorkflow(page, marker),
             },
           ),
@@ -6806,6 +7263,7 @@ try {
             { email: "intra.test.employee@mwell.com.ph" },
             {
               name: "warehouse event creation",
+              scenarioId: "warehouse-allocation-event-return",
               run: (page) => warehouseCreateEventWorkflow(page, marker),
             },
           ),
@@ -6817,6 +7275,7 @@ try {
             { email: "intra.test.marketing.events@mwell.com.ph" },
             {
               name: "warehouse event role handoff",
+              scenarioId: "warehouse-allocation-event-return",
               run: (page) =>
                 roleHandoffReadbackWorkflow(
                   page,
@@ -6834,6 +7293,7 @@ try {
             { email: "intra.test.admin@mwell.com.ph" },
             {
               name: "department DOA creation",
+              scenarioId: "admin-doa",
               run: (page) => adminCreateDoaWorkflow(page, marker),
             },
           ),
@@ -6845,6 +7305,7 @@ try {
             { email: "intra.test.legal.lead@mwell.com.ph" },
             {
               name: "department DOA role handoff",
+              scenarioId: "admin-doa",
               run: (page) =>
                 roleHandoffReadbackWorkflow(
                   page,
@@ -6895,7 +7356,21 @@ try {
       const task3Results = [];
       const governedActivityResults = [];
       const eventDependencyResults = [];
+      const vendorInviteCommandResults = [];
       for (const marker of auditMarkers) {
+        try {
+          vendorInviteCommandResults.push(
+            await cleanupVendorInviteCommands(marker),
+          );
+        } catch (error) {
+          vendorInviteCommandResults.push({
+            entity: "legal.vendor_invite_commands",
+            marker,
+            removed: false,
+            remaining: null,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
         try {
           governedActivityResults.push(
             await cleanupGovernedWorkflowActivity(marker),
@@ -6940,12 +7415,16 @@ try {
         authEmails: auditMarkers.map((marker) => vendorAuditEmail(marker)),
       });
       cleanup.results.push(
+        ...vendorInviteCommandResults,
         ...governedActivityResults,
         ...eventDependencyResults,
         ...task3Results,
       );
       cleanup.complete =
         cleanup.complete &&
+        vendorInviteCommandResults.every(
+          (result) => result.remaining === 0 && !result.error,
+        ) &&
         governedActivityResults.every(
           (result) => result.remaining === 0 && !result.error,
         ) &&
@@ -7013,6 +7492,26 @@ const aggregate = results.map((item) => ({
   consoleErrors: item.consoleErrors,
 }));
 
+const scenarioCoverage = CURRENT_LIVE_SCENARIOS.map((scenario) => {
+  const runs = workflows.filter(
+    (workflow) => workflow.scenarioId === scenario.id,
+  );
+  return {
+    id: scenario.id,
+    requiredViewports: scenario.viewports,
+    coveredViewports: Array.from(new Set(runs.map((run) => run.viewport))),
+    actors: scenario.actors,
+    successfulRuns: runs.filter((run) => run.ok).length,
+    failedRuns: runs.filter((run) => !run.ok).length,
+    workflows: runs.map((run) => ({
+      viewport: run.viewport,
+      user: run.user,
+      workflow: run.workflow,
+      ok: run.ok,
+    })),
+  };
+});
+
 const outputPath = path.resolve(
   process.env.AUDIT_OUTPUT_PATH ??
     "test-results/full-intra-live-e2e-results.json",
@@ -7030,6 +7529,7 @@ await writeFile(
       ),
       phase: auditPhase,
       aggregate,
+      scenarioCoverage,
       workflows,
       cleanup,
       results,
@@ -7077,10 +7577,21 @@ const workflowFailures = workflows
       `${workflow.viewport}/${workflow.workflow}: ${workflow.error ?? "failed"}`,
   );
 if (mutatingPhase) {
-  for (const scenarioId of EXECUTABLE_CROSS_MODULE_SCENARIOS) {
-    if (!workflows.some((workflow) => workflow.scenarioId === scenarioId)) {
+  for (const scenario of scenarioCoverage) {
+    for (const viewport of scenario.requiredViewports) {
+      if (
+        !scenario.workflows.some(
+          (workflow) => workflow.viewport === viewport && workflow.ok,
+        )
+      ) {
+        workflowFailures.push(
+          `${auditRunId}: scenario ${scenario.id} has no successful ${viewport} workflow`,
+        );
+      }
+    }
+    if (!scenario.workflows.length) {
       workflowFailures.push(
-        `${auditRunId}: executable scenario ${scenarioId} was not run`,
+        `${auditRunId}: executable scenario ${scenario.id} was not run`,
       );
     }
   }
