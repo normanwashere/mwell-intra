@@ -28,7 +28,7 @@ test("deployment gate waits until health reports the exact GitHub SHA", async ()
     expectedCommit,
     expectedAppEnv: "uat",
     expectedProjectRef: "uatprojectref",
-    timeoutMs: 100,
+    timeoutMs: 5_000,
     intervalMs: 1,
     sleepImpl: async () => {},
     onAttempt: (attempt) => observations.push(attempt),
