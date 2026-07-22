@@ -6,7 +6,7 @@ describe("My Work queue", () => {
   it("filters without changing source ownership", () => {
     const items = filterWorkItems(WORK_DEMO_DATA.items, "warehouse");
     expect(items).toHaveLength(1);
-    expect(items[0]?.href).toBe("/warehouse/quality-control");
+    expect(items[0]?.href).toBe("/warehouse/quality");
   });
 
   it("orders urgent work before normal work", () => {

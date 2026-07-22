@@ -224,6 +224,8 @@ test("legacy top-level routes redirect without trapping the detail handoff", asy
   await expect(page).toHaveURL(/\/events$/);
   await page.goto("/warehouse/reports");
   await expect(page).toHaveURL(/\/insights\/warehouse$/);
+  await page.goto("/warehouse/quality-control");
+  await expect(page).toHaveURL(/\/warehouse\/quality$/);
   await page.goto("/warehouse/events/evt-demo-wellness-caravan");
   await expect(page).toHaveURL(
     /\/warehouse\/events\/evt-demo-wellness-caravan$/,

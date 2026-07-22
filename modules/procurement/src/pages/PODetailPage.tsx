@@ -538,9 +538,9 @@ export function PODetailPage() {
                   : ''}
               </span>
               {canReceiveInWarehouse && po.status === 'issued' && !fullyReceived ? (
-              <Link to={`/warehouse/purchase-orders?po=${encodeURIComponent(po.id)}`} className="btn-outline">
+                <a href={`/warehouse/purchase-orders?po=${encodeURIComponent(po.id)}`} className="btn-outline">
                   Open Warehouse handoff
-                </Link>
+                </a>
               ) : null}
             </div>
           </Card>

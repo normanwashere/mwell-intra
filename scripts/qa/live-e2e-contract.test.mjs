@@ -362,6 +362,14 @@ test("route crawl rejects silent redirects without depending on permanent QA rec
     /route\.recordText\s*\?\s*route\.recordText\.test\(audit\.text\)/,
   );
   assert.match(source, /acceptedPaths\.get\(canonicalPath\(expectedPath\)\)/);
+  assert.match(
+    source,
+    /\["\/warehouse\/data", new Set\(\["\/warehouse\/data", "\/insights\/warehouse"\]\)\]/,
+  );
+  assert.match(
+    source,
+    /\["\/warehouse\/quality-control", new Set\(\["\/warehouse\/quality"\]\)\]/,
+  );
   assert.doesNotMatch(source, /path: "\/procurement\/requests\/req_seed_001"/);
   assert.doesNotMatch(source, /path: "\/legal\/cases\/case_seed_001"/);
   assert.doesNotMatch(source, /path: "\/vendor\/cases\/case_seed_001"/);
@@ -369,6 +377,9 @@ test("route crawl rejects silent redirects without depending on permanent QA rec
     source,
     /const body = document\.body;\s*if \(!body\) return false;/,
   );
+  assert.match(source, /if \(routeClass === "blank-or-nearblank"\)/);
+  assert.match(source, /blankRecoveryAttempts = 1/);
+  assert.match(source, /await page\.reload\(\{ waitUntil: "domcontentloaded"/);
 });
 
 test("route classification rejects rendered not-found shells", async () => {
@@ -534,6 +545,7 @@ test("interaction reachability rechecks blocked controls without hiding real fix
     scrollRecheck,
   );
   assert.ok(initialProbe >= 0, "an initial multi-point probe is required");
+  assert.match(source, /!element\.isConnected \|\| !visible\(element\)/);
   assert.ok(scrollRecheck > initialProbe, "blocked controls are rechecked");
   assert.ok(
     finalFailure > scrollRecheck,

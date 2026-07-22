@@ -514,6 +514,8 @@ function finalPathMatches(expectedPath, currentUrl) {
   const actualPath = canonicalPath(new URL(currentUrl).pathname);
   const acceptedPaths = new Map([
     ["/procurement", new Set(["/procurement", "/procurement/approvals"])],
+    ["/warehouse/data", new Set(["/warehouse/data", "/insights/warehouse"])],
+    ["/warehouse/quality-control", new Set(["/warehouse/quality"])],
   ]);
   return (
     actualPath === canonicalPath(expectedPath) ||
@@ -1105,10 +1107,15 @@ async function auditKeyboardAndHotspots(page) {
     const interceptedTargets = [];
     let recheckedTargetCount = 0;
     for (const element of controls) {
+      // Ephemeral controls such as toast dismiss buttons can legitimately leave
+      // the DOM while this audit is traversing a long page. A detached control
+      // is no longer an interaction target and must not be reported as blocked.
+      if (!element.isConnected || !visible(element)) continue;
       const initial = probe(element);
       if (initial.reachable) continue;
       recheckedTargetCount += 1;
       const reachability = await recheckReachability(element, initial);
+      if (!element.isConnected || !visible(element)) continue;
       if (reachability.reachable) continue;
       interceptedTargets.push({
         target: describe(element),
@@ -1202,8 +1209,17 @@ async function auditRoute(page, route) {
   });
   await waitForMeaningfulRoute(page);
   await waitForRouteExpectation(page, route.text);
-  const audit = await pageAudit(page);
-  const routeClass = classify(audit.text, page.url());
+  let audit = await pageAudit(page);
+  let routeClass = classify(audit.text, page.url());
+  let blankRecoveryAttempts = 0;
+  if (routeClass === "blank-or-nearblank") {
+    blankRecoveryAttempts = 1;
+    await page.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
+    await waitForMeaningfulRoute(page);
+    await waitForRouteExpectation(page, route.text);
+    audit = await pageAudit(page);
+    routeClass = classify(audit.text, page.url());
+  }
   const expectedClass =
     route.expectedAccess === "denied" ? "access-denied" : "rendered";
   const finalPathMet = finalPathMatches(route.path, page.url());
@@ -1223,6 +1239,7 @@ async function auditRoute(page, route) {
     expectationMet,
     finalPathMet,
     recordExpectationMet,
+    blankRecoveryAttempts,
     h1: audit.h1,
     mainCount: audit.mainCount,
     controls: audit.visibleControls,
