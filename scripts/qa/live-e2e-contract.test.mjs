@@ -371,6 +371,15 @@ test("route crawl rejects silent redirects without depending on permanent QA rec
   );
 });
 
+test("route classification rejects rendered not-found shells", async () => {
+  const source = await readFile(
+    new URL("./full-intra-live-e2e.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /lower\.includes\("page not found"\)/);
+  assert.match(source, /return "not-found"/);
+});
+
 test("route crawl covers visible same-origin navigation discovered from the shell DOM", async () => {
   const source = await readFile(
     new URL("./full-intra-live-e2e.mjs", import.meta.url),
@@ -539,6 +548,8 @@ test("interaction reachability rechecks blocked controls without hiding real fix
     /const ys = \[top \+ insetY, \(top \+ bottom\) \/ 2, bottom - insetY\]/,
   );
   assert.match(source, /label\?\.control === element/);
+  assert.match(source, /associatedLabel\?\.contains\(element\)/);
+  assert.match(source, /element\.closest\("label"\)/);
   assert.match(
     source,
     /element\.scrollIntoView\(\{ block: "center", inline: "center" \}\)/,
@@ -566,6 +577,7 @@ test("Product launch certification uses UI decisions, denial checks, readback, s
   assert.match(source, /Approve go-live/);
   assert.match(source, /Approve price/);
   assert.match(source, /Acknowledge Operations handoff/);
+  assert.match(source, /Acknowledg\(\?:e\|ing\) Operations handoff/);
   assert.match(source, /not awaiting decision/i);
   assert.match(source, /not authorized/i);
   assert.match(source, /"product",\s*"can_launch"/);
@@ -578,6 +590,11 @@ test("Product launch certification uses UI decisions, denial checks, readback, s
   assert.match(source, /cleanupProductGovernance\(marker\)/);
   assert.match(source, /cleanup_certification_records/);
   assert.match(source, /name: state\.readinessTitle,\s*exact: true/);
+  assert.match(source, /xpath=ancestor::article\[1\]/);
+  assert.doesNotMatch(
+    source,
+    /ancestor::div\[\.\/\/button\[normalize-space\(\)=['"]Approve (?:go-live|price)['"]\]\]/,
+  );
   assert.match(source, /productGovernanceResults\.every/);
 });
 

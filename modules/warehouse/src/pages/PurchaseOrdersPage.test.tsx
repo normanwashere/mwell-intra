@@ -198,6 +198,7 @@ describe("PurchaseOrdersPage", () => {
     expect(within(list).getByText("From Procurement")).toBeInTheDocument();
     const link = within(list).getByRole("link", { name: "PO-2026-0003" });
     expect(link).toHaveAttribute("href", "/warehouse/purchase-orders?po=ppo-9");
+    expect(link).toHaveClass("min-h-11");
     expect(
       within(list).getByRole("button", { name: /^receive and inspect$/i }),
     ).toBeInTheDocument();

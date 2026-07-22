@@ -439,7 +439,8 @@ function ReadinessCard({
 }) {
   const handoffReady = canAcknowledge && canAcknowledgeOperationsHandoff(item);
   return (
-    <Card className="space-y-4">
+    <article aria-label={`${item.title} readiness package`}>
+      <Card className="space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase text-faint">Version {item.version}</p>
@@ -476,8 +477,9 @@ function ReadinessCard({
             : "Acknowledge Operations handoff"}
         </button>
       )}
-      {handoffIssue && <ActionFeedback issue={handoffIssue} />}
-    </Card>
+        {handoffIssue && <ActionFeedback issue={handoffIssue} />}
+      </Card>
+    </article>
   );
 }
 
@@ -487,7 +489,8 @@ function PriceCard({ item, canDecide, onDecide }: {
   onDecide: (decision: Decision) => void;
 }) {
   return (
-    <Card className="space-y-4">
+    <article aria-label={`${item.reason} price proposal`}>
+      <Card className="space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase text-faint">{item.productName} · Version {item.version}</p>
@@ -500,13 +503,14 @@ function PriceCard({ item, canDecide, onDecide }: {
         <div><dt className="text-faint">Effective</dt><dd className="font-semibold text-ink">{new Date(item.effectiveAt).toLocaleDateString()}</dd></div>
       </dl>
       <p className="text-sm text-muted">{item.reason}</p>
-      {canDecide && (
+        {canDecide && (
         <div className="flex flex-wrap gap-2">
           <button type="button" className="btn-primary min-h-11" onClick={() => onDecide("approved")}>Approve price</button>
           <button type="button" className="btn-secondary min-h-11" onClick={() => onDecide("rejected")}>Reject price</button>
         </div>
-      )}
-    </Card>
+        )}
+      </Card>
+    </article>
   );
 }
 

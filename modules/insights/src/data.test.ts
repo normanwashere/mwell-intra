@@ -193,7 +193,7 @@ describe("Insights source access and priority", () => {
       resolveGovernedSource(metric, { warehouse: ["bi_analyst"] }),
     ).toMatchObject({
       accessible: true,
-      href: "/warehouse/analytics",
+      href: "/warehouse/data",
     });
   });
 

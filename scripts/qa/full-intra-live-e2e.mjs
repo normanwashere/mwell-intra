@@ -585,6 +585,12 @@ function classify(text, url) {
   const lower = (text || "").toLowerCase();
   if (url.includes("/login")) return "redirected-login";
   if (
+    lower.includes("page not found") ||
+    lower.includes("we couldn't find that page")
+  ) {
+    return "not-found";
+  }
+  if (
     lower.includes("application error") ||
     lower.includes("runtime error") ||
     lower.includes("internal server error") ||
@@ -975,7 +981,16 @@ async function auditKeyboardAndHotspots(page) {
     );
     const undersizedTargets = controls
       .map((element) => {
-        const rect = element.getBoundingClientRect();
+        const associatedLabel = "labels" in element ? element.labels?.[0] : null;
+        const enclosingLabel = associatedLabel?.contains(element)
+          ? associatedLabel
+          : element.closest("label");
+        const controlRect = element.getBoundingClientRect();
+        const labelRect = enclosingLabel?.getBoundingClientRect();
+        const rect =
+          labelRect && labelRect.width > 0 && labelRect.height > 0
+            ? labelRect
+            : controlRect;
         return {
           label: (
             element.getAttribute("aria-label") ||
@@ -6821,9 +6836,7 @@ async function productOwnerDecisionWorkflow(page, state, { captureState }) {
     exact: true,
   });
   await readinessHeading.waitFor({ state: "visible" });
-  const readinessCard = readinessHeading.locator(
-    "xpath=ancestor::div[.//button[normalize-space()='Approve go-live']][1]",
-  );
+  const readinessCard = readinessHeading.locator("xpath=ancestor::article[1]");
   await readinessCard.getByRole("button", { name: "Approve go-live" }).click();
   const readinessDecision = page.getByRole("dialog", {
     name: "Approve go-live",
@@ -6846,9 +6859,7 @@ async function productOwnerDecisionWorkflow(page, state, { captureState }) {
 
   const priceReason = page.getByText(state.pricingReason, { exact: true });
   await priceReason.waitFor({ state: "visible" });
-  const priceCard = priceReason.locator(
-    "xpath=ancestor::div[.//button[normalize-space()='Approve price']][1]",
-  );
+  const priceCard = priceReason.locator("xpath=ancestor::article[1]");
   await priceCard.getByRole("button", { name: "Approve price" }).click();
   const priceDecision = page.getByRole("dialog", { name: "Approve price" });
   await priceDecision
@@ -6923,15 +6934,13 @@ async function productOperationsHandoffWorkflow(page, state, { captureState }) {
       "Operations partner was offered a Product authoring decision.",
     );
   }
-  const card = readinessHeading.locator(
-    "xpath=ancestor::div[.//button[normalize-space()='Acknowledge Operations handoff']][1]",
-  );
+  const card = readinessHeading.locator("xpath=ancestor::article[1]");
   await captureState("Operations Product handoff ready");
   await card
     .getByRole("button", { name: "Acknowledge Operations handoff" })
     .click();
-  await page
-    .getByRole("button", { name: "Acknowledge Operations handoff" })
+  await card
+    .getByRole("button", { name: /Acknowledg(?:e|ing) Operations handoff/ })
     .waitFor({ state: "hidden", timeout: 15_000 });
 
   const duplicate = await callRpcAsBrowserUser(

@@ -40,7 +40,10 @@ export const TOAST_TONE_STYLES: Record<ToastTone, { cls: string; icon: IconName 
 };
 
 export const TOAST_DISMISS_CLASS =
-  'grid min-h-11 min-w-11 shrink-0 place-items-center rounded-lg text-white transition hover:bg-white/10';
+  'pointer-events-auto grid h-12 w-12 shrink-0 place-items-center rounded-lg text-white transition hover:bg-white/10';
+
+export const TOAST_STACK_CLASS =
+  'pointer-events-none fixed inset-x-0 top-[calc(4.75rem+env(safe-area-inset-top))] z-[60] flex max-h-[calc(100dvh-var(--shell-mobile-nav-clearance,5.5rem)-6rem)] flex-col items-center gap-3 overflow-y-auto px-3 sm:top-auto sm:bottom-0 sm:items-end sm:max-h-[calc(100dvh-2rem)] sm:px-6 sm:pb-6';
 
 export const MAX_VISIBLE_TOASTS = 3;
 
@@ -135,7 +138,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     <ToastContext.Provider value={value}>
       {children}
       <div
-        className="pointer-events-none fixed inset-x-0 top-[calc(4.75rem+env(safe-area-inset-top))] z-[60] flex max-h-[calc(100dvh-var(--shell-mobile-nav-clearance,5.5rem)-6rem)] flex-col items-center gap-3 overflow-y-auto px-3 sm:top-auto sm:bottom-0 sm:max-h-[calc(100dvh-2rem)] sm:px-4 sm:pb-6"
+        className={TOAST_STACK_CLASS}
         role="region"
         aria-label="Notifications"
         aria-live="polite"
@@ -147,13 +150,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               <m.div
                 key={t.id}
                 role="status"
-                layout
                 initial={reduced ? false : TOAST_MOTION_STATES.initial}
                 animate={TOAST_MOTION_STATES.animate}
                 exit={reduced ? undefined : TOAST_MOTION_STATES.exit}
                 transition={SPRING_SNAPPY}
                 className={clsx(
-                  'pointer-events-auto flex w-full max-w-sm items-center gap-2.5 rounded-2xl border px-4 py-3 text-sm font-medium shadow-e3',
+                  'pointer-events-none flex w-full max-w-sm items-center gap-2.5 rounded-2xl border px-4 py-3 text-sm font-medium shadow-e3',
                   tone.cls,
                 )}
               >

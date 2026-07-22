@@ -78,6 +78,21 @@ describe('WarehouseApp basename handling', () => {
   );
 
   it(
+    'redirects the retired analytics URL to the governed data workspace',
+    async () => {
+      renderSignedInWarehouse('/warehouse/analytics', ['bi_analyst']);
+
+      expect(
+        await screen.findByRole('heading', { name: 'Data & Reports' }),
+      ).toBeInTheDocument();
+      await waitFor(() => {
+        expect(window.location.pathname).toBe('/warehouse/data');
+      });
+    },
+    FIRST_RENDER_TIMEOUT,
+  );
+
+  it(
     'rejects an unknown Warehouse role instead of casting the claim',
     async () => {
       renderSignedInWarehouse('/warehouse/', ['made_up_role']);

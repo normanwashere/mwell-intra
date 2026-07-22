@@ -96,6 +96,7 @@ export function mapInsightRow(row: UnknownRow): InsightMetric {
     row.data_status,
     "incomplete",
   ) as InsightDataStatus;
+  const rawSourceHref = text(row.source_href, "/insights");
   const metric = {
     id: text(row.id),
     area: text(row.area) as InsightArea,
@@ -112,7 +113,10 @@ export function mapInsightRow(row: UnknownRow): InsightMetric {
       : "incomplete",
     sampleCount: Math.max(0, number(row.sample_count)),
     detail: text(row.detail),
-    sourceHref: text(row.source_href, "/insights"),
+    sourceHref:
+      rawSourceHref === "/warehouse/analytics"
+        ? "/warehouse/data"
+        : rawSourceHref,
     reportingPeriodStart: nullableText(row.reporting_period_start),
     reportingPeriodEnd: nullableText(row.reporting_period_end),
     sourceUpdatedAt: nullableText(row.source_updated_at),
@@ -128,7 +132,7 @@ export function resolveGovernedSource(
   const href = metric.sourceHref;
   const accessible =
     href === "/work" ||
-    (href === "/warehouse/analytics" &&
+    (href === "/warehouse/data" &&
       can(roles, "warehouse", "view_analytics")) ||
     (href === "/warehouse/cycle-counts" &&
       (can(roles, "warehouse", "cycle_count") ||

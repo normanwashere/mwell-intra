@@ -15,7 +15,7 @@ export const INSIGHTS_DEMO_DATA: InsightsData = {
       dataStatus: "current",
       sampleCount: 28,
       detail: "Issued units against approved event demand",
-      sourceHref: "/warehouse/analytics",
+      sourceHref: "/warehouse/data",
       reportingPeriodStart: "2026-06-14T08:00:00+08:00",
       reportingPeriodEnd: "2026-07-14T08:00:00+08:00",
       sourceUpdatedAt: "2026-07-14T07:30:00+08:00",

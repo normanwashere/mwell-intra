@@ -1,4 +1,4 @@
-import { Route, Routes, useNavigate } from "react-router-dom";
+import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { Suspense, lazy, useEffect, useRef } from "react";
 import { AppShell } from "@/components/AppShell";
 import { useWarehouse } from "./store";
@@ -442,6 +442,10 @@ export function App() {
                 <DataPage />
               </Guard>
             }
+          />
+          <Route
+            path="/analytics"
+            element={<Navigate replace to={WAREHOUSE_ROUTE_BY_ID.data.path} />}
           />
           <Route path="*" element={<NotFound />} />
         </Routes>

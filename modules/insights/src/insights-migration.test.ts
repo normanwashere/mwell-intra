@@ -6,6 +6,10 @@ const migrationPath = resolve(
   process.cwd(),
   "../../supabase/migrations/20260722124731_insights_correctness_and_provenance.sql",
 );
+const sourceRouteMigrationPath = resolve(
+  process.cwd(),
+  "../../supabase/migrations/20260723031500_insights_warehouse_source_route.sql",
+);
 
 describe("Insights snapshot migration contract", () => {
   it("projects target semantics, completeness, reporting, and freshness provenance", () => {
@@ -35,5 +39,14 @@ describe("Insights snapshot migration contract", () => {
     );
     expect(sql).toContain("current_timestamp as extracted_at");
     expect(sql).not.toMatch(/source_updated_at\s*,?\s*current_timestamp/i);
+  });
+
+  it("forwards the Warehouse metric source to the canonical data route", () => {
+    const sql = readFileSync(sourceRouteMigrationPath, "utf8");
+
+    expect(sql).toContain("core.insights_snapshot()");
+    expect(sql).toContain("'/warehouse/analytics'");
+    expect(sql).toContain("'/warehouse/data'");
+    expect(sql).toContain("notify pgrst, 'reload schema'");
   });
 });

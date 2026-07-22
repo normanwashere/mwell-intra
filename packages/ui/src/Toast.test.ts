@@ -3,6 +3,7 @@ import {
   MAX_VISIBLE_TOASTS,
   TOAST_DISMISS_CLASS,
   TOAST_MOTION_STATES,
+  TOAST_STACK_CLASS,
   TOAST_TONE_STYLES,
   coalesceToastQueue,
   type ToastRecord,
@@ -23,14 +24,20 @@ describe('toast queue ergonomics', () => {
   });
 
   it('keeps the dismiss target at least 44px in both dimensions', () => {
-    expect(TOAST_DISMISS_CLASS).toContain('min-h-11');
-    expect(TOAST_DISMISS_CLASS).toContain('min-w-11');
+    expect(TOAST_DISMISS_CLASS).toContain('pointer-events-auto');
+    expect(TOAST_DISMISS_CLASS).toContain('h-12');
+    expect(TOAST_DISMISS_CLASS).toContain('w-12');
   });
 
   it('does not translate stacked dismiss targets through neighboring toasts', () => {
     expect(TOAST_MOTION_STATES.initial).not.toHaveProperty('y');
     expect(TOAST_MOTION_STATES.animate).not.toHaveProperty('y');
     expect(TOAST_MOTION_STATES.exit).not.toHaveProperty('y');
+  });
+
+  it('keeps desktop notifications away from central form actions', () => {
+    expect(TOAST_STACK_CLASS).toContain('sm:items-end');
+    expect(TOAST_STACK_CLASS).toContain('sm:px-6');
   });
 
   it('coalesces an identical message and tone instead of stacking duplicates', () => {

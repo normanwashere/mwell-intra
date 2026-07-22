@@ -493,10 +493,10 @@ export function PurchaseOrdersPage() {
                         <div className="min-w-0">
                           <a
                             href={po.warehouseHref}
-                            className="block max-w-full truncate font-semibold text-brand-700 underline-offset-2 hover:underline dark:text-brand-300"
+                            className="flex min-h-11 max-w-full items-center font-semibold text-brand-700 underline-offset-2 hover:underline dark:text-brand-300"
                             title="Open Warehouse receiving details"
                           >
-                            {po.poNumber}
+                            <span className="truncate">{po.poNumber}</span>
                           </a>
                           <p className="truncate text-sm text-ink">{po.vendorName}</p>
                           <p className="text-xs text-faint">
