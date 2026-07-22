@@ -6516,7 +6516,8 @@ async function runWorkflow(browser, viewport, user, workflow) {
             .map((element) => {
               const controlRect = element.getBoundingClientRect();
               const label = "labels" in element ? element.labels?.[0] : null;
-              const labelRect = label?.getBoundingClientRect();
+              const enclosingLabel = label?.contains(element) ? label : null;
+              const labelRect = enclosingLabel?.getBoundingClientRect();
               const rect =
                 labelRect && labelRect.width > 0 && labelRect.height > 0
                   ? labelRect

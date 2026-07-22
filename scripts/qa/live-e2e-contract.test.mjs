@@ -447,6 +447,7 @@ test("governed transactions retain visual and accessibility evidence", async () 
   assert.match(source, /overflow: layout\.horizontalOverflow/);
   assert.match(source, /seriousAccessibility/);
   assert.match(source, /undersizedMobileTargets/);
+  assert.match(source, /label\?\.contains\(element\)/);
   assert.match(source, /interactionProblems/);
 });
 
