@@ -176,12 +176,12 @@ export function AppShell({ children }: { children: ReactNode }) {
               {isActive(e.href) && !reduced && (
                 <m.span
                   layoutId="nav-rail-pill"
-                  className="absolute inset-0 rounded-xl bg-brand-500/12"
+                  className="pointer-events-none absolute inset-0 rounded-xl bg-brand-500/12"
                   transition={{ type: "spring", stiffness: 380, damping: 32 }}
                 />
               )}
               {isActive(e.href) && reduced && (
-                <span className="absolute inset-0 rounded-xl bg-brand-500/12" />
+                <span className="pointer-events-none absolute inset-0 rounded-xl bg-brand-500/12" />
               )}
               <Icon name={e.icon} className="relative h-5 w-5" />
               <span className="relative hidden min-w-0 truncate text-sm font-medium lg:block">

@@ -269,6 +269,8 @@ test("cross-module scenarios are imported and executed as browser/database contr
   assert.match(source, /Denied Events mutation persisted a row/);
   assert.match(source, /mutated the read-only Insights snapshot/);
   assert.match(source, /denied Insights write persisted a row/);
+  assert.match(source, /getByLabel\("Insight view", \{ exact: true \}\)/);
+  assert.match(source, /availableAreas\.includes\(area\)/);
   assert.match(source, /beforeRefresh !== afterRefresh/);
   assert.match(source, /sources\.has\("procurement_po"\)/);
   assert.match(source, /sources\.has\("warehouse_receipt"\)/);

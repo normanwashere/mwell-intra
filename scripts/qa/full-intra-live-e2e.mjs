@@ -5946,14 +5946,33 @@ async function insightsGovernanceWorkflow(page, role) {
     timeout: 20_000,
   });
   await waitForMeaningfulRoute(page);
-  for (const area of contract.visible) {
-    await page.getByRole("tab", { name: area, exact: true }).waitFor({
-      state: "visible",
-    });
-  }
-  for (const area of contract.hidden) {
-    if (await page.getByRole("tab", { name: area, exact: true }).count()) {
-      throw new Error(`${role} received forbidden ${area} Insights scope.`);
+  const mobileAreaSelect = page.getByLabel("Insight view", { exact: true });
+  if (await mobileAreaSelect.isVisible().catch(() => false)) {
+    const availableAreas = await mobileAreaSelect
+      .locator("option")
+      .evaluateAll((options) =>
+        options.map((option) => option.textContent?.trim()),
+      );
+    for (const area of contract.visible) {
+      if (!availableAreas.includes(area)) {
+        throw new Error(`${role} is missing the ${area} Insights scope.`);
+      }
+    }
+    for (const area of contract.hidden) {
+      if (availableAreas.includes(area)) {
+        throw new Error(`${role} received forbidden ${area} Insights scope.`);
+      }
+    }
+  } else {
+    for (const area of contract.visible) {
+      await page.getByRole("tab", { name: area, exact: true }).waitFor({
+        state: "visible",
+      });
+    }
+    for (const area of contract.hidden) {
+      if (await page.getByRole("tab", { name: area, exact: true }).count()) {
+        throw new Error(`${role} received forbidden ${area} Insights scope.`);
+      }
     }
   }
   const indicator = page.locator('[aria-label="Operational indicators"]');
