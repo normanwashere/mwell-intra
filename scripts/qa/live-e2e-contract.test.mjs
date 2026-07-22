@@ -301,7 +301,10 @@ test("cross-module scenarios are imported and executed as browser/database contr
   assert.match(source, /sources\.has\("procurement_po"\)/);
   assert.match(source, /sources\.has\("warehouse_receipt"\)/);
   assert.match(source, /Unified Finance PO source link is incorrect/);
-  assert.match(source, /Unified Finance receipt source link is incorrect/);
+  assert.match(
+    source,
+    /Unified Finance exposed an inaccessible receiving link/,
+  );
   assert.match(source, /evaluateScenarioCoverage\(/);
   assert.match(source, /scenarioCoverage/);
   assert.match(source, /scenarioCoverageFailures\(scenarioCoverage\)/);
@@ -320,7 +323,10 @@ test("route crawl enforces an exact role-to-route authorization matrix", async (
     source,
     /no \(\?:warehouse\|procurement[\s\S]*finance\|product\) access/,
   );
-  assert.match(source, /const routeQueue = routesFor\(user, discoveredRoutes\)/);
+  assert.match(
+    source,
+    /const routeQueue = routesFor\(user, discoveredRoutes\)/,
+  );
   assert.match(source, /while \(routeQueue\.length\)/);
   assert.match(
     source,
@@ -486,6 +492,67 @@ test("governed transactions retain visual and accessibility evidence", async () 
   assert.match(source, /intermediateEvidence/);
 });
 
+test("interaction reachability scopes an active modal and excludes inert background controls", async () => {
+  const source = await readFile(
+    new URL("./full-intra-live-e2e.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /element\.closest\("\[inert\]"\)/);
+  assert.match(source, /element\.closest\('\[aria-hidden="true"\]'\)/);
+  assert.match(source, /element\.getAttribute\("aria-disabled"\) === "true"/);
+  assert.match(source, /dialog\[open\], \[role="dialog"\]/);
+  assert.match(source, /dialog\.getAttribute\("aria-modal"\) === "true"/);
+  assert.match(source, /dialog\.matches\(":modal"\)/);
+  assert.match(source, /!activeDialog \|\| activeDialog\.contains\(element\)/);
+  assert.match(
+    source,
+    /activeDialog && active && !activeDialog\.contains\(active\)/,
+  );
+  assert.match(source, /suppressedControlCount/);
+});
+
+test("interaction reachability rechecks blocked controls without hiding real fixed-overlay failures", async () => {
+  const source = await readFile(
+    new URL("./full-intra-live-e2e.mjs", import.meta.url),
+    "utf8",
+  );
+  const initialProbe = source.indexOf("const initial = probe(element)");
+  const scrollRecheck = source.indexOf(
+    "const reachability = await recheckReachability(element, initial)",
+  );
+  const finalFailure = source.indexOf(
+    "interceptedTargets.push({",
+    scrollRecheck,
+  );
+  assert.ok(initialProbe >= 0, "an initial multi-point probe is required");
+  assert.ok(scrollRecheck > initialProbe, "blocked controls are rechecked");
+  assert.ok(
+    finalFailure > scrollRecheck,
+    "interception is reported only after the reachability recheck",
+  );
+  assert.match(
+    source,
+    /const xs = \[left \+ insetX, \(left \+ right\) \/ 2, right - insetX\]/,
+  );
+  assert.match(
+    source,
+    /const ys = \[top \+ insetY, \(top \+ bottom\) \/ 2, bottom - insetY\]/,
+  );
+  assert.match(source, /label\?\.control === element/);
+  assert.match(
+    source,
+    /element\.scrollIntoView\(\{ block: "center", inline: "center" \}\)/,
+  );
+  assert.match(source, /await nextPaint\(\);\s*await nextPaint\(\);/);
+  assert.match(
+    source,
+    /container\.element\.scrollTo\(container\.left, container\.top\)/,
+  );
+  assert.match(source, /scrollTo\(windowScroll\.left, windowScroll\.top\)/);
+  assert.match(source, /recheckedAfterScroll/);
+  assert.doesNotMatch(source, /position\s*===?\s*["']fixed["']/);
+});
+
 test("Product launch certification uses UI decisions, denial checks, readback, screenshots, and cleanup", async () => {
   const source = await readFile(
     new URL("./full-intra-live-e2e.mjs", import.meta.url),
@@ -504,8 +571,13 @@ test("Product launch certification uses UI decisions, denial checks, readback, s
   assert.match(source, /"product",\s*"can_launch"/);
   assert.match(source, /await page\.reload\(/);
   assert.match(source, /captureState\("Product readiness validation"\)/);
-  assert.match(source, /captureState\("Operations Product handoff persisted"\)/);
+  assert.match(
+    source,
+    /captureState\("Operations Product handoff persisted"\)/,
+  );
   assert.match(source, /cleanupProductGovernance\(marker\)/);
+  assert.match(source, /cleanup_certification_records/);
+  assert.match(source, /name: state\.readinessTitle,\s*exact: true/);
   assert.match(source, /productGovernanceResults\.every/);
 });
 

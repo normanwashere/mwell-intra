@@ -82,6 +82,8 @@ export const PROCUREMENT_ROUTE_BY_ID = Object.fromEntries(
   PROCUREMENT_ROUTE_CONTRACTS.map((entry) => [entry.id, entry]),
 ) as Record<ProcurementRouteId, ProcurementRouteContract>;
 
+export const PROCUREMENT_REQUESTS_ALIAS_PATH = "/requests";
+
 export function procurementRoutesForAudience(
   audience: "full" | "approvals-only",
 ): ProcurementRouteContract[] {

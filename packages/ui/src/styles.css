@@ -215,12 +215,12 @@
 }
 
 .btn-primary {
-  background: var(--brand-600);
+  background: var(--brand-700);
   color: #ffffff;
   box-shadow: var(--shadow-e1);
 }
 .btn-primary:hover {
-  background: var(--brand-700);
+  background: var(--brand-800);
 }
 
 .btn-accent {

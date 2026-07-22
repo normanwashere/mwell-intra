@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SessionValue } from '@intra/auth';
 import { FINANCE_DEMO_DATA } from './seed';
@@ -86,6 +86,18 @@ describe('FinanceApp', () => {
       'href',
       '/procurement/purchase-orders/po-demo-1042',
     );
+  });
+
+  it('opens receipt evidence in place instead of linking Finance to receiving', () => {
+    render(<FinanceApp />);
+
+    expect(screen.queryByRole('link', { name: 'receipt-demo-318' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole('button', { name: 'View receipt-demo-318 details' })[0]!);
+
+    const dialog = screen.getByRole('dialog', { name: 'Finance activity receipt-demo-318' });
+    expect(dialog).toBeInTheDocument();
+    expect(within(dialog).getByText('Warehouse receipt')).toBeInTheDocument();
+    expect(within(dialog).getByText('received')).toBeInTheDocument();
   });
 
   it('admits Procurement Finance without inventing Warehouse access', () => {

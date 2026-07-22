@@ -44,6 +44,12 @@ export const TOAST_DISMISS_CLASS =
 
 export const MAX_VISIBLE_TOASTS = 3;
 
+export const TOAST_MOTION_STATES = {
+  initial: { opacity: 0, scale: 0.98 },
+  animate: { opacity: 1, scale: 1 },
+  exit: { opacity: 0, scale: 0.98 },
+} as const;
+
 export function coalesceToastQueue(
   current: readonly ToastRecord[],
   incoming: ToastRecord,
@@ -129,12 +135,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     <ToastContext.Provider value={value}>
       {children}
       <div
-        className="pointer-events-none fixed inset-x-0 top-[calc(4.75rem+env(safe-area-inset-top))] z-[60] flex max-h-[calc(100dvh-var(--shell-mobile-nav-clearance,5.5rem)-6rem)] flex-col items-center gap-2 overflow-y-auto px-3 sm:top-auto sm:bottom-0 sm:max-h-[calc(100dvh-2rem)] sm:px-4 sm:pb-6"
+        className="pointer-events-none fixed inset-x-0 top-[calc(4.75rem+env(safe-area-inset-top))] z-[60] flex max-h-[calc(100dvh-var(--shell-mobile-nav-clearance,5.5rem)-6rem)] flex-col items-center gap-3 overflow-y-auto px-3 sm:top-auto sm:bottom-0 sm:max-h-[calc(100dvh-2rem)] sm:px-4 sm:pb-6"
         role="region"
         aria-label="Notifications"
         aria-live="polite"
       >
-        <AnimatePresence mode="popLayout">
+        <AnimatePresence initial={false}>
           {toasts.map((t) => {
             const tone = TOAST_TONE_STYLES[t.tone] ?? TOAST_TONE_STYLES.info;
             return (
@@ -142,9 +148,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 key={t.id}
                 role="status"
                 layout
-                initial={reduced ? false : { opacity: 0, y: 16, scale: 0.96 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={reduced ? undefined : { opacity: 0, y: 8, scale: 0.98 }}
+                initial={reduced ? false : TOAST_MOTION_STATES.initial}
+                animate={TOAST_MOTION_STATES.animate}
+                exit={reduced ? undefined : TOAST_MOTION_STATES.exit}
                 transition={SPRING_SNAPPY}
                 className={clsx(
                   'pointer-events-auto flex w-full max-w-sm items-center gap-2.5 rounded-2xl border px-4 py-3 text-sm font-medium shadow-e3',

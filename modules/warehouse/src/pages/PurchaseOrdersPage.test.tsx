@@ -166,7 +166,7 @@ describe("PurchaseOrdersPage", () => {
     });
   });
 
-  it("surfaces procurement-issued POs with a From Procurement badge and deep link", async () => {
+  it("keeps procurement-issued PO links inside the Warehouse workflow", async () => {
     window.localStorage.setItem(
       PROCUREMENT_PO_KEY,
       JSON.stringify([
@@ -197,7 +197,7 @@ describe("PurchaseOrdersPage", () => {
 
     expect(within(list).getByText("From Procurement")).toBeInTheDocument();
     const link = within(list).getByRole("link", { name: "PO-2026-0003" });
-    expect(link).toHaveAttribute("href", "/procurement/purchase-orders/ppo-9");
+    expect(link).toHaveAttribute("href", "/warehouse/purchase-orders?po=ppo-9");
     expect(
       within(list).getByRole("button", { name: /^receive and inspect$/i }),
     ).toBeInTheDocument();

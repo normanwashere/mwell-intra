@@ -7,6 +7,7 @@ import {
   EmptyState,
   SectionTitle,
   SegmentedControl,
+  Sheet,
   money,
   type Column,
 } from '@intra/ui';
@@ -43,30 +44,43 @@ function formatDate(value: string): string {
       }).format(date);
 }
 
-function activityHref(item: FinanceActivity): string {
+function activityHref(item: FinanceActivity): string | null {
   if (item.purchaseOrderId) {
     return `/procurement/purchase-orders/${encodeURIComponent(item.purchaseOrderId)}`;
   }
-  return item.source === 'warehouse_return'
-    ? '/warehouse/returns'
-    : '/warehouse/receiving';
+  return null;
 }
 
-const columns: Column<FinanceActivity>[] = [
+function activityColumns(
+  onInspect: (item: FinanceActivity) => void,
+): Column<FinanceActivity>[] {
+  return [
   {
     key: 'reference',
     header: 'Reference',
     primary: true,
     sortable: true,
     sortValue: (row) => row.referenceId,
-    render: (row) => (
-      <a
-        href={activityHref(row)}
-        className="font-semibold text-brand-700 hover:underline dark:text-brand-300"
-      >
-        {row.referenceId}
-      </a>
-    ),
+    render: (row) => {
+      const href = activityHref(row);
+      return href ? (
+        <a
+          href={href}
+          className="font-semibold text-brand-700 hover:underline dark:text-brand-300"
+        >
+          {row.referenceId}
+        </a>
+      ) : (
+        <button
+          type="button"
+          onClick={() => onInspect(row)}
+          className="font-semibold text-brand-700 hover:underline dark:text-brand-300"
+          aria-label={`View ${row.referenceId} details`}
+        >
+          {row.referenceId}
+        </button>
+      );
+    },
   },
   {
     key: 'source',
@@ -100,7 +114,8 @@ const columns: Column<FinanceActivity>[] = [
     sortValue: (row) => row.occurredAt,
     render: (row) => formatDate(row.occurredAt),
   },
-];
+  ];
+}
 
 const FILTERS: Array<{ value: FinanceActivityFilter; label: string }> = [
   { value: 'all', label: 'All' },
@@ -111,6 +126,8 @@ const FILTERS: Array<{ value: FinanceActivityFilter; label: string }> = [
 
 export function FinanceActivityTable({ activity }: { activity: FinanceActivity[] }) {
   const [filter, setFilter] = useState<FinanceActivityFilter>('all');
+  const [selected, setSelected] = useState<FinanceActivity | null>(null);
+  const columns = useMemo(() => activityColumns(setSelected), []);
   const visible = useMemo(
     () => filterFinanceActivity(activity, filter),
     [activity, filter],
@@ -147,6 +164,35 @@ export function FinanceActivityTable({ activity }: { activity: FinanceActivity[]
           density="compact"
         />
       )}
+      <Sheet
+        open={selected !== null}
+        onOpenChange={(open) => {
+          if (!open) setSelected(null);
+        }}
+        title={selected ? `Finance activity ${selected.referenceId}` : 'Finance activity'}
+        description="Read-only financial evidence from the governed source ledger."
+      >
+        {selected && (
+          <dl className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <dt className="text-xs font-semibold uppercase text-faint">Source</dt>
+              <dd className="mt-1 text-sm font-semibold text-ink">{SOURCE_LABEL[selected.source]}</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-semibold uppercase text-faint">State</dt>
+              <dd className="mt-1 text-sm capitalize text-ink">{selected.status.replaceAll('_', ' ')}</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-semibold uppercase text-faint">Value</dt>
+              <dd className="mt-1 text-sm font-semibold text-ink">{money(selected.amount)}</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-semibold uppercase text-faint">Recorded</dt>
+              <dd className="mt-1 text-sm text-ink">{formatDate(selected.occurredAt)}</dd>
+            </div>
+          </dl>
+        )}
+      </Sheet>
     </section>
   );
 }

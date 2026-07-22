@@ -142,7 +142,7 @@ function AdminAuditInner() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 max-w-full space-y-6">
       <ModuleHero
         eyebrow="Platform governance"
         title="Audit history"
@@ -194,19 +194,22 @@ function AdminAuditInner() {
           message="Administrative and governed workflow changes appear here."
         />
       ) : (
-        <ol className="space-y-3">
+        <ol className="min-w-0 max-w-full space-y-3">
           {filtered.map((row) => (
-            <li key={row.id}>
-              <Card className="p-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
+            <li key={row.id} className="min-w-0 max-w-full">
+              <Card className="min-w-0 max-w-full overflow-hidden p-4">
+                <div className="flex min-w-0 max-w-full flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0 max-w-full flex-1">
+                    <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
                       <Badge tone="brand">{row.module}</Badge>
-                      <h2 className="font-semibold text-ink">
+                      <h2 className="min-w-0 break-words font-semibold text-ink [overflow-wrap:anywhere]">
                         {row.action.replaceAll("_", " ")}
                       </h2>
                     </div>
-                    <p className="mt-2 text-sm text-muted">
+                    <p
+                      data-testid="audit-entity-reference"
+                      className="mt-2 max-w-full break-words text-sm text-muted [overflow-wrap:anywhere]"
+                    >
                       {row.entity_type}:{row.entity_id}
                     </p>
                   </div>
@@ -214,11 +217,14 @@ function AdminAuditInner() {
                     {new Date(row.created_at).toLocaleString("en-PH")}
                   </time>
                 </div>
-                <p className="mt-3 text-sm text-muted">
+                <p className="mt-3 max-w-full break-words text-sm text-muted [overflow-wrap:anywhere]">
                   Actor: {actors.get(row.actor) ?? row.actor}
                 </p>
                 {row.detail && (
-                  <pre className="mt-3 max-h-48 overflow-auto rounded-md bg-inset p-3 text-xs text-muted">
+                  <pre
+                    data-testid="audit-event-detail"
+                    className="mt-3 max-h-48 w-full min-w-0 max-w-full overflow-x-hidden overflow-y-auto whitespace-pre-wrap break-words rounded-md bg-inset p-3 text-xs text-muted [overflow-wrap:anywhere]"
+                  >
                     {JSON.stringify(row.detail, null, 2)}
                   </pre>
                 )}

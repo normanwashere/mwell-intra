@@ -20,7 +20,10 @@ import { PurchaseOrdersPage } from "./pages/PurchaseOrdersPage";
 import { PODetailPage } from "./pages/PODetailPage";
 import { AcceptanceWorkItemPage } from "./pages/AcceptanceWorkItemPage";
 import { resolveTiers, type UserRolesShape } from "./tiers";
-import { PROCUREMENT_ROUTE_BY_ID } from "./routes";
+import {
+  PROCUREMENT_REQUESTS_ALIAS_PATH,
+  PROCUREMENT_ROUTE_BY_ID,
+} from "./routes";
 
 export interface ProcurementAppProps {
   /** Path prefix the shell mounts this module under (default `/procurement`). */
@@ -154,6 +157,10 @@ export function ProcurementApp({
               element={<Navigate to="/approvals" replace />}
             />
             <Route
+              path={PROCUREMENT_REQUESTS_ALIAS_PATH}
+              element={<Navigate to="/approvals" replace />}
+            />
+            <Route
               path={PROCUREMENT_ROUTE_BY_ID.approvals.path}
               element={<ApprovalInboxPage />}
             />
@@ -168,6 +175,10 @@ export function ProcurementApp({
           <>
             <Route
               path={PROCUREMENT_ROUTE_BY_ID.requests.path}
+              element={<RequestsPage />}
+            />
+            <Route
+              path={PROCUREMENT_REQUESTS_ALIAS_PATH}
               element={<RequestsPage />}
             />
             <Route

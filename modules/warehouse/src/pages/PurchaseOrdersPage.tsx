@@ -492,9 +492,9 @@ export function PurchaseOrdersPage() {
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <a
-                            href={po.href}
+                            href={po.warehouseHref}
                             className="block max-w-full truncate font-semibold text-brand-700 underline-offset-2 hover:underline dark:text-brand-300"
-                            title="Open in procurement"
+                            title="Open Warehouse receiving details"
                           >
                             {po.poNumber}
                           </a>

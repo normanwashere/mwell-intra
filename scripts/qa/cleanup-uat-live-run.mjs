@@ -674,6 +674,47 @@ export async function cleanupAndVerifyRun({
     "id",
     (query) => query.in("id", departmentRequestIds),
   );
+  try {
+    const { data, error } = await database
+      .schema("product")
+      .rpc("cleanup_certification_records", { p_marker: scope.marker });
+    if (error) throw new Error(error.message);
+    const [readinessVerification, pricingVerification] = await Promise.all([
+      database
+        .schema("product")
+        .from("readiness_packages")
+        .select("id", { count: "exact", head: true })
+        .eq("title", `${scope.marker} launch readiness`),
+      database
+        .schema("product")
+        .from("price_proposals")
+        .select("id", { count: "exact", head: true })
+        .eq("reason", `${scope.marker} governed pricing proposal`),
+    ]);
+    const verificationError =
+      readinessVerification.error ?? pricingVerification.error;
+    const remaining =
+      Number(readinessVerification.count ?? 0) +
+      Number(pricingVerification.count ?? 0);
+    if (verificationError || remaining !== 0) {
+      throw new Error(
+        verificationError?.message ??
+          `Product certification cleanup left ${remaining} record(s).`,
+      );
+    }
+    results.push({
+      entity: "product.certification-records",
+      removed: Number(data?.removed ?? 0),
+      remaining,
+    });
+  } catch (error) {
+    results.push({
+      entity: "product.certification-records",
+      removed: 0,
+      remaining: null,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
   await removeWhen(productIds, "warehouse", "products", "id", (query) =>
     query.in("id", productIds),
   );

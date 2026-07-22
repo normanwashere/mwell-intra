@@ -127,6 +127,8 @@ test("independent cleanup guards UAT and covers governed residue plus Auth", asy
   }
   assert.match(source, /auth\.admin\.listUsers/);
   assert.match(source, /auth\.admin\.deleteUser/);
+  assert.match(source, /product[\s\S]*cleanup_certification_records/);
+  assert.match(source, /product\.certification-records/);
   assert.match(source, /remaining === 0/);
 });
 

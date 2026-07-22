@@ -914,7 +914,7 @@ async function auditKeyboardAndHotspots(page) {
     };
   });
   await page.keyboard.press("Tab");
-  const result = await page.evaluate(() => {
+  const result = await page.evaluate(async () => {
     const selector =
       'a[href],button,input:not([type="hidden"]):not([type="file"]),select,textarea,[role="button"],[role="link"],[tabindex]:not([tabindex="-1"])';
     const visible = (element) => {
@@ -928,11 +928,50 @@ async function auditKeyboardAndHotspots(page) {
         rect.height > 0
       );
     };
-    const controls = [...document.querySelectorAll(selector)].filter(visible);
+    const hiddenFromInteraction = (element) =>
+      Boolean(
+        element.closest("[inert]") ||
+        element.closest('[aria-hidden="true"]') ||
+        element.matches(":disabled") ||
+        element.getAttribute("aria-disabled") === "true",
+      );
+    const visibleDialogs = [
+      ...document.querySelectorAll('dialog[open], [role="dialog"]'),
+    ].filter((dialog) => visible(dialog) && !hiddenFromInteraction(dialog));
+    const modalDialogs = visibleDialogs.filter((dialog) => {
+      if (dialog.getAttribute("aria-modal") === "true") return true;
+      if (dialog instanceof HTMLDialogElement && dialog.open) {
+        try {
+          return dialog.matches(":modal");
+        } catch {
+          return true;
+        }
+      }
+      return false;
+    });
+    const activeDialog = modalDialogs
+      .map((dialog, order) => ({
+        dialog,
+        order,
+        zIndex: Number.parseInt(getComputedStyle(dialog).zIndex, 10) || 0,
+      }))
+      .sort((left, right) =>
+        left.zIndex === right.zIndex
+          ? left.order - right.order
+          : left.zIndex - right.zIndex,
+      )
+      .at(-1)?.dialog;
+    const visibleControls = [...document.querySelectorAll(selector)].filter(
+      visible,
+    );
+    const controls = visibleControls.filter(
+      (element) =>
+        !hiddenFromInteraction(element) &&
+        (!activeDialog || activeDialog.contains(element)),
+    );
     const active = document.activeElement;
-    const dialog = document.querySelector('[role="dialog"]');
     const focusEscapedDialog = Boolean(
-      dialog && visible(dialog) && active && !dialog.contains(active),
+      activeDialog && active && !activeDialog.contains(active),
     );
     const undersizedTargets = controls
       .map((element) => {
@@ -953,58 +992,116 @@ async function auditKeyboardAndHotspots(page) {
       })
       .filter((target) => target.width < 44 || target.height < 44)
       .slice(0, 16);
-    const interceptedTargets = controls
-      .flatMap((element) => {
-        const rect = element.getBoundingClientRect();
+
+    const describe = (element) =>
+      (
+        element?.getAttribute?.("aria-label") ||
+        element?.textContent ||
+        element?.tagName ||
+        "unknown element"
+      )
+        .trim()
+        .replace(/\s+/g, " ")
+        .slice(0, 80);
+    const samplePoints = (element) => {
+      const rect = element.getBoundingClientRect();
+      const left = Math.max(0, rect.left);
+      const right = Math.min(innerWidth, rect.right);
+      const top = Math.max(0, rect.top);
+      const bottom = Math.min(innerHeight, rect.bottom);
+      if (right <= left || bottom <= top) return [];
+      const insetX = Math.min(6, Math.max(1, (right - left) / 4));
+      const insetY = Math.min(6, Math.max(1, (bottom - top) / 4));
+      const xs = [left + insetX, (left + right) / 2, right - insetX];
+      const ys = [top + insetY, (top + bottom) / 2, bottom - insetY];
+      return xs.flatMap((x) =>
+        ys.map((y) => ({
+          x: Math.min(innerWidth - 1, Math.max(0, x)),
+          y: Math.min(innerHeight - 1, Math.max(0, y)),
+        })),
+      );
+    };
+    const hitActivates = (element, hit) => {
+      if (!hit) return false;
+      if (hit === element || element.contains(hit)) return true;
+      const label = hit.closest("label");
+      if (label?.control === element) return true;
+      const enclosingLabel = element.closest("label");
+      return Boolean(enclosingLabel && enclosingLabel.contains(hit));
+    };
+    const probe = (element) => {
+      const samples = samplePoints(element).map((point) => ({
+        ...point,
+        hit: document.elementFromPoint(point.x, point.y),
+      }));
+      return {
+        reachable: samples.some(({ hit }) => hitActivates(element, hit)),
+        blocker:
+          samples
+            .map(({ hit }) => hit)
+            .find((hit) => hit && !hitActivates(element, hit)) ?? null,
+      };
+    };
+    const nextPaint = () =>
+      new Promise((resolve) => requestAnimationFrame(() => resolve()));
+    const scrollContainers = (element) => {
+      const containers = [];
+      for (
+        let ancestor = element.parentElement;
+        ancestor && ancestor !== document.documentElement;
+        ancestor = ancestor.parentElement
+      ) {
+        const style = getComputedStyle(ancestor);
+        const scrollable = /(auto|scroll|overlay)/.test(
+          `${style.overflow} ${style.overflowX} ${style.overflowY}`,
+        );
         if (
-          element.matches(":disabled") ||
-          rect.bottom <= 0 ||
-          rect.right <= 0 ||
-          rect.top >= innerHeight ||
-          rect.left >= innerWidth
+          scrollable &&
+          (ancestor.scrollHeight > ancestor.clientHeight ||
+            ancestor.scrollWidth > ancestor.clientWidth)
         ) {
-          return [];
+          containers.push({
+            element: ancestor,
+            left: ancestor.scrollLeft,
+            top: ancestor.scrollTop,
+          });
         }
-        const x = Math.min(
-          innerWidth - 1,
-          Math.max(0, rect.left + rect.width / 2),
-        );
-        const y = Math.min(
-          innerHeight - 1,
-          Math.max(0, rect.top + rect.height / 2),
-        );
-        if (x < 0 || y < 0 || x > innerWidth || y > innerHeight) return [];
-        const hit = document.elementFromPoint(x, y);
-        if (!hit || hit === element || element.contains(hit)) return [];
-        const hitControl = hit.closest(selector);
-        if (
-          !hitControl ||
-          hitControl === element ||
-          element.contains(hitControl)
-        )
-          return [];
-        return [
-          {
-            target: (
-              element.getAttribute("aria-label") ||
-              element.textContent ||
-              element.tagName
-            )
-              .trim()
-              .replace(/\s+/g, " ")
-              .slice(0, 80),
-            blocker: (
-              hitControl.getAttribute("aria-label") ||
-              hitControl.textContent ||
-              hitControl.tagName
-            )
-              .trim()
-              .replace(/\s+/g, " ")
-              .slice(0, 80),
-          },
-        ];
-      })
-      .slice(0, 12);
+      }
+      return containers;
+    };
+    const recheckReachability = async (element, initial) => {
+      const windowScroll = { left: scrollX, top: scrollY };
+      const containers = scrollContainers(element);
+      element.scrollIntoView({ block: "center", inline: "center" });
+      await nextPaint();
+      await nextPaint();
+      const recheck = probe(element);
+      for (const container of containers) {
+        container.element.scrollTo(container.left, container.top);
+      }
+      scrollTo(windowScroll.left, windowScroll.top);
+      await nextPaint();
+      return {
+        ...recheck,
+        initialBlocker: initial.blocker,
+        recheckedAfterScroll: true,
+      };
+    };
+    const interceptedTargets = [];
+    let recheckedTargetCount = 0;
+    for (const element of controls) {
+      const initial = probe(element);
+      if (initial.reachable) continue;
+      recheckedTargetCount += 1;
+      const reachability = await recheckReachability(element, initial);
+      if (reachability.reachable) continue;
+      interceptedTargets.push({
+        target: describe(element),
+        blocker: describe(reachability.blocker ?? reachability.initialBlocker),
+        recheckedAfterScroll: reachability.recheckedAfterScroll,
+      });
+      if (interceptedTargets.length >= 12) break;
+    }
     return {
       focusAfterTab: {
         tag: active?.tagName?.toLowerCase() ?? null,
@@ -1015,6 +1112,9 @@ async function auditKeyboardAndHotspots(page) {
       },
       focusEscapedDialog,
       focusableCount: controls.length,
+      activeDialog: activeDialog ? describe(activeDialog) : null,
+      suppressedControlCount: visibleControls.length - controls.length,
+      recheckedTargetCount,
       undersizedTargets,
       interceptedTargets,
     };
@@ -6547,13 +6647,17 @@ async function unifiedFinanceReadbackWorkflow(page, fixture) {
     throw new Error(`Unified Finance PO source link is incorrect: ${poHref}`);
   }
   await page.getByRole("tab", { name: "Receipts", exact: true }).click();
-  const receiptLink = page.getByRole("link", { name: receiptId, exact: true });
-  await receiptLink.waitFor({ state: "visible" });
-  const receiptHref = await receiptLink.getAttribute("href");
-  if (receiptHref !== "/warehouse/receiving") {
-    throw new Error(
-      `Unified Finance receipt source link is incorrect: ${receiptHref}`,
-    );
+  const receiptControl = page.getByRole("button", {
+    name: `View ${receiptId} details`,
+    exact: true,
+  });
+  await receiptControl.waitFor({ state: "visible" });
+  await receiptControl.click();
+  await page
+    .getByRole("dialog", { name: `Finance activity ${receiptId}` })
+    .waitFor({ state: "visible" });
+  if (await page.getByRole("link", { name: receiptId, exact: true }).count()) {
+    throw new Error("Unified Finance exposed an inaccessible receiving link.");
   }
   return {
     name: "Unified Finance cross-module readback",
@@ -6714,6 +6818,7 @@ async function productOwnerDecisionWorkflow(page, state, { captureState }) {
   await waitForMeaningfulRoute(page);
   const readinessHeading = page.getByRole("heading", {
     name: state.readinessTitle,
+    exact: true,
   });
   await readinessHeading.waitFor({ state: "visible" });
   const readinessCard = readinessHeading.locator(
@@ -6807,6 +6912,7 @@ async function productOperationsHandoffWorkflow(page, state, { captureState }) {
   await waitForMeaningfulRoute(page);
   const readinessHeading = page.getByRole("heading", {
     name: state.readinessTitle,
+    exact: true,
   });
   await readinessHeading.waitFor({ state: "visible" });
   if (
@@ -6935,23 +7041,14 @@ async function cleanupProductGovernance(marker) {
       "Product cleanup refused a row without exact marker proof.",
     );
   }
-  const readinessIds = (readiness ?? []).map((row) => row.id);
-  const priceIds = (pricing ?? []).map((row) => row.id);
-  const removeIds = async (schema, table, column, ids) => {
-    if (!ids.length) return;
-    const { error } = await db
-      .schema(schema)
-      .from(table)
-      .delete()
-      .in(column, ids);
-    if (error)
-      throw new Error(`${schema}.${table} cleanup failed: ${error.message}`);
-  };
-  await removeIds("core", "notifications", "entity_id", readinessIds);
-  await removeIds("product", "readiness_events", "readiness_id", readinessIds);
-  await removeIds("product", "price_events", "proposal_id", priceIds);
-  await removeIds("product", "readiness_packages", "id", readinessIds);
-  await removeIds("product", "price_proposals", "id", priceIds);
+  const { data: cleanupResult, error: cleanupError } = await db
+    .schema("product")
+    .rpc("cleanup_certification_records", { p_marker: marker });
+  if (cleanupError) {
+    throw new Error(
+      `Product certification cleanup failed: ${cleanupError.message}`,
+    );
+  }
   const [
     { count: readinessRemaining, error: readinessVerify },
     { count: priceRemaining, error: priceVerify },
@@ -6978,7 +7075,9 @@ async function cleanupProductGovernance(marker) {
   return {
     entity: "product-governance",
     marker,
-    removed: readinessIds.length + priceIds.length,
+    removed:
+      Number(cleanupResult?.readiness_removed ?? 0) +
+      Number(cleanupResult?.pricing_removed ?? 0),
     remaining: 0,
   };
 }

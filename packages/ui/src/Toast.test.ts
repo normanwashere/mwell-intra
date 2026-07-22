@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   MAX_VISIBLE_TOASTS,
   TOAST_DISMISS_CLASS,
+  TOAST_MOTION_STATES,
   TOAST_TONE_STYLES,
   coalesceToastQueue,
   type ToastRecord,
@@ -24,6 +25,12 @@ describe('toast queue ergonomics', () => {
   it('keeps the dismiss target at least 44px in both dimensions', () => {
     expect(TOAST_DISMISS_CLASS).toContain('min-h-11');
     expect(TOAST_DISMISS_CLASS).toContain('min-w-11');
+  });
+
+  it('does not translate stacked dismiss targets through neighboring toasts', () => {
+    expect(TOAST_MOTION_STATES.initial).not.toHaveProperty('y');
+    expect(TOAST_MOTION_STATES.animate).not.toHaveProperty('y');
+    expect(TOAST_MOTION_STATES.exit).not.toHaveProperty('y');
   });
 
   it('coalesces an identical message and tone instead of stacking duplicates', () => {

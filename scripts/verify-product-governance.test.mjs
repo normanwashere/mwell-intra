@@ -10,6 +10,13 @@ const migration = readFileSync(
   ),
   "utf8",
 ).toLowerCase();
+const certificationMigration = readFileSync(
+  resolve(
+    process.cwd(),
+    "supabase/migrations/20260723020000_product_certification_cleanup.sql",
+  ),
+  "utf8",
+).toLowerCase();
 
 test("creates governed Product readiness and pricing records", () => {
   for (const fragment of [
@@ -68,4 +75,32 @@ test("keeps Product tables RPC-only and history append-only", () => {
   assert.match(migration, /create or replace function product\.reject_history_mutation/);
   assert.match(migration, /before update or delete on product\.readiness_events/);
   assert.match(migration, /before update or delete on product\.price_events/);
+});
+
+test("allows vaulted certification readback and exact marker cleanup only", () => {
+  assert.match(
+    certificationMigration,
+    /grant select on[\s\S]*product\.readiness_packages[\s\S]*to service_role/,
+  );
+  assert.match(
+    certificationMigration,
+    /create or replace function product\.cleanup_certification_records\(p_marker text\)/,
+  );
+  assert.match(certificationMigration, /auth\.role\(\) <> 'service_role'/);
+  assert.match(
+    certificationMigration,
+    /\^qa-\[0-9\]\{8\}-\[a-f0-9\]\{8\}-\(desktop-1440\|mobile-390\)\$/,
+  );
+  assert.match(
+    certificationMigration,
+    /revoke all on function product\.cleanup_certification_records\(text\)[\s\S]*from public, anon, authenticated/,
+  );
+  assert.match(
+    certificationMigration,
+    /grant execute on function product\.cleanup_certification_records\(text\)[\s\S]*to service_role/,
+  );
+  assert.doesNotMatch(
+    certificationMigration,
+    /grant (?:insert|update|delete|all) on[\s\S]*product\.readiness_packages[\s\S]*to service_role/,
+  );
 });
