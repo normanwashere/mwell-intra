@@ -585,7 +585,9 @@ async function waitForMeaningfulRoute(page) {
   await page
     .waitForFunction(
       () => {
-        const text = document.body.innerText.trim().replace(/\s+/g, " ");
+        const body = document.body;
+        if (!body) return false;
+        const text = body.innerText.trim().replace(/\s+/g, " ");
         const lower = text.toLowerCase();
         if (lower.includes("restoring your session")) return false;
         if (document.querySelector("[aria-busy='true']")) return false;
@@ -611,7 +613,9 @@ async function waitForRouteExpectation(page, expected) {
   await page
     .waitForFunction(
       ({ source, flags }) => {
-        const text = document.body.innerText.trim().replace(/\s+/g, " ");
+        const body = document.body;
+        if (!body) return false;
+        const text = body.innerText.trim().replace(/\s+/g, " ");
         return new RegExp(source, flags).test(text);
       },
       { source: expected.source, flags: expected.flags },

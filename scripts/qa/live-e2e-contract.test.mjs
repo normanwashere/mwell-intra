@@ -338,6 +338,7 @@ test("route crawl rejects silent redirects without depending on permanent QA rec
   assert.doesNotMatch(source, /path: "\/procurement\/requests\/req_seed_001"/);
   assert.doesNotMatch(source, /path: "\/legal\/cases\/case_seed_001"/);
   assert.doesNotMatch(source, /path: "\/vendor\/cases\/case_seed_001"/);
+  assert.match(source, /const body = document\.body;\s*if \(!body\) return false;/);
 });
 
 test("route crawl covers visible same-origin navigation discovered from the shell DOM", async () => {
