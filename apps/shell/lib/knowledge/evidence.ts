@@ -67,8 +67,8 @@ export const KNOWLEDGE_EVIDENCE_SCENARIOS: Record<string, EvidenceScenario> = {
   "access-fix": {
     route: "/admin/users",
     state:
-      "The platform administrator has opened the disposable Intra Test Admin account to demonstrate a minimum approved warehouse grant.",
-    landmark: "warehouse:business_unit for intra.test.admin@mwell.com.ph",
+      "The platform administrator has opened the disposable Intra Test Employee account to demonstrate a minimum approved warehouse grant without changing the administrator's own protected access.",
+    landmark: "warehouse:business_unit for intra.test.employee@mwell.com.ph",
     label: "Grant scoped warehouse access",
     instruction:
       "Select only the approved scoped role for the test account, then verify the resulting access with a new session.",
@@ -129,25 +129,27 @@ export const KNOWLEDGE_EVIDENCE_SCENARIOS: Record<string, EvidenceScenario> = {
   },
   "p2p-receive": {
     route: "/warehouse/purchase-orders",
+    roleId: "warehouse_logistics_supervisor",
     state:
-      "Warehouse procurement has opened an ordered purchase order and is ready to start controlled receiving.",
-    landmark: "Receive",
-    label: "Receive supply",
+      "Warehouse Logistics has an issued goods purchase order available for controlled receiving and inspection.",
+    landmark: "Receive and inspect",
+    label: "Start goods receiving",
     instruction:
-      "Open the ordered purchase order and select Receive to record custody in inspection staging.",
+      "Select Receive and inspect on the issued goods PO to verify the delivery, map products, and record custody in inspection staging.",
     x: 0.4988,
     y: 0.6676,
     mobileX: 0.6521,
     mobileY: 0.4536,
   },
   "p2p-payment-pack": {
-    route: "/procurement/purchase-orders/po_seed_001",
+    route: "/procurement/purchase-orders/qa_flow1_payment_po",
+    roleId: "procurement_officer",
     state:
-      "Finance is inspecting the approved seeded PO record and its upstream blockers before payment-readiness evidence can be assembled.",
-    landmark: "Full PO record",
-    label: "Inspect full PO record",
+      "Procurement has opened an issued UAT purchase order with attributable service acceptance and completed the structured invoice fields.",
+    landmark: "Validate match and send to Finance",
+    label: "Validate invoice match",
     instruction:
-      "Open the full PO record, then resolve approval, receipt, acceptance, invoice, and tax-evidence blockers before deciding readiness.",
+      "Verify the invoice, dates, amount, tax, withholding, and private evidence references, then validate the computed match and send the pack to Finance.",
     x: 0.6882,
     y: 0.4027,
     mobileX: 0.0974,
@@ -170,10 +172,10 @@ export const KNOWLEDGE_EVIDENCE_SCENARIOS: Record<string, EvidenceScenario> = {
     route: "/vendor/cases/case_documentation_vendor_draft/application",
     state:
       "The controlled documentation vendor application is open for vendor-owned updates.",
-    landmark: "Save draft",
-    label: "Save application draft",
+    landmark: "Company trade name",
+    label: "Complete vendor application",
     instruction:
-      "Complete the vendor-owned fields and save the accreditation application draft.",
+      "Complete every required vendor-owned field. Changes save securely as you work; review the declaration, sign, and submit only when the application is complete.",
     x: 0.668,
     y: 0.9433,
     mobileX: 0.328,
@@ -183,11 +185,11 @@ export const KNOWLEDGE_EVIDENCE_SCENARIOS: Record<string, EvidenceScenario> = {
     route: "/warehouse/storage",
     roleId: "warehouse_admin",
     state:
-      "The warehouse administrator has opened Add storage area at the warehouse selector.",
-    landmark: "Warehouse",
-    label: "Select warehouse",
+      "The warehouse administrator has opened Add storage area in the active warehouse context.",
+    landmark: "Bin code",
+    label: "Enter scannable bin code",
     instruction:
-      "Select the governed warehouse that will own the storage area.",
+      "Confirm the active warehouse, then enter the unique code printed on the physical shelf label.",
     x: 0.5889,
     y: 0.2509,
     mobileX: 0.5,
@@ -284,10 +286,10 @@ export const KNOWLEDGE_EVIDENCE_SCENARIOS: Record<string, EvidenceScenario> = {
     route: "/warehouse/storage",
     state:
       "The logistics supervisor has opened the putaway scanner for accepted stock.",
-    landmark: "Add stock",
-    label: "Add stock for putaway",
+    landmark: "Enter stock code manually",
+    label: "Enter stock identity",
     instruction:
-      "Scan or enter accepted stock before selecting its controlled destination bin.",
+      "Scan the accepted stock or enter its barcode or serial before selecting the controlled destination bin.",
     x: 0.6476,
     y: 0.445,
     mobileX: 0.8167,
@@ -320,22 +322,24 @@ export const KNOWLEDGE_EVIDENCE_SCENARIOS: Record<string, EvidenceScenario> = {
     mobileY: 0.9408,
   },
   "quality-return": {
-    route: "/warehouse/purchase-orders",
+    route: "/warehouse/quality",
+    roleId: "warehouse_logistics_supervisor",
     state:
-      "Warehouse procurement is reviewing the quality queue handoff from a supplier order.",
-    landmark: "Open quality queue",
-    label: "Open vendor-return handoff",
+      "The logistics supervisor has selected Return to vendor, recorded the reason, and attached inspection evidence.",
+    landmark: "Submit inspection",
+    label: "Record vendor-return disposition",
     instruction:
-      "Open the quality queue and prepare the supplier return disposition with source evidence.",
+      "Submit the evidence-backed vendor-return disposition; Procurement then handles the supplier follow-up from the recorded handoff.",
     x: 0.9069,
     y: 0.2353,
     mobileX: 0.5,
     mobileY: 0.3884,
   },
   "event-fulfillment-start": {
-    route: "/warehouse/events",
+    route: "/events",
+    roleId: "events_requester",
     state:
-      "The business-unit owner is viewing seeded events and the New event command.",
+      "The event requester is viewing seeded events and the New event command.",
     landmark: "New event",
     label: "Create event demand",
     instruction:
@@ -398,8 +402,9 @@ export const KNOWLEDGE_EVIDENCE_SCENARIOS: Record<string, EvidenceScenario> = {
   },
   "return-adjustment-handoff": {
     route: "/warehouse/cycle-counts",
+    roleId: "warehouse_logistics_supervisor",
     state:
-      "Warehouse finance has entered a deterministic physical variance ready for approval handoff.",
+      "The logistics supervisor has entered a deterministic physical variance ready for approval handoff.",
     landmark: "Submit count",
     label: "Submit supported adjustment",
     instruction:
@@ -411,8 +416,9 @@ export const KNOWLEDGE_EVIDENCE_SCENARIOS: Record<string, EvidenceScenario> = {
   },
   "count-start": {
     route: "/warehouse/cycle-counts",
+    roleId: "warehouse_logistics_supervisor",
     state:
-      "Warehouse finance is selecting the controlled location and count scope.",
+      "The logistics supervisor is selecting the controlled location and count scope.",
     landmark: "Location",
     label: "Select count location",
     instruction:
@@ -426,7 +432,7 @@ export const KNOWLEDGE_EVIDENCE_SCENARIOS: Record<string, EvidenceScenario> = {
     route: "/warehouse/cycle-counts",
     state:
       "The warehouse logistics supervisor has entered the observed physical quantity on the authorized cycle-count sheet.",
-    landmark: "Counted Event Shirt (L)",
+    landmark: "Counted mWell Event Shirt - Medium",
     label: "Enter physical count",
     instruction:
       "Enter the observed product quantity on the controlled count sheet and retain accountable count evidence.",
@@ -490,8 +496,9 @@ export const KNOWLEDGE_EVIDENCE_SCENARIOS: Record<string, EvidenceScenario> = {
   },
   "allocation-start": {
     route: "/warehouse/allocations",
+    roleId: "warehouse_logistics_supervisor",
     state:
-      "The business-unit owner is preparing a seeded reservation from approved demand.",
+      "Warehouse operations is preparing a seeded reservation from approved department demand.",
     landmark: "Reserve",
     label: "Reserve event stock",
     instruction: "Select Reserve and tie the request to approved event demand.",
@@ -503,24 +510,25 @@ export const KNOWLEDGE_EVIDENCE_SCENARIOS: Record<string, EvidenceScenario> = {
   "allocation-reserve": {
     route: "/warehouse/allocations",
     state:
-      "Warehouse operations is reviewing seeded reserved stock and the Issue command.",
-    landmark: "Issue",
-    label: "Reserve and issue stock",
+      "Warehouse operations has opened the issue confirmation for seeded reserved stock and is verifying its custody source.",
+    landmark: "Confirm issue",
+    label: "Confirm accountable issue",
     instruction:
-      "Issue only the reserved quantity to the accountable custody record.",
+      "Verify the reserved quantity, source identity, and accountable recipient before confirming the issue.",
     x: 0.5575,
     y: 0.4198,
     mobileX: 0.8097,
     mobileY: 0.4536,
   },
   "price-start": {
-    route: "/warehouse/pricing",
+    route: "/product",
+    roleId: "product_contributor",
     state:
-      "The pricing analyst is reviewing the seeded landed-cost and turnover table.",
-    landmark: "Pricing table",
-    label: "Prepare landed-cost basis",
+      "A Product contributor is reviewing pricing governance before opening a controlled proposal.",
+    landmark: "Propose price",
+    label: "Open governed price proposal",
     instruction:
-      "Open the product row and review landed cost, valuation, and turnover before proposing price.",
+      "Select Propose price, then record the product, proposed price, cost basis, reason, and effective date for independent Product Owner review.",
     x: 0.5889,
     y: 0.5098,
     mobileX: 0.5,

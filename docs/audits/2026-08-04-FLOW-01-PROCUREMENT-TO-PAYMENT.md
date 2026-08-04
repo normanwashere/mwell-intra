@@ -2,7 +2,7 @@
 
 Date: 2026-08-04
 Target: Mwell Intra UAT
-Status: Remediated; release gates passed
+Status: Remediated; application gates passed, infrastructure-owner follow-ups remain
 
 ## Intended flow
 
@@ -40,18 +40,19 @@ flowchart TD
 
 ## Findings and remediation
 
-| Priority | Finding | Resolution |
-|---|---|---|
-| P0 | RFQ/RFP existed in policy but had no operable sourcing record. | Added governed sourcing plans, invitations, responses, evaluation, award rationale, and closure. |
-| P0 | Services and milestones were blocked by Warehouse goods receipts. | Added category-based goods, service, and milestone acceptance routes. |
-| P0 | Finance could accept a pack but could not record payment execution. | Added attributable partial and full payment releases with unique references and automatic closure. |
-| P0 | The invoice match was a user-controlled checkbox. | Replaced it with structured invoice fields and database-computed PO and accepted-value matching. |
-| P0 | The requester responsible for non-stock acceptance could not open the linked PO. | Added own-request PO visibility and a requester acceptance route while keeping authoring and payment actions denied. |
-| P1 | Insufficient competitive responses created a dead end. | Added submission and independent approval or rejection of an insufficient-bids exception. |
-| P1 | Finance returns could be saved without actionable context. | A correction note is mandatory for every returned pack. |
-| P1 | Department and cost center were free text. | Request entry now uses governed active choices and the database validates the pairing. |
-| P1 | Acceptance value was not dependable for matching. | Added accepted commercial value and database derivation for goods receipts. |
-| P1 | Procurement records were readable too broadly by module membership. | Tightened PO, sourcing, acceptance, and payment RLS to role authority or requester ownership. |
+| Priority | Finding                                                                                              | Resolution                                                                                                               |
+| -------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| P0       | RFQ/RFP existed in policy but had no operable sourcing record.                                       | Added governed sourcing plans, invitations, responses, evaluation, award rationale, and closure.                         |
+| P0       | Services and milestones were blocked by Warehouse goods receipts.                                    | Added category-based goods, service, and milestone acceptance routes.                                                    |
+| P0       | Finance could accept a pack but could not record payment execution.                                  | Added attributable partial and full payment releases with unique references and automatic closure.                       |
+| P0       | The invoice match was a user-controlled checkbox.                                                    | Replaced it with structured invoice fields and database-computed PO and accepted-value matching.                         |
+| P0       | The requester responsible for non-stock acceptance could not open the linked PO.                     | Added own-request PO visibility and a requester acceptance route while keeping authoring and payment actions denied.     |
+| P1       | Insufficient competitive responses created a dead end.                                               | Added submission and independent approval or rejection of an insufficient-bids exception.                                |
+| P1       | Finance returns could be saved without actionable context.                                           | A correction note is mandatory for every returned pack.                                                                  |
+| P1       | Department and cost center were free text.                                                           | Request entry now uses governed active choices and the database validates the pairing.                                   |
+| P1       | Acceptance value was not dependable for matching.                                                    | Added accepted commercial value and database derivation for goods receipts.                                              |
+| P1       | Procurement records were readable too broadly by module membership.                                  | Tightened PO, sourcing, acceptance, and payment RLS to role authority or requester ownership.                            |
+| P1       | Warehouse could discover non-goods purchase orders even though only goods are physically receivable. | Restricted the Warehouse handoff view, PO and line policies, and both receipt RPCs to approved or issued goods requests. |
 
 ## Verification evidence
 
@@ -65,9 +66,13 @@ flowchart TD
 - Browser assertions cover role switching, milestone acceptance, structured invoice entry, Finance acceptance, two payment releases, PO closure, persistence, and horizontal overflow.
 - Desktop/mobile route crawl passed for Procurement Requester, Officer, Approver, Finance, Admin, and unified Finance, including access-denial correctness, dead links, labels, console errors, and overflow.
 - All package tests, lint, type checking, and the production build passed. The local toolchain emits a Node 20 deprecation warning; the declared and deployment runtime remains Node 22 or newer.
+- Authenticated live UAT evidence capture passed for 39 production scenarios at 1440x900 and 390x844. The Knowledge Base now has 78 unique, role-correct screenshots with verified actionable controls, semantic report metadata, and no near-duplicate workflow states.
+- Live database boundary check confirmed an issued goods PO appears in the Warehouse handoff, while an issued service PO does not; the private goods assertion accepted the goods PO and rejected the service PO.
+- Controlled QA procurement, receipt, allocation, stock, event, vendor-case, and invite records were deleted after evidence capture. Exact-ID cleanup verification returned zero records in every target table.
+- Supabase security advisor returned zero findings after the goods-receiving migration.
 
 ## Controlled follow-ups
 
-- Authenticate the same browser journey against UAT with a vaulted CI test account after test-account credentials are rotated and restored.
-- Capture updated Knowledge Base screenshots from the deployed UAT build; existing payment screenshots must not be relabeled as the new screen.
-- Review unused indexes only after representative production telemetry. No index should be removed from this audit alone.
+- Add `AUDIT_PASSWORD` to the GitHub Actions secret vault once repository CLI access is authenticated. The password remains local and ignored; this external CI configuration was not claimed as complete.
+- Move Supabase Auth database connections to percentage-based allocation before production-scale concurrency testing.
+- Review the 174 current informational unused-index notices only after representative production telemetry. No index should be removed from this audit alone; see the [Supabase unused-index guidance](https://supabase.com/docs/guides/database/database-linter?lint=0005_unused_index).

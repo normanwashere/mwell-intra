@@ -1,41 +1,71 @@
 {
-  "sourceCommit": "d021d170bff5f8179ef95159a2bdcda7449840ea",
-  "capturedAt": "2026-07-13",
-  "reviewedAt": "2026-07-13",
+  "sourceCommit": "1b30773850985e38ba949d2cd34f7628ed1cdd9c",
+  "capturedAt": "2026-08-04",
+  "reviewedAt": "2026-08-04",
   "hotspots": {
-    "ev-access-start": {
+    "ev-event-fulfillment-start": {
       "desktop": {
-        "x": 0.5,
-        "y": 0.6009
+        "x": 0.221,
+        "y": 0.55
+      },
+      "mobile": {
+        "x": 0.2724,
+        "y": 0.5
+      }
+    },
+    "ev-allocation-reserve": {
+      "desktop": {
+        "x": 0.6333,
+        "y": 0.795
       },
       "mobile": {
         "x": 0.5,
-        "y": 0.6076
+        "y": 0.9408
+      }
+    },
+    "ev-price-start": {
+      "desktop": {
+        "x": 0.9453,
+        "y": 0.6671
+      },
+      "mobile": {
+        "x": 0.5,
+        "y": 0.5398
+      }
+    },
+    "ev-access-start": {
+      "desktop": {
+        "x": 0.5,
+        "y": 0.6114
+      },
+      "mobile": {
+        "x": 0.5,
+        "y": 0.6188
       }
     },
     "ev-access-fix": {
       "desktop": {
         "x": 0.9597,
-        "y": 0.5478
+        "y": 0.4533
       },
       "mobile": {
         "x": 0.8615,
-        "y": 0.5403
+        "y": 0.4573
       }
     },
     "ev-p2p-start": {
       "desktop": {
-        "x": 0.794,
-        "y": 0.7821
+        "x": 0.8384,
+        "y": 0.881
       },
       "mobile": {
         "x": 0.8033,
-        "y": 0.6071
+        "y": 0.6569
       }
     },
     "ev-p2p-rfq-evidence": {
       "desktop": {
-        "x": 0.3052,
+        "x": 0.3497,
         "y": 0.5504
       },
       "mobile": {
@@ -45,7 +75,7 @@
     },
     "ev-p2p-rfp-evidence": {
       "desktop": {
-        "x": 0.3052,
+        "x": 0.3497,
         "y": 0.5504
       },
       "mobile": {
@@ -55,7 +85,7 @@
     },
     "ev-p2p-po": {
       "desktop": {
-        "x": 0.1993,
+        "x": 0.2576,
         "y": 0.55
       },
       "mobile": {
@@ -65,52 +95,52 @@
     },
     "ev-p2p-receive": {
       "desktop": {
-        "x": 0.6446,
-        "y": 0.6339
+        "x": 0.5073,
+        "y": 0.5587
       },
       "mobile": {
-        "x": 0.7295,
-        "y": 0.9408
+        "x": 0.6833,
+        "y": 0.7249
       }
     },
     "ev-p2p-payment-pack": {
       "desktop": {
-        "x": 0.777,
-        "y": 0.55
+        "x": 0.3938,
+        "y": 0.8227
       },
       "mobile": {
-        "x": 0.0974,
-        "y": 0.5005
+        "x": 0.5,
+        "y": 0.7019
       }
     },
     "ev-vendor-start": {
       "desktop": {
-        "x": 0.7162,
-        "y": 0.9382
+        "x": 0.7516,
+        "y": 0.9171
       },
       "mobile": {
-        "x": 0.8033,
-        "y": 0.7588
+        "x": 0.5,
+        "y": 0.7457
       }
     },
     "ev-vendor-apply": {
       "desktop": {
-        "x": 0.668,
-        "y": 0.9433
+        "x": 0.3351,
+        "y": 0.5493
       },
       "mobile": {
-        "x": 0.328,
-        "y": 0.8449
+        "x": 0.5,
+        "y": 0.4995
       }
     },
     "ev-setup-start": {
       "desktop": {
-        "x": 0.5889,
-        "y": 0.55
+        "x": 0.4693,
+        "y": 0.4
       },
       "mobile": {
-        "x": 0.5,
-        "y": 0.5
+        "x": 0.3868,
+        "y": 0.6102
       }
     },
     "ev-setup-area": {
@@ -145,18 +175,18 @@
     },
     "ev-receive-start": {
       "desktop": {
-        "x": 0.3951,
+        "x": 0.2884,
         "y": 0.55
       },
       "mobile": {
-        "x": 0.5,
-        "y": 0.5
+        "x": 0.3147,
+        "y": 0.5661
       }
     },
     "ev-receive-record": {
       "desktop": {
         "x": 0.4528,
-        "y": 0.55
+        "y": 0.5498
       },
       "mobile": {
         "x": 0.5,
@@ -165,11 +195,11 @@
     },
     "ev-receive-putaway": {
       "desktop": {
-        "x": 0.6476,
+        "x": 0.4615,
         "y": 0.445
       },
       "mobile": {
-        "x": 0.8167,
+        "x": 0.3578,
         "y": 0.6137
       }
     },
@@ -180,7 +210,7 @@
       },
       "mobile": {
         "x": 0.5,
-        "y": 0.5
+        "y": 0.5448
       }
     },
     "ev-quality-release": {
@@ -195,32 +225,22 @@
     },
     "ev-quality-return": {
       "desktop": {
-        "x": 0.9069,
-        "y": 0.55
+        "x": 0.6273,
+        "y": 0.8281
       },
       "mobile": {
         "x": 0.5,
-        "y": 0.5
-      }
-    },
-    "ev-event-fulfillment-start": {
-      "desktop": {
-        "x": 0.9316,
-        "y": 0.55
-      },
-      "mobile": {
-        "x": 0.1912,
-        "y": 0.5
+        "y": 0.9408
       }
     },
     "ev-event-issue": {
       "desktop": {
-        "x": 0.929,
+        "x": 0.5575,
         "y": 0.55
       },
       "mobile": {
         "x": 0.8097,
-        "y": 0.5
+        "y": 0.5329
       }
     },
     "ev-return-start": {
@@ -236,7 +256,7 @@
     "ev-return-restock": {
       "desktop": {
         "x": 0.3944,
-        "y": 0.9076
+        "y": 0.862
       },
       "mobile": {
         "x": 0.5,
@@ -275,8 +295,8 @@
     },
     "ev-count-enter": {
       "desktop": {
-        "x": 0.8461,
-        "y": 0.7642
+        "x": 0.8764,
+        "y": 0.5498
       },
       "mobile": {
         "x": 0.759,
@@ -305,7 +325,7 @@
     },
     "ev-admin-start": {
       "desktop": {
-        "x": 0.8963,
+        "x": 0.9269,
         "y": 0.5504
       },
       "mobile": {
@@ -333,39 +353,19 @@
         "y": 0.5
       }
     },
-    "ev-allocation-reserve": {
-      "desktop": {
-        "x": 0.5575,
-        "y": 0.55
-      },
-      "mobile": {
-        "x": 0.8097,
-        "y": 0.5045
-      }
-    },
-    "ev-price-start": {
-      "desktop": {
-        "x": 0.5889,
-        "y": 0.5498
-      },
-      "mobile": {
-        "x": 0.5,
-        "y": 0.5
-      }
-    },
     "ev-doa-start": {
       "desktop": {
-        "x": 0.9028,
-        "y": 0.566
+        "x": 0.9333,
+        "y": 0.5593
       },
       "mobile": {
         "x": 0.7847,
-        "y": 0.5001
+        "y": 0.5002
       }
     },
     "ev-doa-activate": {
       "desktop": {
-        "x": 0.5215,
+        "x": 0.5705,
         "y": 0.55
       },
       "mobile": {
@@ -376,21 +376,21 @@
     "ev-recover-start": {
       "desktop": {
         "x": 0.5,
-        "y": 0.5421
+        "y": 0.5474
       },
       "mobile": {
         "x": 0.5,
-        "y": 0.5365
+        "y": 0.5477
       }
     },
     "ev-recover-retry": {
       "desktop": {
         "x": 0.5,
-        "y": 0.6009
+        "y": 0.6114
       },
       "mobile": {
         "x": 0.5,
-        "y": 0.6076
+        "y": 0.6188
       }
     }
   }

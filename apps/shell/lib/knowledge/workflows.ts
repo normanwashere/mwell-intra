@@ -415,7 +415,11 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
         "p2p-receive",
         "handoff",
         "Record delivery or non-stock acceptance",
-        ["warehouse_procurement", "warehouse_logistics_supervisor", "procurement_requester"],
+        [
+          "warehouse_procurement",
+          "warehouse_logistics_supervisor",
+          "procurement_requester",
+        ],
         "For goods, Warehouse receives and inspects exact PO lines before the requester accepts them. For services or subscriptions, the requester records delivered scope and accepted value. For construction or capex, the requester records the completed milestone and value.",
       ),
       decision(
@@ -427,7 +431,8 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
         "Procurement payment controls require attributable delivery, service completion, or milestone acceptance before invoice matching.",
         {
           destinationNodeId: "p2p-receive",
-          justification: "Every category reaches the same governed acceptance record through a category-specific evidence path.",
+          justification:
+            "Every category reaches the same governed acceptance record through a category-specific evidence path.",
         },
       ),
       process(
@@ -577,13 +582,38 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
         "exception",
       ),
       edge("p2p-po", "p2p-acceptance-route"),
-      edge("p2p-acceptance-route", "p2p-receive", "Goods: Warehouse receipt and QC", "success"),
-      edge("p2p-acceptance-route", "p2p-receive", "Service or subscription: requester acceptance", "neutral"),
-      edge("p2p-acceptance-route", "p2p-receive", "Construction or capex: milestone acceptance", "neutral"),
+      edge(
+        "p2p-acceptance-route",
+        "p2p-receive",
+        "Goods: Warehouse receipt and QC",
+        "success",
+      ),
+      edge(
+        "p2p-acceptance-route",
+        "p2p-receive",
+        "Service or subscription: requester acceptance",
+        "neutral",
+      ),
+      edge(
+        "p2p-acceptance-route",
+        "p2p-receive",
+        "Construction or capex: milestone acceptance",
+        "neutral",
+      ),
       edge("p2p-receive", "p2p-payment-pack"),
       edge("p2p-payment-pack", "p2p-finance-review"),
-      edge("p2p-finance-review", "p2p-complete", "Accepted and payment posted", "success"),
-      edge("p2p-finance-review", "p2p-revision", "Returned with correction note", "neutral"),
+      edge(
+        "p2p-finance-review",
+        "p2p-complete",
+        "Accepted and payment posted",
+        "success",
+      ),
+      edge(
+        "p2p-finance-review",
+        "p2p-revision",
+        "Returned with correction note",
+        "neutral",
+      ),
     ],
   ),
 
@@ -1112,6 +1142,8 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
     "Event fulfillment",
     "Validate demand, reserve and issue stock, then reconcile consumption and return obligations.",
     [
+      "events_requester",
+      "events_coordinator",
       "warehouse_business_unit",
       "warehouse_marketing",
       "warehouse_operations",
@@ -1122,15 +1154,15 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
         "event-fulfillment-start",
         "start",
         "Create event demand",
-        ["warehouse_business_unit", "warehouse_marketing"],
+        ["events_requester", "events_coordinator"],
         "Record event owner, dates, location, purpose, and requested products and quantities.",
       ),
       decision(
         "event-demand-valid",
         "Is the event demand still valid?",
-        ["warehouse_business_unit", "warehouse_marketing"],
+        ["events_requester", "events_coordinator"],
         "Confirm the approved activity, dates, accountable recipient, and current quantity need.",
-        "warehouse_marketing",
+        "events_coordinator",
         "Event custody policy: stock may be reserved only for active, attributable business demand.",
       ),
       decision(
@@ -1294,8 +1326,8 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
         "return-adjustment-handoff",
         "handoff",
         "Submit supported adjustment",
-        ["warehouse_finance", "warehouse_logistics_supervisor"],
-        "Send the count, reason, value impact, and custody evidence into the approval-controlled adjustment workflow.",
+        ["warehouse_logistics_supervisor"],
+        "Send the physical count, reason, value impact, and custody evidence into the approval-controlled workflow for independent review.",
       ),
       terminal(
         "return-complete",
@@ -1362,7 +1394,7 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
         "count-start",
         "start",
         "Create the controlled count",
-        ["warehouse_finance", "warehouse_operations"],
+        ["warehouse_operations", "warehouse_logistics_supervisor"],
         "Select location and bin, capture expected count context, and prevent unrecorded movement during the count.",
       ),
       process(
@@ -1672,9 +1704,9 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
       process(
         "allocation-start",
         "start",
-        "Open approved event demand",
-        ["warehouse_business_unit", "warehouse_marketing"],
-        "Use the event record and requested quantities as the allocation source.",
+        "Prepare reservation from approved demand",
+        ["warehouse_operations", "warehouse_logistics_supervisor"],
+        "Use the approved event or department request and its quantities as the allocation source.",
       ),
       process(
         "allocation-reserve",
@@ -1863,9 +1895,9 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
       process(
         "price-start",
         "start",
-        "Prepare the governed cost basis",
-        ["warehouse_pricing", "warehouse_finance"],
-        "Confirm the current landed-cost, valuation, supplier, and margin facts that Product will reference. This upstream review does not change the price.",
+        "Prepare the governed price proposal",
+        ["product_contributor"],
+        "Confirm the current cost basis and commercial rationale, then open a Product price proposal. This does not change the controlled price.",
       ),
       process(
         "price-submit",
@@ -1908,10 +1940,7 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
       terminal(
         "price-complete",
         "Pricing report available",
-        [
-          "product_owner",
-          "product_contributor",
-        ],
+        ["product_owner", "product_contributor"],
         "The proposal status and effective price history show the independent decision and single activation.",
         "complete",
       ),

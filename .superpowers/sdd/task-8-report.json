@@ -1,14 +1,140 @@
 {
   "schemaVersion": 1,
-  "sourceCommit": "d021d170bff5f8179ef95159a2bdcda7449840ea",
+  "sourceCommit": "1b30773850985e38ba949d2cd34f7628ed1cdd9c",
   "runtime": {
     "parentNode": "v24.14.0",
-    "serverNode": "v24.14.0"
+    "serverNode": "v22.22.0"
   },
-  "capturedAt": "2026-07-13",
-  "reviewedAt": "2026-07-13",
+  "capturedAt": "2026-08-04",
+  "reviewedAt": "2026-08-04",
   "evidenceCount": 39,
   "evidence": {
+    "ev-event-fulfillment-start": {
+      "route": "/events",
+      "roleId": "events_requester",
+      "state": "The event requester is viewing seeded events and the New event command.",
+      "control": {
+        "id": "primary",
+        "label": "Create event demand",
+        "instruction": "Select New event and record accountable demand before reservation."
+      },
+      "desktop": {
+        "file": "/knowledge/screenshots/task8-event-fulfillment-start-desktop.png",
+        "sha256": "1bea25d6a1558cc0c78eeaf9375cd11b5cea4d22b9a35788fca096cbc1a72f41",
+        "width": 1440,
+        "height": 900,
+        "controlBounds": {
+          "x": 253,
+          "y": 473,
+          "width": 130.4375,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.221,
+          "y": 0.55
+        }
+      },
+      "mobile": {
+        "file": "/knowledge/screenshots/task8-event-fulfillment-start-mobile.png",
+        "sha256": "52b5fd3d4910ca4c72b6f5d8f99b7eeebbc3ddedec4dfb8d67245b2e237718b9",
+        "width": 390,
+        "height": 844,
+        "controlBounds": {
+          "x": 41,
+          "y": 400,
+          "width": 130.4375,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.2724,
+          "y": 0.5
+        }
+      }
+    },
+    "ev-allocation-reserve": {
+      "route": "/warehouse/allocations",
+      "roleId": "warehouse_operations",
+      "state": "Warehouse operations has opened the issue confirmation for seeded reserved stock and is verifying its custody source.",
+      "control": {
+        "id": "primary",
+        "label": "Confirm accountable issue",
+        "instruction": "Verify the reserved quantity, source identity, and accountable recipient before confirming the issue."
+      },
+      "desktop": {
+        "file": "/knowledge/screenshots/task8-allocation-reserve-desktop.png",
+        "sha256": "8b5f72c3b121d9ea5c87b7560e4193cca90f4f51454696109ae3a966637b6e27",
+        "width": 1440,
+        "height": 900,
+        "controlBounds": {
+          "x": 840,
+          "y": 693.5,
+          "width": 144,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.6333,
+          "y": 0.795
+        }
+      },
+      "mobile": {
+        "file": "/knowledge/screenshots/task8-allocation-reserve-mobile.png",
+        "sha256": "096b53ce8815fa98232c68d3627579c236f0a84dba085807c7cbc75c7b731298",
+        "width": 390,
+        "height": 844,
+        "controlBounds": {
+          "x": 20,
+          "y": 772,
+          "width": 350,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.5,
+          "y": 0.9408
+        }
+      }
+    },
+    "ev-price-start": {
+      "route": "/product",
+      "roleId": "product_contributor",
+      "state": "A Product contributor is reviewing pricing governance before opening a controlled proposal.",
+      "control": {
+        "id": "primary",
+        "label": "Open governed price proposal",
+        "instruction": "Select Propose price, then record the product, proposed price, cost basis, reason, and effective date for independent Product Owner review."
+      },
+      "desktop": {
+        "file": "/knowledge/screenshots/task8-price-start-desktop.png",
+        "sha256": "f426d47a1d6b4c231d15285de9211218cf694b44e3011a6c4be636943fa89800",
+        "width": 1440,
+        "height": 900,
+        "controlBounds": {
+          "x": 1306.5625,
+          "y": 578.390625,
+          "width": 109.4375,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.9453,
+          "y": 0.6671
+        }
+      },
+      "mobile": {
+        "file": "/knowledge/screenshots/task8-price-start-mobile.png",
+        "sha256": "426388a3f41267cfc6c581f6e3a528d28cb95b2d3b782a45f861c693b483ac5a",
+        "width": 390,
+        "height": 844,
+        "controlBounds": {
+          "x": 16,
+          "y": 433.59375,
+          "width": 358,
+          "height": 44
+        },
+        "hotspot": {
+          "x": 0.5,
+          "y": 0.5398
+        }
+      }
+    },
     "ev-access-start": {
       "route": "/login",
       "roleId": "core_staff_only",
@@ -20,41 +146,41 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-access-start-desktop.png",
-        "sha256": "089084cc9d179f53a451fb34271399e6aefe5e1a642b3d674469703f6ba5cfeb",
+        "sha256": "360d8770511d06968b0627418bd7d8493d473a7055bf540ac64c4bc40b83c45f",
         "width": 1440,
         "height": 900,
         "controlBounds": {
           "x": 517,
-          "y": 518.796875,
+          "y": 528.296875,
           "width": 406,
           "height": 44
         },
         "hotspot": {
           "x": 0.5,
-          "y": 0.6009
+          "y": 0.6114
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-access-start-mobile.png",
-        "sha256": "8de6d4b0f42e90be807d24983bdc9d6b22db273dea4ef64ea2c83de751057842",
+        "sha256": "6d1eb16464da6586c10acdd4d965fe2cd2a5d24edee521cf94aa5baec9dcf69d",
         "width": 390,
         "height": 844,
         "controlBounds": {
           "x": 33,
-          "y": 490.796875,
+          "y": 500.296875,
           "width": 324,
           "height": 44
         },
         "hotspot": {
           "x": 0.5,
-          "y": 0.6076
+          "y": 0.6188
         }
       }
     },
     "ev-access-fix": {
       "route": "/admin/users",
       "roleId": "platform_admin",
-      "state": "The platform administrator has opened the disposable Intra Test Admin account to demonstrate a minimum approved warehouse grant.",
+      "state": "The platform administrator has opened the disposable Intra Test Employee account to demonstrate a minimum approved warehouse grant without changing the administrator's own protected access.",
       "control": {
         "id": "primary",
         "label": "Grant scoped warehouse access",
@@ -62,34 +188,34 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-access-fix-desktop.png",
-        "sha256": "c027217ba38ebfc5ade612a55abfe85443d726efaf6c83129489eba91d026a02",
+        "sha256": "3eae287a9228e92cee5ff5df9bedce2d3dea0f3f6976b7dab7fbaf27c77f4a67",
         "width": 1440,
         "height": 900,
         "controlBounds": {
           "x": 1360,
-          "y": 471,
+          "y": 386,
           "width": 44,
           "height": 44
         },
         "hotspot": {
           "x": 0.9597,
-          "y": 0.5478
+          "y": 0.4533
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-access-fix-mobile.png",
-        "sha256": "4586eabb8fde5c554bdd389ad0414aa5af615392ae6a52c5c8bb03e42189cd6c",
+        "sha256": "62103e8692888e70c7456cfe3f4b18ea5a4b78c50358549ce1cf077f89b97d0f",
         "width": 390,
         "height": 844,
         "controlBounds": {
           "x": 314,
-          "y": 434,
+          "y": 364,
           "width": 44,
           "height": 44
         },
         "hotspot": {
           "x": 0.8615,
-          "y": 0.5403
+          "y": 0.4573
         }
       }
     },
@@ -104,34 +230,34 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-p2p-start-desktop.png",
-        "sha256": "7d3e3fbd23902ac53803936f6e3d002f5376d7b3f2a8ae1fe3f939482cab852b",
+        "sha256": "540c955b75df589b29c0781bb56d0b004d9f3bcfb14809432d41d4d0a28179b1",
         "width": 1440,
         "height": 900,
         "controlBounds": {
-          "x": 1082.578125,
-          "y": 681.890625,
+          "x": 1146.578125,
+          "y": 770.890625,
           "width": 121.421875,
           "height": 44
         },
         "hotspot": {
-          "x": 0.794,
-          "y": 0.7821
+          "x": 0.8384,
+          "y": 0.881
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-p2p-start-mobile.png",
-        "sha256": "63dcb9d7c8b66beba154ae18d76680b47db83bd3471a4d37a3242495623f059c",
+        "sha256": "0f7ff333ff741f792f85e37704bfc080e10c9f2d60a1a594959e02cd5e64e09e",
         "width": 390,
         "height": 844,
         "controlBounds": {
           "x": 252.578125,
-          "y": 490.390625,
+          "y": 532.390625,
           "width": 121.421875,
           "height": 44
         },
         "hotspot": {
           "x": 0.8033,
-          "y": 0.6071
+          "y": 0.6569
         }
       }
     },
@@ -146,23 +272,23 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-p2p-rfq-evidence-desktop.png",
-        "sha256": "1b8ebd9fd2d615d9bbcef8fa3b8a72216620ba4edf5626a66054517d9e868dea",
+        "sha256": "e19b87d976dc6d9606d3787dc9b97b6d0061c3fe4bec845dd0863b7d46748b36",
         "width": 1440,
         "height": 900,
         "controlBounds": {
-          "x": 329,
+          "x": 393,
           "y": 473.390625,
           "width": 221.109375,
           "height": 44
         },
         "hotspot": {
-          "x": 0.3052,
+          "x": 0.3497,
           "y": 0.5504
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-p2p-rfq-evidence-mobile.png",
-        "sha256": "42df10f9c2b5d5fe6d85608001a8bcb887f1c0817d18064522ed882bc8061a0e",
+        "sha256": "82e284fbdc4fe0f4635a28c18a07b28c1df0c4e545ee85f3260d3dd33a02d7a6",
         "width": 390,
         "height": 844,
         "controlBounds": {
@@ -188,23 +314,23 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-p2p-rfp-evidence-desktop.png",
-        "sha256": "b12424d0dfe0423fbd214cb95d558034c83ac67a23884a956e06c34d1702737e",
+        "sha256": "9cc12aed65e12adb84269564aafe1f714ec3b428ced16ebb4e36f12310bc8c53",
         "width": 1440,
         "height": 900,
         "controlBounds": {
-          "x": 329,
+          "x": 393,
           "y": 473.390625,
           "width": 221.109375,
           "height": 44
         },
         "hotspot": {
-          "x": 0.3052,
+          "x": 0.3497,
           "y": 0.5504
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-p2p-rfp-evidence-mobile.png",
-        "sha256": "d1e8786b98e049a0a5df14923dec76fc2571ba46396104762793e273e1602e10",
+        "sha256": "83685265aff6a6e3f41daf836f2530e108a3cc76d890b8cb404a181df94e9f8c",
         "width": 390,
         "height": 844,
         "controlBounds": {
@@ -230,23 +356,23 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-p2p-po-desktop.png",
-        "sha256": "3932421d91fda4f410cd6843aca1e9272b5bc312160de92114a1bc5524c44550",
+        "sha256": "ae1967c46c88fd7926c77e4e3fd1880502c9bd54e71a9295da05bfd565cd89ad",
         "width": 1440,
         "height": 900,
         "controlBounds": {
-          "x": 169,
+          "x": 253,
           "y": 473,
           "width": 235.96875,
           "height": 44
         },
         "hotspot": {
-          "x": 0.1993,
+          "x": 0.2576,
           "y": 0.55
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-p2p-po-mobile.png",
-        "sha256": "71642e135f38c3f4737e2bc89174e2fafebe524c34eb8878bff164136072f09c",
+        "sha256": "209a3d4b25dfea08148fface812adc0e9b07fee7512863100688eb43f5b479f4",
         "width": 390,
         "height": 844,
         "controlBounds": {
@@ -263,85 +389,85 @@
     },
     "ev-p2p-receive": {
       "route": "/warehouse/purchase-orders",
-      "roleId": "warehouse_procurement",
-      "state": "Warehouse procurement has opened an ordered purchase order and is ready to start controlled receiving.",
+      "roleId": "warehouse_logistics_supervisor",
+      "state": "Warehouse Logistics has an issued goods purchase order available for controlled receiving and inspection.",
       "control": {
         "id": "primary",
-        "label": "Receive supply",
-        "instruction": "Open the ordered purchase order and select Receive to record custody in inspection staging."
+        "label": "Start goods receiving",
+        "instruction": "Select Receive and inspect on the issued goods PO to verify the delivery, map products, and record custody in inspection staging."
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-p2p-receive-desktop.png",
-        "sha256": "69a15f075014b72374e0dde53b03a9d9e9f1449548028db49b030ffbcae926df",
+        "sha256": "942572892a19f658804197686d86e39e33094690fd57fb4ab24d7041865074f7",
         "width": 1440,
         "height": 900,
         "controlBounds": {
-          "x": 872.390625,
-          "y": 548.5,
-          "width": 111.609375,
+          "x": 639.96875,
+          "y": 480.796875,
+          "width": 181.03125,
           "height": 44
         },
         "hotspot": {
-          "x": 0.6446,
-          "y": 0.6339
+          "x": 0.5073,
+          "y": 0.5587
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-p2p-receive-mobile.png",
-        "sha256": "6a56b82e5e9571d209a1da5984b8bf5e91daf2e077cfb1f5bb51e704bddde6c0",
+        "sha256": "44b44ce08948bb2573e6800482690f6be7213c1f591d3b3d70f0b611fa33e735",
         "width": 390,
         "height": 844,
         "controlBounds": {
-          "x": 199,
-          "y": 772,
-          "width": 171,
+          "x": 175.96875,
+          "y": 589.796875,
+          "width": 181.03125,
           "height": 44
         },
         "hotspot": {
-          "x": 0.7295,
-          "y": 0.9408
+          "x": 0.6833,
+          "y": 0.7249
         }
       }
     },
     "ev-p2p-payment-pack": {
-      "route": "/procurement/purchase-orders/po_seed_001",
-      "roleId": "procurement_finance",
-      "state": "Finance is inspecting the approved seeded PO record and its upstream blockers before payment-readiness evidence can be assembled.",
+      "route": "/procurement/purchase-orders/qa_flow1_payment_po",
+      "roleId": "procurement_officer",
+      "state": "Procurement has opened an issued UAT purchase order with attributable service acceptance and completed the structured invoice fields.",
       "control": {
         "id": "primary",
-        "label": "Inspect full PO record",
-        "instruction": "Open the full PO record, then resolve approval, receipt, acceptance, invoice, and tax-evidence blockers before deciding readiness."
+        "label": "Validate invoice match",
+        "instruction": "Verify the invoice, dates, amount, tax, withholding, and private evidence references, then validate the computed match and send the pack to Finance."
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-p2p-payment-pack-desktop.png",
-        "sha256": "419082e747510de440c262f72a6a5719e875625abe088dbd0b264450e8d71c2e",
+        "sha256": "f31d771cb8db11f6c0450c41b11f27eeee4b2fbe8ee50c42cd96c289cfad1dc1",
         "width": 1440,
         "height": 900,
         "controlBounds": {
-          "x": 1096.90625,
-          "y": 473,
-          "width": 44,
+          "x": 410,
+          "y": 718.390625,
+          "width": 314.21875,
           "height": 44
         },
         "hotspot": {
-          "x": 0.777,
-          "y": 0.55
+          "x": 0.3938,
+          "y": 0.8227
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-p2p-payment-pack-mobile.png",
-        "sha256": "407e836e9c06967276f61997eafdda10755b7e3b7543c646b531c11ca7ebbd36",
+        "sha256": "8d1caa2c5a8fb8ec5c0ee8ad3e284df77eb6bbb146407c713de097c4d3ffc166",
         "width": 390,
         "height": 844,
         "controlBounds": {
-          "x": 16,
-          "y": 400.390625,
-          "width": 44,
-          "height": 44
+          "x": 50,
+          "y": 562.390625,
+          "width": 290,
+          "height": 60
         },
         "hotspot": {
-          "x": 0.0974,
-          "y": 0.5005
+          "x": 0.5,
+          "y": 0.7019
         }
       }
     },
@@ -356,34 +482,34 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-vendor-start-desktop.png",
-        "sha256": "3e6a237b1bf5ff493c1b7489d31e3b6e497db82317831f8afd93976d66dfa882",
+        "sha256": "20910d5f8ee4dbfc41b4d0da81dcd72726b94244cdee0961b28e62ed7e110854",
         "width": 1440,
         "height": 900,
         "controlBounds": {
-          "x": 970.578125,
-          "y": 822.390625,
+          "x": 1021.578125,
+          "y": 803.390625,
           "width": 121.421875,
           "height": 44
         },
         "hotspot": {
-          "x": 0.7162,
-          "y": 0.9382
+          "x": 0.7516,
+          "y": 0.9171
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-vendor-start-mobile.png",
-        "sha256": "bccfc844464dab52f07abbbb20565bbac7d59ece921c1bfe6c04965abf2d3039",
+        "sha256": "883e5441820739305de9d99a9d0f5e5bb02aca56de1ba1509469da512a4a8321",
         "width": 390,
         "height": 844,
         "controlBounds": {
-          "x": 252.578125,
-          "y": 618.390625,
-          "width": 121.421875,
+          "x": 29,
+          "y": 607.390625,
+          "width": 332,
           "height": 44
         },
         "hotspot": {
-          "x": 0.8033,
-          "y": 0.7588
+          "x": 0.5,
+          "y": 0.7457
         }
       }
     },
@@ -393,81 +519,81 @@
       "state": "The controlled documentation vendor application is open for vendor-owned updates.",
       "control": {
         "id": "primary",
-        "label": "Save application draft",
-        "instruction": "Complete the vendor-owned fields and save the accreditation application draft."
+        "label": "Complete vendor application",
+        "instruction": "Complete every required vendor-owned field. Changes save securely as you work; review the declaration, sign, and submit only when the application is complete."
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-vendor-apply-desktop.png",
-        "sha256": "83781635fcf6fbd4bfb3216dee56bfa48cf57593b91453a66c6d05c69e4f76b7",
+        "sha256": "a681f231e941c45a9cf62cb60892f3400f9f7937c1640782876b5fa8d7220d5e",
         "width": 1440,
         "height": 900,
         "controlBounds": {
-          "x": 909.265625,
-          "y": 827,
-          "width": 105.28125,
+          "x": 253,
+          "y": 472.390625,
+          "width": 459,
           "height": 44
         },
         "hotspot": {
-          "x": 0.668,
-          "y": 0.9433
+          "x": 0.3351,
+          "y": 0.5493
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-vendor-apply-mobile.png",
-        "sha256": "f8f7d986171f1317625b70cd500c5b7baa05b936f773596d4f636eaa35dacecc",
+        "sha256": "2215b02bb49c0b1e90f90000e757ecb8f78b5f2aeaf379ef424a4524cc02dc57",
         "width": 390,
         "height": 844,
         "controlBounds": {
-          "x": 75.265625,
-          "y": 691.109375,
-          "width": 105.28125,
+          "x": 33,
+          "y": 399.578125,
+          "width": 324,
           "height": 44
         },
         "hotspot": {
-          "x": 0.328,
-          "y": 0.8449
+          "x": 0.5,
+          "y": 0.4995
         }
       }
     },
     "ev-setup-start": {
       "route": "/warehouse/storage",
       "roleId": "warehouse_admin",
-      "state": "The warehouse administrator has opened Add storage area at the warehouse selector.",
+      "state": "The warehouse administrator has opened Add storage area in the active warehouse context.",
       "control": {
         "id": "primary",
-        "label": "Select warehouse",
-        "instruction": "Select the governed warehouse that will own the storage area."
+        "label": "Enter scannable bin code",
+        "instruction": "Confirm the active warehouse, then enter the unique code printed on the physical shelf label."
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-setup-start-desktop.png",
-        "sha256": "8e2e8b51d329e26b2fe9234dcd661afa96746f645b888d47e7636232a8847c53",
+        "sha256": "17d16a35a40c4acf95fcb5d73f4a4592ee8dd0607b5becd1ce756742521892ff",
         "width": 1440,
         "height": 900,
         "controlBounds": {
-          "x": 296,
-          "y": 473,
-          "width": 1104,
+          "x": 456,
+          "y": 338,
+          "width": 439.703125,
           "height": 44
         },
         "hotspot": {
-          "x": 0.5889,
-          "y": 0.55
+          "x": 0.4693,
+          "y": 0.4
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-setup-start-mobile.png",
-        "sha256": "49ade1c281f8c6e5b7dd198957a3a8982c7fb6fbd03452596fb91da885e189aa",
+        "sha256": "c9feb8926dae1fcf3f9f6af1713957edec8fc6d6889281cf087992ae6c0b5c97",
         "width": 390,
         "height": 844,
         "controlBounds": {
-          "x": 16,
-          "y": 400,
-          "width": 358,
+          "x": 20,
+          "y": 493,
+          "width": 261.703125,
           "height": 44
         },
         "hotspot": {
-          "x": 0.5,
-          "y": 0.5
+          "x": 0.3868,
+          "y": 0.6102
         }
       }
     },
@@ -482,7 +608,7 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-setup-area-desktop.png",
-        "sha256": "725013d9809ca199b5eac4505e519f1839accfe4bbf2b4adc3a2501765bd7da9",
+        "sha256": "79f667d419675a8373821b82f94a655d615621cf55279ee7a891a0320fb0a4da",
         "width": 1440,
         "height": 900,
         "controlBounds": {
@@ -498,7 +624,7 @@
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-setup-area-mobile.png",
-        "sha256": "372500a97cc28eaa24740ced0a3817260e0eeba26d712a26fe55e15549c7a8d4",
+        "sha256": "f800d6d9af6cf52f514dfab353e53db2088dff27f104c9be28e1d57005f371dc",
         "width": 390,
         "height": 844,
         "controlBounds": {
@@ -524,7 +650,7 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-setup-bin-desktop.png",
-        "sha256": "d63263de27cab9f17209506364f16fb996b0eefda2176163a3b50638fa9d1149",
+        "sha256": "bfcbab03c608d12781eb9e4d6e73688387fbb6d93f708e5d056243808d5964f5",
         "width": 1440,
         "height": 900,
         "controlBounds": {
@@ -540,7 +666,7 @@
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-setup-bin-mobile.png",
-        "sha256": "74e8fe4389652f921e12b64ff0add438874c2076bc441b97d7576e97e6855d4a",
+        "sha256": "74ac8b1f41ebd1b3f72dca7894cc3c84337527f72404b7cc2c86b553a2a37b30",
         "width": 390,
         "height": 844,
         "controlBounds": {
@@ -566,7 +692,7 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-setup-route-desktop.png",
-        "sha256": "aa644ea27e99e549d97afbc3a050511aef0f079b8ed0a77150a77df336c7a796",
+        "sha256": "d9ec7bc2f37bf1e98c45d0ad644ca788e44627fd0b1474e4d55aca88e1011552",
         "width": 1440,
         "height": 900,
         "controlBounds": {
@@ -582,7 +708,7 @@
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-setup-route-mobile.png",
-        "sha256": "1c355dbeb5df43f327d56fae59aac7b047b0f2738f5441dbac43ccbc0cf67829",
+        "sha256": "5006a9b5ba73945d55b44f8ab15033e7e02a5a51d82c57887706fc85206f06a1",
         "width": 390,
         "height": 844,
         "controlBounds": {
@@ -608,34 +734,34 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-receive-start-desktop.png",
-        "sha256": "71ec3092e3e765cb61efe52c0a48d3f4cde4c54772b3f9529f21f98f886d56e8",
+        "sha256": "f486ce20aba1ea995499ea348252ea410dba50b410d426a6480275e68a7e7dd2",
         "width": 1440,
         "height": 900,
         "controlBounds": {
-          "x": 296,
-          "y": 415,
-          "width": 546,
-          "height": 160
+          "x": 317,
+          "y": 473,
+          "width": 196.671875,
+          "height": 44
         },
         "hotspot": {
-          "x": 0.3951,
+          "x": 0.2884,
           "y": 0.55
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-receive-start-mobile.png",
-        "sha256": "97cca1d881601271bec32f84fe8e8240f13576b503ed62114418b8d78c51960e",
+        "sha256": "c5d898ff6237f2a859e07293e642bb1ae5a16e95a0981168920e079a28910b96",
         "width": 390,
         "height": 844,
         "controlBounds": {
-          "x": 16,
-          "y": 346,
-          "width": 358,
-          "height": 152
+          "x": 33,
+          "y": 455.796875,
+          "width": 179.4375,
+          "height": 44
         },
         "hotspot": {
-          "x": 0.5,
-          "y": 0.5
+          "x": 0.3147,
+          "y": 0.5661
         }
       }
     },
@@ -650,23 +776,23 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-receive-record-desktop.png",
-        "sha256": "6b4ad5833165c0c19b1f6589936c3801c262cdff8537591ac53d54c5cf0ace69",
+        "sha256": "20e0d7f966fe993433d8cea58da4f30003391c2ec520c38a209725b84ea53c98",
         "width": 1440,
         "height": 900,
         "controlBounds": {
           "x": 485,
-          "y": 473,
+          "y": 472.796875,
           "width": 334,
           "height": 44
         },
         "hotspot": {
           "x": 0.4528,
-          "y": 0.55
+          "y": 0.5498
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-receive-record-mobile.png",
-        "sha256": "c7badb41d5a7c253e839275753171a162d83c6f3a58d08c2efb25805f202c403",
+        "sha256": "738069e72c0f53737a90a1f39a2029434e2703b3387e0048a17f8b50ac775029",
         "width": 390,
         "height": 844,
         "controlBounds": {
@@ -687,38 +813,38 @@
       "state": "The logistics supervisor has opened the putaway scanner for accepted stock.",
       "control": {
         "id": "primary",
-        "label": "Add stock for putaway",
-        "instruction": "Scan or enter accepted stock before selecting its controlled destination bin."
+        "label": "Enter stock identity",
+        "instruction": "Scan the accepted stock or enter its barcode or serial before selecting the controlled destination bin."
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-receive-putaway-desktop.png",
-        "sha256": "5ff3cc8ea407e62407e316a3703f91967e17a96eb62b59bb2aae0173134fe45a",
+        "sha256": "fca32fbe3ce2dd63182779a140adb1a0b1e82cf3a484a24042337760be1088b3",
         "width": 1440,
         "height": 900,
         "controlBounds": {
-          "x": 881.046875,
+          "x": 456,
           "y": 378.5,
-          "width": 102.953125,
+          "width": 417.046875,
           "height": 44
         },
         "hotspot": {
-          "x": 0.6476,
+          "x": 0.4615,
           "y": 0.445
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-receive-putaway-mobile.png",
-        "sha256": "5ce13f9ec411ddd9367dcd0be1323594c370365c58c730d143803acb7e519a0d",
+        "sha256": "e86d05dbd0f974a4b5c0fe806b79c661a6543d4d124beaf23b278d2b7ac134ea",
         "width": 390,
         "height": 844,
         "controlBounds": {
-          "x": 267.046875,
+          "x": 20,
           "y": 496,
-          "width": 102.953125,
+          "width": 239.046875,
           "height": 44
         },
         "hotspot": {
-          "x": 0.8167,
+          "x": 0.3578,
           "y": 0.6137
         }
       }
@@ -734,7 +860,7 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-quality-start-desktop.png",
-        "sha256": "c1a19bf14a31473641339b4419ace8d0f127828b3d6249c48d63955ffdf9a255",
+        "sha256": "20c8ab9ab959a238934a91cc667e1a61091e7e449257f42f367f69d8ad18f555",
         "width": 1440,
         "height": 900,
         "controlBounds": {
@@ -750,18 +876,18 @@
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-quality-start-mobile.png",
-        "sha256": "04da7904af220181e1b8e187018e0254aa642b2aa5e886e3f0b48941a5756cf8",
+        "sha256": "ae4ba7ceb9445b3cb94774114eb8c18dff1b8619bea9fee70c7284f1fe74e20d",
         "width": 390,
         "height": 844,
         "controlBounds": {
           "x": 33,
-          "y": 400,
+          "y": 437.796875,
           "width": 324,
           "height": 44
         },
         "hotspot": {
           "x": 0.5,
-          "y": 0.5
+          "y": 0.5448
         }
       }
     },
@@ -776,7 +902,7 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-quality-release-desktop.png",
-        "sha256": "b08cb533e42b7fec0c4424d9587ab6e9d018733d3f70c5ea6ec310c55027b978",
+        "sha256": "5e2d9db36cc6add332b21ba8a4227a4197fa3bac9d9937767d5af6c6463476ae",
         "width": 1440,
         "height": 900,
         "controlBounds": {
@@ -792,7 +918,7 @@
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-quality-release-mobile.png",
-        "sha256": "a2f102017be03d4828e82c4e61f85aa03dc931c4add02c1511c9b9aa8fbab5a3",
+        "sha256": "0cf18611e10d1c502214e50be36142490644a98db3de2e6c4c6ef02f810b31ca",
         "width": 390,
         "height": 844,
         "controlBounds": {
@@ -808,86 +934,44 @@
       }
     },
     "ev-quality-return": {
-      "route": "/warehouse/purchase-orders",
-      "roleId": "warehouse_procurement",
-      "state": "Warehouse procurement is reviewing the quality queue handoff from a supplier order.",
+      "route": "/warehouse/quality",
+      "roleId": "warehouse_logistics_supervisor",
+      "state": "The logistics supervisor has selected Return to vendor, recorded the reason, and attached inspection evidence.",
       "control": {
         "id": "primary",
-        "label": "Open vendor-return handoff",
-        "instruction": "Open the quality queue and prepare the supplier return disposition with source evidence."
+        "label": "Record vendor-return disposition",
+        "instruction": "Submit the evidence-backed vendor-return disposition; Procurement then handles the supplier follow-up from the recorded handoff."
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-quality-return-desktop.png",
-        "sha256": "7fe6b07d0b9cadf35d46e95d5bac7ccb08a829d019e175bd2f010429604c3b2c",
+        "sha256": "fee0011fc588679762a17d22c3dec0a2c070b98a566323cd01abb3ba212d7679",
         "width": 1440,
         "height": 900,
         "controlBounds": {
-          "x": 1228.765625,
-          "y": 473,
-          "width": 154.234375,
+          "x": 822.546875,
+          "y": 723.328125,
+          "width": 161.453125,
           "height": 44
         },
         "hotspot": {
-          "x": 0.9069,
-          "y": 0.55
+          "x": 0.6273,
+          "y": 0.8281
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-quality-return-mobile.png",
-        "sha256": "98275f0e75082af3847b84a1105f58f6bfd645a8595d35d2f6b9abeede8eebbc",
+        "sha256": "6f5a64a915225a3939456a0c4e43fbe44311956d1a7754b8dd30f4c93c64869c",
         "width": 390,
         "height": 844,
         "controlBounds": {
-          "x": 33,
-          "y": 400,
-          "width": 324,
+          "x": 20,
+          "y": 772,
+          "width": 350,
           "height": 44
         },
         "hotspot": {
           "x": 0.5,
-          "y": 0.5
-        }
-      }
-    },
-    "ev-event-fulfillment-start": {
-      "route": "/warehouse/events",
-      "roleId": "warehouse_business_unit",
-      "state": "The business-unit owner is viewing seeded events and the New event command.",
-      "control": {
-        "id": "primary",
-        "label": "Create event demand",
-        "instruction": "Select New event and record accountable demand before reservation."
-      },
-      "desktop": {
-        "file": "/knowledge/screenshots/task8-event-fulfillment-start-desktop.png",
-        "sha256": "fc3ba5cd9008318bae56c66ee0f92329848fe55c5312523681be14e3e45e0ec9",
-        "width": 1440,
-        "height": 900,
-        "controlBounds": {
-          "x": 1282.890625,
-          "y": 473,
-          "width": 117.109375,
-          "height": 44
-        },
-        "hotspot": {
-          "x": 0.9316,
-          "y": 0.55
-        }
-      },
-      "mobile": {
-        "file": "/knowledge/screenshots/task8-event-fulfillment-start-mobile.png",
-        "sha256": "d510d8be8ceccce061b7f55c5980ca1582dc38762b6e08f83a7ff7b6731cbe21",
-        "width": 390,
-        "height": 844,
-        "controlBounds": {
-          "x": 16,
-          "y": 400,
-          "width": 117.109375,
-          "height": 44
-        },
-        "hotspot": {
-          "x": 0.1912,
-          "y": 0.5
+          "y": 0.9408
         }
       }
     },
@@ -902,34 +986,34 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-event-issue-desktop.png",
-        "sha256": "572ca3f0a1a6fbe2ad8840476bcd69c04ee8860f5cdebe1404bdea9a44d29e18",
+        "sha256": "7146b7ea11ad60ee8cc12e7dd5e1ee63f2dcc540b363c78e7003173644f769bb",
         "width": 1440,
         "height": 900,
         "controlBounds": {
-          "x": 1308.59375,
+          "x": 773.59375,
           "y": 473,
           "width": 58.40625,
           "height": 44
         },
         "hotspot": {
-          "x": 0.929,
+          "x": 0.5575,
           "y": 0.55
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-event-issue-mobile.png",
-        "sha256": "e5163c6c026b0326e8b3a1cc863beb51903d35f1f64161b9eaf24b776149b61f",
+        "sha256": "3e7f657b745ea103c6e85a0f274bb9c619b14fad93ddeaf0cc9cce3aee81b338",
         "width": 390,
         "height": 844,
         "controlBounds": {
           "x": 286.59375,
-          "y": 400,
+          "y": 427.796875,
           "width": 58.40625,
           "height": 44
         },
         "hotspot": {
           "x": 0.8097,
-          "y": 0.5
+          "y": 0.5329
         }
       }
     },
@@ -944,7 +1028,7 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-return-start-desktop.png",
-        "sha256": "927f8d449a6d14f66aafe9746e5b3dac2ca9c11bcf6bda8ca370e936dce42260",
+        "sha256": "90f0195a6b791d1241c4a2a8e4c88eceb0478fe17a07830bfbb197bd99e4e7bb",
         "width": 1440,
         "height": 900,
         "controlBounds": {
@@ -960,7 +1044,7 @@
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-return-start-mobile.png",
-        "sha256": "dfbeca5e90daabe764982abd9b873d97a97067ae1cf74750a47549e3ae973447",
+        "sha256": "454c276d7d6743c2f672f4cf7a43d682213495d45109d003198b891172a6a2b0",
         "width": 390,
         "height": 844,
         "controlBounds": {
@@ -986,23 +1070,23 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-return-restock-desktop.png",
-        "sha256": "d352378b2ee11de01b4ad3c9cbaaabd6c1ed36a43ed0612fd25820294b2cbb24",
+        "sha256": "ac54c8a69dc66d9fb522f32cda165b228ec65f1b53ae6a18512d6c22cbe77831",
         "width": 1440,
         "height": 900,
         "controlBounds": {
           "x": 317,
-          "y": 794.796875,
+          "y": 753.796875,
           "width": 502,
           "height": 44
         },
         "hotspot": {
           "x": 0.3944,
-          "y": 0.9076
+          "y": 0.862
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-return-restock-mobile.png",
-        "sha256": "1081c0ae4892157412b9682cb5f01bc8e5e24739a2ff911cee39f55b1429bf93",
+        "sha256": "30341444e520324b9f706eb9f7daa5ea3d87b4f9b158196cc2b2271fba29cf79",
         "width": 390,
         "height": 844,
         "controlBounds": {
@@ -1028,7 +1112,7 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-return-quarantine-desktop.png",
-        "sha256": "411c83062ddac9002d822f47796e63f6bd516f9d1955e524741b73541a63e2d6",
+        "sha256": "1e593b1caa8c9465499ae92502bfc9741f55901cdf147a20c7d19c43a16f1bf1",
         "width": 1440,
         "height": 900,
         "controlBounds": {
@@ -1044,7 +1128,7 @@
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-return-quarantine-mobile.png",
-        "sha256": "fcd9458e755164cc3e5ac0221f635d785a2eead224ab48236d97510b2c5d00c1",
+        "sha256": "4829339ebaf6774c0939f7bcd92552d51120d69b4afcdd3e06e4e5be039f738b",
         "width": 390,
         "height": 844,
         "controlBounds": {
@@ -1061,8 +1145,8 @@
     },
     "ev-return-adjustment-handoff": {
       "route": "/warehouse/cycle-counts",
-      "roleId": "warehouse_finance",
-      "state": "Warehouse finance has entered a deterministic physical variance ready for approval handoff.",
+      "roleId": "warehouse_logistics_supervisor",
+      "state": "The logistics supervisor has entered a deterministic physical variance ready for approval handoff.",
       "control": {
         "id": "primary",
         "label": "Submit supported adjustment",
@@ -1070,7 +1154,7 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-return-adjustment-handoff-desktop.png",
-        "sha256": "57f1f085e2fb7b10e76d1294424ecee0ac2cb35d513d2bf07d2928e18bbc6d52",
+        "sha256": "6167fb474faedf4777e85a2be5c17345f522fb51f1ffb51b355b38904faf17d4",
         "width": 1440,
         "height": 900,
         "controlBounds": {
@@ -1086,7 +1170,7 @@
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-return-adjustment-handoff-mobile.png",
-        "sha256": "ba694804e6d7b83dba3556fd3a3262f544a8870a1a832e22a30c83a0d4c1adc1",
+        "sha256": "214bfbd0d694a0b02f83fd486b3f29049924eb7f298bf7cd7f0c9b98e1264ca7",
         "width": 390,
         "height": 844,
         "controlBounds": {
@@ -1103,8 +1187,8 @@
     },
     "ev-count-start": {
       "route": "/warehouse/cycle-counts",
-      "roleId": "warehouse_finance",
-      "state": "Warehouse finance is selecting the controlled location and count scope.",
+      "roleId": "warehouse_logistics_supervisor",
+      "state": "The logistics supervisor is selecting the controlled location and count scope.",
       "control": {
         "id": "primary",
         "label": "Select count location",
@@ -1112,7 +1196,7 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-count-start-desktop.png",
-        "sha256": "93d33a02b33acfe8c1a60d1c14981006ff7bd15af8d5c79e596a25472417049b",
+        "sha256": "b7853e7ac2f81563c34c9ee7087e6c3e6d165f8f66400b3727fb57aa22e11241",
         "width": 1440,
         "height": 900,
         "controlBounds": {
@@ -1128,7 +1212,7 @@
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-count-start-mobile.png",
-        "sha256": "dab735c5b6d2e72010d73ba03f1b03e3f9b47d87fbdb42aa6b9336e3e5817733",
+        "sha256": "18c6e796beb44474d8d6e7988cbeea20c1877c84305c9ce3884e23261c8f0db6",
         "width": 390,
         "height": 844,
         "controlBounds": {
@@ -1154,23 +1238,23 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-count-enter-desktop.png",
-        "sha256": "5d3ea9919ceb7a52197405bbceabc2026c6ab4c611995b2e15c351e49d80d086",
+        "sha256": "1d6b942916184024af985a860f08024b4d19f8bba3a569991b3fd63675ec8fc9",
         "width": 1440,
         "height": 900,
         "controlBounds": {
-          "x": 1170.3125,
-          "y": 665.796875,
+          "x": 1214.0625,
+          "y": 472.796875,
           "width": 96,
           "height": 44
         },
         "hotspot": {
-          "x": 0.8461,
-          "y": 0.7642
+          "x": 0.8764,
+          "y": 0.5498
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-count-enter-mobile.png",
-        "sha256": "7c28064908f7cf29b8675c130d2087fa7cfd887cfe140925ea222c11fba06320",
+        "sha256": "ae1742d1dc22a6f51a79f74e61d068a336881c3037754a22b42ce6f18bdca803",
         "width": 390,
         "height": 844,
         "controlBounds": {
@@ -1196,7 +1280,7 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-count-investigate-desktop.png",
-        "sha256": "c07cd6fa1e55315f7ade5acf0a572ee0f1478bfd806b9208ce4d236cf370d1db",
+        "sha256": "088149d1d5b64625ef8c75fe37c6825f32c8157fab09240f1a9d59b5e14885e3",
         "width": 1440,
         "height": 900,
         "controlBounds": {
@@ -1212,7 +1296,7 @@
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-count-investigate-mobile.png",
-        "sha256": "b1fff8a4b0554a28636ff1d9af434c583dee833400006d2d548f8485186ead8c",
+        "sha256": "2b6499c00187a63d7dcc975bd00a2bd871a1f137a011a9c29c6276fc2c3f850e",
         "width": 390,
         "height": 844,
         "controlBounds": {
@@ -1238,7 +1322,7 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-count-post-desktop.png",
-        "sha256": "232c2622253cbdc6bed10373fe4aa66e3a760e6db89d53ee71986e17fc900fa3",
+        "sha256": "51f4ed68a238a59fa1e6f8b31f65aaebecd18ef535f0740f5b5dc2b9db268702",
         "width": 1440,
         "height": 900,
         "controlBounds": {
@@ -1254,7 +1338,7 @@
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-count-post-mobile.png",
-        "sha256": "3baa77284d09c48babe79b94efc3f84f83fa91f6e8173a30525e71c076b137ff",
+        "sha256": "5c80bd1c3c4daa68a9f9787b16768c620ded1397d010bdbe1f5b02098a1a6827",
         "width": 390,
         "height": 844,
         "controlBounds": {
@@ -1280,23 +1364,23 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-admin-start-desktop.png",
-        "sha256": "ec23fc929d8f45b2b88926dbb2b5f40a8417a1c2966d77a61c0aa4b8ca184867",
+        "sha256": "c118e141c5e3a33d4452cae966b462000497c37ed0f6ffa82febcea195b45806",
         "width": 1440,
         "height": 900,
         "controlBounds": {
-          "x": 1239.25,
+          "x": 1283.421875,
           "y": 473.390625,
           "width": 102.75,
           "height": 44
         },
         "hotspot": {
-          "x": 0.8963,
+          "x": 0.9269,
           "y": 0.5504
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-admin-start-mobile.png",
-        "sha256": "03774021f596d0d5aec7394a61ec7afb2526235113a9c9e9b1829440e3a3ea81",
+        "sha256": "5a510f44166ca0a7514def41c617cba1fff69aa7b086e263c7d86a982ed79bb1",
         "width": 390,
         "height": 844,
         "controlBounds": {
@@ -1322,7 +1406,7 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-admin-activate-desktop.png",
-        "sha256": "8a463013fa4094e2e9fa78a80d4a33a4a2323236c2646e8667d8aa022683fe7e",
+        "sha256": "3caa97fcc7df64afa242324cff101a89efbc6f0ccc79cf6b9582b4d3235f3ded",
         "width": 1440,
         "height": 900,
         "controlBounds": {
@@ -1338,7 +1422,7 @@
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-admin-activate-mobile.png",
-        "sha256": "513621c776d88a4e8a196eb2683873f04c1aec8f402f27eae2d19043b7243085",
+        "sha256": "eb4d07fd833c2ac45ef29d5ff7430f855974c389535f710a5ad5034e6603fe3b",
         "width": 390,
         "height": 844,
         "controlBounds": {
@@ -1355,8 +1439,8 @@
     },
     "ev-allocation-start": {
       "route": "/warehouse/allocations",
-      "roleId": "warehouse_business_unit",
-      "state": "The business-unit owner is preparing a seeded reservation from approved demand.",
+      "roleId": "warehouse_logistics_supervisor",
+      "state": "Warehouse operations is preparing a seeded reservation from approved department demand.",
       "control": {
         "id": "primary",
         "label": "Reserve event stock",
@@ -1364,7 +1448,7 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-allocation-start-desktop.png",
-        "sha256": "2338ec3bc2fad7710b209c03ce9e6fceb81a3cfe82b8b973309717230e88d64e",
+        "sha256": "01e67d600e1cafa2903d3984e89da91a9c278913d9b62acea23aebc749191a56",
         "width": 1440,
         "height": 900,
         "controlBounds": {
@@ -1380,7 +1464,7 @@
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-allocation-start-mobile.png",
-        "sha256": "f13c26273891d8babfa879034d91ab96e220721ab9b8cacbf962fd5575df71d8",
+        "sha256": "eeeb95999f1d545aac860c9d769b925a24797463bd8f84c4626c3e0fe6b65326",
         "width": 390,
         "height": 844,
         "controlBounds": {
@@ -1391,90 +1475,6 @@
         },
         "hotspot": {
           "x": 0.1699,
-          "y": 0.5
-        }
-      }
-    },
-    "ev-allocation-reserve": {
-      "route": "/warehouse/allocations",
-      "roleId": "warehouse_operations",
-      "state": "Warehouse operations is reviewing seeded reserved stock and the Issue command.",
-      "control": {
-        "id": "primary",
-        "label": "Reserve and issue stock",
-        "instruction": "Issue only the reserved quantity to the accountable custody record."
-      },
-      "desktop": {
-        "file": "/knowledge/screenshots/task8-allocation-reserve-desktop.png",
-        "sha256": "0dd94e838b13fb1575e55dd70bfb282ba34a58bd5f03c80ace6ded8917e33d40",
-        "width": 1440,
-        "height": 900,
-        "controlBounds": {
-          "x": 773.59375,
-          "y": 473,
-          "width": 58.40625,
-          "height": 44
-        },
-        "hotspot": {
-          "x": 0.5575,
-          "y": 0.55
-        }
-      },
-      "mobile": {
-        "file": "/knowledge/screenshots/task8-allocation-reserve-mobile.png",
-        "sha256": "88550c8399a9880be9fb6e93edea29eb2efed7df1ca1c7604df0f092ce2a2ab7",
-        "width": 390,
-        "height": 844,
-        "controlBounds": {
-          "x": 286.59375,
-          "y": 403.796875,
-          "width": 58.40625,
-          "height": 44
-        },
-        "hotspot": {
-          "x": 0.8097,
-          "y": 0.5045
-        }
-      }
-    },
-    "ev-price-start": {
-      "route": "/warehouse/pricing",
-      "roleId": "warehouse_pricing",
-      "state": "The pricing analyst is reviewing the seeded landed-cost and turnover table.",
-      "control": {
-        "id": "primary",
-        "label": "Prepare landed-cost basis",
-        "instruction": "Open the product row and review landed cost, valuation, and turnover before proposing price."
-      },
-      "desktop": {
-        "file": "/knowledge/screenshots/task8-price-start-desktop.png",
-        "sha256": "aa68e1d61210ea0c2a2faaee6fe764e11c185bf07a0cf049ca341fa8c8041df3",
-        "width": 1440,
-        "height": 900,
-        "controlBounds": {
-          "x": 317,
-          "y": 472.796875,
-          "width": 1062,
-          "height": 44
-        },
-        "hotspot": {
-          "x": 0.5889,
-          "y": 0.5498
-        }
-      },
-      "mobile": {
-        "file": "/knowledge/screenshots/task8-price-start-mobile.png",
-        "sha256": "d10cef3e0ca3c19533f5d436c79f365116e6b32281c1f0842a00bbfb878fbc02",
-        "width": 390,
-        "height": 844,
-        "controlBounds": {
-          "x": 33,
-          "y": 400,
-          "width": 324,
-          "height": 44
-        },
-        "hotspot": {
-          "x": 0.5,
           "y": 0.5
         }
       }
@@ -1490,34 +1490,34 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-doa-start-desktop.png",
-        "sha256": "2eba817d00bc9bffb5377a1b21729c484ce26a753252de7ea64935f9b4a4de36",
+        "sha256": "9e16b15a735631a2932038b607b6ac45bad7809f424a858973d4ad30090e256d",
         "width": 1440,
         "height": 900,
         "controlBounds": {
-          "x": 1249.03125,
-          "y": 487.390625,
+          "x": 1293.03125,
+          "y": 481.390625,
           "width": 101.96875,
           "height": 44
         },
         "hotspot": {
-          "x": 0.9028,
-          "y": 0.566
+          "x": 0.9333,
+          "y": 0.5593
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-doa-start-mobile.png",
-        "sha256": "2e0096f9565fb62590cb6fc7baa0374d1f77f7860a869078010a371cce4b7c06",
+        "sha256": "315e4a2499739fd8301d728d4492a6f57dd79e637b20859c0ec965e50bf624a8",
         "width": 390,
         "height": 844,
         "controlBounds": {
           "x": 272.55645751953125,
-          "y": 407.7750244140625,
+          "y": 407.875,
           "width": 66.953125,
           "height": 28.59375
         },
         "hotspot": {
           "x": 0.7847,
-          "y": 0.5001
+          "y": 0.5002
         }
       }
     },
@@ -1532,23 +1532,23 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-doa-activate-desktop.png",
-        "sha256": "a5d8516552dc90036cf6cbdc2eb6471b8820770fb8d970b3b7d2885680c7cdab",
+        "sha256": "0150310800ddbb45d2dbbb1d446d7806aefe0f9352b53695d264dd4d4febc083",
         "width": 1440,
         "height": 900,
         "controlBounds": {
-          "x": 710.15625,
+          "x": 780.828125,
           "y": 473,
           "width": 81.46875,
           "height": 44
         },
         "hotspot": {
-          "x": 0.5215,
+          "x": 0.5705,
           "y": 0.55
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-doa-activate-mobile.png",
-        "sha256": "5aed7600cf6d32f0b11ee775ea387858763fd2995b70a415519b4f44906fa262",
+        "sha256": "487052cafa4399743ceca2369787bdea9857bd4af82ccaabbc5fc99364bc3930",
         "width": 390,
         "height": 844,
         "controlBounds": {
@@ -1574,34 +1574,34 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-recover-start-desktop.png",
-        "sha256": "bffa7aa1d4b804f2ef770de0deafd6df9b9177bf50cd2b0689cf306ebd60e095",
+        "sha256": "7341cd175beccd61e4cc80cb92c766a05d012883e595d085dc4088cdb739fb3e",
         "width": 1440,
         "height": 900,
         "controlBounds": {
           "x": 517,
-          "y": 465.890625,
+          "y": 470.640625,
           "width": 406,
           "height": 44
         },
         "hotspot": {
           "x": 0.5,
-          "y": 0.5421
+          "y": 0.5474
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-recover-start-mobile.png",
-        "sha256": "e5e887b667dc5f5434c483e39a4308881e4ea4d0d93568c673ff728f1dea605b",
+        "sha256": "2ca8035e13021f5806eb7c7e4ee5f033a9aff39e9b61562d98693f0050a91905",
         "width": 390,
         "height": 844,
         "controlBounds": {
           "x": 33,
-          "y": 430.796875,
+          "y": 440.296875,
           "width": 324,
           "height": 44
         },
         "hotspot": {
           "x": 0.5,
-          "y": 0.5365
+          "y": 0.5477
         }
       }
     },
@@ -1616,34 +1616,34 @@
       },
       "desktop": {
         "file": "/knowledge/screenshots/task8-recover-retry-desktop.png",
-        "sha256": "d794f13350d360e7f0956e5430fad2137ccad4938c92cc47c2c23878deb2429f",
+        "sha256": "b893e3247e15683e3f3e1eb648a05730d5e1a3d94a5935b9436d08f29c484d7f",
         "width": 1440,
         "height": 900,
         "controlBounds": {
           "x": 517,
-          "y": 518.796875,
+          "y": 528.296875,
           "width": 406,
           "height": 44
         },
         "hotspot": {
           "x": 0.5,
-          "y": 0.6009
+          "y": 0.6114
         }
       },
       "mobile": {
         "file": "/knowledge/screenshots/task8-recover-retry-mobile.png",
-        "sha256": "f6c154ee605c7da53e19f4f0cc47bb67f36d5b93e9949eaee5f539762e02b45f",
+        "sha256": "00e40ef5fb8c4e1510606f815f4b6c9282e6398fe2ac60cb63b8844b76b68e5a",
         "width": 390,
         "height": 844,
         "controlBounds": {
           "x": 33,
-          "y": 490.796875,
+          "y": 500.296875,
           "width": 324,
           "height": 44
         },
         "hotspot": {
           "x": 0.5,
-          "y": 0.6076
+          "y": 0.6188
         }
       }
     }

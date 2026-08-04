@@ -83,6 +83,7 @@ const LIVE_EMAILS: Record<string, string> = {
   legal_admin: "intra.test.legal.lead@mwell.com.ph",
   events_requester: "intra.test.employee@mwell.com.ph",
   insights_analyst: "intra.test.leadership@mwell.com.ph",
+  product_contributor: "intra.test.employee@mwell.com.ph",
 };
 
 function evidenceTargetKey(evidence: KnowledgeEvidence): string {
@@ -115,7 +116,10 @@ function scenarioManifestVersion(): string {
   return `${SCENARIO_MANIFEST_SCHEMA}:${hash}`;
 }
 
-function resumeRequirements(sourceCommit: string): CaptureResumeRequirements {
+function resumeRequirements(
+  sourceCommit: string,
+  capturedEvidence?: CaptureResumeManifest["evidence"],
+): CaptureResumeRequirements {
   return {
     expectedSessionRoot: STAGING_ROOT,
     sourceCommit,
@@ -135,8 +139,11 @@ function resumeRequirements(sourceCommit: string): CaptureResumeRequirements {
           },
           files: { desktop: evidence.desktopSrc, mobile: evidence.mobileSrc },
           hotspots: {
-            desktop: { x: evidence.hotspots[0]!.x, y: evidence.hotspots[0]!.y },
-            mobile: {
+            desktop: capturedEvidence?.[evidence.id]?.desktop.hotspot ?? {
+              x: evidence.hotspots[0]!.x,
+              y: evidence.hotspots[0]!.y,
+            },
+            mobile: capturedEvidence?.[evidence.id]?.mobile.hotspot ?? {
               x: evidence.hotspots[0]!.mobileX,
               y: evidence.hotspots[0]!.mobileY,
             },
@@ -323,6 +330,13 @@ const SESSIONS: Record<
       events: ["requester"],
     },
   },
+  product_contributor: {
+    profileId: "demo-operations",
+    roles: {
+      core: ["staff"],
+      product: ["contributor"],
+    },
+  },
   insights_analyst: {
     profileId: "demo-bi",
     roles: {
@@ -381,10 +395,12 @@ async function openInspection(page: Page): Promise<void> {
 }
 
 async function enterShirtCount(page: Page): Promise<void> {
+  const storageArea = page.getByLabel("Storage area");
+  if (await storageArea.count()) await storageArea.selectOption({ index: 1 });
   const label =
     (page.viewportSize()?.width ?? 0) < 640
-      ? "Event Shirt (L) counted quantity"
-      : "Counted Event Shirt (L)";
+      ? "mWell Event Shirt - Medium counted quantity"
+      : "Counted mWell Event Shirt - Medium";
   const input = page.getByLabel(label, { exact: true });
   await expect(input).toBeVisible();
   await input.fill("199");
@@ -455,7 +471,20 @@ async function attachInspectionEvidence(page: Page): Promise<void> {
   });
 }
 
+async function resetRequestWizard(page: Page): Promise<void> {
+  await page
+    .getByText("Checking for a saved draft...", { exact: true })
+    .waitFor({ state: "hidden", timeout: 10_000 })
+    .catch(() => undefined);
+  const discard = page.getByRole("button", { name: /Discard draft/i });
+  if (await discard.isVisible().catch(() => false)) await discard.click();
+  const firstStep = page.getByRole("button", { name: /What are you buying/i });
+  if (await firstStep.isEnabled().catch(() => false)) await firstStep.click();
+  await expect(page.getByText("Goods", { exact: true })).toBeVisible();
+}
+
 async function prepareSourcingDecision(page: Page): Promise<void> {
+  await resetRequestWizard(page);
   await page.getByText("Goods", { exact: true }).click();
   await page.getByLabel("Title").fill("Documented sourcing route decision");
   await page.getByLabel("Line 1 description").fill("Cold-chain supplies");
@@ -471,8 +500,8 @@ async function prepareSourcingDecision(page: Page): Promise<void> {
 }
 
 const ACCESS_GUIDE_USER = {
-  name: LIVE_CAPTURE ? "Intra Test Admin" : "Marco Reyes",
-  email: LIVE_CAPTURE ? "intra.test.admin@mwell.com.ph" : "ops@mwell.demo",
+  name: LIVE_CAPTURE ? "UAT Internal Staff" : "Marco Reyes",
+  email: LIVE_CAPTURE ? "intra.test.employee@mwell.com.ph" : "ops@mwell.demo",
 };
 
 async function manageAccessGuideUser(page: Page): Promise<Locator> {
@@ -521,9 +550,9 @@ async function targetFor(page: Page, nodeId: string): Promise<Locator> {
     case "access-fix": {
       const manage = await manageAccessGuideUser(page);
       await manage.click();
-      const dialog = page.getByRole("dialog", {
-        name: ACCESS_GUIDE_USER.name,
-      });
+      const dialog = page
+        .getByRole("dialog")
+        .filter({ hasText: ACCESS_GUIDE_USER.email });
       await expect(dialog).toBeVisible();
       return dialog
         .getByLabel(`warehouse:business_unit for ${ACCESS_GUIDE_USER.email}`)
@@ -531,6 +560,7 @@ async function targetFor(page: Page, nodeId: string): Promise<Locator> {
     }
     case "p2p-start":
       if (LIVE_CAPTURE) {
+        await resetRequestWizard(page);
         const pettyCash = page
           .locator("label")
           .filter({ hasText: /^Petty cash/i })
@@ -561,87 +591,36 @@ async function targetFor(page: Page, nodeId: string): Promise<Locator> {
       return page.getByRole("button", { name: "Confirm sourcing route" });
     case "p2p-po":
       return page.getByRole("link", { name: "Author from approved request" });
-    case "p2p-receive": {
-      const openFirstPurchaseOrder = async () => {
-        const list = page.getByRole("list", { name: "Purchase orders" });
-        await expect(list).toBeVisible();
-        await (
-          await first(
-            list
-              .getByRole("button")
-              .filter({ hasText: /Ordered|Partially received/i }),
-          )
-        ).click();
-      };
-      const receive = page.getByRole("button", {
-        name: "Receive",
-        exact: true,
+    case "p2p-receive":
+      return first(page.getByRole("button", { name: "Receive and inspect" }));
+    case "p2p-payment-pack": {
+      await page.getByLabel("Invoice / SI number").fill("UAT-FLOW1-INV-001");
+      await page.getByLabel("Invoice amount").fill("1250");
+      await page.getByLabel("Invoice date").fill("2026-08-04");
+      await page.getByLabel("Due date").fill("2026-08-19");
+      await page.getByLabel("Tax amount").fill("150");
+      await page.getByLabel("Withholding amount").fill("25");
+      await page
+        .getByLabel("Invoice, OR, or SI private reference")
+        .fill("uat-private/invoices/flow1-001");
+      await page
+        .getByLabel("Delivery or milestone private reference")
+        .fill("uat-private/acceptance/flow1-001");
+      await page
+        .getByLabel("Tax and withholding private reference")
+        .fill("uat-private/tax/flow1-001");
+      return page.getByRole("button", {
+        name: "Validate match and send to Finance",
       });
-      const purchaseOrderList = page.getByRole("list", {
-        name: "Purchase orders",
-      });
-      const receivableCards = purchaseOrderList
-        .getByRole("button")
-        .filter({ hasText: /Ordered|Partially received/i });
-      if (!(await receivableCards.count())) {
-        await page
-          .getByRole("button", { name: "New PO", exact: true })
-          .first()
-          .click();
-        let dialog = page.getByRole("dialog", {
-          name: "New purchase order",
-        });
-        await expect(dialog).toBeVisible();
-        const addSupplier = dialog.getByRole("button", {
-          name: "Add a supplier",
-          exact: true,
-        });
-        if (await addSupplier.count()) {
-          await addSupplier.click();
-          await page.getByRole("button", { name: "Add supplier" }).click();
-          const supplierDialog = page.getByRole("dialog", {
-            name: "Add supplier",
-          });
-          await expect(supplierDialog).toBeVisible();
-          await supplierDialog
-            .getByLabel("Supplier name")
-            .fill("Documentation Supply Partner");
-          await supplierDialog
-            .getByRole("button", { name: "Save supplier" })
-            .click();
-          await expect(
-            page.getByRole("list", { name: "Suppliers" }),
-          ).toBeVisible({
-            timeout: 15_000,
-          });
-          await page.goto("/warehouse/purchase-orders", {
-            waitUntil: "domcontentloaded",
-          });
-          await page
-            .getByRole("button", { name: "New PO", exact: true })
-            .first()
-            .click();
-          dialog = page.getByRole("dialog", { name: "New purchase order" });
-          await expect(dialog).toBeVisible();
-        }
-        await dialog.getByLabel("Product").selectOption({ index: 1 });
-        await dialog.getByRole("button", { name: "Add line" }).click();
-        await dialog.getByRole("button", { name: "Create PO" }).click();
-        await expect(
-          page.getByRole("list", { name: "Purchase orders" }),
-        ).toBeVisible({ timeout: 15_000 });
-      }
-      await openFirstPurchaseOrder();
-      await expect(receive.first()).toBeVisible();
-      return receive.first();
     }
-    case "p2p-payment-pack":
-      return page.getByRole("button", { name: "Full PO record" });
-    case "vendor-apply":
-      return page.getByRole("button", { name: "Save draft", exact: true });
+    case "vendor-apply": {
+      const tradeName = page.getByLabel("Company trade name");
+      await tradeName.focus();
+      return tradeName;
+    }
     case "setup-start":
       await openStorageArea(page);
-      return page.getByLabel("Warehouse");
+      return page.getByLabel("Bin code");
     case "setup-area":
       await openStorageArea(page);
       await page.getByLabel("Label (optional)").focus();
@@ -657,15 +636,15 @@ async function targetFor(page: Page, nodeId: string): Promise<Locator> {
       return page.getByRole("button", { name: "Save route" });
     }
     case "receive-start":
-      return first(
-        page.getByRole("list", { name: "Purchase orders" }).getByRole("button"),
-      );
+      return first(page.getByTitle("Open Warehouse receiving details"));
     case "receive-record":
-      await page.getByLabel("Product").selectOption("shirt-l");
+      await page
+        .getByLabel("Product")
+        .selectOption({ label: "mWell Event Shirt - Medium" });
       return page.getByRole("button", { name: "Add to receipt" });
     case "receive-putaway":
       await page.getByRole("button", { name: "Put away" }).click();
-      return page.getByRole("button", { name: "Add stock" });
+      return page.getByLabel("Enter stock code manually");
     case "quality-start":
       return first(page.getByRole("button", { name: "Inspect", exact: true }));
     case "quality-release":
@@ -674,7 +653,13 @@ async function targetFor(page: Page, nodeId: string): Promise<Locator> {
       await attachInspectionEvidence(page);
       return page.getByRole("button", { name: "Submit inspection" });
     case "quality-return":
-      return page.getByRole("link", { name: "Open quality queue" });
+      await openInspection(page);
+      await page.getByLabel("Disposition").selectOption("vendor_return");
+      await page
+        .getByLabel("Reason")
+        .fill("Supplier return required after controlled quality inspection");
+      await attachInspectionEvidence(page);
+      return page.getByRole("button", { name: "Submit inspection" });
     case "event-fulfillment-start":
       return page.getByRole("button", { name: "New event" });
     case "event-issue":
@@ -684,7 +669,8 @@ async function targetFor(page: Page, nodeId: string): Promise<Locator> {
       const issue = await first(
         page.getByRole("button", { name: "Issue", exact: true }),
       );
-      return issue;
+      await issue.click();
+      return page.getByRole("button", { name: "Confirm issue" });
     }
     case "return-start":
       return page.getByLabel("Related event (optional)");
@@ -692,7 +678,9 @@ async function targetFor(page: Page, nodeId: string): Promise<Locator> {
       await page
         .getByLabel("Related event (optional)")
         .selectOption({ index: 1 });
-      await page.getByLabel("Product").selectOption("shirt-l");
+      await page
+        .getByLabel("Product")
+        .selectOption({ label: "mWell Event Shirt - Medium" });
       await page.getByLabel("Disposition").selectOption("restock");
       return page.getByRole("button", { name: "Record return" });
     case "return-quarantine":
@@ -712,8 +700,8 @@ async function targetFor(page: Page, nodeId: string): Promise<Locator> {
       await enterShirtCount(page);
       return page.getByLabel(
         (page.viewportSize()?.width ?? 0) < 640
-          ? "Event Shirt (L) counted quantity"
-          : "Counted Event Shirt (L)",
+          ? "mWell Event Shirt - Medium counted quantity"
+          : "Counted mWell Event Shirt - Medium",
         { exact: true },
       );
     case "count-investigate":
@@ -835,7 +823,9 @@ async function targetFor(page: Page, nodeId: string): Promise<Locator> {
     case "allocation-start":
       return page.getByRole("button", { name: "Reserve" });
     case "price-start":
-      return page.getByLabel("Product");
+      return LIVE_CAPTURE
+        ? page.getByRole("button", { name: "Propose price" })
+        : page.getByLabel("Product");
     case "doa-start":
       return page.getByRole("button", { name: "Add tier" });
     case "recover-start":
@@ -1041,7 +1031,8 @@ test("captures reviewed desktop and mobile principal-flow evidence", async ({
     stdio: "ignore",
   });
   expect(sourceCommit).toMatch(/^[0-9a-f]{40}$/);
-  if (LIVE_CAPTURE) await rm(STAGING_ROOT, { recursive: true, force: true });
+  if (LIVE_CAPTURE && process.env.TASK8_RESET_CAPTURE === "1")
+    await rm(STAGING_ROOT, { recursive: true, force: true });
   await mkdir(STAGING_ROOT, { recursive: true });
   const pendingRoot = path.join(
     path.dirname(STAGING_ROOT),
@@ -1049,10 +1040,12 @@ test("captures reviewed desktop and mobile principal-flow evidence", async ({
   );
   await rm(pendingRoot, { recursive: true, force: true });
   await mkdir(pendingRoot, { recursive: true });
-  const requirements = resumeRequirements(sourceCommit);
+  let requirements = resumeRequirements(sourceCommit);
   let manifest: CaptureResumeManifest;
   try {
     manifest = await readCaptureResumeManifest(STAGING_ROOT);
+    if (LIVE_CAPTURE)
+      requirements = resumeRequirements(sourceCommit, manifest.evidence);
     await validateCaptureResumeSession(STAGING_ROOT, manifest, requirements);
   } catch (error) {
     const sessionFiles = await readdir(STAGING_ROOT);
@@ -1325,6 +1318,8 @@ test("captures reviewed desktop and mobile principal-flow evidence", async ({
     coordinateErrors,
     "all hotspot coordinates match rendered controls",
   ).toEqual([]);
+  if (LIVE_CAPTURE)
+    requirements = resumeRequirements(sourceCommit, manifest.evidence);
   const completedIds = LIVE_CAPTURE
     ? Object.keys(manifest.evidence)
     : await validateCaptureResumeSession(STAGING_ROOT, manifest, requirements);
