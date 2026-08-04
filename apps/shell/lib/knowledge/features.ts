@@ -1426,17 +1426,17 @@ const definitions: FeatureDefinition[] = [
       "procurement_admin",
     ],
     purpose:
-      "Authors and controls one purchase order from approved demand through supplier issue and payment readiness.",
+      "Controls one purchase order from approved demand through supplier issue, category-specific acceptance, invoice matching, payment release, and closure.",
     reads:
       "PO, request, award, vendor, accreditation, receipts, inspections, acceptance, invoice, and decision history.",
     writes:
-      "Updates draft terms and records approval, issue, receipt linkage, acceptance, and payment-readiness evidence.",
+      "Records approval, issue, receipt linkage, goods/service/milestone acceptance, structured invoice evidence, Finance review, and payment release reference.",
     statuses:
-      "Draft, blocked, approved, issued, partially received, received, accepted, disputed, payment ready, or cancelled.",
+      "Draft, blocked, approved, issued, partially accepted, accepted, payment ready, returned, released, closed, or cancelled.",
     exception:
       "Do not issue or mark ready when accreditation, approval, receipt, inspection, acceptance, invoice, or amount match fails.",
     completionEvidence:
-      "Controlled PO, issue record, three-way evidence, named actions, and final readiness or exception status are linked.",
+      "Controlled PO, acceptance value, computed invoice match, Finance decision, payment reference, released amount, and closure state are linked.",
   },
 
   {

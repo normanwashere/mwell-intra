@@ -12,7 +12,10 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   const client = await createSupabaseServerClient("core");
-  if (!client) return NextResponse.json({ guide: null }, { status: 503 });
+  // Contextual guidance is optional UI assistance. In memory/demo mode there
+  // is no server auth client, so return an empty result without generating a
+  // failed browser request on every route.
+  if (!client) return NextResponse.json({ guide: null, unavailable: true });
   const { data, error } = await client.auth.getUser();
   if (error || !data.user)
     return NextResponse.json({ guide: null }, { status: 401 });

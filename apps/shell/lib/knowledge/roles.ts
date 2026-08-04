@@ -753,9 +753,19 @@ export const WAREHOUSE_DETAIL_ROUTE_ALIASES = [
   },
 ] as const;
 
+const ROLE_DETAIL_ROUTE_ALIASES = [
+  ...WAREHOUSE_DETAIL_ROUTE_ALIASES,
+  {
+    route: "/procurement/purchase-orders/:id",
+    parentPath: "/procurement",
+    parentHref: "/procurement",
+    parentLabel: "Open purchase requests",
+  },
+] as const;
+
 export const ROLE_ROUTE_PARENT_PATHS: Readonly<Record<string, string>> =
   Object.fromEntries(
-    WAREHOUSE_DETAIL_ROUTE_ALIASES.map((alias) => [
+    ROLE_DETAIL_ROUTE_ALIASES.map((alias) => [
       alias.route,
       alias.parentHref,
     ]),
@@ -763,7 +773,7 @@ export const ROLE_ROUTE_PARENT_PATHS: Readonly<Record<string, string>> =
 
 export const ROLE_ROUTE_PARENT_LABELS: Readonly<Record<string, string>> =
   Object.fromEntries(
-    WAREHOUSE_DETAIL_ROUTE_ALIASES.map((alias) => [
+    ROLE_DETAIL_ROUTE_ALIASES.map((alias) => [
       alias.route,
       alias.parentLabel,
     ]),
@@ -1282,13 +1292,15 @@ export const LIVE_KNOWLEDGE_ROLES: KnowledgeRole[] = [
         "/procurement",
         "/procurement/requests",
         "/procurement/requests/new",
+        "/procurement/purchase-orders/:id",
       ],
       canDo: [
         "Create and maintain purchase-request drafts and provide clarification or evidence when the governed route asks for it.",
         "Track the request handoff into sourcing and approval.",
+        "Open a purchase order linked to your own request and record attributable service or milestone acceptance when the contracted value is delivered.",
       ],
       cannotDo: [
-        "Do not approve your own request, select an award, author a purchase order, or alter approval evidence.",
+        "Do not approve your own request, select an award, author or issue a purchase order, review an invoice, or release payment.",
         "Do not submit a request with missing justification, value, route facts, or required supporting documents.",
       ],
       decisions: [
@@ -1375,7 +1387,7 @@ export const LIVE_KNOWLEDGE_ROLES: KnowledgeRole[] = [
     label: "Procurement finance",
     module: "procurement",
     purpose:
-      "Review financial approval, commercial evidence, receipt and acceptance context, and payment readiness for procurement records.",
+      "Review financial approval, computed invoice matching, receipt or service acceptance, and governed payment release for procurement records.",
     authority: {
       accessibleRoutes: [
         "/finance",
@@ -1385,14 +1397,14 @@ export const LIVE_KNOWLEDGE_ROLES: KnowledgeRole[] = [
       ],
       canDo: [
         "Review finance context and decide the Finance approval tier on assigned procurement records.",
-        "Assess whether purchase-order, receipt, acceptance, and financial evidence are ready for the next controlled handoff.",
+        "Accept or return a structured payment pack and post the payment amount, method, date, and unique reference after acceptance.",
       ],
       cannotDo: [
         "Do not create sourcing events, author a purchase order, select a vendor, or approve without complete commercial evidence.",
         "Do not clear a payment-readiness issue by changing receipt or acceptance evidence outside its owning role.",
       ],
       decisions: [
-        "Decide the Finance approval outcome and whether financial evidence is sufficiently complete for payment-readiness handoff.",
+        "Decide the Finance review outcome and whether a matched invoice can proceed to payment release.",
       ],
       upstreamRoleIds: [
         "procurement_officer",

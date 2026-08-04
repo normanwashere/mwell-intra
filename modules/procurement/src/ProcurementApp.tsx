@@ -80,6 +80,10 @@ export function ProcurementApp({
     can(userRoles, "procurement", "approve_award") ||
     can(userRoles, "procurement", "view_finance") ||
     can(userRoles, "procurement", "admin");
+  // Requesters need the linked PO detail to complete service or milestone
+  // acceptance, but they still do not receive the portfolio-level PO list.
+  const canViewPurchaseOrderDetail =
+    canViewPurchaseOrders || can(userRoles, "procurement", "create_request");
   if (loading) {
     return (
       <div className="mx-auto max-w-5xl space-y-6 p-4 md:p-6" aria-busy="true">
@@ -199,7 +203,7 @@ export function ProcurementApp({
             />
             <Route
               path={PROCUREMENT_ROUTE_BY_ID["po-detail"].path}
-              element={canViewPurchaseOrders ? <PODetailPage /> : <AcceptanceWorkItemPage />}
+              element={canViewPurchaseOrderDetail ? <PODetailPage /> : <AcceptanceWorkItemPage />}
             />
             <Route path="*" element={<Navigate to="/" replace />} />
           </>

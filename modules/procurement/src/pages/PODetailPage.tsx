@@ -27,9 +27,8 @@ import {
   useProcurementVendors,
   usePurchaseOrders,
 } from '../localStore';
-import { evaluateIssueReadiness } from '../policy';
-import { evaluateCommitmentReadiness } from '../policy';
-import { PaymentReadinessPanel, type PaymentReadinessDraft } from '../components/PaymentReadinessPanel';
+import { acceptanceTypeForCategory, evaluateCommitmentReadiness, evaluateIssueReadiness } from '../policy';
+import { PaymentReadinessPanel, type PaymentReadinessDraft, type PaymentReleaseDraft } from '../components/PaymentReadinessPanel';
 import { ProcurementAccessDenied } from '../components/ProcurementAccessDenied';
 import {
   accreditationLabel,
@@ -70,7 +69,7 @@ export function PODetailPage() {
     rows, approve, issue, cancel, recordAcceptance,
     createPolicyEvidence, reviewPolicyEvidence, supersedePolicyEvidence,
     createFinancialProtection, reviewFinancialProtection, supersedeFinancialProtection,
-    preparePayment, reviewPayment, loading,
+    preparePayment, reviewPayment, releasePayment, loading,
   } = usePurchaseOrders();
   const { rows: requests } = useProcurementRequests();
   const vendors = useProcurementVendors();
@@ -156,6 +155,7 @@ export function PODetailPage() {
   const fullyReceived = po.receiptStatus
     ? po.receiptStatus.outstandingQuantity <= 0
     : po.lines.every((line) => line.receivedQuantity >= line.quantity);
+  const acceptanceType = acceptanceTypeForCategory(sourceRequest?.category);
 
   function openApprovalSheet() {
     if (databaseCommitmentBlockers?.length) {
@@ -212,17 +212,24 @@ export function PODetailPage() {
     if (next) success(`PO ${next.poNumber} cancelled`);
   }
 
-  async function handleAcceptance(scope: string, exceptions: string[], acceptedLines: Array<{ poLineId: string; quantity: number }>) {
+  async function handleAcceptance(scope: string, exceptions: string[], acceptedLines: Array<{ poLineId: string; quantity: number }>, acceptedAmount?: number) {
     if (!po) return;
     const next = await recordAcceptance(po.id, {
-      acceptanceType: sourceRequest?.category === 'services' || sourceRequest?.category === 'subscription'
-        ? 'service' : 'goods',
+      acceptanceType,
       acceptedScope: scope,
       acceptedLines,
+      acceptedAmount,
       exceptions,
       actorEmail: profile?.email,
     });
-    if (next) success('Technical acceptance recorded');
+    if (next) {
+      const acceptanceLabel = acceptanceType === 'goods'
+        ? 'Technical'
+        : acceptanceType === 'service'
+          ? 'Service'
+          : 'Milestone';
+      success(`${acceptanceLabel} acceptance recorded`);
+    }
     else error('Could not record acceptance. A goods receipt or authorized requester is required.');
   }
 
@@ -267,6 +274,13 @@ export function PODetailPage() {
     const next = await reviewPayment(po.id, { status, note, actorEmail: profile?.email });
     if (next) success(status === 'accepted' ? 'Payment pack accepted' : 'Payment pack returned for correction');
     else error('Could not save the Finance review.');
+  }
+
+  async function handleReleasePayment(draft: PaymentReleaseDraft) {
+    if (!po) return;
+    const next = await releasePayment(po.id, { ...draft, actorEmail: profile?.email });
+    if (next) success('Payment release posted');
+    else error('Could not post the payment release. Check the balance and payment reference.');
   }
 
   // PR-27: hero primary action = the PO's current lifecycle action.
@@ -564,12 +578,15 @@ export function PODetailPage() {
               }))}
               pack={po.paymentReadiness}
               stalenessEvents={po.paymentReadinessStalenessEvents}
-              canAccept={Boolean(po.commitmentReadiness?.canRecordAcceptance ?? isSourceRequester) && (po.receiptStatus?.acceptedLines?.length ?? 0) > 0}
+              purchaseOrderAmount={po.total}
+              acceptanceType={acceptanceType}
+              canAccept={Boolean(po.commitmentReadiness?.canRecordAcceptance ?? isSourceRequester) && (acceptanceType !== 'goods' || (po.receiptStatus?.acceptedLines?.length ?? 0) > 0)}
               canPrepare={canAuthorPo}
               canReview={canViewFinance}
               onAccept={handleAcceptance}
               onPrepare={handlePreparePayment}
               onReview={handleReviewPayment}
+              onRelease={handleReleasePayment}
             />
           </Card>
         </div>

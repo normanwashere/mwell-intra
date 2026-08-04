@@ -1,15 +1,27 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Badge, Icon } from '@intra/ui';
+import { Badge, Icon, money } from '@intra/ui';
 import type { AcceptancePack, PaymentReadinessPack, PaymentReadinessStalenessEvent } from '../types';
 import { evaluatePaymentPackReadiness } from '../policy';
 
 export interface PaymentReadinessDraft {
-  poMatch: boolean;
+  invoiceNumber: string;
+  invoiceDate: string;
+  dueDate: string;
+  invoiceAmount: number;
+  taxAmount: number;
+  withholdingAmount: number;
   invoiceOrSiReference: string;
   milestoneSupportReference: string;
   taxWithholdingSupportReference: string;
+}
+
+export interface PaymentReleaseDraft {
+  amount: number;
+  paymentReference: string;
+  paymentMethod: string;
+  paidAt: string;
 }
 
 export interface AcceptanceLineDraft {
@@ -27,9 +39,12 @@ export function PaymentReadinessPanel({
   canAccept,
   canPrepare,
   canReview,
+  purchaseOrderAmount,
+  acceptanceType,
   onAccept,
   onPrepare,
   onReview,
+  onRelease,
 }: {
   acceptance?: AcceptancePack;
   acceptances?: AcceptancePack[];
@@ -39,28 +54,53 @@ export function PaymentReadinessPanel({
   canAccept: boolean;
   canPrepare: boolean;
   canReview: boolean;
-  onAccept: (scope: string, exceptions: string[], acceptedLines: Array<{ poLineId: string; quantity: number }>) => Promise<void>;
+  purchaseOrderAmount: number;
+  acceptanceType: AcceptancePack['acceptanceType'];
+  onAccept: (scope: string, exceptions: string[], acceptedLines: Array<{ poLineId: string; quantity: number }>, acceptedAmount?: number) => Promise<void>;
   onPrepare: (draft: PaymentReadinessDraft) => Promise<void>;
   onReview: (status: 'returned' | 'accepted', note: string) => Promise<void>;
+  onRelease: (draft: PaymentReleaseDraft) => Promise<void>;
 }) {
   const [scope, setScope] = useState('Delivered scope matches the approved PO and request.');
   const [exceptionsText, setExceptionsText] = useState('');
   const [acceptedQuantities, setAcceptedQuantities] = useState<Record<string, number>>({});
   const [financeNote, setFinanceNote] = useState('');
+  const [acceptedAmount, setAcceptedAmount] = useState(purchaseOrderAmount);
+  const [release, setRelease] = useState<PaymentReleaseDraft>({
+    amount: Math.max((pack?.invoiceAmount ?? 0) - (pack?.releasedAmount ?? 0), 0),
+    paymentReference: '', paymentMethod: 'bank_transfer',
+    paidAt: new Date().toISOString().slice(0, 10),
+  });
   const [draft, setDraft] = useState<PaymentReadinessDraft>({
-    poMatch: pack?.poMatch ?? false,
+    invoiceNumber: pack?.invoiceNumber ?? '',
+    invoiceDate: pack?.invoiceDate ?? '',
+    dueDate: pack?.dueDate ?? '',
+    invoiceAmount: pack?.invoiceAmount ?? 0,
+    taxAmount: pack?.taxAmount ?? 0,
+    withholdingAmount: pack?.withholdingAmount ?? 0,
     invoiceOrSiReference: pack?.invoiceOrSiReference ?? '',
     milestoneSupportReference: pack?.milestoneSupportReference ?? '',
     taxWithholdingSupportReference: pack?.taxWithholdingSupportReference ?? '',
   });
   useEffect(() => {
     setDraft({
-      poMatch: pack?.poMatch ?? false,
+      invoiceNumber: pack?.invoiceNumber ?? '',
+      invoiceDate: pack?.invoiceDate ?? '',
+      dueDate: pack?.dueDate ?? '',
+      invoiceAmount: pack?.invoiceAmount ?? 0,
+      taxAmount: pack?.taxAmount ?? 0,
+      withholdingAmount: pack?.withholdingAmount ?? 0,
       invoiceOrSiReference: pack?.invoiceOrSiReference ?? '',
       milestoneSupportReference: pack?.milestoneSupportReference ?? '',
       taxWithholdingSupportReference: pack?.taxWithholdingSupportReference ?? '',
     });
   }, [pack?.id]);
+  useEffect(() => {
+    setRelease((current) => ({
+      ...current,
+      amount: Math.max((pack?.invoiceAmount ?? 0) - (pack?.releasedAmount ?? 0), 0),
+    }));
+  }, [pack?.id, pack?.invoiceAmount, pack?.releasedAmount]);
   useEffect(() => {
     setAcceptedQuantities(Object.fromEntries(
       acceptanceLines.map((line) => [line.poLineId, line.qcAcceptedQuantity]),
@@ -74,10 +114,13 @@ export function PaymentReadinessPanel({
     acceptancePackIds: activeAcceptances.map((item) => item.id),
     acceptedQuantity: pack?.acceptedQuantity
       ?? activeAcceptances.reduce((sum, item) => sum + (item.acceptedQuantity ?? 0), 0),
-    ...draft, status: pack?.status ?? 'draft', preparedAt: pack?.preparedAt ?? '',
+    ...draft, poMatch: pack?.poMatch ?? false,
+    status: pack?.status ?? 'draft', preparedAt: pack?.preparedAt ?? '',
   }), [activeAcceptances, draft, pack]);
   const blockers = evaluatePaymentPackReadiness(activeAcceptances, preview);
   const exceptions = exceptionsText.split('\n').map((value) => value.trim()).filter(Boolean);
+  const remainingPayment = Math.max((pack?.invoiceAmount ?? 0) - (pack?.releasedAmount ?? 0), 0);
+  const acceptanceLabel = acceptanceType === 'goods' ? 'technical' : acceptanceType;
 
   return (
     <div className="space-y-4">
@@ -108,9 +151,20 @@ export function PaymentReadinessPanel({
               />
             </label>
           ))}
+          {acceptanceType !== 'goods' && (
+            <label className="block text-sm font-semibold text-ink">
+              Accepted {acceptanceType === 'service' ? 'service' : 'milestone'} value
+              <input
+                type="number" min={0.01} max={purchaseOrderAmount} step="0.01"
+                className="input mt-1.5" value={acceptedAmount}
+                onChange={(event) => setAcceptedAmount(Math.min(purchaseOrderAmount, Math.max(0, Number(event.target.value) || 0)))}
+              />
+              <span className="mt-1 block text-xs font-normal text-muted">Maximum {money(purchaseOrderAmount)}</span>
+            </label>
+          )}
           <label className="block text-sm font-semibold text-ink">Accepted scope<textarea className="input mt-1.5" rows={3} value={scope} onChange={(event) => setScope(event.target.value)} /></label>
           <label className="block text-sm font-semibold text-ink">Exceptions or defects, one per line<textarea className="input mt-1.5" rows={3} value={exceptionsText} onChange={(event) => setExceptionsText(event.target.value)} /></label>
-          <button type="button" className="btn-primary" disabled={!scope.trim()} onClick={() => void onAccept(scope.trim(), exceptions, acceptanceLines.map((line) => ({ poLineId: line.poLineId, quantity: acceptedQuantities[line.poLineId] ?? 0 })).filter((line) => line.quantity > 0))}><Icon name="check" className="h-4 w-4" />Record technical acceptance</button>
+          <button type="button" className="btn-primary w-full sm:w-auto" disabled={!scope.trim() || (acceptanceType !== 'goods' && acceptedAmount <= 0)} onClick={() => void onAccept(scope.trim(), exceptions, acceptanceLines.map((line) => ({ poLineId: line.poLineId, quantity: acceptedQuantities[line.poLineId] ?? 0 })).filter((line) => line.quantity > 0), acceptanceType === 'goods' ? undefined : acceptedAmount)}><Icon name="check" className="h-4 w-4" />Record {acceptanceLabel} acceptance</button>
         </section>
       )}
 
@@ -142,20 +196,43 @@ export function PaymentReadinessPanel({
 
       {canPrepare && activeAcceptances.length > 0 && (
         <section className="space-y-3 rounded-lg border border-line p-4">
-          <label className="flex min-h-11 items-center gap-3 text-sm font-semibold text-ink"><input type="checkbox" className="h-5 w-5" checked={draft.poMatch} onChange={(event) => setDraft({ ...draft, poMatch: event.target.checked })} />PO, receipt/acceptance, and invoice amounts match</label>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block text-sm font-semibold text-ink">Invoice / SI number<input className="input mt-1.5" value={draft.invoiceNumber} onChange={(event) => setDraft({ ...draft, invoiceNumber: event.target.value })} /></label>
+            <label className="block text-sm font-semibold text-ink">Invoice amount<input type="number" min={0.01} step="0.01" className="input mt-1.5" value={draft.invoiceAmount} onChange={(event) => setDraft({ ...draft, invoiceAmount: Math.max(0, Number(event.target.value) || 0) })} /></label>
+            <label className="block text-sm font-semibold text-ink">Invoice date<input type="date" className="input mt-1.5" value={draft.invoiceDate} onChange={(event) => setDraft({ ...draft, invoiceDate: event.target.value })} /></label>
+            <label className="block text-sm font-semibold text-ink">Due date<input type="date" className="input mt-1.5" value={draft.dueDate} onChange={(event) => setDraft({ ...draft, dueDate: event.target.value })} /></label>
+            <label className="block text-sm font-semibold text-ink">Tax amount<input type="number" min={0} step="0.01" className="input mt-1.5" value={draft.taxAmount} onChange={(event) => setDraft({ ...draft, taxAmount: Math.max(0, Number(event.target.value) || 0) })} /></label>
+            <label className="block text-sm font-semibold text-ink">Withholding amount<input type="number" min={0} step="0.01" className="input mt-1.5" value={draft.withholdingAmount} onChange={(event) => setDraft({ ...draft, withholdingAmount: Math.max(0, Number(event.target.value) || 0) })} /></label>
+          </div>
           {([
             ['invoiceOrSiReference', 'Invoice, OR, or SI private reference'],
             ['milestoneSupportReference', 'Delivery or milestone private reference'],
             ['taxWithholdingSupportReference', 'Tax and withholding private reference'],
           ] as const).map(([key, label]) => <label key={key} className="block text-sm font-semibold text-ink">{label}<input className="input mt-1.5" value={draft[key]} onChange={(event) => setDraft({ ...draft, [key]: event.target.value })} /></label>)}
-          <button type="button" className="btn-primary" disabled={blockers.length > 0} onClick={() => void onPrepare(draft)}><Icon name="check" className="h-4 w-4" />Send to Finance</button>
+          <button type="button" className="btn-primary w-full sm:w-auto" disabled={!draft.invoiceNumber.trim() || !draft.invoiceDate || draft.invoiceAmount <= 0 || !draft.invoiceOrSiReference.trim() || !draft.milestoneSupportReference.trim() || !draft.taxWithholdingSupportReference.trim()} onClick={() => void onPrepare(draft)}><Icon name="check" className="h-4 w-4" />Validate match and send to Finance</button>
         </section>
       )}
 
       {canReview && pack?.status === 'ready_for_finance' && (
         <section className="space-y-3 rounded-lg border border-line p-4">
           <label className="block text-sm font-semibold text-ink">Finance review note<textarea className="input mt-1.5" rows={3} value={financeNote} onChange={(event) => setFinanceNote(event.target.value)} /></label>
-          <div className="flex flex-wrap gap-2"><button type="button" className="btn-outline" onClick={() => void onReview('returned', financeNote)}><Icon name="rotate" className="h-4 w-4" />Return for correction</button><button type="button" className="btn-primary" disabled={blockers.length > 0} onClick={() => void onReview('accepted', financeNote)}><Icon name="check" className="h-4 w-4" />Accept for payment</button></div>
+          <div className="grid gap-2 sm:flex sm:flex-wrap"><button type="button" className="btn-outline" disabled={!financeNote.trim()} onClick={() => void onReview('returned', financeNote.trim())}><Icon name="rotate" className="h-4 w-4" />Return for correction</button><button type="button" className="btn-primary" disabled={blockers.length > 0} onClick={() => void onReview('accepted', financeNote)}><Icon name="check" className="h-4 w-4" />Accept for payment</button></div>
+        </section>
+      )}
+
+      {canReview && pack?.status === 'accepted' && (
+        <section className="space-y-3 rounded-lg border border-line p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div><h4 className="font-semibold text-ink">Record payment release</h4><p className="text-xs text-muted">Invoice {pack.invoiceNumber ?? 'reference pending'} / remaining {money(remainingPayment)}</p></div>
+            <Badge tone="cyan">{money(pack.releasedAmount ?? 0)} released</Badge>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block text-sm font-semibold text-ink">Release amount<input type="number" min={0.01} max={remainingPayment} step="0.01" className="input mt-1.5" value={release.amount} onChange={(event) => setRelease({ ...release, amount: Math.min(remainingPayment, Math.max(0, Number(event.target.value) || 0)) })} /></label>
+            <label className="block text-sm font-semibold text-ink">Payment date<input type="date" className="input mt-1.5" value={release.paidAt} onChange={(event) => setRelease({ ...release, paidAt: event.target.value })} /></label>
+            <label className="block text-sm font-semibold text-ink">Payment reference<input className="input mt-1.5" value={release.paymentReference} onChange={(event) => setRelease({ ...release, paymentReference: event.target.value })} /></label>
+            <label className="block text-sm font-semibold text-ink">Payment method<select className="input mt-1.5" value={release.paymentMethod} onChange={(event) => setRelease({ ...release, paymentMethod: event.target.value })}><option value="bank_transfer">Bank transfer</option><option value="check">Check</option><option value="corporate_card">Corporate card</option><option value="other">Other</option></select></label>
+          </div>
+          <button type="button" className="btn-primary w-full sm:w-auto" disabled={release.amount <= 0 || !release.paymentReference.trim() || !release.paidAt} onClick={() => void onRelease({ ...release, paymentReference: release.paymentReference.trim() })}><Icon name="check" className="h-4 w-4" />Post payment release</button>
         </section>
       )}
 

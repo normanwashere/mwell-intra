@@ -104,6 +104,13 @@ interface PurchaseRequestDraftSnapshot {
   requesterName?: string;
 }
 
+interface DepartmentCostCenterOption {
+  department_code: string;
+  department_name: string;
+  cost_center_code: string;
+  cost_center_name: string;
+}
+
 function blankLine(): LineDraft {
   return {
     key:
@@ -162,6 +169,7 @@ export function CreateRequestPage() {
   const [category, setCategory] = useState<RequestCategory | "">("");
   const [department, setDepartment] = useState("");
   const [costCenter, setCostCenter] = useState("");
+  const [departmentOptions, setDepartmentOptions] = useState<DepartmentCostCenterOption[]>([]);
   const [projectCode, setProjectCode] = useState("");
   const [budgetCode, setBudgetCode] = useState("");
   const [neededBy, setNeededBy] = useState("");
@@ -231,6 +239,23 @@ export function CreateRequestPage() {
   const liveDraftClient = mode === "supabase"
     ? (supabaseClient as RequestDraftClient | null)
     : null;
+
+  useEffect(() => {
+    if (mode !== "supabase" || !supabaseClient) return;
+    let active = true;
+    void supabaseClient.schema("warehouse").from("department_request_options")
+      .select("department_code,department_name,cost_center_code,cost_center_name")
+      .then(({ data, error: queryError }) => {
+        if (!active || queryError) return;
+        setDepartmentOptions((data ?? []) as DepartmentCostCenterOption[]);
+      });
+    return () => { active = false; };
+  }, [mode, supabaseClient]);
+
+  const departments = useMemo(() => Array.from(new Map(
+    departmentOptions.map((option) => [option.department_code, option.department_name]),
+  )), [departmentOptions]);
+  const availableCostCenters = departmentOptions.filter((option) => option.department_code === department);
   const draftSnapshot = useMemo<PurchaseRequestDraftSnapshot>(() => ({
     step,
     title,
@@ -1128,12 +1153,16 @@ export function CreateRequestPage() {
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Field label="Department" htmlFor="department">
-                    <Input
+                    {departments.length > 0 ? <select
                       id="department"
+                      className="input"
                       value={department}
+                      onChange={(e) => { setDepartment(e.target.value); setCostCenter(""); }}
+                    ><option value="">Select department</option>{departments.map(([code, name]) => <option key={code} value={code}>{name}</option>)}</select> : <Input
+                      id="department" value={department}
                       onChange={(e) => setDepartment(e.target.value)}
-                      placeholder="Marketing / IT / HR / …"
-                    />
+                      placeholder="Department"
+                    />}
                   </Field>
                   <Field label="Needed by" htmlFor="neededBy">
                     <Input
@@ -1144,12 +1173,17 @@ export function CreateRequestPage() {
                     />
                   </Field>
                   <Field label="Cost center" htmlFor="costCenter">
-                    <Input
+                    {departments.length > 0 ? <select
                       id="costCenter"
+                      className="input"
                       value={costCenter}
+                      disabled={!department}
                       onChange={(e) => setCostCenter(e.target.value)}
-                      placeholder="MKT-2026-EV"
-                    />
+                    ><option value="">Select cost center</option>{availableCostCenters.map((option) => <option key={option.cost_center_code} value={option.cost_center_code}>{option.cost_center_code} / {option.cost_center_name}</option>)}</select> : <Input
+                      id="costCenter" value={costCenter}
+                      onChange={(e) => setCostCenter(e.target.value)}
+                      placeholder="Cost center"
+                    />}
                   </Field>
                   <Field label="Project code (optional)" htmlFor="projectCode">
                     <Input

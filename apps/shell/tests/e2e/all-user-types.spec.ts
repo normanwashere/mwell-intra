@@ -185,8 +185,7 @@ const WAREHOUSE_CAPS: Record<string, readonly string[]> = {
     "view_dashboard",
     "manage_inventory",
     "view_finance",
-    "cycle_count",
-    "approve_stock_adjustment",
+    "approve_stock_adjustment_finance",
     "view_exceptions",
   ],
   bi_analyst: [

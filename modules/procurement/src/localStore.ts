@@ -235,17 +235,22 @@ function mapAcceptancePack(row: LiveRow): AcceptancePack {
     ? ((acceptedScope as { lines?: Array<{ quantity?: unknown }> }).lines ?? [])
       .reduce((sum, line) => sum + Number(line.quantity ?? 0), 0)
     : undefined;
+  const acceptanceType = row.acceptance_type === 'goods_receipt'
+    ? 'goods' : row.acceptance_type === 'service_completion'
+      ? 'service' : row.acceptance_type === 'technical_acceptance'
+        ? 'milestone' : row.acceptance_type;
   return {
     id: row.id,
     purchaseOrderId: row.purchase_order_id,
     requestId: row.request_id ?? undefined,
     warehouseReceiptReference: row.warehouse_receipt_reference ?? undefined,
-    acceptanceType: row.acceptance_type as unknown as AcceptancePack['acceptanceType'],
+    acceptanceType: acceptanceType as AcceptancePack['acceptanceType'],
     acceptedScope: acceptedScopeText,
     acceptedQuantity,
     exceptions: Array.isArray(exceptions) ? exceptions.map(String) : [],
     acceptedByEmail: row.accepted_by_email ?? undefined,
     acceptedAt: row.accepted_at,
+    acceptedAmount: row.accepted_amount == null ? undefined : Number(row.accepted_amount),
     documentHash: row.document_hash ?? undefined,
     status: row.status,
   } as unknown as AcceptancePack;
@@ -262,6 +267,16 @@ function mapPaymentReadinessPack(row: LiveRow): PaymentReadinessPack {
     invoiceOrSiReference: row.invoice_or_si_storage_path ?? undefined,
     milestoneSupportReference: row.milestone_support_storage_path ?? undefined,
     taxWithholdingSupportReference: row.tax_withholding_support_storage_path ?? undefined,
+    invoiceNumber: row.invoice_number ?? undefined,
+    invoiceDate: row.invoice_date ?? undefined,
+    dueDate: row.due_date ?? undefined,
+    invoiceAmount: row.invoice_amount == null ? undefined : Number(row.invoice_amount),
+    taxAmount: row.tax_amount == null ? undefined : Number(row.tax_amount),
+    withholdingAmount: row.withholding_amount == null ? undefined : Number(row.withholding_amount),
+    purchaseOrderAmount: row.purchase_order_amount == null ? undefined : Number(row.purchase_order_amount),
+    acceptedAmount: row.accepted_amount == null ? undefined : Number(row.accepted_amount),
+    varianceAmount: row.variance_amount == null ? undefined : Number(row.variance_amount),
+    releasedAmount: row.released_amount == null ? undefined : Number(row.released_amount),
     status: row.status,
     preparedByEmail: row.prepared_by_email ?? undefined,
     preparedAt: row.prepared_at,
@@ -607,6 +622,7 @@ export interface ProcurementRequestsAPI {
     actor: DecideActor,
   ) => MaybePromise<ProcurementRequest | null>;
   getById: (id: string) => ProcurementRequest | undefined;
+  refresh: () => Promise<void>;
 }
 
 export function useProcurementRequests(): ProcurementRequestsAPI {
@@ -896,7 +912,7 @@ export function useProcurementRequests(): ProcurementRequestsAPI {
     [rows],
   );
 
-  return { rows, loading, add, update, submit, cancel, decide, getById };
+  return { rows, loading, add, update, submit, cancel, decide, getById, refresh: refreshLive };
 }
 
 // ---------------------------------------------------------------------------
@@ -934,15 +950,16 @@ export interface PurchaseOrdersAPI {
   ) => MaybePromise<PurchaseOrder | null>;
   issue: (id: string, readiness: { sourceAwardApproved: boolean; vendorEligible: boolean }) => MaybePromise<PurchaseOrder | null>;
   cancel: (id: string) => MaybePromise<PurchaseOrder | null>;
-  recordAcceptance: (id: string, input: { acceptanceType: 'goods' | 'service' | 'milestone'; acceptedScope: string; acceptedLines?: Array<{ poLineId: string; quantity: number }>; exceptions: string[]; actorEmail?: string }) => MaybePromise<PurchaseOrder | null>;
+  recordAcceptance: (id: string, input: { acceptanceType: 'goods' | 'service' | 'milestone'; acceptedScope: string; acceptedLines?: Array<{ poLineId: string; quantity: number }>; acceptedAmount?: number; exceptions: string[]; actorEmail?: string }) => MaybePromise<PurchaseOrder | null>;
   createPolicyEvidence: (requestId: string, input: { controlCode: string; evidenceType: string; facts?: Record<string, unknown> }) => Promise<void>;
   reviewPolicyEvidence: (id: string, decision: 'approved' | 'rejected') => Promise<void>;
   supersedePolicyEvidence: (id: string) => Promise<void>;
   createFinancialProtection: (requestId: string, input: { protectionType: string; triggerBasis: string; requiredAmount?: number }) => Promise<void>;
   reviewFinancialProtection: (id: string, decision: 'approved' | 'waived', waiver?: { reason: string; basis: string; evidenceStoragePath: string }) => Promise<void>;
   supersedeFinancialProtection: (id: string) => Promise<void>;
-  preparePayment: (id: string, input: { poMatch: boolean; invoiceOrSiReference: string; milestoneSupportReference: string; taxWithholdingSupportReference: string; actorEmail?: string }) => MaybePromise<PurchaseOrder | null>;
+  preparePayment: (id: string, input: { invoiceNumber: string; invoiceDate: string; dueDate: string; invoiceAmount: number; taxAmount: number; withholdingAmount: number; invoiceOrSiReference: string; milestoneSupportReference: string; taxWithholdingSupportReference: string; actorEmail?: string }) => MaybePromise<PurchaseOrder | null>;
   reviewPayment: (id: string, input: { status: 'returned' | 'accepted'; note?: string; actorEmail?: string }) => MaybePromise<PurchaseOrder | null>;
+  releasePayment: (id: string, input: { amount: number; paymentReference: string; paymentMethod: string; paidAt: string; actorEmail?: string }) => MaybePromise<PurchaseOrder | null>;
   getById: (id: string) => PurchaseOrder | undefined;
 }
 
@@ -1169,7 +1186,7 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
     [patch, live, refreshLive],
   );
 
-  const recordAcceptance = useCallback((id: string, input: { acceptanceType: 'goods' | 'service' | 'milestone'; acceptedScope: string; acceptedLines?: Array<{ poLineId: string; quantity: number }>; exceptions: string[]; actorEmail?: string }): MaybePromise<PurchaseOrder | null> => {
+  const recordAcceptance = useCallback((id: string, input: { acceptanceType: 'goods' | 'service' | 'milestone'; acceptedScope: string; acceptedLines?: Array<{ poLineId: string; quantity: number }>; acceptedAmount?: number; exceptions: string[]; actorEmail?: string }): MaybePromise<PurchaseOrder | null> => {
     const current = rows.find((row) => row.id === id);
     if (!current) return null;
     if (input.acceptanceType === 'goods' &&
@@ -1181,10 +1198,12 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
               lines: input.acceptedLines ?? [],
             }
           : input.acceptedScope;
-        return liveRpc<LiveRow>(live, 'procurement', 'record_acceptance_pack', {
+        return liveRpc<LiveRow>(live, 'procurement', input.acceptanceType === 'goods'
+          ? 'record_acceptance_pack' : 'record_non_stock_acceptance', {
         purchase_order_id: id,
         acceptance_type: input.acceptanceType,
           accepted_scope: acceptedScope,
+        accepted_amount: input.acceptedAmount,
         exceptions: input.exceptions,
         warehouse_receipt_reference: current.receiptStatus?.latestReceiptReference,
       }).then(() => refreshLive().then(() => current));
@@ -1195,6 +1214,7 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
       acceptanceType: input.acceptanceType, acceptedScope: input.acceptedScope,
       exceptions: input.exceptions, acceptedByEmail: input.actorEmail,
       acceptedAt: nowIso(), acceptedQuantity: (input.acceptedLines ?? []).reduce((sum, line) => sum + line.quantity, 0),
+      acceptedAmount: input.acceptedAmount,
       status: input.exceptions.length ? 'accepted_with_exceptions' : 'accepted',
     };
     const acceptancePacks = [...(current.acceptancePacks ?? (current.acceptancePack ? [current.acceptancePack] : [])), acceptancePack];
@@ -1229,14 +1249,19 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
     if (!live) return; await liveRpc(live, 'procurement', 'supersede_financial_protection', { id }); await refreshCommitmentReadiness();
   }, [live, refreshCommitmentReadiness]);
 
-  const preparePayment = useCallback((id: string, input: { poMatch: boolean; invoiceOrSiReference: string; milestoneSupportReference: string; taxWithholdingSupportReference: string; actorEmail?: string }): MaybePromise<PurchaseOrder | null> => {
+  const preparePayment = useCallback((id: string, input: { invoiceNumber: string; invoiceDate: string; dueDate: string; invoiceAmount: number; taxAmount: number; withholdingAmount: number; invoiceOrSiReference: string; milestoneSupportReference: string; taxWithholdingSupportReference: string; actorEmail?: string }): MaybePromise<PurchaseOrder | null> => {
     const current = rows.find((row) => row.id === id);
     const activeAcceptances = current?.acceptancePacks ?? (current?.acceptancePack ? [current.acceptancePack] : []);
     if (!current || activeAcceptances.length === 0) return null;
     if (isLive(live)) {
-      return liveRpc<LiveRow>(live, 'procurement', 'prepare_payment_readiness', {
+      return liveRpc<LiveRow>(live, 'procurement', 'prepare_invoice_payment_readiness', {
         purchase_order_id: id,
-        po_match: input.poMatch,
+        invoice_number: input.invoiceNumber,
+        invoice_date: input.invoiceDate,
+        due_date: input.dueDate || undefined,
+        invoice_amount: input.invoiceAmount,
+        tax_amount: input.taxAmount,
+        withholding_amount: input.withholdingAmount,
         invoice_or_si_storage_path: input.invoiceOrSiReference,
         milestone_support_storage_path: input.milestoneSupportReference,
         tax_withholding_support_storage_path: input.taxWithholdingSupportReference,
@@ -1248,7 +1273,14 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
     const paymentReadiness: PaymentReadinessPack = {
       id: newId('pay'), purchaseOrderId: id, acceptancePackId: activeAcceptances[0]!.id,
       acceptancePackIds: activeAcceptances.map((acceptance) => acceptance.id),
-      poMatch: input.poMatch, invoiceOrSiReference: input.invoiceOrSiReference,
+      poMatch: input.invoiceAmount > 0 && input.invoiceAmount <= current.total,
+      invoiceNumber: input.invoiceNumber, invoiceDate: input.invoiceDate, dueDate: input.dueDate,
+      invoiceAmount: input.invoiceAmount, taxAmount: input.taxAmount,
+      withholdingAmount: input.withholdingAmount,
+      purchaseOrderAmount: current.total,
+      acceptedAmount: activeAcceptances.reduce((sum, item) => sum + (item.acceptedAmount ?? 0), 0),
+      releasedAmount: 0,
+      invoiceOrSiReference: input.invoiceOrSiReference,
       milestoneSupportReference: input.milestoneSupportReference,
       taxWithholdingSupportReference: input.taxWithholdingSupportReference,
       status: 'ready_for_finance', preparedByEmail: input.actorEmail, preparedAt: nowIso(),
@@ -1273,12 +1305,36 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
     } });
   }, [live, patch, refreshLive, rows]);
 
+  const releasePayment = useCallback((id: string, input: { amount: number; paymentReference: string; paymentMethod: string; paidAt: string; actorEmail?: string }): MaybePromise<PurchaseOrder | null> => {
+    const current = rows.find((row) => row.id === id);
+    if (!current?.paymentReadiness || current.paymentReadiness.status !== 'accepted') return null;
+    if (isLive(live)) {
+      return liveRpc<LiveRow>(live, 'procurement', 'release_payment', {
+        payment_readiness_pack_id: current.paymentReadiness.id,
+        amount: input.amount,
+        payment_reference: input.paymentReference,
+        payment_method: input.paymentMethod,
+        paid_at: input.paidAt,
+      }).then(() => refreshLive().then(() => current));
+    }
+    const releasedAmount = (current.paymentReadiness.releasedAmount ?? 0) + input.amount;
+    const complete = releasedAmount >= (current.paymentReadiness.invoiceAmount ?? 0);
+    return patch(id, {
+      status: complete ? 'closed' : current.status,
+      paymentReadiness: {
+        ...current.paymentReadiness,
+        releasedAmount,
+        status: complete ? 'released' : 'accepted',
+      },
+    });
+  }, [live, patch, refreshLive, rows]);
+
   const getById = useCallback((id: string) => rows.find((r) => r.id === id), [rows]);
 
   return { rows, loading, add, approve, issue, cancel, recordAcceptance,
     createPolicyEvidence, reviewPolicyEvidence, supersedePolicyEvidence,
     createFinancialProtection, reviewFinancialProtection, supersedeFinancialProtection,
-    preparePayment, reviewPayment, getById };
+    preparePayment, reviewPayment, releasePayment, getById };
 }
 
 export interface AcceptanceWorkItem {

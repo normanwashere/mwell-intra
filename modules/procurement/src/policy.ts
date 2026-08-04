@@ -609,6 +609,30 @@ export function evaluatePaymentReadiness(input: PaymentReadinessInput): string[]
   return blockers;
 }
 
+export function acceptanceTypeForCategory(
+  category: RequestCategory | undefined,
+): AcceptancePack['acceptanceType'] {
+  if (category === 'services' || category === 'subscription' || category === 'manpower') {
+    return 'service';
+  }
+  if (category === 'construction' || category === 'capex') return 'milestone';
+  return 'goods';
+}
+
+export function calculateInvoiceMatch(input: {
+  purchaseOrderAmount: number;
+  acceptedAmount: number;
+  invoiceAmount: number;
+}): { matched: boolean; variance: number } {
+  const variance = Number((input.acceptedAmount - input.invoiceAmount).toFixed(2));
+  return {
+    matched: input.invoiceAmount > 0
+      && input.invoiceAmount <= input.purchaseOrderAmount
+      && Math.abs(variance) < 0.01,
+    variance,
+  };
+}
+
 export function evaluateIssueReadiness(input: {
   poApproved: boolean;
   sourceAwardApproved: boolean;

@@ -139,7 +139,11 @@ function mapPayment(
     purchaseOrderId,
     poNumber: text(po?.po_number, purchaseOrderId),
     vendorName: text(po?.vendor_name, 'Vendor not available'),
-    amount: amount(po?.total),
+    amount: amount(row.invoice_amount ?? po?.total),
+    invoiceNumber: optionalText(row.invoice_number),
+    dueDate: optionalText(row.due_date),
+    releasedAmount: amount(row.released_amount),
+    remainingAmount: Math.max(amount(row.invoice_amount ?? po?.total) - amount(row.released_amount), 0),
     poStatus: text(po?.status, 'unknown'),
     status,
     poMatch: row.po_match === true,
@@ -186,7 +190,7 @@ export async function loadLiveFinanceData(
           .schema('procurement')
           .from('payment_readiness_packs')
           .select(
-            'id,purchase_order_id,status,po_match,invoice_or_si_storage_path,prepared_by,prepared_at,finance_reviewed_by,finance_reviewed_at,finance_note',
+            'id,purchase_order_id,status,po_match,invoice_or_si_storage_path,invoice_number,due_date,invoice_amount,released_amount,prepared_by,prepared_at,finance_reviewed_by,finance_reviewed_at,finance_note',
           )
           .neq('status', 'superseded')
           .order('prepared_at', { ascending: false })

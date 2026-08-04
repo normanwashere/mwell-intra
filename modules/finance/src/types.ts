@@ -30,6 +30,10 @@ export interface FinancePaymentItem {
   poNumber: string;
   vendorName: string;
   amount: number;
+  invoiceNumber?: string;
+  dueDate?: string;
+  releasedAmount: number;
+  remainingAmount: number;
   poStatus: string;
   status: PaymentReadinessStatus;
   poMatch: boolean;

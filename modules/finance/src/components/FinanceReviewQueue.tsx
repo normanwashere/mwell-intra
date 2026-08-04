@@ -51,7 +51,7 @@ const columns: Column<FinancePaymentItem>[] = [
           {row.poNumber}
         </a>
         <span className="block truncate text-xs font-normal text-muted">
-          {row.vendorName}
+          {row.vendorName}{row.invoiceNumber ? ` / ${row.invoiceNumber}` : ''}
         </span>
       </span>
     ),
@@ -74,11 +74,11 @@ const columns: Column<FinancePaymentItem>[] = [
   },
   {
     key: 'amount',
-    header: 'Amount',
+    header: 'Remaining',
     align: 'right',
     sortable: true,
-    sortValue: (row) => row.amount,
-    render: (row) => money(row.amount),
+    sortValue: (row) => row.remainingAmount,
+    render: (row) => <span className="block"><strong className="text-ink">{money(row.remainingAmount)}</strong>{row.releasedAmount > 0 && <span className="block text-xs text-muted">{money(row.releasedAmount)} released</span>}</span>,
   },
   {
     key: 'prepared',

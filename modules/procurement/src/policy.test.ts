@@ -19,6 +19,8 @@ import {
   evaluatePaymentReadiness,
   evaluateIssueReadiness,
   evaluatePaymentPackReadiness,
+  acceptanceTypeForCategory,
+  calculateInvoiceMatch,
 } from './policy';
 import type { AcceptancePack, ApprovalStep, PaymentReadinessPack } from './types';
 
@@ -233,6 +235,29 @@ describe('sourcing response readiness', () => {
     expect(
       evaluateSourcingReadiness({ method: 'rfp', intendedResponses: 3, invited: 4, responses: 1 }),
     ).toEqual({ ready: false, insufficientBidsExceptionRequired: true });
+  });
+});
+
+describe('acceptance and invoice controls', () => {
+  it('routes non-stock work to requester acceptance without a Warehouse receipt', () => {
+    expect(acceptanceTypeForCategory('services')).toBe('service');
+    expect(acceptanceTypeForCategory('subscription')).toBe('service');
+    expect(acceptanceTypeForCategory('construction')).toBe('milestone');
+    expect(acceptanceTypeForCategory('capex')).toBe('milestone');
+    expect(acceptanceTypeForCategory('goods')).toBe('goods');
+  });
+
+  it('computes the three-way amount match instead of trusting a checkbox', () => {
+    expect(calculateInvoiceMatch({
+      purchaseOrderAmount: 120_000,
+      acceptedAmount: 60_000,
+      invoiceAmount: 60_000,
+    })).toEqual({ matched: true, variance: 0 });
+    expect(calculateInvoiceMatch({
+      purchaseOrderAmount: 120_000,
+      acceptedAmount: 60_000,
+      invoiceAmount: 61_000,
+    })).toEqual({ matched: false, variance: -1_000 });
   });
 });
 

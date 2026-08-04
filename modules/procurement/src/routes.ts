@@ -67,6 +67,7 @@ export const PROCUREMENT_ROUTE_CONTRACTS: ProcurementRouteContract[] = [
     path: "/purchase-orders/:id",
     capabilityIds: [
       "view_dashboard",
+      "create_request",
       "author_po",
       "approve_award",
       "view_finance",

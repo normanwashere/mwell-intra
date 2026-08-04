@@ -413,8 +413,8 @@ const procedureArticles: KnowledgeArticle[] = [
   ),
   processArticle(
     "purchase-order-and-payment",
-    "Issue PO and establish payment readiness",
-    "Author a controlled PO and connect receipt, acceptance, and finance evidence.",
+    "Issue PO, match invoices, and release payment",
+    "Author a controlled PO and connect receipt or service acceptance to a computed invoice match, Finance decision, payment release, and closure.",
     "procurement",
     [
       "procurement_officer",
@@ -434,12 +434,16 @@ const procedureArticles: KnowledgeArticle[] = [
         "Complete required PO controls before supplier commitment.",
       ],
       [
-        "Match receipt",
-        "Confirm receipt and inspection evidence against PO lines.",
+        "Record acceptance",
+        "For goods, confirm Warehouse receipt and inspection against PO lines. For non-stock work, record accepted service or milestone scope and value.",
       ],
       [
-        "Confirm acceptance",
-        "Record business acceptance and finance readiness evidence.",
+        "Register and match invoice",
+        "Record the unique invoice number, dates, amount, tax, withholding, and evidence; the database validates accepted unpaid value.",
+      ],
+      [
+        "Review and release",
+        "Finance accepts or returns the pack, then posts the payment amount, method, date, and unique reference. Full acceptance and release close the PO.",
       ],
     ],
   ),

@@ -102,10 +102,9 @@ export function FinanceApp() {
         <Card className="space-y-4">
           <div>
             <p className="text-xs font-semibold uppercase text-faint">Control ownership</p>
-            <h2 className="mt-1 font-display text-lg font-bold text-ink">Review here, execute at source</h2>
+            <h2 className="mt-1 font-display text-lg font-bold text-ink">Review and release from the governed PO</h2>
             <p className="mt-1 text-sm text-muted">
-              Finance sees the combined trail. Procurement still owns requests and POs; Warehouse owns receiving,
-              inspection, counts, and custody.
+              Finance sees the combined trail and posts the payment reference on the approved pack. Procurement owns requests and POs; Warehouse owns receiving, inspection, counts, and custody.
             </p>
           </div>
           <div className="grid gap-2">

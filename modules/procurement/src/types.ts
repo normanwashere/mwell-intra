@@ -354,6 +354,7 @@ export interface AcceptancePack {
   acceptanceType: 'goods' | 'service' | 'milestone';
   acceptedScope: string;
   acceptedQuantity?: number;
+  acceptedAmount?: number;
   exceptions: string[];
   acceptedByEmail?: string;
   acceptedAt: string;
@@ -385,6 +386,17 @@ export interface PaymentReadinessPack {
   invoiceOrSiReference?: string;
   milestoneSupportReference?: string;
   taxWithholdingSupportReference?: string;
+  invoiceNumber?: string;
+  invoiceDate?: string;
+  dueDate?: string;
+  invoiceAmount?: number;
+  taxAmount?: number;
+  withholdingAmount?: number;
+  purchaseOrderAmount?: number;
+  acceptedAmount?: number;
+  varianceAmount?: number;
+  releasedAmount?: number;
+  paymentReleases?: PaymentRelease[];
   status: 'draft' | 'ready_for_finance' | 'returned' | 'accepted' | 'released' | 'superseded';
   preparedByEmail?: string;
   preparedAt: string;
@@ -394,6 +406,15 @@ export interface PaymentReadinessPack {
   correctedFrom?: string;
   evidenceStale?: boolean;
   evidenceStaleAt?: string;
+}
+
+export interface PaymentRelease {
+  id: string;
+  amount: number;
+  paymentReference: string;
+  paymentMethod: string;
+  paidAt: string;
+  recordedByEmail?: string;
 }
 
 export interface PurchaseOrder {

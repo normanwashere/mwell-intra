@@ -37,17 +37,23 @@ test('PO acceptance and Finance readiness persist across the governed role flow'
   await page.goto(`/procurement/purchase-orders/${poId}`);
 
   await expect(page.getByRole('heading', { name: 'Acceptance and payment readiness' })).toBeVisible();
-  await page.getByRole('button', { name: 'Record technical acceptance' }).click();
-  await expect(page.getByText('Technical acceptance recorded')).toBeVisible();
-  await expect(page.getByText('Acceptance recorded', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Accepted milestone value')).toHaveValue('750000');
+  await page.getByRole('button', { name: 'Record milestone acceptance' }).click();
+  await expect(page.getByText('Milestone acceptance recorded')).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Active acceptance packs' })).toContainText('1 active acceptance pack');
 
   await setSession(page, sessions.procurement);
   await page.reload();
-  await page.getByLabel('PO, receipt/acceptance, and invoice amounts match').check();
+  await page.getByLabel('Invoice / SI number').fill('SI-UAT-0001');
+  await page.getByLabel('Invoice amount').fill('750000');
+  await page.getByLabel('Invoice date').fill('2026-08-04');
+  await page.getByLabel('Due date').fill('2026-09-03');
+  await page.getByLabel('Tax amount').fill('90000');
+  await page.getByLabel('Withholding amount').fill('15000');
   await page.getByLabel('Invoice, OR, or SI private reference').fill('private/invoice-si.pdf');
   await page.getByLabel('Delivery or milestone private reference').fill('private/warehouse-acceptance.pdf');
   await page.getByLabel('Tax and withholding private reference').fill('private/tax-support.pdf');
-  await page.getByRole('button', { name: 'Send to Finance' }).click();
+  await page.getByRole('button', { name: 'Validate match and send to Finance' }).click();
   await expect(page.getByText('Payment evidence sent to Finance')).toBeVisible();
 
   await setSession(page, sessions.finance);
@@ -58,11 +64,32 @@ test('PO acceptance and Finance readiness persist across the governed role flow'
   await expect(page.getByText('Payment pack accepted')).toBeVisible();
   await expect(page.getByText('Finance accepted')).toBeVisible();
 
+  await page.getByLabel('Release amount').fill('300000');
+  await page.getByLabel('Payment reference').fill('BANK-UAT-0001');
+  await page.getByRole('button', { name: 'Post payment release' }).click();
+  await expect(page.getByText('Payment release posted')).toBeVisible();
+  await expect(page.getByText(/remaining.*450,000/i)).toBeVisible();
+
+  await page.getByLabel('Release amount').fill('450000');
+  await page.getByLabel('Payment reference').fill('BANK-UAT-0002');
+  await page.getByRole('button', { name: 'Post payment release' }).click();
+  await expect(page.getByText('Finance released')).toBeVisible();
+
   const persisted = await page.evaluate(({ key, id }) => {
-    const rows = JSON.parse(localStorage.getItem(key) ?? '[]') as Array<{ id: string; acceptancePack?: unknown; paymentReadiness?: { status: string } }>;
+    const rows = JSON.parse(localStorage.getItem(key) ?? '[]') as Array<{
+      id: string;
+      status: string;
+      acceptancePack?: { acceptanceType: string; acceptedAmount?: number };
+      paymentReadiness?: { status: string; invoiceNumber?: string; releasedAmount?: number };
+    }>;
     return rows.find((row) => row.id === id);
   }, { key: PO_KEY, id: poId });
-  expect(persisted?.acceptancePack).toBeTruthy();
-  expect(persisted?.paymentReadiness?.status).toBe('accepted');
+  expect(persisted?.acceptancePack).toMatchObject({ acceptanceType: 'milestone', acceptedAmount: 750000 });
+  expect(persisted?.paymentReadiness).toMatchObject({
+    status: 'released',
+    invoiceNumber: 'SI-UAT-0001',
+    releasedAmount: 750000,
+  });
+  expect(persisted?.status).toBe('closed');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });

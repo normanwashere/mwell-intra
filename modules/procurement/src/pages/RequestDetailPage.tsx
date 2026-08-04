@@ -34,6 +34,7 @@ import type {
 import {
   useApprovalHistory,
   useProcurementRequests,
+  useProcurementVendors,
   usePurchaseOrders,
 } from '../localStore';
 import {
@@ -46,6 +47,7 @@ import {
   type SubmitReadiness,
 } from '../policy';
 import { SourcingDecisionPanel } from '../components/SourcingDecisionPanel';
+import { SourcingWorkspace } from '../components/SourcingWorkspace';
 import {
   attachmentKindLabel,
   formatDate,
@@ -111,12 +113,14 @@ export function RequestDetailPage() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { rows, submit, cancel, update, loading } = useProcurementRequests();
+  const { rows, submit, cancel, update, refresh, loading } = useProcurementRequests();
   const { rows: pos, add: addPO } = usePurchaseOrders();
+  const vendors = useProcurementVendors();
   const history = useApprovalHistory(id);
   const { success, error } = useToast();
   const { profile, mode, supabaseClient } = useSession();
   const canConfirmRoute = useCan('procurement', 'manage_rfp');
+  const canApproveSourcingException = useCan('procurement', 'approve_award');
   const [routeMethod, setRouteMethod] = useState<SourcingMethod>('rfq');
   const [routeRiskFacts, setRouteRiskFacts] = useState<ProcurementRiskFacts>({
     comparable: true,
@@ -260,7 +264,8 @@ export function RequestDetailPage() {
           },
         );
         if (rpcError) throw new Error(rpcError.message);
-        window.location.reload();
+        await refresh();
+        success('Sourcing route confirmed');
         return;
       }
       await update(currentRequest.id, {
@@ -413,6 +418,26 @@ export function RequestDetailPage() {
                 Confirm sourcing route
               </button>
             )}
+          </Card>
+        </div>
+      )}
+
+      {req.status === 'draft' && req.compliance?.routeConfirmed && (req.sourcingMethod === 'rfq' || req.sourcingMethod === 'rfp') && (
+        <div>
+          <SectionTitle
+            title="Competitive sourcing"
+            subtitle="The sourcing record must be complete before the request enters approval."
+          />
+          <Card>
+            <SourcingWorkspace
+              requestId={req.id}
+              method={req.sourcingMethod}
+              canManage={canConfirmRoute}
+              canApprove={canApproveSourcingException}
+              client={mode === 'supabase' ? supabaseClient : null}
+              vendors={vendors}
+              onChanged={refresh}
+            />
           </Card>
         </div>
       )}
