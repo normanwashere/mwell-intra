@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 // Reviewer inbox (internal) + vendor application card (external).
 //
@@ -13,8 +13,8 @@
 // disclosure. The hero shrinks to eyebrow + company; boilerplate moves into
 // an InfoTip next to the section title.
 
-import { useMemo, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useMemo, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   Badge,
   DataTable,
@@ -28,8 +28,8 @@ import {
   StaggerGrid,
   StaggerItem,
   type Column,
-} from '@intra/ui';
-import { Guard, useSession } from '@intra/auth';
+} from "@intra/ui";
+import { Guard, useSession } from "@intra/auth";
 import type {
   AccreditationCase,
   AccreditationDoc,
@@ -37,8 +37,8 @@ import type {
   InboxBucket,
   RequirementChecklistItem,
   SignedInstrument,
-} from '../types';
-import { JURISDICTION_LABEL } from '../types';
+} from "../types";
+import { JURISDICTION_LABEL } from "../types";
 import {
   computeCaseStatus,
   useAccreditationCases,
@@ -46,12 +46,12 @@ import {
   useChecklist,
   useSignedInstruments,
   useVendorAliases,
-} from '../localStore';
+} from "../localStore";
 import {
   computeCaseProgress,
   deriveInboxBucket,
   INBOX_BUCKET_LABEL,
-} from '../caseLogic';
+} from "../caseLogic";
 import {
   CASE_STATUS_DOT,
   CASE_STATUS_LABEL,
@@ -59,25 +59,24 @@ import {
   formatDate,
   VENDOR_STATUS_EXPLAINER,
   VENDOR_STATUS_LABEL,
-} from '../labels';
-import { visibleCasesForVendor } from '../vendorAccess';
+} from "../labels";
+import { visibleCasesForVendor } from "../vendorAccess";
+import { VendorLifecyclePanel } from "../components/VendorLifecyclePanel";
 
 function columns(
   bucketOf: Map<string, InboxBucket | null>,
 ): Column<AccreditationCase>[] {
   return [
     {
-      key: 'vendorName',
-      header: 'Vendor',
+      key: "vendorName",
+      header: "Vendor",
       primary: true,
       render: (r) => (
         <div className="min-w-0">
-          <span className="font-semibold text-ink">
-            {r.vendorName}
-          </span>
+          <span className="font-semibold text-ink">{r.vendorName}</span>
           {r.jurisdiction && (
             <span className="ml-2 inline-flex items-center rounded-full bg-inset px-2 py-0.5 text-[0.65rem] font-semibold text-muted">
-              {r.jurisdiction === 'OTHER' && r.originCountry
+              {r.jurisdiction === "OTHER" && r.originCountry
                 ? r.originCountry
                 : JURISDICTION_LABEL[r.jurisdiction]}
             </span>
@@ -86,40 +85,42 @@ function columns(
       ),
     },
     {
-      key: 'status',
-      header: 'Status',
+      key: "status",
+      header: "Status",
       render: (r) => {
         const s = computeCaseStatus(r);
         return <Badge tone={CASE_STATUS_TONE[s]}>{CASE_STATUS_LABEL[s]}</Badge>;
       },
     },
     {
-      key: 'bucket',
-      header: 'Waiting on',
+      key: "bucket",
+      header: "Waiting on",
       render: (r) => {
         const bucket = bucketOf.get(r.id);
         return bucket ? (
-          <span className="text-sm text-muted">{INBOX_BUCKET_LABEL[bucket]}</span>
+          <span className="text-sm text-muted">
+            {INBOX_BUCKET_LABEL[bucket]}
+          </span>
         ) : (
           <span className="text-sm text-faint">—</span>
         );
       },
     },
-    { key: 'category', header: 'Category', render: (r) => r.category ?? '—' },
+    { key: "category", header: "Category", render: (r) => r.category ?? "—" },
     {
-      key: 'submittedAt',
-      header: 'Submitted',
+      key: "submittedAt",
+      header: "Submitted",
       render: (r) => formatDate(r.submittedAt),
     },
     {
-      key: 'expiresAt',
-      header: 'Expires',
+      key: "expiresAt",
+      header: "Expires",
       render: (r) => formatDate(r.expiresAt),
     },
   ];
 }
 
-type CaseFilter = 'all' | InboxBucket;
+type CaseFilter = "all" | InboxBucket;
 
 export function AccreditationCasesPage() {
   const { profile } = useSession();
@@ -130,9 +131,9 @@ export function AccreditationCasesPage() {
   const { rows: aliases } = useVendorAliases();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
-  const isVendor = profile?.kind === 'vendor';
-  const firstName = profile?.name?.split(/\s+/)[0] ?? 'Legal';
-  const filter = (params.get('filter') as CaseFilter) ?? 'all';
+  const isVendor = profile?.kind === "vendor";
+  const firstName = profile?.name?.split(/\s+/)[0] ?? "Legal";
+  const filter = (params.get("filter") as CaseFilter) ?? "all";
 
   // Vendors see only their own case(s) — same matcher as the detail guard.
   const visible = useMemo(
@@ -167,13 +168,13 @@ export function AccreditationCasesPage() {
   }, [bucketOf]);
 
   const filteredVisible = useMemo(() => {
-    if (filter === 'all') return visible;
+    if (filter === "all") return visible;
     return visible.filter((r) => bucketOf.get(r.id) === filter);
   }, [visible, filter, bucketOf]);
 
   const applyFilter = (next: CaseFilter) => {
-    if (next === 'all') params.delete('filter');
-    else params.set('filter', next);
+    if (next === "all") params.delete("filter");
+    else params.set("filter", next);
     setParams(params, { replace: false });
   };
 
@@ -183,7 +184,7 @@ export function AccreditationCasesPage() {
   if (isVendor) {
     return (
       <VendorHome
-        profileName={profile?.name ?? 'Your organization'}
+        profileName={profile?.name ?? "Your organization"}
         cases={visible}
         loading={loading}
         allChecklist={allChecklist}
@@ -198,6 +199,14 @@ export function AccreditationCasesPage() {
   // -------------------------------------------------------------------------
   const waitingOnYou =
     bucketCounts.waiting_on_legal + bucketCounts.ready_for_decision;
+  const lifecycleVendors = Array.from(
+    new Map(
+      visible.map((kase) => [
+        kase.vendorId,
+        { id: kase.vendorId, name: kase.vendorName },
+      ]),
+    ).values(),
+  );
 
   return (
     <div className="space-y-6">
@@ -207,7 +216,9 @@ export function AccreditationCasesPage() {
         icon="clipboard"
         accessory={
           <HeroStat label="Waiting on you" align="right">
-            <p className="tnum font-display text-2xl font-extrabold text-ink">{waitingOnYou}</p>
+            <p className="tnum font-display text-2xl font-extrabold text-ink">
+              {waitingOnYou}
+            </p>
           </HeroStat>
         }
       />
@@ -216,36 +227,36 @@ export function AccreditationCasesPage() {
         {(
           [
             {
-              key: 'waiting_on_vendor' as const,
-              label: 'Waiting on vendor',
+              key: "waiting_on_vendor" as const,
+              label: "Waiting on vendor",
               value: bucketCounts.waiting_on_vendor,
-              icon: 'building' as const,
-              tone: 'slate' as const,
-              hint: 'Docs / signatures outstanding',
+              icon: "building" as const,
+              tone: "slate" as const,
+              hint: "Docs / signatures outstanding",
             },
             {
-              key: 'waiting_on_legal' as const,
-              label: 'Waiting on Legal',
+              key: "waiting_on_legal" as const,
+              label: "Waiting on Legal",
               value: bucketCounts.waiting_on_legal,
-              icon: 'rotate' as const,
-              tone: 'amber' as const,
-              hint: 'Evidence needs your review',
+              icon: "rotate" as const,
+              tone: "amber" as const,
+              hint: "Evidence needs your review",
             },
             {
-              key: 'ready_for_decision' as const,
-              label: 'Ready for decision',
+              key: "ready_for_decision" as const,
+              label: "Ready for decision",
               value: bucketCounts.ready_for_decision,
-              icon: 'signature' as const,
-              tone: 'emerald' as const,
-              hint: 'All required items approved',
+              icon: "signature" as const,
+              tone: "emerald" as const,
+              hint: "All required items approved",
             },
             {
-              key: 'renewal_due' as const,
-              label: 'Renewals',
+              key: "renewal_due" as const,
+              label: "Renewals",
               value: bucketCounts.renewal_due,
-              icon: 'alert' as const,
-              tone: 'rose' as const,
-              hint: 'Expiring within 30 days',
+              icon: "alert" as const,
+              tone: "rose" as const,
+              hint: "Expiring within 30 days",
             },
           ] as const
         ).map((c) => {
@@ -255,7 +266,7 @@ export function AccreditationCasesPage() {
               key={c.key}
               className={
                 active
-                  ? 'rounded-2xl ring-2 ring-brand-500 ring-offset-2 ring-offset-app'
+                  ? "rounded-2xl ring-2 ring-brand-500 ring-offset-2 ring-offset-app"
                   : undefined
               }
             >
@@ -264,13 +275,15 @@ export function AccreditationCasesPage() {
                 value={c.value}
                 icon={c.icon}
                 tone={c.tone}
-                hint={active ? 'Showing below' : c.hint}
+                hint={active ? "Showing below" : c.hint}
                 onClick={() => applyFilter(c.key)}
               />
             </StaggerItem>
           );
         })}
       </StaggerGrid>
+
+      <VendorLifecyclePanel vendors={lifecycleVendors} />
 
       <div>
         <SectionTitle
@@ -283,11 +296,11 @@ export function AccreditationCasesPage() {
           }
         />
 
-        {filter !== 'all' && (
+        {filter !== "all" && (
           <div className="mb-3">
             <button
               type="button"
-              onClick={() => applyFilter('all')}
+              onClick={() => applyFilter("all")}
               className="chip bg-brand-500/15 text-brand-700 hover:bg-brand-500/25 dark:text-brand-300"
             >
               {INBOX_BUCKET_LABEL[filter]}
@@ -301,18 +314,21 @@ export function AccreditationCasesPage() {
         )}
 
         {loading ? (
-          <div className="h-24 animate-pulse rounded-2xl bg-inset" aria-hidden />
+          <div
+            className="h-24 animate-pulse rounded-2xl bg-inset"
+            aria-hidden
+          />
         ) : filteredVisible.length === 0 ? (
           <EmptyState
             icon="building"
             title="No cases in this bucket"
             message={
-              filter === 'all'
-                ? 'Invite a vendor to start their onboarding — a case appears here once they submit.'
-                : 'Nothing here right now. Tap a stat card above to see other cases.'
+              filter === "all"
+                ? "Invite a vendor to start their onboarding — a case appears here once they submit."
+                : "Nothing here right now. Tap a stat card above to see other cases."
             }
             action={
-              filter === 'all' ? (
+              filter === "all" ? (
                 <Guard module="legal" cap="manage_checklist" fallback={null}>
                   <Link to="/invites/new" className="btn-primary">
                     Invite vendor
@@ -401,7 +417,10 @@ function VendorHome({
         />
 
         {loading ? (
-          <div className="h-64 animate-pulse rounded-2xl bg-inset" aria-hidden />
+          <div
+            className="h-64 animate-pulse rounded-2xl bg-inset"
+            aria-hidden
+          />
         ) : !active ? (
           <EmptyState
             icon="building"
@@ -427,7 +446,7 @@ function VendorHome({
             >
               <Icon
                 name="chevron"
-                className={`h-3.5 w-3.5 transition ${pastOpen ? 'rotate-90' : ''}`}
+                className={`h-3.5 w-3.5 transition ${pastOpen ? "rotate-90" : ""}`}
               />
               Past accreditations ({past.length})
             </button>
@@ -452,11 +471,17 @@ function VendorHome({
                             </span>
                             <span className="block text-xs text-muted">
                               Opened {formatDate(k.openedAt)}
-                              {k.expiresAt ? ` · expired ${formatDate(k.expiresAt)}` : ''}
+                              {k.expiresAt
+                                ? ` · expired ${formatDate(k.expiresAt)}`
+                                : ""}
                             </span>
                           </span>
                         </span>
-                        <Icon name="chevron" className="h-4 w-4 shrink-0 text-faint" aria-hidden />
+                        <Icon
+                          name="chevron"
+                          className="h-4 w-4 shrink-0 text-faint"
+                          aria-hidden
+                        />
                       </Link>
                     </li>
                   );
@@ -487,49 +512,63 @@ function VendorApplicationCard({
     [items, docs, signed],
   );
   const required = items.filter((i) => i.required);
-  const requiredApproved = required.filter((i) => i.decision === 'approved').length;
+  const requiredApproved = required.filter(
+    (i) => i.decision === "approved",
+  ).length;
   const oweDocs = progress.outstanding.filter((i) => !i.instrument).length;
   const oweSignatures = progress.outstanding.filter((i) => i.instrument).length;
   const pct = Math.round(progress.ratio * 100);
 
   const meta = [
-    kase.submittedAt ? `Submitted ${formatDate(kase.submittedAt)}` : `Opened ${formatDate(kase.openedAt)}`,
+    kase.submittedAt
+      ? `Submitted ${formatDate(kase.submittedAt)}`
+      : `Opened ${formatDate(kase.openedAt)}`,
     kase.category,
     kase.jurisdiction
-      ? kase.jurisdiction === 'OTHER' && kase.originCountry
+      ? kase.jurisdiction === "OTHER" && kase.originCountry
         ? kase.originCountry
         : JURISDICTION_LABEL[kase.jurisdiction]
       : undefined,
   ]
     .filter(Boolean)
-    .join(' · ');
+    .join(" · ");
 
   const cta =
-    status === 'approved'
-      ? 'View accreditation'
-      : status === 'rejected' || status === 'expired'
-        ? 'View application'
-        : 'Continue application';
+    status === "approved"
+      ? "View accreditation"
+      : status === "rejected" || status === "expired"
+        ? "View application"
+        : "Continue application";
 
   return (
     <div className="card space-y-4 p-4 sm:p-5">
       {/* Status line: dot + plain language + explainer behind (i). */}
       <div>
         <div className="flex items-center gap-2">
-          <span aria-hidden className={`h-2.5 w-2.5 shrink-0 rounded-full ${CASE_STATUS_DOT[status]}`} />
+          <span
+            aria-hidden
+            className={`h-2.5 w-2.5 shrink-0 rounded-full ${CASE_STATUS_DOT[status]}`}
+          />
           <p className="min-w-0 flex-1 font-display text-base font-bold leading-snug text-ink">
             {VENDOR_STATUS_LABEL[status]}
           </p>
-          <InfoTip label="What this status means" content={VENDOR_STATUS_EXPLAINER[status]} />
+          <InfoTip
+            label="What this status means"
+            content={VENDOR_STATUS_EXPLAINER[status]}
+          />
         </div>
-        <p className="mt-0.5 text-sm text-muted">Your accreditation application</p>
+        <p className="mt-0.5 text-sm text-muted">
+          Your accreditation application
+        </p>
       </div>
 
       {/* Progress (reuses the caseLogic roll-up). */}
       <div>
         <div className="flex items-center justify-between gap-3 text-sm">
           <p className="font-semibold text-ink">
-            <span className="tnum">{requiredApproved} of {required.length}</span>{' '}
+            <span className="tnum">
+              {requiredApproved} of {required.length}
+            </span>{" "}
             requirements approved
           </p>
           <p className="tnum text-muted">{pct}%</p>
@@ -557,11 +596,18 @@ function VendorApplicationCard({
                 to={`/cases/${kase.id}`}
                 className="flex items-center gap-2.5 px-3 py-2.5 text-sm font-semibold text-ink transition hover:bg-inset"
               >
-                <Icon name="clipboard" className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-300" />
+                <Icon
+                  name="clipboard"
+                  className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-300"
+                />
                 <span className="min-w-0 flex-1">
-                  You still owe {oweDocs} document{oweDocs === 1 ? '' : 's'}
+                  You still owe {oweDocs} document{oweDocs === 1 ? "" : "s"}
                 </span>
-                <Icon name="chevron" className="h-4 w-4 shrink-0 text-faint" aria-hidden />
+                <Icon
+                  name="chevron"
+                  className="h-4 w-4 shrink-0 text-faint"
+                  aria-hidden
+                />
               </Link>
             </li>
           )}
@@ -571,11 +617,19 @@ function VendorApplicationCard({
                 to={`/cases/${kase.id}`}
                 className="flex items-center gap-2.5 px-3 py-2.5 text-sm font-semibold text-ink transition hover:bg-inset"
               >
-                <Icon name="signature" className="h-4 w-4 shrink-0 text-brand-600 dark:text-brand-300" />
+                <Icon
+                  name="signature"
+                  className="h-4 w-4 shrink-0 text-brand-600 dark:text-brand-300"
+                />
                 <span className="min-w-0 flex-1">
-                  {oweSignatures} agreement{oweSignatures === 1 ? '' : 's'} awaiting your signature
+                  {oweSignatures} agreement{oweSignatures === 1 ? "" : "s"}{" "}
+                  awaiting your signature
                 </span>
-                <Icon name="chevron" className="h-4 w-4 shrink-0 text-faint" aria-hidden />
+                <Icon
+                  name="chevron"
+                  className="h-4 w-4 shrink-0 text-faint"
+                  aria-hidden
+                />
               </Link>
             </li>
           )}
@@ -585,7 +639,10 @@ function VendorApplicationCard({
       {/* Meta demoted to one muted line. */}
       {meta && <p className="text-xs text-muted">{meta}</p>}
 
-      <Link to={`/cases/${kase.id}`} className="btn-primary w-full justify-center">
+      <Link
+        to={`/cases/${kase.id}`}
+        className="btn-primary w-full justify-center"
+      >
         {cta}
         <Icon name="arrowRight" className="h-4 w-4" />
       </Link>

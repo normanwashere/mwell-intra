@@ -1,28 +1,32 @@
-'use client';
+"use client";
 
-import { useCallback, useEffect, useState } from 'react';
-import { useSession } from '@intra/auth';
-import { EVENTS_DEMO_DATA } from './seed';
+import { useCallback, useEffect, useState } from "react";
+import { useSession } from "@intra/auth";
+import { EVENTS_DEMO_DATA } from "./seed";
 import type {
   EventDraft,
   EventFulfillmentRequest,
   EventLifecycle,
   EventManagementInput,
   EventRecord,
+  EventReconciliation,
+  SaveEventReconciliationInput,
   EventsData,
-} from './types';
+} from "./types";
 
-type EventsClient = NonNullable<ReturnType<typeof useSession>['supabaseClient']>;
+type EventsClient = NonNullable<
+  ReturnType<typeof useSession>["supabaseClient"]
+>;
 type UnknownRow = Record<string, unknown>;
 
-const MEMORY_EVENTS_KEY = 'intra.events-data.v1';
+const MEMORY_EVENTS_KEY = "intra.events-data.v1";
 
-function text(value: unknown, fallback = ''): string {
-  return typeof value === 'string' && value.length > 0 ? value : fallback;
+function text(value: unknown, fallback = ""): string {
+  return typeof value === "string" && value.length > 0 ? value : fallback;
 }
 
 function count(value: unknown): number {
-  const parsed = typeof value === 'number' ? value : Number(value ?? 0);
+  const parsed = typeof value === "number" ? value : Number(value ?? 0);
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
@@ -31,9 +35,9 @@ export function lifecycleForDates(
   endDate: string | undefined,
   today = new Date().toISOString().slice(0, 10),
 ): EventLifecycle {
-  if (startDate > today) return 'planned';
-  if ((endDate ?? startDate) < today) return 'completed';
-  return 'active';
+  if (startDate > today) return "planned";
+  if ((endDate ?? startDate) < today) return "completed";
+  return "active";
 }
 
 export function validateEventDraft(draft: EventDraft): string | null {
@@ -41,84 +45,101 @@ export function validateEventDraft(draft: EventDraft): string | null {
   return fields.name ?? fields.startDate ?? fields.endDate ?? null;
 }
 
-export function validateEventDraftFields(draft: EventDraft): Record<string, string> {
+export function validateEventDraftFields(
+  draft: EventDraft,
+): Record<string, string> {
   const errors: Record<string, string> = {};
-  if (!draft.name.trim()) errors.name = 'Event name is required.';
-  if (!draft.startDate) errors.startDate = 'Start date is required.';
+  if (!draft.name.trim()) errors.name = "Event name is required.";
+  if (!draft.startDate) errors.startDate = "Start date is required.";
   if (draft.startDate && draft.endDate && draft.endDate < draft.startDate) {
-    errors.endDate = 'End date cannot be before the start date.';
+    errors.endDate = "End date cannot be before the start date.";
   }
   return errors;
 }
 
 export function validateEventManagementFields(
-  action: EventManagementInput['action'],
+  action: EventManagementInput["action"],
   draft: Partial<EventDraft>,
   reason: string,
   ownerEmail: string,
   minimumDate?: string,
 ): Record<string, string> {
   const errors: Record<string, string> = {};
-  if (action === 'edit' && !draft.name?.trim()) {
-    errors.name = 'Event name is required.';
+  if (action === "edit" && !draft.name?.trim()) {
+    errors.name = "Event name is required.";
   }
-  if (action === 'reschedule') {
+  if (action === "reschedule") {
     if (!draft.startDate) {
-      errors.startDate = 'Start date is required.';
+      errors.startDate = "Start date is required.";
     } else if (minimumDate && draft.startDate < minimumDate) {
-      errors.startDate = 'Start date cannot be in the past.';
+      errors.startDate = "Start date cannot be in the past.";
     }
     if (draft.startDate && draft.endDate && draft.endDate < draft.startDate) {
-      errors.endDate = 'End date cannot be before the start date.';
+      errors.endDate = "End date cannot be before the start date.";
     }
   }
-  if (action === 'transfer_owner') {
+  if (action === "transfer_owner") {
     if (!ownerEmail.trim()) {
-      errors.ownerEmail = 'New owner email is required.';
+      errors.ownerEmail = "New owner email is required.";
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ownerEmail.trim())) {
-      errors.ownerEmail = 'Enter a valid email address.';
+      errors.ownerEmail = "Enter a valid email address.";
     }
   }
-  if (!reason.trim()) errors.reason = 'A reason is required for the event history.';
+  if (!reason.trim())
+    errors.reason = "A reason is required for the event history.";
   return errors;
 }
 
 export function validateEventFulfillmentFields(
   input: EventFulfillmentRequest,
-  options: { minimumDate?: string; maximumDate?: string; itemClass?: string } = {},
+  options: {
+    minimumDate?: string;
+    maximumDate?: string;
+    itemClass?: string;
+  } = {},
 ): Record<string, string> {
   const errors: Record<string, string> = {};
-  if (!input.requestingDepartment.trim()) errors.department = 'Department is required.';
-  if (!input.purpose.trim()) errors.purpose = 'Business purpose is required.';
-  if (!input.costCenter.trim()) errors.costCenter = 'Cost center is required.';
+  if (!input.requestingDepartment.trim())
+    errors.department = "Department is required.";
+  if (!input.purpose.trim()) errors.purpose = "Business purpose is required.";
+  if (!input.costCenter.trim()) errors.costCenter = "Cost center is required.";
   if (!input.requiredDate) {
-    errors.requiredDate = 'Required date is required.';
+    errors.requiredDate = "Required date is required.";
   } else if (options.minimumDate && input.requiredDate < options.minimumDate) {
-    errors.requiredDate = 'Required date cannot be in the past.';
+    errors.requiredDate = "Required date cannot be in the past.";
   } else if (options.maximumDate && input.requiredDate > options.maximumDate) {
-    errors.requiredDate = 'Required date cannot be after the event end date.';
+    errors.requiredDate = "Required date cannot be after the event end date.";
   }
-  if (!input.productId) errors.productId = 'Select a product.';
+  if (!input.productId) errors.productId = "Select a product.";
   if (!Number.isInteger(input.quantity) || input.quantity < 1) {
-    errors.quantity = 'Enter a positive whole-number quantity.';
+    errors.quantity = "Enter a positive whole-number quantity.";
   }
-  if (options.itemClass === 'merchandise' && input.expenseTreatment !== 'expense') {
-    errors.treatment = 'Merchandise must be treated as an expense.';
+  if (
+    options.itemClass === "merchandise" &&
+    input.expenseTreatment !== "expense"
+  ) {
+    errors.treatment = "Merchandise must be treated as an expense.";
   }
   return errors;
 }
 
 function lifecycleForRow(row: UnknownRow): EventLifecycle {
   const status = text(row.status);
-  if (status === 'cancelled' || status === 'closed') return status;
-  return lifecycleForDates(text(row.start_date), text(row.end_date) || undefined);
+  if (status === "cancelled" || status === "closed") return status;
+  return lifecycleForDates(
+    text(row.start_date),
+    text(row.end_date) || undefined,
+  );
 }
 
-function mapEventRow(row: UnknownRow, totals = { reserved: 0, issued: 0, returned: 0 }): EventRecord {
+function mapEventRow(
+  row: UnknownRow,
+  totals = { reserved: 0, issued: 0, returned: 0 },
+): EventRecord {
   return {
     id: text(row.id),
-    name: text(row.name, 'Untitled event'),
-    type: text(row.type, 'corporate'),
+    name: text(row.name, "Untitled event"),
+    type: text(row.type, "corporate"),
     startDate: text(row.start_date),
     endDate: text(row.end_date) || undefined,
     siteLocationId: text(row.site_location_id) || undefined,
@@ -131,17 +152,20 @@ function mapEventRow(row: UnknownRow, totals = { reserved: 0, issued: 0, returne
   };
 }
 
-export async function manageLiveEvent(client: EventsClient, input: EventManagementInput): Promise<EventRecord> {
+export async function manageLiveEvent(
+  client: EventsClient,
+  input: EventManagementInput,
+): Promise<EventRecord> {
   const validation = validateEventManagementFields(
     input.action,
-    input.changes ?? { name: '', type: 'corporate', startDate: '' },
+    input.changes ?? { name: "", type: "corporate", startDate: "" },
     input.reason,
-    input.changes?.ownerEmail ?? '',
+    input.changes?.ownerEmail ?? "",
   );
   const firstError = Object.values(validation)[0];
   if (firstError) throw new Error(firstError);
   const changes = input.changes ?? {};
-  const { data, error } = await client.schema('warehouse').rpc('manage_event', {
+  const { data, error } = await client.schema("warehouse").rpc("manage_event", {
     payload: {
       event_id: input.eventId,
       action: input.action,
@@ -150,10 +174,18 @@ export async function manageLiveEvent(client: EventsClient, input: EventManageme
       changes: {
         ...(changes.name !== undefined ? { name: changes.name.trim() } : {}),
         ...(changes.type !== undefined ? { type: changes.type } : {}),
-        ...(changes.startDate !== undefined ? { start_date: changes.startDate } : {}),
-        ...(changes.endDate !== undefined ? { end_date: changes.endDate || null } : {}),
-        ...(changes.siteLocationId !== undefined ? { site_location_id: changes.siteLocationId || null } : {}),
-        ...(changes.ownerEmail !== undefined ? { owner_email: changes.ownerEmail.trim() } : {}),
+        ...(changes.startDate !== undefined
+          ? { start_date: changes.startDate }
+          : {}),
+        ...(changes.endDate !== undefined
+          ? { end_date: changes.endDate || null }
+          : {}),
+        ...(changes.siteLocationId !== undefined
+          ? { site_location_id: changes.siteLocationId || null }
+          : {}),
+        ...(changes.ownerEmail !== undefined
+          ? { owner_email: changes.ownerEmail.trim() }
+          : {}),
       },
     },
   });
@@ -165,50 +197,122 @@ export async function requestEventFulfillment(
   client: EventsClient,
   input: EventFulfillmentRequest,
 ): Promise<{ id: string; eventId: string }> {
-  if (!input.eventId) throw new Error('Event is required.');
+  if (!input.eventId) throw new Error("Event is required.");
   const validation = validateEventFulfillmentFields(input);
   const firstError = Object.values(validation)[0];
   if (firstError) throw new Error(firstError);
-  const { data, error } = await client.schema('warehouse').rpc('request_event_fulfillment', {
-    payload: {
-      event_id: input.eventId,
-      requesting_department: input.requestingDepartment.trim(),
-      purpose: input.purpose.trim(),
-      cost_center: input.costCenter.trim(),
-      required_date: input.requiredDate,
-      expense_treatment: input.expenseTreatment,
-      lines: [{ productId: input.productId, quantity: input.quantity }],
-      idempotency_key: input.idempotencyKey,
-    },
-  });
+  const { data, error } = await client
+    .schema("warehouse")
+    .rpc("request_event_fulfillment", {
+      payload: {
+        event_id: input.eventId,
+        requesting_department: input.requestingDepartment.trim(),
+        purpose: input.purpose.trim(),
+        cost_center: input.costCenter.trim(),
+        required_date: input.requiredDate,
+        expense_treatment: input.expenseTreatment,
+        lines: [{ productId: input.productId, quantity: input.quantity }],
+        idempotency_key: input.idempotencyKey,
+      },
+    });
   if (error) throw error;
   const row = (data ?? {}) as UnknownRow;
   return { id: text(row.id), eventId: text(row.event_id) };
 }
 
-export async function loadLiveEvents(client: EventsClient): Promise<EventsData> {
-  const [eventResult, allocationResult, productResult] = await Promise.all([
-    client
-      .schema('warehouse')
-      .from('events')
-      .select('id,name,type,site_location_id,start_date,end_date,status,owner_email,updated_at')
-      .order('start_date', { ascending: false })
-      .limit(1000),
-    client.schema('warehouse').from('allocations').select('event_id,quantity,status').limit(10000),
-    client
-      .schema('warehouse')
-      .from('products')
-      .select('id,name,item_class')
-      .in('item_class', ['sellable_sku', 'merchandise'])
-      .order('name', { ascending: true })
-      .limit(1000),
-  ]);
+function mapReconciliationRow(row: UnknownRow): EventReconciliation {
+  return {
+    eventId: text(row.event_id),
+    status: text(row.status, "draft") as EventReconciliation["status"],
+    soldUnits: count(row.sold_units),
+    giveawayUnits: count(row.giveaway_units),
+    returnedUnits: count(row.returned_units),
+    lostUnits: count(row.lost_units),
+    damagedUnits: count(row.damaged_units),
+    rekitUnits: count(row.rekit_units),
+    grossSalesAmount: count(row.gross_sales_amount),
+    financeReference: text(row.finance_reference) || undefined,
+    evidenceUrl: text(row.evidence_url) || undefined,
+    note: text(row.note) || undefined,
+    approvedAt: text(row.approved_at) || undefined,
+  };
+}
+
+export async function saveLiveEventReconciliation(
+  client: EventsClient,
+  input: SaveEventReconciliationInput,
+): Promise<EventReconciliation> {
+  const { data, error } = await client
+    .schema("warehouse")
+    .rpc("save_event_reconciliation", {
+      payload: {
+        event_id: input.eventId,
+        action: input.action,
+        sold_units: input.soldUnits,
+        giveaway_units: input.giveawayUnits,
+        returned_units: input.returnedUnits,
+        lost_units: input.lostUnits,
+        damaged_units: input.damagedUnits,
+        rekit_units: input.rekitUnits,
+        gross_sales_amount: input.grossSalesAmount,
+        finance_reference: input.financeReference?.trim() || null,
+        evidence_url: input.evidenceUrl?.trim() || null,
+        note: input.note?.trim() || null,
+      },
+    });
+  if (error) throw error;
+  return mapReconciliationRow((data ?? {}) as UnknownRow);
+}
+export async function loadLiveEvents(
+  client: EventsClient,
+): Promise<EventsData> {
+  const [eventResult, allocationResult, productResult, reconciliationResult] =
+    await Promise.all([
+      client
+        .schema("warehouse")
+        .from("events")
+        .select(
+          "id,name,type,site_location_id,start_date,end_date,status,owner_email,updated_at",
+        )
+        .order("start_date", { ascending: false })
+        .limit(1000),
+      client
+        .schema("warehouse")
+        .from("allocations")
+        .select("event_id,quantity,status")
+        .limit(10000),
+      client
+        .schema("warehouse")
+        .from("products")
+        .select("id,name,item_class")
+        .in("item_class", ["sellable_sku", "merchandise"])
+        .order("name", { ascending: true })
+        .limit(1000),
+      client
+        .schema("warehouse")
+        .from("event_reconciliations")
+        .select(
+          "event_id,status,sold_units,giveaway_units,returned_units,lost_units,damaged_units,rekit_units,gross_sales_amount,finance_reference,evidence_url,note,approved_at",
+        )
+        .limit(1000),
+    ]);
   const warnings: string[] = [];
   if (eventResult.error) warnings.push(`Events: ${eventResult.error.message}`);
-  if (allocationResult.error) warnings.push(`Fulfillment: ${allocationResult.error.message}`);
-  if (productResult.error) warnings.push(`Products: ${productResult.error.message}`);
-  const allocations = Array.isArray(allocationResult.data) ? (allocationResult.data as UnknownRow[]) : [];
-  const totals = new Map<string, { reserved: number; issued: number; returned: number }>();
+  if (allocationResult.error)
+    warnings.push(`Fulfillment: ${allocationResult.error.message}`);
+  if (productResult.error)
+    warnings.push("Products: " + productResult.error.message);
+  if (reconciliationResult.error)
+    warnings.push(
+      "Event reconciliation: " + reconciliationResult.error.message,
+    );
+  const allocations = Array.isArray(allocationResult.data)
+    ? (allocationResult.data as UnknownRow[])
+    : [];
+  const totals = new Map<
+    string,
+    { reserved: number; issued: number; returned: number }
+  >();
   for (const row of allocations) {
     const eventId = text(row.event_id);
     const current = totals.get(eventId) ?? {
@@ -218,32 +322,45 @@ export async function loadLiveEvents(client: EventsClient): Promise<EventsData> 
     };
     const quantity = count(row.quantity);
     const status = text(row.status);
-    if (status === 'reserved' || status === 'allocated') current.reserved += quantity;
-    if (status === 'issued') current.issued += quantity;
-    if (status === 'returned') current.returned += quantity;
+    if (status === "reserved" || status === "allocated")
+      current.reserved += quantity;
+    if (status === "issued") current.issued += quantity;
+    if (status === "returned") current.returned += quantity;
     totals.set(eventId, current);
   }
-  const rows = Array.isArray(eventResult.data) ? (eventResult.data as UnknownRow[]) : [];
+  const rows = Array.isArray(eventResult.data)
+    ? (eventResult.data as UnknownRow[])
+    : [];
   return {
     events: rows.map((row): EventRecord => {
       const id = text(row.id);
       const total = totals.get(id) ?? { reserved: 0, issued: 0, returned: 0 };
       return mapEventRow(row, total);
     }),
-    products: (Array.isArray(productResult.data) ? (productResult.data as UnknownRow[]) : []).map((row) => ({
+    products: (Array.isArray(productResult.data)
+      ? (productResult.data as UnknownRow[])
+      : []
+    ).map((row) => ({
       id: text(row.id),
-      name: text(row.name, 'Unnamed product'),
+      name: text(row.name, "Unnamed product"),
       itemClass: text(row.item_class),
     })),
+    reconciliations: (Array.isArray(reconciliationResult.data)
+      ? (reconciliationResult.data as UnknownRow[])
+      : []
+    ).map(mapReconciliationRow),
     warnings,
   };
 }
 
-export async function createLiveEvent(client: EventsClient, draft: EventDraft): Promise<void> {
+export async function createLiveEvent(
+  client: EventsClient,
+  draft: EventDraft,
+): Promise<void> {
   const validation = validateEventDraft(draft);
   if (validation) throw new Error(validation);
   const id = `evt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const { error } = await client.schema('warehouse').rpc('create_event', {
+  const { error } = await client.schema("warehouse").rpc("create_event", {
     payload: {
       event: {
         id,
@@ -258,25 +375,34 @@ export async function createLiveEvent(client: EventsClient, draft: EventDraft): 
   if (error) throw error;
 }
 
-export function loadMemoryEvents(storage: Pick<Storage, 'getItem'>): EventsData {
+export function loadMemoryEvents(
+  storage: Pick<Storage, "getItem">,
+): EventsData {
   const stored = storage.getItem(MEMORY_EVENTS_KEY);
   if (!stored) return EVENTS_DEMO_DATA;
   try {
     const parsed = JSON.parse(stored) as Partial<EventsData>;
-    return Array.isArray(parsed.events) ? { events: parsed.events as EventRecord[], warnings: [] } : EVENTS_DEMO_DATA;
+    return Array.isArray(parsed.events)
+      ? { events: parsed.events as EventRecord[], warnings: [] }
+      : EVENTS_DEMO_DATA;
   } catch {
     return EVENTS_DEMO_DATA;
   }
 }
 
-export function saveMemoryEvents(storage: Pick<Storage, 'setItem'>, data: EventsData): void {
+export function saveMemoryEvents(
+  storage: Pick<Storage, "setItem">,
+  data: EventsData,
+): void {
   storage.setItem(MEMORY_EVENTS_KEY, JSON.stringify({ events: data.events }));
 }
 
 export function useEventsData() {
   const { mode, supabaseClient } = useSession();
-  const live = mode === 'supabase' ? supabaseClient : null;
-  const [data, setData] = useState<EventsData>(live ? { events: [], warnings: [] } : EVENTS_DEMO_DATA);
+  const live = mode === "supabase" ? supabaseClient : null;
+  const [data, setData] = useState<EventsData>(
+    live ? { events: [], warnings: [] } : EVENTS_DEMO_DATA,
+  );
   const [loading, setLoading] = useState(Boolean(live));
   const [error, setError] = useState<string | null>(null);
 
@@ -290,9 +416,11 @@ export function useEventsData() {
     try {
       const next = await loadLiveEvents(live);
       setData(next);
-      setError(next.warnings.length ? next.warnings.join(' ') : null);
+      setError(next.warnings.length ? next.warnings.join(" ") : null);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Events could not be loaded.');
+      setError(
+        cause instanceof Error ? cause.message : "Events could not be loaded.",
+      );
     } finally {
       setLoading(false);
     }
@@ -325,7 +453,8 @@ export function useEventsData() {
 
   const manageEvent = useCallback(
     async (input: EventManagementInput) => {
-      if (!live) throw new Error('Event lifecycle changes require Supabase mode.');
+      if (!live)
+        throw new Error("Event lifecycle changes require Supabase mode.");
       const updated = await manageLiveEvent(live, input);
       await refresh();
       return updated;
@@ -335,12 +464,25 @@ export function useEventsData() {
 
   const requestFulfillment = useCallback(
     async (input: EventFulfillmentRequest) => {
-      if (!live) throw new Error('Warehouse fulfillment requests require Supabase mode.');
+      if (!live)
+        throw new Error(
+          "Warehouse fulfillment requests require Supabase mode.",
+        );
       return requestEventFulfillment(live, input);
     },
     [live],
   );
 
+  const saveReconciliation = useCallback(
+    async (input: SaveEventReconciliationInput) => {
+      if (!live)
+        throw new Error("Event reconciliation requires Supabase mode.");
+      const result = await saveLiveEventReconciliation(live, input);
+      await refresh();
+      return result;
+    },
+    [live, refresh],
+  );
   useEffect(() => {
     void refresh();
   }, [refresh]);
@@ -352,5 +494,6 @@ export function useEventsData() {
     createEvent,
     manageEvent,
     requestFulfillment,
+    saveReconciliation,
   };
 }

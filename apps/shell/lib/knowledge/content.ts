@@ -499,7 +499,10 @@ const procedureArticles: KnowledgeArticle[] = [
         "Record decision",
         "Approve only when gates and decision authority are satisfied.",
       ],
-      ["Monitor renewal", "Track expiry and material changes."],
+      [
+        "Monitor lifecycle",
+        "Open renewal, document expiry, performance, reassessment, suspension, or offboarding review; record due date, risk, evidence, decision, and completion. Suspension blocks supplier eligibility and offboarding also disables linked vendor access.",
+      ],
     ],
   ),
   processArticle(
@@ -571,10 +574,13 @@ const procedureArticles: KnowledgeArticle[] = [
       ],
       [
         "Record outcome",
-        "Enter consumed, returned, lost, or damaged quantities.",
+        "Enter sold, giveaway, returned, lost, damaged, re-kit, and gross-sales outcomes with Finance reference and evidence.",
       ],
       ["Inspect returns", "Restock accepted units and route exceptions."],
-      ["Reconcile", "Confirm all issued quantity has a final outcome."],
+      [
+        "Reconcile",
+        "Submit the balanced outcome to Finance, obtain independent settlement approval, and close only after every fulfillment record is complete or cancelled.",
+      ],
     ],
   ),
   processArticle(
@@ -618,6 +624,10 @@ const procedureArticles: KnowledgeArticle[] = [
         "A warehouse operator other than the packer verifies Ready, performs the physical handoff, and posts stock and packaging movements once.",
       ],
       [
+        "Track courier delivery",
+        "For ecommerce, move the released shipment through in transit, failed delivery and retry or return-to-sender, then record a proof-of-delivery reference and evidence. Delivery, not dispatch, completes the order.",
+      ],
+      [
         "Acknowledge receipt",
         "For accountable handovers, the recipient or another authorized user records acknowledgment reference and evidence. The linked department request closes automatically only after this step.",
       ],
@@ -627,7 +637,7 @@ const procedureArticles: KnowledgeArticle[] = [
       ],
       [
         "Resolve returns separately",
-        "Customer Service records the issue, Warehouse quarantines and selects the physical outcome, Finance records refund evidence, and approved open-box work is completed into a scanned rack or bin.",
+        "Customer Service records the issue and serial, Warehouse quarantines every item and selects replacement, refund, supplier RMA, re-kit, or write-off. Replacement creates a linked fulfillment order; refund and write-off require Finance evidence; supplier return requires an RMA reference; Customer Service records final customer closure evidence.",
       ],
     ],
   ),
@@ -642,7 +652,10 @@ const procedureArticles: KnowledgeArticle[] = [
     [
       ["Create draft", "Select bin and count scope."],
       ["Record physical count", "Enter observed quantity and evidence."],
-      ["Review variance", "Determine cause, value, and approval requirement."],
+      [
+        "Review variance",
+        "Determine cause, value, and approval requirement. Use the same integrity register for expiry, recall, damage, or serialized reconciliation.",
+      ],
       ["Post approved adjustment", "Use the stock-change approval workflow."],
       ["Confirm reconciliation", "Verify ledger and physical count agree."],
     ],

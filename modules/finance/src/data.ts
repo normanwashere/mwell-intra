@@ -1,20 +1,24 @@
-'use client';
+"use client";
 
-import { useCallback, useEffect, useState } from 'react';
-import { useSession } from '@intra/auth';
-import { can } from '@intra/rbac';
-import { FINANCE_DEMO_DATA } from './seed';
+import { useCallback, useEffect, useState } from "react";
+import { useSession } from "@intra/auth";
+import { can } from "@intra/rbac";
+import { FINANCE_DEMO_DATA } from "./seed";
 import type {
   FinanceActivity,
   FinanceActivityFilter,
   FinanceActivitySource,
   FinanceData,
+  FinanceCloseEntry,
+  ManageFinanceCloseEntryInput,
   FinancePaymentItem,
   FinanceSummary,
   PaymentReadinessStatus,
-} from './types';
+} from "./types";
 
-type FinanceClient = NonNullable<ReturnType<typeof useSession>['supabaseClient']>;
+type FinanceClient = NonNullable<
+  ReturnType<typeof useSession>["supabaseClient"]
+>;
 type UnknownRow = Record<string, unknown>;
 
 export interface FinanceSourceAccess {
@@ -23,22 +27,22 @@ export interface FinanceSourceAccess {
 }
 
 const ACTIVITY_SOURCES = new Set<FinanceActivitySource>([
-  'procurement_po',
-  'warehouse_receipt',
-  'warehouse_return',
+  "procurement_po",
+  "warehouse_receipt",
+  "warehouse_return",
 ]);
 
 const PAYMENT_STATUSES = new Set<PaymentReadinessStatus>([
-  'draft',
-  'ready_for_finance',
-  'returned',
-  'accepted',
-  'released',
-  'superseded',
+  "draft",
+  "ready_for_finance",
+  "returned",
+  "accepted",
+  "released",
+  "superseded",
 ]);
 
-function text(value: unknown, fallback = ''): string {
-  return typeof value === 'string' && value.length > 0 ? value : fallback;
+function text(value: unknown, fallback = ""): string {
+  return typeof value === "string" && value.length > 0 ? value : fallback;
 }
 
 function optionalText(value: unknown): string | undefined {
@@ -47,7 +51,7 @@ function optionalText(value: unknown): string | undefined {
 }
 
 function amount(value: unknown): number {
-  const result = typeof value === 'number' ? value : Number(value ?? 0);
+  const result = typeof value === "number" ? value : Number(value ?? 0);
   return Number.isFinite(result) ? result : 0;
 }
 
@@ -57,14 +61,14 @@ function rows(value: unknown): UnknownRow[] {
 
 export function summarizeFinanceData(data: FinanceData): FinanceSummary {
   const committedValue = data.activity
-    .filter((item) => item.source === 'procurement_po')
+    .filter((item) => item.source === "procurement_po")
     .reduce((sum, item) => sum + item.amount, 0);
   const receivedValue = data.activity
-    .filter((item) => item.source === 'warehouse_receipt')
+    .filter((item) => item.source === "warehouse_receipt")
     .reduce((sum, item) => sum + item.amount, 0);
   const returnedValue = Math.abs(
     data.activity
-      .filter((item) => item.source === 'warehouse_return')
+      .filter((item) => item.source === "warehouse_return")
       .reduce((sum, item) => sum + item.amount, 0),
   );
   return {
@@ -73,10 +77,13 @@ export function summarizeFinanceData(data: FinanceData): FinanceSummary {
     receivedValue,
     returnedValue,
     netWarehouseValue: receivedValue - returnedValue,
-    reviewCount: data.payments.filter((item) => item.status === 'ready_for_finance').length,
-    returnedCount: data.payments.filter((item) => item.status === 'returned').length,
+    reviewCount: data.payments.filter(
+      (item) => item.status === "ready_for_finance",
+    ).length,
+    returnedCount: data.payments.filter((item) => item.status === "returned")
+      .length,
     acceptedCount: data.payments.filter(
-      (item) => item.status === 'accepted' || item.status === 'released',
+      (item) => item.status === "accepted" || item.status === "released",
     ).length,
   };
 }
@@ -85,13 +92,13 @@ export function filterFinanceActivity(
   activity: readonly FinanceActivity[],
   filter: FinanceActivityFilter,
 ): FinanceActivity[] {
-  if (filter === 'all') return [...activity];
+  if (filter === "all") return [...activity];
   const source: FinanceActivitySource =
-    filter === 'procurement'
-      ? 'procurement_po'
-      : filter === 'receipts'
-        ? 'warehouse_receipt'
-        : 'warehouse_return';
+    filter === "procurement"
+      ? "procurement_po"
+      : filter === "receipts"
+        ? "warehouse_receipt"
+        : "warehouse_return";
   return activity.filter((item) => item.source === source);
 }
 
@@ -101,9 +108,10 @@ export function scopeFinanceData(
 ): FinanceData {
   return {
     activity: data.activity.filter((item) =>
-      item.source === 'procurement_po' ? access.procurement : access.warehouse,
+      item.source === "procurement_po" ? access.procurement : access.warehouse,
     ),
     payments: access.procurement ? [...data.payments] : [],
+    closeEntries: [...data.closeEntries],
     inventoryValue: access.warehouse ? data.inventoryValue : 0,
     warnings: [...data.warnings],
   };
@@ -120,7 +128,7 @@ function mapActivity(row: UnknownRow): FinanceActivity | null {
     purchaseOrderId: optionalText(row.po_id),
     vendorId: optionalText(row.vendor_id),
     amount: amount(row.amount),
-    status: text(row.status, 'unknown'),
+    status: text(row.status, "unknown"),
     occurredAt: text(row.occurred_at, new Date(0).toISOString()),
   };
 }
@@ -138,13 +146,16 @@ function mapPayment(
     id,
     purchaseOrderId,
     poNumber: text(po?.po_number, purchaseOrderId),
-    vendorName: text(po?.vendor_name, 'Vendor not available'),
+    vendorName: text(po?.vendor_name, "Vendor not available"),
     amount: amount(row.invoice_amount ?? po?.total),
     invoiceNumber: optionalText(row.invoice_number),
     dueDate: optionalText(row.due_date),
     releasedAmount: amount(row.released_amount),
-    remainingAmount: Math.max(amount(row.invoice_amount ?? po?.total) - amount(row.released_amount), 0),
-    poStatus: text(po?.status, 'unknown'),
+    remainingAmount: Math.max(
+      amount(row.invoice_amount ?? po?.total) - amount(row.released_amount),
+      0,
+    ),
+    poStatus: text(po?.status, "unknown"),
     status,
     poMatch: row.po_match === true,
     invoiceReference: optionalText(row.invoice_or_si_storage_path),
@@ -156,95 +167,171 @@ function mapPayment(
   };
 }
 
+function mapCloseEntry(row: UnknownRow): FinanceCloseEntry | null {
+  const id = text(row.id);
+  const entryType = text(row.entry_type) as FinanceCloseEntry["entryType"];
+  if (!id || !entryType) return null;
+  return {
+    id,
+    periodStart: text(row.period_start),
+    periodEnd: text(row.period_end),
+    entryType,
+    sourceModule: text(row.source_module),
+    sourceReference: text(row.source_reference),
+    costCenter: optionalText(row.cost_center),
+    amount: amount(row.amount),
+    status: text(row.status, "draft") as FinanceCloseEntry["status"],
+    evidenceUrl: optionalText(row.evidence_url),
+    reconciliationNote: optionalText(row.reconciliation_note),
+    preparedBy: text(row.prepared_by),
+    preparedAt: text(row.prepared_at),
+    postedBy: optionalText(row.posted_by),
+    postedAt: optionalText(row.posted_at),
+  };
+}
+
+export async function manageLiveFinanceCloseEntry(
+  client: FinanceClient,
+  input: ManageFinanceCloseEntryInput,
+): Promise<FinanceCloseEntry> {
+  const { data, error } = await client
+    .schema("core")
+    .rpc("manage_finance_close_entry", {
+      payload: {
+        action: input.action,
+        id: input.id ?? null,
+        period_start: input.periodStart ?? null,
+        period_end: input.periodEnd ?? null,
+        entry_type: input.entryType ?? null,
+        source_module: input.sourceModule ?? null,
+        source_reference: input.sourceReference ?? null,
+        cost_center: input.costCenter ?? null,
+        amount: input.amount ?? null,
+        evidence_url: input.evidenceUrl ?? null,
+        reconciliation_note: input.reconciliationNote ?? null,
+      },
+    });
+  if (error) throw error;
+  const mapped = mapCloseEntry((data ?? {}) as UnknownRow);
+  if (!mapped) throw new Error("Finance close entry could not be read.");
+  return mapped;
+}
 export async function loadLiveFinanceData(
   client: FinanceClient,
   access: FinanceSourceAccess = { procurement: true, warehouse: true },
 ): Promise<FinanceData> {
   const emptyResult = () =>
-    Promise.resolve({ data: [] as UnknownRow[], error: null as { message: string } | null });
+    Promise.resolve({
+      data: [] as UnknownRow[],
+      error: null as { message: string } | null,
+    });
   const [
     activityResult,
     purchaseOrderResult,
     paymentResult,
     inventoryResult,
     productResult,
+    closeEntryResult,
   ] = await Promise.all([
     access.procurement || access.warehouse
       ? client
-          .schema('core')
-          .from('v_finance_activity')
-          .select('source,ref_id,po_id,vendor_id,amount,status,occurred_at')
-          .order('occurred_at', { ascending: false })
+          .schema("core")
+          .from("v_finance_activity")
+          .select("source,ref_id,po_id,vendor_id,amount,status,occurred_at")
+          .order("occurred_at", { ascending: false })
           .limit(1000)
       : emptyResult(),
     access.procurement
       ? client
-          .schema('procurement')
-          .from('purchase_orders')
-          .select('id,po_number,vendor_name,total,status,updated_at')
-          .order('updated_at', { ascending: false })
+          .schema("procurement")
+          .from("purchase_orders")
+          .select("id,po_number,vendor_name,total,status,updated_at")
+          .order("updated_at", { ascending: false })
           .limit(1000)
       : emptyResult(),
     access.procurement
       ? client
-          .schema('procurement')
-          .from('payment_readiness_packs')
+          .schema("procurement")
+          .from("payment_readiness_packs")
           .select(
-            'id,purchase_order_id,status,po_match,invoice_or_si_storage_path,invoice_number,due_date,invoice_amount,released_amount,prepared_by,prepared_at,finance_reviewed_by,finance_reviewed_at,finance_note',
+            "id,purchase_order_id,status,po_match,invoice_or_si_storage_path,invoice_number,due_date,invoice_amount,released_amount,prepared_by,prepared_at,finance_reviewed_by,finance_reviewed_at,finance_note",
           )
-          .neq('status', 'superseded')
-          .order('prepared_at', { ascending: false })
+          .neq("status", "superseded")
+          .order("prepared_at", { ascending: false })
           .limit(1000)
       : emptyResult(),
     access.warehouse
       ? client
-          .schema('warehouse')
-          .from('inventory_position_v1')
-          .select('product_id,on_hand')
+          .schema("warehouse")
+          .from("inventory_position_v1")
+          .select("product_id,on_hand")
           .limit(100000)
       : emptyResult(),
     access.warehouse
       ? client
-          .schema('warehouse')
-          .from('products')
-          .select('id,unit_cost')
+          .schema("warehouse")
+          .from("products")
+          .select("id,unit_cost")
           .limit(10000)
+      : emptyResult(),
+    access.procurement || access.warehouse
+      ? client
+          .schema("core")
+          .from("finance_close_entries")
+          .select(
+            "id,period_start,period_end,entry_type,source_module,source_reference,cost_center,amount,status,evidence_url,reconciliation_note,prepared_by,prepared_at,posted_by,posted_at",
+          )
+          .order("period_end", { ascending: false })
+          .limit(1000)
       : emptyResult(),
   ]);
 
   const warnings: string[] = [];
-  if (activityResult.error) warnings.push(`Financial activity: ${activityResult.error.message}`);
+  if (activityResult.error)
+    warnings.push(`Financial activity: ${activityResult.error.message}`);
   if (purchaseOrderResult.error)
     warnings.push(`Purchase orders: ${purchaseOrderResult.error.message}`);
   if (paymentResult.error)
     warnings.push(`Payment readiness: ${paymentResult.error.message}`);
+  if (closeEntryResult.error)
+    warnings.push("Finance close: " + closeEntryResult.error.message);
   if (inventoryResult.error || productResult.error)
     warnings.push(
-      `Inventory valuation: ${inventoryResult.error?.message ?? productResult.error?.message ?? 'source unavailable'}`,
+      `Inventory valuation: ${inventoryResult.error?.message ?? productResult.error?.message ?? "source unavailable"}`,
     );
 
   const purchaseOrders = new Map(
     rows(purchaseOrderResult.data).map((row) => [text(row.id), row]),
   );
   const unitCostByProduct = new Map(
-    rows(productResult.data).map((row) => [text(row.id), amount(row.unit_cost)]),
+    rows(productResult.data).map((row) => [
+      text(row.id),
+      amount(row.unit_cost),
+    ]),
   );
   const inventoryValue = rows(inventoryResult.data).reduce(
     (sum, row) =>
-      sum + amount(row.on_hand) * (unitCostByProduct.get(text(row.product_id)) ?? 0),
+      sum +
+      amount(row.on_hand) * (unitCostByProduct.get(text(row.product_id)) ?? 0),
     0,
   );
 
-  return scopeFinanceData({
-    activity: rows(activityResult.data)
-      .map(mapActivity)
-      .filter((item): item is FinanceActivity => item !== null),
-    payments: rows(paymentResult.data)
-      .map((row) => mapPayment(row, purchaseOrders))
-      .filter((item): item is FinancePaymentItem => item !== null),
-    inventoryValue,
-    warnings,
-  }, access);
+  return scopeFinanceData(
+    {
+      activity: rows(activityResult.data)
+        .map(mapActivity)
+        .filter((item): item is FinanceActivity => item !== null),
+      payments: rows(paymentResult.data)
+        .map((row) => mapPayment(row, purchaseOrders))
+        .filter((item): item is FinancePaymentItem => item !== null),
+      closeEntries: rows(closeEntryResult.data)
+        .map(mapCloseEntry)
+        .filter((item): item is FinanceCloseEntry => item !== null),
+      inventoryValue,
+      warnings,
+    },
+    access,
+  );
 }
 
 export function useFinanceData(): {
@@ -252,14 +339,23 @@ export function useFinanceData(): {
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
+  manageCloseEntry: (
+    input: ManageFinanceCloseEntryInput,
+  ) => Promise<FinanceCloseEntry>;
 } {
   const { mode, supabaseClient, userRoles } = useSession();
-  const live = mode === 'supabase' ? supabaseClient : null;
-  const procurementAccess = can(userRoles, 'procurement', 'view_finance');
-  const warehouseAccess = can(userRoles, 'warehouse', 'view_finance');
+  const live = mode === "supabase" ? supabaseClient : null;
+  const procurementAccess = can(userRoles, "procurement", "view_finance");
+  const warehouseAccess = can(userRoles, "warehouse", "view_finance");
   const [data, setData] = useState<FinanceData>(
     live
-      ? { activity: [], payments: [], inventoryValue: 0, warnings: [] }
+      ? {
+          activity: [],
+          payments: [],
+          closeEntries: [],
+          inventoryValue: 0,
+          warnings: [],
+        }
       : scopeFinanceData(FINANCE_DEMO_DATA, {
           procurement: procurementAccess,
           warehouse: warehouseAccess,
@@ -287,17 +383,31 @@ export function useFinanceData(): {
         warehouse: warehouseAccess,
       });
       setData(next);
-      setError(next.warnings.length > 0 ? next.warnings.join(' ') : null);
+      setError(next.warnings.length > 0 ? next.warnings.join(" ") : null);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Finance data could not be loaded.');
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Finance data could not be loaded.",
+      );
     } finally {
       setLoading(false);
     }
   }, [live, procurementAccess, warehouseAccess]);
 
+  const manageCloseEntry = useCallback(
+    async (input: ManageFinanceCloseEntryInput) => {
+      if (!live)
+        throw new Error("Finance close actions require Supabase mode.");
+      const result = await manageLiveFinanceCloseEntry(live, input);
+      await refresh();
+      return result;
+    },
+    [live, refresh],
+  );
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
-  return { data, loading, error, refresh };
+  return { data, loading, error, refresh, manageCloseEntry };
 }

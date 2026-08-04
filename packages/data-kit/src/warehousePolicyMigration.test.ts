@@ -7,7 +7,9 @@ describe("Warehouse procurement-lineage migration", () => {
     const migrations = resolve(process.cwd(), "../../supabase/migrations");
     const policyMigration = readdirSync(migrations)
       .filter((file) => file.endsWith(".sql"))
-      .map((file) => readFileSync(resolve(migrations, file), "utf8"))
+      .map((file) =>
+        readFileSync(resolve(migrations, file), "utf8").replace(/\r\n/g, "\n"),
+      )
       .find((sql) => sql.includes("Warehouse PO authoring is disabled"));
 
     expect(policyMigration).toContain(

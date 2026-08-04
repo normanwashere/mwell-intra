@@ -173,45 +173,40 @@ const WAREHOUSE_CAPS: Record<string, readonly string[]> = {
   ],
   operations: [
     "view_dashboard",
-    "manage_inventory",
-    "reserve_allocate",
-    "issue_items",
-    "manage_returns",
-    "transfer_stock",
-    "inspect_quality",
-    "view_exceptions",
+    "view_inventory",
+    "request_fulfillment",
+    "request_stock",
+    "submit_return_case",
   ],
   finance: [
     "view_dashboard",
-    "manage_inventory",
+    "view_inventory",
     "view_finance",
     "approve_stock_adjustment_finance",
     "view_exceptions",
   ],
   bi_analyst: [
     "view_dashboard",
-    "manage_inventory",
+    "view_inventory",
     "view_analytics",
     "view_exceptions",
   ],
-  business_unit: ["view_dashboard", "manage_inventory", "reserve_allocate"],
+  business_unit: ["view_dashboard", "view_inventory", "request_stock"],
   marketing: [
     "view_dashboard",
-    "manage_inventory",
-    "reserve_allocate",
-    "manage_returns",
+    "view_inventory",
+    "request_stock",
   ],
   procurement: [
     "view_dashboard",
-    "manage_inventory",
+    "view_inventory",
     "view_procurement",
     "manage_products",
   ],
   pricing: [
     "view_dashboard",
-    "manage_inventory",
+    "view_inventory",
     "view_pricing",
-    "set_pricing",
     "view_finance",
   ],
   warehouse_admin: [
@@ -628,13 +623,13 @@ function warehouseRoutes(roles: Roles): readonly RouteExpectation[] {
     {
       path: "/warehouse/inventory",
       label: "warehouse inventory",
-      caps: ["manage_inventory"],
+      caps: ["view_inventory", "manage_inventory"],
       allowedText: /Inventory|SKUs|Low stock/i,
     },
     {
       path: "/warehouse/inventory/ecg-ring-10",
       label: "warehouse product detail",
-      caps: ["manage_inventory"],
+      caps: ["view_inventory", "manage_inventory"],
       allowedText: /Traceability|Stock|ECG Ring/i,
     },
     {
@@ -658,7 +653,7 @@ function warehouseRoutes(roles: Roles): readonly RouteExpectation[] {
     {
       path: "/warehouse/returns",
       label: "warehouse returns",
-      caps: ["manage_returns"],
+      caps: ["manage_returns", "submit_return_case"],
       allowedText: /Returns|Record return/i,
     },
     {
@@ -781,15 +776,13 @@ function procurementTiers(roles: Roles): readonly string[] {
   const tiers = new Set<string>();
   const proc = roles.procurement ?? [];
   const legal = roles.legal ?? [];
-  const warehouse = roles.warehouse ?? [];
   if (proc.includes("approver")) tiers.add("dept_head");
   if (proc.includes("procurement_officer")) tiers.add("procurement_head");
   if (proc.includes("admin")) {
     tiers.add("procurement_head");
     tiers.add("final_approver");
   }
-  if (proc.includes("finance") || warehouse.includes("finance"))
-    tiers.add("finance");
+  if (proc.includes("finance")) tiers.add("finance");
   if (legal.includes("legal_reviewer")) tiers.add("legal");
   return [...tiers];
 }

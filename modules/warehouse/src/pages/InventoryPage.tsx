@@ -27,6 +27,7 @@ import { Icon } from "@/components/Icon";
 import { ProductThumb } from "@/components/ProductThumb";
 import { ExpiryBadge } from "@/components/ExpiryStatus";
 import { BarcodeLabelSheet } from "@/components/BarcodeLabelSheet";
+import { InventoryIntegrityPanel } from "@/components/InventoryIntegrityPanel";
 import { clsx } from "clsx";
 
 type Filter = "all" | ItemCategory;
@@ -180,6 +181,12 @@ export function InventoryPage() {
             )}
           </div>
         }
+      />
+
+      <InventoryIntegrityPanel
+        products={data.products}
+        canManage={can("manage_inventory")}
+        canApprove={can("approve_stock_adjustment")}
       />
 
       <Card className="space-y-3">

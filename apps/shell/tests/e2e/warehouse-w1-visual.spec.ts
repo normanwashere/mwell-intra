@@ -99,4 +99,31 @@ test.describe('warehouse W1 strict visual matrix', () => {
       await auditRoute(page, testInfo, role, 'light', route);
     });
   }
+
+  for (const { role, route, label } of [
+    {
+      role: 'warehouse_admin' as const,
+      route: '/warehouse/fulfillment',
+      label: 'governed fulfillment',
+    },
+    {
+      role: 'procurement' as const,
+      route: '/warehouse/procurement',
+      label: 'replenishment planning',
+    },
+    {
+      role: 'finance' as const,
+      route: '/finance',
+      label: 'unified Finance close',
+    },
+    {
+      role: 'marketing' as const,
+      route: '/events/evt-demo-corporate',
+      label: 'event reconciliation',
+    },
+  ]) {
+    test(`${label} workspace ${route}`, async ({ page }, testInfo) => {
+      await auditRoute(page, testInfo, role, 'light', route);
+    });
+  }
 });

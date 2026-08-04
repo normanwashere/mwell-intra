@@ -389,6 +389,18 @@ export function rowToFulfillmentOrder(r: Row): FulfillmentOrder {
     currency: r.gross_sales_amount == null ? undefined : "PHP",
     courier: r.courier ?? undefined,
     waybillNumber: r.waybill_number ?? undefined,
+    shipmentStatus:
+      r.shipment_status ??
+      (r.delivery_method === "shipment"
+        ? "awaiting_dispatch"
+        : "not_applicable"),
+    dispatchedAt: r.dispatched_at ?? undefined,
+    lastTrackingAt: r.last_tracking_at ?? undefined,
+    deliveryFailureReason: r.delivery_failure_reason ?? undefined,
+    failedDeliveryAt: r.failed_delivery_at ?? undefined,
+    proofOfDeliveryReference: r.proof_of_delivery_reference ?? undefined,
+    proofOfDeliveryEvidenceUrl: r.proof_of_delivery_evidence_url ?? undefined,
+    deliveredAt: r.delivered_at ?? undefined,
     deliveryMethod: r.delivery_method ?? deliveryMethodForSource(r.source),
     handoverRecipientName: r.handover_recipient_name ?? undefined,
     handoverRecipientDepartment: r.handover_recipient_department ?? undefined,
@@ -472,6 +484,11 @@ export function rowToCustomerReturnCase(r: Row): CustomerReturnCase {
     replacementOrderId: r.replacement_order_id ?? undefined,
     refundReference: r.refund_reference ?? undefined,
     supplierReference: r.supplier_reference ?? undefined,
+    financeEvidenceUrl: r.finance_evidence_url ?? undefined,
+    customerResolutionReference: r.customer_resolution_reference ?? undefined,
+    customerClosureEvidenceUrl: r.customer_closure_evidence_url ?? undefined,
+    customerClosedBy: r.customer_closed_by ?? undefined,
+    customerClosedAt: r.customer_closed_at ?? undefined,
     createdBy: r.created_by,
     createdAt: r.created_at,
     resolvedBy: r.resolved_by ?? undefined,

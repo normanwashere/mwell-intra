@@ -342,6 +342,9 @@ export interface AdvanceFulfillmentOrderInput {
   handoverEvidenceUrl?: string;
   acknowledgementReference?: string;
   acknowledgementEvidenceUrl?: string;
+  trackingReference?: string;
+  trackingEvidenceUrl?: string;
+  deliveryFailureReason?: string;
   cancellationReason?: string;
   packagingDisposition?: import("./domain/wms").PackagingDisposition;
 }
@@ -377,6 +380,14 @@ export interface ResolveCustomerReturnCaseInput {
   replacementOrderId?: string;
   refundReference?: string;
   supplierReference?: string;
+  financeEvidenceUrl?: string;
+  actor: string;
+}
+
+export interface CloseCustomerReturnCaseInput {
+  returnCaseId: string;
+  customerResolutionReference: string;
+  customerClosureEvidenceUrl: string;
   actor: string;
 }
 
@@ -456,6 +467,9 @@ export interface WarehouseRepository {
   ): Promise<CustomerReturnCase>;
   resolveCustomerReturnCase(
     input: ResolveCustomerReturnCaseInput,
+  ): Promise<CustomerReturnCase>;
+  closeCustomerReturnCase(
+    input: CloseCustomerReturnCaseInput,
   ): Promise<CustomerReturnCase>;
   createKitDefinition(input: CreateKitDefinitionInput): Promise<KitDefinition>;
   createReKitWorkOrder(

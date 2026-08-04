@@ -74,7 +74,7 @@ function activityColumns(
         <button
           type="button"
           onClick={() => onInspect(row)}
-          className="font-semibold text-brand-700 hover:underline dark:text-brand-300"
+          className="inline-flex min-h-11 items-center text-left font-semibold text-brand-700 hover:underline dark:text-brand-300"
           aria-label={`View ${row.referenceId} details`}
         >
           {row.referenceId}

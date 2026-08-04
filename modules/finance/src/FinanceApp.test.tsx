@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SessionValue } from '@intra/auth';
+import { ToastProvider } from '@intra/ui';
 import { FINANCE_DEMO_DATA } from './seed';
 import type { FinanceData } from './types';
 
@@ -25,6 +26,14 @@ vi.mock('./data', async (importOriginal) => {
 });
 
 import { FinanceApp } from './FinanceApp';
+
+function renderFinanceApp() {
+  return render(
+    <ToastProvider>
+      <FinanceApp />
+    </ToastProvider>,
+  );
+}
 
 function session(roles: SessionValue['userRoles']): SessionValue {
   return {
@@ -65,7 +74,7 @@ describe('FinanceApp', () => {
   });
 
   it('shows one unified workspace for a dual-role Finance user', () => {
-    render(<FinanceApp />);
+    renderFinanceApp();
     expect(screen.getByText('Warehouse Finance')).toBeInTheDocument();
     expect(screen.getByText('Procurement Finance')).toBeInTheDocument();
     expect(screen.getByText('Payment readiness')).toBeInTheDocument();
@@ -89,7 +98,7 @@ describe('FinanceApp', () => {
   });
 
   it('opens receipt evidence in place instead of linking Finance to receiving', () => {
-    render(<FinanceApp />);
+    renderFinanceApp();
 
     expect(screen.queryByRole('link', { name: 'receipt-demo-318' })).not.toBeInTheDocument();
     fireEvent.click(screen.getAllByRole('button', { name: 'View receipt-demo-318 details' })[0]!);
@@ -102,7 +111,7 @@ describe('FinanceApp', () => {
 
   it('admits Procurement Finance without inventing Warehouse access', () => {
     state.session = session({ core: ['staff'], procurement: ['finance'] });
-    render(<FinanceApp />);
+    renderFinanceApp();
     expect(screen.getByText('Procurement Finance')).toBeInTheDocument();
     expect(screen.queryByText('Warehouse Finance')).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /stock adjustment approvals/i })).not.toBeInTheDocument();
@@ -118,7 +127,7 @@ describe('FinanceApp', () => {
         activity: FINANCE_DEMO_DATA.activity.filter((item) => item.source !== 'procurement_po'),
       },
     };
-    render(<FinanceApp />);
+    renderFinanceApp();
     expect(screen.getByRole('link', { name: /review inventory value/i })).toHaveAttribute(
       'href',
       '/warehouse/inventory',
@@ -128,7 +137,7 @@ describe('FinanceApp', () => {
 
   it('shows an explicit denial for unrelated roles', () => {
     state.session = session({ core: ['staff'], procurement: ['requester'] });
-    render(<FinanceApp />);
+    renderFinanceApp();
     expect(screen.getByRole('heading', { name: 'No Finance access' })).toBeInTheDocument();
   });
 
@@ -137,7 +146,7 @@ describe('FinanceApp', () => {
       ...state.data,
       error: 'Inventory valuation: source unavailable',
     };
-    render(<FinanceApp />);
+    renderFinanceApp();
     expect(screen.getByText(/some Finance sources are unavailable/i)).toBeInTheDocument();
     expect(screen.getAllByText('PO-2026-1042')).toHaveLength(2);
   });

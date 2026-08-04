@@ -165,6 +165,7 @@ describe('event lifecycle rules', () => {
   });
 
   it('routes controlled changes through the lifecycle RPC with concurrency metadata', async () => {
+    const futureDate = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
     const calls: Array<{ name: string; payload: unknown }> = [];
     const client = {
       schema: () => ({
@@ -175,7 +176,7 @@ describe('event lifecycle rules', () => {
               id: 'evt-1',
               name: 'Moved event',
               type: 'corporate',
-              start_date: '2026-08-02',
+              start_date: futureDate,
               end_date: null,
               status: 'planned',
               owner_email: 'owner@mwell.com.ph',
@@ -193,7 +194,7 @@ describe('event lifecycle rules', () => {
         action: 'reschedule',
         reason: 'Venue conflict',
         expectedUpdatedAt: '2026-07-22T02:00:00Z',
-        changes: { startDate: '2026-08-02' },
+        changes: { startDate: futureDate },
       }),
     ).resolves.toMatchObject({
       id: 'evt-1',
@@ -208,7 +209,7 @@ describe('event lifecycle rules', () => {
           action: 'reschedule',
           reason: 'Venue conflict',
           expected_updated_at: '2026-07-22T02:00:00Z',
-          changes: { start_date: '2026-08-02' },
+          changes: { start_date: futureDate },
         },
       },
     ]);

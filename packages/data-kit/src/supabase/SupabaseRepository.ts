@@ -60,6 +60,7 @@ import {
   type CreateKitDefinitionInput,
   type CreateReKitWorkOrderInput,
   type CompleteReKitWorkOrderInput,
+  type CloseCustomerReturnCaseInput,
   type CreateLocationInput,
   type CreateProductInput,
   type CreatePurchaseOrderInput,
@@ -173,7 +174,7 @@ const TABLE_PROJECTIONS: Record<string, string> = {
   procurement_po_handoff:
     "id,po_number,vendor_name,status,expected_date,total,lines,created_at",
   fulfillment_orders:
-    "id,source,external_reference,requesting_department,source_location_id,source_bin_id,customer_reference,event_id,third_party_location_id,gross_sales_amount,courier,waybill_number,delivery_method,handover_recipient_name,handover_recipient_department,handover_reference,handover_evidence_url,status,lines,packaging,created_by,created_at,updated_at,parent_order_id,picked_by,picked_at,packed_by,packed_at,released_by,released_at,acknowledged_by,acknowledged_at,acknowledgement_reference,acknowledgement_evidence_url,cancellation_reason,packaging_disposition",
+    "id,source,external_reference,requesting_department,source_location_id,source_bin_id,customer_reference,event_id,third_party_location_id,gross_sales_amount,courier,waybill_number,delivery_method,shipment_status,dispatched_at,last_tracking_at,delivery_failure_reason,failed_delivery_at,proof_of_delivery_reference,proof_of_delivery_evidence_url,delivered_at,handover_recipient_name,handover_recipient_department,handover_reference,handover_evidence_url,status,lines,packaging,created_by,created_at,updated_at,parent_order_id,picked_by,picked_at,packed_by,packed_at,released_by,released_at,acknowledged_by,acknowledged_at,acknowledgement_reference,acknowledgement_evidence_url,cancellation_reason,packaging_disposition",
   fulfillment_reservations:
     "id,order_id,product_id,location_id,bin_id,quantity,status,created_by,created_at,closed_at",
   department_stock_requests:
@@ -181,7 +182,7 @@ const TABLE_PROJECTIONS: Record<string, string> = {
   department_request_options:
     "department_code,department_name,cost_center_code,cost_center_name",
   customer_return_cases:
-    "id,source_order_id,serial_number,product_id,defect_description,requesting_department,status,resolution,quarantine_bin_id,replacement_order_id,refund_reference,supplier_reference,created_by,created_at,resolved_by,resolved_at",
+    "id,source_order_id,serial_number,product_id,defect_description,requesting_department,status,resolution,quarantine_bin_id,replacement_order_id,refund_reference,supplier_reference,finance_evidence_url,customer_resolution_reference,customer_closure_evidence_url,customer_closed_by,customer_closed_at,created_by,created_at,resolved_by,resolved_at",
   kit_definitions:
     "id,product_id,version,name,components,status,owner_department,product_approval_reference,created_by,created_at",
   rekit_work_orders:
@@ -1478,6 +1479,29 @@ export class SupabaseRepository implements WarehouseControlRepository {
   }
 
   async advanceFulfillmentOrder(input: AdvanceFulfillmentOrderInput) {
+    const shipmentActions = new Set([
+      "mark_in_transit",
+      "record_delivery_failed",
+      "confirm_delivery",
+      "return_to_sender",
+    ]);
+    if (shipmentActions.has(input.action)) {
+      const row = await this.callRpc("update_shipment_tracking", {
+        idempotency_key:
+          "shipment_" +
+          input.action +
+          "-" +
+          input.orderId +
+          "-" +
+          crypto.randomUUID(),
+        order_id: input.orderId,
+        action: input.action,
+        tracking_reference: input.trackingReference?.trim() || null,
+        evidence_url: input.trackingEvidenceUrl?.trim() || null,
+        failure_reason: input.deliveryFailureReason?.trim() || null,
+      });
+      return rowToFulfillmentOrder(row);
+    }
     const row = await this.callRpc("advance_fulfillment_order", {
       idempotency_key: `advance_${input.action}-${input.orderId}`,
       order_id: input.orderId,
@@ -1556,10 +1580,20 @@ export class SupabaseRepository implements WarehouseControlRepository {
       replacement_order_id: input.replacementOrderId ?? null,
       refund_reference: input.refundReference?.trim() || null,
       supplier_reference: input.supplierReference?.trim() || null,
+      finance_evidence_url: input.financeEvidenceUrl?.trim() || null,
     });
     return rowToCustomerReturnCase(row);
   }
 
+  async closeCustomerReturnCase(input: CloseCustomerReturnCaseInput) {
+    const row = await this.callRpc("close_customer_return_case", {
+      idempotency_key: "close_customer_return-" + input.returnCaseId,
+      return_case_id: input.returnCaseId,
+      customer_resolution_reference: input.customerResolutionReference.trim(),
+      customer_closure_evidence_url: input.customerClosureEvidenceUrl.trim(),
+    });
+    return rowToCustomerReturnCase(row);
+  }
   async createKitDefinition(input: CreateKitDefinitionInput) {
     const id = crypto.randomUUID();
     const row = await this.callRpc("create_kit_definition", {

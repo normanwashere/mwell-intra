@@ -39,8 +39,21 @@ export type FulfillmentAction =
   | "confirm_pack"
   | "mark_ready"
   | "release"
+  | "mark_in_transit"
+  | "record_delivery_failed"
+  | "confirm_delivery"
+  | "return_to_sender"
   | "acknowledge_receipt"
   | "cancel";
+
+export type ShipmentTrackingStatus =
+  | "not_applicable"
+  | "awaiting_dispatch"
+  | "dispatched"
+  | "in_transit"
+  | "delivery_failed"
+  | "delivered"
+  | "returned_to_sender";
 
 export type FulfillmentDeliveryMethod =
   "shipment" | "internal_handover" | "event_handover" | "third_party_transfer";
@@ -85,6 +98,14 @@ export interface FulfillmentOrder {
   currency?: "PHP";
   courier?: string;
   waybillNumber?: string;
+  shipmentStatus?: ShipmentTrackingStatus;
+  dispatchedAt?: string;
+  lastTrackingAt?: string;
+  deliveryFailureReason?: string;
+  failedDeliveryAt?: string;
+  proofOfDeliveryReference?: string;
+  proofOfDeliveryEvidenceUrl?: string;
+  deliveredAt?: string;
   deliveryMethod: FulfillmentDeliveryMethod;
   handoverRecipientName?: string;
   handoverRecipientDepartment?: string;
@@ -144,7 +165,13 @@ const FULFILLMENT_TRANSITIONS: Record<
   picking: { confirm_pick: "packing", cancel: "cancelled" },
   packing: { confirm_pack: "ready", mark_ready: "ready", cancel: "cancelled" },
   ready: { release: "released", cancel: "cancelled" },
-  released: { acknowledge_receipt: "completed" },
+  released: {
+    mark_in_transit: "released",
+    record_delivery_failed: "released",
+    confirm_delivery: "completed",
+    return_to_sender: "released",
+    acknowledge_receipt: "completed",
+  },
 };
 
 export function nextFulfillmentStatus(
@@ -312,12 +339,22 @@ export interface CustomerReturnCase {
   defectDescription: string;
   requestingDepartment: "customer_service";
   status:
-    "submitted" | "received" | "inspecting" | "decision_required" | "resolved";
+    | "submitted"
+    | "received"
+    | "inspecting"
+    | "decision_required"
+    | "resolved"
+    | "closed";
   resolution: ReturnResolution;
   quarantineBinId?: string;
   replacementOrderId?: string;
   refundReference?: string;
   supplierReference?: string;
+  financeEvidenceUrl?: string;
+  customerResolutionReference?: string;
+  customerClosureEvidenceUrl?: string;
+  customerClosedBy?: string;
+  customerClosedAt?: string;
   createdBy: string;
   createdAt: string;
   resolvedBy?: string;

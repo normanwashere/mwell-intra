@@ -29,6 +29,7 @@ describe("warehouse navigation metadata", () => {
       "dashboard",
       "inventory",
       "fulfillment",
+      "returns",
       "events",
     ]);
     expect(

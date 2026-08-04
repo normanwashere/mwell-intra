@@ -1838,4 +1838,189 @@ describe("W1 control parity", () => {
       }),
     ).rejects.toThrow(/last active route/i);
   });
+  it("tracks ecommerce delivery failure and requires proof of delivery", async () => {
+    const controlled = new InMemoryRepository(miniData(), {
+      now: () => "2026-08-04T10:00:00Z",
+    });
+    const order = await controlled.createFulfillmentOrder({
+      source: "ecommerce",
+      externalReference: "ECOM-TRACK-001",
+      sourceLocationId: "loc-wh",
+      lines: [{ productId: "ring", quantity: 1 }],
+      actor: "order-ingestion",
+    });
+
+    await controlled.advanceFulfillmentOrder({
+      orderId: order.id,
+      action: "allocate",
+      actor: "allocator",
+    });
+    await controlled.advanceFulfillmentOrder({
+      orderId: order.id,
+      action: "start_picking",
+      actor: "picker",
+    });
+    await controlled.advanceFulfillmentOrder({
+      orderId: order.id,
+      action: "confirm_pick",
+      pickedLines: [{ productId: "ring", quantity: 1, serialNumbers: ["SN1"] }],
+      actor: "picker",
+    });
+    await controlled.advanceFulfillmentOrder({
+      orderId: order.id,
+      action: "confirm_pack",
+      courier: "LBC",
+      waybillNumber: "WB-001",
+      packaging: [],
+      actor: "packer",
+    });
+    const released = await controlled.advanceFulfillmentOrder({
+      orderId: order.id,
+      action: "release",
+      actor: "releaser",
+    });
+    expect(released).toMatchObject({
+      status: "released",
+      shipmentStatus: "dispatched",
+    });
+
+    await controlled.advanceFulfillmentOrder({
+      orderId: order.id,
+      action: "mark_in_transit",
+      actor: "courier-desk",
+    });
+    await expect(
+      controlled.advanceFulfillmentOrder({
+        orderId: order.id,
+        action: "record_delivery_failed",
+        actor: "courier-desk",
+      }),
+    ).rejects.toThrow(/reason/i);
+    await controlled.advanceFulfillmentOrder({
+      orderId: order.id,
+      action: "record_delivery_failed",
+      deliveryFailureReason: "Customer unavailable",
+      actor: "courier-desk",
+    });
+    await expect(
+      controlled.advanceFulfillmentOrder({
+        orderId: order.id,
+        action: "confirm_delivery",
+        actor: "courier-desk",
+      }),
+    ).rejects.toThrow(/proof-of-delivery/i);
+
+    const delivered = await controlled.advanceFulfillmentOrder({
+      orderId: order.id,
+      action: "confirm_delivery",
+      trackingReference: "POD-001",
+      trackingEvidenceUrl: "evidence/pod-001.jpg",
+      actor: "courier-desk",
+    });
+    expect(delivered).toMatchObject({
+      status: "completed",
+      shipmentStatus: "delivered",
+      proofOfDeliveryReference: "POD-001",
+    });
+  });
+
+  it("requires Finance evidence and Customer Service closure evidence for returns", async () => {
+    const controlled = new InMemoryRepository(miniData(), {
+      now: () => "2026-08-04T11:00:00Z",
+    });
+    const opened = await controlled.createCustomerReturnCase({
+      productId: "ring",
+      serialNumber: "SN1",
+      defectDescription: "Intermittent charging failure",
+      actor: "customer-service",
+    });
+
+    await expect(
+      controlled.resolveCustomerReturnCase({
+        returnCaseId: opened.id,
+        resolution: "refund",
+        quarantineBinId: "bin-a",
+        refundReference: "RF-001",
+        actor: "finance",
+      }),
+    ).rejects.toThrow(/Finance evidence/i);
+
+    const resolved = await controlled.resolveCustomerReturnCase({
+      returnCaseId: opened.id,
+      resolution: "refund",
+      quarantineBinId: "bin-a",
+      refundReference: "RF-001",
+      financeEvidenceUrl: "evidence/refund-001.pdf",
+      actor: "finance",
+    });
+    expect(resolved).toMatchObject({
+      status: "resolved",
+      resolution: "refund",
+      financeEvidenceUrl: "evidence/refund-001.pdf",
+    });
+
+    await expect(
+      controlled.closeCustomerReturnCase({
+        returnCaseId: opened.id,
+        customerResolutionReference: "",
+        customerClosureEvidenceUrl: "",
+        actor: "customer-service",
+      }),
+    ).rejects.toThrow(/closure evidence/i);
+
+    const closed = await controlled.closeCustomerReturnCase({
+      returnCaseId: opened.id,
+      customerResolutionReference: "CASE-CLOSED-001",
+      customerClosureEvidenceUrl: "evidence/customer-confirmation-001.pdf",
+      actor: "customer-service",
+    });
+    expect(closed).toMatchObject({
+      status: "closed",
+      customerResolutionReference: "CASE-CLOSED-001",
+      customerClosedBy: "customer-service",
+    });
+  });
+  it("creates the replacement order and requires supplier RMA evidence", async () => {
+    const replacementRepo = new InMemoryRepository(miniData(), {
+      now: () => "2026-08-04T12:00:00Z",
+    });
+    const opened = await replacementRepo.createCustomerReturnCase({
+      productId: "ring",
+      serialNumber: "SN1",
+      defectDescription: "Confirmed charging defect",
+      actor: "customer-service",
+    });
+    const resolved = await replacementRepo.resolveCustomerReturnCase({
+      returnCaseId: opened.id,
+      resolution: "replacement",
+      quarantineBinId: "bin-a",
+      actor: "warehouse-return-desk",
+    });
+    const replacement = (
+      await replacementRepo.getData()
+    ).fulfillmentOrders.find(
+      (order) => order.id === resolved.replacementOrderId,
+    );
+    expect(replacement).toMatchObject({
+      source: "ecommerce",
+      status: "received",
+      lines: [expect.objectContaining({ productId: "ring", quantity: 1 })],
+    });
+
+    const vendorRepo = new InMemoryRepository(miniData());
+    const vendorCase = await vendorRepo.createCustomerReturnCase({
+      productId: "ring",
+      serialNumber: "SN1",
+      defectDescription: "Supplier defect",
+      actor: "customer-service",
+    });
+    await expect(
+      vendorRepo.resolveCustomerReturnCase({
+        returnCaseId: vendorCase.id,
+        resolution: "vendor_return",
+        quarantineBinId: "bin-a",
+        actor: "warehouse-return-desk",
+      }),
+    ).rejects.toThrow(/supplier RMA/i);
+  });
 });

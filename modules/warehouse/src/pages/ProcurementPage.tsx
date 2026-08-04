@@ -1,11 +1,15 @@
-import { useWarehouse } from '@/app/store';
-import { toStockState } from '@/data/repository';
-import { availableForProduct, lowStockProducts } from '@/domain/stock';
+import { useWarehouse } from "@/app/store";
+import { toStockState } from "@/data/repository";
+import { availableForProduct, lowStockProducts } from "@/domain/stock";
 import {
   consumptionRatePerDay,
   projectedStockout,
-} from '@/domain/procurementAnalytics';
-import type { Product, Supplier } from '@/domain/types';
+} from "@/domain/procurementAnalytics";
+import type { Product, Supplier } from "@/domain/types";
+import {
+  ReplenishmentControlPanel,
+  type ReplenishmentCandidate,
+} from "@/components/ReplenishmentControlPanel";
 import {
   Badge,
   Card,
@@ -17,7 +21,7 @@ import {
   StaggerGrid,
   StaggerItem,
   type Column,
-} from '@/components/ui';
+} from "@/components/ui";
 
 interface ReorderRow {
   product: Product;
@@ -43,7 +47,8 @@ export function ProcurementPage() {
         data.lots.some((l) => l.productId === p.id && l.supplierId === s.id),
       );
       const ratePerDay = consumptionRatePerDay(data.movements, p.id, 90);
-      const leadTimeDays = supplier?.leadTimeDays ?? fallbackSupplier?.leadTimeDays ?? 14;
+      const leadTimeDays =
+        supplier?.leadTimeDays ?? fallbackSupplier?.leadTimeDays ?? 14;
       const { daysOfCover, atRisk } = projectedStockout({
         available,
         ratePerDay,
@@ -53,69 +58,114 @@ export function ProcurementPage() {
         product: p,
         available,
         deficit: Math.max(0, p.reorderPoint - available),
-        suggest: Math.max(Math.max(0, p.reorderPoint - available), p.reorderPoint),
+        suggest: Math.max(
+          Math.max(0, p.reorderPoint - available),
+          p.reorderPoint,
+        ),
         supplier,
         daysOfCover,
         atRisk,
       };
     })
     .filter((r) => r.deficit > 0 || r.atRisk)
-    .sort((a, b) => Number(b.atRisk) - Number(a.atRisk) || b.deficit - a.deficit);
+    .sort(
+      (a, b) => Number(b.atRisk) - Number(a.atRisk) || b.deficit - a.deficit,
+    );
 
   const atRiskCount = reorderRows.filter((r) => r.atRisk).length;
   const openPOs = data.purchaseOrders.filter(
-    (po) => po.status !== 'received' && po.status !== 'cancelled',
+    (po) => po.status !== "received" && po.status !== "cancelled",
   ).length;
 
   const cover = (r: ReorderRow) =>
-    r.daysOfCover === Infinity ? '∞' : `${Math.round(r.daysOfCover)}d`;
+    r.daysOfCover === Infinity ? "∞" : `${Math.round(r.daysOfCover)}d`;
 
+  const replenishmentCandidates: ReplenishmentCandidate[] = reorderRows.map(
+    (row) => ({
+      productId: row.product.id,
+      productName: row.product.name,
+      recommendedQuantity: row.suggest,
+      onHand: row.available,
+      reorderPoint: row.product.reorderPoint,
+      leadTimeDays: (row.supplier ?? fallbackSupplier)?.leadTimeDays ?? 14,
+      stockoutRisk:
+        row.available === 0 ? "critical" : row.atRisk ? "high" : "medium",
+      rationale: row.atRisk
+        ? "Projected stockout within " +
+          cover(row) +
+          " against supplier lead time."
+        : "On-hand stock is below the configured minimum of " +
+          row.product.reorderPoint +
+          ".",
+    }),
+  );
   const columns: Column<ReorderRow>[] = [
     {
-      key: 'item',
-      header: 'Item',
+      key: "item",
+      header: "Item",
       primary: true,
       render: (r) => (
         <span>
-          {r.product.name}{' '}
+          {r.product.name}{" "}
           <span className="font-mono text-xs text-faint">{r.product.sku}</span>
         </span>
       ),
     },
     {
-      key: 'supplier',
-      header: 'Supplier',
+      key: "supplier",
+      header: "Supplier",
       render: (r) => (
-        <span className="text-faint">{(r.supplier ?? fallbackSupplier)?.name ?? '—'}</span>
-      ),
-    },
-    { key: 'avail', header: 'Avail.', align: 'right', render: (r) => r.available },
-    {
-      key: 'cover',
-      header: 'Cover',
-      align: 'right',
-      render: (r) => (
-        <Badge tone={r.atRisk ? 'rose' : 'slate'}>{cover(r)}</Badge>
+        <span className="text-faint">
+          {(r.supplier ?? fallbackSupplier)?.name ?? "—"}
+        </span>
       ),
     },
     {
-      key: 'suggest',
-      header: 'Suggest',
-      align: 'right',
+      key: "avail",
+      header: "Avail.",
+      align: "right",
+      render: (r) => r.available,
+    },
+    {
+      key: "cover",
+      header: "Cover",
+      align: "right",
+      render: (r) => (
+        <Badge tone={r.atRisk ? "rose" : "slate"}>{cover(r)}</Badge>
+      ),
+    },
+    {
+      key: "suggest",
+      header: "Suggest",
+      align: "right",
       render: (r) => <Badge tone="amber">+{r.suggest}</Badge>,
     },
   ];
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Procurement" icon="cart" subtitle="Reorder, stockout risk & lead times" />
+      <PageHeader
+        title="Procurement"
+        icon="cart"
+        subtitle="Reorder, stockout risk & lead times"
+      />
 
       <StaggerGrid className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StaggerItem>
-          <StatCard label="SKUs to reorder" value={low.length} icon="cart" tone="amber" />
+          <StatCard
+            label="SKUs to reorder"
+            value={low.length}
+            icon="cart"
+            tone="amber"
+          />
         </StaggerItem>
         <StaggerItem>
-          <StatCard label="Stockout risk" value={atRiskCount} icon="alert" tone={atRiskCount ? 'rose' : 'emerald'} />
+          <StatCard
+            label="Stockout risk"
+            value={atRiskCount}
+            icon="alert"
+            tone={atRiskCount ? "rose" : "emerald"}
+          />
         </StaggerItem>
         <StaggerItem>
           <StatCard label="Open POs" value={openPOs} icon="list" tone="brand" />
@@ -133,13 +183,18 @@ export function ProcurementPage() {
         </StaggerItem>
       </StaggerGrid>
 
+      <ReplenishmentControlPanel candidates={replenishmentCandidates} />
+
       <Card>
         <SectionTitle
           title="Reorder worklist"
           subtitle="At-risk first; cover = days until stockout"
           action={
             reorderRows.length > 0 ? (
-              <a href="/procurement/requests/new" className="btn-primary btn-sm">
+              <a
+                href="/procurement/requests/new"
+                className="btn-primary btn-sm"
+              >
                 Create Procurement request
               </a>
             ) : undefined

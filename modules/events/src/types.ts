@@ -1,4 +1,5 @@
-export type EventLifecycle = 'planned' | 'active' | 'completed' | 'cancelled' | 'closed';
+export type EventLifecycle =
+  "planned" | "active" | "completed" | "cancelled" | "closed";
 
 export interface EventRecord {
   id: string;
@@ -24,12 +25,7 @@ export interface EventDraft {
 }
 
 export type EventManagementAction =
-  | 'edit'
-  | 'reschedule'
-  | 'cancel'
-  | 'close'
-  | 'reopen'
-  | 'transfer_owner';
+  "edit" | "reschedule" | "cancel" | "close" | "reopen" | "transfer_owner";
 
 export interface EventManagementInput {
   eventId: string;
@@ -45,14 +41,39 @@ export interface EventFulfillmentRequest {
   purpose: string;
   costCenter: string;
   requiredDate: string;
-  expenseTreatment: 'expense' | 'custody' | 'sale';
+  expenseTreatment: "expense" | "custody" | "sale";
   productId: string;
   quantity: number;
   idempotencyKey: string;
 }
 
+export type EventReconciliationStatus = "draft" | "submitted" | "approved";
+
+export interface EventReconciliation {
+  eventId: string;
+  status: EventReconciliationStatus;
+  soldUnits: number;
+  giveawayUnits: number;
+  returnedUnits: number;
+  lostUnits: number;
+  damagedUnits: number;
+  rekitUnits: number;
+  grossSalesAmount: number;
+  financeReference?: string;
+  evidenceUrl?: string;
+  note?: string;
+  approvedAt?: string;
+}
+
+export interface SaveEventReconciliationInput extends Omit<
+  EventReconciliation,
+  "status" | "approvedAt"
+> {
+  action: "save" | "submit" | "approve";
+}
 export interface EventsData {
   events: EventRecord[];
   products?: Array<{ id: string; name: string; itemClass: string }>;
+  reconciliations?: EventReconciliation[];
   warnings: string[];
 }

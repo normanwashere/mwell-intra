@@ -48,6 +48,7 @@ import type {
   CreateKitDefinitionInput,
   CreateReKitWorkOrderInput,
   CompleteReKitWorkOrderInput,
+  CloseCustomerReturnCaseInput,
   CreateVendorReturnInput,
   CreateLocationInput,
   CreateProductInput,
@@ -192,6 +193,9 @@ interface WarehouseContextValue {
   resolveCustomerReturnCase: (
     input: Omit<ResolveCustomerReturnCaseInput, "actor">,
   ) => Promise<boolean>;
+  closeCustomerReturnCase: (
+    input: Omit<CloseCustomerReturnCaseInput, "actor">,
+  ) => Promise<boolean>;
   createKitDefinition: (
     input: Omit<CreateKitDefinitionInput, "actor">,
   ) => Promise<boolean>;
@@ -305,20 +309,20 @@ export function WarehouseProvider({
   const identityId = providedIdentityId ?? actor;
   const roleCode = providedRoleCode ?? role;
   const roleProfile = ROLES[role];
-  const roleLabel = providedRoleLabel ?? (
-    roleCode === role
+  const roleLabel =
+    providedRoleLabel ??
+    (roleCode === role
       ? roleProfile.label
       : roleCode
           .split("_")
           .filter(Boolean)
           .map((part) => part[0]?.toUpperCase() + part.slice(1))
-          .join(" ")
-  );
-  const roleDescription = providedRoleDescription ?? (
-    roleCode === role
+          .join(" "));
+  const roleDescription =
+    providedRoleDescription ??
+    (roleCode === role
       ? roleProfile.description
-      : "Runtime Warehouse access bundle managed by an administrator."
-  );
+      : "Runtime Warehouse access bundle managed by an administrator.");
   const capabilities = useMemo<readonly Capability[]>(
     () =>
       source === "supabase"
@@ -341,7 +345,8 @@ export function WarehouseProvider({
     [capabilitySet],
   );
   const canOpenDestination = useCallback(
-    (destination: WarehouseDestination) => destinationAccess?.[destination] !== false,
+    (destination: WarehouseDestination) =>
+      destinationAccess?.[destination] !== false,
     [destinationAccess],
   );
 
@@ -645,6 +650,10 @@ export function WarehouseProvider({
           : "manage_returns",
         "other",
         () => repo.resolveCustomerReturnCase({ ...input, actor }),
+      ),
+    closeCustomerReturnCase: (input) =>
+      runAuthorizedAction("submit_return_case", "other", () =>
+        repo.closeCustomerReturnCase({ ...input, actor }),
       ),
     createKitDefinition: (input) =>
       runAuthorizedAction("manage_products", "other", () =>

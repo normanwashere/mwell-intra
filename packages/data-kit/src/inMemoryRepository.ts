@@ -34,6 +34,7 @@ import {
   type CreateKitDefinitionInput,
   type CreateReKitWorkOrderInput,
   type CompleteReKitWorkOrderInput,
+  type CloseCustomerReturnCaseInput,
   type CreateLocationInput,
   type CreateProductInput,
   type CreatePurchaseOrderInput,
@@ -1941,6 +1942,11 @@ export class InMemoryRepository implements WarehouseControlRepository {
       currency: input.grossSalesAmount === undefined ? undefined : "PHP",
       deliveryMethod:
         input.deliveryMethod ?? deliveryMethodForSource(input.source),
+      shipmentStatus:
+        (input.deliveryMethod ?? deliveryMethodForSource(input.source)) ===
+        "shipment"
+          ? "awaiting_dispatch"
+          : "not_applicable",
       sourceLocationId: input.sourceLocationId,
       sourceBinId: input.sourceBinId,
       status: "received",
@@ -2275,6 +2281,11 @@ export class InMemoryRepository implements WarehouseControlRepository {
       }
       order.releasedBy = input.actor;
       order.releasedAt = createdAt;
+      if (order.deliveryMethod === "shipment") {
+        order.shipmentStatus = "dispatched";
+        order.dispatchedAt = createdAt;
+        order.lastTrackingAt = createdAt;
+      }
       for (const reservation of this.data.fulfillmentReservations.filter(
         (row) => row.orderId === order.id && row.status === "active",
       )) {
@@ -2283,6 +2294,72 @@ export class InMemoryRepository implements WarehouseControlRepository {
       }
     }
 
+    if (input.action === "mark_in_transit") {
+      if (order.deliveryMethod !== "shipment") {
+        throw new Error("Courier tracking applies only to shipment orders.");
+      }
+      if (
+        !["dispatched", "delivery_failed"].includes(order.shipmentStatus ?? "")
+      ) {
+        throw new Error(
+          "Shipment cannot enter transit from its current state.",
+        );
+      }
+      order.shipmentStatus = "in_transit";
+      order.dispatchedAt ??= this.now();
+      order.lastTrackingAt = this.now();
+      order.deliveryFailureReason = undefined;
+    }
+
+    if (input.action === "record_delivery_failed") {
+      if (!["dispatched", "in_transit"].includes(order.shipmentStatus ?? "")) {
+        throw new Error(
+          "Only a dispatched shipment can record failed delivery.",
+        );
+      }
+      if (!input.deliveryFailureReason?.trim()) {
+        throw new Error("A failed-delivery reason is required.");
+      }
+      order.shipmentStatus = "delivery_failed";
+      order.deliveryFailureReason = input.deliveryFailureReason.trim();
+      order.failedDeliveryAt = this.now();
+      order.lastTrackingAt = order.failedDeliveryAt;
+    }
+
+    if (input.action === "confirm_delivery") {
+      if (
+        !["dispatched", "in_transit", "delivery_failed"].includes(
+          order.shipmentStatus ?? "",
+        )
+      ) {
+        throw new Error("Shipment cannot be delivered from its current state.");
+      }
+      if (
+        !input.trackingReference?.trim() ||
+        !input.trackingEvidenceUrl?.trim()
+      ) {
+        throw new Error(
+          "Proof-of-delivery reference and evidence are required.",
+        );
+      }
+      order.shipmentStatus = "delivered";
+      order.proofOfDeliveryReference = input.trackingReference.trim();
+      order.proofOfDeliveryEvidenceUrl = input.trackingEvidenceUrl.trim();
+      order.deliveredAt = this.now();
+      order.lastTrackingAt = order.deliveredAt;
+    }
+
+    if (input.action === "return_to_sender") {
+      if (order.shipmentStatus !== "delivery_failed") {
+        throw new Error("Only a failed delivery can return to sender.");
+      }
+      if (!input.deliveryFailureReason?.trim()) {
+        throw new Error("A return-to-sender reason is required.");
+      }
+      order.shipmentStatus = "returned_to_sender";
+      order.deliveryFailureReason = input.deliveryFailureReason.trim();
+      order.lastTrackingAt = this.now();
+    }
     if (input.action === "acknowledge_receipt") {
       if (order.releasedBy === input.actor) {
         throw new Error("The releasing operator cannot acknowledge receipt.");
@@ -2505,23 +2582,54 @@ export class InMemoryRepository implements WarehouseControlRepository {
     const record = this.data.customerReturnCases.find(
       (row) => row.id === input.returnCaseId,
     );
-    if (!record || record.status === "resolved")
+    if (!record || ["resolved", "closed"].includes(record.status))
       throw new Error("Open return case not found.");
+    if (!input.quarantineBinId) {
+      throw new Error(
+        "A quarantine bin is required before any return resolution.",
+      );
+    }
     if (
-      ["replacement", "refund", "re_kit"].includes(input.resolution) &&
-      !input.quarantineBinId
+      input.resolution === "vendor_return" &&
+      !input.supplierReference?.trim()
     ) {
-      throw new Error("A quarantine bin is required before resolution.");
+      throw new Error(
+        "A supplier RMA reference is required for vendor return.",
+      );
     }
     if (input.resolution === "refund" && !input.refundReference?.trim()) {
       throw new Error("Finance refund reference is required.");
     }
+    if (
+      ["refund", "write_off"].includes(input.resolution) &&
+      !input.financeEvidenceUrl?.trim()
+    ) {
+      throw new Error(
+        "Finance evidence is required for refunds and write-offs.",
+      );
+    }
+    let replacementOrderId = input.replacementOrderId;
+    if (input.resolution === "replacement" && !replacementOrderId) {
+      const sourceOrder = this.data.fulfillmentOrders.find(
+        (order) => order.id === record.sourceOrderId,
+      );
+      const replacement = await this.createFulfillmentOrder({
+        source: "ecommerce",
+        externalReference: "REPL-" + record.id,
+        sourceLocationId: sourceOrder?.sourceLocationId,
+        customerReference: sourceOrder?.customerReference ?? record.id,
+        lines: [{ productId: record.productId, quantity: 1 }],
+        actor: input.actor,
+      });
+      replacementOrderId = replacement.id;
+    }
     record.status = "resolved";
     record.resolution = input.resolution;
     record.quarantineBinId = input.quarantineBinId;
-    record.replacementOrderId = input.replacementOrderId;
+    record.replacementOrderId = replacementOrderId;
     record.refundReference = input.refundReference?.trim();
     record.supplierReference = input.supplierReference?.trim();
+    record.financeEvidenceUrl = input.financeEvidenceUrl?.trim();
     record.resolvedBy = input.actor;
     record.resolvedAt = this.now();
     if (record.serialNumber && input.quarantineBinId) {
@@ -2557,6 +2665,34 @@ export class InMemoryRepository implements WarehouseControlRepository {
     return clone(record);
   }
 
+  async closeCustomerReturnCase(
+    input: CloseCustomerReturnCaseInput,
+  ): Promise<CustomerReturnCase> {
+    const record = this.data.customerReturnCases.find(
+      (row) => row.id === input.returnCaseId,
+    );
+    if (!record || record.status !== "resolved") {
+      throw new Error(
+        "A resolved return case is required for customer closure.",
+      );
+    }
+    if (
+      !input.customerResolutionReference.trim() ||
+      !input.customerClosureEvidenceUrl.trim()
+    ) {
+      throw new Error(
+        "Customer resolution reference and closure evidence are required.",
+      );
+    }
+    record.status = "closed";
+    record.customerResolutionReference =
+      input.customerResolutionReference.trim();
+    record.customerClosureEvidenceUrl = input.customerClosureEvidenceUrl.trim();
+    record.customerClosedBy = input.actor;
+    record.customerClosedAt = this.now();
+    this.persist();
+    return clone(record);
+  }
   async createKitDefinition(
     input: CreateKitDefinitionInput,
   ): Promise<KitDefinition> {

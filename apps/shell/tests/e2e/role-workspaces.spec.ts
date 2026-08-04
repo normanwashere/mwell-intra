@@ -107,7 +107,7 @@ test("event requester validates, creates, opens, and hands off an event", async 
   await installSession(page, sessions.requester);
   await page.goto("/events");
   await expect(
-    page.getByRole("heading", { name: "Events", exact: true }),
+    page.getByRole("heading", { name: "Event planning and fulfillment" }),
   ).toBeVisible();
   await captureKnowledgeScreen(
     page,
@@ -119,13 +119,20 @@ test("event requester validates, creates, opens, and hands off an event", async 
   await page.getByRole("button", { name: "Create event" }).click();
   await expect(page.getByText("Event name is required.")).toBeVisible();
   await page.getByLabel("Event name").fill("QA Community Wellness Day");
-  await page.getByLabel("Start date").fill("2026-07-20");
-  await page.getByLabel("End date").fill("2026-07-19");
+  const startDate = new Date();
+  startDate.setDate(startDate.getDate() + 14);
+  const endBeforeStart = new Date(startDate);
+  endBeforeStart.setDate(endBeforeStart.getDate() - 1);
+  const endDate = new Date(startDate);
+  endDate.setDate(endDate.getDate() + 1);
+  const dateValue = (value: Date) => value.toISOString().slice(0, 10);
+  await page.getByLabel("Start date").fill(dateValue(startDate));
+  await page.getByLabel("End date").fill(dateValue(endBeforeStart));
   await page.getByRole("button", { name: "Create event" }).click();
   await expect(
     page.getByText("End date cannot be before the start date."),
   ).toBeVisible();
-  await page.getByLabel("End date").fill("2026-07-21");
+  await page.getByLabel("End date").fill(dateValue(endDate));
   await page.getByRole("button", { name: "Create event" }).click();
   await expect(
     page.getByRole("heading", { name: "QA Community Wellness Day" }),
@@ -134,9 +141,15 @@ test("event requester validates, creates, opens, and hands off an event", async 
   await expect(
     page.getByRole("heading", { name: "QA Community Wellness Day" }),
   ).toBeVisible();
+  await page.getByRole("button", { name: "Request warehouse stock" }).click();
   await expect(
-    page.getByRole("link", { name: /Open Warehouse fulfillment/i }),
-  ).toHaveAttribute("href", /\/warehouse\/events\//);
+    page.getByRole("heading", { name: "Request warehouse stock" }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Department")).toBeVisible();
+  await expect(page.getByLabel("Required date")).toHaveValue(
+    dateValue(startDate),
+  );
+  await page.keyboard.press("Escape");
   await assertVisualSafety(page);
   await page.screenshot({
     path: testInfo.outputPath(`events-detail-${testInfo.project.name}.png`),
@@ -148,7 +161,7 @@ test("event viewer is read-only", async ({ page }) => {
   await installSession(page, sessions.viewer);
   await page.goto("/events");
   await expect(
-    page.getByRole("heading", { name: "Events", exact: true }),
+    page.getByRole("heading", { name: "Event planning and fulfillment" }),
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "New event" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Event guide" })).toBeVisible();
@@ -160,8 +173,15 @@ test("Insights respects analyst, manager, and executive scopes", async ({
 }, testInfo) => {
   await installSession(page, sessions.analyst);
   await page.goto("/insights");
-  await expect(page.getByRole("tab", { name: "Warehouse" })).toBeVisible();
-  await expect(page.getByRole("tab", { name: "Executive" })).toHaveCount(0);
+  const mobile = testInfo.project.name.startsWith("mobile");
+  if (mobile) {
+    await expect(page.getByRole("combobox", { name: "Insight view" })).toBeVisible();
+    await expect(page.getByRole("option", { name: "Warehouse" })).toHaveCount(1);
+    await expect(page.getByRole("option", { name: "Executive" })).toHaveCount(0);
+  } else {
+    await expect(page.getByRole("tab", { name: "Warehouse" })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Executive" })).toHaveCount(0);
+  }
   await expect(page.getByText("Fulfillment rate")).toBeVisible();
   await captureKnowledgeScreen(
     page,
@@ -173,17 +193,25 @@ test("Insights respects analyst, manager, and executive scopes", async ({
   const manager = await page.context().newPage();
   await installSession(manager, sessions.manager);
   await manager.goto("/insights");
-  await expect(manager.getByRole("tab", { name: "Executive" })).toBeVisible();
-  await expect(manager.getByRole("tab", { name: "Warehouse" })).toBeVisible();
+  if (mobile) {
+    await expect(manager.getByRole("option", { name: "Executive" })).toHaveCount(1);
+    await expect(manager.getByRole("option", { name: "Warehouse" })).toHaveCount(1);
+  } else {
+    await expect(manager.getByRole("tab", { name: "Executive" })).toBeVisible();
+    await expect(manager.getByRole("tab", { name: "Warehouse" })).toBeVisible();
+  }
   await manager.close();
 
   const executive = await page.context().newPage();
   await installSession(executive, sessions.executive);
   await executive.goto("/insights");
-  await expect(executive.getByRole("tab", { name: "Executive" })).toBeVisible();
-  await expect(executive.getByRole("tab", { name: "Warehouse" })).toHaveCount(
-    0,
-  );
+  if (mobile) {
+    await expect(executive.getByRole("option", { name: "Executive" })).toHaveCount(1);
+    await expect(executive.getByRole("option", { name: "Warehouse" })).toHaveCount(0);
+  } else {
+    await expect(executive.getByRole("tab", { name: "Executive" })).toBeVisible();
+    await expect(executive.getByRole("tab", { name: "Warehouse" })).toHaveCount(0);
+  }
   await expect(
     executive.getByText("Priority exceptions", { exact: true }),
   ).toBeVisible();

@@ -952,13 +952,13 @@ const definitions: FeatureDefinition[] = [
     reads:
       "Demand references, governed department and cost center, event and third-party locations, reported sales value, products, item classes, stock, explicit reservations, serial identities, fulfillment supplies, return cases, Product approval references, shipment or handover evidence, and request decisions.",
     writes:
-      "Creates demand and return records, records independent request decisions, writes reservations, supports linked backorders, advances separated pick-pack-release states, captures recipient acknowledgment, reconciles cancelled packaging, issues stock, and registers Product-approved re-kit lineage.",
+      "Creates demand and return records, records independent request decisions, writes reservations, supports linked backorders, advances separated pick-pack-release-delivery states, captures proof of delivery or recipient acknowledgment, quarantines every customer return, creates linked replacement orders, records Finance or supplier evidence, closes with Customer Service evidence, reconciles cancelled packaging, issues stock, and registers Product-approved re-kit lineage.",
     statuses:
-      "Received, allocated, picking, packing, ready, released, completed, cancelled, pending approval, approved, rejected, submitted, resolved, active, or inspection.",
+      "Received, allocated, picking, packing, ready, released, dispatched, in transit, delivery failed, returned to sender, delivered, completed, cancelled, pending approval, approved, rejected, submitted, resolved, customer closed, active, or inspection.",
     exception:
-      "Stop for insufficient or held stock, duplicate or missing serials, incomplete bundle sets, missing Product approval, unavailable packaging, missing shipment or handover evidence, same-person pack and release, stale status, invalid cost center, or self-approval.",
+      "Stop for insufficient or held stock, duplicate or missing serials, incomplete bundle sets, missing Product approval, unavailable packaging, missing courier, waybill, proof of delivery, quarantine bin, Finance evidence, supplier RMA, or customer closure evidence, same-person pack and release, stale status, invalid cost center, or self-approval.",
     completionEvidence:
-      "The source demand, departmental owner, reservation, backorder lineage, picked identities, packaging treatment, dispatch or handover evidence, independent release, recipient acknowledgment, request decision, and return or re-kit outcome remain visible and attributable.",
+      "The source demand, departmental owner, reservation, backorder lineage, picked identities, packaging treatment, dispatch, delivery failure or proof, independent release, recipient acknowledgment, request decision, quarantine, replacement or refund evidence, customer closure, and return or re-kit outcome remain visible and attributable.",
   },
   {
     id: "warehouse-returns",
@@ -1024,9 +1024,9 @@ const definitions: FeatureDefinition[] = [
     reads:
       "Event header, demand lines, reservations, issues, returns, outcomes, evidence, and cost summary.",
     writes:
-      "Updates event demand and records authorized allocation or outcome actions through governed controls.",
+      "Updates event demand, records authorized allocation and outcome actions, submits sold, giveaway, returned, lost, damaged, and re-kit totals, and records independent Finance settlement approval through governed controls.",
     statuses:
-      "Draft, confirmed, allocated, issued, reconciling, complete, cancelled, or exception.",
+      "Draft, confirmed, allocated, issued, reconciliation draft, submitted to Finance, settlement approved, complete, cancelled, or exception.",
     exception:
       "Investigate missing custody, over-consumption, damaged stock, or duplicate outcome records before closure.",
     completionEvidence:
@@ -1042,13 +1042,13 @@ const definitions: FeatureDefinition[] = [
     reads:
       "Stock, reorder settings, open demand, open POs, suppliers, lead times, and consumption trends.",
     writes:
-      "Creates one or more draft warehouse purchase orders through the repository; filtering and product review do not write data.",
+      "Saves a reorder recommendation, records Operations acceptance, creates a linked draft Procurement request at handoff, and follows the issued Procurement PO and expected arrival; Warehouse does not author supplier commitments.",
     statuses:
-      "Healthy, monitor, reorder, stockout risk, inbound, or data incomplete.",
+      "Healthy, monitor, recommended, accepted, handed to Procurement, ordered, inbound, stockout risk, dismissed, or data incomplete.",
     exception:
       "Validate unusual demand, missing lead time, or stale inbound status before raising procurement action.",
     completionEvidence:
-      "The recommendation can be traced to current stock, demand, lead time, and open supply.",
+      "The recommendation can be traced to current stock, reorder point, stockout risk, lead time, the linked Procurement request, issued PO, and expected arrival.",
   },
   {
     id: "warehouse-purchase-orders",
@@ -1060,7 +1060,7 @@ const definitions: FeatureDefinition[] = [
     reads:
       "Purchase orders, suppliers, lines, ordered and received quantities, expected dates, and linked receipts.",
     writes:
-      "Creates, cancels, and receives warehouse purchase orders through repository methods; opening and filtering are read-only.",
+      "Records governed receipt and inspection evidence against issued Procurement purchase orders; Warehouse cannot create, approve, issue, amend, or cancel the supplier commitment.",
     statuses:
       "Draft, approved, issued, partially received, received, cancelled, or overdue.",
     exception:
@@ -1158,13 +1158,13 @@ const definitions: FeatureDefinition[] = [
     reads:
       "Purchase orders, payment-readiness packs, receipt evidence, returns, stock valuation, and cross-module activity permitted by the user's scoped Finance roles.",
     writes:
-      "No procurement or warehouse transaction is created here; Finance opens the owning source record to perform an authorized decision.",
+      "Finance opens the owning source record for payment decisions and prepares period-close entries for inventory valuation, COGS, merchandise expense, cost centers, write-offs, and event settlement. A second Finance user posts evidence-backed entries before reconciliation.",
     statuses:
-      "Ready for Finance, returned, accepted, issued, received, unavailable, or partially available.",
+      "Ready for Finance, returned, accepted, issued, received, close entry ready, posted, reconciled, exception, unavailable, or partially available.",
     exception:
       "When a source is unavailable or values disagree, retain the visible data, open the owning record, and resolve the discrepancy without duplicating or overriding source transactions.",
     completionEvidence:
-      "The review links to attributable procurement and warehouse source records, with status, value, and timestamps visible for reconciliation.",
+      "The review links to attributable procurement, warehouse, return, event, and period-close source records with status, value, preparer, independent poster, evidence, and reconciliation timestamps.",
   },
   {
     id: "warehouse-pricing",
@@ -1445,11 +1445,11 @@ const definitions: FeatureDefinition[] = [
     module: "legal",
     route: "/legal",
     purpose:
-      "Queues vendor accreditation cases by risk, owner, completeness, policy state, and required legal action.",
+      "Queues vendor accreditation cases and post-accreditation renewal, document expiry, performance, reassessment, suspension, and offboarding reviews by risk, owner, due date, evidence, and required Legal action.",
     reads:
       "Vendors, cases, submissions, risk facts, checklist progress, instruments, decisions, and expiry dates.",
     writes:
-      "No case decision is made from the list; assignment or navigation uses governed case controls.",
+      "Opens and advances governed vendor lifecycle reviews; accreditation decisions remain in the case detail, while suspension and offboarding update supplier eligibility and disable linked vendor access.",
     statuses:
       "Invited, in progress, submitted, under review, correction required, approved, rejected, expired, or suspended.",
     exception:

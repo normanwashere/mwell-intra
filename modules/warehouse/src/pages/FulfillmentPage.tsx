@@ -311,6 +311,7 @@ function OrdersWorkspace({
   const [backorderOrder, setBackorderOrder] = useState<FulfillmentOrder>();
   const [cancelOrder, setCancelOrder] = useState<FulfillmentOrder>();
   const [acknowledgeOrder, setAcknowledgeOrder] = useState<FulfillmentOrder>();
+  const [trackingOrder, setTrackingOrder] = useState<FulfillmentOrder>();
 
   const advance = async (
     order: FulfillmentOrder,
@@ -429,7 +430,14 @@ function OrdersWorkspace({
                     </p>
                   )}
                 </div>
-                <StatusBadge status={order.status} />
+                <div className="flex flex-col items-end gap-1">
+                  <StatusBadge status={order.status} />
+                  {order.deliveryMethod === "shipment" && (
+                    <StatusBadge
+                      status={order.shipmentStatus ?? "awaiting_dispatch"}
+                    />
+                  )}
+                </div>
               </div>
               <div className="mt-3 grid grid-cols-2 gap-2 rounded-lg bg-inset p-3 text-xs">
                 <div>
@@ -447,7 +455,7 @@ function OrdersWorkspace({
                   </span>
                   <span className="font-medium text-ink">
                     {order.deliveryMethod === "shipment" && order.courier
-                      ? `${order.courier} · ${order.waybillNumber}`
+                      ? `${order.courier} / ${order.waybillNumber}`
                       : order.handoverRecipientName
                         ? `${order.handoverRecipientName} / ${order.handoverReference}`
                         : "Pending preparation"}
@@ -528,14 +536,33 @@ function OrdersWorkspace({
                     </button>
                   </div>
                 )}
-              {canAcknowledge && order.status === "released" && (
-                <button
-                  type="button"
-                  className="btn-primary mt-4 w-full sm:w-auto"
-                  onClick={() => setAcknowledgeOrder(order)}
-                >
-                  Acknowledge receipt
-                </button>
+              {canAcknowledge &&
+                order.status === "released" &&
+                order.deliveryMethod !== "shipment" && (
+                  <button
+                    type="button"
+                    className="btn-primary mt-4 w-full sm:w-auto"
+                    onClick={() => setAcknowledgeOrder(order)}
+                  >
+                    Acknowledge receipt
+                  </button>
+                )}
+              {canExecute &&
+                order.status === "released" &&
+                order.deliveryMethod === "shipment" &&
+                order.shipmentStatus !== "delivered" && (
+                  <button
+                    type="button"
+                    className="btn-primary mt-4 w-full sm:w-auto"
+                    onClick={() => setTrackingOrder(order)}
+                  >
+                    Update delivery
+                  </button>
+                )}
+              {order.deliveryFailureReason && (
+                <p className="mt-3 rounded-lg bg-rose-500/10 px-3 py-2 text-xs font-medium text-rose-700 dark:text-rose-300">
+                  Delivery exception: {order.deliveryFailureReason}
+                </p>
               )}
             </li>
           ))}
@@ -572,6 +599,10 @@ function OrdersWorkspace({
       <AcknowledgeReceiptSheet
         order={acknowledgeOrder}
         onClose={() => setAcknowledgeOrder(undefined)}
+      />
+      <ShipmentTrackingSheet
+        order={trackingOrder}
+        onClose={() => setTrackingOrder(undefined)}
       />
     </section>
   );
@@ -895,7 +926,7 @@ function PickSheet({
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
-      title={`Confirm pick · ${order.externalReference}`}
+      title={`Confirm pick / ${order.externalReference}`}
       description="Confirm the full quantity and one serial per serialized unit."
       footer={
         <button
@@ -1009,7 +1040,7 @@ function PackSheet({
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
-      title={`Pack order · ${order.externalReference}`}
+      title={`Pack order / ${order.externalReference}`}
       description={
         shipment
           ? "Record the courier, waybill, and fulfillment supplies consumed."
@@ -1396,6 +1427,127 @@ function AcknowledgeReceiptSheet({
   );
 }
 
+function ShipmentTrackingSheet({
+  order,
+  onClose,
+}: {
+  order?: FulfillmentOrder;
+  onClose: () => void;
+}) {
+  const { advanceFulfillmentOrder } = useWarehouse();
+  const toast = useToast();
+  const [action, setAction] = useState<
+    | "mark_in_transit"
+    | "record_delivery_failed"
+    | "confirm_delivery"
+    | "return_to_sender"
+  >("mark_in_transit");
+  const [reference, setReference] = useState("");
+  const [evidenceUrl, setEvidenceUrl] = useState("");
+  const [reason, setReason] = useState("");
+  const [saving, setSaving] = useState(false);
+  if (!order) return null;
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setSaving(true);
+    const ok = await advanceFulfillmentOrder({
+      orderId: order.id,
+      action,
+      trackingReference: reference || undefined,
+      trackingEvidenceUrl: evidenceUrl || undefined,
+      deliveryFailureReason: reason || undefined,
+    });
+    setSaving(false);
+    if (ok) {
+      toast.success(
+        action === "confirm_delivery"
+          ? "Proof of delivery recorded."
+          : "Shipment tracking updated.",
+      );
+      onClose();
+    }
+  };
+  return (
+    <Sheet
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+      title={"Delivery / " + order.externalReference}
+      description="Record courier progression, failed attempts, redelivery, or proof of delivery."
+      footer={
+        <button
+          type="submit"
+          form="shipment-tracking-form"
+          className="btn-primary w-full"
+          disabled={saving}
+        >
+          {saving ? "Saving..." : "Save delivery update"}
+        </button>
+      }
+    >
+      <form
+        id="shipment-tracking-form"
+        className="space-y-4"
+        onSubmit={(event) => void submit(event)}
+      >
+        <Field label="Delivery outcome" htmlFor="shipment-action">
+          <select
+            id="shipment-action"
+            className="input"
+            value={action}
+            onChange={(event) => setAction(event.target.value as typeof action)}
+          >
+            <option value="mark_in_transit">Dispatched / in transit</option>
+            <option value="record_delivery_failed">Failed delivery</option>
+            <option value="confirm_delivery">Delivered with proof</option>
+            {order.shipmentStatus === "delivery_failed" && (
+              <option value="return_to_sender">Return to sender</option>
+            )}
+          </select>
+        </Field>
+        {action === "confirm_delivery" && (
+          <>
+            <Field label="Proof-of-delivery reference" htmlFor="pod-reference">
+              <input
+                id="pod-reference"
+                className="input"
+                value={reference}
+                onChange={(event) => setReference(event.target.value)}
+                required
+              />
+            </Field>
+            <Field
+              label="Proof-of-delivery evidence URL"
+              htmlFor="pod-evidence"
+            >
+              <input
+                id="pod-evidence"
+                className="input"
+                type="url"
+                value={evidenceUrl}
+                onChange={(event) => setEvidenceUrl(event.target.value)}
+                required
+              />
+            </Field>
+          </>
+        )}
+        {(action === "record_delivery_failed" ||
+          action === "return_to_sender") && (
+          <Field label="Exception reason" htmlFor="delivery-reason">
+            <textarea
+              id="delivery-reason"
+              className="input min-h-24"
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+              required
+            />
+          </Field>
+        )}
+      </form>
+    </Sheet>
+  );
+}
 function RequestsWorkspace({
   products,
   requests,
@@ -1757,10 +1909,14 @@ function ReturnsWorkspace({
   canCreate: boolean;
   resolutionMode: "warehouse" | "finance" | "read_only";
 }) {
-  const { createCustomerReturnCase, resolveCustomerReturnCase } =
-    useWarehouse();
+  const {
+    createCustomerReturnCase,
+    resolveCustomerReturnCase,
+    closeCustomerReturnCase,
+  } = useWarehouse();
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<CustomerReturnCase>();
+  const [closing, setClosing] = useState<CustomerReturnCase>();
   return (
     <section className="space-y-4" aria-labelledby="returns-title">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -1834,7 +1990,7 @@ function ReturnsWorkspace({
                 Resolution: {titleCase(record.resolution)}
               </p>
               {resolutionMode !== "read_only" &&
-                record.status !== "resolved" && (
+                !["resolved", "closed"].includes(record.status) && (
                   <button
                     type="button"
                     className="btn-outline mt-4 w-full sm:w-auto"
@@ -1844,6 +2000,21 @@ function ReturnsWorkspace({
                       ? "Record refund"
                       : "Record resolution"}
                   </button>
+                )}
+              {canCreate && record.status === "resolved" && (
+                <button
+                  type="button"
+                  className="btn-primary mt-4 w-full sm:w-auto"
+                  onClick={() => setClosing(record)}
+                >
+                  Close with customer
+                </button>
+              )}
+              {record.status === "closed" &&
+                record.customerResolutionReference && (
+                  <p className="mt-3 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                    Customer closure: {record.customerResolutionReference}
+                  </p>
                 )}
             </li>
           ))}
@@ -1861,6 +2032,11 @@ function ReturnsWorkspace({
         resolve={resolveCustomerReturnCase}
         mode={resolutionMode === "finance" ? "finance" : "warehouse"}
         onClose={() => setSelected(undefined)}
+      />
+      <CloseReturnSheet
+        record={closing}
+        close={closeCustomerReturnCase}
+        onClose={() => setClosing(undefined)}
       />
     </section>
   );
@@ -1996,6 +2172,7 @@ function ResolveReturnSheet({
   >(mode === "finance" ? "refund" : "replacement");
   const [binId, setBinId] = useState("");
   const [reference, setReference] = useState("");
+  const [financeEvidenceUrl, setFinanceEvidenceUrl] = useState("");
   const [saving, setSaving] = useState(false);
   if (!record) return null;
   const submit = async (event: FormEvent) => {
@@ -2006,10 +2183,12 @@ function ResolveReturnSheet({
       resolution,
       quarantineBinId: binId || undefined,
       refundReference: resolution === "refund" ? reference : undefined,
-      replacementOrderId:
-        resolution === "replacement" ? reference || undefined : undefined,
+      replacementOrderId: undefined,
       supplierReference:
         resolution === "vendor_return" ? reference || undefined : undefined,
+      financeEvidenceUrl: ["refund", "write_off"].includes(resolution)
+        ? financeEvidenceUrl || undefined
+        : undefined,
     });
     setSaving(false);
     if (ok) {
@@ -2017,7 +2196,7 @@ function ResolveReturnSheet({
       onClose();
     }
   };
-  const needsBin = ["replacement", "refund", "re_kit"].includes(resolution);
+  const needsBin = true;
   return (
     <Sheet
       open
@@ -2027,7 +2206,7 @@ function ResolveReturnSheet({
       title={
         mode === "finance" ? "Record finance refund" : "Resolve return case"
       }
-      description="Record the physical and downstream outcome before closing the case."
+      description="Quarantine the item first. Replacement creates a linked fulfillment order automatically."
       footer={
         <button
           type="submit"
@@ -2073,34 +2252,129 @@ function ResolveReturnSheet({
               <option value="">Select a controlled bin</option>
               {bins.map((bin) => (
                 <option key={bin.id} value={bin.id}>
-                  {bin.code} · {bin.label ?? "Controlled storage"}
+                  {bin.code} / {bin.label ?? "Controlled storage"}
                 </option>
               ))}
             </select>
           </Field>
         )}
+        {["refund", "vendor_return"].includes(resolution) && (
+          <Field
+            label={
+              resolution === "refund"
+                ? "Finance refund reference"
+                : "Supplier RMA reference"
+            }
+            htmlFor="return-reference"
+            hint="Use the attributable Finance or supplier case reference."
+          >
+            <input
+              id="return-reference"
+              className="input"
+              value={reference}
+              onChange={(event) => setReference(event.target.value)}
+              required
+            />
+          </Field>
+        )}
+        {["refund", "write_off"].includes(resolution) && (
+          <Field label="Finance evidence URL" htmlFor="return-finance-evidence">
+            <input
+              id="return-finance-evidence"
+              className="input"
+              type="url"
+              value={financeEvidenceUrl}
+              onChange={(event) => setFinanceEvidenceUrl(event.target.value)}
+              required
+            />
+          </Field>
+        )}
+      </form>
+    </Sheet>
+  );
+}
+
+function CloseReturnSheet({
+  record,
+  close,
+  onClose,
+}: {
+  record?: CustomerReturnCase;
+  close: ReturnType<typeof useWarehouse>["closeCustomerReturnCase"];
+  onClose: () => void;
+}) {
+  const toast = useToast();
+  const [reference, setReference] = useState("");
+  const [evidenceUrl, setEvidenceUrl] = useState("");
+  const [saving, setSaving] = useState(false);
+  if (!record) return null;
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setSaving(true);
+    const ok = await close({
+      returnCaseId: record.id,
+      customerResolutionReference: reference,
+      customerClosureEvidenceUrl: evidenceUrl,
+    });
+    setSaving(false);
+    if (ok) {
+      toast.success("Customer closure recorded.");
+      onClose();
+    }
+  };
+  return (
+    <Sheet
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+      title="Close customer return"
+      description="Customer Service confirms the customer received the refund, replacement, or final disposition."
+      footer={
+        <button
+          type="submit"
+          form="close-return-form"
+          className="btn-primary w-full"
+          disabled={saving}
+        >
+          {saving ? "Saving..." : "Confirm customer closure"}
+        </button>
+      }
+    >
+      <form
+        id="close-return-form"
+        className="space-y-4"
+        onSubmit={(event) => void submit(event)}
+      >
         <Field
-          label={
-            mode === "finance"
-              ? "Finance refund reference"
-              : "Downstream reference"
-          }
-          htmlFor="return-reference"
-          hint="Refund, replacement order, or supplier reference as applicable."
+          label="Customer resolution reference"
+          htmlFor="customer-resolution-reference"
         >
           <input
-            id="return-reference"
+            id="customer-resolution-reference"
             className="input"
             value={reference}
             onChange={(event) => setReference(event.target.value)}
-            required={resolution === "refund"}
+            required
+          />
+        </Field>
+        <Field
+          label="Customer confirmation evidence URL"
+          htmlFor="customer-closure-evidence"
+        >
+          <input
+            id="customer-closure-evidence"
+            className="input"
+            type="url"
+            value={evidenceUrl}
+            onChange={(event) => setEvidenceUrl(event.target.value)}
+            required
           />
         </Field>
       </form>
     </Sheet>
   );
 }
-
 function KitsWorkspace({
   products,
   definitions,
@@ -2361,7 +2635,7 @@ function CompleteReKitSheet({
             <option value="">Select a scanned destination</option>
             {eligibleBins.map((bin) => (
               <option key={bin.id} value={bin.id}>
-                {bin.code} · {bin.label ?? "Storage bin"}
+                {bin.code} / {bin.label ?? "Storage bin"}
               </option>
             ))}
           </select>
