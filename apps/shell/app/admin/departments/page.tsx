@@ -40,6 +40,23 @@ interface DepartmentForm {
   isActive: boolean;
 }
 
+interface DepartmentCostCenter {
+  readonly id: string;
+  readonly department_code: string;
+  readonly cost_center_code: string;
+  readonly name: string;
+  readonly is_active: boolean;
+  readonly updated_at: string;
+}
+
+interface CostCenterForm {
+  id: string | null;
+  departmentCode: string;
+  code: string;
+  name: string;
+  isActive: boolean;
+}
+
 const EMPTY_FORM: DepartmentForm = {
   id: null,
   code: "",
@@ -47,6 +64,14 @@ const EMPTY_FORM: DepartmentForm = {
   parentId: "",
   sortOrder: "0",
   purpose: "",
+  isActive: true,
+};
+
+const EMPTY_COST_CENTER_FORM: CostCenterForm = {
+  id: null,
+  departmentCode: "",
+  code: "",
+  name: "",
   isActive: true,
 };
 
@@ -85,6 +110,23 @@ const PREVIEW_DEPARTMENTS: readonly Department[] = [
   can_deactivate: true,
   deactivation_blocked_reason: null,
 }));
+
+const PREVIEW_COST_CENTER_VALUES = [
+  ["operations", "CC-1100", "Operations"],
+  ["sales", "CC-2200", "Sales"],
+  ["marketing", "CC-4100", "Marketing"],
+  ["product", "CC-3100", "Product"],
+] as const;
+
+const PREVIEW_COST_CENTER_ROWS: readonly DepartmentCostCenter[] =
+  PREVIEW_COST_CENTER_VALUES.map(([departmentCode, code, name]) => ({
+    id: `${departmentCode}-${code}`,
+    department_code: departmentCode,
+    cost_center_code: code,
+    name,
+    is_active: true,
+    updated_at: "2026-08-04T00:00:00.000Z",
+  }));
 
 export function descendantIds(
   departments: readonly Department[],
@@ -272,10 +314,16 @@ function DepartmentAdministration() {
   const [departments, setDepartments] = useState<readonly Department[]>(
     isLive ? [] : PREVIEW_DEPARTMENTS,
   );
+  const [costCenters, setCostCenters] = useState<
+    readonly DepartmentCostCenter[]
+  >(isLive ? [] : PREVIEW_COST_CENTER_ROWS);
   const [loading, setLoading] = useState(isLive);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<DepartmentForm | null>(null);
+  const [costCenterForm, setCostCenterForm] = useState<CostCenterForm | null>(
+    null,
+  );
   const [pendingDeactivation, setPendingDeactivation] =
     useState<Department | null>(null);
 
@@ -283,12 +331,23 @@ function DepartmentAdministration() {
     if (!supabase) return;
     setLoading(true);
     setError(null);
-    const { data, error: rpcError } = await supabase.rpc("list_departments");
-    if (rpcError) {
-      setError(rpcError.message);
-      toast.error(rpcError.message);
+    const [departmentResult, costCenterResult] = await Promise.all([
+      supabase.rpc("list_departments"),
+      supabase
+        .from("department_cost_centers")
+        .select("id,department_code,cost_center_code,name,is_active,updated_at")
+        .order("department_code")
+        .order("cost_center_code"),
+    ]);
+    const refreshError = departmentResult.error ?? costCenterResult.error;
+    if (refreshError) {
+      setError(refreshError.message);
+      toast.error(refreshError.message);
     } else {
-      setDepartments((data ?? []) as Department[]);
+      setDepartments((departmentResult.data ?? []) as Department[]);
+      setCostCenters(
+        (costCenterResult.data ?? []) as unknown as DepartmentCostCenter[],
+      );
     }
     setLoading(false);
   }, [supabase, toast]);
@@ -390,6 +449,55 @@ function DepartmentAdministration() {
     await refresh();
   };
 
+  const openCostCenter = (costCenter?: DepartmentCostCenter) => {
+    setCostCenterForm(
+      costCenter
+        ? {
+            id: costCenter.id,
+            departmentCode: costCenter.department_code,
+            code: costCenter.cost_center_code,
+            name: costCenter.name,
+            isActive: costCenter.is_active,
+          }
+        : { ...EMPTY_COST_CENTER_FORM },
+    );
+  };
+
+  const saveCostCenter = async () => {
+    if (!costCenterForm || !supabase) return;
+    if (
+      !costCenterForm.departmentCode ||
+      !costCenterForm.code.trim() ||
+      !costCenterForm.name.trim()
+    ) {
+      toast.error("Department, cost center code, and name are required.");
+      return;
+    }
+    setSaving(true);
+    const { error: rpcError } = await supabase.rpc(
+      "upsert_department_cost_center",
+      {
+        payload: {
+          ...(costCenterForm.id ? { id: costCenterForm.id } : {}),
+          department_code: costCenterForm.departmentCode,
+          cost_center_code: costCenterForm.code.trim().toUpperCase(),
+          name: costCenterForm.name.trim(),
+          is_active: costCenterForm.isActive,
+        },
+      },
+    );
+    setSaving(false);
+    if (rpcError) {
+      toast.error(rpcError.message);
+      return;
+    }
+    toast.success(
+      costCenterForm.id ? "Cost center updated." : "Cost center added.",
+    );
+    setCostCenterForm(null);
+    await refresh();
+  };
+
   return (
     <div className="space-y-6">
       <ModuleHero
@@ -453,6 +561,72 @@ function DepartmentAdministration() {
           ))}
         </ul>
       )}
+
+      <section className="space-y-4 border-t border-line pt-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-ink">
+              Requestable departments and cost centers
+            </h2>
+            <p className="mt-1 text-sm text-muted">
+              These controlled choices appear on department inventory requests.
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            icon="plus"
+            onClick={() => openCostCenter()}
+            disabled={!isLive}
+          >
+            Add cost center
+          </Button>
+        </div>
+        <div className="overflow-x-auto border-y border-line">
+          <table className="w-full min-w-[40rem] text-left text-sm">
+            <thead className="bg-inset text-xs font-semibold uppercase text-muted">
+              <tr>
+                <th className="px-3 py-3">Department</th>
+                <th className="px-3 py-3">Cost center</th>
+                <th className="px-3 py-3">Name</th>
+                <th className="px-3 py-3">Status</th>
+                <th className="px-3 py-3 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {costCenters.map((costCenter) => (
+                <tr key={costCenter.id} className="border-t border-line">
+                  <td className="px-3 py-3 font-medium text-ink">
+                    {departments.find(
+                      (department) =>
+                        department.code === costCenter.department_code,
+                    )?.name ?? costCenter.department_code}
+                  </td>
+                  <td className="px-3 py-3 font-mono text-ink">
+                    {costCenter.cost_center_code}
+                  </td>
+                  <td className="px-3 py-3 text-muted">{costCenter.name}</td>
+                  <td className="px-3 py-3">
+                    <Badge tone={costCenter.is_active ? "emerald" : "slate"}>
+                      {costCenter.is_active ? "Active" : "Inactive"}
+                    </Badge>
+                  </td>
+                  <td className="px-3 py-3 text-right">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      icon="edit"
+                      disabled={!isLive}
+                      onClick={() => openCostCenter(costCenter)}
+                    >
+                      Edit
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       <Sheet
         open={Boolean(form)}
@@ -616,6 +790,99 @@ function DepartmentAdministration() {
               Historical assignments remain available for audit and reporting.
               The department code and prior relationships are retained.
             </p>
+          </div>
+        )}
+      </Sheet>
+
+      <Sheet
+        open={Boolean(costCenterForm)}
+        onOpenChange={(open) => {
+          if (!open) setCostCenterForm(null);
+        }}
+        title={costCenterForm?.id ? "Edit cost center" : "Add cost center"}
+        description="Use a stable finance-owned code. Inactive entries remain on historical requests but cannot be selected for new ones."
+        side="right"
+        footer={
+          <Button
+            onClick={() => void saveCostCenter()}
+            disabled={!costCenterForm || saving}
+          >
+            {saving ? "Saving..." : "Save cost center"}
+          </Button>
+        }
+      >
+        {costCenterForm && (
+          <div className="space-y-5">
+            <Field label="Department" htmlFor="cost-center-department">
+              <select
+                id="cost-center-department"
+                className="input"
+                value={costCenterForm.departmentCode}
+                onChange={(event) =>
+                  setCostCenterForm({
+                    ...costCenterForm,
+                    departmentCode: event.currentTarget.value,
+                  })
+                }
+              >
+                <option value="">Select a department</option>
+                {departments
+                  .filter((department) => department.is_active)
+                  .map((department) => (
+                    <option key={department.id} value={department.code}>
+                      {department.name}
+                    </option>
+                  ))}
+              </select>
+            </Field>
+            <Field label="Cost center code" htmlFor="cost-center-code">
+              <Input
+                id="cost-center-code"
+                value={costCenterForm.code}
+                onChange={(event) =>
+                  setCostCenterForm({
+                    ...costCenterForm,
+                    code: event.currentTarget.value,
+                  })
+                }
+                placeholder="CC-4100"
+              />
+            </Field>
+            <Field label="Display name" htmlFor="cost-center-name">
+              <Input
+                id="cost-center-name"
+                value={costCenterForm.name}
+                onChange={(event) =>
+                  setCostCenterForm({
+                    ...costCenterForm,
+                    name: event.currentTarget.value,
+                  })
+                }
+              />
+            </Field>
+            {costCenterForm.id && (
+              <label className="flex items-start gap-3 border-t border-line pt-4">
+                <input
+                  type="checkbox"
+                  className="mt-1 h-4 w-4"
+                  checked={costCenterForm.isActive}
+                  onChange={(event) =>
+                    setCostCenterForm({
+                      ...costCenterForm,
+                      isActive: event.currentTarget.checked,
+                    })
+                  }
+                />
+                <span>
+                  <span className="block text-sm font-semibold text-ink">
+                    Available for new requests
+                  </span>
+                  <span className="block text-xs text-muted">
+                    Turn this off to retire the choice without changing history.
+                  </span>
+                </span>
+              </label>
+            )}
           </div>
         )}
       </Sheet>

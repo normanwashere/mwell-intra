@@ -5,7 +5,25 @@ import { buildSeed } from "./seed";
 let repo: InMemoryRepository;
 
 beforeEach(() => {
-  repo = new InMemoryRepository(buildSeed(), {
+  const seed = buildSeed();
+  const merchandise = seed.products.find((row) => row.id === "doctor-token")!;
+  const merchandiseStock = seed.stockLevels.find(
+    (row) => row.productId === "doctor-token" && row.locationId === "loc-wh",
+  )!;
+  seed.products.push({
+    ...merchandise,
+    id: "event-banner",
+    sku: "EVENT-BANNER",
+    name: "Event Banner",
+    itemClass: "event_material",
+    barcode: "4900099999",
+  });
+  seed.stockLevels.push({
+    ...merchandiseStock,
+    productId: "event-banner",
+    quantity: 5,
+  });
+  repo = new InMemoryRepository(seed, {
     now: () => "2026-07-21T08:00:00.000Z",
     id: (prefix) => `${prefix}-test`,
   });
@@ -55,7 +73,7 @@ describe("cross-department WMS repository", () => {
     const released = await repo.advanceFulfillmentOrder({
       orderId: created.id,
       action: "release",
-      actor: "warehouse@mwell",
+      actor: "warehouse.supervisor@mwell",
     });
 
     expect(released.status).toBe("released");
@@ -72,6 +90,196 @@ describe("cross-department WMS repository", () => {
         }),
       ]),
     );
+  });
+
+  it("synchronizes an internal request through allocation, issue, and acknowledgment", async () => {
+    const request = await repo.createDepartmentStockRequest({
+      requestingDepartment: "marketing",
+      purpose: "Event booth materials",
+      costCenter: "CC-4100",
+      requiredDate: "2026-08-15",
+      expenseTreatment: "custody",
+      lines: [{ productId: "event-banner", quantity: 1 }],
+      actor: "marketing.requester@mwell",
+    });
+    const approved = await repo.decideDepartmentStockRequest({
+      requestId: request.id,
+      decision: "approved",
+      actor: "marketing.approver@mwell",
+    });
+    const orderId = approved.fulfillmentOrderId!;
+
+    await repo.advanceFulfillmentOrder({
+      orderId,
+      action: "allocate",
+      actor: "warehouse.operator@mwell",
+    });
+    expect(
+      (await repo.getData()).departmentStockRequests.find(
+        (row) => row.id === request.id,
+      )?.status,
+    ).toBe("allocated");
+
+    await repo.advanceFulfillmentOrder({
+      orderId,
+      action: "start_picking",
+      actor: "warehouse.operator@mwell",
+    });
+    await repo.advanceFulfillmentOrder({
+      orderId,
+      action: "confirm_pick",
+      actor: "warehouse.operator@mwell",
+      pickedLines: [{ productId: "event-banner", quantity: 1 }],
+    });
+    await repo.advanceFulfillmentOrder({
+      orderId,
+      action: "confirm_pack",
+      actor: "warehouse.operator@mwell",
+      handoverRecipientName: "Maya Santos",
+      handoverRecipientDepartment: "Marketing",
+      handoverReference: "HO-EVENT-1001",
+      handoverEvidenceUrl: "https://evidence.example/handover.jpg",
+      packaging: [],
+    });
+    await expect(
+      repo.advanceFulfillmentOrder({
+        orderId,
+        action: "release",
+        actor: "warehouse.operator@mwell",
+      }),
+    ).rejects.toThrow(/second warehouse operator/i);
+    await repo.advanceFulfillmentOrder({
+      orderId,
+      action: "release",
+      actor: "warehouse.supervisor@mwell",
+    });
+    expect(
+      (await repo.getData()).departmentStockRequests.find(
+        (row) => row.id === request.id,
+      )?.status,
+    ).toBe("issued");
+
+    const completed = await repo.advanceFulfillmentOrder({
+      orderId,
+      action: "acknowledge_receipt",
+      actor: "marketing.requester@mwell",
+      acknowledgementReference: "ACK-EVENT-1001",
+      acknowledgementEvidenceUrl: "https://evidence.example/accepted.jpg",
+    });
+    expect(completed.status).toBe("completed");
+    expect(
+      (await repo.getData()).departmentStockRequests.find(
+        (row) => row.id === request.id,
+      )?.status,
+    ).toBe("closed");
+  });
+
+  it("creates an explicit reservation and splits unavailable demand into a backorder", async () => {
+    const order = await repo.createFulfillmentOrder({
+      source: "event",
+      externalReference: "EVENT-2001",
+      eventId: "evt-makati",
+      sourceLocationId: "loc-wh",
+      lines: [{ productId: "doctor-token", quantity: 10 }],
+      actor: "operations@mwell",
+    });
+
+    await repo.advanceFulfillmentOrder({
+      orderId: order.id,
+      action: "split_backorder",
+      actor: "warehouse.operator@mwell",
+      fulfilledLines: [{ productId: "doctor-token", quantity: 4 }],
+    });
+    await repo.advanceFulfillmentOrder({
+      orderId: order.id,
+      action: "allocate",
+      actor: "warehouse.operator@mwell",
+    });
+
+    const data = await repo.getData();
+    expect(data.fulfillmentOrders).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: order.id,
+          lines: [expect.objectContaining({ quantity: 4 })],
+        }),
+        expect.objectContaining({
+          parentOrderId: order.id,
+          externalReference: "EVENT-2001-BO-1",
+          lines: [expect.objectContaining({ quantity: 6 })],
+        }),
+      ]),
+    );
+    expect(data.fulfillmentReservations).toEqual([
+      expect.objectContaining({
+        orderId: order.id,
+        productId: "doctor-token",
+        quantity: 4,
+        status: "active",
+      }),
+    ]);
+  });
+
+  it("records consumed packaging when a prepared order is cancelled", async () => {
+    const order = await repo.createFulfillmentOrder({
+      source: "ecommerce",
+      externalReference: "SHOP-CANCEL-1",
+      sourceLocationId: "loc-wh",
+      lines: [{ productId: "smart-watch", quantity: 1 }],
+      actor: "sales@mwell",
+    });
+    await repo.advanceFulfillmentOrder({
+      orderId: order.id,
+      action: "allocate",
+      actor: "warehouse.operator@mwell",
+    });
+    await repo.advanceFulfillmentOrder({
+      orderId: order.id,
+      action: "start_picking",
+      actor: "warehouse.operator@mwell",
+    });
+    await repo.advanceFulfillmentOrder({
+      orderId: order.id,
+      action: "confirm_pick",
+      actor: "warehouse.operator@mwell",
+      pickedLines: [
+        {
+          productId: "smart-watch",
+          quantity: 1,
+          serialNumbers: ["SMART-WATCH-SN0001"],
+        },
+      ],
+    });
+    await repo.advanceFulfillmentOrder({
+      orderId: order.id,
+      action: "confirm_pack",
+      actor: "warehouse.operator@mwell",
+      courier: "LBC",
+      waybillNumber: "VOID-1001",
+      packaging: [{ productId: "pack-small-box", quantity: 1 }],
+    });
+    await repo.advanceFulfillmentOrder({
+      orderId: order.id,
+      action: "cancel",
+      actor: "warehouse.supervisor@mwell",
+      cancellationReason: "Customer cancelled before dispatch",
+      packagingDisposition: "consumed",
+    });
+
+    const data = await repo.getData();
+    expect(data.movements).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "packaging_consumption",
+          reference: order.id,
+          reason: "Cancelled after packing: Customer cancelled before dispatch",
+        }),
+      ]),
+    );
+    expect(
+      data.fulfillmentReservations.find((row) => row.orderId === order.id)
+        ?.status,
+    ).toBe("cancelled");
   });
 
   it("records third-party event sales demand against its external stock location", async () => {
@@ -120,7 +328,7 @@ describe("cross-department WMS repository", () => {
     const request = await repo.createDepartmentStockRequest({
       requestingDepartment: "marketing",
       purpose: "Doctor roadshow giveaways",
-      costCenter: "MKT-100",
+      costCenter: "CC-4100",
       requiredDate: "2026-08-01",
       expenseTreatment: "expense",
       lines: [{ productId: "doctor-token", quantity: 10 }],
@@ -144,24 +352,24 @@ describe("cross-department WMS repository", () => {
     );
   });
 
-  it("limits department requests to SKU or merchandise and expenses merchandise", async () => {
+  it("limits department requests to governed issue classes and expenses merchandise", async () => {
     await expect(
       repo.createDepartmentStockRequest({
         requestingDepartment: "operations",
         purpose: "Packing station replenishment",
-        costCenter: "OPS-100",
+        costCenter: "CC-1100",
         requiredDate: "2026-08-01",
         expenseTreatment: "expense",
         lines: [{ productId: "pack-small-box", quantity: 2 }],
         actor: "operations@mwell",
       }),
-    ).rejects.toThrow(/SKU and merchandise/i);
+    ).rejects.toThrow(/SKU, merchandise, and event material/i);
 
     await expect(
       repo.createDepartmentStockRequest({
         requestingDepartment: "marketing",
         purpose: "Campaign giveaways",
-        costCenter: "MKT-100",
+        costCenter: "CC-4100",
         requiredDate: "2026-08-01",
         expenseTreatment: "custody",
         lines: [{ productId: "doctor-token", quantity: 2 }],

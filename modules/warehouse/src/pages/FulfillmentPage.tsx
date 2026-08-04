@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import type {
   CustomerReturnCase,
+  DepartmentRequestOption,
   DepartmentStockRequest,
   FulfillmentAction,
   FulfillmentOrder,
@@ -129,7 +130,7 @@ function SummaryStrip({
     {
       label: "Orders in progress",
       value: orders.filter(
-        (row) => !["released", "cancelled"].includes(row.status),
+        (row) => !["released", "completed", "cancelled"].includes(row.status),
       ).length,
     },
     {
@@ -164,7 +165,7 @@ function SummaryStrip({
 
 export function FulfillmentPage() {
   const warehouse = useWarehouse();
-  const { data, role, can } = warehouse;
+  const { data, role, can, actor, identityId } = warehouse;
   const [tab, setTab] = useState<WorkspaceTab>("orders");
 
   if (!data) return null;
@@ -237,6 +238,8 @@ export function FulfillmentPage() {
           orders={data.fulfillmentOrders}
           canCreate={canCreateOrder}
           canExecute={canExecute}
+          canAcknowledge={canCreateOrder || canRequestStock || canExecute}
+          actorIds={[actor, identityId]}
         />
       )}
       {tab === "requests" && (
@@ -246,6 +249,7 @@ export function FulfillmentPage() {
           canCreate={canRequestStock}
           canApprove={canApproveRequest}
           department={role === "business_unit" ? "business_unit" : role}
+          options={data.departmentRequestOptions}
         />
       )}
       {tab === "returns" && (
@@ -286,6 +290,8 @@ function OrdersWorkspace({
   orders,
   canCreate,
   canExecute,
+  canAcknowledge,
+  actorIds,
 }: {
   products: Product[];
   locations: Array<{ id: string; name: string; type?: string }>;
@@ -293,6 +299,8 @@ function OrdersWorkspace({
   orders: FulfillmentOrder[];
   canCreate: boolean;
   canExecute: boolean;
+  canAcknowledge: boolean;
+  actorIds: string[];
 }) {
   const { createFulfillmentOrder, advanceFulfillmentOrder } = useWarehouse();
   const toast = useToast();
@@ -300,6 +308,9 @@ function OrdersWorkspace({
   const [workingId, setWorkingId] = useState<string>();
   const [pickOrder, setPickOrder] = useState<FulfillmentOrder>();
   const [packOrder, setPackOrder] = useState<FulfillmentOrder>();
+  const [backorderOrder, setBackorderOrder] = useState<FulfillmentOrder>();
+  const [cancelOrder, setCancelOrder] = useState<FulfillmentOrder>();
+  const [acknowledgeOrder, setAcknowledgeOrder] = useState<FulfillmentOrder>();
 
   const advance = async (
     order: FulfillmentOrder,
@@ -429,11 +440,17 @@ function OrdersWorkspace({
                   </span>
                 </div>
                 <div>
-                  <span className="block text-faint">Courier / waybill</span>
+                  <span className="block text-faint">
+                    {order.deliveryMethod === "shipment"
+                      ? "Courier / waybill"
+                      : "Recipient / handover"}
+                  </span>
                   <span className="font-medium text-ink">
-                    {order.courier
+                    {order.deliveryMethod === "shipment" && order.courier
                       ? `${order.courier} · ${order.waybillNumber}`
-                      : "Pending packing"}
+                      : order.handoverRecipientName
+                        ? `${order.handoverRecipientName} / ${order.handoverReference}`
+                        : "Pending preparation"}
                   </span>
                 </div>
               </div>
@@ -446,15 +463,26 @@ function OrdersWorkspace({
                 </p>
               )}
               {canExecute &&
-                !["released", "cancelled"].includes(order.status) && (
+                !["released", "completed", "cancelled"].includes(
+                  order.status,
+                ) && (
                   <div className="mt-4 flex flex-wrap gap-2">
                     {order.status === "received" && (
-                      <ActionButton
-                        busy={workingId === order.id}
-                        onClick={() => void advance(order, "allocate")}
-                      >
-                        Allocate stock
-                      </ActionButton>
+                      <>
+                        <ActionButton
+                          busy={workingId === order.id}
+                          onClick={() => void advance(order, "allocate")}
+                        >
+                          Allocate stock
+                        </ActionButton>
+                        <button
+                          type="button"
+                          className="btn-outline flex-1 sm:flex-none"
+                          onClick={() => setBackorderOrder(order)}
+                        >
+                          Split backorder
+                        </button>
+                      </>
                     )}
                     {order.status === "allocated" && (
                       <ActionButton
@@ -471,19 +499,44 @@ function OrdersWorkspace({
                     )}
                     {order.status === "packing" && (
                       <ActionButton onClick={() => setPackOrder(order)}>
-                        Pack and add waybill
+                        {order.deliveryMethod === "shipment"
+                          ? "Pack and add waybill"
+                          : "Prepare accountable handover"}
                       </ActionButton>
                     )}
-                    {order.status === "ready" && (
-                      <ActionButton
-                        busy={workingId === order.id}
-                        onClick={() => void advance(order, "release")}
-                      >
-                        Release to courier
-                      </ActionButton>
-                    )}
+                    {order.status === "ready" &&
+                      (actorIds.includes(order.packedBy ?? "") ? (
+                        <p className="w-full rounded-lg bg-amber-500/10 px-3 py-2 text-sm font-medium text-amber-800 dark:text-amber-300">
+                          Awaiting release by a second warehouse operator.
+                        </p>
+                      ) : (
+                        <ActionButton
+                          busy={workingId === order.id}
+                          onClick={() => void advance(order, "release")}
+                        >
+                          {order.deliveryMethod === "shipment"
+                            ? "Release shipment"
+                            : "Release handover"}
+                        </ActionButton>
+                      ))}
+                    <button
+                      type="button"
+                      className="btn-outline flex-1 sm:flex-none"
+                      onClick={() => setCancelOrder(order)}
+                    >
+                      Cancel
+                    </button>
                   </div>
                 )}
+              {canAcknowledge && order.status === "released" && (
+                <button
+                  type="button"
+                  className="btn-primary mt-4 w-full sm:w-auto"
+                  onClick={() => setAcknowledgeOrder(order)}
+                >
+                  Acknowledge receipt
+                </button>
+              )}
             </li>
           ))}
         </ul>
@@ -506,6 +559,19 @@ function OrdersWorkspace({
         order={packOrder}
         products={products}
         onClose={() => setPackOrder(undefined)}
+      />
+      <BackorderSheet
+        order={backorderOrder}
+        products={products}
+        onClose={() => setBackorderOrder(undefined)}
+      />
+      <CancelOrderSheet
+        order={cancelOrder}
+        onClose={() => setCancelOrder(undefined)}
+      />
+      <AcknowledgeReceiptSheet
+        order={acknowledgeOrder}
+        onClose={() => setAcknowledgeOrder(undefined)}
       />
     </section>
   );
@@ -904,10 +970,15 @@ function PackSheet({
   );
   const [courier, setCourier] = useState("");
   const [waybill, setWaybill] = useState("");
+  const [recipientName, setRecipientName] = useState("");
+  const [recipientDepartment, setRecipientDepartment] = useState("");
+  const [handoverReference, setHandoverReference] = useState("");
+  const [handoverEvidenceUrl, setHandoverEvidenceUrl] = useState("");
   const [supplyId, setSupplyId] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [saving, setSaving] = useState(false);
   if (!order) return null;
+  const shipment = order.deliveryMethod === "shipment";
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setSaving(true);
@@ -916,11 +987,19 @@ function PackSheet({
       action: "confirm_pack",
       courier,
       waybillNumber: waybill,
+      handoverRecipientName: recipientName,
+      handoverRecipientDepartment: recipientDepartment,
+      handoverReference,
+      handoverEvidenceUrl,
       packaging: supplyId ? [{ productId: supplyId, quantity }] : [],
     });
     setSaving(false);
     if (ok) {
-      toast.success("Packing confirmed. The order is ready for release.");
+      toast.success(
+        shipment
+          ? "Packing confirmed. The shipment is ready for release."
+          : "Handover prepared. A second operator must release it.",
+      );
       onClose();
     }
   };
@@ -931,7 +1010,11 @@ function PackSheet({
         if (!open) onClose();
       }}
       title={`Pack order · ${order.externalReference}`}
-      description="Record the courier, waybill, and fulfillment supplies consumed."
+      description={
+        shipment
+          ? "Record the courier, waybill, and fulfillment supplies consumed."
+          : "Identify the recipient and attach handover evidence before release."
+      }
       footer={
         <button
           type="submit"
@@ -948,24 +1031,76 @@ function PackSheet({
         className="space-y-4"
         onSubmit={(event) => void submit(event)}
       >
-        <Field label="Courier" htmlFor="pack-courier">
-          <input
-            id="pack-courier"
-            className="input"
-            value={courier}
-            onChange={(event) => setCourier(event.target.value)}
-            required
-          />
-        </Field>
-        <Field label="Waybill number" htmlFor="pack-waybill">
-          <input
-            id="pack-waybill"
-            className="input"
-            value={waybill}
-            onChange={(event) => setWaybill(event.target.value)}
-            required
-          />
-        </Field>
+        {shipment ? (
+          <>
+            <Field label="Courier" htmlFor="pack-courier">
+              <input
+                id="pack-courier"
+                className="input"
+                value={courier}
+                onChange={(event) => setCourier(event.target.value)}
+                required
+              />
+            </Field>
+            <Field label="Waybill number" htmlFor="pack-waybill">
+              <input
+                id="pack-waybill"
+                className="input"
+                value={waybill}
+                onChange={(event) => setWaybill(event.target.value)}
+                required
+              />
+            </Field>
+          </>
+        ) : (
+          <>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Recipient name" htmlFor="handover-recipient">
+                <input
+                  id="handover-recipient"
+                  className="input"
+                  value={recipientName}
+                  onChange={(event) => setRecipientName(event.target.value)}
+                  required
+                />
+              </Field>
+              <Field label="Recipient department" htmlFor="handover-department">
+                <input
+                  id="handover-department"
+                  className="input"
+                  value={recipientDepartment}
+                  onChange={(event) =>
+                    setRecipientDepartment(event.target.value)
+                  }
+                  required
+                />
+              </Field>
+            </div>
+            <Field label="Handover reference" htmlFor="handover-reference">
+              <input
+                id="handover-reference"
+                className="input"
+                value={handoverReference}
+                onChange={(event) => setHandoverReference(event.target.value)}
+                required
+              />
+            </Field>
+            <Field
+              label="Handover evidence URL"
+              htmlFor="handover-evidence"
+              hint="Attach the signed release form or handover photo."
+            >
+              <input
+                id="handover-evidence"
+                className="input"
+                type="url"
+                value={handoverEvidenceUrl}
+                onChange={(event) => setHandoverEvidenceUrl(event.target.value)}
+                required
+              />
+            </Field>
+          </>
+        )}
         {supplies.length > 0 ? (
           <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_7rem]">
             <Field label="Packaging supply" htmlFor="pack-supply">
@@ -1005,18 +1140,276 @@ function PackSheet({
   );
 }
 
+function BackorderSheet({
+  order,
+  products,
+  onClose,
+}: {
+  order?: FulfillmentOrder;
+  products: Product[];
+  onClose: () => void;
+}) {
+  const { advanceFulfillmentOrder } = useWarehouse();
+  const toast = useToast();
+  const [saving, setSaving] = useState(false);
+  if (!order) return null;
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setSaving(true);
+    const ok = await advanceFulfillmentOrder({
+      orderId: order.id,
+      action: "split_backorder",
+      fulfilledLines: order.lines.map((line) => ({
+        productId: line.productId,
+        quantity: Number(form.get(`quantity-${line.productId}`)),
+      })),
+    });
+    setSaving(false);
+    if (ok) {
+      toast.success(
+        "Available demand retained and the remainder moved to a backorder.",
+      );
+      onClose();
+    }
+  };
+  return (
+    <Sheet
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+      title={`Split backorder / ${order.externalReference}`}
+      description="Keep the quantity Warehouse can fulfill now. The remainder stays visible as a linked backorder."
+      footer={
+        <button
+          type="submit"
+          form="split-backorder-form"
+          className="btn-primary w-full"
+          disabled={saving}
+        >
+          {saving ? "Splitting..." : "Create backorder"}
+        </button>
+      }
+    >
+      <form
+        id="split-backorder-form"
+        className="space-y-4"
+        onSubmit={(event) => void submit(event)}
+      >
+        {order.lines.map((line) => (
+          <Field
+            key={line.productId}
+            label={
+              products.find((row) => row.id === line.productId)?.name ??
+              line.productId
+            }
+            htmlFor={`backorder-${line.productId}`}
+            hint={`Original demand: ${line.quantity}`}
+          >
+            <input
+              id={`backorder-${line.productId}`}
+              name={`quantity-${line.productId}`}
+              className="input"
+              type="number"
+              min="1"
+              max={line.quantity}
+              defaultValue={Math.max(1, line.quantity - 1)}
+              required
+            />
+          </Field>
+        ))}
+      </form>
+    </Sheet>
+  );
+}
+
+function CancelOrderSheet({
+  order,
+  onClose,
+}: {
+  order?: FulfillmentOrder;
+  onClose: () => void;
+}) {
+  const { advanceFulfillmentOrder } = useWarehouse();
+  const toast = useToast();
+  const [reason, setReason] = useState("");
+  const [disposition, setDisposition] = useState<
+    "returned_to_stock" | "consumed"
+  >("returned_to_stock");
+  const [saving, setSaving] = useState(false);
+  if (!order) return null;
+  const prepared =
+    ["packing", "ready"].includes(order.status) && order.packaging.length > 0;
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setSaving(true);
+    const ok = await advanceFulfillmentOrder({
+      orderId: order.id,
+      action: "cancel",
+      cancellationReason: reason,
+      packagingDisposition: prepared ? disposition : undefined,
+    });
+    setSaving(false);
+    if (ok) {
+      toast.success(
+        "Demand cancelled with its reason and stock commitment recorded.",
+      );
+      onClose();
+      setReason("");
+    }
+  };
+  return (
+    <Sheet
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+      title={`Cancel demand / ${order.externalReference}`}
+      description="Cancellation releases the reservation and preserves the operational reason."
+      footer={
+        <button
+          type="submit"
+          form="cancel-order-form"
+          className="btn-primary w-full"
+          disabled={saving}
+        >
+          {saving ? "Cancelling..." : "Confirm cancellation"}
+        </button>
+      }
+    >
+      <form
+        id="cancel-order-form"
+        className="space-y-4"
+        onSubmit={(event) => void submit(event)}
+      >
+        <Field label="Cancellation reason" htmlFor="cancel-order-reason">
+          <textarea
+            id="cancel-order-reason"
+            className="input min-h-24"
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            required
+          />
+        </Field>
+        {prepared && (
+          <Field label="Prepared packaging" htmlFor="packaging-disposition">
+            <select
+              id="packaging-disposition"
+              className="input"
+              value={disposition}
+              onChange={(event) =>
+                setDisposition(event.target.value as typeof disposition)
+              }
+            >
+              <option value="returned_to_stock">
+                Unused and returned to stock
+              </option>
+              <option value="consumed">Consumed or no longer reusable</option>
+            </select>
+          </Field>
+        )}
+      </form>
+    </Sheet>
+  );
+}
+
+function AcknowledgeReceiptSheet({
+  order,
+  onClose,
+}: {
+  order?: FulfillmentOrder;
+  onClose: () => void;
+}) {
+  const { advanceFulfillmentOrder } = useWarehouse();
+  const toast = useToast();
+  const [reference, setReference] = useState("");
+  const [evidenceUrl, setEvidenceUrl] = useState("");
+  const [saving, setSaving] = useState(false);
+  if (!order) return null;
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setSaving(true);
+    const ok = await advanceFulfillmentOrder({
+      orderId: order.id,
+      action: "acknowledge_receipt",
+      acknowledgementReference: reference,
+      acknowledgementEvidenceUrl: evidenceUrl,
+    });
+    setSaving(false);
+    if (ok) {
+      toast.success("Receipt acknowledged and the linked request closed.");
+      onClose();
+      setReference("");
+      setEvidenceUrl("");
+    }
+  };
+  return (
+    <Sheet
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+      title={`Acknowledge receipt / ${order.externalReference}`}
+      description="Confirm that the recipient or delivery destination accepted the released inventory."
+      footer={
+        <button
+          type="submit"
+          form="acknowledge-order-form"
+          className="btn-primary w-full"
+          disabled={saving}
+        >
+          {saving ? "Saving..." : "Confirm receipt"}
+        </button>
+      }
+    >
+      <form
+        id="acknowledge-order-form"
+        className="space-y-4"
+        onSubmit={(event) => void submit(event)}
+      >
+        <Field label="Acknowledgment reference" htmlFor="ack-reference">
+          <input
+            id="ack-reference"
+            className="input"
+            value={reference}
+            onChange={(event) => setReference(event.target.value)}
+            required
+          />
+        </Field>
+        <Field
+          label="Acceptance evidence URL"
+          htmlFor="ack-evidence"
+          hint="Attach a signed handover, delivery proof, or recipient confirmation."
+        >
+          <input
+            id="ack-evidence"
+            className="input"
+            type="url"
+            value={evidenceUrl}
+            onChange={(event) => setEvidenceUrl(event.target.value)}
+            required
+          />
+        </Field>
+      </form>
+    </Sheet>
+  );
+}
+
 function RequestsWorkspace({
   products,
   requests,
   canCreate,
   canApprove,
   department,
+  options,
 }: {
   products: Product[];
   requests: DepartmentStockRequest[];
   canCreate: boolean;
   canApprove: boolean;
   department: string;
+  options: DepartmentRequestOption[];
 }) {
   const { createDepartmentStockRequest, decideDepartmentStockRequest } =
     useWarehouse();
@@ -1135,6 +1528,7 @@ function RequestsWorkspace({
         onOpenChange={setOpen}
         products={products}
         department={department}
+        options={options}
         create={createDepartmentStockRequest}
       />
     </section>
@@ -1146,16 +1540,31 @@ function CreateRequestSheet({
   onOpenChange,
   products,
   department,
+  options,
   create,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   products: Product[];
   department: string;
+  options: DepartmentRequestOption[];
   create: ReturnType<typeof useWarehouse>["createDepartmentStockRequest"];
 }) {
   const toast = useToast();
   const [purpose, setPurpose] = useState("");
+  const matchingOptions = options.filter(
+    (option) => option.departmentCode === department,
+  );
+  const availableOptions =
+    matchingOptions.length > 0 ? matchingOptions : options;
+  const departmentOptions = Array.from(
+    new Map(
+      availableOptions.map((option) => [option.departmentCode, option]),
+    ).values(),
+  );
+  const [departmentCode, setDepartmentCode] = useState(
+    departmentOptions[0]?.departmentCode ?? department,
+  );
   const [costCenter, setCostCenter] = useState("");
   const [requiredDate, setRequiredDate] = useState("");
   const [treatment, setTreatment] = useState<"expense" | "custody" | "sale">(
@@ -1165,7 +1574,9 @@ function CreateRequestSheet({
     const itemClass =
       product.itemClass ??
       (product.category === "device" ? "sellable_sku" : "merchandise");
-    return itemClass === "sellable_sku" || itemClass === "merchandise";
+    return ["sellable_sku", "merchandise", "event_material"].includes(
+      itemClass,
+    );
   });
   const [productId, setProductId] = useState(eligibleProducts[0]?.id ?? "");
   const [quantity, setQuantity] = useState(1);
@@ -1179,7 +1590,7 @@ function CreateRequestSheet({
     event.preventDefault();
     setSaving(true);
     const ok = await create({
-      requestingDepartment: department,
+      requestingDepartment: departmentCode,
       purpose,
       costCenter,
       requiredDate,
@@ -1218,12 +1629,22 @@ function CreateRequestSheet({
         onSubmit={(event) => void submit(event)}
       >
         <Field label="Requesting department" htmlFor="request-department">
-          <input
+          <select
             id="request-department"
             className="input"
-            value={titleCase(department)}
-            readOnly
-          />
+            value={departmentCode}
+            onChange={(event) => {
+              setDepartmentCode(event.target.value);
+              setCostCenter("");
+            }}
+            required
+          >
+            {departmentOptions.map((option) => (
+              <option key={option.departmentCode} value={option.departmentCode}>
+                {option.departmentName}
+              </option>
+            ))}
+          </select>
         </Field>
         <Field label="Business purpose" htmlFor="request-purpose">
           <textarea
@@ -1236,13 +1657,25 @@ function CreateRequestSheet({
         </Field>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Cost center" htmlFor="request-cost-center">
-            <input
+            <select
               id="request-cost-center"
               className="input"
               value={costCenter}
               onChange={(event) => setCostCenter(event.target.value)}
               required
-            />
+            >
+              <option value="">Select a cost center</option>
+              {availableOptions
+                .filter((option) => option.departmentCode === departmentCode)
+                .map((option) => (
+                  <option
+                    key={option.costCenterCode}
+                    value={option.costCenterCode}
+                  >
+                    {option.costCenterCode} - {option.costCenterName}
+                  </option>
+                ))}
+            </select>
           </Field>
           <Field label="Required date" htmlFor="request-date">
             <input

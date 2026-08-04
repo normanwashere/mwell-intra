@@ -10,6 +10,7 @@ import {
 const order = (patch: Partial<FulfillmentOrder> = {}): FulfillmentOrder => ({
   id: "order-1",
   source: "ecommerce",
+  deliveryMethod: "shipment",
   externalReference: "SHOP-1001",
   requestingDepartment: "sales",
   status: "received",
@@ -65,6 +66,57 @@ describe("WMS operating contracts", () => {
     expect(() => nextFulfillmentStatus("received", "release")).toThrow(
       "Cannot release an order while it is received.",
     );
+  });
+
+  it("accepts accountable internal handover details instead of courier fields", () => {
+    expect(
+      canReleaseFulfillmentOrder(
+        order({
+          source: "department_request",
+          deliveryMethod: "internal_handover",
+          status: "ready",
+          lines: [
+            {
+              productId: "tablet",
+              quantity: 1,
+              pickedQuantity: 1,
+              pickedSerialNumbers: ["TAB-001"],
+            },
+          ],
+          handoverRecipientName: "Ana Reyes",
+          handoverRecipientDepartment: "Marketing",
+          handoverReference: "HO-1001",
+          handoverEvidenceUrl: "https://evidence.example/ho-1001.jpg",
+          packedBy: "operator-a",
+        }),
+        "operator-b",
+      ),
+    ).toEqual({ ok: true });
+  });
+
+  it("prevents the packer from releasing their own prepared order", () => {
+    expect(
+      canReleaseFulfillmentOrder(
+        order({
+          status: "ready",
+          courier: "LBC",
+          waybillNumber: "WB-1001",
+          packedBy: "operator-a",
+          lines: [
+            {
+              productId: "tablet",
+              quantity: 1,
+              pickedQuantity: 1,
+              pickedSerialNumbers: ["TAB-001"],
+            },
+          ],
+        }),
+        "operator-a",
+      ),
+    ).toEqual({
+      ok: false,
+      reason: "A second warehouse operator must release the prepared order.",
+    });
   });
 
   it("requires department, purpose, cost center, date, and at least one line", () => {

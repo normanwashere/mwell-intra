@@ -62,6 +62,8 @@ function data(): WarehouseData {
     receipts: [],
     purchaseOrders: [],
     fulfillmentOrders: [],
+    fulfillmentReservations: [],
+    departmentRequestOptions: [],
     departmentStockRequests: [],
     customerReturnCases: [],
     kitDefinitions: [],

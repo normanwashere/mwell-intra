@@ -1048,6 +1048,33 @@ export function buildSeed(): WarehouseData {
     receipts: [...receipts, ...history.receipts],
     purchaseOrders,
     fulfillmentOrders: [],
+    fulfillmentReservations: [],
+    departmentRequestOptions: [
+      {
+        departmentCode: "marketing",
+        departmentName: "Marketing",
+        costCenterCode: "CC-4100",
+        costCenterName: "Marketing",
+      },
+      {
+        departmentCode: "operations",
+        departmentName: "Operations",
+        costCenterCode: "CC-1100",
+        costCenterName: "Operations",
+      },
+      {
+        departmentCode: "sales",
+        departmentName: "Sales",
+        costCenterCode: "CC-2200",
+        costCenterName: "Sales",
+      },
+      {
+        departmentCode: "business_unit",
+        departmentName: "Business Unit",
+        costCenterCode: "CC-2100",
+        costCenterName: "Business Unit",
+      },
+    ],
     departmentStockRequests: [],
     customerReturnCases: [],
     kitDefinitions: [],

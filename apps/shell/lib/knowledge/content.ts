@@ -576,7 +576,7 @@ const procedureArticles: KnowledgeArticle[] = [
   processArticle(
     "warehouse-order-to-release",
     "Fulfill an order or department stock request",
-    "Move approved demand through allocation, serialized picking, packaging, courier handoff, release, and exception recovery.",
+    "Move approved demand through governed reservation, serialized picking, shipment or accountable handover, independent release, receipt acknowledgment, and exception recovery.",
     "warehouse",
     [
       "warehouse_operations",
@@ -591,7 +591,7 @@ const procedureArticles: KnowledgeArticle[] = [
     [
       [
         "Record demand",
-        "Sales or ecommerce creates an order; Operations links third-party sales to an event, external location, and PHP value; or a department submits purpose, cost center, due date, treatment, product, and quantity.",
+        "Sales or ecommerce creates an order; Operations links third-party sales to an event, external location, and PHP value; or a department selects an active department and cost center, then submits purpose, due date, treatment, product, and quantity.",
       ],
       [
         "Approve when required",
@@ -602,16 +602,24 @@ const procedureArticles: KnowledgeArticle[] = [
         "Confirm item class, serialization, source bin, and Product approval reference for active bundles.",
       ],
       [
-        "Allocate and pick",
-        "Reserve unheld availability, scan the rack/bin and every serialized unit, and preserve bundle-set identity.",
+        "Allocate, split if short, and pick",
+        "Create an explicit reservation for available stock. If demand cannot be completed together, split the remaining quantity into a linked backorder. The picker scans the rack/bin and every serialized unit.",
       ],
       [
-        "Pack and record waybill",
-        "Scan quantity-controlled packing supplies and enter the courier and waybill before marking the order ready.",
+        "Prepare shipment or handover",
+        "For ecommerce, scan packing supplies and enter courier and waybill. For department, event, or third-party release, record the named recipient, receiving department, handover reference, and evidence.",
       ],
       [
-        "Release once",
-        "Verify the Ready state, hand off to the courier or recipient, and confirm stock and packaging movements were posted.",
+        "Release with separation of duties",
+        "A warehouse operator other than the packer verifies Ready, performs the physical handoff, and posts stock and packaging movements once.",
+      ],
+      [
+        "Acknowledge receipt",
+        "For accountable handovers, the recipient or another authorized user records acknowledgment reference and evidence. The linked department request closes automatically only after this step.",
+      ],
+      [
+        "Cancel or recover",
+        "Record a cancellation reason, release the reservation, and declare whether already-packed supplies were returned or consumed. Keep partial demand as a linked backorder rather than silently reducing it.",
       ],
       [
         "Resolve returns separately",

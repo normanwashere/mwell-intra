@@ -948,17 +948,17 @@ const definitions: FeatureDefinition[] = [
     module: "warehouse",
     route: "/warehouse/fulfillment",
     purpose:
-      "Coordinates ecommerce and third-party event demand, department stock requests, customer returns, Product-approved kits, packing supplies, courier waybills, open-box re-kitting, and warehouse release in one governed workspace.",
+      "Coordinates ecommerce and third-party event demand, department stock requests, customer returns, Product-approved kits, packing supplies, shipments, accountable handovers, open-box re-kitting, and warehouse release in one governed workspace.",
     reads:
-      "Demand references, requesting department, event and third-party locations, reported sales value, products, item classes, stock and bin availability, serial identities, fulfillment supplies, return cases, Product approval references, kit definitions, courier details, and request decisions.",
+      "Demand references, governed department and cost center, event and third-party locations, reported sales value, products, item classes, stock, explicit reservations, serial identities, fulfillment supplies, return cases, Product approval references, shipment or handover evidence, and request decisions.",
     writes:
-      "Creates demand and return records, records third-party event sales context and independent department-request decisions, advances controlled pick-pack-release states, consumes packaging, issues stock, prints quantity-item barcode sheets, and registers or completes Product-approved re-kit lineage.",
+      "Creates demand and return records, records independent request decisions, writes reservations, supports linked backorders, advances separated pick-pack-release states, captures recipient acknowledgment, reconciles cancelled packaging, issues stock, and registers Product-approved re-kit lineage.",
     statuses:
-      "Received, allocated, picking, packing, ready, released, cancelled, pending approval, approved, rejected, submitted, resolved, active, inspection, or completed.",
+      "Received, allocated, picking, packing, ready, released, completed, cancelled, pending approval, approved, rejected, submitted, resolved, active, or inspection.",
     exception:
-      "Stop for insufficient or held stock, duplicate or missing serials, incomplete bundle sets, missing Product approval, unavailable packaging, invalid quarantine destination, missing courier or waybill, stale status, or self-approval.",
+      "Stop for insufficient or held stock, duplicate or missing serials, incomplete bundle sets, missing Product approval, unavailable packaging, missing shipment or handover evidence, same-person pack and release, stale status, invalid cost center, or self-approval.",
     completionEvidence:
-      "The source demand, departmental owner, event sales context, picked identities, packaging consumption, courier and waybill, release movement, request decision, return resolution, and completed kit or open-box lineage remain visible and attributable.",
+      "The source demand, departmental owner, reservation, backorder lineage, picked identities, packaging treatment, dispatch or handover evidence, independent release, recipient acknowledgment, request decision, and return or re-kit outcome remain visible and attributable.",
   },
   {
     id: "warehouse-returns",

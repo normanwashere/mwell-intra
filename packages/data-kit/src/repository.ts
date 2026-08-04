@@ -50,8 +50,11 @@ import type {
 import type {
   CustomerReturnCase,
   DepartmentStockRequest,
+  DepartmentRequestOption,
   FulfillmentAction,
+  FulfillmentDeliveryMethod,
   FulfillmentOrder,
+  FulfillmentReservation,
   FulfillmentSource,
   KitComponent,
   KitDefinition,
@@ -77,6 +80,8 @@ export interface WarehouseData {
   receipts: Receipt[];
   purchaseOrders: PurchaseOrder[];
   fulfillmentOrders: FulfillmentOrder[];
+  fulfillmentReservations: FulfillmentReservation[];
+  departmentRequestOptions: DepartmentRequestOption[];
   departmentStockRequests: DepartmentStockRequest[];
   customerReturnCases: CustomerReturnCase[];
   kitDefinitions: KitDefinition[];
@@ -306,6 +311,7 @@ export interface CreateFulfillmentOrderInput {
   grossSalesAmount?: number;
   sourceLocationId?: string;
   sourceBinId?: string;
+  deliveryMethod?: FulfillmentDeliveryMethod;
   lines: Array<{
     productId: string;
     quantity: number;
@@ -323,9 +329,21 @@ export interface AdvanceFulfillmentOrderInput {
     quantity: number;
     serialNumbers?: string[];
   }>;
+  fulfilledLines?: Array<{
+    productId: string;
+    quantity: number;
+  }>;
   packaging?: PackagingConsumption[];
   courier?: string;
   waybillNumber?: string;
+  handoverRecipientName?: string;
+  handoverRecipientDepartment?: string;
+  handoverReference?: string;
+  handoverEvidenceUrl?: string;
+  acknowledgementReference?: string;
+  acknowledgementEvidenceUrl?: string;
+  cancellationReason?: string;
+  packagingDisposition?: import("./domain/wms").PackagingDisposition;
 }
 
 export interface CreateDepartmentStockRequestInput {

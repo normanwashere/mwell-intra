@@ -61,6 +61,77 @@ describe("FulfillmentPage", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("uses an accountable handover and waits for a second operator to release", async () => {
+    const repo = makeRepo();
+    const created = await repo.createFulfillmentOrder({
+      source: "department_request",
+      externalReference: "REQ-MKT-2201",
+      requestingDepartment: "marketing",
+      sourceLocationId: "loc-wh",
+      lines: [{ productId: "doctor-token", quantity: 1 }],
+      actor: "marketing@mwell",
+    });
+    for (const action of ["allocate", "start_picking"] as const) {
+      await repo.advanceFulfillmentOrder({
+        orderId: created.id,
+        action,
+        actor: "warehouse_operator@mwell",
+      });
+    }
+    await repo.advanceFulfillmentOrder({
+      orderId: created.id,
+      action: "confirm_pick",
+      actor: "warehouse_operator@mwell",
+      pickedLines: [{ productId: "doctor-token", quantity: 1 }],
+    });
+
+    const user = userEvent.setup();
+    renderWithProviders(<FulfillmentPage />, {
+      role: "warehouse_operator",
+      repo,
+    });
+    const order = await screen.findByRole("listitem", {
+      name: /REQ-MKT-2201/i,
+    });
+    await user.click(
+      within(order).getByRole("button", {
+        name: "Prepare accountable handover",
+      }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: /Pack order.*REQ-MKT-2201/i,
+    });
+    expect(within(dialog).queryByLabelText("Courier")).not.toBeInTheDocument();
+    await user.type(
+      within(dialog).getByLabelText("Recipient name"),
+      "Maya Santos",
+    );
+    await user.type(
+      within(dialog).getByLabelText("Recipient department"),
+      "Marketing",
+    );
+    await user.type(
+      within(dialog).getByLabelText("Handover reference"),
+      "HO-2201",
+    );
+    await user.type(
+      within(dialog).getByLabelText("Handover evidence URL"),
+      "https://evidence.example/ho-2201.jpg",
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: "Confirm packing" }),
+    );
+
+    expect(
+      await within(order).findByText(
+        "Awaiting release by a second warehouse operator.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(order).queryByRole("button", { name: "Release handover" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("lets Operations record third-party event sales demand", async () => {
     const repo = makeRepo();
     const user = userEvent.setup();
@@ -135,8 +206,11 @@ describe("FulfillmentPage", () => {
       within(dialog).getByLabelText("Business purpose"),
       "Community wellness campaign",
     );
-    await user.clear(within(dialog).getByLabelText("Cost center"));
-    await user.type(within(dialog).getByLabelText("Cost center"), "MKT-220");
+    expect(within(dialog).getByLabelText("Cost center").tagName).toBe("SELECT");
+    await user.selectOptions(
+      within(dialog).getByLabelText("Cost center"),
+      "CC-4100",
+    );
     await user.type(
       within(dialog).getByLabelText("Required date"),
       "2026-08-15",
@@ -156,6 +230,7 @@ describe("FulfillmentPage", () => {
       expect((await repo.getData()).departmentStockRequests).toEqual([
         expect.objectContaining({
           requestingDepartment: "marketing",
+          costCenter: "CC-4100",
           purpose: "Community wellness campaign",
           status: "pending_approval",
         }),

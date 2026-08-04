@@ -997,8 +997,8 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
         control(
           "Submit department request",
-          "Records a department's stock need, business purpose, cost center, required date, and treatment.",
-          "The requester must provide all required business context and cannot approve the same request.",
+          "Records a department's stock need, business purpose, governed cost center, required date, treatment, and eligible SKU, merchandise, or event material.",
+          "The requester must select an active department/cost-center combination, provide all business context, and cannot approve the same request.",
           "A pending request is visible to the requester and decision owner.",
         ),
         control(
@@ -1009,9 +1009,9 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
         control(
           "Allocate stock",
-          "Checks unheld available stock at the selected warehouse and bin before reserving the order.",
-          "Every order line must remain fully available after other active commitments.",
-          "The order advances to Allocated without changing physical stock.",
+          "Checks unheld available stock at the selected warehouse and bin and writes an explicit reservation ledger entry.",
+          "Every allocated line must remain available after active reservations; unavailable demand must be split to a linked backorder.",
+          "The order advances to Allocated without changing physical stock, and its reservation remains auditable.",
         ),
         control(
           "Confirm pick",
@@ -1021,15 +1021,27 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
         control(
           "Confirm pack",
-          "Records courier, waybill, and quantity-controlled fulfillment supplies used for the shipment.",
-          "Courier and waybill are required and packaging products must be available fulfillment supplies.",
-          "The order becomes Ready and packaging remains reserved for release.",
+          "Records shipment dispatch details or an accountable internal, event, or third-party handover, plus any fulfillment supplies used.",
+          "Shipments require courier and waybill. Handovers require recipient, receiving department, reference, and evidence. Packaging must be available fulfillment supply.",
+          "The order becomes Ready, the packer is attributable, and packaging remains reserved for release.",
         ),
         control(
           "Release order",
-          "Posts final serialized or quantity stock issue and packaging-consumption movements.",
-          "The order must be Ready, fully picked, and still have eligible stock and packaging.",
-          "The order becomes Released with attributable warehouse movements.",
+          "Posts final serialized or quantity stock issue and packaging-consumption movements after physical dispatch or handover.",
+          "The order must be Ready and fully picked; the releasing operator cannot be the recorded packer.",
+          "The order becomes Released with attributable movements; handovers still await recipient acknowledgment.",
+        ),
+        control(
+          "Acknowledge receipt",
+          "Records proof that an internal, event, or third-party recipient accepted released stock.",
+          "An acknowledgment reference and evidence are required, and the acknowledger cannot be the releasing operator.",
+          "The order and its linked department request become Completed and Closed.",
+        ),
+        control(
+          "Split backorder or cancel",
+          "Preserves unfulfilled quantities in a linked order or closes work with an accountable reason.",
+          "Backorder quantities cannot exceed open demand. Packed cancellations must mark packaging as returned or consumed.",
+          "Reservations are released, packaging treatment is posted, and no demand disappears without lineage.",
         ),
         control(
           "Create return or re-kit work",
@@ -1085,7 +1097,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "Cost center",
           "Routes expense or custody accountability.",
           false,
-          "Required for department requests and must match the approved finance structure.",
+          "Required for department requests and must be an active option configured for the selected department.",
         ),
         field(
           "Required date",
@@ -1114,14 +1126,14 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         field(
           "Courier",
           "Names the dispatch carrier or accountable courier.",
-          true,
-          "Required before packing can complete.",
+          false,
+          "Required before shipment packing can complete; not used for accountable handovers.",
         ),
         field(
           "Waybill number",
           "Links physical dispatch to shipment evidence.",
-          true,
-          "Required before packing can complete and release can occur.",
+          false,
+          "Required for shipments. Handovers instead require recipient, department, reference, and evidence.",
         ),
         field(
           "Product approval reference",

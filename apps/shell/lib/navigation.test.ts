@@ -311,6 +311,10 @@ describe("configurable organization administration", () => {
     expect(departments).toContain("Confirm deactivation");
     expect(departments).toContain("Historical assignments remain available");
     expect(departments).toContain("expected_updated_at");
+    expect(departments).toContain('from("department_cost_centers")');
+    expect(departments).toContain('"upsert_department_cost_center"');
+    expect(departments).toContain("Add cost center");
+    expect(departments).toContain("Requestable departments and cost centers");
   });
 });
 

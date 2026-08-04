@@ -36,10 +36,13 @@ import type {
 import type {
   CustomerReturnCase,
   DepartmentStockRequest,
+  DepartmentRequestOption,
   FulfillmentOrder,
+  FulfillmentReservation,
   KitDefinition,
   ReKitWorkOrder,
 } from "../domain/wms";
+import { deliveryMethodForSource } from "../domain/wms";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Row = Record<string, any>;
@@ -386,14 +389,45 @@ export function rowToFulfillmentOrder(r: Row): FulfillmentOrder {
     currency: r.gross_sales_amount == null ? undefined : "PHP",
     courier: r.courier ?? undefined,
     waybillNumber: r.waybill_number ?? undefined,
+    deliveryMethod: r.delivery_method ?? deliveryMethodForSource(r.source),
+    handoverRecipientName: r.handover_recipient_name ?? undefined,
+    handoverRecipientDepartment: r.handover_recipient_department ?? undefined,
+    handoverReference: r.handover_reference ?? undefined,
+    handoverEvidenceUrl: r.handover_evidence_url ?? undefined,
     status: r.status,
     lines: r.lines ?? [],
     packaging: r.packaging ?? [],
     createdBy: r.created_by,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
+    parentOrderId: r.parent_order_id ?? undefined,
+    pickedBy: r.picked_by ?? undefined,
+    pickedAt: r.picked_at ?? undefined,
+    packedBy: r.packed_by ?? undefined,
+    packedAt: r.packed_at ?? undefined,
     releasedBy: r.released_by ?? undefined,
     releasedAt: r.released_at ?? undefined,
+    acknowledgedBy: r.acknowledged_by ?? undefined,
+    acknowledgedAt: r.acknowledged_at ?? undefined,
+    acknowledgementReference: r.acknowledgement_reference ?? undefined,
+    acknowledgementEvidenceUrl: r.acknowledgement_evidence_url ?? undefined,
+    cancellationReason: r.cancellation_reason ?? undefined,
+    packagingDisposition: r.packaging_disposition ?? undefined,
+  };
+}
+
+export function rowToFulfillmentReservation(r: Row): FulfillmentReservation {
+  return {
+    id: r.id,
+    orderId: r.order_id,
+    productId: r.product_id,
+    locationId: r.location_id ?? undefined,
+    binId: r.bin_id ?? undefined,
+    quantity: Number(r.quantity),
+    status: r.status,
+    createdBy: r.created_by,
+    createdAt: r.created_at,
+    closedAt: r.closed_at ?? undefined,
   };
 }
 
@@ -412,6 +446,15 @@ export function rowToDepartmentStockRequest(r: Row): DepartmentStockRequest {
     approvedBy: r.approved_by ?? undefined,
     approvedAt: r.approved_at ?? undefined,
     fulfillmentOrderId: r.fulfillment_order_id ?? undefined,
+  };
+}
+
+export function rowToDepartmentRequestOption(r: Row): DepartmentRequestOption {
+  return {
+    departmentCode: r.department_code,
+    departmentName: r.department_name,
+    costCenterCode: r.cost_center_code,
+    costCenterName: r.cost_center_name,
   };
 }
 

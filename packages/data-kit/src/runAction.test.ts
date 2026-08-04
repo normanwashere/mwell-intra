@@ -46,6 +46,8 @@ function emptyData(): WarehouseData {
     receipts: [],
     purchaseOrders: [],
     fulfillmentOrders: [],
+    fulfillmentReservations: [],
+    departmentRequestOptions: [],
     departmentStockRequests: [],
     customerReturnCases: [],
     kitDefinitions: [],

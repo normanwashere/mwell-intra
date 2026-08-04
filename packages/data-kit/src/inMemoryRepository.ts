@@ -57,6 +57,7 @@ import {
 } from "./repository";
 import {
   canReleaseFulfillmentOrder,
+  deliveryMethodForSource,
   nextFulfillmentStatus,
   validateDepartmentRequest,
   type CustomerReturnCase,
@@ -162,7 +163,14 @@ export class InMemoryRepository implements WarehouseControlRepository {
     const source = persisted ?? clone(initial ?? buildSeed());
     this.data = {
       ...source,
-      fulfillmentOrders: source.fulfillmentOrders ?? [],
+      fulfillmentOrders: (source.fulfillmentOrders ?? []).map((order) => ({
+        ...order,
+        deliveryMethod:
+          order.deliveryMethod ?? deliveryMethodForSource(order.source),
+      })),
+      fulfillmentReservations: source.fulfillmentReservations ?? [],
+      departmentRequestOptions:
+        source.departmentRequestOptions ?? buildSeed().departmentRequestOptions,
       departmentStockRequests: source.departmentStockRequests ?? [],
       customerReturnCases: source.customerReturnCases ?? [],
       kitDefinitions: source.kitDefinitions ?? [],
@@ -209,6 +217,25 @@ export class InMemoryRepository implements WarehouseControlRepository {
 
   private newId(prefix: string): string {
     return this.idProvider(prefix);
+  }
+
+  private syncDepartmentRequest(order: FulfillmentOrder): void {
+    const request = this.data.departmentStockRequests.find(
+      (row) => row.fulfillmentOrderId === order.id,
+    );
+    if (!request) return;
+    request.status =
+      order.status === "cancelled"
+        ? "cancelled"
+        : order.status === "completed"
+          ? "closed"
+          : order.status === "released"
+            ? "issued"
+            : ["allocated", "picking", "packing", "ready"].includes(
+                  order.status,
+                )
+              ? "allocated"
+              : "approved";
   }
 
   private idempotent<T>(
@@ -1874,7 +1901,7 @@ export class InMemoryRepository implements WarehouseControlRepository {
         input.source === "ecommerce"
           ? ["sellable_sku", "re_kitted_item"]
           : input.source === "department_request"
-            ? ["sellable_sku", "merchandise"]
+            ? ["sellable_sku", "merchandise", "event_material"]
             : [
                 "sellable_sku",
                 "re_kitted_item",
@@ -1912,6 +1939,8 @@ export class InMemoryRepository implements WarehouseControlRepository {
       thirdPartyLocationId: input.thirdPartyLocationId,
       grossSalesAmount: input.grossSalesAmount,
       currency: input.grossSalesAmount === undefined ? undefined : "PHP",
+      deliveryMethod:
+        input.deliveryMethod ?? deliveryMethodForSource(input.source),
       sourceLocationId: input.sourceLocationId,
       sourceBinId: input.sourceBinId,
       status: "received",
@@ -1942,6 +1971,58 @@ export class InMemoryRepository implements WarehouseControlRepository {
     const nextStatus = nextFulfillmentStatus(order.status, input.action);
     const sourceLocationId = order.sourceLocationId;
 
+    if (input.action === "split_backorder") {
+      const fulfilledLines = input.fulfilledLines ?? [];
+      const backorderLines = order.lines.flatMap((line) => {
+        const selection = fulfilledLines.find(
+          (row) => row.productId === line.productId,
+        );
+        if (
+          !selection ||
+          selection.quantity <= 0 ||
+          selection.quantity > line.quantity
+        ) {
+          throw new Error(
+            "Every line must keep a positive quantity that does not exceed the original demand.",
+          );
+        }
+        const remainder = line.quantity - selection.quantity;
+        line.quantity = selection.quantity;
+        return remainder > 0 ? [{ ...clone(line), quantity: remainder }] : [];
+      });
+      if (backorderLines.length === 0) {
+        throw new Error("At least one line must have a backordered quantity.");
+      }
+      const sequence =
+        this.data.fulfillmentOrders.filter(
+          (row) => row.parentOrderId === order.id,
+        ).length + 1;
+      const createdAt = this.now();
+      this.data.fulfillmentOrders.push({
+        ...clone(order),
+        id: this.newId("fulfillment-backorder"),
+        externalReference: `${order.externalReference}-BO-${sequence}`,
+        parentOrderId: order.id,
+        status: "received",
+        lines: backorderLines,
+        packaging: [],
+        createdBy: input.actor,
+        createdAt,
+        updatedAt: createdAt,
+        pickedBy: undefined,
+        pickedAt: undefined,
+        packedBy: undefined,
+        packedAt: undefined,
+        releasedBy: undefined,
+        releasedAt: undefined,
+        acknowledgedBy: undefined,
+        acknowledgedAt: undefined,
+      });
+      order.updatedAt = createdAt;
+      this.persist();
+      return clone(order);
+    }
+
     if (input.action === "allocate") {
       for (const line of order.lines) {
         const product = this.data.products.find(
@@ -1964,11 +2045,39 @@ export class InMemoryRepository implements WarehouseControlRepository {
                   (!order.sourceBinId || level.binId === order.sourceBinId),
               )
               .reduce((sum, level) => sum + level.quantity, 0);
-        if (available < line.quantity) {
+        const committed = this.data.fulfillmentReservations
+          .filter(
+            (reservation) =>
+              reservation.status === "active" &&
+              reservation.orderId !== order.id &&
+              reservation.productId === line.productId &&
+              (!sourceLocationId ||
+                !reservation.locationId ||
+                reservation.locationId === sourceLocationId) &&
+              (!order.sourceBinId ||
+                !reservation.binId ||
+                reservation.binId === order.sourceBinId),
+          )
+          .reduce((sum, reservation) => sum + reservation.quantity, 0);
+        if (available - committed < line.quantity) {
           throw new Error(
-            `Only ${available} of ${product.name} is available for this order.`,
+            `Only ${Math.max(0, available - committed)} of ${product.name} is available for this order.`,
           );
         }
+      }
+      const createdAt = this.now();
+      for (const line of order.lines) {
+        this.data.fulfillmentReservations.push({
+          id: this.newId(`fulfillment-reservation-${line.productId}`),
+          orderId: order.id,
+          productId: line.productId,
+          locationId: sourceLocationId,
+          binId: order.sourceBinId,
+          quantity: line.quantity,
+          status: "active",
+          createdBy: input.actor,
+          createdAt,
+        });
       }
     }
 
@@ -2008,13 +2117,26 @@ export class InMemoryRepository implements WarehouseControlRepository {
         line.pickedQuantity = selection.quantity;
         line.pickedSerialNumbers = serialNumbers;
       }
+      order.pickedBy = input.actor;
+      order.pickedAt = this.now();
     }
 
     if (input.action === "confirm_pack") {
-      if (!input.courier?.trim())
-        throw new Error("Courier is required at packing.");
-      if (!input.waybillNumber?.trim())
-        throw new Error("Waybill number is required at packing.");
+      if (order.deliveryMethod === "shipment") {
+        if (!input.courier?.trim())
+          throw new Error("Courier is required at packing.");
+        if (!input.waybillNumber?.trim())
+          throw new Error("Waybill number is required at packing.");
+      } else if (
+        !input.handoverRecipientName?.trim() ||
+        !input.handoverRecipientDepartment?.trim() ||
+        !input.handoverReference?.trim() ||
+        !input.handoverEvidenceUrl?.trim()
+      ) {
+        throw new Error(
+          "Recipient, department, handover reference, and evidence are required at packing.",
+        );
+      }
       for (const material of input.packaging ?? []) {
         if (material.quantity <= 0)
           throw new Error("Packaging quantity must be greater than zero.");
@@ -2038,13 +2160,22 @@ export class InMemoryRepository implements WarehouseControlRepository {
         if (available < material.quantity)
           throw new Error(`Insufficient ${product.name} for packing.`);
       }
-      order.courier = input.courier.trim();
-      order.waybillNumber = input.waybillNumber.trim();
+      order.courier = input.courier?.trim() || undefined;
+      order.waybillNumber = input.waybillNumber?.trim() || undefined;
+      order.handoverRecipientName =
+        input.handoverRecipientName?.trim() || undefined;
+      order.handoverRecipientDepartment =
+        input.handoverRecipientDepartment?.trim() || undefined;
+      order.handoverReference = input.handoverReference?.trim() || undefined;
+      order.handoverEvidenceUrl =
+        input.handoverEvidenceUrl?.trim() || undefined;
       order.packaging = clone(input.packaging ?? []);
+      order.packedBy = input.actor;
+      order.packedAt = this.now();
     }
 
     if (input.action === "release") {
-      const release = canReleaseFulfillmentOrder(order);
+      const release = canReleaseFulfillmentOrder(order, input.actor);
       if (!release.ok) throw new Error(release.reason);
       const createdAt = this.now();
       for (const line of order.lines) {
@@ -2144,10 +2275,93 @@ export class InMemoryRepository implements WarehouseControlRepository {
       }
       order.releasedBy = input.actor;
       order.releasedAt = createdAt;
+      for (const reservation of this.data.fulfillmentReservations.filter(
+        (row) => row.orderId === order.id && row.status === "active",
+      )) {
+        reservation.status = "released";
+        reservation.closedAt = createdAt;
+      }
+    }
+
+    if (input.action === "acknowledge_receipt") {
+      if (order.releasedBy === input.actor) {
+        throw new Error("The releasing operator cannot acknowledge receipt.");
+      }
+      if (!input.acknowledgementReference?.trim()) {
+        throw new Error("An acknowledgment reference is required.");
+      }
+      if (!input.acknowledgementEvidenceUrl?.trim()) {
+        throw new Error("Acknowledgment evidence is required.");
+      }
+      order.acknowledgedBy = input.actor;
+      order.acknowledgedAt = this.now();
+      order.acknowledgementReference = input.acknowledgementReference.trim();
+      order.acknowledgementEvidenceUrl =
+        input.acknowledgementEvidenceUrl.trim();
+    }
+
+    if (input.action === "cancel") {
+      if (!input.cancellationReason?.trim()) {
+        throw new Error("A cancellation reason is required.");
+      }
+      const prepared = ["packing", "ready"].includes(order.status);
+      if (
+        prepared &&
+        order.packaging.length > 0 &&
+        !input.packagingDisposition
+      ) {
+        throw new Error(
+          "Choose whether prepared packaging was consumed or returned.",
+        );
+      }
+      order.cancellationReason = input.cancellationReason.trim();
+      order.packagingDisposition = input.packagingDisposition;
+      const cancelledAt = this.now();
+      if (prepared && input.packagingDisposition === "consumed") {
+        for (const material of order.packaging) {
+          let remaining = material.quantity;
+          const levels = this.data.stockLevels.filter(
+            (level) =>
+              level.productId === material.productId &&
+              (!sourceLocationId || level.locationId === sourceLocationId),
+          );
+          if (
+            levels.reduce((sum, level) => sum + level.quantity, 0) < remaining
+          ) {
+            throw new Error("Packaging stock changed before cancellation.");
+          }
+          for (const level of levels) {
+            const take = Math.min(level.quantity, remaining);
+            level.quantity -= take;
+            remaining -= take;
+            if (take > 0) {
+              this.data.movements.push({
+                id: this.newId("mv"),
+                type: "packaging_consumption",
+                productId: material.productId,
+                quantity: take,
+                fromLocationId: level.locationId,
+                fromBinId: level.binId,
+                reference: order.id,
+                reason: `Cancelled after packing: ${order.cancellationReason}`,
+                actor: input.actor,
+                createdAt: cancelledAt,
+              });
+            }
+          }
+        }
+      }
+      for (const reservation of this.data.fulfillmentReservations.filter(
+        (row) => row.orderId === order.id && row.status === "active",
+      )) {
+        reservation.status = "cancelled";
+        reservation.closedAt = cancelledAt;
+      }
     }
 
     order.status = nextStatus;
     order.updatedAt = this.now();
+    this.syncDepartmentRequest(order);
     this.persist();
     return clone(order);
   }
@@ -2157,6 +2371,18 @@ export class InMemoryRepository implements WarehouseControlRepository {
   ): Promise<DepartmentStockRequest> {
     const errors = validateDepartmentRequest(input);
     if (errors.length > 0) throw new Error(errors.join(" "));
+    if (
+      this.data.departmentRequestOptions.length > 0 &&
+      !this.data.departmentRequestOptions.some(
+        (option) =>
+          option.departmentCode === input.requestingDepartment.trim() &&
+          option.costCenterCode === input.costCenter.trim(),
+      )
+    ) {
+      throw new Error(
+        "Select an active cost center for the requesting department.",
+      );
+    }
     const requestedProducts = input.lines.map((line) =>
       this.data.products.find((product) => product.id === line.productId),
     );
@@ -2168,11 +2394,13 @@ export class InMemoryRepository implements WarehouseControlRepository {
         const itemClass =
           product!.itemClass ??
           (product!.category === "device" ? "sellable_sku" : "merchandise");
-        return !["sellable_sku", "merchandise"].includes(itemClass);
+        return !["sellable_sku", "merchandise", "event_material"].includes(
+          itemClass,
+        );
       })
     ) {
       throw new Error(
-        "Department requests may include only sellable SKU and merchandise items.",
+        "Department requests may include only sellable SKU, merchandise, and event material items.",
       );
     }
     if (

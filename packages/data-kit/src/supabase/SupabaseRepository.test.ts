@@ -563,7 +563,7 @@ describe("SupabaseRepository read model query shape", () => {
   it("uses explicit projections and bounds operational history", async () => {
     const { client, queries } = makeMockClient(buildSeed());
     await new SupabaseRepository(client).getData();
-    expect(queries).toHaveLength(21);
+    expect(queries).toHaveLength(23);
     expect(queries.every((query) => query.projection !== "*")).toBe(true);
     expect(queries.find((query) => query.table === "movements")?.limit).toBe(
       5000,
@@ -571,6 +571,14 @@ describe("SupabaseRepository read model query shape", () => {
     expect(
       queries.find((query) => query.table === "products")?.limit,
     ).toBeUndefined();
+    expect(
+      queries.find((query) => query.table === "fulfillment_reservations")
+        ?.projection,
+    ).not.toBe("*");
+    expect(
+      queries.find((query) => query.table === "department_request_options")
+        ?.projection,
+    ).not.toBe("*");
   });
 });
 
@@ -587,6 +595,8 @@ describe("SupabaseRepository WMS persistence boundary", () => {
     });
     for (const table of [
       "fulfillment_orders",
+      "fulfillment_reservations",
+      "department_request_options",
       "department_stock_requests",
       "customer_return_cases",
       "kit_definitions",

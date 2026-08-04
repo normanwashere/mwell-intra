@@ -28,16 +28,33 @@ export type FulfillmentStatus =
   | "packing"
   | "ready"
   | "released"
+  | "completed"
   | "cancelled";
 
 export type FulfillmentAction =
   | "allocate"
+  | "split_backorder"
   | "start_picking"
   | "confirm_pick"
   | "confirm_pack"
   | "mark_ready"
   | "release"
+  | "acknowledge_receipt"
   | "cancel";
+
+export type FulfillmentDeliveryMethod =
+  "shipment" | "internal_handover" | "event_handover" | "third_party_transfer";
+
+export type PackagingDisposition = "returned_to_stock" | "consumed";
+
+export function deliveryMethodForSource(
+  source: FulfillmentSource,
+): FulfillmentDeliveryMethod {
+  if (source === "ecommerce") return "shipment";
+  if (source === "department_request") return "internal_handover";
+  if (source === "event") return "event_handover";
+  return "third_party_transfer";
+}
 
 export interface FulfillmentOrderLine {
   productId: string;
@@ -68,32 +85,73 @@ export interface FulfillmentOrder {
   currency?: "PHP";
   courier?: string;
   waybillNumber?: string;
+  deliveryMethod: FulfillmentDeliveryMethod;
+  handoverRecipientName?: string;
+  handoverRecipientDepartment?: string;
+  handoverReference?: string;
+  handoverEvidenceUrl?: string;
   status: FulfillmentStatus;
   lines: FulfillmentOrderLine[];
   packaging: PackagingConsumption[];
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+  parentOrderId?: string;
+  pickedBy?: string;
+  pickedAt?: string;
+  packedBy?: string;
+  packedAt?: string;
   releasedBy?: string;
   releasedAt?: string;
+  acknowledgedBy?: string;
+  acknowledgedAt?: string;
+  acknowledgementReference?: string;
+  acknowledgementEvidenceUrl?: string;
+  cancellationReason?: string;
+  packagingDisposition?: PackagingDisposition;
+}
+
+export interface FulfillmentReservation {
+  id: string;
+  orderId: string;
+  productId: string;
+  locationId?: string;
+  binId?: string;
+  quantity: number;
+  status: "active" | "released" | "cancelled";
+  createdBy: string;
+  createdAt: string;
+  closedAt?: string;
+}
+
+export interface DepartmentRequestOption {
+  departmentCode: string;
+  departmentName: string;
+  costCenterCode: string;
+  costCenterName: string;
 }
 
 const FULFILLMENT_TRANSITIONS: Record<
-  Exclude<FulfillmentStatus, "released" | "cancelled">,
+  Exclude<FulfillmentStatus, "completed" | "cancelled">,
   Partial<Record<FulfillmentAction, FulfillmentStatus>>
 > = {
-  received: { allocate: "allocated", cancel: "cancelled" },
+  received: {
+    allocate: "allocated",
+    split_backorder: "received",
+    cancel: "cancelled",
+  },
   allocated: { start_picking: "picking", cancel: "cancelled" },
   picking: { confirm_pick: "packing", cancel: "cancelled" },
   packing: { confirm_pack: "ready", mark_ready: "ready", cancel: "cancelled" },
   ready: { release: "released", cancel: "cancelled" },
+  released: { acknowledge_receipt: "completed" },
 };
 
 export function nextFulfillmentStatus(
   current: FulfillmentStatus,
   action: FulfillmentAction,
 ): FulfillmentStatus {
-  if (current === "released" || current === "cancelled") {
+  if (current === "completed" || current === "cancelled") {
     throw new Error(
       `Cannot ${action.replace("_", " ")} an order while it is ${current}.`,
     );
@@ -111,6 +169,7 @@ export type ReleaseValidation = { ok: true } | { ok: false; reason: string };
 
 export function canReleaseFulfillmentOrder(
   order: FulfillmentOrder,
+  actor?: string,
 ): ReleaseValidation {
   if (order.lines.some((line) => line.pickedQuantity !== line.quantity)) {
     return {
@@ -118,16 +177,35 @@ export function canReleaseFulfillmentOrder(
       reason: "Every order line must be fully picked before release.",
     };
   }
-  if (!order.courier?.trim()) {
-    return { ok: false, reason: "A courier is required before release." };
-  }
-  if (!order.waybillNumber?.trim()) {
-    return { ok: false, reason: "A waybill is required before release." };
+  if (order.deliveryMethod === "shipment") {
+    if (!order.courier?.trim()) {
+      return { ok: false, reason: "A courier is required before release." };
+    }
+    if (!order.waybillNumber?.trim()) {
+      return { ok: false, reason: "A waybill is required before release." };
+    }
+  } else if (
+    !order.handoverRecipientName?.trim() ||
+    !order.handoverRecipientDepartment?.trim() ||
+    !order.handoverReference?.trim() ||
+    !order.handoverEvidenceUrl?.trim()
+  ) {
+    return {
+      ok: false,
+      reason:
+        "Recipient, department, handover reference, and evidence are required before release.",
+    };
   }
   if (order.status !== "ready") {
     return {
       ok: false,
       reason: "The order must be marked ready before release.",
+    };
+  }
+  if (actor && order.packedBy === actor) {
+    return {
+      ok: false,
+      reason: "A second warehouse operator must release the prepared order.",
     };
   }
   return { ok: true };

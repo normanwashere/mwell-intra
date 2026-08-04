@@ -114,7 +114,9 @@ import {
   rowToWarehouseTask,
   rowToVendorReturn,
   rowToFulfillmentOrder,
+  rowToFulfillmentReservation,
   rowToDepartmentStockRequest,
+  rowToDepartmentRequestOption,
   rowToCustomerReturnCase,
   rowToKitDefinition,
   rowToReKitWorkOrder,
@@ -171,9 +173,13 @@ const TABLE_PROJECTIONS: Record<string, string> = {
   procurement_po_handoff:
     "id,po_number,vendor_name,status,expected_date,total,lines,created_at",
   fulfillment_orders:
-    "id,source,external_reference,requesting_department,source_location_id,source_bin_id,customer_reference,event_id,third_party_location_id,gross_sales_amount,courier,waybill_number,status,lines,packaging,created_by,created_at,updated_at,released_by,released_at",
+    "id,source,external_reference,requesting_department,source_location_id,source_bin_id,customer_reference,event_id,third_party_location_id,gross_sales_amount,courier,waybill_number,delivery_method,handover_recipient_name,handover_recipient_department,handover_reference,handover_evidence_url,status,lines,packaging,created_by,created_at,updated_at,parent_order_id,picked_by,picked_at,packed_by,packed_at,released_by,released_at,acknowledged_by,acknowledged_at,acknowledgement_reference,acknowledgement_evidence_url,cancellation_reason,packaging_disposition",
+  fulfillment_reservations:
+    "id,order_id,product_id,location_id,bin_id,quantity,status,created_by,created_at,closed_at",
   department_stock_requests:
     "id,requesting_department,purpose,cost_center,required_date,expense_treatment,status,lines,requested_by,requested_at,approved_by,approved_at,fulfillment_order_id",
+  department_request_options:
+    "department_code,department_name,cost_center_code,cost_center_name",
   customer_return_cases:
     "id,source_order_id,serial_number,product_id,defect_description,requesting_department,status,resolution,quarantine_bin_id,replacement_order_id,refund_reference,supplier_reference,created_by,created_at,resolved_by,resolved_at",
   kit_definitions:
@@ -239,7 +245,9 @@ export class SupabaseRepository implements WarehouseControlRepository {
       operationTypes,
       operationRoutes,
       fulfillmentOrders,
+      fulfillmentReservations,
       departmentStockRequests,
+      departmentRequestOptions,
       customerReturnCases,
       kitDefinitions,
       reKitWorkOrders,
@@ -261,7 +269,9 @@ export class SupabaseRepository implements WarehouseControlRepository {
       this.select("operation_types", rowToOperationType),
       this.select("operation_routes", rowToOperationRoute),
       this.select("fulfillment_orders", rowToFulfillmentOrder),
+      this.select("fulfillment_reservations", rowToFulfillmentReservation),
       this.select("department_stock_requests", rowToDepartmentStockRequest),
+      this.select("department_request_options", rowToDepartmentRequestOption),
       this.select("customer_return_cases", rowToCustomerReturnCase),
       this.select("kit_definitions", rowToKitDefinition),
       this.select("rekit_work_orders", rowToReKitWorkOrder),
@@ -284,7 +294,9 @@ export class SupabaseRepository implements WarehouseControlRepository {
       operationTypes,
       operationRoutes,
       fulfillmentOrders,
+      fulfillmentReservations,
       departmentStockRequests,
+      departmentRequestOptions,
       customerReturnCases,
       kitDefinitions,
       reKitWorkOrders,
@@ -1453,6 +1465,7 @@ export class SupabaseRepository implements WarehouseControlRepository {
       gross_sales_amount: input.grossSalesAmount ?? null,
       source_location_id: input.sourceLocationId ?? null,
       source_bin_id: input.sourceBinId ?? null,
+      delivery_method: input.deliveryMethod ?? null,
       lines: input.lines.map((line) => ({
         productId: line.productId,
         quantity: line.quantity,
@@ -1475,9 +1488,20 @@ export class SupabaseRepository implements WarehouseControlRepository {
           quantity: line.quantity,
           serialNumbers: line.serialNumbers ?? [],
         })) ?? [],
+      fulfilled_lines: input.fulfilledLines ?? [],
       packaging: input.packaging ?? [],
       courier: input.courier?.trim() || null,
       waybill_number: input.waybillNumber?.trim() || null,
+      handover_recipient_name: input.handoverRecipientName?.trim() || null,
+      handover_recipient_department:
+        input.handoverRecipientDepartment?.trim() || null,
+      handover_reference: input.handoverReference?.trim() || null,
+      handover_evidence_url: input.handoverEvidenceUrl?.trim() || null,
+      acknowledgement_reference: input.acknowledgementReference?.trim() || null,
+      acknowledgement_evidence_url:
+        input.acknowledgementEvidenceUrl?.trim() || null,
+      cancellation_reason: input.cancellationReason?.trim() || null,
+      packaging_disposition: input.packagingDisposition ?? null,
     });
     return rowToFulfillmentOrder(row);
   }
