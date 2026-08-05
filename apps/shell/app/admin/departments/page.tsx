@@ -49,6 +49,15 @@ interface DepartmentCostCenter {
   readonly updated_at: string;
 }
 
+interface DepartmentCostCenterRow {
+  readonly id: string;
+  readonly department_id: string;
+  readonly code: string;
+  readonly name: string;
+  readonly is_active: boolean;
+  readonly updated_at: string;
+}
+
 interface CostCenterForm {
   id: string | null;
   departmentCode: string;
@@ -335,18 +344,32 @@ function DepartmentAdministration() {
       supabase.rpc("list_departments"),
       supabase
         .from("department_cost_centers")
-        .select("id,department_code,cost_center_code,name,is_active,updated_at")
-        .order("department_code")
-        .order("cost_center_code"),
+        .select("id,department_id,code,name,is_active,updated_at")
+        .order("department_id")
+        .order("code"),
     ]);
     const refreshError = departmentResult.error ?? costCenterResult.error;
     if (refreshError) {
       setError(refreshError.message);
       toast.error(refreshError.message);
     } else {
-      setDepartments((departmentResult.data ?? []) as Department[]);
+      const departmentRows = (departmentResult.data ?? []) as Department[];
+      const departmentCodes = new Map(
+        departmentRows.map((department) => [department.id, department.code]),
+      );
+      setDepartments(departmentRows);
       setCostCenters(
-        (costCenterResult.data ?? []) as unknown as DepartmentCostCenter[],
+        ((costCenterResult.data ?? []) as DepartmentCostCenterRow[]).map(
+          (costCenter) => ({
+            id: costCenter.id,
+            department_code:
+              departmentCodes.get(costCenter.department_id) ?? "unassigned",
+            cost_center_code: costCenter.code,
+            name: costCenter.name,
+            is_active: costCenter.is_active,
+            updated_at: costCenter.updated_at,
+          }),
+        ),
       );
     }
     setLoading(false);
@@ -473,14 +496,21 @@ function DepartmentAdministration() {
       toast.error("Department, cost center code, and name are required.");
       return;
     }
+    const departmentId = departments.find(
+      (department) => department.code === costCenterForm.departmentCode,
+    )?.id;
+    if (!departmentId) {
+      toast.error("Select an active department for this cost center.");
+      return;
+    }
     setSaving(true);
     const { error: rpcError } = await supabase.rpc(
       "upsert_department_cost_center",
       {
         payload: {
           ...(costCenterForm.id ? { id: costCenterForm.id } : {}),
-          department_code: costCenterForm.departmentCode,
-          cost_center_code: costCenterForm.code.trim().toUpperCase(),
+          department_id: departmentId,
+          code: costCenterForm.code.trim().toUpperCase(),
           name: costCenterForm.name.trim(),
           is_active: costCenterForm.isActive,
         },

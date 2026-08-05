@@ -253,7 +253,10 @@ test("shards UAT certification into bounded least-privilege jobs", async () => {
   assert.match(workflow, /pnpm provision:test:uat/);
   assert.match(workflow, /secrets\.UAT_SUPABASE_SERVICE_ROLE_KEY/);
   assert.match(workflow, /AUDIT_REQUIRE_VENDOR_DELIVERY: "true"/);
-  assert.match(workflow, /secrets\.UAT_VENDOR_AUDIT_EMAIL/);
+  assert.match(
+    workflow,
+    /AUDIT_VENDOR_EMAIL: intra\.test\.admin\+\{marker\}@mwell\.com\.ph/,
+  );
   assert.match(workflow, /test-results\/evidence/);
   assert.doesNotMatch(workflow, /service_role\s*[=:]\s*["'][^"']+/i);
 });

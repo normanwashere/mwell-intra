@@ -312,6 +312,13 @@ describe("configurable organization administration", () => {
     expect(departments).toContain("Historical assignments remain available");
     expect(departments).toContain("expected_updated_at");
     expect(departments).toContain('from("department_cost_centers")');
+    expect(departments).toContain(
+      'select("id,department_id,code,name,is_active,updated_at")',
+    );
+    expect(departments).toContain("department_id: departmentId");
+    expect(departments).not.toContain(
+      'select("id,department_code,cost_center_code,name,is_active,updated_at")',
+    );
     expect(departments).toContain('"upsert_department_cost_center"');
     expect(departments).toContain("Add cost center");
     expect(departments).toContain("Requestable departments and cost centers");

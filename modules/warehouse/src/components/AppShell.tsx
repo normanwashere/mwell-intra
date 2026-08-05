@@ -321,7 +321,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               >
                 <Icon name="bell" />
                 {notifications.length > 0 && (
-                  <span className="absolute right-1.5 top-1.5 grid h-4 min-w-4 place-items-center rounded-full bg-rose-500 px-1 text-[0.6rem] font-bold text-white">
+                  <span className="absolute right-1 top-1 grid h-5 min-w-5 place-items-center rounded-full bg-rose-700 px-1 text-[0.65rem] font-bold leading-none text-white">
                     {notifications.length}
                   </span>
                 )}

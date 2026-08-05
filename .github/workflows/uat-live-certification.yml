@@ -169,7 +169,7 @@ jobs:
       AUDIT_OUTPUT_PATH: test-results/transactions-${{ matrix.viewport }}.json
       AUDIT_EVIDENCE_DIR: test-results/evidence
       AUDIT_REQUIRE_VENDOR_DELIVERY: "true"
-      AUDIT_VENDOR_EMAIL: ${{ secrets.UAT_VENDOR_AUDIT_EMAIL }}
+      AUDIT_VENDOR_EMAIL: intra.test.admin+{marker}@mwell.com.ph
       NEXT_PUBLIC_SUPABASE_URL: https://kkoitlvydytdhlpxhuah.supabase.co
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.UAT_SUPABASE_ANON_KEY }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.UAT_SUPABASE_SERVICE_ROLE_KEY }}

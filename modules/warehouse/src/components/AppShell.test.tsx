@@ -198,7 +198,12 @@ describe("AppShell navigation", () => {
     renderWithProviders(<AppShell>content</AppShell>);
     await screen.findByRole("navigation", { name: "Primary" });
 
-    await user.click(screen.getByRole("button", { name: /module alerts/i }));
+    const alertsButton = screen.getByRole("button", { name: /module alerts/i });
+    const countBadge = within(alertsButton).getByText(/^\d+$/);
+    expect(countBadge).toHaveClass("bg-rose-700");
+    expect(countBadge).not.toHaveClass("bg-rose-500");
+
+    await user.click(alertsButton);
     expect(
       await screen.findByRole("dialog", { name: /notifications/i }),
     ).toBeInTheDocument();
