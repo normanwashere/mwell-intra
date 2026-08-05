@@ -8,12 +8,34 @@ import type {
   KnowledgeFeature,
   KnowledgeFlow,
   KnowledgeRole,
+  GlossaryEntry,
 } from "@shell/lib/knowledge/types";
 import { capabilityGuidance } from "@shell/lib/knowledge/capabilities";
 import {
   ROLE_ROUTE_PARENT_LABELS,
   ROLE_ROUTE_PARENT_PATHS,
 } from "@shell/lib/knowledge/roles";
+import { GuideOutline } from "./GuideOutline";
+import { GlossaryTerms } from "./GlossaryTerms";
+
+const ROLE_OUTLINE = [
+  { id: "role-tasks", label: "Start common work" },
+  { id: "role-pages", label: "Accessible pages" },
+  { id: "role-capabilities", label: "Capabilities" },
+  { id: "role-boundaries", label: "Boundaries" },
+  { id: "role-decisions", label: "Decision authority" },
+  { id: "role-timeline", label: "Responsibility timeline" },
+  { id: "role-handoffs", label: "Handoffs" },
+  { id: "role-sod", label: "Segregation of duties" },
+  { id: "role-escalation", label: "Exceptions" },
+  { id: "role-related", label: "Related guidance" },
+];
+
+const taskScore = (task: string, candidate: string) => {
+  const words = task.toLowerCase().split(/[^a-z0-9]+/).filter((word) => word.length > 3);
+  const normalizedCandidate = candidate.toLowerCase();
+  return words.filter((word) => normalizedCandidate.includes(word)).length;
+};
 
 const availabilityLabel = {
   live: "Live",
@@ -34,6 +56,7 @@ export function KnowledgeRoleGuide({
   relatedFeatures,
   relatedArticles,
   relatedFlows,
+  glossary = [],
   onBack,
   onOpenArticle,
   onOpenFlow,
@@ -43,11 +66,19 @@ export function KnowledgeRoleGuide({
   relatedFeatures: KnowledgeFeature[];
   relatedArticles: KnowledgeArticle[];
   relatedFlows: KnowledgeFlow[];
+  glossary?: GlossaryEntry[];
   onBack: () => void;
   onOpenArticle: (id: string) => void;
   onOpenFlow: (id: string) => void;
 }) {
   const isRoadmap = role.availability === "coming_soon";
+  const taskLaunches = role.dailyTasks.slice(0, 5).map((task) => {
+    const destinations = [
+      ...relatedFlows.map((item) => ({ kind: "flow" as const, id: item.id, title: item.title, summary: item.summary, score: taskScore(task, `${item.title} ${item.summary}`) })),
+      ...relatedFeatures.map((item) => ({ kind: "feature" as const, id: item.id, title: item.title, summary: item.purpose, score: taskScore(task, `${item.title} ${item.purpose}`) })),
+    ].sort((left, right) => right.score - left.score || left.title.localeCompare(right.title));
+    return { task, destination: destinations[0] };
+  });
 
   return (
     <article className="mx-auto max-w-5xl">
@@ -77,9 +108,39 @@ export function KnowledgeRoleGuide({
             ? "Not available for live work. This profile documents planned authority only and grants no current access or execution rights."
             : `${role.label} has ${role.authority.capabilities.length} recorded capabilities and ${role.authority.decisions.length} explicit decision ${role.authority.decisions.length === 1 ? "responsibility" : "responsibilities"}.`}
         </p>
+        <GlossaryTerms
+          entries={glossary}
+          text={[role.purpose, ...role.dailyTasks, ...role.authority.canDo, ...role.authority.cannotDo, ...role.authority.decisions].join(" ")}
+        />
       </header>
 
-      <div className="mt-7 space-y-9">
+      <div className="mt-7 grid gap-8 lg:grid-cols-[minmax(0,1fr)_15rem]">
+        <aside className="lg:order-2"><GuideOutline items={ROLE_OUTLINE} /></aside>
+        <div className="min-w-0 space-y-9 lg:order-1">
+        <GuideSection id="role-tasks" title="Common tasks">
+          <p className="mt-2 text-sm leading-6 text-muted">
+            Choose the task closest to what you need to complete. The linked guide shows prerequisites, handoffs, decisions, and completion evidence.
+          </p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {taskLaunches.map(({ task, destination }, index) => (
+              <button
+                key={task}
+                type="button"
+                disabled={!destination || isRoadmap}
+                onClick={() => destination?.kind === "flow" ? onOpenFlow(destination.id) : destination && onOpenArticle(`feature-${destination.id}`)}
+                className="group min-h-28 border border-line bg-surface p-4 text-left transition hover:border-brand-400 hover:shadow-e1 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+              >
+                <span className="text-xs font-semibold uppercase text-brand-700">Task {index + 1}</span>
+                <span className="mt-1 block font-semibold text-ink">{task}</span>
+                <span className="mt-3 flex items-center justify-between gap-3 text-xs text-muted">
+                  <span>{destination ? `${destination.kind === "flow" ? "Guided workflow" : "Feature guide"}: ${destination.title}` : "Written responsibility only"}</span>
+                  {destination && <Icon name="arrowRight" className="h-4 w-4 shrink-0 text-brand-700" />}
+                </span>
+              </button>
+            ))}
+          </div>
+        </GuideSection>
+
         <GuideSection id="role-pages" title="Accessible pages">
           {role.authority.accessibleRoutes.length > 0 ? (
             <ul className="mt-3 divide-y divide-line border-y border-line">
@@ -203,10 +264,6 @@ export function KnowledgeRoleGuide({
           </div>
         </GuideSection>
 
-        <GuideSection id="role-tasks" title="Common tasks">
-          <BulletList items={role.dailyTasks} />
-        </GuideSection>
-
         <GuideSection id="role-sod" title="Segregation of duties">
           <p className="mt-2 text-sm leading-6 text-muted">
             Access is additive, but authority is not transferable. A page or
@@ -263,6 +320,7 @@ export function KnowledgeRoleGuide({
             )}
           </div>
         </GuideSection>
+        </div>
       </div>
     </article>
   );
@@ -278,7 +336,7 @@ function GuideSection({
   children: React.ReactNode;
 }) {
   return (
-    <section aria-labelledby={`${id}-title`}>
+    <section id={id} className="scroll-mt-24" aria-labelledby={`${id}-title`}>
       <h2 id={`${id}-title`} className="text-xl font-bold text-ink">
         {title}
       </h2>
@@ -406,7 +464,7 @@ function RelatedButton({
       onClick={onClick}
       className="flex min-h-11 w-full items-center justify-between gap-4 py-3 text-left hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
     >
-      <span>
+      <span className="min-w-0">
         <span className="block text-sm font-semibold text-ink">{label}</span>
         <span className="mt-0.5 block text-xs text-muted">{context}</span>
       </span>

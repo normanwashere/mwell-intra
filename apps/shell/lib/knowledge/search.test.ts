@@ -3,6 +3,18 @@ import { KNOWLEDGE_CONTENT } from "./content";
 import { searchKnowledge } from "./search";
 
 describe("knowledge search taxonomy", () => {
+  it("recovers from common spelling mistakes and plain-language aliases", () => {
+    expect(searchKnowledge(KNOWLEDGE_CONTENT, "recieving")[0]?.title).toMatch(
+      /receiv/i,
+    );
+    expect(
+      searchKnowledge(KNOWLEDGE_CONTENT, "accreditaion")[0]?.title,
+    ).toMatch(/accredit/i);
+    expect(searchKnowledge(KNOWLEDGE_CONTENT, "log in")[0]?.title).toMatch(
+      /sign in|access/i,
+    );
+  });
+
   it("keeps a specific multi-word task focused on results that match every term", () => {
     const results = searchKnowledge(KNOWLEDGE_CONTENT, "reset password");
 

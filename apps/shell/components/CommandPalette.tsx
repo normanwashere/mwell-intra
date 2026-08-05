@@ -107,7 +107,7 @@ export function CommandPalette() {
         href: "/legal/cases",
       });
     }
-    if (hasCapability(access, "legal", "admin")) {
+    if (hasCapability(access, "legal", "manage_checklist")) {
       out.push({
         id: "legal-invite",
         label: "Invite vendor",

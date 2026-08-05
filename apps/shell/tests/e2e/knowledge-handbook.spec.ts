@@ -85,6 +85,31 @@ function choicePathToNode(flow: KnowledgeFlow, targetNodeId: string) {
 
 test.beforeEach(async ({ page }) => installSession(page));
 
+test("first-time orientation, personal library, and feedback remain available", async ({
+  page,
+}) => {
+  await page.goto("/knowledge");
+  await expect(
+    page.getByRole("region", { name: "First 10 minutes in Intra" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Next orientation step" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Learn your workspace", exact: true }),
+  ).toBeVisible();
+
+  await page.goto("/knowledge?article=feature-warehouse-receiving");
+  await page.getByRole("button", { name: "Save guide" }).click();
+  await page.getByRole("button", { name: "Helpful" }).click();
+  await expect(
+    page.getByRole("status").filter({ hasText: /feedback recorded/i }),
+  ).toContainText(/feedback recorded/i);
+
+  await page.goto("/knowledge");
+  await expect(
+    page.getByRole("region", { name: "Your Knowledge Base library" }),
+  ).toContainText(/Warehouse receiving/i);
+});
+
 test("task, role, and feature search supports recovery and browser history", async ({
   page,
 }) => {

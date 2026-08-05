@@ -93,7 +93,9 @@ test('Platform Admin can configure department DOA without gaining approval autho
   await expect(
     page.getByRole('heading', { name: /Delegation of Authority/i }),
   ).toBeVisible();
-  await expect(page.getByText(/department/i).first()).toBeVisible();
+  await expect(
+    page.getByRole('textbox', { name: 'Department', exact: true }),
+  ).toBeVisible();
   await expectStableViewport(page);
 });
 

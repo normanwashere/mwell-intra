@@ -289,7 +289,11 @@ export function StatCard({
           </span>
         ) : null}
       </div>
-      {hint && <p className="truncate text-xs text-faint">{hint}</p>}
+      {hint && (
+        <p className="line-clamp-2 min-h-8 text-xs leading-4 text-faint">
+          {hint}
+        </p>
+      )}
       {children}
     </>
   );

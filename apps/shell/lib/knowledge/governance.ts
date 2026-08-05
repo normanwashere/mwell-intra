@@ -412,4 +412,64 @@ export const OPERATIONS_GLOSSARY: GlossaryEntry[] = [
       "Database policy that limits which records an authenticated identity may read or change.",
     aliases: ["RLS", "row security"],
   },
+  {
+    term: "Three-way match",
+    definition:
+      "Finance comparison of the purchase order, accepted goods receipt, and supplier invoice before payment readiness is confirmed.",
+    aliases: ["3-way match", "PO receipt invoice match"],
+  },
+  {
+    term: "Goods receipt",
+    definition:
+      "The governed record confirming what was delivered, when it arrived, and which purchase order, batch, and serialized items it belongs to.",
+    aliases: ["GRN", "goods received note", "receiving record"],
+  },
+  {
+    term: "Return merchandise authorization",
+    definition:
+      "The controlled supplier or customer return reference used to track approval, custody, disposition, replacement, refund, and closure.",
+    aliases: ["RMA", "return authorization"],
+  },
+  {
+    term: "Cost of goods sold",
+    definition:
+      "The inventory cost recognized by Finance when a sellable item is fulfilled or otherwise qualifies for cost recognition.",
+    aliases: ["COGS"],
+  },
+  {
+    term: "Proof of delivery",
+    definition:
+      "Courier or recipient evidence that a released shipment reached the intended destination, including delivery status and traceable reference.",
+    aliases: ["POD", "delivery proof"],
+  },
+  {
+    term: "Batch or lot",
+    definition:
+      "A traceability grouping for items produced or received together, commonly used for expiry monitoring, quality holds, and recalls.",
+    aliases: ["batch", "lot number"],
+  },
+  {
+    term: "Serialized inventory",
+    definition:
+      "Stock tracked as individual units using unique serial numbers from receipt through custody, issue, return, replacement, and final disposition.",
+    aliases: ["serial tracking", "serialized stock"],
+  },
+  {
+    term: "Event settlement",
+    definition:
+      "Reconciliation of event stock issued, sold, given away, returned, lost, damaged, or re-kitted against approved event demand and custody evidence.",
+    aliases: ["event reconciliation"],
+  },
+  {
+    term: "Cost center",
+    definition:
+      "The accountable department or operating unit to which approved spend, merchandise expense, write-off, or settlement value is posted.",
+    aliases: ["expense owner", "department charge"],
+  },
+  {
+    term: "First expired, first out",
+    definition:
+      "A picking rule that prioritizes inventory with the earliest valid expiry date while preserving quality and hold controls.",
+    aliases: ["FEFO", "expiry-based picking"],
+  },
 ];

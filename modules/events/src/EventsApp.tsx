@@ -418,23 +418,25 @@ export function EventsApp({
             </Badge>
           }
         />
-        <div className="grid grid-cols-1 gap-3 min-[340px]:grid-cols-3">
-          <StatCard
-            label="Reserved"
-            value={selectedEvent.reservedUnits}
-            icon="tag"
-          />
-          <StatCard
-            label="Issued"
-            value={selectedEvent.issuedUnits}
-            icon="truck"
-          />
-          <StatCard
-            label="Returned"
-            value={selectedEvent.returnedUnits}
-            icon="rotate"
-          />
-        </div>
+        <Card className="overflow-hidden p-0">
+          <dl className="grid grid-cols-3 divide-x divide-line">
+            {([
+              ["Reserved", selectedEvent.reservedUnits, "tag"],
+              ["Issued", selectedEvent.issuedUnits, "truck"],
+              ["Returned", selectedEvent.returnedUnits, "rotate"],
+            ] as const).map(([label, value, icon]) => (
+              <div key={label} className="min-w-0 px-3 py-3 sm:px-5 sm:py-4">
+                <dt className="flex min-w-0 items-center gap-2 text-xs font-semibold text-muted">
+                  <Icon name={icon} className="h-4 w-4 shrink-0 text-brand-600" />
+                  <span className="truncate">{label}</span>
+                </dt>
+                <dd className="tnum mt-2 font-display text-2xl font-extrabold leading-none text-ink">
+                  {value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </Card>
         <Card className="space-y-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>

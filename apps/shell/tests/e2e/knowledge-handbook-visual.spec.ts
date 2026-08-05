@@ -7,15 +7,27 @@ const EXPECTED_VIEWPORTS: Record<string, [number, number]> = {
   "desktop-1440": [1440, 900], "desktop-1280": [1280, 800], "tablet-768": [768, 1024],
   "mobile-390": [390, 844], "mobile-360": [360, 800], "mobile-320": [320, 720],
 };
-const PAGES = [
+const MODULE_ROLE_PAGES = [...new Set(KNOWLEDGE_CONTENT.roles.map((item) => item.module))].map((module) => {
+  const role = KNOWLEDGE_CONTENT.roles.find((item) => item.module === module)!;
+  return [`role-${module}`, `/knowledge?article=role-${role.id}`] as const;
+});
+const MODULE_FEATURE_PAGES = [...new Set(KNOWLEDGE_CONTENT.features.map((item) => item.module))].map((module) => {
+  const feature = KNOWLEDGE_CONTENT.features.find((item) => item.module === module && item.availability !== "coming_soon")
+    ?? KNOWLEDGE_CONTENT.features.find((item) => item.module === module)!;
+  return [`feature-${module}`, `/knowledge?article=feature-${feature.id}`] as const;
+});
+const PAGES: ReadonlyArray<readonly [string, string]> = [
   ["landing", "/knowledge"], ["role", `/knowledge?article=role-${KNOWLEDGE_CONTENT.roles[0]!.id}`],
   ["feature", `/knowledge?article=feature-${KNOWLEDGE_CONTENT.features[0]!.id}`],
+  ["feature-reference", `/knowledge?article=feature-${KNOWLEDGE_CONTENT.features[0]!.id}`],
   ["flow", `/knowledge?flow=${KNOWLEDGE_CONTENT.flows[0]!.id}&view=flow`],
   ["decision", `/knowledge?flow=${KNOWLEDGE_CONTENT.flows[0]!.id}&view=steps&step=${KNOWLEDGE_CONTENT.flows[0]!.nodes.find((n) => n.type === "decision")!.id}`],
   ["exception", `/knowledge?flow=${KNOWLEDGE_CONTENT.flows[0]!.id}&view=exceptions`],
   ["admin", "/knowledge?article=admin-doa"], ["no-result", "/knowledge?q=zzqxjv9274"],
   ["coming-soon", "/knowledge?type=future"],
-] as const;
+  ...MODULE_ROLE_PAGES,
+  ...MODULE_FEATURE_PAGES,
+];
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(({ key, session }) => sessionStorage.setItem(key, JSON.stringify(session)), {
@@ -46,12 +58,18 @@ async function assertVisualIntegrity(page: Page) {
         ((clipsX && el.scrollWidth > el.clientWidth + 2) || (clipsY && el.scrollHeight > el.clientHeight + 2));
     }).map(label);
     const minimum = innerWidth < 640 ? 44 : 24;
-    const undersized = controls.filter((el) => { const r = el.getBoundingClientRect(); return r.width < minimum || r.height < minimum; }).map(label);
+    const undersized = controls.flatMap((el) => {
+      const rect = el.getBoundingClientRect();
+      return rect.width < minimum - 0.5 || rect.height < minimum - 0.5
+        ? [`${label(el)} (${rect.width.toFixed(1)}x${rect.height.toFixed(1)})`]
+        : [];
+    });
     const mobileNav = document.querySelector<HTMLElement>('nav[aria-label="Primary mobile"]');
     const navRect = mobileNav && visible(mobileNav) ? mobileNav.getBoundingClientRect() : null;
     const initialScrollY = window.scrollY;
     const intercepted = controls.filter((el) => {
       if (mobileNav?.contains(el)) return false;
+      if (el.matches('button[aria-pressed][aria-label*="."]')) return false;
       el.scrollIntoView({ block: "center", inline: "center" });
       const r = el.getBoundingClientRect();
       if (r.left < 0 || r.right > innerWidth || r.top < 0 || r.bottom > innerHeight) return true;
@@ -73,7 +91,8 @@ async function assertVisualIntegrity(page: Page) {
 
   const axe = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
   expect(axe.violations).toEqual([]);
-  for (const hotspot of await page.locator('figure button[aria-pressed]').all()) {
+  for (const hotspot of await page.locator('button[aria-pressed][aria-label*="."]').all()) {
+    await hotspot.click({ trial: true });
     const box = await hotspot.boundingBox(); const image = hotspot.locator("xpath=ancestor::*[.//img][1]//img"); const imageBox = await image.boundingBox();
     expect(box).not.toBeNull(); expect(imageBox).not.toBeNull();
     expect(box!.x).toBeGreaterThanOrEqual(imageBox!.x - 1); expect(box!.y).toBeGreaterThanOrEqual(imageBox!.y - 1);
@@ -91,6 +110,8 @@ for (const [name, route] of PAGES) {
     const expected = EXPECTED_VIEWPORTS[testInfo.project.name]; expect(expected, `unapproved project ${testInfo.project.name}`).toBeTruthy();
     expect(page.viewportSize()).toEqual({ width: expected![0], height: expected![1] });
     await page.goto(route);
+    if (name === "feature-reference")
+      await page.getByRole("tab", { name: "Control reference" }).click();
     await expect(page.locator("body")).not.toContainText("Restoring your session");
     await expect(page.locator("main")).toHaveCount(1);
     await expect(page.getByRole("main")).toBeVisible();

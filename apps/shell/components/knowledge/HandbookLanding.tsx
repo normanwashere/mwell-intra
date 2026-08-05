@@ -14,6 +14,8 @@ import type {
   KnowledgeRole,
 } from "@shell/lib/knowledge/types";
 import { OperatingModel } from "./OperatingModel";
+import { FirstTimeJourney } from "./FirstTimeJourney";
+import { PersonalLibrary } from "./PersonalLibrary";
 
 const MODULES: Array<{
   id: KnowledgeModule;
@@ -205,9 +207,11 @@ export function HandbookLanding({
   availability,
   resultLimit,
   recommendedRoleIds,
+  userId,
   rolesById,
   onSetParams,
   onOpenResult,
+  onOpenHref,
 }: {
   content: KnowledgeContent;
   results: HandbookSearchResult[];
@@ -218,12 +222,14 @@ export function HandbookLanding({
   availability: KnowledgeAvailability | "all";
   resultLimit: number;
   recommendedRoleIds: string[];
+  userId: string;
   rolesById: Map<string, KnowledgeRole>;
   onSetParams: (
     changes: Record<string, string | null>,
     options?: { replace?: boolean; scroll?: "top" | "preserve" | "restore" },
   ) => void;
   onOpenResult: (result: HandbookSearchResult) => void;
+  onOpenHref: (href: string) => void;
 }) {
   const recommendedRoles = new Set(recommendedRoleIds);
   const matchingResults = results.filter(
@@ -243,6 +249,7 @@ export function HandbookLanding({
         result.roleIds.some((id) => recommendedRoles.has(id)),
     )
     .slice(0, 4);
+  const practiceResult = recommended[0];
   const recentlyReviewed = results
     .filter(
       (result) => result.reviewedAt && result.availability !== "coming_soon",
@@ -328,6 +335,8 @@ export function HandbookLanding({
             <input
               id="knowledge-search"
               type="search"
+              aria-label="Search all handbook content"
+              style={{ minHeight: "3rem" }}
               value={query}
               onChange={(event) =>
                 onSetParams(
@@ -335,7 +344,7 @@ export function HandbookLanding({
                   { replace: true, scroll: "preserve" },
                 )
               }
-              className="input-base min-h-14 w-full bg-surface pl-12 pr-12 text-base shadow-e1"
+              className="input-base min-h-14 min-w-12 w-full bg-surface pl-12 pr-12 text-base shadow-e1"
               placeholder="How do I receive stock, approve a request, or fix an error?"
             />
             {query && (
@@ -475,6 +484,13 @@ export function HandbookLanding({
 
       {isHome && (
         <>
+          <FirstTimeJourney
+            userId={userId}
+            onExploreRoles={() => onSetParams({ mode: "role" })}
+            onPractice={
+              practiceResult ? () => onOpenResult(practiceResult) : undefined
+            }
+          />
           {recommended.length > 0 && (
             <StartHere
               results={recommended}
@@ -489,6 +505,7 @@ export function HandbookLanding({
           />
           <PrincipalFlowLibrary content={content} onSetParams={onSetParams} />
           <ModuleDirectory onSetParams={onSetParams} />
+          <PersonalLibrary userId={userId} onOpenHref={onOpenHref} />
           <HelpAndUpdates
             results={recentlyReviewed}
             onSetParams={onSetParams}

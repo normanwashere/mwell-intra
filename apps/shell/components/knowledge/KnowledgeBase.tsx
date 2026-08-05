@@ -21,6 +21,7 @@ import { HandbookLanding } from "./HandbookLanding";
 import { KnowledgeArticle } from "./KnowledgeArticle";
 import { KnowledgeFlow } from "./KnowledgeFlow";
 import { KnowledgeRoleGuide } from "./KnowledgeRoleGuide";
+import { KnowledgePageTools } from "./KnowledgePageTools";
 
 const ENTRY_MODES = new Set<HandbookEntryMode>(["task", "role", "feature"]);
 const AVAILABILITY_FILTERS = new Set<KnowledgeAvailability | "all">([
@@ -178,7 +179,17 @@ export function KnowledgeBase({ content }: { content: KnowledgeContent }) {
         .includes(glossary.term.toLowerCase()),
     );
     return (
-      <div className="mx-auto max-w-4xl space-y-6">
+      <div>
+        <KnowledgePageTools
+          userId={profile.id}
+          item={{
+            id: `glossary:${glossary.term}`,
+            title: glossary.term,
+            href: `/knowledge?glossary=${encodeURIComponent(glossary.term)}`,
+            context: "Glossary",
+          }}
+        />
+        <div className="mx-auto max-w-4xl space-y-6">
         <button
           type="button"
           className="btn-ghost btn-sm"
@@ -222,6 +233,7 @@ export function KnowledgeBase({ content }: { content: KnowledgeContent }) {
             ))}
           </div>
         </section>
+        </div>
       </div>
     );
   }
@@ -231,72 +243,114 @@ export function KnowledgeBase({ content }: { content: KnowledgeContent }) {
     setParams({ article: id, flow: null, step: null, view: null });
   const openFlow = (id: string) =>
     setParams({ article: null, flow: id, step: null, view: "flow" });
+  const openKnowledgeHref = (href: string) => {
+    const target = new URL(href, window.location.origin);
+    const changes: Record<string, string | null> = {
+      article: null,
+      flow: null,
+      step: null,
+      glossary: null,
+      view: null,
+      type: null,
+    };
+    target.searchParams.forEach((value, key) => {
+      changes[key] = value;
+    });
+    if (target.searchParams.has("flow") && !target.searchParams.has("view"))
+      changes.view = "flow";
+    setParams(changes);
+  };
   if (guide?.kind === "role") {
     const roleId = guide.role.id;
     return (
-      <KnowledgeRoleGuide
-        role={guide.role}
-        rolesById={rolesById}
-        relatedFeatures={scopedContent.features.filter((feature) =>
-          feature.roleIds.includes(roleId),
-        )}
-        relatedArticles={scopedContent.articles.filter(
-          (item) =>
-            item.id !== `role-${roleId}` &&
-            !item.id.startsWith("feature-") &&
+      <>
+        <KnowledgePageTools
+          userId={profile.id}
+          item={{ id: `role:${roleId}`, title: guide.role.label, href: `/knowledge?article=role-${encodeURIComponent(roleId)}`, context: "Role guide", owner: guide.role.module }}
+        />
+        <KnowledgeRoleGuide
+          role={guide.role}
+          rolesById={rolesById}
+          relatedFeatures={scopedContent.features.filter((feature) =>
+            feature.roleIds.includes(roleId),
+          )}
+          relatedArticles={scopedContent.articles.filter(
+            (item) =>
+              item.id !== `role-${roleId}` &&
+              !item.id.startsWith("feature-") &&
+              item.roles.includes(roleId),
+          )}
+          relatedFlows={scopedContent.flows.filter((item) =>
             item.roles.includes(roleId),
-        )}
-        relatedFlows={scopedContent.flows.filter((item) =>
-          item.roles.includes(roleId),
-        )}
-        onBack={() => setParams({ article: null }, { scroll: "restore" })}
-        onOpenArticle={openArticle}
-        onOpenFlow={openFlow}
-      />
+          )}
+          glossary={scopedContent.glossary}
+          onBack={() => setParams({ article: null }, { scroll: "restore" })}
+          onOpenArticle={openArticle}
+          onOpenFlow={openFlow}
+        />
+      </>
     );
   }
   if (guide?.kind === "feature")
     return (
-      <FeatureGuide
-        feature={guide.feature}
-        rolesById={rolesById}
-        relatedArticles={scopedContent.articles.filter(
-          (item) =>
-            !item.id.startsWith("role-") &&
-            !item.id.startsWith("feature-") &&
-            item.flowIds.some((flowId) =>
-              guide.feature.relatedFlowIds.includes(flowId),
-            ),
-        )}
-        relatedFlows={guide.feature.relatedFlowIds.flatMap((flowId) => {
-          const flow = scopedContent.flows.find((item) => item.id === flowId);
-          return flow ? [flow] : [];
-        })}
-        evidence={scopedContent.evidence.filter(
-          (item) => item.featureId === guide.feature.id,
-        )}
-        onBack={() => setParams({ article: null }, { scroll: "restore" })}
-        onOpenArticle={openArticle}
-        onOpenFlow={openFlow}
-      />
+      <>
+        <KnowledgePageTools
+          userId={profile.id}
+          item={{ id: `feature:${guide.feature.id}`, title: guide.feature.title, href: `/knowledge?article=feature-${encodeURIComponent(guide.feature.id)}`, context: "Feature guide", owner: guide.feature.owner }}
+        />
+        <FeatureGuide
+          feature={guide.feature}
+          rolesById={rolesById}
+          relatedArticles={scopedContent.articles.filter(
+            (item) =>
+              !item.id.startsWith("role-") &&
+              !item.id.startsWith("feature-") &&
+              item.flowIds.some((flowId) =>
+                guide.feature.relatedFlowIds.includes(flowId),
+              ),
+          )}
+          relatedFlows={guide.feature.relatedFlowIds.flatMap((flowId) => {
+            const flow = scopedContent.flows.find((item) => item.id === flowId);
+            return flow ? [flow] : [];
+          })}
+          evidence={scopedContent.evidence.filter(
+            (item) => item.featureId === guide.feature.id,
+          )}
+          glossary={scopedContent.glossary}
+          onBack={() => setParams({ article: null }, { scroll: "restore" })}
+          onOpenArticle={openArticle}
+          onOpenFlow={openFlow}
+        />
+      </>
     );
 
   const article = scopedContent.articles.find((item) => item.id === articleId);
   if (article)
     return (
-      <KnowledgeArticle
-        article={article}
-        rolesById={rolesById}
-        articlesById={articlesById}
-        onBack={() => setParams({ article: null }, { scroll: "restore" })}
-        onOpenArticle={openArticle}
-        onOpenFlow={openFlow}
-      />
+      <>
+        <KnowledgePageTools
+          userId={profile.id}
+          item={{ id: `article:${article.id}`, title: article.title, href: `/knowledge?article=${encodeURIComponent(article.id)}`, context: "Procedure", owner: article.owner }}
+        />
+        <KnowledgeArticle
+          article={article}
+          rolesById={rolesById}
+          articlesById={articlesById}
+          glossary={scopedContent.glossary}
+          onBack={() => setParams({ article: null }, { scroll: "restore" })}
+          onOpenArticle={openArticle}
+          onOpenFlow={openFlow}
+        />
+      </>
     );
   const flow = scopedContent.flows.find((item) => item.id === flowId);
   if (flow)
     return (
       <div className="space-y-5">
+        <KnowledgePageTools
+          userId={profile.id}
+          item={{ id: `flow:${flow.id}`, title: flow.title, href: `/knowledge?flow=${encodeURIComponent(flow.id)}&view=flow`, context: "Guided workflow" }}
+        />
         <button
           className="btn-ghost btn-sm"
           onClick={() =>
@@ -325,23 +379,7 @@ export function KnowledgeBase({ content }: { content: KnowledgeContent }) {
 
   const recommendedRoleIds = knowledgeRoleIdsForAssignments(userRoles);
 
-  const openResult = (result: HandbookSearchResult) => {
-    const target = new URL(result.href, window.location.origin);
-    const changes: Record<string, string | null> = {
-      article: null,
-      flow: null,
-      step: null,
-      glossary: null,
-      view: null,
-      type: null,
-    };
-    target.searchParams.forEach((value, key) => {
-      changes[key] = value;
-    });
-    if (target.searchParams.has("flow") && !target.searchParams.has("view"))
-      changes.view = "flow";
-    setParams(changes);
-  };
+  const openResult = (result: HandbookSearchResult) => openKnowledgeHref(result.href);
 
   return (
     <HandbookLanding
@@ -354,9 +392,11 @@ export function KnowledgeBase({ content }: { content: KnowledgeContent }) {
       availability={availability}
       resultLimit={resultLimit}
       recommendedRoleIds={recommendedRoleIds}
+      userId={profile.id}
       rolesById={rolesById}
       onSetParams={setParams}
       onOpenResult={openResult}
+      onOpenHref={openKnowledgeHref}
     />
   );
 }

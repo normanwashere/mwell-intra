@@ -76,6 +76,46 @@ const phraseScore = (haystack: string, query: string, weight: number) => {
 const includesToken = (haystack: string, token: string) =>
   ` ${haystack} `.includes(` ${token} `);
 
+const QUERY_ALIASES: Record<string, string> = {
+  "log in": "sign in",
+  login: "sign in",
+  "stock in": "receive stock",
+  "goods receipt": "receiving",
+  grn: "receiving",
+};
+
+const editDistance = (left: string, right: string) => {
+  const previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+    const current = [leftIndex];
+    for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+      const substitution =
+        (previous[rightIndex - 1] ?? rightIndex - 1) +
+        (left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1);
+      current[rightIndex] = Math.min(
+        (current[rightIndex - 1] ?? leftIndex) + 1,
+        (previous[rightIndex] ?? rightIndex) + 1,
+        substitution,
+      );
+    }
+    previous.splice(0, previous.length, ...current);
+  }
+  return previous[right.length] ?? right.length;
+};
+
+const approximatelyIncludesToken = (haystack: string, token: string) => {
+  if (includesToken(haystack, token)) return true;
+  if (token.length < 5) return false;
+  const tolerance = token.length >= 9 ? 2 : 1;
+  return [...new Set(haystack.split(" "))]
+    .some(
+      (candidate) =>
+        candidate[0] === token[0] &&
+        Math.abs(candidate.length - token.length) <= tolerance &&
+        editDistance(candidate, token) <= tolerance,
+    );
+};
+
 const scoreText = (text: WeightedText, query: string) => {
   if (!query) return 1;
   const title = normalize(text.title);
@@ -88,10 +128,10 @@ const scoreText = (text: WeightedText, query: string) => {
   const exactBodyPhrase = phraseScore(body, query, 1) > 0;
 
   const matchedTitleTokens = tokens.filter((token) =>
-    includesToken(title, token),
+    approximatelyIncludesToken(title, token),
   ).length;
   const matchesEveryToken = tokens.every((token) =>
-    includesToken(indexedText, token),
+    includesToken(indexedText, token) || approximatelyIncludesToken(primaryText, token),
   );
   if (
     !matchesEveryToken &&
@@ -126,6 +166,8 @@ const scoreText = (text: WeightedText, query: string) => {
     if (aliases.some((value) => includesToken(value, token))) score += 20;
     if (keywords.some((value) => includesToken(value, token))) score += 14;
     if (includesToken(body, token)) score += 3;
+    if (!includesToken(indexedText, token) && approximatelyIncludesToken(primaryText, token))
+      score += 2;
   }
   return score;
 };
@@ -165,7 +207,8 @@ export function searchKnowledge(
       }),
     ),
   ];
-  const rawQuery = normalize(query);
+  const normalizedQuery = normalize(query);
+  const rawQuery = QUERY_ALIASES[normalizedQuery] ?? normalizedQuery;
   const requestsRoadmap = [...ROADMAP_TERMS].some(
     (term) =>
       rawQuery === term ||

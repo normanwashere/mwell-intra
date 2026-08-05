@@ -92,4 +92,20 @@ describe("EvidenceViewer", () => {
       }
     }
   });
+
+  it("traps focus, closes with Escape, and returns focus to the opener", async () => {
+    await act(() => root.render(<EvidenceViewer evidence={evidence} node={node} />));
+    const open = [...container.querySelectorAll("button")].find((button) =>
+      button.textContent?.includes("View image full screen"),
+    )!;
+    open.focus();
+    await act(() => open.click());
+    const close = document.querySelector<HTMLButtonElement>(
+      '[aria-label="Close full-screen evidence"]',
+    );
+    expect(document.activeElement).toBe(close);
+    await act(() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })));
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(document.activeElement).toBe(open);
+  });
 });

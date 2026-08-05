@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Icon } from "@intra/ui";
 import type { KnowledgeEvidence, KnowledgeFlowNode } from "@shell/lib/knowledge/types";
 import { nodePresentation } from "@shell/lib/knowledge/semantics";
@@ -19,6 +19,9 @@ export function EvidenceViewer({
   const [active, setActive] = useState(evidence?.hotspots[0]?.id ?? "");
   const [mobile, setMobile] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
     if (!window.matchMedia) return;
     const query = window.matchMedia("(max-width: 639px)");
@@ -35,8 +38,34 @@ export function EvidenceViewer({
     if (!expanded) return;
     const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    closeButtonRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setExpanded(false);
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = [...(dialogRef.current?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ) ?? [])];
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!first || !last) return;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
     return () => {
       document.body.style.overflow = previous;
+      document.removeEventListener("keydown", onKeyDown);
+      openerRef.current?.focus();
     };
   }, [expanded]);
   const presentation = node
@@ -88,6 +117,7 @@ export function EvidenceViewer({
             className="icon-btn h-11 w-11 sm:h-8 sm:w-8"
             aria-label="Zoom out"
             title="Zoom out"
+            disabled={zoom <= 1}
             onClick={() => setZoom((value) => Math.max(1, value - 0.25))}
           >
             <Icon name="minus" />
@@ -104,11 +134,15 @@ export function EvidenceViewer({
             className="icon-btn h-11 w-11 sm:h-8 sm:w-8"
             aria-label="Zoom in"
             title="Zoom in"
+            disabled={zoom >= 2}
             onClick={() => setZoom((value) => Math.min(2, value + 0.25))}
           >
             <Icon name="plus" />
           </button>
         </div>
+        <span className="sr-only" role="status" aria-live="polite">
+          Zoom {Math.round(zoom * 100)} percent
+        </span>
       </div>
       <div className="max-h-[42rem] overflow-auto border border-line bg-white">
         <div
@@ -145,7 +179,10 @@ export function EvidenceViewer({
       </div>
       <button
         type="button"
-        onClick={() => setExpanded(true)}
+        onClick={(event) => {
+          openerRef.current = event.currentTarget;
+          setExpanded(true);
+        }}
         className="btn-outline mt-2 min-h-11 w-full justify-center sm:hidden"
       >
         <Icon name="camera" className="h-4 w-4" /> View image full screen
@@ -167,6 +204,7 @@ export function EvidenceViewer({
       </div>
       {expanded && (
         <div
+          ref={dialogRef}
           role="dialog"
           aria-modal="true"
           aria-labelledby="evidence-fullscreen-title"
@@ -180,6 +218,7 @@ export function EvidenceViewer({
               <p className="text-xs text-muted">Follow the numbered controls in order.</p>
             </div>
             <button
+              ref={closeButtonRef}
               type="button"
               onClick={() => setExpanded(false)}
               className="icon-btn shrink-0"

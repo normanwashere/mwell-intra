@@ -5,7 +5,10 @@ import { Badge, Button, Icon } from "@intra/ui";
 import type {
   KnowledgeArticle as Article,
   KnowledgeRole,
+  GlossaryEntry,
 } from "@shell/lib/knowledge/types";
+import { GuideOutline } from "./GuideOutline";
+import { GlossaryTerms } from "./GlossaryTerms";
 
 const availabilityLabel = {
   live: "Live",
@@ -17,6 +20,7 @@ export function KnowledgeArticle({
   article,
   rolesById,
   articlesById,
+  glossary = [],
   onBack,
   onOpenArticle,
   onOpenFlow,
@@ -24,6 +28,7 @@ export function KnowledgeArticle({
   article: Article;
   rolesById: Map<string, KnowledgeRole>;
   articlesById?: Map<string, Article>;
+  glossary?: GlossaryEntry[];
   onBack: () => void;
   onOpenArticle?: (id: string) => void;
   onOpenFlow: (id: string) => void;
@@ -59,9 +64,24 @@ export function KnowledgeArticle({
         <p className="mt-3 text-xs text-faint">
           Owner: {article.owner} | Reviewed {article.reviewedAt}
         </p>
+        <GlossaryTerms
+          entries={glossary}
+          text={[article.title, article.summary, ...article.sections.flatMap((section) => [section.title, section.body, ...(section.steps?.flatMap((step) => [step.title, step.instruction, step.expectedOutcome, step.exception ?? ""]) ?? [])])].join(" ")}
+        />
       </header>
+      <div className="mt-6 grid gap-8 lg:grid-cols-[minmax(0,1fr)_15rem]">
+        <aside className="lg:order-2">
+          <GuideOutline
+            items={[
+              ...(article.screenshots?.length ? [{ id: "article-screen-guide", label: "Screen guide" }] : []),
+              ...article.sections.map((section) => ({ id: section.id, label: section.title })),
+              { id: "article-continue", label: "Continue in Intra" },
+            ]}
+          />
+        </aside>
+        <div className="min-w-0 lg:order-1">
       {article.screenshots && article.screenshots.length > 0 && (
-        <section className="mt-6" aria-labelledby="screen-guide-title">
+        <section id="article-screen-guide" className="scroll-mt-24" aria-labelledby="screen-guide-title">
           <h2 id="screen-guide-title" className="text-xl font-bold text-ink">
             Screen guide
           </h2>
@@ -131,7 +151,7 @@ export function KnowledgeArticle({
           </section>
         ))}
       </div>
-      <footer className="mt-8 border-t border-line pt-5">
+      <footer id="article-continue" className="mt-8 scroll-mt-24 border-t border-line pt-5">
         <h2 className="font-semibold text-ink">Continue in Intra</h2>
         {article.availability !== "live" && (
           <p className="mt-2 text-sm text-muted">
@@ -191,6 +211,8 @@ export function KnowledgeArticle({
           </section>
         )}
       </footer>
+        </div>
+      </div>
     </article>
   );
 }

@@ -8,10 +8,13 @@ import type {
   KnowledgeFeature,
   KnowledgeFlow,
   KnowledgeEvidence,
+  GlossaryEntry,
   KnowledgeRole,
 } from "@shell/lib/knowledge/types";
 import { capabilityGuidance } from "@shell/lib/knowledge/capabilities";
 import { EvidenceViewer } from "./EvidenceViewer";
+import { GuideOutline } from "./GuideOutline";
+import { GlossaryTerms } from "./GlossaryTerms";
 
 const availabilityLabel = {
   live: "Live",
@@ -32,6 +35,7 @@ export function FeatureGuide({
   relatedArticles,
   relatedFlows,
   evidence = [],
+  glossary = [],
   onBack,
   onOpenArticle,
   onOpenFlow,
@@ -41,11 +45,13 @@ export function FeatureGuide({
   relatedArticles: KnowledgeArticle[];
   relatedFlows: KnowledgeFlow[];
   evidence?: KnowledgeEvidence[];
+  glossary?: GlossaryEntry[];
   onBack: () => void;
   onOpenArticle: (id: string) => void;
   onOpenFlow: (id: string) => void;
 }) {
   const isRoadmap = feature.availability === "coming_soon";
+  const [view, setView] = React.useState<"guide" | "reference">("guide");
   const exactFlows = relatedFlows.filter((flow) =>
     feature.relatedFlowIds.includes(flow.id),
   );
@@ -88,9 +94,57 @@ export function FeatureGuide({
           <Meta label="Owner">{feature.owner}</Meta>
           <Meta label="Reviewed">{feature.reviewedAt}</Meta>
         </dl>
+        <GlossaryTerms
+          entries={glossary}
+          text={[feature.title, feature.purpose, ...feature.controls.flatMap((item) => [item.behavior, item.validation, item.result]), ...feature.fields?.flatMap((item) => [item.name, item.purpose, item.validation]) ?? [], ...feature.statuses, ...feature.exceptions].join(" ")}
+        />
       </header>
 
-      <div className="mt-7 space-y-9">
+      <div className="mt-6 inline-flex rounded-md border border-line bg-inset p-1" role="tablist" aria-label="Feature guide depth">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view === "guide"}
+          className={`min-h-11 rounded px-4 text-sm font-semibold ${view === "guide" ? "bg-surface text-brand-700 shadow-e1" : "text-muted hover:text-ink"}`}
+          onClick={() => setView("guide")}
+        >
+          Task guide
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view === "reference"}
+          className={`min-h-11 rounded px-4 text-sm font-semibold ${view === "reference" ? "bg-surface text-brand-700 shadow-e1" : "text-muted hover:text-ink"}`}
+          onClick={() => setView("reference")}
+        >
+          Control reference
+        </button>
+      </div>
+
+      <div className="mt-7 grid gap-8 lg:grid-cols-[minmax(0,1fr)_15rem]">
+        <aside className="lg:order-2">
+          <GuideOutline
+            items={
+              view === "guide"
+                ? [
+                    ...(evidence.length > 0 ? [{ id: "feature-screen-guide", label: "Screen guide" }] : []),
+                    { id: "feature-entry", label: "Before you start" },
+                    { id: "feature-controls", label: "Controls" },
+                    { id: "feature-outcomes", label: "Completion and recovery" },
+                    { id: "feature-related", label: "Related guidance" },
+                  ]
+                : [
+                    { id: "feature-fields", label: "Fields" },
+                    { id: "feature-data", label: "Reads and writes" },
+                    { id: "feature-states", label: "Statuses and feedback" },
+                    { id: "feature-policy", label: "Policy basis" },
+                    { id: "feature-related", label: "Related guidance" },
+                  ]
+            }
+          />
+        </aside>
+        <div className="min-w-0 space-y-9 lg:order-1">
+        <div hidden={view !== "guide"} className="space-y-9">
         {evidence.length > 0 && (
           <GuideSection id="feature-screen-guide" title="Screen guide">
             <p className="mt-2 text-sm leading-6 text-muted">
@@ -103,12 +157,12 @@ export function FeatureGuide({
             </div>
           </GuideSection>
         )}
-        <GuideSection id="feature-entry" title="Entry routes and access">
+        <GuideSection id="feature-entry" title="Before you start">
           <div className="mt-3 divide-y divide-line border-y border-line">
             {feature.routes.map((route) => (
               <div
                 key={route}
-                className="flex min-h-14 items-center justify-between gap-3 py-2"
+                className="flex min-h-14 flex-wrap items-center justify-between gap-3 py-2 sm:flex-nowrap"
               >
                 <code className="break-all text-sm text-ink">{route}</code>
                 {isRoadmap || route.includes(":") ? (
@@ -145,10 +199,16 @@ export function FeatureGuide({
         </GuideSection>
 
         <GuideSection id="feature-controls" title="Controls">
+          <p className="mt-2 text-sm leading-6 text-muted">
+            Complete these interactions in order. Confirm each validation before moving to the next control.
+          </p>
           <ol className="mt-3 divide-y divide-line border-y border-line">
-            {feature.controls.map((control) => (
+            {feature.controls.map((control, index) => (
               <li key={control.name} className="py-5">
-                <h3 className="font-semibold text-ink">{control.name}</h3>
+                <h3 className="flex items-center gap-3 font-semibold text-ink">
+                  <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-brand-600 text-xs font-bold text-white">{index + 1}</span>
+                  {control.name}
+                </h3>
                 <dl className="mt-3 grid gap-4 text-sm sm:grid-cols-3">
                   <Definition term="Behavior">{control.behavior}</Definition>
                   <Definition term="Validation">
@@ -161,6 +221,20 @@ export function FeatureGuide({
           </ol>
         </GuideSection>
 
+        <GuideSection id="feature-outcomes" title="Errors and completion">
+          <div className="mt-3 grid gap-6 border-y border-line py-5 md:grid-cols-2">
+            <DataList title="Errors and recovery" items={feature.exceptions} />
+            <div className="md:border-l md:border-line md:pl-6">
+              <DataList
+                title="Completion evidence"
+                items={feature.completionEvidence ?? ["The expected governed status is visible on the record."]}
+              />
+            </div>
+          </div>
+        </GuideSection>
+        </div>
+
+        <div hidden={view !== "reference"} className="space-y-9">
         <GuideSection id="feature-fields" title="Fields">
           {(feature.fields ?? []).length > 0 ? (
             <div
@@ -239,22 +313,6 @@ export function FeatureGuide({
           </div>
         </GuideSection>
 
-        <GuideSection id="feature-outcomes" title="Errors and completion">
-          <div className="mt-3 grid gap-6 border-y border-line py-5 md:grid-cols-2">
-            <DataList title="Errors and recovery" items={feature.exceptions} />
-            <div className="md:border-l md:border-line md:pl-6">
-              <DataList
-                title="Completion evidence"
-                items={
-                  feature.completionEvidence ?? [
-                    "The expected governed status is visible on the record.",
-                  ]
-                }
-              />
-            </div>
-          </div>
-        </GuideSection>
-
         <GuideSection id="feature-policy" title="Policy basis">
           <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-muted">
             {feature.policyBasis.map((policy) => (
@@ -262,6 +320,7 @@ export function FeatureGuide({
             ))}
           </ul>
         </GuideSection>
+        </div>
 
         <GuideSection id="feature-related" title="Related flows and content">
           <div className="mt-3 divide-y divide-line border-y border-line">
@@ -291,6 +350,7 @@ export function FeatureGuide({
             ))}
           </div>
         </GuideSection>
+        </div>
       </div>
     </article>
   );
@@ -306,7 +366,7 @@ function GuideSection({
   children: React.ReactNode;
 }) {
   return (
-    <section aria-labelledby={`${id}-title`}>
+    <section id={id} className="scroll-mt-24" aria-labelledby={`${id}-title`}>
       <h2 id={`${id}-title`} className="text-xl font-bold text-ink">
         {title}
       </h2>
@@ -373,7 +433,7 @@ function RelatedButton({
       onClick={onClick}
       className="flex min-h-11 w-full items-center justify-between gap-4 py-3 text-left hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
     >
-      <span>
+      <span className="min-w-0">
         <span className="block text-sm font-semibold text-ink">{label}</span>
         <span className="mt-0.5 block text-xs text-muted">{context}</span>
       </span>

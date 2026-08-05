@@ -91,8 +91,8 @@ describe("AppShell navigation", () => {
       "Analyze",
       "Configure",
     ]) {
-      const heading = within(sidebar).getByRole("heading", { name: group });
-      expect(heading).toHaveAttribute("tabindex", "0");
+      const toggle = within(sidebar).getByRole("button", { name: group });
+      expect(toggle).toHaveAttribute("aria-expanded");
     }
   });
 

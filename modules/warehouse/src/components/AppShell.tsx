@@ -94,6 +94,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [conflictsOpen, setConflictsOpen] = useState(false);
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<ModuleGroup>>(
+    () => new Set<ModuleGroup>(['analyze', 'configure']),
+  );
   const [offline, setOffline] = useState(
     typeof navigator !== 'undefined' && !navigator.onLine,
   );
@@ -145,6 +148,30 @@ export function AppShell({ children }: { children: ReactNode }) {
     group,
     modules: modules.filter((module) => module.group === group),
   })).filter((section) => section.modules.length > 0);
+  const activeGroup = modules.find((module) =>
+    module.path === '/'
+      ? location.pathname === '/'
+      : location.pathname === module.path || location.pathname.startsWith(`${module.path}/`),
+  )?.group;
+
+  useEffect(() => {
+    if (!activeGroup) return;
+    setCollapsedGroups((current) => {
+      if (!current.has(activeGroup)) return current;
+      const next = new Set(current);
+      next.delete(activeGroup);
+      return next;
+    });
+  }, [activeGroup]);
+
+  const toggleGroup = (group: ModuleGroup) => {
+    setCollapsedGroups((current) => {
+      const next = new Set(current);
+      if (next.has(group)) next.delete(group);
+      else next.add(group);
+      return next;
+    });
+  };
 
   // Reset demo data is destructive (wipes + reseeds) — always confirm first
   // and give explicit feedback before the reload (WH-6).
@@ -179,23 +206,36 @@ export function AppShell({ children }: { children: ReactNode }) {
         <nav className="flex-1 space-y-5 overflow-y-auto px-3 pb-4" aria-label="Primary">
           {groupedModules.map((section) => (
             <section key={section.group} aria-labelledby={`warehouse-nav-${section.group}`}>
-              <h2
-                id={`warehouse-nav-${section.group}`}
-                tabIndex={0}
-                className="mb-1 px-3 text-[0.65rem] font-bold uppercase text-faint outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-              >
-                {MODULE_GROUP_LABELS[section.group]}
-              </h2>
-              <div className="space-y-1">
-                {section.modules.map((module) => (
-                  <SideLink
-                    key={module.id}
-                    to={module.path}
-                    icon={module.icon as IconName}
-                    label={module.label}
+              <h2 id={`warehouse-nav-${section.group}`} className="mb-1">
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(section.group)}
+                  aria-expanded={!collapsedGroups.has(section.group)}
+                  aria-controls={`warehouse-nav-${section.group}-items`}
+                  className="flex min-h-8 w-full items-center justify-between rounded-md px-3 text-[0.65rem] font-bold uppercase text-faint transition hover:bg-inset hover:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                >
+                  <span>{MODULE_GROUP_LABELS[section.group]}</span>
+                  <Icon
+                    name="chevron"
+                    className={clsx(
+                      'h-3.5 w-3.5 transition-transform',
+                      !collapsedGroups.has(section.group) && 'rotate-90',
+                    )}
                   />
-                ))}
-              </div>
+                </button>
+              </h2>
+              {!collapsedGroups.has(section.group) && (
+                <div id={`warehouse-nav-${section.group}-items`} className="space-y-1">
+                  {section.modules.map((module) => (
+                    <SideLink
+                      key={module.id}
+                      to={module.path}
+                      icon={module.icon as IconName}
+                      label={module.label}
+                    />
+                  ))}
+                </div>
+              )}
             </section>
           ))}
         </nav>

@@ -38,6 +38,7 @@ playwright-report/
 test-results/
 **/test-results/
 .qa/
+output/
 .review-shots/
 .playwright-cli/
 .pwcli/
