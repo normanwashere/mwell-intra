@@ -80,7 +80,7 @@ describe("DashboardPage", () => {
     async () => {
       renderWithProviders(<DashboardPage />, { role: "bi_analyst" });
       expect(
-        await screen.findByRole("heading", { name: "BI Analyst warehouse dashboard" }),
+        await screen.findByRole("heading", { name: "Warehouse dashboard" }),
       ).toBeInTheDocument();
       expect(screen.getByText("Active SKUs")).toBeInTheDocument();
       expect(screen.getByText("Inventory Value")).toBeInTheDocument();
@@ -129,7 +129,7 @@ describe("DashboardPage", () => {
   it("gives Operations demand handoffs without physical custody actions", async () => {
     renderWithProviders(<DashboardPage />, { role: "operations" });
     expect(
-      await screen.findByRole("heading", { name: /ecommerce \/ operations/i }),
+      await screen.findByText("eCommerce / Operations"),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /new demand/i }),
@@ -182,7 +182,7 @@ describe("DashboardPage", () => {
   it("gives the Warehouse Administrator an operational control overview", async () => {
     renderWithProviders(<DashboardPage />, { role: "warehouse_admin" });
     expect(
-      await screen.findByRole("heading", { name: "Warehouse Administrator warehouse dashboard" }),
+      await screen.findByRole("heading", { name: "Warehouse dashboard" }),
     ).toBeInTheDocument();
     expect(screen.getByText(/low-stock alerts/i)).toBeInTheDocument();
     expect(screen.getByText(/reconciliation/i)).toBeInTheDocument();
@@ -206,8 +206,7 @@ describe("DashboardPage", () => {
       buttons.forEach((b) => fireEvent.click(b));
       unmount();
     }
-  }, // Renders every role against the full 90-day seed history — needs more
-  // headroom than the 5s default.
+  }, // headroom than the 5s default. // Renders every role against the full 90-day seed history — needs more
   15_000);
 
   it("has no accessibility violations", async () => {

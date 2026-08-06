@@ -17,7 +17,9 @@ export function normalizeWarehouseRole(role: WarehouseUiRole): Role {
   return role;
 }
 
-export function warehouseRolePresentation(role: WarehouseUiRole | readonly WarehouseUiRole[]): {
+export function warehouseRolePresentation(
+  role: WarehouseUiRole | readonly WarehouseUiRole[],
+): {
   label: string;
   description: string;
 } {
@@ -37,14 +39,19 @@ export function warehouseRolePresentation(role: WarehouseUiRole | readonly Wareh
           "Demand intake plus routine receiving, putaway, issue, returns, and count work.",
       };
     }
-    const presentations = [...roles].map((entry) =>
-      warehouseRolePresentation(entry),
-    );
+    const presentations = [...roles]
+      .map((entry) => warehouseRolePresentation(entry))
+      .filter(
+        (presentation, index, entries) =>
+          entries.findIndex(
+            (candidate) =>
+              candidate.label === presentation.label &&
+              candidate.description === presentation.description,
+          ) === index,
+      );
     return {
       label: presentations.map((entry) => entry.label).join(" + "),
-      description: presentations
-        .map((entry) => entry.description)
-        .join(" "),
+      description: presentations.map((entry) => entry.description).join(" "),
     };
   }
   if (role === "warehouse_operator") {

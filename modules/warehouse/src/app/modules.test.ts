@@ -41,9 +41,10 @@ describe("warehouse navigation metadata", () => {
 
   it("presents the combined Operations and Operator assignment as Operations Associate", () => {
     expect(
-      warehouseRolePresentation(
-        ["operations", "warehouse_operator"] as unknown as "operations",
-      ),
+      warehouseRolePresentation([
+        "operations",
+        "warehouse_operator",
+      ] as unknown as "operations"),
     ).toEqual({
       label: "Operations Associate",
       description:
@@ -51,10 +52,24 @@ describe("warehouse navigation metadata", () => {
     });
   });
 
+  it("does not repeat equivalent supervisor role aliases", () => {
+    expect(
+      warehouseRolePresentation([
+        "warehouse_supervisor",
+        "logistics_supervisor",
+      ]),
+    ).toEqual({
+      label: "Warehouse Supervisor",
+      description:
+        "Controlled exceptions, approvals, quality, and floor oversight.",
+    });
+  });
+
   it("returns a safe presentation while a role assignment is unavailable", () => {
     expect(warehouseRolePresentation([])).toEqual({
       label: "Warehouse access",
-      description: "Warehouse responsibilities are assigned by an administrator.",
+      description:
+        "Warehouse responsibilities are assigned by an administrator.",
     });
   });
 

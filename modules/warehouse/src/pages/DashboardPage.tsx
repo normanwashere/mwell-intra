@@ -332,7 +332,8 @@ function OperatorDashboard({
           Warehouse floor operations
         </h1>
         <p className="mt-1 text-sm text-muted">
-          {name ? `Welcome back, ${name}. ` : ""}Routine work ready for this shift.
+          {name ? `Welcome back, ${name}. ` : ""}Routine work ready for this
+          shift.
         </p>
       </section>
       <section aria-labelledby="operator-overview">
@@ -1511,7 +1512,7 @@ export function DashboardPage() {
     <div className="space-y-6">
       <DashboardHero
         eyebrow="Inventory operations"
-        title={`${rolePresentation.label} warehouse dashboard`}
+        title="Warehouse dashboard"
         description={`${firstName ? `Welcome back, ${firstName}. ` : ""}${HERO_STATUS[dashboardRole]}`}
         roleLabel={rolePresentation.label}
         icon={heroCta.icon}
