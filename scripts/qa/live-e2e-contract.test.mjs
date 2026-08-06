@@ -750,6 +750,25 @@ test("Task 3 uses browser-role exception receipts and proves transactional clean
   assert.match(source, /qcInspectionIds/);
 });
 
+test("vendor readiness appends conditional requirements with array-safe operations", async () => {
+  const migration = await readFile(
+    new URL(
+      "../../supabase/migrations/20260806100000_vendor_readiness_array_append.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.match(migration, /array_append\(v_required, 'PH_PRIVACY_COMPLIANCE'\)/);
+  assert.match(
+    migration,
+    /array_append\(v_required, 'PH_CYBERSECURITY_POLICIES'\)/,
+  );
+  assert.doesNotMatch(
+    migration,
+    /v_required\s*:=\s*v_required\s*\|\|\s*'PH_/,
+  );
+});
+
 test("receiving wrappers authorize before disclosure and preserve idempotent replay", async () => {
   const migration = await readFile(
     new URL(
@@ -1682,4 +1701,19 @@ test("the issue client excludes exact holds and can select another valid source"
     behaviorTests,
     /avoids exact held stock and selects another unheld source location/,
   );
+});
+
+test("procurement readiness distinguishes missing records from retired seed owners", async () => {
+  const procurementReadiness = await readFile(
+    new URL(
+      "../../supabase/migrations/20260806101500_repair_commitment_readiness_ownership.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.match(procurementReadiness, /v_request_found := found/);
+  assert.match(procurementReadiness, /if not v_request_found then/);
+  assert.match(procurementReadiness, /requester_id is null/);
+  assert.match(procurementReadiness, /v_requester_id is null and not v_has_control_access/);
+  assert.match(procurementReadiness, /coalesce\(auth\.uid\(\) = v_requester_id, false\)/);
 });
