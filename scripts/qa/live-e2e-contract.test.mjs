@@ -747,6 +747,76 @@ test("Task 3 uses browser-role exception receipts and proves transactional clean
   assert.match(source, /qcInspectionIds/);
 });
 
+test("receiving wrappers authorize before disclosure and preserve idempotent replay", async () => {
+  const migration = await readFile(
+    new URL(
+      "../../supabase/migrations/20260806090000_receiving_boundary_replay_order.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  for (const command of [
+    "receive_procurement_po",
+    "receive_procurement_po_exception",
+  ]) {
+    const start = migration.indexOf(
+      `create or replace function warehouse.${command}`,
+    );
+    assert.ok(start >= 0, `${command} wrapper is missing`);
+    const body = migration.slice(start, migration.indexOf("$$;", start));
+    assert.ok(
+      body.indexOf("core.has_cap('warehouse', 'receive_stock')") <
+        body.indexOf("private.assert_goods_procurement_po"),
+      `${command} must authorize before checking PO state`,
+    );
+    assert.ok(
+      body.indexOf("warehouse.command_log") <
+        body.indexOf("private.assert_goods_procurement_po"),
+      `${command} must recognize a replay before checking current PO state`,
+    );
+  }
+});
+
+test("the UI and live harness cover mobile names, controlled accounting, and completed writes", async () => {
+  const [requestPage, accreditationCases, caseDetail, eventsApp, harness] =
+    await Promise.all([
+      readFile(
+        new URL(
+          "../../modules/procurement/src/pages/CreateRequestPage.tsx",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+      readFile(
+        new URL(
+          "../../modules/legal/src/pages/AccreditationCasesPage.tsx",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+      readFile(
+        new URL(
+          "../../modules/legal/src/pages/CaseDetailPage.tsx",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+      readFile(
+        new URL("../../modules/events/src/EventsApp.tsx", import.meta.url),
+        "utf8",
+      ),
+      readFile(new URL("./full-intra-live-e2e.mjs", import.meta.url), "utf8"),
+    ]);
+  assert.match(requestPage, /aria-label={`Step \$\{s\.n\}:/);
+  assert.match(accreditationCases, /aria-label="Accreditation requirements approved"/);
+  assert.match(caseDetail, /aria-label="Overall accreditation progress"/);
+  assert.match(eventsApp, /<select[\s\S]*id="event-request-department"/);
+  assert.match(eventsApp, /<select[\s\S]*id="event-request-cost"/);
+  assert.match(harness, /getByLabel\("Department"\)\.selectOption\("marketing"\)/);
+  assert.match(harness, /readinessDialog\.waitFor\(\{ state: "detached"/);
+  assert.match(harness, /priceDialog\.waitFor\(\{ state: "detached"/);
+});
+
 test("the live harness verifies deployed identity before browser launch", async () => {
   const source = await readFile(
     new URL("./full-intra-live-e2e.mjs", import.meta.url),

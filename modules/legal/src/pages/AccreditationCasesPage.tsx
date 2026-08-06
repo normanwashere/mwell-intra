@@ -575,6 +575,7 @@ function VendorApplicationCard({
         </div>
         <div
           role="progressbar"
+          aria-label="Accreditation requirements approved"
           aria-valuenow={pct}
           aria-valuemin={0}
           aria-valuemax={100}

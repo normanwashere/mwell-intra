@@ -1456,7 +1456,7 @@ async function legalInviteVendorWorkflow(page, marker) {
         timeout: 20_000,
       });
       await vendorPage
-        .getByText("Vendor portal", { exact: true })
+        .getByLabel("Vendor portal chrome")
         .waitFor({ state: "visible", timeout: 25_000 });
       const vendorLayout = await pageAudit(vendorPage);
       const vendorAccessibility = await new AxeBuilder({ page: vendorPage })
@@ -6451,11 +6451,11 @@ async function eventsCoordinatorReadbackWorkflow(page, state) {
     name: "Request warehouse stock",
   });
   state.fulfillmentPurpose = `${state.marker} event fulfillment`;
-  await requestDialog.getByLabel("Department").fill("Marketing");
+  await requestDialog.getByLabel("Department").selectOption("marketing");
   await requestDialog
     .getByLabel("Business purpose")
     .fill(state.fulfillmentPurpose);
-  await requestDialog.getByLabel("Cost center").fill("MKT-UAT");
+  await requestDialog.getByLabel("Cost center").selectOption("CC-4100");
   const product = requestDialog.getByLabel("Product");
   if (!(await product.inputValue()))
     throw new Error("Events handoff has no eligible Warehouse product.");
@@ -6751,6 +6751,7 @@ async function productContributorWorkflow(
     .fill("Operations acknowledgement is required before launch.");
   await captureState("Product readiness ready to submit");
   await readinessSubmit.click();
+  await readinessDialog.waitFor({ state: "detached", timeout: 30_000 });
   await page.getByRole("heading", { name: readinessTitle }).waitFor({
     state: "visible",
     timeout: 15_000,
@@ -6773,6 +6774,7 @@ async function productContributorWorkflow(
     .fill("2027-08-15T09:00");
   await captureState("Product pricing ready to submit");
   await priceSubmit.click();
+  await priceDialog.waitFor({ state: "detached", timeout: 30_000 });
   await page.getByText(pricingReason, { exact: true }).waitFor({
     state: "visible",
     timeout: 15_000,

@@ -74,6 +74,12 @@ export interface SaveEventReconciliationInput extends Omit<
 export interface EventsData {
   events: EventRecord[];
   products?: Array<{ id: string; name: string; itemClass: string }>;
+  departments?: Array<{
+    id: string;
+    code: string;
+    name: string;
+    costCenters: Array<{ code: string; name: string }>;
+  }>;
   reconciliations?: EventReconciliation[];
   warnings: string[];
 }

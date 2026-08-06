@@ -42,6 +42,30 @@ describe('event lifecycle rules', () => {
     expect(filters.some(([column]) => column === 'active')).toBe(false);
   });
 
+  it('loads active departments and cost centers for governed fulfillment choices', async () => {
+    const tables: string[] = [];
+    const query = {
+      select: () => query,
+      order: () => query,
+      limit: async () => ({ data: [], error: null }),
+      in: () => query,
+      eq: () => query,
+    };
+    const client = {
+      schema: () => ({
+        from: (table: string) => {
+          tables.push(table);
+          return query;
+        },
+      }),
+    };
+
+    await loadLiveEvents(client as never);
+
+    expect(tables).toContain('departments');
+    expect(tables).toContain('department_cost_centers');
+  });
+
   it('exposes controlled lifecycle and fulfillment operations', async () => {
     const module = await import('./data');
 
@@ -278,6 +302,8 @@ describe('event lifecycle rules', () => {
     expect(app).toContain('btn-ghost text-rose-700 dark:text-rose-300');
     expect(app).toContain('Reopen event');
     expect(app).toContain('Request warehouse stock');
+    expect(app).toContain('Select a department');
+    expect(app).toContain('Select a cost center');
     expect(app).toContain('error={formErrors.startDate}');
     expect(app).toContain('focusFirstInvalidField');
     expect(app).toContain('error={manageErrors.reason}');

@@ -710,6 +710,7 @@ export function CaseDetailPage() {
         </div>
         <div
           role="progressbar"
+          aria-label="Overall accreditation progress"
           aria-valuenow={Math.round(progress.ratio * 100)}
           aria-valuemin={0}
           aria-valuemax={100}

@@ -266,7 +266,14 @@ export async function saveLiveEventReconciliation(
 export async function loadLiveEvents(
   client: EventsClient,
 ): Promise<EventsData> {
-  const [eventResult, allocationResult, productResult, reconciliationResult] =
+  const [
+    eventResult,
+    allocationResult,
+    productResult,
+    reconciliationResult,
+    departmentResult,
+    costCenterResult,
+  ] =
     await Promise.all([
       client
         .schema("warehouse")
@@ -295,6 +302,21 @@ export async function loadLiveEvents(
           "event_id,status,sold_units,giveaway_units,returned_units,lost_units,damaged_units,rekit_units,gross_sales_amount,finance_reference,evidence_url,note,approved_at",
         )
         .limit(1000),
+      client
+        .schema("core")
+        .from("departments")
+        .select("id,code,name,is_active")
+        .eq("is_active", true)
+        .order("sort_order", { ascending: true })
+        .order("name", { ascending: true })
+        .limit(1000),
+      client
+        .schema("core")
+        .from("department_cost_centers")
+        .select("department_id,code,name,is_active")
+        .eq("is_active", true)
+        .order("code", { ascending: true })
+        .limit(1000),
     ]);
   const warnings: string[] = [];
   if (eventResult.error) warnings.push(`Events: ${eventResult.error.message}`);
@@ -306,6 +328,10 @@ export async function loadLiveEvents(
     warnings.push(
       "Event reconciliation: " + reconciliationResult.error.message,
     );
+  if (departmentResult.error)
+    warnings.push("Departments: " + departmentResult.error.message);
+  if (costCenterResult.error)
+    warnings.push("Cost centers: " + costCenterResult.error.message);
   const allocations = Array.isArray(allocationResult.data)
     ? (allocationResult.data as UnknownRow[])
     : [];
@@ -331,6 +357,9 @@ export async function loadLiveEvents(
   const rows = Array.isArray(eventResult.data)
     ? (eventResult.data as UnknownRow[])
     : [];
+  const costCenters = Array.isArray(costCenterResult.data)
+    ? (costCenterResult.data as UnknownRow[])
+    : [];
   return {
     events: rows.map((row): EventRecord => {
       const id = text(row.id);
@@ -344,6 +373,20 @@ export async function loadLiveEvents(
       id: text(row.id),
       name: text(row.name, "Unnamed product"),
       itemClass: text(row.item_class),
+    })),
+    departments: (Array.isArray(departmentResult.data)
+      ? (departmentResult.data as UnknownRow[])
+      : []
+    ).map((row) => ({
+      id: text(row.id),
+      code: text(row.code),
+      name: text(row.name, text(row.code)),
+      costCenters: costCenters
+        .filter((costCenter) => text(costCenter.department_id) === text(row.id))
+        .map((costCenter) => ({
+          code: text(costCenter.code),
+          name: text(costCenter.name, text(costCenter.code)),
+        })),
     })),
     reconciliations: (Array.isArray(reconciliationResult.data)
       ? (reconciliationResult.data as UnknownRow[])

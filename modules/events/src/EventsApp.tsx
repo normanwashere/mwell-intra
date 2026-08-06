@@ -155,6 +155,9 @@ export function EventsApp({
     [data.events],
   );
   const today = new Date().toISOString().slice(0, 10);
+  const selectedDepartment = data.departments?.find(
+    (department) => department.code === fulfillment.department,
+  );
 
   if (sessionLoading || (profile && loading)) {
     return (
@@ -395,8 +398,18 @@ export function EventsApp({
                 className="btn-primary"
                 onClick={() => {
                   setFulfillmentErrors({});
+                  const defaultDepartment =
+                    data.departments?.find(
+                      (department) => department.code === fulfillment.department,
+                    ) ?? data.departments?.[0];
+                  const defaultCostCenter =
+                    defaultDepartment?.costCenters.find(
+                      (costCenter) => costCenter.code === fulfillment.costCenter,
+                    ) ?? defaultDepartment?.costCenters[0];
                   setFulfillment((current) => ({
                     ...current,
+                    department: defaultDepartment?.code ?? "",
+                    costCenter: defaultCostCenter?.code ?? "",
                     productId:
                       current.productId || data.products?.[0]?.id || "",
                     requiredDate:
@@ -921,7 +934,7 @@ export function EventsApp({
               htmlFor="event-request-department"
               error={fulfillmentErrors.department}
             >
-              <input
+              <select
                 id="event-request-department"
                 className="input"
                 aria-invalid={Boolean(fulfillmentErrors.department)}
@@ -930,6 +943,10 @@ export function EventsApp({
                   setFulfillment((current) => ({
                     ...current,
                     department: event.target.value,
+                    costCenter:
+                      data.departments?.find(
+                        (department) => department.code === event.target.value,
+                      )?.costCenters[0]?.code ?? "",
                   }));
                   setFulfillmentErrors((current) => ({
                     ...current,
@@ -937,7 +954,14 @@ export function EventsApp({
                   }));
                 }}
                 required
-              />
+              >
+                <option value="">Select a department</option>
+                {(data.departments ?? []).map((department) => (
+                  <option key={department.id} value={department.code}>
+                    {department.name}
+                  </option>
+                ))}
+              </select>
             </Field>
             <Field
               label="Business purpose"
@@ -968,7 +992,7 @@ export function EventsApp({
                 htmlFor="event-request-cost"
                 error={fulfillmentErrors.costCenter}
               >
-                <input
+                <select
                   id="event-request-cost"
                   className="input"
                   aria-invalid={Boolean(fulfillmentErrors.costCenter)}
@@ -984,7 +1008,15 @@ export function EventsApp({
                     }));
                   }}
                   required
-                />
+                  disabled={!selectedDepartment}
+                >
+                  <option value="">Select a cost center</option>
+                  {(selectedDepartment?.costCenters ?? []).map((costCenter) => (
+                    <option key={costCenter.code} value={costCenter.code}>
+                      {costCenter.code} - {costCenter.name}
+                    </option>
+                  ))}
+                </select>
               </Field>
               <Field
                 label="Required date"
