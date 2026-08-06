@@ -197,6 +197,9 @@ test("production certification is read-only and covers every supported viewport"
     /PRODUCTION_SUPABASE_PROJECT_REF:\s*abbfziukjalyqtcuskhi/,
   );
   assert.doesNotMatch(workflow, /SUPABASE_SERVICE_ROLE_KEY/);
+  assert.match(workflow, /health\.supabase !== "reachable"/);
+  assert.match(workflow, /health\.clientAuth !== "supabase-configured"/);
+  assert.match(workflow, /health\.features\?\.serviceWorker !== "configured"/);
   for (const viewport of [
     "desktop-1440",
     "desktop-1280",

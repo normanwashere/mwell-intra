@@ -45,9 +45,13 @@ jobs:
           if (health.deployment?.supabaseProjectRef !== "abbfziukjalyqtcuskhi") {
             throw new Error("Live deployment is not connected to the approved production Supabase project.");
           }
-          if (!health.supabase?.reachable) throw new Error("Production Supabase is not reachable.");
-          if (!health.clientAuth?.configured) throw new Error("Production client authentication is not configured.");
-          if (!health.serviceWorker?.configured) throw new Error("Production service worker is not configured.");
+          if (health.supabase !== "reachable") throw new Error("Production Supabase is not reachable.");
+          if (health.clientAuth !== "supabase-configured") {
+            throw new Error("Production client authentication is not configured.");
+          }
+          if (health.features?.serviceWorker !== "configured") {
+            throw new Error("Production service worker is not configured.");
+          }
           if (!/^[a-f0-9]{40}$/.test(health.commit ?? "")) {
             throw new Error("Production did not report a full release commit.");
           }
