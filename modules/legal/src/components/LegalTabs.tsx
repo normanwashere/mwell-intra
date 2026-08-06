@@ -23,7 +23,7 @@ const TABS: Tab[] = [
 export function LegalTabs({ canInvite }: { canInvite: boolean }) {
   const visible = TABS.filter((t) => !t.requires || (t.requires === 'manage_checklist' && canInvite));
   return (
-    <div className="sticky top-[var(--shell-header,0px)] z-10 -mx-4 mb-4 border-b border-line bg-surface/90 px-4 backdrop-blur-md sm:-mx-6 sm:px-6">
+    <div className="-mx-4 mb-4 border-b border-line bg-surface px-4 sm:-mx-6 sm:px-6 md:sticky md:top-[var(--shell-header,0px)] md:z-10 md:bg-surface/90 md:backdrop-blur-md">
       <nav
         aria-label="Legal sections"
         className="-mb-px flex min-w-0 gap-1 overflow-x-auto"

@@ -422,7 +422,7 @@ export function InviteVendorPage() {
                     onClick={() =>
                       setOpenGroups((cur) => ({ ...cur, [group]: !open }))
                     }
-                    className="flex w-full items-center justify-between gap-3 text-left"
+                    className="flex min-h-11 w-full items-center justify-between gap-3 text-left"
                   >
                     <span className="flex min-w-0 items-center gap-2">
                       <Icon

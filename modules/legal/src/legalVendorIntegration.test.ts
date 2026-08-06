@@ -38,8 +38,12 @@ describe('Legal/vendor lifecycle UI integration', () => {
   it('uses in-flow mobile action regions and inline invite validation', () => {
     const invite = source('modules/legal/src/pages/InviteVendorPage.tsx');
     const detail = source('modules/legal/src/pages/CaseDetailPage.tsx');
+    const tabs = source('modules/legal/src/components/LegalTabs.tsx');
     expect(invite).toContain('role="alert"');
     expect(invite).not.toContain('bottom-[calc(8.5rem+env(safe-area-inset-bottom))]');
+    expect(invite).toContain('className="flex min-h-11 w-full items-center');
+    expect(tabs).toContain('md:sticky');
+    expect(tabs).not.toContain('className="sticky ');
     expect(detail).toContain('ok.decisionPending');
     expect(detail).toContain('Independent Legal confirmation required');
     expect(detail).toContain('Awaiting independent Legal confirmation');
