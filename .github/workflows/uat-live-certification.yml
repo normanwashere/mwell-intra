@@ -26,7 +26,7 @@ jobs:
       AUDIT_BASE_URL: https://mwell-intra-uat.vercel.app
       NEXT_PUBLIC_SUPABASE_URL: https://kkoitlvydytdhlpxhuah.supabase.co
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.UAT_SUPABASE_SERVICE_ROLE_KEY }}
-      AUDIT_PASSWORD: ${{ secrets.UAT_AUDIT_MASTER_PASSWORD }}
+      AUDIT_PASSWORD: ${{ secrets.AUDIT_PASSWORD || secrets.UAT_AUDIT_MASTER_PASSWORD }}
       SUPABASE_PROJECT_REF: kkoitlvydytdhlpxhuah
       PRODUCTION_SUPABASE_PROJECT_REF: abbfziukjalyqtcuskhi
       POLICY_ALLOW_TEST_MUTATIONS: "true"
@@ -109,7 +109,7 @@ jobs:
       AUDIT_OUTPUT_PATH: test-results/routes-${{ matrix.viewport }}.json
       NEXT_PUBLIC_SUPABASE_URL: https://kkoitlvydytdhlpxhuah.supabase.co
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.UAT_SUPABASE_ANON_KEY }}
-      AUDIT_PASSWORD: ${{ secrets.UAT_AUDIT_MASTER_PASSWORD }}
+      AUDIT_PASSWORD: ${{ secrets.AUDIT_PASSWORD || secrets.UAT_AUDIT_MASTER_PASSWORD }}
       SUPABASE_PROJECT_REF: kkoitlvydytdhlpxhuah
       PRODUCTION_SUPABASE_PROJECT_REF: abbfziukjalyqtcuskhi
       POLICY_ALLOW_TEST_MUTATIONS: "false"
@@ -174,7 +174,7 @@ jobs:
       NEXT_PUBLIC_SUPABASE_URL: https://kkoitlvydytdhlpxhuah.supabase.co
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.UAT_SUPABASE_ANON_KEY }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.UAT_SUPABASE_SERVICE_ROLE_KEY }}
-      AUDIT_PASSWORD: ${{ secrets.UAT_AUDIT_MASTER_PASSWORD }}
+      AUDIT_PASSWORD: ${{ secrets.AUDIT_PASSWORD || secrets.UAT_AUDIT_MASTER_PASSWORD }}
       SUPABASE_PROJECT_REF: kkoitlvydytdhlpxhuah
       PRODUCTION_SUPABASE_PROJECT_REF: abbfziukjalyqtcuskhi
       POLICY_ALLOW_TEST_MUTATIONS: "true"

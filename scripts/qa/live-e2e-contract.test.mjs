@@ -252,6 +252,10 @@ test("shards UAT certification into bounded least-privilege jobs", async () => {
   assert.match(workflow, /max-parallel: 1/);
   assert.match(workflow, /pnpm provision:test:uat/);
   assert.match(workflow, /secrets\.UAT_SUPABASE_SERVICE_ROLE_KEY/);
+  assert.match(
+    workflow,
+    /secrets\.AUDIT_PASSWORD \|\| secrets\.UAT_AUDIT_MASTER_PASSWORD/g,
+  );
   assert.match(workflow, /AUDIT_REQUIRE_VENDOR_DELIVERY: "true"/);
   assert.match(workflow, /AUDIT_VENDOR_DELIVERY_VIEWPORT: desktop-1440/);
   assert.match(
@@ -748,6 +752,22 @@ test("Task 3 uses browser-role exception receipts and proves transactional clean
   assert.match(source, /reject:\s*"vendor_return"/i);
   assert.match(source, /warehouseReceiptId/);
   assert.match(source, /qcInspectionIds/);
+});
+
+test("production certification uses the shared audit credential without privileged database access", async () => {
+  const workflow = await readFile(
+    new URL(
+      "../../.github/workflows/production-readonly-certification.yml",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.match(
+    workflow,
+    /AUDIT_PASSWORD: \$\{\{ secrets\.AUDIT_PASSWORD \|\| secrets\.UAT_AUDIT_MASTER_PASSWORD \}\}/,
+  );
+  assert.doesNotMatch(workflow, /SUPABASE_SERVICE_ROLE_KEY/);
+  assert.match(workflow, /AUDIT_MUTATIONS: "false"/);
 });
 
 test("vendor readiness appends conditional requirements with array-safe operations", async () => {

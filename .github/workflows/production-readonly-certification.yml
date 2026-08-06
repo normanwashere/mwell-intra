@@ -93,7 +93,7 @@ jobs:
       AUDIT_MUTATIONS: "false"
       AUDIT_OUTPUT_PATH: test-results/production-routes-${{ matrix.viewport }}.json
       NEXT_PUBLIC_SUPABASE_URL: https://abbfziukjalyqtcuskhi.supabase.co
-      AUDIT_PASSWORD: ${{ secrets.UAT_AUDIT_MASTER_PASSWORD }}
+      AUDIT_PASSWORD: ${{ secrets.AUDIT_PASSWORD || secrets.UAT_AUDIT_MASTER_PASSWORD }}
       SUPABASE_PROJECT_REF: abbfziukjalyqtcuskhi
       PRODUCTION_SUPABASE_PROJECT_REF: abbfziukjalyqtcuskhi
       POLICY_ALLOW_TEST_MUTATIONS: "false"
