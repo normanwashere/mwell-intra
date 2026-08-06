@@ -173,3 +173,38 @@ test("UAT certification workflow gates deployment and always certifies cleanup",
   );
   assert.doesNotMatch(workflow, /SUPABASE_SERVICE_ROLE_KEY:\s*eyJ/);
 });
+
+test("production certification is read-only and covers every supported viewport", async () => {
+  const workflow = await readFile(
+    new URL(
+      "../../.github/workflows/production-readonly-certification.yml",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+
+  assert.match(
+    workflow,
+    /AUDIT_BASE_URL:\s*https:\/\/mwell-intra\.vercel\.app/,
+  );
+  assert.match(workflow, /APP_ENV:\s*production/);
+  assert.match(workflow, /AUDIT_PHASE:\s*routes/);
+  assert.match(workflow, /AUDIT_MUTATIONS:\s*"false"/);
+  assert.match(workflow, /POLICY_ALLOW_TEST_MUTATIONS:\s*"false"/);
+  assert.match(workflow, /SUPABASE_PROJECT_REF:\s*abbfziukjalyqtcuskhi/);
+  assert.match(
+    workflow,
+    /PRODUCTION_SUPABASE_PROJECT_REF:\s*abbfziukjalyqtcuskhi/,
+  );
+  assert.doesNotMatch(workflow, /SUPABASE_SERVICE_ROLE_KEY/);
+  for (const viewport of [
+    "desktop-1440",
+    "desktop-1280",
+    "tablet-768",
+    "mobile-390",
+    "mobile-360",
+    "mobile-320",
+  ]) {
+    assert.match(workflow, new RegExp(`viewport: ${viewport}`));
+  }
+});
