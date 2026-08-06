@@ -3,7 +3,10 @@
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { assertApprovedMutationTarget } from "../lib/target-environment.mjs";
+import {
+  assertApprovedMutationTarget,
+  projectRefFromSupabaseUrl,
+} from "../lib/target-environment.mjs";
 import { CURRENT_LIVE_ROLES } from "./live-e2e-scenarios.mjs";
 
 const REQUIRED_PASSWORD_PATTERN =
@@ -156,15 +159,31 @@ export function validateProvisioningInputs({
   expectedProjectRef,
   productionProjectRef,
   mutationsApproved,
+  allowProductionCertification = false,
 }) {
-  assertApprovedMutationTarget({
-    appEnv,
-    supabaseUrl: url,
-    expectedProjectRef,
-    productionProjectRef,
-    mutationsRequested: true,
-    mutationsApproved,
-  });
+  if (allowProductionCertification) {
+    const projectRef = projectRefFromSupabaseUrl(url);
+    if (
+      appEnv !== "production" ||
+      !mutationsApproved ||
+      !projectRef ||
+      projectRef !== expectedProjectRef ||
+      projectRef !== productionProjectRef
+    ) {
+      throw new Error(
+        "Production certification provisioning requires the exact approved production project and explicit mutation approval.",
+      );
+    }
+  } else {
+    assertApprovedMutationTarget({
+      appEnv,
+      supabaseUrl: url,
+      expectedProjectRef,
+      productionProjectRef,
+      mutationsRequested: true,
+      mutationsApproved,
+    });
+  }
   if (!serviceKey) throw new Error("SUPABASE_SERVICE_ROLE_KEY is required.");
   buildPersonaPasswords({
     personas,
@@ -398,6 +417,7 @@ export async function provisionUatIntraUsers({
   expectedProjectRef,
   productionProjectRef,
   mutationsApproved,
+  allowProductionCertification = false,
   fetchImpl = fetch,
   log = console.log,
 }) {
@@ -411,6 +431,7 @@ export async function provisionUatIntraUsers({
     expectedProjectRef,
     productionProjectRef,
     mutationsApproved,
+    allowProductionCertification,
   });
   const resolvedPasswords = buildPersonaPasswords({
     personas,
@@ -646,9 +667,11 @@ async function main() {
     expectedProjectRef: process.env.SUPABASE_PROJECT_REF,
     productionProjectRef: process.env.PRODUCTION_SUPABASE_PROJECT_REF,
     mutationsApproved: process.env.POLICY_ALLOW_TEST_MUTATIONS === "true",
+    allowProductionCertification:
+      process.env.PRODUCTION_CERTIFICATION_MUTATIONS === "true",
   });
   console.log(
-    `Provisioned ${result.provisioned.length} guarded UAT personas. Passwords were not printed.`,
+    `Provisioned ${result.provisioned.length} guarded certification personas. Passwords were not printed.`,
   );
 }
 

@@ -368,6 +368,46 @@ test("rejects weak credentials and production mutation targets", () => {
   );
 });
 
+test("allows only an explicitly approved exact production certification target", () => {
+  assert.doesNotThrow(() =>
+    validateProvisioningInputs({
+      ...valid,
+      url: "https://productionref.supabase.co",
+      appEnv: "production",
+      expectedProjectRef: "productionref",
+      productionProjectRef: "productionref",
+      mutationsApproved: true,
+      allowProductionCertification: true,
+    }),
+  );
+  assert.throws(
+    () =>
+      validateProvisioningInputs({
+        ...valid,
+        url: "https://anotherproject.supabase.co",
+        appEnv: "production",
+        expectedProjectRef: "anotherproject",
+        productionProjectRef: "productionref",
+        mutationsApproved: true,
+        allowProductionCertification: true,
+      }),
+    /exact approved production project/i,
+  );
+  assert.throws(
+    () =>
+      validateProvisioningInputs({
+        ...valid,
+        url: "https://productionref.supabase.co",
+        appEnv: "production",
+        expectedProjectRef: "productionref",
+        productionProjectRef: "productionref",
+        mutationsApproved: false,
+        allowProductionCertification: true,
+      }),
+    /explicit mutation approval/i,
+  );
+});
+
 test("paginates Auth users, reconciles add-before-prune, verifies state, and never logs passwords", async () => {
   const mock = createProvisioningFetch();
   const logs = [];

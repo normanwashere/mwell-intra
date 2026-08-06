@@ -7,6 +7,10 @@ on:
       - codex/unified-finance-module
     paths:
       - .github/workflows/production-readonly-certification.yml
+      - apps/**
+      - packages/**
+      - scripts/qa/**
+      - supabase/migrations/**
 
 concurrency:
   group: production-readonly-certification
