@@ -201,6 +201,7 @@ function mapRequest(row: LiveRow, steps: ApprovalStep[] = []): ProcurementReques
     projectCode: row.project_code ?? undefined,
     budgetCode: row.budget_code ?? undefined,
     status: row.status,
+    requesterId: row.requester_id ?? undefined,
     requesterName: row.requester_name ?? undefined,
     requesterEmail: row.requester_email ?? undefined,
     neededBy: row.needed_by ?? undefined,

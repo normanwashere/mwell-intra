@@ -5,9 +5,13 @@ import { Navigate, useParams } from 'react-router-dom';
 import { Icon, PageHeader, useToast } from '@intra/ui';
 import { useAcceptanceWorkItem } from '../localStore';
 
-export function AcceptanceWorkItemPage() {
-  const { id = '' } = useParams();
-  const { item, loading, recordAcceptance } = useAcceptanceWorkItem(id);
+type AcceptanceWorkItemController = ReturnType<typeof useAcceptanceWorkItem>;
+
+export function AcceptanceWorkItemView({
+  controller: { item, loading, recordAcceptance },
+}: {
+  controller: AcceptanceWorkItemController;
+}) {
   const { success, error } = useToast();
   const [scope, setScope] = useState('Delivered goods match the approved request and QC-accepted quantities.');
   const [exceptions, setExceptions] = useState('');
@@ -63,4 +67,10 @@ export function AcceptanceWorkItemPage() {
       </button>
     </div>
   );
+}
+
+export function AcceptanceWorkItemPage() {
+  const { id = '' } = useParams();
+  const controller = useAcceptanceWorkItem(id);
+  return <AcceptanceWorkItemView controller={controller} />;
 }

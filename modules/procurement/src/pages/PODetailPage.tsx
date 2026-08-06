@@ -90,7 +90,10 @@ export function PODetailPage() {
     [po, requests],
   );
   const isSourceRequester = Boolean(
-    profile?.email && sourceRequest?.requesterEmail === profile.email,
+    profile && sourceRequest && (
+      sourceRequest.requesterId === profile.id ||
+      (profile.email && sourceRequest.requesterEmail === profile.email)
+    ),
   );
   const canViewPurchaseOrders =
     canAuthorPo || canApproveAward || canViewFinance || canAdmin || isSourceRequester;

@@ -91,11 +91,16 @@ const runTransactionAudit = auditPhase !== "routes";
 const mutatingPhase = allowMutations && runTransactionAudit;
 const requireVendorDelivery =
   process.env.AUDIT_REQUIRE_VENDOR_DELIVERY === "true";
+const vendorDeliveryViewport =
+  process.env.AUDIT_VENDOR_DELIVERY_VIEWPORT?.trim();
+const runVendorDeliveryWorkflow =
+  !vendorDeliveryViewport || viewFilter === vendorDeliveryViewport;
 const controlledVendorEmail =
   process.env.AUDIT_VENDOR_EMAIL?.trim().toLowerCase();
 const vendorDeliveryConfigurationError =
   mutatingPhase &&
   requireVendorDelivery &&
+  runVendorDeliveryWorkflow &&
   !controlledVendorEmail?.includes("{marker}")
     ? "AUDIT_VENDOR_EMAIL must be a controlled mailbox template containing {marker} when AUDIT_REQUIRE_VENDOR_DELIVERY=true."
     : null;
@@ -1576,6 +1581,34 @@ async function legalInviteVendorWorkflow(page, marker) {
     replayStatus,
     acceptanceEvidenceScreenshot,
     acceptanceUsedAuditToken,
+  };
+}
+
+async function legalInviteVendorInteractionWorkflow(page, marker) {
+  const companyName = `${marker} Vendor mobile review`;
+  const vendorEmail = vendorAuditEmail(marker);
+  await page.goto(`${baseUrl}/legal/invites/new?workflow=${Date.now()}`, {
+    waitUntil: "domcontentloaded",
+    timeout: 20_000,
+  });
+  await waitForMeaningfulRoute(page);
+  await page.getByLabel("Company name").fill(companyName);
+  await page.getByLabel("Vendor contact email").fill(vendorEmail);
+  await page.getByRole("button", { name: /continue/i }).click();
+  await page.getByRole("button", { name: /continue/i }).click();
+  const submit = page.getByRole("button", { name: /send invite & open case/i });
+  await submit.waitFor({ state: "visible", timeout: 10_000 });
+  const audit = await pageAudit(page);
+  return {
+    name: "legal vendor invite",
+    ok:
+      audit.text.includes(companyName) &&
+      audit.text.includes(vendorEmail) &&
+      (await submit.isEnabled()),
+    finalUrl: page.url().replace(baseUrl, ""),
+    text: audit.text.slice(0, 260),
+    deliveryStatus: `certified-on-${vendorDeliveryViewport}`,
+    interactionSurfaceOnly: true,
   };
 }
 
@@ -8132,7 +8165,10 @@ try {
             {
               name: "legal vendor invite",
               scenarioId: "vendor-accreditation",
-              run: (page) => legalInviteVendorWorkflow(page, marker),
+              run: (page) =>
+                runVendorDeliveryWorkflow
+                  ? legalInviteVendorWorkflow(page, marker)
+                  : legalInviteVendorInteractionWorkflow(page, marker),
             },
           ),
         );

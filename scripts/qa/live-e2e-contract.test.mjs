@@ -253,6 +253,7 @@ test("shards UAT certification into bounded least-privilege jobs", async () => {
   assert.match(workflow, /pnpm provision:test:uat/);
   assert.match(workflow, /secrets\.UAT_SUPABASE_SERVICE_ROLE_KEY/);
   assert.match(workflow, /AUDIT_REQUIRE_VENDOR_DELIVERY: "true"/);
+  assert.match(workflow, /AUDIT_VENDOR_DELIVERY_VIEWPORT: desktop-1440/);
   assert.match(
     workflow,
     /AUDIT_VENDOR_EMAIL: intra\.test\.admin\+\{marker\}@mwell\.com\.ph/,
@@ -487,6 +488,8 @@ test("the invite workflow verifies the persisted delivery state", async () => {
     "utf8",
   );
   assert.match(source, /AUDIT_REQUIRE_VENDOR_DELIVERY/);
+  assert.match(source, /runVendorDeliveryWorkflow/);
+  assert.match(source, /legalInviteVendorInteractionWorkflow/);
   assert.match(source, /AUDIT_VENDOR_EMAIL/);
   assert.match(source, /controlled mailbox template containing \{marker\}/);
   assert.match(source, /vendorDeliveryConfigurationError/);

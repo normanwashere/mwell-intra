@@ -244,6 +244,7 @@ export interface ProcurementRequest {
   /** Budget line / GL code the request charges against. */
   budgetCode?: string;
   status: RequestStatus;
+  requesterId?: string;
   requesterName?: string;
   requesterEmail?: string;
   neededBy?: string; // ISO date

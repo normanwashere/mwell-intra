@@ -74,6 +74,8 @@ const po: PurchaseOrder = {
 };
 
 let warehouseAccess = true;
+let procurementAccess = true;
+let requesterId: string | undefined;
 
 vi.mock('@intra/auth', async () => {
   const actual = await vi.importActual<typeof import('@intra/auth')>('@intra/auth');
@@ -83,8 +85,10 @@ vi.mock('@intra/auth', async () => {
     useCan: (module: string, cap: string) =>
       module === 'warehouse' && cap === 'receive_stock'
         ? warehouseAccess
-        : true,
-    useSession: () => ({ profile: { name: 'Procurement Officer', email: 'procurement@mwell.com.ph' } }),
+        : module === 'procurement'
+          ? procurementAccess
+          : true,
+    useSession: () => ({ profile: { id: 'requester-1', name: 'Procurement Officer', email: 'procurement@mwell.com.ph' } }),
   };
 });
 
@@ -99,7 +103,7 @@ vi.mock('@intra/ui', async () => {
 vi.mock('../localStore', () => ({
   isAccredited: () => true,
   useProcurementRequests: () => ({
-    rows: [{ id: 'req-approved-1', status: 'approved', category: 'goods' }],
+    rows: [{ id: 'req-approved-1', status: 'approved', category: 'goods', requesterId }],
   }),
   useProcurementVendors: () => [{
     id: 'vendor-approved-1',
@@ -139,6 +143,8 @@ function renderPage() {
 describe('PODetailPage Warehouse handoff', () => {
   beforeEach(() => {
     warehouseAccess = true;
+    procurementAccess = true;
+    requesterId = undefined;
   });
 
   it('removes receipt mutation and shows governed Warehouse status for issued POs', () => {
@@ -168,5 +174,16 @@ describe('PODetailPage Warehouse handoff', () => {
 
     expect(html).toMatch(/warehouse receiving/i);
     expect(html).not.toMatch(/open warehouse handoff/i);
+  });
+
+  it('uses the immutable requester id when a request has no denormalized email', () => {
+    procurementAccess = false;
+    warehouseAccess = false;
+    requesterId = 'requester-1';
+
+    const html = renderPage();
+
+    expect(html).toMatch(/PO-2026-0042/);
+    expect(html).not.toMatch(/No purchase order access/);
   });
 });

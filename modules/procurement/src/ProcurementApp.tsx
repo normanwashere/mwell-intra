@@ -17,8 +17,8 @@ import { CreateRequestPage } from "./pages/CreateRequestPage";
 import { RequestDetailPage } from "./pages/RequestDetailPage";
 import { ApprovalInboxPage } from "./pages/ApprovalInboxPage";
 import { PurchaseOrdersPage } from "./pages/PurchaseOrdersPage";
-import { PODetailPage } from "./pages/PODetailPage";
 import { AcceptanceWorkItemPage } from "./pages/AcceptanceWorkItemPage";
+import { PurchaseOrderDetailRoute } from "./pages/PurchaseOrderDetailRoute";
 import { resolveTiers, type UserRolesShape } from "./tiers";
 import {
   PROCUREMENT_REQUESTS_ALIAS_PATH,
@@ -80,10 +80,6 @@ export function ProcurementApp({
     can(userRoles, "procurement", "approve_award") ||
     can(userRoles, "procurement", "view_finance") ||
     can(userRoles, "procurement", "admin");
-  // Requesters need the linked PO detail to complete service or milestone
-  // acceptance, but they still do not receive the portfolio-level PO list.
-  const canViewPurchaseOrderDetail =
-    canViewPurchaseOrders || can(userRoles, "procurement", "create_request");
   if (loading) {
     return (
       <div className="mx-auto max-w-5xl space-y-6 p-4 md:p-6" aria-busy="true">
@@ -203,7 +199,7 @@ export function ProcurementApp({
             />
             <Route
               path={PROCUREMENT_ROUTE_BY_ID["po-detail"].path}
-              element={canViewPurchaseOrderDetail ? <PODetailPage /> : <AcceptanceWorkItemPage />}
+              element={<PurchaseOrderDetailRoute canViewFullDetail={canViewPurchaseOrders} />}
             />
             <Route path="*" element={<Navigate to="/" replace />} />
           </>
