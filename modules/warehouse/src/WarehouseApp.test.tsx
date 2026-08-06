@@ -54,9 +54,10 @@ describe('WarehouseApp basename handling', () => {
       });
       expect(
         await screen.findByRole('heading', {
-          name: /procurement warehouse dashboard/i,
+          name: /warehouse dashboard/i,
         }),
       ).toBeInTheDocument();
+      expect(screen.getAllByText(/^procurement$/i).length).toBeGreaterThan(0);
       expect(screen.getByText(/welcome back, grace/i)).toBeInTheDocument();
     },
     FIRST_RENDER_TIMEOUT,
