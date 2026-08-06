@@ -1,10 +1,9 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { parse } from 'csv-parse/sync';
-import { createClient } from '@supabase/supabase-js';
 import { NextResponse, type NextRequest } from 'next/server';
 import { validateImportRows, type WarehouseImportKind } from '@intra/data-kit';
 import { createSupabaseServerClient } from '@shell/lib/supabase/server';
-import { SUPABASE_URL } from '@shell/lib/supabase/env';
+import type { ShellSupabaseClient } from '@shell/lib/supabase/types';
 import {
   authorizeWarehouseImport,
   ImportAuthorizationError,
@@ -23,15 +22,6 @@ const KINDS = new Set<WarehouseImportKind>([
 const errorResponse = (message: string, status: number) =>
   NextResponse.json({ error: message }, { status });
 
-function adminClient() {
-  const key = process.env.SUPABASE_SECRET_KEY?.trim()
-    || process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
-  if (!SUPABASE_URL || !key) throw new ImportAuthorizationError('Import storage is not configured.', 503);
-  return createClient(SUPABASE_URL, key, {
-    auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
-  });
-}
-
 function parseCsv(source: string): Record<string, string>[] {
   if (source.includes('\uFFFD')) throw new Error('CSV must be valid UTF-8.');
   return parse(source, {
@@ -42,7 +32,7 @@ function parseCsv(source: string): Record<string, string>[] {
   }) as Record<string, string>[];
 }
 
-async function validationContext(client: ReturnType<typeof adminClient>) {
+async function validationContext(client: ShellSupabaseClient) {
   const [{ data: locations, error: locationError }, { data: bins, error: binError }] =
     await Promise.all([
       client.schema('warehouse').from('locations').select('id'),
@@ -61,8 +51,7 @@ export async function GET() {
     const userClient = await createSupabaseServerClient('warehouse');
     if (!userClient) return errorResponse('Supabase is not configured.', 503);
     await authorizeWarehouseImport(userClient);
-    const admin = adminClient();
-    const { data: jobs, error } = await admin.schema('warehouse')
+    const { data: jobs, error } = await userClient.schema('warehouse')
       .from('import_jobs')
       .select('id,status,source_rows,accepted_rows,rejected_rows,duplicate_rows,filename,checksum_sha256,created_by,created_by_email,corrected_from,created_at')
       .eq('status', 'ready')
@@ -81,7 +70,6 @@ export async function POST(request: NextRequest) {
     const userClient = await createSupabaseServerClient('warehouse');
     if (!userClient) return errorResponse('Supabase is not configured.', 503);
     const user = await authorizeWarehouseImport(userClient);
-    const admin = adminClient();
     const contentType = request.headers.get('content-type') ?? '';
 
     if (contentType.includes('multipart/form-data')) {
@@ -97,22 +85,13 @@ export async function POST(request: NextRequest) {
       const source = await file.text();
       const rows = parseCsv(source);
       const context = kind === 'products_opening_stock_v1'
-        ? await validationContext(admin)
+        ? await validationContext(userClient)
         : undefined;
       const result = validateImportRows(kind, rows, context);
       const checksum = createHash('sha256').update(source, 'utf8').digest('hex');
       const storagePath = `${user.id}/${Date.now()}-${randomUUID()}.csv`;
-      const { data: bucket } = await admin.storage.getBucket(BUCKET);
-      if (!bucket) {
-        const { error } = await admin.storage.createBucket(BUCKET, {
-          public: false,
-          fileSizeLimit: MAX_BYTES,
-          allowedMimeTypes: ['text/csv', 'application/vnd.ms-excel'],
-        });
-        if (error && !/already exists/i.test(error.message)) throw new Error(error.message);
-      }
-      const { error: uploadError } = await admin.storage
-        .from(BUCKET)
+      const importStorage = userClient.storage.from(BUCKET);
+      const { error: uploadError } = await importStorage
         .upload(storagePath, new Blob([source], { type: 'text/csv;charset=utf-8' }), {
           contentType: 'text/csv;charset=utf-8',
           upsert: false,
@@ -120,9 +99,8 @@ export async function POST(request: NextRequest) {
       if (uploadError) throw new Error(uploadError.message);
 
       const status = result.rejectedRows > 0 ? 'invalid' : 'ready';
-      const { data: job, error: jobError } = await admin.schema('warehouse')
-        .from('import_jobs')
-        .insert({
+      const { data: job, error: jobError } = await userClient.schema('warehouse')
+        .rpc('stage_import_job', { payload: {
           import_kind: kind,
           schema_version: '1',
           filename: file.name,
@@ -133,24 +111,17 @@ export async function POST(request: NextRequest) {
           rejected_rows: result.rejectedRows,
           duplicate_rows: result.duplicateRows,
           status,
-          created_by: user.id,
-          created_by_email: user.email ?? '',
           corrected_from: form.get('corrected_from') || null,
-        })
-        .select('id,status,source_rows,accepted_rows,rejected_rows,duplicate_rows')
-        .single();
-      if (jobError) throw new Error(jobError.message);
-      if (result.issues.length > 0) {
-        const { error } = await admin.schema('warehouse').from('import_errors').insert(
-          result.issues.map((item) => ({
-            import_job_id: job.id,
+          issues: result.issues.map((item) => ({
             row_number: Math.max(1, item.row),
             field_name: item.field,
             error_code: item.code,
             message: item.message,
           })),
-        );
-        if (error) throw new Error(error.message);
+        } });
+      if (jobError) {
+        await importStorage.remove([storagePath]).catch(() => undefined);
+        throw new Error(jobError.message);
       }
       return NextResponse.json({
         job,
@@ -174,7 +145,7 @@ export async function POST(request: NextRequest) {
     if (body.action !== 'apply' || !body.job_id || !body.idempotency_key) {
       return errorResponse('Apply requires job_id and idempotency_key.', 400);
     }
-    const { data: job, error: jobError } = await admin.schema('warehouse')
+    const { data: job, error: jobError } = await userClient.schema('warehouse')
       .from('import_jobs')
       .select('id,import_kind,schema_version,storage_path,checksum_sha256,status,created_by')
       .eq('id', body.job_id)
@@ -182,9 +153,9 @@ export async function POST(request: NextRequest) {
     if (jobError || !job) return errorResponse('Import job not found.', 404);
     if (job.created_by === user.id) return errorResponse('Import creator cannot review or apply the same job.', 403);
     if (job.status !== 'ready') return errorResponse('Only ready import jobs can be applied.', 409);
-    const { data: sourceFile, error: downloadError } = await admin.storage
+    const { data: sourceFile, error: downloadError } = await userClient.storage
       .from(BUCKET)
-      .download(job.storage_path);
+      .download(String(job.storage_path));
     if (downloadError || !sourceFile) throw new Error(downloadError?.message ?? 'Import source missing.');
     const source = await sourceFile.text();
     const checksum = createHash('sha256').update(source, 'utf8').digest('hex');
@@ -192,7 +163,7 @@ export async function POST(request: NextRequest) {
     const kind = job.import_kind as WarehouseImportKind;
     const rows = parseCsv(source);
     const context = kind === 'products_opening_stock_v1'
-      ? await validationContext(admin)
+      ? await validationContext(userClient)
       : undefined;
     const result = validateImportRows(kind, rows, context);
     if (result.rejectedRows > 0) return errorResponse('Import source no longer validates.', 409);

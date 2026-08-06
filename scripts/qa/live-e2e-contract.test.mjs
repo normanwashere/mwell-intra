@@ -815,6 +815,10 @@ test("the UI and live harness cover mobile names, controlled accounting, and com
   assert.match(harness, /getByLabel\("Department"\)\.selectOption\("marketing"\)/);
   assert.match(harness, /readinessDialog\.waitFor\(\{ state: "detached"/);
   assert.match(harness, /priceDialog\.waitFor\(\{ state: "detached"/);
+  assert.match(
+    harness,
+    /acceptanceHeading[\s\S]*waitFor\(\{ state: "visible", timeout: 25_000 \}\)/,
+  );
 });
 
 test("the live harness verifies deployed identity before browser launch", async () => {

@@ -4835,7 +4835,15 @@ async function task3GoodsAcceptance(
     },
   );
   await waitForMeaningfulRoute(page);
-  if (!/goods acceptance/i.test(await page.locator("body").innerText()))
+  const acceptanceHeading = page.getByRole("heading", {
+    name: "Goods acceptance",
+    exact: true,
+  });
+  const acceptanceRendered = await acceptanceHeading
+    .waitFor({ state: "visible", timeout: 25_000 })
+    .then(() => true)
+    .catch(() => false);
+  if (!acceptanceRendered)
     throw new Error(`${workflowName} did not render the scoped acceptance UI.`);
   const projection = await callRpcAsBrowserUser(
     page,
