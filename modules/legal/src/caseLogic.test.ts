@@ -299,6 +299,13 @@ describe('evidence + progress', () => {
     expect(progress.ratio).toBe(0);
   });
 
+  it('does not present an empty checklist as fully approved', () => {
+    const progress = computeCaseProgress([], { docs: [], signed: [] });
+
+    expect(progress.total).toBe(0);
+    expect(progress.ratio).toBe(0);
+  });
+
   it('normalizes live-only submitted checklist states back to pending', () => {
     expect(normalizeChecklistDecision('submitted')).toBe('pending');
     expect(normalizeChecklistDecision('approved')).toBe('approved');

@@ -308,7 +308,7 @@ export function computeCaseProgress(
         pending,
         submitted,
         expiringSoon,
-        ratio: required.length ? requiredApproved / required.length : 1,
+        ratio: required.length ? requiredApproved / required.length : 0,
       };
     });
 
@@ -331,7 +331,7 @@ export function computeCaseProgress(
     rejected: items.filter((i) => i.decision === 'rejected').length,
     submitted: awaitingReview.length,
     expiringSoon: items.filter((i) => itemExpiringSoon(i, evidence)).length,
-    ratio: required.length ? requiredApproved.length / required.length : 1,
+    ratio: required.length ? requiredApproved.length / required.length : 0,
     groups,
     outstanding,
     awaitingReview,
