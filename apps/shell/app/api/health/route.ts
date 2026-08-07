@@ -145,6 +145,9 @@ export async function GET(request: NextRequest) {
       clientAuth,
       staticAssets,
       features: {
+        notifications: process.env.NEXT_PUBLIC_ENABLE_NOTIFICATIONS === 'true'
+          ? 'configured' as FeatureStatus
+          : 'missing' as FeatureStatus,
         vendorInviteDelivery: SUPABASE_URL && SUPABASE_ANON_KEY
           ? 'configured' as FeatureStatus
           : 'missing' as FeatureStatus,

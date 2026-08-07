@@ -36,6 +36,11 @@ test("deployment gate waits until health reports the exact GitHub SHA", async ()
       calls += 1;
       return Response.json({
         deployment: { appEnv: "uat", supabaseProjectRef: "uatprojectref" },
+        features: {
+          notifications: "configured",
+          serviceWorker: "configured",
+          vendorInviteDelivery: "configured",
+        },
         commit: calls === 1 ? "b".repeat(40) : expectedCommit,
       });
     },
@@ -43,6 +48,7 @@ test("deployment gate waits until health reports the exact GitHub SHA", async ()
 
   assert.equal(calls, 2);
   assert.equal(result.commit, expectedCommit);
+  assert.equal(result.features.notifications, "configured");
   assert.equal(result.ready, true);
   assert.equal(observations[0].ready, false);
 });

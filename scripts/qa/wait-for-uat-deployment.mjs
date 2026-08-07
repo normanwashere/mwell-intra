@@ -46,6 +46,7 @@ export async function waitForExactDeployment({
         const appEnv = payload?.deployment?.appEnv;
         const projectRef = payload?.deployment?.supabaseProjectRef;
         const commit = payload?.commit;
+        const features = payload?.features;
         if (appEnv && appEnv !== expectedAppEnv)
           throw new Error(
             `Wrong APP_ENV: expected ${expectedAppEnv}, received ${appEnv}.`,
@@ -57,7 +58,10 @@ export async function waitForExactDeployment({
         if (
           appEnv === expectedAppEnv &&
           projectRef === expectedProjectRef &&
-          commit === expectedCommit
+          commit === expectedCommit &&
+          features?.notifications === "configured" &&
+          features?.serviceWorker === "configured" &&
+          features?.vendorInviteDelivery === "configured"
         ) {
           const result = {
             ready: true,
@@ -67,11 +71,12 @@ export async function waitForExactDeployment({
             appEnv,
             projectRef,
             commit,
+            features,
           };
           onAttempt(result);
           return result;
         }
-        lastObservation = `health commit ${String(commit ?? "missing")} (waiting for ${expectedCommit})`;
+        lastObservation = `health commit ${String(commit ?? "missing")} (waiting for ${expectedCommit}); features notifications=${String(features?.notifications ?? "missing")}, serviceWorker=${String(features?.serviceWorker ?? "missing")}, vendorInviteDelivery=${String(features?.vendorInviteDelivery ?? "missing")}`;
       } else {
         lastObservation = `health returned HTTP ${response.status}`;
       }

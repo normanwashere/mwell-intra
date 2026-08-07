@@ -15,6 +15,7 @@ describe('GET /api/health', () => {
 
   beforeEach(() => {
     process.env.APP_ENV = 'uat';
+    process.env.NEXT_PUBLIC_ENABLE_NOTIFICATIONS = 'true';
     vi.stubGlobal('fetch', vi.fn(async (input: URL | RequestInfo) => {
       const url = String(input);
       if (url.endsWith('/auth/v1/health')) {
@@ -38,6 +39,7 @@ describe('GET /api/health', () => {
 
   afterEach(() => {
     delete process.env.APP_ENV;
+    delete process.env.NEXT_PUBLIC_ENABLE_NOTIFICATIONS;
     vi.unstubAllGlobals();
   });
 
@@ -51,6 +53,7 @@ describe('GET /api/health', () => {
       appEnv: 'uat',
       supabaseProjectRef: 'uatref123',
     });
+    expect(body.features.notifications).toBe('configured');
     expect(JSON.stringify(body)).not.toContain('anon-secret-value');
   });
 });
