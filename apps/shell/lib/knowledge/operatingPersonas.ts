@@ -167,10 +167,10 @@ export const OPERATING_PERSONA_GUIDES: Record<string, OperatingPersonaGuide> = {
       ),
       task(
         "request-stock",
-        "Request or reserve stock",
-        "Reserve available inventory for approved business demand.",
-        "/warehouse/allocations",
-        "warehouse-allocations",
+        "Request stock",
+        "Submit approved business demand for Operations to allocate and issue.",
+        "/warehouse/fulfillment",
+        "warehouse-fulfillment",
       ),
       task(
         "request-event",
@@ -247,7 +247,7 @@ export const OPERATING_PERSONA_GUIDES: Record<string, OperatingPersonaGuide> = {
         "review-adjustment",
         "Review a stock adjustment",
         "Confirm count evidence and decide the controlled inventory change.",
-        "/warehouse/stock-approvals",
+        "/warehouse/approvals",
         "warehouse-approvals",
       ),
       task(
@@ -308,8 +308,8 @@ export const OPERATING_PERSONA_GUIDES: Record<string, OperatingPersonaGuide> = {
     tasks: [
       task(
         "review-finance-work",
-        "Review the Finance queue",
-        "See procurement and warehouse items that need financial control.",
+        "Run Finance control and close",
+        "Review procurement and warehouse activity, then prepare valuation, COGS, expense, write-off, and event-settlement close entries.",
         "/finance",
         "warehouse-finance",
       ),
@@ -323,8 +323,8 @@ export const OPERATING_PERSONA_GUIDES: Record<string, OperatingPersonaGuide> = {
       task(
         "review-warehouse",
         "Review inventory control",
-        "Review valuation, reconciliation, and supported warehouse adjustments.",
-        "/warehouse/finance",
+        "Review valuation, reconciliation, supported warehouse adjustments, and close evidence in the unified Finance workspace.",
+        "/finance",
         "warehouse-finance",
       ),
       task(
@@ -350,7 +350,7 @@ export const OPERATING_PERSONA_GUIDES: Record<string, OperatingPersonaGuide> = {
         "invite-vendor",
         "Invite a vendor",
         "Create a controlled invitation for the correct vendor contact.",
-        "/legal/invitations/new",
+        "/legal/invites/new",
         "legal-invite-vendor",
       ),
       task(
@@ -381,24 +381,24 @@ export const OPERATING_PERSONA_GUIDES: Record<string, OperatingPersonaGuide> = {
       ),
       task(
         "reserve-event-stock",
-        "Reserve event stock",
-        "Link approved demand to available promotional or operational inventory.",
-        "/warehouse/events",
-        "warehouse-events",
+        "Request event stock",
+        "Submit approved event demand for Operations to reserve, pick, and issue.",
+        "/events",
+        "events-workspace",
       ),
       task(
         "track-fulfillment",
         "Track event fulfillment",
-        "Follow the warehouse handoff from allocation through accountable issue.",
-        "/warehouse/fulfillment",
-        "warehouse-fulfillment",
+        "Follow the Operations handoff and issued quantities from the event record.",
+        "/events",
+        "events-workspace",
       ),
       task(
         "reconcile-event",
         "Reconcile an event",
-        "Record sales, giveaways, returns, losses, and remaining custody.",
-        "/warehouse/events",
-        "warehouse-events",
+        "Record sales, giveaways, returns, losses, damage, and re-kitting, then submit the balanced settlement for independent Finance approval before closure.",
+        "/events",
+        "events-workspace",
       ),
     ],
   },
@@ -415,7 +415,7 @@ export const OPERATING_PERSONA_GUIDES: Record<string, OperatingPersonaGuide> = {
       task(
         "decide-launch",
         "Record a go-live decision",
-        "Approve, return, or block launch based on complete readiness evidence.",
+        "Approve or reject launch based on complete readiness evidence and an attributable decision note.",
         "/product",
         "product-governance",
       ),

@@ -41,4 +41,50 @@ describe("operating persona guide contracts", () => {
       }
     }
   });
+
+  it("routes audited persona tasks to their implemented workspaces", () => {
+    const taskHref = (personaId: string, taskId: string) =>
+      OPERATING_PERSONA_GUIDES[personaId]?.tasks.find(
+        (task) => task.id === taskId,
+      )?.workspaceHref;
+
+    expect(taskHref("general_employee", "request-stock")).toBe(
+      "/warehouse/fulfillment",
+    );
+    expect(taskHref("operations_lead", "review-adjustment")).toBe(
+      "/warehouse/approvals",
+    );
+    expect(taskHref("legal_compliance_lead", "invite-vendor")).toBe(
+      "/legal/invites/new",
+    );
+  });
+
+  it("keeps event, finance, and product guidance aligned with implemented controls", () => {
+    const marketingTasks =
+      OPERATING_PERSONA_GUIDES.marketing_events_lead!.tasks;
+    expect(marketingTasks.map((task) => task.workspaceHref)).toEqual([
+      "/events",
+      "/events",
+      "/events",
+      "/events",
+    ]);
+    expect(
+      marketingTasks.find((task) => task.id === "reconcile-event")?.summary,
+    ).toMatch(/Finance approval before closure/i);
+
+    const financeTasks = OPERATING_PERSONA_GUIDES.finance_controller!.tasks;
+    expect(
+      financeTasks.find((task) => task.id === "review-finance-work")?.summary,
+    ).toMatch(/valuation, COGS, expense, write-off, and event-settlement/i);
+    expect(
+      financeTasks.find((task) => task.id === "review-warehouse")
+        ?.workspaceHref,
+    ).toBe("/finance");
+
+    expect(
+      OPERATING_PERSONA_GUIDES.product_owner!.tasks.find(
+        (task) => task.id === "decide-launch",
+      )?.summary,
+    ).toMatch(/Approve or reject launch/i);
+  });
 });

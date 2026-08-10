@@ -12,17 +12,47 @@ import { Button, Card, Field, HeroStat, Icon, Input } from "@intra/ui";
 import { useSession } from "@intra/auth";
 import { MwellIntraLogo } from "@shell/components/MwellIntraLogo";
 
+const hasUnsafePathCharacter = (value: string) =>
+  value.includes("\\") ||
+  Array.from(value).some((character) => {
+    const code = character.charCodeAt(0);
+    return code <= 31 || code === 127;
+  });
+
+export function getSafeResetNextPath(
+  requestedNext: string | null | undefined,
+): string {
+  if (!requestedNext) return "/";
+
+  let candidate = requestedNext;
+  for (let pass = 0; pass < 5; pass += 1) {
+    if (
+      !candidate.startsWith("/") ||
+      candidate.startsWith("//") ||
+      candidate.includes("://") ||
+      hasUnsafePathCharacter(candidate)
+    ) {
+      return "/";
+    }
+
+    try {
+      const decoded = decodeURIComponent(candidate);
+      if (decoded === candidate) return requestedNext;
+      candidate = decoded;
+    } catch {
+      return "/";
+    }
+  }
+
+  return "/";
+}
+
 export default function ResetPasswordPage() {
   const { mode, changePassword } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
   const requestedNext = searchParams?.get("next");
-  const nextPath =
-    requestedNext?.startsWith("/") &&
-    !requestedNext.startsWith("//") &&
-    !requestedNext.includes("://")
-      ? requestedNext
-      : "/";
+  const nextPath = getSafeResetNextPath(requestedNext);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
