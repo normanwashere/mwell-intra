@@ -190,8 +190,8 @@ describe("Knowledge Base content", () => {
       ),
     ).toMatchObject({ availability: "live" });
   });
-  it("defines explicit operating data for all 39 role profiles", () => {
-    expect(KNOWLEDGE_GUIDE_CONTENT.roles).toHaveLength(39);
+  it("defines explicit operating data for all 40 role profiles", () => {
+    expect(KNOWLEDGE_GUIDE_CONTENT.roles).toHaveLength(40);
     for (const role of KNOWLEDGE_GUIDE_CONTENT.roles) {
       expect(role.dailyTasks.length, `${role.id} daily tasks`).toBeGreaterThan(
         0,
@@ -216,7 +216,7 @@ describe("Knowledge Base content", () => {
           JSON.stringify([role.dailyTasks, role.responsibilityStages]),
         ),
       ).size,
-    ).toBe(39);
+    ).toBe(40);
   });
 
   it("defines exact policy and flow relationships for all 65 feature profiles", () => {
@@ -329,7 +329,7 @@ describe("Knowledge Base content", () => {
     }
   });
   it("covers every production persona with valid articles and flows", () => {
-    expect(KNOWLEDGE_CONTENT.roles).toHaveLength(33);
+    expect(KNOWLEDGE_CONTENT.roles).toHaveLength(34);
     expect(validateKnowledgeBase(KNOWLEDGE_CONTENT)).toEqual([]);
     expect(validateKnowledgeContent(KNOWLEDGE_CONTENT)).toEqual([]);
   });

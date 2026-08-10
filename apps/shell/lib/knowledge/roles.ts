@@ -472,6 +472,24 @@ const ROLE_OPERATING_DETAILS: Record<string, RoleOperatingDetails> = {
       ),
     ],
   },
+  events_finance_reviewer: {
+    dailyTasks: [
+      "Review submitted event outcomes, custody totals, financial evidence, and unresolved variances.",
+      "Approve or return a balanced settlement independently from its preparer.",
+    ],
+    responsibilityStages: [
+      stage(
+        "Review settlement evidence",
+        "Compare issued quantities with sales, giveaways, returns, losses, damage, re-kitting, and the submitted financial references.",
+        "The settlement is balanced and supported, or its exact blocker is recorded.",
+      ),
+      stage(
+        "Decide independently",
+        "Approve the submitted settlement only when the preparer is a different actor and every required source is current.",
+        "The event can proceed to coordinator closure with an attributable Finance decision.",
+      ),
+    ],
+  },
   events_admin: {
     dailyTasks: [
       "Administer event lifecycle access and recover controlled event failures.",
@@ -1629,6 +1647,33 @@ export const LIVE_KNOWLEDGE_ROLES: KnowledgeRole[] = [
       downstreamRoleIds: ["events_coordinator"],
       escalation:
         "Escalate incorrect event data to the Event Coordinator with the event reference.",
+    },
+  }),
+  liveRole({
+    id: "events_finance_reviewer",
+    rbacModule: "events",
+    rbacRole: "finance_reviewer",
+    label: "Finance settlement reviewer",
+    module: "events",
+    purpose:
+      "Independently review and decide submitted event settlements without receiving event-management or Warehouse custody authority.",
+    authority: {
+      accessibleRoutes: ["/events"],
+      canDo: [
+        "View event lifecycle and fulfillment totals.",
+        "Approve or return a submitted, balanced event settlement prepared by another actor.",
+      ],
+      cannotDo: [
+        "Do not create, manage, fulfill, or close an event through this role.",
+        "Do not approve a settlement you prepared or clear a variance by changing Warehouse custody evidence.",
+      ],
+      decisions: [
+        "Decide whether submitted event outcome and financial evidence are complete, balanced, current, and independently reviewable.",
+      ],
+      upstreamRoleIds: ["events_coordinator", "warehouse_finance"],
+      downstreamRoleIds: ["events_coordinator", "warehouse_finance"],
+      escalation:
+        "Return incomplete or unbalanced evidence to the Event Coordinator and escalate material financial variance to the accountable Finance control owner.",
     },
   }),
   liveRole({

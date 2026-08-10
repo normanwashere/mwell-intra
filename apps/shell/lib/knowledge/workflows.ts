@@ -1144,6 +1144,7 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
     [
       "events_requester",
       "events_coordinator",
+      "events_finance_reviewer",
       "warehouse_business_unit",
       "warehouse_marketing",
       "warehouse_operations",
@@ -1187,16 +1188,24 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
       decision(
         "event-reconciled",
         "Does event usage reconcile?",
-        ["warehouse_marketing", "warehouse_operations"],
-        "Compare issued, consumed, returned, damaged, and missing quantities against the event record.",
-        "warehouse_operations",
-        "Event reconciliation control: every issued unit must be consumed, returned, or recorded as an accountable variance.",
+        [
+          "warehouse_marketing",
+          "warehouse_operations",
+          "events_finance_reviewer",
+        ],
+        "Compare issued, consumed, returned, damaged, and missing quantities against the event record, then require independent Finance approval of the balanced settlement before closure.",
+        "events_finance_reviewer",
+        "Event reconciliation control: every issued unit must be consumed, returned, or recorded as an accountable variance, and the preparer cannot approve the settlement.",
       ),
       terminal(
         "event-fulfilled",
         "Event inventory closed",
-        ["warehouse_marketing", "warehouse_operations"],
-        "Issued, consumed, and returned quantities reconcile with custody evidence.",
+        [
+          "warehouse_marketing",
+          "warehouse_operations",
+          "events_finance_reviewer",
+        ],
+        "Issued, consumed, and returned quantities reconcile with custody evidence and the independent Finance settlement decision is complete.",
         "complete",
       ),
       terminal(
@@ -2206,6 +2215,7 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
       "events_requester",
       "events_coordinator",
       "events_viewer",
+      "events_finance_reviewer",
       "events_admin",
       "warehouse_marketing",
       "warehouse_business_unit",
