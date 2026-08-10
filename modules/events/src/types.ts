@@ -62,14 +62,17 @@ export interface EventReconciliation {
   financeReference?: string;
   evidenceUrl?: string;
   note?: string;
+  preparedBy?: string;
   approvedAt?: string;
+  updatedAt: string;
 }
 
 export interface SaveEventReconciliationInput extends Omit<
   EventReconciliation,
-  "status" | "approvedAt"
+  "status" | "preparedBy" | "approvedAt" | "updatedAt"
 > {
   action: "save" | "submit" | "approve";
+  expectedUpdatedAt?: string;
 }
 export interface EventsData {
   events: EventRecord[];

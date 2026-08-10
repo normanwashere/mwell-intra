@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 import { useSession } from "@intra/auth";
-import { can } from "@intra/rbac";
 import {
   Badge,
   Card,
@@ -19,6 +18,7 @@ import {
   useToast,
 } from "@intra/ui";
 import {
+  canApproveEventSettlement,
   canAccessEvents,
   canCloseEvents,
   canCreateEvents,
@@ -197,9 +197,7 @@ export function EventsApp({
   const mayManage = canManageEvents(userRoles);
   const mayClose = canCloseEvents(userRoles);
   const mayRequest = canRequestEventFulfillment(userRoles);
-  const mayApproveReconciliation =
-    can(userRoles, "warehouse", "view_finance") ||
-    can(userRoles, "procurement", "view_finance");
+  const mayApproveReconciliation = canApproveEventSettlement(userRoles);
   const reconciliation = data.reconciliations?.find(
     (record) => record.eventId === selectedEvent?.id,
   );
@@ -345,6 +343,7 @@ export function EventsApp({
       await saveReconciliation({
         eventId: selectedEvent.id,
         action: reconciliationAction,
+        expectedUpdatedAt: reconciliation?.updatedAt,
         ...reconciliationDraft,
       });
       toast.success(

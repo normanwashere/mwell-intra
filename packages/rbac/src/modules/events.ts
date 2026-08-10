@@ -6,9 +6,10 @@ export type EventsCapability =
   | 'manage_events'
   | 'request_fulfillment'
   | 'close_event'
+  | 'approve_settlement'
   | 'admin';
 
-export type EventsRole = 'requester' | 'coordinator' | 'viewer' | 'admin';
+export type EventsRole = 'requester' | 'coordinator' | 'viewer' | 'finance_reviewer' | 'admin';
 
 const EVENTS_CAPABILITIES = [
   'view_events',
@@ -16,6 +17,7 @@ const EVENTS_CAPABILITIES = [
   'manage_events',
   'request_fulfillment',
   'close_event',
+  'approve_settlement',
   'admin',
 ] as const satisfies readonly EventsCapability[];
 
@@ -49,10 +51,15 @@ export const eventsModule: ModuleDefinition<
       description: 'Reviews event plans and fulfillment status.',
       capabilities: ['view_events'],
     },
+    finance_reviewer: {
+      label: 'Finance Settlement Reviewer',
+      description: 'Reviews submitted event outcomes and independently approves complete settlement evidence.',
+      capabilities: ['view_events', 'approve_settlement'],
+    },
     admin: {
       label: 'Events Administrator',
       description: 'Full event workspace administration.',
-      capabilities: [...EVENTS_CAPABILITIES],
+      capabilities: EVENTS_CAPABILITIES.filter((capability) => capability !== 'approve_settlement'),
     },
   },
 };

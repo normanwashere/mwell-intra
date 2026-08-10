@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { filterFinanceActivity, scopeFinanceData, summarizeFinanceData } from './data';
+import {
+  filterFinanceActivity,
+  manageLiveFinanceCloseEntry,
+  scopeFinanceData,
+  summarizeFinanceData,
+} from './data';
 import { FINANCE_DEMO_DATA } from './seed';
 
 describe('summarizeFinanceData', () => {
@@ -14,6 +19,53 @@ describe('summarizeFinanceData', () => {
       returnedCount: 1,
       acceptedCount: 0,
     });
+  });
+});
+
+describe('manageLiveFinanceCloseEntry', () => {
+  it('passes the current row timestamp to governed transitions', async () => {
+    const calls: unknown[] = [];
+    const client = {
+      schema: () => ({
+        rpc: async (_name: string, args: unknown) => {
+          calls.push(args);
+          return {
+            data: {
+              id: 'close-1',
+              period_start: '2026-08-01',
+              period_end: '2026-08-31',
+              entry_type: 'cogs',
+              source_module: 'warehouse',
+              source_reference: 'AUG-2026',
+              amount: 100,
+              status: 'posted',
+              prepared_by: 'finance-a',
+              prepared_at: '2026-08-10T01:00:00Z',
+              posted_by: 'finance-b',
+              posted_at: '2026-08-10T02:00:00Z',
+              updated_at: '2026-08-10T02:00:00Z',
+            },
+            error: null,
+          };
+        },
+      }),
+    };
+
+    await manageLiveFinanceCloseEntry(client as never, {
+      action: 'post',
+      id: 'close-1',
+      expectedUpdatedAt: '2026-08-10T01:00:00Z',
+    });
+
+    expect(calls).toEqual([
+      {
+        payload: expect.objectContaining({
+          action: 'post',
+          id: 'close-1',
+          expected_updated_at: '2026-08-10T01:00:00Z',
+        }),
+      },
+    ]);
   });
 });
 

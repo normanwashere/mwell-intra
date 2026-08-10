@@ -278,6 +278,7 @@ test("covers the implemented workflow role families with eleven lean personas", 
     "events:requester",
     "events:coordinator",
     "events:viewer",
+    "events:finance_reviewer",
     "events:admin",
     "insights:analyst",
     "insights:manager",
@@ -292,6 +293,7 @@ test("covers the implemented workflow role families with eleven lean personas", 
     core: ["staff"],
     procurement: ["finance"],
     warehouse: ["finance"],
+    events: ["finance_reviewer"],
   });
 });
 

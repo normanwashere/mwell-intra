@@ -31,6 +31,7 @@
     "verify:warehouse-w1-contract": "node scripts/verify-warehouse-w1-contract.mjs",
     "verify:cross-department-wms": "node --test scripts/verify-cross-department-wms.test.mjs",
     "verify:operational-flows": "node --test scripts/verify-operational-flow-completion.test.mjs",
+    "verify:finance-event-authority": "node --test scripts/verify-finance-event-authority-remediation.test.mjs",
     "verify:insights-read-only": "node --test scripts/verify-insights-read-only.test.mjs",
     "verify:launch-artifacts": "node scripts/verify-launch-artifacts.mjs",
     "verify:supabase-advisors": "node scripts/qa/snapshot-supabase-advisors.mjs",

@@ -33,7 +33,7 @@ describe("warehouse parity vs source roles.ts", () => {
   });
 
   it("has the source capabilities, W1 controls, and request-only handoffs", () => {
-    expect(warehouseModule.capabilities).toHaveLength(27);
+    expect(warehouseModule.capabilities).toHaveLength(28);
     expect([...warehouseModule.capabilities].sort()).toEqual(
       [
         "view_dashboard",
@@ -51,6 +51,7 @@ describe("warehouse parity vs source roles.ts", () => {
         "issue_items",
         "transfer_stock",
         "view_finance",
+        "manage_finance_close",
         "view_analytics",
         "view_procurement",
         "view_pricing",
@@ -133,6 +134,7 @@ describe("warehouse parity vs source roles.ts", () => {
       "view_dashboard",
       "view_inventory",
       "view_finance",
+      "manage_finance_close",
       "approve_stock_adjustment_finance",
       "view_exceptions",
     ],
@@ -157,7 +159,8 @@ describe("warehouse parity vs source roles.ts", () => {
       "view_finance",
     ],
     warehouse_admin: warehouseModule.capabilities.filter(
-      (capability) => capability !== "set_pricing",
+      (capability) =>
+        capability !== "set_pricing" && capability !== "manage_finance_close",
     ),
   };
 
@@ -348,11 +351,29 @@ describe("toRoleCapabilityRows() — DB seed shape", () => {
 describe("events and insights workspace matrices", () => {
   it("exposes the event lifecycle roles", () => {
     expect(listModuleRoles("events").sort()).toEqual(
-      ["admin", "coordinator", "requester", "viewer"].sort(),
+      [
+        "admin",
+        "coordinator",
+        "finance_reviewer",
+        "requester",
+        "viewer",
+      ].sort(),
     );
     expect(hasCapInModule("events", "requester", "create_event")).toBe(true);
     expect(hasCapInModule("events", "requester", "close_event")).toBe(false);
     expect(hasCapInModule("events", "coordinator", "close_event")).toBe(true);
+    expect(
+      hasCapInModule("events", "finance_reviewer", "approve_settlement"),
+    ).toBe(true);
+    expect(hasCapInModule("events", "finance_reviewer", "manage_events")).toBe(
+      false,
+    );
+    expect(hasCapInModule("events", "viewer", "approve_settlement")).toBe(
+      false,
+    );
+    expect(hasCapInModule("events", "admin", "approve_settlement")).toBe(
+      false,
+    );
   });
 
   it("keeps insight audiences least-privileged", () => {

@@ -8,6 +8,7 @@ import {
   loadMemoryEvents,
   manageLiveEvent,
   requestEventFulfillment,
+  saveLiveEventReconciliation,
   saveMemoryEvents,
   validateEventDraft,
   validateEventDraftFields,
@@ -269,6 +270,57 @@ describe('event lifecycle rules', () => {
       name: 'request_event_fulfillment',
       payload: { event_id: 'evt-1', idempotency_key: 'event-request-1' },
     });
+  });
+
+  it('passes the current reconciliation timestamp to settlement approval', async () => {
+    const calls: Array<{ name: string; payload: unknown }> = [];
+    const client = {
+      schema: () => ({
+        rpc: async (name: string, args: { payload: unknown }) => {
+          calls.push({ name, payload: args.payload });
+          return {
+            data: {
+              event_id: 'evt-1',
+              status: 'approved',
+              sold_units: 1,
+              giveaway_units: 0,
+              returned_units: 0,
+              lost_units: 0,
+              damaged_units: 0,
+              rekit_units: 0,
+              gross_sales_amount: 500,
+              prepared_by: 'marketing-user',
+              approved_at: '2026-08-10T03:00:00Z',
+              updated_at: '2026-08-10T03:00:00Z',
+            },
+            error: null,
+          };
+        },
+      }),
+    };
+
+    await saveLiveEventReconciliation(client as never, {
+      eventId: 'evt-1',
+      action: 'approve',
+      soldUnits: 1,
+      giveawayUnits: 0,
+      returnedUnits: 0,
+      lostUnits: 0,
+      damagedUnits: 0,
+      rekitUnits: 0,
+      grossSalesAmount: 500,
+      expectedUpdatedAt: '2026-08-10T02:00:00Z',
+    });
+
+    expect(calls).toEqual([
+      {
+        name: 'save_event_reconciliation',
+        payload: expect.objectContaining({
+          action: 'approve',
+          expected_updated_at: '2026-08-10T02:00:00Z',
+        }),
+      },
+    ]);
   });
 
   it('defines audited lifecycle and event-linked handoff database controls', () => {

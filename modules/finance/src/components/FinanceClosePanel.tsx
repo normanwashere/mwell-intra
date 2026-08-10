@@ -29,9 +29,11 @@ const ENTRY_LABEL: Record<FinanceCloseEntryType, string> = {
 export function FinanceClosePanel({
   entries,
   manage,
+  canManage,
 }: {
   entries: FinanceCloseEntry[];
   manage: (input: ManageFinanceCloseEntryInput) => Promise<FinanceCloseEntry>;
+  canManage: boolean;
 }) {
   const toast = useToast();
   const [open, setOpen] = useState(false);
@@ -60,6 +62,7 @@ export function FinanceClosePanel({
       await manage({
         action,
         id: entry.id,
+        expectedUpdatedAt: entry.updatedAt,
         reconciliationNote:
           action === "exception"
             ? "Flagged for correction from Finance close."
@@ -130,20 +133,26 @@ export function FinanceClosePanel({
             settlement in one governed queue.
           </p>
         </div>
-        <button
-          type="button"
-          className="btn-primary w-full sm:w-auto"
-          onClick={() => setOpen(true)}
-        >
-          <Icon name="plus" className="h-4 w-4" /> Prepare close entry
-        </button>
+        {canManage && (
+          <button
+            type="button"
+            className="btn-primary w-full sm:w-auto"
+            onClick={() => setOpen(true)}
+          >
+            <Icon name="plus" className="h-4 w-4" /> Prepare close entry
+          </button>
+        )}
       </div>
 
       {entries.length === 0 ? (
         <EmptyState
           icon="coins"
           title="No close entries"
-          message="Prepare the first evidence-backed period entry. A second Finance user posts it."
+          message={
+            canManage
+              ? "Prepare the first evidence-backed period entry. A second Finance user posts it."
+              : "No close entries are available in your current Finance scope."
+          }
         />
       ) : (
         <div className="grid gap-3 xl:grid-cols-2">
@@ -178,45 +187,47 @@ export function FinanceClosePanel({
                     {money(entry.amount)}
                   </p>
                 </div>
-                <div className="flex flex-wrap justify-end gap-2">
-                  {entry.status === "ready" && (
-                    <button
-                      type="button"
-                      className="btn-outline btn-sm"
-                      disabled={workingId === entry.id}
-                      onClick={() => void transition(entry, "post")}
-                    >
-                      Post
-                    </button>
-                  )}
-                  {entry.status === "posted" && (
-                    <button
-                      type="button"
-                      className="btn-primary btn-sm"
-                      disabled={workingId === entry.id}
-                      onClick={() => void transition(entry, "reconcile")}
-                    >
-                      Reconcile
-                    </button>
-                  )}
-                  {!["reconciled", "exception"].includes(entry.status) && (
-                    <button
-                      type="button"
-                      className="btn-ghost btn-sm text-rose-700 dark:text-rose-300"
-                      disabled={workingId === entry.id}
-                      onClick={() => void transition(entry, "exception")}
-                    >
-                      Flag
-                    </button>
-                  )}
-                </div>
+                {canManage && (
+                  <div className="flex flex-wrap justify-end gap-2">
+                    {entry.status === "ready" && (
+                      <button
+                        type="button"
+                        className="btn-outline btn-sm"
+                        disabled={workingId === entry.id}
+                        onClick={() => void transition(entry, "post")}
+                      >
+                        Post
+                      </button>
+                    )}
+                    {entry.status === "posted" && (
+                      <button
+                        type="button"
+                        className="btn-primary btn-sm"
+                        disabled={workingId === entry.id}
+                        onClick={() => void transition(entry, "reconcile")}
+                      >
+                        Reconcile
+                      </button>
+                    )}
+                    {!["reconciled", "exception"].includes(entry.status) && (
+                      <button
+                        type="button"
+                        className="btn-ghost btn-sm text-rose-700 dark:text-rose-300"
+                        disabled={workingId === entry.id}
+                        onClick={() => void transition(entry, "exception")}
+                      >
+                        Flag
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             </Card>
           ))}
         </div>
       )}
 
-      <Sheet
+      {canManage && <Sheet
         open={open}
         onOpenChange={setOpen}
         title="Prepare Finance close entry"
@@ -379,7 +390,7 @@ export function FinanceClosePanel({
             />
           </Field>
         </form>
-      </Sheet>
+      </Sheet>}
     </section>
   );
 }

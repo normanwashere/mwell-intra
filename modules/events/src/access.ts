@@ -19,3 +19,7 @@ export function canCloseEvents(userRoles: Partial<UserRoles>): boolean {
 export function canRequestEventFulfillment(userRoles: Partial<UserRoles>): boolean {
   return can(userRoles, 'events', 'request_fulfillment');
 }
+
+export function canApproveEventSettlement(userRoles: Partial<UserRoles>): boolean {
+  return can(userRoles, 'events', 'approve_settlement');
+}

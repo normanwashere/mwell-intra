@@ -32,6 +32,7 @@ const GUIDANCE: Record<string, CapabilityGuidance> = {
   "warehouse:issue_items": { label: "Issue items", description: "Transfer custody of allocated items to an approved recipient." },
   "warehouse:transfer_stock": { label: "Transfer stock", description: "Move inventory between approved locations with ledger traceability." },
   "warehouse:view_finance": { label: "View warehouse finance", description: "View authorized valuation, costing, and reconciliation information." },
+  "warehouse:manage_finance_close": { label: "Manage Finance close", description: "Prepare, post, reconcile, or flag evidence-backed close entries with segregation of duties." },
   "warehouse:view_analytics": { label: "View warehouse analytics", description: "View inventory movement, consumption, and utilization analysis." },
   "warehouse:view_procurement": { label: "View replenishment planning", description: "View reorder needs, supplier context, and stockout risk." },
   "warehouse:view_pricing": { label: "View pricing", description: "View authorized landed cost, price, and margin information." },
@@ -53,6 +54,7 @@ const GUIDANCE: Record<string, CapabilityGuidance> = {
   "procurement:manage_vendors": { label: "Coordinate vendors", description: "Use eligible vendor records during sourcing and purchasing work." },
   "procurement:view_finance": { label: "Review procurement finance", description: "Review commercial values and payment-readiness evidence." },
   "procurement:admin": { label: "Administer procurement", description: "Configure and oversee procurement functions within approved policy." },
+  "events:approve_settlement": { label: "Approve event settlements", description: "Independently approve a submitted event settlement after verifying outcomes and Finance evidence." },
 
   "legal:view_dashboard": { label: "View legal dashboard", description: "View accreditation workload, evidence status, and pending decisions." },
   "legal:review_accreditation": { label: "Review accreditation", description: "Review submitted vendor identity, risk, declarations, and evidence." },
@@ -70,7 +72,7 @@ const sentenceCase = (value: string) => {
 
 export function capabilityGuidance(
   capability: string,
-  module?: KnowledgeModule | "core" | "warehouse" | "procurement" | "legal",
+  module?: KnowledgeModule | "core" | "warehouse" | "procurement" | "legal" | "events",
 ): CapabilityGuidance {
   const match = module ? GUIDANCE[`${module}:${capability}`] : undefined;
   if (match) return match;

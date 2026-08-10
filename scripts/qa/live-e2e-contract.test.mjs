@@ -28,6 +28,7 @@ test("declares every current live role exactly once", () => {
   );
   assert.deepEqual(unifiedFinance?.assignments.warehouse, ["finance"]);
   assert.deepEqual(unifiedFinance?.assignments.procurement, ["finance"]);
+  assert.deepEqual(unifiedFinance?.assignments.events, ["finance_reviewer"]);
   assert.deepEqual(
     CURRENT_LIVE_ROLES.find((item) => item.role === "leadership_insights")
       ?.assignments.insights,

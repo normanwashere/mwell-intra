@@ -12,6 +12,7 @@ const state = vi.hoisted(() => ({
     loading: boolean;
     error: string | null;
     refresh: () => Promise<void>;
+    manageCloseEntry: ReturnType<typeof vi.fn>;
   },
 }));
 
@@ -70,6 +71,7 @@ describe('FinanceApp', () => {
       loading: false,
       error: null,
       refresh: vi.fn(async () => undefined),
+      manageCloseEntry: vi.fn(async () => undefined),
     };
   });
 
@@ -115,6 +117,14 @@ describe('FinanceApp', () => {
     expect(screen.getByText('Procurement Finance')).toBeInTheDocument();
     expect(screen.queryByText('Warehouse Finance')).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /stock adjustment approvals/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /prepare close entry/i })).not.toBeInTheDocument();
+  });
+
+  it('keeps Warehouse Pricing read-only in the Finance workspace', () => {
+    state.session = session({ core: ['staff'], warehouse: ['pricing'] });
+    renderFinanceApp();
+    expect(screen.getByText('Warehouse Finance')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /prepare close entry/i })).not.toBeInTheDocument();
   });
 
   it('keeps a Warehouse-only Finance user in Warehouse-owned workflows', () => {

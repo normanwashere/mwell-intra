@@ -119,11 +119,15 @@ describe("warehouse W1 capabilities", () => {
     expect(Object.keys(warehouseModule.roles)).toContain("warehouse_admin");
     expect(warehouseModule.roles.warehouse_admin.capabilities).toEqual(
       warehouseModule.capabilities.filter(
-        (capability) => capability !== "set_pricing",
+        (capability) =>
+          capability !== "set_pricing" && capability !== "manage_finance_close",
       ),
     );
     expect(warehouseModule.roles.warehouse_admin.capabilities).not.toContain(
       "set_pricing",
+    );
+    expect(warehouseModule.roles.warehouse_admin.capabilities).not.toContain(
+      "manage_finance_close",
     );
   });
 
@@ -154,6 +158,7 @@ describe("warehouse W1 capabilities", () => {
       true,
     );
     expect(can(finance, "warehouse", "release_quality_hold")).toBe(false);
+    expect(can(finance, "warehouse", "manage_finance_close")).toBe(true);
     expect(can(bi, "warehouse", "view_exceptions")).toBe(true);
     expect(can(bi, "warehouse", "resolve_exceptions")).toBe(false);
   });
@@ -166,8 +171,17 @@ describe("warehouse W1 capabilities", () => {
       expect(capabilities).not.toContain("manage_inventory");
       expect(capabilities).not.toContain("cycle_count");
       expect(capabilities).not.toContain("transfer_stock");
+      if (role === "pricing") {
+        expect(capabilities).not.toContain("manage_finance_close");
+      }
     },
   );
+
+  it("keeps Warehouse administration outside Finance close mutation", () => {
+    expect(
+      can(roles(["warehouse_admin"]), "warehouse", "manage_finance_close"),
+    ).toBe(false);
+  });
 
   it("does not grant import access to a Business Unit user", () => {
     expect(

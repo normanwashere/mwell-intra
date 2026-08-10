@@ -12,7 +12,7 @@ import {
 } from "@intra/ui";
 import { useSession } from "@intra/auth";
 import { can } from "@intra/rbac";
-import { canAccessFinanceRoles } from "./access";
+import { canAccessFinanceRoles, canManageFinanceCloseRoles } from "./access";
 import { summarizeFinanceData, useFinanceData } from "./data";
 import { FinanceActivityTable } from "./components/FinanceActivityTable";
 import { FinanceOverview } from "./components/FinanceOverview";
@@ -59,6 +59,7 @@ export function FinanceApp() {
 
   const warehouseFinance = can(userRoles, "warehouse", "view_finance");
   const procurementFinance = can(userRoles, "procurement", "view_finance");
+  const mayManageClose = canManageFinanceCloseRoles(userRoles);
   const summary = summarizeFinanceData(data);
   const nextReview = data.payments.find(
     (item) => item.status === "ready_for_finance",
@@ -175,6 +176,7 @@ export function FinanceApp() {
       <FinanceClosePanel
         entries={data.closeEntries}
         manage={manageCloseEntry}
+        canManage={mayManageClose}
       />
 
       <FinanceActivityTable activity={data.activity} />

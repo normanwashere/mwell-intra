@@ -73,6 +73,7 @@ export const CURRENT_LIVE_ROLES = [
       core: ["staff"],
       procurement: ["finance"],
       warehouse: ["finance"],
+      events: ["finance_reviewer"],
     },
     "finance",
     { title: "Finance Controller" },

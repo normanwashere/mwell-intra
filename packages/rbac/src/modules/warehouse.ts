@@ -22,6 +22,7 @@ export type WarehouseCapability =
   | "issue_items"
   | "transfer_stock"
   | "view_finance"
+  | "manage_finance_close"
   | "view_analytics"
   | "view_procurement"
   | "view_pricing"
@@ -73,6 +74,7 @@ const WAREHOUSE_CAPABILITIES = [
   "issue_items",
   "transfer_stock",
   "view_finance",
+  "manage_finance_close",
   "view_analytics",
   "view_procurement",
   "view_pricing",
@@ -88,7 +90,8 @@ const WAREHOUSE_CAPABILITIES = [
 ] as const satisfies readonly WarehouseCapability[];
 
 const WAREHOUSE_ADMIN_CAPABILITIES = WAREHOUSE_CAPABILITIES.filter(
-  (capability) => capability !== "set_pricing",
+  (capability) =>
+    capability !== "set_pricing" && capability !== "manage_finance_close",
 );
 
 const WAREHOUSE_OPERATOR_CAPABILITIES = [
@@ -171,6 +174,7 @@ export const warehouseModule: ModuleDefinition<
       capabilities: [
         ...ALL_INVENTORY,
         "view_finance",
+        "manage_finance_close",
         "approve_stock_adjustment_finance",
         "view_exceptions",
       ],

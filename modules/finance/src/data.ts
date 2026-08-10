@@ -187,6 +187,7 @@ function mapCloseEntry(row: UnknownRow): FinanceCloseEntry | null {
     preparedAt: text(row.prepared_at),
     postedBy: optionalText(row.posted_by),
     postedAt: optionalText(row.posted_at),
+    updatedAt: text(row.updated_at),
   };
 }
 
@@ -209,6 +210,7 @@ export async function manageLiveFinanceCloseEntry(
         amount: input.amount ?? null,
         evidence_url: input.evidenceUrl ?? null,
         reconciliation_note: input.reconciliationNote ?? null,
+        expected_updated_at: input.expectedUpdatedAt ?? null,
       },
     });
   if (error) throw error;
@@ -279,7 +281,7 @@ export async function loadLiveFinanceData(
           .schema("core")
           .from("finance_close_entries")
           .select(
-            "id,period_start,period_end,entry_type,source_module,source_reference,cost_center,amount,status,evidence_url,reconciliation_note,prepared_by,prepared_at,posted_by,posted_at",
+            "id,period_start,period_end,entry_type,source_module,source_reference,cost_center,amount,status,evidence_url,reconciliation_note,prepared_by,prepared_at,posted_by,posted_at,updated_at",
           )
           .order("period_end", { ascending: false })
           .limit(1000)

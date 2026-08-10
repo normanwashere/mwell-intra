@@ -6,3 +6,7 @@ export function canAccessFinanceRoles(userRoles: Partial<UserRoles>): boolean {
     can(userRoles, 'procurement', 'view_finance')
   );
 }
+
+export function canManageFinanceCloseRoles(userRoles: Partial<UserRoles>): boolean {
+  return can(userRoles, 'warehouse', 'manage_finance_close');
+}

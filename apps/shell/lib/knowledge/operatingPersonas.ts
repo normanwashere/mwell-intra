@@ -334,6 +334,13 @@ export const OPERATING_PERSONA_GUIDES: Record<string, OperatingPersonaGuide> = {
         "/warehouse/cycle-counts",
         "warehouse-cycle-counts",
       ),
+      task(
+        "approve-event-settlement",
+        "Approve an event settlement",
+        "Independently verify event outcomes, Finance reference, and evidence before approval.",
+        "/events",
+        "events-workspace",
+      ),
     ],
   },
   legal_compliance_lead: {

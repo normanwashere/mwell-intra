@@ -68,6 +68,7 @@ export interface FinanceCloseEntry {
   preparedAt: string;
   postedBy?: string;
   postedAt?: string;
+  updatedAt: string;
 }
 
 export interface ManageFinanceCloseEntryInput {
@@ -82,6 +83,7 @@ export interface ManageFinanceCloseEntryInput {
   amount?: number;
   evidenceUrl?: string;
   reconciliationNote?: string;
+  expectedUpdatedAt?: string;
 }
 export interface FinanceData {
   activity: FinanceActivity[];

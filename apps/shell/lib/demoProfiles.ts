@@ -107,6 +107,7 @@ export const DEMO_PROFILES: readonly MemoryProfile[] = [
       core: ['staff'],
       warehouse: ['finance'],
       procurement: ['finance'],
+      events: ['finance_reviewer'],
     },
   },
   {

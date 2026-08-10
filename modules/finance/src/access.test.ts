@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canAccessFinanceRoles } from './access';
+import { canAccessFinanceRoles, canManageFinanceCloseRoles } from './access';
 
 describe('canAccessFinanceRoles', () => {
   it('accepts either scoped Finance role and their combination', () => {
@@ -20,5 +20,16 @@ describe('canAccessFinanceRoles', () => {
         procurement: ['requester'],
       }),
     ).toBe(false);
+  });
+});
+
+describe('canManageFinanceCloseRoles', () => {
+  it('allows the Warehouse Finance controller role', () => {
+    expect(canManageFinanceCloseRoles({ warehouse: ['finance'] })).toBe(true);
+  });
+
+  it('keeps read-only and procurement-only Finance access outside close mutations', () => {
+    expect(canManageFinanceCloseRoles({ warehouse: ['pricing'] })).toBe(false);
+    expect(canManageFinanceCloseRoles({ procurement: ['finance'] })).toBe(false);
   });
 });

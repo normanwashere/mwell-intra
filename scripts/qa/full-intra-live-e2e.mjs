@@ -417,6 +417,7 @@ const roleRoutes = {
       path: "/warehouse/approvals",
       text: /Approvals|Stock adjustment approvals|Controlled exceptions/i,
     },
+    { path: "/events", text: /Events|Event operations|Settlement/i },
   ],
   events_requester: [{ path: "/events", text: /Events|New event|Create/i }],
   events_coordinator: [

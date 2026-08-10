@@ -234,7 +234,9 @@ function mapReconciliationRow(row: UnknownRow): EventReconciliation {
     financeReference: text(row.finance_reference) || undefined,
     evidenceUrl: text(row.evidence_url) || undefined,
     note: text(row.note) || undefined,
+    preparedBy: text(row.prepared_by) || undefined,
     approvedAt: text(row.approved_at) || undefined,
+    updatedAt: text(row.updated_at),
   };
 }
 
@@ -258,6 +260,7 @@ export async function saveLiveEventReconciliation(
         finance_reference: input.financeReference?.trim() || null,
         evidence_url: input.evidenceUrl?.trim() || null,
         note: input.note?.trim() || null,
+        expected_updated_at: input.expectedUpdatedAt ?? null,
       },
     });
   if (error) throw error;
@@ -299,7 +302,7 @@ export async function loadLiveEvents(
         .schema("warehouse")
         .from("event_reconciliations")
         .select(
-          "event_id,status,sold_units,giveaway_units,returned_units,lost_units,damaged_units,rekit_units,gross_sales_amount,finance_reference,evidence_url,note,approved_at",
+          "event_id,status,sold_units,giveaway_units,returned_units,lost_units,damaged_units,rekit_units,gross_sales_amount,finance_reference,evidence_url,note,prepared_by,approved_at,updated_at",
         )
         .limit(1000),
       client
