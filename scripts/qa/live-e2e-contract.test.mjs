@@ -1436,6 +1436,35 @@ test("the DOA editor cannot submit while asynchronous workspace data shifts the 
   );
 });
 
+test("DOA revision loading follows business order and the schema restores its audit timestamp", async () => {
+  const [page, migration] = await Promise.all([
+    readFile(
+      new URL("../../apps/shell/app/admin/doa/page.tsx", import.meta.url),
+      "utf8",
+    ),
+    readFile(
+      new URL(
+        "../../supabase/migrations/20260810142147_restore_doa_assignment_audit_timestamp.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  ]);
+
+  assert.doesNotMatch(
+    page,
+    /from\("doa_assignments"\)[\s\S]{0,300}order\("created_at"\)/,
+  );
+  assert.match(page, /TIERS\.indexOf\(left\.tier as Tier\)/);
+  assert.match(page, /String\(left\.category \?\? ""\)\.localeCompare/);
+  assert.match(page, /Number\(left\.min_amount \?\? 0\)/);
+  assert.match(migration, /add column if not exists created_at timestamptz/);
+  assert.match(migration, /coalesce\(matrix\.created_at, now\(\)\)/);
+  assert.match(migration, /alter column created_at set default now\(\)/);
+  assert.match(migration, /alter column created_at set not null/);
+  assert.match(migration, /notify pgrst, 'reload schema'/);
+});
+
 test("already-versioned Warehouse databases restore governed receive_stock", async () => {
   const source = await readFile(
     new URL(

@@ -233,8 +233,7 @@ function DoaWorkspace() {
       .from("doa_assignments")
       .select("tier,category,min_amount,max_amount,approver_user_id")
       .eq("matrix_id", matrix.id)
-      .eq("active", true)
-      .order("created_at");
+      .eq("active", true);
     setLoadingRevision(null);
     if (error) return toast.error(error.message);
     if (!data?.length)
@@ -244,8 +243,18 @@ function DoaWorkspace() {
     setVersion(`${matrix.version}-REV`);
     setSourceDocument(matrix.source_document ?? "Mwell approved DOA schedule");
     setEffectiveAt(new Date().toISOString().slice(0, 10));
+    const orderedAssignments = [...data].sort((left, right) => {
+      const tierOrder =
+        TIERS.indexOf(left.tier as Tier) - TIERS.indexOf(right.tier as Tier);
+      if (tierOrder !== 0) return tierOrder;
+      const categoryOrder = String(left.category ?? "").localeCompare(
+        String(right.category ?? ""),
+      );
+      if (categoryOrder !== 0) return categoryOrder;
+      return Number(left.min_amount ?? 0) - Number(right.min_amount ?? 0);
+    });
     setAssignments(
-      data.map((row) => ({
+      orderedAssignments.map((row) => ({
         key: crypto.randomUUID(),
         tier: row.tier as Tier,
         category: typeof row.category === "string" ? row.category : "",
