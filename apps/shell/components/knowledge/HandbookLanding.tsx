@@ -517,7 +517,15 @@ export function HandbookLanding({
       {!query && !filtersActive && mode === "role" && (
         <PersonaDirectory
           onExplore={(persona) =>
-            onSetParams({ q: persona.label, mode: "role", limit: null })
+            onSetParams({
+              article: `persona-${persona.id}`,
+              q: null,
+              role: null,
+              flow: null,
+              step: null,
+              limit: null,
+              mode: "role",
+            })
           }
         />
       )}

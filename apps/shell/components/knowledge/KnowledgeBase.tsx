@@ -5,6 +5,10 @@ import { useSearchParams } from "next/navigation";
 import { Badge, EmptyState, Icon } from "@intra/ui";
 import { useSession } from "@intra/auth";
 import { knowledgeRoleIdsForAssignments } from "@shell/lib/knowledge/roles";
+import {
+  OPERATING_PERSONAS,
+  OPERATING_PERSONA_GUIDES,
+} from "@shell/lib/knowledge/operatingPersonas";
 import { knowledgeContentForAudience } from "@shell/lib/knowledge/audience";
 import {
   searchKnowledge,
@@ -22,6 +26,7 @@ import { KnowledgeArticle } from "./KnowledgeArticle";
 import { KnowledgeFlow } from "./KnowledgeFlow";
 import { KnowledgeRoleGuide } from "./KnowledgeRoleGuide";
 import { KnowledgePageTools } from "./KnowledgePageTools";
+import { OperatingPersonaGuide } from "./OperatingPersonaGuide";
 
 const ENTRY_MODES = new Set<HandbookEntryMode>(["task", "role", "feature"]);
 const AVAILABILITY_FILTERS = new Set<KnowledgeAvailability | "all">([
@@ -36,6 +41,18 @@ export function resolveKnowledgeGuide(
   articleId: string | null,
 ) {
   if (!articleId) return null;
+  const persona = OPERATING_PERSONAS.find(
+    (item) => `persona-${item.id}` === articleId,
+  );
+  const personaGuide = persona ? OPERATING_PERSONA_GUIDES[persona.id] : null;
+  if (
+    persona &&
+    personaGuide &&
+    personaGuide.roleIds.some((roleId) =>
+      content.roles.some((role) => role.id === roleId),
+    )
+  )
+    return { kind: "persona" as const, persona, personaGuide };
   const role = content.roles.find((item) => `role-${item.id}` === articleId);
   if (role) return { kind: "role" as const, role };
   const feature = content.features.find(
@@ -190,49 +207,51 @@ export function KnowledgeBase({ content }: { content: KnowledgeContent }) {
           }}
         />
         <div className="mx-auto max-w-4xl space-y-6">
-        <button
-          type="button"
-          className="btn-ghost btn-sm"
-          onClick={() => setParams({ glossary: null }, { scroll: "restore" })}
-        >
-          <Icon name="chevron" className="h-4 w-4 rotate-90" />
-          Back to Knowledge Base
-        </button>
-        <article className="border-y border-line py-7">
-          <Badge tone="brand">Glossary</Badge>
-          <h1 className="mt-4 text-3xl font-bold text-ink">{glossary.term}</h1>
-          <p className="mt-3 max-w-3xl text-lg leading-8 text-muted">
-            {glossary.definition}
-          </p>
-          {glossary.aliases.length > 0 && (
-            <p className="mt-4 text-sm text-muted">
-              <span className="font-semibold text-ink">Also known as:</span>{" "}
-              {glossary.aliases.join(", ")}
+          <button
+            type="button"
+            className="btn-ghost btn-sm"
+            onClick={() => setParams({ glossary: null }, { scroll: "restore" })}
+          >
+            <Icon name="chevron" className="h-4 w-4 rotate-90" />
+            Back to Knowledge Base
+          </button>
+          <article className="border-y border-line py-7">
+            <Badge tone="brand">Glossary</Badge>
+            <h1 className="mt-4 text-3xl font-bold text-ink">
+              {glossary.term}
+            </h1>
+            <p className="mt-3 max-w-3xl text-lg leading-8 text-muted">
+              {glossary.definition}
             </p>
-          )}
-        </article>
-        <section aria-labelledby="related-guidance">
-          <h2 id="related-guidance" className="text-xl font-bold text-ink">
-            Related guided workflows
-          </h2>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            {relatedFlows.map((item) => (
-              <button
-                type="button"
-                key={item.id}
-                onClick={() =>
-                  setParams({ glossary: null, flow: item.id, step: null })
-                }
-                className="border border-line bg-surface p-4 text-left hover:border-brand-500"
-              >
-                <span className="font-semibold text-ink">{item.title}</span>
-                <span className="mt-1 block text-sm text-muted">
-                  {item.summary}
-                </span>
-              </button>
-            ))}
-          </div>
-        </section>
+            {glossary.aliases.length > 0 && (
+              <p className="mt-4 text-sm text-muted">
+                <span className="font-semibold text-ink">Also known as:</span>{" "}
+                {glossary.aliases.join(", ")}
+              </p>
+            )}
+          </article>
+          <section aria-labelledby="related-guidance">
+            <h2 id="related-guidance" className="text-xl font-bold text-ink">
+              Related guided workflows
+            </h2>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              {relatedFlows.map((item) => (
+                <button
+                  type="button"
+                  key={item.id}
+                  onClick={() =>
+                    setParams({ glossary: null, flow: item.id, step: null })
+                  }
+                  className="border border-line bg-surface p-4 text-left hover:border-brand-500"
+                >
+                  <span className="font-semibold text-ink">{item.title}</span>
+                  <span className="mt-1 block text-sm text-muted">
+                    {item.summary}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </section>
         </div>
       </div>
     );
@@ -260,13 +279,73 @@ export function KnowledgeBase({ content }: { content: KnowledgeContent }) {
       changes.view = "flow";
     setParams(changes);
   };
+  if (guide?.kind === "persona") {
+    const linkedRoleIds = new Set(guide.personaGuide.roleIds);
+    const taskFeatureIds = new Set(
+      guide.personaGuide.tasks.map((task) => task.featureId),
+    );
+    const featuresById = new Map(
+      scopedContent.features.map((feature) => [feature.id, feature]),
+    );
+    const taskFeatures = guide.personaGuide.tasks.flatMap((task) => {
+      const feature = featuresById.get(task.featureId);
+      return feature ? [feature] : [];
+    });
+    const additionalRoleFeatures = scopedContent.features.filter(
+      (feature) =>
+        !taskFeatureIds.has(feature.id) &&
+        feature.roleIds.some((linkedRoleId) => linkedRoleIds.has(linkedRoleId)),
+    );
+    const linkedRoles = guide.personaGuide.roleIds.flatMap((linkedRoleId) => {
+      const role = rolesById.get(linkedRoleId);
+      return role ? [role] : [];
+    });
+    return (
+      <>
+        <KnowledgePageTools
+          userId={profile.id}
+          item={{
+            id: `persona:${guide.persona.id}`,
+            title: guide.persona.label,
+            href: `/knowledge?mode=role&article=persona-${encodeURIComponent(guide.persona.id)}`,
+            context: "Job persona guide",
+            owner: guide.persona.department,
+          }}
+        />
+        <OperatingPersonaGuide
+          persona={guide.persona}
+          guide={guide.personaGuide}
+          linkedRoles={linkedRoles}
+          rolesById={rolesById}
+          relatedFeatures={[...taskFeatures, ...additionalRoleFeatures]}
+          relatedFlows={scopedContent.flows.filter((flow) =>
+            flow.roles.some((linkedRoleId) => linkedRoleIds.has(linkedRoleId)),
+          )}
+          onBack={() =>
+            setParams(
+              { article: null, q: null, role: null, limit: null, mode: "role" },
+              { scroll: "restore" },
+            )
+          }
+          onOpenFeature={(id) => openArticle(`feature-${id}`)}
+          onOpenFlow={openFlow}
+        />
+      </>
+    );
+  }
   if (guide?.kind === "role") {
     const roleId = guide.role.id;
     return (
       <>
         <KnowledgePageTools
           userId={profile.id}
-          item={{ id: `role:${roleId}`, title: guide.role.label, href: `/knowledge?article=role-${encodeURIComponent(roleId)}`, context: "Role guide", owner: guide.role.module }}
+          item={{
+            id: `role:${roleId}`,
+            title: guide.role.label,
+            href: `/knowledge?article=role-${encodeURIComponent(roleId)}`,
+            context: "Role guide",
+            owner: guide.role.module,
+          }}
         />
         <KnowledgeRoleGuide
           role={guide.role}
@@ -296,7 +375,13 @@ export function KnowledgeBase({ content }: { content: KnowledgeContent }) {
       <>
         <KnowledgePageTools
           userId={profile.id}
-          item={{ id: `feature:${guide.feature.id}`, title: guide.feature.title, href: `/knowledge?article=feature-${encodeURIComponent(guide.feature.id)}`, context: "Feature guide", owner: guide.feature.owner }}
+          item={{
+            id: `feature:${guide.feature.id}`,
+            title: guide.feature.title,
+            href: `/knowledge?article=feature-${encodeURIComponent(guide.feature.id)}`,
+            context: "Feature guide",
+            owner: guide.feature.owner,
+          }}
         />
         <FeatureGuide
           feature={guide.feature}
@@ -330,7 +415,13 @@ export function KnowledgeBase({ content }: { content: KnowledgeContent }) {
       <>
         <KnowledgePageTools
           userId={profile.id}
-          item={{ id: `article:${article.id}`, title: article.title, href: `/knowledge?article=${encodeURIComponent(article.id)}`, context: "Procedure", owner: article.owner }}
+          item={{
+            id: `article:${article.id}`,
+            title: article.title,
+            href: `/knowledge?article=${encodeURIComponent(article.id)}`,
+            context: "Procedure",
+            owner: article.owner,
+          }}
         />
         <KnowledgeArticle
           article={article}
@@ -349,7 +440,12 @@ export function KnowledgeBase({ content }: { content: KnowledgeContent }) {
       <div className="space-y-5">
         <KnowledgePageTools
           userId={profile.id}
-          item={{ id: `flow:${flow.id}`, title: flow.title, href: `/knowledge?flow=${encodeURIComponent(flow.id)}&view=flow`, context: "Guided workflow" }}
+          item={{
+            id: `flow:${flow.id}`,
+            title: flow.title,
+            href: `/knowledge?flow=${encodeURIComponent(flow.id)}&view=flow`,
+            context: "Guided workflow",
+          }}
         />
         <button
           className="btn-ghost btn-sm"
@@ -379,7 +475,8 @@ export function KnowledgeBase({ content }: { content: KnowledgeContent }) {
 
   const recommendedRoleIds = knowledgeRoleIdsForAssignments(userRoles);
 
-  const openResult = (result: HandbookSearchResult) => openKnowledgeHref(result.href);
+  const openResult = (result: HandbookSearchResult) =>
+    openKnowledgeHref(result.href);
 
   return (
     <HandbookLanding

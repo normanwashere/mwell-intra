@@ -45,6 +45,15 @@ describe("vendor Knowledge Base audience boundary", () => {
     expect(
       resolveKnowledgeGuide(vendorContent, "feature-vendor-application"),
     ).toMatchObject({ kind: "feature" });
+    expect(
+      resolveKnowledgeGuide(vendorContent, "persona-operations_associate"),
+    ).toBeNull();
+    expect(
+      resolveKnowledgeGuide(vendorContent, "persona-vendor_representative"),
+    ).toMatchObject({
+      kind: "persona",
+      persona: { id: "vendor_representative" },
+    });
   });
 });
 

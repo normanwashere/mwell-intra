@@ -82,6 +82,48 @@ test("lean operating model exposes all personas and opens governed decision tree
   ).toBeVisible();
 });
 
+test("job persona directory opens an exact task-first guide", async ({
+  page,
+}) => {
+  await page.goto("/knowledge?mode=role");
+
+  await page
+    .getByRole("button", { name: /Operations Associate Operations/ })
+    .click();
+  await expect(page).toHaveURL(
+    /mode=role&article=persona-operations_associate/,
+  );
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Operations Associate" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "What do you need to do?" }),
+  ).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open workspace" })).toHaveCount(
+    5,
+  );
+  await expect(page.getByRole("button", { name: "Show me how" })).toHaveCount(
+    5,
+  );
+  await expect(page.getByText("Receive stock", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("Perform a cycle count", { exact: true }),
+  ).toBeVisible();
+
+  const firstViewport = await page.evaluate(() => ({
+    hasHorizontalOverflow:
+      document.documentElement.scrollWidth >
+      document.documentElement.clientWidth,
+    firstTaskVisible:
+      (document
+        .getElementById("persona-task-receive-stock")
+        ?.getBoundingClientRect().top ?? Number.POSITIVE_INFINITY) <
+      window.innerHeight,
+  }));
+  expect(firstViewport.hasHorizontalOverflow).toBe(false);
+  expect(firstViewport.firstTaskVisible).toBe(true);
+});
+
 test("landing interactions preserve URL state and accessible targets", async ({
   page,
 }) => {

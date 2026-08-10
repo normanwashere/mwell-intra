@@ -5,6 +5,19 @@ export interface OperatingPersona {
   responsibility: string;
 }
 
+export interface OperatingPersonaTask {
+  id: string;
+  title: string;
+  summary: string;
+  workspaceHref: string;
+  featureId: string;
+}
+
+export interface OperatingPersonaGuide {
+  roleIds: string[];
+  tasks: OperatingPersonaTask[];
+}
+
 export interface OperatingWorkflowStep {
   personaId: string;
   action: string;
@@ -87,6 +100,406 @@ export const OPERATING_PERSONAS: OperatingPersona[] = [
     responsibility: "Accreditation application and evidence",
   },
 ];
+
+const task = (
+  id: string,
+  title: string,
+  summary: string,
+  workspaceHref: string,
+  featureId: string,
+): OperatingPersonaTask => ({
+  id,
+  title,
+  summary,
+  workspaceHref,
+  featureId,
+});
+
+export const OPERATING_PERSONA_GUIDES: Record<string, OperatingPersonaGuide> = {
+  platform_administrator: {
+    roleIds: ["platform_admin"],
+    tasks: [
+      task(
+        "manage-users",
+        "Manage users and access",
+        "Create or maintain an identity and assign only approved scoped roles.",
+        "/admin/users",
+        "admin-users",
+      ),
+      task(
+        "manage-departments",
+        "Maintain departments",
+        "Keep the organization directory and ownership structure current.",
+        "/admin/departments",
+        "admin-departments",
+      ),
+      task(
+        "manage-doa",
+        "Maintain delegated authority",
+        "Create, review, and activate a department DOA revision.",
+        "/admin/doa",
+        "admin-doa",
+      ),
+      task(
+        "review-audit",
+        "Review platform activity",
+        "Investigate attributable access and governance activity.",
+        "/admin/audit",
+        "admin-audit",
+      ),
+    ],
+  },
+  general_employee: {
+    roleIds: [
+      "core_staff_only",
+      "procurement_requester",
+      "events_requester",
+      "warehouse_business_unit",
+      "product_contributor",
+    ],
+    tasks: [
+      task(
+        "request-purchase",
+        "Request a purchase",
+        "Describe the need, budget context, lines, and supporting evidence.",
+        "/procurement/requests/new",
+        "procurement-request-create",
+      ),
+      task(
+        "request-stock",
+        "Request or reserve stock",
+        "Reserve available inventory for approved business demand.",
+        "/warehouse/allocations",
+        "warehouse-allocations",
+      ),
+      task(
+        "request-event",
+        "Plan an event requirement",
+        "Record event demand and hand fulfillment requirements to Operations.",
+        "/events",
+        "events-workspace",
+      ),
+      task(
+        "track-work",
+        "Track assigned work",
+        "Review your active requests, decisions, and next handoffs.",
+        "/work",
+        "my-work",
+      ),
+    ],
+  },
+  operations_associate: {
+    roleIds: ["warehouse_operator", "warehouse_operations"],
+    tasks: [
+      task(
+        "receive-stock",
+        "Receive stock",
+        "Match an approved PO, capture quantity and traceability, then attach evidence.",
+        "/warehouse/receiving",
+        "warehouse-receiving",
+      ),
+      task(
+        "inspect-putaway",
+        "Inspect and put away",
+        "Record the physical result and move accepted stock to its controlled bin.",
+        "/warehouse/quality",
+        "warehouse-quality",
+      ),
+      task(
+        "pick-issue",
+        "Allocate, pick, and issue",
+        "Reserve approved demand, scan the source, and preserve custody evidence.",
+        "/warehouse/fulfillment",
+        "warehouse-fulfillment",
+      ),
+      task(
+        "process-return",
+        "Process a return",
+        "Locate the issued identity and route the returned item for inspection.",
+        "/warehouse/returns",
+        "warehouse-returns",
+      ),
+      task(
+        "count-stock",
+        "Perform a cycle count",
+        "Count the assigned location and submit supported variance evidence.",
+        "/warehouse/cycle-counts",
+        "warehouse-cycle-counts",
+      ),
+    ],
+  },
+  operations_lead: {
+    roleIds: [
+      "warehouse_supervisor",
+      "warehouse_logistics_supervisor",
+      "procurement_approver",
+      "product_operations_partner",
+    ],
+    tasks: [
+      task(
+        "review-quality",
+        "Decide a quality disposition",
+        "Review operator evidence and release, retain, or route held stock.",
+        "/warehouse/quality",
+        "warehouse-quality",
+      ),
+      task(
+        "review-adjustment",
+        "Review a stock adjustment",
+        "Confirm count evidence and decide the controlled inventory change.",
+        "/warehouse/stock-approvals",
+        "warehouse-approvals",
+      ),
+      task(
+        "resolve-exception",
+        "Resolve an exception",
+        "Investigate the source record and record an attributable outcome.",
+        "/warehouse/exceptions",
+        "warehouse-exceptions",
+      ),
+      task(
+        "maintain-location",
+        "Maintain warehouse setup",
+        "Create or revise locations, bins, and controlled operation routes.",
+        "/warehouse/locations",
+        "warehouse-locations",
+      ),
+    ],
+  },
+  procurement_lead: {
+    roleIds: [
+      "procurement_officer",
+      "procurement_admin",
+      "warehouse_procurement",
+    ],
+    tasks: [
+      task(
+        "triage-request",
+        "Review purchase requests",
+        "Confirm completeness, sourcing route, and the next approval handoff.",
+        "/procurement/requests",
+        "procurement-requests",
+      ),
+      task(
+        "review-approval",
+        "Process procurement approvals",
+        "Decide or route the Procurement tier with a recorded reason.",
+        "/procurement/approvals",
+        "procurement-approvals",
+      ),
+      task(
+        "author-po",
+        "Author a purchase order",
+        "Convert an approved sourcing outcome into a controlled supplier commitment.",
+        "/procurement/purchase-orders",
+        "procurement-purchase-orders",
+      ),
+      task(
+        "plan-replenishment",
+        "Coordinate replenishment",
+        "Review stock risk and connect the warehouse need to Procurement.",
+        "/warehouse/procurement",
+        "warehouse-procurement-planning",
+      ),
+    ],
+  },
+  finance_controller: {
+    roleIds: ["procurement_finance", "warehouse_finance"],
+    tasks: [
+      task(
+        "review-finance-work",
+        "Review the Finance queue",
+        "See procurement and warehouse items that need financial control.",
+        "/finance",
+        "warehouse-finance",
+      ),
+      task(
+        "review-procurement",
+        "Review procurement readiness",
+        "Check approval, receipt, acceptance, invoice, and payment evidence.",
+        "/procurement/purchase-orders",
+        "procurement-purchase-orders",
+      ),
+      task(
+        "review-warehouse",
+        "Review inventory control",
+        "Review valuation, reconciliation, and supported warehouse adjustments.",
+        "/warehouse/finance",
+        "warehouse-finance",
+      ),
+      task(
+        "review-count",
+        "Investigate count variance",
+        "Trace material variance to the count and operational evidence.",
+        "/warehouse/cycle-counts",
+        "warehouse-cycle-counts",
+      ),
+    ],
+  },
+  legal_compliance_lead: {
+    roleIds: ["legal_reviewer", "legal_compliance", "legal_admin"],
+    tasks: [
+      task(
+        "review-case",
+        "Review vendor accreditation",
+        "Check completeness, risk, instruments, and current supporting evidence.",
+        "/legal/cases",
+        "legal-cases",
+      ),
+      task(
+        "invite-vendor",
+        "Invite a vendor",
+        "Create a controlled invitation for the correct vendor contact.",
+        "/legal/invitations/new",
+        "legal-invite-vendor",
+      ),
+      task(
+        "sign-instrument",
+        "Review and sign an instrument",
+        "Complete the governed legal instrument and retain signed evidence.",
+        "/legal/cases",
+        "legal-sign-instrument",
+      ),
+      task(
+        "maintain-doa",
+        "Maintain department DOA",
+        "Create and activate an approved department authority revision.",
+        "/admin/doa",
+        "admin-doa",
+      ),
+    ],
+  },
+  marketing_events_lead: {
+    roleIds: ["events_coordinator", "events_admin", "warehouse_marketing"],
+    tasks: [
+      task(
+        "plan-event",
+        "Plan an event",
+        "Record dates, owners, cost context, and inventory demand.",
+        "/events",
+        "events-workspace",
+      ),
+      task(
+        "reserve-event-stock",
+        "Reserve event stock",
+        "Link approved demand to available promotional or operational inventory.",
+        "/warehouse/events",
+        "warehouse-events",
+      ),
+      task(
+        "track-fulfillment",
+        "Track event fulfillment",
+        "Follow the warehouse handoff from allocation through accountable issue.",
+        "/warehouse/fulfillment",
+        "warehouse-fulfillment",
+      ),
+      task(
+        "reconcile-event",
+        "Reconcile an event",
+        "Record sales, giveaways, returns, losses, and remaining custody.",
+        "/warehouse/events",
+        "warehouse-events",
+      ),
+    ],
+  },
+  product_owner: {
+    roleIds: ["product_owner", "events_viewer"],
+    tasks: [
+      task(
+        "review-product",
+        "Review product readiness",
+        "Confirm required ownership, evidence, and launch controls.",
+        "/product",
+        "product-governance",
+      ),
+      task(
+        "decide-launch",
+        "Record a go-live decision",
+        "Approve, return, or block launch based on complete readiness evidence.",
+        "/product",
+        "product-governance",
+      ),
+      task(
+        "review-pricing",
+        "Review pricing governance",
+        "Connect the approved product decision to controlled pricing evidence.",
+        "/product",
+        "product-governance",
+      ),
+      task(
+        "review-event-use",
+        "Review product use in events",
+        "Monitor event demand without taking operational custody decisions.",
+        "/events",
+        "events-workspace",
+      ),
+    ],
+  },
+  leadership_insights: {
+    roleIds: [
+      "insights_analyst",
+      "insights_manager",
+      "insights_executive",
+      "warehouse_bi_analyst",
+    ],
+    tasks: [
+      task(
+        "review-insights",
+        "Review cross-department insights",
+        "Use governed measures to identify operational and financial risk.",
+        "/insights",
+        "insights-workspace",
+      ),
+      task(
+        "review-inventory-risk",
+        "Review inventory risk",
+        "Inspect stock, consumption, and exception trends without changing records.",
+        "/warehouse/reports",
+        "warehouse-reports",
+      ),
+      task(
+        "review-work",
+        "Review workflow health",
+        "Identify delayed handoffs and send evidence-backed questions to owners.",
+        "/work",
+        "my-work",
+      ),
+    ],
+  },
+  vendor_representative: {
+    roleIds: ["vendor_portal"],
+    tasks: [
+      task(
+        "complete-application",
+        "Complete accreditation",
+        "Provide the vendor profile, declarations, and required evidence.",
+        "/vendor",
+        "vendor-application",
+      ),
+      task(
+        "correct-requirement",
+        "Respond to a correction",
+        "Replace or clarify only the requirement returned by Legal.",
+        "/vendor",
+        "vendor-case-detail",
+      ),
+      task(
+        "sign-instrument",
+        "Sign a legal instrument",
+        "Review and sign the assigned controlled document.",
+        "/vendor",
+        "vendor-sign-instrument",
+      ),
+      task(
+        "track-status",
+        "Track accreditation status",
+        "See the current case state and the next action owned by the vendor.",
+        "/vendor",
+        "vendor-cases",
+      ),
+    ],
+  },
+};
 
 export const OPERATING_WORKFLOWS: OperatingWorkflow[] = [
   {
