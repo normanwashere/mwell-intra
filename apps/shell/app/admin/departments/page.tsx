@@ -236,7 +236,7 @@ function DepartmentTreeNode({
               <p className="mt-1 line-clamp-2 text-xs text-muted">{department.purpose}</p>
             )}
             <details className="mt-1 text-xs text-faint">
-              <summary className="min-h-7 cursor-pointer py-1 font-medium text-brand-700">
+              <summary className="flex min-h-11 cursor-pointer items-center py-1 font-medium text-brand-700">
                 Technical details
                 {department.deactivation_blocked_reason && department.is_active
                   ? " · Protected"

@@ -308,7 +308,7 @@ export function InventoryPage() {
                         >
                           {available}
                         </p>
-                        <p className="text-xs text-faint">available</p>
+                        <p className="text-xs text-muted">available</p>
                       </div>
                       <Icon name="chevron" className="h-4 w-4 text-faint" />
                     </div>
@@ -351,7 +351,7 @@ export function InventoryPage() {
                           {total}
                         </p>
                         {/* One stock noun module-wide (WH-23). */}
-                        <p className="text-xs text-faint">available</p>
+                        <p className="text-xs text-muted">available</p>
                       </div>
                       <Icon
                         name="chevron"

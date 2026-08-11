@@ -548,6 +548,7 @@ async function collectVisibleSameOriginRoutes(page, selector) {
         rect.height > 0;
       const href = link.getAttribute("href");
       if (!visible || !href || link.hasAttribute("download")) return [];
+      if (/QA-\d{8}-[A-F0-9]{8}/i.test(link.textContent || "")) return [];
       const target = new URL(href, document.baseURI);
       if (target.origin !== location.origin) return [];
       if (
@@ -1099,7 +1100,7 @@ async function auditKeyboardAndHotspots(page) {
         };
       })
       .filter((target) => target.width < 44 || target.height < 44)
-      .slice(0, 16);
+      .slice(0, 64);
 
     const describe = (element) =>
       (
@@ -1297,6 +1298,7 @@ async function openPersonaPageFrom(page, email) {
     viewport: sourceViewport,
     isMobile: emulateTouch,
     hasTouch: emulateTouch,
+    reducedMotion: "reduce",
   });
   await installScopedProtectionBypass({
     context,
@@ -7385,6 +7387,7 @@ async function runWorkflow(browser, viewport, user, workflow) {
     viewport: viewport.viewport,
     isMobile: viewport.isMobile,
     hasTouch: viewport.isMobile,
+    reducedMotion: "reduce",
   });
   await installScopedProtectionBypass({
     context,
@@ -7645,6 +7648,7 @@ if (runRouteAudit) {
         viewport: viewport.viewport,
         isMobile: viewport.isMobile,
         hasTouch: viewport.isMobile,
+        reducedMotion: "reduce",
       });
       await installScopedProtectionBypass({
         context,

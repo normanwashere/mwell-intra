@@ -71,7 +71,7 @@ function AccessDenied() {
       </p>
       <a
         href="/"
-        className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-black/85 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/40 dark:bg-white/90 dark:text-black dark:hover:bg-white dark:focus-visible:ring-white/40"
+        className="btn-primary min-h-11"
       >
         Back to dashboard
       </a>

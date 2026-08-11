@@ -834,7 +834,7 @@ export function CreateRequestPage() {
                         <label
                           key={c.code}
                           className={[
-                            "group flex cursor-pointer flex-col rounded-2xl border p-2.5 transition sm:p-3",
+                            "group flex min-h-11 cursor-pointer flex-col rounded-2xl border p-2.5 transition sm:p-3",
                             active
                               ? "border-brand-500 bg-brand-500/10 ring-2 ring-brand-500/40"
                               : "border-line bg-surface hover:border-brand-500/40",
@@ -1351,7 +1351,7 @@ export function CreateRequestPage() {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3">
-                  <label className="inline-flex items-center gap-2 text-sm text-muted">
+                  <label className="inline-flex min-h-11 items-center gap-2 text-sm text-muted">
                     <input
                       type="checkbox"
                       checked={emergency}
@@ -1359,7 +1359,7 @@ export function CreateRequestPage() {
                     />
                     Emergency purchase
                   </label>
-                  <label className="inline-flex items-center gap-2 text-sm text-muted">
+                  <label className="inline-flex min-h-11 items-center gap-2 text-sm text-muted">
                     <input
                       type="checkbox"
                       checked={repeat}

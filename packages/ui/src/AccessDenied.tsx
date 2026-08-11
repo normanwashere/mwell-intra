@@ -12,7 +12,7 @@ export function AccessDenied({
   returnLabel = "Back to home",
 }: AccessDeniedProps) {
   return (
-    <main className="grid min-h-[60vh] place-items-center px-4 py-10 text-center">
+    <section className="grid min-h-[60vh] place-items-center px-4 py-10 text-center">
       <div
         role="alert"
         aria-live="polite"
@@ -29,6 +29,6 @@ export function AccessDenied({
           {returnLabel}
         </a>
       </div>
-    </main>
+    </section>
   );
 }

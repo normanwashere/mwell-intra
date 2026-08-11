@@ -514,6 +514,10 @@ test("route crawl covers visible same-origin navigation discovered from the shel
   );
   assert.match(source, /const target = new URL\(href, document\.baseURI\)/);
   assert.match(source, /target\.origin !== location\.origin/);
+  assert.match(
+    source,
+    /QA-\\d\{8\}-\[A-F0-9\]\{8\}\/i\.test\(link\.textContent \|\| ""\)/,
+  );
   assert.match(source, /routesFor\(user, discoveredRoutes\)/);
   assert.match(source, /getByRole\("button", \{ name: "More"/);
   assert.match(source, /getByRole\("dialog", \{ name: "All areas"/);
@@ -524,6 +528,8 @@ test("route crawl covers visible same-origin navigation discovered from the shel
     /routes\.filter\(\(pathname\) => !isEphemeralAuditPath\(pathname\)\)/,
   );
   assert.match(source, /QA-\\d\{8\}-\[A-F0-9\]\{8\}/);
+  assert.match(source, /reducedMotion: "reduce"/);
+  assert.match(source, /\.slice\(0, 64\)/);
 });
 
 test("the mutating harness waits for quality data and uses unambiguous DOA controls", async () => {

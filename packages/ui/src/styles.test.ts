@@ -30,6 +30,9 @@ describe('shared interaction styles', () => {
     expect(styles).toContain("@media (max-width: 767px)");
     expect(styles).toContain("input:not([type='checkbox']):not([type='radio']):not([type='hidden'])");
     expect(styles).toContain('min-height: 2.75rem');
+    expect(styles).toMatch(
+      /\.btn-primary,[\s\S]*?min-height: 2\.75rem;[\s\S]*?min-width: 2\.75rem;/,
+    );
   });
 
   it('keeps primary actions above WCAG AA contrast with white text', () => {

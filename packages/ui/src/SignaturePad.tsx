@@ -220,7 +220,7 @@ export function SignaturePad({
             aria-selected={mode === opt.id}
             onClick={() => setMode(opt.id)}
             className={clsx(
-              'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition',
+              'inline-flex min-h-11 min-w-11 items-center gap-1.5 rounded-lg px-3 py-1.5 transition',
               mode === opt.id
                 ? 'bg-brand-500/10 text-brand-700 dark:text-brand-300'
                 : 'text-muted hover:text-ink',
@@ -242,7 +242,7 @@ export function SignaturePad({
           onChange={(e) => setSignerName(e.target.value)}
           placeholder="e.g. Marta Ramos"
           autoComplete="name"
-          className="w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30"
+          className="min-h-11 w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30"
         />
       </div>
 
@@ -275,7 +275,7 @@ export function SignaturePad({
             <button
               type="button"
               onClick={clearInk}
-              className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-500/10 dark:text-brand-300"
+              className="inline-flex min-h-11 min-w-11 items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-500/10 dark:text-brand-300"
             >
               <Icon name="rotate" className="h-3.5 w-3.5" />
               Clear

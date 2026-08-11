@@ -370,6 +370,7 @@ export function EventsApp({
         <EmptyState
           icon="calendar"
           title="Event not found"
+          headingLevel={1}
           message="This event may have been removed or is outside your permitted data scope."
           action={
             <a href="/events" className="btn-primary">

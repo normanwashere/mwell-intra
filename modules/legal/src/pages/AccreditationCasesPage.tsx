@@ -595,7 +595,7 @@ function VendorApplicationCard({
             <li>
               <Link
                 to={`/cases/${kase.id}`}
-                className="flex items-center gap-2.5 px-3 py-2.5 text-sm font-semibold text-ink transition hover:bg-inset"
+                className="flex min-h-11 items-center gap-2.5 px-3 py-2.5 text-sm font-semibold text-ink transition hover:bg-inset"
               >
                 <Icon
                   name="clipboard"
@@ -616,7 +616,7 @@ function VendorApplicationCard({
             <li>
               <Link
                 to={`/cases/${kase.id}`}
-                className="flex items-center gap-2.5 px-3 py-2.5 text-sm font-semibold text-ink transition hover:bg-inset"
+                className="flex min-h-11 items-center gap-2.5 px-3 py-2.5 text-sm font-semibold text-ink transition hover:bg-inset"
               >
                 <Icon
                   name="signature"

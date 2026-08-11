@@ -358,13 +358,16 @@ export function EmptyState({
   message,
   action,
   compact = false,
+  headingLevel = 2,
 }: {
   icon?: IconName;
   title: string;
   message?: string;
   action?: ReactNode;
   compact?: boolean;
+  headingLevel?: 1 | 2 | 3;
 }) {
+  const Heading = headingLevel === 1 ? 'h1' : headingLevel === 3 ? 'h3' : 'h2';
   return (
     <div className={clsx(
       'grid place-items-center rounded-2xl border border-dashed border-line bg-inset/50 text-center',
@@ -376,7 +379,7 @@ export function EmptyState({
       )}>
         <Icon name={icon} />
       </span>
-      <p className="font-semibold text-ink">{title}</p>
+      <Heading className="font-semibold text-ink">{title}</Heading>
       {message && <p className="mt-1 max-w-sm text-sm text-muted">{message}</p>}
       {action && <div className="mt-4">{action}</div>}
     </div>

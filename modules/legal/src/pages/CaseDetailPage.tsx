@@ -817,7 +817,7 @@ export function CaseDetailPage() {
                     onClick={() =>
                       setGroupOverrides((cur) => ({ ...cur, [key]: !expanded }))
                     }
-                    className="flex min-w-0 items-center gap-2 text-left font-display text-sm font-bold uppercase tracking-wide text-muted transition hover:text-ink"
+                    className="flex min-h-11 min-w-0 items-center gap-2 text-left font-display text-sm font-bold uppercase tracking-wide text-muted transition hover:text-ink"
                   >
                     <Icon
                       name="chevron"
@@ -1511,7 +1511,7 @@ function ChecklistRow({
                     onToggleWhy();
                   }}
                   aria-expanded={whyExpanded}
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-brand-700 hover:underline dark:text-brand-300"
+                  className="inline-flex min-h-11 items-center gap-1 rounded-lg px-2 text-xs font-semibold text-brand-700 hover:bg-inset hover:underline dark:text-brand-300"
                 >
                   <Icon name="info" className="h-3.5 w-3.5" />
                   Why we need this
@@ -1593,7 +1593,7 @@ function ChecklistRow({
                     setVersionsOpen((v) => !v);
                   }}
                   aria-expanded={versionsOpen}
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-muted transition hover:text-ink"
+                  className="inline-flex min-h-11 items-center gap-1 rounded-lg px-2 text-xs font-semibold text-muted transition hover:bg-inset hover:text-ink"
                 >
                   <Icon
                     name="chevron"
