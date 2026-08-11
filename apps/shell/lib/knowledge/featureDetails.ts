@@ -41,6 +41,12 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "Only destinations exposed by the current role are rendered; secondary mobile destinations remain under More.",
           "The selected workspace opens and the current destination remains visibly identified.",
         ),
+        control(
+          "View account details",
+          "Opens the account menu to show the active job persona, department, responsibility, and each scoped module role.",
+          "The values come from the authenticated profile and current role assignments; this menu cannot grant authority.",
+          "The user can confirm the active identity, open Knowledge Base guidance, or sign out to use a different approved account.",
+        ),
       ],
       fields: [
         field(
@@ -54,6 +60,12 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "Shows each workspace authorized for the active profile.",
           false,
           "Availability is derived from role capability checks, never manual selection.",
+        ),
+        field(
+          "Persona context",
+          "Distinguishes the user's job title and department from the narrower module roles that authorize specific actions.",
+          true,
+          "The title is resolved from the canonical 11-persona operating model while authority remains derived from current scoped assignments.",
         ),
       ],
     },

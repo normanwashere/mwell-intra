@@ -560,9 +560,9 @@ const definitions: FeatureDefinition[] = [
     route: "/",
     roleIds: ["core_staff_only", "platform_admin"],
     purpose:
-      "Shows an authenticated employee the modules and shared work areas available through current role assignments.",
+      "Shows an authenticated employee the modules and shared work areas available through current role assignments, with the active job persona and authority visible in the shell.",
     reads:
-      "Current profile, role assignments, module navigation, and unread notification summaries.",
+      "Current profile, canonical job persona, department, scoped role assignments, module navigation, and unread notification summaries.",
     writes:
       "No operational record is changed; opening a destination changes navigation state only.",
     statuses:
@@ -570,7 +570,7 @@ const definitions: FeatureDefinition[] = [
     exception:
       "If an expected module is absent, refresh the session and ask a platform administrator to review role scope.",
     completionEvidence:
-      "The intended authorized module or work item opens under the employee identity.",
+      "The intended authorized module or work item opens under the employee identity, and the shell account context identifies the active job title, department, responsibility, and module authority.",
   },
   {
     id: "sign-in",

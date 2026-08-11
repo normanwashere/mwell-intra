@@ -62,8 +62,10 @@ export const TROUBLESHOOTING_GUIDES: TroubleshootingGuide[] = [
       "Assignment changed while the session was open",
     ],
     safeRecovery: [
-      "Confirm the route and required responsibility",
+      "Open the account menu and confirm the job title, department, responsibility, and scoped authority shown for the active identity",
+      "Confirm the denied route and the specific responsibility required for that action",
       "Sign out and back in after an approved role change",
+      "Use Sign in with a different account when the current identity is not the intended operator",
       "Submit an access request with business owner approval",
     ],
     dataImpact:
@@ -384,13 +386,14 @@ export const TROUBLESHOOTING_GUIDES: TroubleshootingGuide[] = [
     ],
     safeRecovery: [
       "Note the route and record ID",
-      "Refresh once",
+      "Wait for the bounded loading state; if Warehouse shows a load failure, use Retry once",
+      "Refresh once only when the page does not provide Retry",
       "Sign in again if prompted",
       "Reopen the record from its queue",
       "Verify activity before repeating an action",
     ],
     dataImpact:
-      "Unsaved field edits may be lost; submitted actions may already be committed.",
+      "Unsaved field edits may be lost and submitted actions may already be committed. Warehouse keeps existing data visible when a background refresh fails, so verify that existing data before retrying a command.",
     escalationOwner: "Platform administrator",
     escalationEvidence: [
       "Route",

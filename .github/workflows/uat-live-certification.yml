@@ -141,7 +141,9 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: uat-routes-${{ matrix.viewport }}-${{ github.run_number }}
-          path: test-results/routes-${{ matrix.viewport }}.json
+          path: |
+            test-results/routes-${{ matrix.viewport }}.json
+            test-results/evidence
           if-no-files-found: error
           retention-days: 30
 

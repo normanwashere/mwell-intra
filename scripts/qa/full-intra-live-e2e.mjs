@@ -1312,6 +1312,50 @@ async function openPersonaPageFrom(page, email) {
   return { context, page: personaPage };
 }
 
+function routeEvidenceToken(value) {
+  return String(value || "root")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+}
+
+function routeNeedsFailureEvidence(routeResult) {
+  const keyboard = routeResult.keyboardHotspots;
+  return Boolean(
+    routeResult.expectationMet === false ||
+      routeResult.routeStructureProblems?.length ||
+      routeResult.overflow ||
+      routeResult.overlaps?.length ||
+      routeResult.deadLinks?.length ||
+      routeResult.unlabeledControls?.length ||
+      routeResult.seriousAccessibility?.length ||
+      routeResult.undersizedMobileTargets?.length ||
+      keyboard?.focusEscapedDialog ||
+      keyboard?.interceptedTargets?.length ||
+      (keyboard?.focusableCount > 0 && !keyboard?.focusAfterTab?.tag),
+  );
+}
+
+async function captureRouteFailureEvidence(
+  page,
+  { viewport, role, route, state = "failed" },
+) {
+  const filename = [viewport, role, route, state]
+    .map(routeEvidenceToken)
+    .filter(Boolean)
+    .join("-");
+  const screenshotPath = path.join(auditEvidenceDir, `${filename}.jpg`);
+  await mkdir(auditEvidenceDir, { recursive: true });
+  await page.screenshot({
+    path: screenshotPath,
+    type: "jpeg",
+    quality: 70,
+    fullPage: true,
+  });
+  return path.relative(process.cwd(), screenshotPath).replaceAll("\\", "/");
+}
+
 async function auditRoute(page, route) {
   await page.goto(`${baseUrl}${route.path}?auditRoute=${Date.now()}`, {
     waitUntil: "domcontentloaded",
@@ -7654,6 +7698,16 @@ if (runRouteAudit) {
             const route = routeQueue.shift();
             try {
               const routeResult = await auditRoute(page, route);
+              if (routeNeedsFailureEvidence(routeResult)) {
+                routeResult.evidenceScreenshot = await captureRouteFailureEvidence(
+                  page,
+                  {
+                    viewport: viewport.name,
+                    role: user.role,
+                    route: route.path,
+                  },
+                ).catch(() => null);
+              }
               routeResults.push(routeResult);
               if (
                 route.expectedAccess === "allowed" &&
@@ -7673,10 +7727,20 @@ if (runRouteAudit) {
                 }
               }
             } catch (error) {
+              const evidenceScreenshot = await captureRouteFailureEvidence(
+                page,
+                {
+                  viewport: viewport.name,
+                  role: user.role,
+                  route: route.path,
+                  state: "navigation-error",
+                },
+              ).catch(() => null);
               routeResults.push({
                 route: route.path,
                 class: "navigation-error",
                 expectationMet: false,
+                evidenceScreenshot,
                 error: String(error.message || error).slice(0, 220),
               });
             }

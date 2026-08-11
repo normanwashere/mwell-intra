@@ -16,6 +16,7 @@ import {
   OPERATIONS_GLOSSARY,
 } from "./governance";
 import { TROUBLESHOOTING_GUIDES } from "./troubleshooting";
+import { EXPLICIT_FEATURE_DETAILS } from "./featureDetails";
 import { searchKnowledge } from "./search";
 import {
   validateFeatureSemanticMappings,
@@ -95,6 +96,28 @@ describe("Knowledge Base content", () => {
         `${item.id} prohibited`,
       ).toBeGreaterThan(0);
     }
+  });
+
+  it("documents current persona context, access recovery, and bounded loading behavior", () => {
+    const home = EXPLICIT_FEATURE_DETAILS["shell-home"]!;
+    expect(home.controls.map((item) => item.name)).toContain(
+      "View account details",
+    );
+    expect(home.fields.map((item) => item.name)).toContain("Persona context");
+
+    const denied = TROUBLESHOOTING_GUIDES.find(
+      (item) => item.id === "trouble-access-denied",
+    )!;
+    expect(denied.safeRecovery.join(" ")).toMatch(
+      /job title.*department.*scoped authority/i,
+    );
+    expect(denied.safeRecovery.join(" ")).toMatch(/different account/i);
+
+    const stale = TROUBLESHOOTING_GUIDES.find(
+      (item) => item.id === "trouble-stale-session",
+    )!;
+    expect(stale.safeRecovery.join(" ")).toMatch(/Retry/i);
+    expect(stale.dataImpact).toMatch(/existing data/i);
   });
 
   it("ties governance controls to approved sources and prohibited workarounds", () => {
