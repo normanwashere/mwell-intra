@@ -51,4 +51,28 @@ describe('DataTable sorting semantics', () => {
     expect(markup).toMatch(new RegExp(`<th[^>]*aria-sort="${ariaSort}"`));
     expect(markup).not.toMatch(/<button[^>]*aria-sort=/);
   });
+
+  it('uses a sibling row-action button instead of nesting controls in a button row', () => {
+    const columns: Column<{ id: string }>[] = [
+      {
+        key: 'id',
+        header: 'Reference',
+        primary: true,
+        render: (row) => <a href={`/records/${row.id}`}>{row.id}</a>,
+      },
+    ];
+    const markup = renderToStaticMarkup(
+      <DataTable
+        ariaLabel="Records"
+        columns={columns}
+        rows={[{ id: 'A-1' }]}
+        keyOf={(row) => row.id}
+        onRowClick={() => undefined}
+        rowActionLabel={(row) => `Open ${row.id}`}
+      />,
+    );
+
+    expect(markup).not.toMatch(/<(tr|div)[^>]*role="button"/);
+    expect(markup.match(/aria-label="Open A-1"/g)).toHaveLength(2);
+  });
 });

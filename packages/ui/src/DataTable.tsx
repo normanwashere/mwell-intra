@@ -1,7 +1,7 @@
 'use client';
 
 import { clsx } from 'clsx';
-import { useMemo, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useMemo, useState, type MouseEvent, type ReactNode } from 'react';
 import { Icon } from './Icon';
 
 export interface Column<T> {
@@ -34,6 +34,8 @@ interface DataTableProps<T> {
   sortKey?: string | null;
   sortDir?: 'asc' | 'desc';
   onSortChange?: (key: string, dir: 'asc' | 'desc') => void;
+  /** Accessible label for the explicit keyboard-reachable row action. */
+  rowActionLabel?: (row: T) => string;
 }
 
 /**
@@ -51,6 +53,7 @@ export function DataTable<T>({
   sortKey: controlledSortKey,
   sortDir: controlledSortDir,
   onSortChange,
+  rowActionLabel,
 }: DataTableProps<T>) {
   const [localSortKey, setLocalSortKey] = useState<string | null>(null);
   const [localSortDir, setLocalSortDir] = useState<'asc' | 'desc'>('asc');
@@ -97,13 +100,14 @@ export function DataTable<T>({
     }
   };
 
-  const rowKeyDown = (row: T) => (e: KeyboardEvent) => {
+  const activateFromSurface = (event: MouseEvent<HTMLElement>, row: T) => {
     if (!onRowClick) return;
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      onRowClick(row);
-    }
+    const target = event.target as HTMLElement;
+    if (target.closest('a, button, input, select, textarea, [role="button"]')) return;
+    onRowClick(row);
   };
+
+  const actionLabel = (row: T) => rowActionLabel?.(row) ?? `Open ${keyOf(row)}`;
 
   return (
     <>
@@ -169,16 +173,14 @@ export function DataTable<T>({
                     </th>
                   );
                 })}
+                {onRowClick && <th scope="col"><span className="sr-only">Open</span></th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
               {sortedRows.map((row, i) => (
                 <tr
                   key={keyOf(row)}
-                  onClick={onRowClick ? () => onRowClick(row) : undefined}
-                  onKeyDown={onRowClick ? rowKeyDown(row) : undefined}
-                  tabIndex={onRowClick ? 0 : undefined}
-                  role={onRowClick ? 'button' : undefined}
+                  onClick={onRowClick ? (event) => activateFromSurface(event, row) : undefined}
                   className={clsx(
                     'text-ink',
                     i % 2 === 1 && 'bg-inset/40',
@@ -191,6 +193,18 @@ export function DataTable<T>({
                       {c.render(row)}
                     </td>
                   ))}
+                  {onRowClick && (
+                    <td className={clsx(cellPad, 'pl-2 text-right')}>
+                      <button
+                        type="button"
+                        aria-label={actionLabel(row)}
+                        onClick={() => onRowClick(row)}
+                        className="inline-grid min-h-11 min-w-11 place-items-center rounded-lg text-faint transition hover:bg-inset hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500"
+                      >
+                        <Icon name="chevron" className="h-4 w-4" />
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -210,10 +224,7 @@ export function DataTable<T>({
           return (
             <li key={keyOf(row)} className="min-w-0 max-w-full">
               <div
-                onClick={onRowClick ? () => onRowClick(row) : undefined}
-                onKeyDown={onRowClick ? rowKeyDown(row) : undefined}
-                tabIndex={onRowClick ? 0 : undefined}
-                role={onRowClick ? 'button' : undefined}
+                onClick={onRowClick ? (event) => activateFromSurface(event, row) : undefined}
                 className={clsx(
                   'card max-w-full overflow-hidden p-3.5',
                   onRowClick &&
@@ -226,9 +237,11 @@ export function DataTable<T>({
                       {primary.render(row)}
                     </div>
                     {onRowClick && (
-                      <span
-                        aria-hidden
-                        className="mt-0.5 shrink-0 text-faint"
+                      <button
+                        type="button"
+                        aria-label={actionLabel(row)}
+                        onClick={() => onRowClick(row)}
+                        className="-mr-2 -mt-2 grid min-h-11 min-w-11 shrink-0 place-items-center rounded-lg text-faint transition hover:bg-inset hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500"
                       >
                         <svg
                           className="h-4 w-4"
@@ -241,7 +254,7 @@ export function DataTable<T>({
                             clipRule="evenodd"
                           />
                         </svg>
-                      </span>
+                      </button>
                     )}
                   </div>
                 )}

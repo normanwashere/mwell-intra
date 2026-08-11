@@ -60,6 +60,8 @@ export function Sheet({
 }: SheetProps) {
   const reduced = useReducedMotion();
   const dragging = useRef(false);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
   const dragControls = useDragControls();
   const draggable = side === 'bottom' && !reduced;
 
@@ -104,7 +106,7 @@ export function Sheet({
           <Icon name="x" />
         </Dialog.Close>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5 md:px-6 md:pb-6">
+      <div ref={bodyRef} className="min-h-0 flex-1 overflow-y-auto px-5 pb-5 md:px-6 md:pb-6">
         {children}
       </div>
       {footer && (
@@ -128,6 +130,20 @@ export function Sheet({
             side === 'right' && (size === 'wide' ? 'md:max-w-3xl' : 'max-w-sm'),
           )}
           {...(description ? {} : { 'aria-describedby': undefined })}
+          onOpenAutoFocus={(event) => {
+            returnFocusRef.current = document.activeElement as HTMLElement | null;
+            const target = bodyRef.current?.querySelector<HTMLElement>(
+              '[data-sheet-initial-focus], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), a[href]',
+            );
+            if (!target) return;
+            event.preventDefault();
+            target.focus();
+          }}
+          onCloseAutoFocus={(event) => {
+            if (!returnFocusRef.current?.isConnected) return;
+            event.preventDefault();
+            returnFocusRef.current.focus();
+          }}
           asChild={draggable}
         >
           {draggable ? (

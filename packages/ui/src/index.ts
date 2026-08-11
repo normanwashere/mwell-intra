@@ -32,6 +32,7 @@ export { Input, type InputProps, Textarea, type TextareaProps } from "./Input";
 export { money, compactMoney, number, relativeTime } from "./format";
 
 export { Sheet } from "./Sheet";
+export { Modal, type ModalProps } from "./Modal";
 export { ToastProvider, useToast } from "./Toast";
 export {
   Skeleton,

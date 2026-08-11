@@ -48,4 +48,13 @@ describe('Legal/vendor lifecycle UI integration', () => {
     expect(detail).toContain('Independent Legal confirmation required');
     expect(detail).toContain('Awaiting independent Legal confirmation');
   });
+
+  it('keeps checklist actions as sibling controls instead of nested button cards', () => {
+    const detail = source('modules/legal/src/pages/CaseDetailPage.tsx');
+
+    expect(detail).not.toContain("role={interactive ? 'button' : undefined}");
+    expect(detail).not.toContain('tabIndex={interactive ? 0 : undefined}');
+    expect(detail).toContain('aria-label={actionLabel}');
+    expect(detail).toContain('min-h-11 min-w-11');
+  });
 });

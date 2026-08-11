@@ -33,6 +33,15 @@ describe("shared shell interaction geometry", () => {
     expect(palette).toContain('"flex min-h-11 w-full items-center');
   });
 
+  it("uses the shared focus-contained modal for the command palette", () => {
+    const palette = source("components/CommandPalette.tsx");
+
+    expect(palette).toContain('import { Icon, Modal, type IconName } from "@intra/ui"');
+    expect(palette).toContain('<Modal');
+    expect(palette).toContain('title="Command palette"');
+    expect(palette).not.toContain('role="dialog"');
+  });
+
   it("presents contextual mobile commands as labeled navigation items", () => {
     const appShell = source("components/AppShell.tsx");
 

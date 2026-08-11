@@ -2,9 +2,9 @@
 
 // Cmd+K / Ctrl+K command palette — navigate modules, jump to common actions.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Icon, type IconName } from "@intra/ui";
+import { Icon, Modal, type IconName } from "@intra/ui";
 import { useSession } from "@intra/auth";
 import {
   ADMIN_NAV,
@@ -31,6 +31,7 @@ export function CommandPalette() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
+  const searchRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const { profile, userRoles, userCapabilities, mode, loading } = useSession();
 
@@ -217,24 +218,19 @@ export function CommandPalette() {
     return () => window.removeEventListener("keydown", onKey);
   }, [open, filtered, active, run]);
 
-  if (!open) return null;
-
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-ink/40 p-4 pt-[12vh] backdrop-blur-sm"
-      role="presentation"
-      onMouseDown={() => setOpen(false)}
+    <Modal
+      open={open}
+      onOpenChange={setOpen}
+      title="Command palette"
+      initialFocusRef={searchRef}
+      className="top-[12vh] w-[min(calc(100vw-2rem),32rem)] -translate-y-0 overflow-hidden rounded-2xl"
+      overlayClassName="bg-ink/40"
     >
-      <div
-        role="dialog"
-        aria-label="Command palette"
-        className="w-full max-w-lg overflow-hidden rounded-2xl border border-line bg-surface shadow-e3"
-        onMouseDown={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center gap-2 border-b border-line px-4 py-3">
+        <div className="flex items-center gap-2 border-b border-line py-3 pl-4 pr-14">
           <Icon name="search" className="h-4 w-4 text-faint" />
           <input
-            autoFocus
+            ref={searchRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search modules and actions…"
@@ -292,7 +288,6 @@ export function CommandPalette() {
             ⌘K
           </kbd>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

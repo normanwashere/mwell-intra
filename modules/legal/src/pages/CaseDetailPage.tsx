@@ -27,7 +27,6 @@ import {
   useRef,
   useState,
   type CSSProperties,
-  type KeyboardEvent,
   type MouseEvent,
   type ReactNode,
   type RefObject,
@@ -1465,32 +1464,16 @@ function ChecklistRow({
     .filter((d): d is number => d !== null)
     .sort((a, b) => a - b)[0];
 
-  // Row-as-target (§2.2.3): the whole card opens the one consistent action;
-  // inner links/buttons stop propagation.
-  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (!interactive) return;
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      onActivate();
-    }
-  };
   const stop = (e: MouseEvent) => e.stopPropagation();
+  const actionLabel = `${item.requirement} — ${isVendor ? (item.instrument ? 'review and sign' : 'upload document') : 'open review'}`;
 
   return (
     <li>
       <div
         onClick={interactive ? onActivate : undefined}
-        onKeyDown={interactive ? onKeyDown : undefined}
-        role={interactive ? 'button' : undefined}
-        tabIndex={interactive ? 0 : undefined}
-        aria-label={
-          interactive
-            ? `${item.requirement} — ${isVendor ? (item.instrument ? 'review and sign' : 'upload document') : 'open review'}`
-            : undefined
-        }
         className={`card p-4 sm:p-5 ${
           interactive
-            ? 'cursor-pointer transition hover:bg-inset/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500'
+            ? 'cursor-pointer transition hover:bg-inset/60'
             : ''
         }`}
       >
@@ -1570,7 +1553,17 @@ function ChecklistRow({
               {CHECKLIST_LABEL[item.decision]}
             </Badge>
             {interactive && (
-              <Icon name="chevron" className="h-4 w-4 text-faint" aria-hidden />
+              <button
+                type="button"
+                aria-label={actionLabel}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onActivate();
+                }}
+                className="grid min-h-11 min-w-11 place-items-center rounded-lg text-faint transition hover:bg-inset hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500"
+              >
+                <Icon name="chevron" className="h-4 w-4" aria-hidden />
+              </button>
             )}
           </div>
         </div>
