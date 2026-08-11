@@ -1209,6 +1209,12 @@ function UserDetail({
             const assignedInModule = cols.filter((column) =>
               held.has(column.key),
             ).length;
+            const orderedRoles = [...cols].sort((left, right) => {
+              const leftAssigned = held.has(left.key);
+              const rightAssigned = held.has(right.key);
+              if (leftAssigned !== rightAssigned) return leftAssigned ? -1 : 1;
+              return left.label.localeCompare(right.label);
+            });
             return (
               <details
                 key={moduleName}
@@ -1250,7 +1256,7 @@ function UserDetail({
                   </span>
                 </summary>
                 <ul className="border-t border-line">
-                  {cols.map((column) => {
+                  {orderedRoles.map((column) => {
                     const checked = held.has(column.key);
                     const rowPending = pending.has(
                       `${profile.id}::${column.key}`,
