@@ -24,6 +24,7 @@ import { ThemeToggle } from "./ThemeToggle";
 import { UserMenu } from "./UserMenu";
 import { CommandPalette } from "./CommandPalette";
 import { MwellIntraLogo } from "./MwellIntraLogo";
+import { PersonaContext } from "./PersonaContext";
 
 interface NavEntry {
   readonly href: string;
@@ -259,12 +260,21 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </p>
               )}
             </div>
-            <p
-              className="hidden truncate font-display text-title text-ink md:block"
-              aria-hidden="true"
-            >
-              {topBarLabel(pathname, entries) || "Home"}
-            </p>
+            <div className="hidden min-w-0 flex-1 items-center gap-4 md:flex">
+              <p
+                className="truncate font-display text-title text-ink"
+                aria-hidden="true"
+              >
+                {topBarLabel(pathname, entries) || "Home"}
+              </p>
+              {profile && (
+                <PersonaContext
+                  profile={profile}
+                  userRoles={userRoles}
+                  className="hidden border-l border-line pl-4 lg:block"
+                />
+              )}
+            </div>
             <div
               className="flex shrink-0 items-center gap-1.5"
               data-shell-header-actions="true"
@@ -325,6 +335,15 @@ export function AppShell({ children }: { children: ReactNode }) {
               <UserMenu />
             </div>
           </div>
+          {profile && (
+            <div className="border-t border-line/60 px-4 py-1.5 md:hidden">
+              <PersonaContext
+                profile={profile}
+                userRoles={userRoles}
+                compact
+              />
+            </div>
+          )}
         </header>
 
         <main

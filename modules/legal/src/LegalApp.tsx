@@ -70,12 +70,13 @@ export function LegalApp({ basename = "/legal" }: LegalAppProps) {
     isVendorSurface && can(userRoles, "core", "view_own_accreditation");
   const canUseVendorSurface = isVendor && hasVendorAccess;
   if (loading) {
-    return (
-      <main className="mx-auto max-w-5xl space-y-6 p-4 md:p-6" aria-busy="true">
+    const loadingState = (
+      <div className="mx-auto max-w-5xl space-y-6 p-4 md:p-6" aria-busy="true">
         <SkeletonStats />
         <SkeletonList rows={5} />
-      </main>
+      </div>
     );
+    return isVendorSurface ? <main>{loadingState}</main> : loadingState;
   }
 
   // Signed out entirely → invite the user to sign in (with a redirect back
@@ -120,29 +121,37 @@ export function LegalApp({ basename = "/legal" }: LegalAppProps) {
   }
 
   if (isVendorSurface ? !canUseVendorSurface : !hasInternalAccess) {
-    return (
-      <main
-        role="alert"
-        className="grid min-h-[60vh] place-items-center bg-app p-6 text-center"
-      >
+    const denied = (
+      <div role="alert" className="grid min-h-[60vh] place-items-center bg-app p-6 text-center">
         <div className="max-w-sm space-y-3">
-          <h1 className="text-lg font-bold text-ink">No legal access</h1>
+          <h1 className="text-lg font-bold text-ink">
+            {isVendorSurface ? "Vendor portal access required" : "No legal access"}
+          </h1>
           <p className="text-sm text-muted">
             {isVendorSurface
-              ? "This area is reserved for enrolled vendor accounts. Sign in with a vendor account or contact your Mwell account manager."
+              ? "This portal is reserved for enrolled vendor representatives. Return to your dashboard or switch to the vendor account named in your invitation."
               : "Your account doesn't include a legal role. Contact your administrator if you need access."}
           </p>
-          <a
-            href={isVendorSurface ? "/login" : "/"}
-            className="inline-flex min-h-11 items-center justify-center rounded-xl bg-brand-600 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-app"
-          >
-            {isVendorSurface
-              ? "Sign in with a different account"
-              : "Back to dashboard"}
-          </a>
+          <div className="flex flex-col justify-center gap-2 sm:flex-row">
+            <a
+              href="/"
+              className="inline-flex min-h-11 items-center justify-center rounded-xl bg-brand-600 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-app"
+            >
+              Back to dashboard
+            </a>
+            {isVendorSurface && (
+              <a
+                href="/login"
+                className="inline-flex min-h-11 items-center justify-center rounded-xl border border-line bg-surface px-3 py-2 text-xs font-semibold text-ink hover:bg-inset focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-app"
+              >
+                Sign in with a different account
+              </a>
+            )}
+          </div>
         </div>
-      </main>
+      </div>
     );
+    return isVendorSurface ? <main>{denied}</main> : <section>{denied}</section>;
   }
 
   const routes = (

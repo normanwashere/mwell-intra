@@ -9,10 +9,10 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Icon } from "@intra/ui";
 import { useSession } from "@intra/auth";
-import { MODULE_LIST } from "@intra/rbac";
 import { cx } from "@shell/lib/cx";
 import { resetDemoData } from "@shell/lib/demoData";
-import { hasCapability, hasModuleAccess } from "@shell/lib/navigation";
+import { hasCapability } from "@shell/lib/navigation";
+import { resolvePersonaPresentation } from "@shell/lib/personaPresentation";
 
 function initials(nameOrEmail: string): string {
   const source = nameOrEmail.trim();
@@ -74,9 +74,7 @@ export function UserMenu() {
 
   const label = profile.name ?? profile.email;
   const access = { mode, userRoles, userCapabilities };
-  const activeModules = MODULE_LIST.filter((module) =>
-    hasModuleAccess(access, module),
-  );
+  const persona = resolvePersonaPresentation(profile, userRoles);
   const isAdmin = hasCapability(access, "core", "manage_rbac");
 
   const handleSignOut = async () => {
@@ -102,7 +100,7 @@ export function UserMenu() {
       {open && (
         <div
           role="menu"
-          className="absolute right-0 top-12 z-30 w-64 animate-pop-in rounded-2xl border border-line bg-surface p-3 shadow-pop"
+          className="absolute right-0 top-12 z-30 w-[min(22rem,calc(100vw-2rem))] animate-pop-in rounded-2xl border border-line bg-surface p-3 shadow-pop"
         >
           <div className="flex items-center gap-3 px-1 pb-3">
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand-600 text-sm font-bold text-white">
@@ -114,24 +112,42 @@ export function UserMenu() {
             </div>
           </div>
 
-          <div className="border-t border-line pt-2">
-            <p className="px-1 text-[0.65rem] font-semibold uppercase tracking-wide text-faint">
-              {profile.kind === "vendor" ? "External vendor" : "Employee"}
-              {profile.title ? ` · ${profile.title}` : ""}
-            </p>
-            <div className="mt-1.5 flex flex-wrap gap-1 px-1">
-              {activeModules.length > 0 ? (
-                activeModules.map((m) => (
-                  <span
-                    key={m}
-                    className={cx("chip bg-inset capitalize text-muted")}
-                  >
-                    {m}
-                  </span>
-                ))
-              ) : (
-                <span className="text-xs text-faint">No module access</span>
+          <div className="space-y-3 border-t border-line pt-3">
+            <div className="px-1">
+              <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-faint">
+                Job context
+              </p>
+              <p className="mt-1 text-sm font-semibold text-ink">
+                {persona.title}
+              </p>
+              <p className="text-xs text-muted">{persona.department}</p>
+              {persona.responsibility && (
+                <p className="mt-1 text-xs leading-relaxed text-faint">
+                  {persona.responsibility}
+                </p>
               )}
+            </div>
+            <div className="px-1">
+              <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-faint">
+                Scoped authority
+              </p>
+              <div className="mt-1.5 space-y-1.5">
+                {persona.authority.length > 0 ? (
+                  persona.authority.map((item) => (
+                    <div
+                      key={`${item.module}:${item.role}`}
+                      className="flex items-start justify-between gap-3 text-xs"
+                    >
+                      <span className="font-medium text-ink">{item.label}</span>
+                      <span className="shrink-0 text-faint">
+                        {item.moduleLabel}
+                      </span>
+                    </div>
+                  ))
+              ) : (
+                  <span className="text-xs text-faint">No scoped authority</span>
+              )}
+              </div>
             </div>
           </div>
 
