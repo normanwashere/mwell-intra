@@ -109,7 +109,7 @@ export function ProcurementApp({
           </p>
           <a
             href="/"
-            className="inline-flex items-center justify-center rounded-xl bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-app"
+            className="btn-primary min-h-11"
           >
             Back to dashboard
           </a>
