@@ -30,6 +30,7 @@ import {
   reviewDecisionForItem,
   sortChecklistRows,
   casePathForViewer,
+  caseRouteWithinModule,
   vendorSubmissionAction,
 } from './caseLogic';
 import { CATALOG_BY_CODE } from './requirements/catalog';
@@ -45,6 +46,7 @@ describe('vendor case navigation and submission', () => {
   it('keeps vendor case links inside the vendor portal', () => {
     expect(casePathForViewer(true, 'case_1')).toBe('/vendor/cases/case_1');
     expect(casePathForViewer(false, 'case_1')).toBe('/legal/cases/case_1');
+    expect(caseRouteWithinModule('case_1')).toBe('/cases/case_1');
   });
 
   it('requires all evidence before offering submission', () => {

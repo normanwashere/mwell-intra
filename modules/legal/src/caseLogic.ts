@@ -29,6 +29,10 @@ export function casePathForViewer(isVendor: boolean, caseId: string): string {
   return `${isVendor ? '/vendor' : '/legal'}/cases/${encodeURIComponent(caseId)}`;
 }
 
+export function caseRouteWithinModule(caseId: string): string {
+  return `/cases/${encodeURIComponent(caseId)}`;
+}
+
 export function vendorSubmissionAction(outstandingCount: number): {
   kind: 'complete_requirements' | 'submit';
   label: string;

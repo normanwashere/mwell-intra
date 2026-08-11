@@ -21,11 +21,11 @@ import {
 
 interface ActivityRow {
   readonly id: number;
-  readonly module: string;
-  readonly entity_type: string;
-  readonly entity_id: string;
-  readonly action: string;
-  readonly actor: string;
+  readonly module: string | null;
+  readonly entity_type: string | null;
+  readonly entity_id: string | null;
+  readonly action: string | null;
+  readonly actor: string | null;
   readonly detail: Record<string, unknown> | null;
   readonly created_at: string;
 }
@@ -96,7 +96,14 @@ function AdminAuditInner() {
   }, [load]);
 
   const modules = useMemo(
-    () => Array.from(new Set(rows.map((row) => row.module))).sort(),
+    () =>
+      Array.from(
+        new Set(
+          rows
+            .map((row) => row.module)
+            .filter((moduleName): moduleName is string => Boolean(moduleName)),
+        ),
+      ).sort(),
     [rows],
   );
   const filtered = useMemo(() => {
@@ -109,7 +116,7 @@ function AdminAuditInner() {
         row.entity_type,
         row.entity_id,
         row.action,
-        actors.get(row.actor) ?? row.actor,
+        actors.get(row.actor ?? "") ?? row.actor,
         JSON.stringify(row.detail ?? {}),
       ]
         .join(" ")
@@ -131,7 +138,7 @@ function AdminAuditInner() {
           row.module,
           row.action,
           `${row.entity_type}:${row.entity_id}`,
-          actors.get(row.actor) ?? row.actor,
+          actors.get(row.actor ?? "") ?? row.actor,
           JSON.stringify(row.detail ?? {}),
         ]
           .map(escape)
@@ -206,7 +213,7 @@ function AdminAuditInner() {
                 <div className="flex min-w-0 max-w-full flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0 max-w-full flex-1">
                     <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
-                      <Badge tone="brand">{row.module}</Badge>
+                      <Badge tone="brand">{row.module || "Platform"}</Badge>
                       <h2 className="min-w-0 break-words font-semibold text-ink [overflow-wrap:anywhere]">
                         {auditEventSummary(row)}
                       </h2>
@@ -231,9 +238,13 @@ function AdminAuditInner() {
                   </summary>
                   <dl className="grid gap-2 rounded-md bg-inset p-3 text-xs sm:grid-cols-[8rem_minmax(0,1fr)]">
                     <dt className="font-semibold text-muted">Reference</dt>
-                    <dd className="break-all font-mono text-ink">{row.entity_id}</dd>
+                    <dd className="break-all font-mono text-ink">
+                      {row.entity_id || "unavailable"}
+                    </dd>
                     <dt className="font-semibold text-muted">Event code</dt>
-                    <dd className="break-all font-mono text-ink">{row.action}</dd>
+                    <dd className="break-all font-mono text-ink">
+                      {row.action || "unavailable"}
+                    </dd>
                     <dt className="font-semibold text-muted">Actor ID</dt>
                     <dd className="break-all font-mono text-ink">{row.actor || "system"}</dd>
                   </dl>

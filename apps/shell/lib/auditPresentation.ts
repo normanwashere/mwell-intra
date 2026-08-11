@@ -1,31 +1,40 @@
 export interface AuditPresentationRow {
-  readonly module: string;
-  readonly entity_type: string;
-  readonly entity_id: string;
-  readonly action: string;
-  readonly actor: string;
+  readonly module: string | null;
+  readonly entity_type: string | null;
+  readonly entity_id: string | null;
+  readonly action: string | null;
+  readonly actor: string | null;
 }
 
-export function humanizeAuditToken(value: string): string {
-  const words = value.trim().replaceAll(/[._-]+/g, " ").replaceAll(/\s+/g, " ");
-  if (!words) return "Activity recorded";
+export function humanizeAuditToken(
+  value: string | null | undefined,
+  fallback = "Activity recorded",
+): string {
+  const words = String(value ?? "")
+    .trim()
+    .replaceAll(/[._-]+/g, " ")
+    .replaceAll(/\s+/g, " ");
+  if (!words) return fallback;
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
 export function auditActorLabel(
-  actorId: string,
+  actorId: string | null | undefined,
   actors: ReadonlyMap<string, string>,
 ): string {
-  const resolved = actors.get(actorId)?.trim();
+  const normalizedActorId = String(actorId ?? "").trim();
+  const resolved = actors.get(normalizedActorId)?.trim();
   if (resolved) return resolved;
-  if (!actorId.trim()) return "System process";
+  if (!normalizedActorId) return "System process";
   return "Unavailable account";
 }
 
 export function auditEntityLabel(row: AuditPresentationRow): string {
-  return humanizeAuditToken(row.entity_type);
+  return humanizeAuditToken(row.entity_type, "Governed record");
 }
 
 export function auditEventSummary(row: AuditPresentationRow): string {
-  return `${humanizeAuditToken(row.action)} ${humanizeAuditToken(row.entity_type).toLocaleLowerCase()}`;
+  const action = humanizeAuditToken(row.action);
+  if (!String(row.entity_type ?? "").trim()) return action;
+  return `${action} ${humanizeAuditToken(row.entity_type).toLocaleLowerCase()}`;
 }

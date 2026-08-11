@@ -39,4 +39,17 @@ describe("audit presentation", () => {
       }),
     ).toBe("Department scope");
   });
+
+  it("presents legacy audit rows with null fields without crashing", () => {
+    const row = {
+      module: null,
+      entity_type: null,
+      entity_id: null,
+      action: null,
+      actor: null,
+    };
+    expect(auditEventSummary(row)).toBe("Activity recorded");
+    expect(auditEntityLabel(row)).toBe("Governed record");
+    expect(auditActorLabel(row.actor, new Map())).toBe("System process");
+  });
 });

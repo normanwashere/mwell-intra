@@ -180,7 +180,7 @@ export function ApprovalInboxPage() {
         description="Decide the requests waiting on your tier."
         icon="clipboard"
         action={
-          <Link to="/procurement" className="btn-outline btn-sm">
+          <Link to="/" className="btn-outline btn-sm">
             <Icon name="arrowRight" className="h-4 w-4 rotate-180" />
             Back to requests
           </Link>
