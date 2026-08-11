@@ -6,7 +6,6 @@ import {
   Badge,
   Card,
   EmptyState,
-  HeroChipButton,
   HeroStat,
   Icon,
   InfoTip,
@@ -181,9 +180,10 @@ export function ApprovalInboxPage() {
         description="Decide the requests waiting on your tier."
         icon="clipboard"
         action={
-          <HeroChipButton href="/procurement" icon="arrowRight">
+          <Link to="/procurement" className="btn-outline btn-sm">
+            <Icon name="arrowRight" className="h-4 w-4 rotate-180" />
             Back to requests
-          </HeroChipButton>
+          </Link>
         }
         accessory={
           <HeroStat label="Waiting on you" align="right">
@@ -210,6 +210,7 @@ export function ApprovalInboxPage() {
           <div className="h-32 animate-pulse rounded-2xl bg-inset" aria-hidden />
         ) : pending.length === 0 ? (
           <EmptyState
+            compact
             icon="check"
             title="Inbox zero"
             message="No requests are waiting on your tier right now — new submissions land here automatically."

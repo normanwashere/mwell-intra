@@ -185,7 +185,11 @@ export function InsightsApp({ initialArea }: { initialArea?: InsightArea }) {
             const presentation = metricStatusPresentation(metric.status);
             const source = resolveGovernedSource(metric, userRoles);
             return (
-              <Card key={metric.id} className="flex min-h-56 flex-col gap-4">
+              <Card
+                key={metric.id}
+                data-insight-metric={metric.id}
+                className="flex min-h-56 flex-col gap-4"
+              >
                 <div className="flex items-center justify-between gap-2">
                   <Badge tone="slate">{LABELS[metric.area]}</Badge>
                   <Badge tone={presentation.tone}>{presentation.label}</Badge>

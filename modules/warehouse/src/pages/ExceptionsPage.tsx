@@ -25,6 +25,7 @@ export function ExceptionsPage() {
   const severity = params.get('severity') ?? 'all';
   const status = params.get('status') ?? 'open';
   const mayResolve = can('resolve_exceptions');
+  const hasNonDefaultFilters = severity !== 'all' || status !== 'open';
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -86,7 +87,23 @@ export function ExceptionsPage() {
       </div>
 
       {loading ? <p className="text-sm text-muted">Loading exceptions...</p> : rows.length === 0 ? (
-        <EmptyState icon="check" title="No exceptions match these filters" />
+        <EmptyState
+          compact
+          icon="check"
+          title={hasNonDefaultFilters ? 'No exceptions match these filters' : 'No open warehouse exceptions'}
+          message={
+            hasNonDefaultFilters
+              ? `${exceptions.length} exception${exceptions.length === 1 ? '' : 's'} exist outside this view.`
+              : 'New operational exceptions appear here automatically.'
+          }
+          action={
+            hasNonDefaultFilters ? (
+              <button type="button" className="btn-outline btn-sm" onClick={() => setParams({}, { replace: true })}>
+                Clear filters
+              </button>
+            ) : undefined
+          }
+        />
       ) : (
         <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface" aria-label="Warehouse exceptions">
           {rows.map((exception) => {

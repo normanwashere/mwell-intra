@@ -30,6 +30,7 @@ import { shouldBlockVendorAccess } from '../vendorAccess';
 import { TechnologyQualificationForm } from '../components/TechnologyQualificationForm';
 import { AccreditationDeclaration } from '../components/AccreditationDeclaration';
 import { createVendorApplicationDraftRepository, type LegalDraftClient } from '../vendorApplicationDraft';
+import { casePathForViewer } from '../caseLogic';
 type SupportedEntity = Extract<EntityType, 'corporation' | 'sole_prop' | 'partnership'>;
 
 function supportedEntity(value: EntityType | undefined): SupportedEntity {
@@ -226,7 +227,7 @@ export function VendorApplicationPage() {
         <Card className="mx-auto max-w-xl">
           <h1 className="font-display text-xl font-bold text-ink">Application could not be loaded</h1>
           <p className="mt-2 text-sm text-muted">{loadError}</p>
-          <Link to={`/cases/${kase.id}`} className="btn-primary mt-4">
+          <Link to={casePathForViewer(isVendor, kase.id)} className="btn-primary mt-4">
             Return to case
           </Link>
         </Card>
@@ -361,7 +362,7 @@ export function VendorApplicationPage() {
         description="Complete the company, experience, evidence, and declaration sections used by Legal and Procurement."
         icon="clipboard"
         action={
-          <HeroChipButton href={`/cases/${kase.id}`} icon="arrowRight">
+          <HeroChipButton href={casePathForViewer(isVendor, kase.id)} icon="arrowRight">
             Back to case
           </HeroChipButton>
         }
@@ -524,7 +525,7 @@ export function VendorApplicationPage() {
               </li>
             ))}
           </ul>
-          <Link to={`/cases/${kase.id}`} className="btn-ghost mt-4">
+          <Link to={casePathForViewer(isVendor, kase.id)} className="btn-ghost mt-4">
             <Icon name="clipboard" className="h-4 w-4" />
             Open document uploads
           </Link>

@@ -13,6 +13,11 @@ import {
   Skeleton,
   useToast,
 } from "@intra/ui";
+import {
+  auditActorLabel,
+  auditEntityLabel,
+  auditEventSummary,
+} from "@shell/lib/auditPresentation";
 
 interface ActivityRow {
   readonly id: number;
@@ -203,14 +208,14 @@ function AdminAuditInner() {
                     <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
                       <Badge tone="brand">{row.module}</Badge>
                       <h2 className="min-w-0 break-words font-semibold text-ink [overflow-wrap:anywhere]">
-                        {row.action.replaceAll("_", " ")}
+                        {auditEventSummary(row)}
                       </h2>
                     </div>
                     <p
                       data-testid="audit-entity-reference"
                       className="mt-2 max-w-full break-words text-sm text-muted [overflow-wrap:anywhere]"
                     >
-                      {row.entity_type}:{row.entity_id}
+                      {auditEntityLabel(row)}
                     </p>
                   </div>
                   <time className="text-xs text-faint" dateTime={row.created_at}>
@@ -218,16 +223,29 @@ function AdminAuditInner() {
                   </time>
                 </div>
                 <p className="mt-3 max-w-full break-words text-sm text-muted [overflow-wrap:anywhere]">
-                  Actor: {actors.get(row.actor) ?? row.actor}
+                  Performed by {auditActorLabel(row.actor, actors)}
                 </p>
-                {row.detail && (
-                  <pre
-                    data-testid="audit-event-detail"
-                    className="mt-3 max-h-48 w-full min-w-0 max-w-full overflow-x-hidden overflow-y-auto whitespace-pre-wrap break-words rounded-md bg-inset p-3 text-xs text-muted [overflow-wrap:anywhere]"
-                  >
-                    {JSON.stringify(row.detail, null, 2)}
-                  </pre>
-                )}
+                <details className="mt-3 border-t border-line pt-3 text-sm">
+                  <summary className="min-h-11 cursor-pointer py-2 font-semibold text-brand-700">
+                    Technical details
+                  </summary>
+                  <dl className="grid gap-2 rounded-md bg-inset p-3 text-xs sm:grid-cols-[8rem_minmax(0,1fr)]">
+                    <dt className="font-semibold text-muted">Reference</dt>
+                    <dd className="break-all font-mono text-ink">{row.entity_id}</dd>
+                    <dt className="font-semibold text-muted">Event code</dt>
+                    <dd className="break-all font-mono text-ink">{row.action}</dd>
+                    <dt className="font-semibold text-muted">Actor ID</dt>
+                    <dd className="break-all font-mono text-ink">{row.actor || "system"}</dd>
+                  </dl>
+                  {row.detail && (
+                    <pre
+                      data-testid="audit-event-detail"
+                      className="mt-2 max-h-48 w-full min-w-0 max-w-full overflow-x-hidden overflow-y-auto whitespace-pre-wrap break-words rounded-md bg-inset p-3 text-xs text-muted [overflow-wrap:anywhere]"
+                    >
+                      {JSON.stringify(row.detail, null, 2)}
+                    </pre>
+                  )}
+                </details>
               </Card>
             </li>
           ))}

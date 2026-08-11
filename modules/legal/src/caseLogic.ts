@@ -25,6 +25,19 @@ import {
   type TailoringProfile,
 } from './requirements/policy';
 
+export function casePathForViewer(isVendor: boolean, caseId: string): string {
+  return `${isVendor ? '/vendor' : '/legal'}/cases/${encodeURIComponent(caseId)}`;
+}
+
+export function vendorSubmissionAction(outstandingCount: number): {
+  kind: 'complete_requirements' | 'submit';
+  label: string;
+} {
+  return outstandingCount > 0
+    ? { kind: 'complete_requirements', label: 'Complete requirements' }
+    : { kind: 'submit', label: 'Submit for review' };
+}
+
 // ---------------------------------------------------------------------------
 // Catalog → checklist seeding
 // ---------------------------------------------------------------------------

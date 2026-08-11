@@ -4,6 +4,12 @@ import { ProcurementPage } from './ProcurementPage';
 import { renderWithProviders } from '@/test/renderWithProviders';
 
 describe('ProcurementPage', () => {
+  it('presents the page as Warehouse replenishment with a Procurement handoff', async () => {
+    renderWithProviders(<ProcurementPage />, { role: 'procurement' });
+    expect(await screen.findByRole('heading', { name: /replenishment planning/i })).toBeInTheDocument();
+    expect(screen.getByText(/warehouse.*procurement handoff/i)).toBeInTheDocument();
+  });
+
   it('summarises reorder needs and supplier lead times', async () => {
     renderWithProviders(<ProcurementPage />, { role: 'procurement' });
     expect(await screen.findByText('SKUs to reorder')).toBeInTheDocument();

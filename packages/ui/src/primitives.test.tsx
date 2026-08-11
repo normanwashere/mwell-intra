@@ -1,6 +1,18 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { ModuleHero } from './primitives';
+import { Card, ModuleHero } from './primitives';
+
+describe('Card DOM contract', () => {
+  it('forwards valid div attributes used by browser tests and accessibility', () => {
+    const markup = renderToStaticMarkup(
+      <Card data-testid="governed-card" aria-label="Governed record">
+        Content
+      </Card>,
+    );
+    expect(markup).toContain('data-testid="governed-card"');
+    expect(markup).toContain('aria-label="Governed record"');
+  });
+});
 
 describe('ModuleHero responsive hierarchy', () => {
   it('keeps the watermark compact and behind readable content', () => {

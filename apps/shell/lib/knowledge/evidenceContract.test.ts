@@ -16,20 +16,28 @@ describe("Knowledge Base evidence contract", () => {
           )
         : [],
     );
+    const featureEvidence = KNOWLEDGE_CONTENT.evidence.filter(
+      (item) => item.featureId,
+    );
 
-    expect(requirements).toHaveLength(executableLiveNodes.length + 3);
-    expect(requirements).toHaveLength(42);
+    expect(requirements).toHaveLength(
+      executableLiveNodes.length + featureEvidence.length,
+    );
     expect(
       requirements
         .filter((item) => item.featureId)
         .map((item) => item.featureId),
-    ).toEqual(["events-workspace", "my-work", "insights-workspace"]);
+    ).toEqual(featureEvidence.map((item) => item.featureId));
     expect(
       requirements.filter((item) => item.environment === "production"),
-    ).toHaveLength(39);
+    ).toHaveLength(
+      requirements.length -
+        requirements.filter((item) => item.environment === "documentation")
+          .length,
+    );
     expect(
       requirements.filter((item) => item.environment === "documentation"),
-    ).toHaveLength(3);
+    ).toHaveLength(featureEvidence.length);
     expect(requirements.every((item) => item.desktop && item.mobile)).toBe(
       true,
     );

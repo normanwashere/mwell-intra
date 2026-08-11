@@ -32,6 +32,14 @@ describe("shared shell interaction geometry", () => {
     expect(appShell).toContain("md:min-h-11");
     expect(palette).toContain('"flex min-h-11 w-full items-center');
   });
+
+  it("presents contextual mobile commands as labeled navigation items", () => {
+    const appShell = source("components/AppShell.tsx");
+
+    expect(appShell).toContain("MobileActionTab");
+    expect(appShell).not.toContain('className="relative -mt-5 grid h-14 w-14');
+    expect(appShell).toContain("{action.label}");
+  });
 });
 
 describe("server-enforced Knowledge Base audience", () => {

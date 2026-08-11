@@ -253,10 +253,10 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "procurement",
-    label: "Procurement",
+    label: "Replenishment",
     path: "/procurement",
     capabilities: ["view_procurement"],
-    description: "Reorder and supplier planning.",
+    description: "Stock planning and Procurement handoff.",
     icon: "cart",
     group: "plan",
   },

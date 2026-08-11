@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSession } from "@intra/auth";
 import { Badge, Card, EmptyState, useToast } from "@/components/ui";
 
@@ -21,6 +21,26 @@ interface SavedRecommendation extends ReplenishmentCandidate {
   expectedArrivalAt?: string;
 }
 
+const RISK_ORDER: Record<ReplenishmentCandidate['stockoutRisk'], number> = {
+  critical: 0,
+  high: 1,
+  medium: 2,
+  low: 3,
+};
+
+export function sortReplenishmentCandidates(
+  candidates: readonly ReplenishmentCandidate[],
+): ReplenishmentCandidate[] {
+  return [...candidates].sort(
+    (left, right) =>
+      RISK_ORDER[left.stockoutRisk] - RISK_ORDER[right.stockoutRisk] ||
+      Math.max(0, right.reorderPoint - right.onHand) -
+        Math.max(0, left.reorderPoint - left.onHand) ||
+      right.leadTimeDays - left.leadTimeDays ||
+      left.productName.localeCompare(right.productName),
+  );
+}
+
 function text(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
@@ -35,6 +55,20 @@ export function ReplenishmentControlPanel({
   const toast = useToast();
   const [rows, setRows] = useState<SavedRecommendation[]>([]);
   const [workingId, setWorkingId] = useState<string>();
+  const visibleCandidates = useMemo(
+    () =>
+      sortReplenishmentCandidates(
+        candidates.filter(
+          (candidate) =>
+            !rows.some(
+              (row) =>
+                row.productId === candidate.productId &&
+                !["dismissed", "ordered"].includes(row.status),
+            ),
+        ),
+      ),
+    [candidates, rows],
+  );
 
   const refresh = useCallback(async () => {
     if (!live) return;
@@ -148,21 +182,21 @@ export function ReplenishmentControlPanel({
           Save the recommendation, accept it, hand it to Procurement, then link
           the order outcome.
         </p>
+        {(visibleCandidates.length > 0 || rows.length > 0) && (
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Badge tone="rose">
+              {visibleCandidates.filter((candidate) => candidate.stockoutRisk === 'critical').length} critical
+            </Badge>
+            <Badge tone="slate">{visibleCandidates.length} new</Badge>
+            <Badge tone="brand">{rows.filter((row) => !['ordered', 'dismissed'].includes(row.status)).length} in progress</Badge>
+          </div>
+        )}
       </div>
       {rows.length === 0 && candidates.length === 0 ? (
         <EmptyState icon="check" title="No replenishment demand" />
       ) : (
-        <div className="grid gap-3 lg:grid-cols-2">
-          {candidates
-            .filter(
-              (candidate) =>
-                !rows.some(
-                  (row) =>
-                    row.productId === candidate.productId &&
-                    !["dismissed", "ordered"].includes(row.status),
-                ),
-            )
-            .map((candidate) => (
+        <div className="space-y-2">
+          {visibleCandidates.map((candidate) => (
               <Card key={candidate.productId} className="space-y-3">
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -182,14 +216,21 @@ export function ReplenishmentControlPanel({
                     {candidate.stockoutRisk}
                   </Badge>
                 </div>
-                <button
-                  type="button"
-                  className="btn-outline btn-sm"
-                  disabled={workingId === candidate.productId}
-                  onClick={() => void recommend(candidate)}
-                >
-                  Save +{candidate.recommendedQuantity} recommendation
-                </button>
+                <div className="flex flex-wrap items-end justify-between gap-3">
+                  <dl className="grid grid-cols-3 gap-x-5 gap-y-1 text-xs">
+                    <div><dt className="text-faint">On hand</dt><dd className="font-semibold text-ink">{candidate.onHand}</dd></div>
+                    <div><dt className="text-faint">Minimum</dt><dd className="font-semibold text-ink">{candidate.reorderPoint}</dd></div>
+                    <div><dt className="text-faint">Lead time</dt><dd className="font-semibold text-ink">{candidate.leadTimeDays}d</dd></div>
+                  </dl>
+                  <button
+                    type="button"
+                    className="btn-outline btn-sm"
+                    disabled={workingId === candidate.productId}
+                    onClick={() => void recommend(candidate)}
+                  >
+                    Save +{candidate.recommendedQuantity}
+                  </button>
+                </div>
               </Card>
             ))}
           {rows.map((record) => (

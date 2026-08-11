@@ -29,6 +29,8 @@ import {
   requiredItemsReadyForDecision,
   reviewDecisionForItem,
   sortChecklistRows,
+  casePathForViewer,
+  vendorSubmissionAction,
 } from './caseLogic';
 import { CATALOG_BY_CODE } from './requirements/catalog';
 import {
@@ -38,6 +40,24 @@ import {
 
 let n = 0;
 const nextId = () => `id_${++n}`;
+
+describe('vendor case navigation and submission', () => {
+  it('keeps vendor case links inside the vendor portal', () => {
+    expect(casePathForViewer(true, 'case_1')).toBe('/vendor/cases/case_1');
+    expect(casePathForViewer(false, 'case_1')).toBe('/legal/cases/case_1');
+  });
+
+  it('requires all evidence before offering submission', () => {
+    expect(vendorSubmissionAction(3)).toEqual({
+      kind: 'complete_requirements',
+      label: 'Complete requirements',
+    });
+    expect(vendorSubmissionAction(0)).toEqual({
+      kind: 'submit',
+      label: 'Submit for review',
+    });
+  });
+});
 
 const UK_IT_PROFILE: TailoringProfile = {
   jurisdiction: 'UK',

@@ -229,17 +229,28 @@ function DepartmentTreeNode({
                 {department.is_active ? "Active" : "Inactive"}
               </Badge>
             </div>
-            <p className="truncate font-mono text-xs text-faint">
-              {department.code} - order {department.sort_order}
-            </p>
             <p className="truncate text-xs text-muted">
               {parentName ? `Reports to ${parentName}` : "Top-level department"}
             </p>
-            {department.deactivation_blocked_reason && department.is_active && (
-              <p className="mt-1 text-xs text-amber-700">
-                {department.deactivation_blocked_reason}
-              </p>
+            {department.purpose && (
+              <p className="mt-1 line-clamp-2 text-xs text-muted">{department.purpose}</p>
             )}
+            <details className="mt-1 text-xs text-faint">
+              <summary className="min-h-7 cursor-pointer py-1 font-medium text-brand-700">
+                Technical details
+                {department.deactivation_blocked_reason && department.is_active
+                  ? " · Protected"
+                  : ""}
+              </summary>
+              <p className="font-mono [overflow-wrap:anywhere]">
+                Code {department.code} · Display order {department.sort_order}
+              </p>
+              {department.deactivation_blocked_reason && department.is_active && (
+                <p className="mt-1 text-amber-700">
+                  {department.deactivation_blocked_reason}
+                </p>
+              )}
+            </details>
           </div>
         </div>
         <div className="flex items-center gap-1">

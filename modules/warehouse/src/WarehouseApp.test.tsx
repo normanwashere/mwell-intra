@@ -57,7 +57,7 @@ describe('WarehouseApp basename handling', () => {
           name: /warehouse dashboard/i,
         }),
       ).toBeInTheDocument();
-      expect(screen.getAllByText(/^procurement$/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/^replenishment$/i).length).toBeGreaterThan(0);
       expect(screen.getByText(/welcome back, grace/i)).toBeInTheDocument();
     },
     FIRST_RENDER_TIMEOUT,

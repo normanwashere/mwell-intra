@@ -2,7 +2,7 @@
 
 // Suite chrome v2 — clinical-modern workspace.
 // Desktop: compact icon rail with flyout labels + dense content column.
-// Mobile: bottom tab bar with raised context-aware center action + spring pill.
+// Mobile: bottom tab bar with a labeled context-aware command + spring pill.
 
 import { usePathname } from "next/navigation";
 import Link from "next/link";
@@ -160,7 +160,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       {/* Desktop icon rail */}
       <aside
-        className="safe-top hidden w-[4.75rem] shrink-0 flex-col items-center border-r border-line bg-surface py-4 md:flex lg:w-[12.5rem] lg:items-stretch"
+        className="safe-top hidden w-[4.75rem] shrink-0 flex-col items-center border-r border-line bg-surface py-4 md:flex lg:w-[15rem] lg:items-stretch"
         aria-label="Primary"
       >
         <Link
@@ -192,7 +192,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               aria-label={e.label}
               aria-current={isActive(e.href) ? "page" : undefined}
               className={cx(
-                "group relative grid h-11 w-11 place-items-center rounded-xl text-faint transition hover:bg-inset hover:text-ink lg:flex lg:w-full lg:justify-start lg:gap-3 lg:px-3",
+                "group relative grid h-11 w-11 place-items-center rounded-xl text-faint transition hover:bg-inset hover:text-ink lg:flex lg:min-h-11 lg:h-auto lg:w-full lg:justify-start lg:gap-3 lg:px-3 lg:py-2.5",
                 isActive(e.href) && "text-brand-700 dark:text-brand-300",
               )}
             >
@@ -207,7 +207,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <span className="pointer-events-none absolute inset-0 rounded-xl bg-brand-500/12" />
               )}
               <Icon name={e.icon} className="relative h-5 w-5" />
-              <span className="relative hidden min-w-0 truncate text-sm font-medium lg:block">
+              <span className="relative hidden min-w-0 text-sm font-medium leading-tight lg:block">
                 {e.label}
               </span>
               <span
@@ -364,14 +364,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             ))}
 
             {fab && (
-              <li className="flex w-16 min-w-0 shrink-0 justify-center">
-                <Link
-                  href={fab.href}
-                  className="relative -mt-5 grid h-14 w-14 place-items-center rounded-2xl bg-brand-600 text-white shadow-e3 ring-4 ring-surface transition active:scale-95"
-                  aria-label={fab.label}
-                >
-                  <Icon name={fab.icon} className="h-6 w-6" />
-                </Link>
+              <li className="min-w-0 flex-1">
+                <MobileActionTab action={fab} />
               </li>
             )}
 
@@ -432,6 +426,27 @@ export function AppShell({ children }: { children: ReactNode }) {
         </Sheet>
       </div>
     </div>
+  );
+}
+
+function MobileActionTab({
+  action,
+}: {
+  action: { href: string; label: string; icon: IconName };
+}) {
+  return (
+    <Link
+      href={action.href}
+      className="relative flex min-h-16 min-w-0 flex-col items-center justify-center gap-0.5 px-1 py-2.5 text-[0.65rem] font-semibold text-brand-700 transition active:bg-brand-500/10 dark:text-brand-300"
+      aria-label={action.label}
+    >
+      <span className="grid h-7 w-7 place-items-center rounded-lg bg-brand-600 text-white shadow-e1">
+        <Icon name={action.icon} className="h-4 w-4" />
+      </span>
+      <span className="block max-w-full text-center leading-tight break-words">
+        {action.label}
+      </span>
+    </Link>
   );
 }
 

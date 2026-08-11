@@ -83,6 +83,7 @@ import {
   requiredItemsReadyForDecision,
   reviewDecisionForItem,
   sortChecklistRows,
+  vendorSubmissionAction,
 } from '../caseLogic';
 import {
   CASE_STATUS_DOT,
@@ -253,6 +254,7 @@ export function CaseDetailPage() {
   const readyForDecision = requiredItemsReadyForDecision(requiredItems, evidence);
   const outstandingCount = progress.outstanding.length;
   const awaitingReviewCount = progress.awaitingReview.length;
+  const submissionAction = vendorSubmissionAction(outstandingCount);
 
   const nextAction = isVendor
     ? outstandingCount > 0
@@ -342,6 +344,11 @@ export function CaseDetailPage() {
   }
 
   async function confirmSubmit() {
+    if (outstandingCount > 0) {
+      error('Complete all required evidence before submitting for Legal review.');
+      setSubmitOpen(false);
+      return;
+    }
     if (!submitSignature) {
       error('Sign the completeness attestation to submit.');
       return;
@@ -594,17 +601,33 @@ export function CaseDetailPage() {
                   : 'Submit for review — you\u2019ll sign a short attestation that the intake is complete and truthful.'}
               </p>
               <div className="mt-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSubmitSignature(null);
-                    setSubmitOpen(true);
-                  }}
-                  className="btn-primary btn-sm"
-                >
-                  <Icon name="signature" className="h-4 w-4" />
-                  Submit for review
-                </button>
+                {submissionAction.kind === 'complete_requirements' ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      document.getElementById('vendor-requirements')?.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start',
+                      })
+                    }
+                    className="btn-primary btn-sm"
+                  >
+                    <Icon name="clipboard" className="h-4 w-4" />
+                    {submissionAction.label}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSubmitSignature(null);
+                      setSubmitOpen(true);
+                    }}
+                    className="btn-primary btn-sm"
+                  >
+                    <Icon name="signature" className="h-4 w-4" />
+                    {submissionAction.label}
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -723,7 +746,7 @@ export function CaseDetailPage() {
         </div>
       </Card>
 
-      <div>
+      <div id="vendor-requirements" className="scroll-mt-28">
         <SectionTitle
           title="Requirement checklist"
           subtitle={`${requiredApproved} of ${requiredItems.length} required approved · ${progress.expiringSoon} expiring soon`}
@@ -1228,7 +1251,7 @@ export function CaseDetailPage() {
 
       {/* Vendor submit-with-attestation sheet (T2) */}
       <Sheet
-        open={submitOpen}
+        open={submitOpen && outstandingCount === 0}
         onOpenChange={(v) => {
           setSubmitOpen(v);
           if (!v) setSubmitSignature(null);
@@ -1241,14 +1264,6 @@ export function CaseDetailPage() {
             on this case are complete, current, and truthful to the best of
             your knowledge. Legal will start their review once submitted.
           </p>
-          {outstandingCount > 0 && (
-            <p className="rounded-xl bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-300">
-              <Icon name="alert" className="mr-1 inline h-4 w-4" />
-              {outstandingCount} required item{outstandingCount === 1 ? '' : 's'} still
-              {outstandingCount === 1 ? ' has' : ' have'} no evidence — you can
-              submit, but Legal may bounce it back.
-            </p>
-          )}
           <div className="space-y-2 rounded-2xl border border-line bg-inset/60 p-3">
             <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-faint">
               <Icon name="signature" className="h-4 w-4" />

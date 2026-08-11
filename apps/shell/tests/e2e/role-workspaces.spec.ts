@@ -183,6 +183,25 @@ test("Insights respects analyst, manager, and executive scopes", async ({
     await expect(page.getByRole("tab", { name: "Executive" })).toHaveCount(0);
   }
   await expect(page.getByText("Fulfillment rate")).toBeVisible();
+  const populatedMetrics = page.locator("[data-insight-metric]");
+  await expect(populatedMetrics).toHaveCount(6);
+  const malformedMetrics = await populatedMetrics.evaluateAll((cards) =>
+    cards
+      .filter((card) => {
+        const rect = card.getBoundingClientRect();
+        return (
+          rect.width < 240 ||
+          rect.right > document.documentElement.clientWidth + 2 ||
+          card.scrollWidth > card.clientWidth + 2
+        );
+      })
+      .map((card) => card.getAttribute("data-insight-metric")),
+  );
+  expect(malformedMetrics).toEqual([]);
+  await page.screenshot({
+    path: testInfo.outputPath(`insights-populated-${testInfo.project.name}.png`),
+    fullPage: true,
+  });
   await captureKnowledgeScreen(
     page,
     page.getByRole("link", { name: "Open governed source" }).first(),

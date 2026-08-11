@@ -146,6 +146,7 @@ export function FinanceClosePanel({
 
       {entries.length === 0 ? (
         <EmptyState
+          compact
           icon="coins"
           title="No close entries"
           message={

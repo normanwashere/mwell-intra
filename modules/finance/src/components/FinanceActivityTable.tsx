@@ -151,6 +151,7 @@ export function FinanceActivityTable({ activity }: { activity: FinanceActivity[]
       </div>
       {visible.length === 0 ? (
         <EmptyState
+          compact
           icon="history"
           title="No activity in this view"
           message="Choose another source or complete an approved PO, receipt, or return workflow."

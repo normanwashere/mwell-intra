@@ -1,5 +1,5 @@
 import { clsx } from 'clsx';
-import type { ReactNode } from 'react';
+import type { HTMLAttributes, ReactNode } from 'react';
 import { Icon, type IconName } from './Icon';
 import { StatValue } from './StatValue';
 
@@ -7,13 +7,13 @@ export function Card({
   children,
   className,
   interactive,
-}: {
-  children: ReactNode;
-  className?: string;
+  ...divProps
+}: HTMLAttributes<HTMLDivElement> & {
   interactive?: boolean;
 }) {
   return (
     <div
+      {...divProps}
       className={clsx(
         'card p-4 sm:p-5',
         interactive &&
@@ -357,15 +357,23 @@ export function EmptyState({
   title,
   message,
   action,
+  compact = false,
 }: {
   icon?: IconName;
   title: string;
   message?: string;
   action?: ReactNode;
+  compact?: boolean;
 }) {
   return (
-    <div className="grid place-items-center rounded-2xl border border-dashed border-line bg-inset/50 px-6 py-12 text-center">
-      <span className="mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-surface text-faint shadow-e1 ring-1 ring-line">
+    <div className={clsx(
+      'grid place-items-center rounded-2xl border border-dashed border-line bg-inset/50 text-center',
+      compact ? 'px-4 py-6' : 'px-6 py-12',
+    )}>
+      <span className={clsx(
+        'mb-3 grid place-items-center rounded-2xl bg-surface text-faint shadow-e1 ring-1 ring-line',
+        compact ? 'h-10 w-10' : 'h-12 w-12',
+      )}>
         <Icon name={icon} />
       </span>
       <p className="font-semibold text-ink">{title}</p>

@@ -545,7 +545,7 @@ async function collectVisibleSameOriginRoutes(page, selector) {
         rect.height > 0;
       const href = link.getAttribute("href");
       if (!visible || !href || link.hasAttribute("download")) return [];
-      const target = new URL(href, location.origin);
+      const target = new URL(href, document.baseURI);
       if (target.origin !== location.origin) return [];
       if (
         target.pathname.startsWith("/login") ||

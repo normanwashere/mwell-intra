@@ -117,6 +117,7 @@ export function FinanceReviewQueue({ items }: { items: FinancePaymentItem[] }) {
       />
       {visible.length === 0 ? (
         <EmptyState
+          compact
           icon="check"
           title="No payment packs yet"
           message="Payment readiness appears after an approved PO, governed receipt or service acceptance, and complete invoice evidence."

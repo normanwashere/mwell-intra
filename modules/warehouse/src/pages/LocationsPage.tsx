@@ -93,7 +93,7 @@ export function LocationsPage() {
         subtitle="Warehouses & event sites"
         action={
           <button type="button" className="btn-primary btn-sm" onClick={openAdd}>
-            <Icon name="plus" /> Add
+            <Icon name="plus" /> Add location
           </button>
         }
       />
@@ -106,6 +106,29 @@ export function LocationsPage() {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {locations.map((l) => {
             const meta = TYPE_META[l.type] ?? { label: l.type, tone: 'amber' as const };
+            const areas = data?.storageAreas.filter((area) => area.locationId === l.id) ?? [];
+            const activeAreas = areas.filter((area) => area.active !== false);
+            const aggregateOnHand = (data?.stockLevels ?? [])
+              .filter((stock) => stock.locationId === l.id)
+              .reduce((total, stock) => total + stock.quantity, 0);
+            const serializedOnHand = (data?.units ?? []).filter(
+              (unit) => unit.locationId === l.id && unit.status === 'in_stock',
+            ).length;
+            const unassigned =
+              (data?.stockLevels ?? [])
+                .filter((stock) => stock.locationId === l.id && !stock.binId)
+                .reduce((total, stock) => total + stock.quantity, 0) +
+              (data?.units ?? []).filter(
+                (unit) => unit.locationId === l.id && unit.status === 'in_stock' && !unit.binId,
+              ).length;
+            const readiness =
+              l.type !== 'warehouse'
+                ? { label: 'Transfer point', tone: 'slate' as const }
+                : activeAreas.length === 0
+                  ? { label: 'Setup required', tone: 'amber' as const }
+                  : unassigned > 0
+                    ? { label: 'Putaway attention', tone: 'amber' as const }
+                    : { label: 'Operational', tone: 'emerald' as const };
             return (
               /* Row = target (WH-21): the card opens the edit sheet; Delete
                  lives inside it behind a confirm. Type replaces the raw id
@@ -119,6 +142,14 @@ export function LocationsPage() {
                 <div className="flex items-start justify-between gap-2">
                   <p className="min-w-0 truncate font-semibold text-ink">{l.name}</p>
                   <Badge tone={meta.tone}>{meta.label}</Badge>
+                </div>
+                <div className="grid grid-cols-2 gap-2 border-y border-line py-2 text-xs text-muted">
+                  <span><strong className="text-ink">{activeAreas.length}</strong> active bins</span>
+                  <span><strong className="text-ink">{aggregateOnHand + serializedOnHand}</strong> units on hand</span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <Badge tone={readiness.tone}>{readiness.label}</Badge>
+                  {unassigned > 0 && <span className="text-xs text-amber-700">{unassigned} awaiting bin</span>}
                 </div>
                 <span className="inline-flex items-center gap-1 text-xs font-medium text-brand-700 dark:text-brand-300">
                   Edit <Icon name="chevron" className="h-3.5 w-3.5" />
@@ -140,7 +171,7 @@ export function LocationsPage() {
         footer={
           <div className="space-y-2">
             <button type="button" className="btn-primary w-full justify-center" onClick={() => void submit()}>
-              {editing ? 'Save' : 'Add'}
+              {editing ? 'Save location' : 'Add location'}
             </button>
             {editing &&
               (confirmDelete ? (

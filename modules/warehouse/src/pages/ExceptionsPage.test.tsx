@@ -28,6 +28,20 @@ async function repositoryWithException(unitCost: number) {
 }
 
 describe('ExceptionsPage', () => {
+  it('offers a clear recovery path when filters hide existing exceptions', async () => {
+    const user = userEvent.setup();
+    const repo = await repositoryWithException(100);
+    renderWithProviders(<ExceptionsPage />, {
+      repo,
+      role: 'logistics_supervisor',
+      route: '/exceptions?severity=P1&status=open',
+    });
+
+    expect(await screen.findByText(/no exceptions match/i)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /clear filters/i }));
+    expect(await screen.findByLabelText('Warehouse exceptions')).toBeInTheDocument();
+  });
+
   it('preserves query-string filters and never offers waive for a P1 exception', async () => {
     const repo = await repositoryWithException(600);
     renderWithProviders(<ExceptionsPage />, {
@@ -55,7 +69,7 @@ describe('ExceptionsPage', () => {
     await user.type(within(dialog).getByLabelText('Resolution'), 'Verified recount and documented root cause');
     await user.click(within(dialog).getByRole('button', { name: 'Resolve' }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Resolve exception' })).not.toBeInTheDocument());
-    expect(await screen.findByText(/no exceptions match/i)).toBeInTheDocument();
+    expect(await screen.findByText(/no open warehouse exceptions/i)).toBeInTheDocument();
   });
 
   it('keeps exception controls read-only for operations users', async () => {

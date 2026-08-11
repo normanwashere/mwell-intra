@@ -145,9 +145,9 @@ export function ProcurementPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Procurement"
+        title="Replenishment planning"
         icon="cart"
-        subtitle="Reorder, stockout risk & lead times"
+        subtitle="Warehouse to Procurement handoff · Reorder risk, quantities, and lead times"
       />
 
       <StaggerGrid className="grid grid-cols-2 gap-3 sm:grid-cols-4">

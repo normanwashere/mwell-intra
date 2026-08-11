@@ -49,7 +49,7 @@ describe("AppShell navigation", () => {
       within(sidebar).queryByRole("link", { name: "Cycle counts" }),
     ).not.toBeInTheDocument();
     for (const label of [
-      "Procurement",
+      "Replenishment",
       "Pricing",
       "Data & Reports",
       "Events",
@@ -198,10 +198,21 @@ describe("AppShell navigation", () => {
     renderWithProviders(<AppShell>content</AppShell>);
     await screen.findByRole("navigation", { name: "Primary" });
 
-    const alertsButton = screen.getByRole("button", { name: /module alerts/i });
-    const countBadge = within(alertsButton).getByText(/^\d+$/);
-    expect(countBadge).toHaveClass("bg-rose-700");
-    expect(countBadge).not.toHaveClass("bg-rose-500");
+    const alertsButton = screen.getByTitle("Module alerts");
+    expect(alertsButton).toHaveAttribute(
+      "aria-label",
+      expect.stringMatching(/^Module alerts \(\d+\)$/),
+    );
+    const alertCount = Number(
+      alertsButton.getAttribute("aria-label")?.match(/\((\d+)\)/)?.[1] ?? 0,
+    );
+    const countBadge = within(alertsButton).queryByText(/^\d+$/);
+    if (alertCount > 0) {
+      expect(countBadge).toHaveTextContent(String(alertCount));
+      expect(countBadge).toHaveClass("bg-rose-700");
+    } else {
+      expect(countBadge).not.toBeInTheDocument();
+    }
 
     await user.click(alertsButton);
     expect(

@@ -413,7 +413,7 @@ test("route crawl covers visible same-origin navigation discovered from the shel
     source,
     /nav a\[href\][\s\S]*\[role=["']navigation["']\] a\[href\]/,
   );
-  assert.match(source, /const target = new URL\(href, location\.origin\)/);
+  assert.match(source, /const target = new URL\(href, document\.baseURI\)/);
   assert.match(source, /target\.origin !== location\.origin/);
   assert.match(source, /routesFor\(user, discoveredRoutes\)/);
   assert.match(source, /getByRole\("button", \{ name: "More"/);
