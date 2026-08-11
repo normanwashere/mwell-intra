@@ -254,6 +254,37 @@ export const GOVERNANCE_ARTICLES: KnowledgeArticle[] = GOVERNANCE_GUIDES.map(
 
 export const HANDBOOK_RELEASE_NOTES: HandbookReleaseNote[] = [
   {
+    id: "release-uat-current-state-2026-08-11",
+    title: "UAT navigation, ownership, and recovery refresh",
+    releasedAt: "2026-08-11",
+    availability: "live",
+    summary:
+      "Aligns the handbook with the current UAT navigation, vendor submission gate, replenishment handoff, location readiness, filtered exception recovery, department hierarchy, and readable audit history.",
+    changedWorkflowIds: [
+      "identity-and-access",
+      "procure-to-pay",
+      "vendor-accreditation",
+      "warehouse-setup",
+      "administration",
+      "exception-and-recovery",
+    ],
+    affectedRoleIds: [
+      "core_staff_only",
+      "platform_admin",
+      "vendor_portal",
+      "legal_reviewer",
+      "legal_admin",
+      "procurement_officer",
+      "procurement_approver",
+      "warehouse_operations",
+      "warehouse_logistics_supervisor",
+      "warehouse_procurement",
+      "warehouse_admin",
+    ],
+    administratorAction:
+      "Confirm department hierarchy and DOA ownership, verify role-scoped navigation, tell vendors to complete every required item before submission, and use the readable audit summary before expanding Technical details.",
+  },
+  {
     id: "release-operating-handbook",
     title: "Operating handbook and guided decisions",
     releasedAt: "2026-07-13",
@@ -352,6 +383,16 @@ export const RELEASE_NOTE_ARTICLES: KnowledgeArticle[] =
   }));
 
 export const OPERATIONS_GLOSSARY: GlossaryEntry[] = [
+  {
+    term: "Replenishment handoff",
+    definition:
+      "The controlled transition from a Warehouse stock-risk recommendation accepted by Operations to a linked draft Procurement request. Procurement, not Warehouse, owns sourcing and supplier commitment.",
+    aliases: [
+      "reorder handoff",
+      "stock replenishment",
+      "warehouse procurement planning",
+    ],
+  },
   {
     term: "Delegation of Authority",
     definition:

@@ -124,6 +124,50 @@ export const TROUBLESHOOTING_GUIDES: TroubleshootingGuide[] = [
     flowIds: ["exception-and-recovery"],
   },
   {
+    id: "trouble-filtered-empty-list",
+    symptom: "A list says no results even though records may exist",
+    summary:
+      "Distinguish a genuinely empty queue from records hidden by search, severity, status, module, or role scope.",
+    module: "core",
+    likelyCauses: [
+      "A non-default filter or search remains active",
+      "The queue defaults to open or pending records while the record is resolved or closed",
+      "The record belongs to another department, warehouse, approval tier, or vendor scope",
+      "An upstream handoff has not created the expected work item",
+    ],
+    safeRecovery: [
+      "Read the empty-state message and any hidden-record count",
+      "Select Clear filters when it is offered",
+      "Search by the governed record ID from the authoritative source module",
+      "Confirm the record status, owner, and upstream handoff before escalating",
+    ],
+    dataImpact:
+      "Filtering is read-only. Creating a replacement or changing scope can duplicate work or expose unrelated records.",
+    escalationOwner: "Relevant module owner",
+    escalationEvidence: [
+      "Route",
+      "Record ID",
+      "Active filters",
+      "Expected status and owner",
+      "Safe screenshot of the empty state",
+    ],
+    prohibitedWorkarounds: [
+      "Do not create a duplicate record to make it appear in the queue",
+      "Do not grant a broader role merely to bypass a filter or scope",
+    ],
+    roleIds: [
+      "core_staff_only",
+      "platform_admin",
+      "warehouse_operations",
+      "warehouse_logistics_supervisor",
+      "procurement_officer",
+      "procurement_approver",
+      "legal_reviewer",
+      "vendor_portal",
+    ],
+    flowIds: ["exception-and-recovery"],
+  },
+  {
     id: "trouble-upload",
     symptom: "Evidence upload fails or the attachment is not visible",
     summary: "Preserve the record while safely retrying an allowed file.",
@@ -413,5 +457,5 @@ export const TROUBLESHOOTING_ARTICLES: KnowledgeArticle[] =
     flowIds: item.flowIds,
     liveRoutes: [],
     owner: item.escalationOwner,
-    reviewedAt: "2026-07-13",
+    reviewedAt: "2026-08-11",
   }));

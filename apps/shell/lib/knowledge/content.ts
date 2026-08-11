@@ -156,7 +156,7 @@ const roleArticles: KnowledgeArticle[] = KNOWLEDGE_ROLES.map((role) => ({
       : role.module === "core"
         ? "Platform"
         : role.module,
-  reviewedAt: "2026-07-11",
+  reviewedAt: "2026-08-11",
 }));
 
 const featureArticles: KnowledgeArticle[] = KNOWLEDGE_FEATURES.map(
@@ -290,7 +290,7 @@ const processArticle = (
       product: "Product",
     } satisfies Record<KnowledgeModule, string>
   )[module],
-  reviewedAt: "2026-07-11",
+  reviewedAt: "2026-08-11",
   screenshots: SCREENSHOTS[id],
 });
 
@@ -470,7 +470,7 @@ const procedureArticles: KnowledgeArticle[] = [
       ],
       [
         "Complete application",
-        "Submit required profile, evidence, and declarations.",
+        "Complete required profile facts, upload every required document, sign assigned instruments, and accept declarations. An incomplete case shows Complete requirements and cannot be submitted for Legal review.",
       ],
     ],
   ),
@@ -506,6 +506,50 @@ const procedureArticles: KnowledgeArticle[] = [
     ],
   ),
   processArticle(
+    "warehouse-replenishment-handoff",
+    "Plan replenishment and hand it to Procurement",
+    "Turn warehouse stock risk into a traceable Procurement request without allowing Warehouse to create supplier commitments.",
+    "warehouse",
+    [
+      "warehouse_operations",
+      "warehouse_logistics_supervisor",
+      "warehouse_procurement",
+      "procurement_requester",
+      "procurement_officer",
+    ],
+    "/warehouse/procurement",
+    "procure-to-pay",
+    [
+      [
+        "Review stock risk",
+        "Start with critical and high-risk candidates. Confirm on-hand quantity, minimum level, suggested quantity, lead time, demand, and inbound supply.",
+        "The recommendation is supported by current warehouse planning facts.",
+        "Investigate missing lead time, unusual demand, stale inbound supply, or an existing active recommendation before saving.",
+      ],
+      [
+        "Save recommendation",
+        "Record the proposed replenishment quantity so it can be reviewed without creating a purchase commitment.",
+        "A traceable recommendation enters the Operations review state.",
+      ],
+      [
+        "Accept operational need",
+        "An authorized Operations owner confirms the quantity and urgency against current warehouse conditions.",
+        "The recommendation becomes eligible for Procurement handoff.",
+        "Dismiss or revise a recommendation that is no longer supported; do not hand off stale demand.",
+      ],
+      [
+        "Hand to Procurement",
+        "Create the linked draft purchase request. Warehouse stops at the handoff and does not select a vendor, approve spend, or issue a PO.",
+        "Procurement receives the authoritative draft request with its warehouse source reference.",
+      ],
+      [
+        "Follow order and arrival",
+        "Procurement completes sourcing, accreditation checks, approval, and PO issuance. Warehouse monitors the linked PO and expected arrival, then receives only eligible remaining quantities.",
+        "Recommendation, request, PO, inbound status, and receipt remain traceable end to end.",
+      ],
+    ],
+  ),
+  processArticle(
     "warehouse-configuration",
     "Configure warehouse, areas, and bins",
     "Establish scannable, controlled storage before stock operations.",
@@ -515,6 +559,10 @@ const procedureArticles: KnowledgeArticle[] = [
     "warehouse-setup",
     [
       ["Create location", "Define the warehouse site."],
+      [
+        "Check readiness",
+        "Use active-bin count, units on hand, and the Operational, Setup required, or Putaway attention label to identify configuration work.",
+      ],
       ["Create storage area", "Set area purpose and restrictions."],
       ["Create bins", "Assign unique scannable bin codes."],
       ["Verify operation routes", "Permit only valid movement paths."],
@@ -689,7 +737,7 @@ const procedureArticles: KnowledgeArticle[] = [
     [
       [
         "Stop and verify",
-        "Refresh the record; check status and activity before retrying.",
+        "Refresh the record; check status and activity before retrying. When a list is empty, read whether the queue is genuinely empty or filtered and use Clear filters when offered.",
       ],
       [
         "Classify",

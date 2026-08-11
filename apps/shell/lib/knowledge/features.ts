@@ -533,9 +533,24 @@ const defineFeature = (definition: FeatureDefinition): KnowledgeFeature => {
     exceptions: [definition.exception],
     completionEvidence: [definition.completionEvidence],
     owner: ownerFor[definition.module],
-    reviewedAt: "2026-07-12",
+    reviewedAt: CURRENT_STATE_REVIEWED_FEATURE_IDS.has(definition.id)
+      ? "2026-08-11"
+      : "2026-07-12",
   };
 };
+
+const CURRENT_STATE_REVIEWED_FEATURE_IDS = new Set([
+  "shell-home",
+  "knowledge-library",
+  "admin-audit",
+  "admin-departments",
+  "warehouse-procurement-planning",
+  "warehouse-exceptions",
+  "warehouse-locations",
+  "procurement-approvals",
+  "vendor-case-detail",
+  "vendor-application",
+]);
 
 const definitions: FeatureDefinition[] = [
   {
@@ -761,22 +776,22 @@ const definitions: FeatureDefinition[] = [
   },
   {
     id: "admin-audit",
-    title: "Administration audit trail",
+    title: "Audit history",
     module: "admin",
     route: "/admin/audit",
     roleIds: ["platform_admin"],
     purpose:
-      "Lets an authorized platform administrator investigate attributable role changes without modifying the evidence.",
+      "Lets an authorized platform administrator investigate attributable platform and cross-module activity without modifying the evidence.",
     reads:
-      "Role-change evidence, actor, subject, module, role, scope, approval reference, reason, effective window, and creation time.",
+      "Readable action and entity labels, actor identity, module, time, retained entity reference, event code, and raw technical payload.",
     writes:
       "No audit evidence is changed; search, action, and module filters only change the current view.",
     statuses:
-      "Loading, ready, filtered, no matching evidence, source unavailable, or access denied.",
+      "Loading, ready, filtered, technical details expanded, no matching evidence, source unavailable, or access denied.",
     exception:
       "If expected evidence is missing, stop the access change, preserve the reference, and escalate to Platform Security before retrying.",
     completionEvidence:
-      "The selected role change displays its actor, subject, approval basis, reason, effective window, and immutable timestamp.",
+      "The selected event displays a readable action, entity, actor, module, and time, with identifiers and raw payload available under Technical details.",
   },
   {
     id: "admin-departments",
@@ -1034,11 +1049,11 @@ const definitions: FeatureDefinition[] = [
   },
   {
     id: "warehouse-procurement-planning",
-    title: "Warehouse procurement planning",
+    title: "Replenishment planning",
     module: "warehouse",
     route: "/warehouse/procurement",
     purpose:
-      "Prioritizes reorder needs using availability, demand, lead time, safety stock, and supplier context.",
+      "Prioritizes warehouse stock risk and hands an accepted recommendation to Procurement without letting Warehouse create supplier commitments.",
     reads:
       "Stock, reorder settings, open demand, open POs, suppliers, lead times, and consumption trends.",
     writes:
@@ -1046,7 +1061,7 @@ const definitions: FeatureDefinition[] = [
     statuses:
       "Healthy, monitor, recommended, accepted, handed to Procurement, ordered, inbound, stockout risk, dismissed, or data incomplete.",
     exception:
-      "Validate unusual demand, missing lead time, or stale inbound status before raising procurement action.",
+      "Validate unusual demand, missing lead time, duplicate active recommendations, or stale inbound status before raising procurement action.",
     completionEvidence:
       "The recommendation can be traced to current stock, reorder point, stockout risk, lead time, the linked Procurement request, issued PO, and expected arrival.",
   },
@@ -1134,7 +1149,7 @@ const definitions: FeatureDefinition[] = [
     writes:
       "Assigns, annotates, resolves, or escalates exception records; source records change only through governed commands.",
     statuses:
-      "Open, assigned, investigating, blocked, resolved, escalated, or reopened.",
+      "Loading, open queue, filtered queue, no open exceptions, no filtered matches, assigned, investigating, blocked, resolved, escalated, or reopened.",
     exception:
       "Do not retry a non-idempotent command until source status and activity prove that no effect was recorded.",
     completionEvidence:
@@ -1246,15 +1261,15 @@ const definitions: FeatureDefinition[] = [
     purpose:
       "Maintains warehouse sites and event locations used by custody, movement, and reporting workflows.",
     reads:
-      "Warehouse and event location master, usage, active routes, and stock occupancy summary.",
+      "Warehouse and event location master, active storage areas, on-hand stock, serialized units, unassigned stock, active routes, and usage summary.",
     writes:
       "Adds, updates, or removes warehouse and event-location records through repository methods without moving stock.",
     statuses:
-      "Active, inactive, warehouse, event site, in use, or configuration conflict.",
+      "Active, inactive, operational, setup required, putaway attention, transfer point, in use, or configuration conflict.",
     exception:
       "Do not deactivate a location with stock, open events, or active routes until those dependencies are resolved.",
     completionEvidence:
-      "The unique location appears with intended type and status and is available only to valid workflows.",
+      "The unique location appears with intended type, active-bin count, units on hand, derived readiness, and availability only to valid workflows.",
   },
   {
     id: "warehouse-imports",
@@ -1566,7 +1581,7 @@ const definitions: FeatureDefinition[] = [
     exception:
       "Do not upload secrets or another company's documents; replace invalid files and contact Legal for incorrect requirements.",
     completionEvidence:
-      "Every requirement shows evidence or explanation and submission records snapshot, declaration, actor, and time.",
+      "Incomplete cases direct the vendor to Complete requirements; complete submission records the snapshot, attestation, actor, and time.",
   },
   {
     id: "vendor-application",

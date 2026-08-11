@@ -18,7 +18,7 @@ export const CONTEXTUAL_FEATURE_GUIDES: ContextualFeatureGuide[] = [
   guide("product-governance", "Product readiness and go-live", "/product"),
   guide("admin-governance", "Administration governance", "/admin"),
   guide("admin-users", "User and role administration", "/admin/users"),
-  guide("admin-audit", "Administration audit trail", "/admin/audit"),
+  guide("admin-audit", "Audit history", "/admin/audit"),
   guide("admin-departments", "Department administration", "/admin/departments"),
   guide("admin-doa", "Delegation of Authority administration", "/admin/doa"),
   guide("warehouse-dashboard", "Warehouse dashboard", "/warehouse"),
@@ -51,7 +51,7 @@ export const CONTEXTUAL_FEATURE_GUIDES: ContextualFeatureGuide[] = [
   ),
   guide(
     "warehouse-procurement-planning",
-    "Warehouse procurement planning",
+    "Replenishment planning",
     "/warehouse/procurement",
   ),
   guide(

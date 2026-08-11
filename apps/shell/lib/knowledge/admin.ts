@@ -73,7 +73,8 @@ export const ADMINISTRATOR_GUIDES: AdministratorGuide[] = [
     summary:
       "Keep organizational scope, ownership, and workflow routing aligned with the approved operating structure.",
     module: "admin",
-    availability: "limited",
+    route: "/admin/departments",
+    availability: "live",
     roleIds: ["platform_admin"],
     prerequisites: [
       "Approved organization change",
@@ -83,16 +84,18 @@ export const ADMINISTRATOR_GUIDES: AdministratorGuide[] = [
     authority:
       "Platform administration maintains department records; Legal or the accountable executive confirms governance ownership where authority changes.",
     configurationFields: [
-      "Department name and code",
+      "Department name",
+      "Stable department code",
+      "Parent department",
+      "Purpose",
+      "Display order",
       "Active status",
-      "Accountable owner",
-      "Default cost center",
-      "Effective date",
     ],
     validation: [
       "Codes must be unique",
-      "An active department needs an active owner",
-      "Do not deactivate a department with unresolved work",
+      "A parent must be active and cannot be the department or one of its descendants",
+      "Do not deactivate a department with active children or current or future profile assignments",
+      "Reload and review the latest version when the editor reports stale data",
     ],
     affectedUsers: [
       "Department users",
@@ -101,7 +104,7 @@ export const ADMINISTRATOR_GUIDES: AdministratorGuide[] = [
       "Reporting owners",
     ],
     auditEffect:
-      "Preserves the old and new department definition and the actor who approved the change.",
+      "Preserves the old and new department definition, hierarchy, active state, and actor through the governed department RPC.",
     recovery:
       "Reactivate the prior valid definition or correct routing through a reviewed change. Do not move historical records to hide an ownership error.",
     requiredReview:
@@ -334,36 +337,33 @@ export const ADMINISTRATOR_GUIDES: AdministratorGuide[] = [
   }),
   guide({
     id: "admin-evidence-audit",
-    title: "Govern evidence requirements and audit review",
+    title: "Review audit history and technical evidence",
     summary:
-      "Define required proof, monitor exceptions, and review attributable activity without changing operational history.",
+      "Review attributable platform and cross-module activity in plain language without changing operational history.",
     module: "admin",
-    availability: "limited",
-    roleIds: [
-      "platform_admin",
-      "legal_admin",
-      "procurement_admin",
-      "warehouse_admin",
-    ],
+    route: "/admin/audit",
+    availability: "live",
+    roleIds: ["platform_admin"],
     prerequisites: [
-      "Approved retention and evidence rules",
-      "Scoped audit access",
-      "Defined exception and escalation owners",
+      "Platform administrator access",
+      "A known actor, record, module, action, or time window to investigate",
+      "An approved reason for exporting retained activity",
     ],
     authority:
-      "Module administrators define approved requirements; authorized auditors review records read-only and operational owners resolve findings.",
+      "Platform administration reviews the retained trail read-only; operational owners correct source records through their governed modules and cannot rewrite audit history.",
     configurationFields: [
-      "Evidence category",
-      "Required file/data",
-      "Retention",
-      "Applicable action",
-      "Exception owner",
-      "Review cadence",
+      "Search actor, action, entity, or reference",
+      "Module filter",
+      "Human-readable event summary",
+      "Readable entity label",
+      "Performed-by identity",
+      "Collapsed technical details",
+      "CSV export",
     ],
     validation: [
-      "Sensitive evidence has restricted access",
-      "Retention matches approved policy",
-      "An exception never silently converts a missing requirement into complete",
+      "Use the readable summary and actor first, then expand Technical details only when an identifier or raw event payload is needed",
+      "Treat system or legacy actor values as retained evidence, not as an employee identity",
+      "Filter before export and protect exported files according to approved access and retention rules",
     ],
     affectedUsers: [
       "All transaction actors",
@@ -372,9 +372,9 @@ export const ADMINISTRATOR_GUIDES: AdministratorGuide[] = [
       "Audit reviewers",
     ],
     auditEffect:
-      "Preserves actor, timestamp, status transition, evidence reference, configuration version, and review disposition.",
+      "The page is read-only and preserves the retained actor, timestamp, event code, entity reference, and payload; search, filtering, expansion, and export do not modify the record.",
     recovery:
-      "Restore access or request replacement evidence through the governed record; preserve the original failure and remediation trail.",
+      "If an expected event is absent, clear filters, search by the source record identifier, and verify the source workflow. Escalate with the route, record, time, expected action, and visible audit state; never insert or edit an audit row directly.",
     requiredReview:
       "Quarterly module-owner review and event-driven review after a policy, security, or material control change.",
     flowIds: [
@@ -441,5 +441,5 @@ export const ADMINISTRATOR_ARTICLES: KnowledgeArticle[] =
       item.module === "admin"
         ? "Platform"
         : item.module[0]!.toUpperCase() + item.module.slice(1),
-    reviewedAt: "2026-07-13",
+    reviewedAt: "2026-08-11",
   }));

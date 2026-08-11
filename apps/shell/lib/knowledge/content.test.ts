@@ -70,6 +70,7 @@ describe("Knowledge Base content", () => {
         "trouble-sign-in",
         "trouble-access-denied",
         "trouble-missing-data",
+        "trouble-filtered-empty-list",
         "trouble-upload",
         "trouble-offline-write",
         "trouble-rejected-request",
@@ -182,13 +183,41 @@ describe("Knowledge Base content", () => {
       searchKnowledge(KNOWLEDGE_CONTENT, "Maintain departments").find(
         (result) => result.id === "admin-departments",
       ),
-    ).toMatchObject({ availability: "limited" });
+    ).toMatchObject({ availability: "live" });
     expect(
       searchKnowledge(KNOWLEDGE_CONTENT, "Department administration").find(
         (result) =>
           result.id === "admin-departments" && result.type === "feature",
       ),
     ).toMatchObject({ availability: "live" });
+  });
+  it("documents the current UAT ownership and recovery behavior", () => {
+    expect(
+      searchKnowledge(
+        KNOWLEDGE_CONTENT,
+        "Warehouse detects Procurement commits",
+      ).some((result) => result.id === "source-ownership-model"),
+    ).toBe(true);
+    expect(
+      KNOWLEDGE_CONTENT.features
+        .find((feature) => feature.id === "vendor-case-detail")
+        ?.controls.map((control) => control.name),
+    ).toContain("Complete requirements");
+    expect(
+      TROUBLESHOOTING_GUIDES.find(
+        (guide) => guide.id === "trouble-filtered-empty-list",
+      )?.safeRecovery,
+    ).toContain("Select Clear filters when it is offered");
+    expect(
+      KNOWLEDGE_CONTENT.articles.find(
+        (article) => article.id === "warehouse-replenishment-handoff",
+      )?.liveRoutes,
+    ).toEqual(["/warehouse/procurement"]);
+    expect(
+      HANDBOOK_RELEASE_NOTES.find(
+        (note) => note.id === "release-uat-current-state-2026-08-11",
+      ),
+    ).toMatchObject({ availability: "live", releasedAt: "2026-08-11" });
   });
   it("defines explicit operating data for all 40 role profiles", () => {
     expect(KNOWLEDGE_GUIDE_CONTENT.roles).toHaveLength(40);

@@ -662,9 +662,9 @@ const ROLE_FEATURE_WALKTHROUGHS: RoleFeatureWalkthrough[] = [
     landmark: "Add department",
     label: "Add a department",
     instruction:
-      "Select Add department, then define its accountable name, slug, parent, and display order.",
+      "Select Add department, then define its name, stable code, purpose, parent, and display order. Expand Technical details only when you need the code or protection reason.",
     alt: "Department administration with the Add department control identified",
-    desktop: { x: 0.2363, y: 0.2615 },
+    desktop: { x: 0.2641, y: 0.2615 },
     mobile: { x: 0.3289, y: 0.2862 },
   },
   {
@@ -673,13 +673,13 @@ const ROLE_FEATURE_WALKTHROUGHS: RoleFeatureWalkthrough[] = [
     roleId: "platform_admin",
     state:
       "The administrator is reviewing retained platform activity and export controls.",
-    landmark: "Export CSV",
-    label: "Export the filtered audit trail",
+    landmark: "Technical details",
+    label: "Inspect retained technical evidence",
     instruction:
-      "Set the search and module filters first, then export the attributable rows required for review.",
+      "Review the readable action, entity, actor, module, and time first. Set filters before export and expand Technical details only when you need identifiers or the raw payload.",
     alt: "Audit history with the Export CSV control identified",
-    desktop: { x: 0.2143, y: 0.2849 },
-    mobile: { x: 0.2476, y: 0.3111 },
+    desktop: { x: 0.5833, y: 0.6804 },
+    mobile: { x: 0.5, y: 0.8597 },
   },
   {
     id: "warehouse-fulfillment",
@@ -701,13 +701,13 @@ const ROLE_FEATURE_WALKTHROUGHS: RoleFeatureWalkthrough[] = [
     roleId: "warehouse_supervisor",
     state:
       "No exception matches the active filters; the supervisor can broaden the queue deliberately.",
-    landmark: "Severity",
-    label: "Filter the exception queue",
+    landmark: "Clear filters",
+    label: "Recover a filtered exception queue",
     instruction:
-      "Choose the required severity and status. If the queue remains empty, return to the source workflow instead of inventing a resolution record.",
-    alt: "Warehouse exception queue with the Severity filter identified",
-    desktop: { x: 0.401, y: 0.2698 },
-    mobile: { x: 0.5, y: 0.3114 },
+      "If a non-default filter hides existing exceptions, select Clear filters. If the default open queue is empty, return to the source workflow instead of inventing a resolution record.",
+    alt: "Warehouse exception queue with the filtered empty-state recovery control identified",
+    desktop: { x: 0.5889, y: 0.512 },
+    mobile: { x: 0.5, y: 0.668 },
   },
   {
     id: "warehouse-locations",
@@ -715,26 +715,26 @@ const ROLE_FEATURE_WALKTHROUGHS: RoleFeatureWalkthrough[] = [
     roleId: "warehouse_supervisor",
     state:
       "The operations lead is reviewing controlled warehouses and event sites.",
-    landmark: "Add",
+    landmark: "Add location",
     label: "Add a controlled location",
     instruction:
-      "Select Add, then identify the location type and accountable operating context before creating bins or routes.",
-    alt: "Warehouse locations with the Add control identified",
-    desktop: { x: 0.9448, y: 0.1233 },
-    mobile: { x: 0.1422, y: 0.2059 },
+      "Review active bins, units on hand, and the readiness label first. Select Add location only when a new governed site or transfer point is required.",
+    alt: "Warehouse locations with readiness summaries and the Add location control identified",
+    desktop: { x: 0.925, y: 0.1233 },
+    mobile: { x: 0.2155, y: 0.2059 },
   },
   {
     id: "procurement-approvals",
     route: "/procurement/approvals",
     roleId: "procurement_admin",
     state: "The approver inbox is empty for the current DOA tier.",
-    landmark: "How the approval inbox works",
-    label: "Confirm inbox routing",
+    landmark: "Back to requests",
+    label: "Return to the request workspace",
     instruction:
-      "Use the inbox guidance to confirm that only requests waiting on your assigned tier appear here; an empty inbox requires no approval action.",
-    alt: "Procurement approval inbox showing the empty routed queue and guidance control",
-    desktop: { x: 0.9681, y: 0.5204 },
-    mobile: { x: 0.0974, y: 0.6438 },
+      "Only requests waiting on the assigned tier appear here. When the inbox is empty, use Back to requests to continue Procurement work without creating a decision.",
+    alt: "Procurement approval inbox showing the empty routed queue and Back to requests control",
+    desktop: { x: 0.259, y: 0.3282 },
+    mobile: { x: 0.3103, y: 0.3772 },
   },
   {
     id: "warehouse-procurement-planning",
@@ -747,8 +747,8 @@ const ROLE_FEATURE_WALKTHROUGHS: RoleFeatureWalkthrough[] = [
     instruction:
       "Review the stock minimum, on-hand quantity, lead time, and suggested amount before saving the recommendation.",
     alt: "Replenishment control with a Save recommendation action identified",
-    desktop: { x: 0.2945, y: 0.5242 },
-    mobile: { x: 0.3592, y: 0.6775 },
+    desktop: { x: 0.9248, y: 0.5576 },
+    mobile: { x: 0.206, y: 0.7889 },
   },
   {
     id: "warehouse-finance",
@@ -775,7 +775,7 @@ const ROLE_FEATURE_WALKTHROUGHS: RoleFeatureWalkthrough[] = [
     instruction:
       "Confirm the status is Awaiting vendor signature. Legal may review the template now, but must not countersign before the vendor signature is retained.",
     alt: "Legal MNDA review showing the Awaiting vendor signature handoff",
-    desktop: { x: 0.3965, y: 0.4627 },
+    desktop: { x: 0.4103, y: 0.4627 },
     mobile: { x: 0.3766, y: 0.6386 },
   },
   {
@@ -784,13 +784,13 @@ const ROLE_FEATURE_WALKTHROUGHS: RoleFeatureWalkthrough[] = [
     roleId: "vendor_portal",
     state:
       "The vendor is reviewing its own accreditation case and outstanding requirements.",
-    landmark: "Complete accreditation form",
-    label: "Complete the accreditation form",
+    landmark: "Complete requirements",
+    label: "Complete outstanding requirements",
     instruction:
-      "Open the accreditation form, complete the required company information, and return to the checklist for documents and signatures.",
-    alt: "Vendor accreditation case with the Complete accreditation form link identified",
-    desktop: { x: 0.5211, y: 0.4238 },
-    mobile: { x: 0.3791, y: 0.6154 },
+      "Open the accreditation form, complete the required company information, then use Complete requirements to finish every document and signature before Submit for review becomes available.",
+    alt: "Vendor accreditation case with the Complete requirements action identified",
+    desktop: { x: 0.2807, y: 0.5871 },
+    mobile: { x: 0.4724, y: 0.8322 },
   },
   {
     id: "vendor-sign-instrument",
@@ -818,7 +818,7 @@ const ROLE_FEATURE_EVIDENCE: KnowledgeEvidence[] =
     state: item.state,
     capturedAt: "2026-08-11",
     reviewedAt: "2026-08-11",
-    appCommit: "725bf15e7211613097f4c97aa0cfe3dc73d365b2",
+    appCommit: "c13fccc24d59a55609072068dd4fadf3ff432cad",
     provenance: "documentation",
     environment: "uat",
     alt: item.alt,

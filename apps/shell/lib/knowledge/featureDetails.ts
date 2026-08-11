@@ -35,6 +35,12 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "The notification needs a valid internal route visible to this user.",
           "The referenced record opens and unread state can be cleared separately.",
         ),
+        control(
+          "Use primary navigation",
+          "Opens a labeled primary destination from the desktop sidebar or mobile bottom navigation.",
+          "Only destinations exposed by the current role are rendered; secondary mobile destinations remain under More.",
+          "The selected workspace opens and the current destination remains visibly identified.",
+        ),
       ],
       fields: [
         field(
@@ -316,6 +322,12 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "Limits the trail to one governed module.",
           "The module must come from the canonical role registry.",
           "The list shows role changes for the selected module without altering scope.",
+        ),
+        control(
+          "Open technical details",
+          "Reveals the retained entity identifier, event code, actor ID, and raw payload beneath the readable audit summary.",
+          "Use technical detail only after the readable action, entity, actor, module, and time have been reviewed.",
+          "Low-level evidence appears without changing the event or overwhelming the default list view.",
         ),
       ],
       fields: [
@@ -1464,6 +1476,18 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "Current stock, supply, and master data appear.",
         ),
         control(
+          "Save recommendation",
+          "Records the suggested replenishment quantity after Operations checks current on-hand stock, minimum level, lead time, and stockout risk.",
+          "The recommendation must refer to a current product candidate and cannot duplicate an active recommendation for the same product.",
+          "The recommendation enters the controlled Operations review and Procurement handoff sequence.",
+        ),
+        control(
+          "Hand to Procurement",
+          "Creates a linked draft purchase request after Operations accepts the recommendation.",
+          "An accepted recommendation and current source data are required; Warehouse cannot select the supplier or issue a purchase order here.",
+          "The linked Procurement request becomes the authoritative sourcing and commitment record.",
+        ),
+        control(
           "Review inbound supply",
           "Opens purchase-order context behind an inbound quantity.",
           "A linked order must exist and remain visible.",
@@ -1762,6 +1786,12 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "Limits the queue by severity, type, owner, or state.",
           "Filter values must match supported exception metadata.",
           "Only matching exception rows remain.",
+        ),
+        control(
+          "Clear filters",
+          "Returns a filtered empty queue to the default open-exception view.",
+          "The control appears only when severity or status differs from the default and the filtered result is empty.",
+          "Hidden exceptions can be reviewed without creating or changing an exception record.",
         ),
         control(
           "Open exception",
@@ -2161,6 +2191,12 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           true,
           "Dependencies must be resolved before deactivation.",
         ),
+        field(
+          "Operational readiness",
+          "Summarizes whether a warehouse is operational, needs storage setup, or has stock awaiting bin assignment; event sites appear as transfer points.",
+          false,
+          "The label is derived from active storage areas and unassigned on-hand stock and is not edited directly.",
+        ),
       ],
     },
     "warehouse-imports": {
@@ -2525,6 +2561,12 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
     },
     "procurement-approvals": {
       controls: [
+        control(
+          "Back to requests",
+          "Returns to the Procurement request list without creating an approval decision.",
+          "Navigation uses the Procurement module root and preserves the user's current authority.",
+          "The request workspace opens with no decision write.",
+        ),
         control(
           "Open decision",
           "Loads the assigned approval step into the decision sheet.",
@@ -2964,9 +3006,15 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "The document appears on the own-case checklist.",
         ),
         control(
-          "Submit application",
-          "Submits the completed own-case application snapshot for Legal review.",
-          "Required facts, documents, and declarations must pass.",
+          "Complete requirements",
+          "Moves the vendor to the requirement checklist when required evidence or signatures are still outstanding.",
+          "The control replaces submission while any required item remains incomplete.",
+          "The first outstanding requirement becomes reachable without opening a misleading submission dialog.",
+        ),
+        control(
+          "Submit for review",
+          "Opens the completeness attestation and submits the complete own-case application snapshot for Legal review.",
+          "Every required fact, document, signature, and declaration must pass before this control appears and submission is accepted.",
           "The case becomes submitted and draft editing closes.",
         ),
         control(
@@ -3034,6 +3082,12 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "Creates the immutable vendor submission snapshot.",
           "All required sections, evidence, and declarations must pass.",
           "The application becomes submitted for Legal review.",
+        ),
+        control(
+          "Back to case",
+          "Returns to the correct Legal or Vendor case route for the active viewer.",
+          "A vendor must remain under the vendor-scoped route and cannot be redirected into an internal Legal workspace.",
+          "The own case opens with the saved application state preserved.",
         ),
       ],
       fields: [
