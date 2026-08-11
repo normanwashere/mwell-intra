@@ -42,14 +42,16 @@ export const ADMINISTRATOR_GUIDES: AdministratorGuide[] = [
       "Identity type",
       "Active status",
       "Department",
-      "Module role",
+      "Module workspace",
+      "Role responsibility",
       "Scope",
       "Effective date",
       "Approval reference",
     ],
     validation: [
       "Use a unique approved email",
-      "Match each role to the user's current responsibility",
+      "Match each role to the user's responsibility inside the correct module workspace",
+      "Assign separate Finance roles only for the Warehouse, Procurement, or Event decisions the user actually owns",
       "Reject conflicting or excess privileges",
     ],
     affectedUsers: [

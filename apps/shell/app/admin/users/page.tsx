@@ -44,12 +44,7 @@ import {
   type Column,
 } from '@intra/ui';
 import { Guard, useSession } from '@intra/auth';
-import {
-  MODULE_LIST,
-  MODULES,
-  type Module,
-  type UserRoles,
-} from '@intra/rbac';
+import { MODULE_LIST, MODULES, type Module, type UserRoles } from '@intra/rbac';
 import { DEMO_PROFILES } from '@shell/lib/demoProfiles';
 import { cx } from '@shell/lib/cx';
 import {
@@ -57,6 +52,10 @@ import {
   validateRoleChangeEvidence,
   type RoleChangeEvidence,
 } from '@shell/lib/adminGovernance';
+import {
+  getAdminModulePresentation,
+  getAdminRolePresentation,
+} from '@shell/lib/adminRolePresentation';
 
 // ---------------------------------------------------------------------------
 // Types + helpers
@@ -96,6 +95,7 @@ interface RoleColumn {
   readonly role: string;
   readonly key: string; // `${module}:${role}`
   readonly label: string;
+  readonly description: string;
   readonly isActive: boolean;
   readonly updatedAt: string | null;
 }
@@ -107,14 +107,16 @@ function buildStaticRoleColumns(): readonly RoleColumn[] {
     // Widen to a plain record so we can iterate module role tables that carry
     // different literal unions per module without a per-module type dance.
     const roles = MODULES[module].roles as Readonly<
-      Record<string, { label: string }>
+      Record<string, { label: string; description: string }>
     >;
     for (const role of Object.keys(roles)) {
+      const presentation = getAdminRolePresentation(module, role, roles[role]);
       out.push({
         module,
         role,
         key: `${module}:${role}`,
-        label: roles[role]?.label ?? role,
+        label: presentation.label,
+        description: presentation.description,
         isActive: true,
         updatedAt: null,
       });
@@ -130,14 +132,18 @@ function roleColumnsFromCatalog(
     .filter((row): row is RoleCatalogRow & { module: Module } =>
       MODULE_LIST.includes(row.module as Module),
     )
-    .map((row) => ({
-      module: row.module,
-      role: row.role,
-      key: `${row.module}:${row.role}`,
-      label: row.label || row.role,
-      isActive: row.is_active,
-      updatedAt: row.updated_at,
-    }));
+    .map((row) => {
+      const presentation = getAdminRolePresentation(row.module, row.role, row);
+      return {
+        module: row.module,
+        role: row.role,
+        key: `${row.module}:${row.role}`,
+        label: presentation.label,
+        description: presentation.description,
+        isActive: row.is_active,
+        updatedAt: row.updated_at,
+      };
+    });
 }
 
 /** Group a flat list of assignments back into a per-user role matrix. */
@@ -153,10 +159,20 @@ function indexAssignments(
   return idx;
 }
 
-/** Compact "core:staff, warehouse:operations" summary for the row footer. */
-function summarizeRoles(held: ReadonlySet<string> | undefined): string {
-  if (!held || held.size === 0) return '—';
-  return Array.from(held).sort().join(', ');
+function assignedRoleColumns(
+  held: ReadonlySet<string> | undefined,
+  roleColumns: readonly RoleColumn[],
+): readonly RoleColumn[] {
+  if (!held || held.size === 0) return [];
+  const byKey = new Map(roleColumns.map((column) => [column.key, column]));
+  return Array.from(held)
+    .map((key) => byKey.get(key))
+    .filter((column): column is RoleColumn => Boolean(column))
+    .sort((left, right) =>
+      getAdminModulePresentation(left.module).label.localeCompare(
+        getAdminModulePresentation(right.module).label,
+      ),
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -222,7 +238,7 @@ function MemoryAdminUsers() {
   }, [held]);
 
   const evidenceUser = evidenceRoles
-    ? profiles.find((profile) => profile.id === 'demo-operations') ?? null
+    ? (profiles.find((profile) => profile.id === 'demo-operations') ?? null)
     : null;
 
   const totalGrants = Array.from(held.values()).reduce((n, s) => n + s.size, 0);
@@ -238,10 +254,14 @@ function MemoryAdminUsers() {
         accessory={
           <div className="flex flex-wrap items-end gap-3">
             <HeroStat label="Profiles">
-              <p className="tnum font-display text-2xl font-extrabold text-ink">{profiles.length}</p>
+              <p className="tnum font-display text-2xl font-extrabold text-ink">
+                {profiles.length}
+              </p>
             </HeroStat>
             <HeroStat label="Scoped grants" align="right">
-              <p className="tnum font-display text-2xl font-extrabold text-ink">{totalGrants}</p>
+              <p className="tnum font-display text-2xl font-extrabold text-ink">
+                {totalGrants}
+              </p>
             </HeroStat>
           </div>
         }
@@ -249,16 +269,40 @@ function MemoryAdminUsers() {
 
       <StaggerGrid className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StaggerItem>
-          <StatCard label="Profiles" value={profiles.length} icon="list" tone="brand" hint="Employees + vendors" />
+          <StatCard
+            label="Profiles"
+            value={profiles.length}
+            icon="list"
+            tone="brand"
+            hint="Employees + vendors"
+          />
         </StaggerItem>
         <StaggerItem>
-          <StatCard label="Scoped grants" value={totalGrants} icon="check" tone="emerald" hint="Across all modules" />
+          <StatCard
+            label="Scoped grants"
+            value={totalGrants}
+            icon="check"
+            tone="emerald"
+            hint="Across all modules"
+          />
         </StaggerItem>
         <StaggerItem>
-          <StatCard label="External vendors" value={vendors} icon="building" tone="cyan" hint="kind = vendor" />
+          <StatCard
+            label="External vendors"
+            value={vendors}
+            icon="building"
+            tone="cyan"
+            hint="kind = vendor"
+          />
         </StaggerItem>
         <StaggerItem>
-          <StatCard label="Backend" value="Demo" icon="alert" tone="amber" hint="Read-only preview" />
+          <StatCard
+            label="Backend"
+            value="Demo"
+            icon="alert"
+            tone="amber"
+            hint="Read-only preview"
+          />
         </StaggerItem>
       </StaggerGrid>
 
@@ -307,9 +351,11 @@ function MemoryAdminUsers() {
         title={evidenceUser?.full_name ?? evidenceUser?.email ?? 'User'}
         description={evidenceUser?.email}
         side="right"
+        size="wide"
       >
         {evidenceUser && evidenceRoles && (
           <UserDetail
+            key={evidenceUser.id}
             profile={evidenceUser}
             held={evidenceRoles}
             roleColumns={columns}
@@ -349,7 +395,9 @@ function LiveAdminUsers() {
   const [detailUserId, setDetailUserId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('active');
-  const [kindFilter, setKindFilter] = useState<'all' | 'employee' | 'vendor'>('all');
+  const [kindFilter, setKindFilter] = useState<'all' | 'employee' | 'vendor'>(
+    'all',
+  );
   const [page, setPage] = useState(1);
   const [roleChange, setRoleChange] = useState<{
     userId: string;
@@ -377,13 +425,13 @@ function LiveAdminUsers() {
         { data: roleRows, error: rErr },
         { data: catalogRows, error: catalogError },
       ] = await Promise.all([
-          supabase
-            .from('profiles')
-            .select('id,email,full_name,title,kind,vendor_id,status')
-            .order('email'),
-          supabase.from('user_roles').select('user_id,module,role'),
-          supabase.rpc('list_rbac_catalog'),
-        ]);
+        supabase
+          .from('profiles')
+          .select('id,email,full_name,title,kind,vendor_id,status')
+          .order('email'),
+        supabase.from('user_roles').select('user_id,module,role'),
+        supabase.rpc('list_rbac_catalog'),
+      ]);
       if (pErr) throw pErr;
       if (rErr) throw rErr;
       if (catalogError) throw catalogError;
@@ -440,15 +488,15 @@ function LiveAdminUsers() {
               `${evidence.effectiveAt}T00:00:00+08:00`,
             ).toISOString(),
             expires_at: evidence.expiresAt
-              ? new Date(
-                  `${evidence.expiresAt}T23:59:59+08:00`,
-                ).toISOString()
+              ? new Date(`${evidence.expiresAt}T23:59:59+08:00`).toISOString()
               : null,
           },
         });
         if (rpcErr) throw rpcErr;
+        const roleLabel = getAdminRolePresentation(moduleName, role).label;
+        const moduleLabel = getAdminModulePresentation(moduleName).label;
         toast.success(
-          `${next ? 'Granted' : 'Revoked'} ${moduleName}:${role}`,
+          `${next ? 'Granted' : 'Revoked'} ${roleLabel} in ${moduleLabel}`,
         );
       } catch (err) {
         // Roll back optimistic update.
@@ -546,10 +594,14 @@ function LiveAdminUsers() {
         accessory={
           <div className="flex flex-wrap items-end gap-3">
             <HeroStat label="Profiles">
-              <p className="tnum font-display text-2xl font-extrabold text-ink">{profiles.length}</p>
+              <p className="tnum font-display text-2xl font-extrabold text-ink">
+                {profiles.length}
+              </p>
             </HeroStat>
             <HeroStat label="Scoped grants" align="right">
-              <p className="tnum font-display text-2xl font-extrabold text-ink">{totalGrants}</p>
+              <p className="tnum font-display text-2xl font-extrabold text-ink">
+                {totalGrants}
+              </p>
             </HeroStat>
           </div>
         }
@@ -557,16 +609,40 @@ function LiveAdminUsers() {
 
       <StaggerGrid className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StaggerItem>
-          <StatCard label="Profiles" value={profiles.length} icon="list" tone="brand" hint="Employees + vendors" />
+          <StatCard
+            label="Profiles"
+            value={profiles.length}
+            icon="list"
+            tone="brand"
+            hint="Employees + vendors"
+          />
         </StaggerItem>
         <StaggerItem>
-          <StatCard label="Scoped grants" value={totalGrants} icon="check" tone="emerald" hint="Across all modules" />
+          <StatCard
+            label="Scoped grants"
+            value={totalGrants}
+            icon="check"
+            tone="emerald"
+            hint="Across all modules"
+          />
         </StaggerItem>
         <StaggerItem>
-          <StatCard label="External vendors" value={vendors} icon="building" tone="cyan" hint="kind = vendor" />
+          <StatCard
+            label="External vendors"
+            value={vendors}
+            icon="building"
+            tone="cyan"
+            hint="kind = vendor"
+          />
         </StaggerItem>
         <StaggerItem>
-          <StatCard label="Backend" value="Live" icon="bell" tone="emerald" hint="Supabase connected" />
+          <StatCard
+            label="Backend"
+            value="Live"
+            icon="bell"
+            tone="emerald"
+            hint="Supabase connected"
+          />
         </StaggerItem>
       </StaggerGrid>
 
@@ -691,9 +767,11 @@ function LiveAdminUsers() {
         title={detailUser?.full_name ?? detailUser?.email ?? 'User'}
         description={detailUser?.email}
         side="right"
+        size="wide"
       >
         {detailUser && (
           <UserDetail
+            key={detailUser.id}
             profile={detailUser}
             held={held.get(detailUser.id) ?? new Set()}
             roleColumns={columns}
@@ -710,10 +788,12 @@ function LiveAdminUsers() {
         onOpenChange={(open) => {
           if (!open) setRoleChange(null);
         }}
-        title={roleChange?.next ? 'Grant governed access' : 'Revoke governed access'}
+        title={
+          roleChange?.next ? 'Grant governed access' : 'Revoke governed access'
+        }
         description={
           roleChange
-            ? `${roleChange.moduleName}:${roleChange.role}`
+            ? `${getAdminRolePresentation(roleChange.moduleName, roleChange.role).label} · ${getAdminModulePresentation(roleChange.moduleName).label}`
             : undefined
         }
         side="right"
@@ -724,6 +804,29 @@ function LiveAdminUsers() {
         }
       >
         <div className="space-y-4">
+          {roleChange && (
+            <div className="border-l-4 border-brand-500 bg-brand-50 p-4 dark:bg-brand-900/20">
+              <p className="text-xs font-bold uppercase text-brand-700 dark:text-brand-300">
+                {getAdminModulePresentation(roleChange.moduleName).label} module
+              </p>
+              <p className="mt-1 font-semibold text-ink">
+                {
+                  getAdminRolePresentation(
+                    roleChange.moduleName,
+                    roleChange.role,
+                  ).label
+                }
+              </p>
+              <p className="mt-1 text-sm text-muted">
+                {
+                  getAdminRolePresentation(
+                    roleChange.moduleName,
+                    roleChange.role,
+                  ).description
+                }
+              </p>
+            </div>
+          )}
           <p className="text-sm text-muted">
             Record the approved request before changing access. This evidence is
             retained in the audit trail.
@@ -862,19 +965,27 @@ function UserRoleTable({
       header: 'Roles',
       hideOnMobile: false,
       render: (row) => {
-        const set = held.get(row.id);
-        if (!set || set.size === 0) {
+        const assigned = assignedRoleColumns(held.get(row.id), roleColumns);
+        if (assigned.length === 0) {
           return <span className="text-xs text-faint">No roles</span>;
         }
         return (
           <div className="flex flex-wrap gap-1">
-            {Array.from(set)
-              .sort()
-              .map((k) => (
-                <span key={k} className="chip bg-inset text-xs text-muted">
-                  {k}
-                </span>
-              ))}
+            {assigned.slice(0, 3).map((column) => (
+              <span
+                key={column.key}
+                className="chip bg-inset text-xs text-muted"
+                title={`${column.label} in ${getAdminModulePresentation(column.module).label}`}
+              >
+                {getAdminModulePresentation(column.module).shortLabel} ·{' '}
+                {column.label}
+              </span>
+            ))}
+            {assigned.length > 3 && (
+              <span className="chip bg-brand-50 text-xs font-semibold text-brand-700 dark:bg-brand-900/30 dark:text-brand-300">
+                +{assigned.length - 3} more
+              </span>
+            )}
           </div>
         );
       },
@@ -992,6 +1103,14 @@ function UserDetail({
   onToggle,
   selfManaged,
 }: UserDetailProps) {
+  const [openModules, setOpenModules] = useState<Set<Module>>(
+    () =>
+      new Set(
+        roleColumns
+          .filter((column) => held.has(column.key))
+          .map((column) => column.module),
+      ),
+  );
   const grouped = useMemo(() => {
     const g = new Map<Module, RoleColumn[]>();
     for (const c of roleColumns) {
@@ -1003,82 +1122,200 @@ function UserDetail({
   }, [roleColumns]);
   const orderedGroups = useMemo(
     () =>
-      Array.from(grouped.entries()).sort(([leftModule, left], [rightModule, right]) => {
-        const leftAssigned = left.some((column) => held.has(column.key));
-        const rightAssigned = right.some((column) => held.has(column.key));
-        if (leftAssigned !== rightAssigned) return leftAssigned ? -1 : 1;
-        if (leftModule === 'core' && rightModule !== 'core') return 1;
-        if (rightModule === 'core' && leftModule !== 'core') return -1;
-        return MODULE_LIST.indexOf(leftModule) - MODULE_LIST.indexOf(rightModule);
-      }),
+      Array.from(grouped.entries()).sort(
+        ([leftModule, left], [rightModule, right]) => {
+          const leftAssigned = left.some((column) => held.has(column.key));
+          const rightAssigned = right.some((column) => held.has(column.key));
+          if (leftAssigned !== rightAssigned) return leftAssigned ? -1 : 1;
+          if (leftModule === 'core' && rightModule !== 'core') return 1;
+          if (rightModule === 'core' && leftModule !== 'core') return -1;
+          return (
+            MODULE_LIST.indexOf(leftModule) - MODULE_LIST.indexOf(rightModule)
+          );
+        },
+      ),
     [grouped, held],
+  );
+  const assigned = useMemo(
+    () => assignedRoleColumns(held, roleColumns),
+    [held, roleColumns],
+  );
+  const assignedModuleCount = useMemo(
+    () => new Set(assigned.map((column) => column.module)).size,
+    [assigned],
   );
 
   return (
-    <div className="space-y-5">
-      <div className="rounded-2xl bg-inset p-4">
-        <div className="flex items-center justify-between gap-2">
+    <div className="space-y-6">
+      <div className="rounded-lg border border-line bg-inset p-4 sm:p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-ink">
+            <p className="truncate font-semibold text-ink">
               {profile.full_name ?? profile.email}
             </p>
-            <p className="truncate text-xs text-muted">{profile.email}</p>
+            <p className="truncate text-sm text-muted">{profile.email}</p>
           </div>
           <Badge tone={profile.kind === 'vendor' ? 'emerald' : 'brand'}>
             {profile.kind === 'vendor' ? 'Vendor' : 'Employee'}
           </Badge>
         </div>
         {profile.title && (
-          <p className="mt-2 text-xs text-faint">{profile.title}</p>
+          <p className="mt-2 text-sm text-muted">{profile.title}</p>
         )}
-        <p className="mt-2 text-xs text-faint">
-          <span className="font-semibold text-muted">Current:</span>{' '}
-          {summarizeRoles(held)}
+        <div className="mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-line bg-line">
+          <div className="bg-surface px-3 py-2.5">
+            <p className="text-xs font-semibold uppercase text-faint">
+              Assigned roles
+            </p>
+            <p className="mt-0.5 font-display text-xl font-bold text-ink">
+              {assigned.length}
+            </p>
+          </div>
+          <div className="bg-surface px-3 py-2.5">
+            <p className="text-xs font-semibold uppercase text-faint">
+              Active modules
+            </p>
+            <p className="mt-0.5 font-display text-xl font-bold text-ink">
+              {assignedModuleCount}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="border-l-4 border-brand-500 bg-brand-50 p-4 dark:bg-brand-900/20">
+        <p className="font-semibold text-ink">How access is organized</p>
+        <p className="mt-1 text-sm text-muted">
+          A module is a workspace, such as Warehouse or Procurement. A role
+          defines what this person may do inside that workspace. One person may
+          need roles in several modules.
         </p>
       </div>
 
-      {orderedGroups.map(([moduleName, cols]) => (
-        <section key={moduleName}>
-          <SectionTitle
-            title={MODULES[moduleName].label}
-            subtitle={`module: ${moduleName}`}
-          />
-          <ul className="space-y-1">
-            {cols.map((c) => {
-              const checked = held.has(c.key);
-              const rowPending = pending.has(`${profile.id}::${c.key}`);
-              return (
-                <li
-                  key={c.key}
-                  className="flex items-center justify-between gap-3 rounded-xl bg-inset/60 px-3 py-2"
-                >
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-medium text-ink">
-                      {c.label}
-                      {!c.isActive && (
-                        <span className="ml-2 inline-flex">
-                          <Badge tone="slate">Inactive</Badge>
-                        </span>
-                      )}
-                    </div>
-                    <div className="truncate font-mono text-[0.7rem] text-faint">
-                      {c.key}
-                    </div>
-                  </div>
-                  <RoleCheckbox
-                    checked={checked}
-                    disabled={
-                      selfManaged || rowPending || (!c.isActive && !checked)
-                    }
-                    label={`${c.key} for ${profile.email}`}
-                    onChange={(next) => onToggle(c.module, c.role, next)}
-                  />
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      ))}
+      <div>
+        <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <p className="text-xs font-bold uppercase text-brand-700 dark:text-brand-300">
+              Access by module
+            </p>
+            <h2 className="font-display text-lg font-bold text-ink">
+              Choose the person&apos;s responsibilities
+            </h2>
+          </div>
+          <p className="text-xs text-muted">Assigned modules appear first</p>
+        </div>
+        <div className="grid items-start gap-3 lg:grid-cols-2">
+          {orderedGroups.map(([moduleName, cols]) => {
+            const modulePresentation = getAdminModulePresentation(moduleName);
+            const assignedInModule = cols.filter((column) =>
+              held.has(column.key),
+            ).length;
+            return (
+              <details
+                key={moduleName}
+                className="group overflow-hidden rounded-lg border border-line bg-surface shadow-e1"
+                open={openModules.has(moduleName)}
+                onToggle={(event) => {
+                  const nextOpen = event.currentTarget.open;
+                  setOpenModules((current) => {
+                    const next = new Set(current);
+                    if (nextOpen) next.add(moduleName);
+                    else next.delete(moduleName);
+                    return next;
+                  });
+                }}
+              >
+                <summary className="flex min-h-20 cursor-pointer list-none items-center gap-3 px-4 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500 [&::-webkit-details-marker]:hidden">
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300">
+                    <Icon name={modulePresentation.icon} className="h-5 w-5" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[0.68rem] font-bold uppercase text-faint">
+                      Module
+                    </span>
+                    <span className="block font-semibold text-ink">
+                      {modulePresentation.label}
+                    </span>
+                    <span className="mt-0.5 block text-xs leading-5 text-muted">
+                      {modulePresentation.description}
+                    </span>
+                  </span>
+                  <span className="flex shrink-0 items-center gap-2">
+                    <Badge tone={assignedInModule > 0 ? 'emerald' : 'slate'}>
+                      {assignedInModule} assigned
+                    </Badge>
+                    <Icon
+                      name="chevron"
+                      className="h-4 w-4 text-muted transition-transform group-open:rotate-90"
+                    />
+                  </span>
+                </summary>
+                <ul className="border-t border-line">
+                  {cols.map((column) => {
+                    const checked = held.has(column.key);
+                    const rowPending = pending.has(
+                      `${profile.id}::${column.key}`,
+                    );
+                    const disabled =
+                      selfManaged ||
+                      rowPending ||
+                      (!column.isActive && !checked);
+                    return (
+                      <li
+                        key={column.key}
+                        className={cx(
+                          'grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-line px-4 py-3 last:border-b-0',
+                          checked && 'bg-brand-50/70 dark:bg-brand-900/20',
+                        )}
+                      >
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-[0.65rem] font-bold uppercase text-brand-700 dark:text-brand-300">
+                              Role
+                            </span>
+                            <p className="font-semibold text-ink">
+                              {column.label}
+                            </p>
+                            {!column.isActive && (
+                              <Badge tone="slate">Inactive</Badge>
+                            )}
+                          </div>
+                          <p className="mt-1 text-xs leading-5 text-muted">
+                            {column.description}
+                          </p>
+                        </div>
+                        <div className="flex flex-col items-center gap-0.5">
+                          <RoleCheckbox
+                            checked={checked}
+                            disabled={disabled}
+                            label={`${checked ? 'Remove' : 'Assign'} ${column.label} in ${modulePresentation.label} for ${profile.email}`}
+                            onChange={(next) =>
+                              onToggle(column.module, column.role, next)
+                            }
+                          />
+                          <span
+                            className={cx(
+                              'text-[0.65rem] font-semibold',
+                              checked
+                                ? 'text-brand-700 dark:text-brand-300'
+                                : 'text-faint',
+                            )}
+                          >
+                            {rowPending
+                              ? 'Saving'
+                              : checked
+                                ? 'Assigned'
+                                : 'Available'}
+                          </span>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </details>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }

@@ -14,6 +14,7 @@ import { Icon } from './Icon';
 import { SPRING_GENTLE } from './motion/tokens';
 
 type SheetSide = 'adaptive' | 'bottom' | 'right' | 'center';
+type SheetSize = 'default' | 'wide';
 
 const CONTENT_CLASS: Record<SheetSide, string> = {
   adaptive:
@@ -24,7 +25,7 @@ const CONTENT_CLASS: Record<SheetSide, string> = {
     'sheet-content fixed inset-x-0 bottom-0 z-50 max-h-[92dvh] rounded-t-2xl bg-surface shadow-e3 ring-1 ring-line ' +
     'flex flex-col pb-safe',
   right:
-    'drawer-content fixed inset-y-0 right-0 z-50 w-full max-w-sm bg-surface shadow-e3 ring-1 ring-line ' +
+    'drawer-content fixed inset-y-0 right-0 z-50 w-full bg-surface shadow-e3 ring-1 ring-line ' +
     'flex flex-col safe-top',
   center:
     'modal-content fixed left-1/2 top-1/2 z-50 w-[min(92vw,32rem)] max-h-[90vh] -translate-x-1/2 ' +
@@ -37,6 +38,8 @@ interface SheetProps {
   title: string;
   description?: string;
   side?: SheetSide;
+  /** Wider desktop drawer for comparison-heavy forms and role matrices. */
+  size?: SheetSize;
   children: ReactNode;
   /** Sticky footer actions. */
   footer?: ReactNode;
@@ -50,6 +53,7 @@ export function Sheet({
   title,
   description,
   side = 'adaptive',
+  size = 'default',
   children,
   footer,
   trigger,
@@ -72,9 +76,7 @@ export function Sheet({
       {(side === 'bottom' || side === 'adaptive') && (
         <div
           aria-hidden
-          onPointerDown={
-            draggable ? (e) => dragControls.start(e) : undefined
-          }
+          onPointerDown={draggable ? (e) => dragControls.start(e) : undefined}
           className={clsx(
             // Generous hit area around the visual handle for the drag gesture.
             'shrink-0 pb-1 pt-2.5 md:hidden',
@@ -102,7 +104,9 @@ export function Sheet({
           <Icon name="x" />
         </Dialog.Close>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5 md:px-6 md:pb-6">{children}</div>
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5 md:px-6 md:pb-6">
+        {children}
+      </div>
       {footer && (
         <div className="relative z-10 shrink-0 border-t border-line bg-surface px-5 py-3 md:px-6 md:py-4">
           <div className="md:flex md:justify-end [&>button]:md:min-w-36 [&>button]:md:w-auto">
@@ -119,7 +123,10 @@ export function Sheet({
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-brand-900/50 backdrop-blur-sm" />
         <Dialog.Content
-          className={clsx(CONTENT_CLASS[side])}
+          className={clsx(
+            CONTENT_CLASS[side],
+            side === 'right' && (size === 'wide' ? 'md:max-w-3xl' : 'max-w-sm'),
+          )}
           {...(description ? {} : { 'aria-describedby': undefined })}
           asChild={draggable}
         >
