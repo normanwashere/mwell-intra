@@ -491,12 +491,27 @@ describe("Knowledge Base content", () => {
           true,
         );
       }
-    expect(requirements).toHaveLength(42);
+    expect(requirements).toHaveLength(53);
     expect(
       KNOWLEDGE_CONTENT.evidence
         .filter((item) => item.featureId)
         .map((item) => item.featureId),
-    ).toEqual(["events-workspace", "my-work", "insights-workspace"]);
+    ).toEqual([
+      "events-workspace",
+      "my-work",
+      "insights-workspace",
+      "admin-departments",
+      "admin-audit",
+      "warehouse-fulfillment",
+      "warehouse-exceptions",
+      "warehouse-locations",
+      "procurement-approvals",
+      "warehouse-procurement-planning",
+      "warehouse-finance",
+      "legal-sign-instrument",
+      "vendor-case-detail",
+      "vendor-sign-instrument",
+    ]);
     expect(
       KNOWLEDGE_CONTENT.evidence.every((item) => item.sensitiveDataReviewed),
     ).toBe(true);
@@ -629,15 +644,15 @@ describe("Knowledge Base content", () => {
       "product_operations_partner",
     ]);
     expect(
-      launch?.nodes.filter((node) => node.type === "decision").map((node) => node.id),
+      launch?.nodes
+        .filter((node) => node.type === "decision")
+        .map((node) => node.id),
     ).toEqual([
       "product-readiness-complete",
       "product-go-live-decision",
       "product-operations-acceptance",
     ]);
-    expect(
-      launch?.edges.map((edge) => edge.label).filter(Boolean),
-    ).toEqual(
+    expect(launch?.edges.map((edge) => edge.label).filter(Boolean)).toEqual(
       expect.arrayContaining([
         "Evidence complete",
         "Missing, stale, or incomplete",
@@ -669,8 +684,9 @@ describe("Knowledge Base content", () => {
     ]);
     expect(article?.screenshots).toBeUndefined();
     expect(
-      article?.sections.find((section) => section.id === "current-evidence-status")
-        ?.body,
+      article?.sections.find(
+        (section) => section.id === "current-evidence-status",
+      )?.body,
     ).toMatch(/no Product-specific desktop or mobile screenshot set/i);
   });
 

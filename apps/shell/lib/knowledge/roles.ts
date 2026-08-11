@@ -783,18 +783,12 @@ const ROLE_DETAIL_ROUTE_ALIASES = [
 
 export const ROLE_ROUTE_PARENT_PATHS: Readonly<Record<string, string>> =
   Object.fromEntries(
-    ROLE_DETAIL_ROUTE_ALIASES.map((alias) => [
-      alias.route,
-      alias.parentHref,
-    ]),
+    ROLE_DETAIL_ROUTE_ALIASES.map((alias) => [alias.route, alias.parentHref]),
   );
 
 export const ROLE_ROUTE_PARENT_LABELS: Readonly<Record<string, string>> =
   Object.fromEntries(
-    ROLE_DETAIL_ROUTE_ALIASES.map((alias) => [
-      alias.route,
-      alias.parentLabel,
-    ]),
+    ROLE_DETAIL_ROUTE_ALIASES.map((alias) => [alias.route, alias.parentLabel]),
   );
 
 function warehouseRoute(path: string): string {
@@ -924,7 +918,13 @@ export const LIVE_KNOWLEDGE_ROLES: KnowledgeRole[] = [
     purpose:
       "Administer identities, scoped roles, shared master data, notification controls, audit review, and governed access changes.",
     authority: {
-      accessibleRoutes: ["/", "/admin/users", "/admin/doa"],
+      accessibleRoutes: [
+        "/",
+        "/admin/users",
+        "/admin/departments",
+        "/admin/doa",
+        "/admin/audit",
+      ],
       canDo: [
         "Provision users, assign the minimum scoped RBAC roles, manage shared vendor and document records, and review audit history.",
         "Maintain the platform administration required for department workflows to operate.",

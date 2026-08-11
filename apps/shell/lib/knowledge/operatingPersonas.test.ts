@@ -59,6 +59,45 @@ describe("operating persona guide contracts", () => {
     );
   });
 
+  it("provides reviewed screen evidence for every persona task", () => {
+    const featureById = new Map(
+      KNOWLEDGE_CONTENT.features.map((feature) => [feature.id, feature]),
+    );
+    const routeMatches = (featureRoute: string, evidenceRoute: string) => {
+      const featureSegments = featureRoute.split("/").filter(Boolean);
+      const evidenceSegments = evidenceRoute
+        .split(/[?#]/, 1)[0]!
+        .split("/")
+        .filter(Boolean);
+      if (featureSegments.some((segment) => segment.startsWith(":")))
+        return (
+          featureSegments.length === evidenceSegments.length &&
+          featureSegments.every(
+            (segment, index) =>
+              segment.startsWith(":") || segment === evidenceSegments[index],
+          )
+        );
+      return (
+        evidenceRoute === featureRoute ||
+        evidenceRoute.startsWith(`${featureRoute}/`)
+      );
+    };
+
+    for (const persona of OPERATING_PERSONAS) {
+      for (const task of OPERATING_PERSONA_GUIDES[persona.id]!.tasks) {
+        const feature = featureById.get(task.featureId)!;
+        expect(
+          KNOWLEDGE_CONTENT.evidence.some(
+            (item) =>
+              item.featureId === feature.id ||
+              feature.routes.some((route) => routeMatches(route, item.route)),
+          ),
+          `${persona.label}: ${task.title}`,
+        ).toBe(true);
+      }
+    }
+  });
+
   it("keeps event, finance, and product guidance aligned with implemented controls", () => {
     const marketingTasks =
       OPERATING_PERSONA_GUIDES.marketing_events_lead!.tasks;
@@ -80,6 +119,12 @@ describe("operating persona guide contracts", () => {
       financeTasks.find((task) => task.id === "review-warehouse")
         ?.workspaceHref,
     ).toBe("/finance");
+    expect(
+      financeTasks.find((task) => task.id === "review-count")?.workspaceHref,
+    ).toBe("/finance");
+    expect(
+      financeTasks.find((task) => task.id === "review-count")?.featureId,
+    ).toBe("warehouse-finance");
 
     expect(
       OPERATING_PERSONA_GUIDES.product_owner!.tasks.find(

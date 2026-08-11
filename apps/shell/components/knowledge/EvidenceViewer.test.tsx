@@ -4,10 +4,15 @@ import * as React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { KnowledgeEvidence, KnowledgeFlowNode } from "@shell/lib/knowledge/types";
+import type {
+  KnowledgeEvidence,
+  KnowledgeFlowNode,
+} from "@shell/lib/knowledge/types";
 import { EvidenceViewer } from "./EvidenceViewer";
 
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+(
+  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true;
 
 vi.mock("@intra/ui", () => ({
   Icon: ({ name }: { name: string }) => <span aria-hidden>{name}</span>,
@@ -38,8 +43,26 @@ const evidence: KnowledgeEvidence = {
   expectedLandmark: "Bin code",
   sensitiveDataReviewed: true,
   hotspots: [
-    { id: "primary", number: 1, x: 0.3, y: 0.4, mobileX: 0.3, mobileY: 0.4, label: "Bin code", instruction: "Enter code." },
-    { id: "step-2", number: 2, x: 0.7, y: 0.8, mobileX: 0.7, mobileY: 0.8, label: "Add bin", instruction: "Submit once." },
+    {
+      id: "primary",
+      number: 1,
+      x: 0.3,
+      y: 0.4,
+      mobileX: 0.3,
+      mobileY: 0.4,
+      label: "Bin code",
+      instruction: "Enter code.",
+    },
+    {
+      id: "step-2",
+      number: 2,
+      x: 0.7,
+      y: 0.8,
+      mobileX: 0.7,
+      mobileY: 0.8,
+      label: "Add bin",
+      instruction: "Submit once.",
+    },
   ],
 };
 
@@ -49,7 +72,11 @@ let root: Root;
 beforeEach(() => {
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
-    value: vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })),
+    value: vi.fn(() => ({
+      matches: true,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })),
   });
   container = document.createElement("div");
   document.body.append(container);
@@ -63,7 +90,9 @@ afterEach(() => {
 
 describe("EvidenceViewer", () => {
   it("shows ordered markers and opens an unobstructed full-screen mobile view", async () => {
-    await act(() => root.render(<EvidenceViewer evidence={evidence} node={node} />));
+    await act(() =>
+      root.render(<EvidenceViewer evidence={evidence} node={node} />),
+    );
     expect(container.querySelectorAll('[aria-label^="1."]')).toHaveLength(1);
     expect(container.querySelectorAll('[aria-label^="2."]')).toHaveLength(1);
     const open = [...container.querySelectorAll("button")].find((button) =>
@@ -83,7 +112,9 @@ describe("EvidenceViewer", () => {
       await act(() =>
         root.render(<EvidenceViewer evidence={evidence} node={node} />),
       );
-      expect(container.textContent).toContain("Reference from an earlier build");
+      expect(container.textContent).toContain(
+        "Reference from an earlier build",
+      );
     } finally {
       if (previous === undefined) {
         delete process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA;
@@ -93,8 +124,22 @@ describe("EvidenceViewer", () => {
     }
   });
 
+  it("labels role walkthrough captures as UAT evidence", async () => {
+    await act(() =>
+      root.render(
+        <EvidenceViewer
+          evidence={{ ...evidence, environment: "uat" }}
+          node={node}
+        />,
+      ),
+    );
+    expect(container.textContent).toContain("UAT evidence");
+  });
+
   it("traps focus, closes with Escape, and returns focus to the opener", async () => {
-    await act(() => root.render(<EvidenceViewer evidence={evidence} node={node} />));
+    await act(() =>
+      root.render(<EvidenceViewer evidence={evidence} node={node} />),
+    );
     const open = [...container.querySelectorAll("button")].find((button) =>
       button.textContent?.includes("View image full screen"),
     )!;
@@ -104,7 +149,9 @@ describe("EvidenceViewer", () => {
       '[aria-label="Close full-screen evidence"]',
     );
     expect(document.activeElement).toBe(close);
-    await act(() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })));
+    await act(() =>
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })),
+    );
     expect(document.querySelector('[role="dialog"]')).toBeNull();
     expect(document.activeElement).toBe(open);
   });

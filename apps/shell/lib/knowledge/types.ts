@@ -43,7 +43,14 @@ export interface KnowledgeResponsibilityStage {
 
 export interface KnowledgeRole {
   id: string;
-  rbacModule?: "core" | "warehouse" | "procurement" | "legal" | "events" | "insights" | "product";
+  rbacModule?:
+    | "core"
+    | "warehouse"
+    | "procurement"
+    | "legal"
+    | "events"
+    | "insights"
+    | "product";
   rbacRole?: string;
   label: string;
   module: KnowledgeModule;
@@ -208,7 +215,7 @@ export interface KnowledgeEvidence {
   reviewedAt: string;
   appCommit: string;
   provenance: "production" | "documentation";
-  environment?: "demo" | "production";
+  environment?: "demo" | "uat" | "production";
   alt: string;
   expectedLandmark: string;
   expectedDatabaseEffect?: string;

@@ -640,6 +640,204 @@ function buildEvidence(node: KnowledgeFlowNode): KnowledgeEvidence {
   };
 }
 
+interface RoleFeatureWalkthrough {
+  id: string;
+  route: string;
+  roleId: string;
+  state: string;
+  landmark: string;
+  label: string;
+  instruction: string;
+  alt: string;
+  desktop: { x: number; y: number };
+  mobile: { x: number; y: number };
+}
+
+const ROLE_FEATURE_WALKTHROUGHS: RoleFeatureWalkthrough[] = [
+  {
+    id: "admin-departments",
+    route: "/admin/departments",
+    roleId: "platform_admin",
+    state: "The administrator is reviewing the governed department hierarchy.",
+    landmark: "Add department",
+    label: "Add a department",
+    instruction:
+      "Select Add department, then define its accountable name, slug, parent, and display order.",
+    alt: "Department administration with the Add department control identified",
+    desktop: { x: 0.2363, y: 0.2615 },
+    mobile: { x: 0.3289, y: 0.2862 },
+  },
+  {
+    id: "admin-audit",
+    route: "/admin/audit",
+    roleId: "platform_admin",
+    state:
+      "The administrator is reviewing retained platform activity and export controls.",
+    landmark: "Export CSV",
+    label: "Export the filtered audit trail",
+    instruction:
+      "Set the search and module filters first, then export the attributable rows required for review.",
+    alt: "Audit history with the Export CSV control identified",
+    desktop: { x: 0.2143, y: 0.2849 },
+    mobile: { x: 0.2476, y: 0.3111 },
+  },
+  {
+    id: "warehouse-fulfillment",
+    route: "/warehouse/fulfillment",
+    roleId: "warehouse_operations",
+    state:
+      "Operations is reviewing active demand and the controlled fulfillment entry point.",
+    landmark: "New fulfillment demand",
+    label: "Create fulfillment demand",
+    instruction:
+      "Select New fulfillment demand only after the customer, event, or department need is confirmed.",
+    alt: "Fulfillment workspace with the New fulfillment demand control identified",
+    desktop: { x: 0.8934, y: 0.4098 },
+    mobile: { x: 0.5, y: 0.7118 },
+  },
+  {
+    id: "warehouse-exceptions",
+    route: "/warehouse/exceptions",
+    roleId: "warehouse_supervisor",
+    state:
+      "No exception matches the active filters; the supervisor can broaden the queue deliberately.",
+    landmark: "Severity",
+    label: "Filter the exception queue",
+    instruction:
+      "Choose the required severity and status. If the queue remains empty, return to the source workflow instead of inventing a resolution record.",
+    alt: "Warehouse exception queue with the Severity filter identified",
+    desktop: { x: 0.401, y: 0.2698 },
+    mobile: { x: 0.5, y: 0.3114 },
+  },
+  {
+    id: "warehouse-locations",
+    route: "/warehouse/locations",
+    roleId: "warehouse_supervisor",
+    state:
+      "The operations lead is reviewing controlled warehouses and event sites.",
+    landmark: "Add",
+    label: "Add a controlled location",
+    instruction:
+      "Select Add, then identify the location type and accountable operating context before creating bins or routes.",
+    alt: "Warehouse locations with the Add control identified",
+    desktop: { x: 0.9448, y: 0.1233 },
+    mobile: { x: 0.1422, y: 0.2059 },
+  },
+  {
+    id: "procurement-approvals",
+    route: "/procurement/approvals",
+    roleId: "procurement_admin",
+    state: "The approver inbox is empty for the current DOA tier.",
+    landmark: "How the approval inbox works",
+    label: "Confirm inbox routing",
+    instruction:
+      "Use the inbox guidance to confirm that only requests waiting on your assigned tier appear here; an empty inbox requires no approval action.",
+    alt: "Procurement approval inbox showing the empty routed queue and guidance control",
+    desktop: { x: 0.9681, y: 0.5204 },
+    mobile: { x: 0.0974, y: 0.6438 },
+  },
+  {
+    id: "warehouse-procurement-planning",
+    route: "/warehouse/procurement",
+    roleId: "warehouse_procurement",
+    state:
+      "Reorder recommendations are ready for a governed Procurement handoff.",
+    landmark: "Save +200 recommendation",
+    label: "Save a reorder recommendation",
+    instruction:
+      "Review the stock minimum, on-hand quantity, lead time, and suggested amount before saving the recommendation.",
+    alt: "Replenishment control with a Save recommendation action identified",
+    desktop: { x: 0.2945, y: 0.5242 },
+    mobile: { x: 0.3592, y: 0.6775 },
+  },
+  {
+    id: "warehouse-finance",
+    route: "/finance",
+    roleId: "procurement_finance",
+    state:
+      "Finance is reviewing cross-module evidence before preparing the period close.",
+    landmark: "Prepare close entry",
+    label: "Prepare a Finance close entry",
+    instruction:
+      "Select Prepare close entry after validating the source PO, receipt, return, adjustment, or event-settlement evidence.",
+    alt: "Unified Finance workspace with the Prepare close entry control identified",
+    desktop: { x: 0.9161, y: 0.4471 },
+    mobile: { x: 0.5, y: 0.3858 },
+  },
+  {
+    id: "legal-sign-instrument",
+    route: "/legal/cases/case_uat_vendor_role_guide/sign/SIGN_NDA",
+    roleId: "legal_reviewer",
+    state:
+      "Legal has opened the governed MNDA and is correctly blocked until the vendor signs first.",
+    landmark: "Awaiting vendor signature",
+    label: "Verify the signature handoff",
+    instruction:
+      "Confirm the status is Awaiting vendor signature. Legal may review the template now, but must not countersign before the vendor signature is retained.",
+    alt: "Legal MNDA review showing the Awaiting vendor signature handoff",
+    desktop: { x: 0.3965, y: 0.4627 },
+    mobile: { x: 0.3766, y: 0.6386 },
+  },
+  {
+    id: "vendor-case-detail",
+    route: "/vendor/cases/case_uat_vendor_role_guide",
+    roleId: "vendor_portal",
+    state:
+      "The vendor is reviewing its own accreditation case and outstanding requirements.",
+    landmark: "Complete accreditation form",
+    label: "Complete the accreditation form",
+    instruction:
+      "Open the accreditation form, complete the required company information, and return to the checklist for documents and signatures.",
+    alt: "Vendor accreditation case with the Complete accreditation form link identified",
+    desktop: { x: 0.5211, y: 0.4238 },
+    mobile: { x: 0.3791, y: 0.6154 },
+  },
+  {
+    id: "vendor-sign-instrument",
+    route: "/vendor/cases/case_uat_vendor_role_guide/sign/SIGN_NDA",
+    roleId: "vendor_portal",
+    state: "The vendor has reached the governed MNDA signature controls.",
+    landmark: "Type",
+    label: "Choose a signature method",
+    instruction:
+      "Choose Draw or Type, confirm the full legal name, complete every required agreement field, and submit only after reviewing the final text.",
+    alt: "Vendor MNDA signature area with the Type signature method identified",
+    desktop: { x: 0.3296, y: 0.4463 },
+    mobile: { x: 0.3861, y: 0.4427 },
+  },
+];
+
+const ROLE_FEATURE_EVIDENCE: KnowledgeEvidence[] =
+  ROLE_FEATURE_WALKTHROUGHS.map((item) => ({
+    id: `ev-role-${item.id}`,
+    featureId: item.id,
+    desktopSrc: `/knowledge/screenshots/role-${item.id}-desktop.png`,
+    mobileSrc: `/knowledge/screenshots/role-${item.id}-mobile.png`,
+    route: item.route,
+    roleId: item.roleId,
+    state: item.state,
+    capturedAt: "2026-08-11",
+    reviewedAt: "2026-08-11",
+    appCommit: "725bf15e7211613097f4c97aa0cfe3dc73d365b2",
+    provenance: "documentation",
+    environment: "uat",
+    alt: item.alt,
+    expectedLandmark: item.landmark,
+    sensitiveDataReviewed: true,
+    hotspots: [
+      {
+        id: "primary",
+        number: 1,
+        x: item.desktop.x,
+        y: item.desktop.y,
+        mobileX: item.mobile.x,
+        mobileY: item.mobile.y,
+        label: item.label,
+        instruction: item.instruction,
+      },
+    ],
+  }));
+
 if (Object.keys(KNOWLEDGE_EVIDENCE_SCENARIOS).length !== executableNodes.length)
   throw new Error(
     "Evidence scenario count does not match executable flow nodes",
@@ -647,98 +845,102 @@ if (Object.keys(KNOWLEDGE_EVIDENCE_SCENARIOS).length !== executableNodes.length)
 
 export const KNOWLEDGE_EVIDENCE: KnowledgeEvidence[] = executableNodes
   .map(buildEvidence)
-  .concat([
-    {
-      id: "ev-events-workspace",
-      featureId: "events-workspace",
-      desktopSrc: "/knowledge/screenshots/task8-events-workspace-desktop.png",
-      mobileSrc: "/knowledge/screenshots/task8-events-workspace-mobile.png",
-      route: "/events",
-      roleId: "events_requester",
-      state:
-        "An event requester is reviewing event readiness before creating a governed event intent.",
-      capturedAt: "2026-07-14",
-      reviewedAt: "2026-07-14",
-      appCommit: "798798f25fea91ec9c4a5ccba906f3587feb8b12",
-      provenance: "documentation",
-      environment: "demo",
-      alt: "Events workspace with the New event control identified",
-      expectedLandmark: "New event",
-      sensitiveDataReviewed: true,
-      hotspots: [
-        {
-          id: "primary",
-          number: 1,
-          x: 0.221,
-          y: 0.2849,
-          mobileX: 0.2724,
-          mobileY: 0.336,
-          label: "Create event intent",
-          instruction:
-            "Select New event, then enter the event name, type, and valid operating dates before creation.",
-        },
-      ],
-    },
-    {
-      id: "ev-my-work",
-      featureId: "my-work",
-      desktopSrc: "/knowledge/screenshots/task8-my-work-desktop.png",
-      mobileSrc: "/knowledge/screenshots/task8-my-work-mobile.png",
-      route: "/work",
-      roleId: "events_requester",
-      state:
-        "A requester is reviewing assigned work and the authoritative source action for an event handoff.",
-      capturedAt: "2026-07-14",
-      reviewedAt: "2026-07-14",
-      appCommit: "798798f25fea91ec9c4a5ccba906f3587feb8b12",
-      provenance: "documentation",
-      environment: "demo",
-      alt: "My Work queue with the authoritative source control identified",
-      expectedLandmark: "Open source",
-      sensitiveDataReviewed: true,
-      hotspots: [
-        {
-          id: "primary",
-          number: 1,
-          x: 0.918,
-          y: 0.5704,
-          mobileX: 0.5,
-          mobileY: 0.7353,
-          label: "Open the authoritative source",
-          instruction:
-            "Use Open source to complete the action in the owning module; My Work does not duplicate approval or transaction commands.",
-        },
-      ],
-    },
-    {
-      id: "ev-insights-workspace",
-      featureId: "insights-workspace",
-      desktopSrc: "/knowledge/screenshots/task8-insights-workspace-desktop.png",
-      mobileSrc: "/knowledge/screenshots/task8-insights-workspace-mobile.png",
-      route: "/insights",
-      roleId: "insights_analyst",
-      state:
-        "An Insights analyst is reviewing role-scoped warehouse indicators and their governed source link.",
-      capturedAt: "2026-07-14",
-      reviewedAt: "2026-07-14",
-      appCommit: "798798f25fea91ec9c4a5ccba906f3587feb8b12",
-      provenance: "documentation",
-      environment: "demo",
-      alt: "Insights workspace with the governed source control identified",
-      expectedLandmark: "Open governed source",
-      sensitiveDataReviewed: true,
-      hotspots: [
-        {
-          id: "primary",
-          number: 1,
-          x: 0.2907,
-          y: 0.7271,
-          mobileX: 0.5,
-          mobileY: 0.7649,
-          label: "Investigate at the governed source",
-          instruction:
-            "Open the governed source to investigate or correct a metric; Insights remains read-only.",
-        },
-      ],
-    },
-  ]);
+  .concat(
+    [
+      {
+        id: "ev-events-workspace",
+        featureId: "events-workspace",
+        desktopSrc: "/knowledge/screenshots/task8-events-workspace-desktop.png",
+        mobileSrc: "/knowledge/screenshots/task8-events-workspace-mobile.png",
+        route: "/events",
+        roleId: "events_requester",
+        state:
+          "An event requester is reviewing event readiness before creating a governed event intent.",
+        capturedAt: "2026-07-14",
+        reviewedAt: "2026-07-14",
+        appCommit: "798798f25fea91ec9c4a5ccba906f3587feb8b12",
+        provenance: "documentation",
+        environment: "demo",
+        alt: "Events workspace with the New event control identified",
+        expectedLandmark: "New event",
+        sensitiveDataReviewed: true,
+        hotspots: [
+          {
+            id: "primary",
+            number: 1,
+            x: 0.221,
+            y: 0.2849,
+            mobileX: 0.2724,
+            mobileY: 0.336,
+            label: "Create event intent",
+            instruction:
+              "Select New event, then enter the event name, type, and valid operating dates before creation.",
+          },
+        ],
+      },
+      {
+        id: "ev-my-work",
+        featureId: "my-work",
+        desktopSrc: "/knowledge/screenshots/task8-my-work-desktop.png",
+        mobileSrc: "/knowledge/screenshots/task8-my-work-mobile.png",
+        route: "/work",
+        roleId: "events_requester",
+        state:
+          "A requester is reviewing assigned work and the authoritative source action for an event handoff.",
+        capturedAt: "2026-07-14",
+        reviewedAt: "2026-07-14",
+        appCommit: "798798f25fea91ec9c4a5ccba906f3587feb8b12",
+        provenance: "documentation",
+        environment: "demo",
+        alt: "My Work queue with the authoritative source control identified",
+        expectedLandmark: "Open source",
+        sensitiveDataReviewed: true,
+        hotspots: [
+          {
+            id: "primary",
+            number: 1,
+            x: 0.918,
+            y: 0.5704,
+            mobileX: 0.5,
+            mobileY: 0.7353,
+            label: "Open the authoritative source",
+            instruction:
+              "Use Open source to complete the action in the owning module; My Work does not duplicate approval or transaction commands.",
+          },
+        ],
+      },
+      {
+        id: "ev-insights-workspace",
+        featureId: "insights-workspace",
+        desktopSrc:
+          "/knowledge/screenshots/task8-insights-workspace-desktop.png",
+        mobileSrc: "/knowledge/screenshots/task8-insights-workspace-mobile.png",
+        route: "/insights",
+        roleId: "insights_analyst",
+        state:
+          "An Insights analyst is reviewing role-scoped warehouse indicators and their governed source link.",
+        capturedAt: "2026-07-14",
+        reviewedAt: "2026-07-14",
+        appCommit: "798798f25fea91ec9c4a5ccba906f3587feb8b12",
+        provenance: "documentation",
+        environment: "demo",
+        alt: "Insights workspace with the governed source control identified",
+        expectedLandmark: "Open governed source",
+        sensitiveDataReviewed: true,
+        hotspots: [
+          {
+            id: "primary",
+            number: 1,
+            x: 0.2907,
+            y: 0.7271,
+            mobileX: 0.5,
+            mobileY: 0.7649,
+            label: "Investigate at the governed source",
+            instruction:
+              "Open the governed source to investigate or correct a metric; Insights remains read-only.",
+          },
+        ],
+      },
+    ],
+    ROLE_FEATURE_EVIDENCE,
+  );

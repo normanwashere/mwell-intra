@@ -330,9 +330,9 @@ export const OPERATING_PERSONA_GUIDES: Record<string, OperatingPersonaGuide> = {
       task(
         "review-count",
         "Investigate count variance",
-        "Trace material variance to the count and operational evidence.",
-        "/warehouse/cycle-counts",
-        "warehouse-cycle-counts",
+        "Review the adjustment and its source count evidence in the unified Finance workspace.",
+        "/finance",
+        "warehouse-finance",
       ),
       task(
         "approve-event-settlement",
@@ -461,8 +461,8 @@ export const OPERATING_PERSONA_GUIDES: Record<string, OperatingPersonaGuide> = {
         "review-inventory-risk",
         "Review inventory risk",
         "Inspect stock, consumption, and exception trends without changing records.",
-        "/warehouse/reports",
-        "warehouse-reports",
+        "/insights",
+        "insights-workspace",
       ),
       task(
         "review-work",
