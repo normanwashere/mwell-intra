@@ -1,8 +1,9 @@
 import { useEffect, useRef } from 'react';
-import { render, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { ToastProvider } from '@/components/ui';
 import { makeRepo } from '@/test/renderWithProviders';
+import { InMemoryRepository } from '@/data/inMemoryRepository';
 import { useWarehouse, WarehouseProvider } from './store';
 
 function IdentityProbe({
@@ -42,6 +43,32 @@ function IdentityProbe({
 
 const repo = makeRepo();
 
+class TimeoutThenSuccessRepository extends InMemoryRepository {
+  attempts = 0;
+
+  override async getData() {
+    this.attempts += 1;
+    if (this.attempts === 1) {
+      return new Promise<never>(() => undefined);
+    }
+    return super.getData();
+  }
+}
+
+function ReadinessProbe() {
+  const { data, error, loading, refresh } = useWarehouse();
+  return (
+    <div>
+      <output aria-label="Warehouse readiness">
+        {loading ? 'loading' : error ? error : data ? 'ready' : 'empty'}
+      </output>
+      <button type="button" onClick={() => void refresh()}>
+        Retry warehouse data
+      </button>
+    </div>
+  );
+}
+
 describe('WarehouseProvider identity authority', () => {
   it('persists immutable profile id and denies the same profile despite a different email', async () => {
     let result: { requestedBy?: string; decisionCommitted: boolean } | undefined;
@@ -66,5 +93,41 @@ describe('WarehouseProvider identity authority', () => {
     }));
     expect((await repo.listStockChangeRequests({})).rows.at(-1)?.status)
       .toBe('pending_supervisor');
+  });
+
+  it('bounds an unresolved initial read and allows a clean retry', async () => {
+    const boundedRepo = new TimeoutThenSuccessRepository();
+
+    render(
+      <ToastProvider>
+        <WarehouseProvider
+          repo={boundedRepo}
+          source="memory"
+          loadTimeoutMs={25}
+        >
+          <ReadinessProbe />
+        </WarehouseProvider>
+      </ToastProvider>,
+    );
+
+    expect(screen.getByLabelText('Warehouse readiness')).toHaveTextContent(
+      'loading',
+    );
+    await waitFor(() =>
+      expect(screen.getByLabelText('Warehouse readiness')).toHaveTextContent(
+        /taking longer than expected/i,
+      ),
+    );
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Retry warehouse data' }),
+    );
+
+    await waitFor(() =>
+      expect(screen.getByLabelText('Warehouse readiness')).toHaveTextContent(
+        'ready',
+      ),
+    );
+    expect(boundedRepo.attempts).toBe(2);
   });
 });

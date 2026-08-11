@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { describe, it, expect } from 'vitest';
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { App } from './App';
 import { renderWithProviders } from '@/test/renderWithProviders';
 import { useWarehouse } from './store';
@@ -31,9 +31,88 @@ class DeniedControlRepository extends InMemoryRepository {
   }
 }
 
+class RetryableLoadRepository extends InMemoryRepository {
+  attempts = 0;
+
+  override async getData() {
+    this.attempts += 1;
+    if (this.attempts === 1) {
+      throw new Error('Warehouse read service is temporarily unavailable.');
+    }
+    return super.getData();
+  }
+}
+
+class BackgroundRefreshFailureRepository extends InMemoryRepository {
+  attempts = 0;
+
+  override async getData() {
+    this.attempts += 1;
+    if (this.attempts > 1) {
+      throw new Error('Background refresh failed.');
+    }
+    return super.getData();
+  }
+}
+
+function RefreshProbe() {
+  const { error, refresh } = useWarehouse();
+  return (
+    <>
+      <button type="button" onClick={() => void refresh()}>
+        Refresh warehouse data
+      </button>
+      <output aria-label="Refresh result">{error ?? 'ok'}</output>
+    </>
+  );
+}
+
 const FIRST_RENDER_TIMEOUT = 10_000;
 
 describe('App routing & guards', () => {
+  it('retains Warehouse chrome and recovers from an initial load failure', async () => {
+    const repo = new RetryableLoadRepository();
+    renderWithProviders(<App />, { repo, route: '/' });
+
+    expect(
+      await screen.findByRole('heading', {
+        name: 'Warehouse data is unavailable',
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText('Mwell Intra Warehouse')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry loading data' }));
+
+    expect(await screen.findByTestId('warehouse-dashboard-hero')).toBeInTheDocument();
+    expect(repo.attempts).toBe(2);
+  });
+
+  it('keeps loaded Warehouse data visible when a background refresh fails', async () => {
+    const repo = new BackgroundRefreshFailureRepository();
+    renderWithProviders(
+      <>
+        <App />
+        <RefreshProbe />
+      </>,
+      { repo, route: '/' },
+    );
+
+    expect(await screen.findByTestId('warehouse-dashboard-hero')).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Refresh warehouse data' }),
+    );
+
+    await waitFor(() =>
+      expect(screen.getByLabelText('Refresh result')).toHaveTextContent(
+        'Background refresh failed.',
+      ),
+    );
+    expect(screen.queryByTestId('warehouse-dashboard-hero')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'Warehouse data is unavailable' }),
+    ).not.toBeInTheDocument();
+  });
+
   it('renders the dashboard at the root', async () => {
     renderWithProviders(<App />, { route: '/' });
     expect(await screen.findByTestId('warehouse-dashboard-hero')).toBeInTheDocument();

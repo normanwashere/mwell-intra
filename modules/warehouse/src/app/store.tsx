@@ -235,6 +235,33 @@ interface WarehouseContextValue {
 const WarehouseContext = createContext<WarehouseContextValue | null>(null);
 
 export const ROLE_KEY = "mwell-intra-warehouse:role";
+export const DEFAULT_WAREHOUSE_LOAD_TIMEOUT_MS = 12_000;
+
+function loadWithTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      reject(
+        new Error(
+          "Warehouse data is taking longer than expected. Check your connection and retry.",
+        ),
+      );
+    }, timeoutMs);
+
+    void promise.then(
+      (result) => {
+        window.clearTimeout(timer);
+        resolve(result);
+      },
+      (error: unknown) => {
+        window.clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
 
 /**
  * The UI role is derived ONLY from the authenticated profile (JWT app_metadata
@@ -259,6 +286,7 @@ export function WarehouseProvider({
   capabilities: providedCapabilities,
   actor: providedActor,
   identityId: providedIdentityId,
+  loadTimeoutMs = DEFAULT_WAREHOUSE_LOAD_TIMEOUT_MS,
 }: {
   children: ReactNode;
   repo?: WarehouseControlRepository;
@@ -276,6 +304,8 @@ export function WarehouseProvider({
   actor?: string;
   /** Auth profile id used for separation-of-duties comparisons. */
   identityId?: string;
+  /** Maximum initial/read refresh wait before the UI offers recovery. */
+  loadTimeoutMs?: number;
 }) {
   const created = useRef<{
     repo: WarehouseControlRepository;
@@ -301,6 +331,8 @@ export function WarehouseProvider({
   );
   const [pendingSync, setPendingSync] = useState(0);
   const [conflicts, setConflicts] = useState<OutboxEntry[]>([]);
+  const hasLoadedData = useRef(false);
+  const refreshSequence = useRef(0);
 
   const actor = useMemo(
     () => providedActor ?? `${role}@mwell`,
@@ -355,22 +387,36 @@ export function WarehouseProvider({
     setConflicts(await allConflicts());
   }, []);
 
-  // Only the very first load shows the full-screen loader. Post-mutation
-  // refreshes update data silently so pages keep their local UI state.
+  // Initial loads and retries are bounded so a slow backend cannot strand the
+  // route in a shell-only state. Post-mutation refreshes keep existing data on
+  // screen, preserving the user's current workspace.
   const refresh = useCallback(async () => {
+    const sequence = ++refreshSequence.current;
+    if (!hasLoadedData.current) setLoading(true);
+    setError(null);
     try {
-      setData(await repo.getData());
+      const nextData = await loadWithTimeout(
+        repo.getData(),
+        Math.max(1, loadTimeoutMs),
+      );
+      if (sequence !== refreshSequence.current) return;
+      hasLoadedData.current = true;
+      setData(nextData);
       setError(null);
     } catch (e) {
+      if (sequence !== refreshSequence.current) return;
       setError(e instanceof Error ? e.message : "Failed to load data.");
     } finally {
-      setLoading(false);
+      if (sequence === refreshSequence.current) setLoading(false);
     }
-  }, [repo]);
+  }, [loadTimeoutMs, repo]);
 
   useEffect(() => {
     void refresh();
     void refreshPending();
+    return () => {
+      refreshSequence.current += 1;
+    };
   }, [refresh, refreshPending]);
 
   // In-memory only: role is authoritative from the signed-in profile, so we

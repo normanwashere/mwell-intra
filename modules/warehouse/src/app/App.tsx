@@ -174,7 +174,18 @@ function NotFound() {
 function LoadingShell() {
   return (
     <AppShell>
-      <div className="space-y-6">
+      <div
+        className="space-y-6"
+        role="status"
+        aria-live="polite"
+        aria-busy="true"
+      >
+        <div>
+          <h1 className="text-xl font-bold text-ink">Loading Warehouse data</h1>
+          <p className="mt-1 text-sm text-muted">
+            Preparing your inventory workspace.
+          </p>
+        </div>
         <Skeleton className="h-28 rounded-3xl sm:h-32" />
         <SkeletonStats />
         <div className="grid gap-4 lg:grid-cols-2">
@@ -186,21 +197,42 @@ function LoadingShell() {
   );
 }
 
+function LoadErrorShell({
+  error,
+  retry,
+}: {
+  error: string;
+  retry: () => void;
+}) {
+  return (
+    <AppShell>
+      <section
+        role="alert"
+        className="mx-auto flex min-h-[50vh] max-w-xl flex-col items-center justify-center text-center"
+      >
+        <div className="grid h-12 w-12 place-items-center rounded-lg bg-rose-500/10 text-rose-700 dark:text-rose-300">
+          <span className="text-xl font-bold" aria-hidden="true">
+            !
+          </span>
+        </div>
+        <h1 className="mt-4 text-xl font-bold text-ink">
+          Warehouse data is unavailable
+        </h1>
+        <p className="mt-2 max-w-md text-sm text-muted">{error}</p>
+        <button type="button" className="btn-primary mt-6" onClick={retry}>
+          Retry loading data
+        </button>
+      </section>
+    </AppShell>
+  );
+}
+
 export function App() {
-  const { loading, error } = useWarehouse();
+  const { data, loading, error, refresh } = useWarehouse();
 
   if (loading) return <LoadingShell />;
-  if (error) {
-    return (
-      <div className="grid min-h-screen place-items-center p-6 text-center">
-        <div>
-          <h1 className="text-lg font-bold text-rose-600 dark:text-rose-300">
-            Could not load data
-          </h1>
-          <p className="mt-2 max-w-sm text-sm text-muted">{error}</p>
-        </div>
-      </div>
-    );
+  if (error && !data) {
+    return <LoadErrorShell error={error} retry={() => void refresh()} />;
   }
 
   return (
