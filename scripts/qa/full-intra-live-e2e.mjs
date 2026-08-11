@@ -27,6 +27,8 @@ const require = createRequire(path.resolve("apps/shell/package.json"));
 const { chromium } = require("@playwright/test");
 const AxeBuilder = require("@axe-core/playwright").default;
 
+let auditProgressSnapshot = () => ({});
+
 const auditEvidenceDir = path.resolve(
   process.env.AUDIT_EVIDENCE_DIR ??
     path.join(
@@ -53,6 +55,7 @@ function preserveFatalAuditEvidence(error) {
           baseUrl: process.env.AUDIT_BASE_URL ?? null,
           runId: process.env.AUDIT_RUN_ID ?? null,
           phase: process.env.AUDIT_PHASE ?? "all",
+          ...auditProgressSnapshot(),
           fatal: {
             message: error instanceof Error ? error.message : String(error),
           },
@@ -1661,14 +1664,18 @@ async function warehouseCreateLocationWorkflow(page, marker) {
     timeout: 20_000,
   });
   await waitForMeaningfulRoute(page);
-  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await page.getByRole("button", { name: "Add location", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Add location" });
-  await dialog.getByRole("button", { name: "Add", exact: true }).click();
+  await dialog
+    .getByRole("button", { name: "Add location", exact: true })
+    .click();
   await dialog.getByRole("alert").waitFor({ state: "visible" });
   await dialog.getByLabel("Name").fill(locationName);
   await dialog.getByLabel("ID (optional)").fill(locationId);
   await dialog.getByLabel("Type").selectOption("warehouse");
-  await dialog.getByRole("button", { name: "Add", exact: true }).click();
+  await dialog
+    .getByRole("button", { name: "Add location", exact: true })
+    .click();
   await page
     .getByText(locationName, { exact: true })
     .waitFor({ state: "visible" });
@@ -7610,6 +7617,11 @@ if (runRouteAudit) {
 
 const workflows = [];
 let cleanup = { runId: auditRunId, complete: true, results: [] };
+auditProgressSnapshot = () => ({
+  workflows,
+  cleanup,
+  results,
+});
 const task3Fixtures = [];
 const registerTask3Cleanup = (fixture) => task3Fixtures.push(fixture);
 const vendorAuditEmail = (marker) =>
@@ -7779,10 +7791,6 @@ try {
           },
         );
         workflows.push(locationSetup);
-        if (!locationSetup.ok)
-          throw new Error(
-            `Warehouse location setup failed: ${JSON.stringify(locationSetup)}`,
-          );
         const binSetup = await runWorkflow(
           browser,
           viewport,
@@ -7794,10 +7802,6 @@ try {
           },
         );
         workflows.push(binSetup);
-        if (!binSetup.ok)
-          throw new Error(
-            `Warehouse bin setup failed: ${JSON.stringify(binSetup)}`,
-          );
         const task3Fixture = await createTask3ReceiptFixture(
           marker,
           registerTask3Cleanup,

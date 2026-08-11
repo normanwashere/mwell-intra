@@ -196,6 +196,44 @@ test("Warehouse certification creates its editable baseline before receiving and
   assert.match(source, /table: "storage_areas"[\s\S]*table: "locations"/);
 });
 
+test("Warehouse location certification follows the live accessible control name without aborting downstream workflows", async () => {
+  const source = await readFile(
+    new URL("./full-intra-live-e2e.mjs", import.meta.url),
+    "utf8",
+  );
+  const workflowStart = source.indexOf(
+    "async function warehouseCreateLocationWorkflow",
+  );
+  const workflowEnd = source.indexOf(
+    "async function warehouseCreateEventWorkflow",
+  );
+  const workflowSource = source.slice(workflowStart, workflowEnd);
+
+  assert.match(
+    workflowSource,
+    /getByRole\("button", \{ name: "Add location", exact: true \}\)/,
+  );
+  assert.doesNotMatch(
+    workflowSource,
+    /getByRole\("button", \{ name: "Add", exact: true \}\)/,
+  );
+  assert.doesNotMatch(source, /Warehouse location setup failed/);
+  assert.doesNotMatch(source, /Warehouse bin setup failed/);
+});
+
+test("fatal audit evidence retains completed route, workflow, and cleanup progress", async () => {
+  const source = await readFile(
+    new URL("./full-intra-live-e2e.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /let auditProgressSnapshot = \(\) => \(\{\}\)/);
+  assert.match(
+    source,
+    /auditProgressSnapshot = \(\) => \(\{[\s\S]*workflows,[\s\S]*cleanup,[\s\S]*results,/,
+  );
+  assert.match(source, /\.\.\.auditProgressSnapshot\(\)/);
+});
+
 test("the approval-group fixture has an explicit service-role grant", async () => {
   const migration = await readFile(
     new URL(
@@ -779,15 +817,15 @@ test("vendor readiness appends conditional requirements with array-safe operatio
     ),
     "utf8",
   );
-  assert.match(migration, /array_append\(v_required, 'PH_PRIVACY_COMPLIANCE'\)/);
+  assert.match(
+    migration,
+    /array_append\(v_required, 'PH_PRIVACY_COMPLIANCE'\)/,
+  );
   assert.match(
     migration,
     /array_append\(v_required, 'PH_CYBERSECURITY_POLICIES'\)/,
   );
-  assert.doesNotMatch(
-    migration,
-    /v_required\s*:=\s*v_required\s*\|\|\s*'PH_/,
-  );
+  assert.doesNotMatch(migration, /v_required\s*:=\s*v_required\s*\|\|\s*'PH_/);
 });
 
 test("receiving wrappers authorize before disclosure and preserve idempotent replay", async () => {
@@ -851,11 +889,17 @@ test("the UI and live harness cover mobile names, controlled accounting, and com
       readFile(new URL("./full-intra-live-e2e.mjs", import.meta.url), "utf8"),
     ]);
   assert.match(requestPage, /aria-label={`Step \$\{s\.n\}:/);
-  assert.match(accreditationCases, /aria-label="Accreditation requirements approved"/);
+  assert.match(
+    accreditationCases,
+    /aria-label="Accreditation requirements approved"/,
+  );
   assert.match(caseDetail, /aria-label="Overall accreditation progress"/);
   assert.match(eventsApp, /<select[\s\S]*id="event-request-department"/);
   assert.match(eventsApp, /<select[\s\S]*id="event-request-cost"/);
-  assert.match(harness, /getByLabel\("Department"\)\.selectOption\("marketing"\)/);
+  assert.match(
+    harness,
+    /getByLabel\("Department"\)\.selectOption\("marketing"\)/,
+  );
   assert.match(harness, /readinessDialog\.waitFor\(\{ state: "detached"/);
   assert.match(harness, /priceDialog\.waitFor\(\{ state: "detached"/);
   assert.match(
@@ -1764,6 +1808,12 @@ test("procurement readiness distinguishes missing records from retired seed owne
   assert.match(procurementReadiness, /v_request_found := found/);
   assert.match(procurementReadiness, /if not v_request_found then/);
   assert.match(procurementReadiness, /requester_id is null/);
-  assert.match(procurementReadiness, /v_requester_id is null and not v_has_control_access/);
-  assert.match(procurementReadiness, /coalesce\(auth\.uid\(\) = v_requester_id, false\)/);
+  assert.match(
+    procurementReadiness,
+    /v_requester_id is null and not v_has_control_access/,
+  );
+  assert.match(
+    procurementReadiness,
+    /coalesce\(auth\.uid\(\) = v_requester_id, false\)/,
+  );
 });
