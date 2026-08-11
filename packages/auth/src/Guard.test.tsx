@@ -306,6 +306,25 @@ describe('useCan', () => {
     expect(screen.getByTestId('live-reserve').textContent).toBe('yes');
   });
 
+  it('does not call Supabase again inside the auth-state callback', async () => {
+    const { client, emit, getUser, makeUser } = transitionClient();
+    render(
+      <SessionProvider config={{ mode: 'supabase', client }}>
+        <LiveSessionProbe />
+      </SessionProvider>,
+    );
+    await screen.findByText('user-a@mwell.test');
+
+    const callsBeforeEvent = getUser.mock.calls.length;
+    const userB = makeUser('user-b', 'warehouse_operator');
+    getUser.mockResolvedValueOnce({ data: { user: userB }, error: null });
+    emit({ user: userB } as Session);
+
+    expect(getUser).toHaveBeenCalledTimes(callsBeforeEvent);
+    await screen.findByText('user-b@mwell.test');
+    expect(getUser).toHaveBeenCalledTimes(callsBeforeEvent + 1);
+  });
+
   it('reflects the scoped capability of the signed-in roles', async () => {
     render(
       <SessionProvider config={{ mode: 'memory', profiles: PROFILES }}>

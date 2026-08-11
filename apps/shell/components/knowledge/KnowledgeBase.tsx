@@ -18,6 +18,8 @@ import {
 import type {
   KnowledgeAvailability,
   KnowledgeContent,
+  KnowledgeEvidence,
+  KnowledgeFeature,
   KnowledgeModule,
 } from "@shell/lib/knowledge/types";
 import { FeatureGuide } from "./FeatureGuide";
@@ -35,6 +37,29 @@ const AVAILABILITY_FILTERS = new Set<KnowledgeAvailability | "all">([
   "limited",
   "coming_soon",
 ]);
+
+export function evidenceForFeature(
+  feature: KnowledgeFeature,
+  evidence: KnowledgeEvidence[],
+): KnowledgeEvidence[] {
+  return evidence.filter((item) => {
+    if (item.featureId === feature.id) return true;
+    const evidenceRoute = item.route.split(/[?#]/, 1)[0] ?? "";
+    return feature.routes.some((route) => {
+      const routeSegments = route.split("/").filter(Boolean);
+      const evidenceSegments = evidenceRoute.split("/").filter(Boolean);
+      if (routeSegments.some((segment) => segment.startsWith(":")))
+        return (
+          routeSegments.length === evidenceSegments.length &&
+          routeSegments.every(
+            (segment, index) =>
+              segment.startsWith(":") || segment === evidenceSegments[index],
+          )
+        );
+      return evidenceRoute === route || evidenceRoute.startsWith(`${route}/`);
+    });
+  });
+}
 
 export function resolveKnowledgeGuide(
   content: KnowledgeContent,
@@ -398,8 +423,9 @@ export function KnowledgeBase({ content }: { content: KnowledgeContent }) {
             const flow = scopedContent.flows.find((item) => item.id === flowId);
             return flow ? [flow] : [];
           })}
-          evidence={scopedContent.evidence.filter(
-            (item) => item.featureId === guide.feature.id,
+          evidence={evidenceForFeature(
+            guide.feature,
+            scopedContent.evidence,
           )}
           glossary={scopedContent.glossary}
           onBack={() => setParams({ article: null }, { scroll: "restore" })}

@@ -1,6 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { KNOWLEDGE_CONTENT } from "../../lib/knowledge/content";
+import { OPERATING_PERSONAS } from "../../lib/knowledge/operatingPersonas";
 
 const MEMORY_SESSION_KEY = "intra.memory-session.v1";
 const EXPECTED_VIEWPORTS: Record<string, [number, number]> = {
@@ -16,6 +17,10 @@ const MODULE_FEATURE_PAGES = [...new Set(KNOWLEDGE_CONTENT.features.map((item) =
     ?? KNOWLEDGE_CONTENT.features.find((item) => item.module === module)!;
   return [`feature-${module}`, `/knowledge?article=feature-${feature.id}`] as const;
 });
+const PERSONA_PAGES = OPERATING_PERSONAS.map((persona) => [
+  `persona-${persona.id}`,
+  `/knowledge?mode=role&article=persona-${persona.id}`,
+] as const);
 const PAGES: ReadonlyArray<readonly [string, string]> = [
   ["landing", "/knowledge"], ["role", `/knowledge?article=role-${KNOWLEDGE_CONTENT.roles[0]!.id}`],
   ["feature", `/knowledge?article=feature-${KNOWLEDGE_CONTENT.features[0]!.id}`],
@@ -27,6 +32,7 @@ const PAGES: ReadonlyArray<readonly [string, string]> = [
   ["coming-soon", "/knowledge?type=future"],
   ...MODULE_ROLE_PAGES,
   ...MODULE_FEATURE_PAGES,
+  ...PERSONA_PAGES,
 ];
 
 test.beforeEach(async ({ page }) => {
@@ -39,6 +45,9 @@ async function assertVisualIntegrity(page: Page) {
   const problems = await page.evaluate(() => {
     const visible = (el: Element) => {
       const rect = el.getBoundingClientRect(); const style = getComputedStyle(el);
+      const closedDetails = el.closest("details:not([open])");
+      if (closedDetails && el !== closedDetails.querySelector(":scope > summary"))
+        return false;
       return style.visibility !== "hidden" && style.display !== "none" && rect.width > 0 && rect.height > 0;
     };
     const label = (el: Element) => el.getAttribute("aria-label") || el.textContent?.trim().slice(0, 80) || el.tagName;

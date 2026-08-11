@@ -95,13 +95,20 @@ export function OperatingPersonaGuide({
         </div>
       </header>
 
-      <section id="persona-start" className="scroll-mt-24 pt-7">
+      <section
+        id="persona-start"
+        className="scroll-mt-24 pt-7"
+        aria-labelledby="persona-start-title"
+      >
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase text-brand-700">
               Your work
             </p>
-            <h2 className="mt-1 text-xl font-bold text-ink">
+            <h2
+              id="persona-start-title"
+              className="mt-1 text-xl font-bold text-ink"
+            >
               What do you need to do?
             </h2>
           </div>
@@ -156,11 +163,15 @@ export function OperatingPersonaGuide({
       <section
         id="persona-responsibility"
         className="scroll-mt-24 border-t border-line pt-7 mt-8"
+        aria-labelledby="persona-responsibility-title"
       >
         <p className="text-xs font-semibold uppercase text-brand-700">
           Responsibility
         </p>
-        <h2 className="mt-1 text-xl font-bold text-ink">
+        <h2
+          id="persona-responsibility-title"
+          className="mt-1 text-xl font-bold text-ink"
+        >
           What you own and when to stop
         </h2>
         <div className="mt-5 grid gap-6 md:grid-cols-2">
@@ -179,7 +190,10 @@ export function OperatingPersonaGuide({
         </div>
       </section>
 
-      <section className="mt-8 divide-y divide-line border-y border-line">
+      <section
+        className="mt-8 divide-y divide-line border-y border-line"
+        aria-label="Role decisions, boundaries, and handoffs"
+      >
         <ReferenceDetails
           title="Decisions you can make"
           count={decisions.length}
@@ -223,11 +237,20 @@ export function OperatingPersonaGuide({
         </ReferenceDetails>
       </section>
 
-      <section id="persona-related" className="scroll-mt-24 pt-8">
+      <section
+        id="persona-related"
+        className="scroll-mt-24 pt-8"
+        aria-labelledby="persona-related-title"
+      >
         <p className="text-xs font-semibold uppercase text-brand-700">
           Keep learning
         </p>
-        <h2 className="mt-1 text-xl font-bold text-ink">Related guidance</h2>
+        <h2
+          id="persona-related-title"
+          className="mt-1 text-xl font-bold text-ink"
+        >
+          Related guidance
+        </h2>
         <p className="mt-1 text-sm text-muted">
           Only the most relevant guides for this job are shown here.
         </p>

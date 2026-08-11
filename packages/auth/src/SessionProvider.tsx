@@ -247,9 +247,16 @@ export function SessionProvider({
     const { data: sub } = client.auth.onAuthStateChange((_event, session) => {
       if (!active) return;
       const generation = beginLiveRefresh(session);
-      void verifyAndApplyLiveUser(session, generation).finally(() => {
-        if (active && generation === liveGeneration.current) setLoading(false);
-      });
+      // Supabase can deadlock when another async client call starts inside the
+      // auth callback. Defer identity verification and capability projection
+      // until the callback has returned and released the auth lock.
+      window.setTimeout(() => {
+        if (!active || generation !== liveGeneration.current) return;
+        void verifyAndApplyLiveUser(session, generation).finally(() => {
+          if (active && generation === liveGeneration.current)
+            setLoading(false);
+        });
+      }, 0);
     });
 
     const refreshOnFocus = () => {
