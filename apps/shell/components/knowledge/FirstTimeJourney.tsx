@@ -99,9 +99,9 @@ export function FirstTimeJourney({
             <p className="text-xs font-semibold uppercase text-brand-700">Step {preferences.onboardingStep + 1} of {STEPS.length}</p>
             <h3 className="mt-2 text-2xl font-bold text-ink">{step.title}</h3>
             <p className="mt-3 max-w-2xl leading-7 text-muted">{step.body}</p>
-            <div className="mt-5 border-l-4 border-emerald-500 bg-emerald-50 p-4">
-              <p className="text-xs font-semibold uppercase text-emerald-800">Checkpoint</p>
-              <p className="mt-1 text-sm text-ink">{step.outcome}</p>
+            <div className="mt-5 border-l-4 border-emerald-500 bg-emerald-50 p-4 dark:border-emerald-400 dark:bg-emerald-950">
+              <p className="text-xs font-semibold uppercase text-emerald-800 dark:text-emerald-300">Checkpoint</p>
+              <p className="mt-1 text-sm text-emerald-950 dark:text-emerald-100">{step.outcome}</p>
             </div>
           </div>
           <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">

@@ -85,6 +85,53 @@ function choicePathToNode(flow: KnowledgeFlow, targetNodeId: string) {
 
 test.beforeEach(async ({ page }) => installSession(page));
 
+test("first-time orientation remains legible in dark mode", async ({
+  page,
+}) => {
+  await page.addInitScript(() => localStorage.setItem("intra-theme", "dark"));
+  await page.goto("/knowledge");
+  await expect(
+    page.getByRole("region", { name: "First 10 minutes in Intra" }),
+  ).toBeVisible();
+  const checkpointContrast = await page
+    .getByText(
+      "You know what you may do and which decisions stay with another owner.",
+      { exact: true },
+    )
+    .evaluate((element) => {
+      const parseRgb = (value: string) =>
+        value
+          .match(/[\d.]+/g)
+          ?.slice(0, 3)
+          .map(Number) ?? [0, 0, 0];
+      const luminance = ([red, green, blue]: number[]) => {
+        const channels = [red, green, blue].map((channel) => {
+          const normalized = channel / 255;
+          return normalized <= 0.03928
+            ? normalized / 12.92
+            : ((normalized + 0.055) / 1.055) ** 2.4;
+        });
+        return (
+          0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]
+        );
+      };
+      const foreground = luminance(parseRgb(getComputedStyle(element).color));
+      const background = luminance(
+        parseRgb(getComputedStyle(element.parentElement!).backgroundColor),
+      );
+      return (
+        (Math.max(foreground, background) + 0.05) /
+        (Math.min(foreground, background) + 0.05)
+      );
+    });
+  expect(checkpointContrast).toBeGreaterThanOrEqual(4.5);
+
+  await page.getByRole("button", { name: "Next orientation step" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Learn your workspace", exact: true }),
+  ).toBeVisible();
+});
+
 test("first-time orientation, personal library, and feedback remain available", async ({
   page,
 }) => {
