@@ -420,11 +420,11 @@ test("route crawl rejects silent redirects without depending on permanent QA rec
   assert.doesNotMatch(source, /path: "\/procurement\/requests\/req_seed_001"/);
   assert.doesNotMatch(source, /path: "\/legal\/cases\/case_seed_001"/);
   assert.doesNotMatch(source, /path: "\/vendor\/cases\/case_seed_001"/);
+  assert.match(source, /async function routeReadinessSnapshot\(page\)/);
   assert.match(
     source,
-    /const body = document\.body;\s*if \(!body\) return false;/,
+    /\["blank-or-nearblank", "route-not-ready"\]\.includes\(routeClass\)/,
   );
-  assert.match(source, /if \(routeClass === "blank-or-nearblank"\)/);
   assert.match(source, /blankRecoveryAttempts = 1/);
   assert.match(source, /await page\.reload\(\{ waitUntil: "domcontentloaded"/);
 });
@@ -436,6 +436,45 @@ test("route classification rejects rendered not-found shells", async () => {
   );
   assert.match(source, /lower\.includes\("page not found"\)/);
   assert.match(source, /return "not-found"/);
+});
+
+test("route readiness fails closed on shell-only, busy, or structurally invalid pages", async () => {
+  const source = await readFile(
+    new URL("./full-intra-live-e2e.mjs", import.meta.url),
+    "utf8",
+  );
+  const waitStart = source.indexOf("async function waitForMeaningfulRoute");
+  const waitEnd = source.indexOf("async function waitForRouteExpectation");
+  const waitSource = source.slice(waitStart, waitEnd);
+  assert.match(waitSource, /visibleMainCount === 1/);
+  assert.match(waitSource, /visibleH1Count === 1/);
+  assert.match(waitSource, /h1InMainCount === 1/);
+  assert.match(waitSource, /routeOwnedTextLength >= 20/);
+  assert.match(waitSource, /busyCount === 0/);
+  assert.doesNotMatch(waitSource, /\.catch\(\(\) => \{\}\)/);
+  assert.match(source, /routeStructureProblems/);
+  assert.match(source, /route-not-ready/);
+});
+
+test("route certification persists accessibility, keyboard, hotspot, and mobile target evidence", async () => {
+  const source = await readFile(
+    new URL("./full-intra-live-e2e.mjs", import.meta.url),
+    "utf8",
+  );
+  const auditStart = source.indexOf("async function auditRoute");
+  const auditEnd = source.indexOf(
+    "async function procurementCreateRequestWorkflow",
+  );
+  const auditSource = source.slice(auditStart, auditEnd);
+  assert.match(auditSource, /auditSeriousAccessibility\(page\)/);
+  assert.match(auditSource, /auditKeyboardAndHotspots\(page\)/);
+  assert.match(auditSource, /seriousAccessibility/);
+  assert.match(auditSource, /undersizedMobileTargets/);
+  assert.match(auditSource, /keyboardHotspots/);
+  assert.match(source, /accessibilityRoutes/);
+  assert.match(source, /keyboardRoutes/);
+  assert.match(source, /targetSizeRoutes/);
+  assert.match(source, /routeStructureRoutes/);
 });
 
 test("route crawl covers visible same-origin navigation discovered from the shell DOM", async () => {

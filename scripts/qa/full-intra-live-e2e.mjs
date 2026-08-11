@@ -634,50 +634,124 @@ function classify(text, url) {
   return "rendered";
 }
 
+async function routeReadinessSnapshot(page) {
+  return page.evaluate(() => {
+    const visible = (element) => {
+      const style = getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      return (
+        style.display !== "none" &&
+        style.visibility !== "hidden" &&
+        Number(style.opacity) !== 0 &&
+        !element.closest("[hidden], [aria-hidden='true']") &&
+        rect.width > 0 &&
+        rect.height > 0
+      );
+    };
+    const visibleMains = [...document.querySelectorAll("main")].filter(visible);
+    const visibleH1s = [...document.querySelectorAll("h1")].filter(visible);
+    const busyCount = [
+      ...document.querySelectorAll("[aria-busy='true']"),
+    ].filter(visible).length;
+    const routeOwnedText = visibleMains
+      .map((main) => main.innerText.trim().replace(/\s+/g, " "))
+      .join(" ")
+      .trim();
+    return {
+      visibleMainCount: visibleMains.length,
+      visibleH1Count: visibleH1s.length,
+      h1InMainCount: visibleH1s.filter((heading) =>
+        visibleMains.some((main) => main.contains(heading)),
+      ).length,
+      routeOwnedTextLength: routeOwnedText.length,
+      busyCount,
+      restoringSession: document.body.innerText
+        .toLowerCase()
+        .includes("restoring your session"),
+    };
+  });
+}
+
+function describeRouteStructureProblems(readiness) {
+  return [
+    readiness.visibleMainCount !== 1
+      ? `expected one visible main, found ${readiness.visibleMainCount}`
+      : null,
+    readiness.visibleH1Count !== 1
+      ? `expected one visible h1, found ${readiness.visibleH1Count}`
+      : null,
+    readiness.h1InMainCount !== 1
+      ? `expected one route-owned h1, found ${readiness.h1InMainCount}`
+      : null,
+    readiness.routeOwnedTextLength < 20 ? "route-owned content is empty" : null,
+    readiness.busyCount !== 0
+      ? `${readiness.busyCount} visible busy region(s) remain`
+      : null,
+    readiness.restoringSession ? "session restoration did not settle" : null,
+  ].filter(Boolean);
+}
+
 async function waitForMeaningfulRoute(page) {
-  await page
-    .waitForLoadState("domcontentloaded", { timeout: 20_000 })
-    .catch(() => {});
-  await page
-    .waitForFunction(
-      () => {
-        const body = document.body;
-        if (!body) return false;
-        const text = body.innerText.trim().replace(/\s+/g, " ");
-        const lower = text.toLowerCase();
-        if (lower.includes("restoring your session")) return false;
-        if (document.querySelector("[aria-busy='true']")) return false;
-        if (document.querySelector("h1")) return true;
+  await page.waitForLoadState("domcontentloaded", { timeout: 20_000 });
+  await page.waitForFunction(
+    () => {
+      const visible = (element) => {
+        const style = getComputedStyle(element);
+        const rect = element.getBoundingClientRect();
         return (
-          text.length >= 20 ||
-          lower.includes("access denied") ||
-          lower.includes("not authorized") ||
-          lower.includes("invalid login credentials") ||
-          lower.includes("application error") ||
-          lower.includes("runtime error")
+          style.display !== "none" &&
+          style.visibility !== "hidden" &&
+          Number(style.opacity) !== 0 &&
+          !element.closest("[hidden], [aria-hidden='true']") &&
+          rect.width > 0 &&
+          rect.height > 0
         );
-      },
-      undefined,
-      { timeout: 8_000 },
-    )
-    .catch(() => {});
-  await page.waitForTimeout(500);
+      };
+      const visibleMains = [...document.querySelectorAll("main")].filter(
+        visible,
+      );
+      const visibleH1s = [...document.querySelectorAll("h1")].filter(visible);
+      const visibleMainCount = visibleMains.length;
+      const visibleH1Count = visibleH1s.length;
+      const h1InMainCount = visibleH1s.filter((heading) =>
+        visibleMains.some((main) => main.contains(heading)),
+      ).length;
+      const routeOwnedTextLength = visibleMains
+        .map((main) => main.innerText.trim().replace(/\s+/g, " "))
+        .join(" ")
+        .trim().length;
+      const busyCount = [
+        ...document.querySelectorAll("[aria-busy='true']"),
+      ].filter(visible).length;
+      return (
+        visibleMainCount === 1 &&
+        visibleH1Count === 1 &&
+        h1InMainCount === 1 &&
+        routeOwnedTextLength >= 20 &&
+        busyCount === 0 &&
+        !document.body.innerText
+          .toLowerCase()
+          .includes("restoring your session")
+      );
+    },
+    undefined,
+    { timeout: 12_000 },
+  );
+  await page.waitForTimeout(250);
 }
 
 async function waitForRouteExpectation(page, expected) {
   if (!expected) return;
-  await page
-    .waitForFunction(
-      ({ source, flags }) => {
-        const body = document.body;
-        if (!body) return false;
-        const text = body.innerText.trim().replace(/\s+/g, " ");
-        return new RegExp(source, flags).test(text);
-      },
-      { source: expected.source, flags: expected.flags },
-      { timeout: 10_000 },
-    )
-    .catch(() => {});
+  await page.waitForFunction(
+    ({ source, flags }) => {
+      const main = document.querySelector("main");
+      if (!main) return false;
+      const text = main.innerText.trim().replace(/\s+/g, " ");
+      return new RegExp(source, flags).test(text);
+    },
+    { source: expected.source, flags: expected.flags },
+    { timeout: 10_000 },
+  );
   await page.waitForTimeout(250);
 }
 
@@ -895,10 +969,12 @@ async function pageAudit(page) {
     return {
       text: text.slice(0, 700),
       h1: Array.from(document.querySelectorAll("h1"))
+        .filter(isVisible)
         .map((heading) => heading.innerText.trim())
         .filter(Boolean)
         .slice(0, 4),
-      mainCount: document.querySelectorAll("main").length,
+      mainCount: Array.from(document.querySelectorAll("main")).filter(isVisible)
+        .length,
       visibleControls: controls.length,
       horizontalOverflow,
       scrollWidth: document.documentElement.scrollWidth,
@@ -1160,6 +1236,25 @@ async function auditKeyboardAndHotspots(page) {
   return { before, ...result };
 }
 
+async function auditSeriousAccessibility(page) {
+  const accessibility = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+    .analyze();
+  return accessibility.violations
+    .filter((violation) => ["critical", "serious"].includes(violation.impact))
+    .map((violation) => ({
+      id: violation.id,
+      impact: violation.impact,
+      help: violation.help,
+      nodes: violation.nodes.length,
+      examples: violation.nodes.slice(0, 3).map((node) => ({
+        target: node.target,
+        html: node.html.slice(0, 500),
+        failureSummary: node.failureSummary,
+      })),
+    }));
+}
+
 async function login(page, user) {
   await page.goto(`${baseUrl}/login?redirect=%2F&audit=${Date.now()}`, {
     waitUntil: "domcontentloaded",
@@ -1222,19 +1317,45 @@ async function auditRoute(page, route) {
     waitUntil: "domcontentloaded",
     timeout: 20_000,
   });
-  await waitForMeaningfulRoute(page);
+  let readinessError = null;
+  try {
+    await waitForMeaningfulRoute(page);
+  } catch (error) {
+    readinessError = String(error.message || error).slice(0, 300);
+  }
   await waitForRouteExpectation(page, route.text);
   let audit = await pageAudit(page);
-  let routeClass = classify(audit.text, page.url());
+  let readiness = await routeReadinessSnapshot(page);
+  let routeStructureProblems = describeRouteStructureProblems(readiness);
+  if (readinessError) routeStructureProblems.push(readinessError);
+  let routeClass = routeStructureProblems.length
+    ? "route-not-ready"
+    : classify(audit.text, page.url());
   let blankRecoveryAttempts = 0;
-  if (routeClass === "blank-or-nearblank") {
+  if (["blank-or-nearblank", "route-not-ready"].includes(routeClass)) {
     blankRecoveryAttempts = 1;
     await page.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
-    await waitForMeaningfulRoute(page);
+    readinessError = null;
+    try {
+      await waitForMeaningfulRoute(page);
+    } catch (error) {
+      readinessError = String(error.message || error).slice(0, 300);
+    }
     await waitForRouteExpectation(page, route.text);
     audit = await pageAudit(page);
-    routeClass = classify(audit.text, page.url());
+    readiness = await routeReadinessSnapshot(page);
+    routeStructureProblems = describeRouteStructureProblems(readiness);
+    if (readinessError) routeStructureProblems.push(readinessError);
+    routeClass = routeStructureProblems.length
+      ? "route-not-ready"
+      : classify(audit.text, page.url());
   }
+  const seriousAccessibility = await auditSeriousAccessibility(page);
+  const keyboardHotspots = await auditKeyboardAndHotspots(page);
+  const isMobile = (page.viewportSize()?.width ?? 1024) < 768;
+  const undersizedMobileTargets = isMobile
+    ? keyboardHotspots.undersizedTargets
+    : [];
   const expectedClass =
     route.expectedAccess === "denied" ? "access-denied" : "rendered";
   const finalPathMet = finalPathMatches(route.path, page.url());
@@ -1254,6 +1375,7 @@ async function auditRoute(page, route) {
     expectationMet,
     finalPathMet,
     recordExpectationMet,
+    routeStructureProblems,
     blankRecoveryAttempts,
     h1: audit.h1,
     mainCount: audit.mainCount,
@@ -1265,6 +1387,9 @@ async function auditRoute(page, route) {
     overlaps: audit.overlaps,
     deadLinks: audit.deadLinks,
     unlabeledControls: audit.unlabeledControls,
+    seriousAccessibility,
+    undersizedMobileTargets,
+    keyboardHotspots,
     text: audit.text.slice(0, 260),
   };
 }
@@ -8412,7 +8537,12 @@ const aggregate = results.map((item) => ({
     })),
   blankOrErrors: item.routes
     .filter((route) =>
-      ["blank-or-nearblank", "error", "navigation-error"].includes(route.class),
+      [
+        "blank-or-nearblank",
+        "route-not-ready",
+        "error",
+        "navigation-error",
+      ].includes(route.class),
     )
     .map((route) => ({
       route: route.route,
@@ -8441,6 +8571,36 @@ const aggregate = results.map((item) => ({
     .map((route) => ({
       route: route.route,
       count: route.unlabeledControls.length,
+    })),
+  routeStructureRoutes: item.routes
+    .filter((route) => route.routeStructureProblems?.length)
+    .map((route) => ({
+      route: route.route,
+      problems: route.routeStructureProblems,
+    })),
+  accessibilityRoutes: item.routes
+    .filter((route) => route.seriousAccessibility?.length)
+    .map((route) => ({
+      route: route.route,
+      violations: route.seriousAccessibility,
+    })),
+  keyboardRoutes: item.routes
+    .filter(
+      (route) =>
+        route.keyboardHotspots?.focusEscapedDialog ||
+        route.keyboardHotspots?.interceptedTargets?.length ||
+        (route.keyboardHotspots?.focusableCount > 0 &&
+          !route.keyboardHotspots?.focusAfterTab?.tag),
+    )
+    .map((route) => ({
+      route: route.route,
+      evidence: route.keyboardHotspots,
+    })),
+  targetSizeRoutes: item.routes
+    .filter((route) => route.undersizedMobileTargets?.length)
+    .map((route) => ({
+      route: route.route,
+      targets: route.undersizedMobileTargets,
     })),
   networkErrors: item.networkErrors,
   consoleErrors: item.consoleErrors,
@@ -8499,6 +8659,18 @@ const routeFailures = aggregate.flatMap((item) => [
   ),
   ...item.unlabeledControlRoutes.map(
     (entry) => `${item.viewport}/${item.role}${entry.route}: unlabeled control`,
+  ),
+  ...item.routeStructureRoutes.map(
+    (entry) => `${item.viewport}/${item.role}${entry.route}: route structure`,
+  ),
+  ...item.accessibilityRoutes.map(
+    (entry) => `${item.viewport}/${item.role}${entry.route}: accessibility`,
+  ),
+  ...item.keyboardRoutes.map(
+    (entry) => `${item.viewport}/${item.role}${entry.route}: keyboard/hotspot`,
+  ),
+  ...item.targetSizeRoutes.map(
+    (entry) => `${item.viewport}/${item.role}${entry.route}: target size`,
   ),
   ...item.networkErrors.map(
     (entry) => `${item.viewport}/${item.role}: network ${entry.status}`,
