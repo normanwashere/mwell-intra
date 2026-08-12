@@ -53,6 +53,8 @@ export type {
 export {
   MODULES,
   CAPABILITY_CLASSIFICATIONS,
+  capabilityClassificationFor,
+  requiresLiveCertification,
   can,
   hasCapInModule,
   roleCapabilities,

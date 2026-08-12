@@ -3,6 +3,8 @@ import {
   CAPABILITY_CLASSIFICATIONS,
   MODULES,
   MODULE_LIST,
+  capabilityClassificationFor,
+  requiresLiveCertification,
   roleCapabilities,
 } from "@intra/rbac";
 
@@ -107,6 +109,41 @@ describe("learning catalog", () => {
         "warehouse:approve_stock_adjustment",
       ]),
     );
+  });
+
+  it("keeps required vendor evidence upload available before onboarding completion", () => {
+    expect(
+      capabilityClassificationFor("core", "submit_documents")?.access,
+    ).toBe("onboarding_write");
+    expect(requiresLiveCertification("core", "submit_documents")).toBe(false);
+    expect(requiredCurriculaFor({ module: "core", capability: "submit_documents" })).toHaveLength(0);
+  });
+
+  it("gates vendor final submission on the controlled journey requirements", () => {
+    expect(
+      capabilityClassificationFor("core", "submit_accreditation")?.access,
+    ).toBe("mutation");
+    expect(requiresLiveCertification("core", "submit_accreditation")).toBe(true);
+
+    const curriculum = roleCurriculumFor("core", "vendor_portal")!;
+    const finalSubmissionRequirement = curriculum.requirementIds
+      .map((id) => requirementById.get(id))
+      .find((requirement) =>
+        requirement?.capabilityOutcomes.some(
+          (capability) => capabilityKey(capability) === "core:submit_accreditation",
+        ),
+      );
+    expect(finalSubmissionRequirement?.prerequisiteIds).toEqual(
+      expect.arrayContaining([
+        "vendor.vendor_representative.orientation.v1",
+        "vendor.vendor_representative.evidence-and-acknowledgments.v1",
+      ]),
+    );
+  });
+
+  it("keeps internal reads ungated and internal live mutations certification-gated", () => {
+    expect(requiresLiveCertification("insights", "view_executive")).toBe(false);
+    expect(requiresLiveCertification("warehouse", "receive_stock")).toBe(true);
   });
 
   it("keeps the Leadership baseline completable without a missing simulation", () => {

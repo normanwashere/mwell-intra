@@ -77,6 +77,22 @@ const orientationRequirement = (personaId: string): RequirementDefinition => {
 
 const baselineRequirements = OPERATING_PERSONA_IDS.map(orientationRequirement);
 
+const VENDOR_EVIDENCE_REQUIREMENT_ID =
+  "vendor.vendor_representative.evidence-and-acknowledgments.v1";
+
+const vendorJourneyRequirements: readonly RequirementDefinition[] = [
+  {
+    id: VENDOR_EVIDENCE_REQUIREMENT_ID,
+    version: 1,
+    audience: "vendor",
+    kind: "attestation",
+    title: "Vendor evidence and acknowledgments",
+    mandatory: true,
+    prerequisiteIds: ["vendor.vendor_representative.orientation.v1"],
+    capabilityOutcomes: [],
+  },
+];
+
 const capabilityClassificationByKey = new Map(
   CAPABILITY_CLASSIFICATIONS.map((item) => [capabilityKey(item), item]),
 );
@@ -111,6 +127,12 @@ const capabilityRequirements = roleDefinitions.flatMap((roleDefinition) => {
 
   const audience = audienceForPersona(roleDefinition.personaId);
   const id = `${audience}.role.${roleDefinition.module}.${roleDefinition.role}.capability-practice.v1`;
+  const prerequisiteIds = [
+    `${audience}.${roleDefinition.personaId}.orientation.v1`,
+    ...(roleDefinition.module === "core" && roleDefinition.role === "vendor_portal"
+      ? [VENDOR_EVIDENCE_REQUIREMENT_ID]
+      : []),
+  ];
   return [
     {
       id,
@@ -119,7 +141,7 @@ const capabilityRequirements = roleDefinitions.flatMap((roleDefinition) => {
       kind: "scenario",
       title: `${roleDefinition.module} ${roleDefinition.role} capability practice`,
       mandatory: true,
-      prerequisiteIds: [`${audience}.${roleDefinition.personaId}.orientation.v1`],
+      prerequisiteIds,
       capabilityOutcomes: capabilities,
       simulationId: id,
     } satisfies RequirementDefinition,
@@ -155,6 +177,7 @@ const unassignedCapabilityRequirements = MUTATING_CAPABILITIES.filter(
 
 const requirements = [
   ...baselineRequirements,
+  ...vendorJourneyRequirements,
   ...capabilityRequirements,
   ...unassignedCapabilityRequirements,
 ] as const;
@@ -186,6 +209,9 @@ export const ROLE_CURRICULA: readonly RoleCurriculumDefinition[] = roleDefinitio
       role: roleDefinition.role,
       requirementIds: [
         `${audience}.${roleDefinition.personaId}.orientation.v1`,
+        ...(roleDefinition.module === "core" && roleDefinition.role === "vendor_portal"
+          ? [VENDOR_EVIDENCE_REQUIREMENT_ID]
+          : []),
         ...(requirements.some((requirement) => requirement.id === capabilityRequirementId)
           ? [capabilityRequirementId]
           : []),

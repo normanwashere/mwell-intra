@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   MODULES,
   MODULE_LIST,
+  capabilityClassificationFor,
   can,
   emptyUserRoles,
   hasCapInModule,
   listModuleRoles,
   roleCapabilities,
+  requiresLiveCertification,
   toRoleCapabilityRows,
   productModule,
   warehouseModule,
@@ -176,6 +178,18 @@ describe("warehouse parity vs source roles.ts", () => {
       );
     },
   );
+});
+
+describe("capability access classifications", () => {
+  it("distinguishes read access, required onboarding writes, and certified live mutations", () => {
+    expect(
+      capabilityClassificationFor("core", "submit_documents")?.access,
+    ).toBe("onboarding_write");
+    expect(requiresLiveCertification("core", "submit_documents")).toBe(false);
+    expect(requiresLiveCertification("core", "submit_accreditation")).toBe(true);
+    expect(requiresLiveCertification("insights", "view_executive")).toBe(false);
+    expect(requiresLiveCertification("warehouse", "receive_stock")).toBe(true);
+  });
 });
 
 describe("can() — capability checks", () => {

@@ -52,12 +52,13 @@ export type Capability = ModuleCapabilityMap[Module];
 /** Every role across every module. */
 export type Role = ModuleRoleMap[Module];
 
-export type CapabilityAccess = 'read' | 'mutation';
+export type CapabilityAccess = 'read' | 'onboarding_write' | 'mutation';
 
 /**
  * The authoritative onboarding/enforcement classification for every RBAC
  * capability. Keeping it next to the registry prevents learning from making
- * an independent access decision and preserves ungated read-only exploration.
+ * an independent access decision, preserves ungated read-only exploration,
+ * and keeps required onboarding writes available before certification.
  */
 export interface CapabilityClassification {
   readonly module: Module;
@@ -86,6 +87,15 @@ const mutationCapability = (
   capability: string,
 ): CapabilityClassification => ({ module, capability, access: 'mutation' });
 
+const onboardingWriteCapability = (
+  module: Module,
+  capability: string,
+): CapabilityClassification => ({
+  module,
+  capability,
+  access: 'onboarding_write',
+});
+
 export const CAPABILITY_CLASSIFICATIONS: readonly CapabilityClassification[] = [
   readCapability('core', 'view_directory'),
   mutationCapability('core', 'manage_rbac'),
@@ -94,7 +104,7 @@ export const CAPABILITY_CLASSIFICATIONS: readonly CapabilityClassification[] = [
   mutationCapability('core', 'manage_accreditation'),
   readCapability('core', 'view_documents'),
   mutationCapability('core', 'manage_documents'),
-  mutationCapability('core', 'submit_documents'),
+  onboardingWriteCapability('core', 'submit_documents'),
   mutationCapability('core', 'submit_accreditation'),
   readCapability('core', 'view_own_accreditation'),
   readCapability('core', 'view_approvals'),
@@ -199,6 +209,27 @@ function validateCapabilityClassifications(): void {
 }
 
 validateCapabilityClassifications();
+
+/** Returns the authoritative classification for a declared RBAC capability. */
+export function capabilityClassificationFor(
+  module: Module,
+  capability: string,
+): CapabilityClassification | undefined {
+  return CAPABILITY_CLASSIFICATIONS.find(
+    (item) => item.module === module && item.capability === capability,
+  );
+}
+
+/**
+ * Whether a current capability grant also needs a live learning certification.
+ * RBAC remains responsible for denying unknown or ungranted capabilities.
+ */
+export function requiresLiveCertification(
+  module: Module,
+  capability: string,
+): boolean {
+  return capabilityClassificationFor(module, capability)?.access === 'mutation';
+}
 
 /**
  * Flatten every module's role → capability matrix into DB-shaped rows.
