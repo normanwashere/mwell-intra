@@ -434,9 +434,7 @@ export class SupabaseLearningRepository implements LearningRepository {
   }
 
   async resolveAssignments(): Promise<LearningSnapshot> {
-    parseSnapshot(await this.rpc("resolve_assignments"));
-    await this.syncSharedCompletions();
-    return this.snapshot();
+    return parseSnapshot(await this.rpc("resolve_assignments"));
   }
 
   async startRequirement(
@@ -615,7 +613,14 @@ export class MemoryLearningRepository implements LearningRepository {
   async snapshot(): Promise<LearningSnapshot> {
     return clone(this.state);
   }
+  private convergeSharedCompletions(): void {
+    const roots = this.state.progress.filter(
+      (item) => item.state === "passed" && item.allowsSharedCompletion,
+    );
+    for (const root of roots) this.replaceProgress(root);
+  }
   async resolveAssignments(): Promise<LearningSnapshot> {
+    this.convergeSharedCompletions();
     return this.snapshot();
   }
 
@@ -679,13 +684,15 @@ export class MemoryLearningRepository implements LearningRepository {
   async startRequirement(
     input: StartRequirementInput,
   ): Promise<StartRequirementResult> {
+    this.convergeSharedCompletions();
     const current = this.progressFor(input.assignmentRequirementId);
     const requirement = this.requirementFor(current.requirementId);
+    if (["passed", "waived"].includes(current.state)) {
+      return { progress: clone(current), attempt: undefined };
+    }
     this.assertPrerequisites(requirement);
     if (current.state === "needs_support")
       throw new Error("Requirement needs support before it can be retried.");
-    if (["passed", "waived"].includes(current.state))
-      throw new Error("Requirement is already complete.");
     if (current.state === "expired") throw new Error("Requirement is expired.");
     if (current.state === "in_progress") {
       return {
@@ -806,7 +813,7 @@ export class MemoryLearningRepository implements LearningRepository {
       );
     }
     const requirement = this.requirementFor(current.requirementId);
-    if (!["policy", "attestation"].includes(requirement.kind))
+    if (requirement.kind !== "policy")
       throw new Error("Assigned requirement is not a policy acknowledgment.");
     this.assertPrerequisites(requirement);
     this.replaceProgress({

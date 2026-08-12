@@ -18,6 +18,8 @@ const SERVICE_CONTRACT_ALIGNMENT_NAME =
   "20260812170000_learning_service_contract_alignment.sql";
 const COMPLETION_ALIGNMENT_NAME =
   "20260812180000_learning_completion_alignment.sql";
+const COMPLETION_HARDENING_NAME =
+  "20260812190000_learning_completion_evidence_hardening.sql";
 const OLD_FOUNDATION_NAME = "20260812090000_learning_foundation.sql";
 const migration = fileURLToPath(
   new URL(`../supabase/migrations/${FOUNDATION_NAME}`, import.meta.url),
@@ -63,6 +65,15 @@ const completionAlignmentMigration = fileURLToPath(
 );
 const completionAlignmentSql = existsSync(completionAlignmentMigration)
   ? readFileSync(completionAlignmentMigration, "utf8")
+  : "";
+const completionHardeningMigration = fileURLToPath(
+  new URL(
+    `../supabase/migrations/${COMPLETION_HARDENING_NAME}`,
+    import.meta.url,
+  ),
+);
+const completionHardeningSql = existsSync(completionHardeningMigration)
+  ? readFileSync(completionHardeningMigration, "utf8")
   : "";
 const migrationDirectory = fileURLToPath(
   new URL("../supabase/migrations/", import.meta.url),
@@ -144,10 +155,10 @@ function errorsForServiceContractAlignment(source) {
   ).join("\n");
 }
 
-function errorsForCompletionAlignment(source) {
+function errorsForCompletionHardening(source) {
   return verifyLearningSchema(
     repositoryMigrations.map((migrationEntry) =>
-      migrationEntry.name === COMPLETION_ALIGNMENT_NAME
+      migrationEntry.name === COMPLETION_HARDENING_NAME
         ? { ...migrationEntry, sql: source }
         : migrationEntry,
     ),
@@ -218,17 +229,17 @@ test("pins the forward snapshot alignment and rejects later replacements", () =>
     assert.match(serviceContractAlignmentSql, new RegExp(`'${key}'`, "i"));
   }
   assert.match(
-    serviceContractAlignmentSql,
+    completionHardeningSql,
     /as requirement_evidence\s*\(\s*requirement_version_id\s*\)/i,
   );
 
   const weakened = replaceRequired(
-    serviceContractAlignmentSql,
+    completionHardeningSql,
     /'lockedCapabilities',\s*v_locked_capabilities/i,
     "'lockedCapabilities', '[]'::jsonb",
   );
   assert.match(
-    errorsForServiceContractAlignment(weakened),
+    errorsForCompletionHardening(weakened),
     /exact guarded function body drifted.*my_learning_snapshot/i,
   );
 
@@ -285,6 +296,7 @@ test("keeps every SQL role persona in parity with the canonical catalog", () => 
 
 test("synchronizes shared completion with serialized, attributable evidence", () => {
   assert.equal(existsSync(completionAlignmentMigration), true);
+  assert.equal(existsSync(completionHardeningMigration), true);
   for (const invariant of [
     /private\.assert_learning_read_committed\(\)/i,
     /from core\.profiles profile[\s\S]*?for update/i,
@@ -297,63 +309,74 @@ test("synchronizes shared completion with serialized, attributable evidence", ()
     /if v_propagated > 0 then[\s\S]*?'shared_completions_synchronized'/i,
     /'shared_completions_synchronized'/i,
   ]) {
-    assert.match(completionAlignmentSql, invariant);
+    assert.match(completionHardeningSql, invariant);
   }
 
   const weakened = replaceRequired(
-    completionAlignmentSql,
+    completionHardeningSql,
     /perform private\.assert_learning_read_committed\(\);/i,
     "",
   );
   assert.match(
-    errorsForCompletionAlignment(weakened),
+    errorsForCompletionHardening(weakened),
     /exact guarded function body drifted|read committed/i,
   );
 
-  const overloaded = `${completionAlignmentSql}\n${completionAlignmentSql.replace(
+  const overloaded = `${completionHardeningSql}\n${completionHardeningSql.replace(
     "sync_shared_completions()",
     "sync_shared_completions(payload jsonb)",
   )}`;
   assert.match(
-    errorsForCompletionAlignment(overloaded),
-    /only the exact no-argument.*sync_shared_completions declaration is approved/i,
+    errorsForCompletionHardening(overloaded),
+    /only exact reviewed completion-hardening function declarations are approved/i,
   );
 });
 
 test("makes shared completion authoritative inside resolve and start transactions", () => {
   for (const invariant of [
-    /alter function learning\.resolve_assignments\(\)\s+rename to resolve_assignments_base/i,
-    /alter function learning\.resolve_assignments_base\(\)\s+set schema private/i,
+    /create or replace function private\.resolve_assignments_base\(\)/i,
     /create or replace function learning\.resolve_assignments\(\)[\s\S]*?private\.resolve_assignments_base\(\)[\s\S]*?learning\.sync_shared_completions\(\)/i,
-    /alter function learning\.start_requirement\(jsonb\)\s+rename to start_requirement_base/i,
-    /alter function learning\.start_requirement_base\(jsonb\)\s+set schema private/i,
+    /create or replace function private\.start_requirement_base\(payload jsonb\)/i,
     /create or replace function learning\.start_requirement\(payload jsonb\)[\s\S]*?learning\.sync_shared_completions\(\)[\s\S]*?private\.start_requirement_base\(payload\)/i,
     /revoke all on function private\.resolve_assignments_base\(\)\s+from public, anon, authenticated, service_role/i,
     /revoke all on function private\.start_requirement_base\(jsonb\)\s+from public, anon, authenticated, service_role/i,
   ]) {
-    assert.match(completionAlignmentSql, invariant);
+    assert.match(completionHardeningSql, invariant);
   }
 
-  const directBaseGrant = `${completionAlignmentSql}\n
+  const startBase = completionHardeningSql.match(
+    /create or replace function private\.start_requirement_base\(payload jsonb\)[\s\S]*?\n\$\$;/i,
+  )?.[0];
+  assert.ok(startBase);
+  assert.match(
+    startBase,
+    /assignment\.status in \('assigned', 'in_progress'\)/i,
+  );
+  assert.doesNotMatch(
+    startBase,
+    /status in \('assigned', 'in_progress', 'blocked'\)/i,
+  );
+
+  const directBaseGrant = `${completionHardeningSql}\n
 grant execute on function private.start_requirement_base(jsonb)
   to authenticated;`;
   assert.match(
-    errorsForCompletionAlignment(directBaseGrant),
+    errorsForCompletionHardening(directBaseGrant),
     /unsafe execute privilege.*private\.start_requirement_base/i,
   );
 });
 
 test("never reuses normal completion for retraining or corrective assignments", () => {
   assert.match(
-    completionAlignmentSql,
+    completionHardeningSql,
     /source_assignment\.source_type not in \('retraining', 'corrective'\)/i,
   );
   assert.match(
-    completionAlignmentSql,
+    completionHardeningSql,
     /target_assignment\.source_type not in \('retraining', 'corrective'\)/i,
   );
   assert.match(
-    serviceContractAlignmentSql,
+    completionHardeningSql,
     /'allowsSharedCompletion', assignment\.source_type not in \(\s*'retraining', 'corrective'\s*\)/i,
   );
 });
@@ -371,16 +394,16 @@ test("certification evidence preserves original completion lineage", () => {
     /'acknowledgment_ids', v_acknowledgment_ids/i,
     /create trigger learning_certifications_completion_evidence\s+before insert on learning\.certifications/i,
   ]) {
-    assert.match(completionAlignmentSql, invariant);
+    assert.match(completionHardeningSql, invariant);
   }
 
   const weakened = replaceRequired(
-    completionAlignmentSql,
+    completionHardeningSql,
     /and attempt\.integrity_result = 'valid'/i,
     "and attempt.integrity_result <> 'valid'",
   );
   assert.match(
-    errorsForCompletionAlignment(weakened),
+    errorsForCompletionHardening(weakened),
     /exact guarded function body drifted.*validate_certification_completion_evidence/i,
   );
 });
@@ -424,16 +447,25 @@ test("rejects client-authored learning authority and weakened service guards", (
     "evaluate_certifications",
     "request_support",
   ]) {
-    const weakened = servicesSql.replace(
+    const alignedByCompletion = new Set([
+      "resolve_assignments",
+      "start_requirement",
+    ]).has(functionName);
+    const sourceSql = alignedByCompletion
+      ? completionHardeningSql
+      : servicesSql;
+    const weakened = sourceSql.replace(
       new RegExp(
         `(create or replace function learning\\.${functionName}\\([^]*?)(perform private\\.assert_learning_read_committed\\(\\);)`,
         "i",
       ),
       "$1",
     );
-    assert.notEqual(weakened, servicesSql, functionName);
+    assert.notEqual(weakened, sourceSql, functionName);
     assert.match(
-      errorsForServices(weakened),
+      alignedByCompletion
+        ? errorsForCompletionHardening(weakened)
+        : errorsForServices(weakened),
       new RegExp(`${functionName}|function body|read committed`, "i"),
       functionName,
     );
@@ -484,6 +516,18 @@ test("requires every checksum-pinned pre-foundation migration", () => {
   assert.match(
     verifyLearningSchema(drifted).join("\n"),
     /checksum.*20260706090100_core_rbac|baseline.*drift/i,
+  );
+});
+
+test("pins every applied learning migration and requires forward repair", () => {
+  const drifted = repositoryMigrations.map((migrationEntry) =>
+    migrationEntry.name === COMPLETION_ALIGNMENT_NAME
+      ? { ...migrationEntry, sql: `${migrationEntry.sql}\nselect 1;` }
+      : migrationEntry,
+  );
+  assert.match(
+    verifyLearningSchema(drifted).join("\n"),
+    /pinned learning migration checksum drifted.*20260812180000/i,
   );
 });
 

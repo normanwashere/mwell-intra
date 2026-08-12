@@ -321,8 +321,6 @@ describe("SupabaseLearningRepository", () => {
     expect(rpc.mock.calls).toEqual([
       ["my_learning_snapshot"],
       ["resolve_assignments"],
-      ["sync_shared_completions"],
-      ["my_learning_snapshot"],
       [
         "start_requirement",
         {
@@ -533,6 +531,132 @@ describe("MemoryLearningRepository", () => {
         (item) => item.assignmentRequirementId === "ar-simulation-shared",
       )?.state,
     ).toBe("passed");
+  });
+
+  it("converges compatible initial progress when assignments resolve", async () => {
+    const ready = snapshotWithOrientationPassed();
+    const repository = new MemoryLearningRepository({
+      snapshot: {
+        ...ready,
+        progress: [
+          ...ready.progress.map((item) =>
+            item.assignmentRequirementId === "ar-simulation"
+              ? { ...item, state: "passed" as const, completedAt: now }
+              : item,
+          ),
+          progress("ar-simulation-shared", simulation.id, "not_started"),
+        ],
+      },
+      runtime: "test",
+      now: () => now,
+    });
+
+    expect(
+      (await repository.resolveAssignments()).progress.find(
+        (item) => item.assignmentRequirementId === "ar-simulation-shared",
+      )?.state,
+    ).toBe("passed");
+  });
+
+  it("returns completed progress without inventing an attempt", async () => {
+    const repository = new MemoryLearningRepository({
+      snapshot: snapshotWithSimulationPassed(),
+      runtime: "test",
+      now: () => now,
+    });
+
+    await expect(
+      repository.startRequirement({
+        assignmentRequirementId: "ar-simulation",
+      }),
+    ).resolves.toEqual({
+      progress: expect.objectContaining({
+        assignmentRequirementId: "ar-simulation",
+        state: "passed",
+      }),
+      attempt: undefined,
+    });
+  });
+
+  it("converges a compatible sibling before it starts", async () => {
+    const ready = snapshotWithOrientationPassed();
+    const repository = new MemoryLearningRepository({
+      snapshot: {
+        ...ready,
+        progress: [
+          ...ready.progress.map((item) =>
+            item.assignmentRequirementId === "ar-simulation"
+              ? { ...item, state: "passed" as const, completedAt: now }
+              : item,
+          ),
+          progress("ar-simulation-shared", simulation.id, "not_started"),
+        ],
+      },
+      runtime: "test",
+      now: () => now,
+    });
+
+    await expect(
+      repository.startRequirement({
+        assignmentRequirementId: "ar-simulation-shared",
+      }),
+    ).resolves.toEqual({
+      progress: expect.objectContaining({
+        assignmentRequirementId: "ar-simulation-shared",
+        state: "passed",
+      }),
+      attempt: undefined,
+    });
+  });
+
+  it("does not accept an attestation through policy acknowledgment", async () => {
+    const attestation: RequirementDefinition = {
+      ...policy,
+      id: "attestation-v1",
+      kind: "attestation",
+    };
+    const repository = new MemoryLearningRepository({
+      snapshot: {
+        ...snapshotWithOrientationPassed(),
+        curricula: [
+          {
+            ...effectiveCurriculum,
+            curriculum: {
+              ...effectiveCurriculum.curriculum,
+              requirementIds: [
+                ...effectiveCurriculum.curriculum.requirementIds,
+                attestation.id,
+              ],
+            },
+            requirements: [...effectiveCurriculum.requirements, attestation],
+          },
+        ],
+        progress: [
+          ...snapshotWithOrientationPassed().progress,
+          {
+            ...progress("ar-attestation", attestation.id, "in_progress"),
+            activeAttempt: {
+              id: "attempt-attestation",
+              attemptNumber: 1,
+              mode: "attestation",
+              startedAt: now,
+            },
+          },
+        ],
+      },
+      runtime: "test",
+      now: () => now,
+    });
+
+    await expect(
+      repository.acknowledgePolicy({
+        assignmentRequirementId: "ar-attestation",
+        controlledDocumentId: "ATT-001",
+        controlledDocumentVersion: "1.0",
+        evidenceHash:
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      }),
+    ).rejects.toThrow("not a policy");
   });
 
   it("never satisfies corrective or retraining work from a shared pass", async () => {

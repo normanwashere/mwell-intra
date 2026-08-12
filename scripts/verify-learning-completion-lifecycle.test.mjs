@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 import { PGlite } from "@electric-sql/pglite";
 
-const completionMigrationSql = readFileSync(
+const completionAlignmentSql = readFileSync(
   fileURLToPath(
     new URL(
       "../supabase/migrations/20260812180000_learning_completion_alignment.sql",
@@ -13,6 +14,31 @@ const completionMigrationSql = readFileSync(
     ),
   ),
   "utf8",
+);
+const completionHardeningSql = readFileSync(
+  fileURLToPath(
+    new URL(
+      "../supabase/migrations/20260812190000_learning_completion_evidence_hardening.sql",
+      import.meta.url,
+    ),
+  ),
+  "utf8",
+);
+const legacyCompletionAlignmentSql = readFileSync(
+  fileURLToPath(
+    new URL(
+      "./fixtures/20260812180000_learning_completion_alignment.legacy.sql",
+      import.meta.url,
+    ),
+  ),
+  "utf8",
+);
+assert.equal(
+  createHash("sha256")
+    .update(legacyCompletionAlignmentSql.replace(/\r\n?/g, "\n"))
+    .digest("hex"),
+  "4d97c2f1f74050df76ff3f981d3047760cefaee1bae7f81ab212e6aaf9141cef",
+  "The deployed completion-alignment fixture must remain immutable.",
 );
 const foundationMigrationSql = readFileSync(
   fileURLToPath(
@@ -48,6 +74,9 @@ const ids = Object.freeze({
   startTargetAssignment: "00000000-0000-0000-0000-000000000207",
   policySourceAssignment: "00000000-0000-0000-0000-000000000208",
   policyTargetAssignment: "00000000-0000-0000-0000-000000000209",
+  chainTargetAssignment: "00000000-0000-0000-0000-000000000210",
+  policyChainTargetAssignment: "00000000-0000-0000-0000-000000000211",
+  blockedAssignment: "00000000-0000-0000-0000-000000000212",
   requirementVersion: "00000000-0000-0000-0000-000000000301",
   retrainingRequirementVersion: "00000000-0000-0000-0000-000000000302",
   policyRequirementVersion: "00000000-0000-0000-0000-000000000303",
@@ -60,15 +89,20 @@ const ids = Object.freeze({
   startTargetRequirement: "00000000-0000-0000-0000-000000000407",
   policySourceRequirement: "00000000-0000-0000-0000-000000000408",
   policyTargetRequirement: "00000000-0000-0000-0000-000000000409",
+  chainTargetRequirement: "00000000-0000-0000-0000-000000000410",
+  policyChainTargetRequirement: "00000000-0000-0000-0000-000000000411",
+  blockedRequirement: "00000000-0000-0000-0000-000000000412",
   sourceAttempt: "00000000-0000-0000-0000-000000000501",
   targetAttempt: "00000000-0000-0000-0000-000000000502",
   certification: "00000000-0000-0000-0000-000000000601",
   policyCertification: "00000000-0000-0000-0000-000000000602",
+  chainCertification: "00000000-0000-0000-0000-000000000603",
+  policyChainCertification: "00000000-0000-0000-0000-000000000604",
   idempotency: "00000000-0000-0000-0000-000000000701",
   policyAcknowledgment: "00000000-0000-0000-0000-000000000801",
 });
 
-async function createCompletionDatabase() {
+async function createCompletionDatabase({ legacyAlignment = false } = {}) {
   const db = new PGlite();
   await db.exec(`
     create role anon;
@@ -118,6 +152,7 @@ async function createCompletionDatabase() {
       audience text not null,
       curriculum_version_id uuid not null,
       source_type text not null,
+      source_id uuid,
       status text not null,
       started_at timestamptz,
       completed_at timestamptz,
@@ -220,7 +255,26 @@ async function createCompletionDatabase() {
       foundationFunction("guard_assignment_requirement_lifecycle"),
     ].join("\n"),
   );
-  await db.exec(completionMigrationSql);
+  await db.exec(
+    legacyAlignment ? legacyCompletionAlignmentSql : completionAlignmentSql,
+  );
+  await db.exec(completionHardeningSql);
+  await db.exec(`
+    create or replace function private.resolve_assignments_base()
+    returns jsonb
+    language sql
+    security definer
+    set search_path = ''
+    as $$ select '{}'::jsonb $$;
+
+    create or replace function learning.my_learning_snapshot()
+    returns jsonb
+    language sql
+    stable
+    security definer
+    set search_path = ''
+    as $$ select '{}'::jsonb $$;
+  `);
   await db.exec(`
     select pg_catalog.set_config(
       'request.jwt.claim.sub',
@@ -238,7 +292,7 @@ async function createCompletionDatabase() {
       id, user_id, department_id, audience, curriculum_version_id,
       source_type, status, completed_at
     ) values
-      ('${ids.sourceAssignment}', '${ids.user}', '${ids.department}', 'internal', '${ids.curriculum}', 'role', 'completed', '2026-01-01T00:00:00Z'),
+      ('${ids.sourceAssignment}', '${ids.user}', '${ids.department}', 'internal', '${ids.curriculum}', 'role', 'in_progress', null),
       ('${ids.targetAssignment}', '${ids.user}', '${ids.department}', 'internal', '${ids.curriculum}', 'role', 'in_progress', null),
       ('${ids.correctiveAssignment}', '${ids.user}', '${ids.department}', 'internal', '${ids.curriculum}', 'corrective', 'assigned', null),
       ('${ids.retrainingSourceAssignment}', '${ids.user}', '${ids.department}', 'internal', '${ids.curriculum}', 'retraining', 'completed', '2026-01-02T00:00:00Z'),
@@ -283,7 +337,7 @@ async function requirementStates(db) {
 }
 
 test("applies shared completion once without bypassing retraining or corrective work", async () => {
-  const db = await createCompletionDatabase();
+  const db = await createCompletionDatabase({ legacyAlignment: true });
   try {
     const first = await db.query(
       "select learning.sync_shared_completions() as result",
@@ -502,6 +556,223 @@ test("writes source policy acknowledgment lineage into certification evidence", 
         status: "passed",
       },
     ]);
+  } finally {
+    await db.close();
+  }
+});
+
+test("preserves the original assessment evidence across chained reuse", async () => {
+  const db = await createCompletionDatabase();
+  try {
+    await db.query("select learning.sync_shared_completions()");
+    await db.exec(`
+      update learning.assignments
+      set status = 'cancelled'
+      where id = '${ids.sourceAssignment}';
+      insert into learning.assignments(
+        id, user_id, department_id, audience, curriculum_version_id,
+        source_type, status
+      ) values (
+        '${ids.chainTargetAssignment}', '${ids.user}', '${ids.department}',
+        'internal', '${ids.curriculum}', 'role', 'assigned'
+      );
+      insert into learning.assignment_requirements(
+        id, assignment_id, user_id, department_id, audience,
+        requirement_version_id, status
+      ) values (
+        '${ids.chainTargetRequirement}', '${ids.chainTargetAssignment}',
+        '${ids.user}', '${ids.department}', 'internal',
+        '${ids.requirementVersion}', 'not_started'
+      );
+    `);
+
+    const result = await db.query(
+      "select learning.sync_shared_completions() as result",
+    );
+    assert.equal(result.rows[0].result.propagated_count, 1);
+    const requirements = await requirementStates(db);
+    assert.equal(requirements.get(ids.chainTargetRequirement).status, "passed");
+    assert.equal(
+      requirements.get(ids.chainTargetRequirement).progress
+        .shared_completion_source_id,
+      ids.sourceRequirement,
+    );
+
+    await db.exec(`
+      insert into learning.certifications(
+        id, assignment_id, user_id, department_id, audience,
+        requirement_version_ids
+      ) values (
+        '${ids.chainCertification}', '${ids.chainTargetAssignment}',
+        '${ids.user}', '${ids.department}', 'internal',
+        array['${ids.requirementVersion}'::uuid]
+      );
+    `);
+    const certification = await db.query(
+      "select evidence_references from learning.certifications where id = $1",
+      [ids.chainCertification],
+    );
+    assert.equal(
+      certification.rows[0].evidence_references[0]
+        .source_assignment_requirement_id,
+      ids.sourceRequirement,
+    );
+    assert.deepEqual(certification.rows[0].evidence_references[0].attempt_ids, [
+      ids.sourceAttempt,
+    ]);
+  } finally {
+    await db.close();
+  }
+});
+
+test("preserves the original policy evidence across chained reuse", async () => {
+  const db = await createCompletionDatabase();
+  try {
+    await db.exec(`
+      insert into learning.requirement_versions(
+        id, audience, requirement_kind
+      ) values ('${ids.policyRequirementVersion}', 'internal', 'policy');
+      insert into learning.assignments(
+        id, user_id, department_id, audience, curriculum_version_id,
+        source_type, status
+      ) values
+        ('${ids.policySourceAssignment}', '${ids.user}', '${ids.department}', 'internal', '${ids.curriculum}', 'role', 'assigned'),
+        ('${ids.policyTargetAssignment}', '${ids.user}', '${ids.department}', 'internal', '${ids.curriculum}', 'role', 'assigned');
+      insert into learning.assignment_requirements(
+        id, assignment_id, user_id, department_id, audience,
+        requirement_version_id, status
+      ) values
+        ('${ids.policySourceRequirement}', '${ids.policySourceAssignment}', '${ids.user}', '${ids.department}', 'internal', '${ids.policyRequirementVersion}', 'not_started'),
+        ('${ids.policyTargetRequirement}', '${ids.policyTargetAssignment}', '${ids.user}', '${ids.department}', 'internal', '${ids.policyRequirementVersion}', 'not_started');
+      update learning.assignments
+      set status = 'in_progress', started_at = '2026-01-01T00:00:00Z'
+      where id = '${ids.policySourceAssignment}';
+      update learning.assignment_requirements
+      set status = 'in_progress', started_at = '2026-01-01T00:00:00Z'
+      where id = '${ids.policySourceRequirement}';
+      update learning.assignment_requirements
+      set status = 'passed', completed_at = '2026-01-01T00:10:00Z'
+      where id = '${ids.policySourceRequirement}';
+      insert into learning.policy_acknowledgments(
+        id, assignment_requirement_id, user_id, audience
+      ) values (
+        '${ids.policyAcknowledgment}', '${ids.policySourceRequirement}',
+        '${ids.user}', 'internal'
+      );
+    `);
+    await db.query("select learning.sync_shared_completions()");
+    await db.exec(`
+      update learning.assignments
+      set status = 'cancelled'
+      where id = '${ids.policySourceAssignment}';
+      insert into learning.assignments(
+        id, user_id, department_id, audience, curriculum_version_id,
+        source_type, status
+      ) values (
+        '${ids.policyChainTargetAssignment}', '${ids.user}',
+        '${ids.department}', 'internal', '${ids.curriculum}', 'role', 'assigned'
+      );
+      insert into learning.assignment_requirements(
+        id, assignment_id, user_id, department_id, audience,
+        requirement_version_id, status
+      ) values (
+        '${ids.policyChainTargetRequirement}',
+        '${ids.policyChainTargetAssignment}', '${ids.user}',
+        '${ids.department}', 'internal', '${ids.policyRequirementVersion}',
+        'not_started'
+      );
+    `);
+    await db.query("select learning.sync_shared_completions()");
+    const requirements = await requirementStates(db);
+    assert.equal(
+      requirements.get(ids.policyChainTargetRequirement).progress
+        .shared_completion_source_id,
+      ids.policySourceRequirement,
+    );
+
+    await db.exec(`
+      insert into learning.certifications(
+        id, assignment_id, user_id, department_id, audience,
+        requirement_version_ids
+      ) values (
+        '${ids.policyChainCertification}',
+        '${ids.policyChainTargetAssignment}', '${ids.user}',
+        '${ids.department}', 'internal',
+        array['${ids.policyRequirementVersion}'::uuid]
+      );
+    `);
+    const certification = await db.query(
+      "select evidence_references from learning.certifications where id = $1",
+      [ids.policyChainCertification],
+    );
+    assert.equal(
+      certification.rows[0].evidence_references[0]
+        .source_assignment_requirement_id,
+      ids.policySourceRequirement,
+    );
+    assert.deepEqual(
+      certification.rows[0].evidence_references[0].acknowledgment_ids,
+      [ids.policyAcknowledgment],
+    );
+  } finally {
+    await db.close();
+  }
+});
+
+test("does not override blocked assignments during shared completion", async () => {
+  const db = await createCompletionDatabase();
+  try {
+    await db.exec(`
+      insert into learning.assignments(
+        id, user_id, department_id, audience, curriculum_version_id,
+        source_type, status
+      ) values (
+        '${ids.blockedAssignment}', '${ids.user}', '${ids.department}',
+        'internal', '${ids.curriculum}', 'department', 'assigned'
+      );
+      update learning.assignments
+      set status = 'blocked', blocked_reason = 'Manager approval required'
+      where id = '${ids.blockedAssignment}';
+      insert into learning.assignment_requirements(
+        id, assignment_id, user_id, department_id, audience,
+        requirement_version_id, status
+      ) values (
+        '${ids.blockedRequirement}', '${ids.blockedAssignment}',
+        '${ids.user}', '${ids.department}', 'internal',
+        '${ids.requirementVersion}', 'not_started'
+      );
+    `);
+    await db.query("select learning.sync_shared_completions()");
+    const assignment = await db.query(
+      "select status, blocked_reason from learning.assignments where id = $1",
+      [ids.blockedAssignment],
+    );
+    assert.deepEqual(assignment.rows[0], {
+      status: "blocked",
+      blocked_reason: "Manager approval required",
+    });
+    const requirements = await requirementStates(db);
+    assert.equal(
+      requirements.get(ids.blockedRequirement).status,
+      "not_started",
+    );
+    await assert.rejects(
+      db.query(`select learning.start_requirement(
+        pg_catalog.jsonb_build_object(
+          'assignment_requirement_id', '${ids.blockedRequirement}',
+          'idempotency_key', '${ids.idempotency}'
+        )
+      )`),
+      /not open for progress/i,
+    );
+    const unchanged = await db.query(
+      "select status, blocked_reason from learning.assignments where id = $1",
+      [ids.blockedAssignment],
+    );
+    assert.deepEqual(unchanged.rows[0], {
+      status: "blocked",
+      blocked_reason: "Manager approval required",
+    });
   } finally {
     await db.close();
   }

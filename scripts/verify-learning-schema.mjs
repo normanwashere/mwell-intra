@@ -14,6 +14,24 @@ export const SERVICE_CONTRACT_ALIGNMENT_MIGRATION_NAME =
   "20260812170000_learning_service_contract_alignment.sql";
 export const COMPLETION_ALIGNMENT_MIGRATION_NAME =
   "20260812180000_learning_completion_alignment.sql";
+export const COMPLETION_HARDENING_MIGRATION_NAME =
+  "20260812190000_learning_completion_evidence_hardening.sql";
+const PINNED_LEARNING_MIGRATION_SHA256 = Object.freeze({
+  [FOUNDATION_MIGRATION_NAME]:
+    "b5b954f0fdb9ff52748047ca4a17916896227934ecd43c22951ea4489fc129ad",
+  [ROLE_LIFECYCLE_MIGRATION_NAME]:
+    "8668f05d2dc557da3d086ec3bdf78d82e4016d3bdbb212898d0d811f5225e736",
+  [ASSIGNMENT_LINEAGE_MIGRATION_NAME]:
+    "c5047ff95b5a545624c8dad090e1ff9c13ed2a977034ffc146a162740d8175ef",
+  [SERVICES_MIGRATION_NAME]:
+    "7b4b704249d37683e8764b4cff5496c49ebb5e5a825b8653921c8346c6e2703f",
+  [SERVICE_CONTRACT_ALIGNMENT_MIGRATION_NAME]:
+    "a4001fd52c284eda4cbb04a813b6346d724d8416da6671a8ecd143037e2c1fbc",
+  [COMPLETION_ALIGNMENT_MIGRATION_NAME]:
+    "1e7daab3d83417e8d49325712eacbdff3114e29cbe0f8c5790985002ea465cc5",
+  [COMPLETION_HARDENING_MIGRATION_NAME]:
+    "9914f21c7fa21e452973ca75d08348b307edb0c0f72580fa46263112e8e0f0d5",
+});
 export const PRIVATE_ANSWER_KEY_TABLE =
   "private.learning_assessment_answer_keys";
 export const LEARNING_SERVICE_FUNCTIONS = Object.freeze([
@@ -594,7 +612,7 @@ export const EXPECTED_FUNCTION_BODY_SHA256 = Object.freeze({
   "private.resolve_assignments_base":
     "2729f8eca28b7cc7d078141a0edc8f3dd340fd7f5c1fe9521a210bebb45389c2",
   "private.start_requirement_base":
-    "e9de0246e498862f69ccb34642422db8d68d4375f31e6e37a91ed46ec6b9c402",
+    "1aec7f8e3061da6c8a2abb0a2f5cb8ef1f443edb635cb8381525363afe64deb6",
   "private.validate_certification_completion_evidence":
     "d98966e8976de20a95333b7a0e42defa9dab2551f63a2bc647ba3263158a82c6",
   "learning.guard_authoritative_write_isolation":
@@ -632,7 +650,7 @@ export const EXPECTED_FUNCTION_BODY_SHA256 = Object.freeze({
   "learning.request_support":
     "ec8f155cf19db9b50f394b6c9b0d160a2805f248e3ecedc34fe5e0e2add17a98",
   "learning.sync_shared_completions":
-    "41bf2690a328ae0debd9ec76b6afe6a3e46025cd8e0ea17e01cdcd22380496ea",
+    "fe31819ed19667879c0000c39bc70f87fa87d51a382e50d5ac947c2f5acd9b28",
   "learning.evaluate_certifications":
     "56e74e7e7c111c1ebd3507f4a34dbe9cfeba0c31c4071b6b09683f032351aa61",
 });
@@ -1230,6 +1248,27 @@ function validateMigrationInventory(state, migrations) {
     seen.add(migration.name);
   }
 
+  const migrationByName = new Map(
+    migrations.map((migration) => [migration.name, migration]),
+  );
+  for (const [name, expectedDigest] of Object.entries(
+    PINNED_LEARNING_MIGRATION_SHA256,
+  )) {
+    const migration = migrationByName.get(name);
+    if (!migration) {
+      state.errors.push(`Pinned learning migration is missing: ${name}.`);
+      continue;
+    }
+    const actualDigest = createHash("sha256")
+      .update(canonicalMigrationSql(migration.sql))
+      .digest("hex");
+    if (actualDigest !== expectedDigest) {
+      state.errors.push(
+        `Pinned learning migration checksum drifted: ${name}. Add a forward migration instead of rewriting applied history.`,
+      );
+    }
+  }
+
   const baseline = migrations.filter(
     (migration) => migration.name < FOUNDATION_MIGRATION_NAME,
   );
@@ -1388,6 +1427,8 @@ function processStatement(state, statement, migrationName) {
     migrationName === SERVICE_CONTRACT_ALIGNMENT_MIGRATION_NAME;
   const isCompletionAlignment =
     migrationName === COMPLETION_ALIGNMENT_MIGRATION_NAME;
+  const isCompletionHardening =
+    migrationName === COMPLETION_HARDENING_MIGRATION_NAME;
   let match;
 
   if (normalized === "create schema if not exists learning") {
@@ -2083,6 +2124,26 @@ function processStatement(state, statement, migrationName) {
       ])
         .get(metadata.qualifiedName)
         ?.join("|") === metadata.argumentTypes.join("|");
+    const approvedCompletionHardening =
+      isCompletionHardening &&
+      ((metadata.qualifiedName === "learning.my_learning_snapshot" &&
+        metadata.argumentTypes.length === 0 &&
+        existingFunction?.migrationName ===
+          SERVICE_CONTRACT_ALIGNMENT_MIGRATION_NAME) ||
+        (metadata.qualifiedName === "learning.sync_shared_completions" &&
+          metadata.argumentTypes.length === 0 &&
+          existingFunction?.migrationName ===
+            COMPLETION_ALIGNMENT_MIGRATION_NAME) ||
+        (existingFunction &&
+          new Map([
+            ["learning.resolve_assignments", []],
+            ["learning.start_requirement", ["jsonb"]],
+            ["private.resolve_assignments_base", []],
+            ["private.start_requirement_base", ["jsonb"]],
+            ["private.validate_certification_completion_evidence", []],
+          ])
+            .get(metadata.qualifiedName)
+            ?.join("|") === metadata.argumentTypes.join("|")));
     if (isServiceContractAlignment && !approvedSnapshotAlignment) {
       state.errors.push(
         `${migrationName}: only the exact no-argument learning.my_learning_snapshot replacement is approved.`,
@@ -2091,13 +2152,21 @@ function processStatement(state, statement, migrationName) {
     }
     if (isCompletionAlignment && !approvedCompletionAlignment) {
       state.errors.push(
-        metadata.qualifiedName === "learning.sync_shared_completions"
-          ? `${migrationName}: only the exact no-argument learning.sync_shared_completions declaration is approved.`
-          : `${migrationName}: only exact reviewed completion-alignment function declarations are approved.`,
+        `${migrationName}: only the exact no-argument learning.sync_shared_completions declaration is approved.`,
       );
       return;
     }
-    if (existingFunction && !approvedSnapshotAlignment) {
+    if (isCompletionHardening && !approvedCompletionHardening) {
+      state.errors.push(
+        `${migrationName}: only exact reviewed completion-hardening function declarations are approved.`,
+      );
+      return;
+    }
+    if (
+      existingFunction &&
+      !approvedSnapshotAlignment &&
+      !approvedCompletionHardening
+    ) {
       state.errors.push(
         `${migrationName}: replacement or overload of modeled function ${metadata.qualifiedName} is default-denied.`,
       );
@@ -2140,8 +2209,9 @@ function processStatement(state, statement, migrationName) {
       ? splitTopLevel(match[2]).map(normalizeSql)
       : [];
     const approvedCompletionOwner =
-      isCompletionAlignment &&
+      (isCompletionAlignment || isCompletionHardening) &&
       new Set([
+        "learning.my_learning_snapshot",
         "learning.sync_shared_completions",
         "learning.resolve_assignments",
         "learning.start_requirement",
@@ -2191,7 +2261,7 @@ function processStatement(state, statement, migrationName) {
   if (approvedFunctionMoves.has(normalized)) {
     const [fromName, toName] = approvedFunctionMoves.get(normalized);
     if (
-      !isCompletionAlignment ||
+      !(isCompletionAlignment || isCompletionHardening) ||
       !moveModeledFunction(state, fromName, toName)
     ) {
       state.errors.push(
@@ -3307,7 +3377,7 @@ function validateFunctions(state) {
       );
     } else if (digestFunctionBody(functionEntry.body) !== expectedDigest) {
       state.errors.push(
-        `Exact guarded function body drifted for ${name}; control-flow changes require explicit verifier review.`,
+        `Exact guarded function body drifted for ${name} (${digestFunctionBody(functionEntry.body)}); control-flow changes require explicit verifier review.`,
       );
     }
   }
