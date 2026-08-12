@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
@@ -8,13 +8,14 @@ import {
   verifyLearningSchema,
 } from "./verify-learning-schema.mjs";
 
+const FOUNDATION_NAME = "20260812130000_learning_foundation.sql";
+const OLD_FOUNDATION_NAME = "20260812090000_learning_foundation.sql";
 const migration = fileURLToPath(
-  new URL(
-    "../supabase/migrations/20260812090000_learning_foundation.sql",
-    import.meta.url,
-  ),
+  new URL(`../supabase/migrations/${FOUNDATION_NAME}`, import.meta.url),
 );
-
+const oldMigration = fileURLToPath(
+  new URL(`../supabase/migrations/${OLD_FOUNDATION_NAME}`, import.meta.url),
+);
 const sql = readFileSync(migration, "utf8");
 
 function replaceRequired(source, pattern, replacement) {
@@ -22,12 +23,35 @@ function replaceRequired(source, pattern, replacement) {
   return source.replace(pattern, replacement);
 }
 
-test("learning foundation satisfies the complete static schema contract", () => {
+function errorsFor(source) {
+  return verifyLearningSchema(source).join("\n");
+}
+
+function orderedErrors(laterSql) {
+  return verifyLearningSchema([
+    { name: FOUNDATION_NAME, sql },
+    { name: "20260812140000_learning_weakening.sql", sql: laterSql },
+  ]).join("\n");
+}
+
+function functionBody(name, source = sql) {
+  const match = source.match(
+    new RegExp(
+      `create or replace function (?:learning|private)\\.${name}\\([^)]*\\)[\\s\\S]*?as \\$\\$([\\s\\S]*?)\\$\\$;`,
+      "i",
+    ),
+  );
+  assert.ok(match, `Missing function ${name}.`);
+  return match[1];
+}
+
+test("uses the monotonic forward foundation and satisfies the full contract", () => {
+  assert.equal(existsSync(oldMigration), false);
   assert.equal(REQUIRED_TABLES.length, 13);
   assert.deepEqual(verifyLearningSchema(sql), []);
 });
 
-test("every authoritative table has identity, timestamp, RLS, and explicit grants", () => {
+test("declares every governed table with UUID identity, timestamp, and terminal RLS", () => {
   for (const table of REQUIRED_TABLES) {
     const tableSql = sql.match(
       new RegExp(
@@ -35,156 +59,297 @@ test("every authoritative table has identity, timestamp, RLS, and explicit grant
         "i",
       ),
     )?.[0];
-
     assert.ok(tableSql, `Missing learning.${table}.`);
     assert.match(tableSql, /id uuid primary key default gen_random_uuid\(\)/i);
     assert.match(tableSql, /created_at timestamptz not null default now\(\)/i);
+  }
+
+  const disabled = `${sql}\nalter table learning.certifications disable row level security;`;
+  assert.match(errorsFor(disabled), /certifications.*RLS.*disabled/i);
+
+  const commentedOnly = replaceRequired(
+    sql,
+    /alter table learning\.attempts enable row level security;/i,
+    "-- alter table learning.attempts enable row level security;",
+  );
+  assert.match(errorsFor(commentedOnly), /attempts.*enable RLS/i);
+});
+
+test("rejects unknown permissive policies and evaluates each policy as a bounded statement", () => {
+  const permissive = `${sql}\ncreate policy learning_certifications_open_read on learning.certifications for select to authenticated using (true);`;
+  assert.match(errorsFor(permissive), /unknown.*policy|permissive.*policy/i);
+
+  const nestedTrue = replaceRequired(
+    sql,
+    /create policy learning_curricula_published_read[\s\S]*?\n\);/i,
+    "create policy learning_curricula_published_read on learning.curricula for select to authenticated using (((true)));",
+  );
+  assert.match(
+    errorsFor(nestedTrue),
+    /curricula.*published.*policy|permissive.*policy/i,
+  );
+
+  const weakenedLearner = replaceRequired(
+    sql,
+    /create policy learning_assignments_learner_read[\s\S]*?\n\);/i,
+    "create policy learning_assignments_learner_read on learning.assignments for select to authenticated using (true);",
+  );
+  assert.match(
+    errorsFor(weakenedLearner),
+    /assignments.*learner.*policy|learner.*assignment.*policy/i,
+  );
+});
+
+test("rejects every direct evidence-write grant spelling and unsafe grantee", () => {
+  const mutations = [
+    "grant insert, update on learning.certifications to authenticated;",
+    "grant all privileges on learning.attempt_events to authenticated;",
+    "grant insert on learning.policy_acknowledgments to public;",
+    "grant update on learning.assignment_requirements to authenticated;",
+    "grant truncate on learning.attempts to service_role;",
+  ];
+
+  for (const grant of mutations) {
     assert.match(
-      sql,
-      new RegExp(
-        `alter table learning\\.${table} enable row level security`,
-        "i",
-      ),
-    );
-    assert.match(
-      sql,
-      new RegExp(
-        `alter table learning\\.${table} force row level security`,
-        "i",
-      ),
-    );
-    assert.match(
-      sql,
-      new RegExp(
-        `revoke all on learning\\.${table} from public, anon, authenticated`,
-        "i",
-      ),
+      errorsFor(`${sql}\n${grant}`),
+      /unsafe.*grant|privilege|grant.*learning/i,
+      grant,
     );
   }
 });
 
-test("the verifier rejects a missing table or RLS boundary", () => {
-  const withoutAttempts = replaceRequired(
-    sql,
-    /create table learning\.attempts\s*\([\s\S]*?\n\);/i,
-    "",
-  );
-  assert.match(verifyLearningSchema(withoutAttempts).join("\n"), /attempts/i);
-
-  const withoutForcedRls = replaceRequired(
-    sql,
-    /alter table learning\.assignments force row level security;/i,
-    "",
-  );
-  assert.match(
-    verifyLearningSchema(withoutForcedRls).join("\n"),
-    /assignments.*force RLS/i,
-  );
-});
-
-test("authoritative learning evidence is immutable or lifecycle-guarded and never client-writable", () => {
+test("uses exact least-privilege service grants with no evidence TRUNCATE", () => {
+  assert.doesNotMatch(sql, /grant\s+all(?:\s+privileges)?\s+on\s+learning\./i);
   for (const table of [
     "attempts",
     "attempt_events",
     "policy_acknowledgments",
+    "certifications",
+    "emergency_exceptions",
   ]) {
-    assert.match(
+    assert.doesNotMatch(
       sql,
-      new RegExp(
-        `create trigger learning_${table}_append_only[\\s\\S]*?before update or delete on learning\\.${table}`,
-        "i",
-      ),
+      new RegExp(`grant[\\s\\S]*?truncate[\\s\\S]*?learning\\.${table}`, "i"),
     );
   }
   assert.match(
     sql,
-    /create trigger learning_certifications_lifecycle_guard[\s\S]*?before update or delete on learning\.certifications[\s\S]*?learning\.guard_certification_lifecycle\(\)/i,
+    /grant select, insert, update on learning\.attempts to service_role;/i,
   );
   assert.match(
     sql,
-    /create trigger learning_emergency_exceptions_lifecycle_guard[\s\S]*?before update or delete on learning\.emergency_exceptions[\s\S]*?learning\.guard_emergency_exception_lifecycle\(\)/i,
+    /grant select, insert on learning\.attempt_events to service_role;/i,
   );
+});
 
+test("detaches certification history from live role deletion and validates issuance", () => {
   assert.doesNotMatch(
     sql,
-    /grant\s+(?:insert|update|delete|all)(?:\s*\([^)]*\))?\s+on\s+(?:table\s+)?learning\.(?:attempts|attempt_events|policy_acknowledgments|certifications|emergency_exceptions)\s+to\s+authenticated/i,
+    /foreign key\s*\([^)]*source_role_assignment_id[^)]*\)[\s\S]*?references core\.user_roles/i,
   );
-
-  const unsafeGrant = `${sql}\n+grant insert on learning.certifications to authenticated;`;
   assert.match(
-    verifyLearningSchema(unsafeGrant).join("\n"),
-    /authenticated.*certifications|certifications.*authenticated/i,
+    sql,
+    /create trigger learning_certifications_validate_issuance[\s\S]*?before insert on learning\.certifications[\s\S]*?private\.validate_certification_issuance\(\)/i,
+  );
+  assert.match(
+    sql,
+    /create trigger learning_revoke_certifications_on_role_delete[\s\S]*?before delete on core\.user_roles[\s\S]*?private\.revoke_certifications_for_role_assignment\(\)/i,
   );
 
-  const withoutEvidenceTrigger = replaceRequired(
+  const body = functionBody("validate_certification_issuance");
+  for (const requirement of [
+    /core\.user_roles/i,
+    /profile\.status\s*<>\s*'active'/i,
+    /core\.role_capabilities/i,
+    /learning\.role_curricula/i,
+    /learning\.curriculum_versions/i,
+    /curriculum_version\.status\s*=\s*'published'/i,
+    /candidate\.curriculum_version_id\s*=\s*new\.curriculum_version_id/i,
+    /learning\.curriculum_requirements/i,
+    /learning\.assignment_requirements/i,
+  ]) {
+    assert.match(body, requirement);
+  }
+  assert.match(
+    functionBody("revoke_certifications_for_role_assignment"),
+    /update learning\.certifications[\s\S]*?status = 'revoked'[\s\S]*?source_role_assignment_id = old\.id/i,
+  );
+});
+
+test("structurally binds requirement-version department ownership and authorizes from its parent", () => {
+  assert.match(
     sql,
-    /create trigger learning_attempt_events_append_only[\s\S]*?for each row execute function learning\.reject_evidence_mutation\(\);/i,
+    /constraint requirement_versions_department_owner_fk\s+foreign key\s*\(\s*requirement_id\s*,\s*audience\s*,\s*requirement_kind\s*,\s*governance_owner\s*,\s*owner_department_id\s*\)[\s\S]*?references learning\.requirements\s*\(\s*id\s*,\s*audience\s*,\s*requirement_kind\s*,\s*governance_owner\s*,\s*owner_department_id\s*\)/i,
+  );
+  assert.match(
+    sql,
+    /create policy learning_requirement_versions_owner_manage[\s\S]*?from learning\.requirements parent_requirement[\s\S]*?parent_requirement\.owner_department_id/i,
+  );
+});
+
+test("freezes curriculum composition after approval and verifies active guard bodies", () => {
+  assert.match(
+    sql,
+    /create trigger learning_curriculum_requirements_composition_guard[\s\S]*?before insert or update or delete on learning\.curriculum_requirements[\s\S]*?learning\.guard_curriculum_composition\(\)/i,
+  );
+  const body = functionBody("guard_curriculum_composition");
+  assert.match(body, /approved.*scheduled.*published.*superseded.*retired/is);
+  assert.match(body, /raise exception/i);
+
+  const inert = replaceRequired(
+    sql,
+    /create or replace function learning\.guard_curriculum_composition\(\)[\s\S]*?\$\$;/i,
+    "create or replace function learning.guard_curriculum_composition() returns trigger language plpgsql as $$ begin return new; end; $$;",
+  );
+  assert.match(
+    errorsFor(inert),
+    /composition.*guard.*inert|composition.*immutable/i,
+  );
+});
+
+test("rejects all prohibited waivers, including service-written Legal policy waivers", () => {
+  assert.match(
+    sql,
+    /create trigger learning_assignment_requirements_validate_waiver[\s\S]*?before insert or update[\s\S]*?on learning\.assignment_requirements[\s\S]*?private\.validate_assignment_requirement_waiver\(\)/i,
+  );
+  const body = functionBody("validate_assignment_requirement_waiver");
+  assert.match(body, /not requirement_version\.waivable/i);
+  assert.match(body, /governance_owner\s*=\s*'legal'/i);
+  assert.match(body, /requirement_kind\s*=\s*'policy'/i);
+  assert.match(body, /raise exception/i);
+});
+
+test("allows only one in-progress-to-terminal attempt transition", () => {
+  assert.match(
+    sql,
+    /create trigger learning_attempts_lifecycle_guard[\s\S]*?before insert or update or delete on learning\.attempts[\s\S]*?learning\.guard_attempt_lifecycle\(\)/i,
+  );
+  const body = functionBody("guard_attempt_lifecycle");
+  assert.match(body, /old\.status\s*<>\s*'in_progress'/i);
+  assert.match(
+    body,
+    /new\.status\s+not in\s*\(\s*'passed'.*'failed'.*'abandoned'.*'invalidated'/is,
+  );
+  assert.match(
+    body,
+    /array\['status', 'score', 'integrity_result', 'submitted_at', 'completed_at'\]/i,
+  );
+  assert.match(body, /raise exception/i);
+});
+
+test("keeps events and acknowledgments append-only with non-inert guards", () => {
+  for (const table of ["attempt_events", "policy_acknowledgments"]) {
+    assert.match(
+      sql,
+      new RegExp(
+        `create trigger learning_${table}_append_only[\\s\\S]*?before update or delete on learning\\.${table}[\\s\\S]*?learning\\.reject_evidence_mutation\\(\\)`,
+        "i",
+      ),
+    );
+  }
+  assert.match(functionBody("reject_evidence_mutation"), /raise exception/i);
+
+  const inert = replaceRequired(
+    sql,
+    /create or replace function learning\.reject_evidence_mutation\(\)[\s\S]*?\$\$;/i,
+    "create or replace function learning.reject_evidence_mutation() returns trigger language plpgsql as $$ begin -- raise exception 'append-only';\nreturn new; end; $$;",
+  );
+  assert.match(errorsFor(inert), /append-only.*guard.*inert|evidence.*guard/i);
+});
+
+test("completes structural audience isolation and rejects vendor Platform profiles", () => {
+  for (const relationship of [
+    /foreign key \(supersedes_id, audience\)[\s\S]*?references learning\.curriculum_versions\(id, audience\)/i,
+    /foreign key \(supersedes_id, audience\)[\s\S]*?references learning\.requirement_versions\(id, audience\)/i,
+    /foreign key \(superseded_by_id, user_id, department_id, audience\)[\s\S]*?references learning\.assignments\(id, user_id, department_id, audience\)/i,
+    /foreign key \(user_id, profile_kind\)[\s\S]*?references core\.profiles\(id, kind\)/i,
+  ]) {
+    assert.match(sql, relationship);
+  }
+  assert.match(
+    sql,
+    /constraint assignments_profile_audience_check[\s\S]*?profile_kind = 'employee'.*audience = 'internal'.*profile_kind = 'vendor'.*audience = 'vendor'/is,
+  );
+  assert.match(
+    functionBody("learning_is_active_employee_platform_admin"),
+    /profile\.kind\s*=\s*'employee'[\s\S]*?profile\.status\s*=\s*'active'[\s\S]*?core\.has_cap\('core', 'manage_rbac'\)/i,
+  );
+});
+
+test("validates emergency grantor, approver, beneficiary, scope, and chronology", () => {
+  const body = functionBody("validate_emergency_exception_issuance");
+  for (const requirement of [
+    /grantor_profile\.kind\s*=\s*'employee'/i,
+    /grantor_profile\.status\s*=\s*'active'/i,
+    /grantor_role\.role\s*=\s*'platform_admin'/i,
+    /approver_profile\.kind\s*=\s*'employee'/i,
+    /approver_profile\.status\s*=\s*'active'/i,
+    /approver_scope\.department_id\s*=\s*new\.department_id/i,
+    /approver_capability\.cap\s*=\s*new\.capability/i,
+  ]) {
+    assert.match(body, requirement);
+  }
+  assert.match(
+    sql,
+    /grantor_id <> approver_id[\s\S]*?grantor_id <> user_id[\s\S]*?approver_id <> user_id/i,
+  );
+  assert.match(
+    sql,
+    /approved_at >= created_at[\s\S]*?approved_at <= effective_at[\s\S]*?expires_at <= effective_at \+ interval '24 hours'/i,
+  );
+});
+
+test("enforces lifecycle transitions and timestamp chronology", () => {
+  const contentBody = functionBody("guard_content_lifecycle");
+  assert.match(contentBody, /tg_op = 'INSERT'.*new\.status <> 'draft'/is);
+  assert.match(contentBody, /old\.status = 'draft'.*new\.status.*in_review/is);
+  assert.match(
+    contentBody,
+    /old\.status = 'in_review'.*new\.status.*approved/is,
+  );
+  assert.match(contentBody, /finalized learning content is immutable/i);
+
+  for (const chronology of [
+    /published_at >= approved_at/i,
+    /published_at <= effective_at/i,
+    /issued_at <= created_at/i,
+    /issued_at <= effective_at/i,
+    /started_at <= submitted_at/i,
+    /submitted_at <= completed_at/i,
+  ]) {
+    assert.match(sql, chronology);
+  }
+});
+
+test("qualifies outer policy correlations", () => {
+  assert.match(
+    sql,
+    /version\.id = learning\.curriculum_requirements\.curriculum_version_id/i,
+  );
+  assert.match(
+    sql,
+    /requirement_version\.id = learning\.policy_acknowledgments\.requirement_version_id/i,
+  );
+  assert.doesNotMatch(sql, /version\.id = curriculum_version_id\b/i);
+  assert.doesNotMatch(
+    sql,
+    /requirement_version\.id = requirement_version_id\b/i,
+  );
+});
+
+test("indexes every foreign key by its complete leading child columns", () => {
+  const withoutAssignmentCurriculumIndex = replaceRequired(
+    sql,
+    /create index learning_assignments_curriculum_fk_idx[\s\S]*?;/i,
     "",
   );
   assert.match(
-    verifyLearningSchema(withoutEvidenceTrigger).join("\n"),
-    /attempt_events.*append-only/i,
+    errorsFor(withoutAssignmentCurriculumIndex),
+    /assignments_curriculum_fk.*leading.*index|missing.*index.*assignments_curriculum_fk/i,
   );
 });
 
-test("published content is immutable and Legal acknowledgments are non-waivable", () => {
-  assert.match(
-    sql,
-    /create trigger learning_curriculum_versions_published_immutable[\s\S]*?on learning\.curriculum_versions/i,
-  );
-  assert.match(
-    sql,
-    /create trigger learning_requirement_versions_published_immutable[\s\S]*?on learning\.requirement_versions/i,
-  );
-  assert.match(
-    sql,
-    /requirement_versions_legal_waiver_check[\s\S]*governance_owner\s*<>\s*'legal'[\s\S]*requirement_kind\s*<>\s*'policy'[\s\S]*not waivable/i,
-  );
-
-  const waivableLegalPolicy = replaceRequired(
-    sql,
-    /constraint requirement_versions_legal_waiver_check[\s\S]*?\n\s*\)/i,
-    "constraint requirement_versions_legal_waiver_check check (true)\n  )",
-  );
-  assert.match(
-    verifyLearningSchema(waivableLegalPolicy).join("\n"),
-    /Legal policy.*non-waivable/i,
-  );
-});
-
-test("emergency exceptions require independent approval and expire within 24 hours", () => {
-  assert.match(
-    sql,
-    /constraint emergency_exceptions_independent_approval_check\s+check\s*\(grantor_id\s*<>\s*approver_id\)/i,
-  );
-  assert.match(
-    sql,
-    /constraint emergency_exceptions_duration_check[\s\S]*expires_at\s*<=\s*effective_at\s*\+\s*interval\s*'24 hours'/i,
-  );
-  assert.match(
-    sql,
-    /constraint emergency_exceptions_no_legal_waiver_check\s+check\s*\(waives_legal_acknowledgment\s*=\s*false\)/i,
-  );
-
-  const selfApproval = replaceRequired(
-    sql,
-    /constraint emergency_exceptions_independent_approval_check\s+check\s*\(grantor_id\s*<>\s*approver_id\)/i,
-    "constraint emergency_exceptions_independent_approval_check check (true)",
-  );
-  assert.match(
-    verifyLearningSchema(selfApproval).join("\n"),
-    /grantor.*approver/i,
-  );
-
-  const longException = replaceRequired(
-    sql,
-    /interval\s*'24 hours'/i,
-    "interval '48 hours'",
-  );
-  assert.match(verifyLearningSchema(longException).join("\n"), /24 hours/i);
-});
-
-test("active certifications and open assignments are unique by authority source", () => {
+test("preserves business uniqueness and certification authority isolation", () => {
   assert.match(
     sql,
     /create unique index learning_one_active_certification_idx\s+on learning\.certifications\s*\(user_id, department_id, module, capability, source_role_assignment_id\)\s+where status = 'active'/i,
@@ -193,152 +358,110 @@ test("active certifications and open assignments are unique by authority source"
     sql,
     /create unique index learning_one_open_assignment_idx\s+on learning\.assignments\s*\(user_id, curriculum_version_id, source_type, source_id\)\s+where status in \('assigned', 'in_progress', 'blocked'\)/i,
   );
-
-  const withoutCertificationIndex = replaceRequired(
+  assert.doesNotMatch(
     sql,
-    /create unique index learning_one_active_certification_idx[\s\S]*?;/i,
-    "",
-  );
-  assert.match(
-    verifyLearningSchema(withoutCertificationIndex).join("\n"),
-    /active certification.*unique/i,
+    /insert into core\.user_roles[\s\S]*?from learning\.certifications|insert into core\.profile_department_scopes[\s\S]*?from learning\.certifications/i,
   );
 });
 
-test("learner, department owner, Legal, Platform, and vendor read scopes stay distinct", () => {
-  assert.match(
-    sql,
-    /create policy learning_assignments_learner_read[\s\S]*?user_id\s*=\s*\(select auth\.uid\(\)\)[\s\S]*?private\.learning_audience_matches_current_profile\(audience\)/i,
-  );
-  assert.match(
-    sql,
-    /create policy learning_assignments_department_owner_read[\s\S]*?private\.learning_owns_department\(department_id\)[\s\S]*?audience\s*=\s*'internal'/i,
-  );
-  assert.match(
-    sql,
-    /create policy learning_policy_acknowledgments_legal_read[\s\S]*?core\.has_cap\('legal', 'review_accreditation'\)[\s\S]*?not core\.is_vendor\(\)[\s\S]*?audience\s*=\s*'internal'/i,
-  );
-  assert.match(
-    sql,
-    /create policy learning_policy_acknowledgments_legal_vendor_read[\s\S]*?core\.has_cap\('legal', 'review_accreditation'\)[\s\S]*?not core\.is_vendor\(\)[\s\S]*?audience\s*=\s*'vendor'/i,
-  );
-  assert.match(
-    sql,
-    /create policy learning_curricula_platform_manage[\s\S]*?for all to authenticated[\s\S]*?core\.has_cap\('core', 'manage_rbac'\)/i,
-  );
-  assert.match(
-    sql,
-    /create policy learning_assignments_vendor_read[\s\S]*?core\.is_vendor\(\)[\s\S]*?user_id\s*=\s*\(select auth\.uid\(\)\)[\s\S]*?audience\s*=\s*'vendor'/i,
-  );
+test("evaluates ordered later migrations and rejects terminal weakening", () => {
+  const weakenings = [
+    "alter table learning.certifications disable row level security;",
+    "create policy learning_attempts_open on learning.attempts for select to public using (true);",
+    "grant all privileges on learning.assignment_requirements to public;",
+    "drop trigger learning_attempt_events_append_only on learning.attempt_events;",
+    "create or replace function learning.reject_evidence_mutation() returns trigger language plpgsql as $$ begin return new; end; $$;",
+    "alter table learning.certifications drop constraint certifications_assignment_fk;",
+    "alter table learning.assignments drop column audience;",
+    "alter trigger learning_attempt_events_append_only on learning.attempt_events rename to learning_attempt_events_unchecked;",
+    "grant select on all tables in schema learning to public;",
+    "alter table learning.certifications add constraint certifications_live_role_fk foreign key (source_role_assignment_id) references core.user_roles(id) on delete restrict;",
+  ];
 
-  const collapsedAudience = replaceRequired(
-    sql,
-    /core\.is_vendor\(\)[\s\S]*?user_id\s*=\s*\(select auth\.uid\(\)\)[\s\S]*?audience\s*=\s*'vendor'/i,
-    "true",
-  );
-  assert.match(
-    verifyLearningSchema(collapsedAudience).join("\n"),
-    /vendor.*audience|audience.*vendor/i,
-  );
-
-  for (const table of [
-    "assignments",
-    "assignment_requirements",
-    "attempts",
-    "attempt_events",
-    "policy_acknowledgments",
-    "certifications",
-    "emergency_exceptions",
-  ]) {
+  for (const weakening of weakenings) {
     assert.match(
-      sql,
-      new RegExp(
-        `create policy learning_${table}_platform_read[\\s\\S]*?core\\.has_cap\\('core', 'manage_rbac'\\)[\\s\\S]*?audience\\s*=\\s*'internal'`,
-        "i",
-      ),
+      orderedErrors(weakening),
+      /RLS|policy|grant|trigger|guard|constraint|weakening/i,
+      weakening,
     );
   }
 });
 
-test("audience ownership references and policy correlations fail closed", () => {
-  assert.match(
-    sql,
-    /foreign key\s*\(\s*requirement_id\s*,\s*audience\s*,\s*requirement_kind\s*,\s*governance_owner\s*\)[\s\S]*?references learning\.requirements\s*\(\s*id\s*,\s*audience\s*,\s*requirement_kind\s*,\s*governance_owner\s*\)/i,
-  );
-  assert.doesNotMatch(
-    sql,
-    /constraint requirement_versions_requirement_fk\s+foreign key\s*\([^)]*owner_department_id[^)]*\)/i,
-  );
-  assert.match(
-    sql,
-    /curriculum\.id = learning\.curriculum_versions\.curriculum_id[\s\S]*?curriculum\.audience = learning\.curriculum_versions\.audience/i,
-  );
-
-  const ambiguousAudience = replaceRequired(
-    sql,
-    /curriculum\.audience = learning\.curriculum_versions\.audience/i,
-    "curriculum.audience = audience",
-  );
-  assert.match(
-    verifyLearningSchema(ambiguousAudience).join("\n"),
-    /correlate.*audience|audience.*correlat/i,
-  );
-});
-
-test("global and department role curricula cannot duplicate", () => {
-  assert.match(
-    sql,
-    /create unique index learning_one_global_role_curriculum_idx[\s\S]*?on learning\.role_curricula\(module, role, curriculum_version_id\)[\s\S]*?where department_id is null/i,
-  );
-  assert.match(
-    sql,
-    /create unique index learning_one_scoped_role_curriculum_idx[\s\S]*?on learning\.role_curricula\(module, role, curriculum_version_id, department_id\)[\s\S]*?where department_id is not null/i,
-  );
-});
-
-test("version, assignment, evidence, and authority lineage use explicit foreign keys", () => {
-  const requiredRelationships = [
-    /curriculum_versions_curriculum_fk[\s\S]*?references learning\.curricula/i,
-    /requirement_versions_requirement_fk[\s\S]*?references learning\.requirements/i,
-    /curriculum_requirements_curriculum_fk[\s\S]*?references learning\.curriculum_versions/i,
-    /curriculum_requirements_requirement_fk[\s\S]*?references learning\.requirement_versions/i,
-    /role_curricula_role_fk[\s\S]*?references core\.roles/i,
-    /assignments_curriculum_fk[\s\S]*?references learning\.curriculum_versions/i,
-    /assignment_requirements_assignment_fk[\s\S]*?references learning\.assignments/i,
-    /attempts_assignment_requirement_fk[\s\S]*?references learning\.assignment_requirements/i,
-    /attempt_events_attempt_fk[\s\S]*?references learning\.attempts/i,
-    /policy_acknowledgments_assignment_requirement_fk[\s\S]*?references learning\.assignment_requirements/i,
-    /certifications_role_assignment_fk[\s\S]*?references core\.user_roles/i,
-    /certifications_capability_fk[\s\S]*?references core\.capabilities/i,
-    /emergency_exceptions_capability_fk[\s\S]*?references core\.capabilities/i,
+test("rejects mutations for every repaired trigger and structural invariant", () => {
+  const inertFunctions = [
+    "guard_attempt_lifecycle",
+    "guard_certification_lifecycle",
+    "guard_emergency_exception_lifecycle",
+    "guard_content_lifecycle",
+    "guard_curriculum_composition",
   ];
-
-  for (const relationship of requiredRelationships) {
-    assert.match(sql, relationship);
+  for (const name of inertFunctions) {
+    const inert = replaceRequired(
+      sql,
+      new RegExp(
+        `create or replace function learning\\.${name}\\(\\)[\\s\\S]*?\\$\\$;`,
+        "i",
+      ),
+      `create or replace function learning.${name}() returns trigger language plpgsql as $$ begin return new; end; $$;`,
+    );
+    assert.match(
+      errorsFor(inert),
+      /guard|lifecycle|composition|immutable/i,
+      name,
+    );
   }
 
-  const severedAttemptLineage = replaceRequired(
-    sql,
-    /constraint attempt_events_attempt_fk[\s\S]*?on delete restrict,/i,
-    "constraint attempt_events_attempt_fk check (true),",
-  );
-  assert.match(
-    verifyLearningSchema(severedAttemptLineage).join("\n"),
-    /attempt events.*attempts|attempt.*event.*foreign key/i,
-  );
-});
+  for (const name of [
+    "validate_assignment_requirement_waiver",
+    "validate_certification_issuance",
+    "validate_emergency_exception_issuance",
+  ]) {
+    const inert = replaceRequired(
+      sql,
+      new RegExp(
+        `create or replace function private\\.${name}\\(\\)[\\s\\S]*?\\$\\$;`,
+        "i",
+      ),
+      `create or replace function private.${name}() returns trigger language plpgsql as $$ begin return new; end; $$;`,
+    );
+    assert.match(
+      errorsFor(inert),
+      /waiver|certification|emergency exception|validator/i,
+      name,
+    );
+  }
 
-test("certifications reference existing role authority without granting roles or scope", () => {
-  assert.match(
+  const forgedOwner = replaceRequired(
     sql,
-    /alter table core\.user_roles\s+add column if not exists id uuid not null default gen_random_uuid\(\)/i,
+    /constraint requirement_versions_department_owner_fk[\s\S]*?on delete restrict,/i,
+    "constraint requirement_versions_department_owner_fk check (true),",
+  );
+  assert.match(errorsFor(forgedOwner), /department ownership.*parent/i);
+
+  const severedProfileKind = replaceRequired(
+    sql,
+    /constraint assignments_profile_audience_check[\s\S]*?\n\s*\),/i,
+    "constraint assignments_profile_audience_check check (true),",
   );
   assert.match(
-    sql,
-    /foreign key \(source_role_assignment_id, user_id, module, source_role\)[\s\S]*?references core\.user_roles\(id, user_id, module, role\)[\s\S]*?on delete restrict/i,
+    errorsFor(severedProfileKind),
+    /structurally separate.*audience/i,
   );
-  assert.doesNotMatch(
+
+  const unqualifiedPolicy = replaceRequired(
     sql,
-    /insert into core\.user_roles[\s\S]*?from learning\.certifications|create policy[\s\S]*?learning\.certifications[\s\S]*?core\.profile_department_scopes[\s\S]*?for insert/i,
+    /version\.id = learning\.curriculum_requirements\.curriculum_version_id/i,
+    "version.id = curriculum_version_id",
+  );
+  assert.match(errorsFor(unqualifiedPolicy), /qualify.*correlation/i);
+
+  const missingChronology = replaceRequired(
+    sql,
+    /issued_at <= effective_at/i,
+    "true",
+  );
+  assert.match(
+    errorsFor(missingChronology),
+    /issued before becoming effective/i,
   );
 });
