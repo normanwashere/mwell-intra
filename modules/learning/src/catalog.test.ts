@@ -111,12 +111,25 @@ describe("learning catalog", () => {
     );
   });
 
-  it("keeps required vendor evidence upload available before onboarding completion", () => {
+  it("keeps required vendor onboarding writes available before onboarding completion", () => {
     expect(
       capabilityClassificationFor("core", "submit_documents")?.access,
     ).toBe("onboarding_write");
+    expect(
+      capabilityClassificationFor("core", "manage_own_accreditation_draft")
+        ?.access,
+    ).toBe("onboarding_write");
     expect(requiresLiveCertification("core", "submit_documents")).toBe(false);
+    expect(
+      requiresLiveCertification("core", "manage_own_accreditation_draft"),
+    ).toBe(false);
     expect(requiredCurriculaFor({ module: "core", capability: "submit_documents" })).toHaveLength(0);
+    expect(
+      requiredCurriculaFor({
+        module: "core",
+        capability: "manage_own_accreditation_draft",
+      }),
+    ).toHaveLength(0);
   });
 
   it("gates vendor final submission on the controlled journey requirements", () => {

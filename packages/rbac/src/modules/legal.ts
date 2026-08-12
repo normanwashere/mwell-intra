@@ -2,7 +2,8 @@ import type { ModuleDefinition } from '../contracts';
 
 // Legal module RBAC — internal accreditation review only. The external vendor
 // tier lives in @intra/rbac core (core:vendor_portal with submit_documents +
-// submit_accreditation + view_own_accreditation). RECONCILED 2026-07-05: the
+// manage_own_accreditation_draft + separately controlled submit_accreditation +
+// view_own_accreditation). RECONCILED 2026-07-05: the
 // provisional `legal:vendor` role and its upload_document/submit_accreditation
 // caps were retired (see supabase/migrations/20260706150000_vendor_tier_reconcile.sql).
 

@@ -185,7 +185,14 @@ describe("capability access classifications", () => {
     expect(
       capabilityClassificationFor("core", "submit_documents")?.access,
     ).toBe("onboarding_write");
+    expect(
+      capabilityClassificationFor("core", "manage_own_accreditation_draft")
+        ?.access,
+    ).toBe("onboarding_write");
     expect(requiresLiveCertification("core", "submit_documents")).toBe(false);
+    expect(
+      requiresLiveCertification("core", "manage_own_accreditation_draft"),
+    ).toBe(false);
     expect(requiresLiveCertification("core", "submit_accreditation")).toBe(true);
     expect(requiresLiveCertification("insights", "view_executive")).toBe(false);
     expect(requiresLiveCertification("warehouse", "receive_stock")).toBe(true);
@@ -274,6 +281,14 @@ describe("hasCapInModule()", () => {
     );
     expect(
       hasCapInModule("core", "vendor_portal", "submit_accreditation"),
+    ).toBe(true);
+    expect(
+      roleCapabilities.some(
+        (grant) =>
+          grant.module === "core" &&
+          grant.role === "vendor_portal" &&
+          grant.cap === "manage_own_accreditation_draft",
+      ),
     ).toBe(true);
     expect(
       hasCapInModule("core", "vendor_portal", "view_own_accreditation"),

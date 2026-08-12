@@ -105,6 +105,7 @@ export const CAPABILITY_CLASSIFICATIONS: readonly CapabilityClassification[] = [
   readCapability('core', 'view_documents'),
   mutationCapability('core', 'manage_documents'),
   onboardingWriteCapability('core', 'submit_documents'),
+  onboardingWriteCapability('core', 'manage_own_accreditation_draft'),
   mutationCapability('core', 'submit_accreditation'),
   readCapability('core', 'view_own_accreditation'),
   readCapability('core', 'view_approvals'),

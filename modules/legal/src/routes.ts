@@ -34,7 +34,7 @@ export const LEGAL_ROUTE_CONTRACTS: LegalRouteContract[] = [
     vendorCapabilityIds: [
       "view_own_accreditation",
       "submit_documents",
-      "submit_accreditation",
+      "manage_own_accreditation_draft",
     ],
     internalMinimumControls: 6,
     internalMinimumFields: 4,
@@ -45,7 +45,10 @@ export const LEGAL_ROUTE_CONTRACTS: LegalRouteContract[] = [
     id: "application",
     path: "/cases/:id/application",
     internalCapabilityIds: ["view_dashboard"],
-    vendorCapabilityIds: ["view_own_accreditation", "submit_accreditation"],
+    vendorCapabilityIds: [
+      "view_own_accreditation",
+      "manage_own_accreditation_draft",
+    ],
     internalMinimumControls: 2,
     internalMinimumFields: 3,
     vendorMinimumControls: 4,

@@ -13,6 +13,7 @@ const GUIDANCE: Record<string, CapabilityGuidance> = {
   "core:view_documents": { label: "View controlled documents", description: "Open documents the user is authorized to see." },
   "core:manage_documents": { label: "Manage controlled documents", description: "Classify, replace, and govern authorized document records." },
   "core:submit_documents": { label: "Submit vendor documents", description: "Upload evidence for the user's own vendor application." },
+  "core:manage_own_accreditation_draft": { label: "Manage own accreditation draft", description: "Open, create, and save the user's own vendor accreditation draft." },
   "core:submit_accreditation": { label: "Submit accreditation", description: "Send the user's own vendor application for formal review." },
   "core:view_own_accreditation": { label: "View own accreditation", description: "View the vendor's own application, requests, and decision status." },
   "core:view_approvals": { label: "View approval history", description: "View approval records available to the user's assigned work." },
