@@ -13,7 +13,7 @@ import {
   useToast,
   type SignaturePayload,
 } from '@intra/ui';
-import { useSession } from '@intra/auth';
+import { useCan, useSession } from '@intra/auth';
 import type {
   AccreditationFieldDisposition,
   EntityType,
@@ -120,12 +120,13 @@ const COMPANY_FIELDS: Array<{
 export function VendorApplicationPage() {
   const { id = '' } = useParams();
   const { profile, mode, supabaseClient } = useSession();
+  const canManageDraft = useCan('core', 'manage_own_accreditation_draft');
   const { getById, submitCase, loading } = useAccreditationCases();
   const { rows: aliases } = useVendorAliases();
   const { success, error } = useToast();
   const kase = getById(id);
   const isVendor = profile?.kind === 'vendor';
-  const readOnly = !isVendor || kase?.status === 'approved';
+  const readOnly = !isVendor || !canManageDraft || kase?.status === 'approved';
   const [application, setApplication] = useState<VendorApplicationSnapshot | null>(null);
   const [signature, setSignature] = useState<SignaturePayload | null>(null);
   const [busy, setBusy] = useState(false);
@@ -139,8 +140,9 @@ export function VendorApplicationPage() {
     return createVendorApplicationDraftRepository({
       mode,
       client: supabaseClient as unknown as LegalDraftClient | null,
+      canManageDraft,
     });
-  }, [mode, supabaseClient]);
+  }, [canManageDraft, mode, supabaseClient]);
 
   useEffect(() => {
     if (!kase || !repository) return;

@@ -67,10 +67,12 @@ describe('vendor application draft repository', () => {
 
   it('saves with optimistic versioning through the guarded RPC', async () => {
     const live = liveClient();
-    const repository = createVendorApplicationDraftRepository({
+    const options = {
       mode: 'supabase',
       client: live.client,
-    });
+      canManageDraft: true,
+    } as const;
+    const repository = createVendorApplicationDraftRepository(options);
 
     await expect(repository.save('case-1', application, 2, 'save-1')).resolves.toMatchObject({
       version: 3,
@@ -88,10 +90,12 @@ describe('vendor application draft repository', () => {
 
   it('discards a Supabase draft through a governed command', async () => {
     const live = liveClient();
-    const repository = createVendorApplicationDraftRepository({
+    const options = {
       mode: 'supabase',
       client: live.client,
-    });
+      canManageDraft: true,
+    } as const;
+    const repository = createVendorApplicationDraftRepository(options);
 
     await repository.discard('case-1', 3);
 
@@ -100,16 +104,36 @@ describe('vendor application draft repository', () => {
     });
   });
 
+  it('fails closed before a live draft mutation when authority is absent', async () => {
+    const live = liveClient();
+    const options = {
+      mode: 'supabase',
+      client: live.client,
+      canManageDraft: false,
+    } as const;
+    const repository = createVendorApplicationDraftRepository(options);
+
+    await expect(repository.save('case-1', application, 2, 'save-1')).rejects.toThrow(
+      'Accreditation draft access required',
+    );
+    await expect(repository.discard('case-1', 2)).rejects.toThrow(
+      'Accreditation draft access required',
+    );
+    expect(live.rpc).not.toHaveBeenCalled();
+  });
+
   it('keeps memory-mode drafts local and removable', async () => {
     const storage = {
       getItem: vi.fn(() => '{}'),
       setItem: vi.fn(),
       removeItem: vi.fn(),
     };
-    const repository = createVendorApplicationDraftRepository({
+    const options = {
       mode: 'memory',
       storage,
-    });
+      canManageDraft: true,
+    } as const;
+    const repository = createVendorApplicationDraftRepository(options);
 
     await repository.save('case-1', application, 0, 'ignored');
     expect(storage.setItem).toHaveBeenCalledOnce();

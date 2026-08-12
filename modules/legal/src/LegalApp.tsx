@@ -8,8 +8,7 @@ import {
   Routes,
   useLocation,
 } from "react-router-dom";
-import { useSession } from "@intra/auth";
-import { can } from "@intra/rbac";
+import { useCan, useSession } from "@intra/auth";
 import {
   ContextualHelpLink,
   SignInPrompt,
@@ -54,8 +53,7 @@ function ScrollToTopOnRouteChange() {
 
 export function LegalApp({ basename = "/legal" }: LegalAppProps) {
   useNormalizeBasenamePath(basename);
-  const { userRoles, profile, loading, signOut, mode, supabaseClient } =
-    useSession();
+  const { profile, loading, signOut, mode, supabaseClient } = useSession();
   const isVendorSurface = basename.startsWith("/vendor");
   const [vendorInviteSearch, setVendorInviteSearch] = useState<string | null>(
     null,
@@ -64,10 +62,15 @@ export function LegalApp({ basename = "/legal" }: LegalAppProps) {
     setVendorInviteSearch(isVendorSurface ? window.location.search : "");
   }, [isVendorSurface]);
   const isVendor = isVendorSurface && profile?.kind === "vendor";
-  const hasInternalAccess = can(userRoles, "legal", "view_dashboard");
+  const hasInternalAccess = useCan("legal", "view_dashboard");
+  const hasVendorReadAccess = useCan("core", "view_own_accreditation");
+  const canManageVendorDraft = useCan(
+    "core",
+    "manage_own_accreditation_draft",
+  );
+  const canInviteVendor = useCan("legal", "manage_checklist");
   // External vendor tier lives in core (reconciled 2026-07-05, ADR-002 #3).
-  const hasVendorAccess =
-    isVendorSurface && can(userRoles, "core", "view_own_accreditation");
+  const hasVendorAccess = isVendorSurface && hasVendorReadAccess;
   const canUseVendorSurface = isVendor && hasVendorAccess;
   if (loading) {
     const loadingState = (
@@ -166,7 +169,13 @@ export function LegalApp({ basename = "/legal" }: LegalAppProps) {
       />
       <Route
         path={LEGAL_ROUTE_BY_ID.application.path}
-        element={<VendorApplicationPage />}
+        element={
+          isVendor && !canManageVendorDraft ? (
+            <VendorDraftAccessDenied />
+          ) : (
+            <VendorApplicationPage />
+          )
+        }
       />
       <Route
         path={LEGAL_ROUTE_BY_ID["sign-instrument"].path}
@@ -195,7 +204,7 @@ export function LegalApp({ basename = "/legal" }: LegalAppProps) {
           onSignOut={signOut}
         />
       ) : (
-        <LegalTabs canInvite={can(userRoles, "legal", "manage_checklist")} />
+        <LegalTabs canInvite={canInviteVendor} />
       )}
       <ScrollToTopOnRouteChange />
       {isVendor ? (
@@ -206,6 +215,25 @@ export function LegalApp({ basename = "/legal" }: LegalAppProps) {
         <div>{routes}</div>
       )}
     </BrowserRouter>
+  );
+}
+
+function VendorDraftAccessDenied() {
+  return (
+    <div role="alert" className="grid min-h-[50vh] place-items-center p-6 text-center">
+      <div className="max-w-sm space-y-3">
+        <h1 className="text-lg font-bold text-ink">
+          Accreditation draft access required
+        </h1>
+        <p className="text-sm text-muted">
+          Your vendor account can view this case, but it cannot edit the
+          accreditation draft.
+        </p>
+        <a href="/vendor" className="btn-primary inline-flex min-h-11 items-center justify-center">
+          Back to vendor cases
+        </a>
+      </div>
+    </div>
   );
 }
 

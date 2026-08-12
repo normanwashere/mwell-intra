@@ -80,6 +80,7 @@ export function createVendorApplicationDraftRepository(options: {
   mode: 'memory' | 'supabase';
   client?: LegalDraftClient | null;
   storage?: DraftStorage;
+  canManageDraft?: boolean;
 }): VendorApplicationDraftRepository {
   const storage = options.storage ?? browserStorage();
   const client = options.client;
@@ -87,6 +88,12 @@ export function createVendorApplicationDraftRepository(options: {
   if (options.mode === 'supabase' && !client) {
     throw new Error('The Legal draft service is not configured.');
   }
+
+  const assertCanManageDraft = () => {
+    if (options.canManageDraft !== true) {
+      throw new Error('Accreditation draft access required.');
+    }
+  };
 
   return {
     async load(caseId) {
@@ -108,6 +115,7 @@ export function createVendorApplicationDraftRepository(options: {
     },
 
     async save(caseId, application, expectedVersion, idempotencyKey) {
+      assertCanManageDraft();
       if (options.mode === 'memory') {
         if (!storage) throw new Error('Browser storage is unavailable.');
         const rows = readMemory(storage);
@@ -133,6 +141,7 @@ export function createVendorApplicationDraftRepository(options: {
     },
 
     async discard(caseId, expectedVersion) {
+      assertCanManageDraft();
       if (options.mode === 'memory') {
         if (!storage) return;
         const rows = readMemory(storage);
