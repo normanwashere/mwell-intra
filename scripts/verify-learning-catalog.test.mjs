@@ -108,6 +108,7 @@ test("catalog queries expose ACL state and transitive service-role escalation", 
       create schema learning;
       grant usage on schema core, private, learning to authenticated, service_role;
       alter default privileges in schema core grant select on tables to authenticated;
+      alter default privileges grant insert on tables to authenticated;
     `);
     const snapshot = await catalogModule.loadLearningCatalogSnapshot(database);
     assert.deepEqual(snapshot.schemas, [
@@ -130,6 +131,21 @@ test("catalog queries expose ACL state and transitive service-role escalation", 
           entry.grantee === "authenticated" &&
           entry.privilege === "SELECT",
       ),
+    );
+    assert.ok(
+      snapshot.defaultPrivileges.some(
+        (entry) =>
+          entry.schema === "<global>" &&
+          entry.owner === "postgres" &&
+          entry.objectType === "TABLE" &&
+          entry.grantee === "authenticated" &&
+          entry.privilege === "INSERT",
+      ),
+    );
+    assert.match(
+      catalogModule.verifyLearningCatalogSnapshot(snapshot).join("\n"),
+      /default privilege/i,
+      "an unsafe global default ACL must fail the exact applied catalog",
     );
     assert.ok(
       snapshot.dangerousMemberships.some(

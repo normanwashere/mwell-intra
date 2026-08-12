@@ -921,7 +921,8 @@ export async function loadLearningCatalogSnapshot(client) {
     `),
     client.query(`
       select owner.rolname as owner,
-             namespace.nspname as schema,
+             case when defaults.defaclnamespace = 0 then '<global>'
+                  else namespace.nspname end as schema,
              case defaults.defaclobjtype
                when 'r' then 'TABLE'
                when 'S' then 'SEQUENCE'
@@ -935,10 +936,13 @@ export async function loadLearningCatalogSnapshot(client) {
              privilege.is_grantable as grantable
       from pg_catalog.pg_default_acl defaults
       join pg_catalog.pg_roles owner on owner.oid = defaults.defaclrole
-      join pg_catalog.pg_namespace namespace on namespace.oid = defaults.defaclnamespace
+      left join pg_catalog.pg_namespace namespace on namespace.oid = defaults.defaclnamespace
       cross join lateral pg_catalog.aclexplode(defaults.defaclacl) privilege
       left join pg_catalog.pg_roles grantee on grantee.oid = privilege.grantee
-      where namespace.nspname in ('core', 'private', 'learning')
+      where (
+          (defaults.defaclnamespace = 0 and owner.rolname = 'postgres')
+          or namespace.nspname in ('core', 'private', 'learning')
+        )
         and privilege.grantee <> defaults.defaclrole
       order by 1, 2, 3, 4, 5
     `),
