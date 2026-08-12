@@ -6,12 +6,7 @@ export interface LearningCapability<M extends Module = Module> {
 }
 
 export type RequirementKind =
-  | "orientation"
-  | "policy"
-  | "tour"
-  | "scenario"
-  | "assessment"
-  | "attestation";
+  "orientation" | "policy" | "tour" | "scenario" | "assessment" | "attestation";
 
 export interface RequirementDefinition {
   id: string;
@@ -81,16 +76,37 @@ export interface RequirementProgress {
 
 export interface SimulationCheckpointInput {
   assignmentRequirementId: string;
+  attemptId: string;
   simulationId: string;
   checkpointId: string;
-  completedAt: string;
+  outcomeId?: string;
+  idempotencyKey?: string;
 }
 
 export interface AssessmentSubmission {
   assignmentRequirementId: string;
-  requirementVersionId: string;
+  attemptId: string;
   answers: readonly { questionId: string; answerId: string }[];
-  submittedAt: string;
+  idempotencyKey?: string;
+}
+
+export interface StartRequirementInput {
+  assignmentRequirementId: string;
+  idempotencyKey?: string;
+}
+
+export interface PolicyAcknowledgmentInput {
+  assignmentRequirementId: string;
+  controlledDocumentId: string;
+  controlledDocumentVersion: string;
+  evidenceHash: string;
+  idempotencyKey?: string;
+}
+
+export interface SupportRequestInput {
+  assignmentRequirementId: string;
+  reason: string;
+  idempotencyKey?: string;
 }
 
 export interface AssessmentResult {
@@ -122,7 +138,8 @@ export interface Certification {
 
 export interface LockedCapability {
   capability: LearningCapability;
-  reason: "missing_certification" | "expired_certification" | "retraining_required";
+  reason:
+    "missing_certification" | "expired_certification" | "retraining_required";
   requirementIds: readonly string[];
   canRequestEmergencyException: boolean;
 }

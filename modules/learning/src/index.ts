@@ -45,6 +45,9 @@ export type {
   RequirementProgress,
   RequirementProgressState,
   RoleCurriculumDefinition,
+  PolicyAcknowledgmentInput,
+  StartRequirementInput,
+  SupportRequestInput,
   SimulationCheckpointInput,
   SimulationDefinition,
 } from "./types";

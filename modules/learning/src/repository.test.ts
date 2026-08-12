@@ -6,7 +6,6 @@ import {
 } from "./repository";
 import * as publicApi from "./index";
 import type {
-  AssessmentResult,
   AssessmentSubmission,
   Certification,
   EffectiveCurriculum,
@@ -37,9 +36,7 @@ const assessment: RequirementDefinition = {
   title: "Assessment",
   mandatory: true,
   prerequisiteIds: [orientation.id],
-  capabilityOutcomes: [
-    { module: "warehouse", capability: "receive_stock" },
-  ],
+  capabilityOutcomes: [{ module: "warehouse", capability: "receive_stock" }],
   passingScore: 80,
   maxAttempts: 2,
 };
@@ -127,6 +124,18 @@ const snapshotWithOrientationPassed = (): LearningSnapshot => {
   };
 };
 
+const snapshotWithAssessmentPassed = (): LearningSnapshot => {
+  const value = snapshot();
+  return {
+    ...value,
+    progress: value.progress.map((item) =>
+      item.assignmentRequirementId === "ar-assessment"
+        ? { ...item, state: "passed", attemptCount: 1, completedAt: now }
+        : item,
+    ),
+  };
+};
+
 describe("SupabaseLearningRepository", () => {
   it("exports both repository implementations from the package API", () => {
     expect(publicApi.SupabaseLearningRepository).toBe(
@@ -142,86 +151,178 @@ describe("SupabaseLearningRepository", () => {
         return { data: null, error: null };
       }
       if (name === "my_learning_snapshot" || name === "resolve_assignments") {
-        return { data: snapshot(), error: null };
+        return {
+          data:
+            name === "my_learning_snapshot"
+              ? snapshotWithAssessmentPassed()
+              : snapshot(),
+          error: null,
+        };
       }
       if (name === "submit_assessment") {
         return {
           data: {
-            assignmentRequirementId: "ar-assessment",
-            passed: true,
+            assignment_requirement_id: "ar-assessment",
+            status: "passed",
             score: 100,
-            attemptNumber: 1,
-            state: "passed",
-            completedAt: now,
-          } satisfies AssessmentResult,
+            attempt_number: 1,
+            completed_at: now,
+          },
           error: null,
         };
       }
-      return {
-        data: progress("ar-simulation", simulation.id, "in_progress"),
-        error: null,
-      };
+      return { data: {}, error: null };
     });
     const schema = vi.fn(() => ({ rpc }));
     const repository = new SupabaseLearningRepository({ schema });
     const submission: AssessmentSubmission = {
       assignmentRequirementId: "ar-assessment",
-      requirementVersionId: assessment.id,
+      attemptId: "attempt-assessment",
       answers: [{ questionId: "q1", answerId: "a1" }],
-      submittedAt: now,
+      idempotencyKey: "00000000-0000-4000-8000-000000000003",
     };
 
     await repository.snapshot();
     await repository.resolveAssignments();
-    await repository.startRequirement(simulation.id);
+    await repository.startRequirement({
+      assignmentRequirementId: "ar-simulation",
+      idempotencyKey: "00000000-0000-4000-8000-000000000001",
+    });
     await repository.checkpoint({
       assignmentRequirementId: "ar-simulation",
+      attemptId: "attempt-simulation",
       simulationId: "receiving-simulation-v1",
       checkpointId: "delivery-recorded",
-      completedAt: now,
+      idempotencyKey: "00000000-0000-4000-8000-000000000002",
     });
-    await repository.submitAssessment(submission);
-    await repository.acknowledgePolicy(policy.id, "sha256:evidence");
+    expect(await repository.submitAssessment(submission)).toMatchObject({
+      assignmentRequirementId: "ar-assessment",
+      passed: true,
+      state: "passed",
+      attemptNumber: 1,
+    });
+    await repository.acknowledgePolicy({
+      assignmentRequirementId: "ar-policy",
+      controlledDocumentId: "POL-001",
+      controlledDocumentVersion: "1.0",
+      evidenceHash:
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      idempotencyKey: "00000000-0000-4000-8000-000000000004",
+    });
     await repository.refreshCertifications();
-    await repository.requestSupport("ar-assessment", "Need coaching");
+    await repository.requestSupport({
+      assignmentRequirementId: "ar-assessment",
+      reason: "Need coaching",
+      idempotencyKey: "00000000-0000-4000-8000-000000000005",
+    });
 
     expect(schema).toHaveBeenCalledTimes(1);
     expect(schema).toHaveBeenCalledWith("learning");
     expect(rpc.mock.calls).toEqual([
       ["my_learning_snapshot"],
       ["resolve_assignments"],
-      ["start_requirement", { requirement_version_id: simulation.id }],
+      [
+        "start_requirement",
+        {
+          payload: {
+            assignment_requirement_id: "ar-simulation",
+            idempotency_key: "00000000-0000-4000-8000-000000000001",
+          },
+        },
+      ],
+      ["my_learning_snapshot"],
       [
         "record_simulation_checkpoint",
         {
-          assignment_requirement_id: "ar-simulation",
-          simulation_id: "receiving-simulation-v1",
-          checkpoint_id: "delivery-recorded",
-          completed_at: now,
+          payload: {
+            assignment_requirement_id: "ar-simulation",
+            attempt_id: "attempt-simulation",
+            checkpoint_id: "delivery-recorded",
+            idempotency_key: "00000000-0000-4000-8000-000000000002",
+          },
         },
       ],
+      ["my_learning_snapshot"],
       [
         "submit_assessment",
         {
-          assignment_requirement_id: "ar-assessment",
-          requirement_version_id: assessment.id,
-          answers: [{ question_id: "q1", answer_id: "a1" }],
-          submitted_at: now,
+          payload: {
+            assignment_requirement_id: "ar-assessment",
+            attempt_id: "attempt-assessment",
+            answers: { q1: "a1" },
+            idempotency_key: "00000000-0000-4000-8000-000000000003",
+          },
         },
       ],
+      ["my_learning_snapshot"],
       [
         "acknowledge_policy",
-        { requirement_version_id: policy.id, evidence_hash: "sha256:evidence" },
+        {
+          payload: {
+            assignment_requirement_id: "ar-policy",
+            controlled_document_id: "POL-001",
+            controlled_document_version: "1.0",
+            evidence_hash:
+              "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            idempotency_key: "00000000-0000-4000-8000-000000000004",
+          },
+        },
       ],
       ["evaluate_certifications"],
       [
         "request_support",
         {
-          assignment_requirement_id: "ar-assessment",
-          reason: "Need coaching",
+          payload: {
+            assignment_requirement_id: "ar-assessment",
+            reason: "Need coaching",
+            idempotency_key: "00000000-0000-4000-8000-000000000005",
+          },
         },
       ],
     ]);
+  });
+
+  it("fails closed when the learning service returns invalid domain values", async () => {
+    const invalidResponses = [
+      {
+        ...snapshot(),
+        progress: [{ ...snapshot().progress[0]!, state: "complete" }],
+      },
+      {
+        ...snapshot(),
+        curricula: [
+          {
+            ...effectiveCurriculum,
+            requirements: [
+              {
+                ...orientation,
+                capabilityOutcomes: [
+                  { module: "unknown", capability: "receive_stock" },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        ...snapshot(),
+        curricula: [
+          {
+            ...effectiveCurriculum,
+            requirements: [{ ...orientation, mandatory: "yes" }],
+          },
+        ],
+      },
+    ];
+
+    for (const response of invalidResponses) {
+      const repository = new SupabaseLearningRepository({
+        schema: () => ({
+          rpc: async () => ({ data: response, error: null }),
+        }),
+      });
+      await expect(repository.snapshot()).rejects.toThrow(/invalid/i);
+    }
   });
 
   it("rejects forged authoritative learner inputs before making an RPC", async () => {
@@ -233,9 +334,8 @@ describe("SupabaseLearningRepository", () => {
     await expect(
       repository.submitAssessment({
         assignmentRequirementId: "ar-assessment",
-        requirementVersionId: assessment.id,
+        attemptId: "attempt-assessment",
         answers: [{ questionId: "q1", answerId: "a1" }],
-        submittedAt: now,
         score: 100,
         passed: true,
         answerKey: "secret",
@@ -252,9 +352,12 @@ describe("SupabaseLearningRepository", () => {
       }),
     });
 
-    await expect(repository.startRequirement(assessment.id)).rejects.toThrow(
-      "denied",
-    );
+    await expect(
+      repository.startRequirement({
+        assignmentRequirementId: "ar-assessment",
+        idempotencyKey: "00000000-0000-4000-8000-000000000006",
+      }),
+    ).rejects.toThrow("denied");
   });
 });
 
@@ -277,7 +380,9 @@ describe("MemoryLearningRepository", () => {
       simulations: [simulationDefinition],
     });
     await expect(
-      blockedRepository.startRequirement(simulation.id),
+      blockedRepository.startRequirement({
+        assignmentRequirementId: "ar-simulation",
+      }),
     ).rejects.toThrow("prerequisite");
 
     const repository = new MemoryLearningRepository({
@@ -287,21 +392,23 @@ describe("MemoryLearningRepository", () => {
       simulations: [simulationDefinition],
     });
 
-    await repository.startRequirement(simulation.id);
+    await repository.startRequirement({
+      assignmentRequirementId: "ar-simulation",
+    });
     await expect(
       repository.checkpoint({
         assignmentRequirementId: "ar-simulation",
+        attemptId: "attempt-simulation",
         simulationId: "wrong-simulation",
         checkpointId: "delivery-recorded",
-        completedAt: now,
       }),
     ).rejects.toThrow("simulation");
 
     const updated = await repository.checkpoint({
       assignmentRequirementId: "ar-simulation",
+      attemptId: "attempt-simulation",
       simulationId: "receiving-simulation-v1",
       checkpointId: "delivery-recorded",
-      completedAt: now,
     });
     expect(updated.state).toBe("passed");
     expect(updated.completedAt).toBe(now);
@@ -314,23 +421,40 @@ describe("MemoryLearningRepository", () => {
       now: () => now,
     });
 
-    await expect(repository.acknowledgePolicy(policy.id, " ")).rejects.toThrow(
-      "evidence hash",
-    );
-    await repository.acknowledgePolicy(policy.id, "sha256:policy");
+    await expect(
+      repository.acknowledgePolicy({
+        assignmentRequirementId: "ar-policy",
+        controlledDocumentId: "POL-001",
+        controlledDocumentVersion: "1.0",
+        evidenceHash: " ",
+      }),
+    ).rejects.toThrow("evidence hash");
+    await repository.acknowledgePolicy({
+      assignmentRequirementId: "ar-policy",
+      controlledDocumentId: "POL-001",
+      controlledDocumentVersion: "1.0",
+      evidenceHash:
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    });
     expect(
       (await repository.snapshot()).progress.find(
         (item) => item.requirementId === policy.id,
       )?.state,
     ).toBe("passed");
-    await repository.requestSupport("ar-assessment", "Need coaching");
+    await repository.requestSupport({
+      assignmentRequirementId: "ar-assessment",
+      reason: "Need coaching",
+    });
     expect(
       (await repository.snapshot()).progress.find(
         (item) => item.assignmentRequirementId === "ar-assessment",
       )?.state,
     ).toBe("needs_support");
     await expect(
-      repository.requestSupport("ar-policy", "Already complete"),
+      repository.requestSupport({
+        assignmentRequirementId: "ar-policy",
+        reason: "Already complete",
+      }),
     ).rejects.toThrow("Completed");
   });
 
@@ -341,24 +465,27 @@ describe("MemoryLearningRepository", () => {
       now: () => now,
       assess: () => ({ score: 40 }),
     });
-    await repository.startRequirement(assessment.id);
+    await repository.startRequirement({
+      assignmentRequirementId: "ar-assessment",
+    });
     const submission: AssessmentSubmission = {
       assignmentRequirementId: "ar-assessment",
-      requirementVersionId: assessment.id,
+      attemptId: "attempt-assessment",
       answers: [{ questionId: "q1", answerId: "a1" }],
-      submittedAt: now,
     };
 
     expect((await repository.submitAssessment(submission)).state).toBe(
       "failed_retryable",
     );
-    await repository.startRequirement(assessment.id);
+    await repository.startRequirement({
+      assignmentRequirementId: "ar-assessment",
+    });
     expect((await repository.submitAssessment(submission)).state).toBe(
       "needs_support",
     );
-    await expect(repository.startRequirement(assessment.id)).rejects.toThrow(
-      "needs support",
-    );
+    await expect(
+      repository.startRequirement({ assignmentRequirementId: "ar-assessment" }),
+    ).rejects.toThrow("needs support");
   });
 
   it("updates only through repository transitions and returns defensive snapshots", async () => {
@@ -384,7 +511,9 @@ describe("MemoryLearningRepository", () => {
 
     const first = await repository.snapshot();
     (first.progress as RequirementProgress[])[0]!.state = "passed";
-    expect((await repository.snapshot()).progress[0]?.state).toBe("not_started");
+    expect((await repository.snapshot()).progress[0]?.state).toBe(
+      "not_started",
+    );
     expect(await repository.refreshCertifications()).toEqual([issued]);
     expect((await repository.snapshot()).certifications).toEqual([issued]);
   });

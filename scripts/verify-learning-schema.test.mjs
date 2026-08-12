@@ -14,6 +14,8 @@ const ROLE_LIFECYCLE_NAME =
 const ASSIGNMENT_LINEAGE_NAME =
   "20260812150000_learning_assignment_lineage_remediation.sql";
 const SERVICES_NAME = "20260812160000_learning_services.sql";
+const SERVICE_CONTRACT_ALIGNMENT_NAME =
+  "20260812170000_learning_service_contract_alignment.sql";
 const OLD_FOUNDATION_NAME = "20260812090000_learning_foundation.sql";
 const migration = fileURLToPath(
   new URL(`../supabase/migrations/${FOUNDATION_NAME}`, import.meta.url),
@@ -39,6 +41,17 @@ const servicesMigration = fileURLToPath(
 );
 const servicesSql = existsSync(servicesMigration)
   ? readFileSync(servicesMigration, "utf8")
+  : "";
+const serviceContractAlignmentMigration = fileURLToPath(
+  new URL(
+    `../supabase/migrations/${SERVICE_CONTRACT_ALIGNMENT_NAME}`,
+    import.meta.url,
+  ),
+);
+const serviceContractAlignmentSql = existsSync(
+  serviceContractAlignmentMigration,
+)
+  ? readFileSync(serviceContractAlignmentMigration, "utf8")
   : "";
 const migrationDirectory = fileURLToPath(
   new URL("../supabase/migrations/", import.meta.url),
@@ -110,6 +123,16 @@ function errorsForServices(source) {
   ).join("\n");
 }
 
+function errorsForServiceContractAlignment(source) {
+  return verifyLearningSchema(
+    repositoryMigrations.map((migrationEntry) =>
+      migrationEntry.name === SERVICE_CONTRACT_ALIGNMENT_NAME
+        ? { ...migrationEntry, sql: source }
+        : migrationEntry,
+    ),
+  ).join("\n");
+}
+
 function orderedErrors(laterSql) {
   return verifyLearningSchema([
     ...repositoryMigrations,
@@ -160,6 +183,44 @@ test("defines the monotonic Task 3 learning service boundary", () => {
     );
   }
   assert.deepEqual(verifyLearningSchema(repositoryMigrations), []);
+});
+
+test("pins the forward snapshot alignment and rejects later replacements", () => {
+  assert.equal(existsSync(serviceContractAlignmentMigration), true);
+  for (const key of [
+    "curricula",
+    "progress",
+    "certifications",
+    "lockedCapabilities",
+    "refreshedAt",
+  ]) {
+    assert.match(serviceContractAlignmentSql, new RegExp(`'${key}'`, "i"));
+  }
+  assert.match(
+    serviceContractAlignmentSql,
+    /as requirement_evidence\s*\(\s*requirement_version_id\s*\)/i,
+  );
+
+  const weakened = replaceRequired(
+    serviceContractAlignmentSql,
+    /'lockedCapabilities',\s*v_locked_capabilities/i,
+    "'lockedCapabilities', '[]'::jsonb",
+  );
+  assert.match(
+    errorsForServiceContractAlignment(weakened),
+    /exact guarded function body drifted.*my_learning_snapshot/i,
+  );
+
+  assert.match(
+    verifyLearningSchema([
+      ...repositoryMigrations,
+      {
+        name: "20260812180000_unreviewed_snapshot_replacement.sql",
+        sql: serviceContractAlignmentSql,
+      },
+    ]).join("\n"),
+    /replacement or overload.*my_learning_snapshot.*default-denied/i,
+  );
 });
 
 test("rejects client-authored learning authority and weakened service guards", () => {

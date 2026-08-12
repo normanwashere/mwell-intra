@@ -10,6 +10,8 @@ const ROLE_LIFECYCLE_MIGRATION_NAME =
 const ASSIGNMENT_LINEAGE_MIGRATION_NAME =
   "20260812150000_learning_assignment_lineage_remediation.sql";
 export const SERVICES_MIGRATION_NAME = "20260812160000_learning_services.sql";
+export const SERVICE_CONTRACT_ALIGNMENT_MIGRATION_NAME =
+  "20260812170000_learning_service_contract_alignment.sql";
 export const PRIVATE_ANSWER_KEY_TABLE =
   "private.learning_assessment_answer_keys";
 export const LEARNING_SERVICE_FUNCTIONS = Object.freeze([
@@ -591,7 +593,7 @@ export const EXPECTED_FUNCTION_BODY_SHA256 = Object.freeze({
   "learning.guard_curriculum_composition":
     "0aea39b911deac9b688cd3a58270a3b9135f23dd4921338911f1864b15c10d3c",
   "learning.my_learning_snapshot":
-    "fa2e9cb1d094d82a8059a80ac19c7b94f4e322eab2d733e754e361058f03b678",
+    "aafde6bd9d83ec4646218734ceae6be47eb211bf8afb12351e1dd4cdf2e791a5",
   "learning.resolve_assignments":
     "2729f8eca28b7cc7d078141a0edc8f3dd340fd7f5c1fe9521a210bebb45389c2",
   "learning.start_requirement":
@@ -1326,6 +1328,8 @@ function processStatement(state, statement, migrationName) {
   const isAssignmentLineage =
     migrationName === ASSIGNMENT_LINEAGE_MIGRATION_NAME;
   const isLearningServices = migrationName === SERVICES_MIGRATION_NAME;
+  const isServiceContractAlignment =
+    migrationName === SERVICE_CONTRACT_ALIGNMENT_MIGRATION_NAME;
   let match;
 
   if (normalized === "create schema if not exists learning") {
@@ -2004,7 +2008,13 @@ function processStatement(state, statement, migrationName) {
       );
       return;
     }
-    if (state.functions.has(metadata.qualifiedName)) {
+    if (
+      state.functions.has(metadata.qualifiedName) &&
+      !(
+        isServiceContractAlignment &&
+        metadata.qualifiedName === "learning.my_learning_snapshot"
+      )
+    ) {
       state.errors.push(
         `${migrationName}: replacement or overload of modeled function ${metadata.qualifiedName} is default-denied.`,
       );
@@ -2047,7 +2057,7 @@ function processStatement(state, statement, migrationName) {
       ? splitTopLevel(match[2]).map(normalizeSql)
       : [];
     if (
-      !isLearningServices ||
+      (!isLearningServices && !isServiceContractAlignment) ||
       !LEARNING_SERVICE_FUNCTIONS.includes(match[1]) ||
       match[3] !== "postgres" ||
       !functionEntry ||
