@@ -1817,7 +1817,7 @@ create trigger learning_curriculum_requirements_read_committed_guard
 before insert or update or delete on learning.curriculum_requirements
 for each row execute function learning.guard_authoritative_write_isolation();
 
-create trigger learning_curriculum_requirement_prerequisites_read_committed_guard
+create trigger learning_curr_req_prereq_read_committed_guard
 before insert or update or delete on learning.curriculum_requirement_prerequisites
 for each row execute function learning.guard_authoritative_write_isolation();
 

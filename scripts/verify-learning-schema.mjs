@@ -1,9 +1,152 @@
+import { createHash } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { basename, resolve } from "node:path";
 
 export const FOUNDATION_MIGRATION_NAME =
   "20260812130000_learning_foundation.sql";
+const ROLE_LIFECYCLE_MIGRATION_NAME =
+  "20260812140000_learning_role_authority_lifecycle.sql";
+
+const PINNED_BASELINE_MIGRATION_NAMES = Object.freeze(
+  `
+20260706090000_core_schema_identity.sql
+20260706090100_core_rbac.sql
+20260706090200_core_vendors.sql
+20260706090300_core_documents.sql
+20260706090400_core_approvals.sql
+20260706090500_core_activity_log.sql
+20260706090600_core_notifications.sql
+20260706090700_core_rls_policies.sql
+20260706090800_core_rpcs.sql
+20260706090900_core_expose_postgrest.sql
+20260706091000_core_seed_rbac.sql
+20260706092000_warehouse_schema.sql
+20260706092100_warehouse_step2_deltas.sql
+20260706092200_warehouse_rls.sql
+20260706092300_warehouse_evidence_storage.sql
+20260706092400_warehouse_rpcs.sql
+20260706092500_warehouse_demo_auth_users.sql
+20260706100000_reconcile_provisional_rbac.sql
+20260706110000_procurement_schema.sql
+20260706120000_legal_schema.sql
+20260706130000_cross_module_wiring.sql
+20260706140000_scheduled_jobs.sql
+20260706150000_vendor_tier_reconcile.sql
+20260706160000_rate_limits_and_uploads.sql
+20260706170000_warehouse_rls_tighten.sql
+20260706180000_finance_keys.sql
+20260706190000_procurement_policy_alignment.sql
+20260707090000_document_storage_buckets.sql
+20260707100000_procurement_approval_rpcs.sql
+20260707110000_warehouse_actor_identity.sql
+20260707120000_retention_enforcement.sql
+20260707130000_rbac_ladder_grants.sql
+20260708140000_lockdown_legacy_public_procurement_requests.sql
+20260708141000_grant_current_app_role_for_legacy_policies.sql
+20260709152000_live_intra_cutover_contract.sql
+20260709161000_live_intra_followup_action_rpcs.sql
+20260709162500_lockdown_legacy_public_procurement_request_grants.sql
+20260709173500_production_readiness_indexes_and_legacy_rbac_policy.sql
+20260710040105_repair_procurement_submission_contract.sql
+20260710041319_govern_procurement_attachments.sql
+20260710041816_govern_vendor_invitation_delivery.sql
+20260710043410_govern_warehouse_csv_exports.sql
+20260710044627_harden_finance_read_model.sql
+20260710093000_p0_p1_production_readiness_fixes.sql
+20260710120000_harden_operational_anon_grants.sql
+20260710150000_warehouse_w1_control_schema.sql
+20260710160000_warehouse_w1_quality_and_approval_rpcs.sql
+20260710170000_warehouse_w1_imports_po_and_reporting.sql
+20260710180000_govern_cycle_count_draft_creation.sql
+20260710210000_policy_aligned_legal_procurement.sql
+20260711090000_department_doa_administration.sql
+20260711100000_rls_advisor_hardening.sql
+20260711110000_policy_rpc_search_paths.sql
+20260711123000_temporary_department_doa_seed.sql
+20260711150000_allow_admin_legal_doa_read.sql
+20260713170000_current_function_advisor_hardening.sql
+20260713190000_governed_rpc_wrapper_execution.sql
+20260713191000_warehouse_policy_core_capabilities.sql
+20260713192000_storage_evidence_core_capabilities.sql
+20260714133000_intra_role_workspaces.sql
+20260714134500_user_role_claim_sync.sql
+20260714160000_command_log_explicit_client_deny.sql
+20260714175057_core_organization_extensibility.sql
+20260714175318_single_po_receipt_authority.sql
+20260717143000_task3_receipt_authority_forward_convergence.sql
+20260718003000_receipt_reconciliation_rls.sql
+20260718004000_current_rls_and_fk_indexes.sql
+20260718005000_expose_intra_postgrest_schemas.sql
+20260718006000_historical_migration_forward_convergence.sql
+20260718150000_fix_stock_approval_projection_uuid_join.sql
+20260718160000_grant_approval_groups_to_service_role.sql
+20260718170000_harden_service_verification_and_digest_resolution.sql
+20260718180000_fix_receipt_quantity_and_service_finance_readback.sql
+20260718190000_restore_governed_receive_stock.sql
+20260718191000_restore_warehouse_actor_helpers.sql
+20260718192000_restore_exception_pack_audit_timestamp.sql
+20260718193000_harden_receive_stock_server_defaults.sql
+20260718194000_restore_warehouse_evidence_registration.sql
+20260718195000_align_evidence_document_entity_identity.sql
+20260718196000_harden_cycle_count_server_defaults.sql
+20260718197000_converge_warehouse_rbac_gates.sql
+20260718198000_converge_stock_change_governance.sql
+20260718199000_align_stock_approval_entity_identity.sql
+20260718200000_serialize_quality_holds_with_reservations.sql
+20260718201000_refresh_atp_inside_product_lock.sql
+20260718202000_block_issue_from_held_stock_identity.sql
+20260721200000_cross_department_wms_persistence.sql
+20260721210000_cross_department_wms_advisor_remediation.sql
+20260722114000_govern_admin_role_changes_and_seed_doa.sql
+20260722120000_legal_vendor_lifecycle_hardening.sql
+20260722120500_procurement_event_workflow_remediation.sql
+20260722121000_warehouse_procurement_lineage_and_read_scope.sql
+20260722121500_product_readiness_and_pricing_governance.sql
+20260722124731_insights_correctness_and_provenance.sql
+20260722150000_advisor_intent_and_private_function_hardening.sql
+20260722151000_index_new_governance_foreign_keys.sql
+20260722170000_restore_receipt_status_projection_access.sql
+20260722173000_finish_governance_performance_hardening.sql
+20260722174500_restore_governed_warehouse_wrapper_execution.sql
+20260722180000_vendor_lifecycle_authority_remediation.sql
+20260722183000_vendor_lifecycle_advisor_hardening.sql
+20260722200000_warehouse_procurement_handoff_presentation.sql
+20260723010000_insights_projection_read_only.sql
+20260723020000_product_certification_cleanup.sql
+20260723031500_insights_warehouse_source_route.sql
+20260723040000_my_work_quality_route.sql
+20260804150000_inventory_release_lifecycle_remediation.sql
+20260804153000_inventory_release_lifecycle_index_hardening.sql
+20260804154500_inventory_release_rls_performance.sql
+20260804170000_procurement_to_payment_completion.sql
+20260804171000_acceptance_value_derivation.sql
+20260804172000_procurement_payment_fk_indexes.sql
+20260804173000_insufficient_bid_exception_workflow.sql
+20260804174000_procurement_cost_center_validation.sql
+20260804175000_procurement_requester_po_visibility.sql
+20260804180000_procurement_goods_receiving_boundary.sql
+20260804200000_operational_flow_completion.sql
+20260804201000_fix_replenishment_procurement_handoff.sql
+20260804202000_index_operational_flow_foreign_keys.sql
+20260804203000_knowledge_feedback.sql
+20260806090000_receiving_boundary_replay_order.sql
+20260806093000_user_scoped_warehouse_import_staging.sql
+20260806094500_knowledge_feedback_rls_initplan.sql
+20260806100000_vendor_readiness_array_append.sql
+20260806101500_repair_commitment_readiness_ownership.sql
+20260806103000_drop_reconciliation_recovery_snapshot.sql
+20260810142147_restore_doa_assignment_audit_timestamp.sql
+20260810155237_block_transfer_of_held_inventory.sql
+20260810155350_procurement_legal_database_authority_remediation.sql
+20260810160000_finance_event_authority_remediation.sql
+20260812120000_vendor_accreditation_draft_rbac.sql
+  `
+    .trim()
+    .split(/\s+/),
+);
+const PINNED_BASELINE_SHA256 =
+  "e705fe63579325ae5167dc1c75fdef410e2102f17d237d65e31136bf880b5e85";
 
 export const REQUIRED_TABLES = Object.freeze([
   "curricula",
@@ -126,14 +269,20 @@ const EXPECTED_POLICIES = new Map([
 
 const REQUIRED_TRIGGERS = Object.freeze({
   ...Object.fromEntries(
-    REQUIRED_TABLES.map((table) => [
-      `learning_${table}_read_committed_guard`,
-      {
-        table: `learning.${table}`,
-        events: "before insert or update or delete",
-        function: "learning.guard_authoritative_write_isolation",
-      },
-    ]),
+    REQUIRED_TABLES.map((table) => {
+      const name =
+        table === "curriculum_requirement_prerequisites"
+          ? "learning_curr_req_prereq_read_committed_guard"
+          : `learning_${table}_read_committed_guard`;
+      return [
+        name,
+        {
+          table: `learning.${table}`,
+          events: "before insert or update or delete",
+          function: "learning.guard_authoritative_write_isolation",
+        },
+      ];
+    }),
   ),
   learning_attempts_lifecycle_guard: {
     table: "learning.attempts",
@@ -169,6 +318,11 @@ const REQUIRED_TRIGGERS = Object.freeze({
     table: "learning.certifications",
     events: "before insert",
     function: "private.validate_certification_issuance",
+  },
+  learning_certifications_lock_role_authority: {
+    table: "learning.certifications",
+    events: "before insert",
+    function: "private.lock_certification_role_authority",
   },
   learning_certifications_lifecycle_guard: {
     table: "learning.certifications",
@@ -215,6 +369,20 @@ const REQUIRED_TRIGGERS = Object.freeze({
     events: "before delete",
     function: "private.revoke_certifications_for_role_assignment",
   },
+  learning_role_deactivation_revoke: {
+    table: "core.roles",
+    events: "after update of is_active",
+    function: "private.revoke_certifications_for_role_authority_loss",
+    constraint: true,
+    deferred: true,
+  },
+  learning_role_capability_removal_revoke: {
+    table: "core.role_capabilities",
+    events: "after delete or update",
+    function: "private.revoke_certifications_for_role_authority_loss",
+    constraint: true,
+    deferred: true,
+  },
 });
 
 const ALLOWED_SECURITY_DEFINERS = new Set([
@@ -226,7 +394,9 @@ const ALLOWED_SECURITY_DEFINERS = new Set([
   "private.validate_curriculum_graph_publication",
   "private.validate_assignment_requirement_waiver",
   "private.validate_certification_issuance",
+  "private.lock_certification_role_authority",
   "private.revoke_certifications_for_role_assignment",
+  "private.revoke_certifications_for_role_authority_loss",
   "private.validate_emergency_exception_issuance",
 ]);
 
@@ -247,6 +417,51 @@ const MODELED_FUNCTIONS = new Set([
   ...Object.values(REQUIRED_TRIGGERS).map((trigger) => trigger.function),
 ]);
 
+const EXPECTED_FUNCTION_BODY_SHA256 = Object.freeze({
+  "private.learning_has_active_profile":
+    "e7dbe840969ff13aab7311d8d69ccfa67111712fdb19eb026465318815c93736",
+  "private.learning_owns_department":
+    "e54ad205024e794bd9a6be8d33453704a3b87f52232677e41aa636cec3c1f232",
+  "private.learning_is_active_employee_platform_admin":
+    "fe11255a9cb0860b5d7726f512e9d8432ea08b783d0e612a3702da58119efe00",
+  "private.assert_learning_read_committed":
+    "701e87936d124ab17432092a2b21e81c056c2a1cc76d351300f241593a2c0956",
+  "private.lock_learning_curriculum_graph":
+    "d73aa7ec65a506ceeda369fdbdc223b34e07cec1788df4045cd63ce3a0908c91",
+  "private.validate_curriculum_graph_publication":
+    "27cbe195b141622a2ee4870a6ab00f3c790076257d1cc4fc66d9ab2c3d06992b",
+  "private.validate_assignment_requirement_waiver":
+    "35738e87fd94279a142944b8e2b811e685bdfc26e9319384fbcb9c42fda12164",
+  "private.validate_certification_issuance":
+    "a5512194464bfaec1e3b7a0a8376a3f14ae02abc9531b8e37a3a0f1d69bb1f54",
+  "private.lock_certification_role_authority":
+    "4cbc6a01858221c42ac3854d11db00e52fcb1355b6224195352b2601ea8ecbd9",
+  "private.revoke_certifications_for_role_assignment":
+    "28832f0ca9ad37097ebc088b66f2aaf3cd0eede660a9236216bb5daeb507a067",
+  "private.revoke_certifications_for_role_authority_loss":
+    "b988f9259cac45781092744e9964a07393296845f62e5dd20f6f26c3a1a64e86",
+  "private.validate_emergency_exception_issuance":
+    "0055e93a905b56fc6d96db9aeb6850f9761da39fa1bd10421917f37c321b1531",
+  "learning.guard_authoritative_write_isolation":
+    "2f58975130b5a9e41bc212084a6ff31f5232c8cd34946ac170b4b3fbe3ca220e",
+  "learning.reject_evidence_mutation":
+    "a4cdda80721ae3aee20bcb47d4075dca860a1224b37bb3beb4c0b31d2a5fe0b5",
+  "learning.guard_attempt_lifecycle":
+    "78c59d7afcfa0a6bea17f65f5ebea16459801819cc45adc8fdcefc51c0498d89",
+  "learning.guard_assignment_lifecycle":
+    "554c1fb8d28e360bc4c38dbab39212650ccfd218ca6212fa219526972cf30729",
+  "learning.guard_assignment_requirement_lifecycle":
+    "faee2f823db6bb6715a156b78c298d2d6a113cb40a47715ca54df783e0bd7b39",
+  "learning.guard_certification_lifecycle":
+    "6ba8320387788360a850514cc8bd86217a08f2d26cc097b35bd84592bdc9ebbe",
+  "learning.guard_emergency_exception_lifecycle":
+    "de3b13bcb9feb8e5970c38362288fa27cd3e5e2f21f5ef422ba3a9466a393ad0",
+  "learning.guard_content_lifecycle":
+    "6d30f12e16c785517bb47dc34d84f2fc0c8649d39b0b160ec8761e4c470938ce",
+  "learning.guard_curriculum_composition":
+    "0aea39b911deac9b688cd3a58270a3b9135f23dd4921338911f1864b15c10d3c",
+});
+
 const ISOLATION_GUARDED_FUNCTIONS = new Set([
   ...Object.values(REQUIRED_TRIGGERS).map((trigger) => trigger.function),
   "private.lock_learning_curriculum_graph",
@@ -255,6 +470,25 @@ const ISOLATION_GUARDED_FUNCTIONS = new Set([
 
 function normalizeSql(value) {
   return value.toLowerCase().replace(/\s+/g, " ").trim().replace(/;$/, "");
+}
+
+function canonicalMigrationSql(value) {
+  return value.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n");
+}
+
+function digestFunctionBody(value) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function digestMigrationBaseline(migrations) {
+  const digest = createHash("sha256");
+  for (const migration of migrations) {
+    digest.update(migration.name);
+    digest.update("\0");
+    digest.update(canonicalMigrationSql(migration.sql));
+    digest.update("\0");
+  }
+  return digest.digest("hex");
 }
 
 function scanSql(source, { splitStatements = true } = {}) {
@@ -618,18 +852,10 @@ function splitTopLevelBoolean(expression, operator) {
 }
 
 function hasPositiveActiveProfileGuard(expression) {
-  const value = normalizeSql(expression);
-  const helper = /private\.learning_has_active_profile\s*\([^)]*\)/;
-  if (!helper.test(value)) return false;
-  if (
-    /\bnot\s*(?:\(\s*)*private\.learning_has_active_profile\s*\(/.test(value) ||
-    /private\.learning_has_active_profile\s*\([^)]*\)\s*(?:=\s*false|!=\s*true|<>\s*true|is\s+false|is\s+not\s+true)/.test(
-      value,
-    )
-  ) {
-    return false;
-  }
-  return true;
+  const value = unwrapBooleanExpression(normalizeSql(expression));
+  return /^private\.learning_has_active_profile\s*\(\s*(?:audience|'internal'|'vendor')\s*\)$/.test(
+    value,
+  );
 }
 
 function activeProfileGuardsEveryPath(expression) {
@@ -665,8 +891,58 @@ function asMigrations(input) {
       }
       return { name: basename(migration.name), sql: migration.sql };
     })
-    .filter((migration) => migration.name >= FOUNDATION_MIGRATION_NAME)
     .sort((left, right) => left.name.localeCompare(right.name));
+}
+
+function validateMigrationInventory(state, migrations) {
+  const migrationNamePattern = /^\d{14}_[a-z0-9_]+\.sql$/i;
+  const seen = new Set();
+  for (const migration of migrations) {
+    if (!migrationNamePattern.test(migration.name)) {
+      state.errors.push(
+        `Malformed SQL migration name ${migration.name}; the complete migration set cannot be verified.`,
+      );
+    }
+    if (seen.has(migration.name)) {
+      state.errors.push(
+        `Duplicate migration ${migration.name} makes ordered authority state ambiguous.`,
+      );
+    }
+    seen.add(migration.name);
+  }
+
+  const baseline = migrations.filter(
+    (migration) => migration.name < FOUNDATION_MIGRATION_NAME,
+  );
+  const actualNames = new Set(baseline.map((migration) => migration.name));
+  const expectedNames = new Set(PINNED_BASELINE_MIGRATION_NAMES);
+  const missing = PINNED_BASELINE_MIGRATION_NAMES.filter(
+    (name) => !actualNames.has(name),
+  );
+  const unexpected = baseline
+    .map((migration) => migration.name)
+    .filter((name) => !expectedNames.has(name));
+
+  if (missing.length > 0) {
+    state.errors.push(
+      `Pinned migration baseline is incomplete; missing ${missing.join(", ")}.`,
+    );
+  }
+  if (unexpected.length > 0) {
+    state.errors.push(
+      `Unexpected earlier unpinned migration(s): ${unexpected.join(", ")}.`,
+    );
+  }
+  if (
+    missing.length === 0 &&
+    unexpected.length === 0 &&
+    baseline.length === PINNED_BASELINE_MIGRATION_NAMES.length &&
+    digestMigrationBaseline(baseline) !== PINNED_BASELINE_SHA256
+  ) {
+    state.errors.push(
+      "Pinned migration baseline checksum drifted; re-review all historical authority before updating the pin.",
+    );
+  }
 }
 
 function emptyPrivileges() {
@@ -729,6 +1005,7 @@ function createState() {
 function processStatement(state, statement, migrationName) {
   const normalized = normalizeSql(statement).replaceAll('"', "");
   const isFoundation = migrationName === FOUNDATION_MIGRATION_NAME;
+  const isRoleLifecycle = migrationName === ROLE_LIFECYCLE_MIGRATION_NAME;
   let match;
 
   if (normalized === "create schema if not exists learning") {
@@ -846,10 +1123,14 @@ function processStatement(state, statement, migrationName) {
   if (match) {
     const table = match[1];
     const triggerName = match[3];
+    const modeledOnTable = Object.values(REQUIRED_TRIGGERS).some(
+      (trigger) => trigger.table === table,
+    );
     if (
       !isFoundation &&
-      !["all", "user"].includes(triggerName) &&
-      !Object.hasOwn(REQUIRED_TRIGGERS, triggerName)
+      (!modeledOnTable ||
+        (!["all", "user"].includes(triggerName) &&
+          !Object.hasOwn(REQUIRED_TRIGGERS, triggerName)))
     ) {
       state.errors.push(
         `${migrationName}: unmodeled trigger mode change for ${triggerName} is default-denied.`,
@@ -1078,7 +1359,12 @@ function processStatement(state, statement, migrationName) {
       );
       return;
     }
-    const existingExecute = state.functions.get(match[2])?.executeRoles;
+    if (state.functions.has(match[2])) {
+      state.errors.push(
+        `${migrationName}: replacement or overload of modeled function ${match[2]} is default-denied.`,
+      );
+      return;
+    }
     state.functions.set(match[2], {
       statement,
       body: functionBody(statement),
@@ -1086,10 +1372,7 @@ function processStatement(state, statement, migrationName) {
         functionBody(statement),
       ),
       securityDefiner: /\bsecurity definer\b/.test(normalized),
-      executeRoles:
-        match[1] && existingExecute
-          ? new Set(existingExecute)
-          : new Set(["public"]),
+      executeRoles: new Set(["public"]),
       migrationName,
     });
     return;
@@ -1117,20 +1400,22 @@ function processStatement(state, statement, migrationName) {
   }
 
   match = normalized.match(
-    /^create (?:or replace )?trigger ([a-z_]+) (.+?) on ((?:learning|core)\.[a-z_]+) for each row execute function ((?:learning|private)\.[a-z_]+)\s*\(/,
+    /^create (?:or replace )?(constraint )?trigger ([a-z_]+) (.+?) on ((?:learning|core)\.[a-z_]+) (.*?)for each row execute function ((?:learning|private)\.[a-z_]+)\s*\(/,
   );
   if (match) {
-    if (!Object.hasOwn(REQUIRED_TRIGGERS, match[1])) {
+    if (!Object.hasOwn(REQUIRED_TRIGGERS, match[2])) {
       state.errors.push(
-        `${migrationName}: unmodeled trigger ${match[1]} is default-denied.`,
+        `${migrationName}: unmodeled trigger ${match[2]} is default-denied.`,
       );
       return;
     }
-    state.triggers.set(match[1], {
-      name: match[1],
-      events: match[2],
-      table: match[3],
-      function: match[4],
+    state.triggers.set(match[2], {
+      name: match[2],
+      events: match[3],
+      table: match[4],
+      function: match[6],
+      constraint: Boolean(match[1]),
+      deferred: normalizeSql(match[5]) === "deferrable initially deferred",
       migrationName,
     });
     return;
@@ -1140,7 +1425,12 @@ function processStatement(state, statement, migrationName) {
     /^drop trigger(?: if exists)? ([a-z_]+) on ((?:learning|core)\.[a-z_]+)(?: cascade| restrict)?$/,
   );
   if (match) {
-    if (!isFoundation && !Object.hasOwn(REQUIRED_TRIGGERS, match[1])) {
+    const isLegacyRename =
+      isRoleLifecycle &&
+      match[1] ===
+        "learning_curriculum_requirement_prerequisites_read_committed_guard" &&
+      match[2] === "learning.curriculum_requirement_prerequisites";
+    if (!Object.hasOwn(REQUIRED_TRIGGERS, match[1]) && !isLegacyRename) {
       state.errors.push(
         `${migrationName}: dropping unmodeled trigger ${match[1]} is default-denied.`,
       );
@@ -1553,7 +1843,7 @@ function validatePolicies(state) {
       )
     ) {
       state.errors.push(
-        `Policy ${name} must require the shared fail-closed active profile helper on every authorization path.`,
+        `Policy ${name} must require an exact positive active profile helper atom on every authorization path.`,
       );
     }
   }
@@ -2044,6 +2334,40 @@ function validateFunctions(state) {
   );
   requireFunction(
     state,
+    "private.lock_certification_role_authority",
+    [
+      /core\.roles role_definition/,
+      /role_definition\.is_active/,
+      /core\.user_roles role_assignment/,
+      /role_assignment\.id = new\.source_role_assignment_id/,
+      /core\.role_capabilities role_capability/,
+      /role_capability\.cap = new\.capability/,
+      /for key share/,
+      /for share/,
+      /raise exception/,
+    ],
+    "Certification issuance must lock final live role, assignment, and capability authority.",
+  );
+  requireFunction(
+    state,
+    "private.revoke_certifications_for_role_authority_loss",
+    [
+      /tg_table_name = 'roles'/,
+      /core\.roles final_role/,
+      /final_role\.is_active/,
+      /tg_table_name = 'role_capabilities'/,
+      /core\.role_capabilities final_capability/,
+      /final_capability\.cap = old\.cap/,
+      /update learning\.certifications/,
+      /source_role = old\.role/,
+      /capability = old\.cap/,
+      /status = 'revoked'/,
+      /status = 'active'/,
+    ],
+    "Final role deactivation or capability removal must revoke dependent active certifications without deleting history.",
+  );
+  requireFunction(
+    state,
     "private.revoke_certifications_for_role_assignment",
     [
       /update learning\.certifications/,
@@ -2080,9 +2404,48 @@ function validateFunctions(state) {
     );
   }
 
+  const authorityLock =
+    state.functions.get("private.lock_certification_role_authority")
+      ?.reachableBody ?? "";
+  const roleDefinitionLock = authorityLock.indexOf(
+    "core.roles role_definition",
+  );
+  const roleAssignmentLock = authorityLock.indexOf(
+    "core.user_roles role_assignment",
+  );
+  const roleCapabilityLock = authorityLock.indexOf(
+    "core.role_capabilities role_capability",
+  );
+  if (
+    roleDefinitionLock < 0 ||
+    roleAssignmentLock <= roleDefinitionLock ||
+    roleCapabilityLock <= roleAssignmentLock
+  ) {
+    state.errors.push(
+      "Certification authority locks must follow role, assignment, then capability order before graph validation.",
+    );
+  }
+
   for (const name of MODELED_FUNCTIONS) {
     if (!state.functions.has(name)) {
       state.errors.push(`Missing modeled learning function ${name}.`);
+      continue;
+    }
+    const functionEntry = state.functions.get(name);
+    if (functionEntry.securityDefiner !== ALLOWED_SECURITY_DEFINERS.has(name)) {
+      state.errors.push(
+        `Modeled function ${name} has an unexpected SECURITY DEFINER security mode.`,
+      );
+    }
+    const expectedDigest = EXPECTED_FUNCTION_BODY_SHA256[name];
+    if (!expectedDigest) {
+      state.errors.push(
+        `Modeled function ${name} has no pinned exact function body.`,
+      );
+    } else if (digestFunctionBody(functionEntry.body) !== expectedDigest) {
+      state.errors.push(
+        `Exact guarded function body drifted for ${name}; control-flow changes require explicit verifier review.`,
+      );
     }
   }
 
@@ -2154,6 +2517,16 @@ function validateTriggers(state) {
         `Missing or weakened trigger ${name} on ${expected.table}.`,
       );
       continue;
+    }
+    if (
+      trigger.constraint !== Boolean(expected.constraint) ||
+      trigger.deferred !== Boolean(expected.deferred)
+    ) {
+      state.errors.push(
+        expected.deferred
+          ? `Required final-state trigger ${name} must be a deferred constraint trigger.`
+          : `Required trigger ${name} has an unexpected constraint/deferred mode.`,
+      );
     }
     const disabled = state.disabledTriggers.get(expected.table);
     if (disabled?.has("all") || disabled?.has("user") || disabled?.has(name)) {
@@ -2252,6 +2625,8 @@ export function verifyLearningSchema(input) {
   const migrations = asMigrations(input);
   const state = createState();
 
+  validateMigrationInventory(state, migrations);
+
   if (
     !migrations.some(
       (migration) => migration.name === FOUNDATION_MIGRATION_NAME,
@@ -2262,7 +2637,9 @@ export function verifyLearningSchema(input) {
     );
   }
 
-  for (const migration of migrations) {
+  for (const migration of migrations.filter(
+    (entry) => entry.name >= FOUNDATION_MIGRATION_NAME,
+  )) {
     let statements;
     try {
       statements = scanSql(migration.sql);
@@ -2290,11 +2667,7 @@ function run() {
   const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
   const migrationDirectory = resolve(root, "supabase/migrations");
   const migrations = readdirSync(migrationDirectory)
-    .filter(
-      (name) =>
-        /^\d{14}_[a-z0-9_]+\.sql$/i.test(name) &&
-        name >= FOUNDATION_MIGRATION_NAME,
-    )
+    .filter((name) => name.toLowerCase().endsWith(".sql"))
     .sort()
     .map((name) => ({
       name,

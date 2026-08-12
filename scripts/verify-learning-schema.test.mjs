@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
@@ -9,6 +9,8 @@ import {
 } from "./verify-learning-schema.mjs";
 
 const FOUNDATION_NAME = "20260812130000_learning_foundation.sql";
+const ROLE_LIFECYCLE_NAME =
+  "20260812140000_learning_role_authority_lifecycle.sql";
 const OLD_FOUNDATION_NAME = "20260812090000_learning_foundation.sql";
 const migration = fileURLToPath(
   new URL(`../supabase/migrations/${FOUNDATION_NAME}`, import.meta.url),
@@ -17,6 +19,22 @@ const oldMigration = fileURLToPath(
   new URL(`../supabase/migrations/${OLD_FOUNDATION_NAME}`, import.meta.url),
 );
 const sql = readFileSync(migration, "utf8");
+const roleLifecycleMigration = fileURLToPath(
+  new URL(`../supabase/migrations/${ROLE_LIFECYCLE_NAME}`, import.meta.url),
+);
+const roleLifecycleSql = existsSync(roleLifecycleMigration)
+  ? readFileSync(roleLifecycleMigration, "utf8")
+  : "";
+const migrationDirectory = fileURLToPath(
+  new URL("../supabase/migrations/", import.meta.url),
+);
+const repositoryMigrations = readdirSync(migrationDirectory)
+  .filter((name) => /^\d{14}_[a-z0-9_]+\.sql$/i.test(name))
+  .sort()
+  .map((name) => ({
+    name,
+    sql: readFileSync(`${migrationDirectory}/${name}`, "utf8"),
+  }));
 const task1Catalog = readFileSync(
   fileURLToPath(new URL("../modules/learning/src/catalog.ts", import.meta.url)),
   "utf8",
@@ -32,13 +50,29 @@ function replaceRequired(source, pattern, replacement) {
 }
 
 function errorsFor(source) {
-  return verifyLearningSchema(source).join("\n");
+  return verifyLearningSchema(
+    repositoryMigrations.map((migrationEntry) =>
+      migrationEntry.name === FOUNDATION_NAME
+        ? { ...migrationEntry, sql: source }
+        : migrationEntry,
+    ),
+  ).join("\n");
+}
+
+function errorsForRoleLifecycle(source) {
+  return verifyLearningSchema(
+    repositoryMigrations.map((migrationEntry) =>
+      migrationEntry.name === ROLE_LIFECYCLE_NAME
+        ? { ...migrationEntry, sql: source }
+        : migrationEntry,
+    ),
+  ).join("\n");
 }
 
 function orderedErrors(laterSql) {
   return verifyLearningSchema([
-    { name: FOUNDATION_NAME, sql },
-    { name: "20260812140000_learning_weakening.sql", sql: laterSql },
+    ...repositoryMigrations,
+    { name: "20260812150000_learning_weakening.sql", sql: laterSql },
   ]).join("\n");
 }
 
@@ -56,7 +90,50 @@ function functionBody(name, source = sql) {
 test("uses the monotonic forward foundation and satisfies the full contract", () => {
   assert.equal(existsSync(oldMigration), false);
   assert.equal(REQUIRED_TABLES.length, 15);
-  assert.deepEqual(verifyLearningSchema(sql), []);
+  assert.deepEqual(verifyLearningSchema(repositoryMigrations), []);
+});
+
+test("requires every checksum-pinned pre-foundation migration", () => {
+  const omitted = repositoryMigrations.filter(
+    (migrationEntry) => migrationEntry.name !== "20260706090100_core_rbac.sql",
+  );
+  assert.match(
+    verifyLearningSchema(omitted).join("\n"),
+    /missing.*pinned.*20260706090100_core_rbac|baseline.*incomplete/i,
+  );
+
+  const drifted = repositoryMigrations.map((migrationEntry) =>
+    migrationEntry.name === "20260706090100_core_rbac.sql"
+      ? {
+          ...migrationEntry,
+          sql: `${migrationEntry.sql}\ngrant service_role to authenticated;`,
+        }
+      : migrationEntry,
+  );
+  assert.match(
+    verifyLearningSchema(drifted).join("\n"),
+    /checksum.*20260706090100_core_rbac|baseline.*drift/i,
+  );
+});
+
+test("rejects an unexpected earlier authority migration", () => {
+  assert.match(
+    verifyLearningSchema([
+      ...repositoryMigrations,
+      {
+        name: "20260812125000_earlier_role_grant.sql",
+        sql: "grant service_role to authenticated;",
+      },
+    ]).join("\n"),
+    /unexpected.*earlier|unpinned.*20260812125000|role.*grant/i,
+  );
+});
+
+test("does not certify a foundation-only migration set", () => {
+  assert.match(
+    verifyLearningSchema(sql).join("\n"),
+    /pinned migration baseline|migration set.*incomplete/i,
+  );
 });
 
 test("normalizes prerequisite and capability outcome graph lineage", () => {
@@ -184,6 +261,85 @@ test("serializes authority deletion, graph mutation, and graph publication in lo
   );
 });
 
+test("revokes certifications only after final role authority loss", () => {
+  assert.ok(
+    existsSync(roleLifecycleMigration),
+    `${ROLE_LIFECYCLE_NAME} must add the forward-safe role lifecycle repair`,
+  );
+  assert.match(
+    roleLifecycleSql,
+    /create or replace function private\.lock_certification_role_authority\(\)[\s\S]*?private\.assert_learning_read_committed\(\)[\s\S]*?from core\.roles role_definition[\s\S]*?for share[\s\S]*?from core\.user_roles role_assignment[\s\S]*?for key share[\s\S]*?from core\.role_capabilities role_capability[\s\S]*?for share/i,
+  );
+  assert.match(
+    roleLifecycleSql,
+    /create trigger learning_certifications_lock_role_authority\s+before insert on learning\.certifications\s+for each row execute function private\.lock_certification_role_authority\(\)/i,
+  );
+  assert.match(
+    roleLifecycleSql,
+    /create or replace function private\.revoke_certifications_for_role_authority_loss\(\)[\s\S]*?private\.assert_learning_read_committed\(\)[\s\S]*?tg_table_name = 'roles'[\s\S]*?from core\.roles final_role[\s\S]*?final_role\.is_active[\s\S]*?tg_table_name = 'role_capabilities'[\s\S]*?from core\.role_capabilities final_capability[\s\S]*?update learning\.certifications[\s\S]*?status = 'revoked'/i,
+  );
+  for (const [trigger, table, event] of [
+    ["learning_role_deactivation_revoke", "roles", "update of is_active"],
+    [
+      "learning_role_capability_removal_revoke",
+      "role_capabilities",
+      "delete or update",
+    ],
+  ]) {
+    assert.match(
+      roleLifecycleSql,
+      new RegExp(
+        `create constraint trigger ${trigger}\\s+after ${event} on core\\.${table}\\s+deferrable initially deferred\\s+for each row execute function private\\.revoke_certifications_for_role_authority_loss\\(\\)`,
+        "i",
+      ),
+      trigger,
+    );
+  }
+  assert.match(
+    roleLifecycleSql,
+    /drop trigger if exists learning_curriculum_requirement_prerequisites_read_committed_guard\s+on learning\.curriculum_requirement_prerequisites[\s\S]*?create trigger learning_curr_req_prereq_read_committed_guard/i,
+  );
+});
+
+test("rejects weakened role-authority lifecycle guards", () => {
+  const immediate = replaceRequired(
+    roleLifecycleSql,
+    /deferrable initially deferred/i,
+    "not deferrable",
+  );
+  assert.match(
+    errorsForRoleLifecycle(immediate),
+    /must be deferred|deferred constraint trigger|final-state trigger/i,
+  );
+
+  const forgedFinalCapability = replaceRequired(
+    roleLifecycleSql,
+    /if exists \(\s*select 1\s*from core\.role_capabilities final_capability[\s\S]*?\) then\s*return null;\s*end if;/i,
+    "if false then return null; end if;",
+  );
+  assert.match(
+    errorsForRoleLifecycle(forgedFinalCapability),
+    /exact.*function body|final.*capability|authority.*revocation/i,
+  );
+
+  const earlyReturn = replaceRequired(
+    roleLifecycleSql,
+    /(create or replace function private\.revoke_certifications_for_role_authority_loss\(\)[\s\S]*?perform private\.assert_learning_read_committed\(\);)/i,
+    "$1\n  if 2 > 1 then return null; end if;",
+  );
+  assert.match(
+    errorsForRoleLifecycle(earlyReturn),
+    /exact.*function body|authority.*revocation|control-flow/i,
+  );
+
+  assert.match(
+    orderedErrors(
+      "drop trigger learning_certifications_lock_role_authority on learning.certifications;",
+    ),
+    /lock_role_authority|role authority|trigger/i,
+  );
+});
+
 test("rejects unsupported isolation on every authoritative mutation path", () => {
   const isolationGuard = functionBody("assert_learning_read_committed");
   assert.match(
@@ -207,10 +363,14 @@ test("rejects unsupported isolation on every authoritative mutation path", () =>
     );
   }
   for (const table of REQUIRED_TABLES) {
+    const triggerName =
+      table === "curriculum_requirement_prerequisites"
+        ? "learning_curr_req_prereq_read_committed_guard"
+        : `learning_${table}_read_committed_guard`;
     assert.match(
       sql,
       new RegExp(
-        `create trigger learning_${table}_read_committed_guard[\\s\\S]*?before insert or update or delete on learning\\.${table}[\\s\\S]*?learning\\.guard_authoritative_write_isolation\\(\\)`,
+        `create trigger ${triggerName}[\\s\\S]*?before insert or update or delete on learning\\.${table}[\\s\\S]*?learning\\.guard_authoritative_write_isolation\\(\\)`,
         "i",
       ),
       table,
@@ -240,6 +400,21 @@ test("rejects unsupported isolation on every authoritative mutation path", () =>
     errorsFor(unguardedTable),
     /missing or weakened trigger.*read_committed_guard/i,
   );
+});
+
+test("keeps every trigger identifier catalog-stable", () => {
+  const triggerNames = [
+    ...`${sql}\n${roleLifecycleSql}`.matchAll(
+      /^create (?:constraint )?trigger ([a-z_]+)/gim,
+    ),
+  ].map((match) => match[1]);
+  assert.ok(triggerNames.length > 0);
+  for (const name of triggerNames) {
+    assert.ok(
+      Buffer.byteLength(name, "utf8") <= 63,
+      `${name} exceeds PostgreSQL's 63-byte identifier limit`,
+    );
+  }
 });
 
 test("keeps authenticated content access read-only for attributable future RPCs", () => {
@@ -293,6 +468,23 @@ using (
     errorsFor(branchBypass),
     /active profile.*every.*path|policy.*active profile/i,
   );
+});
+
+test("accepts only a bare positive active-profile policy atom", () => {
+  const activeProfileAtom = /private\.learning_has_active_profile\(audience\)/i;
+  for (const wrapped of [
+    "private.learning_has_active_profile(audience) is not null",
+    "private.learning_has_active_profile(audience) is distinct from true",
+    "coalesce(private.learning_has_active_profile(audience), true)",
+    "private.learning_has_active_profile(audience) = true",
+  ]) {
+    const weakened = replaceRequired(sql, activeProfileAtom, wrapped);
+    assert.match(
+      errorsFor(weakened),
+      /exact positive|bare positive|active profile.*authorization path/i,
+      wrapped,
+    );
+  }
 });
 
 test("rejects vendor waivers and makes assignment terminal evidence monotonic", () => {
@@ -749,6 +941,38 @@ test("rejects round-two policy, function, trigger, DDL, grantee, and role bypass
   }
 });
 
+test("pins modeled function security mode and rejects overload shadowing", () => {
+  const securityInvoker = replaceRequired(
+    sql,
+    /(create or replace function private\.learning_has_active_profile\([^]*?\bstable\s+)security definer/i,
+    "$1security invoker",
+  );
+  assert.match(
+    errorsFor(securityInvoker),
+    /security definer|security mode|function metadata/i,
+  );
+
+  const exactRejectBody = functionBody("reject_evidence_mutation").trim();
+  assert.match(
+    orderedErrors(`
+      create or replace function learning.reject_evidence_mutation()
+      returns trigger language plpgsql set search_path = '' as $$
+      begin
+        perform private.assert_learning_read_committed();
+        return new;
+        raise exception 'Authoritative learning evidence is append-only';
+      end;
+      $$;
+
+      create or replace function learning.reject_evidence_mutation(dummy boolean)
+      returns trigger language plpgsql set search_path = '' as $$
+      ${exactRejectBody}
+      $$;
+    `),
+    /replacement|overload|duplicate.*function|function declaration/i,
+  );
+});
+
 test("default-denies round-three view, procedural, privilege, and role bypasses", () => {
   const laterBypasses = [
     "create view learning.certification_export with (security_invoker = false) as select * from learning.certifications; grant select on learning.certification_export to authenticated;",
@@ -760,6 +984,7 @@ test("default-denies round-three view, procedural, privilege, and role bypasses"
     "create event trigger learning_ddl_backdoor on ddl_command_end execute function private.learning_dump();",
     "alter default privileges in schema learning grant select on tables to authenticated;",
     "alter table learning.certifications disable trigger learning_unmodeled_side_effect;",
+    "alter table core.capabilities disable trigger user;",
     "grant select on learning.certifications to authenticated with grant option;",
     "grant execute on function private.assert_learning_read_committed() to service_role with grant option;",
     "create or replace function learning.reject_evidence_mutation() returns trigger language plpgsql set search_path = '' as $$ begin perform private.assert_learning_read_committed(); execute 'alter table learning.certifications disable row level security'; raise exception 'Authoritative learning evidence is append-only'; end; $$;",
@@ -767,7 +992,7 @@ test("default-denies round-three view, procedural, privilege, and role bypasses"
   for (const bypass of laterBypasses) {
     assert.match(
       orderedErrors(bypass),
-      /unmodeled|view|procedural|privilege|role|statement|unsafe|default-deny|grant option|delegated/i,
+      /unmodeled|view|procedural|privilege|role|statement|unsafe|default-deny|grant option|delegated|replacement|overload/i,
       bypass,
     );
   }
@@ -798,6 +1023,7 @@ test("default-denies round-three view, procedural, privilege, and role bypasses"
     "if true then return new; end if;",
     "if 1 = 1 then return new; end if;",
     "case when true then return new; end case;",
+    "if 2 > 1 then begin if 3 > 2 then return new; end if; end; end if;",
   ]) {
     const inert = replaceRequired(
       sql,
@@ -806,6 +1032,24 @@ test("default-denies round-three view, procedural, privilege, and role bypasses"
     );
     assert.match(errorsFor(inert), /unreachable|inert|guard/i, earlyReturn);
   }
+
+  const nestedConstantReturn = replaceRequired(
+    sql,
+    /(create or replace function learning\.reject_evidence_mutation\(\)[\s\S]*?perform private\.assert_learning_read_committed\(\);)/i,
+    `$1
+
+  if 2 > 1 then
+    begin
+      if 3 > 2 then
+        return new;
+      end if;
+    end;
+  end if;`,
+  );
+  assert.match(
+    errorsFor(nestedConstantReturn),
+    /exact.*function body|guard body.*drift|unreachable|inert/i,
+  );
 });
 
 test("rejects removed locks, graph lineage, active-profile, and monotonic guards", () => {
