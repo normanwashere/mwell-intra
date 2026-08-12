@@ -43,6 +43,12 @@ const task1Registry = readFileSync(
   fileURLToPath(new URL("../packages/rbac/src/registry.ts", import.meta.url)),
   "utf8",
 );
+const packageJson = JSON.parse(
+  readFileSync(
+    fileURLToPath(new URL("../package.json", import.meta.url)),
+    "utf8",
+  ),
+);
 
 function replaceRequired(source, pattern, replacement) {
   assert.match(source, pattern, `Fixture did not contain ${pattern}.`);
@@ -337,6 +343,205 @@ test("rejects weakened role-authority lifecycle guards", () => {
       "drop trigger learning_certifications_lock_role_authority on learning.certifications;",
     ),
     /lock_role_authority|role authority|trigger/i,
+  );
+});
+
+test("pins complete modeled function catalog metadata", () => {
+  const declarationMutations = [
+    [
+      /create or replace function private\.revoke_certifications_for_role_authority_loss\(\)/i,
+      'create or replace function "Private"."revoke_certifications_for_role_authority_loss"()',
+      "schema and name",
+    ],
+    [
+      /create or replace function private\.revoke_certifications_for_role_authority_loss\(\)/i,
+      "create function private.revoke_certifications_for_role_authority_loss()",
+      "replacement form",
+    ],
+    [
+      /(create or replace function private\.revoke_certifications_for_role_authority_loss\(\)\s*returns trigger\s*language plpgsql)\s*security definer/i,
+      "$1\nstable\nsecurity definer",
+      "STABLE",
+    ],
+    [
+      /(create or replace function private\.revoke_certifications_for_role_authority_loss\(\)\s*returns trigger\s*language plpgsql)\s*security definer/i,
+      "$1\nimmutable\nsecurity definer",
+      "IMMUTABLE",
+    ],
+    [
+      /(create or replace function private\.revoke_certifications_for_role_authority_loss\(\)\s*returns trigger\s*language plpgsql\s*security definer\s*set search_path = )''/i,
+      "$1'', public",
+      "expanded search_path",
+    ],
+    [
+      /(create or replace function private\.revoke_certifications_for_role_authority_loss\(\)\s*returns trigger\s*language plpgsql\s*security definer\s*set search_path = ''\s*)as \$\$/i,
+      (_match, declaration) => `${declaration}set row_security = off\nas $$`,
+      "extra privileged SET",
+    ],
+    [
+      /(create or replace function private\.revoke_certifications_for_role_authority_loss\(\)\s*)returns trigger/i,
+      "$1returns boolean",
+      "return type",
+    ],
+    [
+      /create or replace function private\.revoke_certifications_for_role_authority_loss\(\)/i,
+      "create or replace function private.revoke_certifications_for_role_authority_loss(dummy boolean)",
+      "argument types",
+    ],
+    [
+      /(create or replace function private\.revoke_certifications_for_role_authority_loss\(\)\s*returns trigger\s*)language plpgsql/i,
+      "$1language sql",
+      "language",
+    ],
+    [
+      /(create or replace function private\.revoke_certifications_for_role_authority_loss\(\)\s*returns trigger\s*language plpgsql\s*)security definer/i,
+      "$1security invoker",
+      "security mode",
+    ],
+    [
+      /(create or replace function private\.revoke_certifications_for_role_authority_loss\(\)\s*returns trigger\s*language plpgsql\s*)security definer/i,
+      "$1leakproof\nsecurity definer",
+      "leakproof",
+    ],
+    [
+      /(create or replace function private\.revoke_certifications_for_role_authority_loss\(\)\s*returns trigger\s*language plpgsql\s*)security definer/i,
+      "$1parallel safe\nsecurity definer",
+      "parallel mode",
+    ],
+    [
+      /(create or replace function private\.revoke_certifications_for_role_authority_loss\(\)\s*returns trigger\s*language plpgsql\s*)security definer/i,
+      "$1strict\nsecurity definer",
+      "strictness",
+    ],
+  ];
+
+  for (const [pattern, replacement, label] of declarationMutations) {
+    const mutated = replaceRequired(roleLifecycleSql, pattern, replacement);
+    assert.match(
+      errorsForRoleLifecycle(mutated),
+      /function.*(?:declaration|metadata|signature|configuration)|proconfig|search_path/i,
+      label,
+    );
+  }
+
+  const wrongPrivilegeSignature = replaceRequired(
+    sql,
+    /revoke all on function private\.learning_has_active_profile\(text\)/i,
+    "revoke all on function private.learning_has_active_profile(uuid)",
+  );
+  assert.match(
+    errorsFor(wrongPrivilegeSignature),
+    /function.*(?:signature|identity)|privilege.*target/i,
+  );
+});
+
+test("reconciles existing invalid certifications with attributable evidence", () => {
+  assert.match(
+    roleLifecycleSql,
+    /alter table learning\.certifications\s+add column if not exists revocation_reason text/i,
+  );
+  assert.match(
+    roleLifecycleSql,
+    /update learning\.certifications certification[\s\S]*?status = 'revoked'[\s\S]*?revoked_at = pg_catalog\.clock_timestamp\(\)[\s\S]*?revocation_reason[\s\S]*?from core\.roles[\s\S]*?core\.role_capabilities/i,
+  );
+
+  const withoutReconciliation = replaceRequired(
+    roleLifecycleSql,
+    /update learning\.certifications certification[\s\S]*?;(?=\s*(?:alter table|create|revoke|drop))/i,
+    "",
+  );
+  assert.match(
+    errorsForRoleLifecycle(withoutReconciliation),
+    /existing active certification|one-time.*reconcil|authority reconciliation/i,
+  );
+
+  const withoutAttribution = replaceRequired(
+    roleLifecycleSql,
+    /revocation_reason = case[\s\S]*?end(?=\s*where certification\.status = 'active')/i,
+    "revocation_reason = null",
+  );
+  assert.match(
+    errorsForRoleLifecycle(withoutAttribution),
+    /revocation.*reason|attribut|authority reconciliation/i,
+  );
+
+  const overBroadReconciliation = replaceRequired(
+    roleLifecycleSql,
+    /  \);\n\nalter table learning\.certifications\n  add constraint certifications_revocation_reason_check/i,
+    "  ) or certification.status = 'active';\n\nalter table learning.certifications\n  add constraint certifications_revocation_reason_check",
+  );
+  assert.match(
+    errorsForRoleLifecycle(overBroadReconciliation),
+    /existing active certification|authority reconciliation|exact.*reconcil/i,
+  );
+});
+
+test("removes TRUNCATE from supported authority paths permanently", () => {
+  for (const table of ["roles", "role_capabilities", "user_roles"]) {
+    assert.match(
+      roleLifecycleSql,
+      new RegExp(
+        `revoke truncate on table core\\.${table}\\s+from public, anon, authenticated, service_role`,
+        "i",
+      ),
+      table,
+    );
+
+    const withoutRevoke = replaceRequired(
+      roleLifecycleSql,
+      new RegExp(
+        `revoke truncate on table core\\.${table}\\s+from public, anon, authenticated, service_role\\s*;`,
+        "i",
+      ),
+      "",
+    );
+    assert.match(
+      errorsForRoleLifecycle(withoutRevoke),
+      /truncate.*core\.|authority table.*truncate|row-level/i,
+      table,
+    );
+  }
+
+  for (const restoration of [
+    "grant truncate on table core.role_capabilities to service_role;",
+    "grant all privileges on table core.roles to service_role;",
+    "grant all privileges on all tables in schema core to service_role;",
+    "alter default privileges in schema core grant truncate on tables to service_role;",
+    "alter default privileges in schema core grant all privileges on tables to service_role;",
+  ]) {
+    assert.match(
+      orderedErrors(restoration),
+      /truncate|default privileges|authority.*privilege|row-level/i,
+      restoration,
+    );
+  }
+});
+
+test("indexes active certifications for role and capability revocation", () => {
+  assert.match(
+    roleLifecycleSql,
+    /create index learning_active_certifications_role_authority_idx\s+on learning\.certifications\s*\(module, source_role, capability\)\s+where status = 'active'/i,
+  );
+
+  const withoutAuthorityIndex = replaceRequired(
+    roleLifecycleSql,
+    /create index learning_active_certifications_role_authority_idx[\s\S]*?;/i,
+    "",
+  );
+  assert.match(
+    errorsForRoleLifecycle(withoutAuthorityIndex),
+    /active certification.*role authority.*index|missing.*role.*capability.*index/i,
+  );
+});
+
+test("wires the environment-independent lifecycle test into root verification", () => {
+  assert.equal(
+    packageJson.scripts["verify:learning-role-lifecycle"],
+    "node --test scripts/verify-learning-role-lifecycle.test.mjs",
+  );
+  assert.match(
+    packageJson.scripts["verify:learning-schema"],
+    /verify-learning-schema\.mjs[\s\S]*verify:learning-role-lifecycle/,
   );
 });
 

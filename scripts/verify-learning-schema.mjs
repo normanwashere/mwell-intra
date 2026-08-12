@@ -7,6 +7,21 @@ export const FOUNDATION_MIGRATION_NAME =
   "20260812130000_learning_foundation.sql";
 const ROLE_LIFECYCLE_MIGRATION_NAME =
   "20260812140000_learning_role_authority_lifecycle.sql";
+const ROLE_AUTHORITY_TABLES = Object.freeze([
+  "roles",
+  "role_capabilities",
+  "user_roles",
+]);
+const UNSAFE_AUTHORITY_TRUNCATE_ROLES = Object.freeze([
+  "public",
+  "anon",
+  "authenticated",
+  "service_role",
+]);
+const ROLE_AUTHORITY_INDEX_NAME =
+  "learning_active_certifications_role_authority_idx";
+const ROLE_AUTHORITY_RECONCILIATION_SHA256 =
+  "fd8e41af904fc15cc4b453220adf3cc98b8da21e15119b52c558c6654b464cfc";
 
 const PINNED_BASELINE_MIGRATION_NAMES = Object.freeze(
   `
@@ -327,7 +342,7 @@ const REQUIRED_TRIGGERS = Object.freeze({
   learning_certifications_lifecycle_guard: {
     table: "learning.certifications",
     events: "before update or delete",
-    function: "learning.guard_certification_lifecycle",
+    function: "learning.guard_certification_lifecycle_v2",
   },
   learning_emergency_exceptions_validate_issuance: {
     table: "learning.emergency_exceptions",
@@ -367,7 +382,7 @@ const REQUIRED_TRIGGERS = Object.freeze({
   learning_revoke_certifications_on_role_delete: {
     table: "core.user_roles",
     events: "before delete",
-    function: "private.revoke_certifications_for_role_assignment",
+    function: "private.revoke_certifications_for_role_assignment_v2",
   },
   learning_role_deactivation_revoke: {
     table: "core.roles",
@@ -396,6 +411,7 @@ const ALLOWED_SECURITY_DEFINERS = new Set([
   "private.validate_certification_issuance",
   "private.lock_certification_role_authority",
   "private.revoke_certifications_for_role_assignment",
+  "private.revoke_certifications_for_role_assignment_v2",
   "private.revoke_certifications_for_role_authority_loss",
   "private.validate_emergency_exception_issuance",
 ]);
@@ -415,7 +431,57 @@ const ALLOWED_FUNCTION_EXECUTE = Object.freeze({
 const MODELED_FUNCTIONS = new Set([
   ...ALLOWED_SECURITY_DEFINERS,
   ...Object.values(REQUIRED_TRIGGERS).map((trigger) => trigger.function),
+  "learning.guard_certification_lifecycle",
 ]);
+
+const EXPECTED_FUNCTION_DECLARATION_SQL = Object.freeze({
+  "private.learning_has_active_profile":
+    "create or replace function private.learning_has_active_profile(required_audience text) returns boolean language sql stable security definer set search_path = ''",
+  "private.learning_owns_department":
+    "create or replace function private.learning_owns_department(target_department_id uuid) returns boolean language sql stable security definer set search_path = ''",
+  "private.learning_is_active_employee_platform_admin":
+    "create or replace function private.learning_is_active_employee_platform_admin() returns boolean language sql stable security definer set search_path = ''",
+  "private.assert_learning_read_committed":
+    "create or replace function private.assert_learning_read_committed() returns void language plpgsql stable security definer set search_path = ''",
+  "private.lock_learning_curriculum_graph":
+    "create or replace function private.lock_learning_curriculum_graph(target_curriculum_version_ids uuid[]) returns void language plpgsql security definer set search_path = ''",
+  "private.validate_curriculum_graph_publication":
+    "create or replace function private.validate_curriculum_graph_publication(target_curriculum_version_id uuid, target_audience text, target_effective_at timestamptz) returns void language plpgsql security definer set search_path = ''",
+  "private.validate_assignment_requirement_waiver":
+    "create or replace function private.validate_assignment_requirement_waiver() returns trigger language plpgsql security definer set search_path = ''",
+  "private.validate_certification_issuance":
+    "create or replace function private.validate_certification_issuance() returns trigger language plpgsql security definer set search_path = ''",
+  "private.lock_certification_role_authority":
+    "create or replace function private.lock_certification_role_authority() returns trigger language plpgsql security definer set search_path = ''",
+  "private.revoke_certifications_for_role_assignment":
+    "create or replace function private.revoke_certifications_for_role_assignment() returns trigger language plpgsql security definer set search_path = ''",
+  "private.revoke_certifications_for_role_assignment_v2":
+    "create or replace function private.revoke_certifications_for_role_assignment_v2() returns trigger language plpgsql security definer set search_path = ''",
+  "private.revoke_certifications_for_role_authority_loss":
+    "create or replace function private.revoke_certifications_for_role_authority_loss() returns trigger language plpgsql security definer set search_path = ''",
+  "private.validate_emergency_exception_issuance":
+    "create or replace function private.validate_emergency_exception_issuance() returns trigger language plpgsql security definer set search_path = ''",
+  "learning.guard_authoritative_write_isolation":
+    "create or replace function learning.guard_authoritative_write_isolation() returns trigger language plpgsql set search_path = ''",
+  "learning.reject_evidence_mutation":
+    "create or replace function learning.reject_evidence_mutation() returns trigger language plpgsql set search_path = ''",
+  "learning.guard_attempt_lifecycle":
+    "create or replace function learning.guard_attempt_lifecycle() returns trigger language plpgsql set search_path = ''",
+  "learning.guard_assignment_lifecycle":
+    "create or replace function learning.guard_assignment_lifecycle() returns trigger language plpgsql set search_path = ''",
+  "learning.guard_assignment_requirement_lifecycle":
+    "create or replace function learning.guard_assignment_requirement_lifecycle() returns trigger language plpgsql set search_path = ''",
+  "learning.guard_certification_lifecycle":
+    "create or replace function learning.guard_certification_lifecycle() returns trigger language plpgsql set search_path = ''",
+  "learning.guard_certification_lifecycle_v2":
+    "create or replace function learning.guard_certification_lifecycle_v2() returns trigger language plpgsql set search_path = ''",
+  "learning.guard_emergency_exception_lifecycle":
+    "create or replace function learning.guard_emergency_exception_lifecycle() returns trigger language plpgsql set search_path = ''",
+  "learning.guard_content_lifecycle":
+    "create or replace function learning.guard_content_lifecycle() returns trigger language plpgsql set search_path = ''",
+  "learning.guard_curriculum_composition":
+    "create or replace function learning.guard_curriculum_composition() returns trigger language plpgsql set search_path = ''",
+});
 
 const EXPECTED_FUNCTION_BODY_SHA256 = Object.freeze({
   "private.learning_has_active_profile":
@@ -438,8 +504,10 @@ const EXPECTED_FUNCTION_BODY_SHA256 = Object.freeze({
     "4cbc6a01858221c42ac3854d11db00e52fcb1355b6224195352b2601ea8ecbd9",
   "private.revoke_certifications_for_role_assignment":
     "28832f0ca9ad37097ebc088b66f2aaf3cd0eede660a9236216bb5daeb507a067",
+  "private.revoke_certifications_for_role_assignment_v2":
+    "b6293eed92f8cc615dcb82ff840f119d95527cd4a961a66a93aa08146456c676",
   "private.revoke_certifications_for_role_authority_loss":
-    "b988f9259cac45781092744e9964a07393296845f62e5dd20f6f26c3a1a64e86",
+    "942e3d91a5165026516d16d4ad3bd89bcc98f17da2fe5825bb5d7bf196fce007",
   "private.validate_emergency_exception_issuance":
     "0055e93a905b56fc6d96db9aeb6850f9761da39fa1bd10421917f37c321b1531",
   "learning.guard_authoritative_write_isolation":
@@ -454,6 +522,8 @@ const EXPECTED_FUNCTION_BODY_SHA256 = Object.freeze({
     "faee2f823db6bb6715a156b78c298d2d6a113cb40a47715ca54df783e0bd7b39",
   "learning.guard_certification_lifecycle":
     "6ba8320387788360a850514cc8bd86217a08f2d26cc097b35bd84592bdc9ebbe",
+  "learning.guard_certification_lifecycle_v2":
+    "1910230a304676339d8ec85b91e27240f97d3d2d0c3862b79788f99acb5086fb",
   "learning.guard_emergency_exception_lifecycle":
     "de3b13bcb9feb8e5970c38362288fa27cd3e5e2f21f5ef422ba3a9466a393ad0",
   "learning.guard_content_lifecycle":
@@ -470,6 +540,97 @@ const ISOLATION_GUARDED_FUNCTIONS = new Set([
 
 function normalizeSql(value) {
   return value.toLowerCase().replace(/\s+/g, " ").trim().replace(/;$/, "");
+}
+
+function canonicalFunctionDeclaration(statement) {
+  const bodyStart = statement.match(/\bas\s+(\$[a-z_][a-z0-9_]*\$|\$\$)/i);
+  const declaration = bodyStart
+    ? statement.slice(0, bodyStart.index)
+    : statement;
+  return normalizeSql(declaration);
+}
+
+function functionArgumentType(argumentDeclaration) {
+  const tokens = normalizeSql(argumentDeclaration).split(/\s+/);
+  if (["in", "out", "inout", "variadic"].includes(tokens[0])) {
+    tokens.shift();
+  }
+  if (tokens.length < 2) return tokens.join(" ");
+  tokens.shift();
+  return tokens.join(" ");
+}
+
+function functionProconfig(declarationSuffix) {
+  const proconfig = [];
+  const settingPattern =
+    /\bset\s+([a-z_][a-z0-9_.]*)\s*(?:=|to)\s+([\s\S]*?)(?=\s+\bset\s+[a-z_][a-z0-9_.]*\s*(?:=|to)|$)/gi;
+  let match;
+  while ((match = settingPattern.exec(declarationSuffix))) {
+    let value = normalizeSql(match[2]);
+    if (/^'(?:''|[^'])*'$/.test(value)) {
+      value = value.slice(1, -1).replaceAll("''", "'");
+    }
+    proconfig.push(`${match[1].toLowerCase()}=${value}`);
+  }
+  return proconfig;
+}
+
+function parseFunctionDeclaration(statement) {
+  const declaration = canonicalFunctionDeclaration(statement);
+  const match = declaration.match(
+    /^create(?: or replace)? function ([a-z_][a-z0-9_]*)\.([a-z_][a-z0-9_]*)\s*\(([^()]*)\)\s+returns\s+(.+?)\s+language\s+([a-z_][a-z0-9_]*)([\s\S]*)$/,
+  );
+  if (!match) return null;
+
+  const argumentDeclarations = match[3].trim()
+    ? splitTopLevel(match[3]).map(normalizeSql)
+    : [];
+  const suffix = normalizeSql(match[6]);
+  const volatility = suffix.match(/\b(immutable|stable|volatile)\b/)?.[1];
+  const parallel = suffix.match(/\bparallel\s+(safe|restricted|unsafe)\b/)?.[1];
+
+  return {
+    orReplace: /^create or replace function\b/.test(declaration),
+    schema: match[1],
+    name: match[2],
+    qualifiedName: `${match[1]}.${match[2]}`,
+    argumentDeclarations,
+    argumentTypes: argumentDeclarations.map(functionArgumentType),
+    returnType: normalizeSql(match[4]),
+    language: match[5],
+    volatility: volatility ?? "volatile",
+    securityMode: /\bsecurity definer\b/.test(suffix) ? "definer" : "invoker",
+    leakproof:
+      /\bleakproof\b/.test(suffix) && !/\bnot leakproof\b/.test(suffix),
+    parallel: parallel ?? "unsafe",
+    strict:
+      /\bstrict\b/.test(suffix) ||
+      /\breturns null on null input\b/.test(suffix),
+    proconfig: functionProconfig(suffix),
+    declaration,
+  };
+}
+
+function functionMetadataDrift(actual, expected) {
+  const fields = [
+    "orReplace",
+    "schema",
+    "name",
+    "argumentDeclarations",
+    "argumentTypes",
+    "returnType",
+    "language",
+    "volatility",
+    "securityMode",
+    "leakproof",
+    "parallel",
+    "strict",
+    "proconfig",
+  ];
+  return fields.filter(
+    (field) =>
+      JSON.stringify(actual?.[field]) !== JSON.stringify(expected[field]),
+  );
 }
 
 function canonicalMigrationSql(value) {
@@ -998,6 +1159,15 @@ function createState() {
     triggers: new Map(),
     disabledTriggers: new Map(),
     indexes: new Map(),
+    roleAuthorityLifecycle: {
+      revocationReasonColumn: false,
+      historicalRevocationAttribution: false,
+      activeCertificationReconciliation: false,
+      revocationReasonConstraint: false,
+      truncateRevokes: new Map(
+        ROLE_AUTHORITY_TABLES.map((table) => [table, new Set()]),
+      ),
+    },
     errors: [],
   };
 }
@@ -1051,6 +1221,83 @@ function processStatement(state, statement, migrationName) {
       state.errors.push(
         `${migrationName}: authority identity bootstrap may not repeat.`,
       );
+    return;
+  }
+
+  if (
+    normalized ===
+    "alter table learning.certifications add column if not exists revocation_reason text"
+  ) {
+    if (!isRoleLifecycle) {
+      state.errors.push(
+        `${migrationName}: certification revocation attribution may only be introduced by the modeled lifecycle migration.`,
+      );
+    } else {
+      state.roleAuthorityLifecycle.revocationReasonColumn = true;
+    }
+    return;
+  }
+
+  if (
+    normalized ===
+    "update learning.certifications set revocation_reason = 'system:historical_revocation_backfill' where status = 'revoked' and revocation_reason is null"
+  ) {
+    if (
+      !isRoleLifecycle ||
+      state.triggers.has("learning_certifications_lifecycle_guard")
+    ) {
+      state.errors.push(
+        `${migrationName}: historical certification attribution must run in the locked modeled lifecycle window.`,
+      );
+    } else {
+      state.roleAuthorityLifecycle.historicalRevocationAttribution = true;
+    }
+    return;
+  }
+
+  if (/^update learning\.certifications certification set\b/.test(normalized)) {
+    const reconciliationPatterns = [
+      /set status = 'revoked', revoked_at = pg_catalog\.clock_timestamp\(\), revocation_reason = case/,
+      /then 'system:source_role_inactive'/,
+      /else 'system:source_role_capability_missing' end/,
+      /from core\.roles source_role/,
+      /source_role\.module = certification\.module/,
+      /source_role\.role = certification\.source_role/,
+      /source_role\.is_active/,
+      /where certification\.status = 'active'/,
+      /or not exists \( select 1 from core\.role_capabilities source_capability/,
+      /source_capability\.module = certification\.module/,
+      /source_capability\.role = certification\.source_role/,
+      /source_capability\.cap = certification\.capability/,
+    ];
+    if (
+      !isRoleLifecycle ||
+      state.triggers.has("learning_certifications_lifecycle_guard") ||
+      createHash("sha256").update(normalized).digest("hex") !==
+        ROLE_AUTHORITY_RECONCILIATION_SHA256 ||
+      reconciliationPatterns.some((pattern) => !pattern.test(normalized))
+    ) {
+      state.errors.push(
+        `${migrationName}: one-time existing active certification authority reconciliation is missing or weakened.`,
+      );
+    } else {
+      state.roleAuthorityLifecycle.activeCertificationReconciliation = true;
+    }
+    return;
+  }
+
+  if (
+    /^alter table learning\.certifications add constraint certifications_revocation_reason_check check \( \(status = 'revoked'\) = \(nullif\(pg_catalog\.btrim\(revocation_reason\), ''\) is not null\) \)$/.test(
+      normalized,
+    )
+  ) {
+    if (!isRoleLifecycle) {
+      state.errors.push(
+        `${migrationName}: certification revocation attribution constraint is outside the modeled lifecycle migration.`,
+      );
+    } else {
+      state.roleAuthorityLifecycle.revocationReasonConstraint = true;
+    }
     return;
   }
 
@@ -1231,6 +1478,50 @@ function processStatement(state, statement, migrationName) {
   }
 
   match = normalized.match(
+    /^revoke (.+?) on (?:table )?core\.(roles|role_capabilities|user_roles) from (.+?)(?: cascade| restrict)?$/,
+  );
+  if (match) {
+    const privileges = expandPrivileges(match[1]);
+    const grantees = parseGrantees(match[3]);
+    const exactGrantees =
+      grantees.length === UNSAFE_AUTHORITY_TRUNCATE_ROLES.length &&
+      UNSAFE_AUTHORITY_TRUNCATE_ROLES.every((role) => grantees.includes(role));
+    if (
+      !isRoleLifecycle ||
+      privileges.length !== 1 ||
+      privileges[0] !== "truncate" ||
+      !exactGrantees
+    ) {
+      state.errors.push(
+        `${migrationName}: authority table privilege changes must be the exact modeled TRUNCATE denial.`,
+      );
+      return;
+    }
+    const revoked = state.roleAuthorityLifecycle.truncateRevokes.get(match[2]);
+    for (const role of grantees) revoked.add(role);
+    return;
+  }
+
+  if (
+    /^grant .+ on (?:table )?core\.(?:roles|role_capabilities|user_roles) to /.test(
+      normalized,
+    ) ||
+    /^grant .+ on all tables in schema core to /.test(normalized)
+  ) {
+    state.errors.push(
+      `${migrationName}: authority table privileges cannot restore TRUNCATE or bypass row-level constrained role updates.`,
+    );
+    return;
+  }
+
+  if (/^alter default privileges\b/.test(normalized)) {
+    state.errors.push(
+      `${migrationName}: DEFAULT PRIVILEGES changes are denied after the pinned baseline and cannot restore authority-table TRUNCATE.`,
+    );
+    return;
+  }
+
+  match = normalized.match(
     /^grant (.+?) on (?:table )?learning\.([a-z_]+) to (.+)$/,
   );
   if (match) {
@@ -1259,7 +1550,7 @@ function processStatement(state, statement, migrationName) {
   }
 
   match = normalized.match(
-    /^grant execute on function ([a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*)\s*\([^)]*\) to (.+)$/,
+    /^grant execute on function ([a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*)\s*\(([^)]*)\) to (.+)$/,
   );
   if (match) {
     if (/\bwith grant option\b/.test(normalized)) {
@@ -1275,13 +1566,25 @@ function processStatement(state, statement, migrationName) {
       );
       return;
     }
-    for (const role of parseGrantees(match[2]))
+    const privilegeArgumentTypes = match[2].trim()
+      ? splitTopLevel(match[2]).map(normalizeSql)
+      : [];
+    if (
+      JSON.stringify(privilegeArgumentTypes) !==
+      JSON.stringify(functionEntry.metadata.argumentTypes)
+    ) {
+      state.errors.push(
+        `${migrationName}: function privilege target ${match[1]} has an unexpected signature.`,
+      );
+      return;
+    }
+    for (const role of parseGrantees(match[3]))
       functionEntry.executeRoles.add(role);
     return;
   }
 
   match = normalized.match(
-    /^revoke (?:all(?: privileges)?|execute) on function ([a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*)\s*\([^)]*\) from (.+?)(?: cascade| restrict)?$/,
+    /^revoke (?:all(?: privileges)?|execute) on function ([a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*)\s*\(([^)]*)\) from (.+?)(?: cascade| restrict)?$/,
   );
   if (match) {
     const functionEntry = state.functions.get(match[1]);
@@ -1293,7 +1596,19 @@ function processStatement(state, statement, migrationName) {
       }
       return;
     }
-    for (const role of parseGrantees(match[2]))
+    const privilegeArgumentTypes = match[2].trim()
+      ? splitTopLevel(match[2]).map(normalizeSql)
+      : [];
+    if (
+      JSON.stringify(privilegeArgumentTypes) !==
+      JSON.stringify(functionEntry.metadata.argumentTypes)
+    ) {
+      state.errors.push(
+        `${migrationName}: function privilege target ${match[1]} has an unexpected signature.`,
+      );
+      return;
+    }
+    for (const role of parseGrantees(match[3]))
       functionEntry.executeRoles.delete(role);
     return;
   }
@@ -1353,25 +1668,33 @@ function processStatement(state, statement, migrationName) {
     /^create (or replace )?function ([a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*)\s*\(/,
   );
   if (match) {
-    if (!MODELED_FUNCTIONS.has(match[2])) {
+    const metadata = parseFunctionDeclaration(statement);
+    if (!metadata) {
       state.errors.push(
-        `${migrationName}: unmodeled procedural function ${match[2]} is default-denied.`,
+        `${migrationName}: modeled function declaration metadata is not safely analyzable.`,
       );
       return;
     }
-    if (state.functions.has(match[2])) {
+    if (!MODELED_FUNCTIONS.has(metadata.qualifiedName)) {
       state.errors.push(
-        `${migrationName}: replacement or overload of modeled function ${match[2]} is default-denied.`,
+        `${migrationName}: unmodeled procedural function ${metadata.qualifiedName} is default-denied.`,
       );
       return;
     }
-    state.functions.set(match[2], {
+    if (state.functions.has(metadata.qualifiedName)) {
+      state.errors.push(
+        `${migrationName}: replacement or overload of modeled function ${metadata.qualifiedName} is default-denied.`,
+      );
+      return;
+    }
+    state.functions.set(metadata.qualifiedName, {
       statement,
       body: functionBody(statement),
       reachableBody: withoutStaticallyUnreachableBranches(
         functionBody(statement),
       ),
-      securityDefiner: /\bsecurity definer\b/.test(normalized),
+      metadata,
+      securityDefiner: metadata.securityMode === "definer",
       executeRoles: new Set(["public"]),
       migrationName,
     });
@@ -1400,7 +1723,7 @@ function processStatement(state, statement, migrationName) {
   }
 
   match = normalized.match(
-    /^create (?:or replace )?(constraint )?trigger ([a-z_]+) (.+?) on ((?:learning|core)\.[a-z_]+) (.*?)for each row execute function ((?:learning|private)\.[a-z_]+)\s*\(/,
+    /^create (?:or replace )?(constraint )?trigger ([a-z_][a-z0-9_]*) (.+?) on ((?:learning|core)\.[a-z_][a-z0-9_]*) (.*?)for each row execute function ((?:learning|private)\.[a-z_][a-z0-9_]*)\s*\(/,
   );
   if (match) {
     if (!Object.hasOwn(REQUIRED_TRIGGERS, match[2])) {
@@ -1444,7 +1767,13 @@ function processStatement(state, statement, migrationName) {
     /^create (unique )?index(?: if not exists)? ([a-z_]+) on learning\.([a-z_]+)\s*\(([^]*?)\)(?: where .+)?$/,
   );
   if (match) {
-    if (!isFoundation && !state.indexes.has(match[2])) {
+    const isModeledRoleAuthorityIndex =
+      isRoleLifecycle && match[2] === ROLE_AUTHORITY_INDEX_NAME;
+    if (
+      !isFoundation &&
+      !state.indexes.has(match[2]) &&
+      !isModeledRoleAuthorityIndex
+    ) {
       state.errors.push(
         `${migrationName}: unmodeled index ${match[2]} is default-denied.`,
       );
@@ -2210,10 +2539,12 @@ function validateFunctions(state) {
   );
   requireFunction(
     state,
-    "learning.guard_certification_lifecycle",
+    "learning.guard_certification_lifecycle_v2",
     [
       /tg_op = 'delete'/,
       /old\.status <> 'active'/,
+      /revocation_reason/,
+      /attributable reason/,
       /certification issuance evidence is immutable/,
       /raise exception/,
     ],
@@ -2361,6 +2692,8 @@ function validateFunctions(state) {
       /update learning\.certifications/,
       /source_role = old\.role/,
       /capability = old\.cap/,
+      /system:source_role_inactive/,
+      /system:source_role_capability_missing/,
       /status = 'revoked'/,
       /status = 'active'/,
     ],
@@ -2368,10 +2701,11 @@ function validateFunctions(state) {
   );
   requireFunction(
     state,
-    "private.revoke_certifications_for_role_assignment",
+    "private.revoke_certifications_for_role_assignment_v2",
     [
       /update learning\.certifications/,
       /status = 'revoked'/,
+      /system:source_role_assignment_removed/,
       /source_role_assignment_id = old\.id/,
     ],
     "Role deletion must revoke dependent active certifications without deleting history.",
@@ -2432,6 +2766,23 @@ function validateFunctions(state) {
       continue;
     }
     const functionEntry = state.functions.get(name);
+    const expectedDeclaration = EXPECTED_FUNCTION_DECLARATION_SQL[name];
+    if (!expectedDeclaration) {
+      state.errors.push(
+        `Modeled function ${name} has no pinned exact declaration metadata.`,
+      );
+    } else {
+      const expectedMetadata = parseFunctionDeclaration(expectedDeclaration);
+      const drift = functionMetadataDrift(
+        functionEntry.metadata,
+        expectedMetadata,
+      );
+      if (drift.length > 0) {
+        state.errors.push(
+          `Modeled function ${name} declaration metadata drifted (${drift.join(", ")}); exact signature, return type, language, volatility, security, leakproof, parallel, strictness, and proconfig are required.`,
+        );
+      }
+    }
     if (functionEntry.securityDefiner !== ALLOWED_SECURITY_DEFINERS.has(name)) {
       state.errors.push(
         `Modeled function ${name} has an unexpected SECURITY DEFINER security mode.`,
@@ -2604,6 +2955,54 @@ function validateIndexes(state) {
       );
     }
   }
+
+  const authorityIndex = state.indexes.get(ROLE_AUTHORITY_INDEX_NAME);
+  if (
+    !authorityIndex ||
+    authorityIndex.table !== "certifications" ||
+    authorityIndex.unique ||
+    authorityIndex.columns.join(",") !== "module,source_role,capability" ||
+    !/where status = 'active'/.test(authorityIndex.normalized)
+  ) {
+    state.errors.push(
+      "Missing active certification role authority index on (module, source_role, capability).",
+    );
+  }
+}
+
+function validateRoleAuthorityLifecycle(state) {
+  const lifecycle = state.roleAuthorityLifecycle;
+  if (!lifecycle.revocationReasonColumn) {
+    state.errors.push(
+      "Certification authority lifecycle must add attributable revocation reasons.",
+    );
+  }
+  if (!lifecycle.historicalRevocationAttribution) {
+    state.errors.push(
+      "Existing revoked certifications need one-time revocation attribution.",
+    );
+  }
+  if (!lifecycle.activeCertificationReconciliation) {
+    state.errors.push(
+      "Existing active certifications need one-time role authority reconciliation.",
+    );
+  }
+  if (!lifecycle.revocationReasonConstraint) {
+    state.errors.push(
+      "Certification revocation status and attributable reason must remain constrained.",
+    );
+  }
+  for (const table of ROLE_AUTHORITY_TABLES) {
+    const revoked = lifecycle.truncateRevokes.get(table);
+    const missing = UNSAFE_AUTHORITY_TRUNCATE_ROLES.filter(
+      (role) => !revoked.has(role),
+    );
+    if (missing.length > 0) {
+      state.errors.push(
+        `TRUNCATE on core.${table} must be revoked from unsafe roles so supported authority changes remain row-level.`,
+      );
+    }
+  }
 }
 
 function validateAuthorityIsolation(state) {
@@ -2658,6 +3057,7 @@ export function verifyLearningSchema(input) {
   validateFunctions(state);
   validateTriggers(state);
   validateIndexes(state);
+  validateRoleAuthorityLifecycle(state);
   validateAuthorityIsolation(state);
 
   return [...new Set(state.errors)];
