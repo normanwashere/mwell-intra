@@ -47,8 +47,184 @@ function functionBody(name, source = sql) {
 
 test("uses the monotonic forward foundation and satisfies the full contract", () => {
   assert.equal(existsSync(oldMigration), false);
-  assert.equal(REQUIRED_TABLES.length, 13);
+  assert.equal(REQUIRED_TABLES.length, 15);
   assert.deepEqual(verifyLearningSchema(sql), []);
+});
+
+test("normalizes prerequisite and capability outcome graph lineage", () => {
+  for (const table of [
+    "curriculum_requirement_prerequisites",
+    "curriculum_capability_outcomes",
+  ]) {
+    assert.ok(REQUIRED_TABLES.includes(table), table);
+    assert.match(sql, new RegExp(`create table learning\\.${table}`, "i"));
+  }
+
+  assert.match(
+    sql,
+    /constraint curriculum_requirement_prerequisites_source_fk[\s\S]*?foreign key\s*\(\s*curriculum_requirement_id\s*,\s*curriculum_version_id\s*,\s*requirement_version_id\s*,\s*audience\s*\)[\s\S]*?references learning\.curriculum_requirements\s*\(\s*id\s*,\s*curriculum_version_id\s*,\s*requirement_version_id\s*,\s*audience\s*\)/i,
+  );
+  assert.match(
+    sql,
+    /constraint curriculum_requirement_prerequisites_target_fk[\s\S]*?foreign key\s*\(\s*curriculum_version_id\s*,\s*prerequisite_requirement_version_id\s*,\s*audience\s*\)[\s\S]*?references learning\.curriculum_requirements\s*\(\s*curriculum_version_id\s*,\s*requirement_version_id\s*,\s*audience\s*\)/i,
+  );
+  assert.match(
+    sql,
+    /constraint curriculum_capability_outcomes_source_fk[\s\S]*?foreign key\s*\(\s*curriculum_requirement_id\s*,\s*curriculum_version_id\s*,\s*requirement_version_id\s*,\s*audience\s*\)[\s\S]*?references learning\.curriculum_requirements\s*\(\s*id\s*,\s*curriculum_version_id\s*,\s*requirement_version_id\s*,\s*audience\s*\)/i,
+  );
+  assert.match(
+    sql,
+    /constraint curriculum_capability_outcomes_capability_fk[\s\S]*?foreign key\s*\(\s*module\s*,\s*capability\s*\)[\s\S]*?references core\.capabilities\s*\(\s*module\s*,\s*cap\s*\)/i,
+  );
+  assert.match(
+    sql,
+    /constraint curriculum_capability_outcomes_audience_check[\s\S]*?audience = 'vendor'[\s\S]*?module = 'core'[\s\S]*?capability = 'manage_own_accreditation_draft'/i,
+  );
+  assert.doesNotMatch(
+    sql,
+    /prerequisite_requirement_version_ids|capability_outcomes jsonb/i,
+  );
+});
+
+test("binds certification to published effective graph outcomes", () => {
+  const issuance = functionBody("validate_certification_issuance");
+  for (const invariant of [
+    /learning\.curriculum_capability_outcomes/i,
+    /learning\.curriculum_requirement_prerequisites/i,
+    /outcome\.module\s*=\s*new\.module/i,
+    /outcome\.capability\s*=\s*new\.capability/i,
+    /outcome\.audience\s*=\s*new\.audience/i,
+    /requirement_version\.status\s*=\s*'published'/i,
+    /requirement_version\.effective_at\s*<=\s*new\.effective_at/i,
+    /requirement_version\.expires_at\s+is null/i,
+    /prerequisite\.prerequisite_requirement_version_id\s*=\s*any\(new\.requirement_version_ids\)/i,
+  ]) {
+    assert.match(issuance, invariant);
+  }
+
+  const publication = functionBody("validate_curriculum_graph_publication");
+  assert.match(publication, /learning\.requirement_versions/i);
+  assert.match(publication, /requirement_version\.status\s*<>\s*'published'/i);
+  assert.match(publication, /with recursive/i);
+  assert.match(publication, /raise exception/i);
+});
+
+test("serializes authority deletion, graph mutation, and graph publication in lock order", () => {
+  const issuance = functionBody("validate_certification_issuance");
+  const roleLock = issuance.search(/core\.user_roles[\s\S]*?for key share/i);
+  const graphLock = issuance.search(
+    /private\.lock_learning_curriculum_graph\s*\(/i,
+  );
+  assert.ok(roleLock >= 0, "issuance must acquire a role-row KEY SHARE lock");
+  assert.ok(
+    graphLock > roleLock,
+    "issuance must lock role authority before curriculum graph rows",
+  );
+
+  const graphLocker = functionBody("lock_learning_curriculum_graph");
+  assert.match(
+    graphLocker,
+    /order by curriculum_version\.id[\s\S]*?for update/i,
+  );
+
+  for (const guard of [
+    "guard_curriculum_composition",
+    "validate_curriculum_graph_publication",
+  ]) {
+    const body = functionBody(guard);
+    assert.match(body, /private\.lock_learning_curriculum_graph\s*\(/i, guard);
+  }
+  assert.match(
+    sql,
+    /Lock order:[\s\S]*?core\.user_roles[\s\S]*?learning\.curriculum_versions[\s\S]*?learning\.requirement_versions/i,
+  );
+});
+
+test("keeps authenticated content access read-only for attributable future RPCs", () => {
+  assert.doesNotMatch(
+    sql,
+    /grant\s+(?:insert|update|delete|[^;]*,\s*(?:insert|update|delete))[^;]*on learning\.[a-z_]+ to authenticated/i,
+  );
+  for (const table of REQUIRED_TABLES) {
+    assert.match(
+      sql,
+      new RegExp(`grant select on learning\\.${table} to authenticated;`, "i"),
+      table,
+    );
+  }
+});
+
+test("requires one active-profile helper in every authenticated policy path", () => {
+  const policies = [
+    ...sql.matchAll(
+      /create policy ([a-z_]+) on learning\.[a-z_]+[\s\S]*?\n\);/gi,
+    ),
+  ];
+  assert.ok(policies.length > 0);
+  for (const policy of policies) {
+    assert.match(
+      policy[0],
+      /private\.learning_has_active_profile\s*\(/i,
+      policy[1],
+    );
+  }
+  assert.match(
+    functionBody("learning_has_active_profile"),
+    /profile\.status\s*=\s*'active'/i,
+  );
+
+  const branchBypass = replaceRequired(
+    sql,
+    /create policy learning_assignments_learner_read[\s\S]*?\n\);/i,
+    `create policy learning_assignments_learner_read on learning.assignments
+for select to authenticated
+using (
+  (
+    user_id = (select auth.uid())
+    and private.learning_has_active_profile(audience)
+    and not core.is_vendor()
+  )
+  or (user_id = (select auth.uid()) and not core.is_vendor())
+);`,
+  );
+  assert.match(
+    errorsFor(branchBypass),
+    /active profile.*every.*path|policy.*active profile/i,
+  );
+});
+
+test("rejects vendor waivers and makes assignment terminal evidence monotonic", () => {
+  assert.match(
+    functionBody("validate_assignment_requirement_waiver"),
+    /requirement_version\.audience\s*=\s*'vendor'[\s\S]*?raise exception/i,
+  );
+  for (const guard of [
+    "guard_assignment_lifecycle",
+    "guard_assignment_requirement_lifecycle",
+  ]) {
+    const body = functionBody(guard);
+    assert.match(body, /tg_op\s*=\s*'DELETE'/i, guard);
+    assert.match(body, /terminal[\s\S]*?immutable/i, guard);
+    assert.match(body, /raise exception/i, guard);
+  }
+  const certifications = sql.match(
+    /create table learning\.certifications\s*\([\s\S]*?\n\);/i,
+  )?.[0];
+  const exceptions = sql.match(
+    /create table learning\.emergency_exceptions\s*\([\s\S]*?\n\);/i,
+  )?.[0];
+  assert.match(
+    certifications ?? "",
+    /revoked_at is null or revoked_at >= issued_at/i,
+  );
+  assert.match(
+    certifications ?? "",
+    /superseded_at is null or superseded_at >= issued_at/i,
+  );
+  assert.match(
+    exceptions ?? "",
+    /revoked_at is null or revoked_at >= effective_at/i,
+  );
 });
 
 test("declares every governed table with UUID identity, timestamp, and terminal RLS", () => {
@@ -272,7 +448,7 @@ test("completes structural audience isolation and rejects vendor Platform profil
   );
   assert.match(
     functionBody("learning_is_active_employee_platform_admin"),
-    /profile\.kind\s*=\s*'employee'[\s\S]*?profile\.status\s*=\s*'active'[\s\S]*?core\.has_cap\('core', 'manage_rbac'\)/i,
+    /private\.learning_has_active_profile\('internal'\)[\s\S]*?core\.has_cap\('core', 'manage_rbac'\)/i,
   );
 });
 
@@ -384,6 +560,117 @@ test("evaluates ordered later migrations and rejects terminal weakening", () => 
       /RLS|policy|grant|trigger|guard|constraint|weakening/i,
       weakening,
     );
+  }
+});
+
+test("rejects round-two policy, function, trigger, DDL, grantee, and role bypasses", () => {
+  const bypasses = [
+    {
+      sql: replaceRequired(
+        sql,
+        /create policy learning_assignments_learner_read[\s\S]*?\n\);/i,
+        "create policy learning_assignments_learner_read on learning.assignments for select to authenticated using (user_id = (select auth.uid()) and private.learning_has_active_profile(audience) or true);",
+      ),
+      error: /tautolog|permissive|policy/i,
+    },
+    {
+      sql: replaceRequired(
+        sql,
+        /create policy learning_assignments_learner_read[\s\S]*?\n\);/i,
+        "create policy learning_assignments_learner_read on learning.assignments for select to authenticated using (user_id = (select auth.uid()) and private.learning_has_active_profile(audience) or 1 = 1);",
+      ),
+      error: /tautolog|permissive|policy/i,
+    },
+    {
+      sql: `${sql}\ncreate function private.learning_dump() returns setof learning.certifications language sql security definer set search_path = '' as $$ select * from learning.certifications $$;`,
+      error:
+        /unknown.*security definer|privileged.*function|function.*learning/i,
+    },
+    {
+      sql: `${sql}\ncreate function private.quoted_learning_dump() returns setof uuid language sql security definer set search_path = '' as $$ select id from "learning"."certifications" $$; revoke all on function private.quoted_learning_dump() from public;`,
+      error:
+        /unknown.*security definer|privileged.*function|function.*learning/i,
+    },
+    {
+      sql: `${sql}\ngrant execute on function private.validate_certification_issuance() to authenticated;`,
+      error: /execute|function.*grant/i,
+    },
+    {
+      sql: replaceRequired(
+        sql,
+        /create or replace function learning\.reject_evidence_mutation\(\)[\s\S]*?\$\$;/i,
+        "create or replace function learning.reject_evidence_mutation() returns trigger language plpgsql as $$ begin if false then raise exception 'append-only'; end if; return new; end; $$;",
+      ),
+      error: /unreachable|inert|guard/i,
+    },
+    {
+      sql: replaceRequired(
+        sql,
+        /create or replace function learning\.reject_evidence_mutation\(\)[\s\S]*?\$\$;/i,
+        "create or replace function learning.reject_evidence_mutation() returns trigger language plpgsql as $$ begin return new; if true then raise exception 'append-only'; end if; end; $$;",
+      ),
+      error: /unreachable|inert|guard/i,
+    },
+  ];
+
+  for (const bypass of bypasses) {
+    assert.match(errorsFor(bypass.sql), bypass.error);
+  }
+
+  const laterBypasses = [
+    "alter table learning.attempt_events enable replica trigger learning_attempt_events_append_only;",
+    "drop index if exists learning.learning_assignments_curriculum_fk_idx cascade;",
+    "drop index concurrently if exists learning_assignments_curriculum_fk_idx;",
+    "alter table learning.certifications add foreign key (source_role_assignment_id) references core.user_roles(id);",
+    "grant select on learning.certifications to reporting_login;",
+    "alter role reporting_login bypassrls;",
+    "create role learning_backdoor login bypassrls;",
+  ];
+  for (const weakening of laterBypasses) {
+    assert.match(
+      orderedErrors(weakening),
+      /trigger|index|role assignment|user_roles|grantee|grant|bypassrls|role/i,
+      weakening,
+    );
+  }
+});
+
+test("rejects removed locks, graph lineage, active-profile, and monotonic guards", () => {
+  const mutations = [
+    [
+      /for key share of role_assignment/i,
+      "",
+      /role.*lock|issuance.*serial|key share/i,
+    ],
+    [
+      /from learning\.curriculum_capability_outcomes outcome\s+where outcome\.curriculum_version_id = new\.curriculum_version_id/i,
+      "from learning.curriculum_requirements outcome where outcome.curriculum_version_id = new.curriculum_version_id",
+      /capability outcome|graph lineage|certification/i,
+    ],
+    [
+      /from learning\.curriculum_requirement_prerequisites prerequisite\s+where prerequisite\.curriculum_version_id = new\.curriculum_version_id/i,
+      "from learning.curriculum_requirements prerequisite where prerequisite.curriculum_version_id = new.curriculum_version_id",
+      /prerequisite|graph lineage|certification/i,
+    ],
+    [
+      /requirement_version\.audience = 'vendor'/i,
+      "false",
+      /vendor.*waiv|waiv.*vendor/i,
+    ],
+    [
+      /private\.learning_has_active_profile\(audience\)/i,
+      "true",
+      /active profile|policy/i,
+    ],
+    [
+      /create trigger learning_assignments_lifecycle_guard[\s\S]*?;/i,
+      "",
+      /assignment.*lifecycle|trigger/i,
+    ],
+  ];
+  for (const [pattern, replacement, expected] of mutations) {
+    const weakened = replaceRequired(sql, pattern, replacement);
+    assert.match(errorsFor(weakened), expected, String(pattern));
   }
 });
 

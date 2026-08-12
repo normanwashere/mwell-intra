@@ -249,8 +249,6 @@ create table learning.curriculum_requirements (
   audience text not null,
   sort_order integer not null,
   mandatory boolean not null default true,
-  prerequisite_requirement_version_ids uuid[] not null default '{}'::uuid[],
-  capability_outcomes jsonb not null default '[]'::jsonb,
   created_by uuid not null references core.profiles(id) on delete restrict,
   created_at timestamptz not null default now(),
   constraint curriculum_requirements_curriculum_fk
@@ -260,11 +258,82 @@ create table learning.curriculum_requirements (
     foreign key (requirement_version_id, audience)
     references learning.requirement_versions(id, audience) on delete restrict,
   constraint curriculum_requirements_order_check check (sort_order >= 0),
-  constraint curriculum_requirements_prerequisite_check
-    check (not requirement_version_id = any(prerequisite_requirement_version_ids)),
-  constraint curriculum_requirements_capability_outcomes_check
-    check (jsonb_typeof(capability_outcomes) = 'array'),
-  unique (curriculum_version_id, requirement_version_id)
+  unique (curriculum_version_id, requirement_version_id),
+  unique (id, curriculum_version_id, requirement_version_id, audience),
+  unique (curriculum_version_id, requirement_version_id, audience)
+);
+
+create table learning.curriculum_requirement_prerequisites (
+  id uuid primary key default gen_random_uuid(),
+  curriculum_requirement_id uuid not null,
+  curriculum_version_id uuid not null,
+  requirement_version_id uuid not null,
+  prerequisite_requirement_version_id uuid not null,
+  audience text not null,
+  created_by uuid not null references core.profiles(id) on delete restrict,
+  created_at timestamptz not null default now(),
+  constraint curriculum_requirement_prerequisites_source_fk
+    foreign key (
+      curriculum_requirement_id,
+      curriculum_version_id,
+      requirement_version_id,
+      audience
+    ) references learning.curriculum_requirements(
+      id,
+      curriculum_version_id,
+      requirement_version_id,
+      audience
+    ) on delete restrict,
+  constraint curriculum_requirement_prerequisites_target_fk
+    foreign key (
+      curriculum_version_id,
+      prerequisite_requirement_version_id,
+      audience
+    ) references learning.curriculum_requirements(
+      curriculum_version_id,
+      requirement_version_id,
+      audience
+    ) on delete restrict,
+  constraint curriculum_requirement_prerequisites_not_self_check
+    check (requirement_version_id <> prerequisite_requirement_version_id),
+  unique (curriculum_requirement_id, prerequisite_requirement_version_id)
+);
+
+create table learning.curriculum_capability_outcomes (
+  id uuid primary key default gen_random_uuid(),
+  curriculum_requirement_id uuid not null,
+  curriculum_version_id uuid not null,
+  requirement_version_id uuid not null,
+  audience text not null,
+  module text not null,
+  capability text not null,
+  created_by uuid not null references core.profiles(id) on delete restrict,
+  created_at timestamptz not null default now(),
+  constraint curriculum_capability_outcomes_source_fk
+    foreign key (
+      curriculum_requirement_id,
+      curriculum_version_id,
+      requirement_version_id,
+      audience
+    ) references learning.curriculum_requirements(
+      id,
+      curriculum_version_id,
+      requirement_version_id,
+      audience
+    ) on delete restrict,
+  constraint curriculum_capability_outcomes_capability_fk
+    foreign key (module, capability)
+    references core.capabilities(module, cap) on delete restrict,
+  constraint curriculum_capability_outcomes_audience_check
+    check (
+      audience = 'internal'
+      or (
+        audience = 'vendor'
+        and module = 'core'
+        and capability = 'manage_own_accreditation_draft'
+      )
+    ),
+  unique (curriculum_requirement_id, module, capability)
 );
 
 create table learning.role_curricula (
@@ -640,6 +709,7 @@ create table learning.emergency_exceptions (
       (status = 'revoked') = (revoked_at is not null)
       and (status = 'revoked') = (revoked_by is not null)
       and (status = 'revoked') = (nullif(btrim(revocation_reason), '') is not null)
+      and (revoked_at is null or revoked_at >= effective_at)
     )
 );
 
@@ -701,6 +771,32 @@ create index learning_curriculum_requirements_requirement_fk_idx
   on learning.curriculum_requirements(requirement_version_id, audience);
 create index learning_curriculum_requirements_created_by_fk_idx
   on learning.curriculum_requirements(created_by);
+create index learning_curriculum_requirement_prerequisites_source_fk_idx
+  on learning.curriculum_requirement_prerequisites(
+    curriculum_requirement_id,
+    curriculum_version_id,
+    requirement_version_id,
+    audience
+  );
+create index learning_curriculum_requirement_prerequisites_target_fk_idx
+  on learning.curriculum_requirement_prerequisites(
+    curriculum_version_id,
+    prerequisite_requirement_version_id,
+    audience
+  );
+create index learning_curriculum_requirement_prerequisites_created_by_fk_idx
+  on learning.curriculum_requirement_prerequisites(created_by);
+create index learning_curriculum_capability_outcomes_source_fk_idx
+  on learning.curriculum_capability_outcomes(
+    curriculum_requirement_id,
+    curriculum_version_id,
+    requirement_version_id,
+    audience
+  );
+create index learning_curriculum_capability_outcomes_capability_fk_idx
+  on learning.curriculum_capability_outcomes(module, capability);
+create index learning_curriculum_capability_outcomes_created_by_fk_idx
+  on learning.curriculum_capability_outcomes(created_by);
 create index learning_role_curricula_curriculum_fk_idx
   on learning.role_curricula(curriculum_version_id, audience);
 create index learning_role_curricula_department_fk_idx
@@ -788,7 +884,7 @@ create index learning_emergency_exceptions_approver_fk_idx
 create index learning_emergency_exceptions_revoked_by_fk_idx
   on learning.emergency_exceptions(revoked_by);
 
-create or replace function private.learning_audience_matches_current_profile(target_audience text)
+create or replace function private.learning_has_active_profile(required_audience text)
 returns boolean
 language sql
 stable
@@ -801,8 +897,8 @@ as $$
     where profile.id = (select auth.uid())
       and profile.status = 'active'
       and (
-        (profile.kind = 'employee' and target_audience = 'internal')
-        or (profile.kind = 'vendor' and target_audience = 'vendor')
+        (profile.kind = 'employee' and required_audience = 'internal')
+        or (profile.kind = 'vendor' and required_audience = 'vendor')
       )
   );
 $$;
@@ -815,18 +911,15 @@ security definer
 set search_path = ''
 as $$
   select
-    not core.is_vendor()
+    private.learning_has_active_profile('internal')
     and exists (
       select 1
       from core.profile_department_scopes scope
-      join core.profiles profile on profile.id = scope.profile_id
       where scope.profile_id = (select auth.uid())
         and scope.department_id = target_department_id
         and scope.scope_type = 'owner'
         and scope.effective_from <= current_date
         and (scope.effective_to is null or scope.effective_to >= current_date)
-        and profile.kind = 'employee'
-        and profile.status = 'active'
     );
 $$;
 
@@ -837,28 +930,162 @@ stable
 security definer
 set search_path = ''
 as $$
-  select exists (
-    select 1
-    from core.profiles profile
-    where profile.id = (select auth.uid())
-      and profile.kind = 'employee'
-      and profile.status = 'active'
-      and core.has_cap('core', 'manage_rbac')
-  );
+  select private.learning_has_active_profile('internal')
+    and core.has_cap('core', 'manage_rbac');
 $$;
 
-revoke all on function private.learning_audience_matches_current_profile(text)
+revoke all on function private.learning_has_active_profile(text)
   from public, anon;
 revoke all on function private.learning_owns_department(uuid)
   from public, anon;
 revoke all on function private.learning_is_active_employee_platform_admin()
   from public, anon;
-grant execute on function private.learning_audience_matches_current_profile(text)
+grant execute on function private.learning_has_active_profile(text)
   to authenticated, service_role;
 grant execute on function private.learning_owns_department(uuid)
   to authenticated, service_role;
 grant execute on function private.learning_is_active_employee_platform_admin()
   to authenticated, service_role;
+
+-- Lock order: core.user_roles first, then learning.curriculum_versions in UUID
+-- order, then learning.requirement_versions in UUID order. Role deletion already
+-- holds its core.user_roles row lock before its BEFORE DELETE trigger runs.
+create or replace function private.lock_learning_curriculum_graph(
+  target_curriculum_version_ids uuid[]
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  perform 1
+  from learning.curriculum_versions curriculum_version
+  where curriculum_version.id = any(target_curriculum_version_ids)
+  order by curriculum_version.id
+  for update;
+end;
+$$;
+
+create or replace function private.validate_curriculum_graph_publication(
+  target_curriculum_version_id uuid,
+  target_audience text,
+  target_effective_at timestamptz
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  perform private.lock_learning_curriculum_graph(
+    array[target_curriculum_version_id]
+  );
+
+  if target_effective_at is null then
+    raise exception 'Approved curriculum graphs require an effective timestamp';
+  end if;
+
+  perform 1
+  from learning.requirement_versions requirement_version
+  join learning.curriculum_requirements curriculum_requirement
+    on curriculum_requirement.requirement_version_id = requirement_version.id
+   and curriculum_requirement.audience = requirement_version.audience
+  where curriculum_requirement.curriculum_version_id = target_curriculum_version_id
+    and curriculum_requirement.audience = target_audience
+  order by requirement_version.id
+  for share of requirement_version;
+
+  if not exists (
+    select 1
+    from learning.curriculum_requirements curriculum_requirement
+    where curriculum_requirement.curriculum_version_id = target_curriculum_version_id
+      and curriculum_requirement.audience = target_audience
+  ) then
+    raise exception 'A curriculum graph cannot be published empty';
+  end if;
+
+  if exists (
+    select 1
+    from learning.curriculum_requirements curriculum_requirement
+    join learning.requirement_versions requirement_version
+      on requirement_version.id = curriculum_requirement.requirement_version_id
+     and requirement_version.audience = curriculum_requirement.audience
+    where curriculum_requirement.curriculum_version_id = target_curriculum_version_id
+      and curriculum_requirement.audience = target_audience
+      and (
+        requirement_version.status <> 'published'
+        or requirement_version.effective_at > target_effective_at
+        or (
+          requirement_version.expires_at is not null
+          and requirement_version.expires_at <= target_effective_at
+        )
+      )
+  ) then
+    raise exception 'Curriculum graph requirements must be published and effective';
+  end if;
+
+  if exists (
+    select 1
+    from learning.curriculum_requirements curriculum_requirement
+    where curriculum_requirement.curriculum_version_id = target_curriculum_version_id
+      and curriculum_requirement.audience = target_audience
+      and curriculum_requirement.mandatory
+      and not exists (
+        select 1
+        from learning.curriculum_capability_outcomes outcome
+        where outcome.curriculum_requirement_id = curriculum_requirement.id
+          and outcome.curriculum_version_id = curriculum_requirement.curriculum_version_id
+          and outcome.requirement_version_id = curriculum_requirement.requirement_version_id
+          and outcome.audience = curriculum_requirement.audience
+      )
+  ) then
+    raise exception 'Mandatory curriculum requirements need a capability outcome';
+  end if;
+
+  if exists (
+    with recursive prerequisite_walk as (
+      select
+        edge.requirement_version_id as origin_id,
+        edge.prerequisite_requirement_version_id as current_id,
+        array[
+          edge.requirement_version_id,
+          edge.prerequisite_requirement_version_id
+        ]::uuid[] as path,
+        false as cycle
+      from learning.curriculum_requirement_prerequisites edge
+      where edge.curriculum_version_id = target_curriculum_version_id
+        and edge.audience = target_audience
+
+      union all
+
+      select
+        walk.origin_id,
+        edge.prerequisite_requirement_version_id,
+        walk.path || edge.prerequisite_requirement_version_id,
+        edge.prerequisite_requirement_version_id = any(walk.path)
+      from prerequisite_walk walk
+      join learning.curriculum_requirement_prerequisites edge
+        on edge.curriculum_version_id = target_curriculum_version_id
+       and edge.audience = target_audience
+       and edge.requirement_version_id = walk.current_id
+      where not walk.cycle
+    )
+    select 1 from prerequisite_walk where cycle
+  ) then
+    raise exception 'Curriculum prerequisite graph cannot contain cycles';
+  end if;
+end;
+$$;
+
+revoke all on function private.lock_learning_curriculum_graph(uuid[])
+  from public, anon, authenticated, service_role;
+revoke all on function private.validate_curriculum_graph_publication(uuid, text, timestamptz)
+  from public, anon, authenticated, service_role;
+grant execute on function private.lock_learning_curriculum_graph(uuid[])
+  to service_role;
+grant execute on function private.validate_curriculum_graph_publication(uuid, text, timestamptz)
+  to service_role;
 
 create or replace function private.validate_assignment_requirement_waiver()
 returns trigger
@@ -880,6 +1107,10 @@ begin
     and version.audience = new.audience;
   if not found then
     raise exception 'Waiver requirement version is missing or crosses audiences';
+  end if;
+
+  if requirement_version.audience = 'vendor' then
+    raise exception 'Vendor learning requirements cannot be waived';
   end if;
 
   select requirement.* into parent_requirement
@@ -940,8 +1171,7 @@ begin
     raise exception 'Certification beneficiary must be active in the matching audience';
   end if;
 
-  if not exists (
-    select 1
+  perform 1
     from core.user_roles role_assignment
     join core.roles role_definition
       on role_definition.module = role_assignment.module
@@ -951,9 +1181,14 @@ begin
       and role_assignment.user_id = new.user_id
       and role_assignment.module = new.module
       and role_assignment.role = new.source_role
-  ) then
+    for key share of role_assignment;
+  if not found then
     raise exception 'Certification source role assignment is not active';
   end if;
+
+  perform private.lock_learning_curriculum_graph(
+    array[new.curriculum_version_id]
+  );
 
   if not exists (
     select 1
@@ -1008,18 +1243,56 @@ begin
     raise exception 'Certification requirement evidence must be non-empty and unique';
   end if;
 
+  perform 1
+  from learning.requirement_versions requirement_version
+  where requirement_version.id = any(new.requirement_version_ids)
+  order by requirement_version.id
+  for share;
+
   if exists (
     select 1
     from unnest(new.requirement_version_ids) requirement_id
     where not exists (
       select 1
       from learning.curriculum_requirements curriculum_requirement
+      join learning.requirement_versions requirement_version
+        on requirement_version.id = curriculum_requirement.requirement_version_id
+       and requirement_version.audience = curriculum_requirement.audience
       where curriculum_requirement.curriculum_version_id = new.curriculum_version_id
         and curriculum_requirement.requirement_version_id = requirement_id
         and curriculum_requirement.audience = new.audience
+        and requirement_version.status = 'published'
+        and requirement_version.effective_at <= new.effective_at
+        and (
+          requirement_version.expires_at is null
+          or requirement_version.expires_at > new.effective_at
+        )
     )
   ) then
-    raise exception 'Certification includes an unrelated requirement version';
+    raise exception 'Certification includes an unpublished, expired, or unrelated requirement version';
+  end if;
+
+  if not exists (
+    select 1
+    from learning.curriculum_capability_outcomes outcome
+    where outcome.curriculum_version_id = new.curriculum_version_id
+      and outcome.requirement_version_id = any(new.requirement_version_ids)
+      and outcome.audience = new.audience
+      and outcome.module = new.module
+      and outcome.capability = new.capability
+  ) then
+    raise exception 'Certified capability is not a declared curriculum outcome';
+  end if;
+
+  if exists (
+    select 1
+    from learning.curriculum_requirement_prerequisites prerequisite
+    where prerequisite.curriculum_version_id = new.curriculum_version_id
+      and prerequisite.audience = new.audience
+      and prerequisite.requirement_version_id = any(new.requirement_version_ids)
+      and not prerequisite.prerequisite_requirement_version_id = any(new.requirement_version_ids)
+  ) then
+    raise exception 'Certification omits a prerequisite requirement';
   end if;
 
   if exists (
@@ -1187,6 +1460,101 @@ begin
 end;
 $$;
 
+create or replace function learning.guard_assignment_lifecycle()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if tg_op = 'DELETE' then
+    raise exception 'Assignment evidence cannot be deleted';
+  end if;
+  if tg_op = 'INSERT' then
+    if new.status <> 'assigned' then
+      raise exception 'Assignments must begin assigned';
+    end if;
+    return new;
+  end if;
+  if old.status in ('completed', 'expired', 'superseded', 'cancelled') then
+    if new is distinct from old then
+      raise exception 'Terminal assignment evidence is immutable';
+    end if;
+    return new;
+  end if;
+  if (to_jsonb(new) - array[
+        'status', 'due_at', 'reassigned_at', 'started_at', 'completed_at',
+        'blocked_reason', 'retraining_reason', 'superseded_by_id'
+      ]) is distinct from
+     (to_jsonb(old) - array[
+        'status', 'due_at', 'reassigned_at', 'started_at', 'completed_at',
+        'blocked_reason', 'retraining_reason', 'superseded_by_id'
+      ]) then
+    raise exception 'Assignment identity and source evidence are immutable';
+  end if;
+  if (old.status = 'assigned' and new.status not in (
+        'assigned', 'in_progress', 'blocked', 'expired', 'superseded', 'cancelled'
+      ))
+     or (old.status = 'in_progress' and new.status not in (
+        'in_progress', 'completed', 'blocked', 'expired', 'superseded', 'cancelled'
+      ))
+     or (old.status = 'blocked' and new.status not in (
+        'blocked', 'assigned', 'in_progress', 'expired', 'superseded', 'cancelled'
+      )) then
+    raise exception 'Invalid assignment lifecycle transition';
+  end if;
+  return new;
+end;
+$$;
+
+create or replace function learning.guard_assignment_requirement_lifecycle()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if tg_op = 'DELETE' then
+    raise exception 'Assignment requirement evidence cannot be deleted';
+  end if;
+  if tg_op = 'INSERT' then
+    if new.status <> 'not_started' then
+      raise exception 'Assignment requirements must begin not started';
+    end if;
+    return new;
+  end if;
+  if old.status in ('passed', 'waived', 'expired') then
+    if new is distinct from old then
+      raise exception 'Terminal assignment requirement evidence is immutable';
+    end if;
+    return new;
+  end if;
+  if (to_jsonb(new) - array[
+        'status', 'attempt_count', 'progress', 'started_at', 'completed_at',
+        'last_checkpoint_id', 'waiver_evidence'
+      ]) is distinct from
+     (to_jsonb(old) - array[
+        'status', 'attempt_count', 'progress', 'started_at', 'completed_at',
+        'last_checkpoint_id', 'waiver_evidence'
+      ]) then
+    raise exception 'Assignment requirement identity is immutable';
+  end if;
+  if (old.status = 'not_started' and new.status not in (
+        'not_started', 'in_progress', 'waived', 'expired'
+      ))
+     or (old.status = 'in_progress' and new.status not in (
+        'in_progress', 'passed', 'failed_retryable', 'needs_support', 'waived', 'expired'
+      ))
+     or (old.status = 'failed_retryable' and new.status not in (
+        'in_progress', 'failed_retryable', 'needs_support', 'waived', 'expired'
+      ))
+     or (old.status = 'needs_support' and new.status not in (
+        'in_progress', 'needs_support', 'waived', 'expired'
+      )) then
+    raise exception 'Invalid assignment requirement lifecycle transition';
+  end if;
+  return new;
+end;
+$$;
+
 create or replace function learning.guard_certification_lifecycle()
 returns trigger
 language plpgsql
@@ -1254,6 +1622,15 @@ begin
     return old;
   end if;
 
+  if tg_table_name = 'curriculum_versions'
+     and new.status in ('approved', 'scheduled', 'published') then
+    perform private.validate_curriculum_graph_publication(
+      new.id,
+      new.audience,
+      new.effective_at
+    );
+  end if;
+
   if old.status = 'draft' and new.status not in ('draft', 'in_review') then
     raise exception 'Invalid draft content transition';
   elsif old.status = 'in_review' and new.status not in ('draft', 'in_review', 'approved') then
@@ -1292,6 +1669,16 @@ declare
   old_parent_status text;
   new_parent_status text;
 begin
+  perform private.lock_learning_curriculum_graph(
+    array_remove(
+      array[
+        case when tg_op in ('UPDATE', 'DELETE') then old.curriculum_version_id end,
+        case when tg_op in ('INSERT', 'UPDATE') then new.curriculum_version_id end
+      ],
+      null::uuid
+    )
+  );
+
   if tg_op in ('UPDATE', 'DELETE') then
     select version.status into old_parent_status
     from learning.curriculum_versions version
@@ -1336,6 +1723,10 @@ revoke all on function learning.reject_evidence_mutation()
   from public, anon, authenticated, service_role;
 revoke all on function learning.guard_attempt_lifecycle()
   from public, anon, authenticated, service_role;
+revoke all on function learning.guard_assignment_lifecycle()
+  from public, anon, authenticated, service_role;
+revoke all on function learning.guard_assignment_requirement_lifecycle()
+  from public, anon, authenticated, service_role;
 revoke all on function learning.guard_certification_lifecycle()
   from public, anon, authenticated, service_role;
 revoke all on function learning.guard_emergency_exception_lifecycle()
@@ -1348,6 +1739,14 @@ revoke all on function learning.guard_curriculum_composition()
 create trigger learning_attempts_lifecycle_guard
 before insert or update or delete on learning.attempts
 for each row execute function learning.guard_attempt_lifecycle();
+
+create trigger learning_assignments_lifecycle_guard
+before insert or update or delete on learning.assignments
+for each row execute function learning.guard_assignment_lifecycle();
+
+create trigger learning_assignment_requirements_lifecycle_guard
+before insert or update or delete on learning.assignment_requirements
+for each row execute function learning.guard_assignment_requirement_lifecycle();
 
 create trigger learning_attempt_events_append_only
 before update or delete on learning.attempt_events
@@ -1389,6 +1788,14 @@ create trigger learning_curriculum_requirements_composition_guard
 before insert or update or delete on learning.curriculum_requirements
 for each row execute function learning.guard_curriculum_composition();
 
+create trigger learning_curriculum_requirement_prerequisites_composition_guard
+before insert or update or delete on learning.curriculum_requirement_prerequisites
+for each row execute function learning.guard_curriculum_composition();
+
+create trigger learning_curriculum_capability_outcomes_composition_guard
+before insert or update or delete on learning.curriculum_capability_outcomes
+for each row execute function learning.guard_curriculum_composition();
+
 create trigger learning_revoke_certifications_on_role_delete
 before delete on core.user_roles
 for each row execute function private.revoke_certifications_for_role_assignment();
@@ -1403,6 +1810,10 @@ alter table learning.requirement_versions enable row level security;
 alter table learning.requirement_versions force row level security;
 alter table learning.curriculum_requirements enable row level security;
 alter table learning.curriculum_requirements force row level security;
+alter table learning.curriculum_requirement_prerequisites enable row level security;
+alter table learning.curriculum_requirement_prerequisites force row level security;
+alter table learning.curriculum_capability_outcomes enable row level security;
+alter table learning.curriculum_capability_outcomes force row level security;
 alter table learning.role_curricula enable row level security;
 alter table learning.role_curricula force row level security;
 alter table learning.assignments enable row level security;
@@ -1424,23 +1835,31 @@ create policy learning_curricula_published_read on learning.curricula
 for select to authenticated
 using (
   status = 'active'
-  and private.learning_audience_matches_current_profile(audience)
+  and private.learning_has_active_profile(audience)
 );
 
 create policy learning_curricula_platform_manage on learning.curricula
 for all to authenticated
-using (private.learning_is_active_employee_platform_admin())
-with check (private.learning_is_active_employee_platform_admin());
+using (
+  private.learning_has_active_profile('internal')
+  and private.learning_is_active_employee_platform_admin()
+)
+with check (
+  private.learning_has_active_profile('internal')
+  and private.learning_is_active_employee_platform_admin()
+);
 
 create policy learning_curricula_department_manage on learning.curricula
 for all to authenticated
 using (
-  audience = 'internal'
+  private.learning_has_active_profile('internal')
+  and audience = 'internal'
   and governance_owner = 'department'
   and private.learning_owns_department(owner_department_id)
 )
 with check (
-  audience = 'internal'
+  private.learning_has_active_profile('internal')
+  and audience = 'internal'
   and governance_owner = 'department'
   and private.learning_owns_department(owner_department_id)
 );
@@ -1448,12 +1867,14 @@ with check (
 create policy learning_curricula_legal_manage on learning.curricula
 for all to authenticated
 using (
-  governance_owner = 'legal'
+  private.learning_has_active_profile('internal')
+  and governance_owner = 'legal'
   and core.has_cap('legal', 'review_accreditation')
   and not core.is_vendor()
 )
 with check (
-  governance_owner = 'legal'
+  private.learning_has_active_profile('internal')
+  and governance_owner = 'legal'
   and core.has_cap('legal', 'review_accreditation')
   and not core.is_vendor()
 );
@@ -1464,18 +1885,25 @@ using (
   status = 'published'
   and effective_at <= now()
   and (expires_at is null or expires_at > now())
-  and private.learning_audience_matches_current_profile(audience)
+  and private.learning_has_active_profile(audience)
 );
 
 create policy learning_curriculum_versions_platform_manage on learning.curriculum_versions
 for all to authenticated
-using (private.learning_is_active_employee_platform_admin())
-with check (private.learning_is_active_employee_platform_admin());
+using (
+  private.learning_has_active_profile('internal')
+  and private.learning_is_active_employee_platform_admin()
+)
+with check (
+  private.learning_has_active_profile('internal')
+  and private.learning_is_active_employee_platform_admin()
+);
 
 create policy learning_curriculum_versions_owner_manage on learning.curriculum_versions
 for all to authenticated
 using (
-  exists (
+  private.learning_has_active_profile('internal')
+  and exists (
     select 1 from learning.curricula curriculum
     where curriculum.id = learning.curriculum_versions.curriculum_id
       and curriculum.audience = learning.curriculum_versions.audience
@@ -1494,7 +1922,8 @@ using (
   )
 )
 with check (
-  exists (
+  private.learning_has_active_profile('internal')
+  and exists (
     select 1 from learning.curricula curriculum
     where curriculum.id = learning.curriculum_versions.curriculum_id
       and curriculum.audience = learning.curriculum_versions.audience
@@ -1517,38 +1946,50 @@ create policy learning_requirements_published_read on learning.requirements
 for select to authenticated
 using (
   status = 'active'
-  and private.learning_audience_matches_current_profile(audience)
+  and private.learning_has_active_profile(audience)
 );
 
 create policy learning_requirements_platform_manage on learning.requirements
 for all to authenticated
-using (private.learning_is_active_employee_platform_admin())
-with check (private.learning_is_active_employee_platform_admin());
+using (
+  private.learning_has_active_profile('internal')
+  and private.learning_is_active_employee_platform_admin()
+)
+with check (
+  private.learning_has_active_profile('internal')
+  and private.learning_is_active_employee_platform_admin()
+);
 
 create policy learning_requirements_owner_manage on learning.requirements
 for all to authenticated
 using (
-  (
-    audience = 'internal'
-    and governance_owner = 'department'
-    and private.learning_owns_department(owner_department_id)
-  )
-  or (
-    governance_owner = 'legal'
-    and core.has_cap('legal', 'review_accreditation')
-    and not core.is_vendor()
+  private.learning_has_active_profile('internal')
+  and (
+    (
+      audience = 'internal'
+      and governance_owner = 'department'
+      and private.learning_owns_department(owner_department_id)
+    )
+    or (
+      governance_owner = 'legal'
+      and core.has_cap('legal', 'review_accreditation')
+      and not core.is_vendor()
+    )
   )
 )
 with check (
-  (
-    audience = 'internal'
-    and governance_owner = 'department'
-    and private.learning_owns_department(owner_department_id)
-  )
-  or (
-    governance_owner = 'legal'
-    and core.has_cap('legal', 'review_accreditation')
-    and not core.is_vendor()
+  private.learning_has_active_profile('internal')
+  and (
+    (
+      audience = 'internal'
+      and governance_owner = 'department'
+      and private.learning_owns_department(owner_department_id)
+    )
+    or (
+      governance_owner = 'legal'
+      and core.has_cap('legal', 'review_accreditation')
+      and not core.is_vendor()
+    )
   )
 );
 
@@ -1558,18 +1999,25 @@ using (
   status = 'published'
   and effective_at <= now()
   and (expires_at is null or expires_at > now())
-  and private.learning_audience_matches_current_profile(audience)
+  and private.learning_has_active_profile(audience)
 );
 
 create policy learning_requirement_versions_platform_manage on learning.requirement_versions
 for all to authenticated
-using (private.learning_is_active_employee_platform_admin())
-with check (private.learning_is_active_employee_platform_admin());
+using (
+  private.learning_has_active_profile('internal')
+  and private.learning_is_active_employee_platform_admin()
+)
+with check (
+  private.learning_has_active_profile('internal')
+  and private.learning_is_active_employee_platform_admin()
+);
 
 create policy learning_requirement_versions_owner_manage on learning.requirement_versions
 for all to authenticated
 using (
-  exists (
+  private.learning_has_active_profile('internal')
+  and exists (
     select 1
     from learning.requirements parent_requirement
     where parent_requirement.id = learning.requirement_versions.requirement_id
@@ -1592,7 +2040,8 @@ using (
   )
 )
 with check (
-  exists (
+  private.learning_has_active_profile('internal')
+  and exists (
     select 1
     from learning.requirements parent_requirement
     where parent_requirement.id = learning.requirement_versions.requirement_id
@@ -1618,7 +2067,7 @@ with check (
 create policy learning_curriculum_requirements_published_read on learning.curriculum_requirements
 for select to authenticated
 using (
-  private.learning_audience_matches_current_profile(audience)
+  private.learning_has_active_profile(audience)
   and exists (
     select 1 from learning.curriculum_versions version
     where version.id = learning.curriculum_requirements.curriculum_version_id
@@ -1631,34 +2080,101 @@ using (
 
 create policy learning_curriculum_requirements_platform_manage on learning.curriculum_requirements
 for all to authenticated
-using (private.learning_is_active_employee_platform_admin())
-with check (private.learning_is_active_employee_platform_admin());
+using (
+  private.learning_has_active_profile('internal')
+  and private.learning_is_active_employee_platform_admin()
+)
+with check (
+  private.learning_has_active_profile('internal')
+  and private.learning_is_active_employee_platform_admin()
+);
+
+create policy learning_curriculum_requirement_prerequisites_published_read
+on learning.curriculum_requirement_prerequisites
+for select to authenticated
+using (
+  private.learning_has_active_profile(audience)
+  and exists (
+    select 1 from learning.curriculum_versions version
+    where version.id = learning.curriculum_requirement_prerequisites.curriculum_version_id
+      and version.audience = learning.curriculum_requirement_prerequisites.audience
+      and version.status = 'published'
+      and version.effective_at <= now()
+      and (version.expires_at is null or version.expires_at > now())
+  )
+);
+
+create policy learning_curriculum_requirement_prerequisites_platform_manage
+on learning.curriculum_requirement_prerequisites
+for all to authenticated
+using (
+  private.learning_has_active_profile('internal')
+  and private.learning_is_active_employee_platform_admin()
+)
+with check (
+  private.learning_has_active_profile('internal')
+  and private.learning_is_active_employee_platform_admin()
+);
+
+create policy learning_curriculum_capability_outcomes_published_read
+on learning.curriculum_capability_outcomes
+for select to authenticated
+using (
+  private.learning_has_active_profile(audience)
+  and exists (
+    select 1 from learning.curriculum_versions version
+    where version.id = learning.curriculum_capability_outcomes.curriculum_version_id
+      and version.audience = learning.curriculum_capability_outcomes.audience
+      and version.status = 'published'
+      and version.effective_at <= now()
+      and (version.expires_at is null or version.expires_at > now())
+  )
+);
+
+create policy learning_curriculum_capability_outcomes_platform_manage
+on learning.curriculum_capability_outcomes
+for all to authenticated
+using (
+  private.learning_has_active_profile('internal')
+  and private.learning_is_active_employee_platform_admin()
+)
+with check (
+  private.learning_has_active_profile('internal')
+  and private.learning_is_active_employee_platform_admin()
+);
 
 create policy learning_role_curricula_published_read on learning.role_curricula
 for select to authenticated
 using (
   effective_at <= now()
   and (expires_at is null or expires_at > now())
-  and private.learning_audience_matches_current_profile(audience)
+  and private.learning_has_active_profile(audience)
 );
 
 create policy learning_role_curricula_platform_manage on learning.role_curricula
 for all to authenticated
-using (private.learning_is_active_employee_platform_admin())
-with check (private.learning_is_active_employee_platform_admin());
+using (
+  private.learning_has_active_profile('internal')
+  and private.learning_is_active_employee_platform_admin()
+)
+with check (
+  private.learning_has_active_profile('internal')
+  and private.learning_is_active_employee_platform_admin()
+);
 
 create policy learning_assignments_learner_read on learning.assignments
 for select to authenticated
 using (
   not core.is_vendor()
   and user_id = (select auth.uid())
-  and private.learning_audience_matches_current_profile(audience)
+  and private.learning_has_active_profile(audience)
 );
 
 create policy learning_assignments_vendor_read on learning.assignments
 for select to authenticated
 using (
-  core.is_vendor()
+  private.learning_has_active_profile('vendor')
+  and core.is_vendor()
   and user_id = (select auth.uid())
   and audience = 'vendor'
 );
@@ -1666,14 +2182,16 @@ using (
 create policy learning_assignments_department_owner_read on learning.assignments
 for select to authenticated
 using (
-  private.learning_owns_department(department_id)
+  private.learning_has_active_profile('internal')
+  and private.learning_owns_department(department_id)
   and audience = 'internal'
 );
 
 create policy learning_assignments_platform_read on learning.assignments
 for select to authenticated
 using (
-  private.learning_is_active_employee_platform_admin()
+  private.learning_has_active_profile('internal')
+  and private.learning_is_active_employee_platform_admin()
   and audience = 'internal'
 );
 
@@ -1681,20 +2199,22 @@ create policy learning_assignment_requirements_learner_read on learning.assignme
 for select to authenticated
 using (
   user_id = (select auth.uid())
-  and private.learning_audience_matches_current_profile(audience)
+  and private.learning_has_active_profile(audience)
 );
 
 create policy learning_assignment_requirements_department_owner_read on learning.assignment_requirements
 for select to authenticated
 using (
-  private.learning_owns_department(department_id)
+  private.learning_has_active_profile('internal')
+  and private.learning_owns_department(department_id)
   and audience = 'internal'
 );
 
 create policy learning_assignment_requirements_platform_read on learning.assignment_requirements
 for select to authenticated
 using (
-  private.learning_is_active_employee_platform_admin()
+  private.learning_has_active_profile('internal')
+  and private.learning_is_active_employee_platform_admin()
   and audience = 'internal'
 );
 
@@ -1702,20 +2222,22 @@ create policy learning_attempts_learner_read on learning.attempts
 for select to authenticated
 using (
   user_id = (select auth.uid())
-  and private.learning_audience_matches_current_profile(audience)
+  and private.learning_has_active_profile(audience)
 );
 
 create policy learning_attempts_department_owner_read on learning.attempts
 for select to authenticated
 using (
-  private.learning_owns_department(department_id)
+  private.learning_has_active_profile('internal')
+  and private.learning_owns_department(department_id)
   and audience = 'internal'
 );
 
 create policy learning_attempts_platform_read on learning.attempts
 for select to authenticated
 using (
-  private.learning_is_active_employee_platform_admin()
+  private.learning_has_active_profile('internal')
+  and private.learning_is_active_employee_platform_admin()
   and audience = 'internal'
 );
 
@@ -1723,20 +2245,22 @@ create policy learning_attempt_events_learner_read on learning.attempt_events
 for select to authenticated
 using (
   user_id = (select auth.uid())
-  and private.learning_audience_matches_current_profile(audience)
+  and private.learning_has_active_profile(audience)
 );
 
 create policy learning_attempt_events_department_owner_read on learning.attempt_events
 for select to authenticated
 using (
-  private.learning_owns_department(department_id)
+  private.learning_has_active_profile('internal')
+  and private.learning_owns_department(department_id)
   and audience = 'internal'
 );
 
 create policy learning_attempt_events_platform_read on learning.attempt_events
 for select to authenticated
 using (
-  private.learning_is_active_employee_platform_admin()
+  private.learning_has_active_profile('internal')
+  and private.learning_is_active_employee_platform_admin()
   and audience = 'internal'
 );
 
@@ -1744,20 +2268,22 @@ create policy learning_policy_acknowledgments_learner_read on learning.policy_ac
 for select to authenticated
 using (
   user_id = (select auth.uid())
-  and private.learning_audience_matches_current_profile(audience)
+  and private.learning_has_active_profile(audience)
 );
 
 create policy learning_policy_acknowledgments_department_owner_read on learning.policy_acknowledgments
 for select to authenticated
 using (
-  private.learning_owns_department(department_id)
+  private.learning_has_active_profile('internal')
+  and private.learning_owns_department(department_id)
   and audience = 'internal'
 );
 
 create policy learning_policy_acknowledgments_legal_read on learning.policy_acknowledgments
 for select to authenticated
 using (
-  core.has_cap('legal', 'review_accreditation')
+  private.learning_has_active_profile('internal')
+  and core.has_cap('legal', 'review_accreditation')
   and not core.is_vendor()
   and audience = 'internal'
   and exists (
@@ -1772,7 +2298,8 @@ using (
 create policy learning_policy_acknowledgments_legal_vendor_read on learning.policy_acknowledgments
 for select to authenticated
 using (
-  core.has_cap('legal', 'review_accreditation')
+  private.learning_has_active_profile('internal')
+  and core.has_cap('legal', 'review_accreditation')
   and not core.is_vendor()
   and audience = 'vendor'
   and exists (
@@ -1787,7 +2314,8 @@ using (
 create policy learning_policy_acknowledgments_platform_read on learning.policy_acknowledgments
 for select to authenticated
 using (
-  private.learning_is_active_employee_platform_admin()
+  private.learning_has_active_profile('internal')
+  and private.learning_is_active_employee_platform_admin()
   and audience = 'internal'
 );
 
@@ -1795,27 +2323,30 @@ create policy learning_certifications_learner_read on learning.certifications
 for select to authenticated
 using (
   user_id = (select auth.uid())
-  and private.learning_audience_matches_current_profile(audience)
+  and private.learning_has_active_profile(audience)
 );
 
 create policy learning_certifications_department_owner_read on learning.certifications
 for select to authenticated
 using (
-  private.learning_owns_department(department_id)
+  private.learning_has_active_profile('internal')
+  and private.learning_owns_department(department_id)
   and audience = 'internal'
 );
 
 create policy learning_certifications_platform_read on learning.certifications
 for select to authenticated
 using (
-  private.learning_is_active_employee_platform_admin()
+  private.learning_has_active_profile('internal')
+  and private.learning_is_active_employee_platform_admin()
   and audience = 'internal'
 );
 
 create policy learning_emergency_exceptions_learner_read on learning.emergency_exceptions
 for select to authenticated
 using (
-  user_id = (select auth.uid())
+  private.learning_has_active_profile('internal')
+  and user_id = (select auth.uid())
   and not core.is_vendor()
   and audience = 'internal'
 );
@@ -1823,14 +2354,16 @@ using (
 create policy learning_emergency_exceptions_department_owner_read on learning.emergency_exceptions
 for select to authenticated
 using (
-  private.learning_owns_department(department_id)
+  private.learning_has_active_profile('internal')
+  and private.learning_owns_department(department_id)
   and audience = 'internal'
 );
 
 create policy learning_emergency_exceptions_platform_read on learning.emergency_exceptions
 for select to authenticated
 using (
-  private.learning_is_active_employee_platform_admin()
+  private.learning_has_active_profile('internal')
+  and private.learning_is_active_employee_platform_admin()
   and audience = 'internal'
 );
 
@@ -1839,6 +2372,8 @@ revoke all on learning.curriculum_versions from public, anon, authenticated, ser
 revoke all on learning.requirements from public, anon, authenticated, service_role;
 revoke all on learning.requirement_versions from public, anon, authenticated, service_role;
 revoke all on learning.curriculum_requirements from public, anon, authenticated, service_role;
+revoke all on learning.curriculum_requirement_prerequisites from public, anon, authenticated, service_role;
+revoke all on learning.curriculum_capability_outcomes from public, anon, authenticated, service_role;
 revoke all on learning.role_curricula from public, anon, authenticated, service_role;
 revoke all on learning.assignments from public, anon, authenticated, service_role;
 revoke all on learning.assignment_requirements from public, anon, authenticated, service_role;
@@ -1853,6 +2388,8 @@ grant select on learning.curriculum_versions to authenticated;
 grant select on learning.requirements to authenticated;
 grant select on learning.requirement_versions to authenticated;
 grant select on learning.curriculum_requirements to authenticated;
+grant select on learning.curriculum_requirement_prerequisites to authenticated;
+grant select on learning.curriculum_capability_outcomes to authenticated;
 grant select on learning.role_curricula to authenticated;
 grant select on learning.assignments to authenticated;
 grant select on learning.assignment_requirements to authenticated;
@@ -1862,18 +2399,13 @@ grant select on learning.policy_acknowledgments to authenticated;
 grant select on learning.certifications to authenticated;
 grant select on learning.emergency_exceptions to authenticated;
 
-grant insert, update, delete on learning.curricula to authenticated;
-grant insert, update, delete on learning.curriculum_versions to authenticated;
-grant insert, update, delete on learning.requirements to authenticated;
-grant insert, update, delete on learning.requirement_versions to authenticated;
-grant insert, update, delete on learning.curriculum_requirements to authenticated;
-grant insert, update, delete on learning.role_curricula to authenticated;
-
 grant select, insert, update, delete on learning.curricula to service_role;
 grant select, insert, update, delete on learning.curriculum_versions to service_role;
 grant select, insert, update, delete on learning.requirements to service_role;
 grant select, insert, update, delete on learning.requirement_versions to service_role;
 grant select, insert, update, delete on learning.curriculum_requirements to service_role;
+grant select, insert, update, delete on learning.curriculum_requirement_prerequisites to service_role;
+grant select, insert, update, delete on learning.curriculum_capability_outcomes to service_role;
 grant select, insert, update, delete on learning.role_curricula to service_role;
 grant select, insert, update on learning.assignments to service_role;
 grant select, insert, update on learning.assignment_requirements to service_role;

@@ -11,6 +11,8 @@ export const REQUIRED_TABLES = Object.freeze([
   "requirements",
   "requirement_versions",
   "curriculum_requirements",
+  "curriculum_requirement_prerequisites",
+  "curriculum_capability_outcomes",
   "role_curricula",
   "assignments",
   "assignment_requirements",
@@ -21,21 +23,19 @@ export const REQUIRED_TABLES = Object.freeze([
   "emergency_exceptions",
 ]);
 
-const CONFIG_TABLES = new Set([
-  "curricula",
-  "curriculum_versions",
-  "requirements",
-  "requirement_versions",
-  "curriculum_requirements",
-  "role_curricula",
-]);
-
 const SERVICE_PRIVILEGES = Object.freeze({
   curricula: ["delete", "insert", "select", "update"],
   curriculum_versions: ["delete", "insert", "select", "update"],
   requirements: ["delete", "insert", "select", "update"],
   requirement_versions: ["delete", "insert", "select", "update"],
   curriculum_requirements: ["delete", "insert", "select", "update"],
+  curriculum_requirement_prerequisites: [
+    "delete",
+    "insert",
+    "select",
+    "update",
+  ],
+  curriculum_capability_outcomes: ["delete", "insert", "select", "update"],
   role_curricula: ["delete", "insert", "select", "update"],
   assignments: ["insert", "select", "update"],
   assignment_requirements: ["insert", "select", "update"],
@@ -67,6 +67,22 @@ const EXPECTED_POLICIES = new Map([
   [
     "learning_curriculum_requirements_platform_manage",
     "curriculum_requirements",
+  ],
+  [
+    "learning_curriculum_requirement_prerequisites_published_read",
+    "curriculum_requirement_prerequisites",
+  ],
+  [
+    "learning_curriculum_requirement_prerequisites_platform_manage",
+    "curriculum_requirement_prerequisites",
+  ],
+  [
+    "learning_curriculum_capability_outcomes_published_read",
+    "curriculum_capability_outcomes",
+  ],
+  [
+    "learning_curriculum_capability_outcomes_platform_manage",
+    "curriculum_capability_outcomes",
   ],
   ["learning_role_curricula_published_read", "role_curricula"],
   ["learning_role_curricula_platform_manage", "role_curricula"],
@@ -113,6 +129,16 @@ const REQUIRED_TRIGGERS = Object.freeze({
     table: "learning.attempts",
     events: "before insert or update or delete",
     function: "learning.guard_attempt_lifecycle",
+  },
+  learning_assignments_lifecycle_guard: {
+    table: "learning.assignments",
+    events: "before insert or update or delete",
+    function: "learning.guard_assignment_lifecycle",
+  },
+  learning_assignment_requirements_lifecycle_guard: {
+    table: "learning.assignment_requirements",
+    events: "before insert or update or delete",
+    function: "learning.guard_assignment_requirement_lifecycle",
   },
   learning_attempt_events_append_only: {
     table: "learning.attempt_events",
@@ -164,11 +190,44 @@ const REQUIRED_TRIGGERS = Object.freeze({
     events: "before insert or update or delete",
     function: "learning.guard_curriculum_composition",
   },
+  learning_curriculum_requirement_prerequisites_composition_guard: {
+    table: "learning.curriculum_requirement_prerequisites",
+    events: "before insert or update or delete",
+    function: "learning.guard_curriculum_composition",
+  },
+  learning_curriculum_capability_outcomes_composition_guard: {
+    table: "learning.curriculum_capability_outcomes",
+    events: "before insert or update or delete",
+    function: "learning.guard_curriculum_composition",
+  },
   learning_revoke_certifications_on_role_delete: {
     table: "core.user_roles",
     events: "before delete",
     function: "private.revoke_certifications_for_role_assignment",
   },
+});
+
+const ALLOWED_SECURITY_DEFINERS = new Set([
+  "private.learning_has_active_profile",
+  "private.learning_owns_department",
+  "private.learning_is_active_employee_platform_admin",
+  "private.lock_learning_curriculum_graph",
+  "private.validate_curriculum_graph_publication",
+  "private.validate_assignment_requirement_waiver",
+  "private.validate_certification_issuance",
+  "private.revoke_certifications_for_role_assignment",
+  "private.validate_emergency_exception_issuance",
+]);
+
+const ALLOWED_FUNCTION_EXECUTE = Object.freeze({
+  "private.learning_has_active_profile": ["authenticated", "service_role"],
+  "private.learning_owns_department": ["authenticated", "service_role"],
+  "private.learning_is_active_employee_platform_admin": [
+    "authenticated",
+    "service_role",
+  ],
+  "private.lock_learning_curriculum_graph": ["service_role"],
+  "private.validate_curriculum_graph_publication": ["service_role"],
 });
 
 function normalizeSql(value) {
@@ -362,6 +421,152 @@ function functionBody(statement) {
   );
 }
 
+function withoutStaticallyUnreachableBranches(body) {
+  let reachable = body;
+  let previous;
+  do {
+    previous = reachable;
+    reachable = reachable
+      .replace(
+        /\bif\s+(?:false|1\s*=\s*0|0\s*=\s*1)\s+then\b[\s\S]*?\bend if\s*;/g,
+        " ",
+      )
+      .replace(
+        /\bcase\s+when\s+(?:false|1\s*=\s*0|0\s*=\s*1)\s+then\b[\s\S]*?\bend\s*;/g,
+        " ",
+      );
+  } while (reachable !== previous);
+  if (/\bbegin\s+return\b[\s\S]*\braise exception\b/.test(reachable)) {
+    reachable = reachable.replace(/(\bbegin\s+return\b[^;]*;)[\s\S]*$/, "$1");
+  }
+  return normalizeSql(reachable);
+}
+
+function parenthesizedClause(statement, keyword) {
+  const lower = statement.toLowerCase();
+  const keywordIndex = lower.search(new RegExp(`\\b${keyword}\\s*\\(`));
+  if (keywordIndex < 0) return "";
+  const start = statement.indexOf("(", keywordIndex);
+  let depth = 0;
+  let quote = "";
+  for (let index = start; index < statement.length; index += 1) {
+    const char = statement[index];
+    const next = statement[index + 1];
+    if (quote) {
+      if (char === quote && next === quote) index += 1;
+      else if (char === quote) quote = "";
+      continue;
+    }
+    if (char === "'" || char === '"') {
+      quote = char;
+      continue;
+    }
+    if (char === "(") depth += 1;
+    else if (char === ")") {
+      depth -= 1;
+      if (depth === 0) return statement.slice(start + 1, index);
+    }
+  }
+  return "";
+}
+
+function hasPolicyTautology(expression) {
+  const normalized = normalizeSql(expression);
+  if (/\btrue\b/.test(normalized)) return true;
+  if (
+    /\b(\d+(?:\.\d+)?)\s*=\s*\1\b/.test(normalized) ||
+    /\b([a-z_][a-z0-9_.]*)\s*(?:=|is not distinct from)\s*\1\b/.test(
+      normalized,
+    ) ||
+    /('(?:''|[^'])*')\s*=\s*\1/.test(normalized)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function unwrapBooleanExpression(expression) {
+  let value = expression.trim();
+  let changed = true;
+  while (changed && value.startsWith("(") && value.endsWith(")")) {
+    changed = false;
+    let depth = 0;
+    let quote = "";
+    for (let index = 0; index < value.length; index += 1) {
+      const char = value[index];
+      const next = value[index + 1];
+      if (quote) {
+        if (char === quote && next === quote) index += 1;
+        else if (char === quote) quote = "";
+        continue;
+      }
+      if (char === "'" || char === '"') {
+        quote = char;
+      } else if (char === "(") {
+        depth += 1;
+      } else if (char === ")") {
+        depth -= 1;
+        if (depth === 0 && index === value.length - 1) {
+          value = value.slice(1, -1).trim();
+          changed = true;
+        } else if (depth === 0) {
+          break;
+        }
+      }
+    }
+  }
+  return value;
+}
+
+function splitTopLevelBoolean(expression, operator) {
+  const value = unwrapBooleanExpression(expression);
+  const lower = value.toLowerCase();
+  const parts = [];
+  let start = 0;
+  let depth = 0;
+  let quote = "";
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    const next = value[index + 1];
+    if (quote) {
+      if (char === quote && next === quote) index += 1;
+      else if (char === quote) quote = "";
+      continue;
+    }
+    if (char === "'" || char === '"') {
+      quote = char;
+    } else if (char === "(") {
+      depth += 1;
+    } else if (char === ")") {
+      depth -= 1;
+    } else if (
+      depth === 0 &&
+      lower.slice(index, index + operator.length) === operator &&
+      !/[a-z0-9_$]/i.test(value[index - 1] ?? "") &&
+      !/[a-z0-9_$]/i.test(value[index + operator.length] ?? "")
+    ) {
+      parts.push(value.slice(start, index).trim());
+      start = index + operator.length;
+      index += operator.length - 1;
+    }
+  }
+  parts.push(value.slice(start).trim());
+  return parts;
+}
+
+function activeProfileGuardsEveryPath(expression) {
+  const value = unwrapBooleanExpression(expression);
+  const alternatives = splitTopLevelBoolean(value, "or");
+  if (alternatives.length > 1) {
+    return alternatives.every(activeProfileGuardsEveryPath);
+  }
+  const conjunctions = splitTopLevelBoolean(value, "and");
+  if (conjunctions.length > 1) {
+    return conjunctions.some(activeProfileGuardsEveryPath);
+  }
+  return /private\.learning_has_active_profile\s*\(/i.test(value);
+}
+
 function asMigrations(input) {
   if (typeof input === "string") {
     return [{ name: FOUNDATION_MIGRATION_NAME, sql: input }];
@@ -444,7 +649,7 @@ function createState() {
 }
 
 function processStatement(state, statement, migrationName) {
-  const normalized = normalizeSql(statement);
+  const normalized = normalizeSql(statement).replaceAll('"', "");
   let match;
 
   match = normalized.match(
@@ -486,14 +691,15 @@ function processStatement(state, statement, migrationName) {
   }
 
   match = normalized.match(
-    /^alter table(?: only)? ((?:learning|core)\.[a-z_]+) (enable|disable) trigger (all|user|[a-z_]+)$/,
+    /^alter table(?: only)? ((?:learning|core)\.[a-z_]+) (enable(?: always| replica)?|disable) trigger (all|user|[a-z_]+)$/,
   );
   if (match) {
     const table = match[1];
     if (!state.disabledTriggers.has(table))
       state.disabledTriggers.set(table, new Set());
     const disabled = state.disabledTriggers.get(table);
-    if (match[2] === "disable") disabled.add(match[3]);
+    if (match[2] === "disable" || match[2] === "enable replica")
+      disabled.add(match[3]);
     else if (match[3] === "all" || match[3] === "user") disabled.clear();
     else disabled.delete(match[3]);
     return;
@@ -522,9 +728,8 @@ function processStatement(state, statement, migrationName) {
   }
 
   if (
-    /^alter table(?: only)? learning\.certifications add constraint\b/.test(
-      normalized,
-    ) &&
+    /^alter table(?: only)? learning\.certifications\b/.test(normalized) &&
+    /\badd\b/.test(normalized) &&
     /references core\.user_roles/.test(normalized)
   ) {
     state.errors.push(
@@ -593,6 +798,43 @@ function processStatement(state, statement, migrationName) {
   }
 
   match = normalized.match(
+    /^grant execute on function ([a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*)\s*\([^)]*\) to (.+)$/,
+  );
+  if (match) {
+    const functionEntry = state.functions.get(match[1]);
+    if (!functionEntry) {
+      state.errors.push(
+        `${migrationName}: EXECUTE granted on unknown function ${match[1]}.`,
+      );
+      return;
+    }
+    for (const role of parseGrantees(match[2]))
+      functionEntry.executeRoles.add(role);
+    return;
+  }
+
+  match = normalized.match(
+    /^revoke (?:all(?: privileges)?|execute) on function ([a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*)\s*\([^)]*\) from (.+?)(?: cascade| restrict)?$/,
+  );
+  if (match) {
+    const functionEntry = state.functions.get(match[1]);
+    if (!functionEntry) return;
+    for (const role of parseGrantees(match[2]))
+      functionEntry.executeRoles.delete(role);
+    return;
+  }
+
+  if (
+    /^(grant|revoke)\b/.test(normalized) &&
+    /\bon (?:all )?functions?\b/.test(normalized)
+  ) {
+    state.errors.push(
+      `${migrationName}: unparsed or schema-wide function privilege is unsafe.`,
+    );
+    return;
+  }
+
+  match = normalized.match(
     /^revoke (.+?) on (?:table )?learning\.([a-z_]+) from (.+?)(?: cascade| restrict)?$/,
   );
   if (match) {
@@ -628,22 +870,38 @@ function processStatement(state, statement, migrationName) {
   }
 
   match = normalized.match(
-    /^create or replace function ((?:learning|private)\.[a-z_]+)\s*\(/,
+    /^create (or replace )?function ([a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*)\s*\(/,
   );
   if (match) {
-    state.functions.set(match[1], {
+    const existingExecute = state.functions.get(match[2])?.executeRoles;
+    state.functions.set(match[2], {
       statement,
       body: functionBody(statement),
+      reachableBody: withoutStaticallyUnreachableBranches(
+        functionBody(statement),
+      ),
+      securityDefiner: /\bsecurity definer\b/.test(normalized),
+      executeRoles:
+        match[1] && existingExecute
+          ? new Set(existingExecute)
+          : new Set(["public"]),
       migrationName,
     });
     return;
   }
 
   match = normalized.match(
-    /^drop function(?: if exists)? ((?:learning|private)\.[a-z_]+)\s*\(/,
+    /^drop function(?: if exists)? ([a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*)\s*\(/,
   );
   if (match) {
     state.functions.delete(match[1]);
+    return;
+  }
+
+  if (/^alter function\b/.test(normalized)) {
+    state.errors.push(
+      `${migrationName}: ALTER FUNCTION is not safely analyzable in the learning security boundary.`,
+    );
     return;
   }
 
@@ -684,9 +942,27 @@ function processStatement(state, statement, migrationName) {
   }
 
   match = normalized.match(
-    /^drop index(?: concurrently)?(?: if exists)? (?:learning\.)?([a-z_]+)$/,
+    /^drop index(?: concurrently)?(?: if exists)? (.+?)(?: cascade| restrict)?$/,
   );
-  if (match) state.indexes.delete(match[1]);
+  if (match) {
+    for (const rawName of splitTopLevel(match[1])) {
+      const name = rawName
+        .trim()
+        .replace(/^learning\./, "")
+        .replaceAll('"', "");
+      state.indexes.delete(name);
+    }
+    return;
+  }
+
+  if (/^(?:alter|create) (?:role|user)\b/.test(normalized)) {
+    if (/\bbypassrls\b/.test(normalized)) {
+      state.errors.push(
+        `${migrationName}: BYPASSRLS role changes are forbidden after the learning foundation.`,
+      );
+    }
+    return;
+  }
 }
 
 function requirePattern(errors, value, pattern, message) {
@@ -694,9 +970,14 @@ function requirePattern(errors, value, pattern, message) {
 }
 
 function requireFunction(state, name, patterns, message) {
-  const body = state.functions.get(name)?.body ?? "";
+  const functionEntry = state.functions.get(name);
+  const body = functionEntry?.reachableBody ?? "";
   if (!body || patterns.some((pattern) => !pattern.test(body))) {
-    state.errors.push(message);
+    const unreachable =
+      functionEntry?.body && functionEntry.body !== functionEntry.reachableBody;
+    state.errors.push(
+      unreachable ? `${message} Guard logic is unreachable.` : message,
+    );
   }
 }
 
@@ -800,6 +1081,31 @@ function validateTables(state) {
       "Assignment supersession must preserve beneficiary, department, and audience.",
     ],
     [
+      "curriculum_requirement_prerequisites",
+      /constraint curriculum_requirement_prerequisites_source_fk foreign key\s*\( curriculum_requirement_id, curriculum_version_id, requirement_version_id, audience \) references learning\.curriculum_requirements\s*\( id, curriculum_version_id, requirement_version_id, audience \)/,
+      "Prerequisite sources must remain in one curriculum graph and audience.",
+    ],
+    [
+      "curriculum_requirement_prerequisites",
+      /constraint curriculum_requirement_prerequisites_target_fk foreign key\s*\( curriculum_version_id, prerequisite_requirement_version_id, audience \) references learning\.curriculum_requirements\s*\( curriculum_version_id, requirement_version_id, audience \)/,
+      "Prerequisite targets must remain in one curriculum graph and audience.",
+    ],
+    [
+      "curriculum_capability_outcomes",
+      /constraint curriculum_capability_outcomes_source_fk foreign key\s*\( curriculum_requirement_id, curriculum_version_id, requirement_version_id, audience \) references learning\.curriculum_requirements\s*\( id, curriculum_version_id, requirement_version_id, audience \)/,
+      "Capability outcomes must remain in one curriculum graph and audience.",
+    ],
+    [
+      "curriculum_capability_outcomes",
+      /constraint curriculum_capability_outcomes_capability_fk foreign key\s*\(module, capability\) references core\.capabilities\s*\(module, cap\)/,
+      "Capability outcomes must reference canonical RBAC capabilities.",
+    ],
+    [
+      "curriculum_capability_outcomes",
+      /constraint curriculum_capability_outcomes_audience_check check\s*\( audience = 'internal' or \( audience = 'vendor' and module = 'core' and capability = 'manage_own_accreditation_draft' \) \)/,
+      "Vendor curriculum outcomes must not expose internal capabilities.",
+    ],
+    [
       "certifications",
       /constraint certifications_assignment_fk foreign key\s*\( assignment_id, user_id, department_id, audience, curriculum_version_id \) references learning\.assignments\s*\( id, user_id, department_id, audience, curriculum_version_id \)/,
       "Certification assignment and curriculum lineage must be structural.",
@@ -818,6 +1124,11 @@ function validateTables(state) {
       "emergency_exceptions",
       /approved_at >= created_at and approved_at <= effective_at and expires_at > effective_at and expires_at <= effective_at \+ interval '24 hours'/,
       "Emergency exception chronology and 24-hour limit are required.",
+    ],
+    [
+      "emergency_exceptions",
+      /revoked_at is null or revoked_at >= effective_at/,
+      "Emergency exception revocation must follow effectivity.",
     ],
   ];
   for (const [table, pattern, message] of tablePatterns) {
@@ -869,6 +1180,27 @@ function validateTables(state) {
   requirePattern(
     state.errors,
     normalizeSql(state.tables.get("certifications") ?? ""),
+    /revoked_at is null or revoked_at >= issued_at/,
+    "Certification revocation must follow issuance.",
+  );
+  requirePattern(
+    state.errors,
+    normalizeSql(state.tables.get("certifications") ?? ""),
+    /superseded_at is null or superseded_at >= issued_at/,
+    "Certification supersession must follow issuance.",
+  );
+  if (
+    /prerequisite_requirement_version_ids|capability_outcomes jsonb/.test(
+      normalizeSql(state.tables.get("curriculum_requirements") ?? ""),
+    )
+  ) {
+    state.errors.push(
+      "Curriculum prerequisites and capability outcomes must be normalized relationally.",
+    );
+  }
+  requirePattern(
+    state.errors,
+    normalizeSql(state.tables.get("certifications") ?? ""),
     /issued_at <= created_at/,
     "Certifications cannot claim a future issuance timestamp.",
   );
@@ -904,13 +1236,10 @@ function validateRls(state) {
 
 function validatePrivileges(state) {
   for (const table of REQUIRED_TABLES) {
-    const expectedAuthenticated = CONFIG_TABLES.has(table)
-      ? ["delete", "insert", "select", "update"]
-      : ["select"];
     const expectedByRole = {
       public: [],
       anon: [],
-      authenticated: expectedAuthenticated,
+      authenticated: ["select"],
       service_role: SERVICE_PRIVILEGES[table],
     };
     for (const [role, expected] of Object.entries(expectedByRole)) {
@@ -919,6 +1248,18 @@ function validatePrivileges(state) {
       if (actual.join(",") !== wanted.join(",")) {
         state.errors.push(
           `Unsafe effective grant on learning.${table} for ${role}: expected [${wanted.join(", ")}], found [${actual.join(", ")}].`,
+        );
+      }
+    }
+  }
+
+  for (const [role, tables] of state.privileges) {
+    if (["public", "anon", "authenticated", "service_role"].includes(role))
+      continue;
+    for (const [table, privileges] of tables) {
+      if (privileges.size > 0) {
+        state.errors.push(
+          `Unsafe learning table grantee ${role} has [${[...privileges].sort().join(", ")}] on learning.${table}.`,
         );
       }
     }
@@ -950,11 +1291,33 @@ function validatePolicies(state) {
       state.errors.push(`Policy ${name} must be scoped only to authenticated.`);
     }
     const compactPolicy = policy.normalized.replace(/\s+/g, "");
+    const usingExpression = parenthesizedClause(policy.statement, "using");
+    const checkExpression = parenthesizedClause(
+      policy.statement,
+      "with\\s+check",
+    );
     if (
       /\busing\(\(*true\)*\)/.test(compactPolicy) ||
-      /\bwithcheck\(\(*true\)*\)/.test(compactPolicy)
+      /\bwithcheck\(\(*true\)*\)/.test(compactPolicy) ||
+      hasPolicyTautology(usingExpression) ||
+      hasPolicyTautology(checkExpression)
     ) {
-      state.errors.push(`Policy ${name} is an unsafe permissive policy.`);
+      state.errors.push(
+        `Policy ${name} contains an unsafe permissive or tautological expression.`,
+      );
+    }
+    const policyExpressions = [usingExpression, checkExpression].filter(
+      Boolean,
+    );
+    if (
+      policyExpressions.length === 0 ||
+      policyExpressions.some(
+        (expression) => !activeProfileGuardsEveryPath(expression),
+      )
+    ) {
+      state.errors.push(
+        `Policy ${name} must require the shared fail-closed active profile helper on every authorization path.`,
+      );
     }
   }
 
@@ -966,17 +1329,11 @@ function validatePolicies(state) {
   const boundedPolicyRules = [
     [
       "learning_curricula_published_read",
-      [
-        /status = 'active'/,
-        /private\.learning_audience_matches_current_profile\(audience\)/,
-      ],
+      [/status = 'active'/, /private\.learning_has_active_profile\(audience\)/],
     ],
     [
       "learning_requirements_published_read",
-      [
-        /status = 'active'/,
-        /private\.learning_audience_matches_current_profile\(audience\)/,
-      ],
+      [/status = 'active'/, /private\.learning_has_active_profile\(audience\)/],
     ],
     [
       "learning_curriculum_versions_published_read",
@@ -984,7 +1341,7 @@ function validatePolicies(state) {
         /status = 'published'/,
         /effective_at <= now\(\)/,
         /expires_at is null or expires_at > now\(\)/,
-        /private\.learning_audience_matches_current_profile\(audience\)/,
+        /private\.learning_has_active_profile\(audience\)/,
       ],
     ],
     [
@@ -993,7 +1350,7 @@ function validatePolicies(state) {
         /status = 'published'/,
         /effective_at <= now\(\)/,
         /expires_at is null or expires_at > now\(\)/,
-        /private\.learning_audience_matches_current_profile\(audience\)/,
+        /private\.learning_has_active_profile\(audience\)/,
       ],
     ],
     [
@@ -1001,7 +1358,25 @@ function validatePolicies(state) {
       [
         /effective_at <= now\(\)/,
         /expires_at is null or expires_at > now\(\)/,
-        /private\.learning_audience_matches_current_profile\(audience\)/,
+        /private\.learning_has_active_profile\(audience\)/,
+      ],
+    ],
+    [
+      "learning_curriculum_requirement_prerequisites_published_read",
+      [
+        /version\.id = learning\.curriculum_requirement_prerequisites\.curriculum_version_id/,
+        /version\.audience = learning\.curriculum_requirement_prerequisites\.audience/,
+        /version\.status = 'published'/,
+        /version\.effective_at <= now\(\)/,
+      ],
+    ],
+    [
+      "learning_curriculum_capability_outcomes_published_read",
+      [
+        /version\.id = learning\.curriculum_capability_outcomes\.curriculum_version_id/,
+        /version\.audience = learning\.curriculum_capability_outcomes\.audience/,
+        /version\.status = 'published'/,
+        /version\.effective_at <= now\(\)/,
       ],
     ],
     [
@@ -1055,6 +1430,8 @@ function validatePolicies(state) {
     "learning_requirements_platform_manage",
     "learning_requirement_versions_platform_manage",
     "learning_curriculum_requirements_platform_manage",
+    "learning_curriculum_requirement_prerequisites_platform_manage",
+    "learning_curriculum_capability_outcomes_platform_manage",
     "learning_role_curricula_platform_manage",
   ]) {
     const policy = state.policies.get(name);
@@ -1102,7 +1479,7 @@ function validatePolicies(state) {
     !policyHas(assignmentsLearner, /user_id = \(select auth\.uid\(\)\)/) ||
     !policyHas(
       assignmentsLearner,
-      /private\.learning_audience_matches_current_profile\(audience\)/,
+      /private\.learning_has_active_profile\(audience\)/,
     )
   ) {
     state.errors.push(
@@ -1133,10 +1510,7 @@ function validatePolicies(state) {
     const learner = state.policies.get(`learning_${table}_learner_read`);
     if (
       !policyHas(learner, /user_id = \(select auth\.uid\(\)\)/) ||
-      !policyHas(
-        learner,
-        /private\.learning_audience_matches_current_profile\(audience\)/,
-      )
+      !policyHas(learner, /private\.learning_has_active_profile\(audience\)/)
     ) {
       state.errors.push(
         `Learner policy for learning.${table} must be self-only and audience-safe.`,
@@ -1235,10 +1609,19 @@ function validatePolicies(state) {
 function validateFunctions(state) {
   requireFunction(
     state,
+    "private.learning_has_active_profile",
+    [
+      /profile\.status = 'active'/,
+      /profile\.kind = 'employee'/,
+      /profile\.kind = 'vendor'/,
+    ],
+    "All authenticated RLS paths must share one fail-closed active profile helper.",
+  );
+  requireFunction(
+    state,
     "private.learning_is_active_employee_platform_admin",
     [
-      /profile\.kind = 'employee'/,
-      /profile\.status = 'active'/,
+      /private\.learning_has_active_profile\('internal'\)/,
       /core\.has_cap\('core', 'manage_rbac'\)/,
     ],
     "Platform policy helper must fail closed to an active employee Platform Administrator.",
@@ -1259,6 +1642,28 @@ function validateFunctions(state) {
       /raise exception/,
     ],
     "Attempt lifecycle guard is missing or inert.",
+  );
+  requireFunction(
+    state,
+    "learning.guard_assignment_lifecycle",
+    [
+      /tg_op = 'delete'/,
+      /old\.status in \('completed', 'expired', 'superseded', 'cancelled'\)/,
+      /terminal assignment evidence is immutable/,
+      /raise exception/,
+    ],
+    "Assignment lifecycle guard must make terminal evidence monotonic.",
+  );
+  requireFunction(
+    state,
+    "learning.guard_assignment_requirement_lifecycle",
+    [
+      /tg_op = 'delete'/,
+      /old\.status in \('passed', 'waived', 'expired'\)/,
+      /terminal assignment requirement evidence is immutable/,
+      /raise exception/,
+    ],
+    "Assignment-requirement lifecycle guard must make terminal evidence monotonic.",
   );
   requireFunction(
     state,
@@ -1290,6 +1695,7 @@ function validateFunctions(state) {
       /new\.status <> 'draft'/,
       /old\.status = 'draft'/,
       /old\.status = 'in_review'/,
+      /private\.validate_curriculum_graph_publication/,
       /finalized learning content is immutable/,
       /raise exception/,
     ],
@@ -1299,6 +1705,7 @@ function validateFunctions(state) {
     state,
     "learning.guard_curriculum_composition",
     [
+      /private\.lock_learning_curriculum_graph/,
       /approved/,
       /scheduled/,
       /published/,
@@ -1312,18 +1719,41 @@ function validateFunctions(state) {
     state,
     "private.validate_assignment_requirement_waiver",
     [
+      /requirement_version\.audience = 'vendor'/,
       /not requirement_version\.waivable/,
       /parent_requirement\.governance_owner = 'legal'/,
       /parent_requirement\.requirement_kind = 'policy'/,
       /raise exception/,
     ],
-    "Assignment-requirement waiver guard must reject non-waivable and Legal policy requirements.",
+    "Assignment-requirement waiver guard must reject vendor, non-waivable, and Legal policy requirements.",
+  );
+  requireFunction(
+    state,
+    "private.lock_learning_curriculum_graph",
+    [/order by curriculum_version\.id/, /for update/],
+    "Curriculum graph locks must be acquired in stable parent UUID order.",
+  );
+  requireFunction(
+    state,
+    "private.validate_curriculum_graph_publication",
+    [
+      /private\.lock_learning_curriculum_graph/,
+      /learning\.requirement_versions/,
+      /requirement_version\.status <> 'published'/,
+      /requirement_version\.effective_at > target_effective_at/,
+      /learning\.curriculum_capability_outcomes/,
+      /with recursive prerequisite_walk/,
+      /raise exception/,
+    ],
+    "Curriculum publication must lock and validate the complete published effective graph.",
   );
   requireFunction(
     state,
     "private.validate_certification_issuance",
     [
       /core\.user_roles/,
+      /for key share of role_assignment/,
+      /private\.lock_learning_curriculum_graph/,
       /profile\.status <> 'active'/,
       /core\.role_capabilities/,
       /learning\.role_curricula/,
@@ -1331,10 +1761,17 @@ function validateFunctions(state) {
       /curriculum_version\.status = 'published'/,
       /candidate\.curriculum_version_id = new\.curriculum_version_id/,
       /learning\.curriculum_requirements/,
+      /learning\.curriculum_capability_outcomes/,
+      /learning\.curriculum_requirement_prerequisites/,
+      /outcome\.module = new\.module/,
+      /outcome\.capability = new\.capability/,
+      /requirement_version\.status = 'published'/,
+      /requirement_version\.effective_at <= new\.effective_at/,
+      /prerequisite\.prerequisite_requirement_version_id = any\(new\.requirement_version_ids\)/,
       /learning\.assignment_requirements/,
       /raise exception/,
     ],
-    "Certification issuance validator must prove active role, capability, published curriculum, audience, and requirement lineage.",
+    "Certification issuance validator must serialize and prove active role, declared capability outcome, published curriculum, audience, and requirement lineage.",
   );
   requireFunction(
     state,
@@ -1360,6 +1797,53 @@ function validateFunctions(state) {
     ],
     "Emergency exception issuance must validate active independent parties, capability, and department scope.",
   );
+
+  const issuance =
+    state.functions.get("private.validate_certification_issuance")
+      ?.reachableBody ?? "";
+  const roleLock = issuance.indexOf("for key share of role_assignment");
+  const graphLock = issuance.indexOf("private.lock_learning_curriculum_graph");
+  if (roleLock < 0 || graphLock <= roleLock) {
+    state.errors.push(
+      "Certification issuance must lock live role authority before curriculum graph rows.",
+    );
+  }
+
+  for (const [name, functionEntry] of state.functions) {
+    const canonicalFunctionSql = normalizeSql(
+      functionEntry.statement,
+    ).replaceAll('"', "");
+    if (
+      functionEntry.securityDefiner &&
+      (/\blearning\./.test(canonicalFunctionSql) ||
+        /\bsearch_path\s*(?:=|to)\s*'?learning\b/.test(canonicalFunctionSql)) &&
+      !ALLOWED_SECURITY_DEFINERS.has(name)
+    ) {
+      state.errors.push(
+        `Unknown SECURITY DEFINER function ${name} touches learning data.`,
+      );
+    }
+    if (
+      functionEntry.securityDefiner &&
+      !/\bset search_path = ''/.test(canonicalFunctionSql)
+    ) {
+      state.errors.push(
+        `SECURITY DEFINER function ${name} must pin an empty search_path.`,
+      );
+    }
+
+    const expectedRoles = new Set(ALLOWED_FUNCTION_EXECUTE[name] ?? []);
+    const actualRoles = functionEntry.executeRoles;
+    const unexpected = [...actualRoles].filter(
+      (role) => !expectedRoles.has(role),
+    );
+    const missing = [...expectedRoles].filter((role) => !actualRoles.has(role));
+    if (unexpected.length > 0 || missing.length > 0) {
+      state.errors.push(
+        `Unsafe EXECUTE privilege on function ${name}: expected [${[...expectedRoles].sort().join(", ")}], found [${[...actualRoles].sort().join(", ")}].`,
+      );
+    }
+  }
 }
 
 function validateTriggers(state) {
@@ -1379,7 +1863,7 @@ function validateTriggers(state) {
     const disabled = state.disabledTriggers.get(expected.table);
     if (disabled?.has("all") || disabled?.has("user") || disabled?.has(name)) {
       state.errors.push(
-        `Required trigger ${name} is disabled in effective migration state.`,
+        `Required trigger ${name} is disabled or non-origin in effective migration state.`,
       );
     }
   }
