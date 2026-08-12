@@ -124,6 +124,16 @@ const FUNCTION_SPECS = Object.freeze([
     "v",
     true,
   ),
+  fn("private.resolve_assignments_base", "", "jsonb", "plpgsql", "v", true),
+  fn("private.start_requirement_base", "jsonb", "jsonb", "plpgsql", "v", true),
+  fn(
+    "private.validate_certification_completion_evidence",
+    "",
+    "trigger",
+    "plpgsql",
+    "v",
+    true,
+  ),
   fn(
     "learning.guard_authoritative_write_isolation",
     "",

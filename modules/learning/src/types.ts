@@ -80,6 +80,7 @@ export interface RequirementProgress {
   requirementVersion: number;
   state: RequirementProgressState;
   attemptCount: number;
+  allowsSharedCompletion: boolean;
   activeAttempt?: ActiveLearningAttempt;
   completedAt?: string;
   updatedAt: string;

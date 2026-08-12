@@ -170,6 +170,9 @@ begin
       'requirementVersion', requirement_version.version,
       'state', assignment_requirement.status,
       'attemptCount', assignment_requirement.attempt_count,
+      'allowsSharedCompletion', assignment.source_type not in (
+        'retraining', 'corrective'
+      ),
       'activeAttempt', active_attempt.value,
       'completedAt', assignment_requirement.completed_at,
       'updatedAt', greatest(

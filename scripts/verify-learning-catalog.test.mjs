@@ -103,6 +103,42 @@ test("catalog models the exact Task 3 RPC owners and execute grants", () => {
   }
 });
 
+test("catalog keeps transition bases private and installs evidence validation", () => {
+  const snapshot = expectedSnapshot();
+  const privateFunctions = [
+    "private.resolve_assignments_base()",
+    "private.start_requirement_base(jsonb)",
+    "private.validate_certification_completion_evidence()",
+  ];
+  for (const functionName of privateFunctions) {
+    const metadata = snapshot.functions.find(
+      (entry) => entry.function === functionName,
+    );
+    assert.equal(metadata?.owner, "postgres", functionName);
+    assert.equal(metadata?.securityDefiner, true, functionName);
+    assert.deepEqual(metadata?.config, ['search_path=""'], functionName);
+    assert.deepEqual(
+      snapshot.functionPrivileges.filter(
+        (entry) => entry.function === functionName,
+      ),
+      [],
+      functionName,
+    );
+  }
+
+  assert.ok(
+    snapshot.triggers.some(
+      (trigger) =>
+        trigger.name === "learning_certifications_completion_evidence" &&
+        trigger.table === "learning.certifications" &&
+        trigger.function ===
+          "private.validate_certification_completion_evidence" &&
+        trigger.timing === "BEFORE" &&
+        trigger.events.join(",") === "INSERT",
+    ),
+  );
+});
+
 test("catalog models the private answer-key table as forced-RLS service authority", () => {
   const snapshot = expectedSnapshot();
   assert.deepEqual(

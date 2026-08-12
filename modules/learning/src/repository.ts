@@ -233,6 +233,7 @@ function parseProgress(value: unknown): RequirementProgress {
     requirementVersion: requiredNumber(value, "requirementVersion"),
     state,
     attemptCount: requiredNumber(value, "attemptCount"),
+    allowsSharedCompletion: requiredBoolean(value, "allowsSharedCompletion"),
     activeAttempt:
       value.activeAttempt == null
         ? undefined
@@ -649,13 +650,15 @@ export class MemoryLearningRepository implements LearningRepository {
   }
 
   private replaceProgress(next: RequirementProgress): RequirementProgress {
-    const sharedCompletion = next.state === "passed";
+    const sharedCompletion =
+      next.state === "passed" && next.allowsSharedCompletion;
     this.state = {
       ...this.state,
       progress: this.state.progress.map((item) =>
         item.assignmentRequirementId === next.assignmentRequirementId
           ? next
           : sharedCompletion &&
+              item.allowsSharedCompletion &&
               item.requirementId === next.requirementId &&
               item.requirementVersion === next.requirementVersion &&
               !["passed", "waived", "expired"].includes(item.state)

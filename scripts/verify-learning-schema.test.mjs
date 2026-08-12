@@ -290,7 +290,9 @@ test("synchronizes shared completion with serialized, attributable evidence", ()
     /from core\.profiles profile[\s\S]*?for update/i,
     /source_requirement\.status = 'passed'/i,
     /target_requirement\.requirement_version_id\s*=\s*v_source\.requirement_version_id/i,
-    /status = 'invalidated'[\s\S]*?integrity_result = 'invalid'/i,
+    /'shared_completion_superseded_attempt'/i,
+    /status = 'abandoned'[\s\S]*?integrity_result = 'valid'/i,
+    /pg_catalog\.gen_random_uuid\(\)/i,
     /'shared_completion_source_id', v_source\.id/i,
     /if v_propagated > 0 then[\s\S]*?'shared_completions_synchronized'/i,
     /'shared_completions_synchronized'/i,
@@ -315,6 +317,71 @@ test("synchronizes shared completion with serialized, attributable evidence", ()
   assert.match(
     errorsForCompletionAlignment(overloaded),
     /only the exact no-argument.*sync_shared_completions declaration is approved/i,
+  );
+});
+
+test("makes shared completion authoritative inside resolve and start transactions", () => {
+  for (const invariant of [
+    /alter function learning\.resolve_assignments\(\)\s+rename to resolve_assignments_base/i,
+    /alter function learning\.resolve_assignments_base\(\)\s+set schema private/i,
+    /create or replace function learning\.resolve_assignments\(\)[\s\S]*?private\.resolve_assignments_base\(\)[\s\S]*?learning\.sync_shared_completions\(\)/i,
+    /alter function learning\.start_requirement\(jsonb\)\s+rename to start_requirement_base/i,
+    /alter function learning\.start_requirement_base\(jsonb\)\s+set schema private/i,
+    /create or replace function learning\.start_requirement\(payload jsonb\)[\s\S]*?learning\.sync_shared_completions\(\)[\s\S]*?private\.start_requirement_base\(payload\)/i,
+    /revoke all on function private\.resolve_assignments_base\(\)\s+from public, anon, authenticated, service_role/i,
+    /revoke all on function private\.start_requirement_base\(jsonb\)\s+from public, anon, authenticated, service_role/i,
+  ]) {
+    assert.match(completionAlignmentSql, invariant);
+  }
+
+  const directBaseGrant = `${completionAlignmentSql}\n
+grant execute on function private.start_requirement_base(jsonb)
+  to authenticated;`;
+  assert.match(
+    errorsForCompletionAlignment(directBaseGrant),
+    /unsafe execute privilege.*private\.start_requirement_base/i,
+  );
+});
+
+test("never reuses normal completion for retraining or corrective assignments", () => {
+  assert.match(
+    completionAlignmentSql,
+    /source_assignment\.source_type not in \('retraining', 'corrective'\)/i,
+  );
+  assert.match(
+    completionAlignmentSql,
+    /target_assignment\.source_type not in \('retraining', 'corrective'\)/i,
+  );
+  assert.match(
+    serviceContractAlignmentSql,
+    /'allowsSharedCompletion', assignment\.source_type not in \(\s*'retraining', 'corrective'\s*\)/i,
+  );
+});
+
+test("certification evidence preserves original completion lineage", () => {
+  for (const invariant of [
+    /create or replace function private\.validate_certification_completion_evidence\(\)/i,
+    /v_target\.progress->>'shared_completion_source_id'/i,
+    /attempt\.assignment_requirement_id = v_source\.id/i,
+    /attempt\.status = 'passed'/i,
+    /attempt\.integrity_result = 'valid'/i,
+    /acknowledgment\.assignment_requirement_id = v_source\.id/i,
+    /'source_assignment_requirement_id', v_source\.id/i,
+    /'attempt_ids', v_attempt_ids/i,
+    /'acknowledgment_ids', v_acknowledgment_ids/i,
+    /create trigger learning_certifications_completion_evidence\s+before insert on learning\.certifications/i,
+  ]) {
+    assert.match(completionAlignmentSql, invariant);
+  }
+
+  const weakened = replaceRequired(
+    completionAlignmentSql,
+    /and attempt\.integrity_result = 'valid'/i,
+    "and attempt.integrity_result <> 'valid'",
+  );
+  assert.match(
+    errorsForCompletionAlignment(weakened),
+    /exact guarded function body drifted.*validate_certification_completion_evidence/i,
   );
 });
 
@@ -888,7 +955,7 @@ test("indexes active certifications for role and capability revocation", () => {
 test("wires the environment-independent lifecycle test into root verification", () => {
   assert.equal(
     packageJson.scripts["verify:learning-role-lifecycle"],
-    "node --test scripts/verify-learning-role-lifecycle.test.mjs",
+    "node --test scripts/verify-learning-role-lifecycle.test.mjs scripts/verify-learning-completion-lifecycle.test.mjs",
   );
   assert.match(
     packageJson.scripts["verify:learning-schema"],

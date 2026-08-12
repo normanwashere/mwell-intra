@@ -372,6 +372,11 @@ export const REQUIRED_TRIGGERS = Object.freeze({
     events: "before insert",
     function: "private.lock_certification_role_authority",
   },
+  learning_certifications_completion_evidence: {
+    table: "learning.certifications",
+    events: "before insert",
+    function: "private.validate_certification_completion_evidence",
+  },
   learning_certifications_lifecycle_guard: {
     table: "learning.certifications",
     events: "before update or delete",
@@ -452,6 +457,9 @@ export const ALLOWED_SECURITY_DEFINERS = new Set([
   "private.revoke_certifications_for_role_assignment_v2",
   "private.revoke_certifications_for_role_authority_loss",
   "private.validate_emergency_exception_issuance",
+  "private.resolve_assignments_base",
+  "private.start_requirement_base",
+  "private.validate_certification_completion_evidence",
   ...LEARNING_SERVICE_FUNCTIONS,
 ]);
 
@@ -508,6 +516,12 @@ export const EXPECTED_FUNCTION_DECLARATION_SQL = Object.freeze({
     "create or replace function private.guard_role_assignment_identity() returns trigger language plpgsql set search_path = ''",
   "private.validate_emergency_exception_issuance":
     "create or replace function private.validate_emergency_exception_issuance() returns trigger language plpgsql security definer set search_path = ''",
+  "private.resolve_assignments_base":
+    "create or replace function private.resolve_assignments_base() returns jsonb language plpgsql security definer set search_path = ''",
+  "private.start_requirement_base":
+    "create or replace function private.start_requirement_base(payload jsonb) returns jsonb language plpgsql security definer set search_path = ''",
+  "private.validate_certification_completion_evidence":
+    "create or replace function private.validate_certification_completion_evidence() returns trigger language plpgsql security definer set search_path = ''",
   "learning.guard_authoritative_write_isolation":
     "create or replace function learning.guard_authoritative_write_isolation() returns trigger language plpgsql set search_path = ''",
   "learning.reject_evidence_mutation":
@@ -577,6 +591,12 @@ export const EXPECTED_FUNCTION_BODY_SHA256 = Object.freeze({
     "4eef02b98abe2b97e08120c9ffb8898a9f9690d84af8d0080be6e8bd032929d3",
   "private.validate_emergency_exception_issuance":
     "0055e93a905b56fc6d96db9aeb6850f9761da39fa1bd10421917f37c321b1531",
+  "private.resolve_assignments_base":
+    "2729f8eca28b7cc7d078141a0edc8f3dd340fd7f5c1fe9521a210bebb45389c2",
+  "private.start_requirement_base":
+    "e9de0246e498862f69ccb34642422db8d68d4375f31e6e37a91ed46ec6b9c402",
+  "private.validate_certification_completion_evidence":
+    "d98966e8976de20a95333b7a0e42defa9dab2551f63a2bc647ba3263158a82c6",
   "learning.guard_authoritative_write_isolation":
     "2f58975130b5a9e41bc212084a6ff31f5232c8cd34946ac170b4b3fbe3ca220e",
   "learning.reject_evidence_mutation":
@@ -598,11 +618,11 @@ export const EXPECTED_FUNCTION_BODY_SHA256 = Object.freeze({
   "learning.guard_curriculum_composition":
     "0aea39b911deac9b688cd3a58270a3b9135f23dd4921338911f1864b15c10d3c",
   "learning.my_learning_snapshot":
-    "6dce63adcee74606830173828304fefe5c20d917028080587a23f1eac2502fe7",
+    "4a6203bf714bff317d95701056a98f05d2c0abfcb368d4813402db2928dc4ff8",
   "learning.resolve_assignments":
-    "2729f8eca28b7cc7d078141a0edc8f3dd340fd7f5c1fe9521a210bebb45389c2",
+    "8a409569481656f0f58bece2a386fccc123732dcb06e39d2df3d9738923fe710",
   "learning.start_requirement":
-    "e9de0246e498862f69ccb34642422db8d68d4375f31e6e37a91ed46ec6b9c402",
+    "294cecabf70371a8a74a9bbf0630100ae2b72e50c7d52024709500c189714e99",
   "learning.record_simulation_checkpoint":
     "283ca2e692fff9563407a7de9e7ae0a4e6fbb9159cfe09f52e6a611525089de0",
   "learning.submit_assessment":
@@ -612,7 +632,7 @@ export const EXPECTED_FUNCTION_BODY_SHA256 = Object.freeze({
   "learning.request_support":
     "ec8f155cf19db9b50f394b6c9b0d160a2805f248e3ecedc34fe5e0e2add17a98",
   "learning.sync_shared_completions":
-    "84d8136ce73bce076ca5160d8e32fdce58373eb964fdce0ada4e72a01ca4ab0f",
+    "41bf2690a328ae0debd9ec76b6afe6a3e46025cd8e0ea17e01cdcd22380496ea",
   "learning.evaluate_certifications":
     "56e74e7e7c111c1ebd3507f4a34dbe9cfeba0c31c4071b6b09683f032351aa61",
 });
@@ -1328,6 +1348,35 @@ function createState() {
   };
 }
 
+function moveModeledFunction(state, fromName, toName) {
+  const functionEntry = state.functions.get(fromName);
+  if (!functionEntry || state.functions.has(toName)) return false;
+
+  const escapedFromName = fromName.replaceAll(".", "\\.");
+  const statement = functionEntry.statement.replace(
+    new RegExp(
+      `(create(?: or replace)? function\\s+)${escapedFromName}(?=\\s*\\()`,
+      "i",
+    ),
+    `$1${toName}`,
+  );
+  const metadata = parseFunctionDeclaration(statement);
+  if (!metadata || metadata.qualifiedName !== toName) return false;
+
+  state.functions.delete(fromName);
+  state.functions.set(toName, {
+    ...functionEntry,
+    statement,
+    metadata,
+  });
+  if (state.learningServices.functionOwners.has(fromName)) {
+    const owner = state.learningServices.functionOwners.get(fromName);
+    state.learningServices.functionOwners.delete(fromName);
+    state.learningServices.functionOwners.set(toName, owner);
+  }
+  return true;
+}
+
 function processStatement(state, statement, migrationName) {
   const normalized = normalizeSql(statement).replaceAll('"', "");
   const isFoundation = migrationName === FOUNDATION_MIGRATION_NAME;
@@ -2025,9 +2074,15 @@ function processStatement(state, statement, migrationName) {
       existingFunction?.migrationName === SERVICES_MIGRATION_NAME;
     const approvedCompletionAlignment =
       isCompletionAlignment &&
-      metadata.qualifiedName === "learning.sync_shared_completions" &&
-      metadata.argumentTypes.length === 0 &&
-      !existingFunction;
+      !existingFunction &&
+      new Map([
+        ["learning.sync_shared_completions", []],
+        ["learning.resolve_assignments", []],
+        ["learning.start_requirement", ["jsonb"]],
+        ["private.validate_certification_completion_evidence", []],
+      ])
+        .get(metadata.qualifiedName)
+        ?.join("|") === metadata.argumentTypes.join("|");
     if (isServiceContractAlignment && !approvedSnapshotAlignment) {
       state.errors.push(
         `${migrationName}: only the exact no-argument learning.my_learning_snapshot replacement is approved.`,
@@ -2036,7 +2091,9 @@ function processStatement(state, statement, migrationName) {
     }
     if (isCompletionAlignment && !approvedCompletionAlignment) {
       state.errors.push(
-        `${migrationName}: only the exact no-argument learning.sync_shared_completions declaration is approved.`,
+        metadata.qualifiedName === "learning.sync_shared_completions"
+          ? `${migrationName}: only the exact no-argument learning.sync_shared_completions declaration is approved.`
+          : `${migrationName}: only exact reviewed completion-alignment function declarations are approved.`,
       );
       return;
     }
@@ -2075,24 +2132,30 @@ function processStatement(state, statement, migrationName) {
   }
 
   match = normalized.match(
-    /^alter function (learning\.[a-z_][a-z0-9_]*)\s*\(([^)]*)\) owner to ([a-z_][a-z0-9_]*)$/,
+    /^alter function ((?:learning|private)\.[a-z_][a-z0-9_]*)\s*\(([^)]*)\) owner to ([a-z_][a-z0-9_]*)$/,
   );
   if (match) {
     const functionEntry = state.functions.get(match[1]);
     const argumentTypes = match[2].trim()
       ? splitTopLevel(match[2]).map(normalizeSql)
       : [];
+    const approvedCompletionOwner =
+      isCompletionAlignment &&
+      new Set([
+        "learning.sync_shared_completions",
+        "learning.resolve_assignments",
+        "learning.start_requirement",
+        "private.resolve_assignments_base",
+        "private.start_requirement_base",
+        "private.validate_certification_completion_evidence",
+      ]).has(match[1]);
+    const approvedServiceOwner =
+      (isLearningServices && LEARNING_SERVICE_FUNCTIONS.includes(match[1])) ||
+      (isServiceContractAlignment &&
+        match[1] === "learning.my_learning_snapshot") ||
+      approvedCompletionOwner;
     if (
-      (!isLearningServices &&
-        !(
-          isServiceContractAlignment &&
-          match[1] === "learning.my_learning_snapshot"
-        ) &&
-        !(
-          isCompletionAlignment &&
-          match[1] === "learning.sync_shared_completions"
-        )) ||
-      !LEARNING_SERVICE_FUNCTIONS.includes(match[1]) ||
+      !approvedServiceOwner ||
       match[3] !== "postgres" ||
       !functionEntry ||
       JSON.stringify(argumentTypes) !==
@@ -2103,6 +2166,37 @@ function processStatement(state, statement, migrationName) {
       );
     } else {
       state.learningServices.functionOwners.set(match[1], match[3]);
+    }
+    return;
+  }
+
+  const approvedFunctionMoves = new Map([
+    [
+      "alter function learning.resolve_assignments() rename to resolve_assignments_base",
+      ["learning.resolve_assignments", "learning.resolve_assignments_base"],
+    ],
+    [
+      "alter function learning.resolve_assignments_base() set schema private",
+      ["learning.resolve_assignments_base", "private.resolve_assignments_base"],
+    ],
+    [
+      "alter function learning.start_requirement(jsonb) rename to start_requirement_base",
+      ["learning.start_requirement", "learning.start_requirement_base"],
+    ],
+    [
+      "alter function learning.start_requirement_base(jsonb) set schema private",
+      ["learning.start_requirement_base", "private.start_requirement_base"],
+    ],
+  ]);
+  if (approvedFunctionMoves.has(normalized)) {
+    const [fromName, toName] = approvedFunctionMoves.get(normalized);
+    if (
+      !isCompletionAlignment ||
+      !moveModeledFunction(state, fromName, toName)
+    ) {
+      state.errors.push(
+        `${migrationName}: reviewed completion-alignment function move could not be applied exactly.`,
+      );
     }
     return;
   }

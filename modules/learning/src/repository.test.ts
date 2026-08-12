@@ -98,6 +98,7 @@ const progress = (
   requirementVersion: 1,
   state,
   attemptCount: 0,
+  allowsSharedCompletion: true,
   updatedAt: now,
 });
 
@@ -532,6 +533,44 @@ describe("MemoryLearningRepository", () => {
         (item) => item.assignmentRequirementId === "ar-simulation-shared",
       )?.state,
     ).toBe("passed");
+  });
+
+  it("never satisfies corrective or retraining work from a shared pass", async () => {
+    const ready = snapshotWithOrientationPassed();
+    const repository = new MemoryLearningRepository({
+      snapshot: {
+        ...ready,
+        progress: [
+          ...ready.progress,
+          {
+            ...progress(
+              "ar-simulation-corrective",
+              simulation.id,
+              "not_started",
+            ),
+            allowsSharedCompletion: false,
+          },
+        ],
+      },
+      runtime: "test",
+      now: () => now,
+      simulations: [simulationDefinition],
+    });
+
+    const started = await repository.startRequirement({
+      assignmentRequirementId: "ar-simulation",
+    });
+    await repository.checkpoint({
+      assignmentRequirementId: "ar-simulation",
+      attemptId: started.attempt!.id,
+      simulationId: "receiving-simulation-v1",
+      checkpointId: "delivery-recorded",
+    });
+    expect(
+      (await repository.snapshot()).progress.find(
+        (item) => item.assignmentRequirementId === "ar-simulation-corrective",
+      )?.state,
+    ).toBe("not_started");
   });
 
   it("matches live start-state requirements for policy and support actions", async () => {
