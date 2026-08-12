@@ -1,12 +1,14 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import { useSession } from "@intra/auth";
 import { Badge, Button, Icon } from "@intra/ui";
 import { OPERATING_PERSONAS } from "./personas";
 import { useLearning } from "./LearningProvider";
 import { OnboardingProgress } from "./OnboardingProgress";
+import { OnboardingTrainingSession } from "./OnboardingTrainingSession";
+import { getTrainingAdapter } from "./training/registry";
 import type {
   RequirementDefinition,
   RequirementProgress,
@@ -54,7 +56,7 @@ function RequirementAction({
   requirement: RequirementDefinition;
   progress?: RequirementProgress;
   unavailableReason?: string;
-  onResume(): void;
+  onResume(launcher: HTMLButtonElement): void;
 }) {
   if (progress?.state === "needs_support") {
     return (
@@ -81,7 +83,7 @@ function RequirementAction({
         iconRight={unavailableReason ? undefined : "arrowRight"}
         className="w-full sm:w-auto"
         disabled={Boolean(unavailableReason)}
-        onClick={onResume}
+        onClick={(event) => onResume(event.currentTarget)}
       >
         {verb} {requirement.title}
       </Button>
@@ -100,7 +102,39 @@ export function OnboardingCenter({
   audience?: "internal" | "vendor";
 }) {
   const { profile } = useSession();
-  const { snapshot, loading, stale, error, refresh, resume } = useLearning();
+  const {
+    snapshot,
+    loading,
+    stale,
+    error,
+    refresh,
+    resume,
+    activeTraining,
+    startingRequirementId,
+    trainingError,
+    closeTraining,
+    recordCheckpoint,
+  } = useLearning();
+  const launcherRef = useRef<HTMLButtonElement | null>(null);
+  const requiredHeadingRef = useRef<HTMLHeadingElement | null>(null);
+  const trainingWasActive = useRef(false);
+
+  useEffect(() => {
+    if (activeTraining) {
+      trainingWasActive.current = true;
+      return;
+    }
+    if (!trainingWasActive.current) return;
+    trainingWasActive.current = false;
+    requestAnimationFrame(() => {
+      const launcher = launcherRef.current;
+      if (launcher?.isConnected && !launcher.disabled) {
+        launcher.focus();
+        return;
+      }
+      requiredHeadingRef.current?.focus();
+    });
+  }, [activeTraining]);
 
   const view = useMemo(() => {
     const requirements = new Map<string, RequirementDefinition>();
@@ -208,6 +242,12 @@ export function OnboardingCenter({
   const unavailableReasonFor = (requirement: RequirementDefinition) => {
     const state = view.progress.get(requirement.id)?.state;
     if (state === "expired") return "Ask your manager to reassign this step";
+    if (
+      requirement.kind !== "orientation" &&
+      (!requirement.simulationId || !getTrainingAdapter(requirement.simulationId))
+    ) {
+      return "Guided practice is being prepared";
+    }
     const incomplete = requirement.prerequisiteIds.find((requirementId) => {
       const prerequisiteState = view.progress.get(requirementId)?.state;
       return !["passed", "waived"].includes(prerequisiteState ?? "");
@@ -237,7 +277,24 @@ export function OnboardingCenter({
 
   return (
     <div className="space-y-0">
-      <header className="border-b border-line pb-5">
+      {activeTraining && (
+        <OnboardingTrainingSession
+          requirementTitle={
+            view.requirements.find((item) => item.id === activeTraining.requirementId)
+              ?.title ?? "Role training"
+          }
+          assignmentRequirementId={activeTraining.assignmentRequirementId}
+          attemptId={activeTraining.attemptId}
+          scenarioId={activeTraining.simulationId}
+          launcherRef={launcherRef}
+          onCheckpoint={recordCheckpoint}
+          onClose={closeTraining}
+        />
+      )}
+      <header
+        className="border-b border-line pb-5"
+        data-onboarding-anchor="onboarding-role-context"
+      >
         <p className="text-xs font-semibold uppercase text-brand-700 dark:text-brand-300">
           {audience === "vendor" ? "Accreditation and access" : "Learning and access"}
         </p>
@@ -262,6 +319,13 @@ export function OnboardingCenter({
         </div>
       )}
 
+      {trainingError && (
+        <div role="alert" className="border-b border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-900 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-100">
+          <p className="font-semibold">Training could not start</p>
+          <p>{trainingError}</p>
+        </div>
+      )}
+
       <section className="border-b border-line py-5">
         <OnboardingProgress completed={view.completed} total={view.required.length} />
         {next && (
@@ -271,15 +335,38 @@ export function OnboardingCenter({
               <p className="mt-1 font-display text-base font-bold text-ink">{next.title}</p>
               <p className="mt-1 text-sm text-muted">{KIND_LABEL[next.kind]} | {next.mandatory ? "Required" : "Optional"}</p>
             </div>
-            <RequirementAction requirement={next} progress={view.progress.get(next.id)} unavailableReason={unavailableReasonFor(next)} onResume={() => resume(next.id)} />
+            <RequirementAction
+              requirement={next}
+              progress={view.progress.get(next.id)}
+              unavailableReason={
+                startingRequirementId === next.id
+                  ? "Starting your governed attempt"
+                  : unavailableReasonFor(next)
+              }
+              onResume={(launcher) => {
+                launcherRef.current = launcher;
+                void resume(next.id);
+              }}
+            />
           </div>
         )}
       </section>
 
       <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_20rem]">
-        <section className="py-6 lg:pr-8" aria-labelledby="required-learning-heading">
+        <section
+          className="py-6 lg:pr-8"
+          aria-labelledby="required-learning-heading"
+          data-onboarding-anchor="onboarding-required-steps"
+        >
           <div className="mb-3">
-            <h2 id="required-learning-heading" className="font-display text-lg font-bold text-ink">Your required steps</h2>
+            <h2
+              id="required-learning-heading"
+              ref={requiredHeadingRef}
+              tabIndex={-1}
+              className="font-display text-lg font-bold text-ink outline-none"
+            >
+              Your required steps
+            </h2>
             <p className="text-sm text-muted">Complete these in order. Shared requirements appear once.</p>
           </div>
           <ol className="border-t border-line">
@@ -300,7 +387,15 @@ export function OnboardingCenter({
                       Continue above
                     </span>
                   ) : (
-                    <RequirementAction requirement={requirement} progress={progress} unavailableReason={unavailableReasonFor(requirement)} onResume={() => resume(requirement.id)} />
+                    <RequirementAction
+                      requirement={requirement}
+                      progress={progress}
+                      unavailableReason={unavailableReasonFor(requirement)}
+                      onResume={(launcher) => {
+                        launcherRef.current = launcher;
+                        void resume(requirement.id);
+                      }}
+                    />
                   )}
                 </li>
               );

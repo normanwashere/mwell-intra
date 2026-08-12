@@ -1,0 +1,11 @@
+[data-training-target="true"] {
+  outline: 3px solid rgb(14 165 233);
+  outline-offset: 4px;
+  scroll-margin: 7rem;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  [data-training-target="true"] {
+    transition: outline-color 160ms ease;
+  }
+}

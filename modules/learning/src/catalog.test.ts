@@ -159,16 +159,19 @@ describe("learning catalog", () => {
     expect(requiresLiveCertification("warehouse", "receive_stock")).toBe(true);
   });
 
-  it("keeps the Leadership baseline completable without a missing simulation", () => {
+  it("gives the Leadership baseline a checkpoint-backed orientation", () => {
     const baseline = LEARNING_CATALOG.curricula.find(
       (curriculum) => curriculum.personaId === "leadership_insights",
     );
     expect(baseline?.requirementIds).toEqual([
       "internal.leadership_insights.orientation.v1",
     ]);
+    const requirement = requirementById.get(baseline?.requirementIds[0] ?? "");
+    expect(requirement?.simulationId).toBe(requirement?.id);
     expect(
-      requirementById.get(baseline?.requirementIds[0] ?? "")?.simulationId,
-    ).toBeUndefined();
+      LEARNING_CATALOG.simulations.find((item) => item.id === requirement?.simulationId)
+        ?.checkpointIds,
+    ).toEqual(["complete"]);
   });
 
   it("uses the approved shared requirement lifecycle states", () => {

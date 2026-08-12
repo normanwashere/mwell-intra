@@ -17,6 +17,8 @@ export const COMPLETION_ALIGNMENT_MIGRATION_NAME =
 export const COMPLETION_HARDENING_MIGRATION_NAME =
   "20260812190000_learning_completion_evidence_hardening.sql";
 export const AUTHORITY_MIGRATION_NAME = "20260812200000_learning_authority.sql";
+export const ORIENTATION_RUNTIME_MIGRATION_NAME =
+  "20260812210000_learning_orientation_runtime.sql";
 const PINNED_LEARNING_MIGRATION_SHA256 = Object.freeze({
   [FOUNDATION_MIGRATION_NAME]:
     "b5b954f0fdb9ff52748047ca4a17916896227934ecd43c22951ea4489fc129ad",
@@ -34,6 +36,8 @@ const PINNED_LEARNING_MIGRATION_SHA256 = Object.freeze({
     "9914f21c7fa21e452973ca75d08348b307edb0c0f72580fa46263112e8e0f0d5",
   [AUTHORITY_MIGRATION_NAME]:
     "a8ad714d8ae7a5f637ecb62af1cb9b4688a256041f42673e86d598ea36085f39",
+  [ORIENTATION_RUNTIME_MIGRATION_NAME]:
+    "4b1fb8f1989e8412658de7e986208b3fdc1299a24885b2112b807485dcbf0f41",
 });
 export const PRIVATE_ANSWER_KEY_TABLE =
   "private.learning_assessment_answer_keys";
@@ -1480,7 +1484,25 @@ function processStatement(state, statement, migrationName) {
   const isCompletionHardening =
     migrationName === COMPLETION_HARDENING_MIGRATION_NAME;
   const isAuthority = migrationName === AUTHORITY_MIGRATION_NAME;
+  const isOrientationRuntime =
+    migrationName === ORIENTATION_RUNTIME_MIGRATION_NAME;
   let match;
+
+  if (
+    isOrientationRuntime &&
+    /^alter table learning\.requirement_versions add constraint requirement_versions_orientation_runtime_check check \(/.test(
+      normalized,
+    )
+  ) {
+    return;
+  }
+  if (
+    isOrientationRuntime &&
+    normalized ===
+      "alter table learning.requirement_versions validate constraint requirement_versions_orientation_runtime_check"
+  ) {
+    return;
+  }
 
   if (normalized === "create schema if not exists learning") {
     if (!isFoundation)

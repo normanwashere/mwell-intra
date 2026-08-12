@@ -1,9 +1,13 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { LearningSnapshot } from "./types";
 import { OnboardingCenter } from "./OnboardingCenter";
 import { OnboardingStatusBand } from "./OnboardingStatusBand";
 import { LearningContext, type LearningContextValue } from "./LearningProvider";
+import {
+  clearTrainingAdaptersForTests,
+  registerTrainingAdapter,
+} from "./training/registry";
 
 const session = {
   profile: {
@@ -164,8 +168,13 @@ function value(overrides: Partial<LearningContextValue> = {}): LearningContextVa
     stale: false,
     error: null,
     resumeRequirementId: null,
+    startingRequirementId: null,
+    trainingError: null,
+    activeTraining: null,
     refresh: vi.fn(),
-    resume: vi.fn(),
+    resume: vi.fn().mockResolvedValue(undefined),
+    closeTraining: vi.fn(),
+    recordCheckpoint: vi.fn().mockResolvedValue(undefined),
     isLiveCapability: vi.fn().mockReturnValue(false),
     lockedReason: vi.fn().mockReturnValue(null),
     ...overrides,
@@ -181,6 +190,17 @@ function renderCenter(overrides: Partial<LearningContextValue> = {}) {
 }
 
 describe("OnboardingCenter", () => {
+  beforeEach(() => {
+    clearTrainingAdaptersForTests();
+    registerTrainingAdapter({
+      id: "receiving-sim",
+      version: 1,
+      scenarioIds: ["receiving-sim"],
+      initialState: () => ({ ready: true }),
+      dispatch: (state) => ({ state, nextStepId: "complete", completed: true }),
+    });
+  });
+
   it("prioritizes the next action and deduplicates shared multi-role requirements", () => {
     renderCenter();
 

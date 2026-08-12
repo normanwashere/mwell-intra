@@ -60,8 +60,9 @@ const audienceForPersona = (personaId: string): "internal" | "vendor" =>
 
 const orientationRequirement = (personaId: string): RequirementDefinition => {
   const audience = audienceForPersona(personaId);
+  const id = `${audience}.${personaId}.orientation.v1`;
   return {
-    id: `${audience}.${personaId}.orientation.v1`,
+    id,
     version: 1,
     audience,
     kind: "orientation",
@@ -72,6 +73,7 @@ const orientationRequirement = (personaId: string): RequirementDefinition => {
     mandatory: true,
     prerequisiteIds: [],
     capabilityOutcomes: [],
+    simulationId: id,
   };
 };
 
@@ -257,13 +259,12 @@ const simulations: readonly SimulationDefinition[] = requirements.flatMap(
   (requirement) => {
     if (!requirement.simulationId) return [];
     const firstCapability = requirement.capabilityOutcomes[0];
-    if (!firstCapability) return [];
     return [
       {
         id: requirement.simulationId,
         version: 1,
         audience: requirement.audience,
-        module: firstCapability.module,
+        module: firstCapability?.module ?? "core",
         title: requirement.title,
         checkpointIds: ["complete"],
         capabilityOutcomes: requirement.capabilityOutcomes,

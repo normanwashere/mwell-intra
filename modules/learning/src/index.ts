@@ -20,13 +20,36 @@ export {
   LearningContext,
   LearningProvider,
   useLearning,
+  type ActiveTrainingRequirement,
   type LearningContextValue,
 } from "./LearningProvider";
 export { OnboardingCenter } from "./OnboardingCenter";
 export { OnboardingProgress } from "./OnboardingProgress";
 export { OnboardingStatusBand } from "./OnboardingStatusBand";
+export { OnboardingTrainingSession } from "./OnboardingTrainingSession";
+export { CoachOverlay } from "./CoachOverlay";
+export {
+  TrainingModeProvider,
+  useTraining,
+  type TrainingContextValue,
+} from "./TrainingModeProvider";
+export { TrainingBanner } from "./TrainingBanner";
+export {
+  clearTrainingAdaptersForTests,
+  getTrainingAdapter,
+  registerTrainingAdapter,
+} from "./training/registry";
 export { REQUIREMENT_PROGRESS_STATES } from "./types";
 export type { OperatingPersona } from "./personas";
+export type {
+  TrainingAdapter,
+  TrainingCheckpoint,
+  TrainingCommand,
+  TrainingPlacement,
+  TrainingScenario,
+  TrainingStep,
+  TrainingTransition,
+} from "./training/types";
 export type {
   LearningRepository,
   LearningRpcClient,
