@@ -6,6 +6,7 @@ import {
   ALLOWED_SECURITY_DEFINERS,
   extractExpectedLearningPolicies,
   MODELED_FUNCTIONS,
+  PRIVATE_ANSWER_KEY_TABLE,
   readRepositoryMigrations,
   REQUIRED_TABLES,
   REQUIRED_TRIGGERS,
@@ -182,6 +183,21 @@ const FUNCTION_SPECS = Object.freeze([
     "v",
     false,
   ),
+  fn("learning.my_learning_snapshot", "", "jsonb", "plpgsql", "s", true),
+  fn("learning.resolve_assignments", "", "jsonb", "plpgsql", "v", true),
+  fn("learning.start_requirement", "jsonb", "jsonb", "plpgsql", "v", true),
+  fn(
+    "learning.record_simulation_checkpoint",
+    "jsonb",
+    "jsonb",
+    "plpgsql",
+    "v",
+    true,
+  ),
+  fn("learning.submit_assessment", "jsonb", "jsonb", "plpgsql", "v", true),
+  fn("learning.acknowledge_policy", "jsonb", "jsonb", "plpgsql", "v", true),
+  fn("learning.evaluate_certifications", "", "jsonb", "plpgsql", "v", true),
+  fn("learning.request_support", "jsonb", "jsonb", "plpgsql", "v", true),
 ]);
 
 const CERTIFICATION_INDEXES = Object.freeze([
@@ -368,6 +384,14 @@ function expectedTablePrivileges() {
     privilege: "SELECT",
     grantable: false,
   });
+  for (const privilege of ["DELETE", "INSERT", "SELECT", "UPDATE"]) {
+    rows.push({
+      table: PRIVATE_ANSWER_KEY_TABLE,
+      grantee: "service_role",
+      privilege,
+      grantable: false,
+    });
+  }
   return rows;
 }
 
@@ -419,11 +443,18 @@ export function expectedLearningCatalogSnapshot({
       owner: "postgres",
     })),
     schemaPrivileges: expectedSchemaPrivileges(),
-    tables: REQUIRED_TABLES.map((table) => ({
-      table: `learning.${table}`,
-      rls: true,
-      forceRls: true,
-    })),
+    tables: [
+      ...REQUIRED_TABLES.map((table) => ({
+        table: `learning.${table}`,
+        rls: true,
+        forceRls: true,
+      })),
+      {
+        table: PRIVATE_ANSWER_KEY_TABLE,
+        rls: true,
+        forceRls: true,
+      },
+    ],
     policies,
     triggers: Object.entries(REQUIRED_TRIGGERS).map(([name, spec]) =>
       triggerSpec(name, spec),
@@ -435,6 +466,7 @@ export function expectedLearningCatalogSnapshot({
       "core.roles",
       "core.role_capabilities",
       "core.user_roles",
+      PRIVATE_ANSWER_KEY_TABLE,
     ].map((table) => ({ table, owner: "postgres" })),
     defaultPrivileges: expectedDefaultPrivileges(),
     roles: [
@@ -800,7 +832,14 @@ export async function loadLearningCatalogSnapshot(client) {
              c.relforcerowsecurity as "forceRls"
       from pg_catalog.pg_class c
       join pg_catalog.pg_namespace n on n.oid = c.relnamespace
-      where n.nspname = 'learning' and c.relkind in ('r', 'p')
+      where c.relkind in ('r', 'p')
+        and (
+          n.nspname = 'learning'
+          or (
+            n.nspname = 'private'
+            and c.relname = 'learning_assessment_answer_keys'
+          )
+        )
       order by 1
     `),
     client.query(`
@@ -813,6 +852,10 @@ export async function loadLearningCatalogSnapshot(client) {
              with_check as "withCheck"
       from pg_catalog.pg_policies
       where schemaname = 'learning'
+        or (
+          schemaname = 'private'
+          and tablename = 'learning_assessment_answer_keys'
+        )
       order by policyname
     `),
     client.query(`
@@ -861,7 +904,14 @@ export async function loadLearningCatalogSnapshot(client) {
       left join pg_catalog.pg_trigger parent_trigger on parent_trigger.oid = t.tgparentid
       left join pg_catalog.pg_class constraint_index on constraint_index.oid = t.tgconstrindid
       where not t.tgisinternal
-        and (table_ns.nspname = 'learning' or (table_ns.nspname = 'core' and t.tgname like 'learning_%'))
+        and (
+          table_ns.nspname = 'learning'
+          or (table_ns.nspname = 'core' and t.tgname like 'learning_%')
+          or (
+            table_ns.nspname = 'private'
+            and table_class.relname = 'learning_assessment_answer_keys'
+          )
+        )
       order by t.tgname
     `),
     client.query(
@@ -899,6 +949,10 @@ export async function loadLearningCatalogSnapshot(client) {
         and (
           n.nspname = 'learning'
           or (n.nspname = 'core' and c.relname in ('roles', 'role_capabilities', 'user_roles'))
+          or (
+            n.nspname = 'private'
+            and c.relname = 'learning_assessment_answer_keys'
+          )
         )
         and privilege.grantee <> c.relowner
       order by 1, 2, 3
@@ -915,6 +969,10 @@ export async function loadLearningCatalogSnapshot(client) {
           or (
             namespace.nspname = 'core'
             and relation.relname in ('roles', 'role_capabilities', 'user_roles')
+          )
+          or (
+            namespace.nspname = 'private'
+            and relation.relname = 'learning_assessment_answer_keys'
           )
         )
       order by 1

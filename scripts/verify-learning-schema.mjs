@@ -9,6 +9,30 @@ const ROLE_LIFECYCLE_MIGRATION_NAME =
   "20260812140000_learning_role_authority_lifecycle.sql";
 const ASSIGNMENT_LINEAGE_MIGRATION_NAME =
   "20260812150000_learning_assignment_lineage_remediation.sql";
+export const SERVICES_MIGRATION_NAME = "20260812160000_learning_services.sql";
+export const PRIVATE_ANSWER_KEY_TABLE =
+  "private.learning_assessment_answer_keys";
+export const LEARNING_SERVICE_FUNCTIONS = Object.freeze([
+  "learning.my_learning_snapshot",
+  "learning.resolve_assignments",
+  "learning.start_requirement",
+  "learning.record_simulation_checkpoint",
+  "learning.submit_assessment",
+  "learning.acknowledge_policy",
+  "learning.evaluate_certifications",
+  "learning.request_support",
+]);
+const LEARNING_SERVICE_MUTATORS = Object.freeze(
+  LEARNING_SERVICE_FUNCTIONS.filter(
+    (name) => name !== "learning.my_learning_snapshot",
+  ),
+);
+const PRIVATE_ANSWER_KEY_TABLE_SHA256 =
+  "91f8b561ceb5a3ed93420ecbad2637ab63745ee681a1d44ae5c2df82ff69d36b";
+const PRIVATE_ANSWER_KEY_CONSTRAINT_SHA256 =
+  "550241953604633cc7ef427e5838cb293d3f0ba17de327e666fbc3265b300cde";
+const PRIVATE_ANSWER_KEY_VALIDATION_SHA256 =
+  "d0622d2f434b9b559f5efbf534aad9696a7d1790e361da949f9b2b5b048c22ef";
 const ROLE_AUTHORITY_TABLES = Object.freeze([
   "roles",
   "role_capabilities",
@@ -423,6 +447,7 @@ export const ALLOWED_SECURITY_DEFINERS = new Set([
   "private.revoke_certifications_for_role_assignment_v2",
   "private.revoke_certifications_for_role_authority_loss",
   "private.validate_emergency_exception_issuance",
+  ...LEARNING_SERVICE_FUNCTIONS,
 ]);
 
 export const ALLOWED_FUNCTION_EXECUTE = Object.freeze({
@@ -435,6 +460,12 @@ export const ALLOWED_FUNCTION_EXECUTE = Object.freeze({
   "private.assert_learning_read_committed": ["service_role"],
   "private.lock_learning_curriculum_graph": ["service_role"],
   "private.validate_curriculum_graph_publication": ["service_role"],
+  ...Object.fromEntries(
+    LEARNING_SERVICE_FUNCTIONS.map((name) => [
+      name,
+      ["authenticated", "service_role"],
+    ]),
+  ),
 });
 
 export const MODELED_FUNCTIONS = new Set([
@@ -492,6 +523,22 @@ export const EXPECTED_FUNCTION_DECLARATION_SQL = Object.freeze({
     "create or replace function learning.guard_content_lifecycle() returns trigger language plpgsql set search_path = ''",
   "learning.guard_curriculum_composition":
     "create or replace function learning.guard_curriculum_composition() returns trigger language plpgsql set search_path = ''",
+  "learning.my_learning_snapshot":
+    "create or replace function learning.my_learning_snapshot() returns jsonb language plpgsql stable security definer set search_path = ''",
+  "learning.resolve_assignments":
+    "create or replace function learning.resolve_assignments() returns jsonb language plpgsql security definer set search_path = ''",
+  "learning.start_requirement":
+    "create or replace function learning.start_requirement(payload jsonb) returns jsonb language plpgsql security definer set search_path = ''",
+  "learning.record_simulation_checkpoint":
+    "create or replace function learning.record_simulation_checkpoint(payload jsonb) returns jsonb language plpgsql security definer set search_path = ''",
+  "learning.submit_assessment":
+    "create or replace function learning.submit_assessment(payload jsonb) returns jsonb language plpgsql security definer set search_path = ''",
+  "learning.acknowledge_policy":
+    "create or replace function learning.acknowledge_policy(payload jsonb) returns jsonb language plpgsql security definer set search_path = ''",
+  "learning.evaluate_certifications":
+    "create or replace function learning.evaluate_certifications() returns jsonb language plpgsql security definer set search_path = ''",
+  "learning.request_support":
+    "create or replace function learning.request_support(payload jsonb) returns jsonb language plpgsql security definer set search_path = ''",
 });
 
 export const EXPECTED_FUNCTION_BODY_SHA256 = Object.freeze({
@@ -543,12 +590,29 @@ export const EXPECTED_FUNCTION_BODY_SHA256 = Object.freeze({
     "6d30f12e16c785517bb47dc34d84f2fc0c8649d39b0b160ec8761e4c470938ce",
   "learning.guard_curriculum_composition":
     "0aea39b911deac9b688cd3a58270a3b9135f23dd4921338911f1864b15c10d3c",
+  "learning.my_learning_snapshot":
+    "fa2e9cb1d094d82a8059a80ac19c7b94f4e322eab2d733e754e361058f03b678",
+  "learning.resolve_assignments":
+    "2729f8eca28b7cc7d078141a0edc8f3dd340fd7f5c1fe9521a210bebb45389c2",
+  "learning.start_requirement":
+    "e9de0246e498862f69ccb34642422db8d68d4375f31e6e37a91ed46ec6b9c402",
+  "learning.record_simulation_checkpoint":
+    "283ca2e692fff9563407a7de9e7ae0a4e6fbb9159cfe09f52e6a611525089de0",
+  "learning.submit_assessment":
+    "80b8209dad35a8110ef3430ffabeabd9a96639f7d949bf2d9c2d7e9938080e55",
+  "learning.acknowledge_policy":
+    "6de1d3f3c539de860eecc5f42c93811fd26188e448af2302c255e433061ffadb",
+  "learning.request_support":
+    "ec8f155cf19db9b50f394b6c9b0d160a2805f248e3ecedc34fe5e0e2add17a98",
+  "learning.evaluate_certifications":
+    "56e74e7e7c111c1ebd3507f4a34dbe9cfeba0c31c4071b6b09683f032351aa61",
 });
 
 const ISOLATION_GUARDED_FUNCTIONS = new Set([
   ...Object.values(REQUIRED_TRIGGERS).map((trigger) => trigger.function),
   "private.lock_learning_curriculum_graph",
   "private.validate_curriculum_graph_publication",
+  ...LEARNING_SERVICE_MUTATORS,
 ]);
 
 function normalizeSql(value) {
@@ -1234,6 +1298,23 @@ function createState() {
         ROLE_AUTHORITY_TABLES.map((table) => [table, new Set()]),
       ),
     },
+    learningServices: {
+      privateAnswerKeys: {
+        created: false,
+        rlsEnabled: false,
+        rlsForced: false,
+        owner: null,
+        privileges: new Map(
+          ["public", "anon", "authenticated", "service_role"].map((role) => [
+            role,
+            new Set(),
+          ]),
+        ),
+        authorityConstraintAdded: false,
+        authorityConstraintValidated: false,
+      },
+      functionOwners: new Map(),
+    },
     errors: [],
   };
 }
@@ -1244,6 +1325,7 @@ function processStatement(state, statement, migrationName) {
   const isRoleLifecycle = migrationName === ROLE_LIFECYCLE_MIGRATION_NAME;
   const isAssignmentLineage =
     migrationName === ASSIGNMENT_LINEAGE_MIGRATION_NAME;
+  const isLearningServices = migrationName === SERVICES_MIGRATION_NAME;
   let match;
 
   if (normalized === "create schema if not exists learning") {
@@ -1403,6 +1485,150 @@ function processStatement(state, statement, migrationName) {
       state.errors.push(
         `${migrationName}: unmodeled PostgREST notification is denied.`,
       );
+    return;
+  }
+
+  if (
+    /^create table private\.learning_assessment_answer_keys\b/.test(normalized)
+  ) {
+    if (
+      !isLearningServices ||
+      createHash("sha256").update(normalized).digest("hex") !==
+        PRIVATE_ANSWER_KEY_TABLE_SHA256
+    ) {
+      state.errors.push(
+        `${migrationName}: private assessment answer-key table must match the exact reviewed definition and foreign keys.`,
+      );
+    } else {
+      state.learningServices.privateAnswerKeys.created = true;
+    }
+    return;
+  }
+
+  match = normalized.match(
+    /^alter table private\.learning_assessment_answer_keys (enable|disable) row level security$/,
+  );
+  if (match) {
+    if (!isLearningServices || match[1] !== "enable") {
+      state.errors.push(
+        `${migrationName}: private assessment answer-key RLS must be enabled only by the reviewed services migration.`,
+      );
+    } else {
+      state.learningServices.privateAnswerKeys.rlsEnabled = true;
+    }
+    return;
+  }
+
+  match = normalized.match(
+    /^alter table private\.learning_assessment_answer_keys (force|no force) row level security$/,
+  );
+  if (match) {
+    if (!isLearningServices || match[1] !== "force") {
+      state.errors.push(
+        `${migrationName}: private assessment answer-key RLS must remain forced.`,
+      );
+    } else {
+      state.learningServices.privateAnswerKeys.rlsForced = true;
+    }
+    return;
+  }
+
+  match = normalized.match(
+    /^alter table private\.learning_assessment_answer_keys owner to ([a-z_][a-z0-9_]*)$/,
+  );
+  if (match) {
+    if (!isLearningServices || match[1] !== "postgres") {
+      state.errors.push(
+        `${migrationName}: private assessment answer-key table must be owned by postgres.`,
+      );
+    } else {
+      state.learningServices.privateAnswerKeys.owner = match[1];
+    }
+    return;
+  }
+
+  match = normalized.match(
+    /^revoke all(?: privileges)? on (?:table )?private\.learning_assessment_answer_keys from (.+?)(?: cascade| restrict)?$/,
+  );
+  if (match) {
+    const grantees = parseGrantees(match[1]);
+    const expected = ["public", "anon", "authenticated", "service_role"];
+    if (
+      !isLearningServices ||
+      grantees.length !== expected.length ||
+      expected.some((role) => !grantees.includes(role))
+    ) {
+      state.errors.push(
+        `${migrationName}: private answer-key table revoke must cover every client role exactly.`,
+      );
+    } else {
+      for (const role of grantees) {
+        state.learningServices.privateAnswerKeys.privileges.get(role).clear();
+      }
+    }
+    return;
+  }
+
+  match = normalized.match(
+    /^grant (.+?) on (?:table )?private\.learning_assessment_answer_keys to (.+)$/,
+  );
+  if (match) {
+    const privileges = expandPrivileges(match[1]).sort();
+    const grantees = parseGrantees(match[2]);
+    const expectedPrivileges = ["delete", "insert", "select", "update"];
+    if (
+      !isLearningServices ||
+      /\bwith grant option\b/.test(normalized) ||
+      grantees.length !== 1 ||
+      grantees[0] !== "service_role" ||
+      JSON.stringify(privileges) !== JSON.stringify(expectedPrivileges)
+    ) {
+      state.errors.push(
+        `${migrationName}: private answer-key table permits only non-delegable service-role SELECT, INSERT, UPDATE, and DELETE.`,
+      );
+    } else {
+      const granted =
+        state.learningServices.privateAnswerKeys.privileges.get("service_role");
+      for (const privilege of privileges) granted.add(privilege);
+    }
+    return;
+  }
+
+  if (
+    /^alter table learning\.requirement_versions add constraint requirement_versions_private_answer_key_check\b/.test(
+      normalized,
+    )
+  ) {
+    if (
+      !isLearningServices ||
+      createHash("sha256").update(normalized).digest("hex") !==
+        PRIVATE_ANSWER_KEY_CONSTRAINT_SHA256
+    ) {
+      state.errors.push(
+        `${migrationName}: learner-readable assessment settings must reject every reviewed answer-key spelling.`,
+      );
+    } else {
+      state.learningServices.privateAnswerKeys.authorityConstraintAdded = true;
+    }
+    return;
+  }
+
+  if (
+    /^alter table learning\.requirement_versions validate constraint requirement_versions_private_answer_key_check$/.test(
+      normalized,
+    )
+  ) {
+    if (
+      !isLearningServices ||
+      createHash("sha256").update(normalized).digest("hex") !==
+        PRIVATE_ANSWER_KEY_VALIDATION_SHA256
+    ) {
+      state.errors.push(
+        `${migrationName}: private answer-key constraint validation is not the reviewed statement.`,
+      );
+    } else {
+      state.learningServices.privateAnswerKeys.authorityConstraintValidated = true;
+    }
     return;
   }
 
@@ -1812,9 +2038,34 @@ function processStatement(state, statement, migrationName) {
     return;
   }
 
+  match = normalized.match(
+    /^alter function (learning\.[a-z_][a-z0-9_]*)\s*\(([^)]*)\) owner to ([a-z_][a-z0-9_]*)$/,
+  );
+  if (match) {
+    const functionEntry = state.functions.get(match[1]);
+    const argumentTypes = match[2].trim()
+      ? splitTopLevel(match[2]).map(normalizeSql)
+      : [];
+    if (
+      !isLearningServices ||
+      !LEARNING_SERVICE_FUNCTIONS.includes(match[1]) ||
+      match[3] !== "postgres" ||
+      !functionEntry ||
+      JSON.stringify(argumentTypes) !==
+        JSON.stringify(functionEntry.metadata.argumentTypes)
+    ) {
+      state.errors.push(
+        `${migrationName}: learning service function ownership must target the exact reviewed signature and postgres owner.`,
+      );
+    } else {
+      state.learningServices.functionOwners.set(match[1], match[3]);
+    }
+    return;
+  }
+
   if (/^alter function\b/.test(normalized)) {
     state.errors.push(
-      `${migrationName}: ALTER FUNCTION is not safely analyzable in the learning security boundary.`,
+      `${migrationName}: unmodeled ALTER FUNCTION is denied in the learning security boundary.`,
     );
     return;
   }
@@ -3148,6 +3399,54 @@ function validateAuthorityIsolation(state) {
   }
 }
 
+function validateLearningServices(state) {
+  const privateTable = state.learningServices.privateAnswerKeys;
+  if (!privateTable.created) {
+    state.errors.push(
+      `Missing exact ${PRIVATE_ANSWER_KEY_TABLE} definition and authority foreign keys.`,
+    );
+  }
+  if (!privateTable.rlsEnabled || !privateTable.rlsForced) {
+    state.errors.push(
+      `${PRIVATE_ANSWER_KEY_TABLE} must have enabled and forced RLS with no client policy.`,
+    );
+  }
+  if (privateTable.owner !== "postgres") {
+    state.errors.push(`${PRIVATE_ANSWER_KEY_TABLE} must be owned by postgres.`);
+  }
+  const expectedPrivileges = {
+    public: [],
+    anon: [],
+    authenticated: [],
+    service_role: ["delete", "insert", "select", "update"],
+  };
+  for (const [role, expected] of Object.entries(expectedPrivileges)) {
+    const actual = [...(privateTable.privileges.get(role) ?? [])].sort();
+    if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+      state.errors.push(
+        `Unsafe effective grant on ${PRIVATE_ANSWER_KEY_TABLE} for ${role}: expected [${expected.join(", ")}], found [${actual.join(", ")}].`,
+      );
+    }
+  }
+  if (
+    !privateTable.authorityConstraintAdded ||
+    !privateTable.authorityConstraintValidated
+  ) {
+    state.errors.push(
+      "Learner-readable assessment settings must have a validated constraint excluding answer-key authority.",
+    );
+  }
+  for (const functionName of LEARNING_SERVICE_FUNCTIONS) {
+    if (
+      state.learningServices.functionOwners.get(functionName) !== "postgres"
+    ) {
+      state.errors.push(
+        `Learning service function ${functionName} must have an exact postgres ownership statement.`,
+      );
+    }
+  }
+}
+
 export function verifyLearningSchema(input) {
   const migrations = asMigrations(input);
   const state = createState();
@@ -3161,6 +3460,13 @@ export function verifyLearningSchema(input) {
   ) {
     state.errors.push(
       `Missing forward foundation migration ${FOUNDATION_MIGRATION_NAME}.`,
+    );
+  }
+  if (
+    !migrations.some((migration) => migration.name === SERVICES_MIGRATION_NAME)
+  ) {
+    state.errors.push(
+      `Missing forward learning services migration ${SERVICES_MIGRATION_NAME}.`,
     );
   }
 
@@ -3187,6 +3493,7 @@ export function verifyLearningSchema(input) {
   validateIndexes(state);
   validateRoleAuthorityLifecycle(state);
   validateAuthorityIsolation(state);
+  validateLearningServices(state);
 
   return [...new Set(state.errors)];
 }

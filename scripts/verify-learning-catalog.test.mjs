@@ -66,6 +66,85 @@ test("an exact expected catalog snapshot passes", () => {
   );
 });
 
+test("catalog models the exact Task 3 RPC owners and execute grants", () => {
+  const snapshot = expectedSnapshot();
+  const expectedFunctions = [
+    "learning.acknowledge_policy(jsonb)",
+    "learning.evaluate_certifications()",
+    "learning.my_learning_snapshot()",
+    "learning.record_simulation_checkpoint(jsonb)",
+    "learning.request_support(jsonb)",
+    "learning.resolve_assignments()",
+    "learning.start_requirement(jsonb)",
+    "learning.submit_assessment(jsonb)",
+  ];
+  const functions = snapshot.functions
+    .filter((entry) => entry.function.startsWith("learning."))
+    .map((entry) => entry.function)
+    .filter((name) => expectedFunctions.includes(name))
+    .sort();
+  assert.deepEqual(functions, expectedFunctions);
+  for (const functionName of expectedFunctions) {
+    const metadata = snapshot.functions.find(
+      (entry) => entry.function === functionName,
+    );
+    assert.equal(metadata.owner, "postgres", functionName);
+    assert.equal(metadata.securityDefiner, true, functionName);
+    assert.deepEqual(metadata.config, ['search_path=""'], functionName);
+    assert.deepEqual(
+      snapshot.functionPrivileges
+        .filter((entry) => entry.function === functionName)
+        .map((entry) => entry.grantee)
+        .sort(),
+      ["authenticated", "service_role"],
+      functionName,
+    );
+  }
+});
+
+test("catalog models the private answer-key table as forced-RLS service authority", () => {
+  const snapshot = expectedSnapshot();
+  assert.deepEqual(
+    snapshot.tables.find(
+      (entry) => entry.table === "private.learning_assessment_answer_keys",
+    ),
+    {
+      table: "private.learning_assessment_answer_keys",
+      rls: true,
+      forceRls: true,
+    },
+  );
+  assert.deepEqual(
+    snapshot.governedTableOwners.find(
+      (entry) => entry.table === "private.learning_assessment_answer_keys",
+    ),
+    {
+      table: "private.learning_assessment_answer_keys",
+      owner: "postgres",
+    },
+  );
+  assert.deepEqual(
+    snapshot.tablePrivileges
+      .filter(
+        (entry) => entry.table === "private.learning_assessment_answer_keys",
+      )
+      .map((entry) => `${entry.grantee}:${entry.privilege}`)
+      .sort(),
+    [
+      "service_role:DELETE",
+      "service_role:INSERT",
+      "service_role:SELECT",
+      "service_role:UPDATE",
+    ],
+  );
+  assert.equal(
+    snapshot.policies.some(
+      (entry) => entry.table === "private.learning_assessment_answer_keys",
+    ),
+    false,
+  );
+});
+
 test("catalog queries execute against PostgreSQL catalogs", async () => {
   const database = new PGlite();
   try {

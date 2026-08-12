@@ -13,6 +13,7 @@ const ROLE_LIFECYCLE_NAME =
   "20260812140000_learning_role_authority_lifecycle.sql";
 const ASSIGNMENT_LINEAGE_NAME =
   "20260812150000_learning_assignment_lineage_remediation.sql";
+const SERVICES_NAME = "20260812160000_learning_services.sql";
 const OLD_FOUNDATION_NAME = "20260812090000_learning_foundation.sql";
 const migration = fileURLToPath(
   new URL(`../supabase/migrations/${FOUNDATION_NAME}`, import.meta.url),
@@ -32,6 +33,12 @@ const assignmentLineageMigration = fileURLToPath(
 );
 const assignmentLineageSql = existsSync(assignmentLineageMigration)
   ? readFileSync(assignmentLineageMigration, "utf8")
+  : "";
+const servicesMigration = fileURLToPath(
+  new URL(`../supabase/migrations/${SERVICES_NAME}`, import.meta.url),
+);
+const servicesSql = existsSync(servicesMigration)
+  ? readFileSync(servicesMigration, "utf8")
   : "";
 const migrationDirectory = fileURLToPath(
   new URL("../supabase/migrations/", import.meta.url),
@@ -93,6 +100,16 @@ function errorsForAssignmentLineage(source) {
   ).join("\n");
 }
 
+function errorsForServices(source) {
+  return verifyLearningSchema(
+    repositoryMigrations.map((migrationEntry) =>
+      migrationEntry.name === SERVICES_NAME
+        ? { ...migrationEntry, sql: source }
+        : migrationEntry,
+    ),
+  ).join("\n");
+}
+
 function orderedErrors(laterSql) {
   return verifyLearningSchema([
     ...repositoryMigrations,
@@ -115,6 +132,98 @@ test("uses the monotonic forward foundation and satisfies the full contract", ()
   assert.equal(existsSync(oldMigration), false);
   assert.equal(REQUIRED_TABLES.length, 15);
   assert.deepEqual(verifyLearningSchema(repositoryMigrations), []);
+});
+
+test("defines the monotonic Task 3 learning service boundary", () => {
+  assert.equal(
+    existsSync(servicesMigration),
+    true,
+    `${SERVICES_NAME} must exist`,
+  );
+  for (const signature of [
+    "my_learning_snapshot()",
+    "resolve_assignments()",
+    "start_requirement(payload jsonb)",
+    "record_simulation_checkpoint(payload jsonb)",
+    "submit_assessment(payload jsonb)",
+    "acknowledge_policy(payload jsonb)",
+    "evaluate_certifications()",
+    "request_support(payload jsonb)",
+  ]) {
+    assert.match(
+      servicesSql,
+      new RegExp(
+        `create or replace function learning\\.${signature.replace(/[()]/g, "\\$&")}`,
+        "i",
+      ),
+      signature,
+    );
+  }
+  assert.deepEqual(verifyLearningSchema(repositoryMigrations), []);
+});
+
+test("rejects client-authored learning authority and weakened service guards", () => {
+  assert.equal(existsSync(servicesMigration), true);
+  for (const forbiddenKey of [
+    "score",
+    "passed",
+    "answer_key",
+    "certification_status",
+    "certification_state",
+  ]) {
+    assert.match(
+      servicesSql,
+      new RegExp(`forbidden learning authority field[^;]+${forbiddenKey}`, "i"),
+      forbiddenKey,
+    );
+  }
+  for (const functionName of [
+    "resolve_assignments",
+    "start_requirement",
+    "record_simulation_checkpoint",
+    "submit_assessment",
+    "acknowledge_policy",
+    "evaluate_certifications",
+    "request_support",
+  ]) {
+    const weakened = servicesSql.replace(
+      new RegExp(
+        `(create or replace function learning\\.${functionName}\\([^]*?)(perform private\\.assert_learning_read_committed\\(\\);)`,
+        "i",
+      ),
+      "$1",
+    );
+    assert.notEqual(weakened, servicesSql, functionName);
+    assert.match(
+      errorsForServices(weakened),
+      new RegExp(`${functionName}|function body|read committed`, "i"),
+      functionName,
+    );
+  }
+});
+
+test("keeps answer keys private and certification bound to exact live authority", () => {
+  assert.equal(existsSync(servicesMigration), true);
+  assert.match(
+    servicesSql,
+    /create table private\.learning_assessment_answer_keys/i,
+  );
+  assert.doesNotMatch(
+    servicesSql,
+    /grant[^;]+private\.learning_assessment_answer_keys[^;]+authenticated/i,
+  );
+  assert.match(
+    servicesSql,
+    /submit_assessment[\s\S]*?private\.learning_assessment_answer_keys/i,
+  );
+  assert.doesNotMatch(
+    servicesSql,
+    /insert\s+into\s+core\.(?:user_roles|profile_department_scopes)/i,
+  );
+  assert.match(
+    servicesSql,
+    /evaluate_certifications[\s\S]*?source_role_assignment_id[\s\S]*?core\.user_roles[\s\S]*?learning\.curriculum_capability_outcomes/i,
+  );
 });
 
 test("requires every checksum-pinned pre-foundation migration", () => {
