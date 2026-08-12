@@ -10,6 +10,7 @@ import {
   ADMIN_NAV,
   FINANCE_NAV,
   KNOWLEDGE_NAV,
+  ONBOARDING_NAV,
   VENDOR_NAV,
   accessibleModules,
   canAccessFinance,
@@ -61,6 +62,17 @@ export function CommandPalette() {
       href: KNOWLEDGE_NAV.href,
       keywords: "help manual documentation workflow how to troubleshooting",
     });
+
+    if (profile.kind === "employee") {
+      out.push({
+        id: "onboarding",
+        label: ONBOARDING_NAV.label,
+        hint: ONBOARDING_NAV.description,
+        icon: ONBOARDING_NAV.icon,
+        href: ONBOARDING_NAV.href,
+        keywords: "learning training certification role readiness practice",
+      });
+    }
 
     for (const m of accessibleModules(access)) {
       out.push({

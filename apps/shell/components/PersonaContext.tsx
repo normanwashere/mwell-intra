@@ -21,12 +21,14 @@ export function PersonaContext({
 
   return (
     <div
-      className={cx("min-w-0", className)}
+      className={cx("min-w-0 max-w-full overflow-hidden", className)}
       aria-label={`Signed in as ${persona.title} in ${persona.department}`}
     >
-      <p className="truncate text-xs font-semibold text-ink">
-        {persona.title}
-        <span className="font-normal text-muted"> · {persona.department}</span>
+      <p className="flex min-w-0 max-w-full text-xs font-semibold text-ink">
+        <span className="min-w-0 truncate">{persona.title}</span>
+        <span className="hidden shrink-0 font-normal text-muted min-[360px]:inline">
+          {" · "}{persona.department}
+        </span>
       </p>
       {!compact && (
         <p

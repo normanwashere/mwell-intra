@@ -11,6 +11,8 @@ export const CONTEXTUAL_FEATURE_GUIDES: ContextualFeatureGuide[] = [
   guide("sign-in", "Sign in", "/login"),
   guide("reset-password", "Password reset", "/reset-password"),
   guide("knowledge-library", "Knowledge Base", "/knowledge"),
+  guide("role-onboarding", "Role onboarding", "/onboarding"),
+  guide("vendor-onboarding", "Vendor onboarding", "/vendor/onboarding"),
   guide("offline-status", "Offline status", "/~offline"),
   guide("my-work", "My Work", "/work"),
   guide("events-workspace", "Events workspace", "/events"),

@@ -10,6 +10,7 @@ import {
   dashboardAreas,
   memoryAccess,
   mobileCenterAction,
+  ONBOARDING_NAV,
   workSources,
 } from "./navigation";
 
@@ -138,9 +139,33 @@ describe("authorized post-login destinations", () => {
       ),
     ).toBe("/");
   });
+
+  it("keeps role onboarding universal while isolating vendor onboarding", () => {
+    const employeeAccess = memoryAccess({ core: ["staff"] });
+    const vendorAccess = memoryAccess({ core: ["vendor"] });
+
+    expect(
+      authorizedPostLoginPath(ONBOARDING_NAV.href, employeeAccess, "employee"),
+    ).toBe("/onboarding");
+    expect(
+      authorizedPostLoginPath("/onboarding", vendorAccess, "vendor"),
+    ).toBe("/");
+    expect(
+      authorizedPostLoginPath("/vendor/onboarding", vendorAccess, "vendor"),
+    ).toBe("/vendor/onboarding");
+  });
 });
 
 describe("dashboard areas", () => {
+  it("keeps onboarding out of the operational area count", () => {
+    const areas = dashboardAreas(
+      memoryAccess({ core: ["staff"], warehouse: ["business_unit"] }),
+      "employee",
+    );
+
+    expect(areas.some((area) => area.href === "/onboarding")).toBe(false);
+  });
+
   it("describes only the actions a requester can actually perform", () => {
     const areas = dashboardAreas(
       memoryAccess({
@@ -280,6 +305,15 @@ describe("configurable organization administration", () => {
       module: "admin",
       capabilityIds: ["manage_rbac"],
       administratorRoleIds: ["platform_admin"],
+    });
+  });
+
+  it("registers role onboarding as a first-class shared route", () => {
+    expect(
+      SHELL_PAGE_ROUTE_CONTRACTS.find((item) => item.route === "/onboarding"),
+    ).toMatchObject({
+      module: "core",
+      capabilityIds: [],
     });
   });
 

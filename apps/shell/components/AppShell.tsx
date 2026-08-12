@@ -14,8 +14,9 @@ import { useSession } from "@intra/auth";
 import {
   FINANCE_NAV,
   KNOWLEDGE_NAV,
-  dashboardAreas,
   mobileCenterAction,
+  ONBOARDING_NAV,
+  shellNavigationAreas,
   type ShellNavItem,
 } from "@shell/lib/navigation";
 import { cx } from "@shell/lib/cx";
@@ -41,6 +42,7 @@ function navItemToEntry(item: ShellNavItem): NavEntry {
 function topBarLabel(pathname: string, entries: readonly NavEntry[]): string {
   if (pathname === "/") return "Home";
   if (pathname.startsWith(FINANCE_NAV.href)) return FINANCE_NAV.label;
+  if (pathname.startsWith(ONBOARDING_NAV.href)) return ONBOARDING_NAV.label;
   if (pathname.startsWith(KNOWLEDGE_NAV.href)) return KNOWLEDGE_NAV.label;
   if (pathname.startsWith("/admin/users")) return "Admin · Users & Roles";
   if (pathname.startsWith("/admin/departments"))
@@ -102,7 +104,8 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => controller.abort();
   }, [pathname, profileId]);
 
-  const areas = loading || !profile ? [] : dashboardAreas(access, profile.kind);
+  const areas =
+    loading || !profile ? [] : shellNavigationAreas(access, profile.kind);
   const entries: NavEntry[] = [HOME_ENTRY, ...areas.map(navItemToEntry)];
 
   const isActive = (href: string) => {

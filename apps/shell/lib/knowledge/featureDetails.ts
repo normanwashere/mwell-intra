@@ -195,6 +195,84 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
       ],
     },
+    "role-onboarding": {
+      controls: [
+        control(
+          "Start or resume requirement",
+          "Opens the next assigned orientation, policy, practice, assessment, or attestation.",
+          "The requirement must belong to an effective curriculum assigned through a current scoped role.",
+          "A governed attempt starts or the existing attempt resumes without duplicating shared requirements.",
+        ),
+        control(
+          "Refresh status",
+          "Rechecks assignments, progress, capability locks, and certifications after stale or failed loading.",
+          "The authenticated identity and current authority snapshot must still be available.",
+          "Fresh status replaces the read-only snapshot, or the last verified snapshot remains visibly marked stale.",
+        ),
+        control(
+          "Open support guidance",
+          "Routes a learner with exhausted attempts or an access problem to the approved recovery guidance.",
+          "The requirement must be in needs-support state or the live capability must remain locked.",
+          "The recovery article opens without bypassing training or changing authority.",
+        ),
+      ],
+      fields: [
+        field(
+          "Assigned role",
+          "Explains which scoped module authority produced each learning requirement.",
+          true,
+          "Values come from current scoped role assignments.",
+        ),
+        field(
+          "Operating persona",
+          "Explains the job responsibility associated with the assigned curriculum.",
+          true,
+          "Values come from the governed persona catalogue and do not grant authority by themselves.",
+        ),
+        field(
+          "Certification status",
+          "Shows active, expired, superseded, or revoked capability evidence.",
+          false,
+          "Dates and status come from immutable certification records; hidden or stale evidence cannot unlock a live capability.",
+        ),
+      ],
+    },
+    "vendor-onboarding": {
+      controls: [
+        control(
+          "Start or resume vendor requirement",
+          "Opens the next accreditation-oriented learning requirement assigned to the vendor identity.",
+          "The requirement must belong to that vendor's current assignment.",
+          "Progress is recorded for the signed-in vendor only.",
+        ),
+        control(
+          "Return to vendor portal",
+          "Returns to the vendor's own accreditation cases and evidence tasks.",
+          "The active account must retain vendor portal access.",
+          "The scoped vendor workspace opens without exposing internal navigation.",
+        ),
+        control(
+          "Sign out",
+          "Ends the vendor session from the isolated onboarding header.",
+          "A session must be active.",
+          "The session ends and the sign-in page opens.",
+        ),
+      ],
+      fields: [
+        field(
+          "Vendor curriculum",
+          "Lists the orientation, evidence, policy, and attestation requirements assigned to this vendor.",
+          true,
+          "Only requirements visible to the authenticated vendor may appear.",
+        ),
+        field(
+          "Vendor readiness",
+          "Summarizes completed mandatory requirements and remaining accreditation preparation.",
+          true,
+          "The count deduplicates shared requirements and never treats a stale snapshot as new completion evidence.",
+        ),
+      ],
+    },
     "offline-status": {
       controls: [
         control(

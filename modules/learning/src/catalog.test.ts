@@ -183,6 +183,13 @@ describe("learning catalog", () => {
     ]);
   });
 
+  it("uses plain-language learner-facing requirement titles", () => {
+    for (const requirement of LEARNING_CATALOG.requirements) {
+      expect(requirement.title, requirement.id).not.toMatch(/_/);
+      expect(requirement.title, requirement.id).toMatch(/^[A-Z]/);
+    }
+  });
+
   it("keeps mutation classification in parity with the authoritative RBAC registry", () => {
     const registryKeys = MODULE_LIST.flatMap((module) =>
       MODULES[module].capabilities.map(

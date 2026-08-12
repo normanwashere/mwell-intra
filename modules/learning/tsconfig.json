@@ -3,9 +3,9 @@
   "extends": "@intra/config/tsconfig/react-library.json",
   "compilerOptions": {
     "noEmit": true,
-    "types": ["node"],
+    "types": ["node", "vitest/globals"],
     "baseUrl": "."
   },
-  "include": ["src"],
+  "include": ["src", "vitest.setup.ts"],
   "exclude": ["node_modules", "dist"]
 }

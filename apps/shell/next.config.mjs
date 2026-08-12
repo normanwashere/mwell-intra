@@ -43,6 +43,7 @@ const nextConfig = {
     '@intra/warehouse',
     '@intra/procurement',
     '@intra/legal',
+    '@intra/learning',
     '@intra/work',
   ],
   turbopack: {

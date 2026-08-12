@@ -16,6 +16,15 @@ export {
   SupabaseLearningRepository,
 } from "./repository";
 export { resolveEffectiveCurriculum } from "./resolver";
+export {
+  LearningContext,
+  LearningProvider,
+  useLearning,
+  type LearningContextValue,
+} from "./LearningProvider";
+export { OnboardingCenter } from "./OnboardingCenter";
+export { OnboardingProgress } from "./OnboardingProgress";
+export { OnboardingStatusBand } from "./OnboardingStatusBand";
 export { REQUIREMENT_PROGRESS_STATES } from "./types";
 export type { OperatingPersona } from "./personas";
 export type {

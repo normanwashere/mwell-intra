@@ -69,6 +69,14 @@ const FEATURE_RELATIONSHIPS: Record<string, FeatureRelationship> = {
     policyBasis: [POLICY.knowledge],
     relatedFlowIds: [],
   },
+  "role-onboarding": {
+    policyBasis: [POLICY.identity, POLICY.knowledge],
+    relatedFlowIds: ["identity-and-access"],
+  },
+  "vendor-onboarding": {
+    policyBasis: [POLICY.identity, POLICY.accreditation, POLICY.vendorScope],
+    relatedFlowIds: ["vendor-accreditation"],
+  },
   "offline-status": {
     policyBasis: [POLICY.resilience],
     relatedFlowIds: ["exception-and-recovery"],
@@ -477,6 +485,10 @@ const auditedNotification = (definition: FeatureDefinition): string => {
       "Password update success or provider failure appears inline; the page does not write core.notifications.",
     "knowledge-library":
       "Search and filter states appear in the page and URL; the library does not write notification records.",
+    "role-onboarding":
+      "Learning progress, support, and certification results appear inline; governed completion records determine whether live capabilities become effective.",
+    "vendor-onboarding":
+      "Vendor learning progress and accreditation readiness appear inline; the page does not widen vendor record scope.",
     "offline-status":
       "The fallback presents connectivity guidance only and does not write notification records.",
     "admin-governance":
@@ -542,6 +554,8 @@ const defineFeature = (definition: FeatureDefinition): KnowledgeFeature => {
 const CURRENT_STATE_REVIEWED_FEATURE_IDS = new Set([
   "shell-home",
   "knowledge-library",
+  "role-onboarding",
+  "vendor-onboarding",
   "admin-audit",
   "admin-departments",
   "warehouse-procurement-planning",
@@ -627,6 +641,44 @@ const definitions: FeatureDefinition[] = [
       "Clear filters or search a plain-language synonym when no result appears; escalate stale guidance to its owner.",
     completionEvidence:
       "The relevant article or workflow opens with owner, review date, route, and completion guidance.",
+  },
+  {
+    id: "role-onboarding",
+    title: "Role onboarding",
+    module: "core",
+    route: "/onboarding",
+    roleIds: CURRENT_ROLE_IDS.filter((roleId) => roleId !== "vendor_portal"),
+    purpose:
+      "Guides each employee through the policy, practice, assessment, and attestation required before governed live actions become available.",
+    reads:
+      "Current scoped role assignments, effective curricula, requirement progress, capability locks, support state, and certification evidence.",
+    writes:
+      "Starts or resumes governed learning attempts and records validated completion evidence through the learning service; viewing the page alone changes no business record.",
+    statuses:
+      "Loading, not assigned, not started, in progress, retryable, needs support, complete, expired, waived, stale, or certification active.",
+    exception:
+      "Refresh stale status, use the support route after exhausted attempts, and contact the role owner when no curriculum is assigned.",
+    completionEvidence:
+      "Every mandatory requirement shows complete or waived, the applicable certification is active, and the intended live capability is no longer listed as locked.",
+  },
+  {
+    id: "vendor-onboarding",
+    title: "Vendor onboarding",
+    module: "vendor",
+    route: "/vendor/onboarding",
+    roleIds: ["vendor_portal"],
+    purpose:
+      "Keeps accreditation orientation, evidence expectations, and vendor-specific readiness separate from internal employee training.",
+    reads:
+      "Only the authenticated vendor's assigned curriculum, progress, capability locks, and certification evidence.",
+    writes:
+      "Starts or resumes the vendor's governed learning attempts without changing another vendor's case or granting internal authority.",
+    statuses:
+      "Loading, not assigned, in progress, retryable, needs support, complete, expired, stale, or certification active.",
+    exception:
+      "Return to the vendor portal for case evidence, refresh stale status, or contact the named Mwell owner when an assignment or invitation is unavailable.",
+    completionEvidence:
+      "Mandatory vendor requirements are complete and the vendor can return to the scoped accreditation case without gaining internal module access.",
   },
   {
     id: "offline-status",

@@ -159,6 +159,16 @@ export const KNOWLEDGE_NAV = {
   tone: "cyan",
 } as const satisfies ShellNavItem;
 
+/** Universal employee qualification and role-readiness workspace. */
+export const ONBOARDING_NAV = {
+  href: "/onboarding",
+  label: "Onboarding",
+  description:
+    "Complete role practice, controls, and certifications required for live work.",
+  icon: "clipboard",
+  tone: "brand",
+} as const satisfies ShellNavItem;
+
 /** Does the user hold at least one role in `module`? */
 export function hasModuleAccess(access: ShellAccess, module: Module): boolean {
   return access.mode === "supabase"
@@ -237,6 +247,11 @@ export function authorizedPostLoginPath(
 ): string | null {
   if (!authorizationReady) return null;
   if (requestedPath === "/") return "/";
+  if (
+    requestedPath === ONBOARDING_NAV.href ||
+    requestedPath.startsWith(`${ONBOARDING_NAV.href}/`)
+  )
+    return profileKind === "employee" ? requestedPath : "/";
   if (requestedPath === "/knowledge" || requestedPath.startsWith("/knowledge/"))
     return requestedPath;
   if (requestedPath === "/work" || requestedPath.startsWith("/work/"))
@@ -293,6 +308,27 @@ export function dashboardAreas(
     (area, index) =>
       areas.findIndex((candidate) => candidate.href === area.href) === index,
   );
+}
+
+/**
+ * Primary shell destinations. Learning is universal navigation, but remains
+ * outside `dashboardAreas` so it is not counted as an operational module.
+ */
+export function shellNavigationAreas(
+  access: ShellAccess,
+  profileKind: "employee" | "vendor",
+): readonly ShellNavItem[] {
+  const areas = [...dashboardAreas(access, profileKind)];
+  if (profileKind !== "employee") return areas;
+  const knowledgeIndex = areas.findIndex(
+    (area) => area.href === KNOWLEDGE_NAV.href,
+  );
+  areas.splice(
+    knowledgeIndex === -1 ? areas.length : knowledgeIndex,
+    0,
+    ONBOARDING_NAV,
+  );
+  return areas;
 }
 
 export interface MobileContextAction {

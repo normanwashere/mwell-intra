@@ -16,6 +16,7 @@ import {
   ModuleHero,
 } from "@intra/ui";
 import { useSession } from "@intra/auth";
+import { OnboardingStatusBand } from "@intra/learning";
 import { dashboardAreas, type ModuleNav } from "@shell/lib/navigation";
 import { useModuleBadges } from "@shell/lib/moduleBadges";
 import { cx } from "@shell/lib/cx";
@@ -137,6 +138,8 @@ export default function DashboardPage() {
           </div>
         }
       />
+
+      {profile.kind === "employee" && <OnboardingStatusBand />}
 
       <div
         id="workspace-areas"

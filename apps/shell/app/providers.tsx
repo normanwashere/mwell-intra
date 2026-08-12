@@ -9,6 +9,7 @@
 import { useEffect, useMemo, type ReactNode } from "react";
 import { SerwistProvider } from "@serwist/turbopack/react";
 import { SessionProvider, type AuthConfig } from "@intra/auth";
+import { LearningProvider } from "@intra/learning";
 import { ToastProvider, MotionProvider } from "@intra/ui";
 import { createSupabaseBrowserClient } from "@shell/lib/supabase/client";
 import { DEMO_PROFILES } from "@shell/lib/demoProfiles";
@@ -100,13 +101,15 @@ export function Providers({ children }: { children: ReactNode }) {
   const tree = (
     <MotionProvider>
       <SessionProvider config={config}>
-        <ConnectivityProvider>
-          <DemoSeeder />
-          <ToastProvider>
-            <StorageFullToast />
-            {children}
-          </ToastProvider>
-        </ConnectivityProvider>
+        <LearningProvider>
+          <ConnectivityProvider>
+            <DemoSeeder />
+            <ToastProvider>
+              <StorageFullToast />
+              {children}
+            </ToastProvider>
+          </ConnectivityProvider>
+        </LearningProvider>
       </SessionProvider>
     </MotionProvider>
   );

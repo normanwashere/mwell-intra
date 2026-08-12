@@ -76,3 +76,38 @@ describe("account menu keyboard contract", () => {
     expect(menu).toContain("pointerdown");
   });
 });
+
+describe("role onboarding integration", () => {
+  it("mounts learning once at the authenticated provider boundary", () => {
+    const providers = source("app/providers.tsx");
+
+    expect(providers).toContain('import { LearningProvider } from "@intra/learning"');
+    expect(providers).toContain("<LearningProvider>");
+    expect(providers).toContain("</LearningProvider>");
+  });
+
+  it("publishes internal and vendor onboarding as distinct destinations", () => {
+    const internalPage = source("app/onboarding/page.tsx");
+    const vendorPage = source("app/vendor/onboarding/page.tsx");
+
+    expect(internalPage).toContain("<OnboardingCenter");
+    expect(vendorPage).toContain('audience="vendor"');
+    expect(vendorPage).toContain("Vendor onboarding");
+  });
+
+  it("shows readiness on Home and makes onboarding universal shell navigation", () => {
+    const dashboard = source("app/page.tsx");
+    const appShell = source("components/AppShell.tsx");
+    const palette = source("components/CommandPalette.tsx");
+
+    expect(dashboard).toContain("<OnboardingStatusBand");
+    expect(appShell).toContain("shellNavigationAreas");
+    expect(palette).toContain("ONBOARDING_NAV");
+  });
+
+  it("compiles every learning workspace utility used by the shell", () => {
+    const tailwind = source("tailwind.config.ts");
+
+    expect(tailwind).toContain("../../modules/learning/src/**/*.{ts,tsx}");
+  });
+});

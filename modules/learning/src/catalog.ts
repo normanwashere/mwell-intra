@@ -97,6 +97,20 @@ const capabilityClassificationByKey = new Map(
   CAPABILITY_CLASSIFICATIONS.map((item) => [capabilityKey(item), item]),
 );
 
+const titleCaseIdentifier = (value: string): string =>
+  value
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+
+const rolePracticeTitle = (module: string, role: string): string => {
+  if (module === "core" && role === "vendor_portal") {
+    return "Vendor accreditation submission practice";
+  }
+  const moduleLabel = module === "core" ? "Intra" : titleCaseIdentifier(module);
+  return `${moduleLabel} ${titleCaseIdentifier(role)} guided practice`;
+};
+
 const roleDefinitions = Object.values(
   roleCapabilities.reduce<
     Record<
@@ -146,7 +160,7 @@ const capabilityRequirements = roleDefinitions.flatMap((roleDefinition) => {
       version: 1,
       audience,
       kind: "scenario",
-      title: `${roleDefinition.module} ${roleDefinition.role} capability practice`,
+      title: rolePracticeTitle(roleDefinition.module, roleDefinition.role),
       mandatory: true,
       prerequisiteIds,
       capabilityOutcomes: capabilities,
@@ -174,7 +188,7 @@ const unassignedCapabilityRequirements = MUTATING_CAPABILITIES.filter(
     version: 1,
     audience: "internal",
     kind: "scenario",
-    title: `${capability.module} ${capability.capability} capability coverage`,
+    title: `${titleCaseIdentifier(capability.module)} ${titleCaseIdentifier(capability.capability)} capability coverage`,
     mandatory: true,
     prerequisiteIds: [],
     capabilityOutcomes: [capability],

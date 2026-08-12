@@ -37,6 +37,13 @@ export const SHELL_PAGE_ROUTE_CONTRACTS: ShellPageRouteContract[] = [
     minimumFields: 4,
   },
   {
+    route: "/onboarding",
+    module: "core",
+    capabilityIds: [],
+    minimumControls: 3,
+    minimumFields: 0,
+  },
+  {
     route: "/~offline",
     module: "core",
     capabilityIds: [],
@@ -144,6 +151,13 @@ export const SHELL_PAGE_ROUTE_CONTRACTS: ShellPageRouteContract[] = [
     module: "vendor",
     capabilityIds: [],
     minimumControls: 0,
+    minimumFields: 0,
+  },
+  {
+    route: "/vendor/onboarding",
+    module: "vendor",
+    capabilityIds: ["view_own_accreditation"],
+    minimumControls: 3,
     minimumFields: 0,
   },
 ];
