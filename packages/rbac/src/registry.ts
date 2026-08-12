@@ -52,6 +52,19 @@ export type Capability = ModuleCapabilityMap[Module];
 /** Every role across every module. */
 export type Role = ModuleRoleMap[Module];
 
+export type CapabilityAccess = 'read' | 'mutation';
+
+/**
+ * The authoritative onboarding/enforcement classification for every RBAC
+ * capability. Keeping it next to the registry prevents learning from making
+ * an independent access decision and preserves ungated read-only exploration.
+ */
+export interface CapabilityClassification {
+  readonly module: Module;
+  readonly capability: string;
+  readonly access: CapabilityAccess;
+}
+
 /** The registry of all module matrices, keyed by module. */
 export const MODULES = {
   core: coreModule,
@@ -62,6 +75,130 @@ export const MODULES = {
   insights: insightsModule,
   product: productModule,
 } as const;
+
+const readCapability = (
+  module: Module,
+  capability: string,
+): CapabilityClassification => ({ module, capability, access: 'read' });
+
+const mutationCapability = (
+  module: Module,
+  capability: string,
+): CapabilityClassification => ({ module, capability, access: 'mutation' });
+
+export const CAPABILITY_CLASSIFICATIONS: readonly CapabilityClassification[] = [
+  readCapability('core', 'view_directory'),
+  mutationCapability('core', 'manage_rbac'),
+  readCapability('core', 'view_vendors'),
+  mutationCapability('core', 'manage_vendors'),
+  mutationCapability('core', 'manage_accreditation'),
+  readCapability('core', 'view_documents'),
+  mutationCapability('core', 'manage_documents'),
+  mutationCapability('core', 'submit_documents'),
+  mutationCapability('core', 'submit_accreditation'),
+  readCapability('core', 'view_own_accreditation'),
+  readCapability('core', 'view_approvals'),
+  mutationCapability('core', 'manage_approvals'),
+  mutationCapability('core', 'record_approval'),
+  readCapability('core', 'view_audit'),
+  mutationCapability('core', 'manage_notifications'),
+  readCapability('warehouse', 'view_dashboard'),
+  readCapability('warehouse', 'view_inventory'),
+  mutationCapability('warehouse', 'receive_stock'),
+  mutationCapability('warehouse', 'manage_inventory'),
+  mutationCapability('warehouse', 'manage_products'),
+  mutationCapability('warehouse', 'manage_locations'),
+  mutationCapability('warehouse', 'cycle_count'),
+  mutationCapability('warehouse', 'manage_returns'),
+  mutationCapability('warehouse', 'request_fulfillment'),
+  mutationCapability('warehouse', 'request_stock'),
+  mutationCapability('warehouse', 'submit_return_case'),
+  mutationCapability('warehouse', 'reserve_allocate'),
+  mutationCapability('warehouse', 'issue_items'),
+  mutationCapability('warehouse', 'transfer_stock'),
+  readCapability('warehouse', 'view_finance'),
+  mutationCapability('warehouse', 'manage_finance_close'),
+  readCapability('warehouse', 'view_analytics'),
+  readCapability('warehouse', 'view_procurement'),
+  readCapability('warehouse', 'view_pricing'),
+  mutationCapability('warehouse', 'set_pricing'),
+  mutationCapability('warehouse', 'manage_operation_routes'),
+  mutationCapability('warehouse', 'inspect_quality'),
+  mutationCapability('warehouse', 'release_quality_hold'),
+  mutationCapability('warehouse', 'approve_stock_adjustment'),
+  mutationCapability('warehouse', 'approve_stock_adjustment_finance'),
+  readCapability('warehouse', 'view_exceptions'),
+  mutationCapability('warehouse', 'resolve_exceptions'),
+  mutationCapability('warehouse', 'import_warehouse_data'),
+  readCapability('procurement', 'view_dashboard'),
+  mutationCapability('procurement', 'create_request'),
+  mutationCapability('procurement', 'manage_rfp'),
+  mutationCapability('procurement', 'author_po'),
+  mutationCapability('procurement', 'approve_request'),
+  mutationCapability('procurement', 'approve_award'),
+  mutationCapability('procurement', 'manage_vendors'),
+  readCapability('procurement', 'view_finance'),
+  mutationCapability('procurement', 'admin'),
+  readCapability('legal', 'view_dashboard'),
+  mutationCapability('legal', 'review_accreditation'),
+  mutationCapability('legal', 'manage_checklist'),
+  mutationCapability('legal', 'approve_accreditation'),
+  mutationCapability('legal', 'manage_documents'),
+  mutationCapability('legal', 'manage_doa'),
+  mutationCapability('legal', 'admin'),
+  readCapability('events', 'view_events'),
+  mutationCapability('events', 'create_event'),
+  mutationCapability('events', 'manage_events'),
+  mutationCapability('events', 'request_fulfillment'),
+  mutationCapability('events', 'close_event'),
+  mutationCapability('events', 'approve_settlement'),
+  mutationCapability('events', 'admin'),
+  readCapability('insights', 'view_warehouse'),
+  readCapability('insights', 'view_procurement'),
+  readCapability('insights', 'view_legal'),
+  readCapability('insights', 'view_finance'),
+  readCapability('insights', 'view_executive'),
+  readCapability('insights', 'prepare_exports'),
+  mutationCapability('insights', 'admin'),
+  readCapability('product', 'view_readiness'),
+  mutationCapability('product', 'prepare_readiness'),
+  mutationCapability('product', 'decide_go_live'),
+  mutationCapability('product', 'acknowledge_operations_handoff'),
+  readCapability('product', 'view_pricing'),
+  mutationCapability('product', 'propose_pricing'),
+  mutationCapability('product', 'approve_pricing'),
+];
+
+function capabilityKey(module: Module, capability: string): string {
+  return `${module}:${capability}`;
+}
+
+function validateCapabilityClassifications(): void {
+  const registryKeys = new Set(
+    MODULE_LIST.flatMap((module) =>
+      MODULES[module].capabilities.map((capability) =>
+        capabilityKey(module, capability),
+      ),
+    ),
+  );
+  const classificationKeys = CAPABILITY_CLASSIFICATIONS.map((item) =>
+    capabilityKey(item.module, item.capability),
+  );
+
+  if (new Set(classificationKeys).size !== classificationKeys.length) {
+    throw new Error('RBAC capability classifications must be unique.');
+  }
+  if (
+    classificationKeys.length !== registryKeys.size ||
+    classificationKeys.some((key) => !registryKeys.has(key))
+  ) {
+    throw new Error(
+      'RBAC capability classifications must cover every declared capability exactly once.',
+    );
+  }
+}
+
+validateCapabilityClassifications();
 
 /**
  * Flatten every module's role → capability matrix into DB-shaped rows.

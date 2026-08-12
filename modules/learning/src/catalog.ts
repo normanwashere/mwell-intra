@@ -1,192 +1,163 @@
-import { MODULES, MODULE_LIST } from "@intra/rbac";
+import {
+  CAPABILITY_CLASSIFICATIONS,
+  roleCapabilities,
+} from "@intra/rbac";
 
 import { OPERATING_PERSONA_IDS } from "./personas";
 import type {
   CurriculumDefinition,
   LearningCapability,
   RequirementDefinition,
+  RoleCurriculumDefinition,
   SimulationDefinition,
 } from "./types";
-
-const READ_ONLY_CAPABILITY_KEYS = new Set([
-  "core:view_directory",
-  "core:view_vendors",
-  "core:view_documents",
-  "core:view_own_accreditation",
-  "core:view_approvals",
-  "core:view_audit",
-  "warehouse:view_dashboard",
-  "warehouse:view_inventory",
-  "warehouse:view_finance",
-  "warehouse:view_analytics",
-  "warehouse:view_procurement",
-  "warehouse:view_pricing",
-  "warehouse:view_exceptions",
-  "procurement:view_dashboard",
-  "procurement:view_finance",
-  "legal:view_dashboard",
-  "events:view_events",
-  "insights:view_warehouse",
-  "insights:view_procurement",
-  "insights:view_legal",
-  "insights:view_finance",
-  "insights:view_executive",
-  "insights:prepare_exports",
-  "product:view_readiness",
-  "product:view_pricing",
-]);
 
 export function capabilityKey(capability: LearningCapability): string {
   return `${capability.module}:${capability.capability}`;
 }
 
 export const MUTATING_CAPABILITIES: readonly LearningCapability[] =
-  MODULE_LIST.flatMap((module) =>
-    MODULES[module].capabilities
-      .map((capability) => ({ module, capability }))
-      .filter((capability) => !READ_ONLY_CAPABILITY_KEYS.has(capabilityKey(capability))),
+  CAPABILITY_CLASSIFICATIONS.filter((item) => item.access === "mutation").map(
+    ({ module, capability }) => ({ module, capability }),
   );
 
-const capability = (module: LearningCapability["module"], name: string): LearningCapability => ({
-  module,
-  capability: name,
-});
-
-const INTERNAL_PERSONA_CAPABILITIES: Readonly<Record<string, readonly LearningCapability[]>> = {
-  platform_administrator: [
-    capability("core", "manage_rbac"),
-    capability("core", "manage_accreditation"),
-    capability("core", "manage_documents"),
-    capability("core", "manage_approvals"),
-    capability("core", "record_approval"),
-    capability("core", "manage_notifications"),
-    capability("events", "admin"),
-    capability("insights", "admin"),
-  ],
-  general_employee: [
-    capability("procurement", "create_request"),
-    capability("warehouse", "request_fulfillment"),
-    capability("warehouse", "request_stock"),
-    capability("warehouse", "submit_return_case"),
-    capability("events", "create_event"),
-    capability("events", "request_fulfillment"),
-  ],
-  operations_associate: [
-    capability("warehouse", "receive_stock"),
-    capability("warehouse", "manage_inventory"),
-    capability("warehouse", "cycle_count"),
-    capability("warehouse", "manage_returns"),
-    capability("warehouse", "reserve_allocate"),
-    capability("warehouse", "issue_items"),
-    capability("warehouse", "transfer_stock"),
-    capability("warehouse", "inspect_quality"),
-  ],
-  operations_lead: [
-    capability("warehouse", "manage_products"),
-    capability("warehouse", "manage_locations"),
-    capability("warehouse", "manage_operation_routes"),
-    capability("warehouse", "release_quality_hold"),
-    capability("warehouse", "approve_stock_adjustment"),
-    capability("warehouse", "resolve_exceptions"),
-    capability("warehouse", "import_warehouse_data"),
-  ],
-  procurement_lead: [
-    capability("core", "manage_vendors"),
-    capability("procurement", "manage_rfp"),
-    capability("procurement", "author_po"),
-    capability("procurement", "approve_request"),
-    capability("procurement", "approve_award"),
-    capability("procurement", "manage_vendors"),
-    capability("procurement", "admin"),
-  ],
-  finance_controller: [
-    capability("warehouse", "manage_finance_close"),
-    capability("warehouse", "approve_stock_adjustment_finance"),
-    capability("events", "approve_settlement"),
-  ],
-  legal_compliance_lead: [
-    capability("legal", "review_accreditation"),
-    capability("legal", "manage_checklist"),
-    capability("legal", "approve_accreditation"),
-    capability("legal", "manage_documents"),
-    capability("legal", "manage_doa"),
-    capability("legal", "admin"),
-  ],
-  marketing_events_lead: [
-    capability("events", "manage_events"),
-    capability("events", "close_event"),
-  ],
-  product_owner: [
-    capability("warehouse", "set_pricing"),
-    capability("product", "prepare_readiness"),
-    capability("product", "decide_go_live"),
-    capability("product", "acknowledge_operations_handoff"),
-    capability("product", "propose_pricing"),
-    capability("product", "approve_pricing"),
-  ],
-  leadership_insights: [],
+const ROLE_PERSONAS: Readonly<Record<string, string>> = {
+  "core:platform_admin": "platform_administrator",
+  "core:staff": "general_employee",
+  "core:vendor_portal": "vendor_representative",
+  "warehouse:warehouse_operator": "operations_associate",
+  "warehouse:warehouse_supervisor": "operations_lead",
+  "warehouse:logistics_supervisor": "operations_lead",
+  "warehouse:operations": "general_employee",
+  "warehouse:finance": "finance_controller",
+  "warehouse:bi_analyst": "leadership_insights",
+  "warehouse:business_unit": "general_employee",
+  "warehouse:marketing": "marketing_events_lead",
+  "warehouse:procurement": "procurement_lead",
+  "warehouse:pricing": "product_owner",
+  "warehouse:warehouse_admin": "operations_lead",
+  "procurement:requester": "general_employee",
+  "procurement:procurement_officer": "procurement_lead",
+  "procurement:approver": "operations_lead",
+  "procurement:finance": "finance_controller",
+  "procurement:admin": "procurement_lead",
+  "legal:legal_reviewer": "legal_compliance_lead",
+  "legal:compliance": "legal_compliance_lead",
+  "legal:admin": "legal_compliance_lead",
+  "events:requester": "general_employee",
+  "events:coordinator": "marketing_events_lead",
+  "events:viewer": "leadership_insights",
+  "events:finance_reviewer": "finance_controller",
+  "events:admin": "marketing_events_lead",
+  "insights:analyst": "leadership_insights",
+  "insights:manager": "leadership_insights",
+  "insights:executive": "leadership_insights",
+  "insights:admin": "leadership_insights",
+  "product:contributor": "product_owner",
+  "product:product_owner": "product_owner",
+  "product:operations_partner": "operations_lead",
 };
 
-const VENDOR_CAPABILITIES = [
-  capability("core", "submit_documents"),
-  capability("core", "submit_accreditation"),
-];
+const audienceForPersona = (personaId: string): "internal" | "vendor" =>
+  personaId === "vendor_representative" ? "vendor" : "internal";
 
-const internalRequirement = (
-  personaId: string,
-  suffix: "orientation" | "capability-practice",
-  capabilityOutcomes: readonly LearningCapability[] = [],
-): RequirementDefinition => ({
-  id: `internal.${personaId}.${suffix}.v1`,
-  version: 1,
-  audience: "internal",
-  kind: suffix === "orientation" ? "orientation" : "scenario",
-  title: suffix === "orientation" ? "Role orientation" : "Capability practice",
-  mandatory: true,
-  prerequisiteIds:
-    suffix === "orientation" ? [] : [`internal.${personaId}.orientation.v1`],
-  capabilityOutcomes,
-  ...(suffix === "capability-practice"
-    ? { simulationId: `internal.${personaId}.capability-practice.v1` }
-    : {}),
-});
-
-const internalRequirements = OPERATING_PERSONA_IDS.filter(
-  (personaId) => personaId !== "vendor_representative",
-).flatMap((personaId) => [
-  internalRequirement(personaId, "orientation"),
-  internalRequirement(
-    personaId,
-    "capability-practice",
-    INTERNAL_PERSONA_CAPABILITIES[personaId] ?? [],
-  ),
-]);
-
-const vendorRequirements: readonly RequirementDefinition[] = [
-  {
-    id: "vendor.vendor_representative.orientation.v1",
+const orientationRequirement = (personaId: string): RequirementDefinition => {
+  const audience = audienceForPersona(personaId);
+  return {
+    id: `${audience}.${personaId}.orientation.v1`,
     version: 1,
-    audience: "vendor",
+    audience,
     kind: "orientation",
-    title: "Vendor accreditation orientation",
+    title: audience === "vendor" ? "Vendor accreditation orientation" : "Role orientation",
     mandatory: true,
     prerequisiteIds: [],
     capabilityOutcomes: [],
-  },
-  {
-    id: "vendor.vendor_representative.capability-practice.v1",
-    version: 1,
-    audience: "vendor",
-    kind: "scenario",
-    title: "Vendor accreditation capability practice",
-    mandatory: true,
-    prerequisiteIds: ["vendor.vendor_representative.orientation.v1"],
-    capabilityOutcomes: VENDOR_CAPABILITIES,
-    simulationId: "vendor.vendor_representative.capability-practice.v1",
-  },
-];
+  };
+};
 
-const requirements = [...internalRequirements, ...vendorRequirements] as const;
+const baselineRequirements = OPERATING_PERSONA_IDS.map(orientationRequirement);
+
+const capabilityClassificationByKey = new Map(
+  CAPABILITY_CLASSIFICATIONS.map((item) => [capabilityKey(item), item]),
+);
+
+const roleDefinitions = Object.values(
+  roleCapabilities.reduce<
+    Record<string, { module: LearningCapability["module"]; role: string; personaId: string }>
+  >((roles, grant) => {
+    const key = `${grant.module}:${grant.role}`;
+    const personaId = ROLE_PERSONAS[key];
+    if (!personaId) {
+      throw new Error(`Missing canonical persona mapping for RBAC role ${key}.`);
+    }
+    roles[key] ??= { module: grant.module, role: grant.role, personaId };
+    return roles;
+  }, {}),
+);
+
+const capabilityRequirements = roleDefinitions.flatMap((roleDefinition) => {
+  const capabilities = roleCapabilities
+    .filter(
+      (grant) =>
+        grant.module === roleDefinition.module && grant.role === roleDefinition.role,
+    )
+    .filter(
+      (grant) =>
+        capabilityClassificationByKey.get(`${grant.module}:${grant.cap}`)?.access ===
+        "mutation",
+    )
+    .map((grant) => ({ module: grant.module, capability: grant.cap }));
+  if (capabilities.length === 0) return [];
+
+  const audience = audienceForPersona(roleDefinition.personaId);
+  const id = `${audience}.role.${roleDefinition.module}.${roleDefinition.role}.capability-practice.v1`;
+  return [
+    {
+      id,
+      version: 1,
+      audience,
+      kind: "scenario",
+      title: `${roleDefinition.module} ${roleDefinition.role} capability practice`,
+      mandatory: true,
+      prerequisiteIds: [`${audience}.${roleDefinition.personaId}.orientation.v1`],
+      capabilityOutcomes: capabilities,
+      simulationId: id,
+    } satisfies RequirementDefinition,
+  ];
+});
+
+const grantedMutationKeys = new Set(
+  roleCapabilities
+    .filter(
+      (grant) =>
+        capabilityClassificationByKey.get(`${grant.module}:${grant.cap}`)?.access ===
+        "mutation",
+    )
+    .map((grant) => `${grant.module}:${grant.cap}`),
+);
+
+const unassignedCapabilityRequirements = MUTATING_CAPABILITIES.filter(
+  (capability) => !grantedMutationKeys.has(capabilityKey(capability)),
+).map((capability) => {
+  const id = `internal.unassigned.${capability.module}.${capability.capability}.capability-practice.v1`;
+  return {
+    id,
+    version: 1,
+    audience: "internal",
+    kind: "scenario",
+    title: `${capability.module} ${capability.capability} capability coverage`,
+    mandatory: true,
+    prerequisiteIds: [],
+    capabilityOutcomes: [capability],
+    simulationId: id,
+  } satisfies RequirementDefinition;
+});
+
+const requirements = [
+  ...baselineRequirements,
+  ...capabilityRequirements,
+  ...unassignedCapabilityRequirements,
+] as const;
 
 const curricula: readonly CurriculumDefinition[] = OPERATING_PERSONA_IDS.map(
   (personaId) => {
@@ -197,13 +168,40 @@ const curricula: readonly CurriculumDefinition[] = OPERATING_PERSONA_IDS.map(
       version: 1,
       personaId,
       audience,
+      requirementIds: [`${prefix}.${personaId}.orientation.v1`],
+    };
+  },
+);
+
+export const ROLE_CURRICULA: readonly RoleCurriculumDefinition[] = roleDefinitions.map(
+  (roleDefinition) => {
+    const audience = audienceForPersona(roleDefinition.personaId);
+    const capabilityRequirementId = `${audience}.role.${roleDefinition.module}.${roleDefinition.role}.capability-practice.v1`;
+    return {
+      id: `${audience}.role.${roleDefinition.module}.${roleDefinition.role}.v1`,
+      version: 1,
+      personaId: roleDefinition.personaId,
+      audience,
+      module: roleDefinition.module,
+      role: roleDefinition.role,
       requirementIds: [
-        `${prefix}.${personaId}.orientation.v1`,
-        `${prefix}.${personaId}.capability-practice.v1`,
+        `${audience}.${roleDefinition.personaId}.orientation.v1`,
+        ...(requirements.some((requirement) => requirement.id === capabilityRequirementId)
+          ? [capabilityRequirementId]
+          : []),
       ],
     };
   },
 );
+
+export const CAPABILITY_COVERAGE_CURRICULA: readonly CurriculumDefinition[] =
+  unassignedCapabilityRequirements.map((requirement) => ({
+    id: requirement.id.replace(".capability-practice", ""),
+    version: 1,
+    personaId: "capability_coverage",
+    audience: requirement.audience,
+    requirementIds: [requirement.id],
+  }));
 
 const simulations: readonly SimulationDefinition[] = requirements.flatMap(
   (requirement) => {
@@ -226,9 +224,20 @@ const simulations: readonly SimulationDefinition[] = requirements.flatMap(
 
 export const LEARNING_CATALOG = {
   curricula,
+  roleCurricula: ROLE_CURRICULA,
+  capabilityCoverageCurricula: CAPABILITY_COVERAGE_CURRICULA,
   requirements,
   simulations,
 } as const;
+
+export function roleCurriculumFor(
+  module: LearningCapability["module"],
+  role: string,
+): RoleCurriculumDefinition | undefined {
+  return ROLE_CURRICULA.find(
+    (curriculum) => curriculum.module === module && curriculum.role === role,
+  );
+}
 
 export function requiredCurriculaFor(
   capability: LearningCapability,
@@ -245,9 +254,11 @@ export function requiredCurriculaFor(
       .map((requirement) => requirement.id),
   );
 
-  return LEARNING_CATALOG.curricula.filter((curriculum) =>
-    curriculum.requirementIds.some((id) => requirementIds.has(id)),
-  );
+  return [
+    ...LEARNING_CATALOG.curricula,
+    ...ROLE_CURRICULA,
+    ...CAPABILITY_COVERAGE_CURRICULA,
+  ].filter((curriculum) => curriculum.requirementIds.some((id) => requirementIds.has(id)));
 }
 
 export function internalRequirementIds(): readonly string[] {

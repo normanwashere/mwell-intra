@@ -35,6 +35,11 @@ export interface CurriculumDefinition {
   requirementIds: readonly string[];
 }
 
+export interface RoleCurriculumDefinition extends CurriculumDefinition {
+  module: Module;
+  role: string;
+}
+
 export interface SimulationDefinition {
   id: string;
   version: number;
@@ -51,12 +56,18 @@ export interface EffectiveCurriculum {
   source: "role" | "department" | "assignment";
 }
 
+export const REQUIREMENT_PROGRESS_STATES = [
+  "not_started",
+  "in_progress",
+  "passed",
+  "failed_retryable",
+  "needs_support",
+  "expired",
+  "waived",
+] as const;
+
 export type RequirementProgressState =
-  | "not_started"
-  | "in_progress"
-  | "complete"
-  | "needs_support"
-  | "expired";
+  (typeof REQUIREMENT_PROGRESS_STATES)[number];
 
 export interface RequirementProgress {
   assignmentRequirementId: string;

@@ -42,6 +42,8 @@ export { productModule } from './modules/product';
 // Registry, predicates, and DB-seed helpers.
 export type {
   Capability,
+  CapabilityAccess,
+  CapabilityClassification,
   Role,
   CapabilityFor,
   RoleFor,
@@ -50,6 +52,7 @@ export type {
 } from './registry';
 export {
   MODULES,
+  CAPABILITY_CLASSIFICATIONS,
   can,
   hasCapInModule,
   roleCapabilities,
