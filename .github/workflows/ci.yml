@@ -16,18 +16,62 @@ concurrency:
 
 env:
   # Fail fast on peer-dep drift and honor the pnpm lockfile everywhere.
-  CI: 'true'
+  CI: "true"
   # `axe-core/playwright` doesn't ship in the repo lockfile yet (spec-declared
   # dep, not yet added to package.json). CI installs it ephemerally in the
   # `axe` job; declared once here so both the install + require paths match.
-  AXE_PW_PKG: '@axe-core/playwright@^4.10.1'
-  COVERAGE_PKG: '@vitest/coverage-v8@3.2.6'
+  AXE_PW_PKG: "@axe-core/playwright@^4.10.1"
+  COVERAGE_PKG: "@vitest/coverage-v8@3.2.6"
   # Minimum overall test coverage — see `verify_coverage.mjs`. Bump this only
   # when we intentionally raise the bar.
   # Current measured aggregate is 51.23%; ratchet this toward 70% as coverage grows.
-  COVERAGE_MIN: '50'
+  COVERAGE_MIN: "50"
 
 jobs:
+  learning-source:
+    name: Learning source checks (fast, non-authoritative)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.23.0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm verify:learning-source
+
+  learning-applied-postgres:
+    name: Learning applied PostgreSQL release authority
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: learning-source
+    env:
+      MWELL_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.23.0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Start disposable local PostgreSQL
+        run: >-
+          pnpm exec supabase start
+          --exclude gotrue,realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+      - name: Apply complete migration history from empty
+        run: pnpm exec supabase db reset --local --no-seed
+      - name: Verify applied learning authority
+        run: pnpm verify:learning-applied
+      - name: Remove disposable local PostgreSQL
+        if: always()
+        run: pnpm exec supabase stop --no-backup
+
   knowledge-base:
     name: Knowledge Base contract
     runs-on: ubuntu-latest
@@ -38,7 +82,7 @@ jobs:
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v5
         with:
-          node-version: '22'
+          node-version: "22"
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm verify:knowledge-base
@@ -52,7 +96,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: ['22']
+        node: ["22"]
     steps:
       - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v6
@@ -71,7 +115,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: ['22']
+        node: ["22"]
     steps:
       - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v6
@@ -94,7 +138,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: ['22']
+        node: ["22"]
     steps:
       - uses: actions/checkout@v5
         with:
@@ -113,7 +157,7 @@ jobs:
       # the resulting package.json / lockfile changes are never committed.
       - name: Install coverage provider (ephemeral, CI-only)
         env:
-          CI: 'false'  # allow pnpm add to update the lockfile in-place
+          CI: "false" # allow pnpm add to update the lockfile in-place
         run: |
           pnpm add -w -D "$COVERAGE_PKG"
 
@@ -158,7 +202,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: ['22']
+        node: ["22"]
     steps:
       - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v6
@@ -224,12 +268,12 @@ jobs:
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v5
         with:
-          node-version: '22'
+          node-version: "22"
           cache: pnpm
 
       - name: Install (with axe + playwright ephemerals)
         env:
-          CI: 'false'  # allow pnpm add to update the lockfile in-place
+          CI: "false" # allow pnpm add to update the lockfile in-place
         run: |
           pnpm install --frozen-lockfile
           pnpm add -w -D "$AXE_PW_PKG" "@playwright/test@^1.49.0"
@@ -272,7 +316,16 @@ jobs:
     name: E2E (playwright shard ${{ matrix.shard }}/3)
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: [knowledge-base, typecheck, lint, test, build, axe]
+    needs:
+      [
+        knowledge-base,
+        learning-applied-postgres,
+        typecheck,
+        lint,
+        test,
+        build,
+        axe,
+      ]
     strategy:
       fail-fast: false
       matrix:

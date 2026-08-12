@@ -7,6 +7,8 @@ export const FOUNDATION_MIGRATION_NAME =
   "20260812130000_learning_foundation.sql";
 const ROLE_LIFECYCLE_MIGRATION_NAME =
   "20260812140000_learning_role_authority_lifecycle.sql";
+const ASSIGNMENT_LINEAGE_MIGRATION_NAME =
+  "20260812150000_learning_assignment_lineage_remediation.sql";
 const ROLE_AUTHORITY_TABLES = Object.freeze([
   "roles",
   "role_capabilities",
@@ -22,6 +24,8 @@ const ROLE_AUTHORITY_INDEX_NAME =
   "learning_active_certifications_role_authority_idx";
 const ROLE_AUTHORITY_RECONCILIATION_SHA256 =
   "fd8e41af904fc15cc4b453220adf3cc98b8da21e15119b52c558c6654b464cfc";
+const ASSIGNMENT_LINEAGE_RECONCILIATION_SHA256 =
+  "3b8a7487ca7665544f20633c83b716679837d149b59b97ec56f0542b8165b988";
 
 const PINNED_BASELINE_MIGRATION_NAMES = Object.freeze(
   `
@@ -181,7 +185,7 @@ export const REQUIRED_TABLES = Object.freeze([
   "emergency_exceptions",
 ]);
 
-const SERVICE_PRIVILEGES = Object.freeze({
+export const SERVICE_PRIVILEGES = Object.freeze({
   curricula: ["delete", "insert", "select", "update"],
   curriculum_versions: ["delete", "insert", "select", "update"],
   requirements: ["delete", "insert", "select", "update"],
@@ -204,7 +208,7 @@ const SERVICE_PRIVILEGES = Object.freeze({
   emergency_exceptions: ["insert", "select", "update"],
 });
 
-const EXPECTED_POLICIES = new Map([
+export const EXPECTED_POLICIES = new Map([
   ["learning_curricula_published_read", "curricula"],
   ["learning_curricula_platform_manage", "curricula"],
   ["learning_curricula_department_manage", "curricula"],
@@ -282,7 +286,7 @@ const EXPECTED_POLICIES = new Map([
   ["learning_emergency_exceptions_platform_read", "emergency_exceptions"],
 ]);
 
-const REQUIRED_TRIGGERS = Object.freeze({
+export const REQUIRED_TRIGGERS = Object.freeze({
   ...Object.fromEntries(
     REQUIRED_TABLES.map((table) => {
       const name =
@@ -384,6 +388,11 @@ const REQUIRED_TRIGGERS = Object.freeze({
     events: "before delete",
     function: "private.revoke_certifications_for_role_assignment_v2",
   },
+  learning_guard_role_assignment_identity: {
+    table: "core.user_roles",
+    events: "before update of id, user_id, module, role",
+    function: "private.guard_role_assignment_identity",
+  },
   learning_role_deactivation_revoke: {
     table: "core.roles",
     events: "after update of is_active",
@@ -400,7 +409,7 @@ const REQUIRED_TRIGGERS = Object.freeze({
   },
 });
 
-const ALLOWED_SECURITY_DEFINERS = new Set([
+export const ALLOWED_SECURITY_DEFINERS = new Set([
   "private.learning_has_active_profile",
   "private.learning_owns_department",
   "private.learning_is_active_employee_platform_admin",
@@ -416,7 +425,7 @@ const ALLOWED_SECURITY_DEFINERS = new Set([
   "private.validate_emergency_exception_issuance",
 ]);
 
-const ALLOWED_FUNCTION_EXECUTE = Object.freeze({
+export const ALLOWED_FUNCTION_EXECUTE = Object.freeze({
   "private.learning_has_active_profile": ["authenticated", "service_role"],
   "private.learning_owns_department": ["authenticated", "service_role"],
   "private.learning_is_active_employee_platform_admin": [
@@ -428,13 +437,13 @@ const ALLOWED_FUNCTION_EXECUTE = Object.freeze({
   "private.validate_curriculum_graph_publication": ["service_role"],
 });
 
-const MODELED_FUNCTIONS = new Set([
+export const MODELED_FUNCTIONS = new Set([
   ...ALLOWED_SECURITY_DEFINERS,
   ...Object.values(REQUIRED_TRIGGERS).map((trigger) => trigger.function),
   "learning.guard_certification_lifecycle",
 ]);
 
-const EXPECTED_FUNCTION_DECLARATION_SQL = Object.freeze({
+export const EXPECTED_FUNCTION_DECLARATION_SQL = Object.freeze({
   "private.learning_has_active_profile":
     "create or replace function private.learning_has_active_profile(required_audience text) returns boolean language sql stable security definer set search_path = ''",
   "private.learning_owns_department":
@@ -459,6 +468,8 @@ const EXPECTED_FUNCTION_DECLARATION_SQL = Object.freeze({
     "create or replace function private.revoke_certifications_for_role_assignment_v2() returns trigger language plpgsql security definer set search_path = ''",
   "private.revoke_certifications_for_role_authority_loss":
     "create or replace function private.revoke_certifications_for_role_authority_loss() returns trigger language plpgsql security definer set search_path = ''",
+  "private.guard_role_assignment_identity":
+    "create or replace function private.guard_role_assignment_identity() returns trigger language plpgsql set search_path = ''",
   "private.validate_emergency_exception_issuance":
     "create or replace function private.validate_emergency_exception_issuance() returns trigger language plpgsql security definer set search_path = ''",
   "learning.guard_authoritative_write_isolation":
@@ -483,7 +494,7 @@ const EXPECTED_FUNCTION_DECLARATION_SQL = Object.freeze({
     "create or replace function learning.guard_curriculum_composition() returns trigger language plpgsql set search_path = ''",
 });
 
-const EXPECTED_FUNCTION_BODY_SHA256 = Object.freeze({
+export const EXPECTED_FUNCTION_BODY_SHA256 = Object.freeze({
   "private.learning_has_active_profile":
     "e7dbe840969ff13aab7311d8d69ccfa67111712fdb19eb026465318815c93736",
   "private.learning_owns_department":
@@ -508,6 +519,8 @@ const EXPECTED_FUNCTION_BODY_SHA256 = Object.freeze({
     "b6293eed92f8cc615dcb82ff840f119d95527cd4a961a66a93aa08146456c676",
   "private.revoke_certifications_for_role_authority_loss":
     "942e3d91a5165026516d16d4ad3bd89bcc98f17da2fe5825bb5d7bf196fce007",
+  "private.guard_role_assignment_identity":
+    "4eef02b98abe2b97e08120c9ffb8898a9f9690d84af8d0080be6e8bd032929d3",
   "private.validate_emergency_exception_issuance":
     "0055e93a905b56fc6d96db9aeb6850f9761da39fa1bd10421917f37c321b1531",
   "learning.guard_authoritative_write_isolation":
@@ -1163,6 +1176,7 @@ function createState() {
       revocationReasonColumn: false,
       historicalRevocationAttribution: false,
       activeCertificationReconciliation: false,
+      assignmentLineageReconciliation: false,
       revocationReasonConstraint: false,
       truncateRevokes: new Map(
         ROLE_AUTHORITY_TABLES.map((table) => [table, new Set()]),
@@ -1176,6 +1190,8 @@ function processStatement(state, statement, migrationName) {
   const normalized = normalizeSql(statement).replaceAll('"', "");
   const isFoundation = migrationName === FOUNDATION_MIGRATION_NAME;
   const isRoleLifecycle = migrationName === ROLE_LIFECYCLE_MIGRATION_NAME;
+  const isAssignmentLineage =
+    migrationName === ASSIGNMENT_LINEAGE_MIGRATION_NAME;
   let match;
 
   if (normalized === "create schema if not exists learning") {
@@ -1251,6 +1267,35 @@ function processStatement(state, statement, migrationName) {
       );
     } else {
       state.roleAuthorityLifecycle.historicalRevocationAttribution = true;
+    }
+    return;
+  }
+
+  if (
+    isAssignmentLineage &&
+    /^update learning\.certifications certification set\b/.test(normalized)
+  ) {
+    const reconciliationPatterns = [
+      /set status = 'revoked', revoked_at = pg_catalog\.clock_timestamp\(\), revocation_reason = case/,
+      /then 'system:source_role_assignment_missing'/,
+      /else 'system:source_role_assignment_identity_mismatch' end/,
+      /from core\.user_roles source_assignment/,
+      /source_assignment\.id = certification\.source_role_assignment_id/,
+      /source_assignment\.user_id = certification\.user_id/,
+      /source_assignment\.module = certification\.module/,
+      /source_assignment\.role = certification\.source_role/,
+      /where certification\.status = 'active'/,
+    ];
+    if (
+      createHash("sha256").update(normalized).digest("hex") !==
+        ASSIGNMENT_LINEAGE_RECONCILIATION_SHA256 ||
+      reconciliationPatterns.some((pattern) => !pattern.test(normalized))
+    ) {
+      state.errors.push(
+        `${migrationName}: exact role-assignment lineage reconciliation is missing or weakened.`,
+      );
+    } else {
+      state.roleAuthorityLifecycle.assignmentLineageReconciliation = true;
     }
     return;
   }
@@ -2712,6 +2757,19 @@ function validateFunctions(state) {
   );
   requireFunction(
     state,
+    "private.guard_role_assignment_identity",
+    [
+      /new\.id is distinct from old\.id/,
+      /new\.user_id is distinct from old\.user_id/,
+      /new\.module is distinct from old\.module/,
+      /new\.role is distinct from old\.role/,
+      /role assignment identity is immutable/,
+      /raise exception/,
+    ],
+    "Role-assignment identity fields must be immutable while unrelated updates remain supported.",
+  );
+  requireFunction(
+    state,
     "private.validate_emergency_exception_issuance",
     [
       /new\.status <> 'active'/,
@@ -2985,6 +3043,11 @@ function validateRoleAuthorityLifecycle(state) {
   if (!lifecycle.activeCertificationReconciliation) {
     state.errors.push(
       "Existing active certifications need one-time role authority reconciliation.",
+    );
+  }
+  if (!lifecycle.assignmentLineageReconciliation) {
+    state.errors.push(
+      "Existing active certifications need exact role-assignment lineage reconciliation.",
     );
   }
   if (!lifecycle.revocationReasonConstraint) {

@@ -11,6 +11,8 @@ import {
 const FOUNDATION_NAME = "20260812130000_learning_foundation.sql";
 const ROLE_LIFECYCLE_NAME =
   "20260812140000_learning_role_authority_lifecycle.sql";
+const ASSIGNMENT_LINEAGE_NAME =
+  "20260812150000_learning_assignment_lineage_remediation.sql";
 const OLD_FOUNDATION_NAME = "20260812090000_learning_foundation.sql";
 const migration = fileURLToPath(
   new URL(`../supabase/migrations/${FOUNDATION_NAME}`, import.meta.url),
@@ -24,6 +26,12 @@ const roleLifecycleMigration = fileURLToPath(
 );
 const roleLifecycleSql = existsSync(roleLifecycleMigration)
   ? readFileSync(roleLifecycleMigration, "utf8")
+  : "";
+const assignmentLineageMigration = fileURLToPath(
+  new URL(`../supabase/migrations/${ASSIGNMENT_LINEAGE_NAME}`, import.meta.url),
+);
+const assignmentLineageSql = existsSync(assignmentLineageMigration)
+  ? readFileSync(assignmentLineageMigration, "utf8")
   : "";
 const migrationDirectory = fileURLToPath(
   new URL("../supabase/migrations/", import.meta.url),
@@ -69,6 +77,16 @@ function errorsForRoleLifecycle(source) {
   return verifyLearningSchema(
     repositoryMigrations.map((migrationEntry) =>
       migrationEntry.name === ROLE_LIFECYCLE_NAME
+        ? { ...migrationEntry, sql: source }
+        : migrationEntry,
+    ),
+  ).join("\n");
+}
+
+function errorsForAssignmentLineage(source) {
+  return verifyLearningSchema(
+    repositoryMigrations.map((migrationEntry) =>
+      migrationEntry.name === ASSIGNMENT_LINEAGE_NAME
         ? { ...migrationEntry, sql: source }
         : migrationEntry,
     ),
@@ -473,6 +491,49 @@ test("reconciles existing invalid certifications with attributable evidence", ()
   assert.match(
     errorsForRoleLifecycle(overBroadReconciliation),
     /existing active certification|authority reconciliation|exact.*reconcil/i,
+  );
+});
+
+test("binds certifications to immutable exact role-assignment lineage", () => {
+  assert.ok(
+    existsSync(assignmentLineageMigration),
+    `${ASSIGNMENT_LINEAGE_NAME} must be a later forward migration`,
+  );
+  assert.match(
+    assignmentLineageSql,
+    /create or replace function private\.guard_role_assignment_identity\(\)[\s\S]*?new\.id is distinct from old\.id[\s\S]*?new\.user_id is distinct from old\.user_id[\s\S]*?new\.module is distinct from old\.module[\s\S]*?new\.role is distinct from old\.role[\s\S]*?raise exception 'Role assignment identity is immutable/i,
+  );
+  assert.match(
+    assignmentLineageSql,
+    /create trigger learning_guard_role_assignment_identity\s+before update of id, user_id, module, role on core\.user_roles\s+for each row execute function private\.guard_role_assignment_identity\(\)/i,
+  );
+  assert.match(
+    assignmentLineageSql,
+    /update learning\.certifications certification[\s\S]*?revocation_reason = case[\s\S]*?system:source_role_assignment_missing[\s\S]*?system:source_role_assignment_identity_mismatch[\s\S]*?from core\.user_roles source_assignment[\s\S]*?source_assignment\.id = certification\.source_role_assignment_id[\s\S]*?source_assignment\.user_id = certification\.user_id[\s\S]*?source_assignment\.module = certification\.module[\s\S]*?source_assignment\.role = certification\.source_role/i,
+  );
+
+  for (const predicate of [
+    /source_assignment\.id = certification\.source_role_assignment_id/i,
+    /source_assignment\.user_id = certification\.user_id/i,
+    /source_assignment\.module = certification\.module/i,
+    /source_assignment\.role = certification\.source_role/i,
+  ]) {
+    const weakened = replaceRequired(assignmentLineageSql, predicate, "true");
+    assert.match(
+      errorsForAssignmentLineage(weakened),
+      /assignment.*lineage|exact.*assignment|reconciliation/i,
+      String(predicate),
+    );
+  }
+
+  const mutableIdentity = replaceRequired(
+    assignmentLineageSql,
+    /new\.role is distinct from old\.role/i,
+    "false",
+  );
+  assert.match(
+    errorsForAssignmentLineage(mutableIdentity),
+    /assignment.*identity|immutable|function body/i,
   );
 });
 
