@@ -3,14 +3,14 @@
 // These are runtime-agnostic types (no React, no Supabase construction) so they
 // are safe to import from server components, client components, and tests.
 
-import type { Module, UserRoles } from '@intra/rbac';
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Module, UserRoles } from "@intra/rbac";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 /** Which auth backend the SessionProvider resolved. */
-export type AuthMode = 'supabase' | 'memory';
+export type AuthMode = "supabase" | "memory";
 
 /** Profile tier — internal employee vs external vendor contact (spec §4.1). */
-export type ProfileKind = 'employee' | 'vendor';
+export type ProfileKind = "employee" | "vendor";
 
 /** Effective capabilities projected by core.my_capabilities() for live UX gates. */
 export type UserCapabilities = Partial<Record<Module, readonly string[]>>;
@@ -49,6 +49,8 @@ export interface SessionValue {
    * Partial because real JWTs only carry the modules a user participates in.
    */
   userRoles: Partial<UserRoles>;
+  /** Raw capabilities granted by current active role assignments. */
+  roleCapabilities?: UserCapabilities;
   /** Fresh database projection used for Supabase-mode UX gates. */
   userCapabilities?: UserCapabilities;
   /** The resolved auth backend. */

@@ -16,6 +16,7 @@ export const COMPLETION_ALIGNMENT_MIGRATION_NAME =
   "20260812180000_learning_completion_alignment.sql";
 export const COMPLETION_HARDENING_MIGRATION_NAME =
   "20260812190000_learning_completion_evidence_hardening.sql";
+export const AUTHORITY_MIGRATION_NAME = "20260812200000_learning_authority.sql";
 const PINNED_LEARNING_MIGRATION_SHA256 = Object.freeze({
   [FOUNDATION_MIGRATION_NAME]:
     "b5b954f0fdb9ff52748047ca4a17916896227934ecd43c22951ea4489fc129ad",
@@ -31,6 +32,8 @@ const PINNED_LEARNING_MIGRATION_SHA256 = Object.freeze({
     "1e7daab3d83417e8d49325712eacbdff3114e29cbe0f8c5790985002ea465cc5",
   [COMPLETION_HARDENING_MIGRATION_NAME]:
     "9914f21c7fa21e452973ca75d08348b307edb0c0f72580fa46263112e8e0f0d5",
+  [AUTHORITY_MIGRATION_NAME]:
+    "a8ad714d8ae7a5f637ecb62af1cb9b4688a256041f42673e86d598ea36085f39",
 });
 export const PRIVATE_ANSWER_KEY_TABLE =
   "private.learning_assessment_answer_keys";
@@ -44,6 +47,15 @@ export const LEARNING_SERVICE_FUNCTIONS = Object.freeze([
   "learning.evaluate_certifications",
   "learning.request_support",
   "learning.sync_shared_completions",
+]);
+export const LEARNING_AUTHORITY_FUNCTIONS = Object.freeze([
+  "learning.is_certification_required",
+  "learning.has_active_certification",
+  "learning.has_active_emergency_exception",
+  "core.has_live_cap",
+  "core.my_role_capabilities",
+  "core.my_capabilities",
+  "core.my_capability_snapshot",
 ]);
 const LEARNING_SERVICE_MUTATORS = Object.freeze(
   LEARNING_SERVICE_FUNCTIONS.filter(
@@ -230,6 +242,7 @@ export const REQUIRED_TABLES = Object.freeze([
   "policy_acknowledgments",
   "certifications",
   "emergency_exceptions",
+  "mutation_capability_rules",
 ]);
 
 export const SERVICE_PRIVILEGES = Object.freeze({
@@ -253,6 +266,7 @@ export const SERVICE_PRIVILEGES = Object.freeze({
   policy_acknowledgments: ["insert", "select"],
   certifications: ["insert", "select", "update"],
   emergency_exceptions: ["insert", "select", "update"],
+  mutation_capability_rules: ["select"],
 });
 
 export const EXPECTED_POLICIES = new Map([
@@ -479,6 +493,7 @@ export const ALLOWED_SECURITY_DEFINERS = new Set([
   "private.start_requirement_base",
   "private.validate_certification_completion_evidence",
   ...LEARNING_SERVICE_FUNCTIONS,
+  ...LEARNING_AUTHORITY_FUNCTIONS,
 ]);
 
 export const ALLOWED_FUNCTION_EXECUTE = Object.freeze({
@@ -491,6 +506,13 @@ export const ALLOWED_FUNCTION_EXECUTE = Object.freeze({
   "private.assert_learning_read_committed": ["service_role"],
   "private.lock_learning_curriculum_graph": ["service_role"],
   "private.validate_curriculum_graph_publication": ["service_role"],
+  "learning.is_certification_required": ["service_role"],
+  "learning.has_active_certification": ["service_role"],
+  "learning.has_active_emergency_exception": ["service_role"],
+  "core.has_live_cap": ["authenticated", "service_role"],
+  "core.my_role_capabilities": ["authenticated", "service_role"],
+  "core.my_capabilities": ["authenticated", "service_role"],
+  "core.my_capability_snapshot": ["authenticated", "service_role"],
   ...Object.fromEntries(
     LEARNING_SERVICE_FUNCTIONS.map((name) => [
       name,
@@ -578,6 +600,20 @@ export const EXPECTED_FUNCTION_DECLARATION_SQL = Object.freeze({
     "create or replace function learning.request_support(payload jsonb) returns jsonb language plpgsql security definer set search_path = ''",
   "learning.sync_shared_completions":
     "create or replace function learning.sync_shared_completions() returns jsonb language plpgsql security definer set search_path = ''",
+  "learning.is_certification_required":
+    "create or replace function learning.is_certification_required(p_module text, p_cap text) returns boolean language sql stable security definer set search_path = ''",
+  "learning.has_active_certification":
+    "create or replace function learning.has_active_certification(p_user_id uuid, p_module text, p_cap text) returns boolean language sql stable security definer set search_path = ''",
+  "learning.has_active_emergency_exception":
+    "create or replace function learning.has_active_emergency_exception(p_user_id uuid, p_module text, p_cap text) returns boolean language sql stable security definer set search_path = ''",
+  "core.has_live_cap":
+    "create or replace function core.has_live_cap(p_module text, p_cap text) returns boolean language sql stable security definer set search_path = ''",
+  "core.my_role_capabilities":
+    "create or replace function core.my_role_capabilities() returns jsonb language sql stable security definer set search_path = ''",
+  "core.my_capabilities":
+    "create or replace function core.my_capabilities() returns jsonb language sql stable security definer set search_path = ''",
+  "core.my_capability_snapshot":
+    "create or replace function core.my_capability_snapshot() returns jsonb language sql stable security definer set search_path = ''",
 });
 
 export const EXPECTED_FUNCTION_BODY_SHA256 = Object.freeze({
@@ -653,6 +689,20 @@ export const EXPECTED_FUNCTION_BODY_SHA256 = Object.freeze({
     "fe31819ed19667879c0000c39bc70f87fa87d51a382e50d5ac947c2f5acd9b28",
   "learning.evaluate_certifications":
     "56e74e7e7c111c1ebd3507f4a34dbe9cfeba0c31c4071b6b09683f032351aa61",
+  "learning.is_certification_required":
+    "3e08a165d77de2450428101f120aa58edd922257cf2dbe3204986258c761d117",
+  "learning.has_active_certification":
+    "37d45d895749a23d9c2de27fcd4290c1170a22b69cd54af00daa6a82d44250c1",
+  "learning.has_active_emergency_exception":
+    "4a501b0bce890b95ddc312be0507b9a927380b2ad55fc5144c03a80ae891954f",
+  "core.has_live_cap":
+    "13e15136d4891f6681d20b9f1b72c271bc48bb0c14005b43fc7dc3ced9ebdb85",
+  "core.my_role_capabilities":
+    "9ba8b932c27960bccab9f8a57383628d53ed5dd4195b23001037c8dfebdfcc5c",
+  "core.my_capabilities":
+    "755b11dd3450af510ee231ab71440adc3a4da79d28b2d4af0e835088e4124536",
+  "core.my_capability_snapshot":
+    "cd47c4c23045f75cf37a0658e5be612711199bf05ba7a1f2ea7d6a9e9ec4d19c",
 });
 
 const ISOLATION_GUARDED_FUNCTIONS = new Set([
@@ -1429,6 +1479,7 @@ function processStatement(state, statement, migrationName) {
     migrationName === COMPLETION_ALIGNMENT_MIGRATION_NAME;
   const isCompletionHardening =
     migrationName === COMPLETION_HARDENING_MIGRATION_NAME;
+  const isAuthority = migrationName === AUTHORITY_MIGRATION_NAME;
   let match;
 
   if (normalized === "create schema if not exists learning") {
@@ -1746,6 +1797,15 @@ function processStatement(state, statement, migrationName) {
       return;
     }
     state.tables.set(match[1], statement);
+    return;
+  }
+
+  if (
+    isAuthority &&
+    /^insert into learning\.mutation_capability_rules\s*\(module, capability\) values\b/.test(
+      normalized,
+    )
+  ) {
     return;
   }
 
@@ -2144,6 +2204,9 @@ function processStatement(state, statement, migrationName) {
           ])
             .get(metadata.qualifiedName)
             ?.join("|") === metadata.argumentTypes.join("|")));
+    const approvedAuthority =
+      isAuthority &&
+      LEARNING_AUTHORITY_FUNCTIONS.includes(metadata.qualifiedName);
     if (isServiceContractAlignment && !approvedSnapshotAlignment) {
       state.errors.push(
         `${migrationName}: only the exact no-argument learning.my_learning_snapshot replacement is approved.`,
@@ -2159,6 +2222,12 @@ function processStatement(state, statement, migrationName) {
     if (isCompletionHardening && !approvedCompletionHardening) {
       state.errors.push(
         `${migrationName}: only exact reviewed completion-hardening function declarations are approved.`,
+      );
+      return;
+    }
+    if (isAuthority && !approvedAuthority) {
+      state.errors.push(
+        `${migrationName}: only exact reviewed learning authority function declarations are approved.`,
       );
       return;
     }
@@ -2201,7 +2270,7 @@ function processStatement(state, statement, migrationName) {
   }
 
   match = normalized.match(
-    /^alter function ((?:learning|private)\.[a-z_][a-z0-9_]*)\s*\(([^)]*)\) owner to ([a-z_][a-z0-9_]*)$/,
+    /^alter function ((?:learning|private|core)\.[a-z_][a-z0-9_]*)\s*\(([^)]*)\) owner to ([a-z_][a-z0-9_]*)$/,
   );
   if (match) {
     const functionEntry = state.functions.get(match[1]);
@@ -2223,7 +2292,8 @@ function processStatement(state, statement, migrationName) {
       (isLearningServices && LEARNING_SERVICE_FUNCTIONS.includes(match[1])) ||
       (isServiceContractAlignment &&
         match[1] === "learning.my_learning_snapshot") ||
-      approvedCompletionOwner;
+      approvedCompletionOwner ||
+      (isAuthority && LEARNING_AUTHORITY_FUNCTIONS.includes(match[1]));
     if (
       !approvedServiceOwner ||
       match[3] !== "postgres" ||
@@ -2460,12 +2530,21 @@ function validateTables(state) {
       continue;
     }
     const normalized = normalizeSql(statement);
-    requirePattern(
-      state.errors,
-      normalized,
-      /\bid uuid primary key default gen_random_uuid\(\)/,
-      `learning.${table} needs a generated UUID primary key.`,
-    );
+    if (table === "mutation_capability_rules") {
+      requirePattern(
+        state.errors,
+        normalized,
+        /primary key \(module, capability\)/,
+        "Mutation capability rules need the canonical composite primary key.",
+      );
+    } else {
+      requirePattern(
+        state.errors,
+        normalized,
+        /\bid uuid primary key default gen_random_uuid\(\)/,
+        `learning.${table} needs a generated UUID primary key.`,
+      );
+    }
     requirePattern(
       state.errors,
       normalized,
@@ -2664,7 +2743,7 @@ function validatePrivileges(state) {
     const expectedByRole = {
       public: [],
       anon: [],
-      authenticated: ["select"],
+      authenticated: table === "mutation_capability_rules" ? [] : ["select"],
       service_role: SERVICE_PRIVILEGES[table],
     };
     for (const [role, expected] of Object.entries(expectedByRole)) {

@@ -38,7 +38,7 @@
     "verify:knowledge-base": "node scripts/verify-knowledge-base.mjs",
     "verify:knowledge-evidence-catalog": "node scripts/qa/knowledge-evidence-catalog.mjs",
     "verify:learning-schema": "node scripts/verify-learning-schema.mjs && pnpm run verify:learning-role-lifecycle",
-    "verify:learning-source": "pnpm run verify:learning-schema && node --test scripts/verify-learning-schema.test.mjs scripts/verify-learning-catalog.test.mjs scripts/verify-learning-concurrency-source.test.mjs",
+    "verify:learning-source": "pnpm run verify:learning-schema && pnpm run verify:learning-authority && node --test scripts/verify-learning-schema.test.mjs scripts/verify-learning-catalog.test.mjs scripts/verify-learning-concurrency-source.test.mjs",
     "verify:learning-role-lifecycle": "node --test scripts/verify-learning-role-lifecycle.test.mjs scripts/verify-learning-completion-lifecycle.test.mjs",
     "verify:learning-catalog": "node scripts/verify-learning-catalog.mjs",
     "verify:learning-concurrency": "node scripts/verify-learning-concurrency.mjs",

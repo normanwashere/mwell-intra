@@ -20,6 +20,7 @@ const COMPLETION_ALIGNMENT_NAME =
   "20260812180000_learning_completion_alignment.sql";
 const COMPLETION_HARDENING_NAME =
   "20260812190000_learning_completion_evidence_hardening.sql";
+const AUTHORITY_NAME = "20260812200000_learning_authority.sql";
 const OLD_FOUNDATION_NAME = "20260812090000_learning_foundation.sql";
 const migration = fileURLToPath(
   new URL(`../supabase/migrations/${FOUNDATION_NAME}`, import.meta.url),
@@ -75,6 +76,13 @@ const completionHardeningMigration = fileURLToPath(
 const completionHardeningSql = existsSync(completionHardeningMigration)
   ? readFileSync(completionHardeningMigration, "utf8")
   : "";
+const authorityMigration = fileURLToPath(
+  new URL(`../supabase/migrations/${AUTHORITY_NAME}`, import.meta.url),
+);
+const authoritySql = existsSync(authorityMigration)
+  ? readFileSync(authorityMigration, "utf8")
+  : "";
+const governedSql = `${sql}\n${authoritySql}`;
 const migrationDirectory = fileURLToPath(
   new URL("../supabase/migrations/", import.meta.url),
 );
@@ -185,7 +193,7 @@ function functionBody(name, source = sql) {
 
 test("uses the monotonic forward foundation and satisfies the full contract", () => {
   assert.equal(existsSync(oldMigration), false);
-  assert.equal(REQUIRED_TABLES.length, 15);
+  assert.equal(REQUIRED_TABLES.length, 16);
   assert.deepEqual(verifyLearningSchema(repositoryMigrations), []);
 });
 
@@ -1017,7 +1025,7 @@ test("rejects unsupported isolation on every authoritative mutation path", () =>
 
   const triggerFunctions = new Set(
     [
-      ...sql.matchAll(
+      ...governedSql.matchAll(
         /create trigger learning_[a-z_]+[\s\S]*?execute function (?:learning|private)\.([a-z_]+)\(\);/gi,
       ),
     ].map((match) => match[1]),
@@ -1035,7 +1043,7 @@ test("rejects unsupported isolation on every authoritative mutation path", () =>
         ? "learning_curr_req_prereq_read_committed_guard"
         : `learning_${table}_read_committed_guard`;
     assert.match(
-      sql,
+      governedSql,
       new RegExp(
         `create trigger ${triggerName}[\\s\\S]*?before insert or update or delete on learning\\.${table}[\\s\\S]*?learning\\.guard_authoritative_write_isolation\\(\\)`,
         "i",
@@ -1071,7 +1079,7 @@ test("rejects unsupported isolation on every authoritative mutation path", () =>
 
 test("keeps every trigger identifier catalog-stable", () => {
   const triggerNames = [
-    ...`${sql}\n${roleLifecycleSql}`.matchAll(
+    ...`${governedSql}\n${roleLifecycleSql}`.matchAll(
       /^create (?:constraint )?trigger ([a-z_]+)/gim,
     ),
   ].map((match) => match[1]);
@@ -1086,16 +1094,22 @@ test("keeps every trigger identifier catalog-stable", () => {
 
 test("keeps authenticated content access read-only for attributable future RPCs", () => {
   assert.doesNotMatch(
-    sql,
+    governedSql,
     /grant\s+(?:insert|update|delete|[^;]*,\s*(?:insert|update|delete))[^;]*on learning\.[a-z_]+ to authenticated/i,
   );
-  for (const table of REQUIRED_TABLES) {
+  for (const table of REQUIRED_TABLES.filter(
+    (table) => table !== "mutation_capability_rules",
+  )) {
     assert.match(
       sql,
       new RegExp(`grant select on learning\\.${table} to authenticated;`, "i"),
       table,
     );
   }
+  assert.doesNotMatch(
+    authoritySql,
+    /grant select on (?:table )?learning\.mutation_capability_rules to authenticated/i,
+  );
 });
 
 test("requires one active-profile helper in every authenticated policy path", () => {
@@ -1202,14 +1216,21 @@ test("rejects vendor waivers and makes assignment terminal evidence monotonic", 
 
 test("declares every governed table with UUID identity, timestamp, and terminal RLS", () => {
   for (const table of REQUIRED_TABLES) {
-    const tableSql = sql.match(
+    const tableSql = governedSql.match(
       new RegExp(
         `create table learning\\.${table}\\s*\\([\\s\\S]*?\\n\\);`,
         "i",
       ),
     )?.[0];
     assert.ok(tableSql, `Missing learning.${table}.`);
-    assert.match(tableSql, /id uuid primary key default gen_random_uuid\(\)/i);
+    if (table === "mutation_capability_rules") {
+      assert.match(tableSql, /primary key \(module, capability\)/i);
+    } else {
+      assert.match(
+        tableSql,
+        /id uuid primary key default gen_random_uuid\(\)/i,
+      );
+    }
     assert.match(tableSql, /created_at timestamptz not null default now\(\)/i);
   }
 

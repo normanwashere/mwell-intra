@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 // SessionProvider — dual-mode session context (spec §5, LLD §10).
 //
@@ -15,28 +15,29 @@ import {
   useMemo,
   useRef,
   useState,
-} from 'react';
-import type { ReactNode } from 'react';
-import type { Session, SupabaseClient, User } from '@supabase/supabase-js';
-import type { UserRoles } from '@intra/rbac';
+} from "react";
+import type { ReactNode } from "react";
+import type { Session, SupabaseClient, User } from "@supabase/supabase-js";
+import { MODULE_LIST } from "@intra/rbac";
+import type { UserRoles } from "@intra/rbac";
 import {
   parseUserCapabilitiesFromClaims,
   parseUserRolesFromClaims,
   profileFromUser,
-} from './claims';
+} from "./claims";
 import type {
   AuthMode,
   MemoryProfile,
   SessionProfile,
   SessionValue,
   UserCapabilities,
-} from './contracts';
+} from "./contracts";
 
 type SupabaseAuthClient = SupabaseClient<Record<string, unknown>, string>;
 
 /** Config for the live JWT contract. The client is injected by the caller. */
 export interface SupabaseAuthConfig {
-  readonly mode: 'supabase';
+  readonly mode: "supabase";
   /**
    * An already-constructed Supabase client (browser/SSR-appropriate). Schema is
    * intentionally unconstrained so callers may pin any DB schema (e.g. `core`);
@@ -49,7 +50,7 @@ export interface SupabaseAuthConfig {
 
 /** Config for the demo/tests contract. Profiles drive `can()` locally. */
 export interface MemoryAuthConfig {
-  readonly mode: 'memory';
+  readonly mode: "memory";
   readonly profiles: readonly MemoryProfile[];
 }
 
@@ -59,7 +60,25 @@ export type AuthConfig = SupabaseAuthConfig | MemoryAuthConfig;
 const SessionContext = createContext<SessionValue | undefined>(undefined);
 
 /** Storage key for the memory-mode session snapshot (tab-scoped). */
-const MEMORY_SESSION_KEY = 'intra.memory-session.v1';
+const MEMORY_SESSION_KEY = "intra.memory-session.v1";
+const CAPABILITY_MODULES = new Set<string>(MODULE_LIST);
+
+function isCapabilityProjection(
+  value: unknown,
+): value is Record<string, readonly string[]> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  return Object.entries(value).every(
+    ([module, capabilities]) =>
+      CAPABILITY_MODULES.has(module) &&
+      Array.isArray(capabilities) &&
+      capabilities.every(
+        (capability) =>
+          typeof capability === "string" && capability.trim().length > 0,
+      ),
+  );
+}
 
 export function SessionProvider({
   children,
@@ -70,18 +89,21 @@ export function SessionProvider({
 }) {
   const mode: AuthMode = config.mode;
   const client: SupabaseAuthClient | null =
-    config.mode === 'supabase' ? config.client : null;
+    config.mode === "supabase" ? config.client : null;
   const memoryProfiles = useMemo<MemoryProfile[]>(
-    () => (config.mode === 'memory' ? [...config.profiles] : []),
+    () => (config.mode === "memory" ? [...config.profiles] : []),
     [config],
   );
   const resetRedirectPath =
-    config.mode === 'supabase'
-      ? (config.resetRedirectPath ?? '/reset-password')
-      : '/reset-password';
+    config.mode === "supabase"
+      ? (config.resetRedirectPath ?? "/reset-password")
+      : "/reset-password";
 
   const [profile, setProfile] = useState<SessionProfile | null>(null);
   const [userRoles, setUserRoles] = useState<Partial<UserRoles>>({});
+  const [roleCapabilities, setRoleCapabilities] = useState<UserCapabilities>(
+    {},
+  );
   const [userCapabilities, setUserCapabilities] = useState<UserCapabilities>(
     {},
   );
@@ -98,8 +120,8 @@ export function SessionProvider({
   // the session). We keep the actor in sessionStorage so it lives for the tab
   // (matches "sign-in for this session" UX) without leaking across tabs/users.
   useEffect(() => {
-    if (mode !== 'memory') return;
-    if (typeof window === 'undefined') {
+    if (mode !== "memory") return;
+    if (typeof window === "undefined") {
       setLoading(false);
       return;
     }
@@ -132,34 +154,62 @@ export function SessionProvider({
   // Project a verified user (or clear). Roles ALWAYS come from the fresh JWT
   // `app_metadata`, so a stale/tampered client value can never elevate access.
   const applyUser = useCallback(
-    (user: User | null, capabilities: UserCapabilities = {}) => {
+    (
+      user: User | null,
+      capabilities: UserCapabilities = {},
+      rawCapabilities: UserCapabilities = {},
+    ) => {
       if (user) {
         activeUserId.current = user.id;
         setProfile(profileFromUser(user));
         setUserRoles(parseUserRolesFromClaims(user.app_metadata));
+        setRoleCapabilities(rawCapabilities);
         setUserCapabilities(capabilities);
       } else {
         activeUserId.current = null;
         setProfile(null);
         setUserRoles({});
+        setRoleCapabilities({});
         setUserCapabilities({});
       }
     },
     [],
   );
 
-  const loadLiveCapabilities =
-    useCallback(async (): Promise<UserCapabilities> => {
-      if (!client) return {};
-      const { data, error } = await client
-        .schema('core')
-        .rpc('my_capabilities');
-      if (error) throw error;
-      return parseUserCapabilitiesFromClaims(data);
-    }, [client]);
+  const loadLiveCapabilities = useCallback(async (): Promise<{
+    roleCapabilities: UserCapabilities;
+    userCapabilities: UserCapabilities;
+  }> => {
+    if (!client) return { roleCapabilities: {}, userCapabilities: {} };
+    const result = await client.schema("core").rpc("my_capability_snapshot");
+    if (
+      result.error ||
+      typeof result.data !== "object" ||
+      result.data === null ||
+      Array.isArray(result.data)
+    ) {
+      return { roleCapabilities: {}, userCapabilities: {} };
+    }
+    const snapshot = result.data as Record<string, unknown>;
+    if (
+      !isCapabilityProjection(snapshot.roleCapabilities) ||
+      !isCapabilityProjection(snapshot.userCapabilities)
+    ) {
+      return { roleCapabilities: {}, userCapabilities: {} };
+    }
+    return {
+      roleCapabilities: parseUserCapabilitiesFromClaims(
+        snapshot.roleCapabilities,
+      ),
+      userCapabilities: parseUserCapabilitiesFromClaims(
+        snapshot.userCapabilities,
+      ),
+    };
+  }, [client]);
 
   const beginLiveRefresh = useCallback((session?: Session | null) => {
     const generation = ++liveGeneration.current;
+    setRoleCapabilities({});
     setUserCapabilities({});
     if (
       session === null ||
@@ -206,7 +256,11 @@ export function SessionProvider({
           activeUserId.current !== user.id
         )
           return false;
-        applyUser(user, capabilities);
+        applyUser(
+          user,
+          capabilities.userCapabilities,
+          capabilities.roleCapabilities,
+        );
       } catch {
         if (
           generation === liveGeneration.current &&
@@ -272,12 +326,12 @@ export function SessionProvider({
           if (active && generation === liveGeneration.current) applyUser(null);
         });
     };
-    window.addEventListener('focus', refreshOnFocus);
+    window.addEventListener("focus", refreshOnFocus);
 
     return () => {
       active = false;
       liveGeneration.current += 1;
-      window.removeEventListener('focus', refreshOnFocus);
+      window.removeEventListener("focus", refreshOnFocus);
       sub.subscription.unsubscribe();
     };
   }, [client, applyUser, beginLiveRefresh, verifyAndApplyLiveUser]);
@@ -293,7 +347,7 @@ export function SessionProvider({
           (p) => p.email.toLowerCase() === normalized,
         );
         if (!matched) {
-          setAuthError('No demo profile matches that email.');
+          setAuthError("No demo profile matches that email.");
           return false;
         }
         setProfile({
@@ -306,7 +360,7 @@ export function SessionProvider({
         });
         setUserRoles(matched.roles);
         // Persist for the tab so F5 / deep-links keep the demo session.
-        if (typeof window !== 'undefined') {
+        if (typeof window !== "undefined") {
           try {
             window.sessionStorage.setItem(
               MEMORY_SESSION_KEY,
@@ -327,16 +381,16 @@ export function SessionProvider({
         if (error) throw error;
         const session = data.session ?? null;
         if (!session) {
-          throw new Error('Sign-in succeeded, but no session was restored.');
+          throw new Error("Sign-in succeeded, but no session was restored.");
         }
         const generation = beginLiveRefresh(session);
         const verified = await verifyAndApplyLiveUser(session, generation);
         if (!verified)
-          throw new Error('Sign-in session could not be verified.');
+          throw new Error("Sign-in session could not be verified.");
         return verified;
       } catch (e) {
         setAuthError(
-          e instanceof Error ? e.message : 'Sign-in failed. Please try again.',
+          e instanceof Error ? e.message : "Sign-in failed. Please try again.",
         );
         return false;
       } finally {
@@ -357,7 +411,7 @@ export function SessionProvider({
         // Clear locally regardless of a network/server error.
       }
     }
-    if (typeof window !== 'undefined') {
+    if (typeof window !== "undefined") {
       try {
         window.sessionStorage.removeItem(MEMORY_SESSION_KEY);
       } catch {
@@ -370,11 +424,11 @@ export function SessionProvider({
     async (email: string) => {
       setAuthError(null);
       if (!client) {
-        setAuthError('Password reset is unavailable in demo mode.');
+        setAuthError("Password reset is unavailable in demo mode.");
         return;
       }
       const redirectTo =
-        typeof window !== 'undefined'
+        typeof window !== "undefined"
           ? `${window.location.origin}${resetRedirectPath}`
           : undefined;
       const { error } = await client.auth.resetPasswordForEmail(
@@ -392,9 +446,9 @@ export function SessionProvider({
   const changePassword = useCallback(
     async (password: string) => {
       if (!client)
-        throw new Error('Password change is unavailable in demo mode.');
+        throw new Error("Password change is unavailable in demo mode.");
       if (password.length < 8) {
-        throw new Error('Password must be at least 8 characters.');
+        throw new Error("Password must be at least 8 characters.");
       }
       const { error } = await client.auth.updateUser({ password });
       if (error) throw new Error(error.message);
@@ -406,6 +460,7 @@ export function SessionProvider({
     () => ({
       profile,
       userRoles,
+      roleCapabilities,
       userCapabilities,
       mode,
       supabaseClient: client,
@@ -421,6 +476,7 @@ export function SessionProvider({
     [
       profile,
       userRoles,
+      roleCapabilities,
       userCapabilities,
       mode,
       loading,
@@ -443,7 +499,7 @@ export function SessionProvider({
 export function useSession(): SessionValue {
   const ctx = useContext(SessionContext);
   if (!ctx) {
-    throw new Error('useSession must be used within a <SessionProvider>.');
+    throw new Error("useSession must be used within a <SessionProvider>.");
   }
   return ctx;
 }
