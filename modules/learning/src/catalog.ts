@@ -1,7 +1,4 @@
-import {
-  CAPABILITY_CLASSIFICATIONS,
-  roleCapabilities,
-} from "@intra/rbac";
+import { CAPABILITY_CLASSIFICATIONS, roleCapabilities } from "@intra/rbac";
 
 import { OPERATING_PERSONA_IDS } from "./personas";
 import type {
@@ -21,7 +18,7 @@ export const MUTATING_CAPABILITIES: readonly LearningCapability[] =
     ({ module, capability }) => ({ module, capability }),
   );
 
-const ROLE_PERSONAS: Readonly<Record<string, string>> = {
+export const ROLE_PERSONAS: Readonly<Record<string, string>> = {
   "core:platform_admin": "platform_administrator",
   "core:staff": "general_employee",
   "core:vendor_portal": "vendor_representative",
@@ -68,7 +65,10 @@ const orientationRequirement = (personaId: string): RequirementDefinition => {
     version: 1,
     audience,
     kind: "orientation",
-    title: audience === "vendor" ? "Vendor accreditation orientation" : "Role orientation",
+    title:
+      audience === "vendor"
+        ? "Vendor accreditation orientation"
+        : "Role orientation",
     mandatory: true,
     prerequisiteIds: [],
     capabilityOutcomes: [],
@@ -99,12 +99,17 @@ const capabilityClassificationByKey = new Map(
 
 const roleDefinitions = Object.values(
   roleCapabilities.reduce<
-    Record<string, { module: LearningCapability["module"]; role: string; personaId: string }>
+    Record<
+      string,
+      { module: LearningCapability["module"]; role: string; personaId: string }
+    >
   >((roles, grant) => {
     const key = `${grant.module}:${grant.role}`;
     const personaId = ROLE_PERSONAS[key];
     if (!personaId) {
-      throw new Error(`Missing canonical persona mapping for RBAC role ${key}.`);
+      throw new Error(
+        `Missing canonical persona mapping for RBAC role ${key}.`,
+      );
     }
     roles[key] ??= { module: grant.module, role: grant.role, personaId };
     return roles;
@@ -115,12 +120,13 @@ const capabilityRequirements = roleDefinitions.flatMap((roleDefinition) => {
   const capabilities = roleCapabilities
     .filter(
       (grant) =>
-        grant.module === roleDefinition.module && grant.role === roleDefinition.role,
+        grant.module === roleDefinition.module &&
+        grant.role === roleDefinition.role,
     )
     .filter(
       (grant) =>
-        capabilityClassificationByKey.get(`${grant.module}:${grant.cap}`)?.access ===
-        "mutation",
+        capabilityClassificationByKey.get(`${grant.module}:${grant.cap}`)
+          ?.access === "mutation",
     )
     .map((grant) => ({ module: grant.module, capability: grant.cap }));
   if (capabilities.length === 0) return [];
@@ -129,7 +135,8 @@ const capabilityRequirements = roleDefinitions.flatMap((roleDefinition) => {
   const id = `${audience}.role.${roleDefinition.module}.${roleDefinition.role}.capability-practice.v1`;
   const prerequisiteIds = [
     `${audience}.${roleDefinition.personaId}.orientation.v1`,
-    ...(roleDefinition.module === "core" && roleDefinition.role === "vendor_portal"
+    ...(roleDefinition.module === "core" &&
+    roleDefinition.role === "vendor_portal"
       ? [VENDOR_EVIDENCE_REQUIREMENT_ID]
       : []),
   ];
@@ -152,8 +159,8 @@ const grantedMutationKeys = new Set(
   roleCapabilities
     .filter(
       (grant) =>
-        capabilityClassificationByKey.get(`${grant.module}:${grant.cap}`)?.access ===
-        "mutation",
+        capabilityClassificationByKey.get(`${grant.module}:${grant.cap}`)
+          ?.access === "mutation",
     )
     .map((grant) => `${grant.module}:${grant.cap}`),
 );
@@ -184,7 +191,8 @@ const requirements = [
 
 const curricula: readonly CurriculumDefinition[] = OPERATING_PERSONA_IDS.map(
   (personaId) => {
-    const audience = personaId === "vendor_representative" ? "vendor" : "internal";
+    const audience =
+      personaId === "vendor_representative" ? "vendor" : "internal";
     const prefix = audience === "vendor" ? "vendor" : "internal";
     return {
       id: `${prefix}.${personaId}.baseline.v1`,
@@ -196,8 +204,8 @@ const curricula: readonly CurriculumDefinition[] = OPERATING_PERSONA_IDS.map(
   },
 );
 
-export const ROLE_CURRICULA: readonly RoleCurriculumDefinition[] = roleDefinitions.map(
-  (roleDefinition) => {
+export const ROLE_CURRICULA: readonly RoleCurriculumDefinition[] =
+  roleDefinitions.map((roleDefinition) => {
     const audience = audienceForPersona(roleDefinition.personaId);
     const capabilityRequirementId = `${audience}.role.${roleDefinition.module}.${roleDefinition.role}.capability-practice.v1`;
     return {
@@ -209,16 +217,18 @@ export const ROLE_CURRICULA: readonly RoleCurriculumDefinition[] = roleDefinitio
       role: roleDefinition.role,
       requirementIds: [
         `${audience}.${roleDefinition.personaId}.orientation.v1`,
-        ...(roleDefinition.module === "core" && roleDefinition.role === "vendor_portal"
+        ...(roleDefinition.module === "core" &&
+        roleDefinition.role === "vendor_portal"
           ? [VENDOR_EVIDENCE_REQUIREMENT_ID]
           : []),
-        ...(requirements.some((requirement) => requirement.id === capabilityRequirementId)
+        ...(requirements.some(
+          (requirement) => requirement.id === capabilityRequirementId,
+        )
           ? [capabilityRequirementId]
           : []),
       ],
     };
-  },
-);
+  });
 
 export const CAPABILITY_COVERAGE_CURRICULA: readonly CurriculumDefinition[] =
   unassignedCapabilityRequirements.map((requirement) => ({
@@ -284,7 +294,9 @@ export function requiredCurriculaFor(
     ...LEARNING_CATALOG.curricula,
     ...ROLE_CURRICULA,
     ...CAPABILITY_COVERAGE_CURRICULA,
-  ].filter((curriculum) => curriculum.requirementIds.some((id) => requirementIds.has(id)));
+  ].filter((curriculum) =>
+    curriculum.requirementIds.some((id) => requirementIds.has(id)),
+  );
 }
 
 export function internalRequirementIds(): readonly string[] {

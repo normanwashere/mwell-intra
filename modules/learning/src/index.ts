@@ -2,6 +2,7 @@ export {
   LEARNING_CATALOG,
   CAPABILITY_COVERAGE_CURRICULA,
   MUTATING_CAPABILITIES,
+  ROLE_PERSONAS,
   ROLE_CURRICULA,
   capabilityKey,
   internalRequirementIds,
@@ -31,6 +32,7 @@ export type {
   ScopedCurriculumInput,
 } from "./resolver";
 export type {
+  ActiveLearningAttempt,
   AssessmentResult,
   AssessmentSubmission,
   CapabilityForLearning,
@@ -38,6 +40,7 @@ export type {
   CurriculumDefinition,
   EffectiveCurriculum,
   LearningCapability,
+  LearningAttemptMode,
   LearningSnapshot,
   LockedCapability,
   RequirementDefinition,
@@ -47,6 +50,7 @@ export type {
   RoleCurriculumDefinition,
   PolicyAcknowledgmentInput,
   StartRequirementInput,
+  StartRequirementResult,
   SupportRequestInput,
   SimulationCheckpointInput,
   SimulationDefinition,

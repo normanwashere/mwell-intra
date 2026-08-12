@@ -593,7 +593,7 @@ export const EXPECTED_FUNCTION_BODY_SHA256 = Object.freeze({
   "learning.guard_curriculum_composition":
     "0aea39b911deac9b688cd3a58270a3b9135f23dd4921338911f1864b15c10d3c",
   "learning.my_learning_snapshot":
-    "aafde6bd9d83ec4646218734ceae6be47eb211bf8afb12351e1dd4cdf2e791a5",
+    "6f43fd6cdb59b3bcd3c8ac69553006f43efe0e4e91b20fe918b358f91a8c63b6",
   "learning.resolve_assignments":
     "2729f8eca28b7cc7d078141a0edc8f3dd340fd7f5c1fe9521a210bebb45389c2",
   "learning.start_requirement":
@@ -2008,13 +2008,19 @@ function processStatement(state, statement, migrationName) {
       );
       return;
     }
-    if (
-      state.functions.has(metadata.qualifiedName) &&
-      !(
-        isServiceContractAlignment &&
-        metadata.qualifiedName === "learning.my_learning_snapshot"
-      )
-    ) {
+    const existingFunction = state.functions.get(metadata.qualifiedName);
+    const approvedSnapshotAlignment =
+      isServiceContractAlignment &&
+      metadata.qualifiedName === "learning.my_learning_snapshot" &&
+      metadata.argumentTypes.length === 0 &&
+      existingFunction?.migrationName === SERVICES_MIGRATION_NAME;
+    if (isServiceContractAlignment && !approvedSnapshotAlignment) {
+      state.errors.push(
+        `${migrationName}: only the exact no-argument learning.my_learning_snapshot replacement is approved.`,
+      );
+      return;
+    }
+    if (existingFunction && !approvedSnapshotAlignment) {
       state.errors.push(
         `${migrationName}: replacement or overload of modeled function ${metadata.qualifiedName} is default-denied.`,
       );
@@ -2057,7 +2063,11 @@ function processStatement(state, statement, migrationName) {
       ? splitTopLevel(match[2]).map(normalizeSql)
       : [];
     if (
-      (!isLearningServices && !isServiceContractAlignment) ||
+      (!isLearningServices &&
+        !(
+          isServiceContractAlignment &&
+          match[1] === "learning.my_learning_snapshot"
+        )) ||
       !LEARNING_SERVICE_FUNCTIONS.includes(match[1]) ||
       match[3] !== "postgres" ||
       !functionEntry ||

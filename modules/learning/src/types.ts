@@ -64,14 +64,30 @@ export const REQUIREMENT_PROGRESS_STATES = [
 export type RequirementProgressState =
   (typeof REQUIREMENT_PROGRESS_STATES)[number];
 
+export type LearningAttemptMode =
+  "tour" | "scenario" | "assessment" | "attestation";
+
+export interface ActiveLearningAttempt {
+  id: string;
+  attemptNumber: number;
+  mode: LearningAttemptMode;
+  startedAt: string;
+}
+
 export interface RequirementProgress {
   assignmentRequirementId: string;
   requirementId: string;
   requirementVersion: number;
   state: RequirementProgressState;
   attemptCount: number;
+  activeAttempt?: ActiveLearningAttempt;
   completedAt?: string;
   updatedAt: string;
+}
+
+export interface StartRequirementResult {
+  progress: RequirementProgress;
+  attempt?: ActiveLearningAttempt;
 }
 
 export interface SimulationCheckpointInput {

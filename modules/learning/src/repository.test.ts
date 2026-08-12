@@ -74,6 +74,20 @@ const simulationDefinition: SimulationDefinition = {
   capabilityOutcomes: [],
 };
 
+const issuedCertification: Certification = {
+  id: "cert-1",
+  userId: "user-1",
+  departmentId: "department-1",
+  sourceRoleAssignmentId: "role-1",
+  capability: { module: "warehouse", capability: "receive_stock" },
+  curriculumId: "curriculum-v1",
+  curriculumVersion: 1,
+  requirementIds: [assessment.id],
+  issuedAt: now,
+  effectiveAt: now,
+  issuedBy: "learning.evaluate_certifications",
+};
+
 const progress = (
   assignmentRequirementId: string,
   requirementId: string,
@@ -136,6 +150,28 @@ const snapshotWithAssessmentPassed = (): LearningSnapshot => {
   };
 };
 
+const snapshotWithSimulationInProgress = (): LearningSnapshot => {
+  const value = snapshot();
+  return {
+    ...value,
+    progress: value.progress.map((item) =>
+      item.assignmentRequirementId === "ar-simulation"
+        ? {
+            ...item,
+            state: "in_progress",
+            attemptCount: 1,
+            activeAttempt: {
+              id: "attempt-simulation",
+              attemptNumber: 1,
+              mode: "scenario",
+              startedAt: now,
+            },
+          }
+        : item,
+    ),
+  };
+};
+
 describe("SupabaseLearningRepository", () => {
   it("exports both repository implementations from the package API", () => {
     expect(publicApi.SupabaseLearningRepository).toBe(
@@ -145,21 +181,57 @@ describe("SupabaseLearningRepository", () => {
   });
 
   it("uses the exact learning RPC names and learner-safe payload keys", async () => {
+    let phase: "initial" | "simulation" | "assessment" | "certified" =
+      "initial";
     const rpc = vi.fn(async (name: string) => {
-      if (name === "evaluate_certifications") return { data: [], error: null };
+      if (name === "evaluate_certifications") {
+        phase = "certified";
+        return {
+          data: [{ id: "raw-snake-case-certification" }],
+          error: null,
+        };
+      }
       if (name === "acknowledge_policy" || name === "request_support") {
         return { data: null, error: null };
       }
       if (name === "my_learning_snapshot" || name === "resolve_assignments") {
+        const data =
+          name === "resolve_assignments"
+            ? snapshot()
+            : phase === "simulation"
+              ? snapshotWithSimulationInProgress()
+              : phase === "certified"
+                ? {
+                    ...snapshotWithAssessmentPassed(),
+                    certifications: [issuedCertification],
+                  }
+                : snapshotWithAssessmentPassed();
         return {
-          data:
-            name === "my_learning_snapshot"
-              ? snapshotWithAssessmentPassed()
-              : snapshot(),
+          data,
           error: null,
         };
       }
+      if (name === "start_requirement") {
+        phase = "simulation";
+        return {
+          data: {
+            assignment_requirement: { id: "ar-simulation" },
+            attempt: {
+              id: "attempt-simulation",
+              attempt_number: 1,
+              mode: "scenario",
+              started_at: now,
+            },
+          },
+          error: null,
+        };
+      }
+      if (name === "record_simulation_checkpoint") {
+        phase = "initial";
+        return { data: {}, error: null };
+      }
       if (name === "submit_assessment") {
+        phase = "assessment";
         return {
           data: {
             assignment_requirement_id: "ar-assessment",
@@ -184,13 +256,17 @@ describe("SupabaseLearningRepository", () => {
 
     await repository.snapshot();
     await repository.resolveAssignments();
-    await repository.startRequirement({
+    const started = await repository.startRequirement({
       assignmentRequirementId: "ar-simulation",
       idempotencyKey: "00000000-0000-4000-8000-000000000001",
     });
+    expect(started).toMatchObject({
+      attempt: { id: "attempt-simulation", mode: "scenario" },
+      progress: { activeAttempt: { id: "attempt-simulation" } },
+    });
     await repository.checkpoint({
       assignmentRequirementId: "ar-simulation",
-      attemptId: "attempt-simulation",
+      attemptId: started.attempt!.id,
       simulationId: "receiving-simulation-v1",
       checkpointId: "delivery-recorded",
       idempotencyKey: "00000000-0000-4000-8000-000000000002",
@@ -209,7 +285,9 @@ describe("SupabaseLearningRepository", () => {
         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       idempotencyKey: "00000000-0000-4000-8000-000000000004",
     });
-    await repository.refreshCertifications();
+    expect(await repository.refreshCertifications()).toEqual([
+      issuedCertification,
+    ]);
     await repository.requestSupport({
       assignmentRequirementId: "ar-assessment",
       reason: "Need coaching",
@@ -269,6 +347,7 @@ describe("SupabaseLearningRepository", () => {
         },
       ],
       ["evaluate_certifications"],
+      ["my_learning_snapshot"],
       [
         "request_support",
         {
@@ -392,13 +471,13 @@ describe("MemoryLearningRepository", () => {
       simulations: [simulationDefinition],
     });
 
-    await repository.startRequirement({
+    const started = await repository.startRequirement({
       assignmentRequirementId: "ar-simulation",
     });
     await expect(
       repository.checkpoint({
         assignmentRequirementId: "ar-simulation",
-        attemptId: "attempt-simulation",
+        attemptId: started.attempt!.id,
         simulationId: "wrong-simulation",
         checkpointId: "delivery-recorded",
       }),
@@ -406,7 +485,7 @@ describe("MemoryLearningRepository", () => {
 
     const updated = await repository.checkpoint({
       assignmentRequirementId: "ar-simulation",
-      attemptId: "attempt-simulation",
+      attemptId: started.attempt!.id,
       simulationId: "receiving-simulation-v1",
       checkpointId: "delivery-recorded",
     });
@@ -465,48 +544,40 @@ describe("MemoryLearningRepository", () => {
       now: () => now,
       assess: () => ({ score: 40 }),
     });
-    await repository.startRequirement({
+    const firstAttempt = await repository.startRequirement({
       assignmentRequirementId: "ar-assessment",
     });
     const submission: AssessmentSubmission = {
       assignmentRequirementId: "ar-assessment",
-      attemptId: "attempt-assessment",
+      attemptId: firstAttempt.attempt!.id,
       answers: [{ questionId: "q1", answerId: "a1" }],
     };
 
     expect((await repository.submitAssessment(submission)).state).toBe(
       "failed_retryable",
     );
-    await repository.startRequirement({
+    const secondAttempt = await repository.startRequirement({
       assignmentRequirementId: "ar-assessment",
     });
-    expect((await repository.submitAssessment(submission)).state).toBe(
-      "needs_support",
-    );
+    expect(
+      (
+        await repository.submitAssessment({
+          ...submission,
+          attemptId: secondAttempt.attempt!.id,
+        })
+      ).state,
+    ).toBe("needs_support");
     await expect(
       repository.startRequirement({ assignmentRequirementId: "ar-assessment" }),
     ).rejects.toThrow("needs support");
   });
 
   it("updates only through repository transitions and returns defensive snapshots", async () => {
-    const issued: Certification = {
-      id: "cert-1",
-      userId: "user-1",
-      departmentId: "department-1",
-      sourceRoleAssignmentId: "role-1",
-      capability: { module: "warehouse", capability: "receive_stock" },
-      curriculumId: "curriculum-v1",
-      curriculumVersion: 1,
-      requirementIds: [assessment.id],
-      issuedAt: now,
-      effectiveAt: now,
-      issuedBy: "memory-learning-service",
-    };
     const repository = new MemoryLearningRepository({
       snapshot: snapshot(),
       runtime: "test",
       now: () => now,
-      evaluateCertifications: () => [issued],
+      evaluateCertifications: () => [issuedCertification],
     });
 
     const first = await repository.snapshot();
@@ -514,7 +585,11 @@ describe("MemoryLearningRepository", () => {
     expect((await repository.snapshot()).progress[0]?.state).toBe(
       "not_started",
     );
-    expect(await repository.refreshCertifications()).toEqual([issued]);
-    expect((await repository.snapshot()).certifications).toEqual([issued]);
+    expect(await repository.refreshCertifications()).toEqual([
+      issuedCertification,
+    ]);
+    expect((await repository.snapshot()).certifications).toEqual([
+      issuedCertification,
+    ]);
   });
 });

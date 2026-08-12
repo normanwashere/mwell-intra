@@ -1,4 +1,5 @@
 import type {
+  ActiveLearningAttempt,
   AssessmentResult,
   AssessmentSubmission,
   Certification,
@@ -14,6 +15,7 @@ import type {
   SimulationCheckpointInput,
   SimulationDefinition,
   StartRequirementInput,
+  StartRequirementResult,
   SupportRequestInput,
 } from "./types";
 import { MODULE_LIST } from "@intra/rbac";
@@ -21,7 +23,9 @@ import { MODULE_LIST } from "@intra/rbac";
 export interface LearningRepository {
   snapshot(): Promise<LearningSnapshot>;
   resolveAssignments(): Promise<LearningSnapshot>;
-  startRequirement(input: StartRequirementInput): Promise<RequirementProgress>;
+  startRequirement(
+    input: StartRequirementInput,
+  ): Promise<StartRequirementResult>;
   checkpoint(input: SimulationCheckpointInput): Promise<RequirementProgress>;
   submitAssessment(input: AssessmentSubmission): Promise<AssessmentResult>;
   acknowledgePolicy(input: PolicyAcknowledgmentInput): Promise<void>;
@@ -77,6 +81,12 @@ const lockReasons = new Set<LockedCapability["reason"]>([
   "retraining_required",
 ]);
 const assessmentAttemptStatuses = new Set(["passed", "failed"] as const);
+const attemptModes = new Set<ActiveLearningAttempt["mode"]>([
+  "tour",
+  "scenario",
+  "assessment",
+  "attestation",
+]);
 const modules = new Set<LearningCapability["module"]>(MODULE_LIST);
 
 const forbiddenLearnerFields = new Set([
@@ -223,8 +233,52 @@ function parseProgress(value: unknown): RequirementProgress {
     requirementVersion: requiredNumber(value, "requirementVersion"),
     state,
     attemptCount: requiredNumber(value, "attemptCount"),
+    activeAttempt:
+      value.activeAttempt == null
+        ? undefined
+        : parseActiveAttempt(value.activeAttempt),
     completedAt: optionalString(value, "completedAt"),
     updatedAt: requiredString(value, "updatedAt"),
+  };
+}
+
+function parseActiveAttempt(value: unknown): ActiveLearningAttempt {
+  if (!isRecord(value))
+    throw new Error("Learning service returned invalid active attempt.");
+  return {
+    id: requiredString(value, "id"),
+    attemptNumber: requiredNumber(value, "attemptNumber"),
+    mode: requiredEnum(value, "mode", attemptModes),
+    startedAt: requiredString(value, "startedAt"),
+  };
+}
+
+function parseRawActiveAttempt(
+  value: unknown,
+): ActiveLearningAttempt | undefined {
+  if (value == null) return undefined;
+  if (!isRecord(value))
+    throw new Error("Learning service returned invalid started attempt.");
+  return {
+    id: requiredString(value, "id"),
+    attemptNumber: requiredNumber(value, "attempt_number"),
+    mode: requiredEnum(value, "mode", attemptModes),
+    startedAt: requiredString(value, "started_at"),
+  };
+}
+
+function parseStartRequirement(value: unknown): {
+  assignmentRequirementId: string;
+  attempt?: ActiveLearningAttempt;
+} {
+  if (!isRecord(value))
+    throw new Error("Learning service returned invalid start result.");
+  if (!isRecord(value.assignment_requirement)) {
+    throw new Error("Learning service omitted the started requirement.");
+  }
+  return {
+    assignmentRequirementId: requiredString(value.assignment_requirement, "id"),
+    attempt: parseRawActiveAttempt(value.attempt),
   };
 }
 
@@ -384,16 +438,25 @@ export class SupabaseLearningRepository implements LearningRepository {
 
   async startRequirement(
     input: StartRequirementInput,
-  ): Promise<RequirementProgress> {
+  ): Promise<StartRequirementResult> {
     assertLearnerSafe(input);
-    await this.rpc(
-      "start_requirement",
-      this.commandPayload({
-        assignment_requirement_id: input.assignmentRequirementId,
-        idempotency_key: this.key(input.idempotencyKey),
-      }),
+    const started = parseStartRequirement(
+      await this.rpc(
+        "start_requirement",
+        this.commandPayload({
+          assignment_requirement_id: input.assignmentRequirementId,
+          idempotency_key: this.key(input.idempotencyKey),
+        }),
+      ),
     );
-    return this.progressAfter(input.assignmentRequirementId);
+    if (started.assignmentRequirementId !== input.assignmentRequirementId) {
+      throw new Error("Learning service started a different requirement.");
+    }
+    const progress = await this.progressAfter(input.assignmentRequirementId);
+    if (started.attempt && progress.activeAttempt?.id !== started.attempt.id) {
+      throw new Error("Learning snapshot omitted the active started attempt.");
+    }
+    return { progress, attempt: progress.activeAttempt ?? started.attempt };
   }
 
   async checkpoint(
@@ -470,10 +533,8 @@ export class SupabaseLearningRepository implements LearningRepository {
   }
 
   async refreshCertifications(): Promise<readonly Certification[]> {
-    const value = await this.rpc("evaluate_certifications");
-    if (!Array.isArray(value))
-      throw new Error("Learning service returned invalid certifications.");
-    return value.map(parseCertification);
+    await this.rpc("evaluate_certifications");
+    return (await this.snapshot()).certifications;
   }
 
   private async progressAfter(
@@ -577,7 +638,7 @@ export class MemoryLearningRepository implements LearningRepository {
 
   async startRequirement(
     input: StartRequirementInput,
-  ): Promise<RequirementProgress> {
+  ): Promise<StartRequirementResult> {
     const current = this.progressFor(input.assignmentRequirementId);
     const requirement = this.requirementFor(current.requirementId);
     this.assertPrerequisites(requirement);
@@ -586,12 +647,38 @@ export class MemoryLearningRepository implements LearningRepository {
     if (["passed", "waived"].includes(current.state))
       throw new Error("Requirement is already complete.");
     if (current.state === "expired") throw new Error("Requirement is expired.");
-    if (current.state === "in_progress") return clone(current);
-    return this.replaceProgress({
+    if (current.state === "in_progress") {
+      return {
+        progress: clone(current),
+        attempt: clone(current.activeAttempt),
+      };
+    }
+    const mode =
+      requirement.kind === "tour" ||
+      requirement.kind === "scenario" ||
+      requirement.kind === "assessment" ||
+      requirement.kind === "attestation"
+        ? requirement.kind
+        : requirement.kind === "orientation"
+          ? "attestation"
+          : undefined;
+    const attemptNumber = current.attemptCount + (mode ? 1 : 0);
+    const activeAttempt = mode
+      ? {
+          id: `memory:${input.assignmentRequirementId}:${attemptNumber}`,
+          attemptNumber,
+          mode,
+          startedAt: this.now(),
+        }
+      : undefined;
+    const progress = this.replaceProgress({
       ...current,
       state: "in_progress",
+      attemptCount: attemptNumber,
+      activeAttempt,
       updatedAt: this.now(),
     });
+    return { progress, attempt: clone(activeAttempt) };
   }
 
   async checkpoint(
@@ -602,6 +689,8 @@ export class MemoryLearningRepository implements LearningRepository {
     const requirement = this.requirementFor(current.requirementId);
     if (current.state !== "in_progress")
       throw new Error("Requirement must be in progress before a checkpoint.");
+    if (current.activeAttempt?.id !== input.attemptId)
+      throw new Error("Checkpoint attempt is not active for this requirement.");
     if (
       !requirement.simulationId ||
       requirement.simulationId !== input.simulationId
@@ -619,6 +708,7 @@ export class MemoryLearningRepository implements LearningRepository {
     return this.replaceProgress({
       ...current,
       state: passed ? "passed" : "in_progress",
+      activeAttempt: passed ? undefined : current.activeAttempt,
       completedAt: passed ? this.now() : undefined,
       updatedAt: this.now(),
     });
@@ -634,12 +724,14 @@ export class MemoryLearningRepository implements LearningRepository {
       throw new Error("Assigned requirement is not an assessment.");
     if (current.state !== "in_progress")
       throw new Error("Assessment must be in progress before submission.");
+    if (current.activeAttempt?.id !== input.attemptId)
+      throw new Error("Assessment attempt is not active for this requirement.");
     if (!this.assess)
       throw new Error("Memory assessment scoring is not configured.");
     const { score } = this.assess(clone(input), clone(requirement));
     if (!Number.isFinite(score) || score < 0 || score > 100)
       throw new Error("Assessment scorer returned an invalid score.");
-    const attemptNumber = current.attemptCount + 1;
+    const attemptNumber = current.activeAttempt.attemptNumber;
     const passed = score >= (requirement.passingScore ?? 100);
     const state = passed
       ? "passed"
@@ -650,7 +742,7 @@ export class MemoryLearningRepository implements LearningRepository {
     this.replaceProgress({
       ...current,
       state,
-      attemptCount: attemptNumber,
+      activeAttempt: undefined,
       completedAt,
       updatedAt: this.now(),
     });

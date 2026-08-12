@@ -47,7 +47,46 @@ begin
         'curriculum', pg_catalog.jsonb_build_object(
           'id', curriculum.catalog_key,
           'version', curriculum_version.version,
-          'personaId', coalesce(role_assignment.role, curriculum.catalog_key),
+          'personaId', case
+            when assignment.source_type <> 'role' then curriculum.catalog_key
+            else case role_assignment.module || ':' || role_assignment.role
+              when 'core:platform_admin' then 'platform_administrator'
+              when 'core:staff' then 'general_employee'
+              when 'core:vendor_portal' then 'vendor_representative'
+              when 'warehouse:warehouse_operator' then 'operations_associate'
+              when 'warehouse:warehouse_supervisor' then 'operations_lead'
+              when 'warehouse:logistics_supervisor' then 'operations_lead'
+              when 'warehouse:operations' then 'general_employee'
+              when 'warehouse:finance' then 'finance_controller'
+              when 'warehouse:bi_analyst' then 'leadership_insights'
+              when 'warehouse:business_unit' then 'general_employee'
+              when 'warehouse:marketing' then 'marketing_events_lead'
+              when 'warehouse:procurement' then 'procurement_lead'
+              when 'warehouse:pricing' then 'product_owner'
+              when 'warehouse:warehouse_admin' then 'operations_lead'
+              when 'procurement:requester' then 'general_employee'
+              when 'procurement:procurement_officer' then 'procurement_lead'
+              when 'procurement:approver' then 'operations_lead'
+              when 'procurement:finance' then 'finance_controller'
+              when 'procurement:admin' then 'procurement_lead'
+              when 'legal:legal_reviewer' then 'legal_compliance_lead'
+              when 'legal:compliance' then 'legal_compliance_lead'
+              when 'legal:admin' then 'legal_compliance_lead'
+              when 'events:requester' then 'general_employee'
+              when 'events:coordinator' then 'marketing_events_lead'
+              when 'events:viewer' then 'leadership_insights'
+              when 'events:finance_reviewer' then 'finance_controller'
+              when 'events:admin' then 'marketing_events_lead'
+              when 'insights:analyst' then 'leadership_insights'
+              when 'insights:manager' then 'leadership_insights'
+              when 'insights:executive' then 'leadership_insights'
+              when 'insights:admin' then 'leadership_insights'
+              when 'product:contributor' then 'product_owner'
+              when 'product:product_owner' then 'product_owner'
+              when 'product:operations_partner' then 'operations_lead'
+              else null
+            end
+          end,
           'audience', assignment.audience,
           'requirementIds', coalesce(requirement_rows.requirement_ids, '[]'::jsonb)
         ),
@@ -131,6 +170,7 @@ begin
       'requirementVersion', requirement_version.version,
       'state', assignment_requirement.status,
       'attemptCount', assignment_requirement.attempt_count,
+      'activeAttempt', active_attempt.value,
       'completedAt', assignment_requirement.completed_at,
       'updatedAt', greatest(
         assignment_requirement.created_at,
@@ -153,6 +193,21 @@ begin
     on curriculum_requirement.curriculum_version_id = assignment.curriculum_version_id
    and curriculum_requirement.requirement_version_id = assignment_requirement.requirement_version_id
    and curriculum_requirement.audience = assignment_requirement.audience
+  left join lateral (
+    select pg_catalog.jsonb_build_object(
+      'id', attempt.id,
+      'attemptNumber', attempt.attempt_number,
+      'mode', attempt.mode,
+      'startedAt', attempt.started_at
+    ) as value
+    from learning.attempts attempt
+    where attempt.assignment_requirement_id = assignment_requirement.id
+      and attempt.user_id = v_user_id
+      and attempt.audience = v_audience
+      and attempt.status = 'in_progress'
+    order by attempt.attempt_number desc
+    limit 1
+  ) active_attempt on true
   where assignment_requirement.user_id = v_user_id
     and assignment_requirement.audience = v_audience
     and assignment.status not in ('cancelled', 'superseded');

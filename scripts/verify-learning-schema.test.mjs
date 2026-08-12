@@ -211,6 +211,20 @@ test("pins the forward snapshot alignment and rejects later replacements", () =>
     /exact guarded function body drifted.*my_learning_snapshot/i,
   );
 
+  const shadowed = `
+create or replace function learning.my_learning_snapshot(payload jsonb)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $$ select '{}'::jsonb $$;
+${serviceContractAlignmentSql}`;
+  assert.match(
+    errorsForServiceContractAlignment(shadowed),
+    /only the exact no-argument.*my_learning_snapshot replacement is approved/i,
+  );
+
   assert.match(
     verifyLearningSchema([
       ...repositoryMigrations,
@@ -221,6 +235,31 @@ test("pins the forward snapshot alignment and rejects later replacements", () =>
     ]).join("\n"),
     /replacement or overload.*my_learning_snapshot.*default-denied/i,
   );
+});
+
+test("keeps every SQL role persona in parity with the canonical catalog", () => {
+  const catalogBlock = task1Catalog.match(
+    /export const ROLE_PERSONAS:[\s\S]*?= \{([\s\S]*?)\n\};/,
+  )?.[1];
+  const sqlBlock = serviceContractAlignmentSql.match(
+    /'personaId', case([\s\S]*?)\n\s*end,\n\s*'audience'/i,
+  )?.[1];
+  assert.ok(catalogBlock, "Missing canonical TypeScript role-persona map.");
+  assert.ok(sqlBlock, "Missing SQL role-persona projection.");
+
+  const catalogMap = new Map(
+    [...catalogBlock.matchAll(/"([^"]+)": "([^"]+)"/g)].map((match) => [
+      match[1],
+      match[2],
+    ]),
+  );
+  const sqlMap = new Map(
+    [...sqlBlock.matchAll(/when '([^']+)' then '([^']+)'/gi)].map((match) => [
+      match[1],
+      match[2],
+    ]),
+  );
+  assert.deepEqual(sqlMap, catalogMap);
 });
 
 test("rejects client-authored learning authority and weakened service guards", () => {
