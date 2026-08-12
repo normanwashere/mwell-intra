@@ -21,6 +21,8 @@ const COMPLETION_ALIGNMENT_NAME =
 const COMPLETION_HARDENING_NAME =
   "20260812190000_learning_completion_evidence_hardening.sql";
 const AUTHORITY_NAME = "20260812200000_learning_authority.sql";
+const TASK8_AUTHORITY_NAME =
+  "20260812220000_task8_database_authority_remediation.sql";
 const OLD_FOUNDATION_NAME = "20260812090000_learning_foundation.sql";
 const migration = fileURLToPath(
   new URL(`../supabase/migrations/${FOUNDATION_NAME}`, import.meta.url),
@@ -81,6 +83,12 @@ const authorityMigration = fileURLToPath(
 );
 const authoritySql = existsSync(authorityMigration)
   ? readFileSync(authorityMigration, "utf8")
+  : "";
+const task8AuthorityMigration = fileURLToPath(
+  new URL(`../supabase/migrations/${TASK8_AUTHORITY_NAME}`, import.meta.url),
+);
+const task8AuthoritySql = existsSync(task8AuthorityMigration)
+  ? readFileSync(task8AuthorityMigration, "utf8")
   : "";
 const governedSql = `${sql}\n${authoritySql}`;
 const migrationDirectory = fileURLToPath(
@@ -173,6 +181,16 @@ function errorsForCompletionHardening(source) {
   ).join("\n");
 }
 
+function errorsForTask8Authority(source) {
+  return verifyLearningSchema(
+    repositoryMigrations.map((migrationEntry) =>
+      migrationEntry.name === TASK8_AUTHORITY_NAME
+        ? { ...migrationEntry, sql: source }
+        : migrationEntry,
+    ),
+  ).join("\n");
+}
+
 function orderedErrors(laterSql) {
   return verifyLearningSchema([
     ...repositoryMigrations,
@@ -223,6 +241,31 @@ test("defines the monotonic Task 3 learning service boundary", () => {
     );
   }
   assert.deepEqual(verifyLearningSchema(repositoryMigrations), []);
+});
+
+test("models only the exact Task 8 authority remediation", () => {
+  assert.equal(existsSync(task8AuthorityMigration), true);
+  assert.equal(errorsForTask8Authority(task8AuthoritySql), "");
+
+  const rawWarehouseAuthority = replaceRequired(
+    task8AuthoritySql,
+    /core\.has_live_cap\('warehouse', 'receive_stock'\)/,
+    "core.has_cap('warehouse', 'receive_stock')",
+  );
+  assert.match(
+    errorsForTask8Authority(rawWarehouseAuthority),
+    /exact reviewed Task 8 authority function body drifted.*warehouse\.receive_stock/i,
+  );
+
+  const callerAuthoredPolicyHash = replaceRequired(
+    task8AuthoritySql,
+    /v_canonical_evidence_hash,\n    v_user_id/,
+    "v_submitted_evidence_hash,\n    v_user_id",
+  );
+  assert.match(
+    errorsForTask8Authority(callerAuthoredPolicyHash),
+    /exact guarded function body drifted for learning\.acknowledge_policy/i,
+  );
 });
 
 test("pins the forward snapshot alignment and rejects later replacements", () => {
@@ -459,9 +502,12 @@ test("rejects client-authored learning authority and weakened service guards", (
       "resolve_assignments",
       "start_requirement",
     ]).has(functionName);
-    const sourceSql = alignedByCompletion
-      ? completionHardeningSql
-      : servicesSql;
+    const governedByTask8 = functionName === "acknowledge_policy";
+    const sourceSql = governedByTask8
+      ? task8AuthoritySql
+      : alignedByCompletion
+        ? completionHardeningSql
+        : servicesSql;
     const weakened = sourceSql.replace(
       new RegExp(
         `(create or replace function learning\\.${functionName}\\([^]*?)(perform private\\.assert_learning_read_committed\\(\\);)`,
@@ -471,7 +517,9 @@ test("rejects client-authored learning authority and weakened service guards", (
     );
     assert.notEqual(weakened, sourceSql, functionName);
     assert.match(
-      alignedByCompletion
+      governedByTask8
+        ? errorsForTask8Authority(weakened)
+        : alignedByCompletion
         ? errorsForCompletionHardening(weakened)
         : errorsForServices(weakened),
       new RegExp(`${functionName}|function body|read committed`, "i"),

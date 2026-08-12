@@ -19,6 +19,8 @@ export const COMPLETION_HARDENING_MIGRATION_NAME =
 export const AUTHORITY_MIGRATION_NAME = "20260812200000_learning_authority.sql";
 export const ORIENTATION_RUNTIME_MIGRATION_NAME =
   "20260812210000_learning_orientation_runtime.sql";
+export const TASK8_AUTHORITY_MIGRATION_NAME =
+  "20260812220000_task8_database_authority_remediation.sql";
 const PINNED_LEARNING_MIGRATION_SHA256 = Object.freeze({
   [FOUNDATION_MIGRATION_NAME]:
     "b5b954f0fdb9ff52748047ca4a17916896227934ecd43c22951ea4489fc129ad",
@@ -38,6 +40,8 @@ const PINNED_LEARNING_MIGRATION_SHA256 = Object.freeze({
     "a8ad714d8ae7a5f637ecb62af1cb9b4688a256041f42673e86d598ea36085f39",
   [ORIENTATION_RUNTIME_MIGRATION_NAME]:
     "4b1fb8f1989e8412658de7e986208b3fdc1299a24885b2112b807485dcbf0f41",
+  [TASK8_AUTHORITY_MIGRATION_NAME]:
+    "9a5eda277ea76db395469a95ac45f7f788a0d589db97a42ed0141ce59ccd6113",
 });
 export const PRIVATE_ANSWER_KEY_TABLE =
   "private.learning_assessment_answer_keys";
@@ -686,7 +690,7 @@ export const EXPECTED_FUNCTION_BODY_SHA256 = Object.freeze({
   "learning.submit_assessment":
     "80b8209dad35a8110ef3430ffabeabd9a96639f7d949bf2d9c2d7e9938080e55",
   "learning.acknowledge_policy":
-    "6de1d3f3c539de860eecc5f42c93811fd26188e448af2302c255e433061ffadb",
+    "e38110ead668101f287759692e51a453b92bd24199031b4d128f976f0c6c2774",
   "learning.request_support":
     "ec8f155cf19db9b50f394b6c9b0d160a2805f248e3ecedc34fe5e0e2add17a98",
   "learning.sync_shared_completions":
@@ -715,6 +719,11 @@ const ISOLATION_GUARDED_FUNCTIONS = new Set([
   "private.validate_curriculum_graph_publication",
   ...LEARNING_SERVICE_MUTATORS,
 ]);
+
+const TASK8_RECEIVE_STOCK_DECLARATION_SQL =
+  "create or replace function warehouse.receive_stock(payload jsonb) returns jsonb language plpgsql security definer set search_path = ''";
+const TASK8_RECEIVE_STOCK_BODY_SHA256 =
+  "02108f3185a18af43b94a8232a38a82de6ddae9cb4405606789bdeedd8ca597f";
 
 function normalizeSql(value) {
   return value.toLowerCase().replace(/\s+/g, " ").trim().replace(/;$/, "");
@@ -1486,6 +1495,7 @@ function processStatement(state, statement, migrationName) {
   const isAuthority = migrationName === AUTHORITY_MIGRATION_NAME;
   const isOrientationRuntime =
     migrationName === ORIENTATION_RUNTIME_MIGRATION_NAME;
+  const isTask8Authority = migrationName === TASK8_AUTHORITY_MIGRATION_NAME;
   let match;
 
   if (
@@ -1657,7 +1667,7 @@ function processStatement(state, statement, migrationName) {
   }
 
   if (/^notify pgrst, 'reload (?:config|schema)'$/.test(normalized)) {
-    if (!isFoundation)
+    if (!isFoundation && !isTask8Authority)
       state.errors.push(
         `${migrationName}: unmodeled PostgREST notification is denied.`,
       );
@@ -2061,6 +2071,24 @@ function processStatement(state, statement, migrationName) {
     /^grant execute on function ([a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*)\s*\(([^)]*)\) to (.+)$/,
   );
   if (match) {
+    if (
+      isTask8Authority &&
+      match[1] === "warehouse.receive_stock" &&
+      match[2].trim() === "jsonb"
+    ) {
+      const grantees = parseGrantees(match[3]);
+      if (
+        grantees.length !== 2 ||
+        !grantees.includes("authenticated") ||
+        !grantees.includes("service_role") ||
+        /\bwith grant option\b/.test(normalized)
+      ) {
+        state.errors.push(
+          `${migrationName}: Task 8 receive_stock EXECUTE must remain non-delegable and limited to authenticated and service_role.`,
+        );
+      }
+      return;
+    }
     if (/\bwith grant option\b/.test(normalized)) {
       state.errors.push(
         `${migrationName}: function EXECUTE may not be delegated with GRANT OPTION.`,
@@ -2095,6 +2123,23 @@ function processStatement(state, statement, migrationName) {
     /^revoke (?:all(?: privileges)?|execute) on function ([a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*)\s*\(([^)]*)\) from (.+?)(?: cascade| restrict)?$/,
   );
   if (match) {
+    if (
+      isTask8Authority &&
+      match[1] === "warehouse.receive_stock" &&
+      match[2].trim() === "jsonb"
+    ) {
+      const grantees = parseGrantees(match[3]);
+      const expected = ["public", "anon", "authenticated", "service_role"];
+      if (
+        grantees.length !== expected.length ||
+        expected.some((role) => !grantees.includes(role))
+      ) {
+        state.errors.push(
+          `${migrationName}: Task 8 receive_stock revoke must clear every client execution role exactly.`,
+        );
+      }
+      return;
+    }
     const functionEntry = state.functions.get(match[1]);
     if (!functionEntry) {
       if (!isFoundation) {
@@ -2183,6 +2228,25 @@ function processStatement(state, statement, migrationName) {
       );
       return;
     }
+    if (
+      isTask8Authority &&
+      metadata.qualifiedName === "warehouse.receive_stock"
+    ) {
+      const expectedMetadata = parseFunctionDeclaration(
+        TASK8_RECEIVE_STOCK_DECLARATION_SQL,
+      );
+      const drift = functionMetadataDrift(metadata, expectedMetadata);
+      const bodyDigest = digestFunctionBody(functionBody(statement));
+      if (
+        drift.length > 0 ||
+        bodyDigest !== TASK8_RECEIVE_STOCK_BODY_SHA256
+      ) {
+        state.errors.push(
+          `${migrationName}: exact reviewed Task 8 authority function body drifted for warehouse.receive_stock (${bodyDigest}).`,
+        );
+      }
+      return;
+    }
     if (!MODELED_FUNCTIONS.has(metadata.qualifiedName)) {
       state.errors.push(
         `${migrationName}: unmodeled procedural function ${metadata.qualifiedName} is default-denied.`,
@@ -2229,6 +2293,10 @@ function processStatement(state, statement, migrationName) {
     const approvedAuthority =
       isAuthority &&
       LEARNING_AUTHORITY_FUNCTIONS.includes(metadata.qualifiedName);
+    const approvedTask8Authority =
+      isTask8Authority &&
+      metadata.qualifiedName === "learning.acknowledge_policy" &&
+      metadata.argumentTypes.join("|") === "jsonb";
     if (isServiceContractAlignment && !approvedSnapshotAlignment) {
       state.errors.push(
         `${migrationName}: only the exact no-argument learning.my_learning_snapshot replacement is approved.`,
@@ -2256,7 +2324,8 @@ function processStatement(state, statement, migrationName) {
     if (
       existingFunction &&
       !approvedSnapshotAlignment &&
-      !approvedCompletionHardening
+      !approvedCompletionHardening &&
+      !approvedTask8Authority
     ) {
       state.errors.push(
         `${migrationName}: replacement or overload of modeled function ${metadata.qualifiedName} is default-denied.`,
@@ -2315,7 +2384,8 @@ function processStatement(state, statement, migrationName) {
       (isServiceContractAlignment &&
         match[1] === "learning.my_learning_snapshot") ||
       approvedCompletionOwner ||
-      (isAuthority && LEARNING_AUTHORITY_FUNCTIONS.includes(match[1]));
+      (isAuthority && LEARNING_AUTHORITY_FUNCTIONS.includes(match[1])) ||
+      (isTask8Authority && match[1] === "learning.acknowledge_policy");
     if (
       !approvedServiceOwner ||
       match[3] !== "postgres" ||
@@ -2328,6 +2398,22 @@ function processStatement(state, statement, migrationName) {
       );
     } else {
       state.learningServices.functionOwners.set(match[1], match[3]);
+    }
+    return;
+  }
+
+  match = normalized.match(
+    /^alter function warehouse\.receive_stock\(([^)]*)\) owner to ([a-z_][a-z0-9_]*)$/,
+  );
+  if (match) {
+    if (
+      !isTask8Authority ||
+      match[1].trim() !== "jsonb" ||
+      match[2] !== "postgres"
+    ) {
+      state.errors.push(
+        `${migrationName}: Task 8 receive_stock ownership must target the exact jsonb signature and postgres owner.`,
+      );
     }
     return;
   }
