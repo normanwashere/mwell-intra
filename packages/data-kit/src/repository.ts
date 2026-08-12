@@ -91,6 +91,15 @@ export interface WarehouseData {
 }
 
 export interface ReceiveStockInput {
+  /**
+   * Stable identity for one logical receipt operation. Reuse this value when
+   * retrying after a timeout or uncertain response. Keys are scoped to
+   * receiveStock and may contain letters, numbers, underscores, and hyphens.
+   *
+   * Legacy callers may omit the key; those calls retain one-shot semantics and
+   * cannot be recovered safely after an uncertain committed response.
+   */
+  idempotencyKey?: string;
   supplierId?: string;
   actualDeliveryDate?: string;
   deliveryReference?: string;

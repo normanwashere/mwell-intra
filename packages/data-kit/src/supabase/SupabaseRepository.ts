@@ -612,10 +612,20 @@ export class SupabaseRepository implements WarehouseControlRepository {
   }
 
   async receiveStock(input: ReceiveStockInput): Promise<Receipt> {
+    const idempotencyKey = input.idempotencyKey ?? uid("receive");
+    if (!/^[A-Za-z0-9_-]{12,128}$/.test(idempotencyKey)) {
+      throw new Error("A valid idempotency key is required.");
+    }
+    const receiptId = `rcpt-${idempotencyKey}`;
     const createdAt = new Date().toISOString();
+    const existing = await this.findReceiptById(receiptId);
+    if (existing) {
+      this.assertReceiveReplayMatches(existing, input);
+      return existing;
+    }
     const data = await this.getData();
     const receipt: Receipt = {
-      id: uid("rcpt"),
+      id: receiptId,
       supplierId: input.supplierId,
       locationId: input.locationId,
       actualDeliveryDate: input.actualDeliveryDate,
@@ -634,7 +644,7 @@ export class SupabaseRepository implements WarehouseControlRepository {
     // emits two rows with the same upsert conflict key.
     const stockByKey = new Map<string, Row>();
 
-    for (const line of input.lines) {
+    for (const [lineIndex, line] of input.lines.entries()) {
       const product = data.products.find((p) => p.id === line.productId);
       if (!product) throw new Error(`Unknown product: ${line.productId}`);
 
@@ -643,9 +653,11 @@ export class SupabaseRepository implements WarehouseControlRepository {
       let lotId: string | undefined;
       if (line.unitCost != null || line.lotCode || line.expiryDate) {
         const lot: Lot = {
-          id: uid("lot"),
+          id: `lot-${idempotencyKey}-${lineIndex}`,
           productId: product.id,
-          lotCode: line.lotCode ?? `LOT-${product.sku}-${Date.now()}`,
+          lotCode:
+            line.lotCode ??
+            `LOT-${product.sku}-${idempotencyKey}-${lineIndex}`,
           supplierId: input.supplierId,
           unitCost: line.unitCost ?? product.unitCost,
           receivedAt: createdAt,
@@ -660,12 +672,12 @@ export class SupabaseRepository implements WarehouseControlRepository {
           ? line.serialNumbers
           : Array.from(
               { length: line.quantity },
-              (_, i) => `${product.sku}-SN${Date.now()}${i}`,
+              (_, i) => `${product.sku}-SN-${idempotencyKey}-${i}`,
             );
-        for (const serialNumber of serials) {
+        for (const [serialIndex, serialNumber] of serials.entries()) {
           units.push(
             unitToRow({
-              id: uid("unit"),
+              id: `unit-${idempotencyKey}-${lineIndex}-${serialIndex}`,
               productId: product.id,
               serialNumber,
               lotId,
@@ -693,7 +705,7 @@ export class SupabaseRepository implements WarehouseControlRepository {
 
       movements.push(
         movementToRow({
-          id: uid("mv"),
+          id: `mv-${idempotencyKey}-${lineIndex}`,
           type: "receipt",
           productId: product.id,
           quantity: line.quantity,
@@ -708,25 +720,108 @@ export class SupabaseRepository implements WarehouseControlRepository {
       );
     }
 
-    const row = await this.callRpc("receive_stock", {
-      lots,
-      units,
-      stock_deltas: [...stockByKey.values()],
-      movements,
-      receipt: {
-        id: receipt.id,
-        supplier_id: receipt.supplierId ?? null,
-        location_id: receipt.locationId,
-        actual_delivery_date: receipt.actualDeliveryDate ?? null,
-        delivery_reference: receipt.deliveryReference ?? null,
-        courier_or_driver: receipt.courierOrDriver ?? null,
-        lines: receipt.lines,
-        evidence_urls: receipt.evidenceUrls ?? [],
-        actor: receipt.actor,
-        created_at: createdAt,
-      },
+    try {
+      const row = await this.callRpc("receive_stock", {
+        idempotency_key: idempotencyKey,
+        lots,
+        units,
+        stock_deltas: [...stockByKey.values()],
+        movements,
+        receipt: {
+          id: receipt.id,
+          supplier_id: receipt.supplierId ?? null,
+          location_id: receipt.locationId,
+          actual_delivery_date: receipt.actualDeliveryDate ?? null,
+          delivery_reference: receipt.deliveryReference ?? null,
+          courier_or_driver: receipt.courierOrDriver ?? null,
+          lines: receipt.lines,
+          evidence_urls: receipt.evidenceUrls ?? [],
+          actor: receipt.actor,
+          created_at: createdAt,
+        },
+      });
+      return rowToReceipt(row);
+    } catch (error) {
+      try {
+        const recovered = await this.findReceiptById(receiptId);
+        if (recovered) {
+          this.assertReceiveReplayMatches(recovered, input);
+          return recovered;
+        }
+      } catch (recoveryError) {
+        if (
+          recoveryError instanceof Error &&
+          recoveryError.message ===
+            "Idempotency key was reused with a different payload."
+        ) {
+          throw recoveryError;
+        }
+      }
+      throw error;
+    }
+  }
+
+  private async findReceiptById(receiptId: string): Promise<Receipt | undefined> {
+    const { data, error } = await this.db
+      .from("receipts")
+      .select(TABLE_PROJECTIONS.receipts)
+      .eq("id", receiptId)
+      .limit(1);
+    if (error) throw new Error(`receipts: ${error.message}`);
+    const row = (data as unknown as Row[] | null)?.find(
+      (candidate) => candidate.id === receiptId,
+    );
+    return row ? rowToReceipt(row as never) : undefined;
+  }
+
+  private receiveReplayPayload(input: ReceiveStockInput): string {
+    return JSON.stringify({
+      supplierId: input.supplierId ?? null,
+      actualDeliveryDate: input.actualDeliveryDate ?? null,
+      deliveryReference: input.deliveryReference ?? null,
+      courierOrDriver: input.courierOrDriver ?? null,
+      locationId: input.locationId,
+      lines: input.lines.map((line) => ({
+        productId: line.productId,
+        quantity: line.quantity,
+        lotCode: line.lotCode ?? null,
+        batchNumber: line.batchNumber ?? null,
+        deviceTestStatus: line.deviceTestStatus ?? null,
+        expiryDate: line.expiryDate ?? null,
+        serialNumbers: line.serialNumbers ?? [],
+        unitCost: line.unitCost ?? null,
+        binId: line.binId ?? null,
+      })),
+      evidenceUrls: input.evidenceUrls ?? [],
     });
-    return rowToReceipt(row);
+  }
+
+  private assertReceiveReplayMatches(
+    receipt: Receipt,
+    input: ReceiveStockInput,
+  ): void {
+    const receiptPayload = JSON.stringify({
+      supplierId: receipt.supplierId ?? null,
+      actualDeliveryDate: receipt.actualDeliveryDate ?? null,
+      deliveryReference: receipt.deliveryReference ?? null,
+      courierOrDriver: receipt.courierOrDriver ?? null,
+      locationId: receipt.locationId,
+      lines: receipt.lines.map((line) => ({
+        productId: line.productId,
+        quantity: line.quantity,
+        lotCode: line.lotCode ?? null,
+        batchNumber: line.batchNumber ?? null,
+        deviceTestStatus: line.deviceTestStatus ?? null,
+        expiryDate: line.expiryDate ?? null,
+        serialNumbers: line.serialNumbers ?? [],
+        unitCost: line.unitCost ?? null,
+        binId: line.binId ?? null,
+      })),
+      evidenceUrls: receipt.evidenceUrls ?? [],
+    });
+    if (receiptPayload !== this.receiveReplayPayload(input)) {
+      throw new Error("Idempotency key was reused with a different payload.");
+    }
   }
 
   async reserve(input: ReserveInput): Promise<Allocation> {

@@ -23,7 +23,10 @@ import {
 //     wire payload envelope is identical — these assertions stay valid.
 function makeMockClient(
   seed: WarehouseData,
-  options: { inventoryHolds?: Record<string, unknown>[] } = {},
+  options: {
+    inventoryHolds?: Record<string, unknown>[];
+    commitReceiveThenFail?: boolean;
+  } = {},
 ) {
   const calls: { fn: string; payload: Record<string, unknown> }[] = [];
   const queries: {
@@ -328,6 +331,7 @@ function makeMockClient(
       completed_at: order.completedAt ?? null,
     })),
   };
+  let receiveFailureInjected = false;
   const client = {
     from: (table: string) => ({
       select: (projection: string) => {
@@ -369,6 +373,18 @@ function makeMockClient(
     }),
     rpc: (fn: string, args: { payload: Record<string, unknown> }) => {
       calls.push({ fn, payload: args.payload });
+      if (
+        fn === "receive_stock" &&
+        options.commitReceiveThenFail &&
+        !receiveFailureInjected
+      ) {
+        receiveFailureInjected = true;
+        tables.receipts!.push(args.payload.receipt!);
+        return Promise.resolve({
+          data: null,
+          error: { message: "Failed to fetch after commit" },
+        });
+      }
       const row: Record<string, unknown> = {
         id: "mock",
         product_id: "mock-product",
@@ -875,6 +891,135 @@ describe("SupabaseRepository W1 control boundary", () => {
         }),
       ],
     });
+  });
+
+  it("uses a stable receive operation identity for every generated row", async () => {
+    const seed = buildSeed();
+    const serialized = seed.products.find((product) => product.serialized)!;
+    const { client, calls } = makeMockClient(seed);
+    const repo = new SupabaseRepository(client);
+
+    await repo.receiveStock({
+      idempotencyKey: "receive-live-20260813-001",
+      locationId: "loc-wh",
+      actor: "untrusted-client-actor",
+      lines: [
+        {
+          productId: serialized.id,
+          quantity: 1,
+          lotCode: "LOT-LIVE-001",
+        },
+      ],
+    });
+
+    const payload = calls.find((item) => item.fn === "receive_stock")!.payload;
+    expect(payload.idempotency_key).toBe("receive-live-20260813-001");
+    expect((payload.receipt as { id: string }).id).toBe(
+      "rcpt-receive-live-20260813-001",
+    );
+    expect((payload.lots as { id: string }[])[0]!.id).toBe(
+      "lot-receive-live-20260813-001-0",
+    );
+    expect((payload.units as { id: string }[])[0]!.id).toBe(
+      "unit-receive-live-20260813-001-0-0",
+    );
+    expect(
+      (payload.units as { serial_number: string }[])[0]!.serial_number,
+    ).toBe(`${serialized.sku}-SN-receive-live-20260813-001-0`);
+    expect((payload.movements as { id: string }[])[0]!.id).toBe(
+      "mv-receive-live-20260813-001-0",
+    );
+  });
+
+  it("recovers the committed receipt when the RPC response is lost", async () => {
+    const seed = buildSeed();
+    const product = seed.products.find((candidate) => !candidate.serialized)!;
+    const { client, calls } = makeMockClient(seed, {
+      commitReceiveThenFail: true,
+    });
+
+    const receipt = await new SupabaseRepository(client).receiveStock({
+      idempotencyKey: "receive-lost-response-20260813-001",
+      locationId: "loc-wh",
+      lines: [{ productId: product.id, quantity: 4 }],
+      actor: "client-user",
+    });
+
+    expect(receipt.id).toBe("rcpt-receive-lost-response-20260813-001");
+    expect(calls.filter((call) => call.fn === "receive_stock")).toHaveLength(1);
+  });
+
+  it("returns a committed receipt on retry without sending a second mutation", async () => {
+    const seed = buildSeed();
+    const product = seed.products.find((candidate) => !candidate.serialized)!;
+    const committedReceipt = {
+      id: "rcpt-receive-uncertain-20260813-001",
+      locationId: "loc-wh",
+      lines: [{ productId: product.id, quantity: 4 }],
+      evidenceUrls: [],
+      actor: "server-user",
+      createdAt: "2026-08-13T02:00:00.000Z",
+    };
+    seed.receipts.push(committedReceipt);
+    const { client, calls } = makeMockClient(seed);
+    const repo = new SupabaseRepository(client);
+
+    const receipt = await repo.receiveStock({
+      idempotencyKey: "receive-uncertain-20260813-001",
+      locationId: "loc-wh",
+      lines: [{ productId: product.id, quantity: 4 }],
+      actor: "client-user",
+    });
+
+    expect(receipt).toEqual(committedReceipt);
+    expect(calls.filter((call) => call.fn === "receive_stock")).toHaveLength(0);
+  });
+
+  it("rejects a committed receipt whose idempotency key is reused for another payload", async () => {
+    const seed = buildSeed();
+    const product = seed.products.find((candidate) => !candidate.serialized)!;
+    seed.receipts.push({
+      id: "rcpt-receive-mismatch-20260813-001",
+      locationId: "loc-wh",
+      lines: [{ productId: product.id, quantity: 4 }],
+      evidenceUrls: [],
+      actor: "server-user",
+      createdAt: "2026-08-13T02:00:00.000Z",
+    });
+    const { client } = makeMockClient(seed);
+
+    await expect(
+      new SupabaseRepository(client).receiveStock({
+        idempotencyKey: "receive-mismatch-20260813-001",
+        locationId: "loc-wh",
+        lines: [{ productId: product.id, quantity: 5 }],
+        actor: "client-user",
+      }),
+    ).rejects.toThrow("Idempotency key was reused with a different payload.");
+  });
+
+  it("treats reordered JSONB line keys as the same committed receive payload", async () => {
+    const seed = buildSeed();
+    const product = seed.products.find((candidate) => !candidate.serialized)!;
+    seed.receipts.push({
+      id: "rcpt-receive-jsonb-order-20260813-001",
+      locationId: "loc-wh",
+      lines: [{ quantity: 4, productId: product.id }],
+      evidenceUrls: [],
+      actor: "server-user",
+      createdAt: "2026-08-13T02:00:00.000Z",
+    });
+    const { client, calls } = makeMockClient(seed);
+
+    const receipt = await new SupabaseRepository(client).receiveStock({
+      idempotencyKey: "receive-jsonb-order-20260813-001",
+      locationId: "loc-wh",
+      lines: [{ productId: product.id, quantity: 4 }],
+      actor: "client-user",
+    });
+
+    expect(receipt.id).toBe("rcpt-receive-jsonb-order-20260813-001");
+    expect(calls.filter((call) => call.fn === "receive_stock")).toHaveLength(0);
   });
 
   it("reads the explicit RLS-backed procurement handoff projection", async () => {

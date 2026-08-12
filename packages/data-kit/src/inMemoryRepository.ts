@@ -317,9 +317,36 @@ export class InMemoryRepository implements WarehouseControlRepository {
   }
 
   async receiveStock(input: ReceiveStockInput): Promise<Receipt> {
+    const idempotencyKey = input.idempotencyKey;
+    if (idempotencyKey) {
+      if (!/^[A-Za-z0-9_-]{12,128}$/.test(idempotencyKey)) {
+        throw new Error("A valid idempotency key is required.");
+      }
+      const receiptId = `rcpt-${idempotencyKey}`;
+      const existing = this.data.receipts.find(
+        (receipt) => receipt.id === receiptId,
+      );
+      if (existing) {
+        this.assertReceiveReplayMatches(existing, input);
+        return clone(existing);
+      }
+      return this.idempotent(
+        "receive_stock",
+        idempotencyKey,
+        this.receiveReplayPayload(input),
+        () => this.receiveStockOnce(input, idempotencyKey),
+      );
+    }
+    return this.receiveStockOnce(input);
+  }
+
+  private receiveStockOnce(
+    input: ReceiveStockInput,
+    idempotencyKey?: string,
+  ): Receipt {
     const createdAt = this.now();
     const receipt: Receipt = {
-      id: uid("rcpt"),
+      id: idempotencyKey ? `rcpt-${idempotencyKey}` : this.newId("rcpt"),
       supplierId: input.supplierId,
       actualDeliveryDate: input.actualDeliveryDate,
       deliveryReference: input.deliveryReference,
@@ -331,7 +358,7 @@ export class InMemoryRepository implements WarehouseControlRepository {
       createdAt,
     };
 
-    for (const line of input.lines) {
+    for (const [lineIndex, line] of input.lines.entries()) {
       const product = this.data.products.find((p) => p.id === line.productId);
       if (!product) throw new Error(`Unknown product: ${line.productId}`);
 
@@ -340,9 +367,15 @@ export class InMemoryRepository implements WarehouseControlRepository {
       let lotId: string | undefined;
       if (line.unitCost != null || line.lotCode || line.expiryDate) {
         const lot: Lot = {
-          id: uid("lot"),
+          id: idempotencyKey
+            ? `lot-${idempotencyKey}-${lineIndex}`
+            : this.newId("lot"),
           productId: product.id,
-          lotCode: line.lotCode ?? `LOT-${product.sku}-${Date.now()}`,
+          lotCode:
+            line.lotCode ??
+            (idempotencyKey
+              ? `LOT-${product.sku}-${idempotencyKey}-${lineIndex}`
+              : `LOT-${product.sku}-${Date.now()}`),
           supplierId: input.supplierId,
           unitCost: line.unitCost ?? product.unitCost,
           receivedAt: createdAt,
@@ -358,11 +391,16 @@ export class InMemoryRepository implements WarehouseControlRepository {
             ? line.serialNumbers
             : Array.from(
                 { length: line.quantity },
-                (_, i) => `${product.sku}-SN${Date.now()}${i}`,
+                (_, i) =>
+                  idempotencyKey
+                    ? `${product.sku}-SN-${idempotencyKey}-${i}`
+                    : `${product.sku}-SN${Date.now()}${i}`,
               );
-        for (const serialNumber of serials) {
+        for (const [serialIndex, serialNumber] of serials.entries()) {
           this.data.units.push({
-            id: uid("unit"),
+            id: idempotencyKey
+              ? `unit-${idempotencyKey}-${lineIndex}-${serialIndex}`
+              : this.newId("unit"),
             productId: product.id,
             serialNumber,
             lotId,
@@ -382,7 +420,9 @@ export class InMemoryRepository implements WarehouseControlRepository {
       }
 
       this.data.movements.push({
-        id: uid("mv"),
+        id: idempotencyKey
+          ? `mv-${idempotencyKey}-${lineIndex}`
+          : this.newId("mv"),
         type: "receipt",
         productId: product.id,
         quantity: line.quantity,
@@ -399,6 +439,56 @@ export class InMemoryRepository implements WarehouseControlRepository {
     this.data.receipts.push(receipt);
     this.persist();
     return clone(receipt);
+  }
+
+  private receiveReplayPayload(input: ReceiveStockInput): string {
+    return JSON.stringify({
+      supplierId: input.supplierId ?? null,
+      actualDeliveryDate: input.actualDeliveryDate ?? null,
+      deliveryReference: input.deliveryReference ?? null,
+      courierOrDriver: input.courierOrDriver ?? null,
+      locationId: input.locationId,
+      lines: input.lines.map((line) => ({
+        productId: line.productId,
+        quantity: line.quantity,
+        lotCode: line.lotCode ?? null,
+        batchNumber: line.batchNumber ?? null,
+        deviceTestStatus: line.deviceTestStatus ?? null,
+        expiryDate: line.expiryDate ?? null,
+        serialNumbers: line.serialNumbers ?? [],
+        unitCost: line.unitCost ?? null,
+        binId: line.binId ?? null,
+      })),
+      evidenceUrls: input.evidenceUrls ?? [],
+    });
+  }
+
+  private assertReceiveReplayMatches(
+    receipt: Receipt,
+    input: ReceiveStockInput,
+  ): void {
+    const receiptPayload = JSON.stringify({
+      supplierId: receipt.supplierId ?? null,
+      actualDeliveryDate: receipt.actualDeliveryDate ?? null,
+      deliveryReference: receipt.deliveryReference ?? null,
+      courierOrDriver: receipt.courierOrDriver ?? null,
+      locationId: receipt.locationId,
+      lines: receipt.lines.map((line) => ({
+        productId: line.productId,
+        quantity: line.quantity,
+        lotCode: line.lotCode ?? null,
+        batchNumber: line.batchNumber ?? null,
+        deviceTestStatus: line.deviceTestStatus ?? null,
+        expiryDate: line.expiryDate ?? null,
+        serialNumbers: line.serialNumbers ?? [],
+        unitCost: line.unitCost ?? null,
+        binId: line.binId ?? null,
+      })),
+      evidenceUrls: receipt.evidenceUrls ?? [],
+    });
+    if (receiptPayload !== this.receiveReplayPayload(input)) {
+      throw new Error("Idempotency key was reused with a different payload.");
+    }
   }
 
   async reserve(input: ReserveInput): Promise<Allocation> {

@@ -77,6 +77,72 @@ beforeEach(() => {
 });
 
 describe("receiveStock", () => {
+  it("replays the same idempotent receipt without duplicating stock", async () => {
+    const input = {
+      idempotencyKey: "receive-ring-20260813-001",
+      locationId: "loc-wh",
+      actor: "logi@mwell",
+      lines: [
+        {
+          productId: "ring",
+          quantity: 2,
+          serialNumbers: ["RETRY-A", "RETRY-B"],
+        },
+      ],
+    };
+
+    const first = await repo.receiveStock(input);
+    const replay = await repo.receiveStock(input);
+    const data = await repo.getData();
+
+    expect(replay.id).toBe(first.id);
+    expect(
+      data.receipts.filter((receipt) => receipt.id === first.id),
+    ).toHaveLength(1);
+    expect(
+      data.units.filter((unit) => unit.serialNumber.startsWith("RETRY-")),
+    ).toHaveLength(2);
+    expect(
+      data.movements.filter((movement) => movement.reference === first.id),
+    ).toHaveLength(1);
+  });
+
+  it("rejects reuse of a receive idempotency key with a different payload", async () => {
+    await repo.receiveStock({
+      idempotencyKey: "receive-shirt-20260813-001",
+      locationId: "loc-wh",
+      actor: "logi@mwell",
+      lines: [{ productId: "shirt", quantity: 2 }],
+    });
+
+    await expect(
+      repo.receiveStock({
+        idempotencyKey: "receive-shirt-20260813-001",
+        locationId: "loc-wh",
+        actor: "logi@mwell",
+        lines: [{ productId: "shirt", quantity: 3 }],
+      }),
+    ).rejects.toThrow("Idempotency key was reused with a different payload.");
+  });
+
+  it("preserves legacy one-shot behavior when no idempotency key is supplied", async () => {
+    const input = {
+      locationId: "loc-wh",
+      actor: "logi@mwell",
+      lines: [{ productId: "shirt", quantity: 2 }],
+    };
+
+    const first = await repo.receiveStock(input);
+    const second = await repo.receiveStock(input);
+    const data = await repo.getData();
+
+    expect(second.id).not.toBe(first.id);
+    expect(data.receipts).toHaveLength(2);
+    expect(
+      data.stockLevels.find((row) => row.productId === "shirt")?.quantity,
+    ).toBe(24);
+  });
+
   it("creates serialized units and increases availability", async () => {
     await repo.receiveStock({
       locationId: "loc-wh",
