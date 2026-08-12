@@ -73,16 +73,73 @@ test("catalog queries execute against PostgreSQL catalogs", async () => {
     assert.deepEqual(Object.keys(snapshot).sort(), [
       "certificationIndexes",
       "dangerousMemberships",
+      "defaultPrivileges",
       "functionPrivileges",
       "functions",
+      "governedTableOwners",
       "policies",
       "privilegedFunctions",
       "privilegedViews",
       "roles",
+      "schemaPrivileges",
+      "schemas",
       "tablePrivileges",
       "tables",
       "triggers",
     ]);
+  } finally {
+    await database.close();
+  }
+});
+
+test("catalog queries expose ACL state and transitive service-role escalation", async () => {
+  const database = new PGlite();
+  try {
+    await database.exec(`
+      create role anon nologin noinherit;
+      create role authenticated nologin noinherit;
+      create role service_role nologin noinherit bypassrls;
+      create role learning_bridge nologin noinherit;
+      create role learning_superuser nologin noinherit superuser;
+      grant learning_superuser to learning_bridge;
+      grant learning_bridge to service_role;
+      create schema core;
+      create schema private;
+      create schema learning;
+      grant usage on schema core, private, learning to authenticated, service_role;
+      alter default privileges in schema core grant select on tables to authenticated;
+    `);
+    const snapshot = await catalogModule.loadLearningCatalogSnapshot(database);
+    assert.deepEqual(snapshot.schemas, [
+      { schema: "core", owner: "postgres" },
+      { schema: "learning", owner: "postgres" },
+      { schema: "private", owner: "postgres" },
+    ]);
+    assert.ok(
+      snapshot.schemaPrivileges.some(
+        (entry) =>
+          entry.schema === "learning" &&
+          entry.grantee === "authenticated" &&
+          entry.privilege === "USAGE",
+      ),
+    );
+    assert.ok(
+      snapshot.defaultPrivileges.some(
+        (entry) =>
+          entry.schema === "core" &&
+          entry.grantee === "authenticated" &&
+          entry.privilege === "SELECT",
+      ),
+    );
+    assert.ok(
+      snapshot.dangerousMemberships.some(
+        (entry) =>
+          entry.member === "service_role" &&
+          entry.target === "learning_superuser" &&
+          entry.depth === 2 &&
+          entry.targetSuperuser,
+      ),
+    );
   } finally {
     await database.close();
   }
@@ -131,6 +188,52 @@ test("RLS, policies, and trigger modes are exact", () => {
   expectDrift((snapshot) => {
     snapshot.triggers[0].enabled = "D";
   }, /trigger/i);
+  const trigger = expectedSnapshot().triggers[0];
+  assert.equal(trigger.predicate, null);
+  assert.deepEqual(trigger.arguments, []);
+  assert.equal(trigger.argumentCount, 0);
+  assert.equal(trigger.oldTransitionTable, null);
+  assert.equal(trigger.newTransitionTable, null);
+  expectDrift((snapshot) => {
+    snapshot.triggers[0].predicate = "false";
+  }, /trigger/i);
+  expectDrift((snapshot) => {
+    snapshot.triggers[0].arguments = ["inert"];
+  }, /trigger/i);
+  expectDrift((snapshot) => {
+    snapshot.triggers[0].argumentCount = 1;
+  }, /trigger/i);
+  expectDrift((snapshot) => {
+    snapshot.triggers[0].oldTransitionTable = "old_rows";
+  }, /trigger/i);
+  expectDrift((snapshot) => {
+    snapshot.triggers[0].newTransitionTable = "new_rows";
+  }, /trigger/i);
+});
+
+test("policy USING and WITH CHECK expressions are exact", () => {
+  const readablePolicy = expectedSnapshot().policies.find(
+    (policy) => typeof policy.qual === "string" && policy.qual.length > 0,
+  );
+  assert.ok(readablePolicy, "expected at least one policy with USING");
+  expectDrift((snapshot) => {
+    const policy = snapshot.policies.find(
+      (candidate) => candidate.name === readablePolicy.name,
+    );
+    policy.qual = `(${policy.qual}) OR true`;
+  }, /policy/i);
+
+  const writablePolicy = expectedSnapshot().policies.find(
+    (policy) =>
+      typeof policy.withCheck === "string" && policy.withCheck.length > 0,
+  );
+  assert.ok(writablePolicy, "expected at least one policy with WITH CHECK");
+  expectDrift((snapshot) => {
+    const policy = snapshot.policies.find(
+      (candidate) => candidate.name === writablePolicy.name,
+    );
+    policy.withCheck = `(${policy.withCheck}) OR true`;
+  }, /policy/i);
 });
 
 test("function, table, and role privileges are exact", () => {
@@ -158,13 +261,69 @@ test("function, table, and role privileges are exact", () => {
     snapshot.roles.find((role) => role.name === "authenticated").bypassRls =
       true;
   }, /role attribute/i);
+  expectDrift((snapshot) => {
+    snapshot.roles.find((role) => role.name === "service_role").bypassRls =
+      false;
+  }, /role attribute/i);
+  expectDrift((snapshot) => {
+    snapshot.roles.find((role) => role.name === "authenticated").createRole =
+      true;
+  }, /role attribute/i);
   expectDrift(
     (snapshot) =>
       snapshot.dangerousMemberships.push({
-        member: "authenticated",
-        target: "service_role",
+        member: "service_role",
+        target: "postgres",
+        depth: 1,
+        adminOption: false,
+        inheritOption: true,
+        setOption: true,
+        targetSuperuser: true,
+        targetBypassRls: true,
+        targetReplication: true,
       }),
     /membership/i,
+  );
+});
+
+test("schema ownership, schema ACLs, table owners, and default ACLs are exact", () => {
+  const expected = expectedSnapshot();
+  assert.deepEqual(
+    expected.schemas.map((schema) => schema.schema),
+    ["core", "learning", "private"],
+  );
+  assert.ok(expected.schemaPrivileges.length > 0);
+  assert.ok(expected.governedTableOwners.length > 0);
+  assert.ok(expected.defaultPrivileges.length > 0);
+
+  expectDrift((snapshot) => {
+    snapshot.schemas.find((schema) => schema.schema === "learning").owner =
+      "service_role";
+  }, /schema ownership/i);
+  expectDrift(
+    (snapshot) =>
+      snapshot.schemaPrivileges.push({
+        schema: "learning",
+        grantee: "authenticated",
+        privilege: "CREATE",
+        grantable: false,
+      }),
+    /schema privilege/i,
+  );
+  expectDrift((snapshot) => {
+    snapshot.governedTableOwners[0].owner = "service_role";
+  }, /table owner/i);
+  expectDrift(
+    (snapshot) =>
+      snapshot.defaultPrivileges.push({
+        owner: "postgres",
+        schema: "learning",
+        objectType: "TABLE",
+        grantee: "authenticated",
+        privilege: "INSERT",
+        grantable: false,
+      }),
+    /default privilege/i,
   );
 });
 

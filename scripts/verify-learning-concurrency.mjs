@@ -18,10 +18,13 @@ const IDS = Object.freeze({
 });
 
 const SCENARIOS = Object.freeze({
-  assignment: scenario(1),
-  role: scenario(2),
-  capability: scenario(3),
-  privilege: scenario(4),
+  assignmentIssuanceFirst: scenario(1),
+  assignmentLossFirst: scenario(2),
+  roleIssuanceFirst: scenario(3),
+  roleLossFirst: scenario(4),
+  capabilityIssuanceFirst: scenario(5),
+  capabilityLossFirst: scenario(6),
+  privilege: scenario(7),
 });
 
 function scenario(number) {
@@ -36,26 +39,32 @@ function scenario(number) {
 }
 
 async function seedFixture(client) {
-  const users = Object.values(SCENARIOS).map((entry) => entry.user);
-  const evidenceScenarios = [
-    SCENARIOS.assignment,
-    SCENARIOS.role,
-    SCENARIOS.capability,
-  ];
+  const evidenceScenarios = Object.entries(SCENARIOS)
+    .filter(([name]) => name !== "privilege")
+    .map(([, entry]) => entry);
   await client.query("set session_replication_role = replica");
   try {
+    const profiles = [
+      [IDS.owner, "learning-ci-owner@example.invalid", "CI Owner"],
+      [IDS.reviewer, "learning-ci-reviewer@example.invalid", "CI Reviewer"],
+      ...Object.entries(SCENARIOS).map(([name, entry]) => [
+        entry.user,
+        `learning-ci-${name.toLowerCase()}@example.invalid`,
+        `CI ${name}`,
+      ]),
+    ];
+    const profileValues = profiles
+      .map(
+        (_, index) =>
+          `($${index * 3 + 1}, $${index * 3 + 2}, $${index * 3 + 3}, 'employee', 'active', '2020-01-01')`,
+      )
+      .join(",\n");
     await client.query(
       `
         insert into core.profiles(id, email, full_name, kind, status, created_at)
-        values
-          ($1, 'learning-ci-owner@example.invalid', 'CI Owner', 'employee', 'active', '2020-01-01'),
-          ($2, 'learning-ci-reviewer@example.invalid', 'CI Reviewer', 'employee', 'active', '2020-01-01'),
-          ($3, 'learning-ci-assignment@example.invalid', 'CI Assignment', 'employee', 'active', '2020-01-01'),
-          ($4, 'learning-ci-role@example.invalid', 'CI Role', 'employee', 'active', '2020-01-01'),
-          ($5, 'learning-ci-capability@example.invalid', 'CI Capability', 'employee', 'active', '2020-01-01'),
-          ($6, 'learning-ci-privilege@example.invalid', 'CI Privilege', 'employee', 'active', '2020-01-01')
+        values ${profileValues}
       `,
-      [IDS.owner, IDS.reviewer, ...users],
+      profiles.flat(),
     );
     await client.query(
       `insert into core.departments(id, code, name, created_at)
@@ -217,6 +226,87 @@ async function seedFixture(client) {
   }
 }
 
+async function cleanupFixture(client) {
+  await client.query("rollback").catch(() => undefined);
+  await client.query("set session_replication_role = replica");
+  try {
+    const certificationIds = Object.values(SCENARIOS).map(
+      (entry) => entry.certification,
+    );
+    const assignmentRequirementIds = Object.values(SCENARIOS).map(
+      (entry) => entry.assignmentRequirement,
+    );
+    const assignmentIds = Object.values(SCENARIOS).map(
+      (entry) => entry.assignment,
+    );
+    const roleAssignmentIds = Object.values(SCENARIOS).map(
+      (entry) => entry.roleAssignment,
+    );
+    const profileIds = [
+      IDS.owner,
+      IDS.reviewer,
+      ...Object.values(SCENARIOS).map((entry) => entry.user),
+    ];
+
+    await client.query(
+      "delete from learning.certifications where id = any($1::uuid[]) or module = 'learning_ci'",
+      [certificationIds],
+    );
+    await client.query(
+      "delete from learning.assignment_requirements where id = any($1::uuid[])",
+      [assignmentRequirementIds],
+    );
+    await client.query(
+      "delete from learning.assignments where id = any($1::uuid[])",
+      [assignmentIds],
+    );
+    await client.query("delete from learning.role_curricula where id = $1", [
+      IDS.roleCurriculum,
+    ]);
+    await client.query(
+      "delete from learning.curriculum_capability_outcomes where id = $1",
+      [IDS.outcome],
+    );
+    await client.query(
+      "delete from learning.curriculum_requirements where id = $1",
+      [IDS.curriculumRequirement],
+    );
+    await client.query(
+      "delete from learning.requirement_versions where id = $1",
+      [IDS.requirementVersion],
+    );
+    await client.query("delete from learning.requirements where id = $1", [
+      IDS.requirement,
+    ]);
+    await client.query(
+      "delete from learning.curriculum_versions where id = $1",
+      [IDS.curriculumVersion],
+    );
+    await client.query("delete from learning.curricula where id = $1", [
+      IDS.curriculum,
+    ]);
+    await client.query(
+      "delete from core.user_roles where id = any($1::uuid[]) or module = 'learning_ci'",
+      [roleAssignmentIds],
+    );
+    await client.query(
+      "delete from core.role_capabilities where module = 'learning_ci'",
+    );
+    await client.query("delete from core.roles where module = 'learning_ci'");
+    await client.query(
+      "delete from core.capabilities where module = 'learning_ci'",
+    );
+    await client.query("delete from core.departments where id = $1", [
+      IDS.department,
+    ]);
+    await client.query("delete from core.profiles where id = any($1::uuid[])", [
+      profileIds,
+    ]);
+  } finally {
+    await client.query("set session_replication_role = origin");
+  }
+}
+
 async function issueCertification(client, entry) {
   await client.query(
     `
@@ -253,7 +343,7 @@ async function assertStillBlocked(promise, label) {
   assert.equal(state, "blocked", `${label} did not wait on issuance locks`);
 }
 
-async function verifyIssuanceRace({
+async function verifyIssuanceFirstRace({
   issueClient,
   lossClient,
   checkClient,
@@ -288,6 +378,49 @@ async function verifyIssuanceRace({
   assert.deepEqual(result.rows, [
     { status: "revoked", revocation_reason: expectedReason, revoked: true },
   ]);
+}
+
+async function verifyAuthorityLossFirstRace({
+  issueClient,
+  lossClient,
+  checkClient,
+  entry,
+  lossSql,
+  lossParameters = [],
+  label,
+}) {
+  await lossClient.query("begin isolation level read committed");
+  await issueClient.query("begin isolation level read committed");
+  let issuance;
+  try {
+    await lossClient.query(lossSql, lossParameters);
+    issuance = issueCertification(issueClient, entry);
+    await assertStillBlocked(issuance, label);
+    await lossClient.query("commit");
+    await assert.rejects(
+      issuance,
+      /certification|source role|role assignment|role authority|capability|inactive/i,
+    );
+    await issueClient.query("rollback");
+  } catch (error) {
+    await Promise.allSettled([
+      issueClient.query("rollback"),
+      lossClient.query("rollback"),
+    ]);
+    throw error;
+  }
+
+  const result = await checkClient.query(
+    `select count(*)::integer as "activeCount"
+     from learning.certifications
+     where id = $1 and status = 'active'`,
+    [entry.certification],
+  );
+  assert.deepEqual(
+    result.rows,
+    [{ activeCount: 0 }],
+    `${label}: expected no active certification after authority loss`,
+  );
 }
 
 async function verifyRoleAssignmentUpdatePrivileges(client) {
@@ -347,53 +480,100 @@ async function run() {
   const [issueClient, lossClient, checkClient] = clients;
   try {
     await Promise.all(
-      clients.map((client) => client.query("set lock_timeout = '10s'")),
+      clients.flatMap((client) => [
+        client.query("set lock_timeout = '10s'"),
+        client.query("set statement_timeout = '20s'"),
+        client.query("set deadlock_timeout = '1s'"),
+      ]),
     );
     const isolation = await checkClient.query(
       "select current_setting('transaction_isolation') as isolation",
     );
     assert.equal(isolation.rows[0].isolation, "read committed");
+    await cleanupFixture(checkClient);
     await seedFixture(checkClient);
     await verifyRoleAssignmentUpdatePrivileges(checkClient);
 
-    await verifyIssuanceRace({
+    await verifyIssuanceFirstRace({
       issueClient,
       lossClient,
       checkClient,
-      entry: SCENARIOS.assignment,
+      entry: SCENARIOS.assignmentIssuanceFirst,
       lossSql: "delete from core.user_roles where id = $1",
-      lossParameters: [SCENARIOS.assignment.roleAssignment],
+      lossParameters: [SCENARIOS.assignmentIssuanceFirst.roleAssignment],
       expectedReason: "system:source_role_assignment_removed",
-      label: "assignment deletion",
+      label: "assignment deletion issuance-first",
     });
-    await verifyIssuanceRace({
+    await verifyAuthorityLossFirstRace({
       issueClient,
       lossClient,
       checkClient,
-      entry: SCENARIOS.role,
+      entry: SCENARIOS.assignmentLossFirst,
+      lossSql: "delete from core.user_roles where id = $1",
+      lossParameters: [SCENARIOS.assignmentLossFirst.roleAssignment],
+      label: "assignment deletion loss-first",
+    });
+    await verifyIssuanceFirstRace({
+      issueClient,
+      lossClient,
+      checkClient,
+      entry: SCENARIOS.roleIssuanceFirst,
       lossSql:
         "update core.roles set is_active = false where module = 'learning_ci' and role = 'operator'",
       expectedReason: "system:source_role_inactive",
-      label: "role deactivation",
+      label: "role deactivation issuance-first",
     });
     await checkClient.query(
       "update core.roles set is_active = true where module = 'learning_ci' and role = 'operator'",
     );
-    await verifyIssuanceRace({
+    await verifyAuthorityLossFirstRace({
       issueClient,
       lossClient,
       checkClient,
-      entry: SCENARIOS.capability,
+      entry: SCENARIOS.roleLossFirst,
+      lossSql:
+        "update core.roles set is_active = false where module = 'learning_ci' and role = 'operator'",
+      label: "role deactivation loss-first",
+    });
+    await checkClient.query(
+      "update core.roles set is_active = true where module = 'learning_ci' and role = 'operator'",
+    );
+    await verifyIssuanceFirstRace({
+      issueClient,
+      lossClient,
+      checkClient,
+      entry: SCENARIOS.capabilityIssuanceFirst,
       lossSql:
         "delete from core.role_capabilities where module = 'learning_ci' and role = 'operator' and cap = 'operate'",
       expectedReason: "system:source_role_capability_missing",
-      label: "capability removal",
+      label: "capability removal issuance-first",
+    });
+    await checkClient.query(
+      "insert into core.role_capabilities(module, role, cap) values ('learning_ci', 'operator', 'operate')",
+    );
+    await verifyAuthorityLossFirstRace({
+      issueClient,
+      lossClient,
+      checkClient,
+      entry: SCENARIOS.capabilityLossFirst,
+      lossSql:
+        "delete from core.role_capabilities where module = 'learning_ci' and role = 'operator' and cap = 'operate'",
+      label: "capability removal loss-first",
     });
     console.log(
-      "Applied PostgreSQL learning concurrency passed (service_role updates and 3 READ COMMITTED races).",
+      "Applied PostgreSQL learning concurrency passed (service_role updates and 6 READ COMMITTED races).",
     );
   } finally {
-    await Promise.allSettled(clients.map((client) => client.end()));
+    await Promise.allSettled([
+      issueClient.query("rollback"),
+      lossClient.query("rollback"),
+      checkClient.query("rollback"),
+    ]);
+    try {
+      await cleanupFixture(checkClient);
+    } finally {
+      await Promise.allSettled(clients.map((client) => client.end()));
+    }
   }
 }
 

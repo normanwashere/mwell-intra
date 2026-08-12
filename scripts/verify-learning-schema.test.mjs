@@ -535,6 +535,16 @@ test("binds certifications to immutable exact role-assignment lineage", () => {
     errorsForAssignmentLineage(mutableIdentity),
     /assignment.*identity|immutable|function body/i,
   );
+
+  const inertIdentityTrigger = replaceRequired(
+    assignmentLineageSql,
+    /on core\.user_roles\s+for each row execute function private\.guard_role_assignment_identity\(\)/i,
+    "on core.user_roles when (false) for each row execute function private.guard_role_assignment_identity()",
+  );
+  assert.match(
+    errorsForAssignmentLineage(inertIdentityTrigger),
+    /trigger.*predicate|when.*not allowed|unconsumed trigger clause|weakened trigger/i,
+  );
 });
 
 test("removes TRUNCATE from supported authority paths permanently", () => {

@@ -941,6 +941,58 @@ function parenthesizedClause(statement, keyword) {
   return "";
 }
 
+export function extractExpectedLearningPolicies(input) {
+  const policies = new Map();
+  for (const migration of asMigrations(input).filter(
+    (entry) => entry.name >= FOUNDATION_MIGRATION_NAME,
+  )) {
+    for (const statement of scanSql(migration.sql)) {
+      const normalized = normalizeSql(statement).replaceAll('"', "");
+      const create = normalized.match(
+        /^create policy ([a-z_][a-z0-9_]*) on learning\.([a-z_][a-z0-9_]*)\b/,
+      );
+      if (create) {
+        const command =
+          normalized.match(/\bfor (all|select|insert|update|delete)\b/)?.[1] ??
+          "all";
+        const roleSql = normalized.match(
+          /\bto ([\s\S]+?)(?=\s+using\s*\(|\s+with check\s*\(|$)/,
+        )?.[1];
+        policies.set(create[1], {
+          name: create[1],
+          table: `learning.${create[2]}`,
+          permissive: !/\bas restrictive\b/.test(normalized),
+          command: command.toUpperCase(),
+          roles: roleSql ? parseGrantees(roleSql) : ["public"],
+          qual: parenthesizedClause(statement, "using") || null,
+          withCheck: parenthesizedClause(statement, "with check") || null,
+        });
+        continue;
+      }
+
+      const drop = normalized.match(
+        /^drop policy(?: if exists)? ([a-z_][a-z0-9_]*) on learning\.[a-z_][a-z0-9_]*$/,
+      );
+      if (drop) policies.delete(drop[1]);
+    }
+  }
+  return [...policies.values()].sort((left, right) =>
+    left.name.localeCompare(right.name),
+  );
+}
+
+export function readRepositoryMigrations() {
+  const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
+  const migrationDirectory = resolve(root, "supabase/migrations");
+  return readdirSync(migrationDirectory)
+    .filter((name) => name.toLowerCase().endsWith(".sql"))
+    .sort()
+    .map((name) => ({
+      name,
+      sql: readFileSync(resolve(migrationDirectory, name), "utf8"),
+    }));
+}
+
 function hasPolicyTautology(expression) {
   const normalized = normalizeSql(expression);
   if (/\btrue\b/.test(normalized)) return true;
@@ -1767,10 +1819,19 @@ function processStatement(state, statement, migrationName) {
     return;
   }
 
-  match = normalized.match(
-    /^create (?:or replace )?(constraint )?trigger ([a-z_][a-z0-9_]*) (.+?) on ((?:learning|core)\.[a-z_][a-z0-9_]*) (.*?)for each row execute function ((?:learning|private)\.[a-z_][a-z0-9_]*)\s*\(/,
-  );
-  if (match) {
+  if (
+    /^create (?:or replace )?(?:constraint )?trigger\b/.test(normalized) &&
+    /\bon (?:learning|core)\./.test(normalized)
+  ) {
+    match = normalized.match(
+      /^create (?:or replace )?(constraint )?trigger ([a-z_][a-z0-9_]*) ((?:before|after|instead of) .+?) on ((?:learning|core)\.[a-z_][a-z0-9_]*)(?: (deferrable initially deferred|not deferrable))? for each row execute function ((?:learning|private)\.[a-z_][a-z0-9_]*)\(\)$/,
+    );
+    if (!match) {
+      state.errors.push(
+        `${migrationName}: unconsumed trigger clause; required triggers may not use predicates, arguments, transition tables, or unmodeled attributes.`,
+      );
+      return;
+    }
     if (!Object.hasOwn(REQUIRED_TRIGGERS, match[2])) {
       state.errors.push(
         `${migrationName}: unmodeled trigger ${match[2]} is default-denied.`,
@@ -1783,7 +1844,11 @@ function processStatement(state, statement, migrationName) {
       table: match[4],
       function: match[6],
       constraint: Boolean(match[1]),
-      deferred: normalizeSql(match[5]) === "deferrable initially deferred",
+      deferred: match[5] === "deferrable initially deferred",
+      predicate: null,
+      arguments: [],
+      oldTransitionTable: null,
+      newTransitionTable: null,
       migrationName,
     });
     return;
@@ -3127,15 +3192,7 @@ export function verifyLearningSchema(input) {
 }
 
 function run() {
-  const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
-  const migrationDirectory = resolve(root, "supabase/migrations");
-  const migrations = readdirSync(migrationDirectory)
-    .filter((name) => name.toLowerCase().endsWith(".sql"))
-    .sort()
-    .map((name) => ({
-      name,
-      sql: readFileSync(resolve(migrationDirectory, name), "utf8"),
-    }));
+  const migrations = readRepositoryMigrations();
   const errors = verifyLearningSchema(migrations);
   if (errors.length > 0) throw new Error(errors.join("\n"));
   console.log(

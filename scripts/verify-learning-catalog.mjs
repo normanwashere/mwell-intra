@@ -4,14 +4,18 @@ import { pathToFileURL } from "node:url";
 import {
   ALLOWED_FUNCTION_EXECUTE,
   ALLOWED_SECURITY_DEFINERS,
-  EXPECTED_POLICIES,
+  extractExpectedLearningPolicies,
   MODELED_FUNCTIONS,
+  readRepositoryMigrations,
   REQUIRED_TABLES,
   REQUIRED_TRIGGERS,
   SERVICE_PRIVILEGES,
 } from "./verify-learning-schema.mjs";
 
 const LOCAL_DATABASE_PORT = "54322";
+const EXPECTED_POLICY_SPECS = Object.freeze(
+  extractExpectedLearningPolicies(readRepositoryMigrations()),
+);
 
 const FUNCTION_SPECS = Object.freeze([
   fn(
@@ -292,6 +296,15 @@ function triggerSpec(name, spec) {
     constraint: spec.constraint ?? false,
     deferrable: spec.constraint ?? false,
     initiallyDeferred: spec.deferred ?? false,
+    predicate: null,
+    arguments: [],
+    argumentCount: 0,
+    oldTransitionTable: null,
+    newTransitionTable: null,
+    referencedTable: null,
+    parentTrigger: null,
+    constraintIndex: null,
+    internal: false,
   };
 }
 
@@ -335,6 +348,7 @@ function expectedTablePrivileges() {
     for (const privilege of [
       "DELETE",
       "INSERT",
+      "MAINTAIN",
       "REFERENCES",
       "SELECT",
       "TRIGGER",
@@ -357,7 +371,41 @@ function expectedTablePrivileges() {
   return rows;
 }
 
-export function expectedLearningCatalogSnapshot() {
+function expectedSchemaPrivileges() {
+  return ["core", "learning", "private"].flatMap((schema) =>
+    ["authenticated", "service_role"].map((grantee) => ({
+      schema,
+      grantee,
+      privilege: "USAGE",
+      grantable: false,
+    })),
+  );
+}
+
+function expectedDefaultPrivileges() {
+  return [
+    "SELECT",
+    "DELETE",
+    "INSERT",
+    "MAINTAIN",
+    "REFERENCES",
+    "SELECT",
+    "TRIGGER",
+    "TRUNCATE",
+    "UPDATE",
+  ].map((privilege, index) => ({
+    owner: "postgres",
+    schema: "core",
+    objectType: "TABLE",
+    grantee: index === 0 ? "authenticated" : "service_role",
+    privilege,
+    grantable: false,
+  }));
+}
+
+export function expectedLearningCatalogSnapshot({
+  policies = EXPECTED_POLICY_SPECS,
+} = {}) {
   return normalizeSnapshot({
     functions: FUNCTION_SPECS,
     privilegedFunctions: FUNCTION_SPECS.filter((spec) =>
@@ -366,43 +414,62 @@ export function expectedLearningCatalogSnapshot() {
       ),
     ).map((spec) => spec.function),
     privilegedViews: [],
+    schemas: ["core", "learning", "private"].map((schema) => ({
+      schema,
+      owner: "postgres",
+    })),
+    schemaPrivileges: expectedSchemaPrivileges(),
     tables: REQUIRED_TABLES.map((table) => ({
       table: `learning.${table}`,
       rls: true,
       forceRls: true,
     })),
-    policies: [...EXPECTED_POLICIES].map(([name, table]) => ({
-      name,
-      table: `learning.${table}`,
-      permissive: true,
-      command: name.endsWith("_manage") ? "ALL" : "SELECT",
-      roles: ["authenticated"],
-      qualPresent: true,
-      withCheckPresent: name.endsWith("_manage"),
-    })),
+    policies,
     triggers: Object.entries(REQUIRED_TRIGGERS).map(([name, spec]) =>
       triggerSpec(name, spec),
     ),
     functionPrivileges: expectedFunctionPrivileges(),
     tablePrivileges: expectedTablePrivileges(),
+    governedTableOwners: [
+      ...REQUIRED_TABLES.map((table) => `learning.${table}`),
+      "core.roles",
+      "core.role_capabilities",
+      "core.user_roles",
+    ].map((table) => ({ table, owner: "postgres" })),
+    defaultPrivileges: expectedDefaultPrivileges(),
     roles: [
       {
         name: "anon",
         superuser: false,
+        inherit: false,
+        createRole: false,
+        createDb: false,
+        canLogin: false,
         bypassRls: false,
         replication: false,
+        connectionLimit: -1,
       },
       {
         name: "authenticated",
         superuser: false,
+        inherit: false,
+        createRole: false,
+        createDb: false,
+        canLogin: false,
         bypassRls: false,
         replication: false,
+        connectionLimit: -1,
       },
       {
         name: "service_role",
         superuser: false,
+        inherit: false,
+        createRole: false,
+        createDb: false,
+        canLogin: false,
         bypassRls: true,
         replication: false,
+        connectionLimit: -1,
       },
     ],
     dangerousMemberships: [],
@@ -420,6 +487,11 @@ function normalizePredicate(predicate) {
     value = value.slice(1, -1).trim();
   }
   return value.replace(/\s*=\s*/g, " = ");
+}
+
+function normalizePolicyExpression(expression) {
+  if (expression == null) return null;
+  return expression.replace(/\r\n?/g, "\n").replace(/\s+/g, " ").trim();
 }
 
 function sorted(values, key) {
@@ -440,13 +512,21 @@ function normalizeSnapshot(snapshot) {
     ),
     privilegedFunctions: [...(snapshot.privilegedFunctions ?? [])].sort(),
     privilegedViews: [...(snapshot.privilegedViews ?? [])].sort(),
+    schemas: sorted(snapshot.schemas ?? [], (row) => row.schema),
+    schemaPrivileges: sorted(
+      snapshot.schemaPrivileges ?? [],
+      (row) => `${row.schema}:${row.grantee}:${row.privilege}`,
+    ),
     tables: sorted(snapshot.tables ?? [], (row) => row.table),
     policies: sorted(snapshot.policies ?? [], (row) => row.name).map((row) => ({
       ...row,
       roles: [...(row.roles ?? [])].sort(),
+      qual: normalizePolicyExpression(row.qual),
+      withCheck: normalizePolicyExpression(row.withCheck),
     })),
     triggers: sorted(snapshot.triggers ?? [], (row) => row.name).map((row) => ({
       ...row,
+      argumentCount: Number(row.argumentCount),
       events: [...(row.events ?? [])].sort(),
       updateColumns: [...(row.updateColumns ?? [])].sort(),
     })),
@@ -457,6 +537,15 @@ function normalizeSnapshot(snapshot) {
     tablePrivileges: sorted(
       snapshot.tablePrivileges ?? [],
       (row) => `${row.table}:${row.grantee}:${row.privilege}`,
+    ),
+    governedTableOwners: sorted(
+      snapshot.governedTableOwners ?? [],
+      (row) => row.table,
+    ),
+    defaultPrivileges: sorted(
+      snapshot.defaultPrivileges ?? [],
+      (row) =>
+        `${row.owner}:${row.schema}:${row.objectType}:${row.grantee}:${row.privilege}`,
     ),
     roles: sorted(snapshot.roles ?? [], (row) => row.name),
     dangerousMemberships: sorted(
@@ -483,8 +572,11 @@ function compareSection(errors, label, expected, actual) {
   }
 }
 
-export function verifyLearningCatalogSnapshot(input) {
-  const expected = expectedLearningCatalogSnapshot();
+export function verifyLearningCatalogSnapshot(
+  input,
+  expectedInput = expectedLearningCatalogSnapshot(),
+) {
+  const expected = normalizeSnapshot(expectedInput);
   const actual = normalizeSnapshot(input);
   const errors = [];
   compareSection(
@@ -504,6 +596,18 @@ export function verifyLearningCatalogSnapshot(input) {
     "Learning privileged view inventory",
     expected.privilegedViews,
     actual.privilegedViews,
+  );
+  compareSection(
+    errors,
+    "Governed schema ownership",
+    expected.schemas,
+    actual.schemas,
+  );
+  compareSection(
+    errors,
+    "Governed schema privilege catalog",
+    expected.schemaPrivileges,
+    actual.schemaPrivileges,
   );
   compareSection(errors, "Learning table RLS", expected.tables, actual.tables);
   compareSection(
@@ -529,6 +633,18 @@ export function verifyLearningCatalogSnapshot(input) {
     "Learning table privilege catalog",
     expected.tablePrivileges,
     actual.tablePrivileges,
+  );
+  compareSection(
+    errors,
+    "Governed table owner catalog",
+    expected.governedTableOwners,
+    actual.governedTableOwners,
+  );
+  compareSection(
+    errors,
+    "Governed default privilege catalog",
+    expected.defaultPrivileges,
+    actual.defaultPrivileges,
   );
   compareSection(
     errors,
@@ -582,11 +698,15 @@ export async function loadLearningCatalogSnapshot(client) {
     functions,
     privilegedFunctions,
     privilegedViews,
+    schemas,
+    schemaPrivileges,
     tables,
     policies,
     triggers,
     functionPrivileges,
     tablePrivileges,
+    governedTableOwners,
+    defaultPrivileges,
     roles,
     dangerousMemberships,
     certificationIndexes,
@@ -653,6 +773,28 @@ export async function loadLearningCatalogSnapshot(client) {
       order by 1
     `),
     client.query(`
+      select namespace.nspname as schema,
+             owner.rolname as owner
+      from pg_catalog.pg_namespace namespace
+      join pg_catalog.pg_roles owner on owner.oid = namespace.nspowner
+      where namespace.nspname in ('core', 'private', 'learning')
+      order by namespace.nspname
+    `),
+    client.query(`
+      select namespace.nspname as schema,
+             coalesce(grantee.rolname, 'PUBLIC') as grantee,
+             privilege.privilege_type as privilege,
+             privilege.is_grantable as grantable
+      from pg_catalog.pg_namespace namespace
+      cross join lateral pg_catalog.aclexplode(
+        coalesce(namespace.nspacl, pg_catalog.acldefault('n', namespace.nspowner))
+      ) privilege
+      left join pg_catalog.pg_roles grantee on grantee.oid = privilege.grantee
+      where namespace.nspname in ('core', 'private', 'learning')
+        and privilege.grantee <> namespace.nspowner
+      order by 1, 2, 3
+    `),
+    client.query(`
       select n.nspname || '.' || c.relname as "table",
              c.relrowsecurity as rls,
              c.relforcerowsecurity as "forceRls"
@@ -667,8 +809,8 @@ export async function loadLearningCatalogSnapshot(client) {
              permissive = 'PERMISSIVE' as permissive,
              cmd as command,
              roles,
-             qual is not null and btrim(qual) not in ('', 'true', '(true)') as "qualPresent",
-             with_check is not null and btrim(with_check) not in ('', 'true', '(true)') as "withCheckPresent"
+             qual,
+             with_check as "withCheck"
       from pg_catalog.pg_policies
       where schemaname = 'learning'
       order by policyname
@@ -697,14 +839,27 @@ export async function loadLearningCatalogSnapshot(client) {
         (t.tgtype & 1) <> 0 as "row",
         t.tgenabled as enabled,
         t.tgconstraint <> 0 as "constraint",
-        coalesce(constraint_row.condeferrable, false) as deferrable,
-        coalesce(constraint_row.condeferred, false) as "initiallyDeferred"
+        t.tgdeferrable as deferrable,
+        t.tginitdeferred as "initiallyDeferred",
+        pg_catalog.pg_get_expr(t.tgqual, t.tgrelid, false) as predicate,
+        t.tgnargs as "argumentCount",
+        encode(t.tgargs, 'hex') as "argumentsHex",
+        t.tgoldtable as "oldTransitionTable",
+        t.tgnewtable as "newTransitionTable",
+        case when t.tgconstrrelid = 0 then null
+             else referenced_ns.nspname || '.' || referenced_class.relname end as "referencedTable",
+        parent_trigger.tgname as "parentTrigger",
+        constraint_index.relname as "constraintIndex",
+        t.tgisinternal as internal
       from pg_catalog.pg_trigger t
       join pg_catalog.pg_class table_class on table_class.oid = t.tgrelid
       join pg_catalog.pg_namespace table_ns on table_ns.oid = table_class.relnamespace
       join pg_catalog.pg_proc function_proc on function_proc.oid = t.tgfoid
       join pg_catalog.pg_namespace function_ns on function_ns.oid = function_proc.pronamespace
-      left join pg_catalog.pg_constraint constraint_row on constraint_row.oid = t.tgconstraint
+      left join pg_catalog.pg_class referenced_class on referenced_class.oid = t.tgconstrrelid
+      left join pg_catalog.pg_namespace referenced_ns on referenced_ns.oid = referenced_class.relnamespace
+      left join pg_catalog.pg_trigger parent_trigger on parent_trigger.oid = t.tgparentid
+      left join pg_catalog.pg_class constraint_index on constraint_index.oid = t.tgconstrindid
       where not t.tgisinternal
         and (table_ns.nspname = 'learning' or (table_ns.nspname = 'core' and t.tgname like 'learning_%'))
       order by t.tgname
@@ -749,33 +904,124 @@ export async function loadLearningCatalogSnapshot(client) {
       order by 1, 2, 3
     `),
     client.query(`
+      select namespace.nspname || '.' || relation.relname as "table",
+             owner.rolname as owner
+      from pg_catalog.pg_class relation
+      join pg_catalog.pg_namespace namespace on namespace.oid = relation.relnamespace
+      join pg_catalog.pg_roles owner on owner.oid = relation.relowner
+      where relation.relkind in ('r', 'p')
+        and (
+          namespace.nspname = 'learning'
+          or (
+            namespace.nspname = 'core'
+            and relation.relname in ('roles', 'role_capabilities', 'user_roles')
+          )
+        )
+      order by 1
+    `),
+    client.query(`
+      select owner.rolname as owner,
+             namespace.nspname as schema,
+             case defaults.defaclobjtype
+               when 'r' then 'TABLE'
+               when 'S' then 'SEQUENCE'
+               when 'f' then 'FUNCTION'
+               when 'T' then 'TYPE'
+               when 'n' then 'SCHEMA'
+               else defaults.defaclobjtype::text
+             end as "objectType",
+             coalesce(grantee.rolname, 'PUBLIC') as grantee,
+             privilege.privilege_type as privilege,
+             privilege.is_grantable as grantable
+      from pg_catalog.pg_default_acl defaults
+      join pg_catalog.pg_roles owner on owner.oid = defaults.defaclrole
+      join pg_catalog.pg_namespace namespace on namespace.oid = defaults.defaclnamespace
+      cross join lateral pg_catalog.aclexplode(defaults.defaclacl) privilege
+      left join pg_catalog.pg_roles grantee on grantee.oid = privilege.grantee
+      where namespace.nspname in ('core', 'private', 'learning')
+        and privilege.grantee <> defaults.defaclrole
+      order by 1, 2, 3, 4, 5
+    `),
+    client.query(`
       select rolname as name,
              rolsuper as superuser,
+             rolinherit as inherit,
+             rolcreaterole as "createRole",
+             rolcreatedb as "createDb",
+             rolcanlogin as "canLogin",
              rolbypassrls as "bypassRls",
-             rolreplication as replication
+             rolreplication as replication,
+             rolconnlimit as "connectionLimit"
       from pg_catalog.pg_roles
       where rolname in ('anon', 'authenticated', 'service_role')
       order by rolname
     `),
     client.query(`
-      with recursive memberships(member_oid, target_oid) as (
-        select member, roleid from pg_catalog.pg_auth_members
+      with recursive memberships(
+        member_oid,
+        target_oid,
+        depth,
+        oid_path,
+        role_path,
+        admin_options,
+        inherit_options,
+        set_options,
+        grantors
+      ) as (
+        select membership.member,
+               membership.roleid,
+               1,
+               array[membership.member, membership.roleid],
+               array[member.rolname, target.rolname],
+               array[membership.admin_option],
+               array[membership.inherit_option],
+               array[membership.set_option],
+               array[grantor.rolname]
+        from pg_catalog.pg_auth_members membership
+        join pg_catalog.pg_roles member on member.oid = membership.member
+        join pg_catalog.pg_roles target on target.oid = membership.roleid
+        join pg_catalog.pg_roles grantor on grantor.oid = membership.grantor
+        where member.rolname in ('anon', 'authenticated', 'service_role')
         union
-        select memberships.member_oid, inherited.roleid
+        select memberships.member_oid,
+               inherited.roleid,
+               memberships.depth + 1,
+               memberships.oid_path || inherited.roleid,
+               memberships.role_path || target.rolname,
+               memberships.admin_options || inherited.admin_option,
+               memberships.inherit_options || inherited.inherit_option,
+               memberships.set_options || inherited.set_option,
+               memberships.grantors || grantor.rolname
         from memberships
         join pg_catalog.pg_auth_members inherited
           on inherited.member = memberships.target_oid
+        join pg_catalog.pg_roles target on target.oid = inherited.roleid
+        join pg_catalog.pg_roles grantor on grantor.oid = inherited.grantor
+        where not inherited.roleid = any(memberships.oid_path)
       )
-      select member.rolname as member, target.rolname as target
+      select member.rolname as member,
+             target.rolname as target,
+             memberships.depth,
+             memberships.role_path as path,
+             memberships.admin_options as "adminOptions",
+             memberships.inherit_options as "inheritOptions",
+             memberships.set_options as "setOptions",
+             memberships.grantors,
+             target.rolsuper as "targetSuperuser",
+             target.rolbypassrls as "targetBypassRls",
+             target.rolreplication as "targetReplication",
+             target.rolcreaterole as "targetCreateRole",
+             target.rolcreatedb as "targetCreateDb"
       from memberships
       join pg_catalog.pg_roles member on member.oid = memberships.member_oid
       join pg_catalog.pg_roles target on target.oid = memberships.target_oid
-      where member.rolname in ('anon', 'authenticated')
-        and (
+      where (
           target.rolname = 'service_role'
           or target.rolsuper
           or target.rolbypassrls
           or target.rolreplication
+          or target.rolcreaterole
+          or target.rolcreatedb
         )
       order by 1, 2
     `),
@@ -808,15 +1054,80 @@ export async function loadLearningCatalogSnapshot(client) {
     functions: functions.rows,
     privilegedFunctions: privilegedFunctions.rows.map((row) => row.function),
     privilegedViews: privilegedViews.rows.map((row) => row.view),
+    schemas: schemas.rows,
+    schemaPrivileges: schemaPrivileges.rows,
     tables: tables.rows,
     policies: policies.rows,
-    triggers: triggers.rows,
+    triggers: triggers.rows.map(({ argumentsHex, ...row }) => ({
+      ...row,
+      arguments:
+        argumentsHex.length === 0
+          ? []
+          : Buffer.from(argumentsHex, "hex")
+              .toString("utf8")
+              .split("\0")
+              .filter(Boolean),
+    })),
     functionPrivileges: functionPrivileges.rows,
     tablePrivileges: tablePrivileges.rows,
+    governedTableOwners: governedTableOwners.rows,
+    defaultPrivileges: defaultPrivileges.rows,
     roles: roles.rows,
     dangerousMemberships: dangerousMemberships.rows,
     certificationIndexes: certificationIndexes.rows,
   });
+}
+
+function quotedIdentifier(value) {
+  if (!/^[a-z_][a-z0-9_]*$/i.test(value)) {
+    throw new Error(
+      `Unsafe SQL identifier in learning policy contract: ${value}`,
+    );
+  }
+  return `"${value.replaceAll('"', '""')}"`;
+}
+
+export async function loadCanonicalExpectedPolicyCatalog(client) {
+  const temporaryPolicies = EXPECTED_POLICY_SPECS.map((policy, index) => ({
+    ...policy,
+    temporaryName: `learning_verify_${String(index).padStart(2, "0")}`,
+  }));
+  await client.query("begin");
+  try {
+    for (const policy of temporaryPolicies) {
+      const [schema, table] = policy.table.split(".");
+      const roles = policy.roles.map(quotedIdentifier).join(", ");
+      const usingClause = policy.qual ? ` using (${policy.qual})` : "";
+      const checkClause = policy.withCheck
+        ? ` with check (${policy.withCheck})`
+        : "";
+      await client.query(
+        `create policy ${quotedIdentifier(policy.temporaryName)} on ${quotedIdentifier(schema)}.${quotedIdentifier(table)} as ${policy.permissive ? "permissive" : "restrictive"} for ${policy.command} to ${roles}${usingClause}${checkClause}`,
+      );
+    }
+    const result = await client.query(
+      `select policyname as name,
+              schemaname || '.' || tablename as "table",
+              permissive = 'PERMISSIVE' as permissive,
+              cmd as command,
+              roles,
+              qual,
+              with_check as "withCheck"
+       from pg_catalog.pg_policies
+       where schemaname = 'learning' and policyname = any($1::text[])
+       order by policyname`,
+      [temporaryPolicies.map((policy) => policy.temporaryName)],
+    );
+    const sourceNameByTemporaryName = new Map(
+      temporaryPolicies.map((policy) => [policy.temporaryName, policy.name]),
+    );
+    return result.rows.map((policy) => ({
+      ...policy,
+      name: sourceNameByTemporaryName.get(policy.name),
+    }));
+  } finally {
+    await client.query("rollback");
+  }
 }
 
 async function run() {
@@ -827,8 +1138,10 @@ async function run() {
   const client = new Client({ connectionString });
   await client.connect();
   try {
+    const policies = await loadCanonicalExpectedPolicyCatalog(client);
+    const expected = expectedLearningCatalogSnapshot({ policies });
     const snapshot = await loadLearningCatalogSnapshot(client);
-    const errors = verifyLearningCatalogSnapshot(snapshot);
+    const errors = verifyLearningCatalogSnapshot(snapshot, expected);
     if (errors.length > 0) throw new Error(errors.join("\n"));
     console.log(
       `Applied PostgreSQL learning catalog passed (${snapshot.functions.length} functions, ${snapshot.tables.length} governed tables).`,
