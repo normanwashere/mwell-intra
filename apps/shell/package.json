@@ -23,6 +23,7 @@
     "@intra/finance": "workspace:*",
     "@intra/insights": "workspace:*",
     "@intra/legal": "workspace:*",
+    "@intra/learning": "workspace:*",
     "@intra/procurement": "workspace:*",
     "@intra/product": "workspace:*",
     "@intra/rbac": "workspace:*",

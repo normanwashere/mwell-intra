@@ -1,0 +1,29 @@
+{
+  "name": "@intra/learning",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Canonical onboarding curricula, competency contracts, and catalog validation.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@intra/auth": "workspace:*",
+    "@intra/rbac": "workspace:*",
+    "@intra/ui": "workspace:*"
+  },
+  "devDependencies": {
+    "@intra/config": "workspace:*",
+    "@types/node": "^22.7.4",
+    "eslint": "^9.17.0",
+    "typescript": "^5.6.3",
+    "vitest": "^3.2.6"
+  }
+}

@@ -40,6 +40,9 @@ importers:
       '@intra/insights':
         specifier: workspace:*
         version: link:../../modules/insights
+      '@intra/learning':
+        specifier: workspace:*
+        version: link:../../modules/learning
       '@intra/legal':
         specifier: workspace:*
         version: link:../../modules/legal
@@ -266,6 +269,34 @@ importers:
       react-dom:
         specifier: ^19.2.0
         version: 19.2.7(react@19.2.7)
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.6
+        version: 3.2.6(@types/node@22.20.0)(jiti@1.21.7)(jsdom@25.0.1)
+
+  modules/learning:
+    dependencies:
+      '@intra/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
+      '@intra/rbac':
+        specifier: workspace:*
+        version: link:../../packages/rbac
+      '@intra/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+    devDependencies:
+      '@intra/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@types/node':
+        specifier: ^22.7.4
+        version: 22.20.0
+      eslint:
+        specifier: ^9.17.0
+        version: 9.39.4(jiti@1.21.7)
       typescript:
         specifier: ^5.6.3
         version: 5.9.3
