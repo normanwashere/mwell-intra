@@ -17,6 +17,14 @@ const oldMigration = fileURLToPath(
   new URL(`../supabase/migrations/${OLD_FOUNDATION_NAME}`, import.meta.url),
 );
 const sql = readFileSync(migration, "utf8");
+const task1Catalog = readFileSync(
+  fileURLToPath(new URL("../modules/learning/src/catalog.ts", import.meta.url)),
+  "utf8",
+);
+const task1Registry = readFileSync(
+  fileURLToPath(new URL("../packages/rbac/src/registry.ts", import.meta.url)),
+  "utf8",
+);
 
 function replaceRequired(source, pattern, replacement) {
   assert.match(source, pattern, `Fixture did not contain ${pattern}.`);
@@ -78,7 +86,13 @@ test("normalizes prerequisite and capability outcome graph lineage", () => {
   );
   assert.match(
     sql,
-    /constraint curriculum_capability_outcomes_audience_check[\s\S]*?audience = 'vendor'[\s\S]*?module = 'core'[\s\S]*?capability = 'manage_own_accreditation_draft'/i,
+    /constraint curriculum_capability_outcomes_audience_check[\s\S]*?audience = 'vendor'[\s\S]*?module = 'core'[\s\S]*?capability = 'submit_accreditation'/i,
+  );
+  assert.doesNotMatch(
+    sql.match(
+      /constraint curriculum_capability_outcomes_audience_check[\s\S]*?\),\n\s*unique/i,
+    )?.[0] ?? "",
+    /manage_own_accreditation_draft|submit_documents/i,
   );
   assert.doesNotMatch(
     sql,
@@ -107,6 +121,36 @@ test("binds certification to published effective graph outcomes", () => {
   assert.match(publication, /requirement_version\.status\s*<>\s*'published'/i);
   assert.match(publication, /with recursive/i);
   assert.match(publication, /raise exception/i);
+  assert.doesNotMatch(
+    publication,
+    /mandatory[\s\S]*?curriculum_capability_outcomes|capability outcome/i,
+  );
+});
+
+test("keeps graph outcomes in parity with the Task 1 catalog and RBAC classification", () => {
+  const classifications = new Map(
+    [
+      ...task1Registry.matchAll(
+        /(readCapability|mutationCapability|onboardingWriteCapability)\('([^']+)', '([^']+)'\)/g,
+      ),
+    ].map((match) => [`${match[2]}:${match[3]}`, match[1]]),
+  );
+  assert.equal(
+    classifications.get("core:manage_own_accreditation_draft"),
+    "onboardingWriteCapability",
+  );
+  assert.equal(
+    classifications.get("core:submit_accreditation"),
+    "mutationCapability",
+  );
+  assert.match(
+    task1Catalog,
+    /kind: "orientation"[\s\S]*?mandatory: true[\s\S]*?capabilityOutcomes: \[\]/,
+  );
+  assert.match(
+    task1Catalog,
+    /VENDOR_EVIDENCE_REQUIREMENT_ID[\s\S]*?kind: "attestation"[\s\S]*?mandatory: true[\s\S]*?capabilityOutcomes: \[\]/,
+  );
 });
 
 test("serializes authority deletion, graph mutation, and graph publication in lock order", () => {
@@ -137,6 +181,64 @@ test("serializes authority deletion, graph mutation, and graph publication in lo
   assert.match(
     sql,
     /Lock order:[\s\S]*?core\.user_roles[\s\S]*?learning\.curriculum_versions[\s\S]*?learning\.requirement_versions/i,
+  );
+});
+
+test("rejects unsupported isolation on every authoritative mutation path", () => {
+  const isolationGuard = functionBody("assert_learning_read_committed");
+  assert.match(
+    isolationGuard,
+    /current_setting\('transaction_isolation'\)[\s\S]*?<>\s*'read committed'/i,
+  );
+  assert.match(isolationGuard, /raise exception/i);
+
+  const triggerFunctions = new Set(
+    [
+      ...sql.matchAll(
+        /create trigger learning_[a-z_]+[\s\S]*?execute function (?:learning|private)\.([a-z_]+)\(\);/gi,
+      ),
+    ].map((match) => match[1]),
+  );
+  for (const name of triggerFunctions) {
+    assert.match(
+      functionBody(name),
+      /private\.assert_learning_read_committed\(\)/i,
+      name,
+    );
+  }
+  for (const table of REQUIRED_TABLES) {
+    assert.match(
+      sql,
+      new RegExp(
+        `create trigger learning_${table}_read_committed_guard[\\s\\S]*?before insert or update or delete on learning\\.${table}[\\s\\S]*?learning\\.guard_authoritative_write_isolation\\(\\)`,
+        "i",
+      ),
+      table,
+    );
+  }
+  assert.match(
+    sql,
+    /Supported isolation:[\s\S]*?READ COMMITTED[\s\S]*?Lock order:/i,
+  );
+
+  const unguardedFunction = replaceRequired(
+    sql,
+    /(create or replace function learning\.guard_attempt_lifecycle\(\)[\s\S]*?as \$\$\s*begin\s*)perform private\.assert_learning_read_committed\(\);/i,
+    "$1",
+  );
+  assert.match(
+    errorsFor(unguardedFunction),
+    /guard_attempt_lifecycle.*read committed|authoritative mutation function/i,
+  );
+
+  const unguardedTable = replaceRequired(
+    sql,
+    /create trigger learning_attempt_events_read_committed_guard[\s\S]*?;/i,
+    "",
+  );
+  assert.match(
+    errorsFor(unguardedTable),
+    /missing or weakened trigger.*read_committed_guard/i,
   );
 });
 
@@ -223,7 +325,19 @@ test("rejects vendor waivers and makes assignment terminal evidence monotonic", 
   );
   assert.match(
     exceptions ?? "",
+    /revoked_at is null[\s\S]*?revoked_at >= created_at[\s\S]*?revoked_at >= approved_at/i,
+  );
+  assert.doesNotMatch(
+    exceptions ?? "",
     /revoked_at is null or revoked_at >= effective_at/i,
+  );
+  assert.match(
+    functionBody("guard_emergency_exception_lifecycle"),
+    /new\.revoked_at\s*:=\s*pg_catalog\.clock_timestamp\(\)/i,
+  );
+  assert.match(
+    functionBody("validate_emergency_exception_issuance"),
+    /new\.status\s*<>\s*'active'[\s\S]*?new\.revoked_at\s+is not null[\s\S]*?raise exception/i,
   );
 });
 
@@ -632,6 +746,65 @@ test("rejects round-two policy, function, trigger, DDL, grantee, and role bypass
       /trigger|index|role assignment|user_roles|grantee|grant|bypassrls|role/i,
       weakening,
     );
+  }
+});
+
+test("default-denies round-three view, procedural, privilege, and role bypasses", () => {
+  const laterBypasses = [
+    "create view learning.certification_export with (security_invoker = false) as select * from learning.certifications; grant select on learning.certification_export to authenticated;",
+    "create materialized view public.learning_evidence_cache as select * from learning.attempt_events; grant select on public.learning_evidence_cache to authenticated;",
+    "do $$ begin execute 'alter table learning.certifications disable row level security'; end $$;",
+    "grant service_role to authenticated;",
+    "set role service_role;",
+    "create procedure private.learning_backdoor() language plpgsql as $$ begin execute 'alter table learning.attempts disable row level security'; end $$;",
+    "create event trigger learning_ddl_backdoor on ddl_command_end execute function private.learning_dump();",
+    "alter default privileges in schema learning grant select on tables to authenticated;",
+    "alter table learning.certifications disable trigger learning_unmodeled_side_effect;",
+    "grant select on learning.certifications to authenticated with grant option;",
+    "grant execute on function private.assert_learning_read_committed() to service_role with grant option;",
+    "create or replace function learning.reject_evidence_mutation() returns trigger language plpgsql set search_path = '' as $$ begin perform private.assert_learning_read_committed(); execute 'alter table learning.certifications disable row level security'; raise exception 'Authoritative learning evidence is append-only'; end; $$;",
+  ];
+  for (const bypass of laterBypasses) {
+    assert.match(
+      orderedErrors(bypass),
+      /unmodeled|view|procedural|privilege|role|statement|unsafe|default-deny|grant option|delegated/i,
+      bypass,
+    );
+  }
+
+  for (const appendedBypass of [
+    "create view learning.foundation_export as select * from learning.certifications;",
+    "do $$ begin execute 'alter table learning.certifications disable row level security'; end $$;",
+    "grant service_role to authenticated;",
+  ]) {
+    assert.match(
+      errorsFor(`${sql}\n${appendedBypass}`),
+      /unmodeled|view|procedural|role|statement|unsafe|default-deny/i,
+      appendedBypass,
+    );
+  }
+
+  const negatedProfile = replaceRequired(
+    sql,
+    /private\.learning_has_active_profile\(audience\)/i,
+    "not private.learning_has_active_profile(audience)",
+  );
+  assert.match(
+    errorsFor(negatedProfile),
+    /positive|negated|active profile|authorization path/i,
+  );
+
+  for (const earlyReturn of [
+    "if true then return new; end if;",
+    "if 1 = 1 then return new; end if;",
+    "case when true then return new; end case;",
+  ]) {
+    const inert = replaceRequired(
+      sql,
+      /create or replace function learning\.reject_evidence_mutation\(\)[\s\S]*?\$\$;/i,
+      `create or replace function learning.reject_evidence_mutation() returns trigger language plpgsql as $$ begin ${earlyReturn} raise exception 'Authoritative learning evidence is append-only'; end; $$;`,
+    );
+    assert.match(errorsFor(inert), /unreachable|inert|guard/i, earlyReturn);
   }
 });
 

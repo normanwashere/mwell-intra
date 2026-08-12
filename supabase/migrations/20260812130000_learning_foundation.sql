@@ -330,7 +330,7 @@ create table learning.curriculum_capability_outcomes (
       or (
         audience = 'vendor'
         and module = 'core'
-        and capability = 'manage_own_accreditation_draft'
+        and capability = 'submit_accreditation'
       )
     ),
   unique (curriculum_requirement_id, module, capability)
@@ -709,7 +709,10 @@ create table learning.emergency_exceptions (
       (status = 'revoked') = (revoked_at is not null)
       and (status = 'revoked') = (revoked_by is not null)
       and (status = 'revoked') = (nullif(btrim(revocation_reason), '') is not null)
-      and (revoked_at is null or revoked_at >= effective_at)
+      and (
+        revoked_at is null
+        or (revoked_at >= created_at and revoked_at >= approved_at)
+      )
     )
 );
 
@@ -947,9 +950,31 @@ grant execute on function private.learning_owns_department(uuid)
 grant execute on function private.learning_is_active_employee_platform_admin()
   to authenticated, service_role;
 
+-- Supported isolation: authoritative learning writes run only at READ COMMITTED,
+-- which refreshes the command snapshot after waiting for an authority-row lock.
 -- Lock order: core.user_roles first, then learning.curriculum_versions in UUID
 -- order, then learning.requirement_versions in UUID order. Role deletion already
 -- holds its core.user_roles row lock before its BEFORE DELETE trigger runs.
+create or replace function private.assert_learning_read_committed()
+returns void
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+begin
+  if pg_catalog.current_setting('transaction_isolation') <> 'read committed' then
+    raise exception 'Authoritative learning writes require READ COMMITTED isolation'
+      using errcode = '25001';
+  end if;
+end;
+$$;
+
+revoke all on function private.assert_learning_read_committed()
+  from public, anon, authenticated, service_role;
+grant execute on function private.assert_learning_read_committed()
+  to service_role;
+
 create or replace function private.lock_learning_curriculum_graph(
   target_curriculum_version_ids uuid[]
 )
@@ -959,6 +984,8 @@ security definer
 set search_path = ''
 as $$
 begin
+  perform private.assert_learning_read_committed();
+
   perform 1
   from learning.curriculum_versions curriculum_version
   where curriculum_version.id = any(target_curriculum_version_ids)
@@ -978,6 +1005,8 @@ security definer
 set search_path = ''
 as $$
 begin
+  perform private.assert_learning_read_committed();
+
   perform private.lock_learning_curriculum_graph(
     array[target_curriculum_version_id]
   );
@@ -1023,24 +1052,6 @@ begin
       )
   ) then
     raise exception 'Curriculum graph requirements must be published and effective';
-  end if;
-
-  if exists (
-    select 1
-    from learning.curriculum_requirements curriculum_requirement
-    where curriculum_requirement.curriculum_version_id = target_curriculum_version_id
-      and curriculum_requirement.audience = target_audience
-      and curriculum_requirement.mandatory
-      and not exists (
-        select 1
-        from learning.curriculum_capability_outcomes outcome
-        where outcome.curriculum_requirement_id = curriculum_requirement.id
-          and outcome.curriculum_version_id = curriculum_requirement.curriculum_version_id
-          and outcome.requirement_version_id = curriculum_requirement.requirement_version_id
-          and outcome.audience = curriculum_requirement.audience
-      )
-  ) then
-    raise exception 'Mandatory curriculum requirements need a capability outcome';
   end if;
 
   if exists (
@@ -1097,6 +1108,8 @@ declare
   requirement_version learning.requirement_versions%rowtype;
   parent_requirement learning.requirements%rowtype;
 begin
+  perform private.assert_learning_read_committed();
+
   if new.status <> 'waived' then
     return new;
   end if;
@@ -1146,6 +1159,8 @@ declare
   assignment learning.assignments%rowtype;
   profile core.profiles%rowtype;
 begin
+  perform private.assert_learning_read_committed();
+
   select candidate.* into assignment
   from learning.assignments candidate
   where candidate.id = new.assignment_id
@@ -1334,6 +1349,8 @@ security definer
 set search_path = ''
 as $$
 begin
+  perform private.assert_learning_read_committed();
+
   update learning.certifications
   set status = 'revoked',
       revoked_at = pg_catalog.clock_timestamp()
@@ -1350,6 +1367,15 @@ security definer
 set search_path = ''
 as $$
 begin
+  perform private.assert_learning_read_committed();
+
+  if new.status <> 'active'
+     or new.revoked_at is not null
+     or new.revoked_by is not null
+     or new.revocation_reason is not null then
+    raise exception 'Emergency exceptions must be issued active and uncancelled';
+  end if;
+
   if not exists (
     select 1
     from core.profiles beneficiary_profile
@@ -1420,12 +1446,28 @@ begin
 end;
 $$;
 
+create or replace function learning.guard_authoritative_write_isolation()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  perform private.assert_learning_read_committed();
+  if tg_op = 'DELETE' then
+    return old;
+  end if;
+  return new;
+end;
+$$;
+
 create or replace function learning.reject_evidence_mutation()
 returns trigger
 language plpgsql
 set search_path = ''
 as $$
 begin
+  perform private.assert_learning_read_committed();
+
   raise exception 'Authoritative learning evidence is append-only';
 end;
 $$;
@@ -1436,6 +1478,8 @@ language plpgsql
 set search_path = ''
 as $$
 begin
+  perform private.assert_learning_read_committed();
+
   if tg_op = 'DELETE' then
     raise exception 'Attempt evidence cannot be deleted';
   end if;
@@ -1466,6 +1510,8 @@ language plpgsql
 set search_path = ''
 as $$
 begin
+  perform private.assert_learning_read_committed();
+
   if tg_op = 'DELETE' then
     raise exception 'Assignment evidence cannot be deleted';
   end if;
@@ -1512,6 +1558,8 @@ language plpgsql
 set search_path = ''
 as $$
 begin
+  perform private.assert_learning_read_committed();
+
   if tg_op = 'DELETE' then
     raise exception 'Assignment requirement evidence cannot be deleted';
   end if;
@@ -1561,6 +1609,8 @@ language plpgsql
 set search_path = ''
 as $$
 begin
+  perform private.assert_learning_read_committed();
+
   if tg_op = 'DELETE' then
     raise exception 'Certification evidence cannot be deleted';
   end if;
@@ -1585,11 +1635,16 @@ language plpgsql
 set search_path = ''
 as $$
 begin
+  perform private.assert_learning_read_committed();
+
   if tg_op = 'DELETE' then
     raise exception 'Emergency exception evidence cannot be deleted';
   end if;
   if old.status <> 'active' then
     raise exception 'Finalized emergency exception evidence is immutable';
+  end if;
+  if new.status = 'revoked' then
+    new.revoked_at := pg_catalog.clock_timestamp();
   end if;
   if (to_jsonb(new) - array['status', 'revoked_at', 'revoked_by', 'revocation_reason'])
      is distinct from
@@ -1609,6 +1664,8 @@ language plpgsql
 set search_path = ''
 as $$
 begin
+  perform private.assert_learning_read_committed();
+
   if tg_op = 'INSERT' then
     if new.status <> 'draft' then
       raise exception 'Learning content must begin as a draft';
@@ -1669,6 +1726,8 @@ declare
   old_parent_status text;
   new_parent_status text;
 begin
+  perform private.assert_learning_read_committed();
+
   perform private.lock_learning_curriculum_graph(
     array_remove(
       array[
@@ -1719,6 +1778,8 @@ revoke all on function private.revoke_certifications_for_role_assignment()
   from public, anon, authenticated, service_role;
 revoke all on function private.validate_emergency_exception_issuance()
   from public, anon, authenticated, service_role;
+revoke all on function learning.guard_authoritative_write_isolation()
+  from public, anon, authenticated, service_role;
 revoke all on function learning.reject_evidence_mutation()
   from public, anon, authenticated, service_role;
 revoke all on function learning.guard_attempt_lifecycle()
@@ -1735,6 +1796,66 @@ revoke all on function learning.guard_content_lifecycle()
   from public, anon, authenticated, service_role;
 revoke all on function learning.guard_curriculum_composition()
   from public, anon, authenticated, service_role;
+
+create trigger learning_curricula_read_committed_guard
+before insert or update or delete on learning.curricula
+for each row execute function learning.guard_authoritative_write_isolation();
+
+create trigger learning_curriculum_versions_read_committed_guard
+before insert or update or delete on learning.curriculum_versions
+for each row execute function learning.guard_authoritative_write_isolation();
+
+create trigger learning_requirements_read_committed_guard
+before insert or update or delete on learning.requirements
+for each row execute function learning.guard_authoritative_write_isolation();
+
+create trigger learning_requirement_versions_read_committed_guard
+before insert or update or delete on learning.requirement_versions
+for each row execute function learning.guard_authoritative_write_isolation();
+
+create trigger learning_curriculum_requirements_read_committed_guard
+before insert or update or delete on learning.curriculum_requirements
+for each row execute function learning.guard_authoritative_write_isolation();
+
+create trigger learning_curriculum_requirement_prerequisites_read_committed_guard
+before insert or update or delete on learning.curriculum_requirement_prerequisites
+for each row execute function learning.guard_authoritative_write_isolation();
+
+create trigger learning_curriculum_capability_outcomes_read_committed_guard
+before insert or update or delete on learning.curriculum_capability_outcomes
+for each row execute function learning.guard_authoritative_write_isolation();
+
+create trigger learning_role_curricula_read_committed_guard
+before insert or update or delete on learning.role_curricula
+for each row execute function learning.guard_authoritative_write_isolation();
+
+create trigger learning_assignments_read_committed_guard
+before insert or update or delete on learning.assignments
+for each row execute function learning.guard_authoritative_write_isolation();
+
+create trigger learning_assignment_requirements_read_committed_guard
+before insert or update or delete on learning.assignment_requirements
+for each row execute function learning.guard_authoritative_write_isolation();
+
+create trigger learning_attempts_read_committed_guard
+before insert or update or delete on learning.attempts
+for each row execute function learning.guard_authoritative_write_isolation();
+
+create trigger learning_attempt_events_read_committed_guard
+before insert or update or delete on learning.attempt_events
+for each row execute function learning.guard_authoritative_write_isolation();
+
+create trigger learning_policy_acknowledgments_read_committed_guard
+before insert or update or delete on learning.policy_acknowledgments
+for each row execute function learning.guard_authoritative_write_isolation();
+
+create trigger learning_certifications_read_committed_guard
+before insert or update or delete on learning.certifications
+for each row execute function learning.guard_authoritative_write_isolation();
+
+create trigger learning_emergency_exceptions_read_committed_guard
+before insert or update or delete on learning.emergency_exceptions
+for each row execute function learning.guard_authoritative_write_isolation();
 
 create trigger learning_attempts_lifecycle_guard
 before insert or update or delete on learning.attempts
