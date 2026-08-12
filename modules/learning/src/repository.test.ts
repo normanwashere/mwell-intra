@@ -172,6 +172,18 @@ const snapshotWithSimulationInProgress = (): LearningSnapshot => {
   };
 };
 
+const snapshotWithSimulationPassed = (): LearningSnapshot => {
+  const value = snapshot();
+  return {
+    ...value,
+    progress: value.progress.map((item) =>
+      item.assignmentRequirementId === "ar-simulation"
+        ? { ...item, state: "passed", attemptCount: 1, completedAt: now }
+        : item,
+    ),
+  };
+};
+
 describe("SupabaseLearningRepository", () => {
   it("exports both repository implementations from the package API", () => {
     expect(publicApi.SupabaseLearningRepository).toBe(
@@ -181,9 +193,16 @@ describe("SupabaseLearningRepository", () => {
   });
 
   it("uses the exact learning RPC names and learner-safe payload keys", async () => {
-    let phase: "initial" | "simulation" | "assessment" | "certified" =
-      "initial";
+    let phase:
+      | "initial"
+      | "simulation"
+      | "simulation_passed"
+      | "assessment"
+      | "certified" = "initial";
     const rpc = vi.fn(async (name: string) => {
+      if (name === "sync_shared_completions") {
+        return { data: { propagated_count: 0 }, error: null };
+      }
       if (name === "evaluate_certifications") {
         phase = "certified";
         return {
@@ -200,12 +219,14 @@ describe("SupabaseLearningRepository", () => {
             ? snapshot()
             : phase === "simulation"
               ? snapshotWithSimulationInProgress()
-              : phase === "certified"
-                ? {
-                    ...snapshotWithAssessmentPassed(),
-                    certifications: [issuedCertification],
-                  }
-                : snapshotWithAssessmentPassed();
+              : phase === "simulation_passed"
+                ? snapshotWithSimulationPassed()
+                : phase === "certified"
+                  ? {
+                      ...snapshotWithAssessmentPassed(),
+                      certifications: [issuedCertification],
+                    }
+                  : snapshotWithAssessmentPassed();
         return {
           data,
           error: null,
@@ -227,7 +248,7 @@ describe("SupabaseLearningRepository", () => {
         };
       }
       if (name === "record_simulation_checkpoint") {
-        phase = "initial";
+        phase = "simulation_passed";
         return { data: {}, error: null };
       }
       if (name === "submit_assessment") {
@@ -299,6 +320,8 @@ describe("SupabaseLearningRepository", () => {
     expect(rpc.mock.calls).toEqual([
       ["my_learning_snapshot"],
       ["resolve_assignments"],
+      ["sync_shared_completions"],
+      ["my_learning_snapshot"],
       [
         "start_requirement",
         {
@@ -321,6 +344,8 @@ describe("SupabaseLearningRepository", () => {
         },
       ],
       ["my_learning_snapshot"],
+      ["sync_shared_completions"],
+      ["my_learning_snapshot"],
       [
         "submit_assessment",
         {
@@ -332,6 +357,8 @@ describe("SupabaseLearningRepository", () => {
           },
         },
       ],
+      ["my_learning_snapshot"],
+      ["sync_shared_completions"],
       ["my_learning_snapshot"],
       [
         "acknowledge_policy",
@@ -346,6 +373,8 @@ describe("SupabaseLearningRepository", () => {
           },
         },
       ],
+      ["sync_shared_completions"],
+      ["sync_shared_completions"],
       ["evaluate_certifications"],
       ["my_learning_snapshot"],
       [
@@ -464,8 +493,15 @@ describe("MemoryLearningRepository", () => {
       }),
     ).rejects.toThrow("prerequisite");
 
+    const ready = snapshotWithOrientationPassed();
     const repository = new MemoryLearningRepository({
-      snapshot: snapshotWithOrientationPassed(),
+      snapshot: {
+        ...ready,
+        progress: [
+          ...ready.progress,
+          progress("ar-simulation-shared", simulation.id, "not_started"),
+        ],
+      },
       runtime: "test",
       now: () => now,
       simulations: [simulationDefinition],
@@ -491,6 +527,35 @@ describe("MemoryLearningRepository", () => {
     });
     expect(updated.state).toBe("passed");
     expect(updated.completedAt).toBe(now);
+    expect(
+      (await repository.snapshot()).progress.find(
+        (item) => item.assignmentRequirementId === "ar-simulation-shared",
+      )?.state,
+    ).toBe("passed");
+  });
+
+  it("matches live start-state requirements for policy and support actions", async () => {
+    const repository = new MemoryLearningRepository({
+      snapshot: snapshotWithOrientationPassed(),
+      runtime: "test",
+      now: () => now,
+    });
+
+    await expect(
+      repository.acknowledgePolicy({
+        assignmentRequirementId: "ar-policy",
+        controlledDocumentId: "POL-001",
+        controlledDocumentVersion: "1.0",
+        evidenceHash:
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      }),
+    ).rejects.toThrow("started");
+    await expect(
+      repository.requestSupport({
+        assignmentRequirementId: "ar-assessment",
+        reason: "Need coaching",
+      }),
+    ).rejects.toThrow("active or retryable");
   });
 
   it("acknowledges only assigned policies and records support through guarded states", async () => {
@@ -498,6 +563,10 @@ describe("MemoryLearningRepository", () => {
       snapshot: snapshotWithOrientationPassed(),
       runtime: "test",
       now: () => now,
+    });
+
+    await repository.startRequirement({
+      assignmentRequirementId: "ar-policy",
     });
 
     await expect(
@@ -520,6 +589,9 @@ describe("MemoryLearningRepository", () => {
         (item) => item.requirementId === policy.id,
       )?.state,
     ).toBe("passed");
+    await repository.startRequirement({
+      assignmentRequirementId: "ar-assessment",
+    });
     await repository.requestSupport({
       assignmentRequirementId: "ar-assessment",
       reason: "Need coaching",
@@ -534,7 +606,7 @@ describe("MemoryLearningRepository", () => {
         assignmentRequirementId: "ar-policy",
         reason: "Already complete",
       }),
-    ).rejects.toThrow("Completed");
+    ).rejects.toThrow("active or retryable");
   });
 
   it("scores assessments through trusted configuration and exhausts retries", async () => {

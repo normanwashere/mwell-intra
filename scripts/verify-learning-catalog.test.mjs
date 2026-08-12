@@ -77,6 +77,7 @@ test("catalog models the exact Task 3 RPC owners and execute grants", () => {
     "learning.resolve_assignments()",
     "learning.start_requirement(jsonb)",
     "learning.submit_assessment(jsonb)",
+    "learning.sync_shared_completions()",
   ];
   const functions = snapshot.functions
     .filter((entry) => entry.function.startsWith("learning."))

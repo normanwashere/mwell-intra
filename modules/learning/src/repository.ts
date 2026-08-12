@@ -433,7 +433,9 @@ export class SupabaseLearningRepository implements LearningRepository {
   }
 
   async resolveAssignments(): Promise<LearningSnapshot> {
-    return parseSnapshot(await this.rpc("resolve_assignments"));
+    parseSnapshot(await this.rpc("resolve_assignments"));
+    await this.syncSharedCompletions();
+    return this.snapshot();
   }
 
   async startRequirement(
@@ -473,7 +475,12 @@ export class SupabaseLearningRepository implements LearningRepository {
         idempotency_key: this.key(input.idempotencyKey),
       }),
     );
-    return this.progressAfter(input.assignmentRequirementId);
+    let progress = await this.progressAfter(input.assignmentRequirementId);
+    if (progress.state === "passed") {
+      await this.syncSharedCompletions();
+      progress = await this.progressAfter(input.assignmentRequirementId);
+    }
+    return progress;
   }
 
   async submitAssessment(
@@ -498,7 +505,11 @@ export class SupabaseLearningRepository implements LearningRepository {
         }),
       ),
     );
-    const progress = await this.progressAfter(input.assignmentRequirementId);
+    let progress = await this.progressAfter(input.assignmentRequirementId);
+    if (progress.state === "passed") {
+      await this.syncSharedCompletions();
+      progress = await this.progressAfter(input.assignmentRequirementId);
+    }
     return {
       ...result,
       state: progress.state,
@@ -518,6 +529,7 @@ export class SupabaseLearningRepository implements LearningRepository {
         idempotency_key: this.key(input.idempotencyKey),
       }),
     );
+    await this.syncSharedCompletions();
   }
 
   async requestSupport(input: SupportRequestInput): Promise<void> {
@@ -533,8 +545,21 @@ export class SupabaseLearningRepository implements LearningRepository {
   }
 
   async refreshCertifications(): Promise<readonly Certification[]> {
+    await this.syncSharedCompletions();
     await this.rpc("evaluate_certifications");
     return (await this.snapshot()).certifications;
+  }
+
+  private async syncSharedCompletions(): Promise<void> {
+    const value = await this.rpc("sync_shared_completions");
+    if (
+      !isRecord(value) ||
+      typeof value.propagated_count !== "number" ||
+      !Number.isInteger(value.propagated_count) ||
+      value.propagated_count < 0
+    ) {
+      throw new Error("Learning service returned invalid completion sync.");
+    }
   }
 
   private async progressAfter(
@@ -624,12 +649,24 @@ export class MemoryLearningRepository implements LearningRepository {
   }
 
   private replaceProgress(next: RequirementProgress): RequirementProgress {
+    const sharedCompletion = next.state === "passed";
     this.state = {
       ...this.state,
       progress: this.state.progress.map((item) =>
         item.assignmentRequirementId === next.assignmentRequirementId
           ? next
-          : item,
+          : sharedCompletion &&
+              item.requirementId === next.requirementId &&
+              item.requirementVersion === next.requirementVersion &&
+              !["passed", "waived", "expired"].includes(item.state)
+            ? {
+                ...item,
+                state: "passed",
+                activeAttempt: undefined,
+                completedAt: this.now(),
+                updatedAt: this.now(),
+              }
+            : item,
       ),
       refreshedAt: this.now(),
     };
@@ -760,6 +797,11 @@ export class MemoryLearningRepository implements LearningRepository {
     if (!input.evidenceHash.trim())
       throw new Error("Policy evidence hash is required.");
     const current = this.progressFor(input.assignmentRequirementId);
+    if (current.state !== "in_progress") {
+      throw new Error(
+        "Policy requirement must be started before acknowledgment.",
+      );
+    }
     const requirement = this.requirementFor(current.requirementId);
     if (!["policy", "attestation"].includes(requirement.kind))
       throw new Error("Assigned requirement is not a policy acknowledgment.");
@@ -775,6 +817,15 @@ export class MemoryLearningRepository implements LearningRepository {
   async requestSupport(input: SupportRequestInput): Promise<void> {
     if (!input.reason.trim()) throw new Error("Support reason is required.");
     const current = this.progressFor(input.assignmentRequirementId);
+    if (
+      !["in_progress", "failed_retryable", "needs_support"].includes(
+        current.state,
+      )
+    ) {
+      throw new Error(
+        "Only active or retryable requirements can request support.",
+      );
+    }
     if (["passed", "waived"].includes(current.state))
       throw new Error("Completed requirements do not need support.");
     this.replaceProgress({

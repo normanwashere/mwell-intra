@@ -16,6 +16,8 @@ const ASSIGNMENT_LINEAGE_NAME =
 const SERVICES_NAME = "20260812160000_learning_services.sql";
 const SERVICE_CONTRACT_ALIGNMENT_NAME =
   "20260812170000_learning_service_contract_alignment.sql";
+const COMPLETION_ALIGNMENT_NAME =
+  "20260812180000_learning_completion_alignment.sql";
 const OLD_FOUNDATION_NAME = "20260812090000_learning_foundation.sql";
 const migration = fileURLToPath(
   new URL(`../supabase/migrations/${FOUNDATION_NAME}`, import.meta.url),
@@ -52,6 +54,15 @@ const serviceContractAlignmentSql = existsSync(
   serviceContractAlignmentMigration,
 )
   ? readFileSync(serviceContractAlignmentMigration, "utf8")
+  : "";
+const completionAlignmentMigration = fileURLToPath(
+  new URL(
+    `../supabase/migrations/${COMPLETION_ALIGNMENT_NAME}`,
+    import.meta.url,
+  ),
+);
+const completionAlignmentSql = existsSync(completionAlignmentMigration)
+  ? readFileSync(completionAlignmentMigration, "utf8")
   : "";
 const migrationDirectory = fileURLToPath(
   new URL("../supabase/migrations/", import.meta.url),
@@ -127,6 +138,16 @@ function errorsForServiceContractAlignment(source) {
   return verifyLearningSchema(
     repositoryMigrations.map((migrationEntry) =>
       migrationEntry.name === SERVICE_CONTRACT_ALIGNMENT_NAME
+        ? { ...migrationEntry, sql: source }
+        : migrationEntry,
+    ),
+  ).join("\n");
+}
+
+function errorsForCompletionAlignment(source) {
+  return verifyLearningSchema(
+    repositoryMigrations.map((migrationEntry) =>
+      migrationEntry.name === COMPLETION_ALIGNMENT_NAME
         ? { ...migrationEntry, sql: source }
         : migrationEntry,
     ),
@@ -260,6 +281,56 @@ test("keeps every SQL role persona in parity with the canonical catalog", () => 
     ]),
   );
   assert.deepEqual(sqlMap, catalogMap);
+});
+
+test("synchronizes shared completion with serialized, attributable evidence", () => {
+  assert.equal(existsSync(completionAlignmentMigration), true);
+  for (const invariant of [
+    /private\.assert_learning_read_committed\(\)/i,
+    /from core\.profiles profile[\s\S]*?for update/i,
+    /source_requirement\.status = 'passed'/i,
+    /target_requirement\.requirement_version_id\s*=\s*v_source\.requirement_version_id/i,
+    /status = 'invalidated'[\s\S]*?integrity_result = 'invalid'/i,
+    /'shared_completion_source_id', v_source\.id/i,
+    /if v_propagated > 0 then[\s\S]*?'shared_completions_synchronized'/i,
+    /'shared_completions_synchronized'/i,
+  ]) {
+    assert.match(completionAlignmentSql, invariant);
+  }
+
+  const weakened = replaceRequired(
+    completionAlignmentSql,
+    /perform private\.assert_learning_read_committed\(\);/i,
+    "",
+  );
+  assert.match(
+    errorsForCompletionAlignment(weakened),
+    /exact guarded function body drifted|read committed/i,
+  );
+
+  const overloaded = `${completionAlignmentSql}\n${completionAlignmentSql.replace(
+    "sync_shared_completions()",
+    "sync_shared_completions(payload jsonb)",
+  )}`;
+  assert.match(
+    errorsForCompletionAlignment(overloaded),
+    /only the exact no-argument.*sync_shared_completions declaration is approved/i,
+  );
+});
+
+test("retraining and corrective work relocks only while the assignment is open", () => {
+  assert.match(
+    serviceContractAlignmentSql,
+    /assignment\.source_type in \('retraining', 'corrective'\)[\s\S]*?then 'retraining_required'/i,
+  );
+  assert.match(
+    serviceContractAlignmentSql,
+    /assignment\.source_type <> 'role'[\s\S]*?assignment\.status in \('assigned', 'in_progress', 'blocked', 'expired'\)/i,
+  );
+  assert.match(
+    serviceContractAlignmentSql,
+    /assignment\.source_type in \('retraining', 'corrective'\)\s*or not exists/i,
+  );
 });
 
 test("rejects client-authored learning authority and weakened service guards", () => {

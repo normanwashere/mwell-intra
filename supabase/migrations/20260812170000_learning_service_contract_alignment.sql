@@ -261,7 +261,8 @@ begin
       pg_catalog.jsonb_build_object(
         'capability', pg_catalog.jsonb_build_object('module', outcome.module, 'capability', outcome.capability),
         'reason', case
-          when assignment.source_type = 'retraining' then 'retraining_required'
+          when assignment.source_type in ('retraining', 'corrective')
+            then 'retraining_required'
           when exists (
             select 1 from learning.certifications expired
             where expired.user_id = assignment.user_id
@@ -286,8 +287,19 @@ begin
      and requirement.audience = requirement_version.audience
     where assignment.user_id = v_user_id
       and assignment.audience = v_audience
-      and assignment.status not in ('cancelled', 'superseded')
-      and not exists (
+      and (
+        (
+          assignment.source_type = 'role'
+          and assignment.status not in ('cancelled', 'superseded')
+        )
+        or (
+          assignment.source_type <> 'role'
+          and assignment.status in ('assigned', 'in_progress', 'blocked', 'expired')
+        )
+      )
+      and (
+        assignment.source_type in ('retraining', 'corrective')
+        or not exists (
         select 1
         from learning.certifications active
         where active.user_id = assignment.user_id
@@ -297,6 +309,7 @@ begin
           and active.status = 'active'
           and active.effective_at <= pg_catalog.statement_timestamp()
           and (active.expires_at is null or active.expires_at > pg_catalog.statement_timestamp())
+        )
       )
     group by assignment.id, assignment.source_type, assignment.source_id,
       assignment.user_id, assignment.audience, outcome.module, outcome.capability

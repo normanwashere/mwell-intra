@@ -12,6 +12,8 @@ const ASSIGNMENT_LINEAGE_MIGRATION_NAME =
 export const SERVICES_MIGRATION_NAME = "20260812160000_learning_services.sql";
 export const SERVICE_CONTRACT_ALIGNMENT_MIGRATION_NAME =
   "20260812170000_learning_service_contract_alignment.sql";
+export const COMPLETION_ALIGNMENT_MIGRATION_NAME =
+  "20260812180000_learning_completion_alignment.sql";
 export const PRIVATE_ANSWER_KEY_TABLE =
   "private.learning_assessment_answer_keys";
 export const LEARNING_SERVICE_FUNCTIONS = Object.freeze([
@@ -23,6 +25,7 @@ export const LEARNING_SERVICE_FUNCTIONS = Object.freeze([
   "learning.acknowledge_policy",
   "learning.evaluate_certifications",
   "learning.request_support",
+  "learning.sync_shared_completions",
 ]);
 const LEARNING_SERVICE_MUTATORS = Object.freeze(
   LEARNING_SERVICE_FUNCTIONS.filter(
@@ -541,6 +544,8 @@ export const EXPECTED_FUNCTION_DECLARATION_SQL = Object.freeze({
     "create or replace function learning.evaluate_certifications() returns jsonb language plpgsql security definer set search_path = ''",
   "learning.request_support":
     "create or replace function learning.request_support(payload jsonb) returns jsonb language plpgsql security definer set search_path = ''",
+  "learning.sync_shared_completions":
+    "create or replace function learning.sync_shared_completions() returns jsonb language plpgsql security definer set search_path = ''",
 });
 
 export const EXPECTED_FUNCTION_BODY_SHA256 = Object.freeze({
@@ -593,7 +598,7 @@ export const EXPECTED_FUNCTION_BODY_SHA256 = Object.freeze({
   "learning.guard_curriculum_composition":
     "0aea39b911deac9b688cd3a58270a3b9135f23dd4921338911f1864b15c10d3c",
   "learning.my_learning_snapshot":
-    "6f43fd6cdb59b3bcd3c8ac69553006f43efe0e4e91b20fe918b358f91a8c63b6",
+    "6dce63adcee74606830173828304fefe5c20d917028080587a23f1eac2502fe7",
   "learning.resolve_assignments":
     "2729f8eca28b7cc7d078141a0edc8f3dd340fd7f5c1fe9521a210bebb45389c2",
   "learning.start_requirement":
@@ -606,6 +611,8 @@ export const EXPECTED_FUNCTION_BODY_SHA256 = Object.freeze({
     "6de1d3f3c539de860eecc5f42c93811fd26188e448af2302c255e433061ffadb",
   "learning.request_support":
     "ec8f155cf19db9b50f394b6c9b0d160a2805f248e3ecedc34fe5e0e2add17a98",
+  "learning.sync_shared_completions":
+    "84d8136ce73bce076ca5160d8e32fdce58373eb964fdce0ada4e72a01ca4ab0f",
   "learning.evaluate_certifications":
     "56e74e7e7c111c1ebd3507f4a34dbe9cfeba0c31c4071b6b09683f032351aa61",
 });
@@ -1330,6 +1337,8 @@ function processStatement(state, statement, migrationName) {
   const isLearningServices = migrationName === SERVICES_MIGRATION_NAME;
   const isServiceContractAlignment =
     migrationName === SERVICE_CONTRACT_ALIGNMENT_MIGRATION_NAME;
+  const isCompletionAlignment =
+    migrationName === COMPLETION_ALIGNMENT_MIGRATION_NAME;
   let match;
 
   if (normalized === "create schema if not exists learning") {
@@ -2014,9 +2023,20 @@ function processStatement(state, statement, migrationName) {
       metadata.qualifiedName === "learning.my_learning_snapshot" &&
       metadata.argumentTypes.length === 0 &&
       existingFunction?.migrationName === SERVICES_MIGRATION_NAME;
+    const approvedCompletionAlignment =
+      isCompletionAlignment &&
+      metadata.qualifiedName === "learning.sync_shared_completions" &&
+      metadata.argumentTypes.length === 0 &&
+      !existingFunction;
     if (isServiceContractAlignment && !approvedSnapshotAlignment) {
       state.errors.push(
         `${migrationName}: only the exact no-argument learning.my_learning_snapshot replacement is approved.`,
+      );
+      return;
+    }
+    if (isCompletionAlignment && !approvedCompletionAlignment) {
+      state.errors.push(
+        `${migrationName}: only the exact no-argument learning.sync_shared_completions declaration is approved.`,
       );
       return;
     }
@@ -2067,6 +2087,10 @@ function processStatement(state, statement, migrationName) {
         !(
           isServiceContractAlignment &&
           match[1] === "learning.my_learning_snapshot"
+        ) &&
+        !(
+          isCompletionAlignment &&
+          match[1] === "learning.sync_shared_completions"
         )) ||
       !LEARNING_SERVICE_FUNCTIONS.includes(match[1]) ||
       match[3] !== "postgres" ||

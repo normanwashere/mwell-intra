@@ -198,6 +198,7 @@ const FUNCTION_SPECS = Object.freeze([
   fn("learning.acknowledge_policy", "jsonb", "jsonb", "plpgsql", "v", true),
   fn("learning.evaluate_certifications", "", "jsonb", "plpgsql", "v", true),
   fn("learning.request_support", "jsonb", "jsonb", "plpgsql", "v", true),
+  fn("learning.sync_shared_completions", "", "jsonb", "plpgsql", "v", true),
 ]);
 
 const CERTIFICATION_INDEXES = Object.freeze([
