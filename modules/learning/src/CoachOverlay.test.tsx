@@ -74,6 +74,30 @@ describe("CoachOverlay", () => {
     ).toBeInTheDocument();
   });
 
+  it("recovers when a dynamically revealed anchor enters the DOM", async () => {
+    render(
+      <CoachOverlay
+        step={step}
+        canGoBack={false}
+        onBack={vi.fn()}
+        onExit={vi.fn()}
+        onResumeLater={vi.fn()}
+      />,
+    );
+    expect(
+      screen.getByRole("heading", { name: "Training needs an update" }),
+    ).toBeInTheDocument();
+
+    const target = document.createElement("button");
+    target.dataset.onboardingAnchor = "purchase-order";
+    visible(target);
+    document.body.append(target);
+
+    expect(
+      await screen.findByRole("heading", { name: step.title }),
+    ).toBeInTheDocument();
+  });
+
   it("focuses the coach heading and exposes keyboard-safe recovery controls", () => {
     const target = document.createElement("button");
     target.dataset.onboardingAnchor = "purchase-order";
@@ -106,10 +130,24 @@ describe("CoachOverlay", () => {
     document.body.append(target);
     visible(target);
 
-    render(
+    const { rerender } = render(
       <CoachOverlay step={step} canGoBack={false} onBack={vi.fn()} onExit={vi.fn()} onResumeLater={vi.fn()} />,
     );
     expect(screen.getByRole("dialog")).toHaveAttribute("data-placement", "sheet");
+    fireEvent.click(screen.getByRole("button", { name: "Minimize training coach" }));
+    expect(screen.getByRole("dialog")).toHaveAttribute("data-collapsed", "true");
+    rerender(
+      <CoachOverlay
+        step={step}
+        canGoBack={false}
+        onBack={vi.fn()}
+        onExit={vi.fn()}
+        onResumeLater={vi.fn()}
+        error="Batch number is required"
+      />,
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent("Batch number is required");
+    expect(screen.getByRole("button", { name: "Minimize training coach" })).toBeVisible();
 
     Object.defineProperty(window, "innerWidth", { configurable: true, value: 1440 });
     fireEvent(window, new Event("resize"));

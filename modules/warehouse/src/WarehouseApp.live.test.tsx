@@ -53,7 +53,10 @@ function makeLiveClient({
     },
     schema: vi.fn().mockReturnValue({
       rpc: vi.fn().mockResolvedValue({
-        data: { warehouse: capabilities },
+        data: {
+          roleCapabilities: { warehouse: capabilities },
+          userCapabilities: { warehouse: capabilities },
+        },
         error: null,
       }),
     }),

@@ -4,6 +4,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -54,6 +55,7 @@ export function TrainingModeProvider<TState>({
   onCheckpoint,
   launcherRef,
   initiallyActive = true,
+  persistSession = false,
   children,
 }: {
   adapter: TrainingAdapter<TState>;
@@ -63,6 +65,7 @@ export function TrainingModeProvider<TState>({
   onCheckpoint(event: TrainingCheckpoint): Promise<void>;
   launcherRef?: RefObject<HTMLElement | null>;
   initiallyActive?: boolean;
+  persistSession?: boolean;
   children: ReactNode;
 }) {
   if (!adapter.scenarioIds.includes(scenario.id)) {
@@ -80,10 +83,33 @@ export function TrainingModeProvider<TState>({
     () => clone(adapter.initialState(scenario.id)),
     [adapter, scenario.id],
   );
-  const [state, setState] = useState<TState>(initialState);
-  const [stepId, setStepId] = useState(scenario.initialStepId);
+  const storageKey = `intra-training:${assignmentRequirementId}:${attemptId}:${scenario.id}:v${adapter.version}`;
+  const restored = useMemo(() => {
+    if (!persistSession || typeof window === "undefined") return null;
+    try {
+      const raw = window.sessionStorage.getItem(storageKey);
+      if (!raw) return null;
+      const value = JSON.parse(raw) as {
+        state?: TState;
+        stepId?: string;
+        completed?: boolean;
+      };
+      if (!value.state || !value.stepId || !stepById.has(value.stepId)) return null;
+      return value;
+    } catch {
+      window.sessionStorage.removeItem(storageKey);
+      return null;
+    }
+  }, [persistSession, stepById, storageKey]);
+  const persistenceEnabled = useRef(persistSession);
+  const [state, setState] = useState<TState>(() =>
+    restored?.state ? clone(restored.state) : initialState(),
+  );
+  const [stepId, setStepId] = useState(
+    restored?.stepId ?? scenario.initialStepId,
+  );
   const [active, setActive] = useState(initiallyActive);
-  const [completed, setCompleted] = useState(false);
+  const [completed, setCompleted] = useState(Boolean(restored?.completed));
   const [checkpointError, setCheckpointError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [history, setHistory] = useState<readonly HistoryEntry<TState>[]>([]);
@@ -92,6 +118,18 @@ export function TrainingModeProvider<TState>({
   const dispatchInFlight = useRef(false);
   const currentStep = stepById.get(stepId);
   if (!currentStep) throw new Error(`Training scenario ${scenario.id} has no step ${stepId}.`);
+
+  useEffect(() => {
+    if (!persistenceEnabled.current || typeof window === "undefined") return;
+    if (completed) {
+      window.sessionStorage.removeItem(storageKey);
+      return;
+    }
+    window.sessionStorage.setItem(
+      storageKey,
+      JSON.stringify({ state, stepId, completed: false }),
+    );
+  }, [completed, state, stepId, storageKey]);
 
   const dispatch = useCallback(
     async (command: TrainingCommand) => {
@@ -112,6 +150,7 @@ export function TrainingModeProvider<TState>({
             `Training adapter ${adapter.id} returned unknown step ${transition.nextStepId}.`,
           );
         }
+        setCheckpointError(null);
         if (transition.checkpointId) {
           const checkpointIdentity = `${attemptId}:${transition.checkpointId}`;
           if (!reportedCheckpoints.current.has(checkpointIdentity)) {
@@ -189,6 +228,10 @@ export function TrainingModeProvider<TState>({
       },
       reset,
       exit() {
+        persistenceEnabled.current = false;
+        if (typeof window !== "undefined") {
+          window.sessionStorage.removeItem(storageKey);
+        }
         reset();
         setActive(false);
         focusLauncher();
@@ -201,7 +244,7 @@ export function TrainingModeProvider<TState>({
         setActive(true);
       },
     }),
-    [active, busy, checkpointError, completed, currentStep, dispatch, focusLauncher, history, reset, scenario, state],
+    [active, busy, checkpointError, completed, currentStep, dispatch, focusLauncher, history, reset, scenario, state, storageKey],
   );
 
   return (

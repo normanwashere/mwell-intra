@@ -106,6 +106,9 @@ const titleCaseIdentifier = (value: string): string =>
     .join(" ");
 
 const rolePracticeTitle = (module: string, role: string): string => {
+  if (module === "warehouse" && role === "warehouse_operator") {
+    return "Receive and inspect controlled stock";
+  }
   if (module === "core" && role === "vendor_portal") {
     return "Vendor accreditation submission practice";
   }
@@ -149,6 +152,11 @@ const capabilityRequirements = roleDefinitions.flatMap((roleDefinition) => {
 
   const audience = audienceForPersona(roleDefinition.personaId);
   const id = `${audience}.role.${roleDefinition.module}.${roleDefinition.role}.capability-practice.v1`;
+  const simulationId =
+    roleDefinition.module === "warehouse" &&
+    roleDefinition.role === "warehouse_operator"
+      ? "warehouse-receiving-v1"
+      : id;
   const prerequisiteIds = [
     `${audience}.${roleDefinition.personaId}.orientation.v1`,
     ...(roleDefinition.module === "core" &&
@@ -166,7 +174,7 @@ const capabilityRequirements = roleDefinitions.flatMap((roleDefinition) => {
       mandatory: true,
       prerequisiteIds,
       capabilityOutcomes: capabilities,
-      simulationId: id,
+      simulationId,
     } satisfies RequirementDefinition,
   ];
 });
@@ -266,7 +274,10 @@ const simulations: readonly SimulationDefinition[] = requirements.flatMap(
         audience: requirement.audience,
         module: firstCapability?.module ?? "core",
         title: requirement.title,
-        checkpointIds: ["complete"],
+        checkpointIds:
+          requirement.simulationId === "warehouse-receiving-v1"
+            ? ["draft-saved", "complete"]
+            : ["complete"],
         capabilityOutcomes: requirement.capabilityOutcomes,
       },
     ];

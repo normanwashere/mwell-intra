@@ -94,14 +94,23 @@ export function CoachOverlay({
   error?: string | null;
 }) {
   const [layout, setLayout] = useState<AnchorLayout>(() => locate(step.anchor));
+  const [collapsed, setCollapsed] = useState(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   useLayoutEffect(() => {
     const update = () => setLayout(locate(step.anchor));
     update();
+    let frame = 0;
+    const observer = new MutationObserver(() => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(update);
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
     window.addEventListener("resize", update);
     window.addEventListener("scroll", update, true);
     return () => {
+      observer.disconnect();
+      cancelAnimationFrame(frame);
       window.removeEventListener("resize", update);
       window.removeEventListener("scroll", update, true);
     };
@@ -121,6 +130,10 @@ export function CoachOverlay({
   }, [layout.target]);
 
   useEffect(() => {
+    if (error) setCollapsed(false);
+  }, [error]);
+
+  useEffect(() => {
     const pauseOnEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       event.preventDefault();
@@ -131,6 +144,40 @@ export function CoachOverlay({
   }, [onResumeLater]);
 
   const sheet = layout.placement === "sheet";
+  if (sheet && collapsed) {
+    return (
+      <div
+        role="dialog"
+        aria-modal="false"
+        aria-labelledby="training-coach-title"
+        data-placement="sheet"
+        data-collapsed="true"
+        className="fixed inset-x-0 bottom-0 z-[80] flex items-center justify-between gap-3 border-t border-cyan-400 bg-surface px-4 py-3 shadow-2xl"
+      >
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase text-brand-700 dark:text-brand-300">
+            Guided practice
+          </p>
+          <h2
+            id="training-coach-title"
+            ref={headingRef}
+            tabIndex={-1}
+            className="truncate font-semibold text-ink outline-none"
+          >
+            {layout.valid ? step.title : "Training needs an update"}
+          </h2>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setCollapsed(false)}
+          aria-label="Expand training coach"
+        >
+          Expand
+        </Button>
+      </div>
+    );
+  }
   return (
     <div
       role="dialog"
@@ -171,6 +218,16 @@ export function CoachOverlay({
               : "The highlighted control is missing or appears more than once."}
           </p>
         </div>
+        {sheet && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setCollapsed(true)}
+            aria-label="Minimize training coach"
+          >
+            Minimize
+          </Button>
+        )}
       </div>
 
       <div className="mt-5 flex flex-wrap gap-2 border-t border-line pt-4">

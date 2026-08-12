@@ -473,3 +473,7 @@ export function useLearning(): LearningContextValue {
   if (!value) throw new Error("useLearning must be used within LearningProvider.");
   return value;
 }
+
+export function useOptionalLearning(): LearningContextValue | null {
+  return useContext(LearningContext);
+}

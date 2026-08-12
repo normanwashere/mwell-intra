@@ -10,12 +10,15 @@ import { useEffect, useMemo, type ReactNode } from "react";
 import { SerwistProvider } from "@serwist/turbopack/react";
 import { SessionProvider, type AuthConfig } from "@intra/auth";
 import { LearningProvider } from "@intra/learning";
+import { registerWarehouseTrainingAdapters } from "@intra/warehouse/training";
 import { ToastProvider, MotionProvider } from "@intra/ui";
 import { createSupabaseBrowserClient } from "@shell/lib/supabase/client";
 import { DEMO_PROFILES } from "@shell/lib/demoProfiles";
 import { DemoSeeder } from "@shell/components/DemoSeeder";
 import { StorageFullToast } from "@shell/components/StorageFullToast";
 import { ConnectivityProvider } from "@shell/components/ConnectivityProvider";
+
+registerWarehouseTrainingAdapters();
 
 // Prod-safety guard: if a production build somehow ships without Supabase env
 // (spec §9), we render a hard error instead of silently using demo profiles.

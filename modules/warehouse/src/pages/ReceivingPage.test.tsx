@@ -1,11 +1,38 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { ReceivingPage } from "./ReceivingPage";
+import type { TrainingContextValue } from "@intra/learning";
+import { ReceivingPage, ReceivingPageSurface } from "./ReceivingPage";
+import type { ReceivingTrainingState } from "@/training/receivingAdapter";
 import { makeRepo, renderWithProviders } from "@/test/renderWithProviders";
 import { availableForProduct } from "@/domain/stock";
 
 describe("ReceivingPage", () => {
+  it("cannot call the live receiving repository from a training surface", async () => {
+    const repo = makeRepo();
+    const before = (await repo.getData()).receipts.length;
+    const dispatch = vi.fn().mockResolvedValue(undefined);
+    const training = {
+      currentStep: { id: "line" },
+      dispatch,
+      busy: false,
+    } as unknown as TrainingContextValue<ReceivingTrainingState>;
+    const user = userEvent.setup();
+
+    renderWithProviders(<ReceivingPageSurface training={training} />, { repo });
+    await screen.findByText(/practice purchase order/i);
+    await user.selectOptions(screen.getByLabelText("Product"), "smart-watch");
+    expect(
+      within(await screen.findByRole("list", { name: "Receipt lines" })).getByText(
+        /Smart Watch/i,
+      ),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /receive .*item/i }));
+
+    expect(dispatch).toHaveBeenLastCalledWith({ type: "submit-receipt" });
+    expect((await repo.getData()).receipts).toHaveLength(before);
+  });
+
   it("hides downstream links that a minimal live receiving bundle cannot open", async () => {
     renderWithProviders(<ReceivingPage />, {
       role: "warehouse_operator",

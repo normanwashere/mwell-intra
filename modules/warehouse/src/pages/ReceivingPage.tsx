@@ -1,6 +1,15 @@
 import { useMemo, useState } from "react";
 import { clsx } from "clsx";
 import { Link } from "react-router-dom";
+import {
+  CoachOverlay,
+  TrainingBanner,
+  TrainingModeProvider,
+  useOptionalLearning,
+  useTraining,
+  type LearningContextValue,
+  type TrainingContextValue,
+} from "@intra/learning";
 import { useWarehouse } from "@/app/store";
 import { actorName, formatWhen } from "@/domain/format";
 import {
@@ -18,6 +27,12 @@ import { Icon } from "@/components/Icon";
 import { BarcodeScanner } from "@/components/camera/BarcodeScanner";
 import { EvidenceCapture } from "@/components/camera/EvidenceCapture";
 import { EvidenceGallery } from "@/components/EvidenceGallery";
+import {
+  RECEIVING_SIMULATION_ID,
+  receivingTrainingAdapter,
+  receivingTrainingScenario,
+  type ReceivingTrainingState,
+} from "@/training/receivingAdapter";
 
 interface Line {
   productId: string;
@@ -30,7 +45,86 @@ interface Line {
   expiryDate: string;
 }
 
+type ReceivingTraining = TrainingContextValue<ReceivingTrainingState>;
+
+function ReceivingTrainingRuntime({ learning }: { learning: LearningContextValue }) {
+  const training = useTraining<ReceivingTrainingState>();
+  const close = () => {
+    training.exit();
+    learning.closeTraining();
+  };
+  const resumeLater = () => {
+    if (training.currentStep.id === "submit") {
+      void training
+        .dispatch({ type: "interrupt" })
+        .then(training.resumeLater)
+        .catch(() => undefined);
+      return;
+    }
+    training.resumeLater();
+  };
+  const continueCommand =
+    training.currentStep.id === "traceability-units"
+      ? "confirm-traceability"
+      : training.currentStep.id === "paused"
+        ? "resume"
+        : null;
+
+  return (
+    <>
+      <TrainingBanner onExit={close} />
+      <ReceivingPageSurface training={training} />
+      {training.active && (
+        <CoachOverlay
+          step={training.currentStep}
+          canGoBack={training.canGoBack}
+          onBack={training.back}
+          onResumeLater={resumeLater}
+          onExit={close}
+          onContinue={
+            continueCommand
+              ? () => {
+                  void training
+                    .dispatch({ type: continueCommand })
+                    .catch(() => undefined);
+                }
+              : undefined
+          }
+          continueLabel={continueCommand === "resume" ? "Resume receipt" : "Confirm traceability"}
+          continueDisabled={training.busy}
+          error={training.checkpointError}
+        />
+      )}
+    </>
+  );
+}
+
 export function ReceivingPage() {
+  const learning = useOptionalLearning();
+  const activeTraining = learning?.activeTraining;
+  if (
+    !learning ||
+    !activeTraining ||
+    activeTraining.simulationId !== RECEIVING_SIMULATION_ID
+  ) {
+    return <ReceivingPageSurface />;
+  }
+  return (
+    <TrainingModeProvider
+      key={activeTraining.attemptId}
+      adapter={receivingTrainingAdapter}
+      scenario={receivingTrainingScenario}
+      assignmentRequirementId={activeTraining.assignmentRequirementId}
+      attemptId={activeTraining.attemptId}
+      onCheckpoint={learning.recordCheckpoint}
+      persistSession
+    >
+      <ReceivingTrainingRuntime learning={learning} />
+    </TrainingModeProvider>
+  );
+}
+
+export function ReceivingPageSurface({ training }: { training?: ReceivingTraining }) {
   const { data, receiveStock, canOpenRoute } = useWarehouse();
   const toast = useToast();
   const warehouses = useMemo(
@@ -61,7 +155,12 @@ export function ReceivingPage() {
     (b) => b.locationId === activeLocation,
   );
   // Guard against a bin selected for a different warehouse after switching.
-  const activeBin = bins.some((b) => b.id === binId) ? binId : "";
+  const activeBin =
+    training && binId === "TRAIN-QA-STAGING"
+      ? binId
+      : bins.some((b) => b.id === binId)
+        ? binId
+        : "";
   const productById = (id: string) => products.find((p) => p.id === id);
   const selectedProduct = productById(selectedProductId);
   const totalItems = lines.reduce((s, l) => s + l.quantity, 0);
@@ -114,6 +213,30 @@ export function ReceivingPage() {
     );
   };
 
+  const productTrainingCategory = (product: (typeof products)[number]) =>
+    product.itemClass === "event_material"
+      ? "event-material"
+      : product.itemClass === "merchandise" || product.category === "merchandise"
+        ? "merch"
+        : "sku";
+
+  const selectProduct = (productId: string) => {
+    setSelectedProductId(productId);
+    if (!training || training.currentStep.id !== "line") return;
+    const product = productById(productId);
+    if (!product) return;
+    void training
+      .dispatch({
+        type: "add-line",
+        payload: {
+          category: productTrainingCategory(product),
+          serialized: product.serialized,
+        },
+      })
+      .then(() => addOrIncrement(product.id, 1))
+      .catch(() => undefined);
+  };
+
   const addSelected = () => {
     if (!selectedProduct) return;
     addOrIncrement(selectedProduct.id, Math.max(1, newQty));
@@ -151,7 +274,7 @@ export function ReceivingPage() {
 
   const handleScan = (code: string) => {
     const matched = products.find((p) => p.barcode === code);
-    if (matched) {
+    if (matched && !training) {
       setSelectedProductId(matched.id);
       addOrIncrement(matched.id, 1);
       toast.success(`Added ${matched.name}`);
@@ -159,8 +282,31 @@ export function ReceivingPage() {
     }
     const selected = productById(selectedProductId);
     if (selected?.serialized) {
+      if (training) {
+        void training
+          .dispatch({ type: "scan-serial", payload: code })
+          .then(() => {
+            addSerial(selected.id, code);
+            toast.success(`Serial ${code} recorded for ${selected.name}`);
+          })
+          .catch(() => undefined);
+        return;
+      }
       addSerial(selected.id, code);
       toast.success(`Serial ${code} → ${selected.name}`);
+      return;
+    }
+    if (selected && training) {
+      void training
+        .dispatch({
+          type: "set-sheet-barcode",
+          payload: { barcode: code, quantity: newQty },
+        })
+        .then(() => {
+          addOrIncrement(selected.id, newQty);
+          toast.success(`Monitored sheet ${code} recorded`);
+        })
+        .catch(() => undefined);
       return;
     }
     toast.error(`Unknown barcode "${code}". Pick a product first.`);
@@ -171,6 +317,10 @@ export function ReceivingPage() {
 
   const submit = async () => {
     if (lines.length === 0 || !activeLocation) return;
+    if (training) {
+      await training.dispatch({ type: "submit-receipt" }).catch(() => undefined);
+      return;
+    }
     const ok = await receiveStock({
       locationId: activeLocation,
       supplierId: supplierId || undefined,
@@ -219,6 +369,38 @@ export function ReceivingPage() {
           ) : undefined
         }
       />
+
+      {training && (
+        <Card className="flex flex-col gap-3 border-cyan-300 bg-cyan-50 dark:border-cyan-800 dark:bg-cyan-950/30 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase text-cyan-800 dark:text-cyan-200">
+              Practice purchase order
+            </p>
+            <p className="mt-1 font-semibold text-ink">
+              TRAIN-PO-1042 | 2 serialized units
+            </p>
+            <p className="mt-1 text-sm text-muted">
+              Training data only. No supplier order or stock record will change.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="btn-primary shrink-0"
+            data-onboarding-anchor="receiving.purchase-order"
+            disabled={training.currentStep.id !== "purchase-order" || training.busy}
+            onClick={() =>
+              void training
+                .dispatch({
+                  type: "select-purchase-order",
+                  payload: { id: "TRAIN-PO-1042", expectedQuantity: 2 },
+                })
+                .catch(() => undefined)
+            }
+          >
+            Use practice order
+          </button>
+        </Card>
+      )}
 
       <div className="flex flex-col gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-950 dark:border-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-100 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -301,12 +483,14 @@ export function ReceivingPage() {
               htmlFor="rcv-product"
               hint="Pick a product and quantity, or scan a barcode. For serialized devices, scan each unit's serial."
             >
-              <ProductSelect
-                id="rcv-product"
-                products={products}
-                value={selectedProductId}
-                onChange={setSelectedProductId}
-              />
+              <div data-onboarding-anchor={training ? "receiving.add-line" : undefined}>
+                <ProductSelect
+                  id="rcv-product"
+                  products={products}
+                  value={selectedProductId}
+                  onChange={selectProduct}
+                />
+              </div>
             </Field>
 
             {selectedProduct?.serialized ? (
@@ -337,13 +521,20 @@ export function ReceivingPage() {
               </div>
             )}
 
-            <BarcodeScanner onDetected={handleScan} label="Scan to receive" />
+            <div data-onboarding-anchor={training ? "receiving.serial-input" : undefined}>
+              <BarcodeScanner
+                onDetected={handleScan}
+                label="Scan to receive"
+                manualLabel={training ? "Enter practice serial or sheet barcode" : undefined}
+                manualActionLabel={training ? "Record" : undefined}
+              />
+            </div>
           </Card>
 
           <Card
             className={clsx(
               "grid gap-3 sm:grid-cols-2",
-              !contextOpen && "hidden lg:grid",
+              !training && !contextOpen && "hidden lg:grid",
             )}
           >
             <Field label="Receive into" htmlFor="rcv-location">
@@ -375,15 +566,37 @@ export function ReceivingPage() {
                 ))}
               </select>
             </Field>
-            <Field label="Actual delivery date" htmlFor="rcv-delivery-date">
-              <input
-                id="rcv-delivery-date"
-                type="date"
-                className="input"
-                value={actualDeliveryDate}
-                onChange={(event) => setActualDeliveryDate(event.target.value)}
-              />
-            </Field>
+            <div className="space-y-2">
+              <Field label="Actual delivery date" htmlFor="rcv-delivery-date">
+                <input
+                  id="rcv-delivery-date"
+                  type="date"
+                  className="input"
+                  value={actualDeliveryDate}
+                  onChange={(event) => setActualDeliveryDate(event.target.value)}
+                />
+              </Field>
+              {training && (
+                <button
+                  type="button"
+                  className="btn-outline w-full"
+                  data-onboarding-anchor="receiving.delivery-date"
+                  disabled={
+                    training.currentStep.id !== "delivery" || training.busy
+                  }
+                  onClick={() =>
+                    void training
+                      .dispatch({
+                        type: "set-delivery-date",
+                        payload: actualDeliveryDate,
+                      })
+                      .catch(() => undefined)
+                  }
+                >
+                  Confirm delivery date
+                </button>
+              )}
+            </div>
             <Field label="Delivery reference" htmlFor="rcv-delivery-reference">
               <input
                 id="rcv-delivery-reference"
@@ -418,10 +631,25 @@ export function ReceivingPage() {
                   id="rcv-bin"
                   className="input"
                   value={activeBin}
-                  onChange={(e) => setBinId(e.target.value)}
-                  disabled={bins.length === 0}
+                  onChange={(event) => {
+                    setBinId(event.target.value);
+                    if (training?.currentStep.id !== "destination") return;
+                    void training
+                      .dispatch({
+                        type: "set-destination",
+                        payload: event.target.value,
+                      })
+                      .catch(() => undefined);
+                  }}
+                  disabled={!training && bins.length === 0}
+                  data-onboarding-anchor={
+                    training ? "receiving.destination" : undefined
+                  }
                 >
                   <option value="">General area (unassigned)</option>
+                  {training && (
+                    <option value="TRAIN-QA-STAGING">Training QA staging</option>
+                  )}
                   {bins.map((b) => (
                     <option key={b.id} value={b.id}>
                       {b.code}
@@ -525,24 +753,47 @@ export function ReceivingPage() {
                               placeholder="optional"
                             />
                           </Field>
-                          <Field
-                            label="Batch number"
-                            htmlFor={`rcv-batch-${l.productId}`}
-                          >
-                            <input
-                              id={`rcv-batch-${l.productId}`}
-                              className="input"
-                              value={l.batchNumber}
-                              onChange={(event) =>
-                                setLineField(
-                                  l.productId,
-                                  "batchNumber",
-                                  event.target.value,
-                                )
-                              }
-                              placeholder="Supplier batch"
-                            />
-                          </Field>
+                          <div className="space-y-2">
+                            <Field
+                              label="Batch number"
+                              htmlFor={`rcv-batch-${l.productId}`}
+                            >
+                              <input
+                                id={`rcv-batch-${l.productId}`}
+                                className="input"
+                                value={l.batchNumber}
+                                onChange={(event) =>
+                                  setLineField(
+                                    l.productId,
+                                    "batchNumber",
+                                    event.target.value,
+                                  )
+                                }
+                                placeholder="Supplier batch"
+                              />
+                            </Field>
+                            {training && (
+                              <button
+                                type="button"
+                                className="btn-outline w-full"
+                                data-onboarding-anchor="receiving.batch-number"
+                                disabled={
+                                  training.currentStep.id !==
+                                    "traceability-batch" || training.busy
+                                }
+                                onClick={() =>
+                                  void training
+                                    .dispatch({
+                                      type: "set-batch-number",
+                                      payload: l.batchNumber,
+                                    })
+                                    .catch(() => undefined)
+                                }
+                              >
+                                Confirm batch number
+                              </button>
+                            )}
+                          </div>
                           <Field
                             label="Device test result"
                             htmlFor={`rcv-test-${l.productId}`}
@@ -611,7 +862,59 @@ export function ReceivingPage() {
               title="Photo evidence"
               subtitle="Delivery / packing proof"
             />
-            <EvidenceCapture onChange={setEvidence} />
+            <div data-onboarding-anchor={training ? "receiving.evidence" : undefined}>
+              {training ? (
+                <div className="space-y-3">
+                  <button
+                    type="button"
+                    className="btn-ghost w-full"
+                    disabled={
+                      training.currentStep.id !== "evidence" || training.busy
+                    }
+                    onClick={() => {
+                      const value = "training://delivery-photo-1";
+                      void training
+                        .dispatch({ type: "attach-evidence", payload: value })
+                        .then(() => setEvidence([value]))
+                        .catch(() => undefined);
+                    }}
+                  >
+                    <Icon name="camera" /> Attach practice delivery photo
+                  </button>
+                  <fieldset>
+                    <legend className="text-sm font-semibold text-ink">
+                      Delivery condition
+                    </legend>
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                      {(["clean", "damaged"] as const).map((condition) => (
+                        <button
+                          key={condition}
+                          type="button"
+                          className="btn-outline capitalize"
+                          disabled={
+                            training.currentStep.id !== "evidence" ||
+                            evidence.length === 0 ||
+                            training.busy
+                          }
+                          onClick={() =>
+                            void training
+                              .dispatch({
+                                type: "mark-condition",
+                                payload: condition,
+                              })
+                              .catch(() => undefined)
+                          }
+                        >
+                          {condition}
+                        </button>
+                      ))}
+                    </div>
+                  </fieldset>
+                </div>
+              ) : (
+                <EvidenceCapture onChange={setEvidence} />
+              )}
+            </div>
           </Card>
         </div>
       </div>
@@ -623,6 +926,8 @@ export function ReceivingPage() {
             type="button"
             className="btn-primary min-h-12 w-full shadow-pop"
             onClick={() => void submit()}
+            data-onboarding-anchor={training ? "receiving.submit" : undefined}
+            disabled={training?.busy}
           >
             Receive {totalItems} item(s)
           </button>

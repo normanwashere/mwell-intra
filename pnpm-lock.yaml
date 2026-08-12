@@ -489,6 +489,9 @@ importers:
       '@intra/data-kit':
         specifier: workspace:*
         version: link:../../packages/data-kit
+      '@intra/learning':
+        specifier: workspace:*
+        version: link:../learning
       '@intra/rbac':
         specifier: workspace:*
         version: link:../../packages/rbac

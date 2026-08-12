@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useSession } from "@intra/auth";
 import { Badge, Button, Icon } from "@intra/ui";
 import { OPERATING_PERSONAS } from "./personas";
@@ -116,8 +117,15 @@ export function OnboardingCenter({
     recordCheckpoint,
   } = useLearning();
   const launcherRef = useRef<HTMLButtonElement | null>(null);
+  const router = useRouter();
   const requiredHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const trainingWasActive = useRef(false);
+
+  useEffect(() => {
+    if (!activeTraining) return;
+    const adapter = getTrainingAdapter(activeTraining.simulationId);
+    if (adapter?.route) router.push(adapter.route);
+  }, [activeTraining, router]);
 
   useEffect(() => {
     if (activeTraining) {
@@ -163,6 +171,17 @@ export function OnboardingCenter({
     });
     return { requirements: ordered, progress, required, completed, personas };
   }, [audience, snapshot]);
+
+  useEffect(() => {
+    const routes = new Set(
+      view.requirements.flatMap((requirement) => {
+        if (!requirement.simulationId) return [];
+        const route = getTrainingAdapter(requirement.simulationId)?.route;
+        return route ? [route] : [];
+      }),
+    );
+    for (const route of routes) router.prefetch(route);
+  }, [router, view.requirements]);
 
   if (audience === "vendor" && profile?.kind !== "vendor") {
     return (
@@ -277,7 +296,7 @@ export function OnboardingCenter({
 
   return (
     <div className="space-y-0">
-      {activeTraining && (
+      {activeTraining && !getTrainingAdapter(activeTraining.simulationId)?.route && (
         <OnboardingTrainingSession
           requirementTitle={
             view.requirements.find((item) => item.id === activeTraining.requirementId)

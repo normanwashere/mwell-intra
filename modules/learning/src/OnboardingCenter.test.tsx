@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { LearningSnapshot } from "./types";
 import { OnboardingCenter } from "./OnboardingCenter";
@@ -8,6 +8,12 @@ import {
   clearTrainingAdaptersForTests,
   registerTrainingAdapter,
 } from "./training/registry";
+
+const push = vi.fn();
+const prefetch = vi.fn();
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push, prefetch }),
+}));
 
 const session = {
   profile: {
@@ -191,14 +197,46 @@ function renderCenter(overrides: Partial<LearningContextValue> = {}) {
 
 describe("OnboardingCenter", () => {
   beforeEach(() => {
+    push.mockClear();
+    prefetch.mockClear();
     clearTrainingAdaptersForTests();
     registerTrainingAdapter({
       id: "receiving-sim",
       version: 1,
       scenarioIds: ["receiving-sim"],
+      route: "/warehouse/receiving?training=receiving-sim",
       initialState: () => ({ ready: true }),
       dispatch: (state) => ({ state, nextStepId: "complete", completed: true }),
     });
+  });
+
+  it("navigates an active domain simulation to its real module surface", async () => {
+    renderCenter({
+      activeTraining: {
+        requirementId: "receiving",
+        assignmentRequirementId: "ar-receiving",
+        attemptId: "attempt-receiving",
+        mode: "scenario",
+        simulationId: "receiving-sim",
+      },
+    });
+
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith(
+        "/warehouse/receiving?training=receiving-sim",
+      ),
+    );
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("prefetches assigned domain simulations before a learner starts them", async () => {
+    renderCenter();
+
+    await waitFor(() =>
+      expect(prefetch).toHaveBeenCalledWith(
+        "/warehouse/receiving?training=receiving-sim",
+      ),
+    );
   });
 
   it("prioritizes the next action and deduplicates shared multi-role requirements", () => {

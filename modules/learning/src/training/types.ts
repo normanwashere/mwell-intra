@@ -15,6 +15,7 @@ export interface TrainingAdapter<TState> {
   id: string;
   version: number;
   scenarioIds: readonly string[];
+  route?: string;
   initialState(scenarioId: string): TState;
   dispatch(
     state: Readonly<TState>,

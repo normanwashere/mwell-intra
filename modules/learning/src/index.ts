@@ -20,6 +20,7 @@ export {
   LearningContext,
   LearningProvider,
   useLearning,
+  useOptionalLearning,
   type ActiveTrainingRequirement,
   type LearningContextValue,
 } from "./LearningProvider";

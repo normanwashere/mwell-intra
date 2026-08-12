@@ -10,6 +10,17 @@ import type { MemoryProfile } from '@intra/auth';
 
 export const DEMO_PROFILES: readonly MemoryProfile[] = [
   {
+    id: 'demo-warehouse-operator',
+    email: 'warehouse.operator@mwell.demo',
+    kind: 'employee',
+    name: 'Mika Reyes',
+    title: 'Warehouse Operator',
+    roles: {
+      core: ['staff'],
+      warehouse: ['warehouse_operator'],
+    },
+  },
+  {
     id: 'demo-logistics',
     email: 'logistics@mwell.demo',
     kind: 'employee',

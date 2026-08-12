@@ -174,6 +174,22 @@ describe("learning catalog", () => {
     ).toEqual(["complete"]);
   });
 
+  it("assigns Warehouse Operators the receiving pilot with resumable checkpoints", () => {
+    const curriculum = roleCurriculumFor("warehouse", "warehouse_operator");
+    const requirement = curriculum?.requirementIds
+      .map((id) => requirementById.get(id))
+      .find((item) => item?.kind === "scenario");
+    expect(requirement).toMatchObject({
+      title: "Receive and inspect controlled stock",
+      simulationId: "warehouse-receiving-v1",
+    });
+    expect(
+      LEARNING_CATALOG.simulations.find(
+        (item) => item.id === "warehouse-receiving-v1",
+      )?.checkpointIds,
+    ).toEqual(["draft-saved", "complete"]);
+  });
+
   it("uses the approved shared requirement lifecycle states", () => {
     expect(REQUIREMENT_PROGRESS_STATES).toEqual([
       "not_started",

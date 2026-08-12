@@ -1,6 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
 import { createRef, type ReactNode } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TrainingModeProvider, useTraining } from "./TrainingModeProvider";
 import type { TrainingAdapter, TrainingScenario } from "./training/types";
 
@@ -61,6 +61,7 @@ const scenario: TrainingScenario = {
 function wrapper(
   checkpoint = vi.fn().mockResolvedValue(undefined),
   launcherRef = createRef<HTMLButtonElement>(),
+  persistSession = false,
 ) {
   return function Wrapper({ children }: { children: ReactNode }) {
     return (
@@ -71,6 +72,7 @@ function wrapper(
         attemptId="attempt-1"
         onCheckpoint={checkpoint}
         launcherRef={launcherRef}
+        persistSession={persistSession}
       >
         {children}
       </TrainingModeProvider>
@@ -79,6 +81,8 @@ function wrapper(
 }
 
 describe("TrainingModeProvider", () => {
+  beforeEach(() => window.sessionStorage.clear());
+
   it("accepts only commands declared by the current step", async () => {
     const { result } = renderHook(() => useTraining<{ count: number }>(), {
       wrapper: wrapper(),
@@ -166,5 +170,22 @@ describe("TrainingModeProvider", () => {
     expect(result.current.active).toBe(false);
     expect(result.current.state.count).toBe(0);
     expect(focus).toHaveBeenCalled();
+  });
+
+  it("restores simulation-only progress after a remount and clears it on exit", async () => {
+    const first = renderHook(() => useTraining<{ count: number }>(), {
+      wrapper: wrapper(vi.fn(), createRef<HTMLButtonElement>(), true),
+    });
+    await act(() => first.result.current.dispatch({ type: "increment" }));
+    first.unmount();
+
+    const resumed = renderHook(() => useTraining<{ count: number }>(), {
+      wrapper: wrapper(vi.fn(), createRef<HTMLButtonElement>(), true),
+    });
+    expect(resumed.result.current.state.count).toBe(1);
+    expect(resumed.result.current.currentStep.id).toBe("confirm");
+
+    act(() => resumed.result.current.exit());
+    expect(window.sessionStorage.length).toBe(0);
   });
 });
