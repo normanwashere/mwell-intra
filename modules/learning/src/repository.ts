@@ -621,6 +621,18 @@ export class MemoryLearningRepository implements LearningRepository {
   }
   async resolveAssignments(): Promise<LearningSnapshot> {
     this.convergeSharedCompletions();
+    this.state = {
+      ...this.state,
+      lockedCapabilities: this.state.lockedCapabilities.filter((lock) =>
+        lock.requirementIds.some((requirementId) =>
+          !this.state.progress.some(
+            (item) =>
+              item.requirementId === requirementId &&
+              ["passed", "waived"].includes(item.state),
+          ),
+        ),
+      ),
+    };
     return this.snapshot();
   }
 

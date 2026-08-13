@@ -558,6 +558,52 @@ describe("MemoryLearningRepository", () => {
     ).toBe("passed");
   });
 
+  it("keeps a capability locked until every required learning step is complete", async () => {
+    const ready = snapshot();
+    const repository = new MemoryLearningRepository({
+      snapshot: {
+        ...ready,
+        progress: ready.progress.map((item) => ({
+          ...item,
+          state:
+            item.requirementId === orientation.id || item.requirementId === policy.id
+              ? ("passed" as const)
+              : item.state,
+        })),
+        lockedCapabilities: [
+          {
+            capability: { module: "warehouse", capability: "receive_stock" },
+            reason: "missing_certification",
+            requirementIds: [orientation.id, policy.id, assessment.id],
+            canRequestEmergencyException: false,
+          },
+        ],
+      },
+      runtime: "test",
+      now: () => now,
+    });
+
+    expect((await repository.resolveAssignments()).lockedCapabilities).toHaveLength(1);
+    const state = await repository.snapshot();
+    const assessmentProgress = state.progress.find(
+      (item) => item.requirementId === assessment.id,
+    )!;
+    const completedRepository = new MemoryLearningRepository({
+      snapshot: {
+        ...state,
+        progress: state.progress.map((item) =>
+          item.assignmentRequirementId === assessmentProgress.assignmentRequirementId
+            ? { ...item, state: "passed" as const, completedAt: now }
+            : item,
+        ),
+      },
+      runtime: "test",
+      now: () => now,
+    });
+
+    expect((await completedRepository.resolveAssignments()).lockedCapabilities).toEqual([]);
+  });
+
   it("returns completed progress without inventing an attempt", async () => {
     const repository = new MemoryLearningRepository({
       snapshot: snapshotWithSimulationPassed(),

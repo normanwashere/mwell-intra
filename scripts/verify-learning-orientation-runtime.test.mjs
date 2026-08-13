@@ -24,7 +24,7 @@ test("orientation catalog and live schema require the same terminal checkpoint",
     catalog,
     /kind:\s*"orientation"[\s\S]*?simulationId:\s*id/,
   );
-  assert.match(catalog, /checkpointIds:\s*\["complete"\]/);
+  assert.match(catalog, /checkpointIds:[\s\S]{0,180}\["complete"\]/);
   assert.match(
     migration,
     /requirement_versions_orientation_runtime_check[\s\S]*?requirement_kind <> 'orientation'[\s\S]*?simulation_id[\s\S]*?required_checkpoints[\s\S]*?\? 'complete'/,

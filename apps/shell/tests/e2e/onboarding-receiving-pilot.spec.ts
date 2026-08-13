@@ -34,7 +34,10 @@ async function completeOrientationPrerequisites(page: Page) {
     .getByRole("button", { name: "Start Receive and inspect controlled stock" })
     .first();
   for (let prerequisite = 0; prerequisite < 3; prerequisite += 1) {
-    if (await practice.isEnabled()) return;
+    const policy = page.getByRole("button", {
+      name: "Start Warehouse receiving and custody policy",
+    });
+    if (await policy.isEnabled()) break;
     await page
       .locator("button:enabled")
       .filter({ hasText: /^Start Role orientation$/ })
@@ -48,6 +51,30 @@ async function completeOrientationPrerequisites(page: Page) {
       .getByRole("button", { name: "Exit training" })
       .click();
   }
+  const policy = page.getByRole("button", {
+    name: "Start Warehouse receiving and custody policy",
+  });
+  await expect(policy).toBeEnabled();
+  await policy.click();
+  let dialog = page.getByRole("dialog");
+  await dialog
+    .getByLabel("I have read and understand this controlled policy version.")
+    .check();
+  await dialog.getByRole("button", { name: "Acknowledge policy" }).click();
+  await expect(dialog.getByText("Policy acknowledged")).toBeVisible();
+  await dialog.getByRole("button", { name: "Close" }).click();
+  await page
+    .getByRole("button", {
+      name: "Start Warehouse receiving controls knowledge check",
+    })
+    .click();
+  dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Delivery date, batch, and every unit serial").check();
+  await dialog.getByRole("button", { name: "Next question" }).click();
+  await dialog.getByLabel("Keep it in controlled quality custody").check();
+  await dialog.getByRole("button", { name: "Submit answers" }).click();
+  await expect(dialog.getByText("Assessment passed")).toBeVisible();
+  await dialog.getByRole("button", { name: "Close" }).click();
   await expect(practice).toBeEnabled();
 }
 

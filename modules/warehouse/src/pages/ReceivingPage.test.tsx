@@ -145,6 +145,30 @@ describe("ReceivingPage", () => {
     });
   });
 
+  it("reuses the receipt idempotency key after an uncertain response", async () => {
+    const repo = makeRepo();
+    const receiveOnce = repo.receiveStock.bind(repo);
+    const receive = vi
+      .spyOn(repo, "receiveStock")
+      .mockRejectedValueOnce(new Error("Response was lost"))
+      .mockImplementation((input) => receiveOnce(input));
+    const user = userEvent.setup();
+    renderWithProviders(<ReceivingPage />, { repo });
+    await screen.findByText(/receipt lines/i);
+
+    await user.selectOptions(screen.getByLabelText("Product"), "doctor-token");
+    await user.click(screen.getByRole("button", { name: /add to receipt/i }));
+    await user.click(screen.getByRole("button", { name: /receive .*item/i }));
+    await screen.findByText(/response was lost/i);
+    await user.click(screen.getByRole("button", { name: /receive .*item/i }));
+
+    await waitFor(() => expect(receive).toHaveBeenCalledTimes(2));
+    expect(receive.mock.calls[0]![0].idempotencyKey).toMatch(/^receive-/);
+    expect(receive.mock.calls[1]![0].idempotencyKey).toBe(
+      receive.mock.calls[0]![0].idempotencyKey,
+    );
+  });
+
   it("warns when scanning an unknown barcode without a product selected", async () => {
     const user = userEvent.setup();
     renderWithProviders(<ReceivingPage />, { repo: makeRepo() });

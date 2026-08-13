@@ -22,13 +22,33 @@ export {
   useLearning,
   useOptionalLearning,
   type ActiveTrainingRequirement,
+  type ActiveLearningActivity,
   type LearningContextValue,
 } from "./LearningProvider";
 export { OnboardingCenter } from "./OnboardingCenter";
+export {
+  assessmentQuestionsFor,
+  policyDocumentFor,
+  WAREHOUSE_RECEIVING_ASSESSMENT_ID,
+  WAREHOUSE_RECEIVING_POLICY_ID,
+} from "./content";
 export { OnboardingProgress } from "./OnboardingProgress";
 export { OnboardingStatusBand } from "./OnboardingStatusBand";
 export { OnboardingTrainingSession } from "./OnboardingTrainingSession";
 export { CoachOverlay } from "./CoachOverlay";
+export { AssessmentRunner, type AssessmentQuestion } from "./AssessmentRunner";
+export {
+  PolicyAcknowledgment,
+  type ControlledPolicyDocument,
+} from "./PolicyAcknowledgment";
+export {
+  LockedCapabilityRecovery,
+  type CapabilityLockReason,
+} from "./LockedCapabilityRecovery";
+export {
+  CertifiedAction,
+  type CertifiedActionRenderProps,
+} from "./CertifiedAction";
 export {
   TrainingModeProvider,
   useTraining,

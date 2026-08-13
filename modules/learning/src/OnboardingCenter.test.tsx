@@ -13,6 +13,7 @@ const push = vi.fn();
 const prefetch = vi.fn();
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push, prefetch }),
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 const session = {
@@ -177,10 +178,15 @@ function value(overrides: Partial<LearningContextValue> = {}): LearningContextVa
     startingRequirementId: null,
     trainingError: null,
     activeTraining: null,
+    activeActivity: null,
     refresh: vi.fn(),
     resume: vi.fn().mockResolvedValue(undefined),
     closeTraining: vi.fn(),
+    closeActivity: vi.fn(),
     recordCheckpoint: vi.fn().mockResolvedValue(undefined),
+    submitAssessment: vi.fn(),
+    acknowledgePolicy: vi.fn(),
+    requestSupport: vi.fn(),
     isLiveCapability: vi.fn().mockReturnValue(false),
     lockedReason: vi.fn().mockReturnValue(null),
     ...overrides,

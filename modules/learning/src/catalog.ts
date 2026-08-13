@@ -8,6 +8,10 @@ import type {
   RoleCurriculumDefinition,
   SimulationDefinition,
 } from "./types";
+import {
+  WAREHOUSE_RECEIVING_ASSESSMENT_ID,
+  WAREHOUSE_RECEIVING_POLICY_ID,
+} from "./content";
 
 export function capabilityKey(capability: LearningCapability): string {
   return `${capability.module}:${capability.capability}`;
@@ -95,6 +99,31 @@ const vendorJourneyRequirements: readonly RequirementDefinition[] = [
   },
 ];
 
+const warehouseReceivingRequirements: readonly RequirementDefinition[] = [
+  {
+    id: WAREHOUSE_RECEIVING_POLICY_ID,
+    version: 1,
+    audience: "internal",
+    kind: "policy",
+    title: "Warehouse receiving and custody policy",
+    mandatory: true,
+    prerequisiteIds: ["internal.operations_associate.orientation.v1"],
+    capabilityOutcomes: [],
+  },
+  {
+    id: WAREHOUSE_RECEIVING_ASSESSMENT_ID,
+    version: 1,
+    audience: "internal",
+    kind: "assessment",
+    title: "Warehouse receiving controls knowledge check",
+    mandatory: true,
+    prerequisiteIds: [WAREHOUSE_RECEIVING_POLICY_ID],
+    capabilityOutcomes: [],
+    passingScore: 80,
+    maxAttempts: 3,
+  },
+];
+
 const capabilityClassificationByKey = new Map(
   CAPABILITY_CLASSIFICATIONS.map((item) => [capabilityKey(item), item]),
 );
@@ -159,6 +188,10 @@ const capabilityRequirements = roleDefinitions.flatMap((roleDefinition) => {
       : id;
   const prerequisiteIds = [
     `${audience}.${roleDefinition.personaId}.orientation.v1`,
+    ...(roleDefinition.module === "warehouse" &&
+    roleDefinition.role === "warehouse_operator"
+      ? [WAREHOUSE_RECEIVING_POLICY_ID, WAREHOUSE_RECEIVING_ASSESSMENT_ID]
+      : []),
     ...(roleDefinition.module === "core" &&
     roleDefinition.role === "vendor_portal"
       ? [VENDOR_EVIDENCE_REQUIREMENT_ID]
@@ -209,6 +242,7 @@ const unassignedCapabilityRequirements = MUTATING_CAPABILITIES.filter(
 const requirements = [
   ...baselineRequirements,
   ...vendorJourneyRequirements,
+  ...warehouseReceivingRequirements,
   ...capabilityRequirements,
   ...unassignedCapabilityRequirements,
 ] as const;
@@ -241,6 +275,10 @@ export const ROLE_CURRICULA: readonly RoleCurriculumDefinition[] =
       role: roleDefinition.role,
       requirementIds: [
         `${audience}.${roleDefinition.personaId}.orientation.v1`,
+        ...(roleDefinition.module === "warehouse" &&
+        roleDefinition.role === "warehouse_operator"
+          ? [WAREHOUSE_RECEIVING_POLICY_ID, WAREHOUSE_RECEIVING_ASSESSMENT_ID]
+          : []),
         ...(roleDefinition.module === "core" &&
         roleDefinition.role === "vendor_portal"
           ? [VENDOR_EVIDENCE_REQUIREMENT_ID]

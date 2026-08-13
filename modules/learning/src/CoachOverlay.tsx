@@ -225,7 +225,9 @@ export function CoachOverlay({
             onClick={() => setCollapsed(true)}
             aria-label="Minimize training coach"
           >
-            Minimize
+            <Icon name="minus" className="h-4 w-4 min-[420px]:hidden" />
+            <span className="max-[419px]:sr-only">Minimize</span>
+            <span className="hidden min-[420px]:inline">Minimize</span>
           </Button>
         )}
       </div>

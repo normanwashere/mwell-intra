@@ -77,4 +77,6 @@ export interface SessionValue {
   resetPassword: (email: string) => Promise<void>;
   /** Change the signed-in user's password (supabase mode only). */
   changePassword: (password: string) => Promise<void>;
+  /** Re-read raw and effective capability projections after governed changes. */
+  refreshCapabilities: () => Promise<boolean>;
 }

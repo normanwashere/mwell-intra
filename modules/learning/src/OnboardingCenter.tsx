@@ -2,13 +2,16 @@
 
 import { useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "@intra/auth";
-import { Badge, Button, Icon } from "@intra/ui";
+import { Badge, Button, Icon, Sheet } from "@intra/ui";
 import { OPERATING_PERSONAS } from "./personas";
 import { useLearning } from "./LearningProvider";
 import { OnboardingProgress } from "./OnboardingProgress";
 import { OnboardingTrainingSession } from "./OnboardingTrainingSession";
+import { AssessmentRunner } from "./AssessmentRunner";
+import { PolicyAcknowledgment } from "./PolicyAcknowledgment";
+import { assessmentQuestionsFor, policyDocumentFor } from "./content";
 import { getTrainingAdapter } from "./training/registry";
 import type {
   RequirementDefinition,
@@ -111,15 +114,20 @@ export function OnboardingCenter({
     refresh,
     resume,
     activeTraining,
+    activeActivity,
     startingRequirementId,
     trainingError,
     closeTraining,
+    closeActivity,
     recordCheckpoint,
   } = useLearning();
   const launcherRef = useRef<HTMLButtonElement | null>(null);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const requestedRequirementId = searchParams.get("requirement");
   const requiredHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const trainingWasActive = useRef(false);
+  const focusedRequirementRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!activeTraining) return;
@@ -182,6 +190,26 @@ export function OnboardingCenter({
     );
     for (const route of routes) router.prefetch(route);
   }, [router, view.requirements]);
+
+  useEffect(() => {
+    if (!requestedRequirementId) {
+      focusedRequirementRef.current = null;
+      return;
+    }
+    if (
+      focusedRequirementRef.current === requestedRequirementId ||
+      !view.requirements.some((item) => item.id === requestedRequirementId)
+    ) return;
+    const target = document.getElementById(
+      `onboarding-requirement-${encodeURIComponent(requestedRequirementId)}`,
+    );
+    if (!target) return;
+    focusedRequirementRef.current = requestedRequirementId;
+    requestAnimationFrame(() => {
+      target.scrollIntoView({ block: "center" });
+      target.focus({ preventScroll: true });
+    });
+  }, [requestedRequirementId, view.requirements]);
 
   if (audience === "vendor" && profile?.kind !== "vendor") {
     return (
@@ -261,8 +289,14 @@ export function OnboardingCenter({
   const unavailableReasonFor = (requirement: RequirementDefinition) => {
     const state = view.progress.get(requirement.id)?.state;
     if (state === "expired") return "Ask your manager to reassign this step";
+    if (requirement.kind === "assessment" && !assessmentQuestionsFor(requirement.id)) {
+      return "Knowledge check is being prepared";
+    }
+    if (requirement.kind === "policy" && !policyDocumentFor(requirement.id)) {
+      return "Controlled policy is being prepared";
+    }
     if (
-      requirement.kind !== "orientation" &&
+      !["orientation", "assessment", "policy"].includes(requirement.kind) &&
       (!requirement.simulationId || !getTrainingAdapter(requirement.simulationId))
     ) {
       return "Guided practice is being prepared";
@@ -293,9 +327,54 @@ export function OnboardingCenter({
       Boolean(item.revokedAt || item.supersededAt) ||
       Boolean(item.expiresAt && new Date(item.expiresAt).getTime() <= Date.now()),
   );
+  const activityRequirement = activeActivity
+    ? view.requirements.find((item) => item.id === activeActivity.requirementId)
+    : undefined;
+  const activityProgress = activeActivity
+    ? view.progress.get(activeActivity.requirementId)
+    : undefined;
+  const assessmentQuestions =
+    activeActivity?.kind === "assessment"
+      ? assessmentQuestionsFor(activeActivity.requirementId)
+      : null;
+  const policyDocument =
+    activeActivity?.kind === "policy"
+      ? policyDocumentFor(activeActivity.requirementId)
+      : null;
 
   return (
     <div className="space-y-0">
+      <Sheet
+        open={Boolean(activeActivity)}
+        onOpenChange={(open) => {
+          if (!open) closeActivity();
+        }}
+        title={activityRequirement?.title ?? "Learning activity"}
+        description="Complete this governed step to continue your role onboarding."
+        side="adaptive"
+        size="wide"
+      >
+        {activeActivity?.kind === "assessment" &&
+          activityRequirement &&
+          activityProgress &&
+          assessmentQuestions && (
+            <AssessmentRunner
+              requirement={activityRequirement}
+              progress={activityProgress}
+              questions={assessmentQuestions}
+            />
+          )}
+        {activeActivity?.kind === "policy" &&
+          activityRequirement &&
+          activityProgress &&
+          policyDocument && (
+            <PolicyAcknowledgment
+              requirement={activityRequirement}
+              progress={activityProgress}
+              document={policyDocument}
+            />
+          )}
+      </Sheet>
       {activeTraining && !getTrainingAdapter(activeTraining.simulationId)?.route && (
         <OnboardingTrainingSession
           requirementTitle={
@@ -392,7 +471,17 @@ export function OnboardingCenter({
             {view.requirements.map((requirement, index) => {
               const progress = view.progress.get(requirement.id);
               return (
-                <li key={requirement.id} className="grid gap-3 border-b border-line py-4 sm:grid-cols-[2rem_minmax(0,1fr)_auto] sm:items-center">
+                <li
+                  key={requirement.id}
+                  id={`onboarding-requirement-${encodeURIComponent(requirement.id)}`}
+                  tabIndex={-1}
+                  aria-current={requestedRequirementId === requirement.id ? "step" : undefined}
+                  className={
+                    requestedRequirementId === requirement.id
+                      ? "grid gap-3 border-b border-brand-400 bg-brand-500/5 px-3 py-4 outline-none sm:grid-cols-[2rem_minmax(0,1fr)_auto] sm:items-center"
+                      : "grid gap-3 border-b border-line py-4 outline-none sm:grid-cols-[2rem_minmax(0,1fr)_auto] sm:items-center"
+                  }
+                >
                   <span className="tnum grid h-8 w-8 place-items-center rounded-full border border-line text-xs font-bold text-muted">{index + 1}</span>
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">

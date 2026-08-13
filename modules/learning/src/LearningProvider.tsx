@@ -11,18 +11,26 @@ import {
   type ReactNode,
 } from "react";
 import { useSession } from "@intra/auth";
-import { MODULE_LIST, type Module, type UserRoles } from "@intra/rbac";
+import { can, MODULE_LIST, type CapabilityFor, type Module, type UserRoles } from "@intra/rbac";
 import { LEARNING_CATALOG, roleCurriculumFor } from "./catalog";
 import {
   MemoryLearningRepository,
   SupabaseLearningRepository,
   type LearningRepository,
 } from "./repository";
-import type { LearningSnapshot, LockedCapability } from "./types";
-import type { LearningAttemptMode } from "./types";
+import type {
+  AssessmentResult,
+  AssessmentSubmission,
+  LearningAttemptMode,
+  LearningSnapshot,
+  LockedCapability,
+  PolicyAcknowledgmentInput,
+  SupportRequestInput,
+} from "./types";
 import type { TrainingCheckpoint } from "./training/types";
 import { createIdempotencyKey } from "./training/idempotency";
 import { getTrainingAdapter } from "./training/registry";
+import { scorePreviewAssessment } from "./content";
 
 const EMPTY_SNAPSHOT: LearningSnapshot = {
   curricula: [],
@@ -32,6 +40,7 @@ const EMPTY_SNAPSHOT: LearningSnapshot = {
   refreshedAt: new Date(0).toISOString(),
 };
 const EMPTY_USER_ROLES: Partial<UserRoles> = {};
+const CONFIRM_LOCAL_CAPABILITIES = async () => true;
 
 function previewSnapshotForRoles(
   userRoles: Partial<UserRoles>,
@@ -108,10 +117,15 @@ export interface LearningContextValue {
   startingRequirementId: string | null;
   trainingError: string | null;
   activeTraining: ActiveTrainingRequirement | null;
+  activeActivity: ActiveLearningActivity | null;
   refresh(): Promise<void>;
   resume(requirementId: string): Promise<void>;
   closeTraining(): void;
+  closeActivity(): void;
   recordCheckpoint(event: TrainingCheckpoint): Promise<void>;
+  submitAssessment(input: AssessmentSubmission): Promise<AssessmentResult>;
+  acknowledgePolicy(input: PolicyAcknowledgmentInput): Promise<void>;
+  requestSupport(input: SupportRequestInput): Promise<void>;
   isLiveCapability(module: Module, capability: string): boolean;
   lockedReason(module: Module, capability: string): LockedCapability | null;
 }
@@ -122,6 +136,13 @@ export interface ActiveTrainingRequirement {
   attemptId: string;
   mode: LearningAttemptMode;
   simulationId: string;
+}
+
+export interface ActiveLearningActivity {
+  requirementId: string;
+  assignmentRequirementId: string;
+  kind: "assessment" | "policy";
+  attemptId?: string;
 }
 
 export const LearningContext = createContext<LearningContextValue | null>(null);
@@ -138,10 +159,12 @@ export function LearningProvider({
 }) {
   const {
     profile,
+    mode,
     supabaseClient,
     userCapabilities = {},
     userRoles = EMPTY_USER_ROLES,
     roleCapabilities = {},
+    refreshCapabilities = CONFIRM_LOCAL_CAPABILITIES,
   } = useSession();
   const repository = useMemo<LearningRepository>(() => {
     if (injectedRepository) return injectedRepository;
@@ -150,6 +173,7 @@ export function LearningProvider({
       snapshot: previewSnapshotForRoles(userRoles),
       runtime: "development",
       simulations: LEARNING_CATALOG.simulations,
+      assess: (input) => ({ score: scorePreviewAssessment(input) }),
     });
   }, [injectedRepository, supabaseClient, userRoles]);
   const [snapshot, setSnapshot] = useState<LearningSnapshot | null>(null);
@@ -166,9 +190,12 @@ export function LearningProvider({
   const [trainingError, setTrainingError] = useState<string | null>(null);
   const [activeTraining, setActiveTraining] =
     useState<ActiveTrainingRequirement | null>(null);
+  const [activeActivity, setActiveActivity] =
+    useState<ActiveLearningActivity | null>(null);
   const generation = useRef(0);
   const startInFlight = useRef<string | null>(null);
   const startKeys = useRef(new Map<string, string>());
+  const commandQueue = useRef<Promise<void>>(Promise.resolve());
   const profileIdRef = useRef(profile?.id);
   profileIdRef.current = profile?.id;
 
@@ -226,6 +253,7 @@ export function LearningProvider({
       setTrainingError(null);
       setStartingRequirementId(null);
       setActiveTraining(null);
+      setActiveActivity(null);
       setTrainingPrincipal(null);
       setResumeRequirementId(null);
       startInFlight.current = null;
@@ -233,6 +261,7 @@ export function LearningProvider({
       return;
     }
     setActiveTraining(null);
+    setActiveActivity(null);
     setTrainingPrincipal(null);
     setResumeRequirementId(null);
     setTrainingError(null);
@@ -250,11 +279,22 @@ export function LearningProvider({
     snapshotPrincipal === principalSignature ? snapshot : null;
   const visibleTraining =
     trainingPrincipal === principalSignature ? activeTraining : null;
+  const visibleActivity =
+    trainingPrincipal === principalSignature ? activeActivity : null;
 
   const isLiveCapability = useCallback(
-    (module: Module, capability: string) =>
-      userCapabilities[module]?.includes(capability) === true,
-    [userCapabilities],
+    (module: Module, capability: string) => {
+      if (mode === "supabase") {
+        return userCapabilities[module]?.includes(capability) === true;
+      }
+      return (
+        can(userRoles, module, capability as CapabilityFor<typeof module>) &&
+        !visibleSnapshot?.lockedCapabilities.some(
+          (item) => item.capability.module === module && item.capability.capability === capability,
+        )
+      );
+    },
+    [mode, userCapabilities, userRoles, visibleSnapshot],
   );
 
   const lockedReason = useCallback(
@@ -282,13 +322,15 @@ export function LearningProvider({
       const requirement = snapshotRef.current?.curricula
         .flatMap((item) => item.requirements)
         .find((item) => item.id === requirementId);
-      if (!requirement?.simulationId) {
+      const isActivity = requirement?.kind === "assessment" || requirement?.kind === "policy";
+      if (!requirement || (!isActivity && !requirement.simulationId)) {
         setTrainingError("This learning step does not have published training content yet.");
         return;
       }
       if (
+        !isActivity &&
         requirement.kind !== "orientation" &&
-        !getTrainingAdapter(requirement.simulationId)
+        !getTrainingAdapter(requirement.simulationId!)
       ) {
         setTrainingError("Guided practice for this step is being prepared.");
         return;
@@ -316,9 +358,6 @@ export function LearningProvider({
         ) {
           return;
         }
-        if (!result.attempt) {
-          throw new Error("This learning step does not provide a resumable attempt.");
-        }
         setSnapshot((current) => {
           if (!current) return current;
           const next = {
@@ -332,13 +371,31 @@ export function LearningProvider({
           snapshotRef.current = next;
           return next;
         });
+        if (isActivity) {
+          if (requirement.kind === "assessment" && !result.attempt) {
+            throw new Error("This assessment does not provide a governed attempt.");
+          }
+          setActiveTraining(null);
+          setActiveActivity({
+            requirementId,
+            assignmentRequirementId: progress.assignmentRequirementId,
+            kind: requirement.kind === "assessment" ? "assessment" : "policy",
+            attemptId: result.attempt?.id,
+          });
+          setTrainingPrincipal(requestPrincipal);
+          return;
+        }
+        if (!result.attempt) {
+          throw new Error("This learning step does not provide a resumable attempt.");
+        }
         setActiveTraining({
           requirementId,
           assignmentRequirementId: progress.assignmentRequirementId,
           attemptId: result.attempt.id,
           mode: result.attempt.mode,
-          simulationId: requirement.simulationId,
+          simulationId: requirement.simulationId!,
         });
+        setActiveActivity(null);
         setTrainingPrincipal(requestPrincipal);
       } catch (cause) {
         if (
@@ -348,6 +405,7 @@ export function LearningProvider({
         ) {
           setTrainingError(errorMessage(cause));
           setActiveTraining(null);
+          setActiveActivity(null);
         }
       } finally {
         if (startInFlight.current === requestToken) {
@@ -419,8 +477,122 @@ export function LearningProvider({
     [repository, visibleTraining],
   );
 
+  const confirmCommand = useCallback(
+    async <T,>(
+      command: () => Promise<T>,
+      validate: (result: T, snapshot: LearningSnapshot) => void,
+    ): Promise<T> => {
+      let release!: () => void;
+      const previous = commandQueue.current;
+      commandQueue.current = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      await previous;
+      const requestGeneration = generation.current;
+      const requestProfileId = profileIdRef.current;
+      const requestPrincipal = principalRef.current;
+      try {
+        if (!requestProfileId) {
+          throw new Error("Learning session is no longer authenticated.");
+        }
+        const result = await command();
+        const confirmed = await repository.resolveAssignments();
+        if (
+          requestGeneration !== generation.current ||
+          requestProfileId !== profileIdRef.current ||
+          requestPrincipal !== principalRef.current
+        ) {
+          throw new Error("Learning authority changed before progress was confirmed.");
+        }
+        validate(result, confirmed);
+        snapshotRef.current = confirmed;
+        setSnapshot(confirmed);
+        setSnapshotPrincipal(requestPrincipal);
+        setStale(false);
+        setError(null);
+        const capabilitiesCurrent = await refreshCapabilities();
+        if (!capabilitiesCurrent) {
+          setStale(true);
+          setError("Learning was saved, but your updated access could not be confirmed.");
+        }
+        return result;
+      } finally {
+        release();
+      }
+    },
+    [refreshCapabilities, repository],
+  );
+
+  const submitAssessment = useCallback(
+    (input: AssessmentSubmission) =>
+      confirmCommand(() =>
+        repository.submitAssessment({
+          ...input,
+          idempotencyKey: input.idempotencyKey ?? createIdempotencyKey(),
+        }),
+        (result, confirmed) => {
+          const progress = confirmed.progress.find(
+            (item) => item.assignmentRequirementId === input.assignmentRequirementId,
+          );
+          if (!progress || progress.state !== result.state) {
+            throw new Error("Assessment result could not be confirmed by readback.");
+          }
+        },
+      ),
+    [confirmCommand, repository],
+  );
+
+  const acknowledgePolicy = useCallback(
+    (input: PolicyAcknowledgmentInput) =>
+      confirmCommand(() =>
+        repository.acknowledgePolicy({
+          ...input,
+          idempotencyKey: input.idempotencyKey ?? createIdempotencyKey(),
+        }),
+        (_result, confirmed) => {
+          const progress = confirmed.progress.find(
+            (item) => item.assignmentRequirementId === input.assignmentRequirementId,
+          );
+          if (
+            !progress ||
+            !["passed", "waived"].includes(progress.state) ||
+            !progress.completedAt
+          ) {
+            throw new Error("Policy acknowledgment could not be confirmed by readback.");
+          }
+        },
+      ),
+    [confirmCommand, repository],
+  );
+
+  const requestSupport = useCallback(
+    (input: SupportRequestInput) =>
+      confirmCommand(() =>
+        repository.requestSupport({
+          ...input,
+          idempotencyKey: input.idempotencyKey ?? createIdempotencyKey(),
+        }),
+        (_result, confirmed) => {
+          const progress = confirmed.progress.find(
+            (item) => item.assignmentRequirementId === input.assignmentRequirementId,
+          );
+          if (!progress || progress.state !== "needs_support") {
+            throw new Error("Support request could not be confirmed by readback.");
+          }
+        },
+      ),
+    [confirmCommand, repository],
+  );
+
   const closeTraining = useCallback(() => {
     setActiveTraining(null);
+    setTrainingPrincipal(null);
+    setResumeRequirementId(null);
+    setTrainingError(null);
+  }, []);
+
+  const closeActivity = useCallback(() => {
+    setActiveActivity(null);
     setTrainingPrincipal(null);
     setResumeRequirementId(null);
     setTrainingError(null);
@@ -436,10 +608,15 @@ export function LearningProvider({
       startingRequirementId,
       trainingError,
       activeTraining: visibleTraining,
+      activeActivity: visibleActivity,
       refresh,
       resume,
       closeTraining,
+      closeActivity,
       recordCheckpoint,
+      submitAssessment,
+      acknowledgePolicy,
+      requestSupport,
       isLiveCapability,
       lockedReason,
     }),
@@ -452,10 +629,15 @@ export function LearningProvider({
       startingRequirementId,
       trainingError,
       visibleTraining,
+      visibleActivity,
       refresh,
       resume,
       closeTraining,
+      closeActivity,
       recordCheckpoint,
+      submitAssessment,
+      acknowledgePolicy,
+      requestSupport,
       isLiveCapability,
       lockedReason,
     ],

@@ -10,6 +10,47 @@ import type { WarehouseData } from '@/data/repository';
 import type { DataSource } from '@intra/data-kit';
 import type { Role } from '@/domain/types';
 import type { Capability } from '@/auth/roles';
+import {
+  LearningContext,
+  type LearningContextValue,
+  type LearningSnapshot,
+} from '@intra/learning';
+
+const certifiedTestSnapshot: LearningSnapshot = {
+  curricula: [],
+  progress: [],
+  certifications: [],
+  lockedCapabilities: [],
+  refreshedAt: '2026-08-13T00:00:00.000Z',
+};
+
+const certifiedTestLearning: LearningContextValue = {
+  snapshot: certifiedTestSnapshot,
+  loading: false,
+  stale: false,
+  error: null,
+  resumeRequirementId: null,
+  startingRequirementId: null,
+  trainingError: null,
+  activeTraining: null,
+  activeActivity: null,
+  refresh: async () => undefined,
+  resume: async () => undefined,
+  closeTraining: () => undefined,
+  closeActivity: () => undefined,
+  recordCheckpoint: async () => undefined,
+  submitAssessment: async () => ({
+    assignmentRequirementId: 'certified-test-assignment',
+    passed: true,
+    score: 100,
+    attemptNumber: 1,
+    state: 'passed',
+  }),
+  acknowledgePolicy: async () => undefined,
+  requestSupport: async () => undefined,
+  isLiveCapability: () => true,
+  lockedReason: () => null,
+};
 
 export function makeRepo(data?: WarehouseData) {
   return new InMemoryRepository(data, { storage: null });
@@ -31,6 +72,13 @@ export function renderWithProviders(
     capabilities?: readonly Capability[];
   } = {},
 ): RenderResult {
+  window.sessionStorage.setItem(
+    'intra.memory-session.v1',
+    JSON.stringify({
+      profileId: `demo-${role}`,
+      roles: { warehouse: [role] },
+    }),
+  );
   return render(
     <MemoryRouter
       initialEntries={[route]}
@@ -52,14 +100,16 @@ export function renderWithProviders(
       >
         <ThemeProvider>
           <ToastProvider>
-            <WarehouseProvider
-              repo={repo}
-              source={source}
-              initialRole={role}
-              capabilities={capabilities}
-            >
-              {ui}
-            </WarehouseProvider>
+            <LearningContext.Provider value={certifiedTestLearning}>
+              <WarehouseProvider
+                repo={repo}
+                source={source}
+                initialRole={role}
+                capabilities={capabilities}
+              >
+                {ui}
+              </WarehouseProvider>
+            </LearningContext.Provider>
           </ToastProvider>
         </ThemeProvider>
       </SessionProvider>

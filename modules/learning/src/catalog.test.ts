@@ -176,12 +176,23 @@ describe("learning catalog", () => {
 
   it("assigns Warehouse Operators the receiving pilot with resumable checkpoints", () => {
     const curriculum = roleCurriculumFor("warehouse", "warehouse_operator");
+    expect(curriculum?.requirementIds).toEqual([
+      "internal.operations_associate.orientation.v1",
+      "internal.warehouse.receiving-custody-policy.v1",
+      "internal.warehouse.receiving-controls-assessment.v1",
+      "internal.role.warehouse.warehouse_operator.capability-practice.v1",
+    ]);
     const requirement = curriculum?.requirementIds
       .map((id) => requirementById.get(id))
       .find((item) => item?.kind === "scenario");
     expect(requirement).toMatchObject({
       title: "Receive and inspect controlled stock",
       simulationId: "warehouse-receiving-v1",
+      prerequisiteIds: [
+        "internal.operations_associate.orientation.v1",
+        "internal.warehouse.receiving-custody-policy.v1",
+        "internal.warehouse.receiving-controls-assessment.v1",
+      ],
     });
     expect(
       LEARNING_CATALOG.simulations.find(

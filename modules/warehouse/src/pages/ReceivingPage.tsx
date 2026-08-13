@@ -1,7 +1,8 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { clsx } from "clsx";
 import { Link } from "react-router-dom";
 import {
+  CertifiedAction,
   CoachOverlay,
   TrainingBanner,
   TrainingModeProvider,
@@ -124,7 +125,11 @@ export function ReceivingPage() {
   );
 }
 
-export function ReceivingPageSurface({ training }: { training?: ReceivingTraining }) {
+export function ReceivingPageSurface({
+  training,
+}: {
+  training?: ReceivingTraining;
+}) {
   const { data, receiveStock, canOpenRoute } = useWarehouse();
   const toast = useToast();
   const warehouses = useMemo(
@@ -147,6 +152,7 @@ export function ReceivingPageSurface({ training }: { training?: ReceivingTrainin
   const [lines, setLines] = useState<Line[]>([]);
   const [evidence, setEvidence] = useState<string[]>([]);
   const [lastReceiptStaged, setLastReceiptStaged] = useState(false);
+  const receiptCommand = useRef<{ key: string; signature: string } | null>(null);
 
   if (!data) return null;
   const products = data.products;
@@ -321,7 +327,7 @@ export function ReceivingPageSurface({ training }: { training?: ReceivingTrainin
       await training.dispatch({ type: "submit-receipt" }).catch(() => undefined);
       return;
     }
-    const ok = await receiveStock({
+    const receiptInput = {
       locationId: activeLocation,
       supplierId: supplierId || undefined,
       actualDeliveryDate: actualDeliveryDate || undefined,
@@ -342,8 +348,20 @@ export function ReceivingPageSurface({ training }: { training?: ReceivingTrainin
         expiryDate: l.expiryDate || undefined,
         binId: activeBin || undefined,
       })),
+    };
+    const signature = JSON.stringify(receiptInput);
+    if (!receiptCommand.current || receiptCommand.current.signature !== signature) {
+      receiptCommand.current = {
+        key: `receive-${crypto.randomUUID()}`,
+        signature,
+      };
+    }
+    const ok = await receiveStock({
+      ...receiptInput,
+      idempotencyKey: receiptCommand.current.key,
     });
     if (!ok) return;
+    receiptCommand.current = null;
     toast.success(`Received ${totalItems} item(s) into inspection staging`);
     setLastReceiptStaged(true);
     setLines([]);
@@ -921,17 +939,34 @@ export function ReceivingPageSurface({ training }: { training?: ReceivingTrainin
 
       {/* Sticky action bar */}
       {lines.length > 0 && (
-        <div className="sticky bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-20 rounded-2xl border border-line bg-surface/95 p-2 shadow-e3 backdrop-blur md:bottom-4">
-          <button
-            type="button"
-            className="btn-primary min-h-12 w-full shadow-pop"
-            onClick={() => void submit()}
-            data-onboarding-anchor={training ? "receiving.submit" : undefined}
-            disabled={training?.busy}
-          >
-            Receive {totalItems} item(s)
-          </button>
-        </div>
+        training ? (
+          <div className="sticky bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-20 rounded-2xl border border-line bg-surface/95 p-2 shadow-e3 backdrop-blur md:bottom-4">
+            <button
+              type="button"
+              className="btn-primary min-h-12 w-full shadow-pop"
+              onClick={() => void submit()}
+              data-onboarding-anchor={training ? "receiving.submit" : undefined}
+              disabled={training?.busy}
+            >
+              Receive {totalItems} item(s)
+            </button>
+          </div>
+        ) : (
+          <CertifiedAction module="warehouse" capability="receive_stock">
+            {({ execute, pending }) => (
+              <div className="sticky bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-20 rounded-2xl border border-line bg-surface/95 p-2 shadow-e3 backdrop-blur md:bottom-4">
+                <button
+                  type="button"
+                  className="btn-primary min-h-12 w-full shadow-pop"
+                  onClick={() => void execute(submit)}
+                  disabled={pending}
+                >
+                  Receive {totalItems} item(s)
+                </button>
+              </div>
+            )}
+          </CertifiedAction>
+        )
       )}
 
       {/* Receipt history — parity with the Returns recent list. */}

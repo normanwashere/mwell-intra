@@ -456,6 +456,25 @@ export function SessionProvider({
     [client],
   );
 
+  const refreshCapabilities = useCallback(async (): Promise<boolean> => {
+    if (!client) return true;
+    const expectedUserId = activeUserId.current;
+    if (!expectedUserId) return false;
+    try {
+      const capabilities = await loadLiveCapabilities();
+      if (activeUserId.current !== expectedUserId) return false;
+      setRoleCapabilities(capabilities.roleCapabilities);
+      setUserCapabilities(capabilities.userCapabilities);
+      return true;
+    } catch {
+      if (activeUserId.current === expectedUserId) {
+        setRoleCapabilities({});
+        setUserCapabilities({});
+      }
+      return false;
+    }
+  }, [client, loadLiveCapabilities]);
+
   const value = useMemo<SessionValue>(
     () => ({
       profile,
@@ -472,6 +491,7 @@ export function SessionProvider({
       signOut,
       resetPassword,
       changePassword,
+      refreshCapabilities,
     }),
     [
       profile,
@@ -487,6 +507,7 @@ export function SessionProvider({
       signOut,
       resetPassword,
       changePassword,
+      refreshCapabilities,
     ],
   );
 

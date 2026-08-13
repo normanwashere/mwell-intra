@@ -11,10 +11,12 @@ import {
 import { clearTrainingAdaptersForTests } from "./training/registry";
 
 const session: {
+  mode: "memory" | "supabase";
   profile: { id: string; email: string; kind: "employee" };
   userCapabilities: UserCapabilities;
   userRoles?: Record<string, string[]>;
 } = {
+  mode: "supabase",
   profile: {
     id: "learner-1",
     email: "operator@mwell.test",
@@ -92,6 +94,8 @@ function Probe() {
       <button onClick={() => learning.resume("receiving-scenario")}>Resume</button>
       <span data-testid="resume">{learning.resumeRequirementId ?? "none"}</span>
       <span data-testid="attempt">{learning.activeTraining?.attemptId ?? "none"}</span>
+      <span data-testid="activity-kind">{learning.activeActivity?.kind ?? "none"}</span>
+      <span data-testid="activity-attempt">{learning.activeActivity?.attemptId ?? "none"}</span>
       <span data-testid="training-error">{learning.trainingError ?? "none"}</span>
       <button onClick={() => void learning.refresh()}>Refresh</button>
     </div>
@@ -147,6 +151,49 @@ const assignedOrientation = (): LearningSnapshot => ({
     },
   ],
 });
+
+const assignedActivity = (kind: "assessment" | "policy"): LearningSnapshot => {
+  const requirementId = `${kind}-1`;
+  return {
+    ...emptySnapshot(),
+    curricula: [
+      {
+        curriculum: {
+          id: `${kind}-curriculum`,
+          version: 1,
+          personaId: "operations_associate",
+          audience: "internal",
+          requirementIds: [requirementId],
+        },
+        source: "role",
+        requirements: [
+          {
+            id: requirementId,
+            version: 1,
+            audience: "internal",
+            kind,
+            title: kind === "assessment" ? "Knowledge check" : "Controlled policy",
+            mandatory: true,
+            prerequisiteIds: [],
+            capabilityOutcomes: [],
+            ...(kind === "assessment" ? { passingScore: 80, maxAttempts: 3 } : {}),
+          },
+        ],
+      },
+    ],
+    progress: [
+      {
+        assignmentRequirementId: `${kind}-assignment`,
+        requirementId,
+        requirementVersion: 1,
+        state: "not_started",
+        attemptCount: 0,
+        allowsSharedCompletion: false,
+        updatedAt: "2026-08-13T00:00:00.000Z",
+      },
+    ],
+  };
+};
 
 describe("LearningProvider", () => {
   it("loads resolved assignments and exposes fail-closed capability helpers", async () => {
@@ -244,6 +291,46 @@ describe("LearningProvider", () => {
     expect(screen.getByTestId("training-error")).toHaveTextContent("none");
   });
 
+  it.each(["assessment", "policy"] as const)(
+    "opens an assigned %s as a reachable governed activity",
+    async (kind) => {
+      const assigned = assignedActivity(kind);
+      const learningRepository = repository(assigned);
+      vi.mocked(learningRepository.startRequirement).mockResolvedValue({
+        progress: {
+          ...assigned.progress[0]!,
+          state: "in_progress",
+          attemptCount: kind === "assessment" ? 1 : 0,
+        },
+        attempt:
+          kind === "assessment"
+            ? {
+                id: "assessment-attempt-1",
+                attemptNumber: 1,
+                mode: "assessment",
+                startedAt: "2026-08-13T01:00:00.000Z",
+              }
+            : undefined,
+      });
+
+      render(
+        <LearningProvider repository={learningRepository}>
+          <Probe />
+        </LearningProvider>,
+      );
+      await screen.findByText("2026-08-13T00:00:00.000Z");
+      await act(async () => observedLearning!.resume(`${kind}-1`));
+
+      await waitFor(() =>
+        expect(screen.getByTestId("activity-kind")).toHaveTextContent(kind),
+      );
+      expect(screen.getByTestId("activity-attempt")).toHaveTextContent(
+        kind === "assessment" ? "assessment-attempt-1" : "none",
+      );
+      expect(screen.getByTestId("training-error")).toHaveTextContent("none");
+    },
+  );
+
   it("refreshes when the window regains focus", async () => {
     const learningRepository = repository(emptySnapshot());
     render(
@@ -286,6 +373,7 @@ describe("LearningProvider", () => {
   });
 
   it("derives a role-accurate preview snapshot in local memory mode", async () => {
+    session.mode = "memory";
     session.userRoles = {
       core: ["staff"],
       warehouse: ["operations"],
@@ -301,6 +389,7 @@ describe("LearningProvider", () => {
     );
     expect(screen.getByTestId("lock")).toHaveTextContent("none");
     session.userRoles = undefined;
+    session.mode = "supabase";
   });
 
   it("hides principal-bound state synchronously when the authenticated profile changes", async () => {
@@ -475,5 +564,136 @@ describe("LearningProvider", () => {
         terminal: true,
       }),
     ).rejects.toThrow("Training completion is not terminal in canonical readback");
+  });
+
+  it("confirms assessment, policy, and support commands through canonical readback", async () => {
+    const initial = emptySnapshot();
+    const confirmed = {
+      ...emptySnapshot("2026-08-13T03:00:00.000Z"),
+      progress: [
+        {
+          assignmentRequirementId: "assessment-1",
+          requirementId: "assessment",
+          requirementVersion: 1,
+          state: "passed" as const,
+          attemptCount: 1,
+          allowsSharedCompletion: false,
+          completedAt: "2026-08-13T03:00:00.000Z",
+          updatedAt: "2026-08-13T03:00:00.000Z",
+        },
+        {
+          assignmentRequirementId: "policy-1",
+          requirementId: "policy",
+          requirementVersion: 1,
+          state: "passed" as const,
+          attemptCount: 0,
+          allowsSharedCompletion: true,
+          completedAt: "2026-08-13T03:00:00.000Z",
+          updatedAt: "2026-08-13T03:00:00.000Z",
+        },
+      ],
+    } satisfies LearningSnapshot;
+    const supportConfirmed = {
+      ...confirmed,
+      progress: confirmed.progress.map((item) =>
+        item.assignmentRequirementId === "assessment-1"
+          ? { ...item, state: "needs_support" as const, completedAt: undefined }
+          : item,
+      ),
+    } satisfies LearningSnapshot;
+    const learningRepository = repository(initial);
+    vi.mocked(learningRepository.resolveAssignments)
+      .mockResolvedValueOnce(initial)
+      .mockResolvedValueOnce(confirmed)
+      .mockResolvedValueOnce(confirmed)
+      .mockResolvedValueOnce(supportConfirmed);
+    vi.mocked(learningRepository.submitAssessment).mockResolvedValue({
+      assignmentRequirementId: "assessment-1",
+      passed: true,
+      score: 100,
+      attemptNumber: 1,
+      state: "passed",
+    });
+    vi.mocked(learningRepository.acknowledgePolicy).mockResolvedValue(undefined);
+    vi.mocked(learningRepository.requestSupport).mockResolvedValue(undefined);
+    render(
+      <LearningProvider repository={learningRepository}>
+        <Probe />
+      </LearningProvider>,
+    );
+    await screen.findByText("2026-08-13T00:00:00.000Z");
+
+    await act(async () => {
+      await observedLearning!.submitAssessment({
+        assignmentRequirementId: "assessment-1",
+        attemptId: "attempt-1",
+        answers: [{ questionId: "q1", answerId: "a1" }],
+      });
+      await observedLearning!.acknowledgePolicy({
+        assignmentRequirementId: "policy-1",
+        controlledDocumentId: "policy",
+        controlledDocumentVersion: "4.2",
+        evidenceHash: "sha256:evidence",
+      });
+      await observedLearning!.requestSupport({
+        assignmentRequirementId: "assessment-1",
+        reason: "Please provide coaching.",
+      });
+    });
+
+    expect(learningRepository.submitAssessment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        assignmentRequirementId: "assessment-1",
+        idempotencyKey: expect.stringMatching(/^[0-9a-f-]{36}$/i),
+      }),
+    );
+    expect(learningRepository.acknowledgePolicy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        controlledDocumentVersion: "4.2",
+        idempotencyKey: expect.stringMatching(/^[0-9a-f-]{36}$/i),
+      }),
+    );
+    expect(learningRepository.requestSupport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason: "Please provide coaching.",
+        idempotencyKey: expect.stringMatching(/^[0-9a-f-]{36}$/i),
+      }),
+    );
+    expect(learningRepository.resolveAssignments).toHaveBeenCalledTimes(4);
+    expect(screen.getByTestId("snapshot")).toHaveTextContent(
+      "2026-08-13T03:00:00.000Z",
+    );
+  });
+
+  it("does not publish an assessment result that canonical readback cannot confirm", async () => {
+    const initial = emptySnapshot();
+    const learningRepository = repository(initial);
+    vi.mocked(learningRepository.resolveAssignments)
+      .mockResolvedValueOnce(initial)
+      .mockResolvedValueOnce(initial);
+    vi.mocked(learningRepository.submitAssessment).mockResolvedValue({
+      assignmentRequirementId: "assessment-1",
+      passed: true,
+      score: 100,
+      attemptNumber: 1,
+      state: "passed",
+    });
+    render(
+      <LearningProvider repository={learningRepository}>
+        <Probe />
+      </LearningProvider>,
+    );
+    await screen.findByText("2026-08-13T00:00:00.000Z");
+
+    await expect(
+      observedLearning!.submitAssessment({
+        assignmentRequirementId: "assessment-1",
+        attemptId: "attempt-1",
+        answers: [{ questionId: "q1", answerId: "a1" }],
+      }),
+    ).rejects.toThrow("Assessment result could not be confirmed by readback");
+    expect(screen.getByTestId("snapshot")).toHaveTextContent(
+      "2026-08-13T00:00:00.000Z",
+    );
   });
 });

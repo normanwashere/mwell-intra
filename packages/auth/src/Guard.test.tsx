@@ -48,7 +48,7 @@ function CanProbe({
 }
 
 function LiveSessionProbe() {
-  const { profile, roleCapabilities, userCapabilities } = useSession();
+  const { profile, roleCapabilities, userCapabilities, refreshCapabilities } = useSession();
   const canReceive = useCan("warehouse", "receive_stock");
   const canReserve = useCan("warehouse", "reserve_allocate");
   return (
@@ -62,6 +62,9 @@ function LiveSessionProbe() {
       </span>
       <span data-testid="live-receive">{canReceive ? "yes" : "no"}</span>
       <span data-testid="live-reserve">{canReserve ? "yes" : "no"}</span>
+      <button type="button" onClick={() => void refreshCapabilities()}>
+        Refresh capabilities
+      </button>
     </div>
   );
 }
@@ -283,6 +286,33 @@ describe("useCan", () => {
     );
     expect(screen.getByTestId("live-receive").textContent).toBe("yes");
     expect(screen.getByTestId("live-reserve").textContent).toBe("no");
+  });
+
+  it("refreshes effective capabilities immediately after a governed state change", async () => {
+    const { client, rpc } = liveClient();
+    render(
+      <SessionProvider config={{ mode: "supabase", client }}>
+        <LiveSessionProbe />
+      </SessionProvider>,
+    );
+    await screen.findByText("live@mwell.test");
+    expect(screen.getByTestId("live-reserve").textContent).toBe("no");
+
+    rpc.mockResolvedValueOnce({
+      data: {
+        roleCapabilities: { warehouse: ["receive_stock", "reserve_allocate"] },
+        userCapabilities: { warehouse: ["receive_stock", "reserve_allocate"] },
+      },
+      error: null,
+    });
+    await act(async () => {
+      screen.getByRole("button", { name: "Refresh capabilities" }).click();
+    });
+
+    await waitFor(() =>
+      expect(screen.getByTestId("live-reserve").textContent).toBe("yes"),
+    );
+    expect(rpc).toHaveBeenCalledTimes(2);
   });
 
   it("keeps verified identity but fails closed when live capabilities cannot load", async () => {
