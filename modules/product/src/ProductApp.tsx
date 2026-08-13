@@ -216,6 +216,7 @@ export function ProductApp() {
         }
         accessory={
           <div className="flex flex-wrap gap-2">
+            {workspace.isDemo && <Badge tone="amber">Demo memory</Badge>}
             <Badge tone="brand">
               {workspace.data.readiness.filter((item) => item.status === "submitted").length} awaiting decision
             </Badge>
@@ -458,6 +459,7 @@ function ReadinessCard({
         ))}
       </ul>
       {item.conditions && <p className="rounded-lg bg-inset p-3 text-sm text-muted"><strong className="text-ink">Conditions:</strong> {item.conditions}</p>}
+      <p className="text-sm text-muted"><strong className="text-ink">Kit approval:</strong> {item.kitApproved ? "verified" : "required before launch"}</p>
       {canDecide && item.status === "submitted" && (
         <div className="flex flex-wrap gap-2">
           <button type="button" className="btn-primary min-h-11" onClick={() => onDecide("approved")}>Approve go-live</button>

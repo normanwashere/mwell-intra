@@ -40,6 +40,8 @@ import {
   buildApprovalSteps,
   nextPendingStep,
   suggestSourcingMethod,
+  validatePurchaseOrderCancellation,
+  validateRejectionReason,
 } from './policy';
 import { buildProcurementSeed } from './seed';
 import { mergeVendorsWithLegal } from './accreditationBridge';
@@ -827,6 +829,8 @@ export function useProcurementRequests(): ProcurementRequestsAPI {
       decision: 'approved' | 'rejected',
       actor: DecideActor,
     ) => {
+      const rejectionError = decision === 'rejected' ? validateRejectionReason(actor.note) : undefined;
+      if (rejectionError) return Promise.reject(new Error(rejectionError));
       if (isLive(live)) {
         const req = rows.find((r) => r.id === id);
         const step = req ? nextPendingStep(req.approvalSteps) : undefined;
@@ -950,7 +954,7 @@ export interface PurchaseOrdersAPI {
     actor: { email?: string; signature?: ApprovalSignature; note?: string },
   ) => MaybePromise<PurchaseOrder | null>;
   issue: (id: string, readiness: { sourceAwardApproved: boolean; vendorEligible: boolean }) => MaybePromise<PurchaseOrder | null>;
-  cancel: (id: string) => MaybePromise<PurchaseOrder | null>;
+  cancel: (id: string, input: { reason: string; actorEmail?: string }) => MaybePromise<PurchaseOrder | null>;
   recordAcceptance: (id: string, input: { acceptanceType: 'goods' | 'service' | 'milestone'; acceptedScope: string; acceptedLines?: Array<{ poLineId: string; quantity: number }>; acceptedAmount?: number; exceptions: string[]; actorEmail?: string }) => MaybePromise<PurchaseOrder | null>;
   createPolicyEvidence: (requestId: string, input: { controlCode: string; evidenceType: string; facts?: Record<string, unknown> }) => Promise<void>;
   reviewPolicyEvidence: (id: string, decision: 'approved' | 'rejected') => Promise<void>;
@@ -1173,18 +1177,28 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
     [patch, live, refreshLive, rows],
   );
   const cancel = useCallback(
-    (id: string) => {
+    (id: string, input: { reason: string; actorEmail?: string }) => {
+      const current = rows.find((row) => row.id === id);
+      if (!current) return null;
+      const validation = validatePurchaseOrderCancellation(current.status, input.reason);
+      if (!validation.allowed) return Promise.reject(new Error(validation.reason));
       if (isLive(live)) {
         return liveRpc<LiveRow>(live, 'procurement', 'cancel_purchase_order', {
           id,
+          reason: input.reason.trim(),
         }).then((row) => {
           const mapped = mapPurchaseOrder(row);
           return refreshLive().then(() => mapped);
         });
       }
-      return patch(id, { status: 'cancelled' });
+      return patch(id, {
+        status: 'cancelled',
+        cancellationReason: input.reason.trim(),
+        cancelledAt: nowIso(),
+        cancelledByEmail: input.actorEmail,
+      });
     },
-    [patch, live, refreshLive],
+    [patch, live, refreshLive, rows],
   );
 
   const recordAcceptance = useCallback((id: string, input: { acceptanceType: 'goods' | 'service' | 'milestone'; acceptedScope: string; acceptedLines?: Array<{ poLineId: string; quantity: number }>; acceptedAmount?: number; exceptions: string[]; actorEmail?: string }): MaybePromise<PurchaseOrder | null> => {
@@ -1294,6 +1308,8 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
   const reviewPayment = useCallback((id: string, input: { status: 'returned' | 'accepted'; note?: string; actorEmail?: string }): MaybePromise<PurchaseOrder | null> => {
     const current = rows.find((row) => row.id === id);
     if (!current?.paymentReadiness) return null;
+    const rejectionError = input.status === 'returned' ? validateRejectionReason(input.note) : undefined;
+    if (rejectionError) return Promise.reject(new Error(rejectionError));
     if (isLive(live)) {
       return liveRpc<LiveRow>(live, 'procurement', 'review_payment_readiness', {
         id: current.paymentReadiness.id, status: input.status, note: input.note,

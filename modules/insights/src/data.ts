@@ -38,7 +38,20 @@ const TARGET_DIRECTIONS: InsightTargetDirection[] = [
   "range",
   "informational",
 ];
-const DATA_STATUSES: InsightDataStatus[] = ["current", "no_data", "incomplete"];
+const DATA_STATUSES: InsightDataStatus[] = ["current", "stale", "no_data", "incomplete"];
+
+const PR_TO_PO_DEFINITION = "Approved PR submission to first issued PO, in calendar days.";
+
+export function getMetricFreshness(
+  extractedAt: string,
+  now = new Date(),
+): { stale: boolean; label: "Current extraction" | "Stale extraction" | "Awaiting data" } {
+  const extracted = Date.parse(extractedAt);
+  if (!extractedAt || Number.isNaN(extracted)) return { stale: true, label: "Awaiting data" };
+  return now.getTime() - extracted > 24 * 60 * 60 * 1000
+    ? { stale: true, label: "Stale extraction" }
+    : { stale: false, label: "Current extraction" };
+}
 
 export function evaluateMetricStatus(
   metric: Pick<
@@ -57,7 +70,7 @@ export function evaluateMetricStatus(
     metric.value == null
   )
     return "no_data";
-  if (metric.dataStatus === "incomplete") return "incomplete";
+  if (metric.dataStatus === "incomplete" || metric.dataStatus === "stale") return "incomplete";
   if (metric.targetDirection === "informational") return "informational";
 
   if (metric.targetDirection === "minimum") {
@@ -113,6 +126,8 @@ export function mapInsightRow(row: UnknownRow): InsightMetric {
       : "incomplete",
     sampleCount: Math.max(0, number(row.sample_count)),
     detail: text(row.detail),
+    drillDownContext:
+      text(row.id) === "pr-cycle" ? PR_TO_PO_DEFINITION : undefined,
     sourceHref:
       rawSourceHref === "/warehouse/analytics"
         ? "/warehouse/data"
@@ -126,7 +141,7 @@ export function mapInsightRow(row: UnknownRow): InsightMetric {
 }
 
 export function resolveGovernedSource(
-  metric: Pick<InsightMetric, "sourceHref">,
+  metric: Pick<InsightMetric, "id" | "sourceHref" | "drillDownContext">,
   roles: Partial<UserRoles>,
 ) {
   const href = metric.sourceHref;
@@ -149,8 +164,11 @@ export function resolveGovernedSource(
     (href === "/finance" &&
       (can(roles, "warehouse", "view_finance") ||
         can(roles, "procurement", "view_finance")));
+  const contextualHref = metric.drillDownContext
+    ? `${href}${href.includes("?") ? "&" : "?"}${new URLSearchParams({ insight: metric.id, context: metric.drillDownContext }).toString()}`
+    : href;
   return accessible
-    ? { accessible: true, href, label: "Open governed source" }
+    ? { accessible: true, href: contextualHref, label: "Open governed source" }
     : { accessible: false, href: null, label: "Source access restricted" };
 }
 
@@ -183,17 +201,24 @@ export function getSnapshotTruth(online: boolean, extractedAt: string) {
       detail:
         "Showing the last available extraction. Reconnect before making a decision.",
     };
-  if (!extractedAt)
+  const freshness = getMetricFreshness(extractedAt);
+  if (freshness.label === "Awaiting data")
     return {
       label: "Awaiting data",
       tone: "slate" as const,
       detail: "No governed extraction is available yet.",
     };
-  return {
-    label: "Current extraction",
-    tone: "emerald" as const,
-    detail: "Connected. Metric freshness is shown on each indicator.",
-  };
+  return freshness.stale
+    ? {
+        label: "Stale extraction",
+        tone: "amber" as const,
+        detail: "The latest governed extraction is over 24 hours old. Refresh or verify the source before making a decision.",
+      }
+    : {
+        label: "Current extraction",
+        tone: "emerald" as const,
+        detail: "Connected. Metric freshness is shown on each indicator.",
+      };
 }
 
 export function prioritizeMetrics(

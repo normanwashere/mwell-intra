@@ -208,6 +208,11 @@ export function InsightsApp({ initialArea }: { initialArea?: InsightArea }) {
                   </p>
                 </div>
                 <p className="text-sm text-muted">{metric.detail}</p>
+                {metric.drillDownContext && (
+                  <p className="text-xs text-faint">
+                    <strong>Definition:</strong> {metric.drillDownContext}
+                  </p>
+                )}
                 <dl className="grid grid-cols-2 gap-x-3 gap-y-2 border-t border-line pt-3 text-xs">
                   <div>
                     <dt className="text-faint">Sample</dt>

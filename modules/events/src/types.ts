@@ -84,5 +84,11 @@ export interface EventsData {
     costCenters: Array<{ code: string; name: string }>;
   }>;
   reconciliations?: EventReconciliation[];
+  fulfillmentHandoffs?: Array<{
+    id: string;
+    eventId: string;
+    status: "demo_recorded" | "submitted";
+    createdAt: string;
+  }>;
   warnings: string[];
 }

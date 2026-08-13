@@ -27,7 +27,7 @@ import {
   useProcurementVendors,
   usePurchaseOrders,
 } from '../localStore';
-import { acceptanceTypeForCategory, evaluateCommitmentReadiness, evaluateIssueReadiness } from '../policy';
+import { acceptanceTypeForCategory, evaluateCommitmentReadiness, evaluateIssueReadiness, validatePurchaseOrderCancellation } from '../policy';
 import { PaymentReadinessPanel, type PaymentReadinessDraft, type PaymentReleaseDraft } from '../components/PaymentReadinessPanel';
 import { ProcurementAccessDenied } from '../components/ProcurementAccessDenied';
 import {
@@ -112,6 +112,9 @@ export function PODetailPage() {
   const [waiverReason, setWaiverReason] = useState('');
   const [waiverBasis, setWaiverBasis] = useState('');
   const [waiverEvidence, setWaiverEvidence] = useState('');
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancellationReason, setCancellationReason] = useState('');
+  const [cancelling, setCancelling] = useState(false);
 
   // PR-15 parity with the approval inbox: a prefilled signer name arms the
   // confirm button; the pad can still replace the seeded typed signature.
@@ -211,8 +214,23 @@ export function PODetailPage() {
   }
   async function handleCancel() {
     if (!po) return;
-    const next = await cancel(po.id);
-    if (next) success(`PO ${next.poNumber} cancelled`);
+    const validation = validatePurchaseOrderCancellation(po.status, cancellationReason);
+    if (!validation.allowed) {
+      error(validation.reason ?? 'PO cancellation is not available.');
+      return;
+    }
+    setCancelling(true);
+    try {
+      const next = await cancel(po.id, { reason: cancellationReason, actorEmail: profile?.email });
+      if (!next) throw new Error('The PO could not be cancelled. Refresh and verify its current status.');
+      success(`PO ${next.poNumber} cancelled`);
+      setCancelOpen(false);
+      setCancellationReason('');
+    } catch (cause) {
+      error(cause instanceof Error ? cause.message : 'The cancellation could not be recorded. The PO remains unchanged.');
+    } finally {
+      setCancelling(false);
+    }
   }
 
   async function handleAcceptance(scope: string, exceptions: string[], acceptedLines: Array<{ poLineId: string; quantity: number }>, acceptedAmount?: number) {
@@ -423,8 +441,8 @@ export function PODetailPage() {
             Issue to vendor
           </button>
         )}
-        {(po.status === 'draft' || po.status === 'approved' || po.status === 'issued') && (
-          <button type="button" onClick={handleCancel} className="btn-outline">
+        {canAuthorPo && (po.status === 'draft' || po.status === 'approved' || po.status === 'issued') && (
+          <button type="button" onClick={() => setCancelOpen(true)} className="btn-outline">
             Cancel PO
           </button>
         )}
@@ -690,6 +708,34 @@ export function PODetailPage() {
             )}
           </div>
         </div>
+      </Sheet>
+
+      <Sheet
+        open={cancelOpen}
+        onOpenChange={setCancelOpen}
+        title="Cancel purchase order"
+        description="This records a governed cancellation request. It does not delete the PO, receipt history, or payment evidence."
+        footer={
+          <button
+            type="button"
+            className="btn-primary w-full"
+            disabled={cancelling || !validatePurchaseOrderCancellation(po.status, cancellationReason).allowed}
+            onClick={() => void handleCancel()}
+          >
+            {cancelling ? 'Recording cancellation...' : 'Confirm PO cancellation'}
+          </button>
+        }
+      >
+        <label htmlFor="po-cancellation-reason" className="block text-sm font-semibold text-ink">
+          Cancellation reason
+          <textarea
+            id="po-cancellation-reason"
+            className="input mt-1 min-h-24"
+            value={cancellationReason}
+            onChange={(event) => setCancellationReason(event.target.value)}
+            placeholder="Explain the supplier, scope, or approval change that requires cancellation."
+          />
+        </label>
       </Sheet>
 
     </div>

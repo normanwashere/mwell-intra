@@ -16,6 +16,7 @@ import type {
   FinanceCloseEntryType,
   ManageFinanceCloseEntryInput,
 } from "../types";
+import { validateFinanceCloseEntry } from "../data";
 
 const ENTRY_LABEL: Record<FinanceCloseEntryType, string> = {
   inventory_valuation: "Inventory valuation",
@@ -57,6 +58,10 @@ export function FinanceClosePanel({
     entry: FinanceCloseEntry,
     action: "post" | "reconcile" | "exception",
   ) => {
+    if (action === "exception" && !entry.reconciliationNote?.trim()) {
+      toast.error("Provide a correction reason on the close entry before flagging it.");
+      return;
+    }
     setWorkingId(entry.id);
     try {
       await manage({
@@ -65,7 +70,7 @@ export function FinanceClosePanel({
         expectedUpdatedAt: entry.updatedAt,
         reconciliationNote:
           action === "exception"
-            ? "Flagged for correction from Finance close."
+            ? entry.reconciliationNote
             : undefined,
       });
       toast.success(
@@ -88,6 +93,11 @@ export function FinanceClosePanel({
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    const validation = validateFinanceCloseEntry({ action: "save", ...draft });
+    if (validation.length) {
+      toast.error(validation[0] ?? "Finance close entry is incomplete.");
+      return;
+    }
     setSaving(true);
     try {
       await manage({
@@ -238,7 +248,7 @@ export function FinanceClosePanel({
             type="submit"
             form="finance-close-form"
             className="btn-primary w-full"
-            disabled={saving}
+            disabled={saving || validateFinanceCloseEntry({ action: "save", ...draft }).length > 0}
           >
             {saving ? "Preparing..." : "Prepare for posting"}
           </button>

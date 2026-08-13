@@ -29,6 +29,7 @@ export function canAcknowledgeOperationsHandoff(
 ): boolean {
   return (
     readiness.status === "approved" &&
+    readiness.kitApproved !== false &&
     readiness.evidence.every((item) => !item.required || item.verified) &&
     readiness.operationsAcknowledgedAt === null
   );
@@ -37,6 +38,7 @@ export function canAcknowledgeOperationsHandoff(
 export function canLaunchFromReadiness(readiness: ReadinessPackage): boolean {
   return (
     readiness.status === "approved" &&
+    readiness.kitApproved !== false &&
     readiness.evidence.every((item) => !item.required || item.verified) &&
     Boolean(
       readiness.operationsAcknowledgedBy &&

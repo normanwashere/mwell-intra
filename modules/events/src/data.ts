@@ -429,7 +429,16 @@ export function loadMemoryEvents(
   try {
     const parsed = JSON.parse(stored) as Partial<EventsData>;
     return Array.isArray(parsed.events)
-      ? { events: parsed.events as EventRecord[], warnings: [] }
+      ? {
+          events: parsed.events as EventRecord[],
+          reconciliations: Array.isArray(parsed.reconciliations)
+            ? parsed.reconciliations as EventReconciliation[]
+            : [],
+          fulfillmentHandoffs: Array.isArray(parsed.fulfillmentHandoffs)
+            ? parsed.fulfillmentHandoffs as NonNullable<EventsData["fulfillmentHandoffs"]>
+            : [],
+          warnings: [],
+        }
       : EVENTS_DEMO_DATA;
   } catch {
     return EVENTS_DEMO_DATA;
@@ -440,7 +449,38 @@ export function saveMemoryEvents(
   storage: Pick<Storage, "setItem">,
   data: EventsData,
 ): void {
-  storage.setItem(MEMORY_EVENTS_KEY, JSON.stringify({ events: data.events }));
+  storage.setItem(MEMORY_EVENTS_KEY, JSON.stringify({
+    events: data.events,
+    reconciliations: data.reconciliations ?? [],
+    fulfillmentHandoffs: data.fulfillmentHandoffs ?? [],
+  }));
+}
+
+export function applyMemoryEventReconciliation(
+  data: EventsData,
+  input: SaveEventReconciliationInput,
+): EventsData {
+  const now = new Date().toISOString();
+  const status = input.action === "save" ? "draft" : input.action === "submit" ? "submitted" : "approved";
+  const next: EventReconciliation = {
+    eventId: input.eventId,
+    status,
+    soldUnits: input.soldUnits,
+    giveawayUnits: input.giveawayUnits,
+    returnedUnits: input.returnedUnits,
+    lostUnits: input.lostUnits,
+    damagedUnits: input.damagedUnits,
+    rekitUnits: input.rekitUnits,
+    grossSalesAmount: input.grossSalesAmount,
+    financeReference: input.financeReference?.trim() || undefined,
+    evidenceUrl: input.evidenceUrl?.trim() || undefined,
+    note: input.note?.trim() || undefined,
+    preparedBy: "events@mwell.demo",
+    approvedAt: input.action === "approve" ? now : undefined,
+    updatedAt: now,
+  };
+  const reconciliations = (data.reconciliations ?? []).filter((item) => item.eventId !== input.eventId);
+  return { ...data, reconciliations: [next, ...reconciliations] };
 }
 
 export function useEventsData() {
@@ -499,8 +539,25 @@ export function useEventsData() {
 
   const manageEvent = useCallback(
     async (input: EventManagementInput) => {
-      if (!live)
-        throw new Error("Event lifecycle changes require Supabase mode.");
+      if (!live) {
+        let updated: EventRecord | undefined;
+        setData((current) => {
+          const event = current.events.find((item) => item.id === input.eventId);
+          if (!event) throw new Error("Event was not found. Refresh before retrying.");
+          const lifecycle = input.action === "cancel" ? "cancelled" : input.action === "close" ? "closed" : input.action === "reopen" ? "planned" : event.lifecycle;
+          updated = {
+            ...event,
+            ...input.changes,
+            lifecycle,
+            ownerEmail: input.changes?.ownerEmail ?? event.ownerEmail,
+            updatedAt: new Date().toISOString(),
+          };
+          const next = { ...current, events: current.events.map((item) => item.id === event.id ? updated! : item) };
+          saveMemoryEvents(window.sessionStorage, next);
+          return next;
+        });
+        return updated;
+      }
       const updated = await manageLiveEvent(live, input);
       await refresh();
       return updated;
@@ -510,10 +567,21 @@ export function useEventsData() {
 
   const requestFulfillment = useCallback(
     async (input: EventFulfillmentRequest) => {
-      if (!live)
-        throw new Error(
-          "Warehouse fulfillment requests require Supabase mode.",
-        );
+      if (!live) {
+        const id = `event-fulfillment-demo-${Date.now()}`;
+        setData((current) => {
+          const next = {
+            ...current,
+            fulfillmentHandoffs: [
+              { id, eventId: input.eventId, status: "demo_recorded" as const, createdAt: new Date().toISOString() },
+              ...(current.fulfillmentHandoffs ?? []),
+            ],
+          };
+          saveMemoryEvents(window.sessionStorage, next);
+          return next;
+        });
+        return { id, eventId: input.eventId };
+      }
       return requestEventFulfillment(live, input);
     },
     [live],
@@ -521,8 +589,17 @@ export function useEventsData() {
 
   const saveReconciliation = useCallback(
     async (input: SaveEventReconciliationInput) => {
-      if (!live)
-        throw new Error("Event reconciliation requires Supabase mode.");
+      if (!live) {
+        let result: EventReconciliation | undefined;
+        setData((current) => {
+          const next = applyMemoryEventReconciliation(current, input);
+          result = next.reconciliations?.find((item) => item.eventId === input.eventId);
+          saveMemoryEvents(window.sessionStorage, next);
+          return next;
+        });
+        if (!result) throw new Error("Event reconciliation could not be saved.");
+        return result;
+      }
       const result = await saveLiveEventReconciliation(live, input);
       await refresh();
       return result;
@@ -541,5 +618,6 @@ export function useEventsData() {
     manageEvent,
     requestFulfillment,
     saveReconciliation,
+    isDemo: !live,
   };
 }

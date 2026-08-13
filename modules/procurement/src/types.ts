@@ -434,6 +434,9 @@ export interface PurchaseOrder {
   updatedAt: string;
   approvedAt?: string;
   approvedByEmail?: string;
+  cancellationReason?: string;
+  cancelledAt?: string;
+  cancelledByEmail?: string;
   /** Electronic signature captured when the PO award was approved. */
   approvalSignature?: ApprovalSignature;
   /** Read-only projection from `procurement.v_purchase_order_receipt_status`. */

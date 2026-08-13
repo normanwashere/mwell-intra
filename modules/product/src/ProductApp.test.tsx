@@ -103,6 +103,7 @@ function session(productRoles: string[]): SessionValue {
     signOut: vi.fn(async () => undefined),
     resetPassword: vi.fn(async () => undefined),
     changePassword: vi.fn(async () => undefined),
+    refreshCapabilities: vi.fn(async () => true),
   };
 }
 

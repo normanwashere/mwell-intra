@@ -9,6 +9,12 @@ import type {
   ReadinessEvidence,
   ReadinessPackage,
 } from "./types";
+import {
+  canAcknowledgeOperationsHandoff,
+  canDecidePriceProposal,
+  validatePriceProposal,
+  validateReadinessSubmission,
+} from "./domain";
 
 type ProductClient = NonNullable<ReturnType<typeof useSession>["supabaseClient"]>;
 type UnknownRow = Record<string, unknown>;
@@ -40,6 +46,101 @@ const EMPTY_DATA: ProductWorkspaceData = {
   pricing: [],
   warnings: [],
 };
+
+const MEMORY_DEMO_DATA: ProductWorkspaceData = {
+  readiness: [
+    {
+      id: "readiness-demo-care-kit",
+      productId: "kit-demo-001",
+      title: "Care kit go-live",
+      version: 1,
+      status: "submitted",
+      evidence: [{ id: "evidence-demo-kit", label: "Kit approval", reference: "KIT-APR-001", required: true, verified: true }],
+      kitApproved: true,
+      conditions: "Demo-only record. Operations acknowledgement remains required.",
+      preparedBy: "product-contributor",
+      submittedBy: "product-contributor",
+      submittedAt: "2026-08-14T00:00:00.000Z",
+      decidedBy: null,
+      decidedAt: null,
+      decisionNote: null,
+      operationsAcknowledgedBy: null,
+      operationsAcknowledgedAt: null,
+      createdAt: "2026-08-14T00:00:00.000Z",
+      updatedAt: "2026-08-14T00:00:00.000Z",
+    },
+  ],
+  pricing: [],
+  warnings: [],
+};
+
+function applyMemoryProductAction(
+  data: ProductWorkspaceData,
+  fn: string,
+  payload: Record<string, unknown>,
+  actor: string,
+): ProductWorkspaceData {
+  const now = new Date().toISOString();
+  if (fn === "submit_readiness_package") {
+    const draft = payload.readiness as ReadinessDraft;
+    const validation = validateReadinessSubmission(draft);
+    if (validation.length) throw new Error(validation[0]);
+    const kitApproved = draft.evidence.some((item) => /kit approval/i.test(item.label) && item.verified);
+    return {
+      ...data,
+      readiness: [{
+        id: `readiness-demo-${Date.now()}`,
+        productId: draft.productId,
+        title: draft.title,
+        version: 1,
+        status: "submitted",
+        evidence: draft.evidence,
+        kitApproved,
+        conditions: draft.conditions,
+        preparedBy: actor,
+        submittedBy: actor,
+        submittedAt: now,
+        decidedBy: null,
+        decidedAt: null,
+        decisionNote: null,
+        operationsAcknowledgedBy: null,
+        operationsAcknowledgedAt: null,
+        createdAt: now,
+        updatedAt: now,
+      }, ...data.readiness],
+    };
+  }
+  if (fn === "decide_readiness_package") {
+    const id = String(payload.id);
+    const decision = payload.decision as "approved" | "rejected";
+    const note = String(payload.note ?? "").trim();
+    const item = data.readiness.find((entry) => entry.id === id);
+    if (!item || item.status !== "submitted") throw new Error("Readiness package changed. Refresh before deciding.");
+    if (item.preparedBy === actor) throw new Error("The preparer cannot make the go-live decision.");
+    if (note.length < 8) throw new Error("Decision note must contain at least 8 characters.");
+    return { ...data, readiness: data.readiness.map((entry) => entry.id === id ? { ...entry, status: decision, decidedBy: actor, decidedAt: now, decisionNote: note, updatedAt: now } : entry) };
+  }
+  if (fn === "acknowledge_operations_handoff") {
+    const id = String(payload.id);
+    const item = data.readiness.find((entry) => entry.id === id);
+    if (!item || !canAcknowledgeOperationsHandoff(item)) throw new Error("The approved kit and verified evidence are required before Operations acknowledgement.");
+    return { ...data, readiness: data.readiness.map((entry) => entry.id === id ? { ...entry, operationsAcknowledgedBy: actor, operationsAcknowledgedAt: now, updatedAt: now } : entry) };
+  }
+  if (fn === "submit_price_proposal") {
+    const draft = payload.proposal as PriceProposalDraft;
+    const validation = validatePriceProposal(draft);
+    if (validation.length) throw new Error(validation[0]);
+    return { ...data, pricing: [{ id: `price-demo-${Date.now()}`, productId: draft.productId, productName: draft.productId, version: 1, status: "submitted", currentPrice: 0, proposedPrice: draft.proposedPrice, costBasis: draft.costBasis, reason: draft.reason, effectiveAt: draft.effectiveAt, proposedBy: actor, submittedAt: now, decidedBy: null, decidedAt: null, decisionNote: null, createdAt: now }, ...data.pricing] };
+  }
+  if (fn === "decide_price_proposal") {
+    const id = String(payload.id);
+    const item = data.pricing.find((entry) => entry.id === id);
+    const note = String(payload.note ?? "").trim();
+    if (!item || !canDecidePriceProposal(item, actor) || note.length < 8) throw new Error("Price proposal is not ready for this decision.");
+    return { ...data, pricing: data.pricing.map((entry) => entry.id === id ? { ...entry, status: payload.decision as PriceProposal["status"], decidedBy: actor, decidedAt: now, decisionNote: note } : entry) };
+  }
+  throw new Error("This Product action is not available in demo memory.");
+}
 
 function text(value: unknown, fallback = ""): string {
   return typeof value === "string" && value.length > 0 ? value : fallback;
@@ -175,12 +276,12 @@ async function callProductRpc(
 }
 
 export function useProductWorkspace() {
-  const { supabaseClient, userRoles } = useSession();
+  const { supabaseClient, userRoles, profile } = useSession();
   const sourceAccess = {
     readiness: can(userRoles, "product", "view_readiness"),
     pricing: can(userRoles, "product", "view_pricing"),
   };
-  const [data, setData] = useState<ProductWorkspaceData>(EMPTY_DATA);
+  const [data, setData] = useState<ProductWorkspaceData>(supabaseClient ? EMPTY_DATA : MEMORY_DEMO_DATA);
   const [loading, setLoading] = useState(Boolean(supabaseClient));
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -188,7 +289,6 @@ export function useProductWorkspace() {
   const refresh = useCallback(async (options: ProductRefreshOptions = {}) => {
     const background = options.background === true;
     if (!supabaseClient) {
-      setData(EMPTY_DATA);
       setLoading(false);
       setRefreshing(false);
       return true;
@@ -215,8 +315,10 @@ export function useProductWorkspace() {
 
   const run = useCallback(
     async (fn: string, payload: Record<string, unknown>) => {
-      if (!supabaseClient)
-        throw new Error("Live Product actions require Supabase.");
+      if (!supabaseClient) {
+        setData((current) => applyMemoryProductAction(current, fn, payload, profile?.id ?? "product-demo-user"));
+        return;
+      }
       await callProductRpc(supabaseClient, fn, payload);
       const readbackSucceeded = await refresh({ background: true });
       if (!readbackSucceeded) {
@@ -225,7 +327,7 @@ export function useProductWorkspace() {
         );
       }
     },
-    [refresh, supabaseClient],
+    [profile?.id, refresh, supabaseClient],
   );
 
   useEffect(() => {
@@ -254,5 +356,6 @@ export function useProductWorkspace() {
       decision: "approved" | "rejected",
       note: string,
     ) => run("decide_price_proposal", { id, decision, note }),
+    isDemo: !supabaseClient,
   };
 }

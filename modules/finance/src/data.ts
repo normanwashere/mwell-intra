@@ -102,6 +102,68 @@ export function filterFinanceActivity(
   return activity.filter((item) => item.source === source);
 }
 
+export function validateFinanceCloseEntry(
+  input: ManageFinanceCloseEntryInput,
+): string[] {
+  const errors: string[] = [];
+  if (input.action === "save" && (!Number.isFinite(input.amount) || Number(input.amount) <= 0)) {
+    errors.push("Amount must be greater than zero.");
+  }
+  if (input.action === "exception" && !input.reconciliationNote?.trim()) {
+    errors.push("Provide a correction reason before flagging a close entry.");
+  }
+  return errors;
+}
+
+export function applyMemoryFinanceCloseEntry(
+  data: FinanceData,
+  input: ManageFinanceCloseEntryInput,
+  actor = "finance@mwell.demo",
+): FinanceData {
+  const errors = validateFinanceCloseEntry(input);
+  if (errors.length) throw new Error(errors[0]);
+  const now = new Date().toISOString();
+  if (input.action === "save") {
+    const entry: FinanceCloseEntry = {
+      id: input.id ?? `close-demo-${Date.now()}`,
+      periodStart: input.periodStart ?? "",
+      periodEnd: input.periodEnd ?? "",
+      entryType: input.entryType ?? "cost_center",
+      sourceModule: input.sourceModule ?? "finance",
+      sourceReference: input.sourceReference ?? "memory",
+      costCenter: input.costCenter,
+      amount: Number(input.amount),
+      status: "ready",
+      evidenceUrl: input.evidenceUrl,
+      reconciliationNote: input.reconciliationNote,
+      preparedBy: actor,
+      preparedAt: now,
+      updatedAt: now,
+    };
+    return { ...data, closeEntries: [entry, ...data.closeEntries] };
+  }
+  const entry = data.closeEntries.find((item) => item.id === input.id);
+  if (!entry) throw new Error("Finance close entry was not found. Refresh before retrying.");
+  if (input.action === "post" && entry.preparedBy === actor) {
+    throw new Error("A different Finance user must post a prepared close entry.");
+  }
+  if (input.action === "reconcile" && entry.postedBy === actor) {
+    throw new Error("A different Finance user must reconcile a posted close entry.");
+  }
+  const status = input.action === "post" ? "posted" : input.action === "reconcile" ? "reconciled" : "exception";
+  return {
+    ...data,
+    closeEntries: data.closeEntries.map((item) => item.id === entry.id ? {
+      ...item,
+      status,
+      reconciliationNote: input.reconciliationNote ?? item.reconciliationNote,
+      postedBy: input.action === "post" ? actor : item.postedBy,
+      postedAt: input.action === "post" ? now : item.postedAt,
+      updatedAt: now,
+    } : item),
+  };
+}
+
 export function scopeFinanceData(
   data: FinanceData,
   access: FinanceSourceAccess,
@@ -195,6 +257,8 @@ export async function manageLiveFinanceCloseEntry(
   client: FinanceClient,
   input: ManageFinanceCloseEntryInput,
 ): Promise<FinanceCloseEntry> {
+  const validation = validateFinanceCloseEntry(input);
+  if (validation.length) throw new Error(validation[0]);
   const { data, error } = await client
     .schema("core")
     .rpc("manage_finance_close_entry", {
@@ -344,8 +408,9 @@ export function useFinanceData(): {
   manageCloseEntry: (
     input: ManageFinanceCloseEntryInput,
   ) => Promise<FinanceCloseEntry>;
+  isDemo: boolean;
 } {
-  const { mode, supabaseClient, userRoles } = useSession();
+  const { mode, supabaseClient, userRoles, profile } = useSession();
   const live = mode === "supabase" ? supabaseClient : null;
   const procurementAccess = can(userRoles, "procurement", "view_finance");
   const warehouseAccess = can(userRoles, "warehouse", "view_finance");
@@ -368,12 +433,6 @@ export function useFinanceData(): {
 
   const refresh = useCallback(async () => {
     if (!live) {
-      setData(
-        scopeFinanceData(FINANCE_DEMO_DATA, {
-          procurement: procurementAccess,
-          warehouse: warehouseAccess,
-        }),
-      );
       setError(null);
       setLoading(false);
       return;
@@ -399,17 +458,25 @@ export function useFinanceData(): {
 
   const manageCloseEntry = useCallback(
     async (input: ManageFinanceCloseEntryInput) => {
-      if (!live)
-        throw new Error("Finance close actions require Supabase mode.");
+      if (!live) {
+        let result: FinanceCloseEntry | undefined;
+        setData((current) => {
+          const next = applyMemoryFinanceCloseEntry(current, input, profile?.email ?? "finance@mwell.demo");
+          result = next.closeEntries.find((entry) => entry.id === input.id) ?? next.closeEntries[0];
+          return next;
+        });
+        if (!result) throw new Error("Finance close entry could not be recorded.");
+        return result;
+      }
       const result = await manageLiveFinanceCloseEntry(live, input);
       await refresh();
       return result;
     },
-    [live, refresh],
+    [live, refresh, profile?.email],
   );
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
-  return { data, loading, error, refresh, manageCloseEntry };
+  return { data, loading, error, refresh, manageCloseEntry, isDemo: !live };
 }

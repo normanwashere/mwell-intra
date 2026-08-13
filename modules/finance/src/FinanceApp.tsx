@@ -21,7 +21,7 @@ import { FinanceClosePanel } from "./components/FinanceClosePanel";
 
 export function FinanceApp() {
   const { profile, userRoles, loading: sessionLoading } = useSession();
-  const { data, loading, error, refresh, manageCloseEntry } = useFinanceData();
+  const { data, loading, error, refresh, manageCloseEntry, isDemo } = useFinanceData();
 
   if (sessionLoading || (profile && loading)) {
     return (
@@ -92,6 +92,7 @@ export function FinanceApp() {
         }
         accessory={
           <div className="flex max-w-[14rem] flex-wrap justify-end gap-1.5">
+            {isDemo && <Badge tone="amber">Demo memory</Badge>}
             {warehouseFinance && (
               <Badge tone="emerald">Warehouse Finance</Badge>
             )}

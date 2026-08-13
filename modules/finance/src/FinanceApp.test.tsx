@@ -56,6 +56,7 @@ function session(roles: SessionValue['userRoles']): SessionValue {
     signOut: vi.fn(async () => undefined),
     resetPassword: vi.fn(async () => undefined),
     changePassword: vi.fn(async () => undefined),
+    refreshCapabilities: vi.fn(async () => true),
   };
 }
 
@@ -85,7 +86,7 @@ describe('FinanceApp', () => {
       'max-w-full',
       'overflow-hidden',
     );
-    for (const purchaseOrderLink of screen.getAllByRole('link', { name: 'PO-2026-1042' })) {
+    for (const purchaseOrderLink of screen.getAllByRole('link', { name: 'PO-2026-0004' })) {
       expect(purchaseOrderLink).toHaveClass('break-all', 'sm:break-normal');
     }
     expect(screen.getByText('Cross-module activity')).toBeInTheDocument();
@@ -95,7 +96,7 @@ describe('FinanceApp', () => {
     );
     expect(screen.getByRole('link', { name: /review next payment pack/i })).toHaveAttribute(
       'href',
-      '/procurement/purchase-orders/po-demo-1042',
+      '/procurement/purchase-orders/po_seed_004',
     );
   });
 
@@ -158,6 +159,6 @@ describe('FinanceApp', () => {
     };
     renderFinanceApp();
     expect(screen.getByText(/some Finance sources are unavailable/i)).toBeInTheDocument();
-    expect(screen.getAllByText('PO-2026-1042')).toHaveLength(2);
+    expect(screen.getAllByText('PO-2026-0004')).toHaveLength(2);
   });
 });

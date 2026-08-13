@@ -27,6 +27,8 @@ import type {
   SourcingMethod,
   AcceptancePack,
   PaymentReadinessPack,
+  ProcurementRequest,
+  PurchaseOrderStatus,
 } from './types';
 
 // ---------------------------------------------------------------------------
@@ -496,6 +498,34 @@ export function evaluateSubmitReadiness(req: {
     ok: missingDocs.length === 0,
     missingDocs,
   };
+}
+
+/** Keep the disabled submit CTA and submit mutation on the same policy gate. */
+export function canSubmitRequest(req: Pick<
+  ProcurementRequest,
+  'category' | 'estimatedAmount' | 'sourcingMethod' | 'attachments' | 'compliance'
+>): { allowed: boolean; blockers: string[] } {
+  const readiness = evaluateSubmitReadiness(req);
+  return { allowed: readiness.ok, blockers: readiness.missingDocs };
+}
+
+export function validatePurchaseOrderCancellation(
+  status: PurchaseOrderStatus,
+  reason: string,
+): { allowed: boolean; reason?: string } {
+  if (!['draft', 'approved', 'issued'].includes(status)) {
+    return { allowed: false, reason: 'Only draft, approved, or issued POs can be cancelled.' };
+  }
+  if (reason.trim().length < 8) {
+    return { allowed: false, reason: 'Enter a cancellation reason of at least 8 characters.' };
+  }
+  return { allowed: true };
+}
+
+export function validateRejectionReason(reason: string | undefined): string | undefined {
+  return reason?.trim().length && reason.trim().length >= 8
+    ? undefined
+    : 'Enter a rejection reason of at least 8 characters.';
 }
 
 export interface CommitmentReadinessInput {

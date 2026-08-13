@@ -11,7 +11,7 @@ describe('summarizeFinanceData', () => {
   it('summarizes commitments, receipts, returns, and review states', () => {
     expect(summarizeFinanceData(FINANCE_DEMO_DATA)).toEqual({
       inventoryValue: 1_284_750,
-      committedValue: 590_500,
+      committedValue: 1_840_000,
       receivedValue: 287_250,
       returnedValue: 18_750,
       netWarehouseValue: 268_500,

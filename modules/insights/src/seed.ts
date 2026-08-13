@@ -50,6 +50,7 @@ export const INSIGHTS_DEMO_DATA: InsightsData = {
       dataStatus: "current",
       sampleCount: 12,
       detail: "Approved requests converted to issued POs",
+      drillDownContext: "Approved PR submission to first issued PO, in calendar days.",
       sourceHref: "/procurement/purchase-orders",
       reportingPeriodStart: "2026-04-15T08:00:00+08:00",
       reportingPeriodEnd: "2026-07-14T08:00:00+08:00",

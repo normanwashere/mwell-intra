@@ -2,7 +2,7 @@ export type InsightArea =
   "warehouse" | "procurement" | "legal" | "finance" | "executive";
 export type InsightTargetDirection =
   "minimum" | "maximum" | "range" | "informational";
-export type InsightDataStatus = "current" | "no_data" | "incomplete";
+export type InsightDataStatus = "current" | "stale" | "no_data" | "incomplete";
 export type InsightMetricStatus =
   | "critical"
   | "review"
@@ -23,6 +23,8 @@ export interface InsightMetric {
   dataStatus: InsightDataStatus;
   sampleCount: number;
   detail: string;
+  /** Plain-language metric definition carried into source drill-downs. */
+  drillDownContext?: string;
   sourceHref: string;
   reportingPeriodStart: string | null;
   reportingPeriodEnd: string | null;

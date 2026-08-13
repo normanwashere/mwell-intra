@@ -20,6 +20,8 @@ export interface ReadinessPackage {
   version: number;
   status: ReadinessStatus;
   evidence: ReadinessEvidence[];
+  /** Explicit approval of the launch kit/bundle dependency, when applicable. */
+  kitApproved?: boolean;
   conditions: string;
   preparedBy: string;
   submittedBy: string | null;

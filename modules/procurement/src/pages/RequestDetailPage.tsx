@@ -39,6 +39,7 @@ import {
 } from '../localStore';
 import {
   categoryMeta,
+  canSubmitRequest,
   deriveSourcingRecommendation,
   evaluateSubmitReadiness,
   requiredDocumentsStatus,
@@ -334,6 +335,7 @@ export function RequestDetailPage() {
       )
     : [];
   const missingDocs = reqDocs.filter((d) => !d.attached);
+  const submitGate = canSubmitRequest(req);
   // PR-20: the 10-tile meta grid collapses to one muted line; the full
   // record lives behind the (i).
   const metaLine = [
@@ -601,7 +603,13 @@ export function RequestDetailPage() {
         <div className="flex flex-wrap gap-2">
           {req.status === 'draft' && isRequester && (
             <>
-              <button type="button" onClick={handleSubmit} className="btn-primary">
+              <button
+                type="button"
+                onClick={handleSubmit}
+                className="btn-primary disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={!submitGate.allowed}
+                title={!submitGate.allowed ? readinessMessage(evaluateSubmitReadiness(req)) : undefined}
+              >
                 <Icon name="check" className="h-4 w-4" />
                 Submit for approval
               </button>

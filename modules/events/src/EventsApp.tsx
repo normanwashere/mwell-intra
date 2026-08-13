@@ -90,6 +90,7 @@ export function EventsApp({
     manageEvent,
     requestFulfillment,
     saveReconciliation,
+    isDemo,
   } = useEventsData();
   const toast = useToast();
   const [open, setOpen] = useState(openCreate);
@@ -306,7 +307,7 @@ export function EventsApp({
     setSaving(true);
     try {
       await requestFulfillment(request);
-      toast.success("Warehouse stock request sent for approval.");
+      toast.success(isDemo ? "Demo Warehouse handoff recorded locally. It has not been sent to Warehouse." : "Warehouse stock request sent for approval.");
       setFulfillmentOpen(false);
     } catch (cause) {
       toast.error(
@@ -350,7 +351,9 @@ export function EventsApp({
         reconciliationAction === "approve"
           ? "Event settlement approved."
           : reconciliationAction === "submit"
-            ? "Event reconciliation sent to Finance."
+            ? isDemo
+              ? "Demo Event settlement recorded locally. It has not been sent to Finance."
+              : "Event reconciliation sent to Finance."
             : "Event reconciliation saved.",
       );
       setReconciliationOpen(false);
