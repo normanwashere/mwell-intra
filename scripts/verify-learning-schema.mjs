@@ -27,6 +27,14 @@ export const POLICY_CHRONOLOGY_MIGRATION_NAME =
   "20260813070234_learning_policy_acknowledgment_chronology.sql";
 export const ASSESSMENT_COMPATIBILITY_MIGRATION_NAME =
   "20260813071129_learning_assessment_answer_count_compatibility.sql";
+export const CERTIFICATION_SCALAR_ALIAS_MIGRATION_NAME =
+  "20260813074855_fix_certification_requirement_scalar_aliases.sql";
+export const CERTIFICATION_EVIDENCE_QUALIFICATION_MIGRATION_NAME =
+  "20260813075513_qualify_certification_requirement_evidence.sql";
+export const CERTIFICATION_CHRONOLOGY_MIGRATION_NAME =
+  "20260813075809_align_certification_issuance_chronology.sql";
+export const ASSIGNMENT_IDEMPOTENCY_MIGRATION_NAME =
+  "20260813080141_make_role_assignment_resolution_idempotent.sql";
 const PINNED_LEARNING_MIGRATION_SHA256 = Object.freeze({
   [FOUNDATION_MIGRATION_NAME]:
     "b5b954f0fdb9ff52748047ca4a17916896227934ecd43c22951ea4489fc129ad",
@@ -651,7 +659,7 @@ export const EXPECTED_FUNCTION_BODY_SHA256 = Object.freeze({
   "private.validate_assignment_requirement_waiver":
     "35738e87fd94279a142944b8e2b811e685bdfc26e9319384fbcb9c42fda12164",
   "private.validate_certification_issuance":
-    "a5512194464bfaec1e3b7a0a8376a3f14ae02abc9531b8e37a3a0f1d69bb1f54",
+    "b14c759dabb8e5ef7d74d9d65d345ca05193123484c3053a8f31dc1a9b754675",
   "private.lock_certification_role_authority":
     "4cbc6a01858221c42ac3854d11db00e52fcb1355b6224195352b2601ea8ecbd9",
   "private.revoke_certifications_for_role_assignment":
@@ -665,7 +673,7 @@ export const EXPECTED_FUNCTION_BODY_SHA256 = Object.freeze({
   "private.validate_emergency_exception_issuance":
     "0055e93a905b56fc6d96db9aeb6850f9761da39fa1bd10421917f37c321b1531",
   "private.resolve_assignments_base":
-    "2729f8eca28b7cc7d078141a0edc8f3dd340fd7f5c1fe9521a210bebb45389c2",
+    "1a3aa0d7602ee2bf27096a6655ae27f25be70d99233a0f8e72914131687a94b3",
   "private.start_requirement_base":
     "1aec7f8e3061da6c8a2abb0a2f5cb8ef1f443edb635cb8381525363afe64deb6",
   "private.validate_certification_completion_evidence":
@@ -707,7 +715,7 @@ export const EXPECTED_FUNCTION_BODY_SHA256 = Object.freeze({
   "learning.sync_shared_completions":
     "fe31819ed19667879c0000c39bc70f87fa87d51a382e50d5ac947c2f5acd9b28",
   "learning.evaluate_certifications":
-    "56e74e7e7c111c1ebd3507f4a34dbe9cfeba0c31c4071b6b09683f032351aa61",
+    "75b3d25e009a848a8c0271f23454837de267135ab9405adffc4213c7c33b1972",
   "learning.is_certification_required":
     "3e08a165d77de2450428101f120aa58edd922257cf2dbe3204986258c761d117",
   "learning.has_active_certification":
@@ -1512,6 +1520,14 @@ function processStatement(state, statement, migrationName) {
   const isPolicyChronology = migrationName === POLICY_CHRONOLOGY_MIGRATION_NAME;
   const isAssessmentCompatibility =
     migrationName === ASSESSMENT_COMPATIBILITY_MIGRATION_NAME;
+  const isCertificationScalarAlias =
+    migrationName === CERTIFICATION_SCALAR_ALIAS_MIGRATION_NAME;
+  const isCertificationEvidenceQualification =
+    migrationName === CERTIFICATION_EVIDENCE_QUALIFICATION_MIGRATION_NAME;
+  const isCertificationChronology =
+    migrationName === CERTIFICATION_CHRONOLOGY_MIGRATION_NAME;
+  const isAssignmentIdempotency =
+    migrationName === ASSIGNMENT_IDEMPOTENCY_MIGRATION_NAME;
   let match;
 
   if (
@@ -2327,6 +2343,18 @@ function processStatement(state, statement, migrationName) {
       isAssessmentCompatibility &&
       metadata.qualifiedName === "learning.submit_assessment" &&
       metadata.argumentTypes.join("|") === "jsonb";
+    const approvedCertificationScalarAlias =
+      (isCertificationScalarAlias || isCertificationEvidenceQualification) &&
+      metadata.qualifiedName === "private.validate_certification_issuance" &&
+      metadata.argumentTypes.length === 0;
+    const approvedCertificationChronology =
+      isCertificationChronology &&
+      metadata.qualifiedName === "learning.evaluate_certifications" &&
+      metadata.argumentTypes.length === 0;
+    const approvedAssignmentIdempotency =
+      isAssignmentIdempotency &&
+      metadata.qualifiedName === "private.resolve_assignments_base" &&
+      metadata.argumentTypes.length === 0;
     if (isServiceContractAlignment && !approvedSnapshotAlignment) {
       state.errors.push(
         `${migrationName}: only the exact no-argument learning.my_learning_snapshot replacement is approved.`,
@@ -2357,7 +2385,10 @@ function processStatement(state, statement, migrationName) {
       !approvedCompletionHardening &&
       !approvedTask8Authority &&
       !approvedPolicyChronology &&
-      !approvedAssessmentCompatibility
+      !approvedAssessmentCompatibility &&
+      !approvedCertificationScalarAlias &&
+      !approvedCertificationChronology &&
+      !approvedAssignmentIdempotency
     ) {
       state.errors.push(
         `${migrationName}: replacement or overload of modeled function ${metadata.qualifiedName} is default-denied.`,
@@ -2422,8 +2453,11 @@ function processStatement(state, statement, migrationName) {
       (isAssessmentCompatibility &&
         match[1] === "learning.submit_assessment") ||
       (isPgcryptoCompatibility && match[1] === "public.digest");
+    const approvedChronologyOwner =
+      isCertificationChronology &&
+      match[1] === "learning.evaluate_certifications";
     if (
-      !approvedServiceOwner ||
+      (!approvedServiceOwner && !approvedChronologyOwner) ||
       match[3] !== "postgres" ||
       !functionEntry ||
       JSON.stringify(argumentTypes) !==

@@ -25,6 +25,12 @@ const TASK8_AUTHORITY_NAME =
   "20260812220000_task8_database_authority_remediation.sql";
 const POLICY_CHRONOLOGY_NAME =
   "20260813070234_learning_policy_acknowledgment_chronology.sql";
+const ASSESSMENT_COMPATIBILITY_NAME =
+  "20260813071129_learning_assessment_answer_count_compatibility.sql";
+const CERTIFICATION_EVIDENCE_QUALIFICATION_NAME =
+  "20260813075513_qualify_certification_requirement_evidence.sql";
+const CERTIFICATION_CHRONOLOGY_NAME =
+  "20260813075809_align_certification_issuance_chronology.sql";
 const OLD_FOUNDATION_NAME = "20260812090000_learning_foundation.sql";
 const migration = fileURLToPath(
   new URL(`../supabase/migrations/${FOUNDATION_NAME}`, import.meta.url),
@@ -98,6 +104,33 @@ const policyChronologyMigration = fileURLToPath(
 const policyChronologySql = existsSync(policyChronologyMigration)
   ? readFileSync(policyChronologyMigration, "utf8")
   : "";
+const assessmentCompatibilitySql = readFileSync(
+  fileURLToPath(
+    new URL(
+      `../supabase/migrations/${ASSESSMENT_COMPATIBILITY_NAME}`,
+      import.meta.url,
+    ),
+  ),
+  "utf8",
+);
+const certificationEvidenceQualificationSql = readFileSync(
+  fileURLToPath(
+    new URL(
+      `../supabase/migrations/${CERTIFICATION_EVIDENCE_QUALIFICATION_NAME}`,
+      import.meta.url,
+    ),
+  ),
+  "utf8",
+);
+const certificationChronologySql = readFileSync(
+  fileURLToPath(
+    new URL(
+      `../supabase/migrations/${CERTIFICATION_CHRONOLOGY_NAME}`,
+      import.meta.url,
+    ),
+  ),
+  "utf8",
+);
 const governedSql = `${sql}\n${authoritySql}`;
 const migrationDirectory = fileURLToPath(
   new URL("../supabase/migrations/", import.meta.url),
@@ -203,6 +236,36 @@ function errorsForPolicyChronology(source) {
   return verifyLearningSchema(
     repositoryMigrations.map((migrationEntry) =>
       migrationEntry.name === POLICY_CHRONOLOGY_NAME
+        ? { ...migrationEntry, sql: source }
+        : migrationEntry,
+    ),
+  ).join("\n");
+}
+
+function errorsForAssessmentCompatibility(source) {
+  return verifyLearningSchema(
+    repositoryMigrations.map((migrationEntry) =>
+      migrationEntry.name === ASSESSMENT_COMPATIBILITY_NAME
+        ? { ...migrationEntry, sql: source }
+        : migrationEntry,
+    ),
+  ).join("\n");
+}
+
+function errorsForCertificationEvidenceQualification(source) {
+  return verifyLearningSchema(
+    repositoryMigrations.map((migrationEntry) =>
+      migrationEntry.name === CERTIFICATION_EVIDENCE_QUALIFICATION_NAME
+        ? { ...migrationEntry, sql: source }
+        : migrationEntry,
+    ),
+  ).join("\n");
+}
+
+function errorsForCertificationChronology(source) {
+  return verifyLearningSchema(
+    repositoryMigrations.map((migrationEntry) =>
+      migrationEntry.name === CERTIFICATION_CHRONOLOGY_NAME
         ? { ...migrationEntry, sql: source }
         : migrationEntry,
     ),
@@ -526,7 +589,15 @@ test("rejects client-authored learning authority and weakened service guards", (
       "start_requirement",
     ]).has(functionName);
     const governedByPolicyChronology = functionName === "acknowledge_policy";
-    const sourceSql = governedByPolicyChronology
+    const governedByAssessmentCompatibility =
+      functionName === "submit_assessment";
+    const governedByCertificationChronology =
+      functionName === "evaluate_certifications";
+    const sourceSql = governedByCertificationChronology
+      ? certificationChronologySql
+      : governedByAssessmentCompatibility
+      ? assessmentCompatibilitySql
+      : governedByPolicyChronology
       ? policyChronologySql
       : alignedByCompletion
         ? completionHardeningSql
@@ -542,6 +613,10 @@ test("rejects client-authored learning authority and weakened service guards", (
     assert.match(
       governedByPolicyChronology
         ? errorsForPolicyChronology(weakened)
+        : governedByCertificationChronology
+          ? errorsForCertificationChronology(weakened)
+        : governedByAssessmentCompatibility
+          ? errorsForAssessmentCompatibility(weakened)
         : alignedByCompletion
           ? errorsForCompletionHardening(weakened)
           : errorsForServices(weakened),
@@ -1670,10 +1745,6 @@ test("rejects round-two policy, function, trigger, DDL, grantee, and role bypass
         /unknown.*security definer|privileged.*function|function.*learning/i,
     },
     {
-      sql: `${sql}\ngrant execute on function private.validate_certification_issuance() to authenticated;`,
-      error: /execute|function.*grant/i,
-    },
-    {
       sql: replaceRequired(
         sql,
         /create or replace function learning\.reject_evidence_mutation\(\)[\s\S]*?\$\$;/i,
@@ -1694,6 +1765,12 @@ test("rejects round-two policy, function, trigger, DDL, grantee, and role bypass
   for (const bypass of bypasses) {
     assert.match(errorsFor(bypass.sql), bypass.error);
   }
+  const leakedValidator = `${certificationEvidenceQualificationSql}\n` +
+    "grant execute on function private.validate_certification_issuance() to authenticated;";
+  assert.match(
+    errorsForCertificationEvidenceQualification(leakedValidator),
+    /unsafe execute|function.*privilege|authenticated/i,
+  );
 
   const laterBypasses = [
     "alter table learning.attempt_events enable replica trigger learning_attempt_events_append_only;",
@@ -1825,7 +1902,7 @@ test("default-denies round-three view, procedural, privilege, and role bypasses"
 });
 
 test("rejects removed locks, graph lineage, active-profile, and monotonic guards", () => {
-  const mutations = [
+  const currentCertificationMutations = [
     [
       /for key share of role_assignment/i,
       "",
@@ -1841,6 +1918,21 @@ test("rejects removed locks, graph lineage, active-profile, and monotonic guards
       "from learning.curriculum_requirements prerequisite where prerequisite.curriculum_version_id = new.curriculum_version_id",
       /prerequisite|graph lineage|certification/i,
     ],
+  ];
+  for (const [pattern, replacement, expected] of currentCertificationMutations) {
+    const weakened = replaceRequired(
+      certificationEvidenceQualificationSql,
+      pattern,
+      replacement,
+    );
+    assert.match(
+      errorsForCertificationEvidenceQualification(weakened),
+      expected,
+      String(pattern),
+    );
+  }
+
+  const mutations = [
     [
       /requirement_version\.audience = 'vendor'/i,
       "false",
@@ -1889,7 +1981,6 @@ test("rejects mutations for every repaired trigger and structural invariant", ()
 
   for (const name of [
     "validate_assignment_requirement_waiver",
-    "validate_certification_issuance",
     "validate_emergency_exception_issuance",
   ]) {
     const inert = replaceRequired(
@@ -1906,6 +1997,17 @@ test("rejects mutations for every repaired trigger and structural invariant", ()
       name,
     );
   }
+
+  const inertCertification = replaceRequired(
+    certificationEvidenceQualificationSql,
+    /create or replace function private\.validate_certification_issuance\(\)[\s\S]*?\$\$;/i,
+    "create or replace function private.validate_certification_issuance() returns trigger language plpgsql as $$ begin return new; end; $$;",
+  );
+  assert.match(
+    errorsForCertificationEvidenceQualification(inertCertification),
+    /certification|validator|function body/i,
+    "validate_certification_issuance",
+  );
 
   const forgedOwner = replaceRequired(
     sql,
