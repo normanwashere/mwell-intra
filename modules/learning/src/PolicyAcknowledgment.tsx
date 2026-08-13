@@ -32,15 +32,18 @@ export function PolicyAcknowledgment({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inFlight = useRef(false);
-  const documentKey = `${progress.assignmentRequirementId}:${requirement.version}:${document.id}:${document.version}`;
+  const documentKey = `${progress.assignmentRequirementId}:${requirement.version}:${document.id}:${document.version}:${document.evidenceHash}`;
+  const documentKeyRef = useRef(documentKey);
+  documentKeyRef.current = documentKey;
   const complete = ["passed", "waived"].includes(progress.state) || acknowledgedKey === documentKey;
 
   useEffect(() => {
     setAccepted(false);
     setAcknowledgedKey(null);
     setError(null);
+    setPending(false);
     inFlight.current = false;
-  }, [documentKey, document.evidenceHash]);
+  }, [documentKey]);
 
   return (
     <section aria-labelledby="policy-title" className="space-y-5">
@@ -82,6 +85,7 @@ export function PolicyAcknowledgment({
             disabled={!accepted || pending}
             onClick={async () => {
               if (inFlight.current) return;
+              const submittedDocumentKey = documentKey;
               inFlight.current = true;
               setPending(true);
               setError(null);
@@ -92,12 +96,16 @@ export function PolicyAcknowledgment({
                   controlledDocumentVersion: document.version,
                   evidenceHash: document.evidenceHash,
                 });
+                if (documentKeyRef.current !== submittedDocumentKey) return;
                 setAcknowledgedKey(documentKey);
               } catch (cause) {
+                if (documentKeyRef.current !== submittedDocumentKey) return;
                 setError(cause instanceof Error ? cause.message : "Policy acknowledgment could not be recorded.");
               } finally {
-                inFlight.current = false;
-                setPending(false);
+                if (documentKeyRef.current === submittedDocumentKey) {
+                  inFlight.current = false;
+                  setPending(false);
+                }
               }
             }}
           >Acknowledge policy</Button>

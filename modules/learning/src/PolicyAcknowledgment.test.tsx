@@ -4,6 +4,12 @@ import { PolicyAcknowledgment } from "./PolicyAcknowledgment";
 import { LearningContext, type LearningContextValue } from "./LearningProvider";
 import type { RequirementDefinition, RequirementProgress } from "./types";
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((next) => { resolve = next; });
+  return { promise, resolve };
+}
+
 const requirement: RequirementDefinition = {
   id: "receiving-policy",
   version: 2,
@@ -131,5 +137,45 @@ describe("PolicyAcknowledgment", () => {
 
     expect(acceptance).not.toBeChecked();
     expect(screen.getByRole("button", { name: "Acknowledge policy" })).toBeDisabled();
+  });
+
+  it("rejects an in-flight acknowledgment after the evidence hash changes", async () => {
+    const pending = deferred<void>();
+    const acknowledgePolicy = vi.fn(() => pending.promise);
+    const document = {
+      id: "LGL-RCV-004",
+      version: "4.2",
+      title: "Receiving and custody control",
+      owner: "Legal and Compliance",
+      effectiveDate: "2026-08-01",
+      summary: "Keep received inventory traceable and under controlled custody.",
+      sections: ["Capture traceability before stock becomes available."],
+      evidenceHash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      href: "/knowledge?article=governance-warehouse-receiving",
+    } as const;
+    const rendered = render(
+      <LearningContext.Provider value={value(acknowledgePolicy)}>
+        <PolicyAcknowledgment requirement={requirement} progress={progress} document={document} />
+      </LearningContext.Provider>,
+    );
+    fireEvent.click(screen.getByLabelText("I have read and understand this controlled policy version."));
+    fireEvent.click(screen.getByRole("button", { name: "Acknowledge policy" }));
+    rendered.rerender(
+      <LearningContext.Provider value={value(acknowledgePolicy)}>
+        <PolicyAcknowledgment
+          requirement={requirement}
+          progress={progress}
+          document={{
+            ...document,
+            evidenceHash: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          }}
+        />
+      </LearningContext.Provider>,
+    );
+    pending.resolve();
+
+    await waitFor(() => expect(acknowledgePolicy).toHaveBeenCalledOnce());
+    expect(screen.queryByText("Policy acknowledged")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("I have read and understand this controlled policy version.")).not.toBeChecked();
   });
 });
