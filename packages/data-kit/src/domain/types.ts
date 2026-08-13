@@ -173,6 +173,7 @@ export type ReturnSource = "customer" | "vendor" | "event";
 
 export type ReturnDisposition =
   | "quarantine"
+  | "hold"
   | "restock"
   | "lost"
   | "vendor_return";

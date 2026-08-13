@@ -15,6 +15,11 @@ async function repositoryWithPendingReceipt() {
     supplierId: data.suppliers[0]!.id,
     lines: [{ productId: "shirt-l", quantity: 2 }],
     evidenceUrls: ["data:image/png;base64,receipt"],
+    receiptException: {
+      type: "non_po",
+      reason: "Approved test receipt outside the PO workflow",
+      evidenceUrls: ["data:application/pdf;base64,approval"],
+    },
   });
   return { repo, receipt };
 }
@@ -196,7 +201,6 @@ describe("QualityPage", () => {
           productId: "shirt-l",
           quantity: 1,
           reason: "unused / surplus",
-          disposition: "restock",
           locationId: data.locations.find(
             (location) => location.type === "warehouse",
           )!.id,

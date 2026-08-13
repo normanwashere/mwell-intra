@@ -6,6 +6,7 @@ import type {
   Movement,
   PurchaseOrder,
   Receipt,
+  ReturnDisposition,
   ReturnRecord,
   StockLevel,
   StorageArea,
@@ -82,6 +83,7 @@ import {
   type PageQuery,
   type PageResult,
   type ProcurementPOHandoff,
+  type QualityDisposition,
   type QualityInspection,
   type ReceiveProcurementPOInput,
   type RequestStockChangeInput,
@@ -1282,12 +1284,22 @@ export class InMemoryRepository implements WarehouseControlRepository {
       ) {
         const row = position(unit.productId, unit.locationId, unit.binId);
         row.onHand += 1;
-        row.unavailable += 1;
+        const coveredByHold = this.holds.some(
+          (hold) =>
+            hold.status === "active" &&
+            hold.productId === unit.productId &&
+            hold.locationId === unit.locationId &&
+            (hold.binId ?? undefined) === (unit.binId ?? undefined) &&
+            (hold.serialNumber === undefined ||
+              hold.serialNumber === unit.serialNumber),
+        );
+        if (!coveredByHold) row.unavailable += 1;
       }
     }
     for (const hold of this.holds.filter((row) => row.status === "active")) {
-      position(hold.productId, hold.locationId, hold.binId).held +=
-        hold.quantity;
+      const row = position(hold.productId, hold.locationId, hold.binId);
+      row.held += hold.quantity;
+      row.unavailable = Math.max(0, row.unavailable - hold.quantity);
     }
     const rows = [...positions.entries()]
       .map(([id, row]) => ({
@@ -1308,6 +1320,139 @@ export class InMemoryRepository implements WarehouseControlRepository {
         : {}),
       total: rows.length,
     };
+  }
+
+  private pendingInspectionUnits(
+    input: Pick<
+      InspectQualityInput,
+      "productId" | "serialNumber"
+    >,
+    locationId: string,
+    binId?: string,
+  ) {
+    return this.data.units.filter(
+      (unit) =>
+        unit.productId === input.productId &&
+        unit.locationId === locationId &&
+        unit.status === "pending_inspection" &&
+        (input.serialNumber === undefined ||
+          unit.serialNumber === input.serialNumber) &&
+        (binId === undefined || unit.binId === binId),
+    );
+  }
+
+  private returnDispositionForQuality(
+    disposition: Exclude<QualityDisposition, "pending">,
+  ): ReturnDisposition {
+    if (disposition === "accepted") return "restock";
+    if (disposition === "vendor_return") return "vendor_return";
+    if (disposition === "unavailable") return "lost";
+    return "hold";
+  }
+
+  private resolveReturnLines(
+    returned: ReturnRecord,
+    input: Pick<
+      InspectQualityInput,
+      "productId" | "serialNumber" | "binId" | "quantity"
+    >,
+    disposition: ReturnDisposition,
+    currentDisposition: ReturnDisposition = "quarantine",
+  ): void {
+    const matches = (line: ReturnRecord["lines"][number]) =>
+      line.productId === input.productId &&
+      line.disposition === currentDisposition &&
+      (input.serialNumber === undefined ||
+        line.serialNumber === input.serialNumber) &&
+      (input.binId === undefined || line.binId === input.binId);
+    const available = returned.lines
+      .filter(matches)
+      .reduce((sum, line) => sum + line.quantity, 0);
+    if (available < input.quantity) {
+      throw new Error("Pending return line is not available for inspection.");
+    }
+
+    let remaining = input.quantity;
+    for (let index = 0; index < returned.lines.length && remaining > 0; index += 1) {
+      const line = returned.lines[index]!;
+      if (!matches(line)) continue;
+      const resolvedQuantity = Math.min(line.quantity, remaining);
+      if (resolvedQuantity < line.quantity) {
+        returned.lines.splice(index + 1, 0, {
+          ...line,
+          quantity: line.quantity - resolvedQuantity,
+        });
+        line.quantity = resolvedQuantity;
+        index += 1;
+      }
+      line.disposition = disposition;
+      remaining -= resolvedQuantity;
+    }
+  }
+
+  private releaseInspectedStock(
+    inspection: QualityInspection,
+    hold: InventoryHold,
+  ): void {
+    const product = this.data.products.find(
+      (row) => row.id === inspection.productId,
+    );
+    if (!product) throw new Error("Inspection product not found.");
+
+    if (product.serialized) {
+      const candidates = this.data.units.filter(
+        (unit) =>
+          unit.productId === hold.productId &&
+          unit.locationId === hold.locationId &&
+          ["pending_inspection", "returned"].includes(unit.status) &&
+          (hold.serialNumber === undefined ||
+            unit.serialNumber === hold.serialNumber) &&
+          (hold.binId === undefined || unit.binId === hold.binId),
+      );
+      if (candidates.length < hold.quantity) {
+        throw new Error("Held serialized stock is not available for release.");
+      }
+      for (const unit of candidates.slice(0, hold.quantity)) {
+        unit.status = "in_stock";
+      }
+    } else {
+      const level = this.stockRow(
+        hold.productId,
+        hold.locationId,
+        hold.binId,
+        false,
+      );
+      if (!level || level.quantity < hold.quantity) {
+        throw new Error("Held stock is not available for release.");
+      }
+      level.unavailable = Math.max(
+        0,
+        (level.unavailable ?? 0) - hold.quantity,
+      );
+    }
+
+    if (inspection.sourceType === "return") {
+      const returned = this.data.returns.find(
+        (row) => row.id === inspection.sourceId,
+      );
+      if (!returned) throw new Error("Return source not found.");
+      this.resolveReturnLines(
+        returned,
+        {
+          productId: hold.productId,
+          serialNumber: hold.serialNumber,
+          binId: hold.binId,
+          quantity: hold.quantity,
+        },
+        "restock",
+        "hold",
+      );
+    } else {
+      const receipt = this.data.receipts.find(
+        (row) => row.id === inspection.sourceId,
+      );
+      if (receipt) receipt.qualityStatus = "accepted";
+    }
   }
 
   async inspectQuality(input: InspectQualityInput): Promise<QualityInspection> {
@@ -1376,6 +1521,9 @@ export class InMemoryRepository implements WarehouseControlRepository {
         )?.binId ?? returned?.lines.find(
           (line) => line.productId === input.productId,
         )?.binId;
+        const returnDisposition = returned
+          ? this.returnDispositionForQuality(input.disposition)
+          : undefined;
         if (input.disposition === "accepted") {
           if (product.serialized) {
             const candidates = this.data.units.filter(
@@ -1405,6 +1553,63 @@ export class InMemoryRepository implements WarehouseControlRepository {
             }
             level.unavailable = (level.unavailable ?? 0) - input.quantity;
           }
+        } else if (returned && input.disposition === "unavailable") {
+          if (product.serialized) {
+            const candidates = this.pendingInspectionUnits(
+              input,
+              locationId,
+              sourceBinId,
+            );
+            if (candidates.length < input.quantity) {
+              throw new Error("Pending serialized stock is not available for inspection.");
+            }
+            for (const unit of candidates.slice(0, input.quantity)) {
+              unit.status = "lost";
+            }
+          } else {
+            const level = this.stockRow(
+              input.productId,
+              locationId,
+              sourceBinId,
+              false,
+            );
+            if (
+              !level ||
+              level.quantity < input.quantity ||
+              (level.unavailable ?? 0) < input.quantity
+            ) {
+              throw new Error("Pending stock is not available for inspection.");
+            }
+            level.quantity -= input.quantity;
+            level.unavailable = (level.unavailable ?? 0) - input.quantity;
+          }
+        } else if (!(returned && input.disposition === "unavailable")) {
+          if (product.serialized) {
+            const candidates = this.pendingInspectionUnits(
+              input,
+              locationId,
+              sourceBinId,
+            );
+            if (candidates.length < input.quantity) {
+              throw new Error("Pending serialized stock is not available for inspection.");
+            }
+            for (const unit of candidates.slice(0, input.quantity)) {
+              unit.status = "returned";
+            }
+          } else {
+            const level = this.stockRow(
+              input.productId,
+              locationId,
+              sourceBinId,
+              false,
+            );
+            if (!level || level.quantity < input.quantity) {
+              throw new Error("Pending stock is not available for inspection.");
+            }
+          }
+        }
+        if (returned && returnDisposition) {
+          this.resolveReturnLines(returned, input, returnDisposition);
         }
         if (receipt) {
           const inspected = this.qualityInspections
@@ -1416,7 +1621,10 @@ export class InMemoryRepository implements WarehouseControlRepository {
             : "partial";
         }
         this.qualityInspections.push(inspection);
-        if (input.disposition !== "accepted") {
+        if (
+          input.disposition !== "accepted" &&
+          !(returned && input.disposition === "unavailable")
+        ) {
           const hold: InventoryHold = {
             id: this.newId("hold"),
             inspectionId: inspection.id,
@@ -1466,7 +1674,10 @@ export class InMemoryRepository implements WarehouseControlRepository {
       const inspection = this.qualityInspections.find(
         (row) => row.id === hold.inspectionId,
       );
-      if (inspection) inspection.disposition = "accepted";
+      if (inspection) {
+        this.releaseInspectedStock(inspection, hold);
+        inspection.disposition = "accepted";
+      }
       const exception = this.exceptions.find(
         (row) =>
           row.sourceType === "quality_inspection" &&
@@ -1522,7 +1733,9 @@ export class InMemoryRepository implements WarehouseControlRepository {
               row.productId === hold.productId &&
               row.serialNumber === hold.serialNumber &&
               row.locationId === hold.locationId &&
-              ["in_stock", "returned"].includes(row.status),
+              ["in_stock", "pending_inspection", "returned"].includes(
+                row.status,
+              ),
           );
           if (!unit)
             throw new Error(
@@ -1544,6 +1757,10 @@ export class InMemoryRepository implements WarehouseControlRepository {
             );
           }
           level.quantity -= hold.quantity;
+          level.unavailable = Math.max(
+            0,
+            (level.unavailable ?? 0) - hold.quantity,
+          );
         }
         const createdAt = this.now();
         const vendorReturn: VendorReturn = {

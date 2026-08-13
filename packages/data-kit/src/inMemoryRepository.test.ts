@@ -72,9 +72,92 @@ function miniData(): WarehouseData {
 }
 
 let repo: InMemoryRepository;
+let qualityCommandSequence = 0;
 beforeEach(() => {
   repo = new InMemoryRepository(miniData());
+  qualityCommandSequence = 0;
 });
+
+type ReceiveInput = Parameters<InMemoryRepository["receiveStock"]>[0];
+type ReturnInput = Parameters<InMemoryRepository["recordReturn"]>[0];
+type QualityOutcome = Parameters<InMemoryRepository["inspectQuality"]>[0]["disposition"];
+
+const DIRECT_RECEIPT_EXCEPTION = {
+  type: "non_po" as const,
+  reason: "Approved test receipt outside the PO workflow",
+  evidenceUrls: ["memory/approved-receipt-exception.pdf"],
+};
+
+async function receiveDirect(
+  repository: InMemoryRepository,
+  input: ReceiveInput,
+) {
+  return repository.receiveStock({
+    ...input,
+    receiptException: input.receiptException ?? DIRECT_RECEIPT_EXCEPTION,
+  });
+}
+
+async function acceptReceipt(
+  repository: InMemoryRepository,
+  receipt: Awaited<ReturnType<InMemoryRepository["receiveStock"]>>,
+) {
+  for (const line of receipt.lines) {
+    qualityCommandSequence += 1;
+    await repository.inspectQuality({
+      idempotencyKey: `quality-accept-${qualityCommandSequence.toString().padStart(4, "0")}`,
+      sourceType: "receipt",
+      sourceId: receipt.id,
+      productId: line.productId,
+      binId: line.binId,
+      quantity: line.quantity,
+      disposition: "accepted",
+    });
+  }
+}
+
+async function receiveAccepted(
+  repository: InMemoryRepository,
+  input: ReceiveInput,
+) {
+  const receipt = await receiveDirect(repository, input);
+  await acceptReceipt(repository, receipt);
+  return receipt;
+}
+
+async function returnThroughQuality(
+  repository: InMemoryRepository,
+  input: ReturnInput,
+  outcomes: QualityOutcome[] = input.lines.map(() => "accepted"),
+) {
+  const quarantineLines = input.lines.map(({ disposition: _disposition, ...line }) => ({
+    ...line,
+    locationId: line.locationId ?? "loc-wh",
+  }));
+  const returned = await repository.recordReturn({
+    ...input,
+    lines: quarantineLines,
+  });
+  for (const [index, line] of quarantineLines.entries()) {
+    qualityCommandSequence += 1;
+    await repository.inspectQuality({
+      idempotencyKey: `quality-return-${qualityCommandSequence.toString().padStart(4, "0")}`,
+      sourceType: "return",
+      sourceId: returned.id,
+      productId: line.productId,
+      binId: line.binId,
+      serialNumber: line.serialNumber,
+      quantity: line.quantity,
+      disposition: outcomes[index] ?? "accepted",
+      reason:
+        (outcomes[index] ?? "accepted") === "accepted"
+          ? undefined
+          : line.reason,
+      evidenceUrls: ["memory/quality-disposition.jpg"],
+    });
+  }
+  return returned;
+}
 
 describe("receiveStock", () => {
   it("rejects a direct receipt until an evidenced non-PO exception is recorded", async () => {
@@ -121,8 +204,8 @@ describe("receiveStock", () => {
       ],
     };
 
-    const first = await repo.receiveStock(input);
-    const replay = await repo.receiveStock(input);
+    const first = await receiveDirect(repo, input);
+    const replay = await receiveDirect(repo, input);
     const data = await repo.getData();
 
     expect(replay.id).toBe(first.id);
@@ -138,7 +221,7 @@ describe("receiveStock", () => {
   });
 
   it("rejects reuse of a receive idempotency key with a different payload", async () => {
-    await repo.receiveStock({
+    await receiveDirect(repo, {
       idempotencyKey: "receive-shirt-20260813-001",
       locationId: "loc-wh",
       actor: "logi@mwell",
@@ -146,7 +229,7 @@ describe("receiveStock", () => {
     });
 
     await expect(
-      repo.receiveStock({
+      receiveDirect(repo, {
         idempotencyKey: "receive-shirt-20260813-001",
         locationId: "loc-wh",
         actor: "logi@mwell",
@@ -162,8 +245,8 @@ describe("receiveStock", () => {
       lines: [{ productId: "shirt", quantity: 2 }],
     };
 
-    const first = await repo.receiveStock(input);
-    const second = await repo.receiveStock(input);
+    const first = await receiveDirect(repo, input);
+    const second = await receiveDirect(repo, input);
     const data = await repo.getData();
 
     expect(second.id).not.toBe(first.id);
@@ -174,7 +257,7 @@ describe("receiveStock", () => {
   });
 
   it("creates serialized units and increases availability", async () => {
-    await repo.receiveStock({
+    await receiveAccepted(repo, {
       locationId: "loc-wh",
       actor: "logi@mwell",
       lines: [
@@ -188,7 +271,7 @@ describe("receiveStock", () => {
   });
 
   it("increments non-serialized stock levels", async () => {
-    await repo.receiveStock({
+    await receiveAccepted(repo, {
       locationId: "loc-wh",
       actor: "logi@mwell",
       lines: [{ productId: "shirt", quantity: 30 }],
@@ -198,7 +281,7 @@ describe("receiveStock", () => {
   });
 
   it("creates a lot and links unit cost when supplied", async () => {
-    await repo.receiveStock({
+    await receiveDirect(repo, {
       locationId: "loc-wh",
       supplierId: "sup-1",
       actor: "logi@mwell",
@@ -218,7 +301,7 @@ describe("receiveStock", () => {
   });
 
   it("links serialized units to the captured lot", async () => {
-    await repo.receiveStock({
+    await receiveDirect(repo, {
       locationId: "loc-wh",
       actor: "logi@mwell",
       lines: [
@@ -238,7 +321,7 @@ describe("receiveStock", () => {
   });
 
   it("does not create a lot when no cost/lot code is supplied", async () => {
-    await repo.receiveStock({
+    await receiveDirect(repo, {
       locationId: "loc-wh",
       actor: "logi@mwell",
       lines: [{ productId: "shirt", quantity: 5 }],
@@ -248,7 +331,7 @@ describe("receiveStock", () => {
   });
 
   it("records evidence URLs on the receipt and movement", async () => {
-    const receipt = await repo.receiveStock({
+    const receipt = await receiveDirect(repo, {
       locationId: "loc-wh",
       actor: "logi@mwell",
       evidenceUrls: ["blob:photo-1"],
@@ -393,7 +476,7 @@ describe("recordReturn", () => {
       actor: "ops@mwell",
     });
     await repo.issue({ allocationId: alloc.id, actor: "ops@mwell" });
-    await repo.recordReturn({
+    await returnThroughQuality(repo, {
       source: "customer",
       eventId: "e1",
       actor: "ops@mwell",
@@ -423,7 +506,7 @@ describe("recordReturn", () => {
       actor: "ops@mwell",
     });
     await repo.issue({ allocationId: alloc.id, actor: "ops@mwell" });
-    await repo.recordReturn({
+    await returnThroughQuality(repo, {
       source: "customer",
       eventId: "e1",
       allocationId: alloc.id,
@@ -445,7 +528,7 @@ describe("recordReturn", () => {
 
   it("keeps a serialized allocation issued until every unit is returned", async () => {
     // Add a second unit so we can allocate two.
-    await repo.receiveStock({
+    await receiveAccepted(repo, {
       locationId: "loc-wh",
       actor: "logi@mwell",
       lines: [{ productId: "ring", quantity: 1, serialNumbers: ["SN2"] }],
@@ -462,7 +545,7 @@ describe("recordReturn", () => {
       serialNumbers: ["SN1", "SN2"],
     });
     // Return only one unit — allocation must stay issued.
-    await repo.recordReturn({
+    await returnThroughQuality(repo, {
       source: "customer",
       eventId: "e1",
       allocationId: alloc.id,
@@ -481,7 +564,7 @@ describe("recordReturn", () => {
       "issued",
     );
     // Return the last unit — now it closes.
-    await repo.recordReturn({
+    await returnThroughQuality(repo, {
       source: "customer",
       eventId: "e1",
       allocationId: alloc.id,
@@ -509,7 +592,7 @@ describe("recordReturn", () => {
       actor: "ops@mwell",
     });
     await repo.issue({ allocationId: alloc.id, actor: "ops@mwell" });
-    await repo.recordReturn({
+    await returnThroughQuality(repo, {
       source: "customer",
       eventId: "e1",
       actor: "ops@mwell",
@@ -536,7 +619,7 @@ describe("recordReturn", () => {
       actor: "ops@mwell",
     });
     await repo.issue({ allocationId: alloc.id, actor: "ops@mwell" });
-    await repo.recordReturn({
+    await returnThroughQuality(repo, {
       source: "customer",
       eventId: "e1",
       actor: "ops@mwell",
@@ -546,10 +629,9 @@ describe("recordReturn", () => {
           quantity: 1,
           reason: "never came back",
           serialNumber: "SN1",
-          disposition: "lost",
         },
       ],
-    });
+    }, ["unavailable"]);
     const data = await repo.getData();
     expect(data.units.find((u) => u.serialNumber === "SN1")!.status).toBe(
       "lost",
@@ -566,7 +648,7 @@ describe("recordReturn", () => {
       actor: "ops@mwell",
     });
     await repo.issue({ allocationId: alloc.id, actor: "ops@mwell" });
-    await repo.recordReturn({
+    await returnThroughQuality(repo, {
       source: "vendor",
       eventId: "e1",
       actor: "ops@mwell",
@@ -576,10 +658,9 @@ describe("recordReturn", () => {
           quantity: 1,
           reason: "RMA",
           serialNumber: "SN1",
-          disposition: "vendor_return",
         },
       ],
-    });
+    }, ["vendor_return"]);
     const data = await repo.getData();
     expect(data.units.find((u) => u.serialNumber === "SN1")!.status).toBe(
       "returned",
@@ -588,8 +669,8 @@ describe("recordReturn", () => {
     expect(availableForProduct(state, "ring")).toBe(0);
   });
 
-  it("records the disposition in the movement reason", async () => {
-    await repo.recordReturn({
+  it("records quarantine intake before Quality sets the final line disposition", async () => {
+    await returnThroughQuality(repo, {
       source: "customer",
       actor: "ops@mwell",
       lines: [
@@ -597,17 +678,17 @@ describe("recordReturn", () => {
           productId: "shirt",
           quantity: 2,
           reason: "wrong size",
-          disposition: "lost",
         },
       ],
-    });
+    }, ["unavailable"]);
     const data = await repo.getData();
     const mv = data.movements.find((m) => m.type === "return")!;
-    expect(mv.reason).toBe("wrong size (lost)");
+    expect(mv.reason).toBe("wrong size (quarantine)");
+    expect(data.returns[0]!.lines[0]!.disposition).toBe("lost");
   });
 
   it("adds non-serialized quantity back to stock when restocking", async () => {
-    await repo.recordReturn({
+    await returnThroughQuality(repo, {
       source: "customer",
       actor: "ops@mwell",
       lines: [{ productId: "shirt", quantity: 4, reason: "wrong size" }],
@@ -617,7 +698,7 @@ describe("recordReturn", () => {
   });
 
   it("restocks into the specified location", async () => {
-    await repo.recordReturn({
+    await returnThroughQuality(repo, {
       source: "customer",
       actor: "ops@mwell",
       lines: [
@@ -635,7 +716,7 @@ describe("recordReturn", () => {
   });
 
   it("does not restock non-serialized quantity when lost or vendor_return", async () => {
-    await repo.recordReturn({
+    await returnThroughQuality(repo, {
       source: "customer",
       actor: "ops@mwell",
       lines: [
@@ -643,18 +724,213 @@ describe("recordReturn", () => {
           productId: "shirt",
           quantity: 4,
           reason: "damaged",
-          disposition: "lost",
         },
         {
           productId: "shirt",
           quantity: 3,
           reason: "recall",
-          disposition: "vendor_return",
+        },
+      ],
+    }, ["unavailable", "vendor_return"]);
+    const state = await repo.getStockState();
+    expect(availableForProduct(state, "shirt")).toBe(20);
+  });
+});
+
+describe("return Quality completion", () => {
+  it("accepts quarantined stock into availability and completes its Quality task", async () => {
+    const returned = await repo.recordReturn({
+      source: "customer",
+      actor: "returns@mwell",
+      lines: [
+        {
+          productId: "shirt",
+          quantity: 2,
+          reason: "Unopened surplus",
+          locationId: "loc-cebu",
+          binId: "bin-a",
         },
       ],
     });
-    const state = await repo.getStockState();
-    expect(availableForProduct(state, "shirt")).toBe(20);
+
+    expect(availableForProduct(await repo.getStockState(), "shirt", "loc-cebu")).toBe(0);
+    expect((await repo.listWarehouseTasks({})).rows).toEqual(
+      expect.arrayContaining([expect.objectContaining({ sourceId: returned.id })]),
+    );
+
+    await repo.inspectQuality({
+      idempotencyKey: "quality-return-accepted-001",
+      sourceType: "return",
+      sourceId: returned.id,
+      productId: "shirt",
+      binId: "bin-a",
+      quantity: 2,
+      disposition: "accepted",
+    });
+
+    const data = await repo.getData();
+    expect(data.returns[0]!.lines[0]!.disposition).toBe("restock");
+    expect(availableForProduct(await repo.getStockState(), "shirt", "loc-cebu")).toBe(2);
+    expect((await repo.listWarehouseTasks({})).rows).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ sourceId: returned.id })]),
+    );
+  });
+
+  it("advances held returns to a hold task and releases them into availability", async () => {
+    const returned = await repo.recordReturn({
+      source: "customer",
+      actor: "returns@mwell",
+      lines: [
+        {
+          productId: "shirt",
+          quantity: 2,
+          reason: "Seal requires review",
+          locationId: "loc-wh",
+          binId: "bin-a",
+        },
+      ],
+    });
+    await repo.inspectQuality({
+      idempotencyKey: "quality-return-held-0001",
+      sourceType: "return",
+      sourceId: returned.id,
+      productId: "shirt",
+      binId: "bin-a",
+      quantity: 2,
+      disposition: "hold",
+      reason: "Awaiting supervisor review",
+      evidenceUrls: ["memory/hold.jpg"],
+    });
+
+    const hold = (await repo.listHolds({ status: "active" })).rows[0]!;
+    expect((await repo.getData()).returns[0]!.lines[0]!.disposition).toBe("hold");
+    expect(availableForProduct(await repo.getStockState(), "shirt", "loc-wh", "bin-a")).toBe(0);
+    expect(
+      (await repo.listInventoryPositions({})).rows.find(
+        (row) => row.productId === "shirt" && row.binId === "bin-a",
+      ),
+    ).toMatchObject({ onHand: 2, held: 2, unavailable: 0, available: 0 });
+    expect((await repo.listWarehouseTasks({})).rows).toEqual(
+      expect.arrayContaining([expect.objectContaining({ sourceId: hold.id })]),
+    );
+    expect((await repo.listWarehouseTasks({})).rows).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ sourceId: returned.id })]),
+    );
+
+    await repo.releaseHold({
+      idempotencyKey: "release-return-held-0001",
+      holdId: hold.id,
+      targetDisposition: "accepted",
+      reason: "Supervisor approved putaway",
+      evidenceUrls: ["memory/release.jpg"],
+    });
+
+    expect((await repo.getData()).returns[0]!.lines[0]!.disposition).toBe("restock");
+    expect(availableForProduct(await repo.getStockState(), "shirt", "loc-wh", "bin-a")).toBe(2);
+    expect((await repo.listWarehouseTasks({})).rows).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ sourceId: hold.id })]),
+    );
+  });
+
+  it("advances vendor-return stock from quarantine into supplier custody", async () => {
+    const allocation = await repo.reserve({
+      eventId: "e1",
+      productId: "ring",
+      quantity: 1,
+      actor: "ops@mwell",
+    });
+    await repo.issue({ allocationId: allocation.id, actor: "ops@mwell" });
+    const returned = await repo.recordReturn({
+      source: "customer",
+      actor: "returns@mwell",
+      lines: [
+        {
+          productId: "ring",
+          quantity: 1,
+          reason: "Manufacturer defect",
+          serialNumber: "SN1",
+          locationId: "loc-wh",
+          binId: "bin-a",
+        },
+      ],
+    });
+    await repo.inspectQuality({
+      idempotencyKey: "quality-return-vendor-001",
+      sourceType: "return",
+      sourceId: returned.id,
+      productId: "ring",
+      binId: "bin-a",
+      serialNumber: "SN1",
+      quantity: 1,
+      disposition: "vendor_return",
+      reason: "Confirmed manufacturer defect",
+      evidenceUrls: ["memory/defect.jpg"],
+    });
+
+    const hold = (await repo.listHolds({ status: "active" })).rows[0]!;
+    expect((await repo.getData()).returns[0]!.lines[0]!.disposition).toBe("vendor_return");
+    expect((await repo.listWarehouseTasks({})).rows).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ sourceId: returned.id })]),
+    );
+
+    await repo.createVendorReturn({
+      idempotencyKey: "vendor-return-custody-001",
+      holdId: hold.id,
+      supplierId: "sup-1",
+      reason: "Return authorized by supplier",
+      reference: "RMA-RETURN-001",
+      evidenceUrls: ["memory/rma.pdf"],
+    });
+
+    expect((await repo.getData()).units.find((unit) => unit.serialNumber === "SN1")!.status).toBe(
+      "vendor_return",
+    );
+    expect((await repo.listWarehouseTasks({})).rows).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ sourceId: hold.id })]),
+    );
+  });
+
+  it("writes off a lost return and completes Quality without an endless hold", async () => {
+    const allocation = await repo.reserve({
+      eventId: "e1",
+      productId: "ring",
+      quantity: 1,
+      actor: "ops@mwell",
+    });
+    await repo.issue({ allocationId: allocation.id, actor: "ops@mwell" });
+    const returned = await repo.recordReturn({
+      source: "customer",
+      actor: "returns@mwell",
+      lines: [
+        {
+          productId: "ring",
+          quantity: 1,
+          reason: "Empty package received",
+          serialNumber: "SN1",
+          locationId: "loc-wh",
+        },
+      ],
+    });
+
+    await repo.inspectQuality({
+      idempotencyKey: "quality-return-lost-0001",
+      sourceType: "return",
+      sourceId: returned.id,
+      productId: "ring",
+      serialNumber: "SN1",
+      quantity: 1,
+      disposition: "unavailable",
+      reason: "Unit confirmed missing",
+      evidenceUrls: ["memory/empty-package.jpg"],
+    });
+
+    const data = await repo.getData();
+    expect(data.returns[0]!.lines[0]!.disposition).toBe("lost");
+    expect(data.units.find((unit) => unit.serialNumber === "SN1")!.status).toBe("lost");
+    expect((await repo.listHolds({ status: "active" })).rows).toHaveLength(0);
+    expect((await repo.listWarehouseTasks({})).rows).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ sourceId: returned.id })]),
+    );
   });
 });
 
@@ -1021,24 +1297,29 @@ describe("receiveAgainstPO", () => {
     });
     expect(updated.status).toBe("received");
 
-    const state = await repo.getStockState();
-    expect(availableForProduct(state, "ring")).toBe(3); // 1 seed + 2 received
+    expect(availableForProduct(await repo.getStockState(), "ring")).toBe(1);
+    const receipt = (await repo.getData()).receipts.find(
+      (row) => row.procurementPoId === po.id,
+    )!;
+    await acceptReceipt(repo, receipt);
+    expect(availableForProduct(await repo.getStockState(), "ring")).toBe(3);
   });
 
-  it("caps received quantity at the ordered amount", async () => {
+  it("rejects a PO overage until an evidenced exception path handles it", async () => {
     const po = await repo.createPurchaseOrder({
       supplierId: "sup-1",
       actor: "proc@mwell",
       lines: [{ productId: "shirt", quantityOrdered: 5 }],
     });
-    const updated = await repo.receiveAgainstPO({
-      poId: po.id,
-      locationId: "loc-wh",
-      actor: "logi@mwell",
-      lines: [{ productId: "shirt", quantityReceived: 12 }],
-    });
-    expect(updated.lines[0]!.quantityReceived).toBe(5);
-    expect(updated.status).toBe("received");
+    await expect(
+      repo.receiveAgainstPO({
+        poId: po.id,
+        locationId: "loc-wh",
+        actor: "logi@mwell",
+        lines: [{ productId: "shirt", quantityReceived: 12 }],
+      }),
+    ).rejects.toThrow(/overage.*exception/i);
+    expect((await repo.getData()).purchaseOrders[0]!.lines[0]!.quantityReceived).toBe(0);
   });
 
   it("rejects receiving a product that is not on the PO", async () => {
@@ -1094,7 +1375,7 @@ describe("deleteLocation", () => {
 
 describe("storage areas & bins", () => {
   it("puts received stock away into a bin", async () => {
-    await repo.receiveStock({
+    await receiveAccepted(repo, {
       locationId: "loc-wh",
       actor: "logi@mwell",
       lines: [{ productId: "shirt", quantity: 6, binId: "bin-a" }],
@@ -1109,7 +1390,7 @@ describe("storage areas & bins", () => {
   });
 
   it("relocates non-serialized stock between bins", async () => {
-    await repo.receiveStock({
+    await receiveAccepted(repo, {
       locationId: "loc-wh",
       actor: "a",
       lines: [{ productId: "shirt", quantity: 10, binId: "bin-a" }],
@@ -1170,7 +1451,7 @@ describe("storage areas & bins", () => {
     });
     expect(updated.code).toBe("WH-C-02");
     // put stock in, then delete — stock falls back to the general area
-    await repo.receiveStock({
+    await receiveAccepted(repo, {
       locationId: "loc-wh",
       actor: "a",
       lines: [{ productId: "shirt", quantity: 3, binId: created.id }],
@@ -1209,7 +1490,7 @@ describe("storage areas & bins", () => {
   });
 
   it("restocks a returned item into a specific bin", async () => {
-    await repo.recordReturn({
+    await returnThroughQuality(repo, {
       source: "customer",
       actor: "ops@mwell",
       lines: [
@@ -1217,7 +1498,6 @@ describe("storage areas & bins", () => {
           productId: "shirt",
           quantity: 2,
           reason: "wrong size",
-          disposition: "restock",
           locationId: "loc-wh",
           binId: "bin-a",
         },
@@ -1262,8 +1542,8 @@ describe("integrity guards (v7)", () => {
             productId: "ring",
             quantity: 1,
             reason: "typo serial",
-            disposition: "restock",
             serialNumber: "DOES-NOT-EXIST",
+            locationId: "loc-wh",
           },
         ],
       }),
@@ -1272,12 +1552,12 @@ describe("integrity guards (v7)", () => {
 
   it("issues non-serialized stock across multiple bins without going negative", async () => {
     // Split shirt stock across two bins, then issue more than any single bin.
-    await repo.receiveStock({
+    await receiveAccepted(repo, {
       locationId: "loc-wh",
       actor: "logi@mwell",
       lines: [{ productId: "shirt", quantity: 3, binId: "bin-a" }],
     });
-    await repo.receiveStock({
+    await receiveAccepted(repo, {
       locationId: "loc-wh",
       actor: "logi@mwell",
       lines: [{ productId: "shirt", quantity: 3, binId: "bin-b" }],
@@ -1306,7 +1586,7 @@ describe("persistence", () => {
       setItem: (k: string, v: string) => void store.set(k, v),
     };
     const r1 = new InMemoryRepository(miniData(), { storage });
-    await r1.receiveStock({
+    await receiveAccepted(r1, {
       locationId: "loc-wh",
       actor: "a",
       lines: [{ productId: "shirt", quantity: 10 }],

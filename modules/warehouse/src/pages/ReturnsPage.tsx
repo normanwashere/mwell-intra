@@ -23,10 +23,11 @@ import {
 import { EvidenceGallery } from '@/components/EvidenceGallery';
 
 const DISPOSITION_META: Record<
-  'quarantine' | 'restock' | 'lost' | 'vendor_return',
+  'quarantine' | 'hold' | 'restock' | 'lost' | 'vendor_return',
   { label: string; tone: Tone }
 > = {
   quarantine: { label: 'Quarantined', tone: 'amber' },
+  hold: { label: 'Quality hold', tone: 'amber' },
   restock: { label: 'Restocked', tone: 'emerald' },
   lost: { label: 'Written off', tone: 'rose' },
   vendor_return: { label: 'To vendor', tone: 'amber' },

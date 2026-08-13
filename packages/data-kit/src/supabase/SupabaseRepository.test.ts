@@ -12,6 +12,12 @@ import {
   supplierToRow,
 } from "./mappers";
 
+const DIRECT_RECEIPT_EXCEPTION = {
+  type: "non_po" as const,
+  reason: "Approved live receipt outside the PO workflow",
+  evidenceUrls: ["evidence/approved-receipt-exception.pdf"],
+};
+
 // Minimal mock: records rpc() calls and returns a row the mappers can read.
 // Table rows are returned in the snake_case shape the rowTo* mappers expect.
 //
@@ -82,6 +88,8 @@ function makeMockClient(
     courier_or_driver: r.courierOrDriver ?? null,
     lines: r.lines,
     evidence_urls: r.evidenceUrls ?? [],
+    receipt_exception: r.receiptException ?? null,
+    quality_status: r.qualityStatus ?? "pending",
     actor: r.actor,
     created_at: r.createdAt,
   }));
@@ -876,6 +884,7 @@ describe("SupabaseRepository W1 control boundary", () => {
           deviceTestStatus: "passed",
         },
       ],
+      receiptException: DIRECT_RECEIPT_EXCEPTION,
       actor: "untrusted-client-actor",
     });
 
@@ -910,6 +919,7 @@ describe("SupabaseRepository W1 control boundary", () => {
           lotCode: "LOT-LIVE-001",
         },
       ],
+      receiptException: DIRECT_RECEIPT_EXCEPTION,
     });
 
     const payload = calls.find((item) => item.fn === "receive_stock")!.payload;
@@ -942,6 +952,7 @@ describe("SupabaseRepository W1 control boundary", () => {
       idempotencyKey: "receive-lost-response-20260813-001",
       locationId: "loc-wh",
       lines: [{ productId: product.id, quantity: 4 }],
+      receiptException: DIRECT_RECEIPT_EXCEPTION,
       actor: "client-user",
     });
 
@@ -957,6 +968,8 @@ describe("SupabaseRepository W1 control boundary", () => {
       locationId: "loc-wh",
       lines: [{ productId: product.id, quantity: 4 }],
       evidenceUrls: [],
+      receiptException: DIRECT_RECEIPT_EXCEPTION,
+      qualityStatus: "pending" as const,
       actor: "server-user",
       createdAt: "2026-08-13T02:00:00.000Z",
     };
@@ -968,6 +981,7 @@ describe("SupabaseRepository W1 control boundary", () => {
       idempotencyKey: "receive-uncertain-20260813-001",
       locationId: "loc-wh",
       lines: [{ productId: product.id, quantity: 4 }],
+      receiptException: DIRECT_RECEIPT_EXCEPTION,
       actor: "client-user",
     });
 
@@ -983,6 +997,8 @@ describe("SupabaseRepository W1 control boundary", () => {
       locationId: "loc-wh",
       lines: [{ productId: product.id, quantity: 4 }],
       evidenceUrls: [],
+      receiptException: DIRECT_RECEIPT_EXCEPTION,
+      qualityStatus: "pending",
       actor: "server-user",
       createdAt: "2026-08-13T02:00:00.000Z",
     });
@@ -993,6 +1009,7 @@ describe("SupabaseRepository W1 control boundary", () => {
         idempotencyKey: "receive-mismatch-20260813-001",
         locationId: "loc-wh",
         lines: [{ productId: product.id, quantity: 5 }],
+        receiptException: DIRECT_RECEIPT_EXCEPTION,
         actor: "client-user",
       }),
     ).rejects.toThrow("Idempotency key was reused with a different payload.");
@@ -1006,6 +1023,8 @@ describe("SupabaseRepository W1 control boundary", () => {
       locationId: "loc-wh",
       lines: [{ quantity: 4, productId: product.id }],
       evidenceUrls: [],
+      receiptException: DIRECT_RECEIPT_EXCEPTION,
+      qualityStatus: "pending",
       actor: "server-user",
       createdAt: "2026-08-13T02:00:00.000Z",
     });
@@ -1015,6 +1034,7 @@ describe("SupabaseRepository W1 control boundary", () => {
       idempotencyKey: "receive-jsonb-order-20260813-001",
       locationId: "loc-wh",
       lines: [{ productId: product.id, quantity: 4 }],
+      receiptException: DIRECT_RECEIPT_EXCEPTION,
       actor: "client-user",
     });
 
@@ -1159,6 +1179,7 @@ describe("SupabaseRepository concurrency-safe payloads (warehouse.* v8 RPCs)", (
     await repo.receiveStock({
       locationId: "loc-wh",
       lines: [{ productId: token.id, quantity: 7 }],
+      receiptException: DIRECT_RECEIPT_EXCEPTION,
       actor: "test",
     });
     const call = calls.find((c) => c.fn === "receive_stock")!;
@@ -1212,7 +1233,7 @@ describe("SupabaseRepository concurrency-safe payloads (warehouse.* v8 RPCs)", (
     expect(call.payload.cycle_count).not.toHaveProperty("actor");
   });
 
-  it("recordReturn accumulates restock deltas + registers evidence-carrying return row", async () => {
+  it("recordReturn registers quarantine custody and its additive physical delta", async () => {
     const { client, calls } = makeMockClient(seed);
     const repo = new SupabaseRepository(client);
     await repo.recordReturn({
@@ -1223,7 +1244,7 @@ describe("SupabaseRepository concurrency-safe payloads (warehouse.* v8 RPCs)", (
           productId: token.id,
           quantity: 3,
           reason: "unused",
-          disposition: "restock",
+          locationId: "loc-wh",
         },
       ],
       evidenceUrls: ["evidence/return/abc.jpg"],
@@ -1236,6 +1257,12 @@ describe("SupabaseRepository concurrency-safe payloads (warehouse.* v8 RPCs)", (
     const ret = call.payload.return as Record<string, unknown>;
     expect(ret.event_id).toBe("evt-makati");
     expect(ret.evidence_urls).toEqual(["evidence/return/abc.jpg"]);
+    expect(ret.lines).toEqual([
+      expect.objectContaining({
+        locationId: "loc-wh",
+        disposition: "quarantine",
+      }),
+    ]);
   });
 
   it("createPurchaseOrder + cancelPurchaseOrder + receiveAgainstPO route through their RPCs", async () => {

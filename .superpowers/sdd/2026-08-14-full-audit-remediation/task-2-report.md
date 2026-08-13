@@ -2,7 +2,7 @@
 
 ## Status
 
-Implemented in `modules/warehouse` and `packages/data-kit`, preserving the pre-existing uncommitted Warehouse work in this fork.
+Stabilized in `modules/warehouse` and `packages/data-kit`, preserving unrelated uncommitted work in this fork.
 
 ## Delivered
 
@@ -11,6 +11,7 @@ Implemented in `modules/warehouse` and `packages/data-kit`, preserving the pre-e
 - Receiving actions are certification-gated in both direct receiving and PO receiving surfaces.
 - Return intake is quarantine-first: operators choose physical custody but cannot choose a final disposition; returned stock is unavailable pending Quality action.
 - Quality tasks are generated for pending receipts and returns, with actionable source links.
+- Return Quality completion now resolves the quarantined line and stock state for accepted, held, vendor-return, and lost outcomes. Hold release and vendor handoff advance custody without leaving the original return inspection task open.
 - Warehouse operators can reach Scan, Tasks, Inventory, Allocations, Cycle Counts, Quality Control, and Exceptions from navigation.
 
 ## TDD evidence
@@ -23,20 +24,18 @@ pnpm.cmd --filter @intra/data-kit test -- --reporter=verbose -t "rejects a direc
 
 It failed because direct receiving resolved without an exception and PO receipts immediately increased availability.
 
-GREEN verification completed:
+GREEN verification completed on Node `v22.23.1`:
 
 ```text
-packages/data-kit: tsc --noEmit -p tsconfig.json
-packages/data-kit: vitest inMemoryRepository.test.ts -t "rejects a direct receipt|creates a pending inspection receipt"
-modules/warehouse: tsc --noEmit -p tsconfig.json
-modules/warehouse: vitest ReceivingPage.test.tsx
-modules/warehouse: vitest ReturnsPage.test.tsx
-modules/warehouse: vitest TasksPage.test.tsx
-modules/warehouse: vitest modules.test.ts
-modules/warehouse: vitest AppShell.test.tsx
+packages/data-kit full suite: 15 files passed, 201 tests passed
+packages/data-kit focused repository suites: 2 files passed, 116 tests passed
+packages/data-kit typecheck: passed
+modules/warehouse focused Quality/Returns/Tasks suites: 3 files passed, 16 tests passed
+modules/warehouse focused Quality/Returns/Tasks/Fulfillment suites: 4 files passed, 29 tests passed
+modules/warehouse typecheck: passed
 ```
 
-Focused results included 2 data-kit contract tests, all 15 Receiving page tests, 6 Returns page tests, 2 Tasks page tests, 18 navigation metadata tests, and 14 AppShell navigation tests passing.
+The pre-fix full Warehouse run passed 360 of 366 tests; its six failures were all stale Quality fixtures. After migrating those fixtures, all six affected cases pass in the focused suite.
 
 ## Changed paths
 
@@ -50,6 +49,5 @@ Focused results included 2 data-kit contract tests, all 15 Receiving page tests,
 
 ## Concerns
 
-- The broader historical `inMemoryRepository.test.ts` run still has 28 failures because older fixtures expect direct receipts to become available immediately and returns to be operator-disposed. The focused new-policy tests pass; those legacy cases should be migrated in a follow-up rather than weakening custody controls.
 - Live Supabase activation depends on the already-planned schema/RPC support for `pending_inspection`, `receipt_exception`, and unavailable stock. Migrations were explicitly out of scope for this task, so no migration was edited or applied.
 - No Playwright spec was added because the existing end-to-end suite is in `apps/shell`, which was explicitly outside the permitted edit scope. The Warehouse unit workflow coverage above verifies the desktop component behavior; mobile end-to-end coverage remains for the integration task.
