@@ -1,10 +1,22 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useWarehouse } from '@/app/store';
 import type { WarehouseTask } from '@intra/data-kit';
 import { Badge, EmptyState, PageHeader, SegmentedControl } from '@/components/ui';
 import { Icon } from '@/components/Icon';
 
 type TaskStatus = WarehouseTask['status'];
+
+const sourcePathForTask = (task: WarehouseTask) => {
+  const path = task.type === 'quality'
+    ? '/quality'
+    : task.type === 'cycle_count'
+      ? '/cycle-counts'
+      : task.type === 'putaway'
+        ? '/storage'
+        : '/exceptions';
+  return `${path}?source=${encodeURIComponent(task.sourceId)}`;
+};
 
 export function TasksPage() {
   const { loadWarehouseTasks } = useWarehouse();
@@ -53,6 +65,12 @@ export function TasksPage() {
                 <span className="block truncate text-sm font-semibold text-ink">{task.title}</span>
                 <span className="block text-xs text-faint">{task.dueAt ? `Due ${task.dueAt.slice(0, 10)}` : 'No due date'}</span>
               </span>
+              <Link
+                to={sourcePathForTask(task)}
+                className="btn-ghost btn-sm shrink-0"
+              >
+                Open {task.type === 'cycle_count' ? 'count' : task.type} source
+              </Link>
               <Badge tone={status === 'blocked' ? 'amber' : status === 'completed' ? 'emerald' : 'brand'}>{status}</Badge>
             </li>
           ))}

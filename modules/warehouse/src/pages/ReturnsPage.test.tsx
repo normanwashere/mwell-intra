@@ -2,9 +2,19 @@ import { describe, it, expect } from "vitest";
 import { screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ReturnsPage } from "./ReturnsPage";
-import { renderWithProviders } from "@/test/renderWithProviders";
+import { makeRepo, renderWithProviders } from "@/test/renderWithProviders";
 
 describe("ReturnsPage", () => {
+  it("records physical returns into quarantine without exposing a final disposition", async () => {
+    renderWithProviders(<ReturnsPage />);
+
+    expect(
+      await screen.findByText(/quality control chooses the final disposition/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Disposition")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Quarantine location")).toBeInTheDocument();
+  });
+
   it("keeps the quality handoff only when the live returns bundle can open it", async () => {
     renderWithProviders(<ReturnsPage />, {
       role: "warehouse_operator",
@@ -28,6 +38,8 @@ describe("ReturnsPage", () => {
       await screen.findByText(/recent returns/i);
 
       await user.selectOptions(screen.getByLabelText("Product"), "shirt-l");
+      await user.selectOptions(screen.getByLabelText("Quarantine location"), "loc-wh");
+      await user.selectOptions(screen.getByLabelText("Quarantine bin"), "bin-pasig-a1");
       const qty = screen.getByLabelText("Quantity");
       await user.clear(qty);
       await user.type(qty, "3");
@@ -47,7 +59,7 @@ describe("ReturnsPage", () => {
         screen.getByRole("link", { name: /open quality queue/i }),
       ).toBeInTheDocument();
       expect(
-        within(screen.getByLabelText("Returns")).getAllByText("Restocked")
+        within(screen.getByLabelText("Returns")).getAllByText("Quarantined")
           .length,
       ).toBeGreaterThan(0);
     },
@@ -70,6 +82,8 @@ describe("ReturnsPage", () => {
       screen.getByLabelText("Serial number"),
       "ECG-RING-10-SN0001",
     );
+    await user.selectOptions(screen.getByLabelText("Quarantine location"), "loc-wh");
+    await user.selectOptions(screen.getByLabelText("Quarantine bin"), "bin-pasig-a1");
     expect(
       screen.getByRole("button", { name: /record return/i }),
     ).toBeEnabled();
@@ -94,5 +108,27 @@ describe("ReturnsPage", () => {
     expect(screen.getByLabelText("Serial number")).toHaveValue(
       "SMART-WATCH-VIP001",
     );
+  });
+
+  it("receives a return from a specific event into a selected bin", async () => {
+    const repo = makeRepo();
+    const user = userEvent.setup();
+    renderWithProviders(<ReturnsPage />, { role: "warehouse_operator", repo });
+    await screen.findByText(/recent returns/i);
+
+    await user.selectOptions(screen.getByLabelText("Return source"), "event");
+    await user.selectOptions(screen.getByLabelText("Return from event"), "evt-makati");
+    await user.selectOptions(screen.getByLabelText("Product"), "shirt-l");
+    await user.selectOptions(screen.getByLabelText("Quarantine location"), "loc-wh");
+    await user.selectOptions(screen.getByLabelText("Quarantine bin"), "bin-pasig-a1");
+    await user.click(screen.getByRole("button", { name: "Record return" }));
+
+    await waitFor(async () => {
+      expect((await repo.getData()).returns.at(-1)).toMatchObject({
+        source: "event",
+        eventId: "evt-makati",
+        lines: [expect.objectContaining({ locationId: "loc-wh", binId: "bin-pasig-a1" })],
+      });
+    });
   });
 });

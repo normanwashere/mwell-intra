@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useSession } from '@intra/auth';
+import { CertifiedAction } from '@intra/learning';
 import { useWarehouse } from '@/app/store';
 import {
   poProgress,
@@ -641,9 +642,18 @@ export function PurchaseOrdersPage() {
           receivePO ? `${poNo(receivePO)} · ${supplierName(receivePO.supplierId)}` : undefined
         }
         footer={
-          <button type="button" className="btn-primary w-full" onClick={() => void submitReceive()}>
-            Confirm receipt
-          </button>
+          <CertifiedAction module="warehouse" capability="receive_stock">
+            {({ execute, pending }) => (
+              <button
+                type="button"
+                className="btn-primary w-full"
+                onClick={() => void execute(submitReceive)}
+                disabled={pending}
+              >
+                Confirm receipt
+              </button>
+            )}
+          </CertifiedAction>
         }
       >
         {receivePO && (

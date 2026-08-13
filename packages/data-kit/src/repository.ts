@@ -14,6 +14,7 @@ import type {
   Profile,
   PurchaseOrder,
   Receipt,
+  ReceiptException,
   ReceiptLine,
   ReturnDisposition,
   ReturnRecord,
@@ -118,6 +119,11 @@ export interface ReceiveStockInput {
     binId?: string;
   }[];
   evidenceUrls?: string[];
+  /**
+   * Direct receipt is never a normal receiving path. A non-PO or overage
+   * intake must carry its reason and durable evidence for later review.
+   */
+  receiptException?: ReceiptException;
   actor: string;
 }
 

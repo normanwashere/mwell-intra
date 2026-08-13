@@ -36,7 +36,7 @@ export function warehouseRolePresentation(
       return {
         label: "Operations Associate",
         description:
-          "Demand intake plus routine receiving, putaway, issue, returns, and count work.",
+          "Demand intake plus routine receiving, putaway, pick and pack, issue, returns, and count work.",
       };
     }
     const presentations = [...roles]
@@ -58,7 +58,7 @@ export function warehouseRolePresentation(
     return {
       label: "Warehouse Operator",
       description:
-        "Routine receiving, putaway, issue, returns, and count work.",
+        "Routine receiving, putaway, pick and pack, issue, returns, and count work.",
     };
   }
   if (role === "warehouse_supervisor" || role === "logistics_supervisor") {
@@ -510,7 +510,10 @@ const OPERATOR_MODULES: ModuleDef[] = [
   },
   {
     ...MODULES.find((module) => module.id === "fulfillment")!,
-    label: "Pick or issue",
+    label: "Pick & Pack",
+    shortLabel: "Pick/Pack",
+    description:
+      "Allocate assigned demand, scan products, pack orders, and hand off for controlled release.",
     group: "operate",
   },
   {
@@ -518,6 +521,15 @@ const OPERATOR_MODULES: ModuleDef[] = [
     label: "Returns and counts",
     group: "operate",
   },
+  ...[
+    "scan",
+    "tasks",
+    "inventory",
+    "allocations",
+    "cycle-counts",
+    "quality",
+    "exceptions",
+  ].map((id) => MODULES.find((module) => module.id === id)!),
 ];
 
 export function modulesForRole(role: WarehouseUiRole): ModuleDef[] {

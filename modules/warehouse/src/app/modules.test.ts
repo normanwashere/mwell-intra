@@ -12,16 +12,41 @@ import {
 import { ROLE_LIST } from "@/auth/roles";
 
 describe("warehouse navigation metadata", () => {
-  it("gives the canonical Operator only the four routine floor flows plus Home", () => {
+  it("gives the canonical Operator routine floor flows plus recovery tools", () => {
     expect(
       modulesForRole("warehouse_operator").map((module) => module.label),
-    ).toEqual([
+    ).toEqual(
+      expect.arrayContaining([
       "Home",
       "Receive and inspect",
       "Put away",
-      "Pick or issue",
+      "Pick & Pack",
       "Returns and counts",
-    ]);
+      "Scan",
+      "Tasks",
+      "Inventory",
+      "Allocations",
+      "Cycle Counts",
+      "Quality Control",
+      "Exceptions",
+      ]),
+    );
+  });
+
+  it("keeps every operator floor recovery route reachable", () => {
+    expect(
+      modulesForRole("warehouse_operator").map((module) => module.id),
+    ).toEqual(
+      expect.arrayContaining([
+        "scan",
+        "tasks",
+        "inventory",
+        "allocations",
+        "cycle-counts",
+        "quality",
+        "exceptions",
+      ]),
+    );
   });
 
   it("keeps Operations separate from the canonical warehouse floor roles", () => {
@@ -48,7 +73,7 @@ describe("warehouse navigation metadata", () => {
     ).toEqual({
       label: "Operations Associate",
       description:
-        "Demand intake plus routine receiving, putaway, issue, returns, and count work.",
+        "Demand intake plus routine receiving, putaway, pick and pack, issue, returns, and count work.",
     });
   });
 
@@ -87,12 +112,11 @@ describe("warehouse navigation metadata", () => {
         "imports",
         "operation-routes",
         "approvals",
-        "quality",
       ]),
     );
   });
 
-  it("intersects live Operator capabilities with the canonical four-flow projection", () => {
+  it("intersects live Operator capabilities with the canonical floor projection", () => {
     const capabilities = new Set([
       "view_dashboard",
       "receive_stock",
@@ -111,8 +135,11 @@ describe("warehouse navigation metadata", () => {
       "Home",
       "Receive and inspect",
       "Put away",
-      "Pick or issue",
+      "Pick & Pack",
       "Returns and counts",
+      "Scan",
+      "Allocations",
+      "Quality Control",
     ]);
     expect(visible.map((module) => module.id)).not.toContain("pricing");
     expect(
@@ -121,7 +148,7 @@ describe("warehouse navigation metadata", () => {
         "warehouse_operator",
         (capability) => capabilities.has(capability),
       ).map((module) => module.label),
-    ).toEqual(["Home", "Receive and inspect", "Put away", "Pick or issue"]);
+    ).toEqual(["Home", "Receive and inspect", "Put away", "Pick & Pack"]);
   });
 
   it("hides cross-module destinations when their destination capability is absent", () => {

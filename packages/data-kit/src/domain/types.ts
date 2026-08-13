@@ -99,7 +99,13 @@ export interface Lot {
 }
 
 export type UnitStatus =
-  "in_stock" | "allocated" | "issued" | "returned" | "vendor_return" | "lost";
+  | "in_stock"
+  | "allocated"
+  | "issued"
+  | "pending_inspection"
+  | "returned"
+  | "vendor_return"
+  | "lost";
 
 /** A single serialized physical unit (e.g. one ECG ring). */
 export interface InventoryUnit {
@@ -124,6 +130,8 @@ export interface StockLevel {
   binId?: Id;
   lotId?: Id;
   quantity: number;
+  /** Physical units awaiting independent Quality disposition. */
+  unavailable?: number;
 }
 
 export type MovementType =
@@ -161,9 +169,13 @@ export interface Movement {
   createdAt: string;
 }
 
-export type ReturnSource = "customer" | "vendor";
+export type ReturnSource = "customer" | "vendor" | "event";
 
-export type ReturnDisposition = "restock" | "lost" | "vendor_return";
+export type ReturnDisposition =
+  | "quarantine"
+  | "restock"
+  | "lost"
+  | "vendor_return";
 
 export interface ReturnLine {
   productId: Id;
@@ -238,9 +250,17 @@ export interface Receipt {
   evidenceUrls?: string[];
   operationRouteId?: string;
   procurementPoId?: string;
+  /** Required audit record when stock is received outside an approved PO. */
+  receiptException?: ReceiptException;
   qualityStatus?: "pending" | "partial" | "accepted" | "hold" | "closed";
   actor: string;
   createdAt: string;
+}
+
+export interface ReceiptException {
+  type: "non_po" | "overage";
+  reason: string;
+  evidenceUrls: string[];
 }
 
 export interface CycleCountLine {

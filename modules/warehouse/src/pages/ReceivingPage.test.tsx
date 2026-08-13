@@ -11,7 +11,28 @@ import {
 } from "@/test/renderWithProviders";
 import { availableForProduct } from "@/domain/stock";
 
+async function evidenceDirectReceipt(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(
+    screen.getByLabelText("Exception reason"),
+    "Approved emergency replenishment",
+  );
+  await user.upload(
+    screen.getByLabelText("Capture photo evidence"),
+    new File(["approval"], "approved-exception.jpg", { type: "image/jpeg" }),
+  );
+}
+
 describe("ReceivingPage", () => {
+  it("makes direct receiving an evidenced exception after the PO-first route", async () => {
+    renderWithProviders(<ReceivingPage />);
+
+    expect(
+      await screen.findByText(/approved purchase orders are the standard receiving route/i),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Receipt exception type")).toHaveValue("non_po");
+    expect(screen.getByLabelText("Exception reason")).toBeInTheDocument();
+  });
+
   it("rehydrates only an existing governed practice attempt after reload", async () => {
     const resume = vi.fn().mockResolvedValue(undefined);
     renderWithProviders(<ReceivingPage />, {
@@ -106,7 +127,7 @@ describe("ReceivingPage", () => {
     await user.selectOptions(screen.getByLabelText("Product"), "smart-watch");
     expect(
       within(
-        await screen.findByRole("list", { name: "Receipt lines" }),
+        await screen.findByRole("table", { name: "Receipt lines" }),
       ).getByText(/Smart Watch/i),
     ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /receive .*item/i }));
@@ -176,6 +197,7 @@ describe("ReceivingPage", () => {
       within(lines).getByText(/ECG Ring \(Size 10\)/i),
     ).toBeInTheDocument();
     expect(await screen.findByText(/added ecg ring/i)).toBeInTheDocument();
+    await evidenceDirectReceipt(user);
 
     await user.click(screen.getByRole("button", { name: /receive .*item/i }));
 
@@ -184,7 +206,7 @@ describe("ReceivingPage", () => {
         await repo.getStockState(),
         "ecg-ring-10",
       );
-      expect(after).toBe(before + 1);
+      expect(after).toBe(before);
     });
     expect(await screen.findByText(/received .*item/i)).toBeInTheDocument();
     expect(
@@ -216,6 +238,7 @@ describe("ReceivingPage", () => {
     expect(lineQty).toHaveValue(5);
     await user.click(within(lines).getByRole("button", { name: "Increase" }));
     expect(lineQty).toHaveValue(6);
+    await evidenceDirectReceipt(user);
 
     await user.click(screen.getByRole("button", { name: /receive .*item/i }));
     await waitFor(async () => {
@@ -223,7 +246,7 @@ describe("ReceivingPage", () => {
         await repo.getStockState(),
         "doctor-token",
       );
-      expect(after).toBe(before + 6);
+      expect(after).toBe(before);
     });
   });
 
@@ -240,6 +263,7 @@ describe("ReceivingPage", () => {
 
     await user.selectOptions(screen.getByLabelText("Product"), "doctor-token");
     await user.click(screen.getByRole("button", { name: /add to receipt/i }));
+    await evidenceDirectReceipt(user);
     await user.click(screen.getByRole("button", { name: /receive .*item/i }));
     await screen.findByText(/response was lost/i);
     await user.click(screen.getByRole("button", { name: /receive .*item/i }));
@@ -264,6 +288,7 @@ describe("ReceivingPage", () => {
     await screen.findByText(/receipt lines/i);
     await user.selectOptions(screen.getByLabelText("Product"), "doctor-token");
     await user.click(screen.getByRole("button", { name: /add to receipt/i }));
+    await evidenceDirectReceipt(user);
     await user.click(screen.getByRole("button", { name: /receive .*item/i }));
     await screen.findByText(/response was lost/i);
     const originalKey = receive.mock.calls[0]![0].idempotencyKey;
@@ -279,6 +304,7 @@ describe("ReceivingPage", () => {
     await resumedUser.click(
       screen.getByRole("button", { name: /add to receipt/i }),
     );
+    await evidenceDirectReceipt(resumedUser);
     await resumedUser.click(
       screen.getByRole("button", { name: /receive .*item/i }),
     );
@@ -321,6 +347,7 @@ describe("ReceivingPage", () => {
       screen.getByLabelText("Expiry date for Doctor Token"),
       "2027-12-31",
     );
+    await evidenceDirectReceipt(user);
     await user.click(screen.getByRole("button", { name: /receive .*item/i }));
 
     await waitFor(async () => {
@@ -356,6 +383,7 @@ describe("ReceivingPage", () => {
       screen.getByLabelText("Device test result"),
       "passed",
     );
+    await evidenceDirectReceipt(user);
     await user.click(screen.getByRole("button", { name: /receive .*item/i }));
 
     await waitFor(async () => {

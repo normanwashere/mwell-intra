@@ -32,6 +32,7 @@ const WAREHOUSE_GUIDES = [
   { path: '/inventory', articleId: 'feature-warehouse-inventory', title: 'Inventory browser' },
   { path: '/receiving', articleId: 'feature-warehouse-receiving', title: 'Warehouse receiving' },
   { path: '/allocations', articleId: 'feature-warehouse-allocations', title: 'Stock allocations' },
+  { path: '/fulfillment', articleId: 'feature-warehouse-fulfillment', title: 'Pick and pack fulfillment' },
   { path: '/returns', articleId: 'feature-warehouse-returns', title: 'Warehouse returns' },
   { path: '/storage', articleId: 'feature-warehouse-storage', title: 'Warehouse storage areas and bins' },
   { path: '/events/:id', articleId: 'feature-warehouse-event-detail', title: 'Warehouse event detail' },

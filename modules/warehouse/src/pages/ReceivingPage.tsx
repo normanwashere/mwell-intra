@@ -269,6 +269,10 @@ export function ReceivingPageSurface({
   const [evidence, setEvidence] = useState<string[]>(() => [
     ...(training?.state?.evidenceUrls ?? []),
   ]);
+  const [exceptionType, setExceptionType] = useState<"non_po" | "overage">(
+    "non_po",
+  );
+  const [exceptionReason, setExceptionReason] = useState("");
   const [lastReceiptStaged, setLastReceiptStaged] = useState(false);
   const receiptCommand = useRef<PendingReceiptCommand | null>(
     readPendingReceiptCommand(),
@@ -458,6 +462,11 @@ export function ReceivingPageSurface({
       deliveryReference: deliveryReference.trim() || undefined,
       courierOrDriver: courierOrDriver.trim() || undefined,
       evidenceUrls: evidence,
+      receiptException: {
+        type: exceptionType,
+        reason: exceptionReason.trim(),
+        evidenceUrls: evidence,
+      },
       lines: lines.map((l) => ({
         productId: l.productId,
         quantity: l.quantity,
@@ -516,6 +525,42 @@ export function ReceivingPageSurface({
           ) : undefined
         }
       />
+
+      {!training && (
+        <Card className="space-y-3 border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30">
+          <div>
+            <p className="font-semibold text-ink">
+              Approved purchase orders are the standard receiving route.
+            </p>
+            <p className="mt-1 text-sm text-muted">
+              Use this form only for a non-PO or overage exception. It stays unavailable until Quality accepts it.
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Receipt exception type" htmlFor="receipt-exception-type">
+              <select
+                id="receipt-exception-type"
+                className="input"
+                value={exceptionType}
+                onChange={(event) =>
+                  setExceptionType(event.target.value as "non_po" | "overage")
+                }
+              >
+                <option value="non_po">Non-PO receipt</option>
+                <option value="overage">PO overage</option>
+              </select>
+            </Field>
+            <Field label="Exception reason" htmlFor="receipt-exception-reason">
+              <input
+                id="receipt-exception-reason"
+                className="input"
+                value={exceptionReason}
+                onChange={(event) => setExceptionReason(event.target.value)}
+              />
+            </Field>
+          </div>
+        </Card>
+      )}
 
       {training && (
         <Card className="flex flex-col gap-3 border-cyan-300 bg-cyan-50 dark:border-cyan-800 dark:bg-cyan-950/30 sm:flex-row sm:items-center sm:justify-between">
@@ -594,7 +639,7 @@ export function ReceivingPageSurface({
         </p>
       )}
 
-      <div className="grid min-w-0 gap-4 lg:grid-cols-2 lg:items-start">
+      <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(22rem,0.8fr)_minmax(0,1.45fr)] xl:items-start">
         {/* Left: capture controls — scan-first (WH-11): the scanner card
             leads; where/who selects collapse into a summary chip on mobile. */}
         <div className="min-w-0 space-y-4">
@@ -841,15 +886,25 @@ export function ReceivingPageSurface({
             {lines.length === 0 ? (
               <EmptyState icon="truck" title="Nothing scanned yet" />
             ) : (
-              <ul className="space-y-2" aria-label="Receipt lines">
+              <div className="overflow-hidden rounded-xl border border-line">
+              <table className="w-full text-left" aria-label="Receipt lines">
+                <thead className="hidden bg-inset text-xs text-muted lg:table-header-group">
+                  <tr>
+                    <th className="px-3 py-2 font-semibold">Product / quantity</th>
+                    <th className="px-3 py-2 font-semibold">Cost / traceability</th>
+                    <th className="px-3 py-2 font-semibold">Quality result</th>
+                    <th className="w-12 px-3 py-2"><span className="sr-only">Actions</span></th>
+                  </tr>
+                </thead>
+                <tbody className="block divide-y divide-line lg:table-row-group">
                 {lines.map((l) => {
                   const p = productById(l.productId)!;
                   return (
-                    <li
+                    <tr
                       key={l.productId}
-                      className="flex items-start justify-between gap-3 rounded-xl bg-inset p-3"
+                      className="grid gap-4 p-3 lg:table-row lg:p-0"
                     >
-                      <div className="min-w-0">
+                      <td className="min-w-0 align-top lg:px-3 lg:py-3">
                         <p className="truncate font-medium text-ink">
                           {p.name}
                         </p>
@@ -869,7 +924,7 @@ export function ReceivingPageSurface({
                           </div>
                         )}
                         {l.serials.length > 0 && (
-                          <div className="mt-1 flex flex-wrap gap-1">
+                          <div className="mt-2 flex flex-wrap gap-1">
                             {l.serials.map((s) => (
                               <Badge key={s} tone="brand">
                                 {s}
@@ -877,9 +932,10 @@ export function ReceivingPageSurface({
                             ))}
                           </div>
                         )}
-                        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                      </td>
+                      <td className="grid gap-2 align-top sm:grid-cols-2 lg:px-3 lg:py-3">
                           <Field
-                            label="Unit cost (₱)"
+                            label="Unit cost (PHP)"
                             htmlFor={`rcv-cost-${l.productId}`}
                           >
                             <input
@@ -959,6 +1015,8 @@ export function ReceivingPageSurface({
                               </button>
                             )}
                           </div>
+                      </td>
+                      <td className="grid gap-2 align-top lg:px-3 lg:py-3">
                           <Field
                             label="Device test result"
                             htmlFor={`rcv-test-${l.productId}`}
@@ -984,7 +1042,7 @@ export function ReceivingPageSurface({
                             </select>
                           </Field>
                           {p.expiryTracked && (
-                            <div className="sm:col-span-2">
+                            <div>
                               <Field
                                 label={`Expiry date for ${p.name}`}
                                 htmlFor={`rcv-expiry-${l.productId}`}
@@ -1005,20 +1063,23 @@ export function ReceivingPageSurface({
                               </Field>
                             </div>
                           )}
-                        </div>
-                      </div>
+                      </td>
+                      <td className="align-top lg:px-3 lg:py-3">
                       <button
                         type="button"
-                        className="text-rose-500"
+                        className="btn-ghost min-h-11 w-full px-3 text-rose-600 lg:w-11"
                         aria-label={`Remove ${p.name}`}
                         onClick={() => removeLine(l.productId)}
                       >
                         <Icon name="x" />
                       </button>
-                    </li>
+                      </td>
+                    </tr>
                   );
                 })}
-              </ul>
+                </tbody>
+              </table>
+              </div>
             )}
           </Card>
 
@@ -1110,7 +1171,7 @@ export function ReceivingPageSurface({
                   type="button"
                   className="btn-primary min-h-12 w-full shadow-pop"
                   onClick={() => void execute(submit)}
-                  disabled={pending}
+                  disabled={pending || !exceptionReason.trim() || evidence.length === 0}
                 >
                   Receive {totalItems} item(s)
                 </button>

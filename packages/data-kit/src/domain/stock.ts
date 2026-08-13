@@ -47,7 +47,7 @@ export function availableForProduct(
         (locationId === undefined || s.locationId === locationId) &&
         (binId === undefined || s.binId === binId),
     )
-    .reduce((sum, s) => sum + s.quantity, 0);
+    .reduce((sum, s) => sum + s.quantity - (s.unavailable ?? 0), 0);
 }
 
 /**
@@ -67,7 +67,13 @@ export function onHand(
         (locationId === undefined || u.locationId === locationId),
     ).length;
   }
-  return availableForProduct(state, productId, locationId);
+  return state.stockLevels
+    .filter(
+      (s) =>
+        s.productId === productId &&
+        (locationId === undefined || s.locationId === locationId),
+    )
+    .reduce((sum, s) => sum + s.quantity, 0);
 }
 
 export function isBelowReorder(product: Product, available: number): boolean {

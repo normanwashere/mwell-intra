@@ -26,6 +26,7 @@
     "@zxing/browser": "^0.1.5",
     "@zxing/library": "^0.21.3",
     "clsx": "^2.1.1",
+    "csv-parse": "^7.0.1",
     "jsbarcode": "3.12.1",
     "react-router-dom": "^6.26.2"
   },

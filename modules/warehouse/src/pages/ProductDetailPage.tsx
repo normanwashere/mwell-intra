@@ -39,6 +39,7 @@ const UNIT_TONE: Record<UnitStatus, Tone> = {
   in_stock: 'emerald',
   allocated: 'amber',
   issued: 'brand',
+  pending_inspection: 'amber',
   returned: 'slate',
   vendor_return: 'rose',
   lost: 'rose',

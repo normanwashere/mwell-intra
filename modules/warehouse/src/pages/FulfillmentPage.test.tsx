@@ -44,6 +44,18 @@ describe("FulfillmentPage", () => {
       repo,
     });
 
+    expect(
+      await screen.findByRole("heading", { name: "Pick & Pack" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("tab", { name: "Department requests" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("tab", { name: "Return cases" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Waiting allocation")).toBeInTheDocument();
+    expect(screen.getByText("Picking")).toBeInTheDocument();
+    expect(screen.getByText("Packing")).toBeInTheDocument();
     const order = await screen.findByRole("listitem", { name: /SHOP-2201/i });
     expect(within(order).getByText("Received")).toBeInTheDocument();
     await user.click(
@@ -59,6 +71,20 @@ describe("FulfillmentPage", () => {
     expect(
       screen.queryByRole("button", { name: "New fulfillment demand" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("gives an idle warehouse operator a clear pick-and-pack queue state", async () => {
+    renderWithProviders(<FulfillmentPage />, {
+      role: "warehouse_operator",
+    });
+
+    expect(
+      await screen.findByRole("heading", { name: "Pick & Pack" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("No orders ready to pick")).toBeInTheDocument();
+    expect(
+      screen.getByText(/orders will appear here for scanning and packing/i),
+    ).toBeInTheDocument();
   });
 
   it("uses an accountable handover and waits for a second operator to release", async () => {
@@ -189,6 +215,41 @@ describe("FulfillmentPage", () => {
     ).not.toBeInTheDocument();
   }, 10_000);
 
+  it("validates and imports a grouped ecommerce order list", async () => {
+    const repo = makeRepo();
+    const user = userEvent.setup();
+    renderWithProviders(<FulfillmentPage />, { role: "operations", repo });
+
+    await user.click(
+      await screen.findByRole("button", { name: "Import order list" }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "Import ecommerce order list",
+    });
+    const csv = [
+      "order_reference,customer_reference,product_sku,quantity,bundle_set_codes",
+      "SHOP-CSV-01,CUST-01,SMART-WATCH,1,OTG-001",
+      "SHOP-CSV-01,CUST-01,ECG-RING-8,1,OTG-001",
+      "SHOP-CSV-02,CUST-02,SMART-WATCH,2,",
+    ].join("\n");
+    await user.upload(
+      within(dialog).getByLabelText("Upload ecommerce order list"),
+      new File([csv], "orders.csv", { type: "text/csv" }),
+    );
+
+    expect(await within(dialog).findAllByText("SHOP-CSV-01")).toHaveLength(2);
+    await user.click(
+      within(dialog).getByRole("button", { name: "Import 2 order(s)" }),
+    );
+
+    await waitFor(async () => {
+      const orders = (await repo.getData()).fulfillmentOrders;
+      expect(orders).toHaveLength(2);
+      expect(orders.find((order) => order.externalReference === "SHOP-CSV-01")?.lines)
+        .toHaveLength(2);
+    });
+  });
+
   it("lets Marketing submit a governed department stock request", async () => {
     const repo = makeRepo();
     const user = userEvent.setup();
@@ -239,6 +300,128 @@ describe("FulfillmentPage", () => {
     expect(
       await screen.findByText("Community wellness campaign"),
     ).toBeInTheDocument();
+  });
+
+  it("submits multiple products in one department stock request", async () => {
+    const repo = makeRepo();
+    const user = userEvent.setup();
+    renderWithProviders(<FulfillmentPage />, { role: "marketing", repo });
+
+    await user.click(
+      await screen.findByRole("tab", { name: "Department requests" }),
+    );
+    await user.click(screen.getByRole("button", { name: "New stock request" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Request warehouse stock",
+    });
+    await user.type(within(dialog).getByLabelText("Business purpose"), "Roadshow kit");
+    await user.selectOptions(within(dialog).getByLabelText("Cost center"), "CC-4100");
+    await user.type(within(dialog).getByLabelText("Required date"), "2026-08-20");
+    await user.selectOptions(within(dialog).getByLabelText("Product"), "doctor-token");
+    await user.click(within(dialog).getByRole("button", { name: "Add another item" }));
+    await user.selectOptions(within(dialog).getByLabelText("Product 2"), "shirt-l");
+    await user.click(within(dialog).getByRole("button", { name: "Submit request" }));
+
+    await waitFor(async () => {
+      expect((await repo.getData()).departmentStockRequests[0]?.lines).toEqual([
+        { productId: "doctor-token", quantity: 1 },
+        { productId: "shirt-l", quantity: 1 },
+      ]);
+    });
+  });
+
+  it("requires and persists an image when confirming shipment delivery", async () => {
+    const repo = makeRepo();
+    const created = await repo.createFulfillmentOrder({
+      source: "ecommerce",
+      externalReference: "SHOP-POD-2201",
+      sourceLocationId: "loc-wh",
+      lines: [{ productId: "smart-watch", quantity: 1 }],
+      actor: "order.ingestion@mwell.com.ph",
+    });
+    await repo.advanceFulfillmentOrder({
+      orderId: created.id,
+      action: "allocate",
+      actor: "allocator@mwell.com.ph",
+    });
+    await repo.advanceFulfillmentOrder({
+      orderId: created.id,
+      action: "start_picking",
+      actor: "picker@mwell.com.ph",
+    });
+    await repo.advanceFulfillmentOrder({
+      orderId: created.id,
+      action: "confirm_pick",
+      actor: "picker@mwell.com.ph",
+      pickedLines: [
+        {
+          productId: "smart-watch",
+          quantity: 1,
+          serialNumbers: ["SMART-WATCH-SN0001"],
+        },
+      ],
+    });
+    await repo.advanceFulfillmentOrder({
+      orderId: created.id,
+      action: "confirm_pack",
+      actor: "packer@mwell.com.ph",
+      courier: "LBC",
+      waybillNumber: "WB-POD-2201",
+      packaging: [],
+    });
+    await repo.advanceFulfillmentOrder({
+      orderId: created.id,
+      action: "release",
+      actor: "releaser@mwell.com.ph",
+    });
+
+    const user = userEvent.setup();
+    renderWithProviders(<FulfillmentPage />, {
+      role: "warehouse_operator",
+      repo,
+    });
+    const order = await screen.findByRole("listitem", {
+      name: /SHOP-POD-2201/i,
+    });
+    await user.click(
+      within(order).getByRole("button", { name: "Update delivery" }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: /Delivery.*SHOP-POD-2201/i,
+    });
+    await user.selectOptions(
+      within(dialog).getByLabelText("Delivery outcome"),
+      "confirm_delivery",
+    );
+    const submit = within(dialog).getByRole("button", {
+      name: "Save delivery update",
+    });
+    expect(submit).toBeDisabled();
+    await user.type(
+      within(dialog).getByLabelText("Proof-of-delivery reference"),
+      "POD-2201",
+    );
+    await user.upload(
+      within(dialog).getByLabelText("Upload proof-of-delivery image"),
+      new File(["proof"], "pod.jpg", { type: "image/jpeg" }),
+    );
+    await within(dialog).findByRole("list", { name: "Captured evidence" }, {
+      timeout: 5_000,
+    });
+    expect(submit).toBeEnabled();
+    await user.click(submit);
+
+    await waitFor(async () => {
+      const delivered = (await repo.getData()).fulfillmentOrders.find(
+        (candidate) => candidate.id === created.id,
+      );
+      expect(delivered).toMatchObject({
+        status: "completed",
+        shipmentStatus: "delivered",
+        proofOfDeliveryReference: "POD-2201",
+      });
+      expect(delivered?.proofOfDeliveryEvidenceUrl).toMatch(/^data:image\/jpeg/);
+    });
   });
 
   it("forces merchandise requests to expense treatment", async () => {

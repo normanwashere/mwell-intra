@@ -77,6 +77,36 @@ beforeEach(() => {
 });
 
 describe("receiveStock", () => {
+  it("rejects a direct receipt until an evidenced non-PO exception is recorded", async () => {
+    await expect(
+      repo.receiveStock({
+        locationId: "loc-wh",
+        actor: "logi@mwell",
+        lines: [{ productId: "shirt", quantity: 2 }],
+      }),
+    ).rejects.toThrow(/purchase order.*exception/i);
+
+    const receipt = await repo.receiveStock({
+      locationId: "loc-wh",
+      actor: "logi@mwell",
+      lines: [{ productId: "shirt", quantity: 2 }],
+      receiptException: {
+        type: "non_po",
+        reason: "Approved emergency replenishment",
+        evidenceUrls: ["memory/approved-emergency-request.pdf"],
+      },
+    });
+
+    expect(receipt).toMatchObject({
+      qualityStatus: "pending",
+      receiptException: {
+        type: "non_po",
+        evidenceUrls: ["memory/approved-emergency-request.pdf"],
+      },
+    });
+    expect(availableForProduct(await repo.getStockState(), "shirt")).toBe(20);
+  });
+
   it("replays the same idempotent receipt without duplicating stock", async () => {
     const input = {
       idempotencyKey: "receive-ring-20260813-001",
@@ -945,7 +975,7 @@ describe("createPurchaseOrder", () => {
 });
 
 describe("receiveAgainstPO", () => {
-  it("increases inventory and partially receives the PO", async () => {
+  it("creates a pending inspection receipt while partially receiving the PO", async () => {
     const po = await repo.createPurchaseOrder({
       supplierId: "sup-1",
       actor: "proc@mwell",
@@ -962,9 +992,18 @@ describe("receiveAgainstPO", () => {
 
     const data = await repo.getData();
     const state = toStockState(data);
-    expect(availableForProduct(state, "shirt")).toBe(30);
+    expect(availableForProduct(state, "shirt")).toBe(20);
+    expect(data.receipts).toContainEqual(
+      expect.objectContaining({
+        procurementPoId: po.id,
+        qualityStatus: "pending",
+        lines: [expect.objectContaining({ productId: "shirt", quantity: 10 })],
+      }),
+    );
     expect(
-      data.movements.some((m) => m.type === "receipt" && m.reference === po.id),
+      data.movements.some(
+        (m) => m.type === "receipt" && m.reference === data.receipts[0]!.id,
+      ),
     ).toBe(true);
   });
 

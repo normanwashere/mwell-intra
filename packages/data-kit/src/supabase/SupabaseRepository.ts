@@ -151,7 +151,7 @@ const TABLE_PROJECTIONS: Record<string, string> = {
   cycle_counts:
     "id,location_id,bin_id,category,lines,status,requested_by,submitted_at,actor,created_at",
   receipts:
-    "id,supplier_id,location_id,actual_delivery_date,delivery_reference,courier_or_driver,lines,evidence_urls,operation_route_id,procurement_po_id,quality_status,actor,created_at",
+    "id,supplier_id,location_id,actual_delivery_date,delivery_reference,courier_or_driver,lines,evidence_urls,operation_route_id,procurement_po_id,receipt_exception,quality_status,actor,created_at",
   purchase_orders: "id,supplier_id,status,lines,expected_date,actor,created_at",
   profiles: "id,role,name,email,title",
   operation_types: "id,code,label,active",
@@ -612,6 +612,14 @@ export class SupabaseRepository implements WarehouseControlRepository {
   }
 
   async receiveStock(input: ReceiveStockInput): Promise<Receipt> {
+    if (
+      !input.receiptException?.reason.trim() ||
+      input.receiptException.evidenceUrls.length === 0
+    ) {
+      throw new Error(
+        "An approved purchase order or an evidenced receiving exception is required.",
+      );
+    }
     const idempotencyKey = input.idempotencyKey ?? uid("receive");
     if (!/^[A-Za-z0-9_-]{12,128}$/.test(idempotencyKey)) {
       throw new Error("A valid idempotency key is required.");
@@ -633,6 +641,8 @@ export class SupabaseRepository implements WarehouseControlRepository {
       courierOrDriver: input.courierOrDriver,
       lines: input.lines,
       evidenceUrls: input.evidenceUrls,
+      receiptException: input.receiptException,
+      qualityStatus: "pending",
       actor: input.actor,
       createdAt,
     };
@@ -683,7 +693,7 @@ export class SupabaseRepository implements WarehouseControlRepository {
               lotId,
               locationId: input.locationId,
               binId: line.binId,
-              status: "in_stock",
+              status: "pending_inspection",
             }),
           );
         }
@@ -736,6 +746,8 @@ export class SupabaseRepository implements WarehouseControlRepository {
           courier_or_driver: receipt.courierOrDriver ?? null,
           lines: receipt.lines,
           evidence_urls: receipt.evidenceUrls ?? [],
+          receipt_exception: receipt.receiptException ?? null,
+          quality_status: receipt.qualityStatus ?? "pending",
           actor: receipt.actor,
           created_at: createdAt,
         },
@@ -1038,13 +1050,23 @@ export class SupabaseRepository implements WarehouseControlRepository {
   }
 
   async recordReturn(input: ReturnInput): Promise<ReturnRecord> {
+    if (input.lines.some((line) => line.disposition && line.disposition !== "quarantine")) {
+      throw new Error("Return intake is quarantine-first; Quality controls final disposition.");
+    }
+    if (input.lines.some((line) => !line.locationId)) {
+      throw new Error("A quarantine location is required for every returned line.");
+    }
     const createdAt = new Date().toISOString();
     const data = await this.getData();
+    const quarantinedLines = input.lines.map((line) => ({
+      ...line,
+      disposition: "quarantine" as const,
+    }));
     const record: ReturnRecord = {
       id: uid("ret"),
       source: input.source,
       eventId: input.eventId,
-      lines: input.lines,
+      lines: quarantinedLines,
       evidenceUrls: input.evidenceUrls,
       actor: input.actor,
       createdAt,
@@ -1055,27 +1077,20 @@ export class SupabaseRepository implements WarehouseControlRepository {
     // Aggregate additive restock by (product, location) for a single upsert key.
     const stockByKey = new Map<string, Row>();
 
-    for (const line of input.lines) {
+    for (const line of quarantinedLines) {
       const product = data.products.find((p) => p.id === line.productId);
       if (!product) throw new Error(`Unknown product: ${line.productId}`);
-      const disposition = line.disposition ?? "restock";
-
       if (product.serialized && line.serialNumber) {
-        const status =
-          disposition === "restock"
-            ? "in_stock"
-            : disposition === "lost"
-              ? "lost"
-              : "returned";
+        const status = "pending_inspection";
         const update: Row = { serial_number: line.serialNumber, status };
         // A restocked unit physically re-enters the warehouse at the chosen
         // location/bin — persist that so it's found by scan-to-bin.
-        if (disposition === "restock" && line.locationId) {
+        if (line.locationId) {
           update.location_id = line.locationId;
           update.bin_id = line.binId ?? null;
         }
         unitUpdates.push(update);
-      } else if (!product.serialized && disposition === "restock") {
+      } else if (!product.serialized) {
         const targetLoc =
           line.locationId ??
           primaryStockLocation(toStockState(data), product.id);
@@ -1104,7 +1119,7 @@ export class SupabaseRepository implements WarehouseControlRepository {
           toLocationId: line.locationId,
           toBinId: line.binId,
           eventId: input.eventId,
-          reason: `${line.reason} (${disposition})`,
+          reason: `${line.reason} (quarantine)`,
           serialNumber: line.serialNumber,
           reference: record.id,
           evidenceUrls: input.evidenceUrls,

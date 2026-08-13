@@ -301,7 +301,7 @@ function OperatorDashboard({
       icon: "truck" as const,
     },
     { label: "Put away", to: "/storage", icon: "pin" as const },
-    { label: "Pick or issue", to: "/allocations", icon: "tag" as const },
+    { label: "Pick & Pack", to: "/fulfillment", icon: "list" as const },
     {
       label: "Returns and counts",
       to: "/returns",

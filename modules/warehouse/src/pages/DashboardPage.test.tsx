@@ -58,7 +58,7 @@ describe("DashboardPage", () => {
     for (const label of [
       "Receive and inspect",
       "Put away",
-      "Pick or issue",
+      "Pick & Pack",
       "Returns and counts",
     ]) {
       expect(
@@ -68,6 +68,10 @@ describe("DashboardPage", () => {
     expect(screen.getByRole("link", { name: "Cycle counts" })).toHaveAttribute(
       "href",
       "/cycle-counts",
+    );
+    expect(screen.getByRole("link", { name: "Pick & Pack" })).toHaveAttribute(
+      "href",
+      "/fulfillment",
     );
     expect(
       screen.queryByText(/consumption by event type/i),

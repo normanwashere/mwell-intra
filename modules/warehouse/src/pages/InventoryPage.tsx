@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useWarehouse } from "@/app/store";
 import { toStockState } from "@/data/repository";
@@ -32,6 +32,8 @@ import { clsx } from "clsx";
 
 type Filter = "all" | ItemCategory;
 
+const INVENTORY_BATCH_SIZE = 12;
+
 export function InventoryPage() {
   const { data, createProduct, can } = useWarehouse();
   const navigate = useNavigate();
@@ -48,6 +50,10 @@ export function InventoryPage() {
   );
   const [lowOnly, setLowOnly] = useState(initialFilter === "low");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [visibleFamilyCount, setVisibleFamilyCount] = useState(
+    INVENTORY_BATCH_SIZE,
+  );
+  const loadMoreRef = useRef<HTMLDivElement>(null);
 
   const [addOpen, setAddOpen] = useState(false);
   const [labelsOpen, setLabelsOpen] = useState(false);
@@ -135,6 +141,41 @@ export function InventoryPage() {
       })
       .filter((fam) => fam.shown.length > 0);
   }, [data, query, filter, lowOnly, state]);
+
+  const visibleFamilies = useMemo(
+    () => families.slice(0, visibleFamilyCount),
+    [families, visibleFamilyCount],
+  );
+  const hasMoreFamilies = visibleFamilyCount < families.length;
+
+  useEffect(() => {
+    setVisibleFamilyCount(INVENTORY_BATCH_SIZE);
+  }, [filter, lowOnly, query]);
+
+  useEffect(() => {
+    if (!hasMoreFamilies) return;
+
+    const target = loadMoreRef.current;
+    if (!target) return;
+
+    if (typeof IntersectionObserver === "undefined") {
+      setVisibleFamilyCount(families.length);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry?.isIntersecting) return;
+        setVisibleFamilyCount((current) =>
+          Math.min(current + INVENTORY_BATCH_SIZE, families.length),
+        );
+      },
+      { rootMargin: "480px 0px" },
+    );
+
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [families.length, hasMoreFamilies]);
 
   if (!data || !state) return null;
   const searching = query.trim().length > 0;
@@ -249,10 +290,10 @@ export function InventoryPage() {
         />
       ) : (
         <StaggerGrid
-          className="grid min-w-0 gap-2 lg:grid-cols-2"
+          className="grid min-w-0 grid-cols-1 gap-2"
           aria-label="Inventory list"
         >
-          {families.map((fam) => {
+          {visibleFamilies.map((fam) => {
             const total = fam.shown.reduce((s, v) => s + avail(v), 0);
             const anyLow = fam.shown.some((v) => isBelowReorder(v, avail(v)));
             const single = fam.shown[0];
@@ -406,6 +447,15 @@ export function InventoryPage() {
             );
           })}
         </StaggerGrid>
+      )}
+
+      {hasMoreFamilies && (
+        <div
+          ref={loadMoreRef}
+          className="h-px w-full"
+          aria-hidden="true"
+          data-testid="inventory-load-sentinel"
+        />
       )}
 
       <Sheet

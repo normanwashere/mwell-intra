@@ -20,6 +20,8 @@ import {
   useToast,
 } from "@/components/ui";
 import { Icon } from "@/components/Icon";
+import { EvidenceCapture } from "@/components/camera/EvidenceCapture";
+import { BulkOrderImportSheet } from "@/components/fulfillment/BulkOrderImportSheet";
 
 type WorkspaceTab = "orders" | "requests" | "returns" | "kits";
 
@@ -120,32 +122,57 @@ function SummaryStrip({
   requests,
   returns,
   reKits,
+  floorMode = false,
 }: {
   orders: FulfillmentOrder[];
   requests: number;
   returns: CustomerReturnCase[];
   reKits: ReKitWorkOrder[];
+  floorMode?: boolean;
 }) {
-  const stats = [
-    {
-      label: "Orders in progress",
-      value: orders.filter(
-        (row) => !["released", "completed", "cancelled"].includes(row.status),
-      ).length,
-    },
-    {
-      label: "Ready to release",
-      value: orders.filter((row) => row.status === "ready").length,
-    },
-    { label: "Requests awaiting decision", value: requests },
-    {
-      label: "Open returns / re-kits",
-      value:
-        returns.filter((row) => row.status !== "resolved").length +
-        reKits.filter((row) => !["completed", "cancelled"].includes(row.status))
-          .length,
-    },
-  ];
+  const stats = floorMode
+    ? [
+        {
+          label: "Waiting allocation",
+          value: orders.filter((row) => row.status === "received").length,
+        },
+        {
+          label: "Picking",
+          value: orders.filter((row) =>
+            ["allocated", "picking"].includes(row.status),
+          ).length,
+        },
+        {
+          label: "Packing",
+          value: orders.filter((row) => row.status === "packing").length,
+        },
+        {
+          label: "Ready for release",
+          value: orders.filter((row) => row.status === "ready").length,
+        },
+      ]
+    : [
+        {
+          label: "Orders in progress",
+          value: orders.filter(
+            (row) =>
+              !["released", "completed", "cancelled"].includes(row.status),
+          ).length,
+        },
+        {
+          label: "Ready to release",
+          value: orders.filter((row) => row.status === "ready").length,
+        },
+        { label: "Requests awaiting decision", value: requests },
+        {
+          label: "Open returns / re-kits",
+          value:
+            returns.filter((row) => row.status !== "resolved").length +
+            reKits.filter((row) =>
+              !["completed", "cancelled"].includes(row.status),
+            ).length,
+        },
+      ];
   return (
     <dl className="grid grid-cols-2 border-y border-line bg-surface sm:grid-cols-4">
       {stats.map((stat) => (
@@ -165,7 +192,7 @@ function SummaryStrip({
 
 export function FulfillmentPage() {
   const warehouse = useWarehouse();
-  const { data, role, can, actor, identityId } = warehouse;
+  const { data, role, roleLabel, can, actor, identityId } = warehouse;
   const [tab, setTab] = useState<WorkspaceTab>("orders");
 
   if (!data) return null;
@@ -179,18 +206,33 @@ export function FulfillmentPage() {
   ].includes(role);
   const canExecute = can("issue_items");
   const canIntakeReturn = can("submit_return_case");
+  const canManageReturns = can("manage_returns");
+  const canReviewFinanceReturn = can("approve_stock_adjustment_finance");
   const canDefineKits =
     [
       "warehouse_supervisor",
       "logistics_supervisor",
       "warehouse_admin",
     ].includes(role) && can("manage_products");
+  const isFloorOperator = role === "warehouse_operator";
+  const visibleTabs = isFloorOperator
+    ? TABS.filter(
+        (item) =>
+          item.id === "orders" ||
+          (item.id === "returns" &&
+            (canIntakeReturn || canManageReturns || canReviewFinanceReturn)),
+      )
+    : TABS;
 
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Fulfillment"
-        subtitle="One controlled queue from demand through warehouse release"
+        title={isFloorOperator ? "Pick & Pack" : "Fulfillment"}
+        subtitle={
+          isFloorOperator
+            ? `${roleLabel} queue for allocation, scanning, packing, and controlled release`
+            : "One controlled queue from demand through warehouse release"
+        }
         icon="list"
       />
 
@@ -203,32 +245,35 @@ export function FulfillmentPage() {
         }
         returns={data.customerReturnCases}
         reKits={data.reKitWorkOrders}
+        floorMode={isFloorOperator}
       />
 
-      <div
-        className="grid grid-cols-2 gap-1 rounded-xl bg-inset p-1 sm:grid-cols-4"
-        role="tablist"
-        aria-label="Fulfillment workspace"
-      >
-        {TABS.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            role="tab"
-            aria-label={item.label}
-            aria-selected={tab === item.id}
-            onClick={() => setTab(item.id)}
-            className={`min-h-11 rounded-lg px-2 py-2 text-sm font-semibold transition ${
-              tab === item.id
-                ? "bg-surface text-brand-700 shadow-e1 dark:text-brand-300"
-                : "text-muted hover:text-ink"
-            }`}
-          >
-            <span className="sm:hidden">{item.shortLabel}</span>
-            <span className="hidden sm:inline">{item.label}</span>
-          </button>
-        ))}
-      </div>
+      {visibleTabs.length > 1 && (
+        <div
+          className="grid grid-cols-2 gap-1 rounded-xl bg-inset p-1 sm:grid-cols-4"
+          role="tablist"
+          aria-label="Fulfillment workspace"
+        >
+          {visibleTabs.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              role="tab"
+              aria-label={item.label}
+              aria-selected={tab === item.id}
+              onClick={() => setTab(item.id)}
+              className={`min-h-11 rounded-lg px-2 py-2 text-sm font-semibold transition ${
+                tab === item.id
+                  ? "bg-surface text-brand-700 shadow-e1 dark:text-brand-300"
+                  : "text-muted hover:text-ink"
+              }`}
+            >
+              <span className="sm:hidden">{item.shortLabel}</span>
+              <span className="hidden sm:inline">{item.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {tab === "orders" && (
         <OrdersWorkspace
@@ -259,9 +304,9 @@ export function FulfillmentPage() {
           bins={data.storageAreas.filter((area) => area.active)}
           canCreate={canIntakeReturn}
           resolutionMode={
-            can("manage_returns")
+            canManageReturns
               ? "warehouse"
-              : can("approve_stock_adjustment_finance")
+              : canReviewFinanceReturn
                 ? "finance"
                 : "read_only"
           }
@@ -276,7 +321,7 @@ export function FulfillmentPage() {
           locations={data.locations}
           bins={data.storageAreas.filter((area) => area.active)}
           canCreate={canDefineKits}
-          canReKit={can("manage_returns")}
+          canReKit={canManageReturns}
         />
       )}
     </div>
@@ -305,6 +350,7 @@ function OrdersWorkspace({
   const { createFulfillmentOrder, advanceFulfillmentOrder } = useWarehouse();
   const toast = useToast();
   const [createOpen, setCreateOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [workingId, setWorkingId] = useState<string>();
   const [pickOrder, setPickOrder] = useState<FulfillmentOrder>();
   const [packOrder, setPackOrder] = useState<FulfillmentOrder>();
@@ -342,13 +388,22 @@ function OrdersWorkspace({
           </p>
         </div>
         {canCreate && (
-          <button
-            type="button"
-            className="btn-primary w-full sm:w-auto"
-            onClick={() => setCreateOpen(true)}
-          >
-            <Icon name="plus" className="h-4 w-4" /> New fulfillment demand
-          </button>
+          <div className="grid gap-2 sm:flex">
+            <button
+              type="button"
+              className="btn-outline w-full sm:w-auto"
+              onClick={() => setImportOpen(true)}
+            >
+              <Icon name="upload" className="h-4 w-4" /> Import order list
+            </button>
+            <button
+              type="button"
+              className="btn-primary w-full sm:w-auto"
+              onClick={() => setCreateOpen(true)}
+            >
+              <Icon name="plus" className="h-4 w-4" /> New fulfillment demand
+            </button>
+          </div>
         )}
       </div>
       <HandoffRail
@@ -396,8 +451,12 @@ function OrdersWorkspace({
       {orders.length === 0 ? (
         <EmptyState
           icon="cart"
-          title="No fulfillment demand"
-          message="Confirmed ecommerce, event, and approved department demand will appear here for Warehouse execution."
+          title={canExecute ? "No orders ready to pick" : "No fulfillment demand"}
+          message={
+            canExecute
+              ? "Allocated ecommerce, event, and approved department orders will appear here for scanning and packing."
+              : "Confirmed ecommerce, event, and approved department demand will appear here for Warehouse execution."
+          }
         />
       ) : (
         <ul
@@ -575,6 +634,15 @@ function OrdersWorkspace({
         products={products}
         locations={locations}
         events={events}
+        create={createFulfillmentOrder}
+      />
+      <BulkOrderImportSheet
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        products={products.filter((product) =>
+          isFulfillmentProduct(product, "ecommerce"),
+        )}
+        locations={locations}
         create={createFulfillmentOrder}
       />
       <PickSheet
@@ -870,7 +938,7 @@ function CreateOrderSheet({
         <Field
           label="Bundle set codes"
           htmlFor="bundle-codes"
-          hint="Optional. Separate customer-facing sets with commas, for example OTG1, OTG2."
+          hint="Optional. Give each complete customer bundle its own code, such as OTG-001, OTG-002. Separate codes with commas; pickers use them to keep component serials in the correct set."
         >
           <input
             id="bundle-codes"
@@ -879,6 +947,14 @@ function CreateOrderSheet({
             onChange={(event) => setBundleCodes(event.target.value)}
           />
         </Field>
+        <div className="border-l-4 border-cyan-500 bg-cyan-500/10 px-4 py-3 text-sm">
+          <p className="font-semibold text-ink">How bundle control works</p>
+          <p className="mt-1 text-muted">
+            One set code represents one finished bundle. During picking, scan
+            every serialized component required for that set; during packing,
+            keep those components together under the same code.
+          </p>
+        </div>
       </form>
     </Sheet>
   );
@@ -944,6 +1020,14 @@ function PickSheet({
         className="space-y-4"
         onSubmit={(event) => void submit(event)}
       >
+        <div className="border-l-4 border-emerald-500 bg-emerald-500/10 px-4 py-3 text-sm">
+          <p className="font-semibold text-ink">Quality checkpoint</p>
+          <p className="mt-1 text-muted">
+            Only accepted, put-away stock is pickable. If packaging, seals, or
+            a device condition looks wrong, stop the pick and route the item to
+            Quality Control instead of substituting it informally.
+          </p>
+        </div>
         {order.lines.map((line) => {
           const product = products.find((row) => row.id === line.productId);
           return (
@@ -957,6 +1041,15 @@ function PickSheet({
               <p className="text-xs text-muted">
                 Required quantity: {line.quantity}
               </p>
+              {line.bundleSetCodes && line.bundleSetCodes.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1" aria-label="Bundle set codes">
+                  {line.bundleSetCodes.map((code) => (
+                    <Badge key={code} tone="cyan">
+                      Set {code}
+                    </Badge>
+                  ))}
+                </div>
+              )}
               {product?.serialized && (
                 <Field
                   label="Scanned serial numbers"
@@ -1443,7 +1536,7 @@ function ShipmentTrackingSheet({
     | "return_to_sender"
   >("mark_in_transit");
   const [reference, setReference] = useState("");
-  const [evidenceUrl, setEvidenceUrl] = useState("");
+  const [evidenceUrls, setEvidenceUrls] = useState<string[]>([]);
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
   if (!order) return null;
@@ -1454,7 +1547,7 @@ function ShipmentTrackingSheet({
       orderId: order.id,
       action,
       trackingReference: reference || undefined,
-      trackingEvidenceUrl: evidenceUrl || undefined,
+      trackingEvidenceUrl: evidenceUrls[0] || undefined,
       deliveryFailureReason: reason || undefined,
     });
     setSaving(false);
@@ -1480,7 +1573,10 @@ function ShipmentTrackingSheet({
           type="submit"
           form="shipment-tracking-form"
           className="btn-primary w-full"
-          disabled={saving}
+          disabled={
+            saving ||
+            (action === "confirm_delivery" && evidenceUrls.length === 0)
+          }
         >
           {saving ? "Saving..." : "Save delivery update"}
         </button>
@@ -1517,19 +1613,18 @@ function ShipmentTrackingSheet({
                 required
               />
             </Field>
-            <Field
-              label="Proof-of-delivery evidence URL"
-              htmlFor="pod-evidence"
-            >
-              <input
-                id="pod-evidence"
-                className="input"
-                type="url"
-                value={evidenceUrl}
-                onChange={(event) => setEvidenceUrl(event.target.value)}
-                required
-              />
-            </Field>
+            <EvidenceCapture
+              label="Upload proof-of-delivery image"
+              maxPhotos={1}
+              reference={`delivery-${order.id}`}
+              onChange={setEvidenceUrls}
+            />
+            {evidenceUrls.length === 0 && (
+              <p className="text-xs text-muted">
+                A delivery photo or signed proof is required before this order
+                can be marked delivered.
+              </p>
+            )}
           </>
         )}
         {(action === "record_delivery_failed" ||
@@ -1730,14 +1825,23 @@ function CreateRequestSheet({
       itemClass,
     );
   });
-  const [productId, setProductId] = useState(eligibleProducts[0]?.id ?? "");
-  const [quantity, setQuantity] = useState(1);
+  const [lines, setLines] = useState(() => [
+    {
+      key: crypto.randomUUID(),
+      productId: eligibleProducts[0]?.id ?? "",
+      quantity: 1,
+    },
+  ]);
   const [saving, setSaving] = useState(false);
-  const selectedProduct = eligibleProducts.find((row) => row.id === productId);
-  const selectedItemClass =
-    selectedProduct?.itemClass ??
-    (selectedProduct?.category === "device" ? "sellable_sku" : "merchandise");
-  const merchandiseSelected = selectedItemClass === "merchandise";
+  const merchandiseSelected = lines.some((line) => {
+    const selectedProduct = eligibleProducts.find(
+      (product) => product.id === line.productId,
+    );
+    return (
+      selectedProduct?.itemClass === "merchandise" ||
+      (!selectedProduct?.itemClass && selectedProduct?.category !== "device")
+    );
+  });
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setSaving(true);
@@ -1746,8 +1850,8 @@ function CreateRequestSheet({
       purpose,
       costCenter,
       requiredDate,
-      expenseTreatment: treatment,
-      lines: [{ productId, quantity }],
+      expenseTreatment: merchandiseSelected ? "expense" : treatment,
+      lines: lines.map(({ productId, quantity }) => ({ productId, quantity })),
     });
     setSaving(false);
     if (ok) {
@@ -1756,6 +1860,13 @@ function CreateRequestSheet({
       setPurpose("");
       setCostCenter("");
       setRequiredDate("");
+      setLines([
+        {
+          key: crypto.randomUUID(),
+          productId: eligibleProducts[0]?.id ?? "",
+          quantity: 1,
+        },
+      ]);
     }
   };
   return (
@@ -1769,7 +1880,7 @@ function CreateRequestSheet({
           type="submit"
           form="department-request-form"
           className="btn-primary w-full"
-          disabled={saving}
+          disabled={saving || lines.some((line) => !line.productId || line.quantity < 1)}
         >
           {saving ? "Submitting..." : "Submit request"}
         </button>
@@ -1855,42 +1966,106 @@ function CreateRequestSheet({
             <option value="sale">Sale</option>
           </select>
         </Field>
-        <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_7rem]">
-          <Field label="Product" htmlFor="request-product">
-            <select
-              id="request-product"
-              className="input"
-              value={productId}
-              onChange={(event) => {
-                const nextId = event.target.value;
-                const next = eligibleProducts.find((row) => row.id === nextId);
-                const nextClass =
-                  next?.itemClass ??
-                  (next?.category === "device"
-                    ? "sellable_sku"
-                    : "merchandise");
-                setProductId(nextId);
-                if (nextClass === "merchandise") setTreatment("expense");
-              }}
+        <fieldset className="space-y-3">
+          <legend className="text-sm font-semibold text-ink">Requested items</legend>
+          {lines.map((line, index) => (
+            <div
+              key={line.key}
+              className="grid gap-3 rounded-xl border border-line p-3 sm:grid-cols-[minmax(0,1fr)_7rem_3rem] sm:items-end"
             >
-              {eligibleProducts.map((product) => (
-                <option key={product.id} value={product.id}>
-                  {product.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Quantity" htmlFor="request-quantity">
-            <input
-              id="request-quantity"
-              className="input"
-              type="number"
-              min="1"
-              value={quantity}
-              onChange={(event) => setQuantity(Number(event.target.value))}
-            />
-          </Field>
-        </div>
+              <Field
+                label={index === 0 ? "Product" : `Product ${index + 1}`}
+                htmlFor={`request-product-${line.key}`}
+              >
+                <select
+                  id={`request-product-${line.key}`}
+                  className="input"
+                  value={line.productId}
+                  onChange={(event) => {
+                    const productId = event.target.value;
+                    setLines((current) =>
+                      current.map((item) =>
+                        item.key === line.key ? { ...item, productId } : item,
+                      ),
+                    );
+                    const next = eligibleProducts.find(
+                      (product) => product.id === productId,
+                    );
+                    if (
+                      next?.itemClass === "merchandise" ||
+                      (!next?.itemClass && next?.category !== "device")
+                    ) {
+                      setTreatment("expense");
+                    }
+                  }}
+                >
+                  {eligibleProducts.map((product) => (
+                    <option key={product.id} value={product.id}>
+                      {product.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field
+                label="Quantity"
+                htmlFor={`request-quantity-${line.key}`}
+              >
+                <input
+                  id={`request-quantity-${line.key}`}
+                  aria-label={index === 0 ? "Quantity" : `Quantity for item ${index + 1}`}
+                  className="input"
+                  type="number"
+                  min="1"
+                  value={line.quantity}
+                  onChange={(event) =>
+                    setLines((current) =>
+                      current.map((item) =>
+                        item.key === line.key
+                          ? { ...item, quantity: Number(event.target.value) }
+                          : item,
+                      ),
+                    )
+                  }
+                />
+              </Field>
+              <button
+                type="button"
+                className="btn-ghost min-h-11 px-3"
+                aria-label={`Remove item ${index + 1}`}
+                disabled={lines.length === 1}
+                onClick={() =>
+                  setLines((current) =>
+                    current.filter((item) => item.key !== line.key),
+                  )
+                }
+              >
+                <Icon name="trash" />
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            className="btn-outline w-full"
+            onClick={() =>
+              setLines((current) => [
+                ...current,
+                {
+                  key: crypto.randomUUID(),
+                  productId: eligibleProducts[0]?.id ?? "",
+                  quantity: 1,
+                },
+              ])
+            }
+          >
+            <Icon name="plus" /> Add another item
+          </button>
+          {merchandiseSelected && (
+            <p className="text-xs text-muted">
+              This request includes merchandise, so the entire release is
+              recorded as an expense.
+            </p>
+          )}
+        </fieldset>
       </form>
     </Sheet>
   );

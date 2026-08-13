@@ -343,6 +343,7 @@ export function rowToReceipt(r: Row): Receipt {
     evidenceUrls: r.evidence_urls ?? [],
     operationRouteId: r.operation_route_id ?? undefined,
     procurementPoId: r.procurement_po_id ?? undefined,
+    receiptException: r.receipt_exception ?? undefined,
     qualityStatus: r.quality_status ?? undefined,
     actor: r.actor,
     createdAt: r.created_at,

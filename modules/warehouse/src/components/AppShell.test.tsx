@@ -30,7 +30,7 @@ describe("AppShell navigation", () => {
     },
   );
 
-  it("renders the Operator desktop and mobile experience around four routine flows", async () => {
+  it("renders the Operator desktop experience with every floor recovery route", async () => {
     renderWithProviders(<AppShell>content</AppShell>, {
       role: "warehouse_operator",
     });
@@ -38,16 +38,24 @@ describe("AppShell navigation", () => {
     for (const label of [
       "Receive and inspect",
       "Put away",
-      "Pick or issue",
+      "Pick & Pack",
       "Returns and counts",
     ]) {
       expect(
         within(sidebar).getByRole("link", { name: label }),
       ).toBeInTheDocument();
     }
-    expect(
-      within(sidebar).queryByRole("link", { name: "Cycle counts" }),
-    ).not.toBeInTheDocument();
+    for (const label of [
+      "Scan",
+      "Tasks",
+      "Inventory",
+      "Allocations",
+      "Cycle Counts",
+      "Quality Control",
+      "Exceptions",
+    ]) {
+      expect(within(sidebar).getByRole("link", { name: label })).toBeInTheDocument();
+    }
     for (const label of [
       "Replenishment",
       "Pricing",
@@ -59,6 +67,9 @@ describe("AppShell navigation", () => {
         within(sidebar).queryByRole("link", { name: label }),
       ).not.toBeInTheDocument();
     }
+    expect(
+      within(sidebar).getByRole("link", { name: "Pick & Pack" }),
+    ).toHaveAttribute("href", "/fulfillment");
   });
 
   it("presents Warehouse as an Mwell Intra workspace on desktop and mobile", async () => {

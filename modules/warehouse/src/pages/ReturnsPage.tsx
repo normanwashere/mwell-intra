@@ -23,9 +23,10 @@ import {
 import { EvidenceGallery } from '@/components/EvidenceGallery';
 
 const DISPOSITION_META: Record<
-  'restock' | 'lost' | 'vendor_return',
+  'quarantine' | 'restock' | 'lost' | 'vendor_return',
   { label: string; tone: Tone }
 > = {
+  quarantine: { label: 'Quarantined', tone: 'amber' },
   restock: { label: 'Restocked', tone: 'emerald' },
   lost: { label: 'Written off', tone: 'rose' },
   vendor_return: { label: 'To vendor', tone: 'amber' },
@@ -42,12 +43,6 @@ const REASONS: { value: string; label: string }[] = [
   { value: 'other', label: 'Other' },
 ];
 
-const DISPOSITIONS: { value: 'restock' | 'lost' | 'vendor_return'; label: string }[] = [
-  { value: 'restock', label: 'Restock (back to available)' },
-  { value: 'lost', label: 'Write off / lost' },
-  { value: 'vendor_return', label: 'Return to vendor' },
-];
-
 export function ReturnsPage() {
   const { data, recordReturn, canOpenRoute } = useWarehouse();
   const toast = useToast();
@@ -56,9 +51,6 @@ export function ReturnsPage() {
   const [productId, setProductId] = useState('');
   const [quantity, setQuantity] = useState(1);
   const [reason, setReason] = useState(REASONS[0]!.value);
-  const [disposition, setDisposition] = useState<'restock' | 'lost' | 'vendor_return'>(
-    'restock',
-  );
   const [serial, setSerial] = useState('');
   const [locationId, setLocationId] = useState('');
   const [binId, setBinId] = useState('');
@@ -68,8 +60,8 @@ export function ReturnsPage() {
   const product = data.products.find((p) => p.id === productId);
   const productName = (id: string) =>
     data.products.find((p) => p.id === id)?.name ?? id;
-  const restockLocations = data.locations.filter((l) => l.type !== 'vendor');
-  const restockBins = (data.storageAreas ?? []).filter(
+  const quarantineLocations = data.locations.filter((l) => l.type !== 'vendor');
+  const quarantineBins = (data.storageAreas ?? []).filter(
     (b) => b.locationId === locationId,
   );
   const serialValidation =
@@ -94,12 +86,9 @@ export function ReturnsPage() {
           productId,
           quantity,
           reason,
-          disposition,
           serialNumber: serial.trim() || undefined,
-          locationId:
-            disposition === 'restock' && locationId ? locationId : undefined,
-          binId:
-            disposition === 'restock' && locationId && binId ? binId : undefined,
+          locationId: locationId || undefined,
+          binId: locationId && binId ? binId : undefined,
         },
       ],
     });
@@ -113,15 +102,15 @@ export function ReturnsPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Returns"
+        title="Returns receiving"
         icon="rotate"
-        subtitle="Log customer & vendor returns with reasons"
+        subtitle="Receive customer, vendor, and event stock into a controlled inspection location"
       />
 
       <div className="flex flex-col gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="font-semibold">Inspection required before putaway</p>
-          <p className="text-xs opacity-80">Every physical return remains in quality staging until its condition is accepted.</p>
+          <p className="text-xs opacity-80">Every physical return remains in quality staging. Quality Control chooses the final disposition.</p>
         </div>
         {canOpenRoute('quality') && <Link to="/quality" className="btn-ghost btn-sm shrink-0 justify-center">Open quality queue</Link>}
       </div>
@@ -138,16 +127,22 @@ export function ReturnsPage() {
             >
               <option value="customer">Customer</option>
               <option value="vendor">Vendor</option>
+              <option value="event">Specific event</option>
             </select>
           </Field>
-          <Field label="Related event (optional)" htmlFor="ret-event">
+          <Field
+            label={source === 'event' ? 'Return from event' : 'Related event (optional)'}
+            htmlFor="ret-event"
+          >
             <select
               id="ret-event"
               className="input"
               value={eventId}
               onChange={(e) => setEventId(e.target.value)}
             >
-              <option value="">—</option>
+              <option value="">
+                {source === 'event' ? 'Select the source event' : 'None'}
+              </option>
               {data.events.map((ev) => (
                 <option key={ev.id} value={ev.id}>
                   {ev.name}
@@ -190,31 +185,10 @@ export function ReturnsPage() {
           </Field>
         </div>
         <Field
-          label="Disposition"
-          htmlFor="ret-disposition"
-          hint="What happens to the returned stock"
+          label="Quarantine location"
+          htmlFor="ret-location"
+          hint="Physical custody remains unavailable until Quality Control accepts it."
         >
-          <select
-            id="ret-disposition"
-            className="input"
-            value={disposition}
-            onChange={(e) =>
-              setDisposition(e.target.value as 'restock' | 'lost' | 'vendor_return')
-            }
-          >
-            {DISPOSITIONS.map((d) => (
-              <option key={d.value} value={d.value}>
-                {d.label}
-              </option>
-            ))}
-          </select>
-        </Field>
-        {disposition === 'restock' && (
-          <Field
-            label="Restock into"
-            htmlFor="ret-location"
-            hint="Location the returned stock is added back to"
-          >
             <select
               id="ret-location"
               className="input"
@@ -224,20 +198,19 @@ export function ReturnsPage() {
                 setBinId('');
               }}
             >
-              <option value="">Auto (site holding stock)</option>
-              {restockLocations.map((l) => (
+              <option value="">Select quarantine location</option>
+              {quarantineLocations.map((l) => (
                 <option key={l.id} value={l.id}>
                   {l.name}
                 </option>
               ))}
             </select>
-          </Field>
-        )}
-        {disposition === 'restock' && locationId && restockBins.length > 0 && (
+        </Field>
+        {locationId && quarantineBins.length > 0 && (
           <Field
-            label="Restock bin"
+            label="Quarantine bin"
             htmlFor="ret-bin"
-            hint="Optional — the storage area the stock goes back into"
+            hint="Select the exact bin holding this return."
           >
             <select
               id="ret-bin"
@@ -245,8 +218,8 @@ export function ReturnsPage() {
               value={binId}
               onChange={(e) => setBinId(e.target.value)}
             >
-              <option value="">General area (unassigned)</option>
-              {restockBins.map((b) => (
+              <option value="">Select quarantine bin</option>
+              {quarantineBins.map((b) => (
                 <option key={b.id} value={b.id}>
                   {b.code}
                   {b.label ? ` · ${b.label}` : ''}
@@ -295,6 +268,9 @@ export function ReturnsPage() {
           className="btn-primary w-full"
           disabled={
             !productId ||
+            (source === 'event' && !eventId) ||
+            !locationId ||
+            !binId ||
             Boolean(product?.serialized && (!serial.trim() || !serialValidation?.ok))
           }
           onClick={() => void submit()}
@@ -316,7 +292,11 @@ export function ReturnsPage() {
                 <li key={r.id} className="rounded-xl bg-inset p-3">
                   <div className="flex items-center justify-between">
                     <Badge tone={r.source === 'vendor' ? 'brand' : 'cyan'}>
-                      {r.source === 'vendor' ? 'Vendor' : 'Customer'}
+                      {r.source === 'vendor'
+                        ? 'Vendor'
+                        : r.source === 'event'
+                          ? 'Event'
+                          : 'Customer'}
                     </Badge>
                     <span className="text-xs text-faint">
                       {formatWhen(r.createdAt)}

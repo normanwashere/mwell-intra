@@ -1,8 +1,12 @@
-import { describe, it, expect } from "vitest";
-import { screen, within, waitFor } from "@testing-library/react";
+import { afterEach, describe, it, expect, vi } from "vitest";
+import { act, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { InventoryPage } from "./InventoryPage";
 import { makeRepo, renderWithProviders } from "@/test/renderWithProviders";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("InventoryPage", () => {
   it("opens a printable barcode sheet for quantity-controlled stock", async () => {
@@ -22,10 +26,67 @@ describe("InventoryPage", () => {
   it("groups SKUs into product families", async () => {
     renderWithProviders(<InventoryPage />);
     const list = await screen.findByLabelText("Inventory list");
+    expect(list).toHaveClass("grid-cols-1");
+    expect(list.className).not.toMatch(/grid-cols-2/);
     // ECG ring sizes collapse into one family; OTG bag stays standalone
     expect(within(list).getByText("ECG Ring")).toBeInTheDocument();
     expect(within(list).getByText("On-The-Go Bag")).toBeInTheDocument();
     expect(within(list).getAllByText(/6 sizes/i).length).toBeGreaterThan(0);
+  });
+
+  it("progressively reveals one-column inventory batches while scrolling", async () => {
+    let notifyIntersection: IntersectionObserverCallback = () => undefined;
+    const observe = vi.fn();
+    const disconnect = vi.fn();
+
+    class TestIntersectionObserver implements IntersectionObserver {
+      readonly root = null;
+      readonly rootMargin = "";
+      readonly thresholds = [];
+
+      constructor(callback: IntersectionObserverCallback) {
+        notifyIntersection = callback;
+      }
+
+      observe = observe;
+      disconnect = disconnect;
+      unobserve = vi.fn();
+      takeRecords = () => [];
+    }
+
+    vi.stubGlobal("IntersectionObserver", TestIntersectionObserver);
+
+    const seed = await makeRepo().getData();
+    const template = seed.products[0]!;
+    seed.products.push(
+      ...Array.from({ length: 30 }, (_, index) => ({
+        ...template,
+        id: `scroll-product-${index}`,
+        sku: `SCROLL-${index}`,
+        name: `Scroll product ${String(index).padStart(2, "0")}`,
+        category: "merchandise" as const,
+        deviceType: undefined,
+        merchandiseType: undefined,
+        attributes: {},
+      })),
+    );
+
+    renderWithProviders(<InventoryPage />, { repo: makeRepo(seed) });
+    const list = await screen.findByLabelText("Inventory list");
+
+    expect(list.children).toHaveLength(12);
+    expect(observe).toHaveBeenCalledWith(
+      screen.getByTestId("inventory-load-sentinel"),
+    );
+
+    act(() => {
+      notifyIntersection(
+        [{ isIntersecting: true } as IntersectionObserverEntry],
+        {} as IntersectionObserver,
+      );
+    });
+
+    await waitFor(() => expect(list.children).toHaveLength(24));
   });
 
   it("expands a family to reveal its size variants", async () => {

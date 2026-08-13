@@ -317,6 +317,7 @@ export class InMemoryRepository implements WarehouseControlRepository {
   }
 
   async receiveStock(input: ReceiveStockInput): Promise<Receipt> {
+    this.assertDirectReceiptException(input);
     const idempotencyKey = input.idempotencyKey;
     if (idempotencyKey) {
       if (!/^[A-Za-z0-9_-]{12,128}$/.test(idempotencyKey)) {
@@ -354,6 +355,8 @@ export class InMemoryRepository implements WarehouseControlRepository {
       locationId: input.locationId,
       lines: input.lines,
       evidenceUrls: input.evidenceUrls,
+      receiptException: input.receiptException,
+      qualityStatus: "pending",
       actor: input.actor,
       createdAt,
     };
@@ -406,7 +409,7 @@ export class InMemoryRepository implements WarehouseControlRepository {
             lotId,
             locationId: input.locationId,
             binId: line.binId,
-            status: "in_stock",
+            status: "pending_inspection",
           });
         }
       } else {
@@ -417,6 +420,7 @@ export class InMemoryRepository implements WarehouseControlRepository {
           true,
         )!;
         level.quantity += line.quantity;
+        level.unavailable = (level.unavailable ?? 0) + line.quantity;
       }
 
       this.data.movements.push({
@@ -460,6 +464,7 @@ export class InMemoryRepository implements WarehouseControlRepository {
         binId: line.binId ?? null,
       })),
       evidenceUrls: input.evidenceUrls ?? [],
+      receiptException: input.receiptException ?? null,
     });
   }
 
@@ -485,9 +490,19 @@ export class InMemoryRepository implements WarehouseControlRepository {
         binId: line.binId ?? null,
       })),
       evidenceUrls: receipt.evidenceUrls ?? [],
+      receiptException: receipt.receiptException ?? null,
     });
     if (receiptPayload !== this.receiveReplayPayload(input)) {
       throw new Error("Idempotency key was reused with a different payload.");
+    }
+  }
+
+  private assertDirectReceiptException(input: ReceiveStockInput): void {
+    const exception = input.receiptException;
+    if (!exception?.reason.trim() || exception.evidenceUrls.length === 0) {
+      throw new Error(
+        "An approved purchase order or an evidenced receiving exception is required.",
+      );
     }
   }
 
@@ -624,22 +639,30 @@ export class InMemoryRepository implements WarehouseControlRepository {
   }
 
   async recordReturn(input: ReturnInput): Promise<ReturnRecord> {
+    if (input.lines.some((line) => line.disposition && line.disposition !== "quarantine")) {
+      throw new Error("Return intake is quarantine-first; Quality controls final disposition.");
+    }
+    if (input.lines.some((line) => !line.locationId)) {
+      throw new Error("A quarantine location is required for every returned line.");
+    }
     const createdAt = this.now();
+    const quarantinedLines = input.lines.map((line) => ({
+      ...line,
+      disposition: "quarantine" as const,
+    }));
     const record: ReturnRecord = {
       id: uid("ret"),
       source: input.source,
       eventId: input.eventId,
-      lines: input.lines,
+      lines: quarantinedLines,
       evidenceUrls: input.evidenceUrls,
       actor: input.actor,
       createdAt,
     };
 
-    for (const line of input.lines) {
+    for (const line of quarantinedLines) {
       const product = this.data.products.find((p) => p.id === line.productId);
       if (!product) throw new Error(`Unknown product: ${line.productId}`);
-
-      const disposition = line.disposition ?? "restock";
 
       if (product.serialized && line.serialNumber) {
         const unit = this.data.units.find(
@@ -654,33 +677,19 @@ export class InMemoryRepository implements WarehouseControlRepository {
             `Serial ${line.serialNumber} not found for ${product.name}.`,
           );
         }
-        if (disposition === "restock") {
-          unit.status = "in_stock";
-          unit.assignedTo = undefined;
-          if (line.locationId) unit.locationId = line.locationId;
-          if (line.binId !== undefined) unit.binId = line.binId;
-        } else if (disposition === "lost") {
-          unit.status = "lost";
-          unit.assignedTo = undefined;
-        } else {
-          unit.status = "returned";
-          unit.assignedTo = undefined;
-        }
+        unit.status = "pending_inspection";
+        unit.assignedTo = undefined;
+        unit.locationId = line.locationId!;
+        if (line.binId !== undefined) unit.binId = line.binId;
       } else if (!product.serialized) {
-        if (disposition === "restock") {
-          const targetLoc =
-            line.locationId ??
-            primaryStockLocation(toStockState(this.data), product.id);
-          if (targetLoc) {
-            const level = this.stockRow(
-              product.id,
-              targetLoc,
-              line.binId,
-              true,
-            )!;
-            level.quantity += line.quantity;
-          }
-        }
+        const level = this.stockRow(
+          product.id,
+          line.locationId!,
+          line.binId,
+          true,
+        )!;
+        level.quantity += line.quantity;
+        level.unavailable = (level.unavailable ?? 0) + line.quantity;
       }
 
       this.data.movements.push({
@@ -691,7 +700,7 @@ export class InMemoryRepository implements WarehouseControlRepository {
         toLocationId: line.locationId,
         toBinId: line.binId,
         eventId: input.eventId,
-        reason: `${line.reason} (${disposition})`,
+        reason: `${line.reason} (quarantine)`,
         serialNumber: line.serialNumber,
         reference: record.id,
         evidenceUrls: input.evidenceUrls,
@@ -857,8 +866,6 @@ export class InMemoryRepository implements WarehouseControlRepository {
     if (!po) throw new Error("Purchase order not found.");
     if (po.status === "cancelled")
       throw new Error("Cannot receive against a cancelled purchase order.");
-    const createdAt = this.now();
-
     for (const line of input.lines) {
       if (line.quantityReceived <= 0) continue;
       const product = this.data.products.find((p) => p.id === line.productId);
@@ -870,45 +877,29 @@ export class InMemoryRepository implements WarehouseControlRepository {
         throw new Error(
           `Received product is not on this PO: ${line.productId}`,
         );
-      // Never let cumulative received exceed what was ordered.
-      poLine.quantityReceived = Math.min(
-        poLine.quantityOrdered,
-        poLine.quantityReceived + line.quantityReceived,
-      );
-
-      if (product.serialized) {
-        for (let i = 0; i < line.quantityReceived; i++) {
-          this.data.units.push({
-            id: uid("unit"),
-            productId: product.id,
-            serialNumber: `${product.sku}-SN${Date.now()}${i}`,
-            locationId: input.locationId,
-            binId: input.binId,
-            status: "in_stock",
-          });
-        }
-      } else {
-        const level = this.stockRow(
-          product.id,
-          input.locationId,
-          input.binId,
-          true,
-        )!;
-        level.quantity += line.quantityReceived;
+      const remaining = poLine.quantityOrdered - poLine.quantityReceived;
+      if (line.quantityReceived > remaining) {
+        throw new Error(
+          "PO overage must be recorded as an evidenced receiving exception.",
+        );
       }
-
-      this.data.movements.push({
-        id: uid("mv"),
-        type: "receipt",
-        productId: product.id,
-        quantity: line.quantityReceived,
-        toLocationId: input.locationId,
-        toBinId: input.binId,
-        reference: po.id,
-        actor: input.actor,
-        createdAt,
-      });
+      poLine.quantityReceived += line.quantityReceived;
     }
+
+    const receipt = this.receiveStockOnce({
+      supplierId: po.supplierId,
+      locationId: input.locationId,
+      lines: input.lines
+        .filter((line) => line.quantityReceived > 0)
+        .map((line) => ({
+          productId: line.productId,
+          quantity: line.quantityReceived,
+          binId: input.binId,
+        })),
+      actor: input.actor,
+    });
+    const storedReceipt = this.data.receipts.find((row) => row.id === receipt.id)!;
+    storedReceipt.procurementPoId = po.id;
 
     po.status = poStatusAfterReceipt(po);
     this.persist();
@@ -1205,6 +1196,26 @@ export class InMemoryRepository implements WarehouseControlRepository {
     query: PageQuery,
   ): Promise<PageResult<WarehouseTask>> {
     const tasks: WarehouseTask[] = [
+      ...this.data.receipts
+        .filter((receipt) => ["pending", "partial"].includes(receipt.qualityStatus ?? "pending"))
+        .map((receipt) => ({
+          id: `quality-receipt-${receipt.id}`,
+          type: "quality" as const,
+          sourceId: receipt.id,
+          title: `Inspect receipt ${receipt.id}`,
+          status: "due" as const,
+        })),
+      ...this.data.returns
+        .filter((returned) =>
+          returned.lines.some((line) => line.disposition === "quarantine"),
+        )
+        .map((returned) => ({
+          id: `quality-return-${returned.id}`,
+          type: "quality" as const,
+          sourceId: returned.id,
+          title: `Inspect return ${returned.id}`,
+          status: "due" as const,
+        })),
       ...this.holds
         .filter((hold) => hold.status === "active")
         .map((hold) => ({
@@ -1258,13 +1269,17 @@ export class InMemoryRepository implements WarehouseControlRepository {
       return row;
     };
     for (const level of this.data.stockLevels) {
-      position(level.productId, level.locationId, level.binId).onHand +=
-        level.quantity;
+      const row = position(level.productId, level.locationId, level.binId);
+      row.onHand += level.quantity;
+      row.unavailable += level.unavailable ?? 0;
     }
     for (const unit of this.data.units) {
       if (unit.status === "in_stock") {
         position(unit.productId, unit.locationId, unit.binId).onHand += 1;
-      } else if (unit.status === "returned") {
+      } else if (
+        unit.status === "returned" ||
+        unit.status === "pending_inspection"
+      ) {
         const row = position(unit.productId, unit.locationId, unit.binId);
         row.onHand += 1;
         row.unavailable += 1;
@@ -1314,7 +1329,18 @@ export class InMemoryRepository implements WarehouseControlRepository {
         const sourceQuantity = lines
           .filter((line) => line.productId === input.productId)
           .reduce((sum, line) => sum + line.quantity, 0);
-        if (input.quantity <= 0 || input.quantity > sourceQuantity) {
+        const alreadyInspected = this.qualityInspections
+          .filter(
+            (inspection) =>
+              inspection.sourceType === input.sourceType &&
+              inspection.sourceId === input.sourceId &&
+              inspection.productId === input.productId,
+          )
+          .reduce((sum, inspection) => sum + inspection.quantity, 0);
+        if (
+          input.quantity <= 0 ||
+          input.quantity > sourceQuantity - alreadyInspected
+        ) {
           throw new Error("Inspection quantity exceeds the source quantity.");
         }
         if (input.disposition !== "accepted" && !input.reason?.trim()) {
@@ -1341,6 +1367,54 @@ export class InMemoryRepository implements WarehouseControlRepository {
           inspectedBy: "demo-quality-inspector",
           inspectedAt: this.now(),
         };
+        const product = this.data.products.find(
+          (row) => row.id === input.productId,
+        );
+        if (!product) throw new Error("Inspection product not found.");
+        const sourceBinId = input.binId ?? receipt?.lines.find(
+          (line) => line.productId === input.productId,
+        )?.binId ?? returned?.lines.find(
+          (line) => line.productId === input.productId,
+        )?.binId;
+        if (input.disposition === "accepted") {
+          if (product.serialized) {
+            const candidates = this.data.units.filter(
+              (unit) =>
+                unit.productId === input.productId &&
+                unit.locationId === locationId &&
+                unit.status === "pending_inspection" &&
+                (input.serialNumber === undefined ||
+                  unit.serialNumber === input.serialNumber) &&
+                (sourceBinId === undefined || unit.binId === sourceBinId),
+            );
+            if (candidates.length < input.quantity) {
+              throw new Error("Pending serialized stock is not available for inspection.");
+            }
+            for (const unit of candidates.slice(0, input.quantity)) {
+              unit.status = "in_stock";
+            }
+          } else {
+            const level = this.stockRow(
+              input.productId,
+              locationId,
+              sourceBinId,
+              false,
+            );
+            if (!level || (level.unavailable ?? 0) < input.quantity) {
+              throw new Error("Pending stock is not available for inspection.");
+            }
+            level.unavailable = (level.unavailable ?? 0) - input.quantity;
+          }
+        }
+        if (receipt) {
+          const inspected = this.qualityInspections
+            .filter((row) => row.sourceType === "receipt" && row.sourceId === receipt.id)
+            .reduce((sum, row) => sum + row.quantity, input.quantity);
+          const received = receipt.lines.reduce((sum, line) => sum + line.quantity, 0);
+          receipt.qualityStatus = inspected >= received
+            ? input.disposition === "accepted" ? "accepted" : "hold"
+            : "partial";
+        }
         this.qualityInspections.push(inspection);
         if (input.disposition !== "accepted") {
           const hold: InventoryHold = {
@@ -2978,7 +3052,7 @@ export class InMemoryRepository implements WarehouseControlRepository {
   async receiveProcurementPO(
     input: ReceiveProcurementPOInput,
   ): Promise<Receipt> {
-    return this.receiveStock({
+    const receipt = this.receiveStockOnce({
       locationId: input.locationId,
       lines: input.lines.map((line) => ({
         productId: line.productId,
@@ -2990,5 +3064,9 @@ export class InMemoryRepository implements WarehouseControlRepository {
       evidenceUrls: input.evidenceUrls,
       actor: "demo-procurement-receiver",
     });
+    const storedReceipt = this.data.receipts.find((row) => row.id === receipt.id)!;
+    storedReceipt.procurementPoId = input.poId;
+    this.persist();
+    return clone(storedReceipt);
   }
 }

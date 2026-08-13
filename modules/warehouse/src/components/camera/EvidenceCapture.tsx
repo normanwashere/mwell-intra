@@ -6,6 +6,7 @@ import { uploadEvidence } from '@/data/supabase/evidence';
 interface EvidenceCaptureProps {
   onChange: (urls: string[]) => void;
   label?: string;
+  maxPhotos?: number;
   /** Used as the Storage path prefix when uploading to Supabase Storage
    * (e.g. a receipt/return id). When omitted in live mode, a timestamp prefix
    * is used. In memory mode uploads are skipped (base64 is stored inline). */
@@ -37,6 +38,7 @@ function readAsDataUrl(file: File): Promise<string> {
 export function EvidenceCapture({
   onChange,
   label = 'Capture photo evidence',
+  maxPhotos = MAX_PHOTOS,
   reference,
 }: EvidenceCaptureProps) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -52,8 +54,8 @@ export function EvidenceCapture({
     let rejected = 0;
     const toUpload: string[] = [];
     for (const file of Array.from(files)) {
-      if (next.length + toUpload.length >= MAX_PHOTOS) {
-        setError(`Up to ${MAX_PHOTOS} photos.`);
+      if (next.length + toUpload.length >= maxPhotos) {
+        setError(`Up to ${maxPhotos} photo${maxPhotos === 1 ? '' : 's'}.`);
         break;
       }
       if (!file.type.startsWith('image/')) {
@@ -116,7 +118,7 @@ export function EvidenceCapture({
         type="file"
         accept="image/*"
         capture="environment"
-        multiple
+        multiple={maxPhotos > 1}
         className="sr-only"
         aria-label={label}
         onChange={(e) => void handleFiles(e.target.files)}
