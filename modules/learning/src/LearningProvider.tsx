@@ -119,6 +119,7 @@ export interface LearningContextValue {
   activeTraining: ActiveTrainingRequirement | null;
   activeActivity: ActiveLearningActivity | null;
   refresh(): Promise<void>;
+  refreshAccess(): Promise<boolean>;
   resume(requirementId: string): Promise<void>;
   closeTraining(): void;
   closeActivity(): void;
@@ -584,6 +585,17 @@ export function LearningProvider({
     [confirmCommand, repository],
   );
 
+  const refreshAccess = useCallback(async (): Promise<boolean> => {
+    const capabilitiesCurrent = await refreshCapabilities();
+    await refresh();
+    if (!capabilitiesCurrent) {
+      setStale(true);
+      setError("Your access status could not be refreshed. Try again when the connection is restored.");
+      return false;
+    }
+    return true;
+  }, [refresh, refreshCapabilities]);
+
   const closeTraining = useCallback(() => {
     setActiveTraining(null);
     setTrainingPrincipal(null);
@@ -610,6 +622,7 @@ export function LearningProvider({
       activeTraining: visibleTraining,
       activeActivity: visibleActivity,
       refresh,
+      refreshAccess,
       resume,
       closeTraining,
       closeActivity,
@@ -631,6 +644,7 @@ export function LearningProvider({
       visibleTraining,
       visibleActivity,
       refresh,
+      refreshAccess,
       resume,
       closeTraining,
       closeActivity,

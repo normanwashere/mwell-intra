@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { LockedCapabilityRecovery } from "./LockedCapabilityRecovery";
 import { LearningContext, type LearningContextValue } from "./LearningProvider";
@@ -16,7 +16,7 @@ const value: LearningContextValue = {
   },
   loading: false, stale: false, error: null, resumeRequirementId: null,
   startingRequirementId: null, trainingError: null, activeTraining: null, activeActivity: null,
-  refresh: vi.fn(), resume: vi.fn(), closeTraining: vi.fn(), closeActivity: vi.fn(), recordCheckpoint: vi.fn(),
+  refresh: vi.fn(), refreshAccess: vi.fn().mockResolvedValue(true), resume: vi.fn(), closeTraining: vi.fn(), closeActivity: vi.fn(), recordCheckpoint: vi.fn(),
   submitAssessment: vi.fn(), acknowledgePolicy: vi.fn(), requestSupport: vi.fn(),
   isLiveCapability: vi.fn().mockReturnValue(false), lockedReason: vi.fn().mockReturnValue(null),
 };
@@ -47,5 +47,18 @@ describe("LockedCapabilityRecovery", () => {
       "href",
       "/onboarding?requirement=receiving",
     );
+  });
+
+  it("offers an explicit fail-closed access refresh", async () => {
+    const refreshAccess = vi.fn().mockResolvedValue(false);
+    render(
+      <LearningContext.Provider value={{ ...value, refreshAccess }}>
+        <LockedCapabilityRecovery module="warehouse" capability="receive_stock" reason="unavailable" />
+      </LearningContext.Provider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Refresh access" }));
+    await waitFor(() => expect(refreshAccess).toHaveBeenCalledOnce());
+    expect(screen.getByRole("alert")).toHaveTextContent("Access could not be refreshed");
   });
 });

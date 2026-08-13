@@ -1,5 +1,5 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { UserCapabilities } from "@intra/auth";
 import type { LearningRepository } from "./repository";
 import type { LearningSnapshot } from "./types";
@@ -15,6 +15,7 @@ const session: {
   profile: { id: string; email: string; kind: "employee" };
   userCapabilities: UserCapabilities;
   userRoles?: Record<string, string[]>;
+  refreshCapabilities?: () => Promise<boolean>;
 } = {
   mode: "supabase",
   profile: {
@@ -32,6 +33,10 @@ vi.mock("@intra/auth", async () => {
     "@intra/auth",
   );
   return { ...actual, useSession: () => session };
+});
+
+afterEach(() => {
+  delete session.refreshCapabilities;
 });
 
 const emptySnapshot = (refreshedAt = "2026-08-13T00:00:00.000Z") =>
@@ -695,5 +700,25 @@ describe("LearningProvider", () => {
     expect(screen.getByTestId("snapshot")).toHaveTextContent(
       "2026-08-13T00:00:00.000Z",
     );
+  });
+
+  it("marks access stale when the governed capability projection cannot refresh", async () => {
+    const initial = emptySnapshot();
+    const learningRepository = repository(initial);
+    session.refreshCapabilities = vi.fn().mockResolvedValue(false);
+    render(
+      <LearningProvider repository={learningRepository}>
+        <Probe />
+      </LearningProvider>,
+    );
+    await screen.findByText("2026-08-13T00:00:00.000Z");
+
+    await expect(observedLearning!.refreshAccess()).resolves.toBe(false);
+    await waitFor(() => {
+      expect(screen.getByTestId("stale")).toHaveTextContent("true");
+      expect(screen.getByTestId("error")).toHaveTextContent(
+        "Your access status could not be refreshed",
+      );
+    });
   });
 });

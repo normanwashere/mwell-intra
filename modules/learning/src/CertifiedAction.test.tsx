@@ -17,7 +17,7 @@ function value(overrides: Partial<LearningContextValue> = {}): LearningContextVa
   return {
     snapshot: null, loading: false, stale: false, error: null,
     resumeRequirementId: null, startingRequirementId: null, trainingError: null,
-    activeTraining: null, activeActivity: null, refresh: vi.fn(), resume: vi.fn(), closeTraining: vi.fn(), closeActivity: vi.fn(),
+    activeTraining: null, activeActivity: null, refresh: vi.fn(), refreshAccess: vi.fn().mockResolvedValue(true), resume: vi.fn(), closeTraining: vi.fn(), closeActivity: vi.fn(),
     recordCheckpoint: vi.fn(), submitAssessment: vi.fn(), acknowledgePolicy: vi.fn(),
     requestSupport: vi.fn(), isLiveCapability: vi.fn().mockReturnValue(true),
     lockedReason: vi.fn().mockReturnValue(null), ...overrides,

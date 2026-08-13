@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import type { Session, SupabaseClient, User } from "@supabase/supabase-js";
@@ -49,6 +49,7 @@ function CanProbe({
 
 function LiveSessionProbe() {
   const { profile, roleCapabilities, userCapabilities, refreshCapabilities } = useSession();
+  const [refreshResult, setRefreshResult] = useState("idle");
   const canReceive = useCan("warehouse", "receive_stock");
   const canReserve = useCan("warehouse", "reserve_allocate");
   return (
@@ -62,7 +63,8 @@ function LiveSessionProbe() {
       </span>
       <span data-testid="live-receive">{canReceive ? "yes" : "no"}</span>
       <span data-testid="live-reserve">{canReserve ? "yes" : "no"}</span>
-      <button type="button" onClick={() => void refreshCapabilities()}>
+      <span data-testid="refresh-result">{refreshResult}</span>
+      <button type="button" onClick={() => void refreshCapabilities().then((ok) => setRefreshResult(ok ? "ok" : "failed"))}>
         Refresh capabilities
       </button>
     </div>
@@ -313,6 +315,26 @@ describe("useCan", () => {
       expect(screen.getByTestId("live-reserve").textContent).toBe("yes"),
     );
     expect(rpc).toHaveBeenCalledTimes(2);
+    expect(screen.getByTestId("refresh-result").textContent).toBe("ok");
+  });
+
+  it("reports a governed capability refresh failure while keeping authority empty", async () => {
+    const { client, rpc } = liveClient();
+    render(
+      <SessionProvider config={{ mode: "supabase", client }}>
+        <LiveSessionProbe />
+      </SessionProvider>,
+    );
+    await screen.findByText("live@mwell.test");
+    rpc.mockResolvedValueOnce({ data: null, error: new Error("offline") });
+
+    await act(async () => {
+      screen.getByRole("button", { name: "Refresh capabilities" }).click();
+    });
+
+    await waitFor(() => expect(screen.getByTestId("refresh-result").textContent).toBe("failed"));
+    expect(screen.getByTestId("role-capabilities").textContent).toBe("none");
+    expect(screen.getByTestId("live-capabilities").textContent).toBe("none");
   });
 
   it("keeps verified identity but fails closed when live capabilities cannot load", async () => {

@@ -182,21 +182,17 @@ export function SessionProvider({
   }> => {
     if (!client) return { roleCapabilities: {}, userCapabilities: {} };
     const result = await client.schema("core").rpc("my_capability_snapshot");
+    if (result.error) throw result.error;
     if (
-      result.error ||
       typeof result.data !== "object" ||
       result.data === null ||
       Array.isArray(result.data)
-    ) {
-      return { roleCapabilities: {}, userCapabilities: {} };
-    }
+    ) throw new Error("Capability snapshot is unavailable or malformed.");
     const snapshot = result.data as Record<string, unknown>;
     if (
       !isCapabilityProjection(snapshot.roleCapabilities) ||
       !isCapabilityProjection(snapshot.userCapabilities)
-    ) {
-      return { roleCapabilities: {}, userCapabilities: {} };
-    }
+    ) throw new Error("Capability snapshot projections are malformed.");
     return {
       roleCapabilities: parseUserCapabilitiesFromClaims(
         snapshot.roleCapabilities,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Badge, Button, Icon } from "@intra/ui";
 import { useLearning } from "./LearningProvider";
 import type { RequirementDefinition, RequirementProgress } from "./types";
@@ -34,6 +34,13 @@ export function PolicyAcknowledgment({
   const inFlight = useRef(false);
   const documentKey = `${progress.assignmentRequirementId}:${requirement.version}:${document.id}:${document.version}`;
   const complete = ["passed", "waived"].includes(progress.state) || acknowledgedKey === documentKey;
+
+  useEffect(() => {
+    setAccepted(false);
+    setAcknowledgedKey(null);
+    setError(null);
+    inFlight.current = false;
+  }, [documentKey, document.evidenceHash]);
 
   return (
     <section aria-labelledby="policy-title" className="space-y-5">

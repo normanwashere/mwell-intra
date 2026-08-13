@@ -66,6 +66,7 @@ function context(overrides: Partial<LearningContextValue> = {}): LearningContext
     activeTraining: null,
     activeActivity: null,
     refresh: vi.fn(),
+    refreshAccess: vi.fn().mockResolvedValue(true),
     resume: vi.fn(),
     closeTraining: vi.fn(),
     closeActivity: vi.fn(),

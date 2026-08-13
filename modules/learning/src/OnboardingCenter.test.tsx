@@ -180,6 +180,7 @@ function value(overrides: Partial<LearningContextValue> = {}): LearningContextVa
     activeTraining: null,
     activeActivity: null,
     refresh: vi.fn(),
+    refreshAccess: vi.fn().mockResolvedValue(true),
     resume: vi.fn().mockResolvedValue(undefined),
     closeTraining: vi.fn(),
     closeActivity: vi.fn(),

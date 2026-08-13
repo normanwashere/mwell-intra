@@ -36,6 +36,7 @@ function value(acknowledgePolicy: LearningContextValue["acknowledgePolicy"]): Le
     activeTraining: null,
     activeActivity: null,
     refresh: vi.fn(),
+    refreshAccess: vi.fn().mockResolvedValue(true),
     resume: vi.fn(),
     closeTraining: vi.fn(),
     closeActivity: vi.fn(),
@@ -88,5 +89,47 @@ describe("PolicyAcknowledgment", () => {
       }),
     );
     expect(screen.getByText("Policy acknowledged")).toBeInTheDocument();
+  });
+
+  it("requires fresh acceptance when the controlled document identity changes", () => {
+    const acknowledgePolicy = vi.fn().mockResolvedValue(undefined);
+    const document = {
+      id: "LGL-RCV-004",
+      version: "4.2",
+      title: "Receiving and custody control",
+      owner: "Legal and Compliance",
+      effectiveDate: "2026-08-01",
+      summary: "Keep received inventory traceable and under controlled custody.",
+      sections: ["Capture traceability before stock becomes available."],
+      evidenceHash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      href: "/knowledge?article=governance-warehouse-receiving",
+    } as const;
+    const rendered = render(
+      <LearningContext.Provider value={value(acknowledgePolicy)}>
+        <PolicyAcknowledgment requirement={requirement} progress={progress} document={document} />
+      </LearningContext.Provider>,
+    );
+    const acceptance = screen.getByLabelText(
+      "I have read and understand this controlled policy version.",
+    );
+    fireEvent.click(acceptance);
+    expect(acceptance).toBeChecked();
+
+    rendered.rerender(
+      <LearningContext.Provider value={value(acknowledgePolicy)}>
+        <PolicyAcknowledgment
+          requirement={{ ...requirement, version: 3 }}
+          progress={{ ...progress, requirementVersion: 3 }}
+          document={{
+            ...document,
+            version: "4.3",
+            evidenceHash: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          }}
+        />
+      </LearningContext.Provider>,
+    );
+
+    expect(acceptance).not.toBeChecked();
+    expect(screen.getByRole("button", { name: "Acknowledge policy" })).toBeDisabled();
   });
 });

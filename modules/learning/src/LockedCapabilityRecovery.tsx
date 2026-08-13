@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { Badge, Icon } from "@intra/ui";
+import { useState } from "react";
+import { Badge, Button, Icon } from "@intra/ui";
 import type { Module } from "@intra/rbac";
 import { useOptionalLearning } from "./LearningProvider";
 
@@ -22,6 +23,8 @@ export function LockedCapabilityRecovery({
   requirementIds?: readonly string[];
 }) {
   const learning = useOptionalLearning();
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
   const requirements = learning?.snapshot?.curricula.flatMap((item) => item.requirements) ?? [];
   const titles = requirementIds.flatMap((id) => {
     const title = requirements.find((requirement) => requirement.id === id)?.title;
@@ -54,6 +57,29 @@ export function LockedCapabilityRecovery({
           )}
           {reason === "training" && requirementIds[0] && (
             <Link href={`/onboarding?requirement=${encodeURIComponent(requirementIds[0])}`} className="btn-outline btn-sm mt-4 inline-flex">Resume onboarding</Link>
+          )}
+          {reason === "unavailable" && learning && (
+            <div className="mt-4">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={refreshing}
+                onClick={async () => {
+                  setRefreshing(true);
+                  setRefreshError(null);
+                  try {
+                    if (!(await learning.refreshAccess())) {
+                      setRefreshError("Access could not be refreshed. Check your connection and try again.");
+                    }
+                  } finally {
+                    setRefreshing(false);
+                  }
+                }}
+              >
+                {refreshing ? "Refreshing access" : "Refresh access"}
+              </Button>
+              {refreshError && <p role="alert" className="mt-2 text-sm font-medium">{refreshError}</p>}
+            </div>
           )}
         </div>
       </div>

@@ -35,6 +35,7 @@ const certifiedTestLearning: LearningContextValue = {
   activeTraining: null,
   activeActivity: null,
   refresh: async () => undefined,
+  refreshAccess: async () => true,
   resume: async () => undefined,
   closeTraining: () => undefined,
   closeActivity: () => undefined,

@@ -100,6 +100,40 @@ function ReceivingTrainingRuntime({ learning }: { learning: LearningContextValue
   );
 }
 
+interface PendingReceiptCommand {
+  key: string;
+  signature: string;
+}
+
+const PENDING_RECEIPT_COMMAND_KEY = "intra.warehouse.pending-receipt-command.v1";
+
+function readPendingReceiptCommand(): PendingReceiptCommand | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(PENDING_RECEIPT_COMMAND_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<PendingReceiptCommand>;
+    return typeof parsed.key === "string" && typeof parsed.signature === "string"
+      ? { key: parsed.key, signature: parsed.signature }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function persistPendingReceiptCommand(command: PendingReceiptCommand | null) {
+  if (typeof window === "undefined") return;
+  try {
+    if (command) {
+      window.sessionStorage.setItem(PENDING_RECEIPT_COMMAND_KEY, JSON.stringify(command));
+    } else {
+      window.sessionStorage.removeItem(PENDING_RECEIPT_COMMAND_KEY);
+    }
+  } catch {
+    // Storage can be disabled. The in-memory key still protects same-mount retries.
+  }
+}
+
 export function ReceivingPage() {
   const learning = useOptionalLearning();
   const activeTraining = learning?.activeTraining;
@@ -152,7 +186,7 @@ export function ReceivingPageSurface({
   const [lines, setLines] = useState<Line[]>([]);
   const [evidence, setEvidence] = useState<string[]>([]);
   const [lastReceiptStaged, setLastReceiptStaged] = useState(false);
-  const receiptCommand = useRef<{ key: string; signature: string } | null>(null);
+  const receiptCommand = useRef<PendingReceiptCommand | null>(readPendingReceiptCommand());
 
   if (!data) return null;
   const products = data.products;
@@ -355,6 +389,7 @@ export function ReceivingPageSurface({
         key: `receive-${crypto.randomUUID()}`,
         signature,
       };
+      persistPendingReceiptCommand(receiptCommand.current);
     }
     const ok = await receiveStock({
       ...receiptInput,
@@ -362,6 +397,7 @@ export function ReceivingPageSurface({
     });
     if (!ok) return;
     receiptCommand.current = null;
+    persistPendingReceiptCommand(null);
     toast.success(`Received ${totalItems} item(s) into inspection staging`);
     setLastReceiptStaged(true);
     setLines([]);
