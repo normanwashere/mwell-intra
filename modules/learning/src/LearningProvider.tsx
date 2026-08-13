@@ -16,6 +16,7 @@ import { LEARNING_CATALOG, roleCurriculumFor } from "./catalog";
 import {
   MemoryLearningRepository,
   SupabaseLearningRepository,
+  createSessionStorageLearningPersistence,
   type LearningRepository,
 } from "./repository";
 import type {
@@ -29,7 +30,6 @@ import type {
 } from "./types";
 import type { TrainingCheckpoint } from "./training/types";
 import { createIdempotencyKey } from "./training/idempotency";
-import { getTrainingAdapter } from "./training/registry";
 import { scorePreviewAssessment } from "./content";
 
 const EMPTY_SNAPSHOT: LearningSnapshot = {
@@ -167,16 +167,24 @@ export function LearningProvider({
     roleCapabilities = {},
     refreshCapabilities = CONFIRM_LOCAL_CAPABILITIES,
   } = useSession();
+  const demoPersistence = useMemo(
+    () =>
+      createSessionStorageLearningPersistence(
+        `intra.demo-learning.v1:${profile?.id ?? "anonymous"}:${JSON.stringify(userRoles)}`,
+      ),
+    [profile?.id, userRoles],
+  );
   const repository = useMemo<LearningRepository>(() => {
     if (injectedRepository) return injectedRepository;
     if (supabaseClient) return new SupabaseLearningRepository(supabaseClient);
     return new MemoryLearningRepository({
       snapshot: previewSnapshotForRoles(userRoles),
       runtime: "development",
+      persistence: demoPersistence,
       simulations: LEARNING_CATALOG.simulations,
       assess: (input) => ({ score: scorePreviewAssessment(input) }),
     });
-  }, [injectedRepository, supabaseClient, userRoles]);
+  }, [demoPersistence, injectedRepository, supabaseClient, userRoles]);
   const [snapshot, setSnapshot] = useState<LearningSnapshot | null>(null);
   const snapshotRef = useRef<LearningSnapshot | null>(null);
   const [loading, setLoading] = useState(Boolean(profile));
@@ -326,14 +334,6 @@ export function LearningProvider({
       const isActivity = requirement?.kind === "assessment" || requirement?.kind === "policy";
       if (!requirement || (!isActivity && !requirement.simulationId)) {
         setTrainingError("This learning step does not have published training content yet.");
-        return;
-      }
-      if (
-        !isActivity &&
-        requirement.kind !== "orientation" &&
-        !getTrainingAdapter(requirement.simulationId!)
-      ) {
-        setTrainingError("Guided practice for this step is being prepared.");
         return;
       }
       const requestGeneration = generation.current;

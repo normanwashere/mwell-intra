@@ -122,8 +122,15 @@ function authorityFor(roles: Partial<UserRoles>): PersonaAuthorityItem[] {
   );
 }
 
-function fallbackDepartment(profile: SessionProfile): string {
-  return profile.kind === "vendor" ? "External" : "Department not specified";
+function fallbackDepartment(
+  profile: SessionProfile,
+  roles: Partial<UserRoles>,
+): string {
+  if (profile.kind === "vendor") return "External";
+  const module = MODULE_LIST.find(
+    (candidate) => candidate !== "core" && (roles[candidate]?.length ?? 0) > 0,
+  );
+  return module ? getAdminModulePresentation(module).label : "Unassigned";
 }
 
 export function resolvePersonaPresentation(
@@ -142,7 +149,7 @@ export function resolvePersonaPresentation(
       persona?.label ??
       profile.title?.trim() ??
       (profile.kind === "vendor" ? "Vendor Representative" : "Employee"),
-    department: persona?.department ?? fallbackDepartment(profile),
+    department: persona?.department ?? fallbackDepartment(profile, roles),
     responsibility: persona?.responsibility,
     authority: authorityFor(roles),
   };

@@ -7,6 +7,7 @@ import type {
   WorkData,
   WorkFilter,
   WorkItem,
+  WorkCapability,
   WorkPriority,
   WorkSource,
 } from "./types";
@@ -46,6 +47,19 @@ export function filterWorkItems(
     : items.filter((item) => item.source === filter);
 }
 
+export function scopeWorkItems(
+  items: readonly WorkItem[],
+  hasCapability: (module: WorkCapability["module"], capability: string) => boolean,
+): WorkItem[] {
+  return items.filter(
+    (item) =>
+      item.sourceRecordExists !== false &&
+      (item.requiredCapabilities?.some((required) =>
+        hasCapability(required.module, required.capability),
+      ) ?? true),
+  );
+}
+
 export function sortWorkItems(items: readonly WorkItem[]): WorkItem[] {
   const rank: Record<WorkPriority, number> = {
     critical: 0,
@@ -75,10 +89,13 @@ function mapWorkItem(row: UnknownRow): WorkItem | null {
     description: text(row.description),
     status: text(row.status, "open"),
     dueAt: text(row.due_at) || undefined,
+    sourceRecordExists: row.source_record_exists !== false,
   };
 }
 
-export function useWorkData() {
+export function useWorkData(
+  hasCapability: (module: WorkCapability["module"], capability: string) => boolean,
+) {
   const { mode, supabaseClient } = useSession();
   const live = mode === "supabase" ? supabaseClient : null;
   const [data, setData] = useState<WorkData>(
@@ -117,5 +134,6 @@ export function useWorkData() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
-  return { data, loading, error, refresh };
+  const scopedItems = scopeWorkItems(data.items, hasCapability);
+  return { data: { ...data, items: scopedItems }, loading, error, refresh };
 }

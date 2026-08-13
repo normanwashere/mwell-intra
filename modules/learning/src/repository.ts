@@ -585,6 +585,44 @@ export interface MemoryLearningRepositoryOptions {
   evaluateCertifications?: (
     snapshot: LearningSnapshot,
   ) => readonly Certification[];
+  persistence?: MemoryLearningPersistence;
+}
+
+export interface MemoryLearningPersistedState {
+  snapshot: LearningSnapshot;
+  completedCheckpoints: Readonly<Record<string, readonly string[]>>;
+}
+
+export interface MemoryLearningPersistence {
+  load(): MemoryLearningPersistedState | null;
+  save(state: MemoryLearningPersistedState): void;
+}
+
+export function createSessionStorageLearningPersistence(
+  key: string,
+): MemoryLearningPersistence {
+  return {
+    load() {
+      if (typeof window === "undefined") return null;
+      try {
+        const raw = window.sessionStorage.getItem(key);
+        if (!raw) return null;
+        const state = JSON.parse(raw) as MemoryLearningPersistedState;
+        return state?.snapshot ? state : null;
+      } catch {
+        window.sessionStorage.removeItem(key);
+        return null;
+      }
+    },
+    save(state) {
+      if (typeof window === "undefined") return;
+      try {
+        window.sessionStorage.setItem(key, JSON.stringify(state));
+      } catch {
+        // Demo persistence is best-effort; learning remains usable in memory.
+      }
+    },
+  };
 }
 
 const clone = <T>(value: T): T => structuredClone(value);
@@ -596,18 +634,38 @@ export class MemoryLearningRepository implements LearningRepository {
   private readonly evaluateCertifications?: MemoryLearningRepositoryOptions["evaluateCertifications"];
   private readonly simulations: ReadonlyMap<string, SimulationDefinition>;
   private readonly completedCheckpoints = new Map<string, Set<string>>();
+  private readonly persistence?: MemoryLearningPersistence;
 
   constructor(options: MemoryLearningRepositoryOptions) {
     const runtime = options.runtime ?? process.env.NODE_ENV;
     if (runtime === "production")
       throw new Error("MemoryLearningRepository is disabled in production.");
-    this.state = clone(options.snapshot);
+    const persisted = options.persistence?.load();
+    this.state = clone(persisted?.snapshot ?? options.snapshot);
     this.now = options.now ?? (() => new Date().toISOString());
     this.assess = options.assess;
     this.evaluateCertifications = options.evaluateCertifications;
     this.simulations = new Map(
       (options.simulations ?? []).map((item) => [item.id, item]),
     );
+    this.persistence = options.persistence;
+    for (const [assignmentRequirementId, checkpointIds] of Object.entries(
+      persisted?.completedCheckpoints ?? {},
+    )) {
+      this.completedCheckpoints.set(assignmentRequirementId, new Set(checkpointIds));
+    }
+  }
+
+  private persist(): void {
+    this.persistence?.save({
+      snapshot: clone(this.state),
+      completedCheckpoints: Object.fromEntries(
+        [...this.completedCheckpoints].map(([id, checkpoints]) => [
+          id,
+          [...checkpoints],
+        ]),
+      ),
+    });
   }
 
   async snapshot(): Promise<LearningSnapshot> {
@@ -633,6 +691,7 @@ export class MemoryLearningRepository implements LearningRepository {
         ),
       ),
     };
+    this.persist();
     return this.snapshot();
   }
 
@@ -690,6 +749,7 @@ export class MemoryLearningRepository implements LearningRepository {
       ),
       refreshedAt: this.now(),
     };
+    this.persist();
     return clone(next);
   }
 
@@ -866,6 +926,7 @@ export class MemoryLearningRepository implements LearningRepository {
         ),
         refreshedAt: this.now(),
       };
+      this.persist();
     }
     return clone(this.state.certifications);
   }

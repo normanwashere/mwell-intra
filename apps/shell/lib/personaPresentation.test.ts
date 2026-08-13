@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { SessionProfile } from "@intra/auth";
 import type { UserRoles } from "@intra/rbac";
 import { resolvePersonaPresentation } from "./personaPresentation";
+import { DEMO_PROFILES } from "./demoProfiles";
 
 const profile = (title?: string): SessionProfile => ({
   id: "person-1",
@@ -160,6 +161,38 @@ describe("resolvePersonaPresentation", () => {
         role: "finance",
         label: "Procurement Finance Reviewer",
       },
+    ]);
+  });
+
+  it("uses the role-owning department for a dedicated demo duty", () => {
+    const result = resolvePersonaPresentation(profile("Finance reviewer"), {
+      core: ["staff"],
+      procurement: ["finance"],
+    });
+
+    expect(result.department).toBe("Procurement");
+    expect(result.responsibility).toBeUndefined();
+  });
+
+  it("keeps canonical demo personas aligned without making platform roles operational", () => {
+    const profileById = new Map(DEMO_PROFILES.map((item) => [item.id, item]));
+
+    expect(profileById.get("demo-admin")?.roles).toEqual({
+      core: ["platform_admin", "staff"],
+    });
+    expect(profileById.get("demo-procurement")?.roles).toMatchObject({
+      procurement: ["procurement_officer", "admin"],
+      warehouse: ["procurement"],
+    });
+    expect(profileById.get("demo-legal")?.roles.legal).toEqual([
+      "legal_reviewer",
+      "compliance",
+      "admin",
+    ]);
+    expect(profileById.get("demo-executive")?.roles.insights).toEqual([
+      "analyst",
+      "manager",
+      "executive",
     ]);
   });
 });

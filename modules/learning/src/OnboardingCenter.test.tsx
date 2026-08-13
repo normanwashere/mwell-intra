@@ -246,6 +246,31 @@ describe("OnboardingCenter", () => {
     );
   });
 
+  it("starts a published generic practice when no domain simulation is registered", () => {
+    renderCenter({
+      snapshot: {
+        ...snapshot,
+        curricula: snapshot.curricula.map((effective) => ({
+          ...effective,
+          requirements: effective.requirements.map((requirement) =>
+            requirement.id === "receiving"
+              ? { ...requirement, simulationId: "procurement-role-practice" }
+              : requirement,
+          ),
+        })),
+      },
+    });
+
+    expect(
+      screen.getByRole("button", {
+        name: "Resume Receive and inspect a serialized device",
+      }),
+    ).toBeEnabled();
+    expect(
+      screen.queryByText("Guided practice is being prepared"),
+    ).not.toBeInTheDocument();
+  });
+
   it("prioritizes the next action and deduplicates shared multi-role requirements", () => {
     renderCenter();
 

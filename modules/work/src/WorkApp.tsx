@@ -21,7 +21,7 @@ import {
   sortWorkItems,
   useWorkData,
 } from "./data";
-import type { WorkFilter, WorkPriority, WorkSource } from "./types";
+import type { WorkCapability, WorkFilter, WorkPriority, WorkSource } from "./types";
 
 const PRIORITY_TONE: Record<WorkPriority, "rose" | "amber" | "slate"> = {
   critical: "rose",
@@ -38,8 +38,10 @@ const ALL_SOURCES: readonly WorkSource[] = [
 
 export function WorkApp({
   allowedSources = ALL_SOURCES,
+  hasCapability = () => true,
 }: {
   allowedSources?: readonly WorkSource[];
+  hasCapability?: (module: WorkCapability["module"], capability: string) => boolean;
 }) {
   const { profile, loading: sessionLoading } = useSession();
   if (sessionLoading)
@@ -59,15 +61,17 @@ export function WorkApp({
       />
     );
   }
-  return <EmployeeWorkApp allowedSources={allowedSources} />;
+  return <EmployeeWorkApp allowedSources={allowedSources} hasCapability={hasCapability} />;
 }
 
 function EmployeeWorkApp({
   allowedSources,
+  hasCapability,
 }: {
   allowedSources: readonly WorkSource[];
+  hasCapability: (module: WorkCapability["module"], capability: string) => boolean;
 }) {
-  const { data, loading, error, refresh } = useWorkData();
+  const { data, loading, error, refresh } = useWorkData(hasCapability);
   const [filter, setFilter] = useState<WorkFilter>("all");
   if (loading)
     return (
@@ -79,7 +83,7 @@ function EmployeeWorkApp({
     allowedSources.includes(item.source),
   );
   const visible = sortWorkItems(filterWorkItems(scopedItems, filter));
-  const urgentCount = data.items.filter(
+  const urgentCount = scopedItems.filter(
     (item) => item.priority !== "normal",
   ).length;
   return (

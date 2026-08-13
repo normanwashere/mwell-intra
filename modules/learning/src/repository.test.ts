@@ -4,6 +4,7 @@ import {
   MemoryLearningRepository,
   SupabaseLearningRepository,
 } from "./repository";
+import type { MemoryLearningRepositoryOptions } from "./repository";
 import * as publicApi from "./index";
 import type {
   AssessmentSubmission,
@@ -872,5 +873,44 @@ describe("MemoryLearningRepository", () => {
     expect((await repository.snapshot()).certifications).toEqual([
       issuedCertification,
     ]);
+  });
+
+  it("restores completed demo learning after the repository is recreated", async () => {
+    let persisted: unknown = null;
+    const persistence = {
+      load: () => persisted,
+      save: (state: unknown) => {
+        persisted = structuredClone(state);
+      },
+    };
+    const first = new MemoryLearningRepository({
+      snapshot: snapshot(),
+      runtime: "test",
+      now: () => now,
+      persistence,
+    } as MemoryLearningRepositoryOptions);
+
+    const started = await first.startRequirement({
+      assignmentRequirementId: "ar-orientation",
+    });
+    await first.checkpoint({
+      assignmentRequirementId: "ar-orientation",
+      attemptId: started.attempt!.id,
+      simulationId: "orientation-sim",
+      checkpointId: "complete",
+    });
+
+    const restored = new MemoryLearningRepository({
+      snapshot: snapshot(),
+      runtime: "test",
+      now: () => now,
+      persistence,
+    } as MemoryLearningRepositoryOptions);
+
+    expect(
+      (await restored.snapshot()).progress.find(
+        (item) => item.assignmentRequirementId === "ar-orientation",
+      )?.state,
+    ).toBe("passed");
   });
 });

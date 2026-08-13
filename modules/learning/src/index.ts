@@ -14,6 +14,7 @@ export { OPERATING_PERSONAS, OPERATING_PERSONA_IDS } from "./personas";
 export {
   MemoryLearningRepository,
   SupabaseLearningRepository,
+  createSessionStorageLearningPersistence,
 } from "./repository";
 export { resolveEffectiveCurriculum } from "./resolver";
 export {
@@ -75,6 +76,8 @@ export type {
   LearningRepository,
   LearningRpcClient,
   MemoryLearningRepositoryOptions,
+  MemoryLearningPersistence,
+  MemoryLearningPersistedState,
 } from "./repository";
 export type {
   CapabilityLearningState,

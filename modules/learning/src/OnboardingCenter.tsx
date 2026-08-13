@@ -297,7 +297,7 @@ export function OnboardingCenter({
     }
     if (
       !["orientation", "assessment", "policy"].includes(requirement.kind) &&
-      (!requirement.simulationId || !getTrainingAdapter(requirement.simulationId))
+      !requirement.simulationId
     ) {
       return "Guided practice is being prepared";
     }

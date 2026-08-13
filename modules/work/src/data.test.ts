@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { availableWorkFilters, filterWorkItems, sortWorkItems } from "./data";
+import {
+  availableWorkFilters,
+  filterWorkItems,
+  scopeWorkItems,
+  sortWorkItems,
+} from "./data";
 import { WORK_DEMO_DATA } from "./seed";
 
 describe("My Work queue", () => {
@@ -21,5 +26,42 @@ describe("My Work queue", () => {
       { value: "procurement", label: "Procurement" },
       { value: "events", label: "Events" },
     ]);
+  });
+
+  it("excludes invalid and capability-ineligible records before priority counts", () => {
+    const items = scopeWorkItems(
+      [
+        {
+          id: "valid-finance",
+          source: "finance",
+          title: "Review payment readiness",
+          description: "Payment readiness evidence is ready for review.",
+          status: "ready for finance",
+          priority: "high",
+          href: "/finance",
+          requiredCapabilities: [
+            { module: "warehouse", capability: "view_finance" },
+          ],
+        },
+        {
+          id: "missing-source",
+          source: "finance",
+          title: "Broken record",
+          description: "This source record was removed.",
+          status: "open",
+          priority: "critical",
+          href: "/finance",
+          requiredCapabilities: [
+            { module: "warehouse", capability: "view_finance" },
+          ],
+          sourceRecordExists: false,
+        },
+      ],
+      (module, capability) =>
+        module === "warehouse" && capability === "view_finance",
+    );
+
+    expect(items.map((item) => item.id)).toEqual(["valid-finance"]);
+    expect(items.filter((item) => item.priority !== "normal")).toHaveLength(1);
   });
 });
