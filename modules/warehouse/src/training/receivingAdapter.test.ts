@@ -42,7 +42,7 @@ describe("receivingTrainingAdapter", () => {
     expect(result.transition).toMatchObject({
       nextStepId: "complete",
       checkpointId: "complete",
-      outcomeId: "clean_inspection_handoff",
+      outcomeId: "receive_stock",
       completed: true,
     });
     expect(result.state).toMatchObject({
@@ -92,7 +92,7 @@ describe("receivingTrainingAdapter", () => {
       { type: "mark-condition", payload: "damaged" },
       { type: "submit-receipt" },
     ]);
-    expect(result.transition?.outcomeId).toBe("damaged_quarantine_handoff");
+    expect(result.transition?.outcomeId).toBe("receive_stock");
     expect(result.state.qualityRoute).toBe("quarantine");
   });
 
@@ -107,7 +107,7 @@ describe("receivingTrainingAdapter", () => {
       ),
       { type: "submit-receipt" },
     ]);
-    expect(result.transition?.outcomeId).toBe("partial_inspection_handoff");
+    expect(result.transition?.outcomeId).toBe("receive_stock");
     expect(result.state.purchaseOrderClosed).toBe(false);
   });
 

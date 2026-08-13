@@ -337,15 +337,9 @@ export const receivingTrainingAdapter: TrainingAdapter<ReceivingTrainingState> &
         state.purchaseOrderClosed =
           state.receivedQuantity === state.expectedQuantity;
         state.status = "complete";
-        const receipt =
-          state.receivedQuantity < state.expectedQuantity
-            ? "partial"
-            : state.condition === "damaged"
-              ? "damaged"
-              : "clean";
         return next(state, "complete", {
           checkpointId: "complete",
-          outcomeId: `${receipt}_${state.qualityRoute}_handoff`,
+          outcomeId: "receive_stock",
           completed: true,
         });
       }
