@@ -1,4 +1,10 @@
-import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
+import {
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
 import { Suspense, lazy, useEffect, useRef } from "react";
 import { AppShell } from "@/components/AppShell";
 import { useWarehouse } from "./store";
@@ -16,6 +22,9 @@ import {
 import { DashboardPage } from "@/pages/DashboardPage";
 import type { ReactNode } from "react";
 import { WAREHOUSE_ROUTE_BY_ID } from "./modules";
+import { useSession } from "@/auth/session";
+import { RECEIVING_SIMULATION_ID } from "@/training/receivingAdapter";
+import { canEnterCapabilityTraining } from "./authorization";
 
 const InventoryPage = lazy(() =>
   import("@/pages/InventoryPage").then((m) => ({ default: m.InventoryPage })),
@@ -131,14 +140,27 @@ function AccessDenied() {
 function Guard({
   anyOf,
   children,
+  training,
 }: {
   anyOf: Capability[];
   children: ReactNode;
+  training?: { capability: Capability; simulationId: string };
 }) {
   const { can } = useWarehouse();
+  const { roleCapabilities = {} } = useSession();
+  const location = useLocation();
   const toast = useToast();
   const toasted = useRef(false);
-  const allowed = anyOf.some((capability) => can(capability));
+  const trainingAllowed = training
+    ? canEnterCapabilityTraining({
+        capability: training.capability,
+        requiredSimulationId: training.simulationId,
+        roleCapabilities,
+        trainingId: new URLSearchParams(location.search).get("training"),
+      })
+    : false;
+  const allowed =
+    anyOf.some((capability) => can(capability)) || trainingAllowed;
   useEffect(() => {
     if (!allowed && !toasted.current) {
       toasted.current = true;
@@ -352,7 +374,13 @@ export function App() {
           <Route
             path={WAREHOUSE_ROUTE_BY_ID.receiving.path}
             element={
-              <Guard anyOf={WAREHOUSE_ROUTE_BY_ID.receiving.gateCapabilityIds}>
+              <Guard
+                anyOf={WAREHOUSE_ROUTE_BY_ID.receiving.gateCapabilityIds}
+                training={{
+                  capability: "receive_stock",
+                  simulationId: RECEIVING_SIMULATION_ID,
+                }}
+              >
                 <ReceivingPage />
               </Guard>
             }

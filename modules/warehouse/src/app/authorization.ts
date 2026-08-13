@@ -1,4 +1,5 @@
 import type { Capability } from "@/auth/roles";
+import type { UserCapabilities } from "@intra/auth";
 import {
   WAREHOUSE_ROUTE_BY_ID,
   warehouseDestinationForRoute,
@@ -19,10 +20,28 @@ export const STOCK_CHANGE_DECISION_CAPABILITIES = [
   "approve_stock_adjustment_finance",
 ] as const satisfies readonly Capability[];
 
+export function canEnterCapabilityTraining({
+  capability,
+  requiredSimulationId,
+  roleCapabilities,
+  trainingId,
+}: {
+  capability: Capability;
+  requiredSimulationId: string;
+  roleCapabilities: UserCapabilities;
+  trainingId: string | null;
+}): boolean {
+  return (
+    trainingId === requiredSimulationId &&
+    roleCapabilities.warehouse?.includes(capability) === true
+  );
+}
+
 export function canOpenWarehouseRoute(
   routeId: WarehouseRouteId,
   canAccess: (capability: Capability) => boolean,
-  canOpenDestination: (destination: WarehouseDestination) => boolean = () => true,
+  canOpenDestination: (destination: WarehouseDestination) => boolean = () =>
+    true,
 ): boolean {
   const destination = warehouseDestinationForRoute(routeId);
   return (

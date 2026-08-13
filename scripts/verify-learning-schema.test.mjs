@@ -23,6 +23,8 @@ const COMPLETION_HARDENING_NAME =
 const AUTHORITY_NAME = "20260812200000_learning_authority.sql";
 const TASK8_AUTHORITY_NAME =
   "20260812220000_task8_database_authority_remediation.sql";
+const POLICY_CHRONOLOGY_NAME =
+  "20260813070234_learning_policy_acknowledgment_chronology.sql";
 const OLD_FOUNDATION_NAME = "20260812090000_learning_foundation.sql";
 const migration = fileURLToPath(
   new URL(`../supabase/migrations/${FOUNDATION_NAME}`, import.meta.url),
@@ -89,6 +91,12 @@ const task8AuthorityMigration = fileURLToPath(
 );
 const task8AuthoritySql = existsSync(task8AuthorityMigration)
   ? readFileSync(task8AuthorityMigration, "utf8")
+  : "";
+const policyChronologyMigration = fileURLToPath(
+  new URL(`../supabase/migrations/${POLICY_CHRONOLOGY_NAME}`, import.meta.url),
+);
+const policyChronologySql = existsSync(policyChronologyMigration)
+  ? readFileSync(policyChronologyMigration, "utf8")
   : "";
 const governedSql = `${sql}\n${authoritySql}`;
 const migrationDirectory = fileURLToPath(
@@ -191,6 +199,16 @@ function errorsForTask8Authority(source) {
   ).join("\n");
 }
 
+function errorsForPolicyChronology(source) {
+  return verifyLearningSchema(
+    repositoryMigrations.map((migrationEntry) =>
+      migrationEntry.name === POLICY_CHRONOLOGY_NAME
+        ? { ...migrationEntry, sql: source }
+        : migrationEntry,
+    ),
+  ).join("\n");
+}
+
 function orderedErrors(laterSql) {
   return verifyLearningSchema([
     ...repositoryMigrations,
@@ -256,14 +274,19 @@ test("models only the exact Task 8 authority remediation", () => {
     errorsForTask8Authority(rawWarehouseAuthority),
     /exact reviewed Task 8 authority function body drifted.*warehouse\.receive_stock/i,
   );
+});
+
+test("models only the exact policy chronology repair", () => {
+  assert.equal(existsSync(policyChronologyMigration), true);
+  assert.equal(errorsForPolicyChronology(policyChronologySql), "");
 
   const callerAuthoredPolicyHash = replaceRequired(
-    task8AuthoritySql,
+    policyChronologySql,
     /v_canonical_evidence_hash,\n    v_user_id/,
     "v_submitted_evidence_hash,\n    v_user_id",
   );
   assert.match(
-    errorsForTask8Authority(callerAuthoredPolicyHash),
+    errorsForPolicyChronology(callerAuthoredPolicyHash),
     /exact guarded function body drifted for learning\.acknowledge_policy/i,
   );
 });
@@ -502,9 +525,9 @@ test("rejects client-authored learning authority and weakened service guards", (
       "resolve_assignments",
       "start_requirement",
     ]).has(functionName);
-    const governedByTask8 = functionName === "acknowledge_policy";
-    const sourceSql = governedByTask8
-      ? task8AuthoritySql
+    const governedByPolicyChronology = functionName === "acknowledge_policy";
+    const sourceSql = governedByPolicyChronology
+      ? policyChronologySql
       : alignedByCompletion
         ? completionHardeningSql
         : servicesSql;
@@ -517,11 +540,11 @@ test("rejects client-authored learning authority and weakened service guards", (
     );
     assert.notEqual(weakened, sourceSql, functionName);
     assert.match(
-      governedByTask8
-        ? errorsForTask8Authority(weakened)
+      governedByPolicyChronology
+        ? errorsForPolicyChronology(weakened)
         : alignedByCompletion
-        ? errorsForCompletionHardening(weakened)
-        : errorsForServices(weakened),
+          ? errorsForCompletionHardening(weakened)
+          : errorsForServices(weakened),
       new RegExp(`${functionName}|function body|read committed`, "i"),
       functionName,
     );
@@ -558,8 +581,9 @@ test("keeps composite assignment locks compatible with PostgreSQL 17", () => {
     /select\s+assignment\s*,\s*assignment_requirement\s+into\s+v_assignment\s*,\s*v_assignment_requirement/i,
   );
   assert.equal(
-    servicesSql.match(/into\s+v_locked_rows[\s\S]*?for update of assignment, assignment_requirement/gi)
-      ?.length,
+    servicesSql.match(
+      /into\s+v_locked_rows[\s\S]*?for update of assignment, assignment_requirement/gi,
+    )?.length,
     5,
   );
 });

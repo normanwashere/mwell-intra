@@ -43,3 +43,4 @@ pnpm-debug.log*
 .review-shots/
 .superpowers/
 .vercel/
+/.env.local

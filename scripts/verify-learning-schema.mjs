@@ -21,6 +21,12 @@ export const ORIENTATION_RUNTIME_MIGRATION_NAME =
   "20260812210000_learning_orientation_runtime.sql";
 export const TASK8_AUTHORITY_MIGRATION_NAME =
   "20260812220000_task8_database_authority_remediation.sql";
+export const PGCRYPTO_COMPATIBILITY_MIGRATION_NAME =
+  "20260813065507_learning_pgcrypto_digest_compatibility.sql";
+export const POLICY_CHRONOLOGY_MIGRATION_NAME =
+  "20260813070234_learning_policy_acknowledgment_chronology.sql";
+export const ASSESSMENT_COMPATIBILITY_MIGRATION_NAME =
+  "20260813071129_learning_assessment_answer_count_compatibility.sql";
 const PINNED_LEARNING_MIGRATION_SHA256 = Object.freeze({
   [FOUNDATION_MIGRATION_NAME]:
     "b5b954f0fdb9ff52748047ca4a17916896227934ecd43c22951ea4489fc129ad",
@@ -533,9 +539,12 @@ export const MODELED_FUNCTIONS = new Set([
   ...ALLOWED_SECURITY_DEFINERS,
   ...Object.values(REQUIRED_TRIGGERS).map((trigger) => trigger.function),
   "learning.guard_certification_lifecycle",
+  "public.digest",
 ]);
 
 export const EXPECTED_FUNCTION_DECLARATION_SQL = Object.freeze({
+  "public.digest":
+    "create or replace function public.digest(data bytea, algorithm text) returns bytea language sql immutable strict parallel safe set search_path = ''",
   "private.learning_has_active_profile":
     "create or replace function private.learning_has_active_profile(required_audience text) returns boolean language sql stable security definer set search_path = ''",
   "private.learning_owns_department":
@@ -625,6 +634,8 @@ export const EXPECTED_FUNCTION_DECLARATION_SQL = Object.freeze({
 });
 
 export const EXPECTED_FUNCTION_BODY_SHA256 = Object.freeze({
+  "public.digest":
+    "7bd8a2be3fdf51da4f4e32b5aa9158cbeb7cce503d1ba51c1f7eb8c616feb0aa",
   "private.learning_has_active_profile":
     "e7dbe840969ff13aab7311d8d69ccfa67111712fdb19eb026465318815c93736",
   "private.learning_owns_department":
@@ -688,9 +699,9 @@ export const EXPECTED_FUNCTION_BODY_SHA256 = Object.freeze({
   "learning.record_simulation_checkpoint":
     "fd29927fc43d93ce1710dee1eb56cc906ffc670e7f47ebbb138061ac48d182d5",
   "learning.submit_assessment":
-    "a97af5a6b7dd8f51f3180accb455a8cef2597a161c8d37227adca0000f2b6016",
+    "c56a70571a9c4091375a82ce2087106414dced595eeb4d1bfc297961a0edee44",
   "learning.acknowledge_policy":
-    "e38110ead668101f287759692e51a453b92bd24199031b4d128f976f0c6c2774",
+    "13a6675c8166123f4a778b4a732f1c4499cb18666362096250258c7e8b5bfdfd",
   "learning.request_support":
     "7d46cd636adcf86f5c5526710cfa250ffe8d3d73b23a8c45b1d70f4300347a84",
   "learning.sync_shared_completions":
@@ -1496,6 +1507,11 @@ function processStatement(state, statement, migrationName) {
   const isOrientationRuntime =
     migrationName === ORIENTATION_RUNTIME_MIGRATION_NAME;
   const isTask8Authority = migrationName === TASK8_AUTHORITY_MIGRATION_NAME;
+  const isPgcryptoCompatibility =
+    migrationName === PGCRYPTO_COMPATIBILITY_MIGRATION_NAME;
+  const isPolicyChronology = migrationName === POLICY_CHRONOLOGY_MIGRATION_NAME;
+  const isAssessmentCompatibility =
+    migrationName === ASSESSMENT_COMPATIBILITY_MIGRATION_NAME;
   let match;
 
   if (
@@ -2237,10 +2253,7 @@ function processStatement(state, statement, migrationName) {
       );
       const drift = functionMetadataDrift(metadata, expectedMetadata);
       const bodyDigest = digestFunctionBody(functionBody(statement));
-      if (
-        drift.length > 0 ||
-        bodyDigest !== TASK8_RECEIVE_STOCK_BODY_SHA256
-      ) {
+      if (drift.length > 0 || bodyDigest !== TASK8_RECEIVE_STOCK_BODY_SHA256) {
         state.errors.push(
           `${migrationName}: exact reviewed Task 8 authority function body drifted for warehouse.receive_stock (${bodyDigest}).`,
         );
@@ -2250,6 +2263,15 @@ function processStatement(state, statement, migrationName) {
     if (!MODELED_FUNCTIONS.has(metadata.qualifiedName)) {
       state.errors.push(
         `${migrationName}: unmodeled procedural function ${metadata.qualifiedName} is default-denied.`,
+      );
+      return;
+    }
+    if (
+      metadata.qualifiedName === "public.digest" &&
+      !isPgcryptoCompatibility
+    ) {
+      state.errors.push(
+        `${migrationName}: public.digest may only be introduced by the pinned pgcrypto compatibility migration.`,
       );
       return;
     }
@@ -2297,6 +2319,14 @@ function processStatement(state, statement, migrationName) {
       isTask8Authority &&
       metadata.qualifiedName === "learning.acknowledge_policy" &&
       metadata.argumentTypes.join("|") === "jsonb";
+    const approvedPolicyChronology =
+      isPolicyChronology &&
+      metadata.qualifiedName === "learning.acknowledge_policy" &&
+      metadata.argumentTypes.join("|") === "jsonb";
+    const approvedAssessmentCompatibility =
+      isAssessmentCompatibility &&
+      metadata.qualifiedName === "learning.submit_assessment" &&
+      metadata.argumentTypes.join("|") === "jsonb";
     if (isServiceContractAlignment && !approvedSnapshotAlignment) {
       state.errors.push(
         `${migrationName}: only the exact no-argument learning.my_learning_snapshot replacement is approved.`,
@@ -2325,7 +2355,9 @@ function processStatement(state, statement, migrationName) {
       existingFunction &&
       !approvedSnapshotAlignment &&
       !approvedCompletionHardening &&
-      !approvedTask8Authority
+      !approvedTask8Authority &&
+      !approvedPolicyChronology &&
+      !approvedAssessmentCompatibility
     ) {
       state.errors.push(
         `${migrationName}: replacement or overload of modeled function ${metadata.qualifiedName} is default-denied.`,
@@ -2361,7 +2393,7 @@ function processStatement(state, statement, migrationName) {
   }
 
   match = normalized.match(
-    /^alter function ((?:learning|private|core)\.[a-z_][a-z0-9_]*)\s*\(([^)]*)\) owner to ([a-z_][a-z0-9_]*)$/,
+    /^alter function ((?:learning|private|core|public)\.[a-z_][a-z0-9_]*)\s*\(([^)]*)\) owner to ([a-z_][a-z0-9_]*)$/,
   );
   if (match) {
     const functionEntry = state.functions.get(match[1]);
@@ -2385,7 +2417,11 @@ function processStatement(state, statement, migrationName) {
         match[1] === "learning.my_learning_snapshot") ||
       approvedCompletionOwner ||
       (isAuthority && LEARNING_AUTHORITY_FUNCTIONS.includes(match[1])) ||
-      (isTask8Authority && match[1] === "learning.acknowledge_policy");
+      (isTask8Authority && match[1] === "learning.acknowledge_policy") ||
+      (isPolicyChronology && match[1] === "learning.acknowledge_policy") ||
+      (isAssessmentCompatibility &&
+        match[1] === "learning.submit_assessment") ||
+      (isPgcryptoCompatibility && match[1] === "public.digest");
     if (
       !approvedServiceOwner ||
       match[3] !== "postgres" ||
