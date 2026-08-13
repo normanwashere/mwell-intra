@@ -36,10 +36,10 @@ export const CONTEXTUAL_FEATURE_GUIDES: ContextualFeatureGuide[] = [
   guide("warehouse-allocations", "Stock allocations", "/warehouse/allocations"),
   guide(
     "warehouse-fulfillment",
-    "Cross-department fulfillment",
+    "Pick, pack, and cross-department fulfillment",
     "/warehouse/fulfillment",
   ),
-  guide("warehouse-returns", "Warehouse returns", "/warehouse/returns"),
+  guide("warehouse-returns", "Returns receiving", "/warehouse/returns"),
   guide(
     "warehouse-storage",
     "Warehouse storage areas and bins",

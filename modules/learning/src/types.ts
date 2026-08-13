@@ -43,6 +43,12 @@ export interface SimulationDefinition {
   title: string;
   checkpointIds: readonly string[];
   capabilityOutcomes: readonly LearningCapability[];
+  embeddedSteps?: readonly {
+    checkpointId: string;
+    title: string;
+    instruction: string;
+    outcomeId: string;
+  }[];
 }
 
 export interface EffectiveCurriculum {

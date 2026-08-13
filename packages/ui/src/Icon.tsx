@@ -29,6 +29,8 @@ export type IconName =
   | "bell"
   | "transfer"
   | "download"
+  | "upload"
+  | "trash"
   | "history"
   | "list"
   | "dots"
@@ -44,8 +46,8 @@ export type IconName =
   | "signature"
   | "shield";
 
-// Icon geometry sourced from Lucide (lucide.dev, ISC license) — clean, uniform
-// 24×24 stroke icons rendered with the shared svg wrapper below.
+// Icon geometry sourced from Lucide (lucide.dev, ISC license): clean, uniform
+// 24x24 stroke icons rendered with the shared SVG wrapper below.
 const ICONS: Record<IconName, ReactNode> = {
   grid: (
     <>
@@ -204,6 +206,22 @@ const ICONS: Record<IconName, ReactNode> = {
       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
       <path d="m7 10 5 5 5-5" />
       <path d="M12 15V3" />
+    </>
+  ),
+  upload: (
+    <>
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="17 8 12 3 7 8" />
+      <line x1="12" x2="12" y1="3" y2="15" />
+    </>
+  ),
+  trash: (
+    <>
+      <path d="M3 6h18" />
+      <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+      <path d="M19 6l-1 14c0 1-1 2-2 2H8c-1 0-2-1-2-2L5 6" />
+      <path d="M10 11v6" />
+      <path d="M14 11v6" />
     </>
   ),
   history: (

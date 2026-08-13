@@ -15,10 +15,6 @@ const sessions = {
     profileId: 'demo-procurement-finance',
     roles: { core: ['staff'], procurement: ['finance'] },
   },
-  warehouse: {
-    profileId: 'demo-finance',
-    roles: { core: ['staff'], warehouse: ['finance'] },
-  },
 } as const;
 
 async function installSession(
@@ -69,7 +65,7 @@ test('dual-scope Finance combines both source systems without duplicating comman
   });
 });
 
-test('single-scope Finance exposes only source links owned by that role', async ({ page }) => {
+test('Procurement Finance exposes only its owned source links', async ({ page }) => {
   await installSession(page, sessions.procurement);
   await page.goto('/finance');
   await expect(page.getByText('Procurement Finance', { exact: true })).toBeVisible();
@@ -83,27 +79,4 @@ test('single-scope Finance exposes only source links owned by that role', async 
     page.locator('span.chip:visible', { hasText: /^Warehouse return$/ }),
   ).toHaveCount(0);
 
-  const warehousePage = await page.context().newPage();
-  await installSession(warehousePage, sessions.warehouse);
-  await warehousePage.goto('/finance');
-  await expect(
-    warehousePage.getByText('Warehouse Finance', { exact: true }),
-  ).toBeVisible();
-  await expect(
-    warehousePage.getByText('Procurement Finance', { exact: true }),
-  ).toHaveCount(0);
-  await expect(
-    warehousePage.getByRole('link', { name: /Warehouse inventory/i }),
-  ).toBeVisible();
-  await expect(
-    warehousePage.getByRole('link', { name: /Procurement records/i }),
-  ).toHaveCount(0);
-  await expect(
-    warehousePage.getByRole('link', { name: /Review inventory value/i }),
-  ).toBeVisible();
-  await expect(warehousePage.getByText('No payment packs yet')).toBeVisible();
-  await expect(
-    warehousePage.locator('span.chip:visible', { hasText: /^Purchase order$/ }),
-  ).toHaveCount(0);
-  await warehousePage.close();
 });

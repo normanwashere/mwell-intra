@@ -81,7 +81,10 @@ describe("AppShell navigation", () => {
     expect(home).toHaveTextContent(/Intra/);
     expect(home).toHaveTextContent(/Warehouse/);
     expect(screen.getByLabelText("Mwell Intra Warehouse")).toHaveTextContent(
-      /Intra/,
+      /Intra · Warehouse/,
+    );
+    expect(screen.getByLabelText("Mwell Intra Warehouse")).toHaveTextContent(
+      /Warehouse Administrator/,
     );
   });
   it("shows logistics modules including Receiving", async () => {

@@ -84,6 +84,7 @@ export function resolveEffectiveCurriculum(
     ),
   ];
   const selectedRequirements = new Map<string, RequirementDefinition>();
+  const selectedOrientationKeys = new Set<string>();
   const visiting = new Set<string>();
 
   const addRequirement = (requirementId: string): void => {
@@ -101,6 +102,11 @@ export function resolveEffectiveCurriculum(
       addRequirement(prerequisiteId);
     }
     visiting.delete(key);
+    if (requirement.kind === "orientation") {
+      const orientationKey = `${requirement.audience}:${requirement.title}`;
+      if (selectedOrientationKeys.has(orientationKey)) return;
+      selectedOrientationKeys.add(orientationKey);
+    }
     selectedRequirements.set(key, requirement);
   };
 

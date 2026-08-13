@@ -248,7 +248,8 @@ export const TROUBLESHOOTING_GUIDES: TroubleshootingGuide[] = [
     id: "trouble-rejected-request",
     symptom:
       "A request, accreditation item, or approval is rejected or returned",
-    summary: "Use the recorded reason to revise or close the governed record.",
+    summary:
+      "Keep a submitted snapshot read-only. Legal records its source version and requested revision before the vendor edits and resubmits.",
     module: "procurement",
     likelyCauses: [
       "Missing evidence",
@@ -258,7 +259,8 @@ export const TROUBLESHOOTING_GUIDES: TroubleshootingGuide[] = [
     ],
     safeRecovery: [
       "Read the decision reason and failed control",
-      "Correct only the returned fields or evidence",
+      "For accreditation, wait for Legal to open the versioned correction request",
+      "Correct only the returned fields or evidence in the requested revision",
       "Preserve prior versions",
       "Resubmit through the displayed route or close when rejection is final",
     ],
@@ -291,7 +293,7 @@ export const TROUBLESHOOTING_GUIDES: TroubleshootingGuide[] = [
     id: "trouble-quality-hold",
     symptom: "Stock remains on quality hold",
     summary:
-      "Resolve evidence and disposition without making held stock available.",
+      "Pending inspection and quarantine keep stock unavailable until the authorized Quality disposition owner decides it.",
     module: "warehouse",
     likelyCauses: [
       "Inspection evidence is incomplete",
@@ -301,6 +303,7 @@ export const TROUBLESHOOTING_GUIDES: TroubleshootingGuide[] = [
     ],
     safeRecovery: [
       "Open the inspection and hold reason",
+      "Confirm the receipt or return remains in quarantine and unavailable",
       "Attach permitted corrective evidence",
       "Route to the authorized Quality disposition owner",
       "Release, continue hold, or return only through the recorded decision",
@@ -386,7 +389,7 @@ export const TROUBLESHOOTING_GUIDES: TroubleshootingGuide[] = [
     ],
     safeRecovery: [
       "Note the route and record ID",
-      "Wait for the bounded loading state; if Warehouse shows a load failure, use Retry once",
+      "After 8 seconds, use Reload page from the bounded loading state",
       "Refresh once only when the page does not provide Retry",
       "Sign in again if prompted",
       "Reopen the record from its queue",
@@ -394,7 +397,7 @@ export const TROUBLESHOOTING_GUIDES: TroubleshootingGuide[] = [
     ],
     dataImpact:
       "Unsaved field edits may be lost and submitted actions may already be committed. Warehouse keeps existing data visible when a background refresh fails, so verify that existing data before retrying a command.",
-    escalationOwner: "Platform administrator",
+    escalationOwner: "Platform Support",
     escalationEvidence: [
       "Route",
       "Record ID",

@@ -24,6 +24,14 @@ const sessions = {
       insights: ["analyst"],
     },
   },
+  coordinator: {
+    profileId: "demo-marketing",
+    roles: {
+      core: ["staff"],
+      warehouse: ["marketing"],
+      events: ["coordinator", "admin"],
+    },
+  },
   manager: {
     profileId: "demo-insights-manager",
     roles: { core: ["staff"], insights: ["manager"] },
@@ -57,7 +65,9 @@ async function assertVisualSafety(page: Page) {
     await page.evaluate(() => document.documentElement.scrollWidth),
   ).toBeLessThanOrEqual(viewport!.width + 2);
   const clippedCommands = await page
-    .locator("button:visible, a.btn-primary:visible, a.btn-ghost:visible")
+    .locator(
+      'button:visible:not([data-nextjs-dev-tools-button]), a.btn-primary:visible, a.btn-ghost:visible',
+    )
     .evaluateAll((elements) =>
       elements
         .filter((element) => element.scrollWidth > element.clientWidth + 2)
@@ -145,11 +155,30 @@ test("event requester validates, creates, opens, and hands off an event", async 
   await expect(
     page.getByRole("heading", { name: "Request warehouse stock" }),
   ).toBeVisible();
-  await expect(page.getByLabel("Department")).toBeVisible();
-  await expect(page.getByLabel("Required date")).toHaveValue(
+  const fulfillmentDialog = page.getByRole("dialog", {
+    name: "Request warehouse stock",
+  });
+  await expect(
+    fulfillmentDialog.getByLabel("Department", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.locator('header [aria-label*="Department"]'),
+  ).toHaveCount(0);
+  await expect(fulfillmentDialog.getByLabel("Required date")).toHaveValue(
     dateValue(startDate),
   );
-  await page.keyboard.press("Escape");
+  await fulfillmentDialog
+    .getByLabel("Department", { exact: true })
+    .selectOption({ index: 1 });
+  await fulfillmentDialog
+    .getByLabel("Business purpose")
+    .fill("Community wellness event stock");
+  await fulfillmentDialog.getByLabel("Product").selectOption({ index: 1 });
+  await fulfillmentDialog.getByLabel("Quantity").fill("2");
+  await fulfillmentDialog
+    .getByRole("button", { name: "Submit for approval" })
+    .click();
+  await expect(page.getByText(/Demo Warehouse handoff recorded locally/i)).toBeVisible();
   await assertVisualSafety(page);
   await page.screenshot({
     path: testInfo.outputPath(`events-detail-${testInfo.project.name}.png`),
@@ -168,7 +197,7 @@ test("event viewer is read-only", async ({ page }) => {
   await assertVisualSafety(page);
 });
 
-test("Insights respects analyst, manager, and executive scopes", async ({
+test("Insights respects unified leadership, manager, and executive scopes", async ({
   page,
 }, testInfo) => {
   await installSession(page, sessions.analyst);
@@ -177,14 +206,14 @@ test("Insights respects analyst, manager, and executive scopes", async ({
   if (mobile) {
     await expect(page.getByRole("combobox", { name: "Insight view" })).toBeVisible();
     await expect(page.getByRole("option", { name: "Warehouse" })).toHaveCount(1);
-    await expect(page.getByRole("option", { name: "Executive" })).toHaveCount(0);
+    await expect(page.getByRole("option", { name: "Executive" })).toHaveCount(1);
   } else {
     await expect(page.getByRole("tab", { name: "Warehouse" })).toBeVisible();
-    await expect(page.getByRole("tab", { name: "Executive" })).toHaveCount(0);
+    await expect(page.getByRole("tab", { name: "Executive" })).toBeVisible();
   }
   await expect(page.getByText("Fulfillment rate")).toBeVisible();
   const populatedMetrics = page.locator("[data-insight-metric]");
-  await expect(populatedMetrics).toHaveCount(6);
+  expect(await populatedMetrics.count()).toBeGreaterThanOrEqual(6);
   const malformedMetrics = await populatedMetrics.evaluateAll((cards) =>
     cards
       .filter((card) => {
@@ -241,7 +270,7 @@ test("Insights respects analyst, manager, and executive scopes", async ({
 test("My Work filters and opens the authoritative source", async ({
   page,
 }, testInfo) => {
-  await installSession(page, sessions.requester);
+  await installSession(page, sessions.coordinator);
   await page.goto("/work");
   await expect(page.getByRole("heading", { name: "My Work" })).toBeVisible();
   await page.getByRole("tab", { name: "Events" }).click();

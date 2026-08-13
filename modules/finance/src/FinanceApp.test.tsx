@@ -88,6 +88,7 @@ describe('FinanceApp', () => {
     );
     for (const purchaseOrderLink of screen.getAllByRole('link', { name: 'PO-2026-0004' })) {
       expect(purchaseOrderLink).toHaveClass('break-all', 'sm:break-normal');
+      expect(purchaseOrderLink).toHaveClass('min-h-11');
     }
     expect(screen.getByText('Cross-module activity')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /stock adjustment approvals/i })).toHaveAttribute(

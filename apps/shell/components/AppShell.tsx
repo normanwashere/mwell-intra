@@ -1,6 +1,6 @@
 "use client";
 
-// Suite chrome v2 — clinical-modern workspace.
+// Suite chrome v2 - clinical-modern workspace.
 // Desktop: compact icon rail with flyout labels + dense content column.
 // Mobile: bottom tab bar with a labeled context-aware command + spring pill.
 
@@ -26,6 +26,7 @@ import { UserMenu } from "./UserMenu";
 import { CommandPalette } from "./CommandPalette";
 import { MwellIntraLogo } from "./MwellIntraLogo";
 import { PersonaContext } from "./PersonaContext";
+import { BoundedLoadingState } from "./BoundedLoadingState";
 
 interface NavEntry {
   readonly href: string;
@@ -44,11 +45,11 @@ function topBarLabel(pathname: string, entries: readonly NavEntry[]): string {
   if (pathname.startsWith(FINANCE_NAV.href)) return FINANCE_NAV.label;
   if (pathname.startsWith(ONBOARDING_NAV.href)) return ONBOARDING_NAV.label;
   if (pathname.startsWith(KNOWLEDGE_NAV.href)) return KNOWLEDGE_NAV.label;
-  if (pathname.startsWith("/admin/users")) return "Admin · Users & Roles";
+  if (pathname.startsWith("/admin/users")) return "Admin / Users & Roles";
   if (pathname.startsWith("/admin/departments"))
-    return "Admin · Departments";
+    return "Admin / Departments";
   if (pathname.startsWith("/admin/doa"))
-    return "Admin · Delegation of Authority";
+    return "Admin / Delegation of Authority";
   if (pathname.startsWith("/admin")) return "Admin";
   const match = entries.find(
     (e) => e.href !== "/" && pathname.startsWith(e.href),
@@ -234,7 +235,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             }}
             className="flex h-11 w-11 items-center justify-center gap-3 rounded-xl border border-line bg-inset text-faint transition hover:text-ink lg:w-full lg:justify-start lg:px-3"
             aria-label="Open command palette"
-            title="Command palette (⌘K)"
+            title="Command palette (Ctrl+K)"
           >
             <Icon name="search" className="h-4 w-4" />
             <span className="hidden text-sm font-medium lg:inline">Search</span>
@@ -295,7 +296,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <Icon name="search" className="h-3.5 w-3.5" />
                 <span>Search</span>
                 <kbd className="rounded border border-line bg-surface px-1 font-mono text-[0.6rem]">
-                  ⌘K
+                  Ctrl+K
                 </kbd>
               </button>
               <span
@@ -355,14 +356,11 @@ export function AppShell({ children }: { children: ReactNode }) {
           style={{ "--shell-header": "4.5rem" } as CSSProperties}
         >
           {loading ? (
-            <div
-              className="grid place-items-center py-24 text-muted"
-              role="status"
-              aria-live="polite"
-            >
-              <Icon name="rotate" className="h-6 w-6 animate-spin" />
-              <span className="mt-2 text-sm">Restoring your session…</span>
-            </div>
+            <BoundedLoadingState
+              label="Restoring your session..."
+              recoveryOwner="Platform Support"
+              className="py-24"
+            />
           ) : (
             <PageTransition id={pathname}>{children}</PageTransition>
           )}
@@ -465,7 +463,7 @@ function MobileActionTab({
       <span className="grid h-7 w-7 place-items-center rounded-lg bg-brand-600 text-white shadow-e1">
         <Icon name={action.icon} className="h-4 w-4" />
       </span>
-      <span className="block max-w-full text-center leading-tight break-words">
+      <span className="block max-w-full text-center text-[0.625rem] leading-tight break-normal hyphens-none">
         {action.label}
       </span>
     </Link>
@@ -501,7 +499,7 @@ function MobileTab({
         <span className="absolute inset-x-1 inset-y-0.5 rounded-2xl bg-brand-500/10" />
       )}
       <Icon name={entry.icon} className="relative h-5 w-5" />
-      <span className="relative block max-w-full text-center leading-tight break-words">
+      <span className="relative block max-w-full text-center text-[0.625rem] leading-tight break-normal hyphens-none">
         {entry.label}
       </span>
     </Link>

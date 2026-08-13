@@ -401,5 +401,11 @@ describe('event demo repository', () => {
       id: 'evt-demo-created',
       name: 'Created event',
     });
+    expect(loadMemoryEvents(storage).departments).toEqual(
+      EVENTS_DEMO_DATA.departments,
+    );
+    expect(loadMemoryEvents(storage).products).toEqual(
+      EVENTS_DEMO_DATA.products,
+    );
   });
 });

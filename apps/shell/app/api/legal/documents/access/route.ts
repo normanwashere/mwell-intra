@@ -1,13 +1,26 @@
 import { NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@shell/lib/supabase/server';
+import { createSupabaseAdminClient } from '@shell/lib/supabase/admin';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-const SIGNED_URL_TTL_SECONDS = 480;
-
 function jsonError(error: string, status: number) {
   return NextResponse.json({ error }, { status });
+}
+
+function isPreparedAccess(value: unknown): value is {
+  storage_path: string;
+  expires_in: number;
+} {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.storage_path === 'string' &&
+    candidate.storage_path.length > 0 &&
+    typeof candidate.expires_in === 'number' &&
+    candidate.expires_in > 0
+  );
 }
 
 export async function POST(request: Request) {
@@ -26,20 +39,31 @@ export async function POST(request: Request) {
   const documentId = typeof body.document_id === 'string' ? body.document_id.trim() : '';
   if (!documentId) return jsonError('A document_id is required.', 400);
 
-  const { data: document, error } = await userClient
+  const purpose = body.disposition === 'download' ? 'download' : 'open';
+  const adminClient = createSupabaseAdminClient();
+  if (!adminClient) return jsonError('Private document delivery is not configured.', 503);
+  const { data: prepared, error } = await userClient
+    .schema('legal')
+    .rpc('prepare_document_signed_access', {
+      payload: { document_id: documentId, purpose },
+    });
+  if (error || !isPreparedAccess(prepared)) {
+    return jsonError('Document access could not be verified.', 403);
+  }
+
+  const { data: document, error: documentError } = await userClient
     .schema('legal')
     .from('accreditation_docs')
-    .select('id,filename,storage_path')
+    .select('filename')
     .eq('id', documentId)
     .maybeSingle();
-  if (error) return jsonError('Document access could not be verified.', 403);
-  if (!document?.storage_path) return jsonError('Document not found.', 404);
+  if (documentError || !document?.filename) return jsonError('Document not found.', 404);
 
-  const { data: signed, error: signedError } = await userClient.storage
+  const { data: signed, error: signedError } = await adminClient.storage
     .from('documents')
     .createSignedUrl(
-      String(document.storage_path),
-      SIGNED_URL_TTL_SECONDS,
+      String(prepared.storage_path),
+      Number(prepared.expires_in),
       body.disposition === 'download' ? { download: String(document.filename) } : undefined,
     );
   if (signedError || !signed?.signedUrl) {

@@ -46,7 +46,7 @@ const columns: Column<FinancePaymentItem>[] = [
       <span className="block min-w-0">
         <a
           href={`/procurement/purchase-orders/${encodeURIComponent(row.purchaseOrderId)}`}
-          className="block max-w-full break-all font-semibold text-brand-700 hover:underline sm:break-normal dark:text-brand-300"
+          className="inline-flex min-h-11 max-w-full items-center break-all font-semibold text-brand-700 hover:underline sm:break-normal dark:text-brand-300"
         >
           {row.poNumber}
         </a>

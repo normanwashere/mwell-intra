@@ -78,6 +78,7 @@ type LiveRow = Record<string, never> & {
   readonly signature: never;
 };
 type LiveQueryError = { readonly message: string };
+const cancellationCommandKeys = new Map<string, string>();
 
 function useLiveClient(): LiveClient | null {
   const { mode, supabaseClient } = useSession();
@@ -314,6 +315,7 @@ function mapPurchaseOrder(
     lines: row.lines ?? [],
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    cancellationVersion: Number(row.cancellation_version ?? 1),
     approvedAt: row.approved_at ?? undefined,
     approvedByEmail: row.approved_by_email ?? undefined,
     approvalSignature: row.approval_signature ?? undefined,
@@ -1183,11 +1185,19 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
       const validation = validatePurchaseOrderCancellation(current.status, input.reason);
       if (!validation.allowed) return Promise.reject(new Error(validation.reason));
       if (isLive(live)) {
+        const expectedVersion = current.cancellationVersion ?? 1;
+        const intentKey = `${id}:${expectedVersion}:${input.reason.trim()}`;
+        const idempotencyKey =
+          cancellationCommandKeys.get(intentKey) ?? crypto.randomUUID();
+        cancellationCommandKeys.set(intentKey, idempotencyKey);
         return liveRpc<LiveRow>(live, 'procurement', 'cancel_purchase_order', {
           id,
           reason: input.reason.trim(),
+          expected_version: expectedVersion,
+          idempotency_key: idempotencyKey,
         }).then((row) => {
           const mapped = mapPurchaseOrder(row);
+          if (mapped.status === 'cancelled') cancellationCommandKeys.delete(intentKey);
           return refreshLive().then(() => mapped);
         });
       }

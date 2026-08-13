@@ -649,7 +649,7 @@ const definitions: FeatureDefinition[] = [
     route: "/onboarding",
     roleIds: CURRENT_ROLE_IDS.filter((roleId) => roleId !== "vendor_portal"),
     purpose:
-      "Guides each employee through the policy, practice, assessment, and attestation required before governed live actions become available.",
+      "Guides each employee through role-specific policy, practice, assessment, and attestation. Practices without a simulation use a completable guided review, and demo completion persists by profile and role bundle.",
     reads:
       "Current scoped role assignments, effective curricula, requirement progress, capability locks, support state, and certification evidence.",
     writes:
@@ -707,7 +707,7 @@ const definitions: FeatureDefinition[] = [
     purpose:
       "Combines assignments and approvals from accessible departments into one personal queue without moving decision authority.",
     reads:
-      "The governed core.v_my_work projection, current identity, source status, priority, due time, and owning record route.",
+      "The governed core.v_my_work projection or demo queue, filtered by effective capabilities and valid source records before filters, sorting, and priority counts are calculated.",
     writes:
       "No source transaction changes; selecting Open source navigates to the authoritative record.",
     statuses:
@@ -979,17 +979,17 @@ const definitions: FeatureDefinition[] = [
     module: "warehouse",
     route: "/warehouse/receiving",
     purpose:
-      "Receives approved purchase-order quantities with traceability, evidence, inspection routing, and destination control.",
+      "Receives approved purchase-order quantities in a scan-friendly receipt table with traceability, evidence, inspection routing, and destination control.",
     reads:
       "Approved purchase orders, remaining lines, products, suppliers, warehouses, bins, and operation routes.",
     writes:
-      "Creates receipt, unit or lot, evidence, movement, stock-ledger, and quality-control records atomically.",
+      "Creates receipt, unit or lot, evidence, movement, stock-ledger, and quality-control records in pending inspection. Received stock remains unavailable until Quality records acceptance.",
     statuses:
       "Receivable, partial, complete, pending inspection, held, rejected, or failed.",
     exception:
-      "Stop for over-delivery, missing PO, damaged goods, invalid route, or duplicate serial and record evidence.",
+      "Standard receiving is PO-first. A direct non-PO receipt or overage requires an evidenced exception; otherwise stop for damaged goods, invalid route, or duplicate serial and record evidence.",
     completionEvidence:
-      "Receipt number, accepted quantity, traceability identity, destination, and ledger activity are visible.",
+      "Receipt number, received quantity, pending-inspection status, unavailable custody, traceability identity, destination, and Quality handoff are visible.",
   },
   {
     id: "warehouse-allocations",
@@ -1011,15 +1011,15 @@ const definitions: FeatureDefinition[] = [
   },
   {
     id: "warehouse-fulfillment",
-    title: "Cross-department fulfillment",
+    title: "Pick, pack, and cross-department fulfillment",
     module: "warehouse",
     route: "/warehouse/fulfillment",
     purpose:
-      "Coordinates ecommerce and third-party event demand, department stock requests, customer returns, Product-approved kits, packing supplies, shipments, accountable handovers, open-box re-kitting, and warehouse release in one governed workspace.",
+      "Coordinates manual or CSV ecommerce demand, third-party event demand, multi-item department stock requests, customer returns, Product-approved kits, packing supplies, shipments, accountable handovers, open-box re-kitting, and warehouse release in one governed workspace.",
     reads:
       "Demand references, governed department and cost center, event and third-party locations, reported sales value, products, item classes, stock, explicit reservations, serial identities, fulfillment supplies, return cases, Product approval references, shipment or handover evidence, and request decisions.",
     writes:
-      "Creates demand and return records, records independent request decisions, writes reservations, supports linked backorders, advances separated pick-pack-release-delivery states, captures proof of delivery or recipient acknowledgment, quarantines every customer return, creates linked replacement orders, records Finance or supplier evidence, closes with Customer Service evidence, reconciles cancelled packaging, issues stock, and registers Product-approved re-kit lineage.",
+      "Creates validated single or CSV-grouped demand, multi-line department request, and return records; records independent request decisions; writes reservations; supports linked backorders; advances separated pick-pack-release-delivery states; uploads proof-of-delivery images; quarantines every customer return; and preserves replacement, Finance, supplier, closure, packaging, issue, and re-kit lineage.",
     statuses:
       "Received, allocated, picking, packing, ready, released, dispatched, in transit, delivery failed, returned to sender, delivered, completed, cancelled, pending approval, approved, rejected, submitted, resolved, customer closed, active, or inspection.",
     exception:
@@ -1029,21 +1029,21 @@ const definitions: FeatureDefinition[] = [
   },
   {
     id: "warehouse-returns",
-    title: "Warehouse returns",
+    title: "Returns receiving",
     module: "warehouse",
     route: "/warehouse/returns",
     purpose:
-      "Records returned custody and routes each unit to restock, hold, repair, loss, damage, or vendor return.",
+      "Receives customer, vendor, or event-specific returns into a named receiving location and bin, quarantines every return before an independent Quality decision, then routes each unit to restock, hold, loss, damage, or vendor return.",
     reads:
       "Open issues, event allocations, products, traceability identity, prior returns, and valid destinations.",
     writes:
-      "Creates return, inspection or disposition movements and updates custody and stock according to the decision.",
+      "Return intake creates unavailable quarantine custody and an inspection task. Independent Quality records the final disposition and only accepted stock becomes available.",
     statuses:
       "Expected, received, inspected, restocked, held, damaged, lost, or returned to vendor.",
     exception:
       "Quarantine unidentified or unsafe items and escalate quantity or serial mismatches instead of forcing a return.",
     completionEvidence:
-      "Every returned quantity has a condition, final disposition, evidence reference, and reconciled custody balance.",
+      "Every returned quantity shows source custody, quarantine intake, independent Quality disposition, evidence reference, and reconciled custody balance.",
   },
   {
     id: "warehouse-storage",
@@ -1221,7 +1221,7 @@ const definitions: FeatureDefinition[] = [
       "platform_admin",
     ],
     purpose:
-      "Combines authorized procurement commitments, payment readiness, warehouse receipts, returns, and inventory valuation in one review workspace.",
+      "Combines authorized procurement commitments, payment readiness, warehouse receipts, returns, inventory valuation, and event settlement in one review workspace. Memory-mode event settlement remains visibly demo-only.",
     reads:
       "Purchase orders, payment-readiness packs, receipt evidence, returns, stock valuation, and cross-module activity permitted by the user's scoped Finance roles.",
     writes:
@@ -1497,7 +1497,7 @@ const definitions: FeatureDefinition[] = [
     reads:
       "PO, request, award, vendor, accreditation, receipts, inspections, acceptance, invoice, and decision history.",
     writes:
-      "Records approval, issue, receipt linkage, goods/service/milestone acceptance, structured invoice evidence, Finance review, and payment release reference.",
+      "Records approval, issue, receipt linkage, goods/service/milestone acceptance, structured invoice evidence, Finance review, payment release reference, and a required PO cancellation reason. A failed live cancellation leaves the displayed PO unchanged.",
     statuses:
       "Draft, blocked, approved, issued, partially accepted, accepted, payment ready, returned, released, closed, or cancelled.",
     exception:
@@ -1627,11 +1627,11 @@ const definitions: FeatureDefinition[] = [
     reads:
       "Vendor-scoped case, application, checklist, documents, corrections, instruments, and decision status.",
     writes:
-      "Uploads vendor evidence, updates draft responses, acknowledges declarations, and submits the governed application snapshot.",
+      "Uploads vendor evidence, updates draft responses, acknowledges declarations, and submits the governed application snapshot. Submitted and under-review applications are read-only until Legal records a versioned correction request; the vendor edits the requested revision and resubmits it.",
     statuses:
       "Draft, incomplete, ready to submit, submitted, correction required, under review, approved, or rejected.",
     exception:
-      "Do not upload secrets or another company's documents; replace invalid files and contact Legal for incorrect requirements.",
+      "Do not edit a submitted snapshot, upload secrets, or use another company's documents. Legal is the recovery owner for an incorrect requirement and must open a versioned correction before vendor edits resume.",
     completionEvidence:
       "Incomplete cases direct the vendor to Complete requirements; complete submission records the snapshot, attestation, actor, and time.",
   },

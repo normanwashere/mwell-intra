@@ -4,9 +4,14 @@ const getUser = vi.fn();
 const createServerClient = vi.fn();
 const createSignedUrl = vi.fn();
 const maybeSingle = vi.fn();
+const rpc = vi.fn();
+const createAdminClient = vi.fn();
 
 vi.mock('@shell/lib/supabase/server', () => ({
   createSupabaseServerClient: (...args: unknown[]) => createServerClient(...args),
+}));
+vi.mock('@shell/lib/supabase/admin', () => ({
+  createSupabaseAdminClient: () => createAdminClient(),
 }));
 
 function userClient() {
@@ -17,8 +22,7 @@ function userClient() {
   };
   return {
     auth: { getUser },
-    schema: () => ({ from: () => docQuery }),
-    storage: { from: () => ({ createSignedUrl }) },
+    schema: () => ({ from: () => docQuery, rpc }),
   };
 }
 
@@ -34,9 +38,20 @@ describe('POST /api/legal/documents/access', () => {
     createServerClient.mockReset();
     createSignedUrl.mockReset();
     maybeSingle.mockReset();
+    rpc.mockReset();
+    createAdminClient.mockReset();
     createServerClient.mockResolvedValue(userClient());
+    createAdminClient.mockReturnValue({ storage: { from: () => ({ createSignedUrl }) } });
     maybeSingle.mockResolvedValue({
-      data: { id: 'doc-1', filename: 'registration.pdf', storage_path: 'vendor/ven-1/legal/accreditation/case-1/registration.pdf' },
+      data: { filename: 'registration.pdf' },
+      error: null,
+    });
+    rpc.mockResolvedValue({
+      data: {
+        storage_path: 'vendor/ven-1/legal/accreditation/case-1/registration.pdf',
+        expires_in: 300,
+        access_audit_id: 'audit-1',
+      },
       error: null,
     });
     createSignedUrl.mockResolvedValue({ data: { signedUrl: 'https://signed.example/document' }, error: null });
@@ -50,23 +65,37 @@ describe('POST /api/legal/documents/access', () => {
     }) as never);
 
     expect(response.status).toBe(401);
-    expect(maybeSingle).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalled();
+    expect(createSignedUrl).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when server-only private document delivery is not configured', async () => {
+    getUser.mockResolvedValue({ data: { user: { id: 'legal-1' } }, error: null });
+    createAdminClient.mockReturnValue(null);
+
+    const response = await POST(new Request('http://localhost/api/legal/documents/access', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"document_id":"doc-1"}',
+    }) as never);
+
+    expect(response.status).toBe(503);
+    expect(rpc).not.toHaveBeenCalled();
     expect(createSignedUrl).not.toHaveBeenCalled();
   });
 
   it('fails closed when the document is not visible through the authenticated legal schema', async () => {
     getUser.mockResolvedValue({ data: { user: { id: 'vendor-1' } }, error: null });
-    maybeSingle.mockResolvedValue({ data: null, error: null });
+    rpc.mockResolvedValue({ data: null, error: { message: 'Not authorized' } });
 
     const response = await POST(new Request('http://localhost/api/legal/documents/access', {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"document_id":"foreign-doc"}',
     }) as never);
 
-    expect(response.status).toBe(404);
+    expect(response.status).toBe(403);
+    expect(maybeSingle).not.toHaveBeenCalled();
     expect(createSignedUrl).not.toHaveBeenCalled();
   });
 
-  it('issues an eight-minute download URL only after the authenticated RLS-scoped lookup', async () => {
+  it('issues a bounded download URL only after governed access is audited', async () => {
     getUser.mockResolvedValue({ data: { user: { id: 'legal-1' } }, error: null });
 
     const response = await POST(new Request('http://localhost/api/legal/documents/access', {
@@ -74,9 +103,12 @@ describe('POST /api/legal/documents/access', () => {
     }) as never);
 
     expect(response.status).toBe(200);
+    expect(rpc).toHaveBeenCalledWith('prepare_document_signed_access', {
+      payload: { document_id: 'doc-1', purpose: 'download' },
+    });
     expect(createSignedUrl).toHaveBeenCalledWith(
       'vendor/ven-1/legal/accreditation/case-1/registration.pdf',
-      480,
+      300,
       { download: 'registration.pdf' },
     );
     await expect(response.json()).resolves.toEqual({ url: 'https://signed.example/document' });

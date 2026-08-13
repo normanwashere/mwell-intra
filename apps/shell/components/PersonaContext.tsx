@@ -20,14 +20,11 @@ export function PersonaContext({
   const authority = persona.authority.map((item) => item.label).join(", ");
 
   return (
-    <div
-      className={cx("min-w-0 max-w-full overflow-hidden", className)}
-      aria-label={`Signed in as ${persona.title} in ${persona.department}`}
-    >
+    <div className={cx("min-w-0 max-w-full overflow-hidden", className)}>
       <p className="flex min-w-0 max-w-full text-xs font-semibold text-ink">
         <span className="min-w-0 truncate">{persona.title}</span>
         <span className="hidden shrink-0 font-normal text-muted min-[360px]:inline">
-          {" · "}{persona.department}
+          {" - "}{persona.department}
         </span>
       </p>
       {!compact && (

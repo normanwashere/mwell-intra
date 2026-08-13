@@ -2,7 +2,13 @@ import { expect, type Page, test, type TestInfo } from "@playwright/test";
 import { DEMO_PROFILES } from "../../lib/demoProfiles";
 
 type ModuleName =
-  "core" | "warehouse" | "procurement" | "legal" | "events" | "insights";
+  | "core"
+  | "warehouse"
+  | "procurement"
+  | "legal"
+  | "events"
+  | "insights"
+  | "product";
 type Roles = Partial<Record<ModuleName, readonly string[]>>;
 type ProfileKind = "employee" | "vendor";
 
@@ -70,7 +76,7 @@ const LOGIN_PROFILES: readonly LoginProfile[] = DEMO_PROFILES.map(
   }),
 );
 
-const CANONICAL_PERSONAS: readonly Persona[] = [
+const _LEGACY_ROLE_MATRIX: readonly Persona[] = [
   {
     id: "core-staff-only",
     label: "Core staff without module roles",
@@ -152,7 +158,48 @@ const CANONICAL_PERSONAS: readonly Persona[] = [
   },
 ];
 
+const CANONICAL_PERSONAS: readonly Persona[] = DEMO_PROFILES.map((profile) => ({
+  id: profile.id,
+  label: `${profile.title ?? profile.email} (${profile.email})`,
+  profileId: profile.id,
+  kind: profile.kind,
+  roles: profile.roles,
+}));
+
 const WAREHOUSE_CAPS: Record<string, readonly string[]> = {
+  warehouse_operator: [
+    "view_dashboard",
+    "view_inventory",
+    "receive_stock",
+    "manage_inventory",
+    "cycle_count",
+    "manage_returns",
+    "reserve_allocate",
+    "issue_items",
+    "transfer_stock",
+    "inspect_quality",
+    "view_exceptions",
+  ],
+  warehouse_supervisor: [
+    "view_dashboard",
+    "view_inventory",
+    "receive_stock",
+    "manage_inventory",
+    "manage_products",
+    "manage_locations",
+    "cycle_count",
+    "manage_returns",
+    "reserve_allocate",
+    "issue_items",
+    "transfer_stock",
+    "manage_operation_routes",
+    "inspect_quality",
+    "release_quality_hold",
+    "approve_stock_adjustment",
+    "view_exceptions",
+    "resolve_exceptions",
+    "import_warehouse_data",
+  ],
   logistics_supervisor: [
     "view_dashboard",
     "manage_inventory",
@@ -294,6 +341,7 @@ const EVENTS_CAPS: Record<string, readonly string[]> = {
     "close_event",
   ],
   viewer: ["view_events"],
+  finance_reviewer: ["view_events", "approve_settlement"],
   admin: [
     "view_events",
     "create_event",
@@ -595,14 +643,14 @@ function expectationsFor(persona: Persona): readonly RouteExpectation[] {
       label: "vendor portal",
       allowed: hasCoreRole(roles, "vendor_portal"),
       allowedText: /Your accreditation|Your application|Vendor/i,
-      deniedText: /No legal access|not enrolled/i,
+      deniedText: /No legal access|not enrolled|Vendor portal access required/i,
     },
     {
       path: "/vendor/cases/case_seed_001",
       label: "vendor case detail",
       allowed: hasCoreRole(roles, "vendor_portal"),
       allowedText: /Accreditation|requirements|documents|application/i,
-      deniedText: /No legal access|not enrolled/i,
+      deniedText: /No legal access|not enrolled|Vendor portal access required/i,
     },
     {
       path: "/admin/users",

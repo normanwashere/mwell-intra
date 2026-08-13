@@ -586,7 +586,7 @@ const procedureArticles: KnowledgeArticle[] = [
         "Select PO and destination",
         "Confirm supplier, warehouse, and remaining quantities.",
       ],
-      ["Record lines", "Scan product, quantity, serial/lot, and evidence."],
+      ["Record lines", "Use the receipt table to scan product and quantity, then capture cost, serial/lot or batch, device-test result, expiry, and evidence."],
       [
         "Inspect",
         "Choose disposition and provide evidence/reason when required.",
@@ -649,7 +649,7 @@ const procedureArticles: KnowledgeArticle[] = [
     [
       [
         "Record demand",
-        "Sales or ecommerce creates an order; Operations links third-party sales to an event, external location, and PHP value; or a department selects an active department and cost center, then submits purpose, due date, treatment, product, and quantity.",
+        "Sales or ecommerce creates one demand or imports a validated CSV order list; Operations links third-party sales to an event, external location, and PHP value; or a department selects an active department and cost center, then submits purpose, due date, treatment, and one or more product lines.",
       ],
       [
         "Approve when required",
@@ -657,7 +657,7 @@ const procedureArticles: KnowledgeArticle[] = [
       ],
       [
         "Validate product and bundle rules",
-        "Confirm item class, serialization, source bin, and Product approval reference for active bundles.",
+        "Confirm item class, serialization, source bin, and Product approval reference for active bundles. Give each finished customer bundle a unique set code and keep its component serials together through pick and pack.",
       ],
       [
         "Allocate, split if short, and pick",
@@ -673,7 +673,7 @@ const procedureArticles: KnowledgeArticle[] = [
       ],
       [
         "Track courier delivery",
-        "For ecommerce, move the released shipment through in transit, failed delivery and retry or return-to-sender, then record a proof-of-delivery reference and evidence. Delivery, not dispatch, completes the order.",
+        "For ecommerce, move the released shipment through in transit, failed delivery and retry or return-to-sender, then enter the proof reference and upload a delivery image. Delivery, not dispatch, completes the order.",
       ],
       [
         "Acknowledge receipt",
@@ -685,7 +685,7 @@ const procedureArticles: KnowledgeArticle[] = [
       ],
       [
         "Resolve returns separately",
-        "Customer Service records the issue and serial, Warehouse quarantines every item and selects replacement, refund, supplier RMA, re-kit, or write-off. Replacement creates a linked fulfillment order; refund and write-off require Finance evidence; supplier return requires an RMA reference; Customer Service records final customer closure evidence.",
+        "For customer cases, Customer Service records the issue and serial before Warehouse quarantine and resolution. For event physical returns, open Returns receiving, choose Specific event, select the source event, product, receiving location and bin, then submit to Quality Control. Replacement creates a linked order; refund and write-off require Finance evidence; supplier return requires an RMA reference; Customer Service records closure evidence.",
       ],
     ],
   ),

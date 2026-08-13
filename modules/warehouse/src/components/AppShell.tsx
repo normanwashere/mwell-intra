@@ -273,8 +273,11 @@ export function AppShell({ children }: { children: ReactNode }) {
               className="flex min-w-0 items-center gap-1.5 md:hidden"
               aria-label="Mwell Intra Warehouse"
             >
-              <Logo className="h-6 w-auto" />
-              <span className="text-[0.65rem] font-bold text-ink">Intra</span>
+              <Logo className="h-5 w-auto shrink-0" />
+              <span className="min-w-0 leading-tight">
+                <span className="block text-[0.65rem] font-bold text-ink">Intra · Warehouse</span>
+                <span className="block max-w-28 truncate text-[0.6rem] text-faint">{roleLabel}</span>
+              </span>
             </div>
             {/* Visual brand only — the semantic <h1> belongs to each page's
                 header so documents never carry two level-1 headings (WH-1). */}

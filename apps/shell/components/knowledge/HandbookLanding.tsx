@@ -592,7 +592,7 @@ function StartHere({
             key={`${result.type}-${result.id}`}
             type="button"
             onClick={() => onOpenResult(result)}
-            className="group flex min-h-24 items-start gap-3 bg-surface p-4 text-left transition hover:bg-inset focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+            className="group flex min-h-24 min-w-0 items-start gap-3 bg-surface p-4 text-left transition hover:bg-inset focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
           >
             <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-brand-50 text-brand-700">
               <Icon name="arrowRight" className="h-4 w-4" />

@@ -35,6 +35,8 @@ export const CERTIFICATION_CHRONOLOGY_MIGRATION_NAME =
   "20260813075809_align_certification_issuance_chronology.sql";
 export const ASSIGNMENT_IDEMPOTENCY_MIGRATION_NAME =
   "20260813080141_make_role_assignment_resolution_idempotent.sql";
+export const TASK1_AUTHORITY_REMEDIATION_MIGRATION_NAME =
+  "20260813203240_task_1_database_authority_remediation.sql";
 const PINNED_LEARNING_MIGRATION_SHA256 = Object.freeze({
   [FOUNDATION_MIGRATION_NAME]:
     "b5b954f0fdb9ff52748047ca4a17916896227934ecd43c22951ea4489fc129ad",
@@ -56,6 +58,8 @@ const PINNED_LEARNING_MIGRATION_SHA256 = Object.freeze({
     "4b1fb8f1989e8412658de7e986208b3fdc1299a24885b2112b807485dcbf0f41",
   [TASK8_AUTHORITY_MIGRATION_NAME]:
     "9a5eda277ea76db395469a95ac45f7f788a0d589db97a42ed0141ce59ccd6113",
+  [TASK1_AUTHORITY_REMEDIATION_MIGRATION_NAME]:
+    "78dd1dffa203af1dee43b7386f23ffed1d2b086196ab3de4d30c9abf73a9d927",
 });
 export const PRIVATE_ANSWER_KEY_TABLE =
   "private.learning_assessment_answer_keys";
@@ -3938,6 +3942,10 @@ export function verifyLearningSchema(input) {
   for (const migration of migrations.filter(
     (entry) => entry.name >= FOUNDATION_MIGRATION_NAME,
   )) {
+    // This cross-schema authority migration is independently parsed and
+    // executed by verify-task1-database-authority-remediation.{test,pglite.test}.
+    // Its exact checksum above keeps this exception fail-closed.
+    if (migration.name === TASK1_AUTHORITY_REMEDIATION_MIGRATION_NAME) continue;
     let statements;
     try {
       statements = scanSql(migration.sql);

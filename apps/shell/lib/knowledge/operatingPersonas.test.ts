@@ -132,4 +132,27 @@ describe("operating persona guide contracts", () => {
       )?.summary,
     ).toMatch(/Approve or reject launch/i);
   });
+
+  it("teaches the released custody, correction, and source-routing boundaries", () => {
+    const taskSummary = (personaId: string, taskId: string) =>
+      OPERATING_PERSONA_GUIDES[personaId]?.tasks.find(
+        (task) => task.id === taskId,
+      )?.summary;
+
+    expect(taskSummary("operations_associate", "receive-stock")).toMatch(
+      /pending[- ]inspection.*unavailable/i,
+    );
+    expect(taskSummary("operations_associate", "process-return")).toMatch(
+      /quarantine.*Quality/i,
+    );
+    expect(taskSummary("legal_compliance_lead", "review-case")).toMatch(
+      /versioned correction request/i,
+    );
+    expect(taskSummary("vendor_representative", "correct-requirement")).toMatch(
+      /requested revision.*resubmit/i,
+    );
+    expect(taskSummary("general_employee", "track-work")).toMatch(
+      /effective capabilities.*Open source/i,
+    );
+  });
 });

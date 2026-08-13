@@ -346,7 +346,16 @@ export function useProductWorkspace() {
       id: string,
       decision: "approved" | "rejected",
       note: string,
-    ) => run("decide_readiness_package", { id, decision, note }),
+    ) => {
+      const current = data.readiness.find((item) => item.id === id);
+      if (!current) return Promise.reject(new Error("Readiness package not found."));
+      return run("decide_readiness_package", {
+        id,
+        decision,
+        note,
+        expected_version: current.version,
+      });
+    },
     acknowledgeHandoff: (id: string) =>
       run("acknowledge_operations_handoff", { id }),
     proposePrice: (draft: PriceProposalDraft) =>

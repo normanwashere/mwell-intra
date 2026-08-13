@@ -245,6 +245,16 @@ function mapCase(row: LiveRow): AccreditationCase {
     decisionPending: Boolean(row.decision_pending ?? row.pending_decision_status),
     pendingDecisionStatus: row.pending_decision_status ?? undefined,
     pendingDecisionProposedByEmail: row.pending_decision_proposed_by_email ?? undefined,
+    correctionRequest:
+      row.status === 'correction_requested' && row.correction_source_version
+        ? {
+            requestedAt: row.correction_requested_at ?? row.updated_at ?? row.opened_at,
+            requestedByEmail: row.correction_requested_by_email ?? undefined,
+            note: row.decision_note ?? 'Legal requested a correction.',
+            sourceVersion: Number(row.correction_source_version),
+            revision: Number(row.correction_revision ?? Number(row.correction_source_version) + 1),
+          }
+        : undefined,
   } as AccreditationCase;
 }
 
@@ -771,7 +781,13 @@ export function useAccreditationCases(): CasesAPI {
   const requestCorrection = useCallback<CasesAPI['requestCorrection']>(
     (id, request) => {
       if (isLive(live)) {
-        throw new Error('Correction requests are not available from the current Legal service.');
+        return liveRpc<LiveRow>(live, 'legal', 'request_vendor_application_correction', {
+          case_id: id,
+          note: request.note.trim(),
+        }).then((row) => {
+          const mapped = mapCase(row);
+          return refreshLive().then(() => mapped);
+        });
       }
       const current = safeRead<AccreditationCase>(CASES_KEY).find((row) => row.id === id);
       if (!current || !canRequestCorrection(current.status) || !request.note.trim()) return null;
@@ -793,7 +809,7 @@ export function useAccreditationCases(): CasesAPI {
       }
       return merged;
     },
-    [live, patchCase],
+    [live, patchCase, refreshLive],
   );
 
   const decideCase = useCallback<CasesAPI['decideCase']>(

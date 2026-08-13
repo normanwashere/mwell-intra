@@ -134,6 +134,108 @@ const titleCaseIdentifier = (value: string): string =>
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
 
+const ROLE_PRACTICE_CONTENT = {
+  platform_administrator: {
+    simulationId: "platform-access-governance-v1",
+    title: "Govern access without operational authority",
+    module: "core",
+    steps: [
+      ["review-access-scope", "Review requested access", "Confirm the requested role scope and accountable department before changing access."],
+      ["confirm-independent-review", "Confirm independent review", "Route the change to a distinct reviewer and verify that platform administration does not inherit operational authority."],
+    ],
+  },
+  general_employee: {
+    simulationId: "employee-request-handoff-v1",
+    title: "Create a governed request and handoff",
+    module: "procurement",
+    steps: [
+      ["draft-source-request", "Draft the source request", "Record the business need, owner, required date, and supporting evidence on the authoritative request."],
+      ["confirm-accountable-handoff", "Confirm the accountable handoff", "Send the request to its owning team without claiming approval or custody authority."],
+    ],
+  },
+  operations_associate: {
+    simulationId: "warehouse-receiving-v1",
+    title: "Receive and inspect controlled stock",
+    module: "warehouse",
+    steps: [
+      ["draft-saved", "Capture receipt evidence", "Record the delivery, identifiers, quantities, and initial custody state before submission."],
+      ["complete", "Submit for independent disposition", "Submit the completed receipt while keeping quality disposition and exception approval separate."],
+    ],
+  },
+  operations_lead: {
+    simulationId: "operations-exception-review-v1",
+    title: "Review custody exceptions independently",
+    module: "warehouse",
+    steps: [
+      ["review-custody-evidence", "Review custody evidence", "Check source receipt, count, hold, and chain-of-custody evidence without rewriting operator facts."],
+      ["record-independent-disposition", "Record an independent disposition", "Approve, reject, or return the exception with reason, owner, and recovery route."],
+    ],
+  },
+  procurement_lead: {
+    simulationId: "procurement-evidence-routing-v1",
+    title: "Validate sourcing evidence and route approval",
+    module: "procurement",
+    steps: [
+      ["validate-sourcing-evidence", "Validate sourcing evidence", "Confirm vendor, competition, policy exception, value, and source identifiers are complete and consistent."],
+      ["route-independent-approval", "Route independent approval", "Send the governed record to the correct authority tier without self-approving configured evidence."],
+    ],
+  },
+  finance_controller: {
+    simulationId: "finance-independent-review-v1",
+    title: "Perform an independent finance review",
+    module: "procurement",
+    steps: [
+      ["reconcile-source-evidence", "Reconcile source evidence", "Match request, order, receipt, acceptance, invoice, and current policy authority before deciding."],
+      ["record-finance-decision", "Record the finance decision", "Approve, reject, or return the pack with a reason while preserving segregation from preparation."],
+    ],
+  },
+  legal_compliance_lead: {
+    simulationId: "legal-controlled-review-v1",
+    title: "Review controlled legal evidence",
+    module: "legal",
+    steps: [
+      ["validate-controlled-evidence", "Validate controlled evidence", "Confirm current document versions, signatures, ownership, and accreditation facts before review."],
+      ["record-legal-determination", "Record the legal determination", "Issue an attributable decision or correction request without replacing applicant evidence."],
+    ],
+  },
+  marketing_events_lead: {
+    simulationId: "event-fulfillment-reconciliation-v1",
+    title: "Plan and reconcile event fulfillment",
+    module: "events",
+    steps: [
+      ["plan-event-fulfillment", "Plan event fulfillment", "Link the event intent to approved stock, accountable owners, dates, and return expectations."],
+      ["reconcile-event-custody", "Reconcile event custody", "Close the event only after issue, return, variance, and independent settlement evidence agree."],
+    ],
+  },
+  product_owner: {
+    simulationId: "product-governance-decision-v1",
+    title: "Make an evidence-bound product decision",
+    module: "product",
+    steps: [
+      ["review-launch-evidence", "Review launch evidence", "Check readiness, pricing, dependencies, effective dates, and independent operational evidence."],
+      ["record-product-decision", "Record the product decision", "Approve, reject, or return the submitted version without editing the preparer's evidence."],
+    ],
+  },
+  leadership_insights: {
+    simulationId: "leadership-indicator-review-v1",
+    title: "Interpret and escalate decision indicators",
+    module: "insights",
+    steps: [
+      ["interpret-indicator-freshness", "Interpret indicator freshness", "Check definition, reporting window, provenance, no-data state, and privacy scope before relying on an indicator."],
+      ["route-accountable-follow-up", "Route accountable follow-up", "Assign the source owner to investigate; a KPI is not approval evidence and does not authorize source edits."],
+    ],
+  },
+  vendor_representative: {
+    simulationId: "vendor-accreditation-submission-v1",
+    title: "Prepare a complete accreditation submission",
+    module: "core",
+    steps: [
+      ["prepare-accreditation-evidence", "Prepare accreditation evidence", "Review required fields, current documents, declarations, and authorized signatory evidence."],
+      ["confirm-vendor-submission", "Confirm the vendor submission", "Submit the complete version for independent Legal review without changing reviewer-owned status."],
+    ],
+  },
+} as const;
+
 const rolePracticeTitle = (module: string, role: string): string => {
   if (module === "warehouse" && role === "warehouse_operator") {
     return "Receive and inspect controlled stock";
@@ -181,11 +283,7 @@ const capabilityRequirements = roleDefinitions.flatMap((roleDefinition) => {
 
   const audience = audienceForPersona(roleDefinition.personaId);
   const id = `${audience}.role.${roleDefinition.module}.${roleDefinition.role}.capability-practice.v1`;
-  const simulationId =
-    roleDefinition.module === "warehouse" &&
-    roleDefinition.role === "warehouse_operator"
-      ? "warehouse-receiving-v1"
-      : id;
+  const simulationId = ROLE_PRACTICE_CONTENT[roleDefinition.personaId as keyof typeof ROLE_PRACTICE_CONTENT].simulationId;
   const prerequisiteIds = [
     `${audience}.${roleDefinition.personaId}.orientation.v1`,
     ...(roleDefinition.module === "warehouse" &&
@@ -235,17 +333,16 @@ const unassignedCapabilityRequirements = MUTATING_CAPABILITIES.filter(
     mandatory: true,
     prerequisiteIds: [],
     capabilityOutcomes: [capability],
-    simulationId: id,
   } satisfies RequirementDefinition;
 });
 
-const requirements = [
+const requirements: readonly RequirementDefinition[] = [
   ...baselineRequirements,
   ...vendorJourneyRequirements,
   ...warehouseReceivingRequirements,
   ...capabilityRequirements,
   ...unassignedCapabilityRequirements,
-] as const;
+];
 
 const curricula: readonly CurriculumDefinition[] = OPERATING_PERSONA_IDS.map(
   (personaId) => {
@@ -301,26 +398,49 @@ export const CAPABILITY_COVERAGE_CURRICULA: readonly CurriculumDefinition[] =
     requirementIds: [requirement.id],
   }));
 
-const simulations: readonly SimulationDefinition[] = requirements.flatMap(
-  (requirement) => {
-    if (!requirement.simulationId) return [];
-    const firstCapability = requirement.capabilityOutcomes[0];
-    return [
-      {
-        id: requirement.simulationId,
-        version: 1,
-        audience: requirement.audience,
-        module: firstCapability?.module ?? "core",
-        title: requirement.title,
-        checkpointIds:
-          requirement.simulationId === "warehouse-receiving-v1"
-            ? ["draft-saved", "complete"]
-            : ["complete"],
-        capabilityOutcomes: requirement.capabilityOutcomes,
-      },
-    ];
-  },
+const orientationSimulations: readonly SimulationDefinition[] = baselineRequirements.map(
+  (requirement) => ({
+    id: requirement.simulationId!,
+    version: 1,
+    audience: requirement.audience,
+    module: "core",
+    title: requirement.title,
+    checkpointIds: ["complete"],
+    capabilityOutcomes: [],
+  }),
 );
+
+const rolePractices = OPERATING_PERSONA_IDS.map((personaId) => {
+  const content = ROLE_PRACTICE_CONTENT[personaId as keyof typeof ROLE_PRACTICE_CONTENT];
+  const capabilityOutcomes = capabilityRequirements
+    .filter((requirement) => requirement.simulationId === content.simulationId)
+    .flatMap((requirement) => requirement.capabilityOutcomes)
+    .filter(
+      (capability, index, all) =>
+        all.findIndex((candidate) => capabilityKey(candidate) === capabilityKey(capability)) === index,
+    );
+  const simulation: SimulationDefinition = {
+    id: content.simulationId,
+    version: 1,
+    audience: audienceForPersona(personaId),
+    module: content.module,
+    title: content.title,
+    checkpointIds: content.steps.map(([checkpointId]) => checkpointId),
+    capabilityOutcomes,
+    embeddedSteps: content.steps.map(([checkpointId, title, instruction]) => ({
+      checkpointId,
+      title,
+      instruction,
+      outcomeId: checkpointId,
+    })),
+  };
+  return { personaId, simulation };
+});
+
+const simulations: readonly SimulationDefinition[] = [
+  ...orientationSimulations,
+  ...rolePractices.map((practice) => practice.simulation),
+];
 
 export const LEARNING_CATALOG = {
   curricula,
@@ -328,7 +448,27 @@ export const LEARNING_CATALOG = {
   capabilityCoverageCurricula: CAPABILITY_COVERAGE_CURRICULA,
   requirements,
   simulations,
+  rolePractices,
 } as const;
+
+export function simulationForRequirement(
+  requirement: RequirementDefinition,
+): SimulationDefinition | undefined {
+  if (!requirement.simulationId) return undefined;
+  return LEARNING_CATALOG.simulations.find(
+    (simulation) => simulation.id === requirement.simulationId,
+  );
+}
+
+export function supportsEmbeddedTraining(
+  requirement: RequirementDefinition,
+): boolean {
+  if (
+    requirement.kind === "orientation" &&
+    requirement.capabilityOutcomes.length === 0
+  ) return true;
+  return Boolean(simulationForRequirement(requirement)?.embeddedSteps?.length);
+}
 
 export function roleCurriculumFor(
   module: LearningCapability["module"],

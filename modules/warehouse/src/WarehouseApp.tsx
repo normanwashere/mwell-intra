@@ -96,6 +96,11 @@ export function WarehouseApp({ basename = '/warehouse' }: WarehouseAppProps) {
         ? [initialRole]
         : [],
   );
+  const displayedRoleLabel = profile?.title?.trim() || rolePresentation.label;
+  const displayedRoleDescription =
+    displayedRoleLabel === rolePresentation.label
+      ? rolePresentation.description
+      : `Warehouse role: ${rolePresentation.label}. ${rolePresentation.description}`;
   const destinationAccess = {
     events: mode !== 'supabase' || (userCapabilities?.events ?? []).includes('view_events'),
     insights: mode !== 'supabase' || (userCapabilities?.insights ?? []).includes('view_warehouse'),
@@ -153,8 +158,8 @@ export function WarehouseApp({ basename = '/warehouse' }: WarehouseAppProps) {
           key={profile?.id ?? initialRole}
           initialRole={initialRole}
           roleCode={mode === 'supabase' ? roleCode : undefined}
-          roleLabel={rolePresentation.label}
-          roleDescription={rolePresentation.description}
+          roleLabel={displayedRoleLabel}
+          roleDescription={displayedRoleDescription}
           destinationAccess={destinationAccess}
           capabilities={mode === 'supabase' ? liveCapabilities : undefined}
           actor={profile?.email}

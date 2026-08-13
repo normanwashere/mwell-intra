@@ -16,4 +16,11 @@ describe("shell persona context", () => {
     expect(menu).toContain("Scoped authority");
     expect(menu).toContain("persona.authority");
   });
+
+  it("does not turn visible persona metadata into a competing accessible name", () => {
+    const context = source("components/PersonaContext.tsx");
+
+    expect(context).not.toContain('aria-label={`Signed in as');
+    expect(context).toContain("persona.department");
+  });
 });

@@ -27,12 +27,13 @@ async function completeAssignedOrientations(page: Page) {
       .first()
       .click();
     const dialog = page.getByRole("dialog");
-    await dialog.getByRole("button", { name: "Continue" }).click();
+    for (let step = 0; step < 10; step += 1) {
+      const finish = dialog.getByRole("button", { name: "Finish review" });
+      if (await finish.isVisible().catch(() => false)) break;
+      await dialog.getByRole("button", { name: "Continue" }).click();
+    }
     await dialog.getByRole("button", { name: "Finish review" }).click();
-    await page
-      .getByRole("region", { name: "Training mode" })
-      .getByRole("button", { name: "Exit training" })
-      .click();
+    await expect(dialog).toHaveCount(0);
   }
   await expect(policy).toBeEnabled();
 }

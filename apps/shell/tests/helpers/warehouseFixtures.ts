@@ -1,14 +1,13 @@
 import type { Page } from '@playwright/test';
 
 export const WAREHOUSE_ROLES = [
+  'warehouse_operator',
   'logistics_supervisor',
-  'operations',
   'finance',
   'bi_analyst',
   'business_unit',
   'marketing',
   'procurement',
-  'pricing',
   'warehouse_admin',
 ] as const;
 
@@ -19,35 +18,24 @@ const MEMORY_SESSION_KEY = 'intra.memory-session.v1';
 const THEME_KEY = 'intra-theme';
 
 const ROLE_PROFILE_IDS: Record<WarehouseRole, string> = {
+  warehouse_operator: 'demo-warehouse-operator',
   logistics_supervisor: 'demo-logistics',
-  operations: 'demo-operations',
   finance: 'demo-finance',
   bi_analyst: 'demo-bi',
   business_unit: 'demo-business-unit',
   marketing: 'demo-marketing',
-  procurement: 'demo-logistics',
-  pricing: 'demo-pricing',
+  procurement: 'demo-procurement',
   warehouse_admin: 'demo-warehouse-admin',
 };
 
-const CROSS_WORKSPACE_GRANTS: Partial<
-  Record<WarehouseRole, Record<string, readonly string[]>>
-> = {
-  bi_analyst: { insights: ['analyst'] },
-  business_unit: { events: ['requester'] },
-  marketing: { events: ['coordinator'] },
-  warehouse_admin: { events: ['admin'], insights: ['admin'] },
-};
-
 export const ROLE_ROUTES: Record<WarehouseRole, readonly string[]> = {
+  warehouse_operator: ['/warehouse', '/warehouse/inventory', '/warehouse/receiving', '/warehouse/storage', '/warehouse/allocations', '/warehouse/cycle-counts', '/warehouse/returns', '/warehouse/quality', '/warehouse/exceptions', '/warehouse/scan'],
   logistics_supervisor: ['/warehouse', '/warehouse/receiving', '/warehouse/storage', '/warehouse/cycle-counts', '/warehouse/quality', '/warehouse/approvals', '/warehouse/exceptions', '/warehouse/imports', '/warehouse/operation-routes', '/warehouse/scan'],
-  operations: ['/warehouse', '/warehouse/inventory', '/warehouse/allocations', '/warehouse/returns', '/warehouse/quality', '/warehouse/exceptions', '/warehouse/scan'],
-  finance: ['/warehouse', '/warehouse/inventory', '/warehouse/cycle-counts', '/finance', '/warehouse/approvals', '/warehouse/exceptions'],
+  finance: ['/warehouse', '/warehouse/inventory', '/finance', '/warehouse/approvals', '/warehouse/exceptions'],
   bi_analyst: ['/warehouse', '/warehouse/inventory', '/warehouse/exceptions'],
   business_unit: ['/warehouse', '/warehouse/inventory', '/warehouse/allocations'],
-  marketing: ['/warehouse', '/warehouse/inventory', '/warehouse/allocations', '/warehouse/returns'],
+  marketing: ['/warehouse', '/warehouse/inventory', '/warehouse/allocations'],
   procurement: ['/warehouse', '/warehouse/inventory', '/warehouse/procurement', '/warehouse/purchase-orders', '/warehouse/suppliers'],
-  pricing: ['/warehouse', '/warehouse/inventory', '/warehouse/pricing', '/finance'],
   warehouse_admin: ['/warehouse', '/warehouse/inventory', '/warehouse/receiving', '/warehouse/storage', '/warehouse/allocations', '/warehouse/cycle-counts', '/warehouse/returns', '/warehouse/quality', '/warehouse/approvals', '/warehouse/exceptions', '/warehouse/imports', '/warehouse/operation-routes', '/warehouse/scan'],
 };
 
@@ -72,11 +60,6 @@ export async function installWarehouseSession(
       selectedTheme: theme,
       session: {
         profileId: ROLE_PROFILE_IDS[role],
-        roles: {
-          core: ['staff'],
-          warehouse: [role],
-          ...CROSS_WORKSPACE_GRANTS[role],
-        },
       },
     },
   );

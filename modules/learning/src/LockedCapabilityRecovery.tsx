@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "next/link.js";
 import { useState } from "react";
 import { Badge, Button, Icon } from "@intra/ui";
 import type { Module } from "@intra/rbac";

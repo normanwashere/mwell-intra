@@ -178,6 +178,37 @@ describe("resolveEffectiveCurriculum", () => {
     );
   });
 
+  it("shows one semantic orientation when multiple personas assign equivalent orientation records", () => {
+    const secondOrientation: RequirementDefinition = {
+      ...orientation,
+      id: "internal.second-persona.orientation.v1",
+    };
+    const result = resolveEffectiveCurriculum({
+      requirements: [orientation, secondOrientation],
+      roleCurricula: [
+        {
+          sourceRoleAssignmentId: "role-1",
+          departmentId: "department-1",
+          curriculum: {
+            id: "multi-persona",
+            version: 1,
+            personaId: "multi-persona",
+            audience: "internal",
+            module: "warehouse",
+            role: "business_unit",
+            requirementIds: [orientation.id, secondOrientation.id],
+          },
+        },
+      ],
+      departmentAssignments: [],
+      userAssignments: [],
+      activeCertifications: [],
+    });
+
+    expect(result.requirements).toHaveLength(1);
+    expect(result.requirements[0]?.id).toBe(orientation.id);
+  });
+
   it("combines role, department, and user assignments in prerequisite order", () => {
     const result = resolveEffectiveCurriculum({
       requirements: [

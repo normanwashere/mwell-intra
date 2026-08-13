@@ -48,7 +48,7 @@ function CanProbe({
 }
 
 function LiveSessionProbe() {
-  const { profile, roleCapabilities, userCapabilities, refreshCapabilities } = useSession();
+  const { profile, roleCapabilities, userCapabilities, refreshCapabilities, loading } = useSession();
   const [refreshResult, setRefreshResult] = useState("idle");
   const canReceive = useCan("warehouse", "receive_stock");
   const canReserve = useCan("warehouse", "reserve_allocate");
@@ -63,6 +63,7 @@ function LiveSessionProbe() {
       </span>
       <span data-testid="live-receive">{canReceive ? "yes" : "no"}</span>
       <span data-testid="live-reserve">{canReserve ? "yes" : "no"}</span>
+      <span data-testid="live-loading">{loading ? "loading" : "ready"}</span>
       <span data-testid="refresh-result">{refreshResult}</span>
       <button type="button" onClick={() => void refreshCapabilities().then((ok) => setRefreshResult(ok ? "ok" : "failed"))}>
         Refresh capabilities
@@ -394,7 +395,7 @@ describe("useCan", () => {
     expect(screen.getByTestId("live-receive").textContent).toBe("no");
   });
 
-  it("invalidates capabilities on focus until a fresh snapshot resolves", async () => {
+  it("keeps the verified screen stable until a fresh focus snapshot replaces capabilities", async () => {
     const { client, rpc } = liveClient();
     render(
       <SessionProvider config={{ mode: "supabase", client }}>
@@ -409,8 +410,13 @@ describe("useCan", () => {
 
     await waitFor(() => {
       expect(rpc).toHaveBeenCalledTimes(2);
-      expect(screen.getByTestId("role-capabilities").textContent).toBe("none");
-      expect(screen.getByTestId("live-capabilities").textContent).toBe("none");
+      expect(screen.getByTestId("live-loading").textContent).toBe("ready");
+      expect(screen.getByTestId("role-capabilities").textContent).toBe(
+        "receive_stock,reserve_allocate",
+      );
+      expect(screen.getByTestId("live-capabilities").textContent).toBe(
+        "receive_stock",
+      );
     });
 
     await act(async () => {
@@ -424,6 +430,7 @@ describe("useCan", () => {
       await refresh.promise;
     });
     await waitFor(() => {
+      expect(screen.getByTestId("live-loading").textContent).toBe("ready");
       expect(screen.getByTestId("live-reserve").textContent).toBe("yes");
       expect(screen.getByTestId("live-receive").textContent).toBe("no");
     });
@@ -523,5 +530,23 @@ describe("useCan", () => {
     );
     await screen.findByText("bu@mwell.test");
     expect(screen.getByTestId("probe").textContent).toBe("no");
+  });
+
+  it("restores memory authority from the current profile contract, not stored roles", async () => {
+    window.sessionStorage.setItem(
+      "intra.memory-session.v1",
+      JSON.stringify({
+        profileId: "sup",
+        roles: { warehouse: ["business_unit"] },
+      }),
+    );
+
+    render(
+      <SessionProvider config={{ mode: "memory", profiles: PROFILES }}>
+        <CanProbe cap="receive_stock" />
+      </SessionProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByTestId("probe").textContent).toBe("yes"));
   });
 });

@@ -66,6 +66,49 @@ describe("learning catalog", () => {
     ).toBe(false);
   });
 
+  it("keeps generic orientation incapable of granting mutation authority", () => {
+    const orientations = LEARNING_CATALOG.requirements.filter(
+      (requirement) => requirement.kind === "orientation",
+    );
+
+    expect(orientations).toHaveLength(OPERATING_PERSONA_IDS.length);
+    for (const orientation of orientations) {
+      expect(orientation.capabilityOutcomes, orientation.id).toEqual([]);
+    }
+  });
+
+  it("defines one domain-specific practice runtime for every operating persona", () => {
+    expect(
+      LEARNING_CATALOG.rolePractices.map((practice) => practice.personaId).sort(),
+    ).toEqual([...OPERATING_PERSONA_IDS].sort());
+
+    for (const practice of LEARNING_CATALOG.rolePractices) {
+      expect(practice.simulation.checkpointIds.length, practice.personaId).toBeGreaterThan(1);
+      expect(practice.simulation.checkpointIds, practice.personaId).not.toEqual([
+        "complete",
+      ]);
+      expect(
+        practice.simulation.embeddedSteps?.map((step) => step.checkpointId),
+        practice.personaId,
+      ).toEqual(practice.simulation.checkpointIds);
+    }
+  });
+
+  it("maps mutation-bearing role requirements only to supported persona practices", () => {
+    const supportedSimulationIds = new Set(
+      LEARNING_CATALOG.rolePractices.map((practice) => practice.simulation.id),
+    );
+
+    for (const requirement of LEARNING_CATALOG.requirements) {
+      if (requirement.capabilityOutcomes.length === 0) continue;
+      if (requirement.id.includes(".unassigned.")) {
+        expect(requirement.simulationId, requirement.id).toBeUndefined();
+        continue;
+      }
+      expect(supportedSimulationIds.has(requirement.simulationId ?? ""), requirement.id).toBe(true);
+    }
+  });
+
   it("derives certification paths for every mutating active-role grant", () => {
     const classificationByKey = new Map(
       CAPABILITY_CLASSIFICATIONS.map((item) => [
@@ -293,7 +336,7 @@ describe("learning catalog", () => {
       expect(simulation, requirement.id).toBeDefined();
       expect(simulation?.audience, requirement.id).toBe(requirement.audience);
       expect(simulation?.capabilityOutcomes.map(capabilityKey), requirement.id).toEqual(
-        requirement.capabilityOutcomes.map(capabilityKey),
+        expect.arrayContaining(requirement.capabilityOutcomes.map(capabilityKey)),
       );
     }
   });

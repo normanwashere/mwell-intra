@@ -1,6 +1,38 @@
 import type { EventsData } from './types';
 
 export const EVENTS_DEMO_DATA: EventsData = {
+  products: [
+    { id: 'smart-watch', name: 'mWell Smart Watch', itemClass: 'sku' },
+    { id: 'ecg-ring-size-8', name: 'mWell ECG Ring - Size 8', itemClass: 'sku' },
+    { id: 'mwell-lanyard', name: 'mWell Branded Lanyard', itemClass: 'merchandise' },
+    { id: 'event-shirt', name: 'Event Shirt', itemClass: 'merchandise' },
+  ],
+  departments: [
+    {
+      id: 'dept-marketing',
+      code: 'MKT',
+      name: 'Marketing',
+      costCenters: [
+        { code: 'MKT-EVENTS', name: 'Events and activations' },
+        { code: 'MKT-BRAND', name: 'Brand programs' },
+      ],
+    },
+    {
+      id: 'dept-operations',
+      code: 'OPS',
+      name: 'Operations',
+      costCenters: [
+        { code: 'OPS-FULFILLMENT', name: 'Fulfillment operations' },
+        { code: 'OPS-CS', name: 'Customer service' },
+      ],
+    },
+    {
+      id: 'dept-product',
+      code: 'PRD',
+      name: 'Product',
+      costCenters: [{ code: 'PRD-LAUNCH', name: 'Product launches' }],
+    },
+  ],
   events: [
     {
       id: 'evt-demo-wellness-caravan',

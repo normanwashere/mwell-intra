@@ -4,11 +4,13 @@ import { AccessDenied } from "./AccessDenied";
 import { EmptyState } from "./primitives";
 
 describe("AccessDenied", () => {
-  it("uses the shell's main landmark, a module-specific H1, nested alert, and 44px recovery target", () => {
+  it("names the recovery owner and exact next action", () => {
     const markup = renderToStaticMarkup(
       <AccessDenied
         module="Vendor Portal"
         message="This area is reserved for an enrolled vendor account."
+        recoveryOwner="Vendor Support"
+        recoveryAction="Ask Vendor Support to verify the company-profile link."
         returnHref="/vendor"
         returnLabel="Return to Vendor Portal"
       />,
@@ -20,6 +22,11 @@ describe("AccessDenied", () => {
     expect(markup).toContain("Vendor Portal access required");
     expect(markup).toContain('role="alert"');
     expect(markup).toContain("min-h-11");
+    expect(markup).toContain("Recovery owner");
+    expect(markup).toContain("Vendor Support");
+    expect(markup).toContain(
+      "Ask Vendor Support to verify the company-profile link.",
+    );
     expect(markup).toContain("Return to Vendor Portal");
   });
 });

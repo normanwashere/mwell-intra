@@ -254,6 +254,39 @@ export const GOVERNANCE_ARTICLES: KnowledgeArticle[] = GOVERNANCE_GUIDES.map(
 
 export const HANDBOOK_RELEASE_NOTES: HandbookReleaseNote[] = [
   {
+    id: "release-task-2-5-current-behavior-2026-08-14",
+    title: "Current role and workflow remediation boundary",
+    releasedAt: "2026-08-14",
+    availability: "limited",
+    summary:
+      "Documents the released role onboarding and My Work scoping, canonical demo-local Procurement-to-Finance and Event handoffs, pending-inspection receiving, quarantine-first returns, and versioned vendor correction flow. The boundary remains limited because live pending-inspection activation and a fresh live-UAT transaction are not yet certified.",
+    changedWorkflowIds: [
+      "identity-and-access",
+      "procure-to-pay",
+      "vendor-accreditation",
+      "receive-to-putaway",
+      "quality-disposition",
+      "returns-reconciliation",
+      "event-fulfillment",
+      "exception-and-recovery",
+    ],
+    affectedRoleIds: [
+      "core_staff_only",
+      "vendor_portal",
+      "procurement_requester",
+      "procurement_officer",
+      "procurement_finance",
+      "legal_reviewer",
+      "legal_compliance",
+      "warehouse_operator",
+      "warehouse_operations",
+      "warehouse_logistics_supervisor",
+      "warehouse_finance",
+    ],
+    administratorAction:
+      "Keep demo-local handoffs visibly marked, confirm each employee's role curriculum and effective capabilities, require Quality disposition before stock availability, and do not claim live certification until the forward schema and live-UAT transaction are verified.",
+  },
+  {
     id: "release-uat-current-state-2026-08-11",
     title: "UAT navigation, ownership, and recovery refresh",
     releasedAt: "2026-08-11",

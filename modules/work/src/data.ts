@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSession } from "@intra/auth";
 import { WORK_DEMO_DATA } from "./seed";
 import type {
@@ -13,6 +13,7 @@ import type {
 } from "./types";
 
 type UnknownRow = Record<string, unknown>;
+type CapabilityProjection = Readonly<Record<string, readonly string[]>>;
 const SOURCES = new Set<WorkSource>([
   "warehouse",
   "procurement",
@@ -96,25 +97,37 @@ function mapWorkItem(row: UnknownRow): WorkItem | null {
 export function useWorkData(
   hasCapability: (module: WorkCapability["module"], capability: string) => boolean,
 ) {
-  const { mode, supabaseClient } = useSession();
+  const { mode, profile, supabaseClient, userCapabilities = {} } = useSession();
   const live = mode === "supabase" ? supabaseClient : null;
   const [data, setData] = useState<WorkData>(
     live ? { items: [], warnings: [] } : WORK_DEMO_DATA,
   );
   const [loading, setLoading] = useState(Boolean(live));
   const [error, setError] = useState<string | null>(null);
+  const authorityRef = useRef(createWorkRequestAuthority());
   const refresh = useCallback(async () => {
     if (!live) {
       setData(WORK_DEMO_DATA);
       setLoading(false);
       return;
     }
+    if (!profile) {
+      setData({ items: [], warnings: [] });
+      setLoading(false);
+      return;
+    }
+    const token = authorityRef.current.begin(
+      workRequestKey(profile.id, userCapabilities),
+    );
     setLoading(true);
     const { data: rows, error: queryError } = await live
       .schema("core")
       .from("v_my_work")
-      .select("id,source,title,description,status,priority,due_at,href")
+      .select(
+        "id,principal_id,source,title,description,status,priority,due_at,href,required_module,required_capability,source_record_exists",
+      )
       .limit(500);
+    if (!authorityRef.current.accepts(token)) return;
     if (queryError) {
       setError(queryError.message);
       setData({ items: [], warnings: [queryError.message] });
@@ -122,18 +135,74 @@ export function useWorkData(
       setError(null);
       setData({
         items: sortWorkItems(
-          ((rows as UnknownRow[]) ?? [])
-            .map(mapWorkItem)
-            .filter((item): item is WorkItem => Boolean(item)),
+          projectLiveWorkItems(
+            (rows as UnknownRow[]) ?? [],
+            profile.id,
+            hasCapability,
+          ),
         ),
         warnings: [],
       });
     }
     setLoading(false);
-  }, [live]);
+  }, [hasCapability, live, profile, userCapabilities]);
   useEffect(() => {
     void refresh();
   }, [refresh]);
   const scopedItems = scopeWorkItems(data.items, hasCapability);
   return { data: { ...data, items: scopedItems }, loading, error, refresh };
+}
+
+export function workRequestKey(
+  principalId: string,
+  capabilities: CapabilityProjection,
+) {
+  const authority = Object.entries(capabilities)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(
+      ([module, values]) =>
+        `${module}:${[...new Set(values)].sort().join(",")}`,
+    )
+    .join("|");
+  return `${principalId}:${authority}`;
+}
+
+export function createWorkRequestAuthority() {
+  let generation = 0;
+  let activeKey = "";
+  return {
+    begin(key: string) {
+      activeKey = key;
+      generation += 1;
+      return { generation, key };
+    },
+    accepts(token: { generation: number; key: string }) {
+      return token.generation === generation && token.key === activeKey;
+    },
+  };
+}
+
+export function projectLiveWorkItems(
+  rows: readonly UnknownRow[],
+  principalId: string,
+  hasCapability: (
+    module: WorkCapability["module"],
+    capability: string,
+  ) => boolean,
+) {
+  return rows.flatMap((row) => {
+    if (
+      text(row.principal_id) !== principalId ||
+      row.source_record_exists === false
+    ) {
+      return [];
+    }
+    const module = text(row.required_module) as WorkCapability["module"];
+    const capability = text(row.required_capability);
+    if (!module || !capability || !hasCapability(module, capability)) return [];
+    const item = mapWorkItem(row);
+    return item
+      ? [{ ...item, requiredCapabilities: [{ module, capability }] }]
+      : [];
+  });
 }

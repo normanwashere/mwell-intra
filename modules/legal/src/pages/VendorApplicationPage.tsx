@@ -128,11 +128,11 @@ export function VendorApplicationPage() {
   const kase = getById(id);
   const isVendor = profile?.kind === 'vendor';
   const editState = applicationEditState(kase?.status ?? 'draft', kase?.correctionRequest);
-  const readOnly = !isVendor || !canManageDraft || !editState.editable;
   const [application, setApplication] = useState<VendorApplicationSnapshot | null>(null);
   const [signature, setSignature] = useState<SignaturePayload | null>(null);
   const [busy, setBusy] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const readOnly = submitted || !isVendor || !canManageDraft || !editState.editable;
   const [draftVersion, setDraftVersion] = useState(0);
   const [draftState, setDraftState] = useState<'loading' | 'saved' | 'unsaved' | 'saving' | 'error'>('loading');
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -344,6 +344,8 @@ export function VendorApplicationPage() {
             application: next,
             declaration: next.declaration,
             signature,
+            expected_version: draftVersion,
+            idempotency_key: globalThis.crypto?.randomUUID?.() ?? `${kase.id}-submit-${draftVersion}`,
           },
         });
         if (rpcError) throw new Error(rpcError.message);
@@ -364,6 +366,7 @@ export function VendorApplicationPage() {
       }
       setApplication(next);
       setSubmitted(true);
+      setDraftState('saved');
       success('Vendor Accreditation Form v.2025 submitted for review');
     } catch (cause) {
       error(cause instanceof Error ? cause.message : 'Could not submit the application.');

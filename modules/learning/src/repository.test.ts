@@ -884,33 +884,75 @@ describe("MemoryLearningRepository", () => {
       },
     };
     const first = new MemoryLearningRepository({
-      snapshot: snapshot(),
+      snapshot: snapshotWithOrientationPassed(),
       runtime: "test",
       now: () => now,
       persistence,
+      simulations: [simulationDefinition],
     } as MemoryLearningRepositoryOptions);
 
     const started = await first.startRequirement({
-      assignmentRequirementId: "ar-orientation",
+      assignmentRequirementId: "ar-simulation",
     });
     await first.checkpoint({
-      assignmentRequirementId: "ar-orientation",
+      assignmentRequirementId: "ar-simulation",
       attemptId: started.attempt!.id,
-      simulationId: "orientation-sim",
-      checkpointId: "complete",
+      simulationId: simulationDefinition.id,
+      checkpointId: simulationDefinition.checkpointIds[0]!,
     });
 
     const restored = new MemoryLearningRepository({
-      snapshot: snapshot(),
+      snapshot: snapshotWithOrientationPassed(),
       runtime: "test",
       now: () => now,
       persistence,
+      simulations: [simulationDefinition],
     } as MemoryLearningRepositoryOptions);
 
     expect(
       (await restored.snapshot()).progress.find(
-        (item) => item.assignmentRequirementId === "ar-orientation",
+        (item) => item.assignmentRequirementId === "ar-simulation",
       )?.state,
     ).toBe("passed");
+    expect(persisted).not.toHaveProperty("snapshot");
+  });
+
+  it("reconciles stored completion against the fresh catalog without trusting stored authority", async () => {
+    const stale = snapshotWithSimulationPassed();
+    const persisted = {
+      progress: stale.progress,
+      completedCheckpoints: {
+        "ar-simulation": simulationDefinition.checkpointIds,
+      },
+    };
+    const fresh = snapshot();
+    fresh.progress = fresh.progress.map((item) =>
+      item.requirementId === simulation.id
+        ? { ...item, assignmentRequirementId: "fresh-ar-simulation" }
+        : item,
+    );
+    fresh.lockedCapabilities = [];
+
+    const repository = new MemoryLearningRepository({
+      snapshot: fresh,
+      runtime: "test",
+      now: () => now,
+      persistence: {
+        load: () => persisted,
+        save: vi.fn(),
+      },
+      simulations: [simulationDefinition],
+    } as MemoryLearningRepositoryOptions);
+
+    const restored = await repository.snapshot();
+    expect(restored.curricula).toEqual(fresh.curricula);
+    expect(restored.certifications).toEqual([]);
+    expect(restored.lockedCapabilities).toEqual([]);
+    expect(
+      restored.progress.find((item) => item.requirementId === simulation.id),
+    ).toMatchObject({
+      assignmentRequirementId: "fresh-ar-simulation",
+      state: "passed",
+    });
   });
 });

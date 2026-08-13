@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
-import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link.js";
+import { useRouter, useSearchParams } from "next/navigation.js";
 import { useSession } from "@intra/auth";
 import { Badge, Button, Icon, Sheet } from "@intra/ui";
 import { OPERATING_PERSONAS } from "./personas";
@@ -13,6 +13,7 @@ import { AssessmentRunner } from "./AssessmentRunner";
 import { PolicyAcknowledgment } from "./PolicyAcknowledgment";
 import { assessmentQuestionsFor, policyDocumentFor } from "./content";
 import { getTrainingAdapter } from "./training/registry";
+import { supportsEmbeddedTraining } from "./catalog";
 import type {
   RequirementDefinition,
   RequirementProgress,
@@ -297,7 +298,9 @@ export function OnboardingCenter({
     }
     if (
       !["orientation", "assessment", "policy"].includes(requirement.kind) &&
-      !requirement.simulationId
+      (!requirement.simulationId ||
+        (!getTrainingAdapter(requirement.simulationId) &&
+          !supportsEmbeddedTraining(requirement)))
     ) {
       return "Guided practice is being prepared";
     }

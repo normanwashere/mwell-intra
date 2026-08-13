@@ -12,7 +12,11 @@ import {
 } from "react";
 import { useSession } from "@intra/auth";
 import { can, MODULE_LIST, type CapabilityFor, type Module, type UserRoles } from "@intra/rbac";
-import { LEARNING_CATALOG, roleCurriculumFor } from "./catalog";
+import {
+  LEARNING_CATALOG,
+  roleCurriculumFor,
+  supportsEmbeddedTraining,
+} from "./catalog";
 import {
   MemoryLearningRepository,
   SupabaseLearningRepository,
@@ -31,6 +35,7 @@ import type {
 import type { TrainingCheckpoint } from "./training/types";
 import { createIdempotencyKey } from "./training/idempotency";
 import { scorePreviewAssessment } from "./content";
+import { getTrainingAdapter } from "./training/registry";
 
 const EMPTY_SNAPSHOT: LearningSnapshot = {
   curricula: [],
@@ -336,6 +341,17 @@ export function LearningProvider({
         setTrainingError("This learning step does not have published training content yet.");
         return;
       }
+      if (
+        !isActivity &&
+        requirement.kind !== "orientation" &&
+        !getTrainingAdapter(requirement.simulationId!) &&
+        !supportsEmbeddedTraining(requirement)
+      ) {
+        setTrainingError(
+          "This domain-specific guided practice is not published yet.",
+        );
+        return;
+      }
       const requestGeneration = generation.current;
       const requestProfileId = profileIdRef.current;
       const requestPrincipal = principalRef.current;
@@ -352,6 +368,9 @@ export function LearningProvider({
           assignmentRequirementId: progress.assignmentRequirementId,
           idempotencyKey,
         });
+        if (!result?.progress) {
+          throw new Error("Learning service did not return updated requirement progress.");
+        }
         if (
           requestGeneration !== generation.current ||
           requestProfileId !== profileIdRef.current ||

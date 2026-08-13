@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "next/link.js";
 import { Button, Icon } from "@intra/ui";
 import { useLearning } from "./LearningProvider";
 import { OnboardingProgress } from "./OnboardingProgress";

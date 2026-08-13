@@ -186,8 +186,7 @@ export const DEMO_PROFILES: readonly MemoryProfile[] = [
     title: 'Leadership / Insights',
     roles: {
       core: ['staff'],
-      warehouse: ['bi_analyst'],
-      insights: ['analyst', 'manager', 'executive'],
+      insights: ['executive'],
     },
   },
   {

@@ -282,7 +282,7 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
   flow(
     "procure-to-pay",
     "Procure to pay",
-    "Route a supported need through sourcing, vendor eligibility, budget, DOA, goods or non-stock acceptance, invoice matching, Finance review, payment release, and closure.",
+    "Route one canonical request, PO, receipt, and payment identity through sourcing, vendor eligibility, budget, DOA, goods or non-stock acceptance, invoice matching, Finance review, payment release, and closure. Memory handoffs remain visibly demo-only.",
     [
       "procurement_requester",
       "procurement_officer",
@@ -708,9 +708,9 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
       ),
       terminal(
         "vendor-revision",
-        "Application returned for revision",
+        "Versioned correction requested and resubmitted",
         ["vendor_portal", "legal_reviewer"],
-        "The vendor receives specific missing, expired, or incorrectly executed evidence requirements.",
+        "Legal records the source version, requested revision, owner, and correction note. The submitted snapshot stays read-only while the vendor edits only the requested revision and resubmits it to the same case.",
         "revision",
       ),
       terminal(
@@ -742,7 +742,7 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
       edge(
         "vendor-evidence",
         "vendor-revision",
-        "Missing, expired, or inconsistent",
+        "Versioned correction request",
         "exception",
       ),
       edge("vendor-risk", "vendor-instruments", "Acceptable", "success"),
@@ -923,12 +923,12 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
       process(
         "receive-record",
         "action",
-        "Post the governed receipt",
+        "Post the governed pending-inspection receipt",
         ["warehouse_logistics_supervisor"],
-        "Record only the delivered eligible quantities and preserve receipt and traceability references.",
+        "Record only the delivered eligible quantities, preserve receipt and traceability references, and keep the stock unavailable for Quality.",
         {
           databaseEffect:
-            "Receipt lines, units or lots, and the inventory ledger are posted from the PO.",
+            "Receipt lines, units or lots, and the inventory ledger are posted from the PO in pending-inspection custody.",
         },
       ),
       decision(
@@ -947,19 +947,19 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
       process(
         "receive-putaway",
         "action",
-        "Put away received stock",
+        "Stage received stock",
         ["warehouse_logistics_supervisor", "warehouse_operations"],
-        "Scan the destination and move accepted units while preserving custody and traceability.",
+        "Scan the receiving destination and move unavailable units into controlled staging while preserving custody and traceability.",
         {
           databaseEffect:
-            "Stock location and bin balances move from receiving to the controlled destination.",
+            "Pending-inspection stock location and bin balances move into the controlled receiving destination without increasing availability.",
         },
       ),
       terminal(
         "receive-complete",
-        "Receipt available for quality disposition",
+        "Receipt pending Quality inspection",
         ["warehouse_logistics_supervisor", "warehouse_operations"],
-        "The eligible, traceable receipt is in a valid bin and linked to its inspection workflow.",
+        "The eligible, traceable receipt is unavailable in a valid receiving bin and linked to its independent Quality workflow.",
         "complete",
       ),
       terminal(
@@ -1292,13 +1292,20 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
         "start",
         "Receive the returned custody record",
         ["warehouse_operations", "warehouse_marketing"],
-        "Match the event or allocation, product, quantity, serialized units, recipient, and return evidence.",
+        "Match the event or allocation, product, quantity, serialized units, recipient, receiving location, bin, and return evidence.",
+      ),
+      process(
+        "return-quarantine",
+        "action",
+        "Quarantine every return on intake",
+        ["warehouse_logistics_supervisor", "warehouse_operations"],
+        "Create unavailable quarantine custody and the Quality task before any restock, damage, loss, or vendor-return disposition.",
       ),
       decision(
         "return-condition",
         "What is the returned-stock condition?",
-        ["warehouse_operations", "warehouse_logistics_supervisor"],
-        "Inspect each returned unit and classify reusable, damaged, unavailable, or not returned.",
+        ["warehouse_logistics_supervisor"],
+        "Independently inspect each quarantined unit and classify reusable, damaged, unavailable, or not returned.",
         "warehouse_logistics_supervisor",
         "Warehouse return control: returned stock requires inspection and traceability before restock or exception disposition.",
       ),
@@ -1308,13 +1315,6 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
         "Restock accepted returns",
         ["warehouse_operations"],
         "Move reusable stock into a valid bin and preserve the return and inspection references.",
-      ),
-      process(
-        "return-quarantine",
-        "action",
-        "Quarantine non-accepted returns",
-        ["warehouse_logistics_supervisor"],
-        "Keep damaged or unavailable units out of available inventory and record the quality disposition.",
       ),
       process(
         "return-variance",
@@ -1354,11 +1354,12 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
       ),
     ],
     [
-      edge("return-start", "return-condition"),
+      edge("return-start", "return-quarantine"),
+      edge("return-quarantine", "return-condition"),
       edge("return-condition", "return-restock", "Reusable", "success"),
       edge(
         "return-condition",
-        "return-quarantine",
+        "return-reconciled",
         "Damaged or unavailable",
         "neutral",
       ),
@@ -1369,7 +1370,6 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
         "exception",
       ),
       edge("return-restock", "return-reconciled"),
-      edge("return-quarantine", "return-reconciled"),
       edge("return-variance", "return-reconciled"),
       edge("return-reconciled", "return-complete", "Balanced", "success"),
       edge(

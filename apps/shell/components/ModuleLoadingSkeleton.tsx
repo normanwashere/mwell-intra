@@ -1,11 +1,12 @@
-// Full-screen skeleton for chromeless module segments (spec §1, dead-end
+// Full-screen skeleton for chromeless module segments (spec section 1, dead-end
 // prevention polish). The warehouse/procurement/legal/vendor mounts skip the
 // suite AppShell (see ChromeGate), so their `loading.tsx` needs to paint the
-// full viewport shape themselves — sidebar rail on desktop, top bar, and a
+// full viewport shape themselves - sidebar rail on desktop, top bar, and a
 // content column that mirrors the eventual module chrome closely enough to
 // avoid a layout jump when the dynamic import resolves.
 
 import { Skeleton, SkeletonList, SkeletonStats } from '@intra/ui';
+import { BoundedLoadingState } from './BoundedLoadingState';
 
 export interface ModuleLoadingSkeletonProps {
   /** Screen-reader label announced during the load. */
@@ -13,16 +14,12 @@ export interface ModuleLoadingSkeletonProps {
 }
 
 export function ModuleLoadingSkeleton({
-  label = 'Loading module…',
+  label = 'Loading module...',
 }: ModuleLoadingSkeletonProps) {
   return (
     <div
       className="min-h-screen bg-app md:flex"
-      role="status"
-      aria-live="polite"
-      aria-label={label}
     >
-      <span className="sr-only">{label}</span>
 
       {/* Desktop sidebar rail */}
       <aside className="hidden w-60 shrink-0 flex-col border-r border-line bg-surface px-3 py-5 md:flex lg:w-64">
@@ -48,6 +45,7 @@ export function ModuleLoadingSkeleton({
         </header>
 
         <main className="mx-auto w-full max-w-5xl flex-1 space-y-6 px-4 py-5 pb-[calc(11rem+env(safe-area-inset-bottom))] sm:px-6 md:pb-10 xl:max-w-6xl">
+          <BoundedLoadingState label={label} className="py-2" />
           <div className="space-y-3">
             <Skeleton className="h-7 w-2/5" />
             <Skeleton className="h-4 w-3/5" />

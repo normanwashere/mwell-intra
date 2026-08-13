@@ -190,9 +190,8 @@ describe("resolvePersonaPresentation", () => {
       "admin",
     ]);
     expect(profileById.get("demo-executive")?.roles.insights).toEqual([
-      "analyst",
-      "manager",
       "executive",
     ]);
+    expect(profileById.get("demo-executive")?.roles.warehouse).toBeUndefined();
   });
 });

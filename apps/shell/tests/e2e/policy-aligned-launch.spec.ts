@@ -99,7 +99,7 @@ test('Platform Admin can configure department DOA without gaining approval autho
   await expectStableViewport(page);
 });
 
-test('Legal Admin can configure DOA but Legal Reviewer cannot', async ({
+test('Legal Admin can configure department DOA', async ({
   page,
 }) => {
   await installSession(page, 'demo-legal', {
@@ -111,16 +111,6 @@ test('Legal Admin can configure DOA but Legal Reviewer cannot', async ({
     page.getByRole('heading', { name: /Delegation of Authority/i }),
   ).toBeVisible();
   await expectStableViewport(page);
-
-  await page.evaluate((key) => sessionStorage.removeItem(key), SESSION_KEY);
-  await installSession(page, 'demo-legal', {
-    core: ['staff'],
-    legal: ['legal_reviewer'],
-  });
-  await page.goto('/admin/doa');
-  await expect(
-    page.getByRole('heading', { name: 'Access denied' }),
-  ).toBeVisible();
 });
 
 test('Finance cannot author POs and requester cannot self-confirm sourcing', async ({

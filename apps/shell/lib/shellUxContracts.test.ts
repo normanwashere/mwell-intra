@@ -49,6 +49,37 @@ describe("shared shell interaction geometry", () => {
     expect(appShell).not.toContain('className="relative -mt-5 grid h-14 w-14');
     expect(appShell).toContain("{action.label}");
   });
+
+  it("keeps long mobile navigation labels on whole-word boundaries", () => {
+    const appShell = source("components/AppShell.tsx");
+
+    expect(appShell).toContain("break-normal hyphens-none");
+    expect(appShell).not.toContain("leading-tight break-words");
+  });
+
+  it("turns prolonged session restoration into a bounded recovery state", () => {
+    const appShell = source("components/AppShell.tsx");
+    const recovery = source("components/BoundedLoadingState.tsx");
+
+    expect(appShell).toContain("<BoundedLoadingState");
+    expect(recovery).toContain("timeoutMs = 8000");
+    expect(recovery).toContain("Loading is taking longer than expected");
+    expect(recovery).toContain("Recovery owner");
+    expect(recovery).toContain("Reload page");
+  });
+
+  it("keeps shared shell-facing source free of encoding-sensitive symbols", () => {
+    for (const path of [
+      "components/AppShell.tsx",
+      "components/PersonaContext.tsx",
+      "components/ModuleLoadingSkeleton.tsx",
+    ]) {
+      expect(
+        [...source(path)].every((character) => character.codePointAt(0)! <= 127),
+        path,
+      ).toBe(true);
+    }
+  });
 });
 
 describe("server-enforced Knowledge Base audience", () => {

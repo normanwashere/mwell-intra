@@ -431,7 +431,7 @@ describe("LearningProvider", () => {
     };
   });
 
-  it("rejects an operational scenario when no domain adapter is registered", async () => {
+  it("rejects an unsupported practice before creating an attempt", async () => {
     clearTrainingAdaptersForTests();
     const orientation = assignedOrientation();
     const assigned: LearningSnapshot = {
@@ -455,8 +455,9 @@ describe("LearningProvider", () => {
     await act(async () => screen.getByRole("button", { name: "Resume" }).click());
 
     expect(learningRepository.startRequirement).not.toHaveBeenCalled();
+    expect(screen.getByTestId("attempt")).toHaveTextContent("none");
     expect(screen.getByTestId("training-error")).toHaveTextContent(
-      "Guided practice for this step is being prepared",
+      "domain-specific guided practice is not published",
     );
   });
 

@@ -919,7 +919,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
         control(
           "Add receipt line",
-          "Adds the selected product and quantity to the receipt draft.",
+          "Adds the selected product and quantity to the responsive receipt-lines table.",
           "Quantity must be positive and within the remaining order balance.",
           "A validated line appears in the receipt draft.",
         ),
@@ -1098,6 +1098,12 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "A received fulfillment order enters the Warehouse queue.",
         ),
         control(
+          "Import order list",
+          "Uploads a CSV, validates every SKU and quantity, previews errors in a table, and groups repeated order references into one multi-line ecommerce order.",
+          "Required columns are order_reference, product_sku, and quantity. All rows must validate before import.",
+          "Each unique order reference enters the Warehouse queue once with all validated lines and optional bundle-set codes.",
+        ),
+        control(
           "Print barcode sheet",
           "Generates one scannable master label for each quantity-controlled merchandise, event-material, or fulfillment-supply item.",
           "The product must have a barcode and must not be a serialized unit.",
@@ -1105,7 +1111,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
         control(
           "Submit department request",
-          "Records a department's stock need, business purpose, governed cost center, required date, treatment, and eligible SKU, merchandise, or event material.",
+          "Records a department's stock need, business purpose, governed cost center, required date, treatment, and one or more eligible SKU, merchandise, or event-material lines.",
           "The requester must select an active department/cost-center combination, provide all business context, and cannot approve the same request.",
           "A pending request is visible to the requester and decision owner.",
         ),
@@ -1123,7 +1129,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
         control(
           "Confirm pick",
-          "Records picked quantities and required unit serials for every order line.",
+          "Records picked quantities and required unit serials for every order line while showing bundle-set codes and the Quality Control stop rule.",
           "Every line must be complete; serialized products require one unique eligible serial per unit.",
           "The order advances to Packing with traceable picked identities.",
         ),
@@ -1144,6 +1150,12 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "Records proof that an internal, event, or third-party recipient accepted released stock.",
           "An acknowledgment reference and evidence are required, and the acknowledger cannot be the releasing operator.",
           "The order and its linked department request become Completed and Closed.",
+        ),
+        control(
+          "Update delivery with proof",
+          "Records courier progression, failed delivery, return to sender, or delivery completion and uploads the delivery image directly from camera or file picker.",
+          "Delivered requires both a proof reference and at least one successfully uploaded image.",
+          "The shipment stores the proof reference and evidence path and becomes Delivered.",
         ),
         control(
           "Split backorder or cancel",
@@ -1260,10 +1272,10 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
     "warehouse-returns": {
       controls: [
         control(
-          "Select issued item",
-          "Loads an outstanding issue into the return form.",
-          "The issue must retain unreturned custody quantity.",
-          "Product, event, and remaining quantity are displayed.",
+          "Select return source",
+          "Identifies whether the physical return came from a customer, vendor, or specific event.",
+          "Event returns require the accountable event before submission.",
+          "The return remains linked to its custody source for reconciliation.",
         ),
         control(
           "Set disposition",
@@ -1279,17 +1291,23 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
         control(
           "Submit return",
-          "Records returned custody and resulting stock movement through the repository.",
-          "Quantity, condition, disposition, and required evidence must pass.",
-          "Custody decreases and the final stock state is recorded.",
+          "Records returned custody into inspection staging at the selected receiving location and bin.",
+          "Quantity, source, event when applicable, serial identity, destination bin, disposition, and required evidence must pass.",
+          "The event or source custody, receiving bin, and inspection handoff remain attributable.",
         ),
       ],
       fields: [
         field(
-          "Issue reference",
-          "Identifies the custody record being returned.",
+          "Return source",
+          "Identifies whether the physical custody came from a customer, vendor, or event workflow.",
           true,
-          "The issue must exist and remain partly outstanding.",
+          "Select one supported source before recording the return.",
+        ),
+        field(
+          "Source event",
+          "Identifies the accountable event that issued the stock now returning to Warehouse.",
+          false,
+          "A specific event is mandatory when Event is selected as the return source.",
         ),
         field(
           "Product",
@@ -1317,9 +1335,9 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
         field(
           "Destination bin",
-          "Selects the restock or hold destination when applicable.",
-          false,
-          "The bin must be active and route-compatible.",
+          "Selects the exact receiving or quarantine bin for physical custody before inspection.",
+          true,
+          "Restock-intent returns require an active bin in the selected receiving location.",
         ),
         field(
           "Reason",

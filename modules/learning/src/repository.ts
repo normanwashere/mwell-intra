@@ -589,8 +589,14 @@ export interface MemoryLearningRepositoryOptions {
 }
 
 export interface MemoryLearningPersistedState {
-  snapshot: LearningSnapshot;
+  progress: readonly RequirementProgress[];
   completedCheckpoints: Readonly<Record<string, readonly string[]>>;
+}
+
+interface LegacyMemoryLearningPersistedState {
+  snapshot?: LearningSnapshot;
+  progress?: readonly RequirementProgress[];
+  completedCheckpoints?: Readonly<Record<string, readonly string[]>>;
 }
 
 export interface MemoryLearningPersistence {
@@ -607,8 +613,10 @@ export function createSessionStorageLearningPersistence(
       try {
         const raw = window.sessionStorage.getItem(key);
         if (!raw) return null;
-        const state = JSON.parse(raw) as MemoryLearningPersistedState;
-        return state?.snapshot ? state : null;
+        const state = JSON.parse(raw) as LegacyMemoryLearningPersistedState;
+        return state?.snapshot || Array.isArray(state?.progress)
+          ? (state as MemoryLearningPersistedState)
+          : null;
       } catch {
         window.sessionStorage.removeItem(key);
         return null;
@@ -640,8 +648,38 @@ export class MemoryLearningRepository implements LearningRepository {
     const runtime = options.runtime ?? process.env.NODE_ENV;
     if (runtime === "production")
       throw new Error("MemoryLearningRepository is disabled in production.");
-    const persisted = options.persistence?.load();
-    this.state = clone(persisted?.snapshot ?? options.snapshot);
+    const persisted = options.persistence?.load() as
+      | (MemoryLearningPersistedState & LegacyMemoryLearningPersistedState)
+      | null
+      | undefined;
+    const fresh = clone(options.snapshot);
+    const persistedProgress = persisted?.progress ?? persisted?.snapshot?.progress ?? [];
+    this.state = {
+      ...fresh,
+      progress: fresh.progress.map((current) => {
+        const prior = persistedProgress.find(
+          (item) =>
+            item.requirementId === current.requirementId &&
+            item.requirementVersion === current.requirementVersion,
+        );
+        if (!prior) return current;
+        if (
+          !["passed", "waived"].includes(prior.state) &&
+          prior.assignmentRequirementId !== current.assignmentRequirementId
+        ) return current;
+        return {
+          ...current,
+          state: prior.state,
+          attemptCount: prior.attemptCount,
+          activeAttempt:
+            prior.assignmentRequirementId === current.assignmentRequirementId
+              ? prior.activeAttempt
+              : undefined,
+          completedAt: prior.completedAt,
+          updatedAt: prior.updatedAt,
+        };
+      }),
+    };
     this.now = options.now ?? (() => new Date().toISOString());
     this.assess = options.assess;
     this.evaluateCertifications = options.evaluateCertifications;
@@ -649,21 +687,42 @@ export class MemoryLearningRepository implements LearningRepository {
       (options.simulations ?? []).map((item) => [item.id, item]),
     );
     this.persistence = options.persistence;
-    for (const [assignmentRequirementId, checkpointIds] of Object.entries(
+    for (const [persistedId, checkpointIds] of Object.entries(
       persisted?.completedCheckpoints ?? {},
     )) {
-      this.completedCheckpoints.set(assignmentRequirementId, new Set(checkpointIds));
+      const prior = persistedProgress.find(
+        (item) =>
+          item.assignmentRequirementId === persistedId ||
+          `${item.requirementId}@${item.requirementVersion}` === persistedId,
+      );
+      const current = prior
+        ? this.state.progress.find(
+            (item) =>
+              item.requirementId === prior.requirementId &&
+              item.requirementVersion === prior.requirementVersion,
+          )
+        : undefined;
+      if (current) {
+        this.completedCheckpoints.set(
+          current.assignmentRequirementId,
+          new Set(checkpointIds),
+        );
+      }
     }
   }
 
   private persist(): void {
     this.persistence?.save({
-      snapshot: clone(this.state),
+      progress: clone(this.state.progress),
       completedCheckpoints: Object.fromEntries(
-        [...this.completedCheckpoints].map(([id, checkpoints]) => [
-          id,
-          [...checkpoints],
-        ]),
+        [...this.completedCheckpoints].flatMap(([id, checkpoints]) => {
+          const progress = this.state.progress.find(
+            (item) => item.assignmentRequirementId === id,
+          );
+          return progress
+            ? [[`${progress.requirementId}@${progress.requirementVersion}`, [...checkpoints]]]
+            : [];
+        }),
       ),
     });
   }

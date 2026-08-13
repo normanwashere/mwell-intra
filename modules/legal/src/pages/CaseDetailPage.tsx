@@ -152,7 +152,7 @@ export function CaseDetailPage() {
   const { rows: invites, retry: retryInvite } = useVendorInvites();
   const { rows: timeline } = useCaseTimeline(id);
   const { success, error } = useToast();
-  const { profile, mode } = useSession();
+  const { profile } = useSession();
   // NOTE: `Guard fallback={null}` renders the default AccessDenied block
   // (null ?? <AccessDenied/>), so capability-dependent actions use useCan.
   const canApprove = useCan('legal', 'approve_accreditation');
@@ -701,7 +701,7 @@ export function CaseDetailPage() {
                   Send reminder
                 </button>
               </Guard>
-              {canReview && mode !== 'supabase' && canRequestCorrection(kase.status) && (
+              {canReview && canRequestCorrection(kase.status) && (
                 <button
                   type="button"
                   onClick={() => setCorrectionOpen((open) => !open)}
@@ -1691,33 +1691,58 @@ function GovernedDocumentLink({
 }) {
   const { prepareAccess } = useAccreditationDocs();
   const { error } = useToast();
-  const [opening, setOpening] = useState(false);
+  const [opening, setOpening] = useState<'open' | 'download' | null>(null);
 
-  async function open() {
-    setOpening(true);
+  async function open(disposition: 'open' | 'download') {
+    const target = disposition === 'open' ? window.open('', '_blank') : null;
+    setOpening(disposition);
     try {
-      const url = await prepareAccess(doc, 'download');
-      window.open(url, '_blank', 'noopener,noreferrer');
+      const url = await prepareAccess(doc, disposition);
+      if (target) {
+        target.opener = null;
+        target.location.href = url;
+      } else {
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = doc.filename;
+        link.rel = 'noopener noreferrer';
+        link.click();
+      }
     } catch (cause) {
+      target?.close();
       error(cause instanceof Error ? cause.message : 'Document access could not be prepared.');
     } finally {
-      setOpening(false);
+      setOpening(null);
     }
   }
 
   return (
+    <div className="flex flex-wrap items-center gap-1">
     <button
       type="button"
       className="btn-ghost btn-sm"
-      disabled={opening}
+      disabled={opening !== null}
       onClick={(event) => {
         onStop(event);
-        void open();
+        void open('open');
       }}
     >
       <Icon name="download" className="h-4 w-4" />
-      {opening ? 'Preparing' : 'Open'}
+      {opening === 'open' ? 'Preparing' : 'Open'}
     </button>
+    <button
+      type="button"
+      className="btn-ghost btn-sm"
+      disabled={opening !== null}
+      onClick={(event) => {
+        onStop(event);
+        void open('download');
+      }}
+    >
+      <Icon name="download" className="h-4 w-4" />
+      {opening === 'download' ? 'Preparing' : 'Download'}
+    </button>
+    </div>
   );
 }
 

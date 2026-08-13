@@ -106,7 +106,7 @@ export function createVendorApplicationDraftRepository(options: {
         .from('vendor_application_snapshots')
         .select('case_id,payload,version,status,updated_at')
         .eq('case_id', caseId)
-        .in('status', ['draft', 'submitted'])
+        .in('status', ['draft', 'submitted', 'correction_requested'])
         .order('version', { ascending: false })
         .limit(1)
         .maybeSingle();

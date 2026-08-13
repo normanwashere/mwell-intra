@@ -431,6 +431,8 @@ export function loadMemoryEvents(
     return Array.isArray(parsed.events)
       ? {
           events: parsed.events as EventRecord[],
+          products: EVENTS_DEMO_DATA.products,
+          departments: EVENTS_DEMO_DATA.departments,
           reconciliations: Array.isArray(parsed.reconciliations)
             ? parsed.reconciliations as EventReconciliation[]
             : [],

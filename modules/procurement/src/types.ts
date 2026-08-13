@@ -432,6 +432,8 @@ export interface PurchaseOrder {
   lines: PurchaseOrderLine[];
   createdAt: string;
   updatedAt: string;
+  /** Optimistic concurrency token for governed cancellation. */
+  cancellationVersion?: number;
   approvedAt?: string;
   approvedByEmail?: string;
   cancellationReason?: string;

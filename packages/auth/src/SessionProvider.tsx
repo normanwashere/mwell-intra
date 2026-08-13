@@ -128,10 +128,7 @@ export function SessionProvider({
     try {
       const raw = window.sessionStorage.getItem(MEMORY_SESSION_KEY);
       if (raw) {
-        const stored = JSON.parse(raw) as {
-          profileId: string;
-          roles: Partial<UserRoles>;
-        };
+        const stored = JSON.parse(raw) as { profileId: string };
         const match = memoryProfiles.find((p) => p.id === stored.profileId);
         if (match) {
           setProfile({
@@ -142,7 +139,9 @@ export function SessionProvider({
             title: match.title,
             vendorId: match.vendorId,
           });
-          setUserRoles(stored.roles);
+          // Persist identity only; authority is re-derived from the current
+          // profile contract so stale or edited storage cannot retain roles.
+          setUserRoles(match.roles);
         }
       }
     } catch {
@@ -203,10 +202,15 @@ export function SessionProvider({
     };
   }, [client]);
 
-  const beginLiveRefresh = useCallback((session?: Session | null) => {
+  const beginLiveRefresh = useCallback((
+    session?: Session | null,
+    preserveCapabilities = false,
+  ) => {
     const generation = ++liveGeneration.current;
-    setRoleCapabilities({});
-    setUserCapabilities({});
+    if (!preserveCapabilities) {
+      setRoleCapabilities({});
+      setUserCapabilities({});
+    }
     if (
       session === null ||
       (session && activeUserId.current !== session.user.id)
@@ -219,7 +223,11 @@ export function SessionProvider({
   }, []);
 
   const verifyAndApplyLiveUser = useCallback(
-    async (session: Session | null, generation: number): Promise<boolean> => {
+    async (
+      session: Session | null,
+      generation: number,
+      preserveCapabilities = false,
+    ): Promise<boolean> => {
       if (!client || generation !== liveGeneration.current) return false;
       if (!session) {
         applyUser(null);
@@ -244,7 +252,7 @@ export function SessionProvider({
         return false;
       }
 
-      applyUser(user, {});
+      if (!preserveCapabilities) applyUser(user, {});
       try {
         const capabilities = await loadLiveCapabilities();
         if (
@@ -311,16 +319,21 @@ export function SessionProvider({
 
     const refreshOnFocus = () => {
       if (!active) return;
-      const generation = beginLiveRefresh();
+      const generation = beginLiveRefresh(undefined, true);
       void client.auth
         .getSession()
         .then(({ data }) => {
           if (!active || generation !== liveGeneration.current) return false;
-          return verifyAndApplyLiveUser(data.session ?? null, generation);
+          return verifyAndApplyLiveUser(
+            data.session ?? null,
+            generation,
+            true,
+          );
         })
         .catch(() => {
           if (active && generation === liveGeneration.current) applyUser(null);
-        });
+        })
+        .finally(() => undefined);
     };
     window.addEventListener("focus", refreshOnFocus);
 

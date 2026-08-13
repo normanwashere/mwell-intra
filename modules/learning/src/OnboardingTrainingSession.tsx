@@ -11,21 +11,14 @@ import type {
   TrainingAdapter,
   TrainingScenario,
 } from "./training/types";
+import { LEARNING_CATALOG } from "./catalog";
 import "./training.css";
 
-interface PreparationState {
-  reviewedRoleContext: boolean;
-  reviewedRequirement: boolean;
-}
+interface PreparationState { stepIndex: number }
 
 function Runtime({ onClose }: { onClose(): void }) {
   const training = useTraining<PreparationState>();
-  const command =
-    training.currentStep.id === "role-context"
-      ? "review-role-context"
-      : training.currentStep.id === "required-step"
-        ? "review-required-step"
-        : null;
+  const command = training.currentStep.allowedCommands[0] ?? null;
 
   return (
     <>
@@ -46,13 +39,18 @@ function Runtime({ onClose }: { onClose(): void }) {
             onClose();
           }}
           onContinue={
-            command
+            training.currentStep.terminal
+              ? () => {
+                  training.exit();
+                  onClose();
+                }
+              : command
               ? () => {
                   void training.dispatch({ type: command }).catch(() => undefined);
                 }
               : undefined
           }
-          continueLabel={command === "review-required-step" ? "Finish review" : "Continue"}
+          continueLabel={training.currentStep.terminal ? "Finish review" : "Continue"}
           continueDisabled={training.busy}
           error={training.checkpointError}
         />
@@ -78,12 +76,42 @@ export function OnboardingTrainingSession({
   onCheckpoint: Parameters<typeof TrainingModeProvider>[0]["onCheckpoint"];
   onClose(): void;
 }) {
+  const publishedSimulation = LEARNING_CATALOG.simulations.find(
+    (simulation) => simulation.id === scenarioId,
+  );
   const scenario = useMemo<TrainingScenario>(
-    () => ({
-      id: scenarioId,
-      title: requirementTitle,
-      initialStepId: "role-context",
-      steps: [
+    () => {
+      const embeddedSteps = publishedSimulation?.embeddedSteps;
+      if (embeddedSteps?.length) {
+        return {
+          id: scenarioId,
+          title: requirementTitle,
+          initialStepId: embeddedSteps[0]!.checkpointId,
+          steps: [
+            ...embeddedSteps.map((step) => ({
+              id: step.checkpointId,
+              title: step.title,
+              instruction: step.instruction,
+              anchor: "[data-onboarding-anchor='onboarding-required-steps']",
+              allowedCommands: [`confirm:${step.checkpointId}`],
+            })),
+            {
+              id: "reviewed",
+              title: "Guided practice complete",
+              instruction:
+                "The practice checkpoints are recorded. Live work remains subject to current authority and source-record controls.",
+              anchor: "[data-onboarding-anchor='onboarding-required-steps']",
+              allowedCommands: [],
+              terminal: true,
+            },
+          ],
+        };
+      }
+      return {
+        id: scenarioId,
+        title: requirementTitle,
+        initialStepId: "role-context",
+        steps: [
         {
           id: "role-context",
           title: "Confirm why this step is assigned",
@@ -109,29 +137,42 @@ export function OnboardingTrainingSession({
           allowedCommands: [],
           terminal: true,
         },
-      ],
-    }),
-    [requirementTitle, scenarioId],
+        ],
+      };
+    },
+    [publishedSimulation, requirementTitle, scenarioId],
   );
   const adapter = useMemo<TrainingAdapter<PreparationState>>(
     () => ({
       id: `preparation:${scenarioId}`,
       version: 1,
       scenarioIds: [scenario.id],
-      initialState: () => ({
-        reviewedRoleContext: false,
-        reviewedRequirement: false,
-      }),
+      initialState: () => ({ stepIndex: 0 }),
       dispatch(state, command) {
-        if (command.type === "review-role-context") {
+        const embeddedSteps = publishedSimulation?.embeddedSteps;
+        if (embeddedSteps?.length) {
+          const step = embeddedSteps[state.stepIndex];
+          if (!step || command.type !== `confirm:${step.checkpointId}`) {
+            throw new Error(`Unknown governed practice command ${command.type}.`);
+          }
+          const nextIndex = state.stepIndex + 1;
           return {
-            state: { ...state, reviewedRoleContext: true },
-            nextStepId: "required-step",
+            state: { stepIndex: nextIndex },
+            nextStepId:
+              nextIndex < embeddedSteps.length
+                ? embeddedSteps[nextIndex]!.checkpointId
+                : "reviewed",
+            checkpointId: step.checkpointId,
+            outcomeId: step.outcomeId,
+            completed: nextIndex === embeddedSteps.length,
           };
         }
-        if (command.type === "review-required-step") {
+        if (command.type === "review-role-context" && state.stepIndex === 0) {
+          return { state: { stepIndex: 1 }, nextStepId: "required-step" };
+        }
+        if (command.type === "review-required-step" && state.stepIndex === 1) {
           return {
-            state: { ...state, reviewedRequirement: true },
+            state: { stepIndex: 2 },
             nextStepId: "reviewed",
             checkpointId: "complete",
             outcomeId: "reviewed",
@@ -141,7 +182,7 @@ export function OnboardingTrainingSession({
         throw new Error(`Unknown onboarding preparation command ${command.type}.`);
       },
     }),
-    [scenario.id, scenarioId],
+    [publishedSimulation, scenario.id, scenarioId],
   );
 
   return (

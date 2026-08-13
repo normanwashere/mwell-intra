@@ -242,6 +242,86 @@ describe("Knowledge Base content", () => {
       ),
     ).toMatchObject({ availability: "live", releasedAt: "2026-08-11" });
   });
+
+  it("matches the released custody, handoff, correction, onboarding, and My Work behavior", () => {
+    const feature = (id: string) =>
+      KNOWLEDGE_CONTENT.features.find((item) => item.id === id)!;
+    const flow = (id: string) =>
+      KNOWLEDGE_CONTENT.flows.find((item) => item.id === id)!;
+
+    expect(JSON.stringify(feature("warehouse-receiving"))).toMatch(
+      /pending inspection.*unavailable.*Quality/i,
+    );
+    expect(JSON.stringify(feature("warehouse-receiving"))).toMatch(
+      /non-PO.*evidenced exception/i,
+    );
+    expect(JSON.stringify(feature("warehouse-returns"))).toMatch(
+      /quarantine.*before.*independent Quality/i,
+    );
+
+    const returns = flow("returns-reconciliation");
+    expect(returns.edges).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          from: "return-start",
+          to: "return-quarantine",
+        }),
+        expect.objectContaining({
+          from: "return-quarantine",
+          to: "return-condition",
+        }),
+      ]),
+    );
+
+    expect(JSON.stringify(flow("procure-to-pay"))).toMatch(
+      /canonical request.*PO.*receipt.*payment/i,
+    );
+    expect(JSON.stringify(feature("warehouse-finance"))).toMatch(
+      /event settlement.*demo-only/i,
+    );
+    expect(JSON.stringify(feature("procurement-po-detail"))).toMatch(
+      /cancellation reason.*displayed PO unchanged/i,
+    );
+
+    expect(JSON.stringify(feature("vendor-case-detail"))).toMatch(
+      /read-only.*Legal.*versioned correction request.*resubmit/i,
+    );
+    expect(JSON.stringify(flow("vendor-accreditation"))).toMatch(
+      /source version.*requested revision.*resubmit/i,
+    );
+
+    expect(JSON.stringify(feature("role-onboarding"))).toMatch(
+      /role-specific.*guided review.*profile.*role bundle/i,
+    );
+    expect(JSON.stringify(feature("my-work"))).toMatch(
+      /effective capabilities.*valid source records.*counts/i,
+    );
+
+    const qualityRecovery = TROUBLESHOOTING_GUIDES.find(
+      (item) => item.id === "trouble-quality-hold",
+    )!;
+    expect(JSON.stringify(qualityRecovery)).toMatch(
+      /pending inspection.*quarantine.*Quality disposition owner/i,
+    );
+    const correctionRecovery = TROUBLESHOOTING_GUIDES.find(
+      (item) => item.id === "trouble-rejected-request",
+    )!;
+    expect(JSON.stringify(correctionRecovery)).toMatch(
+      /submitted snapshot.*Legal.*source version.*requested revision.*resubmit/i,
+    );
+    const loadingRecovery = TROUBLESHOOTING_GUIDES.find(
+      (item) => item.id === "trouble-stale-session",
+    )!;
+    expect(JSON.stringify(loadingRecovery)).toMatch(
+      /8 seconds.*Reload page.*Platform Support/i,
+    );
+
+    expect(
+      HANDBOOK_RELEASE_NOTES.find(
+        (note) => note.id === "release-task-2-5-current-behavior-2026-08-14",
+      ),
+    ).toMatchObject({ releasedAt: "2026-08-14", availability: "limited" });
+  });
   it("defines explicit operating data for all 40 role profiles", () => {
     expect(KNOWLEDGE_GUIDE_CONTENT.roles).toHaveLength(40);
     for (const role of KNOWLEDGE_GUIDE_CONTENT.roles) {
@@ -414,7 +494,7 @@ describe("Knowledge Base content", () => {
       "field",
       "Destination bin",
       "feature",
-      /Warehouse (receiving|product detail)/i,
+      /Warehouse (receiving|product detail)|Returns receiving/i,
     ],
     ["status", "partially authorized", "feature", /Intra home/i],
     ["problem", "expected module is absent", "feature", /Intra home/i],

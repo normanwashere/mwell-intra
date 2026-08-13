@@ -43,7 +43,7 @@ test.describe('warehouse W1 memory workflows', () => {
   });
 
   test('return scan rejects an in-stock serial and accepts the issued event unit', async ({ page }) => {
-    await installWarehouseSession(page, 'operations');
+    await installWarehouseSession(page, 'warehouse_operator');
     await page.goto('/warehouse/returns', { waitUntil: 'networkidle' });
     await page.getByLabel('Related event (optional)').selectOption('evt-vip');
     await page.getByLabel('Product').selectOption('smart-watch');
@@ -57,7 +57,7 @@ test.describe('warehouse W1 memory workflows', () => {
   });
 
   test('device count records presence and blocks an unexpected serial', async ({ page }) => {
-    await installWarehouseSession(page, 'finance');
+    await installWarehouseSession(page, 'warehouse_operator');
     await page.goto('/warehouse/cycle-counts', { waitUntil: 'networkidle' });
     await page.getByLabel('Category').selectOption('device');
     await page.getByLabel('Enter barcode manually').fill('UNKNOWN-UNIT');

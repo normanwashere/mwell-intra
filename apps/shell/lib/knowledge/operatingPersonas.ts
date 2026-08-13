@@ -1,6 +1,5 @@
-import { OPERATING_PERSONAS } from "@intra/learning";
-export { OPERATING_PERSONAS } from "@intra/learning";
-export type { OperatingPersona } from "@intra/learning";
+export { OPERATING_PERSONAS } from "@intra/learning/personas";
+export type { OperatingPersona } from "@intra/learning/personas";
 
 export interface OperatingPersonaTask {
   id: string;
@@ -110,7 +109,7 @@ export const OPERATING_PERSONA_GUIDES: Record<string, OperatingPersonaGuide> = {
       task(
         "track-work",
         "Track assigned work",
-        "Review your active requests, decisions, and next handoffs.",
+        "Review work scoped by your effective capabilities, then use Open source to act in the owning workspace.",
         "/work",
         "my-work",
       ),
@@ -122,7 +121,7 @@ export const OPERATING_PERSONA_GUIDES: Record<string, OperatingPersonaGuide> = {
       task(
         "receive-stock",
         "Receive stock",
-        "Match an approved PO, capture quantity and traceability, then attach evidence.",
+        "Match an approved PO, capture quantity, traceability, and evidence, then create the pending-inspection handoff while stock remains unavailable.",
         "/warehouse/receiving",
         "warehouse-receiving",
       ),
@@ -135,15 +134,15 @@ export const OPERATING_PERSONA_GUIDES: Record<string, OperatingPersonaGuide> = {
       ),
       task(
         "pick-issue",
-        "Allocate, pick, and issue",
-        "Reserve approved demand, scan the source, and preserve custody evidence.",
+        "Pick and pack an order",
+        "Open Pick & Pack, allocate approved demand, scan the source bin and every item, add packaging and handoff evidence, then send it to a second operator for release.",
         "/warehouse/fulfillment",
         "warehouse-fulfillment",
       ),
       task(
         "process-return",
         "Process a return",
-        "Locate the issued identity and route the returned item for inspection.",
+        "Locate the source identity, quarantine the returned item, and hand final disposition to Quality.",
         "/warehouse/returns",
         "warehouse-returns",
       ),
@@ -277,7 +276,7 @@ export const OPERATING_PERSONA_GUIDES: Record<string, OperatingPersonaGuide> = {
       task(
         "review-case",
         "Review vendor accreditation",
-        "Check completeness, risk, instruments, and current supporting evidence.",
+        "Check completeness, risk, instruments, and evidence; open a versioned correction request when submitted facts must change.",
         "/legal/cases",
         "legal-cases",
       ),
@@ -414,7 +413,7 @@ export const OPERATING_PERSONA_GUIDES: Record<string, OperatingPersonaGuide> = {
       task(
         "correct-requirement",
         "Respond to a correction",
-        "Replace or clarify only the requirement returned by Legal.",
+        "Edit only Legal's requested revision, replace or clarify the returned requirement, and resubmit the new version.",
         "/vendor",
         "vendor-case-detail",
       ),

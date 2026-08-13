@@ -246,7 +246,7 @@ describe("OnboardingCenter", () => {
     );
   });
 
-  it("starts a published generic practice when no domain simulation is registered", () => {
+  it("fails closed when a practice has no supported domain simulation", () => {
     renderCenter({
       snapshot: {
         ...snapshot,
@@ -261,14 +261,10 @@ describe("OnboardingCenter", () => {
       },
     });
 
-    expect(
-      screen.getByRole("button", {
-        name: "Resume Receive and inspect a serialized device",
-      }),
-    ).toBeEnabled();
-    expect(
-      screen.queryByText("Guided practice is being prepared"),
-    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", {
+      name: "Resume Receive and inspect a serialized device",
+    })).toBeDisabled();
+    expect(screen.getAllByText("Guided practice is being prepared").length).toBeGreaterThan(0);
   });
 
   it("prioritizes the next action and deduplicates shared multi-role requirements", () => {
