@@ -29,7 +29,7 @@ const PINNED_LEARNING_MIGRATION_SHA256 = Object.freeze({
   [ASSIGNMENT_LINEAGE_MIGRATION_NAME]:
     "c5047ff95b5a545624c8dad090e1ff9c13ed2a977034ffc146a162740d8175ef",
   [SERVICES_MIGRATION_NAME]:
-    "7b4b704249d37683e8764b4cff5496c49ebb5e5a825b8653921c8346c6e2703f",
+    "037c98deded4de50131c0de3889e919e8baedbd62810c3ecd36f3decdfb9f667",
   [SERVICE_CONTRACT_ALIGNMENT_MIGRATION_NAME]:
     "a4001fd52c284eda4cbb04a813b6346d724d8416da6671a8ecd143037e2c1fbc",
   [COMPLETION_ALIGNMENT_MIGRATION_NAME]:
@@ -686,13 +686,13 @@ export const EXPECTED_FUNCTION_BODY_SHA256 = Object.freeze({
   "learning.start_requirement":
     "294cecabf70371a8a74a9bbf0630100ae2b72e50c7d52024709500c189714e99",
   "learning.record_simulation_checkpoint":
-    "283ca2e692fff9563407a7de9e7ae0a4e6fbb9159cfe09f52e6a611525089de0",
+    "fd29927fc43d93ce1710dee1eb56cc906ffc670e7f47ebbb138061ac48d182d5",
   "learning.submit_assessment":
-    "80b8209dad35a8110ef3430ffabeabd9a96639f7d949bf2d9c2d7e9938080e55",
+    "a97af5a6b7dd8f51f3180accb455a8cef2597a161c8d37227adca0000f2b6016",
   "learning.acknowledge_policy":
     "e38110ead668101f287759692e51a453b92bd24199031b4d128f976f0c6c2774",
   "learning.request_support":
-    "ec8f155cf19db9b50f394b6c9b0d160a2805f248e3ecedc34fe5e0e2add17a98",
+    "7d46cd636adcf86f5c5526710cfa250ffe8d3d73b23a8c45b1d70f4300347a84",
   "learning.sync_shared_completions":
     "fe31819ed19667879c0000c39bc70f87fa87d51a382e50d5ac947c2f5acd9b28",
   "learning.evaluate_certifications":

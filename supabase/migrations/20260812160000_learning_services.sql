@@ -347,6 +347,7 @@ declare
   v_source_id uuid;
   v_assignment learning.assignments%rowtype;
   v_assignment_requirement learning.assignment_requirements%rowtype;
+  v_locked_rows jsonb;
   v_requirement_version learning.requirement_versions%rowtype;
   v_attempt learning.attempts%rowtype;
   v_mode text;
@@ -404,8 +405,11 @@ begin
     end if;
   end if;
 
-  select assignment, assignment_requirement
-  into v_assignment, v_assignment_requirement
+  select pg_catalog.jsonb_build_object(
+    'assignment', pg_catalog.to_jsonb(assignment),
+    'assignment_requirement', pg_catalog.to_jsonb(assignment_requirement)
+  )
+  into v_locked_rows
   from learning.assignments assignment
   join learning.assignment_requirements assignment_requirement
     on assignment_requirement.assignment_id = assignment.id
@@ -417,6 +421,15 @@ begin
   if not found then
     raise exception 'Learning assignment is not open for progress';
   end if;
+
+  v_assignment := pg_catalog.jsonb_populate_record(
+    null::learning.assignments,
+    v_locked_rows->'assignment'
+  );
+  v_assignment_requirement := pg_catalog.jsonb_populate_record(
+    null::learning.assignment_requirements,
+    v_locked_rows->'assignment_requirement'
+  );
 
   perform private.lock_learning_curriculum_graph(
     array[v_assignment.curriculum_version_id]
@@ -640,6 +653,7 @@ declare
   v_source_id uuid;
   v_assignment learning.assignments%rowtype;
   v_assignment_requirement learning.assignment_requirements%rowtype;
+  v_locked_rows jsonb;
   v_requirement_version learning.requirement_versions%rowtype;
   v_attempt learning.attempts%rowtype;
   v_required_checkpoints jsonb;
@@ -704,8 +718,11 @@ begin
     end if;
   end if;
 
-  select assignment, assignment_requirement
-  into v_assignment, v_assignment_requirement
+  select pg_catalog.jsonb_build_object(
+    'assignment', pg_catalog.to_jsonb(assignment),
+    'assignment_requirement', pg_catalog.to_jsonb(assignment_requirement)
+  )
+  into v_locked_rows
   from learning.assignments assignment
   join learning.assignment_requirements assignment_requirement
     on assignment_requirement.assignment_id = assignment.id
@@ -718,6 +735,15 @@ begin
   if not found then
     raise exception 'Learning requirement is not in progress';
   end if;
+
+  v_assignment := pg_catalog.jsonb_populate_record(
+    null::learning.assignments,
+    v_locked_rows->'assignment'
+  );
+  v_assignment_requirement := pg_catalog.jsonb_populate_record(
+    null::learning.assignment_requirements,
+    v_locked_rows->'assignment_requirement'
+  );
 
   perform private.lock_learning_curriculum_graph(
     array[v_assignment.curriculum_version_id]
@@ -899,6 +925,7 @@ declare
   v_source_id uuid;
   v_assignment learning.assignments%rowtype;
   v_assignment_requirement learning.assignment_requirements%rowtype;
+  v_locked_rows jsonb;
   v_requirement_version learning.requirement_versions%rowtype;
   v_attempt learning.attempts%rowtype;
   v_question_count integer;
@@ -964,8 +991,11 @@ begin
     end if;
   end if;
 
-  select assignment, assignment_requirement
-  into v_assignment, v_assignment_requirement
+  select pg_catalog.jsonb_build_object(
+    'assignment', pg_catalog.to_jsonb(assignment),
+    'assignment_requirement', pg_catalog.to_jsonb(assignment_requirement)
+  )
+  into v_locked_rows
   from learning.assignments assignment
   join learning.assignment_requirements assignment_requirement
     on assignment_requirement.assignment_id = assignment.id
@@ -978,6 +1008,15 @@ begin
   if not found then
     raise exception 'Assessment requirement is not in progress';
   end if;
+
+  v_assignment := pg_catalog.jsonb_populate_record(
+    null::learning.assignments,
+    v_locked_rows->'assignment'
+  );
+  v_assignment_requirement := pg_catalog.jsonb_populate_record(
+    null::learning.assignment_requirements,
+    v_locked_rows->'assignment_requirement'
+  );
 
   perform private.lock_learning_curriculum_graph(
     array[v_assignment.curriculum_version_id]
@@ -1163,6 +1202,7 @@ declare
   v_source_id uuid;
   v_assignment learning.assignments%rowtype;
   v_assignment_requirement learning.assignment_requirements%rowtype;
+  v_locked_rows jsonb;
   v_requirement_version learning.requirement_versions%rowtype;
   v_acknowledgment learning.policy_acknowledgments%rowtype;
   v_inserted integer := 0;
@@ -1231,8 +1271,11 @@ begin
     end if;
   end if;
 
-  select assignment, assignment_requirement
-  into v_assignment, v_assignment_requirement
+  select pg_catalog.jsonb_build_object(
+    'assignment', pg_catalog.to_jsonb(assignment),
+    'assignment_requirement', pg_catalog.to_jsonb(assignment_requirement)
+  )
+  into v_locked_rows
   from learning.assignments assignment
   join learning.assignment_requirements assignment_requirement
     on assignment_requirement.assignment_id = assignment.id
@@ -1244,6 +1287,15 @@ begin
   if not found then
     raise exception 'Policy requirement must be started before acknowledgment';
   end if;
+
+  v_assignment := pg_catalog.jsonb_populate_record(
+    null::learning.assignments,
+    v_locked_rows->'assignment'
+  );
+  v_assignment_requirement := pg_catalog.jsonb_populate_record(
+    null::learning.assignment_requirements,
+    v_locked_rows->'assignment_requirement'
+  );
 
   select acknowledgment.* into v_acknowledgment
   from learning.policy_acknowledgments acknowledgment
@@ -1413,6 +1465,7 @@ declare
   v_source_id uuid;
   v_assignment learning.assignments%rowtype;
   v_assignment_requirement learning.assignment_requirements%rowtype;
+  v_locked_rows jsonb;
   v_attempt learning.attempts%rowtype;
 begin
   perform private.assert_learning_read_committed();
@@ -1471,8 +1524,11 @@ begin
     end if;
   end if;
 
-  select assignment, assignment_requirement
-  into v_assignment, v_assignment_requirement
+  select pg_catalog.jsonb_build_object(
+    'assignment', pg_catalog.to_jsonb(assignment),
+    'assignment_requirement', pg_catalog.to_jsonb(assignment_requirement)
+  )
+  into v_locked_rows
   from learning.assignments assignment
   join learning.assignment_requirements assignment_requirement
     on assignment_requirement.assignment_id = assignment.id
@@ -1487,6 +1543,15 @@ begin
   if not found then
     raise exception 'Only active or retryable requirements can request support';
   end if;
+
+  v_assignment := pg_catalog.jsonb_populate_record(
+    null::learning.assignments,
+    v_locked_rows->'assignment'
+  );
+  v_assignment_requirement := pg_catalog.jsonb_populate_record(
+    null::learning.assignment_requirements,
+    v_locked_rows->'assignment_requirement'
+  );
 
   if exists (
     select 1

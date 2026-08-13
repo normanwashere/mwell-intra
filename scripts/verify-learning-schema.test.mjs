@@ -552,6 +552,18 @@ test("keeps answer keys private and certification bound to exact live authority"
   );
 });
 
+test("keeps composite assignment locks compatible with PostgreSQL 17", () => {
+  assert.doesNotMatch(
+    servicesSql,
+    /select\s+assignment\s*,\s*assignment_requirement\s+into\s+v_assignment\s*,\s*v_assignment_requirement/i,
+  );
+  assert.equal(
+    servicesSql.match(/into\s+v_locked_rows[\s\S]*?for update of assignment, assignment_requirement/gi)
+      ?.length,
+    5,
+  );
+});
+
 test("requires every checksum-pinned pre-foundation migration", () => {
   const omitted = repositoryMigrations.filter(
     (migrationEntry) => migrationEntry.name !== "20260706090100_core_rbac.sql",
