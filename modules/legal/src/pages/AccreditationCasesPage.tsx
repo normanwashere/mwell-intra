@@ -359,6 +359,7 @@ const VENDOR_ACTIVE_PRIORITY: Record<CaseStatus, number> = {
   draft: 0,
   submitted: 1,
   under_review: 1,
+  correction_requested: 0,
   renewal_due: 2,
   provisional: 2,
   approved: 3,

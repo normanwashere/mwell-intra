@@ -101,6 +101,7 @@ import {
   accreditationSummaryCsv,
   accreditationSummaryFilename,
 } from '../caseSummary';
+import { applicationEditState, canRequestCorrection } from '../vendorCaseWorkflow';
 
 const CHECKLIST_TONE: Record<ChecklistDecision, 'slate' | 'emerald' | 'rose' | 'amber'> = {
   pending: 'amber',
@@ -141,6 +142,7 @@ export function CaseDetailPage() {
     submitCase,
     decideCase,
     sendReminder,
+    requestCorrection,
     loading: casesLoading,
   } = useAccreditationCases();
   const { forCase: checklistForCase, review, attach } = useChecklist();
@@ -150,7 +152,7 @@ export function CaseDetailPage() {
   const { rows: invites, retry: retryInvite } = useVendorInvites();
   const { rows: timeline } = useCaseTimeline(id);
   const { success, error } = useToast();
-  const { profile } = useSession();
+  const { profile, mode } = useSession();
   // NOTE: `Guard fallback={null}` renders the default AccessDenied block
   // (null ?? <AccessDenied/>), so capability-dependent actions use useCan.
   const canApprove = useCan('legal', 'approve_accreditation');
@@ -201,6 +203,8 @@ export function CaseDetailPage() {
   const [groupOverrides, setGroupOverrides] = useState<Record<string, boolean>>({});
   const [prevCycleOpen, setPrevCycleOpen] = useState(false);
   const [retryingInvite, setRetryingInvite] = useState(false);
+  const [correctionOpen, setCorrectionOpen] = useState(false);
+  const [correctionNote, setCorrectionNote] = useState('');
 
   // Sticky progress bar (§2.2.1): appears once the hero scrolls out of view.
   const pageRef = useRef<HTMLDivElement>(null);
@@ -254,6 +258,7 @@ export function CaseDetailPage() {
   const outstandingCount = progress.outstanding.length;
   const awaitingReviewCount = progress.awaitingReview.length;
   const submissionAction = vendorSubmissionAction(outstandingCount);
+  const vendorEditState = applicationEditState(kase.status, kase.correctionRequest);
 
   const nextAction = isVendor
     ? outstandingCount > 0
@@ -366,6 +371,21 @@ export function CaseDetailPage() {
     const ok = await sendReminder(kase!.id, profile?.email);
     if (ok) success(`Reminder sent to ${ok.contactEmail ?? ok.vendorName}`);
     else error('Could not record the reminder.');
+  }
+
+  async function handleRequestCorrection() {
+    const result = await requestCorrection(kase!.id, {
+      note: correctionNote,
+      requestedByEmail: profile?.email,
+      sourceVersion: kase!.correctionRequest?.revision ?? 1,
+    });
+    if (result) {
+      success('Versioned correction requested');
+      setCorrectionOpen(false);
+      setCorrectionNote('');
+    } else {
+      error('Enter the correction required from the vendor.');
+    }
   }
 
   async function handleInviteRetry() {
@@ -570,7 +590,26 @@ export function CaseDetailPage() {
       </div>
 
       {/* Vendor: you still owe N + submit CTA. Legal: waiting on vendor. */}
-      {isVendor && kase.status === 'draft' && (
+      {isVendor && !vendorEditState.editable && (
+        <Card className="border-amber-500/30 bg-amber-500/5" role="status">
+          <p className="font-semibold text-ink">{vendorEditState.label}</p>
+          <p className="mt-1 text-sm text-muted">
+            Your submitted application cannot change while Legal is reviewing it.
+          </p>
+        </Card>
+      )}
+
+      {isVendor && kase.status === 'correction_requested' && kase.correctionRequest && (
+        <Card className="border-amber-500/30 bg-amber-500/5" role="status">
+          <p className="font-semibold text-ink">{vendorEditState.label}</p>
+          <p className="mt-1 text-sm text-muted">{vendorEditState.detail}</p>
+          <Link to={`/cases/${kase.id}/application`} className="btn-primary btn-sm mt-3">
+            Update correction revision
+          </Link>
+        </Card>
+      )}
+
+      {isVendor && vendorEditState.editable && (kase.status === 'draft' || kase.status === 'correction_requested') && (
         <Card
           className={
             outstandingCount > 0
@@ -662,9 +701,41 @@ export function CaseDetailPage() {
                   Send reminder
                 </button>
               </Guard>
+              {canReview && mode !== 'supabase' && canRequestCorrection(kase.status) && (
+                <button
+                  type="button"
+                  onClick={() => setCorrectionOpen((open) => !open)}
+                  className="btn-outline btn-sm"
+                >
+                  <Icon name="rotate" className="h-4 w-4" /> Request correction
+                </button>
+              )}
             </div>
           </Card>
         )}
+
+      {!isVendor && correctionOpen && (
+        <Card className="border-amber-500/30 bg-amber-500/5">
+          <label className="block text-sm font-semibold text-ink" htmlFor="correction-note">
+            Correction required
+          </label>
+          <textarea
+            id="correction-note"
+            className="input mt-2 min-h-24"
+            value={correctionNote}
+            onChange={(event) => setCorrectionNote(event.target.value)}
+            placeholder="State the exact information or document the vendor must correct."
+          />
+          <div className="mt-3 flex gap-2">
+            <button type="button" className="btn-primary btn-sm" onClick={() => void handleRequestCorrection()}>
+              Send correction request
+            </button>
+            <button type="button" className="btn-ghost btn-sm" onClick={() => setCorrectionOpen(false)}>
+              Cancel
+            </button>
+          </div>
+        </Card>
+      )}
 
       {!isVendor &&
         (kase.status === 'submitted' || kase.status === 'under_review') &&
@@ -1402,18 +1473,8 @@ function documentColumns(
       header: '',
       align: 'right',
       render: (d) =>
-        d.dataUrl ? (
-          <a
-            href={d.dataUrl}
-            target="_blank"
-            rel="noreferrer"
-            download={d.filename}
-            className="btn-ghost btn-sm"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <Icon name="download" className="h-4 w-4" />
-            Open
-          </a>
+        d.dataUrl || d.storagePath ? (
+          <GovernedDocumentLink doc={d} onStop={(event) => event.stopPropagation()} />
         ) : (
           <span className="text-xs text-faint">—</span>
         ),
@@ -1621,6 +1682,45 @@ function ChecklistRow({
   );
 }
 
+function GovernedDocumentLink({
+  doc,
+  onStop,
+}: {
+  doc: AccreditationDoc;
+  onStop: (event: MouseEvent) => void;
+}) {
+  const { prepareAccess } = useAccreditationDocs();
+  const { error } = useToast();
+  const [opening, setOpening] = useState(false);
+
+  async function open() {
+    setOpening(true);
+    try {
+      const url = await prepareAccess(doc, 'download');
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (cause) {
+      error(cause instanceof Error ? cause.message : 'Document access could not be prepared.');
+    } finally {
+      setOpening(false);
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      className="btn-ghost btn-sm"
+      disabled={opening}
+      onClick={(event) => {
+        onStop(event);
+        void open();
+      }}
+    >
+      <Icon name="download" className="h-4 w-4" />
+      {opening ? 'Preparing' : 'Open'}
+    </button>
+  );
+}
+
 function DocRow({
   doc,
   current = false,
@@ -1663,19 +1763,7 @@ function DocRow({
         </span>
       </span>
       <span className="flex gap-2">
-        {doc.dataUrl && (
-          <a
-            href={doc.dataUrl}
-            target="_blank"
-            rel="noreferrer"
-            download={doc.filename}
-            onClick={onStop}
-            className="btn-ghost btn-sm"
-          >
-            <Icon name="download" className="h-4 w-4" />
-            Open
-          </a>
-        )}
+        {(doc.dataUrl || doc.storagePath) && <GovernedDocumentLink doc={doc} onStop={onStop} />}
         {onDocStatus && doc.status === 'submitted' && (
           <>
             <button

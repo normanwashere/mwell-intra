@@ -13,7 +13,15 @@
 // ---------------------------------------------------------------------------
 
 export type CaseStatus =
-  'draft' | 'submitted' | 'under_review' | 'approved' | 'provisional' | 'rejected' | 'expired' | 'renewal_due';
+  | 'draft'
+  | 'submitted'
+  | 'under_review'
+  | 'correction_requested'
+  | 'approved'
+  | 'provisional'
+  | 'rejected'
+  | 'expired'
+  | 'renewal_due';
 
 /** ISO 3166 style; `OTHER` = free-text country captured on originCountry. */
 export type Jurisdiction = 'PH' | 'US' | 'EU' | 'UK' | 'SG' | 'HK' | 'OTHER';
@@ -322,6 +330,14 @@ export interface AccreditationCase {
   decisionPending?: boolean;
   pendingDecisionStatus?: 'approved' | 'rejected' | 'provisional';
   pendingDecisionProposedByEmail?: string;
+  /** Immutable submission version that Legal explicitly returned for correction. */
+  correctionRequest?: {
+    requestedAt: string;
+    requestedByEmail?: string;
+    note: string;
+    sourceVersion: number;
+    revision: number;
+  };
 }
 
 export type ChecklistDecision = 'pending' | 'approved' | 'rejected' | 'na';

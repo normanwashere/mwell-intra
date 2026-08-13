@@ -33,6 +33,7 @@ import { buildLegalSeed } from './seed';
 import type { VendorLoginAlias } from './vendorAccess';
 import type { TailoringProfile } from './requirements/policy';
 import { resolveVendorInviteDelivery, type VendorInviteDeliveryEnvelope } from './vendorInviteDelivery';
+import { canRequestCorrection, type CorrectionRequest } from './vendorCaseWorkflow';
 
 type MaybePromise<T> = T | Promise<T>;
 type LiveClient = NonNullable<ReturnType<typeof useSession>['supabaseClient']>;
@@ -631,6 +632,10 @@ export interface CasesAPI {
   ) => MaybePromise<AccreditationCase | null>;
   /** Reviewer nudge: writes a timeline entry + bumps `lastReminderAt`. */
   sendReminder: (id: string, actor?: string) => MaybePromise<AccreditationCase | null>;
+  requestCorrection: (
+    id: string,
+    request: Omit<CorrectionRequest, 'requestedAt' | 'revision'> & { revision?: number },
+  ) => MaybePromise<AccreditationCase | null>;
 }
 
 export function useAccreditationCases(): CasesAPI {
@@ -742,6 +747,7 @@ export function useAccreditationCases(): CasesAPI {
           return refreshLive().then(() => mapped);
         });
       }
+      const wasCorrection = safeRead<AccreditationCase>(CASES_KEY).find((row) => row.id === id)?.status === 'correction_requested';
       const merged = patchCase(id, {
         status: 'submitted',
         submittedAt: nowIso(),
@@ -751,7 +757,7 @@ export function useAccreditationCases(): CasesAPI {
         appendTimeline({
           caseId: id,
           actorEmail: actor,
-          action: 'submitted',
+          action: wasCorrection ? 'resubmitted' : 'submitted',
           detail: signature
             ? `Vendor submitted the intake for legal review — completeness attested and e-signed by ${signature.signerName}.`
             : 'Vendor submitted the intake for legal review.',
@@ -760,6 +766,34 @@ export function useAccreditationCases(): CasesAPI {
       return merged;
     },
     [patchCase, live, refreshLive],
+  );
+
+  const requestCorrection = useCallback<CasesAPI['requestCorrection']>(
+    (id, request) => {
+      if (isLive(live)) {
+        throw new Error('Correction requests are not available from the current Legal service.');
+      }
+      const current = safeRead<AccreditationCase>(CASES_KEY).find((row) => row.id === id);
+      if (!current || !canRequestCorrection(current.status) || !request.note.trim()) return null;
+      const correctionRequest = {
+        requestedAt: nowIso(),
+        requestedByEmail: request.requestedByEmail,
+        note: request.note.trim(),
+        sourceVersion: request.sourceVersion,
+        revision: request.revision ?? request.sourceVersion + 1,
+      };
+      const merged = patchCase(id, { status: 'correction_requested', correctionRequest });
+      if (merged) {
+        appendTimeline({
+          caseId: id,
+          actorEmail: request.requestedByEmail,
+          action: 'correction_requested',
+          detail: `Legal returned submitted version ${correctionRequest.sourceVersion} for correction revision ${correctionRequest.revision}: ${correctionRequest.note}`,
+        });
+      }
+      return merged;
+    },
+    [live, patchCase],
   );
 
   const decideCase = useCallback<CasesAPI['decideCase']>(
@@ -859,6 +893,7 @@ export function useAccreditationCases(): CasesAPI {
     submitCase,
     decideCase,
     sendReminder,
+    requestCorrection,
   };
 }
 
@@ -974,6 +1009,10 @@ export interface DocsAPI {
     actor?: string,
     note?: string,
   ) => MaybePromise<AccreditationDoc | null>;
+  prepareAccess: (
+    doc: AccreditationDoc,
+    disposition?: 'open' | 'download',
+  ) => Promise<string>;
 }
 
 export function useAccreditationDocs(): DocsAPI {
@@ -1076,7 +1115,28 @@ export function useAccreditationDocs(): DocsAPI {
     [set, live, refreshLive],
   );
 
-  return { rows, loading, forCase, forRequirement, upload, setStatus };
+  const prepareAccess = useCallback<DocsAPI['prepareAccess']>(
+    async (doc, disposition = 'open') => {
+      if (!isLive(live)) {
+        if (!doc.dataUrl) throw new Error('This demo document is unavailable.');
+        return doc.dataUrl;
+      }
+      const response = await fetch('/api/legal/documents/access', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ document_id: doc.id, disposition }),
+      });
+      const result = (await response.json().catch(() => ({}))) as { url?: string; error?: string };
+      if (!response.ok || !result.url) {
+        throw new Error(result.error ?? 'Document access could not be prepared.');
+      }
+      return result.url;
+    },
+    [live],
+  );
+
+  return { rows, loading, forCase, forRequirement, upload, setStatus, prepareAccess };
 }
 
 // ---------------------------------------------------------------------------

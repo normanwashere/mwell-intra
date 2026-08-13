@@ -17,6 +17,7 @@ import {
   Sheet,
   useToast,
 } from "@intra/ui";
+import { lifecyclePresentation } from "../vendorCaseWorkflow";
 
 interface VendorOption {
   id: string;
@@ -216,8 +217,8 @@ export function VendorLifecyclePanel({ vendors }: { vendors: VendorOption[] }) {
                   <p className="font-semibold text-ink">
                     {vendorName.get(review.vendorId) ?? review.vendorId}
                   </p>
-                  <p className="text-xs capitalize text-muted">
-                    {review.reviewType.replaceAll("_", " ")}
+                  <p className="text-xs text-muted">
+                    {lifecyclePresentation(review.reviewType, review.status).label}
                     {review.dueDate ? " / due " + review.dueDate : ""}
                   </p>
                 </div>
@@ -231,10 +232,13 @@ export function VendorLifecyclePanel({ vendors }: { vendors: VendorOption[] }) {
                         : "brand"
                   }
                 >
-                  {review.status}
+                  {lifecyclePresentation(review.reviewType, review.status).label}
                 </Badge>
               </div>
               <p className="text-sm text-ink">{review.reason}</p>
+              <p className="text-xs text-muted">
+                {lifecyclePresentation(review.reviewType, review.status).detail}
+              </p>
               <div className="flex flex-wrap gap-2">
                 {review.status === "open" && (
                   <button

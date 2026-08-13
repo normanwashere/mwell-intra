@@ -31,6 +31,7 @@ import { TechnologyQualificationForm } from '../components/TechnologyQualificati
 import { AccreditationDeclaration } from '../components/AccreditationDeclaration';
 import { createVendorApplicationDraftRepository, type LegalDraftClient } from '../vendorApplicationDraft';
 import { casePathForViewer, caseRouteWithinModule } from '../caseLogic';
+import { applicationEditState, recoverStaleDraft } from '../vendorCaseWorkflow';
 type SupportedEntity = Extract<EntityType, 'corporation' | 'sole_prop' | 'partnership'>;
 
 function supportedEntity(value: EntityType | undefined): SupportedEntity {
@@ -126,7 +127,8 @@ export function VendorApplicationPage() {
   const { success, error } = useToast();
   const kase = getById(id);
   const isVendor = profile?.kind === 'vendor';
-  const readOnly = !isVendor || !canManageDraft || kase?.status === 'approved';
+  const editState = applicationEditState(kase?.status ?? 'draft', kase?.correctionRequest);
+  const readOnly = !isVendor || !canManageDraft || !editState.editable;
   const [application, setApplication] = useState<VendorApplicationSnapshot | null>(null);
   const [signature, setSignature] = useState<SignaturePayload | null>(null);
   const [busy, setBusy] = useState(false);
@@ -283,6 +285,20 @@ export function VendorApplicationPage() {
       setDraftState('saved');
       success(mode === 'supabase' ? 'Application draft saved securely' : 'Application draft saved on this device');
     } catch (cause) {
+      if (cause instanceof Error && /version|stale|conflict/i.test(cause.message)) {
+        const latest = await repository.load(activeCase.id);
+        if (latest?.application) {
+          const recovered = recoverStaleDraft(
+            { version: draftVersion, application: currentApplication },
+            { version: latest.version, application: latest.application },
+          );
+          setApplication(recovered.application);
+          setDraftVersion(recovered.version);
+          setDraftState('saved');
+          error(recovered.message);
+          return;
+        }
+      }
       setDraftState('error');
       error(cause instanceof Error ? cause.message : 'Could not save the draft.');
     }
@@ -358,6 +374,20 @@ export function VendorApplicationPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
+      {!editState.editable && (
+        <Card className="border-amber-500/30 bg-amber-500/5" role="status">
+          <p className="font-semibold text-ink">{editState.label}</p>
+          <p className="mt-1 text-sm text-muted">
+            Submitted applications stay unchanged while Legal reviews them. Legal must request a versioned correction before this form can be edited again.
+          </p>
+        </Card>
+      )}
+      {editState.detail && (
+        <Card className="border-amber-500/30 bg-amber-500/5" role="status">
+          <p className="font-semibold text-ink">{editState.label}</p>
+          <p className="mt-1 text-sm text-muted">{editState.detail}</p>
+        </Card>
+      )}
       <ModuleHero
         eyebrow="Vendor Accreditation Form v.2025"
         title={kase.vendorName}

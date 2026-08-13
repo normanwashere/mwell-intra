@@ -13,6 +13,7 @@ export const CASE_STATUS_LABEL: Record<CaseStatus, string> = {
   draft: 'Draft',
   submitted: 'Submitted',
   under_review: 'Under review',
+  correction_requested: 'Correction requested',
   approved: 'Approved',
   provisional: 'Provisional clearance',
   rejected: 'Rejected',
@@ -25,6 +26,7 @@ export const VENDOR_STATUS_LABEL: Record<CaseStatus, string> = {
   draft: 'Action needed — complete your application',
   submitted: 'We\u2019re reviewing your documents',
   under_review: 'We\u2019re reviewing your documents',
+  correction_requested: 'Changes requested \u2014 update and resubmit',
   approved: 'Accredited',
   provisional: 'Temporary clearance granted',
   rejected: 'Not approved — see reviewer notes',
@@ -40,6 +42,8 @@ export const VENDOR_STATUS_EXPLAINER: Record<CaseStatus, string> = {
     'Our Legal team is checking every document you submitted. We\u2019ll flag anything that needs a re-upload.',
   under_review:
     'Our Legal team is checking every document you submitted. We\u2019ll flag anything that needs a re-upload.',
+  correction_requested:
+    'Legal returned a specific submitted version for correction. Update only the requested information, then resubmit it for review.',
   approved:
     'Your organization is accredited to transact with Mwell. We\u2019ll remind you before it expires.',
   provisional:
@@ -57,6 +61,7 @@ export const CASE_STATUS_DOT: Record<CaseStatus, string> = {
   draft: 'bg-slate-400',
   submitted: 'bg-cyan-400',
   under_review: 'bg-amber-400',
+  correction_requested: 'bg-amber-400',
   approved: 'bg-emerald-400',
   provisional: 'bg-cyan-400',
   rejected: 'bg-rose-400',
@@ -72,6 +77,7 @@ export const CASE_STATUS_TONE: Record<
   draft: 'slate',
   submitted: 'cyan',
   under_review: 'amber',
+  correction_requested: 'amber',
   approved: 'emerald',
   provisional: 'cyan',
   rejected: 'rose',
@@ -90,6 +96,8 @@ export const TIMELINE_ACTION_LABEL: Record<string, string> = {
   checklist_decided: 'Checklist decided',
   instrument_signed: 'Agreement signed',
   reminder_sent: 'Reminder sent',
+  correction_requested: 'Correction requested',
+  resubmitted: 'Correction resubmitted',
 };
 
 export function timelineActionLabel(action: string): string {
