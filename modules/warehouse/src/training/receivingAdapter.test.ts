@@ -4,7 +4,10 @@ import {
   receivingTrainingAdapter,
 } from "./receivingAdapter";
 
-const run = (branch: Parameters<typeof createReceivingTrainingState>[0], commands: Array<{ type: string; payload?: unknown }>) => {
+const run = (
+  branch: Parameters<typeof createReceivingTrainingState>[0],
+  commands: Array<{ type: string; payload?: unknown }>,
+) => {
   let state = createReceivingTrainingState(branch);
   let transition;
   for (const command of commands) {
@@ -15,9 +18,15 @@ const run = (branch: Parameters<typeof createReceivingTrainingState>[0], command
 };
 
 const cleanCommands = [
-  { type: "select-purchase-order", payload: { id: "TRAIN-PO-1042", expectedQuantity: 2 } },
+  {
+    type: "select-purchase-order",
+    payload: { id: "TRAIN-PO-1042", expectedQuantity: 2 },
+  },
   { type: "set-delivery-date", payload: "2026-08-13" },
-  { type: "add-line", payload: { category: "sku", serialized: true } },
+  {
+    type: "add-line",
+    payload: { category: "sku", productId: "smart-watch", serialized: true },
+  },
   { type: "set-batch-number", payload: "TRAIN-BATCH-A" },
   { type: "scan-serial", payload: "TRAIN-SERIAL-0001" },
   { type: "scan-serial", payload: "TRAIN-SERIAL-0002" },
@@ -50,8 +59,9 @@ describe("receivingTrainingAdapter", () => {
         command.type !== "confirm-traceability",
     );
     const { state } = run("missing-batch", commands);
-    expect(() => receivingTrainingAdapter.dispatch(state, { type: "submit-receipt" }))
-      .toThrow("Batch number is required");
+    expect(() =>
+      receivingTrainingAdapter.dispatch(state, { type: "submit-receipt" }),
+    ).toThrow("Batch number is required");
   });
 
   it("rejects a duplicate serial without changing the simulated receipt", () => {
@@ -88,8 +98,13 @@ describe("receivingTrainingAdapter", () => {
 
   it("records a partial receipt without pretending the PO is closed", () => {
     const result = run("partial-receipt", [
-      ...cleanCommands.filter((command) =>
-        !(command.type === "scan-serial" && command.payload === "TRAIN-SERIAL-0002")),
+      ...cleanCommands.filter(
+        (command) =>
+          !(
+            command.type === "scan-serial" &&
+            command.payload === "TRAIN-SERIAL-0002"
+          ),
+      ),
       { type: "submit-receipt" },
     ]);
     expect(result.transition?.outcomeId).toBe("partial_inspection_handoff");
@@ -98,8 +113,12 @@ describe("receivingTrainingAdapter", () => {
 
   it("pauses and resumes from the same immutable simulated state", () => {
     const before = run("interruption", cleanCommands.slice(0, 4)).state;
-    const paused = receivingTrainingAdapter.dispatch(before, { type: "interrupt" });
-    const resumed = receivingTrainingAdapter.dispatch(paused.state, { type: "resume" });
+    const paused = receivingTrainingAdapter.dispatch(before, {
+      type: "interrupt",
+    });
+    const resumed = receivingTrainingAdapter.dispatch(paused.state, {
+      type: "resume",
+    });
     expect(paused.checkpointId).toBe("draft-saved");
     expect(resumed.state).toMatchObject({
       batchNumber: "TRAIN-BATCH-A",
@@ -111,17 +130,33 @@ describe("receivingTrainingAdapter", () => {
   it.each([
     ["merch", "TRAIN-MERCH-SHEET-01"],
     ["event-material", "TRAIN-EVENT-SHEET-01"],
-  ] as const)("uses one monitored barcode sheet for %s", (category, barcode) => {
-    const result = run(category, [
-      { type: "select-purchase-order", payload: { id: "TRAIN-PO-1042", expectedQuantity: 10 } },
-      { type: "set-delivery-date", payload: "2026-08-13" },
-      { type: "add-line", payload: { category, serialized: false } },
-      { type: "set-batch-number", payload: "TRAIN-BATCH-A" },
-      { type: "set-sheet-barcode", payload: barcode },
-      { type: "set-quantity", payload: 10 },
-      { type: "confirm-traceability" },
-    ]);
-    expect(result.state).toMatchObject({ barcodeSheetCode: barcode, receivedQuantity: 10 });
-    expect(result.state.serials).toEqual([]);
-  });
+  ] as const)(
+    "uses one monitored barcode sheet for %s",
+    (category, barcode) => {
+      const result = run(category, [
+        {
+          type: "select-purchase-order",
+          payload: { id: "TRAIN-PO-1042", expectedQuantity: 10 },
+        },
+        { type: "set-delivery-date", payload: "2026-08-13" },
+        {
+          type: "add-line",
+          payload: {
+            category,
+            productId: `${category}-item`,
+            serialized: false,
+          },
+        },
+        { type: "set-batch-number", payload: "TRAIN-BATCH-A" },
+        { type: "set-sheet-barcode", payload: barcode },
+        { type: "set-quantity", payload: 10 },
+        { type: "confirm-traceability" },
+      ]);
+      expect(result.state).toMatchObject({
+        barcodeSheetCode: barcode,
+        receivedQuantity: 10,
+      });
+      expect(result.state.serials).toEqual([]);
+    },
+  );
 });

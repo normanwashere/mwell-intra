@@ -234,19 +234,41 @@ export function ReceivingPageSurface({
   );
   const [locationId, setLocationId] = useState("");
   const [supplierId, setSupplierId] = useState("");
-  const [actualDeliveryDate, setActualDeliveryDate] = useState(() =>
-    new Date().toISOString().slice(0, 10),
+  const [actualDeliveryDate, setActualDeliveryDate] = useState(
+    () =>
+      training?.state?.deliveryDate || new Date().toISOString().slice(0, 10),
   );
   const [deliveryReference, setDeliveryReference] = useState("");
   const [courierOrDriver, setCourierOrDriver] = useState("");
-  const [binId, setBinId] = useState("");
+  const [binId, setBinId] = useState(
+    () => training?.state?.destinationId ?? "",
+  );
   // 390px is scan-first (WH-11): context selects collapse into a summary chip
   // so "Scan to receive" sits above the fold. Desktop always shows them.
   const [contextOpen, setContextOpen] = useState(false);
-  const [selectedProductId, setSelectedProductId] = useState("");
+  const [selectedProductId, setSelectedProductId] = useState(
+    () => training?.state?.productId ?? "",
+  );
   const [newQty, setNewQty] = useState(1);
-  const [lines, setLines] = useState<Line[]>([]);
-  const [evidence, setEvidence] = useState<string[]>([]);
+  const [lines, setLines] = useState<Line[]>(() =>
+    training?.state?.productId
+      ? [
+          {
+            productId: training.state.productId,
+            quantity: Math.max(1, training.state.receivedQuantity),
+            serials: [...training.state.serials],
+            unitCost: "",
+            lotCode: "",
+            batchNumber: training.state.batchNumber,
+            deviceTestStatus: "not_tested",
+            expiryDate: "",
+          },
+        ]
+      : [],
+  );
+  const [evidence, setEvidence] = useState<string[]>(() => [
+    ...(training?.state?.evidenceUrls ?? []),
+  ]);
   const [lastReceiptStaged, setLastReceiptStaged] = useState(false);
   const receiptCommand = useRef<PendingReceiptCommand | null>(
     readPendingReceiptCommand(),
@@ -335,6 +357,7 @@ export function ReceivingPageSurface({
         type: "add-line",
         payload: {
           category: productTrainingCategory(product),
+          productId: product.id,
           serialized: product.serialized,
         },
       })
