@@ -4,10 +4,92 @@ import userEvent from "@testing-library/user-event";
 import type { TrainingContextValue } from "@intra/learning";
 import { ReceivingPage, ReceivingPageSurface } from "./ReceivingPage";
 import type { ReceivingTrainingState } from "@/training/receivingAdapter";
-import { makeRepo, renderWithProviders } from "@/test/renderWithProviders";
+import {
+  certifiedTestLearning,
+  makeRepo,
+  renderWithProviders,
+} from "@/test/renderWithProviders";
 import { availableForProduct } from "@/domain/stock";
 
 describe("ReceivingPage", () => {
+  it("rehydrates only an existing governed practice attempt after reload", async () => {
+    const resume = vi.fn().mockResolvedValue(undefined);
+    renderWithProviders(<ReceivingPage />, {
+      route: "/receiving?training=warehouse-receiving-v1",
+      learning: {
+        ...certifiedTestLearning,
+        resume,
+        snapshot: {
+          ...certifiedTestLearning.snapshot!,
+          curricula: [
+            {
+              curriculum: {
+                id: "warehouse-operator",
+                version: 1,
+                personaId: "warehouse-operator",
+                audience: "internal",
+                requirementIds: ["receiving-practice"],
+              },
+              source: "role",
+              requirements: [
+                {
+                  id: "receiving-practice",
+                  version: 1,
+                  audience: "internal",
+                  kind: "scenario",
+                  title: "Warehouse receiving capability practice",
+                  mandatory: true,
+                  prerequisiteIds: [],
+                  capabilityOutcomes: [
+                    { module: "warehouse", capability: "receive_stock" },
+                  ],
+                  simulationId: "warehouse-receiving-v1",
+                },
+              ],
+            },
+          ],
+          progress: [
+            {
+              assignmentRequirementId: "assignment-receiving",
+              requirementId: "receiving-practice",
+              requirementVersion: 1,
+              state: "in_progress",
+              attemptCount: 1,
+              allowsSharedCompletion: false,
+              activeAttempt: {
+                id: "attempt-receiving",
+                attemptNumber: 1,
+                mode: "scenario",
+                startedAt: "2026-08-13T00:00:00.000Z",
+              },
+              updatedAt: "2026-08-13T00:00:00.000Z",
+            },
+          ],
+        },
+      },
+    });
+
+    expect(
+      await screen.findByText("Restoring receiving practice…"),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(resume).toHaveBeenCalledWith("receiving-practice"),
+    );
+  });
+
+  it("does not expose the live form for a training URL without an active attempt", async () => {
+    renderWithProviders(<ReceivingPage />, {
+      route: "/receiving?training=warehouse-receiving-v1",
+    });
+
+    expect(
+      await screen.findByText("Complete onboarding before this action"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Receiving" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("cannot call the live receiving repository from a training surface", async () => {
     const repo = makeRepo();
     const before = (await repo.getData()).receipts.length;
@@ -23,9 +105,9 @@ describe("ReceivingPage", () => {
     await screen.findByText(/practice purchase order/i);
     await user.selectOptions(screen.getByLabelText("Product"), "smart-watch");
     expect(
-      within(await screen.findByRole("list", { name: "Receipt lines" })).getByText(
-        /Smart Watch/i,
-      ),
+      within(
+        await screen.findByRole("list", { name: "Receipt lines" }),
+      ).getByText(/Smart Watch/i),
     ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /receive .*item/i }));
 
@@ -190,13 +272,24 @@ describe("ReceivingPage", () => {
     const resumedUser = userEvent.setup();
     renderWithProviders(<ReceivingPage />, { repo });
     await screen.findByText(/receipt lines/i);
-    await resumedUser.selectOptions(screen.getByLabelText("Product"), "doctor-token");
-    await resumedUser.click(screen.getByRole("button", { name: /add to receipt/i }));
-    await resumedUser.click(screen.getByRole("button", { name: /receive .*item/i }));
+    await resumedUser.selectOptions(
+      screen.getByLabelText("Product"),
+      "doctor-token",
+    );
+    await resumedUser.click(
+      screen.getByRole("button", { name: /add to receipt/i }),
+    );
+    await resumedUser.click(
+      screen.getByRole("button", { name: /receive .*item/i }),
+    );
 
     await waitFor(() => expect(receive).toHaveBeenCalledTimes(2));
     expect(receive.mock.calls[1]![0].idempotencyKey).toBe(originalKey);
-    expect(window.sessionStorage.getItem("intra.warehouse.pending-receipt-command.v1")).toBeNull();
+    expect(
+      window.sessionStorage.getItem(
+        "intra.warehouse.pending-receipt-command.v1",
+      ),
+    ).toBeNull();
   });
 
   it("warns when scanning an unknown barcode without a product selected", async () => {

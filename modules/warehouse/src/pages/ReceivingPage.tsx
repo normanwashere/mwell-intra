@@ -1,9 +1,10 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { clsx } from "clsx";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import {
   CertifiedAction,
   CoachOverlay,
+  LockedCapabilityRecovery,
   TrainingBanner,
   TrainingModeProvider,
   useOptionalLearning,
@@ -48,7 +49,11 @@ interface Line {
 
 type ReceivingTraining = TrainingContextValue<ReceivingTrainingState>;
 
-function ReceivingTrainingRuntime({ learning }: { learning: LearningContextValue }) {
+function ReceivingTrainingRuntime({
+  learning,
+}: {
+  learning: LearningContextValue;
+}) {
   const training = useTraining<ReceivingTrainingState>();
   const close = () => {
     training.exit();
@@ -91,7 +96,11 @@ function ReceivingTrainingRuntime({ learning }: { learning: LearningContextValue
                 }
               : undefined
           }
-          continueLabel={continueCommand === "resume" ? "Resume receipt" : "Confirm traceability"}
+          continueLabel={
+            continueCommand === "resume"
+              ? "Resume receipt"
+              : "Confirm traceability"
+          }
           continueDisabled={training.busy}
           error={training.checkpointError}
         />
@@ -105,7 +114,8 @@ interface PendingReceiptCommand {
   signature: string;
 }
 
-const PENDING_RECEIPT_COMMAND_KEY = "intra.warehouse.pending-receipt-command.v1";
+const PENDING_RECEIPT_COMMAND_KEY =
+  "intra.warehouse.pending-receipt-command.v1";
 
 function readPendingReceiptCommand(): PendingReceiptCommand | null {
   if (typeof window === "undefined") return null;
@@ -113,7 +123,8 @@ function readPendingReceiptCommand(): PendingReceiptCommand | null {
     const raw = window.sessionStorage.getItem(PENDING_RECEIPT_COMMAND_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<PendingReceiptCommand>;
-    return typeof parsed.key === "string" && typeof parsed.signature === "string"
+    return typeof parsed.key === "string" &&
+      typeof parsed.signature === "string"
       ? { key: parsed.key, signature: parsed.signature }
       : null;
   } catch {
@@ -125,7 +136,10 @@ function persistPendingReceiptCommand(command: PendingReceiptCommand | null) {
   if (typeof window === "undefined") return;
   try {
     if (command) {
-      window.sessionStorage.setItem(PENDING_RECEIPT_COMMAND_KEY, JSON.stringify(command));
+      window.sessionStorage.setItem(
+        PENDING_RECEIPT_COMMAND_KEY,
+        JSON.stringify(command),
+      );
     } else {
       window.sessionStorage.removeItem(PENDING_RECEIPT_COMMAND_KEY);
     }
@@ -136,13 +150,61 @@ function persistPendingReceiptCommand(command: PendingReceiptCommand | null) {
 
 export function ReceivingPage() {
   const learning = useOptionalLearning();
+  const location = useLocation();
+  const resumeRequested = useRef<string | null>(null);
   const activeTraining = learning?.activeTraining;
+  const requestedTraining =
+    new URLSearchParams(location.search).get("training") ===
+    RECEIVING_SIMULATION_ID;
+  const requirement = learning?.snapshot?.curricula
+    .flatMap((curriculum) => curriculum.requirements)
+    .find((item) => item.simulationId === RECEIVING_SIMULATION_ID);
+  const progress = learning?.snapshot?.progress.find(
+    (item) => item.requirementId === requirement?.id,
+  );
+  const recoverable =
+    requestedTraining &&
+    requirement &&
+    progress?.state === "in_progress" &&
+    progress.activeAttempt;
+
+  useEffect(() => {
+    if (
+      !learning ||
+      activeTraining ||
+      !recoverable ||
+      resumeRequested.current === requirement.id
+    ) {
+      return;
+    }
+    resumeRequested.current = requirement.id;
+    void learning.resume(requirement.id);
+  }, [activeTraining, learning, recoverable, requirement]);
+
+  if (!learning || !requestedTraining) {
+    return <ReceivingPageSurface />;
+  }
   if (
-    !learning ||
     !activeTraining ||
     activeTraining.simulationId !== RECEIVING_SIMULATION_ID
   ) {
-    return <ReceivingPageSurface />;
+    if (learning.loading || recoverable) {
+      return (
+        <div className="grid min-h-[50vh] place-items-center" role="status">
+          <p className="text-sm font-semibold text-muted">
+            Restoring receiving practice…
+          </p>
+        </div>
+      );
+    }
+    return (
+      <LockedCapabilityRecovery
+        module="warehouse"
+        capability="receive_stock"
+        reason="training"
+        requirementIds={requirement ? [requirement.id] : []}
+      />
+    );
   }
   return (
     <TrainingModeProvider
@@ -186,7 +248,9 @@ export function ReceivingPageSurface({
   const [lines, setLines] = useState<Line[]>([]);
   const [evidence, setEvidence] = useState<string[]>([]);
   const [lastReceiptStaged, setLastReceiptStaged] = useState(false);
-  const receiptCommand = useRef<PendingReceiptCommand | null>(readPendingReceiptCommand());
+  const receiptCommand = useRef<PendingReceiptCommand | null>(
+    readPendingReceiptCommand(),
+  );
 
   if (!data) return null;
   const products = data.products;
@@ -256,7 +320,8 @@ export function ReceivingPageSurface({
   const productTrainingCategory = (product: (typeof products)[number]) =>
     product.itemClass === "event_material"
       ? "event-material"
-      : product.itemClass === "merchandise" || product.category === "merchandise"
+      : product.itemClass === "merchandise" ||
+          product.category === "merchandise"
         ? "merch"
         : "sku";
 
@@ -358,7 +423,9 @@ export function ReceivingPageSurface({
   const submit = async () => {
     if (lines.length === 0 || !activeLocation) return;
     if (training) {
-      await training.dispatch({ type: "submit-receipt" }).catch(() => undefined);
+      await training
+        .dispatch({ type: "submit-receipt" })
+        .catch(() => undefined);
       return;
     }
     const receiptInput = {
@@ -384,7 +451,10 @@ export function ReceivingPageSurface({
       })),
     };
     const signature = JSON.stringify(receiptInput);
-    if (!receiptCommand.current || receiptCommand.current.signature !== signature) {
+    if (
+      !receiptCommand.current ||
+      receiptCommand.current.signature !== signature
+    ) {
       receiptCommand.current = {
         key: `receive-${crypto.randomUUID()}`,
         signature,
@@ -441,7 +511,9 @@ export function ReceivingPageSurface({
             type="button"
             className="btn-primary shrink-0"
             data-onboarding-anchor="receiving.purchase-order"
-            disabled={training.currentStep.id !== "purchase-order" || training.busy}
+            disabled={
+              training.currentStep.id !== "purchase-order" || training.busy
+            }
             onClick={() =>
               void training
                 .dispatch({
@@ -537,7 +609,11 @@ export function ReceivingPageSurface({
               htmlFor="rcv-product"
               hint="Pick a product and quantity, or scan a barcode. For serialized devices, scan each unit's serial."
             >
-              <div data-onboarding-anchor={training ? "receiving.add-line" : undefined}>
+              <div
+                data-onboarding-anchor={
+                  training ? "receiving.add-line" : undefined
+                }
+              >
                 <ProductSelect
                   id="rcv-product"
                   products={products}
@@ -575,11 +651,19 @@ export function ReceivingPageSurface({
               </div>
             )}
 
-            <div data-onboarding-anchor={training ? "receiving.serial-input" : undefined}>
+            <div
+              data-onboarding-anchor={
+                training ? "receiving.serial-input" : undefined
+              }
+            >
               <BarcodeScanner
                 onDetected={handleScan}
                 label="Scan to receive"
-                manualLabel={training ? "Enter practice serial or sheet barcode" : undefined}
+                manualLabel={
+                  training
+                    ? "Enter practice serial or sheet barcode"
+                    : undefined
+                }
                 manualActionLabel={training ? "Record" : undefined}
               />
             </div>
@@ -627,7 +711,9 @@ export function ReceivingPageSurface({
                   type="date"
                   className="input"
                   value={actualDeliveryDate}
-                  onChange={(event) => setActualDeliveryDate(event.target.value)}
+                  onChange={(event) =>
+                    setActualDeliveryDate(event.target.value)
+                  }
                 />
               </Field>
               {training && (
@@ -702,7 +788,9 @@ export function ReceivingPageSurface({
                 >
                   <option value="">General area (unassigned)</option>
                   {training && (
-                    <option value="TRAIN-QA-STAGING">Training QA staging</option>
+                    <option value="TRAIN-QA-STAGING">
+                      Training QA staging
+                    </option>
                   )}
                   {bins.map((b) => (
                     <option key={b.id} value={b.id}>
@@ -916,7 +1004,11 @@ export function ReceivingPageSurface({
               title="Photo evidence"
               subtitle="Delivery / packing proof"
             />
-            <div data-onboarding-anchor={training ? "receiving.evidence" : undefined}>
+            <div
+              data-onboarding-anchor={
+                training ? "receiving.evidence" : undefined
+              }
+            >
               {training ? (
                 <div className="space-y-3">
                   <button
@@ -974,8 +1066,8 @@ export function ReceivingPageSurface({
       </div>
 
       {/* Sticky action bar */}
-      {lines.length > 0 && (
-        training ? (
+      {lines.length > 0 &&
+        (training ? (
           <div className="sticky bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-20 rounded-2xl border border-line bg-surface/95 p-2 shadow-e3 backdrop-blur md:bottom-4">
             <button
               type="button"
@@ -1002,8 +1094,7 @@ export function ReceivingPageSurface({
               </div>
             )}
           </CertifiedAction>
-        )
-      )}
+        ))}
 
       {/* Receipt history — parity with the Returns recent list. */}
       <Card>
