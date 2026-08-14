@@ -90,6 +90,9 @@ describe('FinanceApp', () => {
       expect(purchaseOrderLink).toHaveClass('break-all', 'sm:break-normal');
       expect(purchaseOrderLink).toHaveClass('min-h-11');
     }
+    for (const activityLink of screen.getAllByRole('link', { name: 'po_seed_004' })) {
+      expect(activityLink).toHaveClass('min-h-11');
+    }
     expect(screen.getByText('Cross-module activity')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /stock adjustment approvals/i })).toHaveAttribute(
       'href',

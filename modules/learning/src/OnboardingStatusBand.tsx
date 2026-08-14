@@ -4,6 +4,7 @@ import Link from "next/link.js";
 import { Button, Icon } from "@intra/ui";
 import { useLearning } from "./LearningProvider";
 import { OnboardingProgress } from "./OnboardingProgress";
+import { sharedCompletionKey } from "./requirementIdentity";
 
 const DONE_STATES = new Set(["passed", "waived"]);
 const BLOCKED_STATES = new Set(["needs_support", "expired"]);
@@ -47,7 +48,7 @@ export function OnboardingStatusBand() {
   const requirements = new Map(
     (snapshot?.curricula ?? []).flatMap((effective) =>
       effective.requirements.map(
-        (requirement) => [requirement.id, requirement] as const,
+        (requirement) => [sharedCompletionKey(requirement), requirement] as const,
       ),
     ),
   );

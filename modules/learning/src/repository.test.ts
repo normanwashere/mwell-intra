@@ -534,6 +534,66 @@ describe("MemoryLearningRepository", () => {
     ).toBe("passed");
   });
 
+  it("shares completion across equivalent persona orientation records", async () => {
+    const equivalentOrientation: RequirementDefinition = {
+      ...orientation,
+      id: "product-owner-orientation-v1",
+    };
+    const productSimulation: RequirementDefinition = {
+      ...simulation,
+      id: "product-simulation-v1",
+      prerequisiteIds: [equivalentOrientation.id],
+    };
+    const ready = snapshotWithOrientationPassed();
+    const repository = new MemoryLearningRepository({
+      snapshot: {
+        ...ready,
+        curricula: [
+          ...ready.curricula,
+          {
+            curriculum: {
+              id: "product-curriculum-v1",
+              version: 1,
+              personaId: "product_owner",
+              audience: "internal",
+              requirementIds: [equivalentOrientation.id, productSimulation.id],
+            },
+            requirements: [equivalentOrientation, productSimulation],
+            source: "role",
+          },
+        ],
+        progress: [
+          ...ready.progress,
+          progress(
+            "ar-product-orientation",
+            equivalentOrientation.id,
+            "not_started",
+          ),
+          progress(
+            "ar-product-simulation",
+            productSimulation.id,
+            "not_started",
+          ),
+        ],
+      },
+      runtime: "test",
+      now: () => now,
+      simulations: [simulationDefinition],
+    });
+
+    const resolved = await repository.resolveAssignments();
+    expect(
+      resolved.progress.find(
+        (item) => item.assignmentRequirementId === "ar-product-orientation",
+      )?.state,
+    ).toBe("passed");
+    await expect(
+      repository.startRequirement({
+        assignmentRequirementId: "ar-product-simulation",
+      }),
+    ).resolves.toMatchObject({ progress: { state: "in_progress" } });
+  });
+
   it("converges compatible initial progress when assignments resolve", async () => {
     const ready = snapshotWithOrientationPassed();
     const repository = new MemoryLearningRepository({

@@ -75,21 +75,21 @@ test.describe("accessible onboarding coach", () => {
     await expect(dialog).toBeVisible();
     await dialog.getByRole("button", { name: "Continue" }).focus();
     await page.keyboard.press("Enter");
-    await dialog.getByRole("button", { name: "Finish review" }).focus();
+    await expect(dialog.getByRole("heading", { name: "Role orientation" })).toBeFocused();
+    await dialog.getByRole("button", { name: "Continue" }).focus();
     await page.keyboard.press("Enter");
     await expect(
       dialog.getByRole("heading", { name: "Guided review complete" }),
     ).toBeFocused();
-    await expect(page.getByText("Complete", { exact: true })).toBeVisible();
-
-    await page
-      .getByRole("region", { name: "Training mode" })
-      .getByRole("button", { name: "Exit training" })
-      .focus();
+    await dialog.getByRole("button", { name: "Finish review" }).focus();
     await page.keyboard.press("Enter");
     await expect(dialog).toHaveCount(0);
+    await expect(page.getByRole("region", { name: "Training mode" })).toHaveCount(0);
+    await expect(page.getByText("Complete", { exact: true })).toBeVisible();
     await expect(
-      page.getByRole("heading", { name: "Your required steps" }),
+      page.getByRole("button", {
+        name: "Start Warehouse Business Unit guided practice",
+      }),
     ).toBeFocused();
     expect(operationalWrites).toEqual([]);
 

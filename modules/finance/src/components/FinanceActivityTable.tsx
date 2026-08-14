@@ -66,7 +66,7 @@ function activityColumns(
       return href ? (
         <a
           href={href}
-          className="font-semibold text-brand-700 hover:underline dark:text-brand-300"
+          className="inline-flex min-h-11 items-center font-semibold text-brand-700 hover:underline dark:text-brand-300"
         >
           {row.referenceId}
         </a>

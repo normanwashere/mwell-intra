@@ -243,7 +243,7 @@ export function ApprovalInboxPage() {
                       <div className="min-w-0">
                         <Link
                           to={`/requests/${r.id}`}
-                          className="text-sm font-semibold text-ink hover:underline"
+                          className="inline-flex min-h-11 items-center text-sm font-semibold text-ink hover:underline"
                         >
                           {r.title}
                         </Link>
@@ -283,7 +283,7 @@ export function ApprovalInboxPage() {
                     <div className="min-w-0">
                       <Link
                         to={`/requests/${r.id}`}
-                        className="text-sm font-semibold text-ink hover:underline"
+                        className="inline-flex min-h-11 items-center text-sm font-semibold text-ink hover:underline"
                       >
                         {r.title}
                       </Link>
@@ -485,7 +485,7 @@ function DecisionSummary({
         <Link
           to={`/requests/${req.id}`}
           onClick={onNavigate}
-          className="font-semibold text-brand-700 hover:underline dark:text-brand-300"
+          className="inline-flex min-h-11 items-center font-semibold text-brand-700 hover:underline dark:text-brand-300"
         >
           Open full request
         </Link>
@@ -509,7 +509,7 @@ function PendingCard({
         <div className="min-w-0">
           <Link
             to={`/requests/${req.id}`}
-            className="font-display text-base font-bold text-ink hover:underline"
+            className="inline-flex min-h-11 items-center font-display text-base font-bold text-ink hover:underline"
           >
             {req.title}
           </Link>

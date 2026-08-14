@@ -43,15 +43,16 @@ test.describe("personalized onboarding center", () => {
     ).toBeVisible();
     await expect(page.getByText(/required steps complete/)).toBeVisible();
     await expect(
-      page
-        .getByRole("region", { name: "Your required steps" })
-        .getByRole("button", { name: "Start Role orientation" }),
+      page.getByRole("button", { name: "Start Role orientation" }),
     ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Start Role orientation" }),
+    ).toHaveCount(1);
     await expect(
       page
         .getByRole("region", { name: "Your required steps" })
-        .getByRole("button", { name: "Start Role orientation" }),
-    ).toHaveCount(1);
+        .getByText("Continue above", { exact: true }),
+    ).toBeVisible();
     await expect(page.getByText("No onboarding assigned yet")).toHaveCount(0);
 
     await expectStableLayout(page);

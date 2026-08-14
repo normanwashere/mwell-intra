@@ -19,6 +19,7 @@ import type {
   SupportRequestInput,
 } from "./types";
 import { MODULE_LIST } from "@intra/rbac";
+import { requirementsShareCompletion } from "./requirementIdentity";
 
 export interface LearningRepository {
   snapshot(): Promise<LearningSnapshot>;
@@ -772,13 +773,20 @@ export class MemoryLearningRepository implements LearningRepository {
 
   private assertPrerequisites(requirement: RequirementDefinition): void {
     for (const id of requirement.prerequisiteIds) {
-      if (
-        !this.state.progress.some(
-          (item) =>
-            item.requirementId === id &&
-            ["passed", "waived"].includes(item.state),
-        )
-      ) {
+      const exactCompletion = this.state.progress.some(
+        (item) =>
+          item.requirementId === id &&
+          ["passed", "waived"].includes(item.state),
+      );
+      const prerequisite = this.requirementFor(id);
+      const sharedCompletion = this.state.progress.some((item) => {
+        if (!["passed", "waived"].includes(item.state)) return false;
+        return requirementsShareCompletion(
+          prerequisite,
+          this.requirementFor(item.requirementId),
+        );
+      });
+      if (!exactCompletion && !sharedCompletion) {
         throw new Error(`Requirement prerequisite ${id} is incomplete.`);
       }
     }
@@ -787,6 +795,9 @@ export class MemoryLearningRepository implements LearningRepository {
   private replaceProgress(next: RequirementProgress): RequirementProgress {
     const sharedCompletion =
       next.state === "passed" && next.allowsSharedCompletion;
+    const completedRequirement = sharedCompletion
+      ? this.requirementFor(next.requirementId)
+      : null;
     this.state = {
       ...this.state,
       progress: this.state.progress.map((item) =>
@@ -794,8 +805,11 @@ export class MemoryLearningRepository implements LearningRepository {
           ? next
           : sharedCompletion &&
               item.allowsSharedCompletion &&
-              item.requirementId === next.requirementId &&
-              item.requirementVersion === next.requirementVersion &&
+              completedRequirement !== null &&
+              requirementsShareCompletion(
+                completedRequirement,
+                this.requirementFor(item.requirementId),
+              ) &&
               !["passed", "waived", "expired"].includes(item.state)
             ? {
                 ...item,

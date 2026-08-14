@@ -14,6 +14,7 @@ import { PolicyAcknowledgment } from "./PolicyAcknowledgment";
 import { assessmentQuestionsFor, policyDocumentFor } from "./content";
 import { getTrainingAdapter } from "./training/registry";
 import { supportsEmbeddedTraining } from "./catalog";
+import { sharedCompletionKey } from "./requirementIdentity";
 import type {
   RequirementDefinition,
   RequirementProgress,
@@ -155,12 +156,16 @@ export function OnboardingCenter({
 
   const view = useMemo(() => {
     const requirements = new Map<string, RequirementDefinition>();
+    const sharedRequirements = new Set<string>();
     const personaIds = new Set<string>();
     for (const effective of snapshot?.curricula ?? []) {
       if (effective.curriculum.audience !== audience) continue;
       personaIds.add(effective.curriculum.personaId);
       for (const requirement of effective.requirements) {
-        if (!requirements.has(requirement.id)) requirements.set(requirement.id, requirement);
+        const sharedKey = sharedCompletionKey(requirement);
+        if (sharedRequirements.has(sharedKey)) continue;
+        sharedRequirements.add(sharedKey);
+        requirements.set(requirement.id, requirement);
       }
     }
     const progress = new Map(
@@ -309,7 +314,9 @@ export function OnboardingCenter({
       return !["passed", "waived"].includes(prerequisiteState ?? "");
     });
     if (!incomplete) return undefined;
-    const title = view.requirements.find((item) => item.id === incomplete)?.title;
+    const title = snapshot.curricula
+      .flatMap((curriculum) => curriculum.requirements)
+      .find((item) => item.id === incomplete)?.title;
     return `Complete ${title ?? "the required previous step"} first`;
   };
   const next = view.requirements.find((requirement) => {

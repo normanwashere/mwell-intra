@@ -622,7 +622,12 @@ function DepartmentAdministration() {
             Add cost center
           </Button>
         </div>
-        <div className="overflow-x-auto border-y border-line">
+        <div
+          className="overflow-x-auto border-y border-line focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+          role="region"
+          aria-label="Department hierarchy table"
+          tabIndex={0}
+        >
           <table className="w-full min-w-[40rem] text-left text-sm">
             <thead className="bg-inset text-xs font-semibold uppercase text-muted">
               <tr>

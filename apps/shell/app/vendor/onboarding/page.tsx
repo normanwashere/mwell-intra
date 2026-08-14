@@ -14,7 +14,11 @@ export default function VendorOnboardingPage() {
     <div className="min-h-screen bg-app">
       <header className="safe-top sticky top-0 z-20 border-b border-line bg-surface/95 backdrop-blur-md">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
-          <Link href="/vendor" aria-label="Vendor portal home">
+          <Link
+            href="/vendor"
+            aria-label="Vendor portal home"
+            className="inline-flex min-h-11 items-center"
+          >
             <MwellIntraLogo logoClassName="h-7" labelClassName="text-sm" />
           </Link>
           <span className="hidden border-l border-line pl-3 text-sm font-semibold text-ink md:block">

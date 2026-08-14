@@ -134,6 +134,7 @@ describe("CoachOverlay", () => {
       <CoachOverlay step={step} canGoBack={false} onBack={vi.fn()} onExit={vi.fn()} onResumeLater={vi.fn()} />,
     );
     expect(screen.getByRole("dialog")).toHaveAttribute("data-placement", "sheet");
+    expect(screen.getAllByText("Minimize")).toHaveLength(1);
     fireEvent.click(screen.getByRole("button", { name: "Minimize training coach" }));
     expect(screen.getByRole("dialog")).toHaveAttribute("data-collapsed", "true");
     rerender(

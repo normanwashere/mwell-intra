@@ -289,6 +289,69 @@ describe("OnboardingCenter", () => {
     ).toHaveAttribute("href", "/knowledge?article=trouble-access-denied");
   });
 
+  it("deduplicates equivalent orientations assigned by different personas", () => {
+    const equivalentOrientation = {
+      ...snapshot.curricula[0]!.requirements[0]!,
+      id: "product-owner-orientation",
+    };
+    const productPractice = {
+      ...snapshot.curricula[0]!.requirements[1]!,
+      id: "product-owner-practice",
+      title: "Product Owner guided practice",
+      prerequisiteIds: [equivalentOrientation.id],
+    };
+    renderCenter({
+      snapshot: {
+        ...snapshot,
+        curricula: [
+          ...snapshot.curricula,
+          {
+            curriculum: {
+              id: "product-owner",
+              version: 1,
+              personaId: "product_owner",
+              audience: "internal",
+              requirementIds: [equivalentOrientation.id, productPractice.id],
+            },
+            source: "role",
+            requirements: [equivalentOrientation, productPractice],
+          },
+        ],
+        progress: [
+          ...snapshot.progress,
+          {
+            assignmentRequirementId: "ar-product-owner-orientation",
+            requirementId: equivalentOrientation.id,
+            requirementVersion: equivalentOrientation.version,
+            state: "not_started",
+            attemptCount: 0,
+            allowsSharedCompletion: true,
+            updatedAt: "2026-08-13T10:00:00.000Z",
+          },
+          {
+            assignmentRequirementId: "ar-product-owner-practice",
+            requirementId: productPractice.id,
+            requirementVersion: productPractice.version,
+            state: "not_started",
+            attemptCount: 0,
+            allowsSharedCompletion: false,
+            updatedAt: "2026-08-13T10:00:00.000Z",
+          },
+        ],
+      },
+    });
+
+    expect(
+      screen.getAllByRole("heading", {
+        level: 3,
+        name: "Warehouse safety orientation",
+      }),
+    ).toHaveLength(1);
+    expect(
+      screen.getByText("Complete Warehouse safety orientation first"),
+    ).toBeInTheDocument();
+  });
+
   it("blocks unmet prerequisites and labels retryable work accurately", () => {
     renderCenter({
       snapshot: {

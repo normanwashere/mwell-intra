@@ -1,4 +1,5 @@
 import { capabilityKey } from "./catalog";
+import { sharedCompletionKey } from "./requirementIdentity";
 import type {
   Certification,
   CurriculumDefinition,
@@ -103,7 +104,7 @@ export function resolveEffectiveCurriculum(
     }
     visiting.delete(key);
     if (requirement.kind === "orientation") {
-      const orientationKey = `${requirement.audience}:${requirement.title}`;
+      const orientationKey = sharedCompletionKey(requirement);
       if (selectedOrientationKeys.has(orientationKey)) return;
       selectedOrientationKeys.add(orientationKey);
     }
