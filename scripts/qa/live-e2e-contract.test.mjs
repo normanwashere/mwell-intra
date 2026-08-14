@@ -67,6 +67,54 @@ test("transaction logins use the same shared UAT credential", async () => {
   assert.match(source, /page\.fill\("#password", sharedUatPassword\)/);
 });
 
+test("warehouse receipt projections have a matching exception schema contract", async () => {
+  const [repository, migration] = await Promise.all([
+    readFile(
+      new URL(
+        "../../packages/data-kit/src/supabase/SupabaseRepository.ts",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+    readFile(
+      new URL(
+        "../../supabase/migrations/20260814083514_add_receipt_exception_contract.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  ]);
+
+  assert.match(repository, /receipts:\s*["'][^"']*receipt_exception/);
+  assert.match(
+    migration,
+    /alter table warehouse\.receipts[\s\S]*add column if not exists receipt_exception jsonb/i,
+  );
+  assert.match(migration, /warehouse_receipt_exception_shape_check/);
+  assert.match(migration, /'non_po',\s*'overage'/);
+  assert.match(migration, /jsonb_array_length\(receipt_exception->'evidenceUrls'\) > 0/);
+});
+
+test("certification gates cannot activate before a published pathway exists", async () => {
+  const migration = await readFile(
+    new URL(
+      "../../supabase/migrations/20260814084615_require_published_certification_pathway.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+
+  assert.match(
+    migration,
+    /create or replace function learning\.is_certification_required/,
+  );
+  assert.match(migration, /curriculum_capability_outcomes/);
+  assert.match(migration, /curriculum_version\.status = 'published'/);
+  assert.match(migration, /requirement_version\.status = 'published'/);
+  assert.match(migration, /curriculum_version\.effective_at <= pg_catalog\.now\(\)/);
+  assert.match(migration, /requirement_version\.effective_at <= pg_catalog\.now\(\)/);
+});
+
 test("browser-role RPCs recover Supabase SSR cookie sessions without logging tokens", async () => {
   const source = await readFile(
     new URL("./full-intra-live-e2e.mjs", import.meta.url),

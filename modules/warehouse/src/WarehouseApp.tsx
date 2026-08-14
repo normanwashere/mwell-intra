@@ -66,6 +66,24 @@ export interface WarehouseAppProps {
   basename?: string;
 }
 
+const CANONICAL_ROLE_PRIORITY: readonly Role[] = [
+  'warehouse_supervisor',
+  'warehouse_operator',
+];
+
+/**
+ * Multi-role warehouse users need a stable operating persona. Canonical floor
+ * roles take precedence over legacy/requester bundles so an Operations
+ * Associate with both `operations` and `warehouse_operator` enters the
+ * physical Pick & Pack workspace instead of the demand-planning view.
+ */
+export function selectWarehouseRole(roles: readonly Role[]): Role | undefined {
+  return (
+    CANONICAL_ROLE_PRIORITY.find((candidate) => roles.includes(candidate)) ??
+    roles[0]
+  );
+}
+
 /**
  * Mount point for the entire warehouse experience. Assumes it is rendered inside
  * the shell's `<SessionProvider>` (that is where the identity + roles come from).
@@ -87,8 +105,9 @@ export function WarehouseApp({ basename = '/warehouse' }: WarehouseAppProps) {
   );
   const hasLiveAccess = mode === 'supabase' && liveCapabilities.length > 0;
   const initialRole: Role | undefined =
-    warehouseRoles[0] ?? (hasLiveAccess ? 'warehouse_operator' : undefined);
-  const roleCode = claimedRoleCodes[0] ?? initialRole;
+    selectWarehouseRole(warehouseRoles) ??
+    (hasLiveAccess ? 'warehouse_operator' : undefined);
+  const roleCode = initialRole ?? claimedRoleCodes[0];
   const rolePresentation = warehouseRolePresentation(
     warehouseRoles.length > 0
       ? warehouseRoles

@@ -37,6 +37,10 @@ export const ASSIGNMENT_IDEMPOTENCY_MIGRATION_NAME =
   "20260813080141_make_role_assignment_resolution_idempotent.sql";
 export const TASK1_AUTHORITY_REMEDIATION_MIGRATION_NAME =
   "20260813203240_task_1_database_authority_remediation.sql";
+export const RECEIPT_EXCEPTION_CONTRACT_MIGRATION_NAME =
+  "20260814083514_add_receipt_exception_contract.sql";
+export const CERTIFICATION_PATHWAY_MIGRATION_NAME =
+  "20260814084615_require_published_certification_pathway.sql";
 const PINNED_LEARNING_MIGRATION_SHA256 = Object.freeze({
   [FOUNDATION_MIGRATION_NAME]:
     "b5b954f0fdb9ff52748047ca4a17916896227934ecd43c22951ea4489fc129ad",
@@ -60,6 +64,10 @@ const PINNED_LEARNING_MIGRATION_SHA256 = Object.freeze({
     "9a5eda277ea76db395469a95ac45f7f788a0d589db97a42ed0141ce59ccd6113",
   [TASK1_AUTHORITY_REMEDIATION_MIGRATION_NAME]:
     "78dd1dffa203af1dee43b7386f23ffed1d2b086196ab3de4d30c9abf73a9d927",
+  [RECEIPT_EXCEPTION_CONTRACT_MIGRATION_NAME]:
+    "9395622c616677faeb09567ecb4f4f92a1ecc7d763d41e2e5f02a8f94a8b680d",
+  [CERTIFICATION_PATHWAY_MIGRATION_NAME]:
+    "c4a57624d28b9a4a877d7122dd908b8d24bbf6904b84c6303c3c31da35154907",
 });
 export const PRIVATE_ANSWER_KEY_TABLE =
   "private.learning_assessment_answer_keys";
@@ -721,7 +729,7 @@ export const EXPECTED_FUNCTION_BODY_SHA256 = Object.freeze({
   "learning.evaluate_certifications":
     "75b3d25e009a848a8c0271f23454837de267135ab9405adffc4213c7c33b1972",
   "learning.is_certification_required":
-    "3e08a165d77de2450428101f120aa58edd922257cf2dbe3204986258c761d117",
+    "d43547c6d501496e047e314ade1c0f512dbd4efb34ec916e48ce4284402d6519",
   "learning.has_active_certification":
     "37d45d895749a23d9c2de27fcd4290c1170a22b69cd54af00daa6a82d44250c1",
   "learning.has_active_emergency_exception":
@@ -1532,6 +1540,8 @@ function processStatement(state, statement, migrationName) {
     migrationName === CERTIFICATION_CHRONOLOGY_MIGRATION_NAME;
   const isAssignmentIdempotency =
     migrationName === ASSIGNMENT_IDEMPOTENCY_MIGRATION_NAME;
+  const isCertificationPathway =
+    migrationName === CERTIFICATION_PATHWAY_MIGRATION_NAME;
   let match;
 
   if (
@@ -2359,6 +2369,10 @@ function processStatement(state, statement, migrationName) {
       isAssignmentIdempotency &&
       metadata.qualifiedName === "private.resolve_assignments_base" &&
       metadata.argumentTypes.length === 0;
+    const approvedCertificationPathway =
+      isCertificationPathway &&
+      metadata.qualifiedName === "learning.is_certification_required" &&
+      metadata.argumentTypes.join("|") === "text|text";
     if (isServiceContractAlignment && !approvedSnapshotAlignment) {
       state.errors.push(
         `${migrationName}: only the exact no-argument learning.my_learning_snapshot replacement is approved.`,
@@ -2392,7 +2406,8 @@ function processStatement(state, statement, migrationName) {
       !approvedAssessmentCompatibility &&
       !approvedCertificationScalarAlias &&
       !approvedCertificationChronology &&
-      !approvedAssignmentIdempotency
+      !approvedAssignmentIdempotency &&
+      !approvedCertificationPathway
     ) {
       state.errors.push(
         `${migrationName}: replacement or overload of modeled function ${metadata.qualifiedName} is default-denied.`,
@@ -2460,8 +2475,13 @@ function processStatement(state, statement, migrationName) {
     const approvedChronologyOwner =
       isCertificationChronology &&
       match[1] === "learning.evaluate_certifications";
+    const approvedCertificationPathwayOwner =
+      isCertificationPathway &&
+      match[1] === "learning.is_certification_required";
     if (
-      (!approvedServiceOwner && !approvedChronologyOwner) ||
+      (!approvedServiceOwner &&
+        !approvedChronologyOwner &&
+        !approvedCertificationPathwayOwner) ||
       match[3] !== "postgres" ||
       !functionEntry ||
       JSON.stringify(argumentTypes) !==
@@ -3945,7 +3965,10 @@ export function verifyLearningSchema(input) {
     // This cross-schema authority migration is independently parsed and
     // executed by verify-task1-database-authority-remediation.{test,pglite.test}.
     // Its exact checksum above keeps this exception fail-closed.
-    if (migration.name === TASK1_AUTHORITY_REMEDIATION_MIGRATION_NAME) continue;
+    if (
+      migration.name === TASK1_AUTHORITY_REMEDIATION_MIGRATION_NAME ||
+      migration.name === RECEIPT_EXCEPTION_CONTRACT_MIGRATION_NAME
+    ) continue;
     let statements;
     try {
       statements = scanSql(migration.sql);

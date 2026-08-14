@@ -79,6 +79,24 @@ describe('WarehouseApp basename handling', () => {
   );
 
   it(
+    'selects the floor role when an Operations Associate also carries the demand role',
+    async () => {
+      renderSignedInWarehouse('/warehouse/fulfillment', [
+        'operations',
+        'warehouse_operator',
+      ]);
+
+      expect(
+        await screen.findByRole('heading', { name: 'Pick & Pack' }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', { name: 'New fulfillment demand' }),
+      ).not.toBeInTheDocument();
+    },
+    FIRST_RENDER_TIMEOUT,
+  );
+
+  it(
     'redirects the retired analytics URL to the governed data workspace',
     async () => {
       renderSignedInWarehouse('/warehouse/analytics', ['bi_analyst']);
