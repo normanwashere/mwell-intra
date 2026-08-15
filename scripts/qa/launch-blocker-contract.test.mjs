@@ -18,16 +18,16 @@ test("the onboarding live command resolves to a real guarded route audit", async
   assert.match(source, /full-intra-live-e2e\.mjs/);
 });
 
-test("UAT CI deploys schema before certification and follows the hardening branch", async () => {
+test("UAT CI certifies the deployed schema without mutating it", async () => {
   const workflow = await readFile(
     new URL("../../.github/workflows/uat-live-certification.yml", import.meta.url),
     "utf8",
   );
   assert.match(workflow, /codex\/uat-launch-blockers/);
   assert.doesNotMatch(workflow, /codex\/unified-finance-module/);
-  assert.match(workflow, /UAT_SUPABASE_ACCESS_TOKEN/);
   assert.match(workflow, /UAT_SUPABASE_DB_PASSWORD/);
-  assert.match(workflow, /supabase db push/);
+  assert.doesNotMatch(workflow, /supabase db push/);
+  assert.doesNotMatch(workflow, /SUPABASE_ACCESS_TOKEN/);
   assert.match(workflow, /pnpm verify:security-db-launch-blockers/);
 });
 

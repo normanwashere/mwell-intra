@@ -31,7 +31,6 @@ jobs:
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.UAT_SUPABASE_SERVICE_ROLE_KEY }}
       AUDIT_PASSWORD: ${{ secrets.AUDIT_PASSWORD || secrets.UAT_AUDIT_MASTER_PASSWORD }}
       SUPABASE_PROJECT_REF: kkoitlvydytdhlpxhuah
-      SUPABASE_ACCESS_TOKEN: ${{ secrets.UAT_SUPABASE_ACCESS_TOKEN }}
       SUPABASE_DB_PASSWORD: ${{ secrets.UAT_SUPABASE_DB_PASSWORD }}
       PRODUCTION_SUPABASE_PROJECT_REF: abbfziukjalyqtcuskhi
       POLICY_ALLOW_TEST_MUTATIONS: "true"
@@ -59,14 +58,7 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Block high severity production dependency vulnerabilities
         run: pnpm audit --prod --audit-level high
-      - name: Apply pending UAT migrations
-        shell: bash
-        run: |
-          pnpm exec supabase link \
-            --project-ref "$SUPABASE_PROJECT_REF" \
-            --password "$SUPABASE_DB_PASSWORD"
-          pnpm exec supabase db push --linked --include-all --yes
-      - name: Verify runtime authority convergence
+      - name: Verify deployed UAT schema and runtime authority convergence
         run: pnpm verify:security-db-launch-blockers
       - name: Lint all workspaces
         run: pnpm lint

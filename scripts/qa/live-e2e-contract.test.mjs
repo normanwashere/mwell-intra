@@ -408,6 +408,20 @@ test("the route crawl recognizes the current explicit access-denied screen", asy
   assert.match(source, /You don't have access to this page/i);
 });
 
+test("the route crawl expands all filters and rejects empty audit shards", async () => {
+  const source = await readFile(
+    new URL("./full-intra-live-e2e.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /AUDIT_ROLE\?\.trim\(\)\.toLowerCase\(\) === "all"/);
+  assert.match(source, /AUDIT_VIEWPORT\?\.trim\(\)\.toLowerCase\(\) === "all"/);
+  assert.match(source, /selectedUsers\.length === 0[\s\S]*?Unknown AUDIT_ROLE/);
+  assert.match(
+    source,
+    /selectedViewports\.length === 0[\s\S]*?Unknown AUDIT_VIEWPORT/,
+  );
+});
+
 test("certifies mandatory first-login onboarding before module route and transaction audits", async () => {
   const workflow = await readFile(
     new URL(

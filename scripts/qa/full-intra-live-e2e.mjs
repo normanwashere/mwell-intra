@@ -83,8 +83,14 @@ process.once("unhandledRejection", (error) => {
 const baseUrl = process.env.AUDIT_BASE_URL?.replace(/\/$/, "");
 const masterPassword = process.env.AUDIT_PASSWORD;
 const allowMutations = process.env.AUDIT_MUTATIONS === "true";
-const viewFilter = process.env.AUDIT_VIEWPORT;
-const roleFilter = process.env.AUDIT_ROLE;
+const viewFilter =
+  process.env.AUDIT_VIEWPORT?.trim().toLowerCase() === "all"
+    ? undefined
+    : process.env.AUDIT_VIEWPORT?.trim();
+const roleFilter =
+  process.env.AUDIT_ROLE?.trim().toLowerCase() === "all"
+    ? undefined
+    : process.env.AUDIT_ROLE?.trim();
 const auditPhase = process.env.AUDIT_PHASE ?? "all";
 if (!["all", "routes", "transactions"].includes(auditPhase)) {
   throw new Error("AUDIT_PHASE must be all, routes, or transactions.");
@@ -7638,12 +7644,20 @@ const browser = await chromium.launch({ headless: true });
 const results = [];
 
 if (runRouteAudit) {
-  for (const viewport of viewports.filter(
+  const selectedViewports = viewports.filter(
     (item) => !viewFilter || item.name === viewFilter,
-  )) {
-    for (const user of users.filter(
+  );
+  const selectedUsers = users.filter(
       (item) => !roleFilter || item.role === roleFilter,
-    )) {
+  );
+  if (selectedViewports.length === 0) {
+    throw new Error(`Unknown AUDIT_VIEWPORT: ${viewFilter}`);
+  }
+  if (selectedUsers.length === 0) {
+    throw new Error(`Unknown AUDIT_ROLE: ${roleFilter}`);
+  }
+  for (const viewport of selectedViewports) {
+    for (const user of selectedUsers) {
       const context = await browser.newContext({
         viewport: viewport.viewport,
         isMobile: viewport.isMobile,
