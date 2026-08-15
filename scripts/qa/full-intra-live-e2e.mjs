@@ -2321,6 +2321,9 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
       crypto.randomUUID(),
       crypto.randomUUID(),
     ],
+    department: crypto.randomUUID(),
+    departmentCostCenter: crypto.randomUUID(),
+    departmentCode: `audit.${crypto.randomUUID().replaceAll("-", "")}`,
   };
   const { data: approvalGroup, error: approvalGroupError } = await client
     .schema("core")
@@ -2431,6 +2434,22 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
       owner_module: "legal",
     },
   ]);
+  await insertAuditRows(client, "core", "departments", [
+    {
+      id: ids.department,
+      code: ids.departmentCode,
+      name: `${marker} Receipt Department`,
+      purpose: "Run-scoped receipt authority certification",
+    },
+  ]);
+  await insertAuditRows(client, "core", "department_cost_centers", [
+    {
+      id: ids.departmentCostCenter,
+      department_id: ids.department,
+      code: `${marker}-CC`,
+      name: `${marker} Receipt Cost Center`,
+    },
+  ]);
   await insertAuditRows(client, "warehouse", "products", [
     {
       id: ids.product,
@@ -2461,8 +2480,8 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
       title: `${marker} Receipt authority request`,
       status: "approved",
       requester_id: requesterProfiles[0].id,
-      department: `${marker} Receipt Department`,
-      cost_center: "CC-1100",
+      department: ids.departmentCode,
+      cost_center: `${marker}-CC`,
       needed_by: "2027-08-15",
       budget_code: `${marker}-RECEIPT-BUDGET`,
       category: "goods",
@@ -2494,7 +2513,7 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
       title: `${marker} ${method} negative`,
       status: "draft",
       requester_id: requesterProfiles[0].id,
-      department: "Operations",
+      department: "operations",
       cost_center: "CC-1100",
       needed_by: "2027-08-15",
       budget_code: `${marker}-BUDGET`,
@@ -2534,7 +2553,7 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
     {
       id: ids.amendmentDoaMatrix,
       version: `${marker}-AMENDMENT-DOA-V1`,
-      department: `${marker} Receipt Department`,
+      department: ids.departmentCode,
       source_document: `${marker} controlled amendment DOA`,
       approved_by_name: "Task 3 governed fixture",
       approved_at: new Date().toISOString(),
@@ -2550,7 +2569,7 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
     ["dept_head", "procurement_head", "final_approver"].map((tier, index) => ({
       id: ids.amendmentDoaAssignments[index],
       matrix_id: ids.amendmentDoaMatrix,
-      department: `${marker} Receipt Department`,
+      department: ids.departmentCode,
       category: "goods",
       min_amount: 0,
       max_amount: 100000,
@@ -5883,6 +5902,22 @@ async function assertTask3ZeroResidualRows(fixture) {
       .eq("module", "warehouse")
       .in("role", [ids.activeApprovalRole, ids.inactiveApprovalRole]),
   ]);
+  checks.push([
+    "core.department_cost_centers Task 3 fixture",
+    client
+      .schema("core")
+      .from("department_cost_centers")
+      .select("id", { count: "exact", head: true })
+      .eq("id", ids.departmentCostCenter),
+  ]);
+  checks.push([
+    "core.departments Task 3 fixture",
+    client
+      .schema("core")
+      .from("departments")
+      .select("id", { count: "exact", head: true })
+      .eq("id", ids.department),
+  ]);
   for (const [name, query] of checks) {
     const { count, error } = await query;
     if (error || count !== 0)
@@ -6184,6 +6219,12 @@ async function cleanupTask3ReceiptFixture(fixture) {
   );
   await remove("core", "vendors", (query) =>
     query.in("id", [ids.vendor, ids.expiredVendor]),
+  );
+  await remove("core", "department_cost_centers", (query) =>
+    query.eq("id", ids.departmentCostCenter),
+  );
+  await remove("core", "departments", (query) =>
+    query.eq("id", ids.department),
   );
   await assertTask3ZeroResidualRows(fixture);
   return {
