@@ -37,6 +37,7 @@ vi.mock("@intra/auth", async () => {
 });
 
 afterEach(() => {
+  vi.unstubAllGlobals();
   delete session.refreshCapabilities;
   session.profile = DEFAULT_PROFILE;
 });
@@ -637,6 +638,101 @@ describe("LearningProvider", () => {
     ).rejects.toThrow(
       "Training completion is not terminal in canonical readback",
     );
+  });
+
+  it("keeps rejected choices out of memory progress and checkpoints accepted choices once", async () => {
+    const assigned = assignedOrientation();
+    const inProgress = {
+      ...assigned.progress[0]!,
+      state: "in_progress" as const,
+      attemptCount: 1,
+      activeAttempt: {
+        id: "attempt-1",
+        attemptNumber: 1,
+        mode: "scenario" as const,
+        startedAt: "2026-08-13T01:00:00.000Z",
+      },
+    };
+    const passed = {
+      ...inProgress,
+      state: "passed" as const,
+      activeAttempt: undefined,
+      completedAt: "2026-08-13T02:00:00.000Z",
+    };
+    const confirmed = {
+      ...assigned,
+      progress: [passed],
+      refreshedAt: "2026-08-13T02:00:00.000Z",
+    } satisfies LearningSnapshot;
+    const learningRepository = repository(assigned);
+    vi.mocked(learningRepository.startRequirement).mockResolvedValue({
+      progress: inProgress,
+      attempt: inProgress.activeAttempt,
+    });
+    vi.mocked(learningRepository.checkpoint).mockResolvedValue(passed);
+    vi.mocked(learningRepository.resolveAssignments)
+      .mockResolvedValueOnce(assigned)
+      .mockResolvedValueOnce(confirmed);
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            accepted: false,
+            feedback: "Use the governed source record.",
+            recorded: false,
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ accepted: true, recorded: false }),
+          { status: 200 },
+        ),
+      );
+    vi.stubGlobal("fetch", fetcher);
+
+    render(
+      <LearningProvider repository={learningRepository}>
+        <Probe />
+      </LearningProvider>,
+    );
+    await screen.findByText("2026-08-13T00:00:00.000Z");
+    await act(async () =>
+      screen.getByRole("button", { name: "Resume" }).click(),
+    );
+    const base = {
+      assignmentRequirementId: "assignment-1",
+      attemptId: "attempt-1",
+      simulationId: "receiving-sim",
+      checkpointId: "complete",
+      idempotencyKey: "00000000-0000-4000-8000-000000000003",
+    };
+
+    await expect(
+      observedLearning!.evaluateTrainingChoice({
+        ...base,
+        choiceId: "unsafe",
+      }),
+    ).resolves.toMatchObject({ accepted: false });
+    expect(learningRepository.checkpoint).not.toHaveBeenCalled();
+
+    await expect(
+      observedLearning!.evaluateTrainingChoice({
+        ...base,
+        choiceId: "governed",
+      }),
+    ).resolves.toEqual({ accepted: true });
+    expect(learningRepository.checkpoint).toHaveBeenCalledOnce();
+    expect(learningRepository.checkpoint).toHaveBeenCalledWith({
+      assignmentRequirementId: "assignment-1",
+      attemptId: "attempt-1",
+      simulationId: "receiving-sim",
+      checkpointId: "complete",
+      outcomeId: "governed",
+      idempotencyKey: "00000000-0000-4000-8000-000000000003",
+    });
   });
 
   it("confirms assessment, policy, and support commands through canonical readback", async () => {

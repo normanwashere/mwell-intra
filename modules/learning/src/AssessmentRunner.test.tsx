@@ -71,6 +71,7 @@ function context(overrides: Partial<LearningContextValue> = {}): LearningContext
     closeTraining: vi.fn(),
     closeActivity: vi.fn(),
     recordCheckpoint: vi.fn(),
+    evaluateTrainingChoice: vi.fn(),
     submitAssessment: vi.fn().mockResolvedValue({
       assignmentRequirementId: "ar-assessment",
       passed: false,

@@ -187,6 +187,7 @@ function value(
     closeTraining: vi.fn(),
     closeActivity: vi.fn(),
     recordCheckpoint: vi.fn().mockResolvedValue(undefined),
+    evaluateTrainingChoice: vi.fn(),
     submitAssessment: vi.fn(),
     acknowledgePolicy: vi.fn(),
     requestSupport: vi.fn(),
@@ -308,6 +309,7 @@ describe("OnboardingCenter", () => {
       id: "product-owner-practice",
       title: "Product Owner guided practice",
       prerequisiteIds: [equivalentOrientation.id],
+      simulationId: "internal.product_owner.guided-practice.v1",
     };
     renderCenter({
       snapshot: {
@@ -357,8 +359,8 @@ describe("OnboardingCenter", () => {
       }),
     ).toHaveLength(1);
     expect(
-      screen.getByText("Complete Warehouse safety orientation first"),
-    ).toBeInTheDocument();
+      screen.queryByText("Complete Warehouse safety orientation first"),
+    ).not.toBeInTheDocument();
   });
 
   it("blocks unmet prerequisites and labels retryable work accurately", () => {

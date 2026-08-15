@@ -1,6 +1,7 @@
 export interface TrainingCommand<TPayload = unknown> {
   type: string;
   payload?: TPayload;
+  checkpointAlreadyRecorded?: boolean;
 }
 
 export interface TrainingTransition<TState> {
@@ -32,8 +33,6 @@ export interface TrainingStep {
   choices?: readonly {
     id: string;
     label: string;
-    correct: boolean;
-    feedback: string;
   }[];
   anchor: string;
   allowedCommands: readonly string[];

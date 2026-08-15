@@ -109,16 +109,18 @@ describe("learning catalog", () => {
           step.choices?.length,
           `${practice.personaId}:${step.checkpointId}`,
         ).toBeGreaterThanOrEqual(3);
-        expect(
-          step.choices?.filter((choice) => choice.correct),
-          `${practice.personaId}:${step.checkpointId}`,
-        ).toHaveLength(1);
-        expect(
-          step.choices?.every((choice) => choice.feedback.length > 0),
-          `${practice.personaId}:${step.checkpointId}`,
-        ).toBe(true);
+        for (const choice of step.choices ?? []) {
+          expect(
+            Object.keys(choice).sort(),
+            `${practice.personaId}:${step.checkpointId}:${choice.id}`,
+          ).toEqual(["id", "label"]);
+        }
       }
     }
+
+    expect(JSON.stringify(LEARNING_CATALOG)).not.toMatch(
+      /"(?:correct|feedback)"\s*:/i,
+    );
   });
 
   it("covers Operations Lead Warehouse decisions and cross-department handoffs", () => {
@@ -162,7 +164,7 @@ describe("learning catalog", () => {
     }
   });
 
-  it("assigns a governed scenario to every role, including read-only roles", () => {
+  it("assigns a governed scenario to every role curriculum", () => {
     const requirementById = new Map(
       LEARNING_CATALOG.requirements.map((requirement) => [
         requirement.id,
@@ -177,6 +179,27 @@ describe("learning catalog", () => {
         `${curriculum.module}:${curriculum.role}`,
       ).toBe(true);
     }
+  });
+
+  it("does not turn Product's context-only Events visibility into Leadership onboarding", () => {
+    expect(roleCurriculumFor("events", "viewer")).toBeUndefined();
+
+    const productRoles = [
+      roleCurriculumFor("core", "staff"),
+      roleCurriculumFor("product", "product_owner"),
+      roleCurriculumFor("events", "viewer"),
+    ].filter((item) => item !== undefined);
+    const requirementIds = productRoles.flatMap((item) => item.requirementIds);
+
+    expect(requirementIds).not.toContain(
+      "internal.leadership_insights.orientation.v1",
+    );
+    expect(requirementIds).not.toContain(
+      "internal.leadership_insights.guided-practice.v1",
+    );
+    expect(requirementIds).toContain(
+      "internal.role.product.product_owner.capability-practice.v1",
+    );
   });
 
   it("derives certification paths for every mutating active-role grant", () => {

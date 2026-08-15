@@ -90,12 +90,41 @@ jobs:
         run: pnpm provision:test:uat
       - name: Wait for the exact commit to be deployed
         run: node scripts/qa/wait-for-uat-deployment.mjs
+      - name: Install Chromium for first-login certification
+        run: pnpm --filter @intra/shell exec playwright install --with-deps chromium
+      - name: Complete first-login role orientations on desktop
+        env:
+          AUDIT_VIEWPORT: desktop-1440
+          AUDIT_ORIENTATION_MUTATIONS: "true"
+          AUDIT_MUTATIONS: "true"
+          AUDIT_OUTPUT_PATH: test-results/onboarding-desktop-1440.json
+          AUDIT_EVIDENCE_DIR: test-results/onboarding-evidence
+        run: pnpm certify:onboarding-live
+      - name: Verify completed role orientations on mobile
+        env:
+          AUDIT_VIEWPORT: mobile-390
+          AUDIT_ORIENTATION_MUTATIONS: "false"
+          AUDIT_MUTATIONS: "false"
+          AUDIT_OUTPUT_PATH: test-results/onboarding-mobile-390.json
+          AUDIT_EVIDENCE_DIR: test-results/onboarding-evidence
+        run: pnpm certify:onboarding-live
       - name: Upload deployment readiness evidence
         if: always()
         uses: actions/upload-artifact@v6
         with:
           name: uat-deployment-readiness-${{ github.run_number }}
           path: test-results/deployment-readiness.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload onboarding evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: uat-onboarding-${{ github.run_number }}
+          path: |
+            test-results/onboarding-desktop-1440.json
+            test-results/onboarding-mobile-390.json
+            test-results/onboarding-evidence
           if-no-files-found: error
           retention-days: 30
 

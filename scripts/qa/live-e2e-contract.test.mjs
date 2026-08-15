@@ -375,6 +375,37 @@ test("shards UAT certification into bounded least-privilege jobs", async () => {
   assert.doesNotMatch(workflow, /service_role\s*[=:]\s*["'][^"']+/i);
 });
 
+test("certifies mandatory first-login onboarding before module route and transaction audits", async () => {
+  const workflow = await readFile(
+    new URL(
+      "../../.github/workflows/uat-live-certification.yml",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const source = await readFile(
+    new URL("./complete-uat-role-orientations.mjs", import.meta.url),
+    "utf8",
+  );
+
+  const desktop = workflow.indexOf("Complete first-login role orientations on desktop");
+  const mobile = workflow.indexOf("Verify completed role orientations on mobile");
+  const routes = workflow.indexOf("routes:");
+  assert.ok(desktop > 0 && mobile > desktop && routes > mobile);
+  assert.match(workflow, /AUDIT_ORIENTATION_MUTATIONS: "true"/);
+  assert.match(workflow, /AUDIT_ORIENTATION_MUTATIONS: "false"/);
+  assert.match(workflow, /pnpm certify:onboarding-live/g);
+  assert.match(source, /CURRENT_LIVE_ROLES/);
+  assert.match(source, /visibleEnabledOrientationLauncher/);
+  assert.match(source, /Start \.\+ orientation/);
+  assert.match(source, /Finish review/);
+  assert.match(source, /Continue to My Work/);
+  assert.match(source, /Continue to vendor onboarding/);
+  assert.match(source, /assertApprovedMutationTarget/);
+  assert.match(source, /verifyDeployedTargetIdentity/);
+  assert.doesNotMatch(source, /AUDIT_PASSWORD\s*[=:]\s*["'][^"']+/);
+});
+
 test("cross-module scenarios are imported and executed as browser/database contracts", async () => {
   const source = await readFile(
     new URL("./full-intra-live-e2e.mjs", import.meta.url),

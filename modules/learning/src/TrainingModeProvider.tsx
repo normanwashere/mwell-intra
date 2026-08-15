@@ -151,7 +151,7 @@ export function TrainingModeProvider<TState>({
           );
         }
         setCheckpointError(null);
-        if (transition.checkpointId) {
+        if (transition.checkpointId && !command.checkpointAlreadyRecorded) {
           const checkpointIdentity = `${attemptId}:${transition.checkpointId}`;
           if (!reportedCheckpoints.current.has(checkpointIdentity)) {
             const idempotencyKey =

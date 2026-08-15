@@ -59,6 +59,11 @@ export const ROLE_PERSONAS: Readonly<Record<string, string>> = {
   "product:operations_partner": "operations_lead",
 };
 
+// Context-only roles add visibility to a user's primary job without creating
+// a second onboarding persona. Their access remains governed by RBAC, but they
+// do not assign an unrelated role curriculum.
+const CONTEXT_ONLY_ROLES = new Set(["events:viewer"]);
+
 const audienceForPersona = (personaId: string): "internal" | "vendor" =>
   personaId === "vendor_representative" ? "vendor" : "internal";
 
@@ -134,12 +139,7 @@ const titleCaseIdentifier = (value: string): string =>
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
 
-const choice = (
-  id: string,
-  label: string,
-  correct: boolean,
-  feedback: string,
-) => ({ id, label, correct, feedback });
+const choice = (id: string, label: string) => ({ id, label });
 
 const decision = (
   context: string,
@@ -162,22 +162,16 @@ const ROLE_PRACTICE_CONTENT = {
           "What should you do first?",
           [
             choice(
-              "verify-role",
-              "Verify the job need and map it to the warehouse approval role",
-              true,
-              "Correct. Platform access must be scoped to the business duty.",
-            ),
-            choice(
               "grant-admin",
               "Grant Platform Administrator so the employee can continue",
-              false,
-              "Platform Administrator does not provide operational approval authority and would violate least privilege.",
+            ),
+            choice(
+              "verify-role",
+              "Verify the job need and map it to the warehouse approval role",
             ),
             choice(
               "share-account",
               "Ask a supervisor to share an account temporarily",
-              false,
-              "Shared accounts remove attribution and are not an acceptable recovery path.",
             ),
           ],
         ),
@@ -191,22 +185,16 @@ const ROLE_PRACTICE_CONTENT = {
           "How should the change proceed?",
           [
             choice(
-              "independent-review",
-              "Route the change to a different authorized reviewer",
-              true,
-              "Correct. The access decision remains attributable and independently reviewed.",
-            ),
-            choice(
               "self-approve",
               "Approve it yourself because the mapping is correct",
-              false,
-              "A correct role mapping does not remove the independent-review requirement.",
             ),
             choice(
               "grant-first",
               "Grant access now and document the review later",
-              false,
-              "Access must not become effective before the required review.",
+            ),
+            choice(
+              "independent-review",
+              "Route the change to a different authorized reviewer",
             ),
           ],
         ),
@@ -227,22 +215,16 @@ const ROLE_PRACTICE_CONTENT = {
           "What is the best next action?",
           [
             choice(
-              "complete-request",
-              "Add the missing purpose, date, cost center, owner, and evidence",
-              true,
-              "Correct. A complete source request prevents avoidable returns and informal approvals.",
-            ),
-            choice(
               "submit-now",
               "Submit now and explain the details through chat",
-              false,
-              "Chat is not the authoritative request record and leaves the handoff incomplete.",
+            ),
+            choice(
+              "complete-request",
+              "Add the missing purpose, date, cost center, owner, and evidence",
             ),
             choice(
               "place-order",
               "Contact a vendor and place the order directly",
-              false,
-              "A requester cannot bypass sourcing, approval, and purchase-order controls.",
             ),
           ],
         ),
@@ -255,23 +237,14 @@ const ROLE_PRACTICE_CONTENT = {
           "The request is complete and the required date is approaching.",
           "How do you move it forward?",
           [
-            choice(
-              "submit-owner",
-              "Submit it to Procurement and monitor the recorded status",
-              true,
-              "Correct. The request is handed to its accountable owner without changing authority.",
-            ),
-            choice(
-              "mark-approved",
-              "Mark the request approved to save time",
-              false,
-              "Request preparation and approval are separate responsibilities.",
-            ),
+            choice("mark-approved", "Mark the request approved to save time"),
             choice(
               "duplicate",
               "Create a second request so one is processed faster",
-              false,
-              "Duplicate records create competing sources of truth and may cause duplicate spend.",
+            ),
+            choice(
+              "submit-owner",
+              "Submit it to Procurement and monitor the recorded status",
             ),
           ],
         ),
@@ -292,22 +265,16 @@ const ROLE_PRACTICE_CONTENT = {
           "What should you record?",
           [
             choice(
-              "record-actual",
-              "Record 9 received, capture every serial, photograph the damage, and raise the variance",
-              true,
-              "Correct. Receiving records actual custody and preserves the discrepancy for independent disposition.",
-            ),
-            choice(
               "record-document",
               "Record 10 because that is the delivery quantity",
-              false,
-              "Recording the document quantity would overstate custody and corrupt serialized inventory.",
+            ),
+            choice(
+              "record-actual",
+              "Record 9 received, capture every serial, photograph the damage, and raise the variance",
             ),
             choice(
               "reject-offline",
               "Refuse the delivery without creating an Intra record",
-              false,
-              "The discrepancy and custody event still require an attributable system record.",
             ),
           ],
         ),
@@ -321,22 +288,16 @@ const ROLE_PRACTICE_CONTENT = {
           "What is the correct action?",
           [
             choice(
-              "hold-for-quality",
-              "Submit the receipt and keep all units unavailable for independent quality review",
-              true,
-              "Correct. Receiving does not grant quality disposition or release authority.",
-            ),
-            choice(
               "release-one",
               "Release one unit and inspect the rest later",
-              false,
-              "Pending-inspection stock cannot be allocated or released.",
             ),
             choice(
               "accept-all",
               "Mark every unit accepted because most cartons look intact",
-              false,
-              "The operator must not replace the independent inspection decision.",
+            ),
+            choice(
+              "hold-for-quality",
+              "Submit the receipt and keep all units unavailable for independent quality review",
             ),
           ],
         ),
@@ -356,23 +317,14 @@ const ROLE_PRACTICE_CONTENT = {
           "A cycle count shows two missing units, but there is no recount and the counter asks you to correct the quantity directly.",
           "What should you do?",
           [
+            choice("edit-count", "Change the count to match the ledger"),
             choice(
               "return-recount",
               "Return the count for an independent recount and supporting evidence",
-              true,
-              "Correct. The source facts stay attributable and the variance is verified before adjustment.",
-            ),
-            choice(
-              "edit-count",
-              "Change the count to match the ledger",
-              false,
-              "Rewriting the observed count destroys the evidence needed to investigate the variance.",
             ),
             choice(
               "approve-loss",
               "Approve the loss immediately because two units is small",
-              false,
-              "Materiality does not remove evidence and approval controls.",
             ),
           ],
         ),
@@ -385,23 +337,11 @@ const ROLE_PRACTICE_CONTENT = {
           "The recount confirms the shortage and identifies an unposted event transfer.",
           "Which disposition is appropriate?",
           [
+            choice("write-off", "Approve a write-off immediately"),
+            choice("delete-count", "Delete the count and start over"),
             choice(
               "route-correction",
               "Return for a linked transfer correction, then re-evaluate the variance",
-              true,
-              "Correct. The known source transaction should be corrected before any write-off decision.",
-            ),
-            choice(
-              "write-off",
-              "Approve a write-off immediately",
-              false,
-              "A known unposted transfer is a correction issue, not evidence of loss.",
-            ),
-            choice(
-              "delete-count",
-              "Delete the count and start over",
-              false,
-              "The original count is part of the audit trail and must remain attributable.",
             ),
           ],
         ),
@@ -415,22 +355,16 @@ const ROLE_PRACTICE_CONTENT = {
           "What should the Operations Lead do?",
           [
             choice(
-              "return-incomplete-handoff",
-              "Return the handoff to Procurement and keep the delivery outside accepted stock custody",
-              true,
-              "Correct. Procurement must complete the budget, DOA, sourcing, and vendor-accreditation controls before Operations accepts custody.",
-            ),
-            choice(
               "receive-then-fix",
               "Receive the stock now and ask Procurement to complete the documents later",
-              false,
-              "Receiving first bypasses the governed Procurement-to-Operations handoff.",
+            ),
+            choice(
+              "return-incomplete-handoff",
+              "Return the handoff to Procurement and keep the delivery outside accepted stock custody",
             ),
             choice(
               "approve-procurement",
               "Approve the missing Procurement controls as Operations Lead",
-              false,
-              "Operations cannot replace Procurement, Finance, Legal, or DOA authority.",
             ),
           ],
         ),
@@ -443,23 +377,14 @@ const ROLE_PRACTICE_CONTENT = {
           "Product has approved go-live with current evidence, but Operations finds that the fulfillment route is not ready.",
           "What is the correct handoff response?",
           [
-            choice(
-              "acknowledge-with-blocker",
-              "Acknowledge Product's decision and record the operational blocker for resolution before execution",
-              true,
-              "Correct. Product owns go-live; Operations owns readiness and must make its blocker visible without silently overriding Product.",
-            ),
-            choice(
-              "override-product",
-              "Cancel Product's go-live decision",
-              false,
-              "Operations does not own Product's go-live authority.",
-            ),
+            choice("override-product", "Cancel Product's go-live decision"),
             choice(
               "ignore-route-risk",
               "Proceed because Product already approved go-live",
-              false,
-              "A go-live decision does not remove Operations' duty to report and resolve execution risk.",
+            ),
+            choice(
+              "acknowledge-with-blocker",
+              "Acknowledge Product's decision and record the operational blocker for resolution before execution",
             ),
           ],
         ),
@@ -480,23 +405,14 @@ const ROLE_PRACTICE_CONTENT = {
           "What should Procurement do?",
           [
             choice(
-              "return-evidence",
-              "Return the pack for competition or a documented exception and active accreditation",
-              true,
-              "Correct. Award routing starts only after required sourcing and vendor evidence is complete.",
-            ),
-            choice(
               "draft-po",
               "Draft the purchase order because the requester selected the vendor",
-              false,
-              "Requester preference is not sourcing evidence or approval authority.",
             ),
             choice(
-              "split-order",
-              "Split the order into smaller values",
-              false,
-              "Order splitting to avoid controls is prohibited.",
+              "return-evidence",
+              "Return the pack for competition or a documented exception and active accreditation",
             ),
+            choice("split-order", "Split the order into smaller values"),
           ],
         ),
       ],
@@ -509,22 +425,16 @@ const ROLE_PRACTICE_CONTENT = {
           "Where should it go next?",
           [
             choice(
-              "effective-doa",
-              "Route it to the next effective DOA tier with the complete evidence pack",
-              true,
-              "Correct. Approval follows the effective authority configuration and recorded amount.",
-            ),
-            choice(
               "lower-amount",
               "Lower the recorded amount so the department head can approve",
-              false,
-              "Changing the amount to fit authority would falsify the governed record.",
             ),
             choice(
               "self-approve-procurement",
               "Approve it as Procurement because sourcing is complete",
-              false,
-              "Sourcing completion does not grant final spending authority.",
+            ),
+            choice(
+              "effective-doa",
+              "Route it to the next effective DOA tier with the complete evidence pack",
             ),
           ],
         ),
@@ -544,23 +454,14 @@ const ROLE_PRACTICE_CONTENT = {
           "The invoice bills 10 devices, the PO orders 10, but only 9 were received and accepted.",
           "What is Finance's correct response?",
           [
+            choice("pay-po", "Pay 10 because the PO was approved"),
             choice(
               "hold-mismatch",
               "Place the invoice on hold and return the mismatch for resolution",
-              true,
-              "Correct. Payment must follow accepted quantity and resolved evidence.",
-            ),
-            choice(
-              "pay-po",
-              "Pay 10 because the PO was approved",
-              false,
-              "PO approval does not prove receipt and acceptance.",
             ),
             choice(
               "edit-receipt",
               "Change the receipt to 10 so the records match",
-              false,
-              "Finance must not rewrite warehouse custody evidence.",
             ),
           ],
         ),
@@ -574,22 +475,13 @@ const ROLE_PRACTICE_CONTENT = {
           "How should Finance close the review?",
           [
             choice(
-              "approve-nine",
-              "Approve the matched amount with the reconciliation evidence",
-              true,
-              "Correct. The payment decision is tied to the corrected, fully matched pack.",
-            ),
-            choice(
               "approve-original",
               "Approve the original amount to avoid payment delay",
-              false,
-              "The original mismatch remains unsupported and must not be paid.",
             ),
+            choice("delete-hold", "Delete the earlier hold record"),
             choice(
-              "delete-hold",
-              "Delete the earlier hold record",
-              false,
-              "The hold and its resolution are part of the audit history.",
+              "approve-nine",
+              "Approve the matched amount with the reconciliation evidence",
             ),
           ],
         ),
@@ -610,22 +502,16 @@ const ROLE_PRACTICE_CONTENT = {
           "What should Legal do?",
           [
             choice(
-              "request-current-privacy",
-              "Request current privacy evidence and keep the case incomplete",
-              true,
-              "Correct. Conditional privacy requirements apply because the service handles personal data.",
-            ),
-            choice(
               "approve-commercial",
               "Approve because the commercial documents are complete",
-              false,
-              "Commercial completeness does not satisfy applicable privacy requirements.",
+            ),
+            choice(
+              "request-current-privacy",
+              "Request current privacy evidence and keep the case incomplete",
             ),
             choice(
               "replace-document",
               "Upload a template on the vendor's behalf",
-              false,
-              "Legal must not replace applicant-owned evidence.",
             ),
           ],
         ),
@@ -639,22 +525,16 @@ const ROLE_PRACTICE_CONTENT = {
           "Which outcome is correct?",
           [
             choice(
-              "return-signature",
-              "Return the case with the exact signature correction required",
-              true,
-              "Correct. The decision identifies the deficiency without altering vendor evidence.",
-            ),
-            choice(
               "sign-for-vendor",
               "Add the missing signature so review can finish",
-              false,
-              "A reviewer cannot execute the vendor's instrument.",
             ),
             choice(
               "approve-pending",
               "Approve now and collect the signature after onboarding",
-              false,
-              "A mandatory executed instrument cannot be deferred after approval.",
+            ),
+            choice(
+              "return-signature",
+              "Return the case with the exact signature correction required",
             ),
           ],
         ),
@@ -675,23 +555,14 @@ const ROLE_PRACTICE_CONTENT = {
           "What should be completed before fulfillment?",
           [
             choice(
-              "assign-custody",
-              "Assign the custodian, issue quantities, event dates, and return expectations",
-              true,
-              "Correct. Consumables and reusable materials need explicit custody outcomes.",
-            ),
-            choice(
               "release-all",
               "Ask Warehouse to release everything and reconcile later",
-              false,
-              "Release without accountable custody creates an avoidable event variance.",
             ),
             choice(
-              "mark-giveaway",
-              "Classify all items as giveaways",
-              false,
-              "Reusable event materials must remain returnable inventory.",
+              "assign-custody",
+              "Assign the custodian, issue quantities, event dates, and return expectations",
             ),
+            choice("mark-giveaway", "Classify all items as giveaways"),
           ],
         ),
       ],
@@ -704,22 +575,13 @@ const ROLE_PRACTICE_CONTENT = {
           "What is the correct closeout action?",
           [
             choice(
-              "record-variance",
-              "Return the two items, record the missing kit variance, and route investigation before closure",
-              true,
-              "Correct. Every outcome is recorded and the unresolved loss remains visible.",
-            ),
-            choice(
               "close-expected",
               "Close the event using the planned quantities",
-              false,
-              "Planned quantities cannot replace actual custody outcomes.",
             ),
+            choice("expense-kit", "Mark the missing kit as a giveaway"),
             choice(
-              "expense-kit",
-              "Mark the missing kit as a giveaway",
-              false,
-              "Changing the classification would conceal the custody loss.",
+              "record-variance",
+              "Return the two items, record the missing kit variance, and route investigation before closure",
             ),
           ],
         ),
@@ -739,23 +601,14 @@ const ROLE_PRACTICE_CONTENT = {
           "A product launch has approved pricing and inventory, but the required Operations readiness acknowledgement is missing.",
           "What should the Product Owner do?",
           [
+            choice("approve-anyway", "Approve because inventory is available"),
             choice(
               "return-readiness",
               "Return the launch for the missing Operations acknowledgement",
-              true,
-              "Correct. Product owns the go-live decision but must rely on complete independent readiness evidence.",
-            ),
-            choice(
-              "approve-anyway",
-              "Approve because inventory is available",
-              false,
-              "Inventory alone does not prove operational readiness.",
             ),
             choice(
               "acknowledge-ops",
               "Record the Operations acknowledgement personally",
-              false,
-              "Product cannot act as the independent Operations owner.",
             ),
           ],
         ),
@@ -768,23 +621,11 @@ const ROLE_PRACTICE_CONTENT = {
           "Operations supplies the missing acknowledgement, but the proposed effective date is already in the past.",
           "Which decision is appropriate?",
           [
+            choice("backdate", "Approve and backdate the decision"),
+            choice("edit-date", "Change the preparer's date and approve"),
             choice(
               "return-effective-date",
               "Return the version for a valid future effective date",
-              true,
-              "Correct. The approved version must have a controlled, usable effective date.",
-            ),
-            choice(
-              "backdate",
-              "Approve and backdate the decision",
-              false,
-              "Backdating weakens chronology and auditability.",
-            ),
-            choice(
-              "edit-date",
-              "Change the preparer's date and approve",
-              false,
-              "Return the submitted version rather than rewrite its evidence.",
             ),
           ],
         ),
@@ -805,23 +646,14 @@ const ROLE_PRACTICE_CONTENT = {
           "How should Leadership interpret it?",
           [
             choice(
-              "qualify-indicator",
-              "Treat it as a warning, disclose the stale sources, and request current validation",
-              true,
-              "Correct. A stale indicator can trigger investigation but not support a final decision.",
-            ),
-            choice(
               "approve-writeoff",
               "Use the chart to approve a stock write-off",
-              false,
-              "A KPI is not source evidence or approval authority.",
             ),
             choice(
-              "ignore",
-              "Ignore the variance because the data is stale",
-              false,
-              "Stale data still warrants an accountable follow-up.",
+              "qualify-indicator",
+              "Treat it as a warning, disclose the stale sources, and request current validation",
             ),
+            choice("ignore", "Ignore the variance because the data is stale"),
           ],
         ),
       ],
@@ -833,23 +665,11 @@ const ROLE_PRACTICE_CONTENT = {
           "Warehouse confirms one feed is missing an event transfer posted yesterday.",
           "What should Leadership do next?",
           [
+            choice("edit-dashboard", "Manually change the dashboard value"),
+            choice("close-alert", "Close the alert because the cause is known"),
             choice(
               "assign-source-owner",
               "Assign Warehouse to reconcile the source transaction and refresh the indicator",
-              true,
-              "Correct. The accountable owner fixes the source before the dashboard is relied upon.",
-            ),
-            choice(
-              "edit-dashboard",
-              "Manually change the dashboard value",
-              false,
-              "Presentation-layer edits would not correct the authoritative source.",
-            ),
-            choice(
-              "close-alert",
-              "Close the alert because the cause is known",
-              false,
-              "The issue remains open until the source is corrected and the indicator is refreshed.",
             ),
           ],
         ),
@@ -870,22 +690,16 @@ const ROLE_PRACTICE_CONTENT = {
           "What should you do before submitting?",
           [
             choice(
-              "replace-and-align",
-              "Upload the current registration and align the authorized signatory evidence",
-              true,
-              "Correct. Submitted evidence must be current and internally consistent.",
-            ),
-            choice(
               "submit-old",
               "Submit now and promise replacements by email",
-              false,
-              "Email promises do not satisfy required accreditation evidence.",
+            ),
+            choice(
+              "replace-and-align",
+              "Upload the current registration and align the authorized signatory evidence",
             ),
             choice(
               "change-review-status",
               "Mark the application reviewed so Legal sees it faster",
-              false,
-              "Vendors cannot change reviewer-owned status.",
             ),
           ],
         ),
@@ -898,23 +712,14 @@ const ROLE_PRACTICE_CONTENT = {
           "All required evidence is current, but one declaration is unanswered.",
           "How should you proceed?",
           [
-            choice(
-              "answer-declaration",
-              "Answer the declaration truthfully, review the pack, and submit",
-              true,
-              "Correct. The submitted version is complete and ready for independent Legal review.",
-            ),
-            choice(
-              "leave-blank",
-              "Submit with the declaration blank",
-              false,
-              "A mandatory unanswered declaration makes the submission incomplete.",
-            ),
+            choice("leave-blank", "Submit with the declaration blank"),
             choice(
               "ask-legal-answer",
               "Ask Legal to complete the declaration for you",
-              false,
-              "Applicant declarations must remain vendor-owned and attributable.",
+            ),
+            choice(
+              "answer-declaration",
+              "Answer the declaration truthfully, review the pack, and submit",
             ),
           ],
         ),
@@ -1071,40 +876,47 @@ const curricula: readonly CurriculumDefinition[] = OPERATING_PERSONA_IDS.map(
 );
 
 export const ROLE_CURRICULA: readonly RoleCurriculumDefinition[] =
-  roleDefinitions.map((roleDefinition) => {
-    const audience = audienceForPersona(roleDefinition.personaId);
-    const capabilityRequirementId = `${audience}.role.${roleDefinition.module}.${roleDefinition.role}.capability-practice.v1`;
-    const personaPracticeRequirementId = `${audience}.${roleDefinition.personaId}.guided-practice.v1`;
-    const hasCapabilityPractice = requirements.some(
-      (requirement) => requirement.id === capabilityRequirementId,
-    );
-    return {
-      id: `${audience}.role.${roleDefinition.module}.${roleDefinition.role}.v1`,
-      version: 1,
-      personaId: roleDefinition.personaId,
-      audience,
-      module: roleDefinition.module,
-      role: roleDefinition.role,
-      requirementIds: [
-        `${audience}.${roleDefinition.personaId}.orientation.v1`,
-        ...(roleDefinition.module === "warehouse" &&
-        roleDefinition.role === "warehouse_operator"
-          ? [WAREHOUSE_RECEIVING_POLICY_ID, WAREHOUSE_RECEIVING_ASSESSMENT_ID]
-          : []),
-        ...(roleDefinition.module === "core" &&
-        roleDefinition.role === "vendor_portal"
-          ? [VENDOR_EVIDENCE_REQUIREMENT_ID]
-          : []),
-        ...(hasCapabilityPractice ? [capabilityRequirementId] : []),
-        ...(!hasCapabilityPractice &&
-        requirements.some(
-          (requirement) => requirement.id === personaPracticeRequirementId,
-        )
-          ? [personaPracticeRequirementId]
-          : []),
-      ],
-    };
-  });
+  roleDefinitions
+    .filter(
+      (roleDefinition) =>
+        !CONTEXT_ONLY_ROLES.has(
+          `${roleDefinition.module}:${roleDefinition.role}`,
+        ),
+    )
+    .map((roleDefinition) => {
+      const audience = audienceForPersona(roleDefinition.personaId);
+      const capabilityRequirementId = `${audience}.role.${roleDefinition.module}.${roleDefinition.role}.capability-practice.v1`;
+      const personaPracticeRequirementId = `${audience}.${roleDefinition.personaId}.guided-practice.v1`;
+      const hasCapabilityPractice = requirements.some(
+        (requirement) => requirement.id === capabilityRequirementId,
+      );
+      return {
+        id: `${audience}.role.${roleDefinition.module}.${roleDefinition.role}.v1`,
+        version: 1,
+        personaId: roleDefinition.personaId,
+        audience,
+        module: roleDefinition.module,
+        role: roleDefinition.role,
+        requirementIds: [
+          `${audience}.${roleDefinition.personaId}.orientation.v1`,
+          ...(roleDefinition.module === "warehouse" &&
+          roleDefinition.role === "warehouse_operator"
+            ? [WAREHOUSE_RECEIVING_POLICY_ID, WAREHOUSE_RECEIVING_ASSESSMENT_ID]
+            : []),
+          ...(roleDefinition.module === "core" &&
+          roleDefinition.role === "vendor_portal"
+            ? [VENDOR_EVIDENCE_REQUIREMENT_ID]
+            : []),
+          ...(hasCapabilityPractice ? [capabilityRequirementId] : []),
+          ...(!hasCapabilityPractice &&
+          requirements.some(
+            (requirement) => requirement.id === personaPracticeRequirementId,
+          )
+            ? [personaPracticeRequirementId]
+            : []),
+        ],
+      };
+    });
 
 export const CAPABILITY_COVERAGE_CURRICULA: readonly CurriculumDefinition[] =
   unassignedCapabilityRequirements.map((requirement) => ({

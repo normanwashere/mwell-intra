@@ -36,12 +36,15 @@ import type {
   LearningSnapshot,
   LockedCapability,
   PolicyAcknowledgmentInput,
+  SimulationChoiceEvaluation,
+  SimulationChoiceSubmission,
   SupportRequestInput,
 } from "./types";
 import type { TrainingCheckpoint } from "./training/types";
 import { createIdempotencyKey } from "./training/idempotency";
-import { scorePreviewAssessment } from "./content";
 import { getTrainingAdapter } from "./training/registry";
+import { requestSimulationChoiceEvaluation } from "./simulationChoiceClient";
+import { requestPreviewAssessmentScore } from "./assessmentScoringClient";
 
 const EMPTY_SNAPSHOT: LearningSnapshot = {
   curricula: [],
@@ -110,7 +113,9 @@ function previewSnapshotForRoles(
       requirementVersion: requirement.version,
       state: "not_started",
       attemptCount: 0,
-      allowsSharedCompletion: requirement.kind === "orientation",
+      allowsSharedCompletion:
+        requirement.kind === "orientation" ||
+        (requirement.kind === "scenario" && Boolean(requirement.simulationId)),
       updatedAt: refreshedAt,
     })),
     certifications: [],
@@ -135,6 +140,9 @@ export interface LearningContextValue {
   closeTraining(): void;
   closeActivity(): void;
   recordCheckpoint(event: TrainingCheckpoint): Promise<void>;
+  evaluateTrainingChoice(
+    input: SimulationChoiceSubmission,
+  ): Promise<SimulationChoiceEvaluation>;
   submitAssessment(input: AssessmentSubmission): Promise<AssessmentResult>;
   acknowledgePolicy(input: PolicyAcknowledgmentInput): Promise<void>;
   requestSupport(input: SupportRequestInput): Promise<void>;
@@ -195,7 +203,11 @@ export function LearningProvider({
       runtime: "development",
       persistence: demoPersistence,
       simulations: LEARNING_CATALOG.simulations,
-      assess: (input) => ({ score: scorePreviewAssessment(input) }),
+      assess: (input, requirement) =>
+        requestPreviewAssessmentScore({
+          ...input,
+          requirementId: requirement.id,
+        }),
     });
   }, [demoPersistence, injectedRepository, supabaseClient, userRoles]);
   const [snapshot, setSnapshot] = useState<LearningSnapshot | null>(null);
@@ -539,6 +551,78 @@ export function LearningProvider({
     [repository, visibleTraining],
   );
 
+  const evaluateTrainingChoice = useCallback(
+    async (
+      input: SimulationChoiceSubmission,
+    ): Promise<SimulationChoiceEvaluation> => {
+      const current = visibleTraining;
+      if (
+        !current ||
+        current.assignmentRequirementId !== input.assignmentRequirementId ||
+        current.attemptId !== input.attemptId ||
+        current.simulationId !== input.simulationId
+      ) {
+        throw new Error(
+          "Training choice does not match the active requirement.",
+        );
+      }
+      const requestGeneration = generation.current;
+      const requestProfileId = profileIdRef.current;
+      const requestPrincipal = principalRef.current;
+      if (!requestProfileId) {
+        throw new Error("Training session is no longer authenticated.");
+      }
+
+      const command = await requestSimulationChoiceEvaluation(input);
+      if (!command.evaluation.accepted) return command.evaluation;
+
+      const canonicalProgress = command.recorded
+        ? (await repository.snapshot()).progress.find(
+            (item) =>
+              item.assignmentRequirementId === input.assignmentRequirementId,
+          )
+        : await repository.checkpoint({
+            assignmentRequirementId: input.assignmentRequirementId,
+            attemptId: input.attemptId,
+            simulationId: input.simulationId,
+            checkpointId: input.checkpointId,
+            outcomeId: input.choiceId,
+            idempotencyKey: input.idempotencyKey,
+          });
+      if (!canonicalProgress) {
+        throw new Error(
+          "Learning service omitted updated requirement progress.",
+        );
+      }
+      const confirmed = await repository.resolveAssignments();
+      if (
+        requestGeneration !== generation.current ||
+        requestProfileId !== profileIdRef.current ||
+        requestPrincipal !== principalRef.current
+      ) {
+        throw new Error(
+          "Training authority changed before progress was confirmed.",
+        );
+      }
+      const readback = confirmed.progress.find(
+        (item) =>
+          item.assignmentRequirementId === input.assignmentRequirementId,
+      );
+      if (!readback || readback.state !== canonicalProgress.state) {
+        throw new Error(
+          "Training completion could not be confirmed by readback.",
+        );
+      }
+      snapshotRef.current = confirmed;
+      setSnapshot(confirmed);
+      setSnapshotPrincipal(requestPrincipal);
+      setStale(false);
+      setError(null);
+      return command.evaluation;
+    },
+    [repository, visibleTraining],
+  );
+
   const confirmCommand = useCallback(
     async <T,>(
       command: () => Promise<T>,
@@ -706,6 +790,7 @@ export function LearningProvider({
       closeTraining,
       closeActivity,
       recordCheckpoint,
+      evaluateTrainingChoice,
       submitAssessment,
       acknowledgePolicy,
       requestSupport,
@@ -728,6 +813,7 @@ export function LearningProvider({
       closeTraining,
       closeActivity,
       recordCheckpoint,
+      evaluateTrainingChoice,
       submitAssessment,
       acknowledgePolicy,
       requestSupport,

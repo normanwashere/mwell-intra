@@ -172,6 +172,43 @@ function useLiveRows<T>(
   return [rows, loading, refresh];
 }
 
+function useLiveRpcRows<T>(
+  client: LiveClient | null,
+  fn: string,
+  map: (row: LiveRow) => T,
+): [T[], boolean, () => Promise<void>] {
+  const [rows, setRows] = useState<T[]>([]);
+  const [loading, setLoading] = useState(Boolean(client));
+  const mapRef = useRef(map);
+
+  useEffect(() => {
+    mapRef.current = map;
+  }, [map]);
+
+  const refresh = useCallback(async () => {
+    if (!client) {
+      setRows([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    try {
+      const data = await liveRpc<LiveRow[]>(client, 'procurement', fn, {});
+      setRows((data ?? []).map(mapRef.current));
+    } catch {
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [client, fn]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  return [rows, loading, refresh];
+}
+
 function mapVendor(row: LiveRow): ProcurementVendor {
   return {
     id: row.id,
@@ -1075,9 +1112,12 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
     (row) => row,
     { column: 'created_at', ascending: false },
   );
-  const [liveReceiptStatuses, liveReceiptStatusesLoading, refreshReceiptStatuses] = useLiveRows<
-    PurchaseOrderReceiptStatus & { purchaseOrderId: string }
-  >(live, 'procurement', 'v_purchase_order_receipt_status', mapReceiptStatus);
+  const [liveReceiptStatuses, liveReceiptStatusesLoading, refreshReceiptStatuses] =
+    useLiveRpcRows<PurchaseOrderReceiptStatus & { purchaseOrderId: string }>(
+      live,
+      'purchase_order_receipt_status',
+      mapReceiptStatus,
+    );
   const [liveAcceptances, liveAcceptancesLoading, refreshAcceptances] = useLiveRows<AcceptancePack>(
     live,
     'procurement',

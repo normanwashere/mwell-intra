@@ -16,7 +16,7 @@ const value: LearningContextValue = {
   },
   loading: false, stale: false, error: null, resumeRequirementId: null,
   startingRequirementId: null, trainingError: null, activeTraining: null, activeActivity: null,
-  refresh: vi.fn(), refreshAccess: vi.fn().mockResolvedValue(true), resume: vi.fn(), closeTraining: vi.fn(), closeActivity: vi.fn(), recordCheckpoint: vi.fn(),
+  refresh: vi.fn(), refreshAccess: vi.fn().mockResolvedValue(true), resume: vi.fn(), closeTraining: vi.fn(), closeActivity: vi.fn(), recordCheckpoint: vi.fn(), evaluateTrainingChoice: vi.fn(),
   submitAssessment: vi.fn(), acknowledgePolicy: vi.fn(), requestSupport: vi.fn(),
   isLiveCapability: vi.fn().mockReturnValue(false), lockedReason: vi.fn().mockReturnValue(null),
 };

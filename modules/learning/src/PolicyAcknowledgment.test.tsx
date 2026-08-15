@@ -47,6 +47,7 @@ function value(acknowledgePolicy: LearningContextValue["acknowledgePolicy"]): Le
     closeTraining: vi.fn(),
     closeActivity: vi.fn(),
     recordCheckpoint: vi.fn(),
+    evaluateTrainingChoice: vi.fn(),
     submitAssessment: vi.fn(),
     acknowledgePolicy,
     requestSupport: vi.fn(),

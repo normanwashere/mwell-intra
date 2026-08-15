@@ -40,6 +40,7 @@ export const certifiedTestLearning: LearningContextValue = {
   closeTraining: () => undefined,
   closeActivity: () => undefined,
   recordCheckpoint: async () => undefined,
+  evaluateTrainingChoice: async () => ({ accepted: true }),
   submitAssessment: async () => ({
     assignmentRequirementId: "certified-test-assignment",
     passed: true,

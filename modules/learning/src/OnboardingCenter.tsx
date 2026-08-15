@@ -133,6 +133,7 @@ export function OnboardingCenter({
     closeTraining,
     closeActivity,
     recordCheckpoint,
+    evaluateTrainingChoice,
   } = useLearning();
   const launcherRef = useRef<HTMLButtonElement | null>(null);
   const router = useRouter();
@@ -168,12 +169,14 @@ export function OnboardingCenter({
 
   const view = useMemo(() => {
     const requirements = new Map<string, RequirementDefinition>();
+    const allRequirements = new Map<string, RequirementDefinition>();
     const sharedRequirements = new Set<string>();
     const personaIds = new Set<string>();
     for (const effective of snapshot?.curricula ?? []) {
       if (effective.curriculum.audience !== audience) continue;
       personaIds.add(effective.curriculum.personaId);
       for (const requirement of effective.requirements) {
+        allRequirements.set(requirement.id, requirement);
         const sharedKey = sharedCompletionKey(requirement);
         if (sharedRequirements.has(sharedKey)) continue;
         sharedRequirements.add(sharedKey);
@@ -182,6 +185,13 @@ export function OnboardingCenter({
     }
     const progress = new Map(
       (snapshot?.progress ?? []).map((item) => [item.requirementId, item]),
+    );
+    const completedSharedKeys = new Set(
+      [...progress.values()].flatMap((item) => {
+        if (!["passed", "waived"].includes(item.state)) return [];
+        const requirement = allRequirements.get(item.requirementId);
+        return requirement ? [sharedCompletionKey(requirement)] : [];
+      }),
     );
     const required = [...requirements.values()].filter(
       (item) => item.mandatory,
@@ -207,7 +217,15 @@ export function OnboardingCenter({
       };
       return rank(left) - rank(right);
     });
-    return { requirements: ordered, progress, required, completed, personas };
+    return {
+      requirements: ordered,
+      allRequirements,
+      completedSharedKeys,
+      progress,
+      required,
+      completed,
+      personas,
+    };
   }, [audience, snapshot]);
 
   useEffect(() => {
@@ -360,7 +378,14 @@ export function OnboardingCenter({
     }
     const incomplete = requirement.prerequisiteIds.find((requirementId) => {
       const prerequisiteState = view.progress.get(requirementId)?.state;
-      return !["passed", "waived"].includes(prerequisiteState ?? "");
+      if (["passed", "waived"].includes(prerequisiteState ?? "")) {
+        return false;
+      }
+      const prerequisite = view.allRequirements.get(requirementId);
+      return (
+        !prerequisite ||
+        !view.completedSharedKeys.has(sharedCompletionKey(prerequisite))
+      );
     });
     if (!incomplete) return undefined;
     const title = snapshot.curricula
@@ -460,6 +485,7 @@ export function OnboardingCenter({
             scenarioId={activeTraining.simulationId}
             launcherRef={launcherRef}
             onCheckpoint={recordCheckpoint}
+            onEvaluateChoice={evaluateTrainingChoice}
             onClose={closeTraining}
           />
         )}

@@ -38,8 +38,6 @@ export interface RoleCurriculumDefinition extends CurriculumDefinition {
 export interface SimulationChoiceDefinition {
   id: string;
   label: string;
-  correct: boolean;
-  feedback: string;
 }
 
 export interface SimulationStepDefinition {
@@ -117,6 +115,19 @@ export interface SimulationCheckpointInput {
   outcomeId?: string;
   idempotencyKey?: string;
 }
+
+export interface SimulationChoiceSubmission {
+  assignmentRequirementId: string;
+  attemptId: string;
+  simulationId: string;
+  checkpointId: string;
+  choiceId: string;
+  idempotencyKey: string;
+}
+
+export type SimulationChoiceEvaluation =
+  | { accepted: true }
+  | { accepted: false; feedback: string };
 
 export interface AssessmentSubmission {
   assignmentRequirementId: string;

@@ -582,7 +582,7 @@ export interface MemoryLearningRepositoryOptions {
   assess?: (
     input: AssessmentSubmission,
     requirement: RequirementDefinition,
-  ) => { score: number };
+  ) => { score: number } | Promise<{ score: number }>;
   evaluateCertifications?: (
     snapshot: LearningSnapshot,
   ) => readonly Certification[];
@@ -654,7 +654,8 @@ export class MemoryLearningRepository implements LearningRepository {
       | null
       | undefined;
     const fresh = clone(options.snapshot);
-    const persistedProgress = persisted?.progress ?? persisted?.snapshot?.progress ?? [];
+    const persistedProgress =
+      persisted?.progress ?? persisted?.snapshot?.progress ?? [];
     this.state = {
       ...fresh,
       progress: fresh.progress.map((current) => {
@@ -667,7 +668,8 @@ export class MemoryLearningRepository implements LearningRepository {
         if (
           !["passed", "waived"].includes(prior.state) &&
           prior.assignmentRequirementId !== current.assignmentRequirementId
-        ) return current;
+        )
+          return current;
         return {
           ...current,
           state: prior.state,
@@ -721,7 +723,12 @@ export class MemoryLearningRepository implements LearningRepository {
             (item) => item.assignmentRequirementId === id,
           );
           return progress
-            ? [[`${progress.requirementId}@${progress.requirementVersion}`, [...checkpoints]]]
+            ? [
+                [
+                  `${progress.requirementId}@${progress.requirementVersion}`,
+                  [...checkpoints],
+                ],
+              ]
             : [];
         }),
       ),
@@ -742,12 +749,13 @@ export class MemoryLearningRepository implements LearningRepository {
     this.state = {
       ...this.state,
       lockedCapabilities: this.state.lockedCapabilities.filter((lock) =>
-        lock.requirementIds.some((requirementId) =>
-          !this.state.progress.some(
-            (item) =>
-              item.requirementId === requirementId &&
-              ["passed", "waived"].includes(item.state),
-          ),
+        lock.requirementIds.some(
+          (requirementId) =>
+            !this.state.progress.some(
+              (item) =>
+                item.requirementId === requirementId &&
+                ["passed", "waived"].includes(item.state),
+            ),
         ),
       ),
     };
@@ -920,7 +928,7 @@ export class MemoryLearningRepository implements LearningRepository {
       throw new Error("Assessment attempt is not active for this requirement.");
     if (!this.assess)
       throw new Error("Memory assessment scoring is not configured.");
-    const { score } = this.assess(clone(input), clone(requirement));
+    const { score } = await this.assess(clone(input), clone(requirement));
     if (!Number.isFinite(score) || score < 0 || score > 100)
       throw new Error("Assessment scorer returned an invalid score.");
     const attemptNumber = current.activeAttempt.attemptNumber;

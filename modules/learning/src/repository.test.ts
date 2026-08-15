@@ -627,7 +627,8 @@ describe("MemoryLearningRepository", () => {
         progress: ready.progress.map((item) => ({
           ...item,
           state:
-            item.requirementId === orientation.id || item.requirementId === policy.id
+            item.requirementId === orientation.id ||
+            item.requirementId === policy.id
               ? ("passed" as const)
               : item.state,
         })),
@@ -644,7 +645,9 @@ describe("MemoryLearningRepository", () => {
       now: () => now,
     });
 
-    expect((await repository.resolveAssignments()).lockedCapabilities).toHaveLength(1);
+    expect(
+      (await repository.resolveAssignments()).lockedCapabilities,
+    ).toHaveLength(1);
     const state = await repository.snapshot();
     const assessmentProgress = state.progress.find(
       (item) => item.requirementId === assessment.id,
@@ -653,7 +656,8 @@ describe("MemoryLearningRepository", () => {
       snapshot: {
         ...state,
         progress: state.progress.map((item) =>
-          item.assignmentRequirementId === assessmentProgress.assignmentRequirementId
+          item.assignmentRequirementId ===
+          assessmentProgress.assignmentRequirementId
             ? { ...item, state: "passed" as const, completedAt: now }
             : item,
         ),
@@ -662,7 +666,9 @@ describe("MemoryLearningRepository", () => {
       now: () => now,
     });
 
-    expect((await completedRepository.resolveAssignments()).lockedCapabilities).toEqual([]);
+    expect(
+      (await completedRepository.resolveAssignments()).lockedCapabilities,
+    ).toEqual([]);
   });
 
   it("returns completed progress without inventing an attempt", async () => {
@@ -884,7 +890,7 @@ describe("MemoryLearningRepository", () => {
       snapshot: snapshotWithOrientationPassed(),
       runtime: "test",
       now: () => now,
-      assess: () => ({ score: 40 }),
+      assess: async () => ({ score: 40 }),
     });
     const firstAttempt = await repository.startRequirement({
       assignmentRequirementId: "ar-assessment",

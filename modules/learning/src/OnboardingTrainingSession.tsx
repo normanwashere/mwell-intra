@@ -1,26 +1,49 @@
 "use client";
 
-import { useEffect, useMemo, useState, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { CoachOverlay } from "./CoachOverlay";
 import { TrainingBanner } from "./TrainingBanner";
 import { TrainingModeProvider, useTraining } from "./TrainingModeProvider";
 import type { TrainingAdapter, TrainingScenario } from "./training/types";
+import { createIdempotencyKey } from "./training/idempotency";
 import { LEARNING_CATALOG } from "./catalog";
+import type {
+  SimulationChoiceEvaluation,
+  SimulationChoiceSubmission,
+} from "./types";
 import "./training.css";
 
 interface PreparationState {
   stepIndex: number;
 }
 
-function Runtime({ onClose }: { onClose(): void }) {
+function Runtime({
+  assignmentRequirementId,
+  attemptId,
+  scenarioId,
+  onEvaluateChoice,
+  onClose,
+}: {
+  assignmentRequirementId: string;
+  attemptId: string;
+  scenarioId: string;
+  onEvaluateChoice(
+    input: SimulationChoiceSubmission,
+  ): Promise<SimulationChoiceEvaluation>;
+  onClose(): void;
+}) {
   const training = useTraining<PreparationState>();
   const command = training.currentStep.allowedCommands[0] ?? null;
   const [choiceFeedback, setChoiceFeedback] = useState<string | null>(null);
   const [selectedChoiceId, setSelectedChoiceId] = useState<string | null>(null);
+  const [evaluationError, setEvaluationError] = useState<string | null>(null);
+  const [evaluating, setEvaluating] = useState(false);
+  const evaluationKeys = useRef(new Map<string, string>());
 
   useEffect(() => {
     setChoiceFeedback(null);
     setSelectedChoiceId(null);
+    setEvaluationError(null);
   }, [training.currentStep.id]);
 
   return (
@@ -57,22 +80,49 @@ function Runtime({ onClose }: { onClose(): void }) {
           }
           onChoose={(choice) => {
             setSelectedChoiceId(choice.id);
-            if (!choice.correct) {
-              setChoiceFeedback(choice.feedback);
-              return;
-            }
             setChoiceFeedback(null);
-            if (command) {
-              void training.dispatch({ type: command }).catch(() => undefined);
-            }
+            setEvaluationError(null);
+            if (!command || evaluating) return;
+            const identity = `${attemptId}:${training.currentStep.id}:${choice.id}`;
+            const idempotencyKey =
+              evaluationKeys.current.get(identity) ?? createIdempotencyKey();
+            evaluationKeys.current.set(identity, idempotencyKey);
+            setEvaluating(true);
+            void onEvaluateChoice({
+              assignmentRequirementId,
+              attemptId,
+              simulationId: scenarioId,
+              checkpointId: training.currentStep.id,
+              choiceId: choice.id,
+              idempotencyKey,
+            })
+              .then((result) => {
+                if (!result.accepted) {
+                  setChoiceFeedback(result.feedback);
+                  return;
+                }
+                setChoiceFeedback(null);
+                return training.dispatch({
+                  type: command,
+                  checkpointAlreadyRecorded: true,
+                });
+              })
+              .catch((cause: unknown) => {
+                setEvaluationError(
+                  cause instanceof Error
+                    ? cause.message
+                    : "This choice could not be checked.",
+                );
+              })
+              .finally(() => setEvaluating(false));
           }}
           selectedChoiceId={selectedChoiceId}
           choiceFeedback={choiceFeedback}
           continueLabel={
             training.currentStep.terminal ? "Finish review" : "Continue"
           }
-          continueDisabled={training.busy}
-          error={training.checkpointError}
+          continueDisabled={training.busy || evaluating}
+          error={evaluationError ?? training.checkpointError}
         />
       )}
     </>
@@ -86,6 +136,7 @@ export function OnboardingTrainingSession({
   scenarioId,
   launcherRef,
   onCheckpoint,
+  onEvaluateChoice,
   onClose,
 }: {
   requirementTitle: string;
@@ -94,6 +145,9 @@ export function OnboardingTrainingSession({
   scenarioId: string;
   launcherRef: RefObject<HTMLElement | null>;
   onCheckpoint: Parameters<typeof TrainingModeProvider>[0]["onCheckpoint"];
+  onEvaluateChoice(
+    input: SimulationChoiceSubmission,
+  ): Promise<SimulationChoiceEvaluation>;
   onClose(): void;
 }) {
   const publishedSimulation = LEARNING_CATALOG.simulations.find(
@@ -219,7 +273,13 @@ export function OnboardingTrainingSession({
       onCheckpoint={onCheckpoint}
       launcherRef={launcherRef}
     >
-      <Runtime onClose={onClose} />
+      <Runtime
+        assignmentRequirementId={assignmentRequirementId}
+        attemptId={attemptId}
+        scenarioId={scenarioId}
+        onEvaluateChoice={onEvaluateChoice}
+        onClose={onClose}
+      />
     </TrainingModeProvider>
   );
 }

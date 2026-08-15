@@ -9,6 +9,9 @@ export function sharedCompletionKey(
   if (requirement.kind === "orientation") {
     return `${requirement.audience}:orientation:${normalizeTitle(requirement.title)}`;
   }
+  if (requirement.kind === "scenario" && requirement.simulationId) {
+    return `${requirement.audience}:scenario:${requirement.simulationId}`;
+  }
   return `${requirement.id}:${requirement.version}`;
 }
 

@@ -114,6 +114,8 @@ export type {
   StartRequirementResult,
   SupportRequestInput,
   SimulationCheckpointInput,
+  SimulationChoiceEvaluation,
+  SimulationChoiceSubmission,
   SimulationChoiceDefinition,
   SimulationDefinition,
   SimulationStepDefinition,

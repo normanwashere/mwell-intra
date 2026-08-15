@@ -27,10 +27,7 @@ export type ScopedCurriculumInput =
     });
 
 export type CapabilityLearningState =
-  | "certified"
-  | "locked"
-  | "expired"
-  | "retraining_required";
+  "certified" | "locked" | "expired" | "retraining_required";
 
 export interface RoleCapabilityState {
   sourceRoleAssignmentId: string;
@@ -80,12 +77,10 @@ export function resolveEffectiveCurriculum(
     ...input.roleCurricula.flatMap(
       ({ curriculum }) => curriculum.requirementIds,
     ),
-    ...scopedAssignments.flatMap(
-      ({ curriculum }) => curriculum.requirementIds,
-    ),
+    ...scopedAssignments.flatMap(({ curriculum }) => curriculum.requirementIds),
   ];
   const selectedRequirements = new Map<string, RequirementDefinition>();
-  const selectedOrientationKeys = new Set<string>();
+  const selectedSharedKeys = new Set<string>();
   const visiting = new Set<string>();
 
   const addRequirement = (requirementId: string): void => {
@@ -96,18 +91,18 @@ export function resolveEffectiveCurriculum(
     const key = requirementKey(requirement);
     if (selectedRequirements.has(key)) return;
     if (visiting.has(key)) {
-      throw new Error(`Learning requirement prerequisite cycle at ${requirementId}.`);
+      throw new Error(
+        `Learning requirement prerequisite cycle at ${requirementId}.`,
+      );
     }
     visiting.add(key);
     for (const prerequisiteId of requirement.prerequisiteIds) {
       addRequirement(prerequisiteId);
     }
     visiting.delete(key);
-    if (requirement.kind === "orientation") {
-      const orientationKey = sharedCompletionKey(requirement);
-      if (selectedOrientationKeys.has(orientationKey)) return;
-      selectedOrientationKeys.add(orientationKey);
-    }
+    const sharedKey = sharedCompletionKey(requirement);
+    if (selectedSharedKeys.has(sharedKey)) return;
+    selectedSharedKeys.add(sharedKey);
     selectedRequirements.set(key, requirement);
   };
 
@@ -124,14 +119,14 @@ export function resolveEffectiveCurriculum(
     ) {
       continue;
     }
-    const capabilityKeys = retrainingCapabilityKeysByRole.get(
-      assignment.sourceRoleAssignmentId,
-    ) ?? new Set<string>();
+    const capabilityKeys =
+      retrainingCapabilityKeysByRole.get(assignment.sourceRoleAssignmentId) ??
+      new Set<string>();
     for (const requirementId of assignment.curriculum.requirementIds) {
-        const requirement = requirementById.get(requirementId);
-        if (!requirement) {
-          throw new Error(`Unknown learning requirement ${requirementId}.`);
-        }
+      const requirement = requirementById.get(requirementId);
+      if (!requirement) {
+        throw new Error(`Unknown learning requirement ${requirementId}.`);
+      }
       for (const capability of requirement.capabilityOutcomes) {
         capabilityKeys.add(capabilityKey(capability));
       }
@@ -180,7 +175,7 @@ export function resolveEffectiveCurriculum(
           new Date(certification.effectiveAt).getTime() <= now &&
           Boolean(
             certification.expiresAt &&
-              new Date(certification.expiresAt).getTime() <= now,
+            new Date(certification.expiresAt).getTime() <= now,
           ),
       );
       const key = capabilityKey(capability);
