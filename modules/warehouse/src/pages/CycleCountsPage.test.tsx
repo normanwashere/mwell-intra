@@ -17,7 +17,9 @@ describe("CycleCountsPage", () => {
     "renders governed cycle counts for canonical %s",
     async (role) => {
       renderWithProviders(<CycleCountsPage />, { role });
-      expect(await screen.findByText(/count sheet/i)).toBeInTheDocument();
+      expect(
+        await screen.findByRole("heading", { name: /count sheet/i }),
+      ).toBeInTheDocument();
       expect(
         screen.getByText(
           /material variance requires a different Warehouse Supervisor/i,
@@ -41,7 +43,7 @@ describe("CycleCountsPage", () => {
   it("requires evidence before atomically creating and submitting a count", async () => {
     const user = userEvent.setup();
     renderWithProviders(<CycleCountsPage />, { role: "warehouse_operator" });
-    await screen.findByText(/count sheet/i);
+    await screen.findByRole("heading", { name: /count sheet/i });
 
     await user.type(screen.getByLabelText(/Counted Event Shirt \(L\)/i), "120");
     expect(screen.getByRole("button", { name: /submit count/i })).toBeDisabled();
@@ -51,7 +53,7 @@ describe("CycleCountsPage", () => {
 
   it("never prefills counted quantities with the expected number (WH-18)", async () => {
     renderWithProviders(<CycleCountsPage />, { role: "finance" });
-    await screen.findByText(/count sheet/i);
+    await screen.findByRole("heading", { name: /count sheet/i });
 
     // Inputs start EMPTY; expected shows as a placeholder reference only.
     const shirtInput = screen.getByLabelText(/Counted Event Shirt \(L\)/i);
@@ -72,7 +74,7 @@ describe("CycleCountsPage", () => {
   it("flags variances once a real value is entered", async () => {
     const user = userEvent.setup();
     renderWithProviders(<CycleCountsPage />, { role: "finance" });
-    await screen.findByText(/count sheet/i);
+    await screen.findByRole("heading", { name: /count sheet/i });
 
     const shirtInput = screen.getByLabelText(/Counted Event Shirt \(L\)/i);
     await user.type(shirtInput, "100");
@@ -85,7 +87,7 @@ describe("CycleCountsPage", () => {
   it('shows "balanced" only after a matching entry', async () => {
     const user = userEvent.setup();
     renderWithProviders(<CycleCountsPage />, { role: "finance" });
-    await screen.findByText(/count sheet/i);
+    await screen.findByRole("heading", { name: /count sheet/i });
 
     const shirtInput = screen.getByLabelText(/Counted Event Shirt \(L\)/i);
     await user.type(shirtInput, "120"); // matches expected
@@ -96,7 +98,7 @@ describe("CycleCountsPage", () => {
   it("blind count blanks expected values and records only entered rows", async () => {
     const user = userEvent.setup();
     renderWithProviders(<CycleCountsPage />, { role: "finance" });
-    await screen.findByText(/count sheet/i);
+    await screen.findByRole("heading", { name: /count sheet/i });
 
     await user.click(screen.getByRole("button", { name: /blind count/i }));
     const shirt = screen.getByLabelText(/Counted Event Shirt \(L\)/i);
@@ -114,7 +116,7 @@ describe("CycleCountsPage", () => {
   it("asks for confirmation when rows are left uncounted, then routes variances for approval", async () => {
     const user = userEvent.setup();
     renderWithProviders(<CycleCountsPage />, { role: "finance" });
-    await screen.findByText(/count sheet/i);
+    await screen.findByRole("heading", { name: /count sheet/i });
 
     await user.type(screen.getByLabelText(/Counted Event Shirt \(L\)/i), "100");
     await attachCountEvidence(user);
@@ -137,7 +139,7 @@ describe("CycleCountsPage", () => {
   it("routes a blind-count variance for supervisor approval", async () => {
     const user = userEvent.setup();
     renderWithProviders(<CycleCountsPage />, { role: "finance" });
-    await screen.findByText(/count sheet/i);
+    await screen.findByRole("heading", { name: /count sheet/i });
 
     await user.click(screen.getByRole("button", { name: /blind count/i }));
     await user.type(screen.getByLabelText(/Counted Event Shirt \(L\)/i), "100");
@@ -153,7 +155,7 @@ describe("CycleCountsPage", () => {
   it("counts serialized devices by presence and blocks unexpected serials", async () => {
     const user = userEvent.setup();
     renderWithProviders(<CycleCountsPage />, { role: "finance" });
-    await screen.findByText(/count sheet/i);
+    await screen.findByRole("heading", { name: /count sheet/i });
     await user.selectOptions(screen.getByLabelText("Category"), "device");
 
     const serials = screen.getByLabelText(
@@ -175,7 +177,7 @@ describe("CycleCountsPage", () => {
   it("adds an eligible device to the count through the shared scanner", async () => {
     const user = userEvent.setup();
     renderWithProviders(<CycleCountsPage />, { role: "finance" });
-    await screen.findByText(/count sheet/i);
+    await screen.findByRole("heading", { name: /count sheet/i });
     await user.selectOptions(screen.getByLabelText("Category"), "device");
 
     const manual = screen.getByLabelText("Enter barcode manually");
