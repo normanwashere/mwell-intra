@@ -14,6 +14,9 @@ describe('GET /api/health', () => {
   });
 
   beforeEach(() => {
+    delete process.env.LEGAL_DOCUMENT_EDGE_FUNCTION;
+    delete process.env.SUPABASE_SECRET_KEY;
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
     process.env.APP_ENV = 'uat';
     process.env.NEXT_PUBLIC_ENABLE_NOTIFICATIONS = 'true';
     process.env.GITHUB_SHA = 'audit-commit-sha';
