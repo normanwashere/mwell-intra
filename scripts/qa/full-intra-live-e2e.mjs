@@ -2029,32 +2029,44 @@ async function adminCreateDoaWorkflow(page, marker, { captureState }) {
   await departmentHeading.waitFor({
     state: "visible",
   });
+  await captureState("DOA draft saved for independent review");
+  const checkpoint = await verifyCheckpoint({
+    schema: "procurement",
+    table: "doa_matrices",
+    filters: { department, version },
+    expected: { status: "draft", active: false },
+    select: "id,department,version,status,active",
+  });
+  return {
+    name: "department DOA creation",
+    ok: true,
+    finalUrl: page.url().replace(baseUrl, ""),
+    checkpoint,
+  };
+}
+
+async function legalActivateDoaWorkflow(page, marker, { captureState }) {
+  const department = `${marker} Department`;
+  const version = `${marker}-V1`;
+  await page.goto(`${baseUrl}/admin/doa?workflow=${Date.now()}`, {
+    waitUntil: "domcontentloaded",
+    timeout: 20_000,
+  });
+  await waitForMeaningfulRoute(page);
+  const departmentHeading = page.getByRole("heading", {
+    name: department,
+    exact: true,
+  });
+  await departmentHeading.waitFor({ state: "visible" });
   const card = departmentHeading.locator(
     "xpath=ancestor::div[.//button[normalize-space()='Activate']][1]",
   );
   page.once("dialog", (dialog) => void dialog.accept());
-  await card.getByRole("button", { name: "Activate" }).click();
+  await card.getByRole("button", { name: "Activate", exact: true }).click();
   await page
     .getByText(`${department} DOA activated.`)
-    .waitFor({ state: "visible" });
-  await captureState("DOA activation success");
-  await page.waitForFunction(() => {
-    const visibleSaveButton = Array.from(
-      document.querySelectorAll("button"),
-    ).find((button) => {
-      const rect = button.getBoundingClientRect();
-      return (
-        button.textContent?.trim() === "Save draft" &&
-        rect.width > 0 &&
-        rect.height > 0
-      );
-    });
-    return (
-      visibleSaveButton instanceof HTMLButtonElement &&
-      !visibleSaveButton.disabled
-    );
-  });
-  await page.waitForTimeout(200);
+    .waitFor({ state: "visible", timeout: 30_000 });
+  await captureState("DOA independently activated by Legal");
   const checkpoint = await verifyCheckpoint({
     schema: "procurement",
     table: "doa_matrices",
@@ -2063,7 +2075,7 @@ async function adminCreateDoaWorkflow(page, marker, { captureState }) {
     select: "id,department,version,status,active",
   });
   return {
-    name: "department DOA creation",
+    name: "department DOA independent activation",
     ok: true,
     finalUrl: page.url().replace(baseUrl, ""),
     checkpoint,
@@ -4854,7 +4866,7 @@ async function task3SupervisorTransactions(page, fixture) {
   };
 }
 
-async function task3FinanceInsufficientStockDenial(page, fixture) {
+async function task3FinanceStockApprovalDenial(page, fixture) {
   const inventoryQuantity = async () => {
     const { data, error } = await fixture.client
       .schema("warehouse")
@@ -4877,8 +4889,8 @@ async function task3FinanceInsufficientStockDenial(page, fixture) {
       decision: "approved",
       note: `${fixture.marker} Finance locked-stock denial`,
     }),
-    /negative|insufficient/i,
-    "Finance insufficient locked stock-change approval",
+    /not authorized|current stock-change approval tier/i,
+    "Finance warehouse stock-change approval",
   );
   const after = await inventoryQuantity();
   if (after !== before)
@@ -4896,7 +4908,7 @@ async function task3FinanceInsufficientStockDenial(page, fixture) {
     fixture.client,
   );
   return {
-    name: "Task 3 Finance insufficient locked-stock denial",
+    name: "Task 3 Finance warehouse stock-approval denial",
     ok: true,
     checkpoint,
   };
@@ -4909,10 +4921,15 @@ async function task3SupervisorExcessFinalDisposition(page, fixture) {
     "procurement_receipt_excess_work_items",
     {},
   );
-  if (!workItems.ok || !workItems.body.includes(fixture.ids.excessCustody))
+  const parsedWorkItems = workItems.ok ? JSON.parse(workItems.body) : [];
+  const excessWorkItem = parsedWorkItems.find(
+    (item) => item.purchase_order_id === fixture.ids.excessPo,
+  );
+  if (!workItems.ok || !excessWorkItem?.custody_id)
     throw new Error(
       `Authenticated excess custody work item disappeared before disposition: ${workItems.body}`,
     );
+  fixture.ids.excessCustody = excessWorkItem.custody_id;
   await page.goto(
     `${baseUrl}/warehouse/purchase-orders?workflow=${Date.now()}`,
     {
@@ -6379,7 +6396,7 @@ async function cleanupEventWorkflowDependencies(marker) {
   const { data: requests, error: requestError } = await client
     .schema("warehouse")
     .from("department_stock_requests")
-    .select("id,purpose")
+    .select("id,purpose,fulfillment_order_id")
     .eq("purpose", `${marker} event fulfillment`);
   if (requestError)
     throw new Error(
@@ -6396,16 +6413,92 @@ async function cleanupEventWorkflowDependencies(marker) {
 
   const eventIds = (events ?? []).map((event) => event.id);
   const requestIds = (requests ?? []).map((request) => request.id);
-  if (eventIds.length) {
+  const requestOrderIds = (requests ?? [])
+    .map((request) => request.fulfillment_order_id)
+    .filter(Boolean);
+  const { data: eventOrders, error: orderLookupError } = eventIds.length
+    ? await client
+        .schema("warehouse")
+        .from("fulfillment_orders")
+        .select("id,parent_order_id")
+        .in("event_id", eventIds)
+    : { data: [], error: null };
+  if (orderLookupError)
+    throw new Error(
+      `Event fulfillment cleanup lookup failed: ${orderLookupError.message}`,
+    );
+  const orderIds = [
+    ...new Set([
+      ...requestOrderIds,
+      ...(eventOrders ?? []).map((order) => order.id),
+    ]),
+  ];
+  if (requestIds.length) {
     const { error } = await client
       .schema("warehouse")
-      .from("event_lifecycle_events")
-      .delete()
-      .in("event_id", eventIds);
+      .from("department_stock_requests")
+      .update({ fulfillment_order_id: null })
+      .in("id", requestIds);
     if (error)
-      throw new Error(`Event lifecycle cleanup failed: ${error.message}`);
+      throw new Error(
+        `Event request fulfillment unlink failed: ${error.message}`,
+      );
   }
-  const activityEntityIds = [...eventIds, ...requestIds];
+  if (orderIds.length) {
+    const { error: reservationError } = await client
+      .schema("warehouse")
+      .from("fulfillment_reservations")
+      .delete()
+      .in("order_id", orderIds);
+    if (reservationError)
+      throw new Error(
+        `Event fulfillment reservation cleanup failed: ${reservationError.message}`,
+      );
+    const childOrderIds = (eventOrders ?? [])
+      .filter((order) => order.parent_order_id)
+      .map((order) => order.id);
+    if (childOrderIds.length) {
+      const { error } = await client
+        .schema("warehouse")
+        .from("fulfillment_orders")
+        .delete()
+        .in("id", childOrderIds);
+      if (error)
+        throw new Error(
+          `Event child fulfillment cleanup failed: ${error.message}`,
+        );
+    }
+    const parentOrderIds = orderIds.filter(
+      (id) => !childOrderIds.includes(id),
+    );
+    if (parentOrderIds.length) {
+      const { error: orderDeleteError } = await client
+        .schema("warehouse")
+        .from("fulfillment_orders")
+        .delete()
+        .in("id", parentOrderIds);
+      if (orderDeleteError)
+        throw new Error(
+          `Event fulfillment cleanup failed: ${orderDeleteError.message}`,
+        );
+    }
+  }
+  if (eventIds.length) {
+    for (const table of [
+      "event_lifecycle_events",
+      "event_reconciliations",
+      "event_settlements",
+    ]) {
+      const { error } = await client
+        .schema("warehouse")
+        .from(table)
+        .delete()
+        .in("event_id", eventIds);
+      if (error)
+        throw new Error(`Event ${table} cleanup failed: ${error.message}`);
+    }
+  }
+  const activityEntityIds = [...eventIds, ...requestIds, ...orderIds];
   if (activityEntityIds.length) {
     const { error } = await client
       .schema("core")
@@ -6414,6 +6507,17 @@ async function cleanupEventWorkflowDependencies(marker) {
       .in("entity_id", activityEntityIds);
     if (error)
       throw new Error(`Event activity cleanup failed: ${error.message}`);
+  }
+  if (orderIds.length) {
+    const { count, error } = await client
+      .schema("warehouse")
+      .from("fulfillment_orders")
+      .select("id", { count: "exact", head: true })
+      .in("id", orderIds);
+    if (error || count !== 0)
+      throw new Error(
+        `Event fulfillment cleanup left ${count ?? "unknown"} row(s): ${error?.message ?? ""}`,
+      );
   }
   return {
     entity: "event-workflow-dependencies",
@@ -8407,9 +8511,9 @@ try {
             viewport,
             { email: "intra.test.finance@mwell.com.ph" },
             {
-              name: "Task 3 Finance insufficient locked-stock denial",
+              name: "Task 3 Finance warehouse stock-approval denial",
               run: (page) =>
-                task3FinanceInsufficientStockDenial(page, task3Fixture),
+                task3FinanceStockApprovalDenial(page, task3Fixture),
             },
           ),
         );
@@ -8623,13 +8727,8 @@ try {
             {
               name: "department DOA role handoff",
               scenarioId: "admin-doa",
-              run: (page) =>
-                roleHandoffReadbackWorkflow(
-                  page,
-                  "/admin/doa",
-                  `${marker} Department`,
-                  "department DOA role handoff",
-                ),
+              run: (page, hooks) =>
+                legalActivateDoaWorkflow(page, marker, hooks),
             },
           ),
         );

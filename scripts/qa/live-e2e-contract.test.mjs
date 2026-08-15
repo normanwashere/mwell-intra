@@ -236,6 +236,28 @@ test("governed workflow activity cleanup resolves generated IDs from exact run m
   );
 });
 
+test("event cleanup removes exact run-scoped fulfillment dependencies first", async () => {
+  const source = await readFile(
+    new URL("./full-intra-live-e2e.mjs", import.meta.url),
+    "utf8",
+  );
+  const start = source.indexOf("async function cleanupEventWorkflowDependencies");
+  const end = source.indexOf("async function procurementReceiptAuthorityWorkflow", start);
+  const cleanup = source.slice(start, end);
+  assert.match(cleanup, /purpose.*marker.*event fulfillment/i);
+  assert.match(cleanup, /fulfillment_order_id/);
+  assert.match(cleanup, /fulfillment_reservations/);
+  assert.match(cleanup, /fulfillment_orders/);
+  assert.match(cleanup, /event_lifecycle_events/);
+  assert.match(cleanup, /event_reconciliations/);
+  assert.match(cleanup, /event_settlements/);
+  assert.ok(
+    cleanup.indexOf("const parentOrderIds") <
+      cleanup.indexOf('"event_lifecycle_events"'),
+    "fulfillment orders must be removed before event-owned rows",
+  );
+});
+
 test("Warehouse certification creates its editable baseline before receiving and cleans it last", async () => {
   const source = await readFile(
     new URL("./full-intra-live-e2e.mjs", import.meta.url),
@@ -682,8 +704,8 @@ test("the mutating harness waits for quality data and uses unambiguous DOA contr
     /getByLabel\("Tier 1", \{ exact: true \}\)\s*\.selectOption\("final_approver"\)/,
   );
   assert.match(source, /getByLabel\(`Tier \$\{index \+ 1\} named approver`\)/);
-  assert.match(source, /visibleSaveButton instanceof HTMLButtonElement/);
-  assert.match(source, /!visibleSaveButton\.disabled/);
+  assert.match(source, /DOA draft saved for independent review/);
+  assert.match(source, /legalActivateDoaWorkflow/);
   assert.match(source, /Loading quality controls/);
   assert.match(source, /No inspections waiting/);
 });
@@ -952,11 +974,11 @@ test("Task 3 uses browser-role exception receipts and proves transactional clean
   assert.match(source, /Material stock change bypassed Finance handoff/);
   assert.match(
     source,
-    /Task 3 Finance insufficient locked-stock denial[\s\S]*intra\.test\.finance@mwell\.com\.ph/,
+    /Task 3 Finance warehouse stock-approval denial[\s\S]*intra\.test\.finance@mwell\.com\.ph/,
   );
   assert.match(
     source,
-    /Finance insufficient locked stock-change approval[\s\S]*expected: \{ status: "pending_finance" \}/,
+    /Finance warehouse stock-change approval[\s\S]*expected: \{ status: "pending_finance" \}/,
   );
   assert.match(source, /valid public quality inspection/i);
   assert.match(
@@ -1471,7 +1493,9 @@ test("Events certification submits and cleans the governed Warehouse handoff", a
   assert.match(source, /from\("department_stock_requests"\)/);
   assert.match(source, /state\.fulfillmentRequestId/);
   assert.match(source, /cleanupEventWorkflowDependencies/);
-  assert.match(source, /from\("event_lifecycle_events"\)[\s\S]*?\.delete\(\)/);
+  assert.match(source, /"event_lifecycle_events"[\s\S]*?\.delete\(\)/);
+  assert.match(source, /fulfillment_reservations/);
+  assert.match(source, /fulfillment_orders/);
 });
 
 test("governed Warehouse wrappers retain private-schema isolation", async () => {
@@ -1562,6 +1586,45 @@ test("governed receipt quantities and service Finance readback converge safely",
   );
   assert.match(source, /auth\.role\(\) = 'service_role'/);
   assert.match(source, /ordered_quantity_at_request''\)\:\:numeric\:\:integer/);
+});
+
+test("the latest public quality boundary delegates exact PO-line inspection", async () => {
+  const migration = await readFile(
+    new URL(
+      "../../supabase/migrations/20260816222000_restore_exact_receipt_quality_boundary.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.match(migration, /core\.has_live_cap\('warehouse', 'inspect_quality'\)/);
+  assert.match(
+    migration,
+    /return private\.warehouse_inspect_quality_v2\(payload\)/,
+  );
+  assert.doesNotMatch(migration, /return private\.warehouse_inspect_quality\(payload\)/);
+});
+
+test("multi-role Procurement collaborators are deduplicated before upsert", async () => {
+  const migration = await readFile(
+    new URL(
+      "../../supabase/migrations/20260816223000_deduplicate_procurement_intake_collaborators.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  for (const functionName of [
+    "procurement.create_request",
+    "procurement.submit_request",
+  ]) {
+    const bodyStart = migration.indexOf(`create or replace function ${functionName}`);
+    const bodyEnd = migration.indexOf("$$;", bodyStart);
+    assert.notEqual(bodyStart, -1, `${functionName} repair is missing`);
+    assert.notEqual(bodyEnd, -1, `${functionName} repair is unterminated`);
+    assert.match(
+      migration.slice(bodyStart, bodyEnd),
+      /insert into procurement\.request_collaborators[\s\S]*?select distinct/i,
+    );
+  }
 });
 
 test("transaction fixtures and UI checks preserve the acting persona and rendered state", async () => {
@@ -1717,7 +1780,30 @@ test("the DOA editor cannot submit while asynchronous workspace data shifts the 
   assert.match(page, /from\("doa_matrices"\)/);
   assert.match(page, /\.eq\("department", matrix\.department\)/);
   assert.match(page, /\.eq\("version", matrix\.version\)/);
-  assert.match(page, /payload: \{ id: currentMatrix\.id \}/);
+  assert.match(page, /payload: \{ matrix_id: currentMatrix\.id \}/);
+});
+
+test("DOA activation sends the governed signature and proves independent review", async () => {
+  const pageSource = await readFile(
+    new URL("../../apps/shell/app/admin/doa/page.tsx", import.meta.url),
+    "utf8",
+  );
+  const auditSource = await readFile(
+    new URL("./full-intra-live-e2e.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    pageSource,
+    /rpc\("activate_doa_matrix"[\s\S]*?payload: \{ matrix_id: currentMatrix\.id \}/,
+  );
+  assert.match(
+    auditSource,
+    /DOA draft saved for independent review[\s\S]*?status: "draft", active: false/,
+  );
+  assert.match(
+    auditSource,
+    /legalActivateDoaWorkflow[\s\S]*?DOA independently activated by Legal[\s\S]*?status: "active", active: true/,
+  );
 });
 
 test("DOA revision loading follows business order and the schema restores its audit timestamp", async () => {

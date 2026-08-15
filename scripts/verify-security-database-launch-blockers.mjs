@@ -94,6 +94,23 @@ with checks(label, present) as (
       )
     ),
     (
+      'warehouse.inspect_quality exact PO-line delegate',
+      pg_catalog.pg_get_functiondef(
+        'warehouse.inspect_quality(jsonb)'::pg_catalog.regprocedure
+      ) ~ 'private[.]warehouse_inspect_quality_v2[[:space:]]*[(][[:space:]]*payload[[:space:]]*[)]'
+      and pg_catalog.pg_get_functiondef(
+        'warehouse.inspect_quality(jsonb)'::pg_catalog.regprocedure
+      ) !~ 'private[.]warehouse_inspect_quality[[:space:]]*[(][[:space:]]*payload[[:space:]]*[)]'
+    ),
+    (
+      'private.warehouse_inspect_quality_v2 unavailable to authenticated',
+      not pg_catalog.has_function_privilege(
+        'authenticated',
+        'private.warehouse_inspect_quality_v2(jsonb)',
+        'EXECUTE'
+      )
+    ),
+    (
       'core_user_roles_last_admin_guard trigger',
       exists (
         select 1

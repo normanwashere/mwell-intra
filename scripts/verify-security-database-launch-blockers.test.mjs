@@ -11,6 +11,8 @@ const SERVICE_VERIFIER_MIGRATION_SUFFIX =
 const LIVE_CAP_CONVERGENCE_SUFFIX = "_converge_read_rpc_live_capabilities.sql";
 const LAUNCH_READ_CONTRACT_SUFFIX = "_restore_launch_read_contracts.sql";
 const COMMITMENT_BOUNDARY_SUFFIX = "_certify_commitment_readiness_boundary.sql";
+const EXACT_RECEIPT_QUALITY_SUFFIX =
+  "_restore_exact_receipt_quality_boundary.sql";
 const VERIFIER = resolve(
   ROOT,
   "scripts",
@@ -83,6 +85,18 @@ function commitmentBoundaryMigration() {
     files.length,
     1,
     "exactly one commitment-boundary repair is required",
+  );
+  return readFileSync(resolve(MIGRATIONS, files[0]), "utf8");
+}
+
+function exactReceiptQualityMigration() {
+  const files = readdirSync(MIGRATIONS)
+    .filter((name) => name.endsWith(EXACT_RECEIPT_QUALITY_SUFFIX))
+    .sort();
+  assert.equal(
+    files.length,
+    1,
+    "exactly one exact receipt-quality repair is required",
   );
   return readFileSync(resolve(MIGRATIONS, files[0]), "utf8");
 }
@@ -339,6 +353,39 @@ test("authenticated commitment readiness uses live certified capabilities", () =
   assert.match(
     sql,
     /grant execute on function procurement\.commitment_readiness\(jsonb\)[\s\S]*?authenticated/i,
+  );
+});
+
+test("launch verification preserves exact PO-line quality delegation", () => {
+  const sql = exactReceiptQualityMigration();
+  const qualityBoundary = functionBody(sql, "warehouse.inspect_quality");
+  assert.match(qualityBoundary, /core\.has_live_cap\('warehouse', 'inspect_quality'\)/i);
+  assert.match(
+    qualityBoundary,
+    /return private\.warehouse_inspect_quality_v2\(payload\)/i,
+  );
+  assert.doesNotMatch(
+    qualityBoundary,
+    /return private\.warehouse_inspect_quality\(payload\)/i,
+  );
+  const verifier = functionBody(sql, "core.verify_launch_read_contracts");
+  assert.match(verifier, /warehouse\.inspect_quality exact PO-line delegate/i);
+  assert.match(
+    verifier,
+    /private\.warehouse_inspect_quality_v2\(jsonb\) unavailable to authenticated/i,
+  );
+  assert.match(
+    sql,
+    /revoke all on function core\.verify_launch_read_contracts\(\)[\s\S]*?authenticated/i,
+  );
+});
+
+test("runtime critical-object verification checks the exact quality boundary", () => {
+  const source = readFileSync(VERIFIER, "utf8");
+  assert.match(source, /warehouse\.inspect_quality exact PO-line delegate/i);
+  assert.match(
+    source,
+    /private\.warehouse_inspect_quality_v2 unavailable to authenticated/i,
   );
 });
 

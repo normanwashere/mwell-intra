@@ -234,7 +234,7 @@ function DoaWorkspace() {
       return toast.error("Only a current draft can be activated.");
     }
     const { error } = await procurement.rpc("activate_doa_matrix", {
-      payload: { id: currentMatrix.id },
+      payload: { matrix_id: currentMatrix.id },
     });
     if (error) return toast.error(error.message);
     toast.success(`${matrix.department} DOA activated.`);
