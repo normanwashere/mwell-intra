@@ -62,6 +62,7 @@ import {
   type CompleteReKitWorkOrderInput,
   type CloseCustomerReturnCaseInput,
   type CreateLocationInput,
+  type CreateAndSubmitCycleCountInput,
   type CreateProductInput,
   type CreatePurchaseOrderInput,
   type CreateStorageAreaInput,
@@ -513,6 +514,26 @@ export class SupabaseRepository implements WarehouseControlRepository {
       cycle_count_id: input.cycleCountId,
       reason: input.reason,
       evidence_urls: input.evidenceUrls ?? [],
+    });
+    return ((response.requests as Row[] | undefined) ?? []).map((row) =>
+      rowToStockChangeRequest(row),
+    );
+  }
+
+  async createAndSubmitCycleCount(
+    input: CreateAndSubmitCycleCountInput,
+  ): Promise<StockChangeRequest[]> {
+    const response = await this.callRpc("create_and_submit_cycle_count", {
+      idempotency_key: input.idempotencyKey,
+      cycle_count: {
+        id: uid("cc"),
+        location_id: input.locationId,
+        bin_id: input.binId ?? null,
+        category: input.category ?? null,
+        lines: input.lines,
+      },
+      reason: input.reason,
+      evidence_urls: input.evidenceUrls,
     });
     return ((response.requests as Row[] | undefined) ?? []).map((row) =>
       rowToStockChangeRequest(row),

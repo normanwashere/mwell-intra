@@ -572,19 +572,16 @@ export function WarehouseProvider({
       ),
     submitNewCycleCount: (input) =>
       runAuthorizedAction("cycle_count", "other", async () => {
-        const count = await repo.recordCycleCount({
+        await repo.createAndSubmitCycleCount({
+          idempotencyKey: `atomic-count-${crypto.randomUUID()}`,
           locationId: input.locationId,
           binId: input.binId,
           category: input.category,
           lines: input.lines,
           actor,
           requesterId: identityId,
-        });
-        await repo.submitCycleCount({
-          idempotencyKey: `submit-count-${count.id}`,
-          cycleCountId: count.id,
           reason: input.reason,
-          evidenceUrls: input.evidenceUrls,
+          evidenceUrls: input.evidenceUrls ?? [],
         });
       }),
     transfer: (input) =>

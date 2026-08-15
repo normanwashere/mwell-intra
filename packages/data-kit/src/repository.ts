@@ -177,6 +177,12 @@ export interface CycleCountInput {
   requesterId?: string;
 }
 
+export interface CreateAndSubmitCycleCountInput extends CycleCountInput {
+  idempotencyKey: string;
+  reason: string;
+  evidenceUrls: string[];
+}
+
 export interface TransferInput {
   productId: string;
   fromLocationId: string;
@@ -516,6 +522,9 @@ export interface WarehouseControlRepository extends WarehouseRepository {
   updateOperationRoute(
     input: UpdateOperationRouteInput,
   ): Promise<OperationRoute>;
+  createAndSubmitCycleCount(
+    input: CreateAndSubmitCycleCountInput,
+  ): Promise<StockChangeRequest[]>;
   submitCycleCount(input: SubmitCycleCountInput): Promise<StockChangeRequest[]>;
   requestStockChange(
     input: RequestStockChangeInput,

@@ -9,9 +9,12 @@ function commandKey(exceptionId: string, action: string) {
 }
 
 function sourceRoute(exception: WarehouseException) {
-  if (exception.sourceType === 'stock_change_request') return { path: '/approvals', routeId: 'approvals' as const };
-  if (exception.type === 'quality') return { path: '/quality', routeId: 'quality' as const };
-  return { path: '/cycle-counts', routeId: 'cycle-counts' as const };
+  const sourceId = encodeURIComponent(exception.sourceId);
+  if (exception.sourceType === 'stock_change_request') return { path: `/approvals?request=${sourceId}`, routeId: 'approvals' as const };
+  if (exception.sourceType === 'receipt') return { path: `/receiving?receipt=${sourceId}`, routeId: 'receiving' as const };
+  if (exception.sourceType === 'import_job') return { path: `/imports?job=${sourceId}`, routeId: 'imports' as const };
+  if (exception.type === 'quality') return { path: `/quality?inspection=${sourceId}`, routeId: 'quality' as const };
+  return { path: `/cycle-counts?count=${sourceId}`, routeId: 'cycle-counts' as const };
 }
 
 export function ExceptionsPage() {

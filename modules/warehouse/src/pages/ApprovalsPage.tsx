@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import type { StockChangeRequest } from '@intra/data-kit';
 import { useWarehouse } from '@/app/store';
 import { Badge, EmptyState, PageHeader, SegmentedControl } from '@/components/ui';
@@ -24,6 +25,8 @@ export function ApprovalsPage() {
   const [requests, setRequests] = useState<StockChangeRequest[]>([]);
   const [selected, setSelected] = useState<StockChangeRequest | null>(null);
   const [loading, setLoading] = useState(true);
+  const [searchParams] = useSearchParams();
+  const openedSource = useRef<string | null>(null);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -35,6 +38,19 @@ export function ApprovalsPage() {
   }, [loadStockChangeRequests]);
 
   useEffect(() => { void reload(); }, [reload]);
+
+  useEffect(() => {
+    const requestedId = searchParams.get('request');
+    if (!requestedId || loading || openedSource.current === requestedId) return;
+    const requested = requests.find((request) => request.id === requestedId);
+    if (!requested) return;
+    openedSource.current = requestedId;
+    if (['approved', 'rejected'].includes(requested.status)) setTab('decided');
+    else if (requested.canDecide) {
+      setTab('waiting');
+      setSelected(requested);
+    } else setTab('review');
+  }, [loading, requests, searchParams]);
 
   const rows = useMemo(() => {
     if (tab === 'waiting') return requests.filter((request) =>
@@ -81,7 +97,11 @@ export function ApprovalsPage() {
           aria-label={tab === 'waiting' ? 'Waiting on you approvals' : tab === 'review' ? 'In review approvals' : 'Recently decided approvals'}
         >
           {rows.map((request) => (
-            <li key={request.id} className="grid gap-3 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+            <li
+              key={request.id}
+              aria-current={searchParams.get('request') === request.id ? 'true' : undefined}
+              className={`grid gap-3 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center ${searchParams.get('request') === request.id ? 'bg-brand-500/10 ring-1 ring-inset ring-brand-400' : ''}`}
+            >
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="truncate text-sm font-semibold text-ink">{productName(request.productId)}</p>

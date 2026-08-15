@@ -41,6 +41,8 @@ export const RECEIPT_EXCEPTION_CONTRACT_MIGRATION_NAME =
   "20260814083514_add_receipt_exception_contract.sql";
 export const CERTIFICATION_PATHWAY_MIGRATION_NAME =
   "20260814084615_require_published_certification_pathway.sql";
+export const OPERATIONS_LAUNCH_BLOCKER_MIGRATION_NAME =
+  "20260815154910_operations_launch_blocker_slice.sql";
 const PINNED_LEARNING_MIGRATION_SHA256 = Object.freeze({
   [FOUNDATION_MIGRATION_NAME]:
     "b5b954f0fdb9ff52748047ca4a17916896227934ecd43c22951ea4489fc129ad",
@@ -68,6 +70,8 @@ const PINNED_LEARNING_MIGRATION_SHA256 = Object.freeze({
     "9395622c616677faeb09567ecb4f4f92a1ecc7d763d41e2e5f02a8f94a8b680d",
   [CERTIFICATION_PATHWAY_MIGRATION_NAME]:
     "c4a57624d28b9a4a877d7122dd908b8d24bbf6904b84c6303c3c31da35154907",
+  [OPERATIONS_LAUNCH_BLOCKER_MIGRATION_NAME]:
+    "4af6fa3a809fb94df70f61ac05503bd6bce621ba53a40e694556321456f20657",
 });
 export const PRIVATE_ANSWER_KEY_TABLE =
   "private.learning_assessment_answer_keys";
@@ -3967,7 +3971,8 @@ export function verifyLearningSchema(input) {
     // Its exact checksum above keeps this exception fail-closed.
     if (
       migration.name === TASK1_AUTHORITY_REMEDIATION_MIGRATION_NAME ||
-      migration.name === RECEIPT_EXCEPTION_CONTRACT_MIGRATION_NAME
+      migration.name === RECEIPT_EXCEPTION_CONTRACT_MIGRATION_NAME ||
+      migration.name === OPERATIONS_LAUNCH_BLOCKER_MIGRATION_NAME
     ) continue;
     let statements;
     try {

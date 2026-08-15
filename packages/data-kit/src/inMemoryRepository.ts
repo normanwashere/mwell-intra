@@ -37,6 +37,7 @@ import {
   type CompleteReKitWorkOrderInput,
   type CloseCustomerReturnCaseInput,
   type CreateLocationInput,
+  type CreateAndSubmitCycleCountInput,
   type CreateProductInput,
   type CreatePurchaseOrderInput,
   type CreateStorageAreaInput,
@@ -1943,6 +1944,66 @@ export class InMemoryRepository implements WarehouseControlRepository {
         return created;
       },
     );
+  }
+
+  async createAndSubmitCycleCount(
+    input: CreateAndSubmitCycleCountInput,
+  ): Promise<StockChangeRequest[]> {
+    if (input.evidenceUrls.length === 0) {
+      throw new Error("Cycle-count evidence is required.");
+    }
+    if (!/^[A-Za-z0-9_-]{12,128}$/.test(input.idempotencyKey)) {
+      throw new Error("A valid idempotency key is required.");
+    }
+    const cacheKey = `create_and_submit_cycle_count:${input.idempotencyKey}`;
+    const payload = JSON.stringify(input);
+    const existing = this.commandResponses.get(cacheKey);
+    if (existing) {
+      if (existing.payload !== payload) {
+        throw new Error("Idempotency key was reused with a different payload.");
+      }
+      return clone(existing.response as StockChangeRequest[]);
+    }
+
+    const dataBefore = clone(this.data);
+    const stockChangesBefore = clone(this.stockChanges);
+    const exceptionsBefore = clone(this.exceptions);
+    let nestedKey = "";
+    try {
+      const count: CycleCount = {
+        id: this.newId("cc"),
+        locationId: input.locationId,
+        binId: input.binId,
+        category: input.category,
+        lines: clone(input.lines),
+        status: "draft",
+        requestedBy: input.requesterId ?? input.actor,
+        actor: input.actor,
+        createdAt: this.now(),
+      };
+      this.data.cycleCounts.push(count);
+      nestedKey = `atomic-${count.id}`;
+      const response = await this.submitCycleCount({
+        idempotencyKey: nestedKey,
+        cycleCountId: count.id,
+        reason: input.reason,
+        evidenceUrls: input.evidenceUrls,
+      });
+      this.commandResponses.set(cacheKey, {
+        payload,
+        response: clone(response),
+      });
+      return clone(response);
+    } catch (error) {
+      this.data = dataBefore;
+      this.stockChanges = stockChangesBefore;
+      this.exceptions = exceptionsBefore;
+      if (nestedKey) {
+        this.commandResponses.delete(`submit_cycle_count:${nestedKey}`);
+      }
+      this.persist();
+      throw error;
+    }
   }
 
   async requestStockChange(

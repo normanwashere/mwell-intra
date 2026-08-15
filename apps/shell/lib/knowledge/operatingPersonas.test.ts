@@ -133,6 +133,29 @@ describe("operating persona guide contracts", () => {
     ).toMatch(/Approve or reject launch/i);
   });
 
+  it("documents the Operations Lead Procurement and Product handoffs", () => {
+    const tasks = OPERATING_PERSONA_GUIDES.operations_lead!.tasks;
+
+    expect(tasks.map((task) => task.id)).toEqual([
+      "review-quality",
+      "review-adjustment",
+      "resolve-exception",
+      "maintain-location",
+      "review-procurement-handoff",
+      "acknowledge-product-handoff",
+    ]);
+    expect(tasks.find((task) => task.id === "review-procurement-handoff"))
+      .toMatchObject({
+        workspaceHref: "/procurement/approvals",
+        featureId: "procurement-approvals",
+      });
+    expect(tasks.find((task) => task.id === "acknowledge-product-handoff"))
+      .toMatchObject({
+        workspaceHref: "/product",
+        featureId: "product-governance",
+      });
+  });
+
   it("teaches the released custody, correction, and source-routing boundaries", () => {
     const taskSummary = (personaId: string, taskId: string) =>
       OPERATING_PERSONA_GUIDES[personaId]?.tasks.find(

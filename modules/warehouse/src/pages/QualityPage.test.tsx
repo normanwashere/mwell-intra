@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QualityPage } from "./QualityPage";
@@ -102,6 +102,49 @@ describe("QualityPage", () => {
     expect(
       await screen.findByText(/controlled exception disposition/i),
     ).toBeInTheDocument();
+  });
+
+  it("keeps a provisional receipt inspection in the queue and out of hold decisions", async () => {
+    const { repo, receipt } = await repositoryWithPendingReceipt();
+    const locationId = (await repo.getData()).locations.find(
+      (location) => location.type === "warehouse",
+    )!.id;
+    vi.spyOn(repo, "listQualityInspections").mockResolvedValue({
+      rows: [{
+        id: "pending-receipt-inspection",
+        sourceType: "receipt",
+        sourceId: receipt.id,
+        productId: "shirt-l",
+        quantity: 2,
+        disposition: "pending",
+        reason: "Awaiting independent quality inspection",
+        evidenceUrls: [],
+        inspectedBy: "receiver@mwell.com.ph",
+        inspectedAt: "2026-08-15T00:00:00Z",
+      }],
+      total: 1,
+    });
+    vi.spyOn(repo, "listHolds").mockResolvedValue({
+      rows: [{
+        id: "pending-receipt-hold",
+        inspectionId: "pending-receipt-inspection",
+        productId: "shirt-l",
+        locationId,
+        quantity: 2,
+        status: "active",
+        reason: "Awaiting independent quality inspection",
+        createdBy: "receiver@mwell.com.ph",
+        createdAt: "2026-08-15T00:00:00Z",
+      }],
+      total: 1,
+    });
+
+    renderWithProviders(<QualityPage />, { repo, role: "warehouse_operator" });
+    const queue = await screen.findByLabelText("Pending inspections");
+    expect(within(queue).getByText((content) => content.includes(receipt.id)))
+      .toBeInTheDocument();
+    await userEvent.click(screen.getByRole("tab", { name: "Holds" }));
+    expect(await screen.findByText("No active holds")).toBeInTheDocument();
   });
 
   it("holds a pending receipt only after reason and evidence are supplied", async () => {

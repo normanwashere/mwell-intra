@@ -406,6 +406,64 @@ const ROLE_PRACTICE_CONTENT = {
           ],
         ),
       ],
+      [
+        "review-procurement-handoff",
+        "Review the Procurement handoff",
+        "Verify the approved budget, DOA route, sourcing evidence, and vendor accreditation before Operations accepts custody.",
+        decision(
+          "A delivery is due today, but the handoff has no approved budget, DOA decision, sourcing evidence, or current vendor accreditation.",
+          "What should the Operations Lead do?",
+          [
+            choice(
+              "return-incomplete-handoff",
+              "Return the handoff to Procurement and keep the delivery outside accepted stock custody",
+              true,
+              "Correct. Procurement must complete the budget, DOA, sourcing, and vendor-accreditation controls before Operations accepts custody.",
+            ),
+            choice(
+              "receive-then-fix",
+              "Receive the stock now and ask Procurement to complete the documents later",
+              false,
+              "Receiving first bypasses the governed Procurement-to-Operations handoff.",
+            ),
+            choice(
+              "approve-procurement",
+              "Approve the missing Procurement controls as Operations Lead",
+              false,
+              "Operations cannot replace Procurement, Finance, Legal, or DOA authority.",
+            ),
+          ],
+        ),
+      ],
+      [
+        "acknowledge-product-handoff",
+        "Acknowledge the Product handoff",
+        "Confirm Product's go-live decision while Operations records execution readiness and blockers.",
+        decision(
+          "Product has approved go-live with current evidence, but Operations finds that the fulfillment route is not ready.",
+          "What is the correct handoff response?",
+          [
+            choice(
+              "acknowledge-with-blocker",
+              "Acknowledge Product's decision and record the operational blocker for resolution before execution",
+              true,
+              "Correct. Product owns go-live; Operations owns readiness and must make its blocker visible without silently overriding Product.",
+            ),
+            choice(
+              "override-product",
+              "Cancel Product's go-live decision",
+              false,
+              "Operations does not own Product's go-live authority.",
+            ),
+            choice(
+              "ignore-route-risk",
+              "Proceed because Product already approved go-live",
+              false,
+              "A go-live decision does not remove Operations' duty to report and resolve execution risk.",
+            ),
+          ],
+        ),
+      ],
     ],
   },
   procurement_lead: {

@@ -72,6 +72,15 @@ describe('ExceptionsPage', () => {
     expect(await screen.findByText(/no open warehouse exceptions/i)).toBeInTheDocument();
   });
 
+  it('deep-links a variance exception to its exact stock-change request', async () => {
+    const repo = await repositoryWithException(100);
+    const exception = (await repo.listExceptions({ limit: 10 })).rows[0]!;
+    renderWithProviders(<ExceptionsPage />, { repo, role: 'logistics_supervisor' });
+
+    const source = await screen.findByRole('link', { name: 'View source' });
+    expect(source).toHaveAttribute('href', `/approvals?request=${exception.sourceId}`);
+  });
+
   it('keeps exception controls read-only for operations users', async () => {
     const repo = await repositoryWithException(100);
     renderWithProviders(<ExceptionsPage />, { repo, role: 'operations' });

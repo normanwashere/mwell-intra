@@ -4,6 +4,14 @@ import userEvent from "@testing-library/user-event";
 import { CycleCountsPage } from "./CycleCountsPage";
 import { renderWithProviders } from "@/test/renderWithProviders";
 
+async function attachCountEvidence(user: ReturnType<typeof userEvent.setup>) {
+  await user.upload(
+    screen.getByLabelText(/attach cycle-count evidence/i),
+    new File(["count evidence"], "count.jpg", { type: "image/jpeg" }),
+  );
+  await screen.findByRole("list", { name: /captured evidence/i });
+}
+
 describe("CycleCountsPage", () => {
   it.each(["warehouse_operator", "warehouse_supervisor"] as const)(
     "renders governed cycle counts for canonical %s",
@@ -28,6 +36,17 @@ describe("CycleCountsPage", () => {
         /material variance requires a different Warehouse Supervisor/i,
       ),
     ).toBeInTheDocument();
+  });
+
+  it("requires evidence before atomically creating and submitting a count", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<CycleCountsPage />, { role: "warehouse_operator" });
+    await screen.findByText(/count sheet/i);
+
+    await user.type(screen.getByLabelText(/Counted Event Shirt \(L\)/i), "120");
+    expect(screen.getByRole("button", { name: /submit count/i })).toBeDisabled();
+    expect(screen.getByText(/evidence is required/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/attach cycle-count evidence/i)).toBeInTheDocument();
   });
 
   it("never prefills counted quantities with the expected number (WH-18)", async () => {
@@ -87,6 +106,7 @@ describe("CycleCountsPage", () => {
     ).toBeDisabled();
 
     await user.type(shirt, "100");
+    await attachCountEvidence(user);
     expect(screen.getByText(/1\/\d+ counted/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /submit count/i })).toBeEnabled();
   });
@@ -97,6 +117,7 @@ describe("CycleCountsPage", () => {
     await screen.findByText(/count sheet/i);
 
     await user.type(screen.getByLabelText(/Counted Event Shirt \(L\)/i), "100");
+    await attachCountEvidence(user);
     await user.click(screen.getByRole("button", { name: /submit count/i }));
 
     // 8 of 9 rows untouched → explicit confirmation before recording.
@@ -120,6 +141,7 @@ describe("CycleCountsPage", () => {
 
     await user.click(screen.getByRole("button", { name: /blind count/i }));
     await user.type(screen.getByLabelText(/Counted Event Shirt \(L\)/i), "100");
+    await attachCountEvidence(user);
     await user.click(screen.getByRole("button", { name: /submit count/i }));
     await waitFor(() =>
       expect(
@@ -145,6 +167,7 @@ describe("CycleCountsPage", () => {
 
     await user.clear(serials);
     await user.type(serials, "ECG-RING-6-SN0003");
+    await attachCountEvidence(user);
     expect(await screen.findByText(/1 missing/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /submit count/i })).toBeEnabled();
   }, 10_000);

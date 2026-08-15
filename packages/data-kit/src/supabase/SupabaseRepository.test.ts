@@ -560,7 +560,7 @@ function makeMockClient(
             ? hold
             : fn === "update_operation_route"
               ? route
-              : fn === "submit_cycle_count"
+              : fn === "submit_cycle_count" || fn === "create_and_submit_cycle_count"
                 ? { cycle_count: row, requests: [request] }
                 : fn === "list_stock_change_requests"
                   ? { rows: [request], next_cursor: null, total: 1 }
@@ -1231,6 +1231,37 @@ describe("SupabaseRepository concurrency-safe payloads (warehouse.* v8 RPCs)", (
     });
     expect(call.payload.cycle_count).not.toHaveProperty("requested_by");
     expect(call.payload.cycle_count).not.toHaveProperty("actor");
+  });
+
+  it("creates and submits an evidenced cycle count through one atomic RPC", async () => {
+    const { client, calls } = makeMockClient(seed);
+    const repo = new SupabaseRepository(client);
+
+    await repo.createAndSubmitCycleCount({
+      idempotencyKey: "atomic-count-001",
+      locationId: "loc-wh",
+      category: "merchandise",
+      lines: [{ productId: token.id, expected: 80, counted: 75 }],
+      reason: "Scheduled control count",
+      evidenceUrls: ["evidence/cycle-counts/atomic-count-001.jpg"],
+      actor: "counter@mwell.com.ph",
+      requesterId: "counter-profile-id",
+    });
+
+    expect(calls.filter((call) => call.fn.includes("cycle_count"))).toHaveLength(1);
+    const call = calls.find((entry) => entry.fn === "create_and_submit_cycle_count")!;
+    expect(call.payload).toMatchObject({
+      idempotency_key: "atomic-count-001",
+      reason: "Scheduled control count",
+      evidence_urls: ["evidence/cycle-counts/atomic-count-001.jpg"],
+      cycle_count: {
+        location_id: "loc-wh",
+        category: "merchandise",
+        lines: [{ productId: token.id, expected: 80, counted: 75 }],
+      },
+    });
+    expect(call.payload.cycle_count).not.toHaveProperty("actor");
+    expect(call.payload.cycle_count).not.toHaveProperty("requested_by");
   });
 
   it("recordReturn registers quarantine custody and its additive physical delta", async () => {

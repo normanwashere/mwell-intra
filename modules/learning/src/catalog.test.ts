@@ -121,6 +121,29 @@ describe("learning catalog", () => {
     }
   });
 
+  it("covers Operations Lead Warehouse decisions and cross-department handoffs", () => {
+    const practice = LEARNING_CATALOG.rolePractices.find(
+      (item) => item.personaId === "operations_lead",
+    );
+
+    expect(practice?.simulation.checkpointIds).toEqual([
+      "review-custody-evidence",
+      "record-independent-disposition",
+      "review-procurement-handoff",
+      "acknowledge-product-handoff",
+    ]);
+    expect(
+      practice?.simulation.embeddedSteps?.find(
+        (step) => step.checkpointId === "review-procurement-handoff",
+      )?.context,
+    ).toMatch(/budget.*DOA.*accreditation/i);
+    expect(
+      practice?.simulation.embeddedSteps?.find(
+        (step) => step.checkpointId === "acknowledge-product-handoff",
+      )?.context,
+    ).toMatch(/Product.*go-live.*Operations/i);
+  });
+
   it("maps mutation-bearing role requirements only to supported persona practices", () => {
     const supportedSimulationIds = new Set(
       LEARNING_CATALOG.rolePractices.map((practice) => practice.simulation.id),

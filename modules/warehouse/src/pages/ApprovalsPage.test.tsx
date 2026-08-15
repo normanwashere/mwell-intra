@@ -86,6 +86,18 @@ describe('ApprovalsPage', () => {
     expect(await screen.findByText('Approved')).toBeInTheDocument();
   });
 
+  it('opens the exact approval referenced by an exception deep link', async () => {
+    const { repo, request } = await createVarianceRequest();
+    renderWithProviders(<ApprovalsPage />, {
+      repo,
+      role: 'logistics_supervisor',
+      route: `/approvals?request=${request.id}`,
+    });
+
+    expect(await screen.findByRole('dialog', { name: 'Review stock change' }))
+      .toBeInTheDocument();
+  });
+
   it('requires Finance after the supervisor approves an impact above PHP 10,000', async () => {
     const { repo, request } = await createVarianceRequest({ unitCost: 600 });
     await repo.decideStockChange({

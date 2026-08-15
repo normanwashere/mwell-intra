@@ -9,6 +9,7 @@ import type { ItemCategory } from '@/domain/types';
 import { Badge, Card, Field, PageHeader, SectionTitle, useToast } from '@/components/ui';
 import { Icon } from '@/components/Icon';
 import { WarehouseScanFlow } from '@/components/camera/WarehouseScanFlow';
+import { EvidenceCapture } from '@/components/camera/EvidenceCapture';
 
 export function CycleCountsPage() {
   const { data, submitNewCycleCount } = useWarehouse();
@@ -24,6 +25,8 @@ export function CycleCountsPage() {
   const [serialInputs, setSerialInputs] = useState<Record<string, string>>({});
   const [blind, setBlind] = useState(false);
   const [confirmUncounted, setConfirmUncounted] = useState(false);
+  const [evidenceUrls, setEvidenceUrls] = useState<string[]>([]);
+  const [evidenceVersion, setEvidenceVersion] = useState(0);
   const [search, setSearch] = useState('');
   const [searchParams] = useSearchParams();
   const [variancesOnly, setVariancesOnly] = useState(
@@ -142,6 +145,7 @@ export function CycleCountsPage() {
       category,
       lines,
       reason: blind ? 'Blind cycle count' : 'Scheduled cycle count',
+      evidenceUrls,
     });
     if (!ok) return;
     toast.success(
@@ -151,6 +155,8 @@ export function CycleCountsPage() {
     );
     setCounts({});
     setSerialInputs({});
+    setEvidenceUrls([]);
+    setEvidenceVersion((version) => version + 1);
     setConfirmUncounted(false);
   };
 
@@ -530,6 +536,27 @@ export function CycleCountsPage() {
         </ul>
       </Card>
 
+      <Card className="space-y-2">
+        <SectionTitle title="Count evidence" />
+        <p className="text-sm text-muted">
+          Attach a clear photo of the count sheet, rack, or bin before submitting.
+        </p>
+        <EvidenceCapture
+          key={evidenceVersion}
+          label="Attach cycle-count evidence"
+          reference={`cycle-count-${activeLocation}-${scope ?? 'general'}`}
+          onChange={(urls) => {
+            setEvidenceUrls(urls);
+            if (urls.length === 0) setConfirmUncounted(false);
+          }}
+        />
+        {evidenceUrls.length === 0 && (
+          <p className="text-xs font-medium text-amber-700 dark:text-amber-300">
+            Evidence is required to create and submit this count atomically.
+          </p>
+        )}
+      </Card>
+
       <div className="space-y-2">
         {confirmUncounted && (
           <div
@@ -552,6 +579,7 @@ export function CycleCountsPage() {
               <button
                 type="button"
                 className="btn-primary btn-sm flex-1 justify-center"
+                disabled={evidenceUrls.length === 0}
                 onClick={() => void submit()}
               >
                 Submit anyway
@@ -564,7 +592,7 @@ export function CycleCountsPage() {
           className="btn-primary w-full shadow-pop"
           // An explicit entry is always required — no more one-tap "perfect
           // count" (WH-18).
-          disabled={enteredCount === 0 || serialIssues.length > 0}
+          disabled={enteredCount === 0 || serialIssues.length > 0 || evidenceUrls.length === 0}
           onClick={onSubmitClick}
         >
           Submit count ({enteredCount}/{items.length})

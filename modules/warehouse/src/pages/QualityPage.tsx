@@ -66,6 +66,7 @@ export function QualityPage() {
     const inspectedQuantity = (sourceType: PendingInspection['sourceType'], sourceId: string, productId: string) => inspections
       .filter((inspection) => inspection.sourceType === sourceType
         && inspection.sourceId === sourceId
+        && inspection.disposition !== 'pending'
         && inspection.productId === productId)
       .reduce((sum, inspection) => sum + inspection.quantity, 0);
     const receipts = data.receipts.flatMap((receipt) => receipt.lines.flatMap((line, lineIndex) => {
@@ -73,6 +74,7 @@ export function QualityPage() {
       const inspected = inspections
         .filter((inspection) => inspection.sourceType === 'receipt'
           && inspection.sourceId === receipt.id
+          && inspection.disposition !== 'pending'
           && inspection.productId === line.productId)
         .reduce((sum, inspection) => sum + inspection.quantity, 0);
       const quantity = Math.max(0, line.quantity - inspected);
@@ -104,7 +106,8 @@ export function QualityPage() {
 
   if (!data) return null;
   const productName = (productId: string) => data.products.find((product) => product.id === productId)?.name ?? productId;
-  const activeHolds = holds.filter((hold) => hold.status === 'active');
+  const activeHolds = holds.filter((hold) =>
+    hold.status === 'active' && hold.reason !== 'Awaiting independent quality inspection');
   const completed = inspections.filter((inspection) => inspection.disposition !== 'pending');
   const receiptRoute = data.operationRoutes?.find((route) => route.active && route.operationTypeId.includes('receipt'));
   const requiresEvidence = receiptRoute?.requiresEvidence ?? true;

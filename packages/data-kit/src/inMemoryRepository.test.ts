@@ -1599,6 +1599,40 @@ describe("persistence", () => {
 });
 
 describe("W1 control parity", () => {
+  it("creates and submits an evidenced cycle count atomically", async () => {
+    const controlled = new InMemoryRepository(miniData(), {
+      now: () => "2026-07-10T01:00:00Z",
+      id: (prefix) => `${prefix}-atomic`,
+    });
+
+    await expect(
+      controlled.createAndSubmitCycleCount({
+        idempotencyKey: "atomic-count-no-evidence",
+        locationId: "loc-wh",
+        category: "merchandise",
+        actor: "counter@mwell",
+        lines: [{ productId: "shirt", expected: 20, counted: 18 }],
+        reason: "Scheduled count",
+        evidenceUrls: [],
+      }),
+    ).rejects.toThrow(/evidence is required/i);
+    expect((await controlled.getData()).cycleCounts).toHaveLength(0);
+
+    const requests = await controlled.createAndSubmitCycleCount({
+      idempotencyKey: "atomic-count-with-evidence",
+      locationId: "loc-wh",
+      category: "merchandise",
+      actor: "counter@mwell",
+      lines: [{ productId: "shirt", expected: 20, counted: 18 }],
+      reason: "Scheduled count",
+      evidenceUrls: ["evidence/count.jpg"],
+    });
+    expect(requests).toHaveLength(1);
+    expect((await controlled.getData()).cycleCounts).toEqual([
+      expect.objectContaining({ status: "pending_approval" }),
+    ]);
+  });
+
   it("keeps held stock on hand but removes it from available inventory", async () => {
     const controlled = new InMemoryRepository(
       {

@@ -198,6 +198,20 @@ export const OPERATING_PERSONA_GUIDES: Record<string, OperatingPersonaGuide> = {
         "/warehouse/locations",
         "warehouse-locations",
       ),
+      task(
+        "review-procurement-handoff",
+        "Review the Procurement handoff",
+        "Confirm the approved request, budget and DOA route, sourcing evidence, accredited vendor, and PO before Operations accepts inbound custody.",
+        "/procurement/approvals",
+        "procurement-approvals",
+      ),
+      task(
+        "acknowledge-product-handoff",
+        "Acknowledge the Product handoff",
+        "Verify Product's go-live decision and current release evidence, then record Operations readiness or an operational blocker.",
+        "/product",
+        "product-governance",
+      ),
     ],
   },
   procurement_lead: {
