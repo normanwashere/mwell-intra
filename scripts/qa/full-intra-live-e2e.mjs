@@ -2462,11 +2462,26 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
       status: "approved",
       requester_id: requesterProfiles[0].id,
       department: `${marker} Receipt Department`,
+      cost_center: "CC-1100",
+      needed_by: "2027-08-15",
+      budget_code: `${marker}-RECEIPT-BUDGET`,
       category: "goods",
       sourcing_method: "rfq",
       core_vendor_id: ids.vendor,
       vendor_name: `${marker} Receipt Vendor`,
       estimated_amount: 500,
+      justification: { need: `${marker} receipt authority certification` },
+      attachments: [
+        { kind: "spec", filename: `${marker}-receipt-spec.pdf` },
+        { kind: "budget", filename: `${marker}-receipt-budget.pdf` },
+      ],
+      lines: [
+        {
+          description: `${marker} receipt authority line`,
+          quantity: 5,
+          unitPrice: 100,
+        },
+      ],
     },
     ...[
       [ids.policyRfq, "rfq", {}],

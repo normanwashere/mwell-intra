@@ -1589,6 +1589,8 @@ test("live journeys enforce evidence, independent QC, current labels, and correc
   );
   assert.match(source, /Document type for \$\{marker\}-spec\.pdf/);
   assert.match(source, /Document type for \$\{marker\}-budget\.pdf/);
+  assert.match(source, /filename: `\$\{marker\}-receipt-spec\.pdf`/);
+  assert.match(source, /filename: `\$\{marker\}-receipt-budget\.pdf`/);
   assert.match(source, /quality_status: "pending"/);
   assert.match(source, /disposition: "pending"/);
   assert.match(source, /Independent QC receipt status was not preserved/);
