@@ -1,24 +1,27 @@
 "use client";
 
-import { useMemo, type RefObject } from "react";
+import { useEffect, useMemo, useState, type RefObject } from "react";
 import { CoachOverlay } from "./CoachOverlay";
 import { TrainingBanner } from "./TrainingBanner";
-import {
-  TrainingModeProvider,
-  useTraining,
-} from "./TrainingModeProvider";
-import type {
-  TrainingAdapter,
-  TrainingScenario,
-} from "./training/types";
+import { TrainingModeProvider, useTraining } from "./TrainingModeProvider";
+import type { TrainingAdapter, TrainingScenario } from "./training/types";
 import { LEARNING_CATALOG } from "./catalog";
 import "./training.css";
 
-interface PreparationState { stepIndex: number }
+interface PreparationState {
+  stepIndex: number;
+}
 
 function Runtime({ onClose }: { onClose(): void }) {
   const training = useTraining<PreparationState>();
   const command = training.currentStep.allowedCommands[0] ?? null;
+  const [choiceFeedback, setChoiceFeedback] = useState<string | null>(null);
+  const [selectedChoiceId, setSelectedChoiceId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setChoiceFeedback(null);
+    setSelectedChoiceId(null);
+  }, [training.currentStep.id]);
 
   return (
     <>
@@ -45,12 +48,29 @@ function Runtime({ onClose }: { onClose(): void }) {
                   onClose();
                 }
               : command
-              ? () => {
-                  void training.dispatch({ type: command }).catch(() => undefined);
-                }
-              : undefined
+                ? () => {
+                    void training
+                      .dispatch({ type: command })
+                      .catch(() => undefined);
+                  }
+                : undefined
           }
-          continueLabel={training.currentStep.terminal ? "Finish review" : "Continue"}
+          onChoose={(choice) => {
+            setSelectedChoiceId(choice.id);
+            if (!choice.correct) {
+              setChoiceFeedback(choice.feedback);
+              return;
+            }
+            setChoiceFeedback(null);
+            if (command) {
+              void training.dispatch({ type: command }).catch(() => undefined);
+            }
+          }}
+          selectedChoiceId={selectedChoiceId}
+          choiceFeedback={choiceFeedback}
+          continueLabel={
+            training.currentStep.terminal ? "Finish review" : "Continue"
+          }
           continueDisabled={training.busy}
           error={training.checkpointError}
         />
@@ -79,39 +99,41 @@ export function OnboardingTrainingSession({
   const publishedSimulation = LEARNING_CATALOG.simulations.find(
     (simulation) => simulation.id === scenarioId,
   );
-  const scenario = useMemo<TrainingScenario>(
-    () => {
-      const embeddedSteps = publishedSimulation?.embeddedSteps;
-      if (embeddedSteps?.length) {
-        return {
-          id: scenarioId,
-          title: requirementTitle,
-          initialStepId: embeddedSteps[0]!.checkpointId,
-          steps: [
-            ...embeddedSteps.map((step) => ({
-              id: step.checkpointId,
-              title: step.title,
-              instruction: step.instruction,
-              anchor: "[data-onboarding-anchor='onboarding-required-steps']",
-              allowedCommands: [`confirm:${step.checkpointId}`],
-            })),
-            {
-              id: "reviewed",
-              title: "Guided practice complete",
-              instruction:
-                "The practice checkpoints are recorded. Live work remains subject to current authority and source-record controls.",
-              anchor: "[data-onboarding-anchor='onboarding-required-steps']",
-              allowedCommands: [],
-              terminal: true,
-            },
-          ],
-        };
-      }
+  const scenario = useMemo<TrainingScenario>(() => {
+    const embeddedSteps = publishedSimulation?.embeddedSteps;
+    if (embeddedSteps?.length) {
       return {
         id: scenarioId,
         title: requirementTitle,
-        initialStepId: "role-context",
+        initialStepId: embeddedSteps[0]!.checkpointId,
         steps: [
+          ...embeddedSteps.map((step) => ({
+            id: step.checkpointId,
+            title: step.title,
+            instruction: step.instruction,
+            context: step.context,
+            question: step.question,
+            choices: step.choices,
+            anchor: "[data-onboarding-anchor='onboarding-required-steps']",
+            allowedCommands: [`confirm:${step.checkpointId}`],
+          })),
+          {
+            id: "reviewed",
+            title: "Guided practice complete",
+            instruction:
+              "The practice checkpoints are recorded. Live work remains subject to current authority and source-record controls.",
+            anchor: "[data-onboarding-anchor='onboarding-required-steps']",
+            allowedCommands: [],
+            terminal: true,
+          },
+        ],
+      };
+    }
+    return {
+      id: scenarioId,
+      title: requirementTitle,
+      initialStepId: "role-context",
+      steps: [
         {
           id: "role-context",
           title: "Confirm why this step is assigned",
@@ -137,11 +159,9 @@ export function OnboardingTrainingSession({
           allowedCommands: [],
           terminal: true,
         },
-        ],
-      };
-    },
-    [publishedSimulation, requirementTitle, scenarioId],
-  );
+      ],
+    };
+  }, [publishedSimulation, requirementTitle, scenarioId]);
   const adapter = useMemo<TrainingAdapter<PreparationState>>(
     () => ({
       id: `preparation:${scenarioId}`,
@@ -153,7 +173,9 @@ export function OnboardingTrainingSession({
         if (embeddedSteps?.length) {
           const step = embeddedSteps[state.stepIndex];
           if (!step || command.type !== `confirm:${step.checkpointId}`) {
-            throw new Error(`Unknown governed practice command ${command.type}.`);
+            throw new Error(
+              `Unknown governed practice command ${command.type}.`,
+            );
           }
           const nextIndex = state.stepIndex + 1;
           return {
@@ -179,7 +201,9 @@ export function OnboardingTrainingSession({
             completed: true,
           };
         }
-        throw new Error(`Unknown onboarding preparation command ${command.type}.`);
+        throw new Error(
+          `Unknown onboarding preparation command ${command.type}.`,
+        );
       },
     }),
     [publishedSimulation, scenario.id, scenarioId],

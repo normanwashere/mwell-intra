@@ -20,7 +20,9 @@ async function installWarehouseOperator(page: Page) {
 }
 
 async function minimizeMobileCoach(page: Page) {
-  const minimize = page.getByRole("button", { name: "Minimize training coach" });
+  const minimize = page.getByRole("button", {
+    name: "Minimize training coach",
+  });
   if (await minimize.isVisible().catch(() => false)) await minimize.click();
 }
 
@@ -45,11 +47,8 @@ async function completeOrientationPrerequisites(page: Page) {
       .click();
     const dialog = page.getByRole("dialog");
     await dialog.getByRole("button", { name: "Continue" }).click();
+    await dialog.getByRole("button", { name: "Continue" }).click();
     await dialog.getByRole("button", { name: "Finish review" }).click();
-    await page
-      .getByRole("region", { name: "Training mode" })
-      .getByRole("button", { name: "Exit training" })
-      .click();
   }
   const policy = page.getByRole("button", {
     name: "Start Warehouse receiving and custody policy",
@@ -69,7 +68,9 @@ async function completeOrientationPrerequisites(page: Page) {
     })
     .click();
   dialog = page.getByRole("dialog");
-  await dialog.getByLabel("Delivery date, batch, and every unit serial").check();
+  await dialog
+    .getByLabel("Delivery date, batch, and every unit serial")
+    .check();
   await dialog.getByRole("button", { name: "Next question" }).click();
   await dialog.getByLabel("Keep it in controlled quality custody").check();
   await dialog.getByRole("button", { name: "Submit answers" }).click();
@@ -103,14 +104,20 @@ test.describe("Warehouse receiving onboarding pilot", () => {
     ).toBeVisible();
     await completeOrientationPrerequisites(page);
     await page
-      .getByRole("button", { name: "Start Receive and inspect controlled stock" })
+      .getByRole("button", {
+        name: "Start Receive and inspect controlled stock",
+      })
       .first()
       .click();
 
-    await expect(page).toHaveURL(/\/warehouse\/receiving\?training=warehouse-receiving-v1/);
+    await expect(page).toHaveURL(
+      /\/warehouse\/receiving\?training=warehouse-receiving-v1/,
+    );
     await page.waitForTimeout(250);
     expect(pageErrors).toEqual([]);
-    await expect(page.getByRole("region", { name: "Training mode" })).toBeVisible();
+    await expect(
+      page.getByRole("region", { name: "Training mode" }),
+    ).toBeVisible();
     const receiptHistoryBefore = await page
       .getByRole("list", { name: "Receipts" })
       .getByRole("listitem")
@@ -144,7 +151,9 @@ test.describe("Warehouse receiving onboarding pilot", () => {
     await minimizeMobileCoach(page);
     const batch = page.getByLabel("Batch number");
     await page.getByRole("button", { name: "Confirm batch number" }).click();
-    await expect(page.getByRole("alert").filter({ hasText: "Batch number is required" })).toBeVisible();
+    await expect(
+      page.getByRole("alert").filter({ hasText: "Batch number is required" }),
+    ).toBeVisible();
     await minimizeMobileCoach(page);
     await batch.fill("TRAIN-BATCH-A");
     await page.getByRole("button", { name: "Confirm batch number" }).click();
@@ -170,11 +179,16 @@ test.describe("Warehouse receiving onboarding pilot", () => {
     await serial.fill("TRAIN-SERIAL-0003");
     await record.click();
     await expect(
-      page.getByRole("alert").filter({ hasText: "Quantity exceeds the purchase order" }),
+      page
+        .getByRole("alert")
+        .filter({ hasText: "Quantity exceeds the purchase order" }),
     ).toBeVisible();
 
     await expandMobileCoach(page);
-    await page.getByRole("dialog").getByRole("button", { name: "Confirm traceability" }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Confirm traceability" })
+      .click();
     await expect(
       page.getByRole("dialog").getByRole("heading", {
         name: "Choose controlled custody",
@@ -188,7 +202,9 @@ test.describe("Warehouse receiving onboarding pilot", () => {
       }),
     ).toBeVisible();
     await minimizeMobileCoach(page);
-    await page.getByRole("button", { name: "Attach practice delivery photo" }).click();
+    await page
+      .getByRole("button", { name: "Attach practice delivery photo" })
+      .click();
     await page.getByRole("button", { name: "Damaged" }).click();
     await expect(
       page.getByRole("dialog").getByRole("heading", {
@@ -197,13 +213,19 @@ test.describe("Warehouse receiving onboarding pilot", () => {
     ).toBeVisible();
 
     await expandMobileCoach(page);
-    await page.getByRole("dialog").getByRole("button", { name: "Resume later" }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Resume later" })
+      .click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await page
       .getByRole("region", { name: "Training mode" })
       .getByRole("button", { name: "Resume", exact: true })
       .click();
-    await page.getByRole("dialog").getByRole("button", { name: "Resume receipt" }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Resume receipt" })
+      .click();
     await minimizeMobileCoach(page);
     await page.getByRole("button", { name: "Receive 2 item(s)" }).click();
 

@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { Button, Icon } from "@intra/ui";
 import type { TrainingPlacement, TrainingStep } from "./training/types";
 
@@ -11,8 +17,8 @@ interface AnchorLayout {
   valid: boolean;
 }
 
-const COACH_WIDTH = 320;
-const COACH_HEIGHT = 260;
+const COACH_WIDTH = 400;
+const COACH_HEIGHT = 500;
 const GAP = 16;
 
 const visible = (element: Element): element is HTMLElement => {
@@ -51,13 +57,19 @@ function locate(anchor: string): AnchorLayout {
         : bottomSpace >= COACH_HEIGHT
           ? "bottom"
           : "top";
-  const top = Math.max(GAP, Math.min(rect.top, window.innerHeight - COACH_HEIGHT - GAP));
+  const top = Math.max(
+    GAP,
+    Math.min(rect.top, window.innerHeight - COACH_HEIGHT - GAP),
+  );
   const left =
     placement === "right"
       ? rect.right + GAP
       : placement === "left"
         ? rect.left - COACH_WIDTH - GAP
-        : Math.max(GAP, Math.min(rect.left, window.innerWidth - COACH_WIDTH - GAP));
+        : Math.max(
+            GAP,
+            Math.min(rect.left, window.innerWidth - COACH_WIDTH - GAP),
+          );
   const verticalTop =
     placement === "bottom"
       ? rect.bottom + GAP
@@ -79,6 +91,9 @@ export function CoachOverlay({
   onExit,
   onResumeLater,
   onContinue,
+  onChoose,
+  selectedChoiceId,
+  choiceFeedback,
   continueLabel = "Continue",
   continueDisabled = false,
   error,
@@ -89,6 +104,9 @@ export function CoachOverlay({
   onExit(): void;
   onResumeLater(): void;
   onContinue?(): void;
+  onChoose?(choice: NonNullable<TrainingStep["choices"]>[number]): void;
+  selectedChoiceId?: string | null;
+  choiceFeedback?: string | null;
   continueLabel?: string;
   continueDisabled?: boolean;
   error?: string | null;
@@ -193,14 +211,20 @@ export function CoachOverlay({
     >
       <div className="flex items-start gap-3">
         <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand-500/10 text-brand-700 dark:text-brand-300">
-          <Icon name={layout.valid ? "clipboard" : "alert"} className="h-5 w-5" />
+          <Icon
+            name={layout.valid ? "clipboard" : "alert"}
+            className="h-5 w-5"
+          />
         </span>
         <div className="min-w-0 flex-1">
           <p className="text-xs font-semibold uppercase text-brand-700 dark:text-brand-300">
             Guided practice
           </p>
           {error && (
-            <p role="alert" className="mt-3 border-l-2 border-rose-500 pl-3 text-sm font-semibold text-rose-800 dark:text-rose-200">
+            <p
+              role="alert"
+              className="mt-3 border-l-2 border-rose-500 pl-3 text-sm font-semibold text-rose-800 dark:text-rose-200"
+            >
               {error}
             </p>
           )}
@@ -212,11 +236,53 @@ export function CoachOverlay({
           >
             {layout.valid ? step.title : "Training needs an update"}
           </h2>
-          <p className="mt-2 text-sm leading-6 text-muted">
+          {layout.valid && step.context && (
+            <div className="mt-3 rounded-lg border border-line bg-inset p-3 text-sm leading-6 text-ink">
+              <span className="mb-1 block text-xs font-semibold uppercase text-faint">
+                Practice case
+              </span>
+              {step.context}
+            </div>
+          )}
+          <p className="mt-3 text-sm leading-6 text-muted">
             {layout.valid
               ? step.instruction
               : "The highlighted control is missing or appears more than once."}
           </p>
+          {layout.valid && step.question && (
+            <p className="mt-3 text-sm font-bold leading-6 text-ink">
+              {step.question}
+            </p>
+          )}
+          {layout.valid && step.choices?.length ? (
+            <div
+              className="mt-3 grid gap-2"
+              role="group"
+              aria-label={step.question ?? "Choose an action"}
+            >
+              {step.choices.map((choice) => (
+                <Button
+                  key={choice.id}
+                  variant="outline"
+                  size="sm"
+                  className="h-auto min-h-11 justify-start whitespace-normal text-left leading-5"
+                  aria-pressed={selectedChoiceId === choice.id}
+                  disabled={continueDisabled}
+                  onClick={() => onChoose?.(choice)}
+                >
+                  {choice.label}
+                </Button>
+              ))}
+            </div>
+          ) : null}
+          {choiceFeedback && (
+            <p
+              role="alert"
+              className="mt-3 border-l-2 border-amber-500 pl-3 text-sm font-semibold leading-5 text-amber-900 dark:text-amber-200"
+            >
+              {choiceFeedback}
+            </p>
+          )}
         </div>
         {sheet && (
           <Button
@@ -232,12 +298,22 @@ export function CoachOverlay({
       </div>
 
       <div className="mt-5 flex flex-wrap gap-2 border-t border-line pt-4">
-        {onContinue && layout.valid && (
-          <Button size="sm" iconRight="arrowRight" disabled={continueDisabled} onClick={onContinue}>
+        {onContinue && layout.valid && !step.choices?.length && (
+          <Button
+            size="sm"
+            iconRight="arrowRight"
+            disabled={continueDisabled}
+            onClick={onContinue}
+          >
             {continueLabel}
           </Button>
         )}
-        <Button variant="outline" size="sm" disabled={!canGoBack} onClick={onBack}>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={!canGoBack}
+          onClick={onBack}
+        >
           Back
         </Button>
         <Button variant="ghost" size="sm" onClick={onResumeLater}>

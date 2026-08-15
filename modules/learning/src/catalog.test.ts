@@ -38,9 +38,7 @@ const requirementById = new Map(
 const requirementCapabilityKeys = (requirementIds: readonly string[]) =>
   requirementIds.flatMap(
     (id) =>
-      requirementById
-        .get(id)
-        ?.capabilityOutcomes.map(capabilityKey) ?? [],
+      requirementById.get(id)?.capabilityOutcomes.map(capabilityKey) ?? [],
   );
 
 describe("learning catalog", () => {
@@ -62,7 +60,9 @@ describe("learning catalog", () => {
       ).toHaveLength(1);
     }
     expect(
-      internalRequirementIds().some((id) => vendorRequirementIds().includes(id)),
+      internalRequirementIds().some((id) =>
+        vendorRequirementIds().includes(id),
+      ),
     ).toBe(false);
   });
 
@@ -79,18 +79,45 @@ describe("learning catalog", () => {
 
   it("defines one domain-specific practice runtime for every operating persona", () => {
     expect(
-      LEARNING_CATALOG.rolePractices.map((practice) => practice.personaId).sort(),
+      LEARNING_CATALOG.rolePractices
+        .map((practice) => practice.personaId)
+        .sort(),
     ).toEqual([...OPERATING_PERSONA_IDS].sort());
 
     for (const practice of LEARNING_CATALOG.rolePractices) {
-      expect(practice.simulation.checkpointIds.length, practice.personaId).toBeGreaterThan(1);
-      expect(practice.simulation.checkpointIds, practice.personaId).not.toEqual([
-        "complete",
-      ]);
+      expect(
+        practice.simulation.checkpointIds.length,
+        practice.personaId,
+      ).toBeGreaterThan(1);
+      expect(practice.simulation.checkpointIds, practice.personaId).not.toEqual(
+        ["complete"],
+      );
       expect(
         practice.simulation.embeddedSteps?.map((step) => step.checkpointId),
         practice.personaId,
       ).toEqual(practice.simulation.checkpointIds);
+      for (const step of practice.simulation.embeddedSteps ?? []) {
+        expect(
+          step.context,
+          `${practice.personaId}:${step.checkpointId}`,
+        ).toBeTruthy();
+        expect(
+          step.question,
+          `${practice.personaId}:${step.checkpointId}`,
+        ).toBeTruthy();
+        expect(
+          step.choices?.length,
+          `${practice.personaId}:${step.checkpointId}`,
+        ).toBeGreaterThanOrEqual(3);
+        expect(
+          step.choices?.filter((choice) => choice.correct),
+          `${practice.personaId}:${step.checkpointId}`,
+        ).toHaveLength(1);
+        expect(
+          step.choices?.every((choice) => choice.feedback.length > 0),
+          `${practice.personaId}:${step.checkpointId}`,
+        ).toBe(true);
+      }
     }
   });
 
@@ -105,7 +132,27 @@ describe("learning catalog", () => {
         expect(requirement.simulationId, requirement.id).toBeUndefined();
         continue;
       }
-      expect(supportedSimulationIds.has(requirement.simulationId ?? ""), requirement.id).toBe(true);
+      expect(
+        supportedSimulationIds.has(requirement.simulationId ?? ""),
+        requirement.id,
+      ).toBe(true);
+    }
+  });
+
+  it("assigns a governed scenario to every role, including read-only roles", () => {
+    const requirementById = new Map(
+      LEARNING_CATALOG.requirements.map((requirement) => [
+        requirement.id,
+        requirement,
+      ]),
+    );
+    for (const curriculum of ROLE_CURRICULA) {
+      expect(
+        curriculum.requirementIds.some(
+          (id) => requirementById.get(id)?.kind === "scenario",
+        ),
+        `${curriculum.module}:${curriculum.role}`,
+      ).toBe(true);
     }
   });
 
@@ -166,7 +213,9 @@ describe("learning catalog", () => {
     expect(
       requiresLiveCertification("core", "manage_own_accreditation_draft"),
     ).toBe(false);
-    expect(requiredCurriculaFor({ module: "core", capability: "submit_documents" })).toHaveLength(0);
+    expect(
+      requiredCurriculaFor({ module: "core", capability: "submit_documents" }),
+    ).toHaveLength(0);
     expect(
       requiredCurriculaFor({
         module: "core",
@@ -179,14 +228,17 @@ describe("learning catalog", () => {
     expect(
       capabilityClassificationFor("core", "submit_accreditation")?.access,
     ).toBe("mutation");
-    expect(requiresLiveCertification("core", "submit_accreditation")).toBe(true);
+    expect(requiresLiveCertification("core", "submit_accreditation")).toBe(
+      true,
+    );
 
     const curriculum = roleCurriculumFor("core", "vendor_portal")!;
     const finalSubmissionRequirement = curriculum.requirementIds
       .map((id) => requirementById.get(id))
       .find((requirement) =>
         requirement?.capabilityOutcomes.some(
-          (capability) => capabilityKey(capability) === "core:submit_accreditation",
+          (capability) =>
+            capabilityKey(capability) === "core:submit_accreditation",
         ),
       );
     expect(finalSubmissionRequirement?.prerequisiteIds).toEqual(
@@ -212,8 +264,9 @@ describe("learning catalog", () => {
     const requirement = requirementById.get(baseline?.requirementIds[0] ?? "");
     expect(requirement?.simulationId).toBe(requirement?.id);
     expect(
-      LEARNING_CATALOG.simulations.find((item) => item.id === requirement?.simulationId)
-        ?.checkpointIds,
+      LEARNING_CATALOG.simulations.find(
+        (item) => item.id === requirement?.simulationId,
+      )?.checkpointIds,
     ).toEqual(["complete"]);
   });
 
@@ -269,7 +322,8 @@ describe("learning catalog", () => {
         (capability) => `${module}:${capability}`,
       ),
     ).sort();
-    const classificationKeys = CAPABILITY_CLASSIFICATIONS.map(capabilityKey).sort();
+    const classificationKeys =
+      CAPABILITY_CLASSIFICATIONS.map(capabilityKey).sort();
 
     expect(classificationKeys).toEqual(registryKeys);
     expect(MUTATING_CAPABILITIES.map(capabilityKey).sort()).toEqual(
@@ -283,12 +337,24 @@ describe("learning catalog", () => {
     const assertUnique = (values: readonly string[], label: string) => {
       expect(new Set(values).size, label).toBe(values.length);
     };
-    assertUnique(LEARNING_CATALOG.requirements.map((item) => item.id), "requirements");
-    assertUnique(allCurricula.map((item) => item.id), "curricula");
-    assertUnique(LEARNING_CATALOG.simulations.map((item) => item.id), "simulations");
+    assertUnique(
+      LEARNING_CATALOG.requirements.map((item) => item.id),
+      "requirements",
+    );
+    assertUnique(
+      allCurricula.map((item) => item.id),
+      "curricula",
+    );
+    assertUnique(
+      LEARNING_CATALOG.simulations.map((item) => item.id),
+      "simulations",
+    );
 
     const simulationById = new Map(
-      LEARNING_CATALOG.simulations.map((simulation) => [simulation.id, simulation]),
+      LEARNING_CATALOG.simulations.map((simulation) => [
+        simulation.id,
+        simulation,
+      ]),
     );
     const classificationByKey = new Map(
       CAPABILITY_CLASSIFICATIONS.map((item) => [capabilityKey(item), item]),
@@ -307,17 +373,27 @@ describe("learning catalog", () => {
     const visiting = new Set<string>();
     const visited = new Set<string>();
     const visit = (requirementId: string): void => {
-      expect(visiting.has(requirementId), `prerequisite cycle at ${requirementId}`).toBe(false);
+      expect(
+        visiting.has(requirementId),
+        `prerequisite cycle at ${requirementId}`,
+      ).toBe(false);
       if (visited.has(requirementId)) return;
       const requirement = requirementById.get(requirementId);
-      expect(requirement, `missing prerequisite ${requirementId}`).toBeDefined();
+      expect(
+        requirement,
+        `missing prerequisite ${requirementId}`,
+      ).toBeDefined();
       visiting.add(requirementId);
       for (const prerequisiteId of requirement?.prerequisiteIds ?? []) {
         const prerequisite = requirementById.get(prerequisiteId);
-        expect(prerequisite, `${requirementId}:${prerequisiteId}`).toBeDefined();
-        expect(prerequisite?.audience, `${requirementId}:${prerequisiteId}`).toBe(
-          requirement?.audience,
-        );
+        expect(
+          prerequisite,
+          `${requirementId}:${prerequisiteId}`,
+        ).toBeDefined();
+        expect(
+          prerequisite?.audience,
+          `${requirementId}:${prerequisiteId}`,
+        ).toBe(requirement?.audience);
         visit(prerequisiteId);
       }
       visiting.delete(requirementId);
@@ -327,7 +403,10 @@ describe("learning catalog", () => {
     for (const requirement of LEARNING_CATALOG.requirements) {
       visit(requirement.id);
       for (const outcome of requirement.capabilityOutcomes) {
-        expect(classificationByKey.get(capabilityKey(outcome)), capabilityKey(outcome)).toMatchObject({
+        expect(
+          classificationByKey.get(capabilityKey(outcome)),
+          capabilityKey(outcome),
+        ).toMatchObject({
           access: "mutation",
         });
       }
@@ -335,8 +414,13 @@ describe("learning catalog", () => {
       const simulation = simulationById.get(requirement.simulationId);
       expect(simulation, requirement.id).toBeDefined();
       expect(simulation?.audience, requirement.id).toBe(requirement.audience);
-      expect(simulation?.capabilityOutcomes.map(capabilityKey), requirement.id).toEqual(
-        expect.arrayContaining(requirement.capabilityOutcomes.map(capabilityKey)),
+      expect(
+        simulation?.capabilityOutcomes.map(capabilityKey),
+        requirement.id,
+      ).toEqual(
+        expect.arrayContaining(
+          requirement.capabilityOutcomes.map(capabilityKey),
+        ),
       );
     }
   });

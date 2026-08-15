@@ -27,6 +27,14 @@ export interface TrainingStep {
   id: string;
   title: string;
   instruction: string;
+  context?: string;
+  question?: string;
+  choices?: readonly {
+    id: string;
+    label: string;
+    correct: boolean;
+    feedback: string;
+  }[];
   anchor: string;
   allowedCommands: readonly string[];
   terminal?: boolean;

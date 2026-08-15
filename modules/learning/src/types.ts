@@ -35,6 +35,23 @@ export interface RoleCurriculumDefinition extends CurriculumDefinition {
   role: string;
 }
 
+export interface SimulationChoiceDefinition {
+  id: string;
+  label: string;
+  correct: boolean;
+  feedback: string;
+}
+
+export interface SimulationStepDefinition {
+  checkpointId: string;
+  title: string;
+  instruction: string;
+  outcomeId: string;
+  context?: string;
+  question?: string;
+  choices?: readonly SimulationChoiceDefinition[];
+}
+
 export interface SimulationDefinition {
   id: string;
   version: number;
@@ -43,12 +60,7 @@ export interface SimulationDefinition {
   title: string;
   checkpointIds: readonly string[];
   capabilityOutcomes: readonly LearningCapability[];
-  embeddedSteps?: readonly {
-    checkpointId: string;
-    title: string;
-    instruction: string;
-    outcomeId: string;
-  }[];
+  embeddedSteps?: readonly SimulationStepDefinition[];
 }
 
 export interface EffectiveCurriculum {
