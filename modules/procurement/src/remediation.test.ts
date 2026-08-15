@@ -18,6 +18,11 @@ describe("Procurement remediation contract", () => {
       allowed: false,
       blockers: [
         "Procurement-confirmed sourcing route",
+        "Positive estimated amount",
+        "Budget context",
+        "Needed-by date",
+        "Cost center",
+        "Department",
         "Technical description / spec",
         "Approved budget evidence",
         "Previous purchase cost",

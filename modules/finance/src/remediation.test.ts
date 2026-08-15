@@ -20,6 +20,8 @@ describe("Finance remediation contract", () => {
   it("rejects zero-value close entries and unexplained correction flags", () => {
     expect(validateFinanceCloseEntry({ action: "save", amount: 0 })).toEqual([
       "Amount must be greater than zero.",
+      "Select a canonical source record.",
+      "Select registered evidence.",
     ]);
     expect(validateFinanceCloseEntry({ action: "exception", id: "close-1" })).toEqual([
       "Provide a correction reason before flagging a close entry.",
