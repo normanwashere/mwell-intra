@@ -95,7 +95,7 @@ describe("OnboardingTrainingSession", () => {
     );
     expect(onCheckpoint).not.toHaveBeenCalled();
     expect(
-      screen.getByRole("heading", { name: "Guided practice complete" }),
+      await screen.findByRole("heading", { name: "Guided practice complete" }),
     ).toBeInTheDocument();
 
     target.remove();
