@@ -234,6 +234,36 @@ describe("<Guard>", () => {
     expect(screen.getByRole("alert").textContent).toContain("Access denied");
   });
 
+  it("explains when an assigned live capability is waiting on certification", async () => {
+    const { client } = liveClient();
+    render(
+      <SessionProvider config={{ mode: "supabase", client }}>
+        <Guard module="warehouse" cap="reserve_allocate">
+          <div>secret content</div>
+        </Guard>
+      </SessionProvider>,
+    );
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("Certification required");
+    expect(alert.textContent).toContain("Complete the required onboarding");
+    expect(screen.getByRole("link", { name: "Open onboarding" })).not.toBeNull();
+  });
+
+  it("explains when the account has no assigned module role", async () => {
+    render(
+      <SessionProvider config={{ mode: "memory", profiles: PROFILES }}>
+        <Guard module="warehouse" cap="receive_stock">
+          <div>secret content</div>
+        </Guard>
+      </SessionProvider>,
+    );
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("Module access not assigned");
+    expect(alert.textContent).toContain("Contact your administrator");
+  });
+
   it("renders a custom fallback when provided", async () => {
     render(
       <SessionProvider config={{ mode: "memory", profiles: PROFILES }}>

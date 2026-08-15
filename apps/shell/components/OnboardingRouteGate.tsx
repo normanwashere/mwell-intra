@@ -9,6 +9,7 @@ import {
   isOnboardingProtectedPath,
   onboardingHref,
 } from "@shell/lib/onboardingGate";
+import { BoundedLoadingState } from "./BoundedLoadingState";
 
 export function OnboardingRouteGate({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? "/";
@@ -35,6 +36,18 @@ export function OnboardingRouteGate({ children }: { children: ReactNode }) {
   if (!employeeRoute) return children;
   if (!checking && !blocked && !unavailable) return children;
 
+  if (checking) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-app px-6">
+        <BoundedLoadingState
+          label="Checking your onboarding..."
+          recoveryOwner="Platform Support"
+          className="py-24"
+        />
+      </main>
+    );
+  }
+
   return (
     <main className="grid min-h-screen place-items-center bg-app px-6 text-center">
       <div
@@ -42,22 +55,18 @@ export function OnboardingRouteGate({ children }: { children: ReactNode }) {
         className="max-w-md"
       >
         <Icon
-          name={unavailable ? "alert" : blocked ? "lock" : "rotate"}
-          className={`mx-auto h-7 w-7 text-brand-600 ${checking ? "animate-spin" : ""}`}
+          name={unavailable ? "alert" : "lock"}
+          className="mx-auto h-7 w-7 text-brand-600"
         />
         <h1 className="mt-4 font-display text-xl font-bold text-ink">
-          {checking
-            ? "Checking your onboarding"
-            : unavailable
-              ? "Onboarding status unavailable"
-              : "Role orientation required"}
+          {unavailable
+            ? "Onboarding status unavailable"
+            : "Role orientation required"}
         </h1>
         <p className="mt-2 text-sm text-muted">
-          {checking
-            ? "Confirming whether this workspace is ready for your account."
-            : unavailable
-              ? error
-              : "Complete your first-time role orientation before entering this workspace."}
+          {unavailable
+            ? error
+            : "Complete your first-time role orientation before entering this workspace."}
         </p>
         {unavailable && (
           <Button

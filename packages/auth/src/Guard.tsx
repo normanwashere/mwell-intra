@@ -48,16 +48,37 @@ export function Guard<M extends Module>({
   children,
   fallback,
 }: GuardProps<M>) {
-  const { loading } = useSession();
+  const { loading, mode, userRoles, roleCapabilities } = useSession();
   const allowed = useCan(module, cap);
+  const moduleAssigned = (userRoles[module]?.length ?? 0) > 0;
+  const certificationRequired =
+    mode === "supabase" &&
+    roleCapabilities?.[module]?.includes(cap) === true;
   // While the session is restoring (memory: sessionStorage read; supabase:
   // getSession) render nothing rather than briefly flashing "Access denied".
   if (loading) return null;
   if (allowed) return <>{children}</>;
-  return <>{fallback !== undefined ? fallback : <AccessDenied />}</>;
+  return (
+    <>
+      {fallback !== undefined ? (
+        fallback
+      ) : (
+        <AccessDenied
+          moduleAssigned={moduleAssigned}
+          certificationRequired={certificationRequired}
+        />
+      )}
+    </>
+  );
 }
 
-function AccessDenied() {
+function AccessDenied({
+  moduleAssigned,
+  certificationRequired,
+}: {
+  moduleAssigned: boolean;
+  certificationRequired: boolean;
+}) {
   return (
     <div
       role="alert"
@@ -65,13 +86,30 @@ function AccessDenied() {
       className="intra-access-denied grid place-items-center gap-3 rounded-2xl border border-black/10 bg-black/[0.02] p-6 text-center dark:border-white/10 dark:bg-white/[0.03]"
     >
       <h1 className="text-lg font-semibold">Access denied for this page</h1>
+      <h2 className="font-semibold">
+        {certificationRequired
+          ? "Certification required"
+          : moduleAssigned
+            ? "Action access not assigned"
+            : "Module access not assigned"}
+      </h2>
       <p className="max-w-sm text-sm opacity-70">
-        This isn&apos;t part of your role. Head back to your dashboard to pick
-        something you can access, or contact your administrator.
+        {certificationRequired
+          ? "Complete the required onboarding and guided practice before using this action."
+          : moduleAssigned
+            ? "Your account can open this module, but this action is not assigned to your role. Contact your administrator if your responsibilities changed."
+            : "This module is not assigned to your account. Contact your administrator if you need access."}
       </p>
+      {certificationRequired && (
+        <a href="/onboarding" className="btn-primary min-h-11">
+          Open onboarding
+        </a>
+      )}
       <a
         href="/"
-        className="btn-primary min-h-11"
+        className={
+          certificationRequired ? "btn-secondary min-h-11" : "btn-primary min-h-11"
+        }
       >
         Back to dashboard
       </a>

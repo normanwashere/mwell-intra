@@ -54,6 +54,21 @@ function clientAuthStatus(): ClientAuthStatus {
   return 'supabase-configured';
 }
 
+function legalDocumentDeliveryStatus(): FeatureStatus {
+  return process.env.LEGAL_DOCUMENT_EDGE_FUNCTION?.trim() ||
+    process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()
+    ? 'configured'
+    : 'missing';
+}
+
+function deploymentCommit(): string | null {
+  return (
+    process.env.VERCEL_GIT_COMMIT_SHA?.trim() ||
+    process.env.GITHUB_SHA?.trim() ||
+    null
+  );
+}
+
 function forwardedSelfFetchHeaders(request: NextRequest): Headers {
   const headers = new Headers();
   for (const key of ['authorization', 'cookie', 'x-vercel-protection-bypass']) {
@@ -151,11 +166,12 @@ export async function GET(request: NextRequest) {
         vendorInviteDelivery: SUPABASE_URL && SUPABASE_ANON_KEY
           ? 'configured' as FeatureStatus
           : 'missing' as FeatureStatus,
+        legalDocumentDelivery: legalDocumentDeliveryStatus(),
         serviceWorker: process.env.NEXT_PUBLIC_ENABLE_SW === 'false'
           ? 'missing' as FeatureStatus
           : 'configured' as FeatureStatus,
       },
-      commit: process.env.VERCEL_GIT_COMMIT_SHA ?? null,
+      commit: deploymentCommit(),
     },
     {
       status: 200,

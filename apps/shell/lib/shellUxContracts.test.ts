@@ -68,6 +68,16 @@ describe("shared shell interaction geometry", () => {
     expect(recovery).toContain("Reload page");
   });
 
+  it("uses the same bounded recovery state while onboarding authority loads", () => {
+    const gate = source("components/OnboardingRouteGate.tsx");
+
+    expect(gate).toContain('import { BoundedLoadingState } from "./BoundedLoadingState"');
+    expect(gate).toContain('<BoundedLoadingState');
+    expect(gate).toContain('label="Checking your onboarding..."');
+    expect(gate).toContain('recoveryOwner="Platform Support"');
+    expect(gate).not.toContain('checking ? "animate-spin"');
+  });
+
   it("keeps shared shell-facing source free of encoding-sensitive symbols", () => {
     for (const path of [
       "components/AppShell.tsx",
