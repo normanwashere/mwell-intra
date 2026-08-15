@@ -14,6 +14,7 @@ import {
   Icon,
   InfoTip,
   ModuleHero,
+  SectionTitle,
 } from "@intra/ui";
 import { useSession } from "@intra/auth";
 import {
@@ -57,11 +58,11 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <div aria-hidden className="space-y-6">
-        <div className="h-40 animate-pulse rounded-3xl bg-inset" />
+        <div className="h-40 animate-pulse rounded-lg bg-inset" />
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <div className="h-32 animate-pulse rounded-2xl bg-inset" />
-          <div className="h-32 animate-pulse rounded-2xl bg-inset" />
-          <div className="h-32 animate-pulse rounded-2xl bg-inset" />
+          <div className="h-32 animate-pulse rounded-lg bg-inset" />
+          <div className="h-32 animate-pulse rounded-lg bg-inset" />
+          <div className="h-32 animate-pulse rounded-lg bg-inset" />
         </div>
       </div>
     );
@@ -120,8 +121,13 @@ export default function DashboardPage() {
           Explanatory description copy moved behind the (i) next to "Your
           workspace" below. */}
       <ModuleHero
-        eyebrow="Welcome back,"
-        title={firstName}
+        eyebrow={`Welcome back, ${firstName}`}
+        title={profile.kind === "vendor" ? "Vendor workspace" : "Your Intra workspace"}
+        description={
+          profile.kind === "vendor"
+            ? "Continue accreditation, evidence, and required declarations for your organization."
+            : `Open the governed workspaces assigned to your ${profile.title ?? "current role"}.`
+        }
         icon="grid"
         action={
           cards.length > 0 ? (
@@ -163,31 +169,29 @@ export default function DashboardPage() {
 
       {profile.kind === "employee" && <OnboardingStatusBand />}
 
-      <div
-        id="workspace-areas"
-        className="scroll-mt-24 flex items-center justify-between gap-3"
-      >
-        <div>
-          <p className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-faint">
-            Your workspace
-            <InfoTip
-              label="About your workspace"
-              content={
-                profile.title
-                  ? `Signed in as ${profile.title}. You see only the areas your roles grant; ask an administrator to widen access.`
-                  : profile.kind === "vendor"
-                    ? "Vendor accreditation & document uploads for your organization."
-                    : "You see only the areas your roles grant; ask an administrator to widen access."
-              }
-            />
-          </p>
-          <h2 className="font-display text-lg font-bold text-ink">
-            {cards.length > 0 ? "Your areas" : "No areas yet"}
-          </h2>
-        </div>
-        <Badge tone={profile.kind === "vendor" ? "emerald" : "brand"}>
-          {profile.kind === "vendor" ? "External vendor" : "Employee"}
-        </Badge>
+      <div id="workspace-areas" className="scroll-mt-24">
+        <SectionTitle
+          eyebrow="Your workspace"
+          title={cards.length > 0 ? "Available areas" : "No areas yet"}
+          subtitle="Open a governed module or workspace available to your current roles."
+          action={
+            <div className="flex items-center gap-2">
+              <InfoTip
+                label="About your workspace"
+                content={
+                  profile.title
+                    ? `Signed in as ${profile.title}. You see only the areas your roles grant; ask an administrator to widen access.`
+                    : profile.kind === "vendor"
+                      ? "Vendor accreditation & document uploads for your organization."
+                      : "You see only the areas your roles grant; ask an administrator to widen access."
+                }
+              />
+              <Badge tone={profile.kind === "vendor" ? "emerald" : "brand"}>
+                {profile.kind === "vendor" ? "External vendor" : "Employee"}
+              </Badge>
+            </div>
+          }
+        />
       </div>
 
       {cards.length === 0 ? (
@@ -233,7 +237,11 @@ export default function DashboardPage() {
                 }
                 data-onboarding-locked={cardLocked ? "true" : undefined}
               >
-                <Card interactive className="group flex h-full flex-col gap-3">
+                <Card
+                  interactive
+                  data-tone={c.tone}
+                  className="workflow-launcher group flex h-full min-h-36 flex-col gap-3"
+                >
                   <div className="flex items-start justify-between gap-2">
                     <span
                       className={cx(

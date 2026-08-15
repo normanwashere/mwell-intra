@@ -20,7 +20,7 @@ const CONTENT_CLASS: Record<SheetSide, string> = {
   adaptive:
     'adaptive-content fixed inset-x-0 bottom-0 z-50 max-h-[92dvh] rounded-t-2xl bg-surface shadow-e3 ring-1 ring-line ' +
     'flex flex-col pb-safe md:inset-x-auto md:bottom-auto md:left-1/2 md:top-1/2 md:w-[min(92vw,36rem)] ' +
-    'md:max-h-[min(46rem,88dvh)] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-xl md:pb-0',
+    'md:max-h-[min(46rem,88dvh)] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-lg md:pb-0',
   bottom:
     'sheet-content fixed inset-x-0 bottom-0 z-50 max-h-[92dvh] rounded-t-2xl bg-surface shadow-e3 ring-1 ring-line ' +
     'flex flex-col pb-safe',
@@ -29,7 +29,7 @@ const CONTENT_CLASS: Record<SheetSide, string> = {
     'flex flex-col safe-top',
   center:
     'modal-content fixed left-1/2 top-1/2 z-50 w-[min(92vw,32rem)] max-h-[90vh] -translate-x-1/2 ' +
-    '-translate-y-1/2 rounded-xl bg-surface shadow-e3 ring-1 ring-line flex flex-col',
+    '-translate-y-1/2 rounded-lg bg-surface shadow-e3 ring-1 ring-line flex flex-col',
 };
 
 interface SheetProps {

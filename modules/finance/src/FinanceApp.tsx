@@ -21,7 +21,8 @@ import { FinanceClosePanel } from "./components/FinanceClosePanel";
 
 export function FinanceApp() {
   const { profile, userRoles, loading: sessionLoading } = useSession();
-  const { data, loading, error, refresh, manageCloseEntry, isDemo } = useFinanceData();
+  const { data, loading, error, refresh, manageCloseEntry, isDemo } =
+    useFinanceData();
 
   if (sessionLoading || (profile && loading)) {
     return (
@@ -68,8 +69,8 @@ export function FinanceApp() {
   return (
     <div className="min-w-0 max-w-full space-y-6 overflow-hidden">
       <ModuleHero
-        eyebrow="Finance control center"
-        title={profile.name?.split(/\s+/)[0] ?? "Finance"}
+        eyebrow="Finance"
+        title="Finance control center"
         description="Follow commitments from approved purchase order through receipt, reconciliation, and payment readiness."
         icon="coins"
         action={

@@ -76,12 +76,24 @@ module.exports = {
       // Formal type-scale tokens (display → caption). Line-height + tracking
       // travel with the size so pages stop hand-rolling combinations.
       fontSize: {
-        "display": ["2.25rem", { lineHeight: "1.1", letterSpacing: "-0.02em", fontWeight: "800" }],
-        "title": ["1.5rem", { lineHeight: "1.2", letterSpacing: "-0.015em", fontWeight: "800" }],
-        "heading": ["1.125rem", { lineHeight: "1.35", letterSpacing: "-0.01em", fontWeight: "700" }],
-        "body": ["0.875rem", { lineHeight: "1.5" }],
-        "caption": ["0.75rem", { lineHeight: "1.4" }],
-        "overline": ["0.68rem", { lineHeight: "1.3", letterSpacing: "0.08em", fontWeight: "600" }],
+        display: [
+          "2.25rem",
+          { lineHeight: "1.1", letterSpacing: "0", fontWeight: "800" },
+        ],
+        title: [
+          "1.5rem",
+          { lineHeight: "1.2", letterSpacing: "0", fontWeight: "800" },
+        ],
+        heading: [
+          "1.125rem",
+          { lineHeight: "1.35", letterSpacing: "0", fontWeight: "700" },
+        ],
+        body: ["0.875rem", { lineHeight: "1.5" }],
+        caption: ["0.75rem", { lineHeight: "1.4" }],
+        overline: [
+          "0.68rem",
+          { lineHeight: "1.3", letterSpacing: "0", fontWeight: "600" },
+        ],
       },
       boxShadow: {
         card: "0 1px 2px rgba(11,46,51,0.05), 0 6px 20px rgba(11,46,51,0.06)",
@@ -118,7 +130,10 @@ module.exports = {
           to: { transform: "translateX(0)" },
         },
         "scale-in": {
-          from: { opacity: "0", transform: "translate(-50%, -48%) scale(0.96)" },
+          from: {
+            opacity: "0",
+            transform: "translate(-50%, -48%) scale(0.96)",
+          },
           to: { opacity: "1", transform: "translate(-50%, -50%) scale(1)" },
         },
         "toast-in": {

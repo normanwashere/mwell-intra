@@ -112,6 +112,36 @@ const QUICK_SEARCHES = [
   "Resolve an exception",
 ];
 
+const HANDBOOK_SECTIONS = [
+  { href: "#kb-search", label: "Search", icon: "search" as IconName },
+  { href: "#kb-start", label: "Start here", icon: "arrowRight" as IconName },
+  { href: "#kb-workflows", label: "Workflows", icon: "check" as IconName },
+  { href: "#kb-modules", label: "Modules", icon: "grid" as IconName },
+  { href: "#kb-help", label: "Help", icon: "info" as IconName },
+];
+
+function KnowledgeSectionNav() {
+  return (
+    <nav
+      aria-label="Knowledge Base sections"
+      className="sticky top-20 z-10 -mx-4 border-y border-line bg-surface/95 px-4 py-2 shadow-e1 backdrop-blur-md sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"
+    >
+      <div className="no-scrollbar mx-auto flex max-w-[78rem] gap-1 overflow-x-auto">
+        {HANDBOOK_SECTIONS.map((item) => (
+          <a
+            key={item.href}
+            href={item.href}
+            className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-lg px-3 text-sm font-semibold text-muted transition hover:bg-inset hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+          >
+            <Icon name={item.icon} className="h-4 w-4" />
+            {item.label}
+          </a>
+        ))}
+      </div>
+    </nav>
+  );
+}
+
 const availabilityLabel: Record<KnowledgeAvailability, string> = {
   live: "Live",
   limited: "Limited",
@@ -267,7 +297,7 @@ export function HandbookLanding({
     query.length > 0 || filtersActive || mode !== "task";
 
   return (
-    <div className="mx-auto max-w-[78rem] space-y-10 pb-10">
+    <div className="mx-auto max-w-[78rem] space-y-8 pb-10 sm:space-y-10">
       <header className="border-b border-line pb-6">
         <div className="flex flex-wrap items-end justify-between gap-5">
           <div>
@@ -299,7 +329,11 @@ export function HandbookLanding({
         </div>
       </header>
 
-      <section aria-labelledby="handbook-search-title" className="relative">
+      <section
+        id="kb-search"
+        aria-labelledby="handbook-search-title"
+        className="relative scroll-mt-28"
+      >
         <div className="rounded-lg border border-brand-400 bg-surface p-4 shadow-e1 sm:p-6">
           <div className="flex flex-wrap items-end justify-between gap-2">
             <div>
@@ -482,15 +516,19 @@ export function HandbookLanding({
         )}
       </section>
 
+      {isHome && <KnowledgeSectionNav />}
+
       {isHome && (
         <>
-          <FirstTimeJourney
-            userId={userId}
-            onExploreRoles={() => onSetParams({ mode: "role" })}
-            onPractice={
-              practiceResult ? () => onOpenResult(practiceResult) : undefined
-            }
-          />
+          <div id="kb-start" className="scroll-mt-36">
+            <FirstTimeJourney
+              userId={userId}
+              onExploreRoles={() => onSetParams({ mode: "role" })}
+              onPractice={
+                practiceResult ? () => onOpenResult(practiceResult) : undefined
+              }
+            />
+          </div>
           {recommended.length > 0 && (
             <StartHere
               results={recommended}
@@ -498,19 +536,27 @@ export function HandbookLanding({
               onOpenResult={onOpenResult}
             />
           )}
-          <OperatingModel
-            onOpenFlow={(flowId) =>
-              onSetParams({ flow: flowId, step: null, view: "flow" })
-            }
-          />
-          <PrincipalFlowLibrary content={content} onSetParams={onSetParams} />
-          <ModuleDirectory onSetParams={onSetParams} />
+          <div className="scroll-mt-36">
+            <OperatingModel
+              onOpenFlow={(flowId) =>
+                onSetParams({ flow: flowId, step: null, view: "flow" })
+              }
+            />
+          </div>
+          <div id="kb-workflows" className="scroll-mt-36">
+            <PrincipalFlowLibrary content={content} onSetParams={onSetParams} />
+          </div>
+          <div id="kb-modules" className="scroll-mt-36">
+            <ModuleDirectory onSetParams={onSetParams} />
+          </div>
           <PersonalLibrary userId={userId} onOpenHref={onOpenHref} />
-          <HelpAndUpdates
-            results={recentlyReviewed}
-            onSetParams={onSetParams}
-            onOpenResult={onOpenResult}
-          />
+          <div id="kb-help" className="scroll-mt-36">
+            <HelpAndUpdates
+              results={recentlyReviewed}
+              onSetParams={onSetParams}
+              onOpenResult={onOpenResult}
+            />
+          </div>
         </>
       )}
 

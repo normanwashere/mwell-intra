@@ -21,10 +21,10 @@
    * mWell brand system (matches mwell.com.ph): cool porcelain canvas, deep
    * corporate blue #004F9D anchor with a sky→cyan gradient, bright cyan
    * #33C6F4 accent for highlights/analytics. */
-  --app: #f2f7fc;
+  --app: #f4f7fa;
   --surface: #ffffff;
-  --inset: #eaf1f9;
-  --line: #d7e3f0;
+  --inset: #edf3f8;
+  --line: #d6e0ea;
   --ink: #16233a;
   --muted: #47566d; /* AA on white & inset */
   --faint: #5b6a83; /* AA on white & inset surfaces */
@@ -49,16 +49,17 @@
   --accent-soft: #8adcf9;
 
   /* ---- RGB channels (for Tailwind alpha utilities, e.g. bg-surface/70) ---- */
-  --c-app: 242 247 252;
+  --c-app: 244 247 250;
   --c-surface: 255 255 255;
-  --c-inset: 234 241 249;
-  --c-line: 215 227 240;
+  --c-inset: 237 243 248;
+  --c-line: 214 224 234;
   --c-ink: 22 35 58;
   --c-muted: 71 86 109;
   --c-faint: 91 106 131;
 
-  --shadow-e1: 0 1px 2px rgba(0, 42, 84, 0.05), 0 2px 6px rgba(0, 42, 84, 0.05);
-  --shadow-e2: 0 1px 2px rgba(0, 42, 84, 0.05), 0 8px 24px rgba(0, 42, 84, 0.08);
+  --shadow-e1: 0 1px 2px rgba(0, 42, 84, 0.05);
+  --shadow-e2:
+    0 1px 2px rgba(0, 42, 84, 0.05), 0 6px 18px rgba(0, 42, 84, 0.055);
   --shadow-e3: 0 18px 50px rgba(0, 42, 84, 0.16);
 
   color-scheme: light;
@@ -112,14 +113,14 @@
 
 /* ---- cards / surfaces ---- */
 .card {
-  border-radius: 1rem;
+  border-radius: 0.5rem;
   background: var(--surface);
-  box-shadow: var(--shadow-e2);
-  border: 1px solid rgb(var(--c-line) / 0.7);
+  box-shadow: var(--shadow-e1);
+  border: 1px solid rgb(var(--c-line) / 0.9);
 }
 
 .surface {
-  border-radius: 1rem;
+  border-radius: 0.5rem;
   background: rgb(var(--c-surface) / 0.7);
   border: 1px solid rgb(var(--c-line) / 0.7);
   backdrop-filter: blur(8px);
@@ -127,13 +128,13 @@
 
 /* ---- 3-tier elevation variants (hairline + layered shadow ramp) ---- */
 .card-e1 {
-  border-radius: 1rem;
+  border-radius: 0.5rem;
   background: var(--surface);
   box-shadow: var(--shadow-e1);
   border: 1px solid rgb(var(--c-line) / 0.6);
 }
 .card-e3 {
-  border-radius: 1.25rem;
+  border-radius: 0.5rem;
   background: var(--surface);
   box-shadow: var(--shadow-e3);
   border: 1px solid rgb(var(--c-line) / 0.5);
@@ -272,7 +273,9 @@
   font-size: 0.875rem;
   color: var(--ink);
   outline: none;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 /* Warehouse is mounted as a nested operational app inside the Intra shell.
@@ -302,11 +305,11 @@
 }
 
 .input-invalid,
-.input[aria-invalid='true'] {
+.input[aria-invalid="true"] {
   border-color: #fb7185;
 }
 .input-invalid:focus,
-.input[aria-invalid='true']:focus {
+.input[aria-invalid="true"]:focus {
   border-color: #fb7185;
   box-shadow: 0 0 0 3px rgba(251, 113, 133, 0.2);
 }
@@ -326,7 +329,7 @@ select.input {
    target. This covers operational forms mounted by individual Intra modules
    while leaving compact checkboxes, radios, and hidden fields unchanged. */
 @media (max-width: 767px) {
-  input:not([type='checkbox']):not([type='radio']):not([type='hidden']),
+  input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
   select,
   textarea {
     min-height: 2.75rem;
@@ -355,9 +358,62 @@ select.input {
 
 /* ---- hero surface (v2 — porcelain card, not full gradient) ---- */
 .hero-surface {
-  background: var(--surface);
-  border: 1px solid rgb(var(--c-line) / 0.75);
-  box-shadow: var(--shadow-e2);
+  background: linear-gradient(
+    90deg,
+    rgb(var(--c-inset) / 0.92),
+    rgb(var(--c-surface) / 0.98)
+  );
+  border-block: 1px solid rgb(var(--c-line) / 0.9);
+}
+
+/* App-wide workspace hierarchy. These classes are consumed by the shared
+   primitives so every module receives the same visual rhythm. */
+.workspace-hero {
+  position: relative;
+  isolation: isolate;
+  border-radius: 0.5rem;
+}
+.workspace-hero::before {
+  content: "";
+  position: absolute;
+  inset-block: 0.75rem;
+  inset-inline-start: 0;
+  width: 0.25rem;
+  border-radius: 0 0.25rem 0.25rem 0;
+  background: var(--brand-600);
+}
+.page-header-band {
+  border-block: 1px solid rgb(var(--c-line) / 0.85);
+  background: rgb(var(--c-surface) / 0.72);
+}
+.section-heading-band {
+  border-bottom: 1px solid rgb(var(--c-line) / 0.9);
+}
+.workflow-launcher {
+  border-inline-start: 0.25rem solid var(--launcher-accent, var(--brand-600));
+}
+.workflow-launcher[data-tone="emerald"] {
+  --launcher-accent: #059669;
+}
+.workflow-launcher[data-tone="amber"] {
+  --launcher-accent: #d97706;
+}
+.workflow-launcher[data-tone="rose"] {
+  --launcher-accent: #e11d48;
+}
+.workflow-launcher[data-tone="cyan"] {
+  --launcher-accent: #0891b2;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card,
+  .btn,
+  .btn-primary,
+  .btn-accent,
+  .btn-ghost,
+  .btn-outline {
+    transition-duration: 0.01ms !important;
+  }
 }
 
 .brand-gradient {
@@ -375,7 +431,7 @@ select.input {
   background: rgb(var(--c-line) / 0.7);
 }
 .skeleton::after {
-  content: '';
+  content: "";
   position: absolute;
   inset: 0;
   transform: translateX(-100%);
@@ -401,21 +457,21 @@ select.input {
 [data-radix-dialog-overlay] {
   animation: overlay-in 0.2s ease-out;
 }
-.sheet-content[data-state='open'] {
+.sheet-content[data-state="open"] {
   animation: sheet-up 0.28s cubic-bezier(0.32, 0.72, 0, 1);
 }
-.adaptive-content[data-state='open'] {
+.adaptive-content[data-state="open"] {
   animation: sheet-up 0.28s cubic-bezier(0.32, 0.72, 0, 1);
 }
 @media (min-width: 768px) {
-  .adaptive-content[data-state='open'] {
+  .adaptive-content[data-state="open"] {
     animation: scale-in 0.2s ease-out;
   }
 }
-.drawer-content[data-state='open'] {
+.drawer-content[data-state="open"] {
   animation: slide-in-right 0.28s cubic-bezier(0.32, 0.72, 0, 1);
 }
-.modal-content[data-state='open'] {
+.modal-content[data-state="open"] {
   animation: scale-in 0.2s ease-out;
 }
 .animate-toast-in {
@@ -432,45 +488,97 @@ select.input {
 .stagger > * {
   animation: pop-in 0.32s ease-out both;
 }
-.stagger > *:nth-child(1) { animation-delay: 0.02s; }
-.stagger > *:nth-child(2) { animation-delay: 0.06s; }
-.stagger > *:nth-child(3) { animation-delay: 0.1s; }
-.stagger > *:nth-child(4) { animation-delay: 0.14s; }
-.stagger > *:nth-child(5) { animation-delay: 0.18s; }
-.stagger > *:nth-child(6) { animation-delay: 0.22s; }
-.stagger > *:nth-child(7) { animation-delay: 0.26s; }
-.stagger > *:nth-child(8) { animation-delay: 0.3s; }
+.stagger > *:nth-child(1) {
+  animation-delay: 0.02s;
+}
+.stagger > *:nth-child(2) {
+  animation-delay: 0.06s;
+}
+.stagger > *:nth-child(3) {
+  animation-delay: 0.1s;
+}
+.stagger > *:nth-child(4) {
+  animation-delay: 0.14s;
+}
+.stagger > *:nth-child(5) {
+  animation-delay: 0.18s;
+}
+.stagger > *:nth-child(6) {
+  animation-delay: 0.22s;
+}
+.stagger > *:nth-child(7) {
+  animation-delay: 0.26s;
+}
+.stagger > *:nth-child(8) {
+  animation-delay: 0.3s;
+}
 
 @keyframes fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 @keyframes overlay-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 @keyframes sheet-up {
-  from { transform: translateY(100%); }
-  to { transform: translateY(0); }
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
 }
 @keyframes slide-in-right {
-  from { transform: translateX(100%); }
-  to { transform: translateX(0); }
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
 }
 @keyframes scale-in {
-  from { opacity: 0; transform: translate(-50%, -48%) scale(0.96); }
-  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  from {
+    opacity: 0;
+    transform: translate(-50%, -48%) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
 }
 @keyframes toast-in {
-  from { opacity: 0; transform: translateY(8px) scale(0.98); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 @keyframes shimmer {
-  100% { transform: translateX(100%); }
+  100% {
+    transform: translateX(100%);
+  }
 }
 @keyframes pop-in {
-  0% { opacity: 0; transform: translateY(6px); }
-  100% { opacity: 1; transform: translateY(0); }
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -5,6 +5,7 @@ interface SegmentedControlProps<T extends string> {
   value: T;
   onChange: (value: T) => void;
   ariaLabel?: string;
+  wrapOnMobile?: boolean;
 }
 
 export function SegmentedControl<T extends string>({
@@ -12,12 +13,16 @@ export function SegmentedControl<T extends string>({
   value,
   onChange,
   ariaLabel,
+  wrapOnMobile = false,
 }: SegmentedControlProps<T>) {
   return (
     <div
       role="tablist"
       aria-label={ariaLabel}
-      className="inline-flex w-full gap-1 rounded-xl bg-inset p-1"
+      className={clsx(
+        "w-full gap-1 rounded-xl bg-inset p-1",
+        wrapOnMobile ? "grid grid-cols-2 sm:flex" : "inline-flex",
+      )}
     >
       {options.map((o) => {
         const active = o.value === value;

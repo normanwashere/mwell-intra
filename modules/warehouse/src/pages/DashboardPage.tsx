@@ -49,6 +49,7 @@ import {
   DonutChart,
   EmptyState,
   HeroChipButton,
+  PageHeader,
   SectionTitle,
   SegmentedControl,
   Sheet,
@@ -61,7 +62,7 @@ import {
   type Column,
   type Tone,
 } from "@/components/ui";
-import type { Movement } from "@/domain/types";
+import type { Movement, WarehouseData } from "@intra/data-kit";
 import type { DeviceUtilizationRow } from "@/domain/analytics";
 
 const EVENT_TYPE_LABELS: Record<string, string> = {
@@ -285,28 +286,85 @@ const WINDOWED_ROLES: Role[] = ["bi_analyst", "marketing"];
 function OperatorDashboard({
   name,
   canOpenRoute,
+  data,
 }: {
   name?: string;
   canOpenRoute: (routeId: WarehouseRouteId) => boolean;
+  data: WarehouseData;
 }) {
+  const openPurchaseOrders = data.purchaseOrders.filter((order) =>
+    ["ordered", "partially_received"].includes(order.status),
+  ).length;
+  const putawayLines = data.receipts.reduce(
+    (total, receipt) =>
+      total +
+      (receipt.qualityStatus === "accepted"
+        ? receipt.lines.filter((line) => !line.binId).length
+        : 0),
+    0,
+  );
+  const fulfillmentWork = data.fulfillmentOrders.filter((order) =>
+    ["allocated", "picking", "packing", "ready"].includes(order.status),
+  ).length;
+  const openReturns = data.customerReturnCases.filter(
+    (record) => !["resolved", "closed"].includes(record.status),
+  ).length;
+  const countWork = data.cycleCounts.filter((count) =>
+    ["submitted", "pending_approval"].includes(count.status ?? "draft"),
+  ).length;
   const actions: Array<{
     label: string;
     to: string;
     icon: IconName;
-    secondary?: { label: string; to: string };
+    description: string;
+    value: number;
+    unit: string;
+    tone: "brand" | "cyan" | "amber" | "rose" | "emerald";
   }> = [
     {
       label: "Receive and inspect",
       to: "/purchase-orders",
       icon: "truck" as const,
+      description: "Verify supplier delivery, serials, batches, and condition.",
+      value: openPurchaseOrders,
+      unit: "incoming",
+      tone: openPurchaseOrders ? "amber" : "emerald",
     },
-    { label: "Put away", to: "/storage", icon: "pin" as const },
-    { label: "Pick & Pack", to: "/fulfillment", icon: "list" as const },
+    {
+      label: "Put away",
+      to: "/storage",
+      icon: "pin" as const,
+      description: "Move accepted stock from staging to its rack and bin.",
+      value: putawayLines,
+      unit: "lines ready",
+      tone: putawayLines ? "cyan" : "emerald",
+    },
+    {
+      label: "Pick & Pack",
+      to: "/fulfillment",
+      icon: "list" as const,
+      description: "Scan locations, items, bundle sets, and packaging.",
+      value: fulfillmentWork,
+      unit: "orders active",
+      tone: fulfillmentWork ? "brand" : "emerald",
+    },
     {
       label: "Returns and counts",
       to: "/returns",
       icon: "rotate",
-      secondary: { label: "Cycle counts", to: "/cycle-counts" },
+      description: "Quarantine returns and resolve stock discrepancies.",
+      value: openReturns,
+      unit: "returns open",
+      tone: openReturns ? "rose" : "emerald",
+    },
+    {
+      label: "Cycle counts",
+      to: "/cycle-counts",
+      icon: "clipboard",
+      description: "Count assigned racks and submit variances for review.",
+      value: countWork,
+      unit: "counts pending",
+      tone: countWork ? "amber" : "emerald",
     },
   ];
   const canOpenPath = (path: string) => {
@@ -315,62 +373,123 @@ function OperatorDashboard({
   };
   const availableActions = actions
     .filter((action) => canOpenPath(action.to))
-    .map((action) => ({
-      ...action,
-      secondary:
-        action.secondary && canOpenPath(action.secondary.to)
-          ? action.secondary
-          : undefined,
-    }));
+    .map((action) => ({ ...action }));
+  const activeActions = availableActions.filter((action) => action.value > 0);
+  const quietActions = availableActions.filter((action) => action.value === 0);
+  const priorityAction =
+    activeActions[0] ?? availableActions[0];
+  const toneClass = {
+    brand: "bg-brand-500/10 text-brand-700 dark:text-brand-300",
+    cyan: "bg-cyan-500/10 text-cyan-800 dark:text-cyan-300",
+    amber: "bg-amber-500/15 text-amber-800 dark:text-amber-300",
+    rose: "bg-rose-500/15 text-rose-800 dark:text-rose-300",
+    emerald: "bg-emerald-500/15 text-emerald-800 dark:text-emerald-300",
+  } as const;
   return (
     <div className="space-y-6">
-      <section className="border-b border-line pb-5">
-        <p className="text-caption font-semibold uppercase text-faint">
-          Warehouse floor
-        </p>
-        <h1 className="mt-1 font-display text-title text-ink">
-          Warehouse floor operations
-        </h1>
-        <p className="mt-1 text-sm text-muted">
-          {name ? `Welcome back, ${name}. ` : ""}Routine work ready for this
-          shift.
-        </p>
-      </section>
-      <section aria-labelledby="operator-overview">
-        <h2
-          id="operator-overview"
-          className="font-display text-lg font-bold text-ink"
-        >
-          Overview
-        </h2>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          {availableActions.map((action) => (
-            <div
-              key={action.label}
-              className="rounded-lg border border-line bg-surface shadow-e1"
+      <PageHeader
+        eyebrow="Warehouse floor"
+        title="Warehouse floor operations"
+        subtitle={`${name ? `Welcome back, ${name}. ` : ""}Start with the highest-priority queue, then work through receiving, storage, fulfillment, and inventory control.`}
+        icon="box"
+        status={<Badge tone="emerald">Shift ready</Badge>}
+        action={
+          priorityAction ? (
+            <Link
+              to={priorityAction.to}
+              aria-label={`Continue ${priorityAction.label}`}
+              className="btn-primary w-full md:w-auto"
             >
+              Continue next task
+              <Icon name="arrowRight" className="h-4 w-4" />
+            </Link>
+          ) : undefined
+        }
+      />
+      <section aria-labelledby="operator-overview">
+        <SectionTitle
+          id="operator-overview"
+          title="Shift queues"
+          subtitle="Counts show work that can be continued now. Open a queue to see record-level status and blockers."
+          eyebrow="Today"
+        />
+        {activeActions.length > 0 ? (
+          <div className="grid gap-3 lg:grid-cols-2">
+            {activeActions.map((action) => (
               <Link
+                key={action.label}
                 to={action.to}
-                className="flex min-h-20 items-center gap-3 px-4 py-3 transition hover:bg-inset"
+                aria-label={action.label}
+                data-tone={action.tone}
+                className="workflow-launcher group grid min-h-[7.25rem] grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-lg border border-line bg-surface px-4 py-3 shadow-e1 transition hover:border-brand-300 hover:shadow-e2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
               >
-                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-brand-500/10 text-brand-700">
+                <span
+                  className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg ${toneClass[action.tone]}`}
+                >
                   <Icon name={action.icon} className="h-5 w-5" />
                 </span>
-                <span className="font-semibold text-ink">{action.label}</span>
-                <Icon name="chevron" className="ml-auto h-4 w-4 text-faint" />
+                <span className="min-w-0">
+                  <span className="block font-semibold text-ink">
+                    {action.label}
+                  </span>
+                  <span className="mt-1 block text-sm leading-5 text-muted">
+                    {action.description}
+                  </span>
+                </span>
+                <span className="min-w-[4.5rem] text-right">
+                  <span className="tnum block font-display text-2xl font-extrabold text-ink">
+                    {action.value}
+                  </span>
+                  <span className="block text-[0.68rem] font-semibold text-faint">
+                    {action.unit}
+                  </span>
+                  <Icon
+                    name="chevron"
+                    className="ml-auto mt-2 h-4 w-4 text-faint transition group-hover:translate-x-0.5 group-hover:text-brand-700"
+                  />
+                </span>
               </Link>
-              {action.secondary ? (
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            compact
+            icon="check"
+            title="No queued floor work"
+            message="The shift queues are clear. Use an available tool below for scanning, review, or preventive inventory work."
+          />
+        )}
+        {quietActions.length > 0 && (
+          <div className="mt-5">
+            <p className="mb-2 text-xs font-semibold uppercase text-faint">
+              Available floor tools
+            </p>
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+              {quietActions.map((action) => (
                 <Link
-                  to={action.secondary.to}
-                  className="flex min-h-11 items-center justify-between border-t border-line px-4 text-sm font-semibold text-brand-700 hover:bg-inset"
+                  key={action.label}
+                  to={action.to}
+                  aria-label={action.label}
+                  className="group flex min-h-16 items-center gap-3 rounded-lg border border-line bg-surface px-3 py-2.5 transition hover:border-brand-300 hover:bg-inset focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
                 >
-                  {action.secondary.label}
-                  <Icon name="chevron" className="h-4 w-4" />
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-emerald-500/15 text-emerald-800 dark:text-emerald-300">
+                    <Icon name={action.icon} className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold text-ink">
+                      {action.label}
+                    </span>
+                    <span className="block text-xs text-faint">Queue clear</span>
+                  </span>
+                  <Icon
+                    name="chevron"
+                    className="h-4 w-4 shrink-0 text-faint transition group-hover:translate-x-0.5 group-hover:text-brand-700"
+                  />
                 </Link>
-              ) : null}
+              ))}
             </div>
-          ))}
-        </div>
+          </div>
+        )}
       </section>
     </div>
   );
@@ -394,6 +513,7 @@ export function DashboardPage() {
       <OperatorDashboard
         name={profile?.name?.split(/\s+/)[0]}
         canOpenRoute={canOpenRoute}
+        data={data}
       />
     );
   }

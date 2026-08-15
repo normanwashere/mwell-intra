@@ -11,6 +11,7 @@ import {
   HeroChipButton,
   Icon,
   ModuleHero,
+  SectionTitle,
   Sheet,
   SignInPrompt,
   SkeletonList,
@@ -45,9 +46,10 @@ function actionIssue(cause: unknown, action: string): ActionIssue {
       message: `Could not ${action} because your current role is not authorized. Ask an administrator to verify your Product responsibility. Your entries were not cleared.`,
     };
   }
-  const stale = /already|changed|conflict|no longer|not found|stale|unexpected status|must be (submitted|approved)/i.test(
-    detail,
-  );
+  const stale =
+    /already|changed|conflict|no longer|not found|stale|unexpected status|must be (submitted|approved)/i.test(
+      detail,
+    );
   if (stale) {
     return {
       stale: true,
@@ -80,7 +82,9 @@ export function ProductApp() {
   const [note, setNote] = useState("");
   const [readinessOpen, setReadinessOpen] = useState(false);
   const [priceOpen, setPriceOpen] = useState(false);
-  const [pendingActions, setPendingActions] = useState<Record<string, true>>({});
+  const [pendingActions, setPendingActions] = useState<Record<string, true>>(
+    {},
+  );
   const [actionIssues, setActionIssues] = useState<Record<string, ActionIssue>>(
     {},
   );
@@ -99,14 +103,22 @@ export function ProductApp() {
   const viewReadiness = can(userRoles, "product", "view_readiness");
   if (!viewReadiness) {
     return (
-      <div role="alert" className="grid min-h-[60vh] place-items-center p-6 text-center">
+      <div
+        role="alert"
+        className="grid min-h-[60vh] place-items-center p-6 text-center"
+      >
         <div className="max-w-sm space-y-3">
           <Icon name="lock" className="mx-auto h-8 w-8 text-faint" />
-          <h1 className="font-display text-lg font-bold text-ink">No Product access</h1>
+          <h1 className="font-display text-lg font-bold text-ink">
+            No Product access
+          </h1>
           <p className="text-sm text-muted">
-            Your account needs a Product role. Ask an administrator to assign the appropriate responsibility.
+            Your account needs a Product role. Ask an administrator to assign
+            the appropriate responsibility.
           </p>
-          <a href="/" className="btn-primary">Back to dashboard</a>
+          <a href="/" className="btn-primary">
+            Back to dashboard
+          </a>
         </div>
       </div>
     );
@@ -175,10 +187,10 @@ export function ProductApp() {
     : null;
   const readinessDecisionStale = Boolean(
     readinessDecision &&
-      (!currentReadinessDecision ||
-        currentReadinessDecision.version !== readinessDecision.item.version ||
-        currentReadinessDecision.updatedAt !== readinessDecision.item.updatedAt ||
-        currentReadinessDecision.status !== "submitted"),
+    (!currentReadinessDecision ||
+      currentReadinessDecision.version !== readinessDecision.item.version ||
+      currentReadinessDecision.updatedAt !== readinessDecision.item.updatedAt ||
+      currentReadinessDecision.status !== "submitted"),
   );
   const priceDecisionKey = priceDecision
     ? `pricing:${priceDecision.item.id}:decision`
@@ -188,9 +200,9 @@ export function ProductApp() {
     : null;
   const priceDecisionStale = Boolean(
     priceDecision &&
-      (!currentPriceDecision ||
-        currentPriceDecision.version !== priceDecision.item.version ||
-        currentPriceDecision.status !== "submitted"),
+    (!currentPriceDecision ||
+      currentPriceDecision.version !== priceDecision.item.version ||
+      currentPriceDecision.status !== "submitted"),
   );
 
   return (
@@ -218,31 +230,48 @@ export function ProductApp() {
           <div className="flex flex-wrap gap-2">
             {workspace.isDemo && <Badge tone="amber">Demo memory</Badge>}
             <Badge tone="brand">
-              {workspace.data.readiness.filter((item) => item.status === "submitted").length} awaiting decision
+              {
+                workspace.data.readiness.filter(
+                  (item) => item.status === "submitted",
+                ).length
+              }{" "}
+              awaiting decision
             </Badge>
             <Badge tone="emerald">
-              {workspace.data.readiness.filter((item) => item.status === "approved").length} approved
+              {
+                workspace.data.readiness.filter(
+                  (item) => item.status === "approved",
+                ).length
+              }{" "}
+              approved
             </Badge>
           </div>
         }
       />
 
       {workspace.error && (
-        <div role="status" className="flex flex-col gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 sm:flex-row sm:items-center sm:justify-between">
+        <div
+          role="status"
+          className="flex flex-col gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 sm:flex-row sm:items-center sm:justify-between"
+        >
           <p>{workspace.error}</p>
-          <button type="button" className="btn-ghost min-h-11" onClick={() => void workspace.refresh()}>
+          <button
+            type="button"
+            className="btn-ghost min-h-11"
+            onClick={() => void workspace.refresh()}
+          >
             <Icon name="rotate" className="h-4 w-4" /> Retry
           </button>
         </div>
       )}
 
       <section aria-labelledby="readiness-queue-title" className="space-y-3">
-        <div>
-          <h2 id="readiness-queue-title" className="font-display text-lg font-bold text-ink">
-            Go-live queue
-          </h2>
-          <p className="text-sm text-muted">Evidence, decision history, conditions, and Operations acknowledgement remain together.</p>
-        </div>
+        <SectionTitle
+          id="readiness-queue-title"
+          eyebrow="Decision queue"
+          title="Go-live queue"
+          subtitle="Evidence, decision history, conditions, and Operations acknowledgement remain together."
+        />
         {workspace.data.readiness.length === 0 ? (
           <EmptyState
             icon="clipboard"
@@ -280,28 +309,31 @@ export function ProductApp() {
       </section>
 
       {viewPricing && (
-        <section aria-labelledby="pricing-governance-title" className="space-y-3">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <h2 id="pricing-governance-title" className="font-display text-lg font-bold text-ink">
-                Pricing governance
-              </h2>
-              <p className="text-sm text-muted">Effective-dated proposals retain cost basis, reason, independent approval, and history.</p>
-            </div>
-            {proposePricing && (
-              <button
-                type="button"
-                className="btn-secondary min-h-11"
-                onClick={() => {
-                  if (!actionIssues["pricing:create"]?.stale)
-                    clearActionIssue("pricing:create");
-                  setPriceOpen(true);
-                }}
-              >
-                <Icon name="plus" className="h-4 w-4" /> Propose price
-              </button>
-            )}
-          </div>
+        <section
+          aria-labelledby="pricing-governance-title"
+          className="space-y-3"
+        >
+          <SectionTitle
+            id="pricing-governance-title"
+            eyebrow="Commercial control"
+            title="Pricing governance"
+            subtitle="Effective-dated proposals retain cost basis, reason, independent approval, and history."
+            action={
+              proposePricing ? (
+                <button
+                  type="button"
+                  className="btn-secondary min-h-11"
+                  onClick={() => {
+                    if (!actionIssues["pricing:create"]?.stale)
+                      clearActionIssue("pricing:create");
+                    setPriceOpen(true);
+                  }}
+                >
+                  <Icon name="plus" className="h-4 w-4" /> Propose price
+                </button>
+              ) : undefined
+            }
+          />
           {workspace.data.pricing.length === 0 ? (
             <EmptyState
               icon="tag"
@@ -314,7 +346,9 @@ export function ProductApp() {
                 <PriceCard
                   key={item.id}
                   item={item}
-                  canDecide={approvePricing && canDecidePriceProposal(item, profile.id)}
+                  canDecide={
+                    approvePricing && canDecidePriceProposal(item, profile.id)
+                  }
                   onDecide={(decision) => {
                     setNote("");
                     clearActionIssue(`pricing:${item.id}:decision`);
@@ -329,7 +363,11 @@ export function ProductApp() {
 
       <DecisionSheet
         open={Boolean(readinessDecision)}
-        title={readinessDecision?.decision === "approved" ? "Approve go-live" : "Reject go-live"}
+        title={
+          readinessDecision?.decision === "approved"
+            ? "Approve go-live"
+            : "Reject go-live"
+        }
         note={note}
         pending={Boolean(pendingActions[readinessDecisionKey])}
         issue={actionIssues[readinessDecisionKey]}
@@ -358,7 +396,11 @@ export function ProductApp() {
       />
       <DecisionSheet
         open={Boolean(priceDecision)}
-        title={priceDecision?.decision === "approved" ? "Approve price" : "Reject price"}
+        title={
+          priceDecision?.decision === "approved"
+            ? "Approve price"
+            : "Reject price"
+        }
         note={note}
         pending={Boolean(pendingActions[priceDecisionKey])}
         issue={actionIssues[priceDecisionKey]}
@@ -389,11 +431,14 @@ export function ProductApp() {
         pending={Boolean(pendingActions["readiness:create"])}
         issue={actionIssues["readiness:create"]}
         onOpenChange={(open) => {
-          if (!open && !pendingActions["readiness:create"]) setReadinessOpen(false);
+          if (!open && !pendingActions["readiness:create"])
+            setReadinessOpen(false);
         }}
         onSubmit={(draft) =>
-          runProductAction("readiness:create", "submit the readiness package", () =>
-            workspace.createReadiness(draft),
+          runProductAction(
+            "readiness:create",
+            "submit the readiness package",
+            () => workspace.createReadiness(draft),
           )
         }
       />
@@ -414,7 +459,9 @@ export function ProductApp() {
   );
 }
 
-function statusTone(status: ReadinessPackage["status"] | PriceProposal["status"]): "brand" | "emerald" | "rose" | "amber" | "slate" {
+function statusTone(
+  status: ReadinessPackage["status"] | PriceProposal["status"],
+): "brand" | "emerald" | "rose" | "amber" | "slate" {
   if (status === "approved") return "emerald";
   if (status === "rejected") return "rose";
   if (status === "submitted") return "amber";
@@ -442,50 +489,88 @@ function ReadinessCard({
   return (
     <article aria-label={`${item.title} readiness package`}>
       <Card className="space-y-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase text-faint">Version {item.version}</p>
-          <h3 className="mt-1 font-display text-base font-bold text-ink">{item.title}</h3>
-          <p className="text-sm text-muted">Product {item.productId}</p>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase text-faint">
+              Version {item.version}
+            </p>
+            <h3 className="mt-1 font-display text-base font-bold text-ink">
+              {item.title}
+            </h3>
+            <p className="text-sm text-muted">Product {item.productId}</p>
+          </div>
+          <Badge tone={statusTone(item.status)}>{item.status}</Badge>
         </div>
-        <Badge tone={statusTone(item.status)}>{item.status}</Badge>
-      </div>
-      <ul className="space-y-2" aria-label="Readiness evidence">
-        {item.evidence.map((evidenceItem) => (
-          <li key={evidenceItem.id} className="flex items-start gap-2 text-sm text-muted">
-            <Icon name={evidenceItem.verified ? "check" : "alert"} className="mt-0.5 h-4 w-4 shrink-0" />
-            <span><strong className="font-semibold text-ink">{evidenceItem.label}</strong> · {evidenceItem.reference}</span>
-          </li>
-        ))}
-      </ul>
-      {item.conditions && <p className="rounded-lg bg-inset p-3 text-sm text-muted"><strong className="text-ink">Conditions:</strong> {item.conditions}</p>}
-      <p className="text-sm text-muted"><strong className="text-ink">Kit approval:</strong> {item.kitApproved ? "verified" : "required before launch"}</p>
-      {canDecide && item.status === "submitted" && (
-        <div className="flex flex-wrap gap-2">
-          <button type="button" className="btn-primary min-h-11" onClick={() => onDecide("approved")}>Approve go-live</button>
-          <button type="button" className="btn-secondary min-h-11" onClick={() => onDecide("rejected")}>Reject go-live</button>
-        </div>
-      )}
-      {handoffReady && (
-        <button
-          type="button"
-          className="btn-primary min-h-11 w-full"
-          disabled={handoffPending || handoffIssue?.stale}
-          aria-busy={handoffPending}
-          onClick={() => void onAcknowledge()}
-        >
-          {handoffPending
-            ? "Acknowledging Operations handoff..."
-            : "Acknowledge Operations handoff"}
-        </button>
-      )}
+        <ul className="space-y-2" aria-label="Readiness evidence">
+          {item.evidence.map((evidenceItem) => (
+            <li
+              key={evidenceItem.id}
+              className="flex items-start gap-2 text-sm text-muted"
+            >
+              <Icon
+                name={evidenceItem.verified ? "check" : "alert"}
+                className="mt-0.5 h-4 w-4 shrink-0"
+              />
+              <span>
+                <strong className="font-semibold text-ink">
+                  {evidenceItem.label}
+                </strong>{" "}
+                · {evidenceItem.reference}
+              </span>
+            </li>
+          ))}
+        </ul>
+        {item.conditions && (
+          <p className="rounded-lg bg-inset p-3 text-sm text-muted">
+            <strong className="text-ink">Conditions:</strong> {item.conditions}
+          </p>
+        )}
+        <p className="text-sm text-muted">
+          <strong className="text-ink">Kit approval:</strong>{" "}
+          {item.kitApproved ? "verified" : "required before launch"}
+        </p>
+        {canDecide && item.status === "submitted" && (
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="btn-primary min-h-11"
+              onClick={() => onDecide("approved")}
+            >
+              Approve go-live
+            </button>
+            <button
+              type="button"
+              className="btn-secondary min-h-11"
+              onClick={() => onDecide("rejected")}
+            >
+              Reject go-live
+            </button>
+          </div>
+        )}
+        {handoffReady && (
+          <button
+            type="button"
+            className="btn-primary min-h-11 w-full"
+            disabled={handoffPending || handoffIssue?.stale}
+            aria-busy={handoffPending}
+            onClick={() => void onAcknowledge()}
+          >
+            {handoffPending
+              ? "Acknowledging Operations handoff..."
+              : "Acknowledge Operations handoff"}
+          </button>
+        )}
         {handoffIssue && <ActionFeedback issue={handoffIssue} />}
       </Card>
     </article>
   );
 }
 
-function PriceCard({ item, canDecide, onDecide }: {
+function PriceCard({
+  item,
+  canDecide,
+  onDecide,
+}: {
   item: PriceProposal;
   canDecide: boolean;
   onDecide: (decision: Decision) => void;
@@ -493,23 +578,47 @@ function PriceCard({ item, canDecide, onDecide }: {
   return (
     <article aria-label={`${item.reason} price proposal`}>
       <Card className="space-y-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold uppercase text-faint">{item.productName} · Version {item.version}</p>
-          <h3 className="mt-1 font-display text-base font-bold text-ink">{money(item.currentPrice)} → {money(item.proposedPrice)}</h3>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase text-faint">
+              {item.productName} · Version {item.version}
+            </p>
+            <h3 className="mt-1 font-display text-base font-bold text-ink">
+              {money(item.currentPrice)} → {money(item.proposedPrice)}
+            </h3>
+          </div>
+          <Badge tone={statusTone(item.status)}>{item.status}</Badge>
         </div>
-        <Badge tone={statusTone(item.status)}>{item.status}</Badge>
-      </div>
-      <dl className="grid grid-cols-2 gap-3 text-sm">
-        <div><dt className="text-faint">Cost basis</dt><dd className="font-semibold text-ink">{money(item.costBasis)}</dd></div>
-        <div><dt className="text-faint">Effective</dt><dd className="font-semibold text-ink">{new Date(item.effectiveAt).toLocaleDateString()}</dd></div>
-      </dl>
-      <p className="text-sm text-muted">{item.reason}</p>
+        <dl className="grid grid-cols-2 gap-3 text-sm">
+          <div>
+            <dt className="text-faint">Cost basis</dt>
+            <dd className="font-semibold text-ink">{money(item.costBasis)}</dd>
+          </div>
+          <div>
+            <dt className="text-faint">Effective</dt>
+            <dd className="font-semibold text-ink">
+              {new Date(item.effectiveAt).toLocaleDateString()}
+            </dd>
+          </div>
+        </dl>
+        <p className="text-sm text-muted">{item.reason}</p>
         {canDecide && (
-        <div className="flex flex-wrap gap-2">
-          <button type="button" className="btn-primary min-h-11" onClick={() => onDecide("approved")}>Approve price</button>
-          <button type="button" className="btn-secondary min-h-11" onClick={() => onDecide("rejected")}>Reject price</button>
-        </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="btn-primary min-h-11"
+              onClick={() => onDecide("approved")}
+            >
+              Approve price
+            </button>
+            <button
+              type="button"
+              className="btn-secondary min-h-11"
+              onClick={() => onDecide("rejected")}
+            >
+              Reject price
+            </button>
+          </div>
         )}
       </Card>
     </article>
@@ -531,7 +640,17 @@ function ActionFeedback({ issue }: { issue: ActionIssue }) {
   );
 }
 
-function DecisionSheet({ open, title, note, pending, issue, stale, onNoteChange, onOpenChange, onSubmit }: {
+function DecisionSheet({
+  open,
+  title,
+  note,
+  pending,
+  issue,
+  stale,
+  onNoteChange,
+  onOpenChange,
+  onSubmit,
+}: {
   open: boolean;
   title: string;
   note: string;
@@ -543,19 +662,29 @@ function DecisionSheet({ open, title, note, pending, issue, stale, onNoteChange,
   onSubmit: () => Promise<void>;
 }) {
   return (
-    <Sheet open={open} onOpenChange={onOpenChange} title={title} description="The actor, timestamp, version, and decision note are retained in the audit history." footer={
-      <button
-        type="button"
-        className="btn-primary min-h-11 w-full"
-        disabled={note.trim().length < 8 || pending || stale}
-        aria-busy={pending}
-        onClick={() => void onSubmit()}
-      >
-        {pending ? `${title}...` : title}
-      </button>
-    }>
+    <Sheet
+      open={open}
+      onOpenChange={onOpenChange}
+      title={title}
+      description="The actor, timestamp, version, and decision note are retained in the audit history."
+      footer={
+        <button
+          type="button"
+          className="btn-primary min-h-11 w-full"
+          disabled={note.trim().length < 8 || pending || stale}
+          aria-busy={pending}
+          onClick={() => void onSubmit()}
+        >
+          {pending ? `${title}...` : title}
+        </button>
+      }
+    >
       <div className="space-y-4" aria-busy={pending}>
-        <Field label="Decision note" htmlFor={`${title.replace(/\s+/g, "-").toLowerCase()}-note`} hint="Required - at least 8 characters">
+        <Field
+          label="Decision note"
+          htmlFor={`${title.replace(/\s+/g, "-").toLowerCase()}-note`}
+          hint="Required - at least 8 characters"
+        >
           <textarea
             id={`${title.replace(/\s+/g, "-").toLowerCase()}-note`}
             className="input min-h-28"
@@ -579,19 +708,33 @@ function DecisionSheet({ open, title, note, pending, issue, stale, onNoteChange,
   );
 }
 
-function ReadinessSheet({ open, pending, issue, onOpenChange, onSubmit }: {
+function ReadinessSheet({
+  open,
+  pending,
+  issue,
+  onOpenChange,
+  onSubmit,
+}: {
   open: boolean;
   pending: boolean;
   issue?: ActionIssue;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (draft: Parameters<ReturnType<typeof useProductWorkspace>["createReadiness"]>[0]) => Promise<boolean>;
+  onSubmit: (
+    draft: Parameters<
+      ReturnType<typeof useProductWorkspace>["createReadiness"]
+    >[0],
+  ) => Promise<boolean>;
 }) {
   const [productId, setProductId] = useState("");
   const [title, setTitle] = useState("");
   const [conditions, setConditions] = useState("");
   const [evidenceLabel, setEvidenceLabel] = useState("");
   const [evidenceReference, setEvidenceReference] = useState("");
-  const valid = productId.trim() && title.trim().length >= 6 && evidenceLabel.trim() && evidenceReference.trim();
+  const valid =
+    productId.trim() &&
+    title.trim().length >= 6 &&
+    evidenceLabel.trim() &&
+    evidenceReference.trim();
   const submit = async () => {
     const succeeded = await onSubmit({
       productId: productId.trim(),
@@ -616,42 +759,98 @@ function ReadinessSheet({ open, pending, issue, onOpenChange, onSubmit }: {
     onOpenChange(false);
   };
   return (
-    <Sheet open={open} onOpenChange={onOpenChange} title="New readiness package" description="Submit verified evidence for an independent Product go-live decision." footer={
-      <button
-        type="button"
-        className="btn-primary min-h-11 w-full"
-        disabled={!valid || pending || issue?.stale}
-        aria-busy={pending}
-        onClick={() => void submit()}
-      >
-        {pending ? "Submitting package..." : "Submit package"}
-      </button>
-    }>
+    <Sheet
+      open={open}
+      onOpenChange={onOpenChange}
+      title="New readiness package"
+      description="Submit verified evidence for an independent Product go-live decision."
+      footer={
+        <button
+          type="button"
+          className="btn-primary min-h-11 w-full"
+          disabled={!valid || pending || issue?.stale}
+          aria-busy={pending}
+          onClick={() => void submit()}
+        >
+          {pending ? "Submitting package..." : "Submit package"}
+        </button>
+      }
+    >
       <fieldset className="space-y-4" disabled={pending} aria-busy={pending}>
-        <Field label="Product ID" htmlFor="readiness-product"><input id="readiness-product" className="input" value={productId} onChange={(event) => setProductId(event.target.value)} /></Field>
-        <Field label="Readiness title" htmlFor="readiness-title"><input id="readiness-title" className="input" value={title} onChange={(event) => setTitle(event.target.value)} /></Field>
-        <Field label="Evidence name" htmlFor="readiness-evidence"><input id="readiness-evidence" className="input" value={evidenceLabel} onChange={(event) => setEvidenceLabel(event.target.value)} /></Field>
-        <Field label="Evidence reference" htmlFor="readiness-reference"><input id="readiness-reference" className="input" value={evidenceReference} onChange={(event) => setEvidenceReference(event.target.value)} /></Field>
-        <Field label="Launch conditions" htmlFor="readiness-conditions"><textarea id="readiness-conditions" className="input min-h-24" value={conditions} onChange={(event) => setConditions(event.target.value)} /></Field>
+        <Field label="Product ID" htmlFor="readiness-product">
+          <input
+            id="readiness-product"
+            className="input"
+            value={productId}
+            onChange={(event) => setProductId(event.target.value)}
+          />
+        </Field>
+        <Field label="Readiness title" htmlFor="readiness-title">
+          <input
+            id="readiness-title"
+            className="input"
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+          />
+        </Field>
+        <Field label="Evidence name" htmlFor="readiness-evidence">
+          <input
+            id="readiness-evidence"
+            className="input"
+            value={evidenceLabel}
+            onChange={(event) => setEvidenceLabel(event.target.value)}
+          />
+        </Field>
+        <Field label="Evidence reference" htmlFor="readiness-reference">
+          <input
+            id="readiness-reference"
+            className="input"
+            value={evidenceReference}
+            onChange={(event) => setEvidenceReference(event.target.value)}
+          />
+        </Field>
+        <Field label="Launch conditions" htmlFor="readiness-conditions">
+          <textarea
+            id="readiness-conditions"
+            className="input min-h-24"
+            value={conditions}
+            onChange={(event) => setConditions(event.target.value)}
+          />
+        </Field>
         {issue && <ActionFeedback issue={issue} />}
       </fieldset>
     </Sheet>
   );
 }
 
-function PriceProposalSheet({ open, pending, issue, onOpenChange, onSubmit }: {
+function PriceProposalSheet({
+  open,
+  pending,
+  issue,
+  onOpenChange,
+  onSubmit,
+}: {
   open: boolean;
   pending: boolean;
   issue?: ActionIssue;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (draft: Parameters<ReturnType<typeof useProductWorkspace>["proposePrice"]>[0]) => Promise<boolean>;
+  onSubmit: (
+    draft: Parameters<
+      ReturnType<typeof useProductWorkspace>["proposePrice"]
+    >[0],
+  ) => Promise<boolean>;
 }) {
   const [productId, setProductId] = useState("");
   const [price, setPrice] = useState("");
   const [costBasis, setCostBasis] = useState("");
   const [reason, setReason] = useState("");
   const [effectiveAt, setEffectiveAt] = useState("");
-  const valid = productId.trim() && Number(price) > 0 && Number(costBasis) >= 0 && reason.trim().length >= 12 && effectiveAt;
+  const valid =
+    productId.trim() &&
+    Number(price) > 0 &&
+    Number(costBasis) >= 0 &&
+    reason.trim().length >= 12 &&
+    effectiveAt;
   const submit = async () => {
     const succeeded = await onSubmit({
       productId: productId.trim(),
@@ -669,25 +868,73 @@ function PriceProposalSheet({ open, pending, issue, onOpenChange, onSubmit }: {
     onOpenChange(false);
   };
   return (
-    <Sheet open={open} onOpenChange={onOpenChange} title="Propose price" description="The current price is unchanged until another authorized person approves this revision." footer={
-      <button
-        type="button"
-        className="btn-primary min-h-11 w-full"
-        disabled={!valid || pending || issue?.stale}
-        aria-busy={pending}
-        onClick={() => void submit()}
-      >
-        {pending ? "Submitting price proposal..." : "Submit price proposal"}
-      </button>
-    }>
+    <Sheet
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Propose price"
+      description="The current price is unchanged until another authorized person approves this revision."
+      footer={
+        <button
+          type="button"
+          className="btn-primary min-h-11 w-full"
+          disabled={!valid || pending || issue?.stale}
+          aria-busy={pending}
+          onClick={() => void submit()}
+        >
+          {pending ? "Submitting price proposal..." : "Submit price proposal"}
+        </button>
+      }
+    >
       <fieldset className="space-y-4" disabled={pending} aria-busy={pending}>
-        <Field label="Product ID" htmlFor="price-product"><input id="price-product" className="input" value={productId} onChange={(event) => setProductId(event.target.value)} /></Field>
+        <Field label="Product ID" htmlFor="price-product">
+          <input
+            id="price-product"
+            className="input"
+            value={productId}
+            onChange={(event) => setProductId(event.target.value)}
+          />
+        </Field>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Proposed price" htmlFor="price-value"><input id="price-value" type="number" min="0.01" step="0.01" className="input" value={price} onChange={(event) => setPrice(event.target.value)} /></Field>
-          <Field label="Cost basis" htmlFor="price-cost"><input id="price-cost" type="number" min="0" step="0.01" className="input" value={costBasis} onChange={(event) => setCostBasis(event.target.value)} /></Field>
+          <Field label="Proposed price" htmlFor="price-value">
+            <input
+              id="price-value"
+              type="number"
+              min="0.01"
+              step="0.01"
+              className="input"
+              value={price}
+              onChange={(event) => setPrice(event.target.value)}
+            />
+          </Field>
+          <Field label="Cost basis" htmlFor="price-cost">
+            <input
+              id="price-cost"
+              type="number"
+              min="0"
+              step="0.01"
+              className="input"
+              value={costBasis}
+              onChange={(event) => setCostBasis(event.target.value)}
+            />
+          </Field>
         </div>
-        <Field label="Reason" htmlFor="price-reason"><textarea id="price-reason" className="input min-h-24" value={reason} onChange={(event) => setReason(event.target.value)} /></Field>
-        <Field label="Effective date and time" htmlFor="price-effective"><input id="price-effective" type="datetime-local" className="input" value={effectiveAt} onChange={(event) => setEffectiveAt(event.target.value)} /></Field>
+        <Field label="Reason" htmlFor="price-reason">
+          <textarea
+            id="price-reason"
+            className="input min-h-24"
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+          />
+        </Field>
+        <Field label="Effective date and time" htmlFor="price-effective">
+          <input
+            id="price-effective"
+            type="datetime-local"
+            className="input"
+            value={effectiveAt}
+            onChange={(event) => setEffectiveAt(event.target.value)}
+          />
+        </Field>
         {issue && <ActionFeedback issue={issue} />}
       </fieldset>
     </Sheet>

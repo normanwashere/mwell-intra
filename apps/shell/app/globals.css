@@ -20,11 +20,18 @@
 
   body {
     @apply bg-app font-sans text-ink antialiased;
+    letter-spacing: 0;
   }
 
   /* Roomy, accessible focus rings across the shell. */
   :focus-visible {
     outline: 2px solid rgb(var(--c-line));
+  }
+}
+
+@layer components {
+  .shell-content > * {
+    min-width: 0;
   }
 }
 
@@ -35,7 +42,9 @@
   }
 
   [data-shell-mobile-nav="true"] {
-    min-height: calc(var(--shell-mobile-nav-height) + env(safe-area-inset-bottom));
+    min-height: calc(
+      var(--shell-mobile-nav-height) + env(safe-area-inset-bottom)
+    );
   }
 
   .shell-content :is(a, button, input, select, textarea, [tabindex]) {

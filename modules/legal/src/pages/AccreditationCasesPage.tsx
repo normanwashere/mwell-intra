@@ -132,7 +132,6 @@ export function AccreditationCasesPage() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const isVendor = profile?.kind === "vendor";
-  const firstName = profile?.name?.split(/\s+/)[0] ?? "Legal";
   const filter = (params.get("filter") as CaseFilter) ?? "all";
 
   // Vendors see only their own case(s) — same matcher as the detail guard.
@@ -211,8 +210,9 @@ export function AccreditationCasesPage() {
   return (
     <div className="space-y-6">
       <ModuleHero
-        eyebrow="Welcome back,"
-        title={firstName}
+        eyebrow="Legal and compliance"
+        title="Vendor accreditation workspace"
+        description="Review evidence, resolve vendor dependencies, record decisions, and monitor renewals from one governed queue."
         icon="clipboard"
         accessory={
           <HeroStat label="Waiting on you" align="right">

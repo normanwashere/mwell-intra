@@ -120,17 +120,24 @@ export const OPERATING_PERSONA_GUIDES: Record<string, OperatingPersonaGuide> = {
     tasks: [
       task(
         "receive-stock",
-        "Receive stock",
-        "Match an approved PO, capture quantity, traceability, and evidence, then create the pending-inspection handoff while stock remains unavailable.",
-        "/warehouse/receiving",
-        "warehouse-receiving",
+        "Review the queue and receive stock",
+        "Start on the Warehouse floor dashboard, open the first receiving task, select the approved PO, and capture quantity, traceability, delivery details, and evidence. This creates the pending-inspection handoff while stock remains unavailable.",
+        "/warehouse/purchase-orders",
+        "warehouse-purchase-orders",
       ),
       task(
-        "inspect-putaway",
-        "Inspect and put away",
-        "Record the physical result and move accepted stock to its controlled bin.",
+        "inspect-stock",
+        "Inspect received stock",
+        "Open Quality Control, record the physical result and evidence, and keep rejected or held stock unavailable for use.",
         "/warehouse/quality",
         "warehouse-quality",
+      ),
+      task(
+        "put-away",
+        "Put accepted stock away",
+        "Open Put away, scan or select the accepted receipt, then confirm its controlled warehouse, rack, and bin before making it available.",
+        "/warehouse/storage",
+        "warehouse-storage",
       ),
       task(
         "pick-issue",

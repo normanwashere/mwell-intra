@@ -436,6 +436,46 @@ describe("useCan", () => {
     });
   });
 
+  it("preserves a verified identity when a focus session refresh fails transiently", async () => {
+    const { client } = liveClient();
+    render(
+      <SessionProvider config={{ mode: "supabase", client }}>
+        <LiveSessionProbe />
+      </SessionProvider>,
+    );
+    await screen.findByText("live@mwell.test");
+
+    vi.mocked(client.auth.getSession).mockRejectedValueOnce(
+      new Error("temporarily offline"),
+    );
+    window.dispatchEvent(new Event("focus"));
+
+    await waitFor(() => expect(client.auth.getSession).toHaveBeenCalledTimes(2));
+    expect(screen.getByTestId("live-user").textContent).toBe("live@mwell.test");
+    expect(screen.getByTestId("live-receive").textContent).toBe("yes");
+    expect(screen.getByTestId("live-loading").textContent).toBe("ready");
+  });
+
+  it("preserves a verified identity when focus revalidation fails transiently", async () => {
+    const { client } = liveClient();
+    render(
+      <SessionProvider config={{ mode: "supabase", client }}>
+        <LiveSessionProbe />
+      </SessionProvider>,
+    );
+    await screen.findByText("live@mwell.test");
+
+    vi.mocked(client.auth.getUser).mockRejectedValueOnce(
+      new Error("temporarily offline"),
+    );
+    window.dispatchEvent(new Event("focus"));
+
+    await waitFor(() => expect(client.auth.getUser).toHaveBeenCalledTimes(2));
+    expect(screen.getByTestId("live-user").textContent).toBe("live@mwell.test");
+    expect(screen.getByTestId("live-receive").textContent).toBe("yes");
+    expect(screen.getByTestId("live-loading").textContent).toBe("ready");
+  });
+
   it("does not let a stale capability refresh overwrite the latest user", async () => {
     const { client, emit, getUser, makeUser, rpc } = transitionClient();
     render(

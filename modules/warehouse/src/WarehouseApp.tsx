@@ -107,7 +107,8 @@ export function WarehouseApp({ basename = '/warehouse' }: WarehouseAppProps) {
   const initialRole: Role | undefined =
     selectWarehouseRole(warehouseRoles) ??
     (hasLiveAccess ? 'warehouse_operator' : undefined);
-  const roleCode = initialRole ?? claimedRoleCodes[0];
+  const roleCode =
+    warehouseRoles.length > 0 ? initialRole : claimedRoleCodes[0] ?? initialRole;
   const rolePresentation = warehouseRolePresentation(
     warehouseRoles.length > 0
       ? warehouseRoles

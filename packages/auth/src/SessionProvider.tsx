@@ -248,7 +248,11 @@ export function SessionProvider({
           return false;
         }
       } catch {
-        if (generation === liveGeneration.current) applyUser(null);
+        const canKeepVerifiedIdentity =
+          preserveCapabilities &&
+          activeUserId.current === session.user.id;
+        if (generation === liveGeneration.current && !canKeepVerifiedIdentity)
+          applyUser(null);
         return false;
       }
 
@@ -331,7 +335,10 @@ export function SessionProvider({
           );
         })
         .catch(() => {
-          if (active && generation === liveGeneration.current) applyUser(null);
+          // A focus refresh is opportunistic. A transient network or Supabase
+          // failure must not erase an identity that was already verified.
+          // Confirmed missing sessions still clear through
+          // verifyAndApplyLiveUser(null), and SIGNED_OUT remains authoritative.
         })
         .finally(() => undefined);
     };

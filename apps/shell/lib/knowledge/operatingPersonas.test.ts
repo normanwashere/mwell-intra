@@ -24,7 +24,7 @@ describe("operating persona guide contracts", () => {
       expect(guide, persona.label).toBeDefined();
       expect(guide!.roleIds.length, persona.label).toBeGreaterThan(0);
       expect(guide!.tasks.length, persona.label).toBeGreaterThanOrEqual(3);
-      expect(guide!.tasks.length, persona.label).toBeLessThanOrEqual(5);
+      expect(guide!.tasks.length, persona.label).toBeLessThanOrEqual(6);
 
       for (const roleId of guide!.roleIds) {
         expect(roleIds.has(roleId), `${persona.label}: ${roleId}`).toBe(true);

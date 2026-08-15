@@ -10,6 +10,7 @@ import {
   HeroChipButton,
   Icon,
   ModuleHero,
+  SectionTitle,
   Sheet,
   SignInPrompt,
   SkeletonList,
@@ -307,7 +308,11 @@ export function EventsApp({
     setSaving(true);
     try {
       await requestFulfillment(request);
-      toast.success(isDemo ? "Demo Warehouse handoff recorded locally. It has not been sent to Warehouse." : "Warehouse stock request sent for approval.");
+      toast.success(
+        isDemo
+          ? "Demo Warehouse handoff recorded locally. It has not been sent to Warehouse."
+          : "Warehouse stock request sent for approval.",
+      );
       setFulfillmentOpen(false);
     } catch (cause) {
       toast.error(
@@ -403,11 +408,13 @@ export function EventsApp({
                   setFulfillmentErrors({});
                   const defaultDepartment =
                     data.departments?.find(
-                      (department) => department.code === fulfillment.department,
+                      (department) =>
+                        department.code === fulfillment.department,
                     ) ?? data.departments?.[0];
                   const defaultCostCenter =
                     defaultDepartment?.costCenters.find(
-                      (costCenter) => costCenter.code === fulfillment.costCenter,
+                      (costCenter) =>
+                        costCenter.code === fulfillment.costCenter,
                     ) ?? defaultDepartment?.costCenters[0];
                   setFulfillment((current) => ({
                     ...current,
@@ -436,14 +443,19 @@ export function EventsApp({
         />
         <Card className="overflow-hidden p-0">
           <dl className="grid grid-cols-3 divide-x divide-line">
-            {([
-              ["Reserved", selectedEvent.reservedUnits, "tag"],
-              ["Issued", selectedEvent.issuedUnits, "truck"],
-              ["Returned", selectedEvent.returnedUnits, "rotate"],
-            ] as const).map(([label, value, icon]) => (
+            {(
+              [
+                ["Reserved", selectedEvent.reservedUnits, "tag"],
+                ["Issued", selectedEvent.issuedUnits, "truck"],
+                ["Returned", selectedEvent.returnedUnits, "rotate"],
+              ] as const
+            ).map(([label, value, icon]) => (
               <div key={label} className="min-w-0 px-3 py-3 sm:px-5 sm:py-4">
                 <dt className="flex min-w-0 items-center gap-2 text-xs font-semibold text-muted">
-                  <Icon name={icon} className="h-4 w-4 shrink-0 text-brand-600" />
+                  <Icon
+                    name={icon}
+                    className="h-4 w-4 shrink-0 text-brand-600"
+                  />
                   <span className="truncate">{label}</span>
                 </dt>
                 <dd className="tnum mt-2 font-display text-2xl font-extrabold leading-none text-ink">
@@ -1223,17 +1235,12 @@ export function EventsApp({
       </div>
 
       <section aria-labelledby="event-list-title" className="space-y-3">
-        <div>
-          <p className="text-xs font-semibold uppercase text-faint">
-            Lifecycle
-          </p>
-          <h2
-            id="event-list-title"
-            className="font-display text-xl font-bold text-ink"
-          >
-            Event readiness and fulfillment
-          </h2>
-        </div>
+        <SectionTitle
+          id="event-list-title"
+          eyebrow="Lifecycle"
+          title="Event readiness and fulfillment"
+          subtitle="Follow demand, approval, Warehouse handoff, event custody, and reconciliation in one record."
+        />
         {data.events.length === 0 ? (
           <EmptyState icon="calendar" title="No events yet" />
         ) : (

@@ -1,9 +1,9 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { SessionValue } from '@intra/auth';
-import { ToastProvider } from '@intra/ui';
-import { FINANCE_DEMO_DATA } from './seed';
-import type { FinanceData } from './types';
+import { fireEvent, render, screen, within } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { SessionValue } from "@intra/auth";
+import { ToastProvider } from "@intra/ui";
+import { FINANCE_DEMO_DATA } from "./seed";
+import type { FinanceData } from "./types";
 
 const state = vi.hoisted(() => ({
   session: null as unknown as SessionValue,
@@ -16,17 +16,17 @@ const state = vi.hoisted(() => ({
   },
 }));
 
-vi.mock('@intra/auth', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@intra/auth')>();
+vi.mock("@intra/auth", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@intra/auth")>();
   return { ...actual, useSession: () => state.session };
 });
 
-vi.mock('./data', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./data')>();
+vi.mock("./data", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./data")>();
   return { ...actual, useFinanceData: () => state.data };
 });
 
-import { FinanceApp } from './FinanceApp';
+import { FinanceApp } from "./FinanceApp";
 
 function renderFinanceApp() {
   return render(
@@ -36,17 +36,17 @@ function renderFinanceApp() {
   );
 }
 
-function session(roles: SessionValue['userRoles']): SessionValue {
+function session(roles: SessionValue["userRoles"]): SessionValue {
   return {
     profile: {
-      id: 'finance-user',
-      email: 'finance@mwell.demo',
-      kind: 'employee',
-      name: 'Rina Domingo',
-      title: 'Finance Manager',
+      id: "finance-user",
+      email: "finance@mwell.demo",
+      kind: "employee",
+      name: "Rina Domingo",
+      title: "Finance Manager",
     },
     userRoles: roles,
-    mode: 'memory',
+    mode: "memory",
     supabaseClient: null,
     loading: false,
     signingIn: false,
@@ -60,12 +60,12 @@ function session(roles: SessionValue['userRoles']): SessionValue {
   };
 }
 
-describe('FinanceApp', () => {
+describe("FinanceApp", () => {
   beforeEach(() => {
     state.session = session({
-      core: ['staff'],
-      warehouse: ['finance'],
-      procurement: ['finance'],
+      core: ["staff"],
+      warehouse: ["finance"],
+      procurement: ["finance"],
     });
     state.data = {
       data: FINANCE_DEMO_DATA,
@@ -76,93 +76,117 @@ describe('FinanceApp', () => {
     };
   });
 
-  it('shows one unified workspace for a dual-role Finance user', () => {
+  it("shows one unified workspace for a dual-role Finance user", () => {
     renderFinanceApp();
-    expect(screen.getByText('Warehouse Finance')).toBeInTheDocument();
-    expect(screen.getByText('Procurement Finance')).toBeInTheDocument();
-    expect(screen.getByText('Payment readiness')).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Payment readiness' })).toHaveClass(
-      'min-w-0',
-      'max-w-full',
-      'overflow-hidden',
-    );
-    for (const purchaseOrderLink of screen.getAllByRole('link', { name: 'PO-2026-0004' })) {
-      expect(purchaseOrderLink).toHaveClass('break-all', 'sm:break-normal');
-      expect(purchaseOrderLink).toHaveClass('min-h-11');
+    expect(
+      screen.getByRole("heading", { name: "Finance control center" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Warehouse Finance")).toBeInTheDocument();
+    expect(screen.getByText("Procurement Finance")).toBeInTheDocument();
+    expect(screen.getByText("Payment readiness")).toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "Payment readiness" }),
+    ).toHaveClass("min-w-0", "max-w-full", "overflow-hidden");
+    for (const purchaseOrderLink of screen.getAllByRole("link", {
+      name: "PO-2026-0004",
+    })) {
+      expect(purchaseOrderLink).toHaveClass("break-all", "sm:break-normal");
+      expect(purchaseOrderLink).toHaveClass("min-h-11");
     }
-    for (const activityLink of screen.getAllByRole('link', { name: 'po_seed_004' })) {
-      expect(activityLink).toHaveClass('min-h-11');
+    for (const activityLink of screen.getAllByRole("link", {
+      name: "po_seed_004",
+    })) {
+      expect(activityLink).toHaveClass("min-h-11");
     }
-    expect(screen.getByText('Cross-module activity')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /stock adjustment approvals/i })).toHaveAttribute(
-      'href',
-      '/warehouse/approvals',
-    );
-    expect(screen.getByRole('link', { name: /review next payment pack/i })).toHaveAttribute(
-      'href',
-      '/procurement/purchase-orders/po_seed_004',
-    );
+    expect(screen.getByText("Cross-module activity")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /stock adjustment approvals/i }),
+    ).toHaveAttribute("href", "/warehouse/approvals");
+    expect(
+      screen.getByRole("link", { name: /review next payment pack/i }),
+    ).toHaveAttribute("href", "/procurement/purchase-orders/po_seed_004");
   });
 
-  it('opens receipt evidence in place instead of linking Finance to receiving', () => {
+  it("opens receipt evidence in place instead of linking Finance to receiving", () => {
     renderFinanceApp();
 
-    expect(screen.queryByRole('link', { name: 'receipt-demo-318' })).not.toBeInTheDocument();
-    fireEvent.click(screen.getAllByRole('button', { name: 'View receipt-demo-318 details' })[0]!);
+    expect(
+      screen.queryByRole("link", { name: "receipt-demo-318" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getAllByRole("button", {
+        name: "View receipt-demo-318 details",
+      })[0]!,
+    );
 
-    const dialog = screen.getByRole('dialog', { name: 'Finance activity receipt-demo-318' });
+    const dialog = screen.getByRole("dialog", {
+      name: "Finance activity receipt-demo-318",
+    });
     expect(dialog).toBeInTheDocument();
-    expect(within(dialog).getByText('Warehouse receipt')).toBeInTheDocument();
-    expect(within(dialog).getByText('received')).toBeInTheDocument();
+    expect(within(dialog).getByText("Warehouse receipt")).toBeInTheDocument();
+    expect(within(dialog).getByText("received")).toBeInTheDocument();
   });
 
-  it('admits Procurement Finance without inventing Warehouse access', () => {
-    state.session = session({ core: ['staff'], procurement: ['finance'] });
+  it("admits Procurement Finance without inventing Warehouse access", () => {
+    state.session = session({ core: ["staff"], procurement: ["finance"] });
     renderFinanceApp();
-    expect(screen.getByText('Procurement Finance')).toBeInTheDocument();
-    expect(screen.queryByText('Warehouse Finance')).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /stock adjustment approvals/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /prepare close entry/i })).not.toBeInTheDocument();
+    expect(screen.getByText("Procurement Finance")).toBeInTheDocument();
+    expect(screen.queryByText("Warehouse Finance")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /stock adjustment approvals/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /prepare close entry/i }),
+    ).not.toBeInTheDocument();
   });
 
-  it('keeps Warehouse Pricing read-only in the Finance workspace', () => {
-    state.session = session({ core: ['staff'], warehouse: ['pricing'] });
+  it("keeps Warehouse Pricing read-only in the Finance workspace", () => {
+    state.session = session({ core: ["staff"], warehouse: ["pricing"] });
     renderFinanceApp();
-    expect(screen.getByText('Warehouse Finance')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /prepare close entry/i })).not.toBeInTheDocument();
+    expect(screen.getByText("Warehouse Finance")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /prepare close entry/i }),
+    ).not.toBeInTheDocument();
   });
 
-  it('keeps a Warehouse-only Finance user in Warehouse-owned workflows', () => {
-    state.session = session({ core: ['staff'], warehouse: ['finance'] });
+  it("keeps a Warehouse-only Finance user in Warehouse-owned workflows", () => {
+    state.session = session({ core: ["staff"], warehouse: ["finance"] });
     state.data = {
       ...state.data,
       data: {
         ...FINANCE_DEMO_DATA,
         payments: [],
-        activity: FINANCE_DEMO_DATA.activity.filter((item) => item.source !== 'procurement_po'),
+        activity: FINANCE_DEMO_DATA.activity.filter(
+          (item) => item.source !== "procurement_po",
+        ),
       },
     };
     renderFinanceApp();
-    expect(screen.getByRole('link', { name: /review inventory value/i })).toHaveAttribute(
-      'href',
-      '/warehouse/inventory',
-    );
-    expect(screen.queryByRole('link', { name: /open purchase orders/i })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /review inventory value/i }),
+    ).toHaveAttribute("href", "/warehouse/inventory");
+    expect(
+      screen.queryByRole("link", { name: /open purchase orders/i }),
+    ).not.toBeInTheDocument();
   });
 
-  it('shows an explicit denial for unrelated roles', () => {
-    state.session = session({ core: ['staff'], procurement: ['requester'] });
+  it("shows an explicit denial for unrelated roles", () => {
+    state.session = session({ core: ["staff"], procurement: ["requester"] });
     renderFinanceApp();
-    expect(screen.getByRole('heading', { name: 'No Finance access' })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "No Finance access" }),
+    ).toBeInTheDocument();
   });
 
-  it('preserves valid data when one live source reports a warning', () => {
+  it("preserves valid data when one live source reports a warning", () => {
     state.data = {
       ...state.data,
-      error: 'Inventory valuation: source unavailable',
+      error: "Inventory valuation: source unavailable",
     };
     renderFinanceApp();
-    expect(screen.getByText(/some Finance sources are unavailable/i)).toBeInTheDocument();
-    expect(screen.getAllByText('PO-2026-0004')).toHaveLength(2);
+    expect(
+      screen.getByText(/some Finance sources are unavailable/i),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("PO-2026-0004")).toHaveLength(2);
   });
 });

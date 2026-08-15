@@ -64,6 +64,13 @@ function topBarLabel(pathname: string, entries: readonly NavEntry[]): string {
   return "";
 }
 
+function mobileNavLabel(label: string): string {
+  if (label === "Administration") return "Admin";
+  if (label === "Knowledge Base") return "Knowledge";
+  if (label === "Delegation of Authority") return "DOA";
+  return label;
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const { profile, userRoles, userCapabilities, mode, loading } = useSession();
   const { snapshot } = useLearning();
@@ -220,19 +227,20 @@ export function AppShell({ children }: { children: ReactNode }) {
               }
               aria-current={isActive(e.href) ? "page" : undefined}
               className={cx(
-                "group relative grid h-11 w-11 place-items-center rounded-xl text-faint transition hover:bg-inset hover:text-ink lg:flex lg:min-h-11 lg:h-auto lg:w-full lg:justify-start lg:gap-3 lg:px-3 lg:py-2.5",
-                isActive(e.href) && "text-brand-700 dark:text-brand-300",
+                "group relative grid h-11 w-11 place-items-center rounded-lg text-faint transition hover:bg-inset hover:text-ink lg:flex lg:min-h-11 lg:h-auto lg:w-full lg:justify-start lg:gap-3 lg:px-3 lg:py-2.5",
+                isActive(e.href) &&
+                  "font-semibold text-brand-700 dark:text-brand-300",
               )}
             >
               {isActive(e.href) && !reduced && (
                 <m.span
                   layoutId="nav-rail-pill"
-                  className="pointer-events-none absolute inset-0 rounded-xl bg-brand-500/12"
+                  className="pointer-events-none absolute inset-0 rounded-lg bg-brand-500/12 before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-r before:bg-brand-600"
                   transition={{ type: "spring", stiffness: 380, damping: 32 }}
                 />
               )}
               {isActive(e.href) && reduced && (
-                <span className="pointer-events-none absolute inset-0 rounded-xl bg-brand-500/12" />
+                <span className="pointer-events-none absolute inset-0 rounded-lg bg-brand-500/12 before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-r before:bg-brand-600" />
               )}
               <Icon name={e.icon} className="relative h-5 w-5" />
               <span className="relative hidden min-w-0 text-sm font-medium leading-tight lg:block">
@@ -377,7 +385,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         <main
           data-shell-content="true"
-          className="shell-content mx-auto w-full max-w-6xl flex-1 px-4 py-5 sm:px-6 md:pb-10 xl:max-w-7xl"
+          className="shell-content mx-auto w-full max-w-[90rem] flex-1 px-4 py-5 sm:px-6 lg:px-8 md:pb-10"
           style={{ "--shell-header": "4.5rem" } as CSSProperties}
         >
           {loading ? (
@@ -553,7 +561,7 @@ function MobileTab({
       )}
       <Icon name={entry.icon} className="relative h-5 w-5" />
       <span className="relative block max-w-full text-center text-[0.625rem] leading-tight break-normal hyphens-none">
-        {entry.label}
+        {mobileNavLabel(entry.label)}
       </span>
       {locked && (
         <Icon

@@ -345,7 +345,7 @@ test("models only the exact policy chronology repair", () => {
 
   const callerAuthoredPolicyHash = replaceRequired(
     policyChronologySql,
-    /v_canonical_evidence_hash,\n    v_user_id/,
+    /v_canonical_evidence_hash,\r?\n    v_user_id/,
     "v_submitted_evidence_hash,\n    v_user_id",
   );
   assert.match(
@@ -408,10 +408,10 @@ ${serviceContractAlignmentSql}`;
 
 test("keeps every SQL role persona in parity with the canonical catalog", () => {
   const catalogBlock = task1Catalog.match(
-    /export const ROLE_PERSONAS:[\s\S]*?= \{([\s\S]*?)\n\};/,
+    /export const ROLE_PERSONAS:[\s\S]*?= \{([\s\S]*?)\r?\n\};/,
   )?.[1];
   const sqlBlock = serviceContractAlignmentSql.match(
-    /'personaId', case([\s\S]*?)\n\s*end,\n\s*'audience'/i,
+    /'personaId', case([\s\S]*?)\r?\n\s*end,\r?\n\s*'audience'/i,
   )?.[1];
   assert.ok(catalogBlock, "Missing canonical TypeScript role-persona map.");
   assert.ok(sqlBlock, "Missing SQL role-persona projection.");
@@ -1043,7 +1043,7 @@ test("reconciles existing invalid certifications with attributable evidence", ()
 
   const overBroadReconciliation = replaceRequired(
     roleLifecycleSql,
-    /  \);\n\nalter table learning\.certifications\n  add constraint certifications_revocation_reason_check/i,
+    /  \);\r?\n\r?\nalter table learning\.certifications\r?\n  add constraint certifications_revocation_reason_check/i,
     "  ) or certification.status = 'active';\n\nalter table learning.certifications\n  add constraint certifications_revocation_reason_check",
   );
   assert.match(

@@ -112,7 +112,7 @@ export function DataTable<T>({
   return (
     <>
       {/* Desktop / tablet table */}
-      <div className="hidden min-w-0 max-w-full overflow-hidden rounded-2xl border border-line bg-surface sm:block">
+      <div className="hidden min-w-0 max-w-full overflow-hidden rounded-lg border border-line bg-surface sm:block">
         <div
           className="max-w-full overflow-x-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
           role="region"

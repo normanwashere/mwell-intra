@@ -127,6 +127,7 @@ function EmployeeWorkApp({
           options={availableWorkFilters(allowedSources)}
           value={filter}
           onChange={(value) => setFilter(value as WorkFilter)}
+          wrapOnMobile
         />
       </div>
       {visible.length === 0 ? (

@@ -28,7 +28,9 @@ describe('shared interaction styles', () => {
     const styles = readFileSync(resolve(process.cwd(), 'src/styles.css'), 'utf8');
 
     expect(styles).toContain("@media (max-width: 767px)");
-    expect(styles).toContain("input:not([type='checkbox']):not([type='radio']):not([type='hidden'])");
+    expect(styles).toMatch(
+      /input:not\(\[type=["']checkbox["']\]\):not\(\[type=["']radio["']\]\):not\(\[type=["']hidden["']\]\)/,
+    );
     expect(styles).toContain('min-height: 2.75rem');
     expect(styles).toMatch(
       /\.btn-primary,[\s\S]*?min-height: 2\.75rem;[\s\S]*?min-width: 2\.75rem;/,

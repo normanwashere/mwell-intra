@@ -1,9 +1,9 @@
-import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
-import { Card, ModuleHero } from './primitives';
+import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it } from "vitest";
+import { Card, ModuleHero } from "./primitives";
 
-describe('Card DOM contract', () => {
-  it('forwards valid div attributes used by browser tests and accessibility', () => {
+describe("Card DOM contract", () => {
+  it("forwards valid div attributes used by browser tests and accessibility", () => {
     const markup = renderToStaticMarkup(
       <Card data-testid="governed-card" aria-label="Governed record">
         Content
@@ -14,8 +14,8 @@ describe('Card DOM contract', () => {
   });
 });
 
-describe('ModuleHero responsive hierarchy', () => {
-  it('keeps the watermark compact and behind readable content', () => {
+describe("ModuleHero responsive hierarchy", () => {
+  it("uses a compact contextual icon and a two-zone operational hierarchy", () => {
     const markup = renderToStaticMarkup(
       <ModuleHero
         eyebrow="Warehouse dashboard"
@@ -26,8 +26,9 @@ describe('ModuleHero responsive hierarchy', () => {
     );
 
     expect(markup).toContain('data-module-hero-watermark="true"');
-    expect(markup).toContain('h-16 w-16 sm:h-20 sm:w-20');
-    expect(markup).toContain('relative z-10');
-    expect(markup).not.toContain('h-36 w-36');
+    expect(markup).toContain("workspace-hero");
+    expect(markup).toContain("h-6 w-6");
+    expect(markup).toContain("relative z-10");
+    expect(markup).not.toContain("h-36 w-36");
   });
 });

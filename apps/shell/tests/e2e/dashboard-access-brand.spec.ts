@@ -2,12 +2,6 @@ import { expect, test } from "@playwright/test";
 
 const WAREHOUSE_ADMIN_SESSION = {
   profileId: "demo-warehouse-admin",
-  roles: {
-    core: ["staff"],
-    warehouse: ["warehouse_admin"],
-    events: ["admin"],
-    insights: ["admin"],
-  },
 };
 
 test.describe("dashboard access and brand truthfulness", () => {
@@ -28,21 +22,20 @@ test.describe("dashboard access and brand truthfulness", () => {
 
     const hero = page
       .getByText("Areas available", { exact: true })
-      .locator("xpath=ancestor::div[contains(@class, 'hero-surface')]");
-    await expect(hero).toContainText(/6\s*areas/);
+      .locator("xpath=ancestor::*[contains(@class, 'hero-surface')][1]");
+    await expect(hero).toContainText(/4\s*areas/);
     await expect(hero.getByRole("link", { name: "My Work" })).toBeVisible();
-    await expect(hero.getByRole("link", { name: "Events" })).toBeVisible();
     await expect(hero.getByRole("link", { name: "Warehouse" })).toBeVisible();
-    await expect(hero.getByRole("link", { name: "+3 more below" })).toBeVisible();
+    await expect(hero.getByRole("link", { name: "Finance" })).toBeVisible();
+    await expect(
+      hero.getByRole("link", { name: "+1 more below" }),
+    ).toBeVisible();
 
     const areaCards = page.locator("#workspace-area-cards");
     await expect(areaCards).toBeVisible();
-    await expect(areaCards.getByRole("link")).toHaveCount(6);
+    await expect(areaCards.getByRole("link")).toHaveCount(4);
     await expect(
       areaCards.getByRole("link", { name: /My Work/ }),
-    ).toBeVisible();
-    await expect(
-      areaCards.getByRole("link", { name: /Events/ }),
     ).toBeVisible();
     await expect(
       areaCards.getByRole("link", { name: /Warehouse/ }),
@@ -52,9 +45,6 @@ test.describe("dashboard access and brand truthfulness", () => {
     ).toBeVisible();
     await expect(
       areaCards.getByRole("link", { name: /Knowledge Base/ }),
-    ).toBeVisible();
-    await expect(
-      areaCards.getByRole("link", { name: /Insights/ }),
     ).toBeVisible();
 
     const isTablet = testInfo.project.name.startsWith("tablet");

@@ -119,6 +119,16 @@ test.describe("personalized onboarding center", () => {
       module: "Warehouse",
     },
     {
+      profileId: "demo-logistics",
+      roles: {
+        core: ["staff"],
+        warehouse: ["warehouse_supervisor", "logistics_supervisor"],
+        procurement: ["approver"],
+        product: ["operations_partner"],
+      },
+      module: "Warehouse",
+    },
+    {
       profileId: "demo-procurement",
       roles: {
         core: ["staff"],
@@ -180,7 +190,7 @@ test.describe("personalized onboarding center", () => {
   ] as const;
 
   for (const roleCase of employeeModuleCases) {
-    test(`${roleCase.module} assignment stays visible but requires first-time orientation`, async ({
+    test(`${roleCase.profileId}: ${roleCase.module} assignment stays visible but requires first-time orientation`, async ({
       page,
     }) => {
       await installSession(page, roleCase);

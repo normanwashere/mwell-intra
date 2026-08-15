@@ -1,62 +1,165 @@
-import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { clsx } from 'clsx';
-import { Logo } from './Logo';
-import { Icon, type IconName } from './Icon';
-import { UserMenu } from './UserMenu';
-import { useWarehouse } from '@/app/store';
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { clsx } from "clsx";
+import { Logo } from "./Logo";
+import { Icon, type IconName } from "./Icon";
+import { UserMenu } from "./UserMenu";
+import { useWarehouse } from "@/app/store";
 import {
   MODULE_GROUP_LABELS,
   modulesForWarehouseAccess,
   primaryModulesForWarehouseAccess,
   type ModuleGroup,
-} from '@/app/modules';
-import { buildNotifications } from '@/app/notifications';
-import { Sheet, useToast, PageTransition } from './ui';
-import { ThemeToggle } from './ThemeToggle';
-import { ContextualHelpLink } from '@intra/ui';
+} from "@/app/modules";
+import { buildNotifications } from "@/app/notifications";
+import { Sheet, useToast, PageTransition } from "./ui";
+import { ThemeToggle } from "./ThemeToggle";
+import { ContextualHelpLink } from "@intra/ui";
 
 const MODULE_GROUP_ORDER: ModuleGroup[] = [
-  'operate',
-  'plan',
-  'control',
-  'analyze',
-  'configure',
+  "operate",
+  "plan",
+  "control",
+  "analyze",
+  "configure",
 ];
 
 const WAREHOUSE_GUIDES = [
-  { path: '/', articleId: 'feature-warehouse-dashboard', title: 'Warehouse dashboard' },
-  { path: '/scan', articleId: 'feature-warehouse-scan', title: 'Warehouse scan' },
-  { path: '/tasks', articleId: 'feature-warehouse-tasks', title: 'Warehouse tasks' },
-  { path: '/inventory/:id', articleId: 'feature-warehouse-product-detail', title: 'Warehouse product detail' },
-  { path: '/inventory', articleId: 'feature-warehouse-inventory', title: 'Inventory browser' },
-  { path: '/receiving', articleId: 'feature-warehouse-receiving', title: 'Warehouse receiving' },
-  { path: '/allocations', articleId: 'feature-warehouse-allocations', title: 'Stock allocations' },
-  { path: '/fulfillment', articleId: 'feature-warehouse-fulfillment', title: 'Pick and pack fulfillment' },
-  { path: '/returns', articleId: 'feature-warehouse-returns', title: 'Warehouse returns' },
-  { path: '/storage', articleId: 'feature-warehouse-storage', title: 'Warehouse storage areas and bins' },
-  { path: '/events/:id', articleId: 'feature-warehouse-event-detail', title: 'Warehouse event detail' },
-  { path: '/events', articleId: 'feature-warehouse-events', title: 'Warehouse events' },
-  { path: '/procurement', articleId: 'feature-warehouse-procurement-planning', title: 'Warehouse procurement planning' },
-  { path: '/purchase-orders', articleId: 'feature-warehouse-purchase-orders', title: 'Warehouse purchase orders' },
-  { path: '/cycle-counts', articleId: 'feature-warehouse-cycle-counts', title: 'Cycle counts' },
-  { path: '/quality', articleId: 'feature-warehouse-quality', title: 'Quality control' },
-  { path: '/approvals', articleId: 'feature-warehouse-approvals', title: 'Stock approvals' },
-  { path: '/exceptions', articleId: 'feature-warehouse-exceptions', title: 'Warehouse exceptions' },
-  { path: '/pricing', articleId: 'feature-warehouse-pricing', title: 'Warehouse pricing' },
-  { path: '/data', articleId: 'feature-warehouse-data', title: 'Warehouse data and analytics' },
-  { path: '/reports', articleId: 'feature-warehouse-reports', title: 'Inventory reports' },
-  { path: '/suppliers', articleId: 'feature-warehouse-suppliers', title: 'Warehouse suppliers' },
-  { path: '/locations', articleId: 'feature-warehouse-locations', title: 'Warehouse locations' },
-  { path: '/imports', articleId: 'feature-warehouse-imports', title: 'Warehouse imports' },
-  { path: '/operation-routes', articleId: 'feature-warehouse-operation-routes', title: 'Warehouse operation routes' },
+  {
+    path: "/",
+    articleId: "feature-warehouse-dashboard",
+    title: "Warehouse dashboard",
+  },
+  {
+    path: "/scan",
+    articleId: "feature-warehouse-scan",
+    title: "Warehouse scan",
+  },
+  {
+    path: "/tasks",
+    articleId: "feature-warehouse-tasks",
+    title: "Warehouse tasks",
+  },
+  {
+    path: "/inventory/:id",
+    articleId: "feature-warehouse-product-detail",
+    title: "Warehouse product detail",
+  },
+  {
+    path: "/inventory",
+    articleId: "feature-warehouse-inventory",
+    title: "Inventory browser",
+  },
+  {
+    path: "/receiving",
+    articleId: "feature-warehouse-receiving",
+    title: "Warehouse receiving",
+  },
+  {
+    path: "/allocations",
+    articleId: "feature-warehouse-allocations",
+    title: "Stock allocations",
+  },
+  {
+    path: "/fulfillment",
+    articleId: "feature-warehouse-fulfillment",
+    title: "Pick and pack fulfillment",
+  },
+  {
+    path: "/returns",
+    articleId: "feature-warehouse-returns",
+    title: "Warehouse returns",
+  },
+  {
+    path: "/storage",
+    articleId: "feature-warehouse-storage",
+    title: "Warehouse storage areas and bins",
+  },
+  {
+    path: "/events/:id",
+    articleId: "feature-warehouse-event-detail",
+    title: "Warehouse event detail",
+  },
+  {
+    path: "/events",
+    articleId: "feature-warehouse-events",
+    title: "Warehouse events",
+  },
+  {
+    path: "/procurement",
+    articleId: "feature-warehouse-procurement-planning",
+    title: "Warehouse procurement planning",
+  },
+  {
+    path: "/purchase-orders",
+    articleId: "feature-warehouse-purchase-orders",
+    title: "Warehouse purchase orders",
+  },
+  {
+    path: "/cycle-counts",
+    articleId: "feature-warehouse-cycle-counts",
+    title: "Cycle counts",
+  },
+  {
+    path: "/quality",
+    articleId: "feature-warehouse-quality",
+    title: "Quality control",
+  },
+  {
+    path: "/approvals",
+    articleId: "feature-warehouse-approvals",
+    title: "Stock approvals",
+  },
+  {
+    path: "/exceptions",
+    articleId: "feature-warehouse-exceptions",
+    title: "Warehouse exceptions",
+  },
+  {
+    path: "/pricing",
+    articleId: "feature-warehouse-pricing",
+    title: "Warehouse pricing",
+  },
+  {
+    path: "/data",
+    articleId: "feature-warehouse-data",
+    title: "Warehouse data and analytics",
+  },
+  {
+    path: "/reports",
+    articleId: "feature-warehouse-reports",
+    title: "Inventory reports",
+  },
+  {
+    path: "/suppliers",
+    articleId: "feature-warehouse-suppliers",
+    title: "Warehouse suppliers",
+  },
+  {
+    path: "/locations",
+    articleId: "feature-warehouse-locations",
+    title: "Warehouse locations",
+  },
+  {
+    path: "/imports",
+    articleId: "feature-warehouse-imports",
+    title: "Warehouse imports",
+  },
+  {
+    path: "/operation-routes",
+    articleId: "feature-warehouse-operation-routes",
+    title: "Warehouse operation routes",
+  },
 ] as const;
 
 const routeMatches = (pattern: string, pathname: string) => {
-  const expected = pattern.split('/').filter(Boolean);
-  const actual = pathname.split('/').filter(Boolean);
-  return expected.length === actual.length && expected.every(
-    (segment, index) => segment.startsWith(':') || segment === actual[index],
+  const expected = pattern.split("/").filter(Boolean);
+  const actual = pathname.split("/").filter(Boolean);
+  return (
+    expected.length === actual.length &&
+    expected.every(
+      (segment, index) => segment.startsWith(":") || segment === actual[index],
+    )
   );
 };
 
@@ -86,9 +189,10 @@ export function AppShell({ children }: { children: ReactNode }) {
     canOpenDestination,
   );
   const rolePresentation = { label: roleLabel, description: roleDescription };
-  const pageGuide = WAREHOUSE_GUIDES.find((guide) =>
-    routeMatches(guide.path, location.pathname),
-  ) ?? WAREHOUSE_GUIDES[0];
+  const pageGuide =
+    WAREHOUSE_GUIDES.find((guide) =>
+      routeMatches(guide.path, location.pathname),
+    ) ?? WAREHOUSE_GUIDES[0];
 
   const [moreOpen, setMoreOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
@@ -96,19 +200,19 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<ModuleGroup>>(
-    () => new Set<ModuleGroup>(['analyze', 'configure']),
+    () => new Set<ModuleGroup>(["analyze", "configure"]),
   );
   const [offline, setOffline] = useState(
-    typeof navigator !== 'undefined' && !navigator.onLine,
+    typeof navigator !== "undefined" && !navigator.onLine,
   );
 
   useEffect(() => {
     const update = () => setOffline(!navigator.onLine);
-    window.addEventListener('online', update);
-    window.addEventListener('offline', update);
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
     return () => {
-      window.removeEventListener('online', update);
-      window.removeEventListener('offline', update);
+      window.removeEventListener("online", update);
+      window.removeEventListener("offline", update);
     };
   }, []);
 
@@ -117,15 +221,15 @@ export function AppShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
     onScroll();
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
   }, [location.pathname]);
 
   const handleSyncNow = async () => {
     setSyncing(true);
     try {
       await syncNow();
-      if (pendingSync === 0) toast.success('All changes synced.');
+      if (pendingSync === 0) toast.success("All changes synced.");
     } finally {
       setSyncing(false);
     }
@@ -142,17 +246,20 @@ export function AppShell({ children }: { children: ReactNode }) {
     can,
     canOpenDestination,
   );
-  const canScan = primary.some((module) => module.id === 'scan');
+  const canScan = primary.some((module) => module.id === "scan");
   const primaryIds = new Set(primary.map((module) => module.id));
-  const remainingModules = modules.filter((module) => !primaryIds.has(module.id));
+  const remainingModules = modules.filter(
+    (module) => !primaryIds.has(module.id),
+  );
   const groupedModules = MODULE_GROUP_ORDER.map((group) => ({
     group,
     modules: modules.filter((module) => module.group === group),
   })).filter((section) => section.modules.length > 0);
   const activeGroup = modules.find((module) =>
-    module.path === '/'
-      ? location.pathname === '/'
-      : location.pathname === module.path || location.pathname.startsWith(`${module.path}/`),
+    module.path === "/"
+      ? location.pathname === "/"
+      : location.pathname === module.path ||
+        location.pathname.startsWith(`${module.path}/`),
   )?.group;
 
   useEffect(() => {
@@ -182,7 +289,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   };
   const confirmReset = () => {
     setResetConfirmOpen(false);
-    toast.success('Demo data reset — reloading fresh seed…');
+    toast.success("Demo data reset — reloading fresh seed…");
     window.setTimeout(() => resetDemo(), 450);
   };
 
@@ -204,9 +311,15 @@ export function AppShell({ children }: { children: ReactNode }) {
             </span>
           </a>
         </div>
-        <nav className="flex-1 space-y-5 overflow-y-auto px-3 pb-4" aria-label="Primary">
+        <nav
+          className="flex-1 space-y-5 overflow-y-auto px-3 pb-4"
+          aria-label="Primary"
+        >
           {groupedModules.map((section) => (
-            <section key={section.group} aria-labelledby={`warehouse-nav-${section.group}`}>
+            <section
+              key={section.group}
+              aria-labelledby={`warehouse-nav-${section.group}`}
+            >
               <h2 id={`warehouse-nav-${section.group}`} className="mb-1">
                 <button
                   type="button"
@@ -219,14 +332,17 @@ export function AppShell({ children }: { children: ReactNode }) {
                   <Icon
                     name="chevron"
                     className={clsx(
-                      'h-3.5 w-3.5 transition-transform',
-                      !collapsedGroups.has(section.group) && 'rotate-90',
+                      "h-3.5 w-3.5 transition-transform",
+                      !collapsedGroups.has(section.group) && "rotate-90",
                     )}
                   />
                 </button>
               </h2>
               {!collapsedGroups.has(section.group) && (
-                <div id={`warehouse-nav-${section.group}-items`} className="space-y-1">
+                <div
+                  id={`warehouse-nav-${section.group}-items`}
+                  className="space-y-1"
+                >
                   {section.modules.map((module) => (
                     <SideLink
                       key={module.id}
@@ -241,9 +357,13 @@ export function AppShell({ children }: { children: ReactNode }) {
           ))}
         </nav>
         <div className="safe-bottom border-t border-line px-5 py-4">
-          <p className="text-sm font-semibold text-ink">{rolePresentation.label}</p>
-          <p className="mt-0.5 text-xs text-muted">{rolePresentation.description}</p>
-          {source === 'memory' && (
+          <p className="text-sm font-semibold text-ink">
+            {rolePresentation.label}
+          </p>
+          <p className="mt-0.5 text-xs text-muted">
+            {rolePresentation.description}
+          </p>
+          {source === "memory" && (
             <button
               type="button"
               onClick={requestReset}
@@ -259,14 +379,14 @@ export function AppShell({ children }: { children: ReactNode }) {
         {/* Top bar */}
         <header
           className={clsx(
-            'safe-top z-20 shrink-0 border-b border-line bg-surface/85 backdrop-blur transition-[padding,box-shadow] md:sticky md:top-0',
-            scrolled && 'shadow-e1',
+            "safe-top z-20 shrink-0 border-b border-line bg-surface/85 backdrop-blur transition-[padding,box-shadow] md:sticky md:top-0",
+            scrolled && "shadow-e1",
           )}
         >
           <div
             className={clsx(
-              'flex items-center justify-between gap-3 px-4 sm:px-6 transition-[padding]',
-              scrolled ? 'py-2' : 'py-3',
+              "flex items-center justify-between gap-3 px-4 sm:px-6 transition-[padding]",
+              scrolled ? "py-2" : "py-3",
             )}
           >
             <div
@@ -275,8 +395,12 @@ export function AppShell({ children }: { children: ReactNode }) {
             >
               <Logo className="h-5 w-auto shrink-0" />
               <span className="min-w-0 leading-tight">
-                <span className="block text-[0.65rem] font-bold text-ink">Intra · Warehouse</span>
-                <span className="block max-w-28 truncate text-[0.6rem] text-faint">{roleLabel}</span>
+                <span className="block text-[0.65rem] font-bold text-ink">
+                  Intra · Warehouse
+                </span>
+                <span className="block max-w-28 truncate text-[0.6rem] text-faint">
+                  {roleLabel.replace(/^Warehouse\s+/i, "")}
+                </span>
               </span>
             </div>
             {/* Visual brand only — the semantic <h1> belongs to each page's
@@ -290,14 +414,18 @@ export function AppShell({ children }: { children: ReactNode }) {
             <div className="flex items-center gap-1.5">
               <span
                 className={clsx(
-                  'chip hidden sm:inline-flex',
-                  source === 'supabase'
-                    ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
-                    : 'bg-amber-500/15 text-amber-800 dark:text-amber-300',
+                  "chip hidden sm:inline-flex",
+                  source === "supabase"
+                    ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                    : "bg-amber-500/15 text-amber-800 dark:text-amber-300",
                 )}
-                title={source === 'supabase' ? 'Connected to Supabase' : 'Offline demo data'}
+                title={
+                  source === "supabase"
+                    ? "Connected to Supabase"
+                    : "Offline demo data"
+                }
               >
-                {source === 'supabase' ? 'Live' : 'Demo'}
+                {source === "supabase" ? "Live" : "Demo"}
               </span>
               <ContextualHelpLink
                 articleId={pageGuide.articleId}
@@ -306,14 +434,16 @@ export function AppShell({ children }: { children: ReactNode }) {
               {canScan && (
                 <button
                   type="button"
-                  onClick={() => navigate('/scan')}
+                  onClick={() => navigate("/scan")}
                   aria-label="Quick scan"
                   className="grid h-11 w-11 place-items-center rounded-full text-muted transition hover:bg-inset hover:text-ink"
                 >
                   <Icon name="scan" />
                 </button>
               )}
-              <ThemeToggle />
+              <span className="hidden min-[420px]:block">
+                <ThemeToggle />
+              </span>
               {/* Branded "Module alerts" (not "Notifications") so it doesn't
                   contradict the shell's disabled demo bell (SH-7). */}
               <button
@@ -342,22 +472,22 @@ export function AppShell({ children }: { children: ReactNode }) {
           >
             <span className="inline-flex items-center gap-1.5">
               <Icon name="alert" className="h-4 w-4" />
-              {source === 'memory'
-                ? 'Offline — changes are saved locally and sync when you reconnect.'
+              {source === "memory"
+                ? "Offline — changes are saved locally and sync when you reconnect."
                 : offline
                   ? `Offline — ${pendingSync} change(s) queued and will sync automatically when you reconnect.`
                   : pendingSync > 0
                     ? `${pendingSync} change(s) syncing…`
                     : null}
             </span>
-            {source === 'supabase' && pendingSync > 0 && !offline && (
+            {source === "supabase" && pendingSync > 0 && !offline && (
               <button
                 type="button"
                 onClick={() => void handleSyncNow()}
                 disabled={syncing}
                 className="underline disabled:opacity-60"
               >
-                {syncing ? 'Syncing…' : 'Sync now'}
+                {syncing ? "Syncing…" : "Sync now"}
               </button>
             )}
             {conflicts.length > 0 && (
@@ -366,7 +496,8 @@ export function AppShell({ children }: { children: ReactNode }) {
                 onClick={() => setConflictsOpen(true)}
                 className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2 py-0.5"
               >
-                <Icon name="alert" className="h-3.5 w-3.5" /> {conflicts.length} conflict(s)
+                <Icon name="alert" className="h-3.5 w-3.5" /> {conflicts.length}{" "}
+                conflict(s)
               </button>
             )}
           </div>
@@ -392,7 +523,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         >
           <ul
             className="grid"
-            style={{ gridTemplateColumns: `repeat(${primary.length + 1}, minmax(0, 1fr))` }}
+            style={{
+              gridTemplateColumns: `repeat(${primary.length + 1}, minmax(0, 1fr))`,
+            }}
           >
             {primary.map((m) => (
               <li key={m.id} className="flex-1">
@@ -424,14 +557,29 @@ export function AppShell({ children }: { children: ReactNode }) {
         title="All tools"
         side="right"
         footer={
-          source === 'memory' ? (
-            <button type="button" className="btn-ghost w-full" onClick={requestReset}>
+          source === "memory" ? (
+            <button
+              type="button"
+              className="btn-ghost w-full"
+              onClick={requestReset}
+            >
               <Icon name="rotate" className="h-4 w-4" /> Reset demo data
             </button>
           ) : undefined
         }
       >
         <ul className="space-y-1">
+          <li className="min-[420px]:hidden">
+            <div className="flex min-h-12 items-center justify-between gap-3 rounded-lg px-3 py-2">
+              <span className="flex items-center gap-3 text-sm font-medium text-ink">
+                <span className="grid h-9 w-9 place-items-center rounded-lg bg-inset text-muted">
+                  <Icon name="moon" />
+                </span>
+                Appearance
+              </span>
+              <ThemeToggle />
+            </div>
+          </li>
           <li>
             <a
               href="/"
@@ -442,7 +590,9 @@ export function AppShell({ children }: { children: ReactNode }) {
               </span>
               <span className="min-w-0">
                 <span className="block">Mwell Intra home</span>
-                <span className="block truncate text-xs text-faint">All modules</span>
+                <span className="block truncate text-xs text-faint">
+                  All modules
+                </span>
               </span>
             </a>
           </li>
@@ -480,7 +630,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         side="right"
       >
         {notifications.length === 0 ? (
-          <p className="py-8 text-center text-sm text-muted">You're all caught up.</p>
+          <p className="py-8 text-center text-sm text-muted">
+            You're all caught up.
+          </p>
         ) : (
           <ul className="space-y-2" aria-label="Alerts">
             {notifications.map((n) => {
@@ -488,12 +640,12 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <>
                   <span
                     className={clsx(
-                      'mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg',
-                      n.tone === 'rose'
-                        ? 'bg-rose-500/15 text-rose-500'
-                        : n.tone === 'amber'
-                          ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
-                          : 'bg-brand-500/10 text-brand-600 dark:text-brand-300',
+                      "mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg",
+                      n.tone === "rose"
+                        ? "bg-rose-500/15 text-rose-500"
+                        : n.tone === "amber"
+                          ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                          : "bg-brand-500/10 text-brand-600 dark:text-brand-300",
                     )}
                   >
                     <Icon name={n.icon} className="h-4 w-4" />
@@ -555,8 +707,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         }
       >
         <p className="text-sm text-muted">
-          Use this when you want a clean slate for a walkthrough. Your theme
-          and sign-in are kept.
+          Use this when you want a clean slate for a walkthrough. Your theme and
+          sign-in are kept.
         </p>
       </Sheet>
 
@@ -575,13 +727,15 @@ export function AppShell({ children }: { children: ReactNode }) {
             {conflicts.map((c) => (
               <li key={c.id} className="rounded-xl bg-inset p-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold text-ink">{c.method}</span>
+                  <span className="text-sm font-semibold text-ink">
+                    {c.method}
+                  </span>
                   <button
                     type="button"
                     className="text-xs font-medium text-brand-700 dark:text-brand-300"
                     onClick={() => {
                       void discardConflict(c.id).then(() => {
-                        toast.success('Discarded.');
+                        toast.success("Discarded.");
                       });
                     }}
                   >
@@ -589,7 +743,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   </button>
                 </div>
                 <p className="mt-1 text-xs text-rose-600 dark:text-rose-300">
-                  {c.error ?? 'Conflict'}
+                  {c.error ?? "Conflict"}
                 </p>
               </li>
             ))}
@@ -600,17 +754,25 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
 }
 
-function SideLink({ to, icon, label }: { to: string; icon: IconName; label: string }) {
+function SideLink({
+  to,
+  icon,
+  label,
+}: {
+  to: string;
+  icon: IconName;
+  label: string;
+}) {
   return (
     <NavLink
       to={to}
-      end={to === '/'}
+      end={to === "/"}
       className={({ isActive }) =>
         clsx(
-          'flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition',
+          "flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition",
           isActive
-            ? 'bg-brand-500/12 text-brand-700 dark:text-brand-300'
-            : 'text-muted hover:bg-inset hover:text-ink',
+            ? "bg-brand-500/12 text-brand-700 dark:text-brand-300"
+            : "text-muted hover:bg-inset hover:text-ink",
         )
       }
     >
@@ -620,15 +782,23 @@ function SideLink({ to, icon, label }: { to: string; icon: IconName; label: stri
   );
 }
 
-function BottomLink({ to, icon, label }: { to: string; icon: IconName; label: string }) {
+function BottomLink({
+  to,
+  icon,
+  label,
+}: {
+  to: string;
+  icon: IconName;
+  label: string;
+}) {
   return (
     <NavLink
       to={to}
-      end={to === '/'}
+      end={to === "/"}
       className={({ isActive }) =>
         clsx(
-          'flex min-h-16 flex-col items-center justify-center gap-0.5 px-2 py-2.5 text-[0.65rem] font-medium transition',
-          isActive ? 'text-brand-600 dark:text-brand-300' : 'text-faint',
+          "flex min-h-16 flex-col items-center justify-center gap-0.5 px-2 py-2.5 text-[0.65rem] font-medium transition",
+          isActive ? "text-brand-600 dark:text-brand-300" : "text-faint",
         )
       }
     >
@@ -636,8 +806,8 @@ function BottomLink({ to, icon, label }: { to: string; icon: IconName; label: st
         <>
           <span
             className={clsx(
-              'grid h-7 w-12 place-items-center rounded-full transition',
-              isActive && 'bg-brand-500/10',
+              "grid h-7 w-12 place-items-center rounded-full transition",
+              isActive && "bg-brand-500/10",
             )}
           >
             <Icon name={icon} className="h-5 w-5" />
