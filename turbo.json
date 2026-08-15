@@ -5,9 +5,11 @@
   "globalPassThroughEnv": [
     "APP_URL",
     "APP_ENV",
+    "DEPLOYMENT_COMMIT_SHA",
     "PRODUCTION_SUPABASE_PROJECT_REF",
     "SUPABASE_PROJECT_REF",
-    "SUPABASE_SECRET_KEY"
+    "SUPABASE_SECRET_KEY",
+    "SUPABASE_SERVICE_ROLE_KEY"
   ],
   "tasks": {
     "build": {

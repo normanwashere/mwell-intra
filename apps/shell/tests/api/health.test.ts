@@ -43,7 +43,9 @@ describe('GET /api/health', () => {
     delete process.env.NEXT_PUBLIC_ENABLE_NOTIFICATIONS;
     delete process.env.GITHUB_SHA;
     delete process.env.LEGAL_DOCUMENT_EDGE_FUNCTION;
+    delete process.env.SUPABASE_SECRET_KEY;
     delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    delete process.env.DEPLOYMENT_COMMIT_SHA;
     delete process.env.VERCEL_GIT_COMMIT_SHA;
     vi.unstubAllGlobals();
   });
@@ -76,6 +78,18 @@ describe('GET /api/health', () => {
     expect(JSON.stringify(body)).not.toContain('legal-document-access');
   });
 
+  it('recognizes the current server-only Supabase secret key without exposing it', async () => {
+    process.env.SUPABASE_SECRET_KEY = 'sb_secret_private-value';
+
+    const response = await GET(
+      new Request('https://uat.example.com/api/health') as never,
+    );
+    const body = await response.json();
+
+    expect(body.features.legalDocumentDelivery).toBe('configured');
+    expect(JSON.stringify(body)).not.toContain('sb_secret_private-value');
+  });
+
   it('falls back to the CI commit when the Vercel commit variable is blank', async () => {
     process.env.VERCEL_GIT_COMMIT_SHA = '   ';
 
@@ -85,5 +99,17 @@ describe('GET /api/health', () => {
     const body = await response.json();
 
     expect(body.commit).toBe('audit-commit-sha');
+  });
+
+  it('uses the explicit deployment commit when provider commit variables are unavailable', async () => {
+    delete process.env.GITHUB_SHA;
+    process.env.DEPLOYMENT_COMMIT_SHA = 'deployed-commit-sha';
+
+    const response = await GET(
+      new Request('https://uat.example.com/api/health') as never,
+    );
+    const body = await response.json();
+
+    expect(body.commit).toBe('deployed-commit-sha');
   });
 });

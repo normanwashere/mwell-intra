@@ -56,6 +56,7 @@ function clientAuthStatus(): ClientAuthStatus {
 
 function legalDocumentDeliveryStatus(): FeatureStatus {
   return process.env.LEGAL_DOCUMENT_EDGE_FUNCTION?.trim() ||
+    process.env.SUPABASE_SECRET_KEY?.trim() ||
     process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()
     ? 'configured'
     : 'missing';
@@ -65,6 +66,7 @@ function deploymentCommit(): string | null {
   return (
     process.env.VERCEL_GIT_COMMIT_SHA?.trim() ||
     process.env.GITHUB_SHA?.trim() ||
+    process.env.DEPLOYMENT_COMMIT_SHA?.trim() ||
     null
   );
 }
