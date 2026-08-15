@@ -188,7 +188,7 @@ const viewports = [
 ];
 
 const DENIED_ROUTE_TEXT =
-  /No (?:warehouse|procurement|legal|vendor|admin|My Work|Events|Insights|Finance|Product) access|Access denied|doesn't include|not authorized|reserved for enrolled|employee workspace/i;
+  /No (?:warehouse|procurement|legal|vendor|admin|My Work|Events|Insights|Finance|Product) access|Access denied|doesn't include|not authorized|reserved for enrolled|employee workspace|You don't have access to this page/i;
 
 const FINANCE_WAREHOUSE_ROLES = new Set([
   "finance",

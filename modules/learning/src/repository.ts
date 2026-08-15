@@ -344,6 +344,23 @@ function parseSnapshot(value: unknown): LearningSnapshot {
   };
 }
 
+function needsCertificationReconciliation(
+  snapshot: LearningSnapshot,
+): boolean {
+  return snapshot.lockedCapabilities.some(
+    (lock) =>
+      lock.reason === "missing_certification" &&
+      lock.requirementIds.length > 0 &&
+      lock.requirementIds.every((requirementId) =>
+        snapshot.progress.some(
+          (item) =>
+            item.requirementId === requirementId &&
+            (item.state === "passed" || item.state === "waived"),
+        ),
+      ),
+  );
+}
+
 interface AssessmentRpcResult {
   assignmentRequirementId: string;
   passed: boolean;
@@ -435,7 +452,11 @@ export class SupabaseLearningRepository implements LearningRepository {
   }
 
   async resolveAssignments(): Promise<LearningSnapshot> {
-    return parseSnapshot(await this.rpc("resolve_assignments"));
+    const resolved = parseSnapshot(await this.rpc("resolve_assignments"));
+    if (!needsCertificationReconciliation(resolved)) return resolved;
+
+    await this.rpc("evaluate_certifications");
+    return this.snapshot();
   }
 
   async startRequirement(

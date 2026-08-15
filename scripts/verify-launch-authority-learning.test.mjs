@@ -14,6 +14,10 @@ const simulationKeyFixMigrationUrl = new URL(
   "../supabase/migrations/20260816190000_fix_equivalent_role_practice_simulation_key.sql",
   import.meta.url,
 );
+const certificationLineageMigrationUrl = new URL(
+  "../supabase/migrations/20260816200000_allow_equivalent_simulation_certification_lineage.sql",
+  import.meta.url,
+);
 
 test("launch read RPCs remain capability-checked and executable by authenticated users", async () => {
   const sql = await readFile(migrationUrl, "utf8");
@@ -83,4 +87,36 @@ test("equivalent role practice propagation is simulation-scoped and evidence pre
     simulationKeyFixSql,
     /pg_catalog\.replace\([\s\S]*?'simulation_version_id'[\s\S]*?'simulation_id'/i,
   );
+});
+
+test("equivalent simulation certification accepts only governed shared evidence", async () => {
+  const sql = await readFile(certificationLineageMigrationUrl, "utf8");
+
+  assert.match(sql, /shared_completion_kind'[\s\S]*?equivalent_role_practice/i);
+  assert.match(sql, /shared_completion_kind'[\s\S]*?role_orientation/i);
+  assert.match(sql, /source_version\.requirement_kind = 'scenario'/i);
+  assert.match(sql, /target_version\.requirement_kind = 'scenario'/i);
+  assert.match(sql, /source_version\.status = 'published'/i);
+  assert.match(sql, /target_version\.status = 'published'/i);
+  assert.match(
+    sql,
+    /target_version\.simulation_id = source_version\.simulation_id/i,
+  );
+  assert.match(sql, /source_version\.requirement_kind = 'orientation'/i);
+  assert.match(sql, /target_version\.requirement_kind = 'orientation'/i);
+  assert.match(
+    sql,
+    /pg_catalog\.btrim\(target_version\.title\)[\s\S]*?pg_catalog\.btrim\(source_version\.title\)/i,
+  );
+  assert.match(
+    sql,
+    /source_assignment\.source_type not in \(\s*'retraining', 'corrective'\s*\)/i,
+  );
+  assert.match(
+    sql,
+    /target_assignment\.source_type not in \(\s*'retraining', 'corrective'\s*\)/i,
+  );
+  assert.match(sql, /attempt\.assignment_requirement_id = v_source\.id/i);
+  assert.match(sql, /attempt\.integrity_result = 'valid'/i);
+  assert.match(sql, /'source_requirement_version_id'/i);
 });

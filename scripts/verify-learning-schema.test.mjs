@@ -20,6 +20,8 @@ const COMPLETION_ALIGNMENT_NAME =
   "20260812180000_learning_completion_alignment.sql";
 const COMPLETION_HARDENING_NAME =
   "20260812190000_learning_completion_evidence_hardening.sql";
+const EQUIVALENT_CERTIFICATION_LINEAGE_NAME =
+  "20260816200000_allow_equivalent_simulation_certification_lineage.sql";
 const AUTHORITY_NAME = "20260812200000_learning_authority.sql";
 const TASK8_AUTHORITY_NAME =
   "20260812220000_task8_database_authority_remediation.sql";
@@ -86,6 +88,15 @@ const completionHardeningMigration = fileURLToPath(
 const completionHardeningSql = existsSync(completionHardeningMigration)
   ? readFileSync(completionHardeningMigration, "utf8")
   : "";
+const equivalentCertificationLineageSql = readFileSync(
+  fileURLToPath(
+    new URL(
+      `../supabase/migrations/${EQUIVALENT_CERTIFICATION_LINEAGE_NAME}`,
+      import.meta.url,
+    ),
+  ),
+  "utf8",
+);
 const authorityMigration = fileURLToPath(
   new URL(`../supabase/migrations/${AUTHORITY_NAME}`, import.meta.url),
 );
@@ -216,6 +227,16 @@ function errorsForCompletionHardening(source) {
   return verifyLearningSchema(
     repositoryMigrations.map((migrationEntry) =>
       migrationEntry.name === COMPLETION_HARDENING_NAME
+        ? { ...migrationEntry, sql: source }
+        : migrationEntry,
+    ),
+  ).join("\n");
+}
+
+function errorsForEquivalentCertificationLineage(source) {
+  return verifyLearningSchema(
+    repositoryMigrations.map((migrationEntry) =>
+      migrationEntry.name === EQUIVALENT_CERTIFICATION_LINEAGE_NAME
         ? { ...migrationEntry, sql: source }
         : migrationEntry,
     ),
@@ -535,12 +556,12 @@ test("certification evidence preserves original completion lineage", () => {
   }
 
   const weakened = replaceRequired(
-    completionHardeningSql,
+    equivalentCertificationLineageSql,
     /and attempt\.integrity_result = 'valid'/i,
     "and attempt.integrity_result <> 'valid'",
   );
   assert.match(
-    errorsForCompletionHardening(weakened),
+    errorsForEquivalentCertificationLineage(weakened),
     /exact guarded function body drifted.*validate_certification_completion_evidence/i,
   );
 });

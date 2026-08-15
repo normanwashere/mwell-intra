@@ -194,6 +194,78 @@ describe("SupabaseLearningRepository", () => {
     expect(publicApi.MemoryLearningRepository).toBe(MemoryLearningRepository);
   });
 
+  it("reconciles a missing certification when every governed requirement is complete", async () => {
+    const completed = snapshot();
+    const locked: LearningSnapshot = {
+      ...completed,
+      progress: completed.progress.map((item) => ({
+        ...item,
+        state: "passed" as const,
+        completedAt: now,
+      })),
+      lockedCapabilities: [
+        {
+          capability: { module: "warehouse", capability: "receive_stock" },
+          reason: "missing_certification",
+          requirementIds: [orientation.id, simulation.id, assessment.id],
+          canRequestEmergencyException: false,
+        },
+      ],
+    };
+    const certified: LearningSnapshot = {
+      ...locked,
+      certifications: [issuedCertification],
+      lockedCapabilities: [],
+    };
+    const rpc = vi.fn(async (name: string) => {
+      if (name === "resolve_assignments") {
+        return { data: locked, error: null };
+      }
+      if (name === "evaluate_certifications") {
+        return { data: [issuedCertification], error: null };
+      }
+      if (name === "my_learning_snapshot") {
+        return { data: certified, error: null };
+      }
+      return { data: null, error: new Error(`Unexpected RPC ${name}`) };
+    });
+    const repository = new SupabaseLearningRepository({
+      schema: vi.fn(() => ({ rpc })),
+    });
+
+    await expect(repository.resolveAssignments()).resolves.toEqual(certified);
+    expect(rpc.mock.calls).toEqual([
+      ["resolve_assignments"],
+      ["evaluate_certifications"],
+      ["my_learning_snapshot"],
+    ]);
+  });
+
+  it("does not evaluate certifications while a required step is incomplete", async () => {
+    const incomplete = snapshot();
+    const locked: LearningSnapshot = {
+      ...incomplete,
+      lockedCapabilities: [
+        {
+          capability: { module: "warehouse", capability: "receive_stock" },
+          reason: "missing_certification",
+          requirementIds: [orientation.id, assessment.id],
+          canRequestEmergencyException: false,
+        },
+      ],
+    };
+    const rpc = vi.fn(async (name: string) => ({
+      data: name === "resolve_assignments" ? locked : null,
+      error: null,
+    }));
+    const repository = new SupabaseLearningRepository({
+      schema: vi.fn(() => ({ rpc })),
+    });
+
+    await expect(repository.resolveAssignments()).resolves.toEqual(locked);
+    expect(rpc.mock.calls).toEqual([["resolve_assignments"]]);
+  });
+
   it("uses the exact learning RPC names and learner-safe payload keys", async () => {
     let phase:
       | "initial"

@@ -375,6 +375,39 @@ test("shards UAT certification into bounded least-privilege jobs", async () => {
   assert.doesNotMatch(workflow, /service_role\s*[=:]\s*["'][^"']+/i);
 });
 
+test("certification gates use only the signed-in user's assigned role pathways", async () => {
+  const migration = await readFile(
+    new URL(
+      "../../supabase/migrations/20260816203000_scope_certification_pathways_to_assigned_roles.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+
+  assert.match(
+    migration,
+    /join core\.user_roles role_assignment[\s\S]*?role_assignment\.user_id = auth\.uid\(\)/i,
+  );
+  assert.match(
+    migration,
+    /join learning\.role_curricula role_curriculum[\s\S]*?role_curriculum\.module = role_assignment\.module[\s\S]*?role_curriculum\.role = role_assignment\.role/i,
+  );
+  assert.match(migration, /curriculum_version\.status = 'published'/i);
+  assert.match(migration, /requirement_version\.status = 'published'/i);
+  assert.match(
+    migration,
+    /grant execute on function warehouse\.procurement_receipt_excess_work_items\(jsonb\)[\s\S]*?authenticated, service_role/i,
+  );
+});
+
+test("the route crawl recognizes the current explicit access-denied screen", async () => {
+  const source = await readFile(
+    new URL("./full-intra-live-e2e.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /You don't have access to this page/i);
+});
+
 test("certifies mandatory first-login onboarding before module route and transaction audits", async () => {
   const workflow = await readFile(
     new URL(

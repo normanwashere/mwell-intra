@@ -63,6 +63,10 @@ const CONTEXT_ONLY_ASSIGNMENT_RETIREMENT_MIGRATION_NAME =
   "20260816184500_retire_context_only_learning_assignments.sql";
 const EQUIVALENT_ROLE_PRACTICE_KEY_FIX_MIGRATION_NAME =
   "20260816190000_fix_equivalent_role_practice_simulation_key.sql";
+const EQUIVALENT_SIMULATION_CERTIFICATION_LINEAGE_MIGRATION_NAME =
+  "20260816200000_allow_equivalent_simulation_certification_lineage.sql";
+const ASSIGNED_ROLE_CERTIFICATION_PATHWAY_MIGRATION_NAME =
+  "20260816203000_scope_certification_pathways_to_assigned_roles.sql";
 const PINNED_LEARNING_MIGRATION_SHA256 = Object.freeze({
   [FOUNDATION_MIGRATION_NAME]:
     "b5b954f0fdb9ff52748047ca4a17916896227934ecd43c22951ea4489fc129ad",
@@ -103,9 +107,9 @@ const PINNED_LEARNING_MIGRATION_SHA256 = Object.freeze({
   [SECURITY_DATABASE_CONVERGENCE_MIGRATION_NAME]:
     "ac434feb1fd32800dee0855e44bd90dce2445a9315594edd758fbcab01617f53",
   [VENDOR_LEARNING_ASSIGNMENT_MIGRATION_NAME]:
-    "a6eeecb8a2c63c78c7bfe0f31ba7f8a06ede9a7fb1bc6b6b8c6a562f5109f79a",
+    "30637614d190712923dc6b4ebf426cd674d69d4addd828a7634e0b418551ac64",
   [SHARED_ROLE_ORIENTATION_MIGRATION_NAME]:
-    "7abef3fcdd528b58a63a1c73407cc1cbef0dd11d59377efdbd5ba779f922ba36",
+    "9cc5d12c7fc9a02992886a9fe287d1b25832a0f8d72b64598d6037fc2ab70891",
   [LAUNCH_AUTHORITY_LEARNING_MIGRATION_NAME]:
     "08d7fbaea5e3205c4656de65ed2fc1f6398da5e817173fede27a6a64dc6acf1d",
   [CONTEXT_ONLY_ASSIGNMENT_RETIREMENT_MIGRATION_NAME]:
@@ -127,6 +131,7 @@ const INDEPENDENTLY_VERIFIED_CROSS_MODULE_MIGRATIONS = new Set([
   LAUNCH_AUTHORITY_LEARNING_MIGRATION_NAME,
   CONTEXT_ONLY_ASSIGNMENT_RETIREMENT_MIGRATION_NAME,
   EQUIVALENT_ROLE_PRACTICE_KEY_FIX_MIGRATION_NAME,
+  ASSIGNED_ROLE_CERTIFICATION_PATHWAY_MIGRATION_NAME,
 ]);
 export const PRIVATE_ANSWER_KEY_TABLE =
   "private.learning_assessment_answer_keys";
@@ -748,7 +753,7 @@ export const EXPECTED_FUNCTION_BODY_SHA256 = Object.freeze({
   "private.start_requirement_base":
     "1aec7f8e3061da6c8a2abb0a2f5cb8ef1f443edb635cb8381525363afe64deb6",
   "private.validate_certification_completion_evidence":
-    "d98966e8976de20a95333b7a0e42defa9dab2551f63a2bc647ba3263158a82c6",
+    "91c2c9c97e2d4f841d4870ff335329cb044253062310cb6acc52d39ddd9f07a8",
   "learning.guard_authoritative_write_isolation":
     "2f58975130b5a9e41bc212084a6ff31f5232c8cd34946ac170b4b3fbe3ca220e",
   "learning.reject_evidence_mutation":
@@ -1600,7 +1605,11 @@ function processStatement(state, statement, migrationName) {
   const isAssignmentIdempotency =
     migrationName === ASSIGNMENT_IDEMPOTENCY_MIGRATION_NAME;
   const isCertificationPathway =
-    migrationName === CERTIFICATION_PATHWAY_MIGRATION_NAME;
+    migrationName === CERTIFICATION_PATHWAY_MIGRATION_NAME ||
+    migrationName === ASSIGNED_ROLE_CERTIFICATION_PATHWAY_MIGRATION_NAME;
+  const isEquivalentSimulationCertificationLineage =
+    migrationName ===
+    EQUIVALENT_SIMULATION_CERTIFICATION_LINEAGE_MIGRATION_NAME;
   let match;
 
   if (
@@ -2432,6 +2441,12 @@ function processStatement(state, statement, migrationName) {
       isCertificationPathway &&
       metadata.qualifiedName === "learning.is_certification_required" &&
       metadata.argumentTypes.join("|") === "text|text";
+    const approvedEquivalentSimulationCertificationLineage =
+      isEquivalentSimulationCertificationLineage &&
+      Boolean(existingFunction) &&
+      metadata.qualifiedName ===
+        "private.validate_certification_completion_evidence" &&
+      metadata.argumentTypes.length === 0;
     if (isServiceContractAlignment && !approvedSnapshotAlignment) {
       state.errors.push(
         `${migrationName}: only the exact no-argument learning.my_learning_snapshot replacement is approved.`,
@@ -2447,6 +2462,15 @@ function processStatement(state, statement, migrationName) {
     if (isCompletionHardening && !approvedCompletionHardening) {
       state.errors.push(
         `${migrationName}: only exact reviewed completion-hardening function declarations are approved.`,
+      );
+      return;
+    }
+    if (
+      isEquivalentSimulationCertificationLineage &&
+      !approvedEquivalentSimulationCertificationLineage
+    ) {
+      state.errors.push(
+        `${migrationName}: only the exact no-argument certification evidence validator replacement is approved.`,
       );
       return;
     }
@@ -2466,7 +2490,8 @@ function processStatement(state, statement, migrationName) {
       !approvedCertificationScalarAlias &&
       !approvedCertificationChronology &&
       !approvedAssignmentIdempotency &&
-      !approvedCertificationPathway
+      !approvedCertificationPathway &&
+      !approvedEquivalentSimulationCertificationLineage
     ) {
       state.errors.push(
         `${migrationName}: replacement or overload of modeled function ${metadata.qualifiedName} is default-denied.`,
@@ -2530,7 +2555,10 @@ function processStatement(state, statement, migrationName) {
       (isPolicyChronology && match[1] === "learning.acknowledge_policy") ||
       (isAssessmentCompatibility &&
         match[1] === "learning.submit_assessment") ||
-      (isPgcryptoCompatibility && match[1] === "public.digest");
+      (isPgcryptoCompatibility && match[1] === "public.digest") ||
+      (isEquivalentSimulationCertificationLineage &&
+        match[1] ===
+          "private.validate_certification_completion_evidence");
     const approvedChronologyOwner =
       isCertificationChronology &&
       match[1] === "learning.evaluate_certifications";
