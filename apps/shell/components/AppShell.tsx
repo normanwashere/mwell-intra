@@ -11,6 +11,7 @@ import { useReducedMotion } from "framer-motion";
 import * as m from "framer-motion/m";
 import { Icon, PageTransition, Sheet, type IconName } from "@intra/ui";
 import { useSession } from "@intra/auth";
+import { roleOrientationState, useLearning } from "@intra/learning";
 import {
   FINANCE_NAV,
   KNOWLEDGE_NAV,
@@ -27,6 +28,10 @@ import { CommandPalette } from "./CommandPalette";
 import { MwellIntraLogo } from "./MwellIntraLogo";
 import { PersonaContext } from "./PersonaContext";
 import { BoundedLoadingState } from "./BoundedLoadingState";
+import {
+  isOnboardingProtectedPath,
+  onboardingHref,
+} from "@shell/lib/onboardingGate";
 
 interface NavEntry {
   readonly href: string;
@@ -46,8 +51,7 @@ function topBarLabel(pathname: string, entries: readonly NavEntry[]): string {
   if (pathname.startsWith(ONBOARDING_NAV.href)) return ONBOARDING_NAV.label;
   if (pathname.startsWith(KNOWLEDGE_NAV.href)) return KNOWLEDGE_NAV.label;
   if (pathname.startsWith("/admin/users")) return "Admin / Users & Roles";
-  if (pathname.startsWith("/admin/departments"))
-    return "Admin / Departments";
+  if (pathname.startsWith("/admin/departments")) return "Admin / Departments";
   if (pathname.startsWith("/admin/doa"))
     return "Admin / Delegation of Authority";
   if (pathname.startsWith("/admin")) return "Admin";
@@ -62,6 +66,7 @@ function topBarLabel(pathname: string, entries: readonly NavEntry[]): string {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { profile, userRoles, userCapabilities, mode, loading } = useSession();
+  const { snapshot } = useLearning();
   const access = { mode, userRoles, userCapabilities };
   const profileId = profile?.id;
   const pathname = usePathname() ?? "/";
@@ -108,6 +113,15 @@ export function AppShell({ children }: { children: ReactNode }) {
   const areas =
     loading || !profile ? [] : shellNavigationAreas(access, profile.kind);
   const entries: NavEntry[] = [HOME_ENTRY, ...areas.map(navItemToEntry)];
+  const orientation = roleOrientationState(snapshot);
+  const onboardingLocked =
+    profile?.kind === "employee" &&
+    orientation.required &&
+    !orientation.complete;
+  const isEntryLocked = (href: string) =>
+    onboardingLocked && isOnboardingProtectedPath(href);
+  const destinationFor = (href: string) =>
+    isEntryLocked(href) ? onboardingHref(href) : href;
 
   const isActive = (href: string) => {
     if (href === "/") return pathname === "/";
@@ -146,7 +160,12 @@ export function AppShell({ children }: { children: ReactNode }) {
     ["/admin", "/legal"].includes(entry.href),
   );
   const prioritizedMobileEntries = governanceEntries.length
-    ? [HOME_ENTRY, ...governancePrimary, ...governanceEntries, ...mobileEntries].filter(
+    ? [
+        HOME_ENTRY,
+        ...governancePrimary,
+        ...governanceEntries,
+        ...mobileEntries,
+      ].filter(
         (entry, index, all) =>
           all.findIndex((candidate) => candidate.href === entry.href) === index,
       )
@@ -193,8 +212,12 @@ export function AppShell({ children }: { children: ReactNode }) {
           {entries.map((e) => (
             <Link
               key={e.href}
-              href={e.href}
-              aria-label={e.label}
+              href={destinationFor(e.href)}
+              aria-label={
+                isEntryLocked(e.href)
+                  ? `${e.label}, onboarding required`
+                  : e.label
+              }
               aria-current={isActive(e.href) ? "page" : undefined}
               className={cx(
                 "group relative grid h-11 w-11 place-items-center rounded-xl text-faint transition hover:bg-inset hover:text-ink lg:flex lg:min-h-11 lg:h-auto lg:w-full lg:justify-start lg:gap-3 lg:px-3 lg:py-2.5",
@@ -215,6 +238,12 @@ export function AppShell({ children }: { children: ReactNode }) {
               <span className="relative hidden min-w-0 text-sm font-medium leading-tight lg:block">
                 {e.label}
               </span>
+              {isEntryLocked(e.href) && (
+                <Icon
+                  name="lock"
+                  className="relative ml-auto hidden h-3.5 w-3.5 text-amber-700 dark:text-amber-300 lg:block"
+                />
+              )}
               <span
                 className="pointer-events-none absolute left-full z-50 ml-2 hidden whitespace-nowrap rounded-lg border border-line bg-surface px-2.5 py-1 text-xs font-medium text-ink opacity-0 shadow-e2 transition group-hover:opacity-100 md:block lg:hidden"
                 role="tooltip"
@@ -341,11 +370,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
           {profile && (
             <div className="border-t border-line/60 px-4 py-1.5 md:hidden">
-              <PersonaContext
-                profile={profile}
-                userRoles={userRoles}
-                compact
-              />
+              <PersonaContext profile={profile} userRoles={userRoles} compact />
             </div>
           )}
         </header>
@@ -377,15 +402,20 @@ export function AppShell({ children }: { children: ReactNode }) {
               <li key={e.href} className="min-w-0 flex-1">
                 <MobileTab
                   entry={e}
+                  href={destinationFor(e.href)}
                   active={isActive(e.href)}
                   reduced={!!reduced}
+                  locked={isEntryLocked(e.href)}
                 />
               </li>
             ))}
 
             {fab && (
               <li className="min-w-0 flex-1">
-                <MobileActionTab action={fab} />
+                <MobileActionTab
+                  action={{ ...fab, href: destinationFor(fab.href) }}
+                  locked={isEntryLocked(fab.href)}
+                />
               </li>
             )}
 
@@ -393,8 +423,10 @@ export function AppShell({ children }: { children: ReactNode }) {
               <li key={e.href} className="min-w-0 flex-1">
                 <MobileTab
                   entry={e}
+                  href={destinationFor(e.href)}
                   active={isActive(e.href)}
                   reduced={!!reduced}
+                  locked={isEntryLocked(e.href)}
                 />
               </li>
             ))}
@@ -426,7 +458,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               {entries.map((entry) => (
                 <li key={entry.href}>
                   <Link
-                    href={entry.href}
+                    href={destinationFor(entry.href)}
                     onClick={() => setMobileMenuOpen(false)}
                     aria-current={isActive(entry.href) ? "page" : undefined}
                     className={cx(
@@ -438,6 +470,12 @@ export function AppShell({ children }: { children: ReactNode }) {
                   >
                     <Icon name={entry.icon} className="h-5 w-5 shrink-0" />
                     <span>{entry.label}</span>
+                    {isEntryLocked(entry.href) && (
+                      <span className="ml-auto inline-flex items-center gap-1 text-xs font-semibold text-amber-800 dark:text-amber-300">
+                        <Icon name="lock" className="h-3.5 w-3.5" />
+                        Onboarding required
+                      </span>
+                    )}
                   </Link>
                 </li>
               ))}
@@ -451,14 +489,18 @@ export function AppShell({ children }: { children: ReactNode }) {
 
 function MobileActionTab({
   action,
+  locked,
 }: {
   action: { href: string; label: string; icon: IconName };
+  locked: boolean;
 }) {
   return (
     <Link
       href={action.href}
       className="relative flex min-h-16 min-w-0 flex-col items-center justify-center gap-0.5 px-1 py-2.5 text-[0.65rem] font-semibold text-brand-700 transition active:bg-brand-500/10 dark:text-brand-300"
-      aria-label={action.label}
+      aria-label={
+        locked ? `${action.label}, onboarding required` : action.label
+      }
     >
       <span className="grid h-7 w-7 place-items-center rounded-lg bg-brand-600 text-white shadow-e1">
         <Icon name={action.icon} className="h-4 w-4" />
@@ -466,22 +508,33 @@ function MobileActionTab({
       <span className="block max-w-full text-center text-[0.625rem] leading-tight break-normal hyphens-none">
         {action.label}
       </span>
+      {locked && (
+        <Icon
+          name="lock"
+          className="absolute right-2 top-1 h-3 w-3 text-amber-700"
+        />
+      )}
     </Link>
   );
 }
 
 function MobileTab({
   entry,
+  href,
   active,
   reduced,
+  locked,
 }: {
   entry: NavEntry;
+  href: string;
   active: boolean;
   reduced: boolean;
+  locked: boolean;
 }) {
   return (
     <Link
-      href={entry.href}
+      href={href}
+      aria-label={locked ? `${entry.label}, onboarding required` : entry.label}
       aria-current={active ? "page" : undefined}
       className={cx(
         "relative flex min-h-16 min-w-0 flex-col items-center justify-center gap-0.5 px-1 py-2.5 text-[0.65rem] font-medium transition",
@@ -502,6 +555,12 @@ function MobileTab({
       <span className="relative block max-w-full text-center text-[0.625rem] leading-tight break-normal hyphens-none">
         {entry.label}
       </span>
+      {locked && (
+        <Icon
+          name="lock"
+          className="absolute right-2 top-1 h-3 w-3 text-amber-700"
+        />
+      )}
     </Link>
   );
 }

@@ -16,10 +16,18 @@ import {
   ModuleHero,
 } from "@intra/ui";
 import { useSession } from "@intra/auth";
-import { OnboardingStatusBand } from "@intra/learning";
+import {
+  OnboardingStatusBand,
+  roleOrientationState,
+  useLearning,
+} from "@intra/learning";
 import { dashboardAreas, type ModuleNav } from "@shell/lib/navigation";
 import { useModuleBadges } from "@shell/lib/moduleBadges";
 import { cx } from "@shell/lib/cx";
+import {
+  isOnboardingProtectedPath,
+  onboardingHref,
+} from "@shell/lib/onboardingGate";
 
 const TONE_CLASS: Record<ModuleNav["tone"], string> = {
   brand: "bg-brand-500/10 text-brand-700 dark:text-brand-300",
@@ -41,6 +49,7 @@ interface CardModel {
 
 export default function DashboardPage() {
   const { profile, userRoles, userCapabilities, loading, mode } = useSession();
+  const { snapshot } = useLearning();
   // Live counts read from the module localStores (guarded; empty in SSR).
   const badges = useModuleBadges(profile, userRoles);
 
@@ -92,6 +101,15 @@ export default function DashboardPage() {
     tone: m.tone,
   }));
   const quickAreas = cards.slice(0, 3);
+  const orientation = roleOrientationState(snapshot);
+  const modulesLocked =
+    profile.kind === "employee" &&
+    orientation.required &&
+    !orientation.complete;
+  const isDestinationLocked = (href: string) =>
+    modulesLocked && isOnboardingProtectedPath(href);
+  const destinationFor = (href: string) =>
+    isDestinationLocked(href) ? onboardingHref(href) : href;
 
   const firstName = profile.name?.split(/\s+/)[0] ?? "there";
 
@@ -109,7 +127,11 @@ export default function DashboardPage() {
           cards.length > 0 ? (
             <div className="flex flex-wrap gap-2">
               {quickAreas.map((c) => (
-                <HeroChipButton key={c.href} href={c.href} icon={c.icon}>
+                <HeroChipButton
+                  key={c.href}
+                  href={destinationFor(c.href)}
+                  icon={isDestinationLocked(c.href) ? "lock" : c.icon}
+                >
                   {c.label}
                 </HeroChipButton>
               ))}
@@ -200,8 +222,17 @@ export default function DashboardPage() {
         >
           {cards.map((c) => {
             const badge = badges[c.href];
+            const cardLocked = isDestinationLocked(c.href);
             return (
-              <Link key={c.href} href={c.href} className="block h-full">
+              <Link
+                key={c.href}
+                href={destinationFor(c.href)}
+                className="block h-full"
+                aria-label={
+                  cardLocked ? `${c.label}, onboarding required` : undefined
+                }
+                data-onboarding-locked={cardLocked ? "true" : undefined}
+              >
                 <Card interactive className="group flex h-full flex-col gap-3">
                   <div className="flex items-start justify-between gap-2">
                     <span
@@ -212,11 +243,16 @@ export default function DashboardPage() {
                     >
                       <Icon name={c.icon} />
                     </span>
-                    {badge && (
+                    {cardLocked ? (
+                      <span className="chip bg-amber-500/15 font-semibold text-amber-800 dark:text-amber-300">
+                        <Icon name="lock" className="h-3.5 w-3.5" />
+                        Onboarding required
+                      </span>
+                    ) : badge ? (
                       <span className="chip bg-amber-500/15 font-semibold text-amber-800 dark:text-amber-300">
                         {badge.label}
                       </span>
-                    )}
+                    ) : null}
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5">

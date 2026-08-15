@@ -10,33 +10,35 @@ import {
 } from "./LearningProvider";
 import { clearTrainingAdaptersForTests } from "./training/registry";
 
+const DEFAULT_PROFILE = {
+  id: "learner-1",
+  email: "operator@mwell.test",
+  kind: "employee" as const,
+};
+
 const session: {
   mode: "memory" | "supabase";
-  profile: { id: string; email: string; kind: "employee" };
+  profile: typeof DEFAULT_PROFILE | undefined;
   userCapabilities: UserCapabilities;
   userRoles?: Record<string, string[]>;
   refreshCapabilities?: () => Promise<boolean>;
 } = {
   mode: "supabase",
-  profile: {
-    id: "learner-1",
-    email: "operator@mwell.test",
-    kind: "employee" as const,
-  },
+  profile: DEFAULT_PROFILE,
   userCapabilities: {
     warehouse: ["view_inventory"],
   } satisfies UserCapabilities,
 };
 
 vi.mock("@intra/auth", async () => {
-  const actual = await vi.importActual<typeof import("@intra/auth")>(
-    "@intra/auth",
-  );
+  const actual =
+    await vi.importActual<typeof import("@intra/auth")>("@intra/auth");
   return { ...actual, useSession: () => session };
 });
 
 afterEach(() => {
   delete session.refreshCapabilities;
+  session.profile = DEFAULT_PROFILE;
 });
 
 const emptySnapshot = (refreshedAt = "2026-08-13T00:00:00.000Z") =>
@@ -96,12 +98,22 @@ function Probe() {
         {String(learning.isLiveCapability("warehouse", "receive_stock"))}
       </span>
       <span data-testid="lock">{lock?.reason ?? "none"}</span>
-      <button onClick={() => learning.resume("receiving-scenario")}>Resume</button>
+      <button onClick={() => learning.resume("receiving-scenario")}>
+        Resume
+      </button>
       <span data-testid="resume">{learning.resumeRequirementId ?? "none"}</span>
-      <span data-testid="attempt">{learning.activeTraining?.attemptId ?? "none"}</span>
-      <span data-testid="activity-kind">{learning.activeActivity?.kind ?? "none"}</span>
-      <span data-testid="activity-attempt">{learning.activeActivity?.attemptId ?? "none"}</span>
-      <span data-testid="training-error">{learning.trainingError ?? "none"}</span>
+      <span data-testid="attempt">
+        {learning.activeTraining?.attemptId ?? "none"}
+      </span>
+      <span data-testid="activity-kind">
+        {learning.activeActivity?.kind ?? "none"}
+      </span>
+      <span data-testid="activity-attempt">
+        {learning.activeActivity?.attemptId ?? "none"}
+      </span>
+      <span data-testid="training-error">
+        {learning.trainingError ?? "none"}
+      </span>
       <button onClick={() => void learning.refresh()}>Refresh</button>
     </div>
   );
@@ -177,11 +189,14 @@ const assignedActivity = (kind: "assessment" | "policy"): LearningSnapshot => {
             version: 1,
             audience: "internal",
             kind,
-            title: kind === "assessment" ? "Knowledge check" : "Controlled policy",
+            title:
+              kind === "assessment" ? "Knowledge check" : "Controlled policy",
             mandatory: true,
             prerequisiteIds: [],
             capabilityOutcomes: [],
-            ...(kind === "assessment" ? { passingScore: 80, maxAttempts: 3 } : {}),
+            ...(kind === "assessment"
+              ? { passingScore: 80, maxAttempts: 3 }
+              : {}),
           },
         ],
       },
@@ -201,6 +216,44 @@ const assignedActivity = (kind: "assessment" | "policy"): LearningSnapshot => {
 };
 
 describe("LearningProvider", () => {
+  it("reports loading synchronously when an authenticated principal appears", async () => {
+    session.profile = undefined;
+    const pending = deferred<LearningSnapshot>();
+    const learningRepository = repository(() => pending.promise);
+    const observations: boolean[] = [];
+
+    function LoadingProbe() {
+      const learning = useLearning();
+      observations.push(learning.loading);
+      return (
+        <span data-testid="principal-loading">{String(learning.loading)}</span>
+      );
+    }
+
+    const view = render(
+      <LearningProvider repository={learningRepository}>
+        <LoadingProbe />
+      </LearningProvider>,
+    );
+    expect(screen.getByTestId("principal-loading")).toHaveTextContent("false");
+
+    observations.length = 0;
+    session.profile = DEFAULT_PROFILE;
+    view.rerender(
+      <LearningProvider repository={learningRepository}>
+        <LoadingProbe />
+      </LearningProvider>,
+    );
+
+    expect(observations[0]).toBe(true);
+    pending.resolve(emptySnapshot());
+    await waitFor(() =>
+      expect(screen.getByTestId("principal-loading")).toHaveTextContent(
+        "false",
+      ),
+    );
+  });
+
   it("loads resolved assignments and exposes fail-closed capability helpers", async () => {
     const learningRepository = repository(emptySnapshot());
     render(
@@ -222,7 +275,9 @@ describe("LearningProvider", () => {
       "missing_certification",
     );
 
-    await act(async () => screen.getByRole("button", { name: "Resume" }).click());
+    await act(async () =>
+      screen.getByRole("button", { name: "Resume" }).click(),
+    );
     expect(screen.getByTestId("resume")).toHaveTextContent(
       "receiving-scenario",
     );
@@ -284,7 +339,9 @@ describe("LearningProvider", () => {
       </LearningProvider>,
     );
     await screen.findByText("2026-08-13T00:00:00.000Z");
-    await act(async () => screen.getByRole("button", { name: "Resume" }).click());
+    await act(async () =>
+      screen.getByRole("button", { name: "Resume" }).click(),
+    );
 
     expect(learningRepository.startRequirement).toHaveBeenCalledWith({
       assignmentRequirementId: "assignment-1",
@@ -390,7 +447,9 @@ describe("LearningProvider", () => {
     );
 
     await waitFor(() =>
-      expect(Number(screen.getByTestId("curricula").textContent)).toBeGreaterThan(0),
+      expect(
+        Number(screen.getByTestId("curricula").textContent),
+      ).toBeGreaterThan(0),
     );
     expect(screen.getByTestId("lock")).toHaveTextContent("none");
     session.userRoles = undefined;
@@ -452,7 +511,9 @@ describe("LearningProvider", () => {
     );
     await screen.findByText("2026-08-13T00:00:00.000Z");
 
-    await act(async () => screen.getByRole("button", { name: "Resume" }).click());
+    await act(async () =>
+      screen.getByRole("button", { name: "Resume" }).click(),
+    );
 
     expect(learningRepository.startRequirement).not.toHaveBeenCalled();
     expect(screen.getByTestId("attempt")).toHaveTextContent("none");
@@ -487,7 +548,9 @@ describe("LearningProvider", () => {
       </LearningProvider>,
     );
     await screen.findByText("2026-08-13T00:00:00.000Z");
-    await act(async () => screen.getByRole("button", { name: "Resume" }).click());
+    await act(async () =>
+      screen.getByRole("button", { name: "Resume" }).click(),
+    );
 
     const completion = observedLearning!.recordCheckpoint({
       assignmentRequirementId: "assignment-1",
@@ -558,7 +621,9 @@ describe("LearningProvider", () => {
       </LearningProvider>,
     );
     await screen.findByText("2026-08-13T00:00:00.000Z");
-    await act(async () => screen.getByRole("button", { name: "Resume" }).click());
+    await act(async () =>
+      screen.getByRole("button", { name: "Resume" }).click(),
+    );
 
     await expect(
       observedLearning!.recordCheckpoint({
@@ -569,7 +634,9 @@ describe("LearningProvider", () => {
         idempotencyKey: "00000000-0000-4000-8000-000000000002",
         terminal: true,
       }),
-    ).rejects.toThrow("Training completion is not terminal in canonical readback");
+    ).rejects.toThrow(
+      "Training completion is not terminal in canonical readback",
+    );
   });
 
   it("confirms assessment, policy, and support commands through canonical readback", async () => {
@@ -620,7 +687,9 @@ describe("LearningProvider", () => {
       attemptNumber: 1,
       state: "passed",
     });
-    vi.mocked(learningRepository.acknowledgePolicy).mockResolvedValue(undefined);
+    vi.mocked(learningRepository.acknowledgePolicy).mockResolvedValue(
+      undefined,
+    );
     vi.mocked(learningRepository.requestSupport).mockResolvedValue(undefined);
     render(
       <LearningProvider repository={learningRepository}>

@@ -649,7 +649,7 @@ const definitions: FeatureDefinition[] = [
     route: "/onboarding",
     roleIds: CURRENT_ROLE_IDS.filter((roleId) => roleId !== "vendor_portal"),
     purpose:
-      "Guides each employee through role-specific policy, practice, assessment, and attestation. Practices without a simulation use a completable guided review, and demo completion persists by profile and role bundle.",
+      "Shows every module assigned to the employee while guiding each employee through role-specific first-time orientation before operational entry. Later policy, practice, assessment, and attestation requirements restrict only the live actions they govern. Practices without a simulation use a completable guided review, and demo completion persists by profile and role bundle.",
     reads:
       "Current scoped role assignments, effective curricula, requirement progress, capability locks, support state, and certification evidence.",
     writes:
@@ -657,9 +657,9 @@ const definitions: FeatureDefinition[] = [
     statuses:
       "Loading, not assigned, not started, in progress, retryable, needs support, complete, expired, waived, stale, or certification active.",
     exception:
-      "Refresh stale status, use the support route after exhausted attempts, and contact the role owner when no curriculum is assigned.",
+      "Knowledge Base and onboarding remain available while module entry is locked. Refresh stale status, use the support route after exhausted attempts, and contact the role owner when no curriculum is assigned.",
     completionEvidence:
-      "Every mandatory requirement shows complete or waived, the applicable certification is active, and the intended live capability is no longer listed as locked.",
+      "Mandatory orientation shows complete or waived and the employee can use the explicit Continue to module action. Any remaining capability-specific learning stays visible until its governed action is unlocked.",
   },
   {
     id: "vendor-onboarding",

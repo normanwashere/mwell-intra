@@ -11,7 +11,13 @@ import {
   type ReactNode,
 } from "react";
 import { useSession } from "@intra/auth";
-import { can, MODULE_LIST, type CapabilityFor, type Module, type UserRoles } from "@intra/rbac";
+import {
+  can,
+  MODULE_LIST,
+  type CapabilityFor,
+  type Module,
+  type UserRoles,
+} from "@intra/rbac";
 import {
   LEARNING_CATALOG,
   roleCurriculumFor,
@@ -154,7 +160,9 @@ export interface ActiveLearningActivity {
 export const LearningContext = createContext<LearningContextValue | null>(null);
 
 const errorMessage = (error: unknown) =>
-  error instanceof Error ? error.message : "Learning status could not be loaded.";
+  error instanceof Error
+    ? error.message
+    : "Learning status could not be loaded.";
 
 export function LearningProvider({
   children,
@@ -198,9 +206,9 @@ export function LearningProvider({
   const [resumeRequirementId, setResumeRequirementId] = useState<string | null>(
     null,
   );
-  const [startingRequirementId, setStartingRequirementId] = useState<string | null>(
-    null,
-  );
+  const [startingRequirementId, setStartingRequirementId] = useState<
+    string | null
+  >(null);
   const [trainingError, setTrainingError] = useState<string | null>(null);
   const [activeTraining, setActiveTraining] =
     useState<ActiveTrainingRequirement | null>(null);
@@ -220,8 +228,13 @@ export function LearningProvider({
   });
   const principalSignature = `${profile?.id ?? "anonymous"}:${authoritySignature}`;
   const principalRef = useRef(principalSignature);
-  const [snapshotPrincipal, setSnapshotPrincipal] = useState<string | null>(null);
-  const [trainingPrincipal, setTrainingPrincipal] = useState<string | null>(null);
+  const [snapshotPrincipal, setSnapshotPrincipal] = useState<string | null>(
+    null,
+  );
+  const [settledPrincipal, setSettledPrincipal] = useState<string | null>(null);
+  const [trainingPrincipal, setTrainingPrincipal] = useState<string | null>(
+    null,
+  );
   if (principalRef.current !== principalSignature) {
     principalRef.current = principalSignature;
     generation.current += 1;
@@ -241,7 +254,8 @@ export function LearningProvider({
       if (
         requestGeneration !== generation.current ||
         requestPrincipal !== principalRef.current
-      ) return;
+      )
+        return;
       snapshotRef.current = next;
       setSnapshot(next);
       setSnapshotPrincipal(requestPrincipal);
@@ -251,7 +265,10 @@ export function LearningProvider({
       setError(errorMessage(cause));
       setStale(snapshotRef.current !== null);
     } finally {
-      if (requestGeneration === generation.current) setLoading(false);
+      if (requestGeneration === generation.current) {
+        setSettledPrincipal(requestPrincipal);
+        setLoading(false);
+      }
     }
   }, [profile, repository]);
 
@@ -261,6 +278,7 @@ export function LearningProvider({
       snapshotRef.current = null;
       setSnapshot(null);
       setSnapshotPrincipal(null);
+      setSettledPrincipal(null);
       setLoading(false);
       setStale(false);
       setError(null);
@@ -291,6 +309,8 @@ export function LearningProvider({
 
   const visibleSnapshot =
     snapshotPrincipal === principalSignature ? snapshot : null;
+  const principalLoading =
+    Boolean(profile) && (loading || settledPrincipal !== principalSignature);
   const visibleTraining =
     trainingPrincipal === principalSignature ? activeTraining : null;
   const visibleActivity =
@@ -304,7 +324,9 @@ export function LearningProvider({
       return (
         can(userRoles, module, capability as CapabilityFor<typeof module>) &&
         !visibleSnapshot?.lockedCapabilities.some(
-          (item) => item.capability.module === module && item.capability.capability === capability,
+          (item) =>
+            item.capability.module === module &&
+            item.capability.capability === capability,
         )
       );
     },
@@ -336,9 +358,12 @@ export function LearningProvider({
       const requirement = snapshotRef.current?.curricula
         .flatMap((item) => item.requirements)
         .find((item) => item.id === requirementId);
-      const isActivity = requirement?.kind === "assessment" || requirement?.kind === "policy";
+      const isActivity =
+        requirement?.kind === "assessment" || requirement?.kind === "policy";
       if (!requirement || (!isActivity && !requirement.simulationId)) {
-        setTrainingError("This learning step does not have published training content yet.");
+        setTrainingError(
+          "This learning step does not have published training content yet.",
+        );
         return;
       }
       if (
@@ -369,7 +394,9 @@ export function LearningProvider({
           idempotencyKey,
         });
         if (!result?.progress) {
-          throw new Error("Learning service did not return updated requirement progress.");
+          throw new Error(
+            "Learning service did not return updated requirement progress.",
+          );
         }
         if (
           requestGeneration !== generation.current ||
@@ -383,7 +410,8 @@ export function LearningProvider({
           const next = {
             ...current,
             progress: current.progress.map((item) =>
-              item.assignmentRequirementId === result.progress.assignmentRequirementId
+              item.assignmentRequirementId ===
+              result.progress.assignmentRequirementId
                 ? result.progress
                 : item,
             ),
@@ -393,7 +421,9 @@ export function LearningProvider({
         });
         if (isActivity) {
           if (requirement.kind === "assessment" && !result.attempt) {
-            throw new Error("This assessment does not provide a governed attempt.");
+            throw new Error(
+              "This assessment does not provide a governed attempt.",
+            );
           }
           setActiveTraining(null);
           setActiveActivity({
@@ -406,7 +436,9 @@ export function LearningProvider({
           return;
         }
         if (!result.attempt) {
-          throw new Error("This learning step does not provide a resumable attempt.");
+          throw new Error(
+            "This learning step does not provide a resumable attempt.",
+          );
         }
         setActiveTraining({
           requirementId,
@@ -452,12 +484,15 @@ export function LearningProvider({
         current.attemptId !== event.attemptId ||
         current.simulationId !== event.scenarioId
       ) {
-        throw new Error("Training checkpoint does not match the active requirement.");
+        throw new Error(
+          "Training checkpoint does not match the active requirement.",
+        );
       }
       const requestGeneration = generation.current;
       const requestProfileId = profileIdRef.current;
       const requestPrincipal = principalRef.current;
-      if (!requestProfileId) throw new Error("Training session is no longer authenticated.");
+      if (!requestProfileId)
+        throw new Error("Training session is no longer authenticated.");
       const canonicalProgress = await repository.checkpoint({
         assignmentRequirementId: event.assignmentRequirementId,
         attemptId: event.attemptId,
@@ -472,13 +507,18 @@ export function LearningProvider({
         requestProfileId !== profileIdRef.current ||
         requestPrincipal !== principalRef.current
       ) {
-        throw new Error("Training authority changed before progress was confirmed.");
+        throw new Error(
+          "Training authority changed before progress was confirmed.",
+        );
       }
       const readback = confirmed.progress.find(
-        (item) => item.assignmentRequirementId === event.assignmentRequirementId,
+        (item) =>
+          item.assignmentRequirementId === event.assignmentRequirementId,
       );
       if (!readback || readback.state !== canonicalProgress.state) {
-        throw new Error("Training completion could not be confirmed by readback.");
+        throw new Error(
+          "Training completion could not be confirmed by readback.",
+        );
       }
       if (
         event.terminal &&
@@ -486,7 +526,9 @@ export function LearningProvider({
           !readback.completedAt ||
           readback.activeAttempt)
       ) {
-        throw new Error("Training completion is not terminal in canonical readback.");
+        throw new Error(
+          "Training completion is not terminal in canonical readback.",
+        );
       }
       snapshotRef.current = confirmed;
       setSnapshot(confirmed);
@@ -522,7 +564,9 @@ export function LearningProvider({
           requestProfileId !== profileIdRef.current ||
           requestPrincipal !== principalRef.current
         ) {
-          throw new Error("Learning authority changed before progress was confirmed.");
+          throw new Error(
+            "Learning authority changed before progress was confirmed.",
+          );
         }
         validate(result, confirmed);
         snapshotRef.current = confirmed;
@@ -533,7 +577,9 @@ export function LearningProvider({
         const capabilitiesCurrent = await refreshCapabilities();
         if (!capabilitiesCurrent) {
           setStale(true);
-          setError("Learning was saved, but your updated access could not be confirmed.");
+          setError(
+            "Learning was saved, but your updated access could not be confirmed.",
+          );
         }
         return result;
       } finally {
@@ -545,17 +591,21 @@ export function LearningProvider({
 
   const submitAssessment = useCallback(
     (input: AssessmentSubmission) =>
-      confirmCommand(() =>
-        repository.submitAssessment({
-          ...input,
-          idempotencyKey: input.idempotencyKey ?? createIdempotencyKey(),
-        }),
+      confirmCommand(
+        () =>
+          repository.submitAssessment({
+            ...input,
+            idempotencyKey: input.idempotencyKey ?? createIdempotencyKey(),
+          }),
         (result, confirmed) => {
           const progress = confirmed.progress.find(
-            (item) => item.assignmentRequirementId === input.assignmentRequirementId,
+            (item) =>
+              item.assignmentRequirementId === input.assignmentRequirementId,
           );
           if (!progress || progress.state !== result.state) {
-            throw new Error("Assessment result could not be confirmed by readback.");
+            throw new Error(
+              "Assessment result could not be confirmed by readback.",
+            );
           }
         },
       ),
@@ -564,21 +614,25 @@ export function LearningProvider({
 
   const acknowledgePolicy = useCallback(
     (input: PolicyAcknowledgmentInput) =>
-      confirmCommand(() =>
-        repository.acknowledgePolicy({
-          ...input,
-          idempotencyKey: input.idempotencyKey ?? createIdempotencyKey(),
-        }),
+      confirmCommand(
+        () =>
+          repository.acknowledgePolicy({
+            ...input,
+            idempotencyKey: input.idempotencyKey ?? createIdempotencyKey(),
+          }),
         (_result, confirmed) => {
           const progress = confirmed.progress.find(
-            (item) => item.assignmentRequirementId === input.assignmentRequirementId,
+            (item) =>
+              item.assignmentRequirementId === input.assignmentRequirementId,
           );
           if (
             !progress ||
             !["passed", "waived"].includes(progress.state) ||
             !progress.completedAt
           ) {
-            throw new Error("Policy acknowledgment could not be confirmed by readback.");
+            throw new Error(
+              "Policy acknowledgment could not be confirmed by readback.",
+            );
           }
         },
       ),
@@ -587,17 +641,21 @@ export function LearningProvider({
 
   const requestSupport = useCallback(
     (input: SupportRequestInput) =>
-      confirmCommand(() =>
-        repository.requestSupport({
-          ...input,
-          idempotencyKey: input.idempotencyKey ?? createIdempotencyKey(),
-        }),
+      confirmCommand(
+        () =>
+          repository.requestSupport({
+            ...input,
+            idempotencyKey: input.idempotencyKey ?? createIdempotencyKey(),
+          }),
         (_result, confirmed) => {
           const progress = confirmed.progress.find(
-            (item) => item.assignmentRequirementId === input.assignmentRequirementId,
+            (item) =>
+              item.assignmentRequirementId === input.assignmentRequirementId,
           );
           if (!progress || progress.state !== "needs_support") {
-            throw new Error("Support request could not be confirmed by readback.");
+            throw new Error(
+              "Support request could not be confirmed by readback.",
+            );
           }
         },
       ),
@@ -609,7 +667,9 @@ export function LearningProvider({
     await refresh();
     if (!capabilitiesCurrent) {
       setStale(true);
-      setError("Your access status could not be refreshed. Try again when the connection is restored.");
+      setError(
+        "Your access status could not be refreshed. Try again when the connection is restored.",
+      );
       return false;
     }
     return true;
@@ -632,7 +692,7 @@ export function LearningProvider({
   const value = useMemo<LearningContextValue>(
     () => ({
       snapshot: visibleSnapshot,
-      loading,
+      loading: principalLoading,
       stale,
       error,
       resumeRequirementId,
@@ -654,7 +714,7 @@ export function LearningProvider({
     }),
     [
       visibleSnapshot,
-      loading,
+      principalLoading,
       stale,
       error,
       resumeRequirementId,
@@ -685,7 +745,8 @@ export function LearningProvider({
 
 export function useLearning(): LearningContextValue {
   const value = useContext(LearningContext);
-  if (!value) throw new Error("useLearning must be used within LearningProvider.");
+  if (!value)
+    throw new Error("useLearning must be used within LearningProvider.");
   return value;
 }
 

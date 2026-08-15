@@ -11,9 +11,10 @@ import {
 
 const push = vi.fn();
 const prefetch = vi.fn();
+let searchParams = new URLSearchParams();
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push, prefetch }),
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => searchParams,
 }));
 
 const session = {
@@ -25,9 +26,8 @@ const session = {
 };
 
 vi.mock("@intra/auth", async () => {
-  const actual = await vi.importActual<typeof import("@intra/auth")>(
-    "@intra/auth",
-  );
+  const actual =
+    await vi.importActual<typeof import("@intra/auth")>("@intra/auth");
   return { ...actual, useSession: () => session };
 });
 
@@ -168,7 +168,9 @@ const snapshot: LearningSnapshot = {
   refreshedAt: "2026-08-13T10:00:00.000Z",
 };
 
-function value(overrides: Partial<LearningContextValue> = {}): LearningContextValue {
+function value(
+  overrides: Partial<LearningContextValue> = {},
+): LearningContextValue {
   return {
     snapshot,
     loading: false,
@@ -206,6 +208,7 @@ describe("OnboardingCenter", () => {
   beforeEach(() => {
     push.mockClear();
     prefetch.mockClear();
+    searchParams = new URLSearchParams();
     clearTrainingAdaptersForTests();
     registerTrainingAdapter({
       id: "receiving-sim",
@@ -261,10 +264,14 @@ describe("OnboardingCenter", () => {
       },
     });
 
-    expect(screen.getByRole("button", {
-      name: "Resume Receive and inspect a serialized device",
-    })).toBeDisabled();
-    expect(screen.getAllByText("Guided practice is being prepared").length).toBeGreaterThan(0);
+    expect(
+      screen.getByRole("button", {
+        name: "Resume Receive and inspect a serialized device",
+      }),
+    ).toBeDisabled();
+    expect(
+      screen.getAllByText("Guided practice is being prepared").length,
+    ).toBeGreaterThan(0);
   });
 
   it("prioritizes the next action and deduplicates shared multi-role requirements", () => {
@@ -274,7 +281,9 @@ describe("OnboardingCenter", () => {
       screen.getByRole("heading", { level: 1, name: "Role onboarding" }),
     ).toBeInTheDocument();
     expect(screen.getByText("Operations Associate")).toBeInTheDocument();
-    expect(screen.getByText("1 of 3 required steps complete")).toBeInTheDocument();
+    expect(
+      screen.getByText("1 of 3 required steps complete"),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("button", {
         name: "Resume Receive and inspect a serialized device",
@@ -371,7 +380,9 @@ describe("OnboardingCenter", () => {
         name: "Try again Receive and inspect a serialized device",
       }),
     ).toBeDisabled();
-    expect(screen.getByText("Complete Warehouse safety orientation first")).toBeInTheDocument();
+    expect(
+      screen.getByText("Complete Warehouse safety orientation first"),
+    ).toBeInTheDocument();
   });
 
   it("does not offer an expired requirement as the next action", () => {
@@ -391,15 +402,21 @@ describe("OnboardingCenter", () => {
         name: "Expired Receive and inspect a serialized device",
       }),
     ).toBeDisabled();
-    expect(screen.getByText("Ask your manager to reassign this step")).toBeInTheDocument();
+    expect(
+      screen.getByText("Ask your manager to reassign this step"),
+    ).toBeInTheDocument();
   });
 
   it("shows certification evidence and a retryable stale-data warning", () => {
     renderCenter({ stale: true, error: "Learning service unavailable" });
 
     expect(screen.getByText("Certification active")).toBeInTheDocument();
-    expect(screen.getByText("Learning status may be out of date")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Refresh status" })).toBeInTheDocument();
+    expect(
+      screen.getByText("Learning status may be out of date"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Refresh status" }),
+    ).toBeInTheDocument();
   });
 
   it("keeps expired certification evidence visible with a clear recovery state", () => {
@@ -432,10 +449,9 @@ describe("OnboardingCenter", () => {
     });
 
     expect(screen.getByText("No onboarding assigned yet")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open Knowledge Base" })).toHaveAttribute(
-      "href",
-      "/knowledge",
-    );
+    expect(
+      screen.getByRole("link", { name: "Open Knowledge Base" }),
+    ).toHaveAttribute("href", "/knowledge");
   });
 
   it("distinguishes an initial service failure from an empty assignment", () => {
@@ -446,9 +462,15 @@ describe("OnboardingCenter", () => {
     });
 
     expect(screen.getByText("Onboarding unavailable")).toBeInTheDocument();
-    expect(screen.getByText("Learning service unavailable")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
-    expect(screen.queryByText("No onboarding assigned yet")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Learning service unavailable"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Try again" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("No onboarding assigned yet"),
+    ).not.toBeInTheDocument();
   });
 
   it("shows a stable loading state", () => {
@@ -503,7 +525,9 @@ describe("OnboardingCenter", () => {
       </LearningContext.Provider>,
     );
 
-    expect(screen.getByText("Vendor onboarding unavailable")).toBeInTheDocument();
+    expect(
+      screen.getByText("Vendor onboarding unavailable"),
+    ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Return home" })).toHaveAttribute(
       "href",
       "/",
@@ -513,6 +537,47 @@ describe("OnboardingCenter", () => {
 });
 
 describe("OnboardingStatusBand", () => {
+  it("makes the first-time module boundary explicit", () => {
+    const firstTimeSnapshot: LearningSnapshot = {
+      ...snapshot,
+      progress: snapshot.progress.map((item) =>
+        item.requirementId === "orientation"
+          ? {
+              ...item,
+              state: "not_started",
+              attemptCount: 0,
+              completedAt: undefined,
+            }
+          : item,
+      ),
+    };
+    render(
+      <LearningContext.Provider value={value({ snapshot: firstTimeSnapshot })}>
+        <OnboardingStatusBand />
+      </LearningContext.Provider>,
+    );
+
+    expect(
+      screen.getByText("Complete role orientation to enter your modules"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("0 of 1 required step complete"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Start onboarding" }),
+    ).toHaveAttribute("href", "/onboarding");
+  });
+
+  it("returns a user to the requested module after role orientation", () => {
+    searchParams = new URLSearchParams("next=%2Fprocurement");
+    renderCenter();
+
+    expect(
+      screen.getByRole("link", { name: "Continue to Procurement" }),
+    ).toHaveAttribute("href", "/procurement");
+    expect(screen.getByText("Procurement is ready")).toBeInTheDocument();
+  });
+
   it("summarizes readiness without presenting onboarding as an app module", () => {
     render(
       <LearningContext.Provider value={value()}>
@@ -523,19 +588,22 @@ describe("OnboardingStatusBand", () => {
     expect(
       screen.getByRole("region", { name: "Role readiness" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("1 of 3 required steps complete")).toBeInTheDocument();
+    expect(
+      screen.getByText("1 of 3 required steps complete"),
+    ).toBeInTheDocument();
     expect(
       screen.getByText("Receive and inspect a serialized device"),
     ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Continue onboarding" })).toHaveAttribute(
-      "href",
-      "/onboarding",
-    );
+    expect(
+      screen.getByRole("link", { name: "Continue onboarding" }),
+    ).toHaveAttribute("href", "/onboarding");
   });
 
   it("does not manufacture a completion state while assignments are unavailable", () => {
     render(
-      <LearningContext.Provider value={value({ snapshot: null, loading: true })}>
+      <LearningContext.Provider
+        value={value({ snapshot: null, loading: true })}
+      >
         <OnboardingStatusBand />
       </LearningContext.Provider>,
     );
@@ -559,7 +627,9 @@ describe("OnboardingStatusBand", () => {
     );
 
     expect(screen.getByText("Role readiness unavailable")).toBeInTheDocument();
-    expect(screen.queryByText("No required learning assigned")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("No required learning assigned"),
+    ).not.toBeInTheDocument();
     screen.getByRole("button", { name: "Retry" }).click();
     expect(refresh).toHaveBeenCalledOnce();
   });
@@ -571,9 +641,8 @@ describe("OnboardingStatusBand", () => {
       </LearningContext.Provider>,
     );
 
-    expect(screen.getByRole("progressbar", { name: "Role readiness progress" })).toHaveAttribute(
-      "aria-valuenow",
-      "33",
-    );
+    expect(
+      screen.getByRole("progressbar", { name: "Role readiness progress" }),
+    ).toHaveAttribute("aria-valuenow", "33");
   });
 });

@@ -17,6 +17,7 @@ import { DEMO_PROFILES } from "@shell/lib/demoProfiles";
 import { DemoSeeder } from "@shell/components/DemoSeeder";
 import { StorageFullToast } from "@shell/components/StorageFullToast";
 import { ConnectivityProvider } from "@shell/components/ConnectivityProvider";
+import { OnboardingRouteGate } from "@shell/components/OnboardingRouteGate";
 
 registerWarehouseTrainingAdapters();
 
@@ -105,13 +106,15 @@ export function Providers({ children }: { children: ReactNode }) {
     <MotionProvider>
       <SessionProvider config={config}>
         <LearningProvider>
-          <ConnectivityProvider>
-            <DemoSeeder />
-            <ToastProvider>
-              <StorageFullToast />
-              {children}
-            </ToastProvider>
-          </ConnectivityProvider>
+          <OnboardingRouteGate>
+            <ConnectivityProvider>
+              <DemoSeeder />
+              <ToastProvider>
+                <StorageFullToast />
+                {children}
+              </ToastProvider>
+            </ConnectivityProvider>
+          </OnboardingRouteGate>
         </LearningProvider>
       </SessionProvider>
     </MotionProvider>

@@ -15,6 +15,10 @@ import { assessmentQuestionsFor, policyDocumentFor } from "./content";
 import { getTrainingAdapter } from "./training/registry";
 import { supportsEmbeddedTraining } from "./catalog";
 import { sharedCompletionKey } from "./requirementIdentity";
+import {
+  roleOrientationState,
+  sanitizeOnboardingReturnPath,
+} from "./orientationGate";
 import type {
   RequirementDefinition,
   RequirementProgress,
@@ -66,13 +70,20 @@ function RequirementAction({
 }) {
   if (progress?.state === "needs_support") {
     return (
-      <Link href="/knowledge?article=trouble-access-denied" className="btn-outline btn-sm">
+      <Link
+        href="/knowledge?article=trouble-access-denied"
+        className="btn-outline btn-sm"
+      >
         Read recovery guidance
       </Link>
     );
   }
   if (progress && ["passed", "waived"].includes(progress.state)) {
-    return <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">Done</span>;
+    return (
+      <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">
+        Done
+      </span>
+    );
   }
   const verb =
     progress?.state === "in_progress"
@@ -127,6 +138,7 @@ export function OnboardingCenter({
   const router = useRouter();
   const searchParams = useSearchParams();
   const requestedRequirementId = searchParams.get("requirement");
+  const returnPath = sanitizeOnboardingReturnPath(searchParams.get("next"));
   const requiredHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const trainingWasActive = useRef(false);
   const focusedRequirementRef = useRef<string | null>(null);
@@ -171,15 +183,27 @@ export function OnboardingCenter({
     const progress = new Map(
       (snapshot?.progress ?? []).map((item) => [item.requirementId, item]),
     );
-    const required = [...requirements.values()].filter((item) => item.mandatory);
+    const required = [...requirements.values()].filter(
+      (item) => item.mandatory,
+    );
     const completed = required.filter((item) =>
       ["passed", "waived"].includes(progress.get(item.id)?.state ?? ""),
     ).length;
-    const personas = OPERATING_PERSONAS.filter((item) => personaIds.has(item.id));
+    const personas = OPERATING_PERSONAS.filter((item) =>
+      personaIds.has(item.id),
+    );
     const ordered = [...requirements.values()].sort((left, right) => {
       const rank = (item: RequirementDefinition) => {
         const state = progress.get(item.id)?.state ?? "not_started";
-        return state === "in_progress" ? 0 : state === "failed_retryable" ? 1 : state === "not_started" ? 2 : state === "needs_support" ? 3 : 4;
+        return state === "in_progress"
+          ? 0
+          : state === "failed_retryable"
+            ? 1
+            : state === "not_started"
+              ? 2
+              : state === "needs_support"
+                ? 3
+                : 4;
       };
       return rank(left) - rank(right);
     });
@@ -205,7 +229,8 @@ export function OnboardingCenter({
     if (
       focusedRequirementRef.current === requestedRequirementId ||
       !view.requirements.some((item) => item.id === requestedRequirementId)
-    ) return;
+    )
+      return;
     const target = document.getElementById(
       `onboarding-requirement-${encodeURIComponent(requestedRequirementId)}`,
     );
@@ -241,9 +266,18 @@ export function OnboardingCenter({
     return (
       <section className="mx-auto max-w-2xl border-y border-line py-10 text-center">
         <Icon name="building" className="mx-auto h-8 w-8 text-brand-600" />
-        <h1 className="mt-4 font-display text-2xl font-bold text-ink">Vendor onboarding</h1>
-        <p className="mt-2 text-sm text-muted">Your accreditation training and evidence stay in the vendor workspace.</p>
-        <Link href="/vendor/onboarding" className="btn-primary mt-6 inline-flex">Continue to vendor onboarding</Link>
+        <h1 className="mt-4 font-display text-2xl font-bold text-ink">
+          Vendor onboarding
+        </h1>
+        <p className="mt-2 text-sm text-muted">
+          Your accreditation training and evidence stay in the vendor workspace.
+        </p>
+        <Link
+          href="/vendor/onboarding"
+          className="btn-primary mt-6 inline-flex"
+        >
+          Continue to vendor onboarding
+        </Link>
       </section>
     );
   }
@@ -251,7 +285,9 @@ export function OnboardingCenter({
   if (loading && !snapshot) {
     return (
       <div className="space-y-5" aria-live="polite">
-        <h1 className="font-display text-2xl font-bold text-ink">Role onboarding</h1>
+        <h1 className="font-display text-2xl font-bold text-ink">
+          Role onboarding
+        </h1>
         <div className="h-28 animate-pulse rounded-lg bg-inset" />
         <p className="text-sm text-muted">Loading your onboarding</p>
       </div>
@@ -264,7 +300,10 @@ export function OnboardingCenter({
         role="alert"
         className="mx-auto max-w-2xl border-y border-rose-300 py-10 text-center dark:border-rose-800"
       >
-        <Icon name="alert" className="mx-auto h-8 w-8 text-rose-700 dark:text-rose-300" />
+        <Icon
+          name="alert"
+          className="mx-auto h-8 w-8 text-rose-700 dark:text-rose-300"
+        />
         <h1 className="mt-4 font-display text-2xl font-bold text-ink">
           Onboarding unavailable
         </h1>
@@ -285,9 +324,16 @@ export function OnboardingCenter({
     return (
       <div className="mx-auto max-w-2xl border-y border-line py-10 text-center">
         <Icon name="clipboard" className="mx-auto h-8 w-8 text-brand-600" />
-        <h1 className="mt-4 font-display text-2xl font-bold text-ink">No onboarding assigned yet</h1>
-        <p className="mt-2 text-sm text-muted">You can continue exploring read-only areas while your role curriculum is assigned.</p>
-        <Link href="/knowledge" className="btn-outline mt-6 inline-flex">Open Knowledge Base</Link>
+        <h1 className="mt-4 font-display text-2xl font-bold text-ink">
+          No onboarding assigned yet
+        </h1>
+        <p className="mt-2 text-sm text-muted">
+          You can continue exploring read-only areas while your role curriculum
+          is assigned.
+        </p>
+        <Link href="/knowledge" className="btn-outline mt-6 inline-flex">
+          Open Knowledge Base
+        </Link>
       </div>
     );
   }
@@ -295,7 +341,10 @@ export function OnboardingCenter({
   const unavailableReasonFor = (requirement: RequirementDefinition) => {
     const state = view.progress.get(requirement.id)?.state;
     if (state === "expired") return "Ask your manager to reassign this step";
-    if (requirement.kind === "assessment" && !assessmentQuestionsFor(requirement.id)) {
+    if (
+      requirement.kind === "assessment" &&
+      !assessmentQuestionsFor(requirement.id)
+    ) {
       return "Knowledge check is being prepared";
     }
     if (requirement.kind === "policy" && !policyDocumentFor(requirement.id)) {
@@ -326,6 +375,17 @@ export function OnboardingCenter({
       !unavailableReasonFor(requirement)
     );
   });
+  const orientation = roleOrientationState(snapshot);
+  const returnLabel = returnPath
+    ? returnPath === "/work"
+      ? "My Work"
+      : (returnPath
+          .split("/")
+          .filter(Boolean)[0]
+          ?.replace(/(^|[-_])\w/g, (part) =>
+            part.replace(/[-_]/, "").toUpperCase(),
+          ) ?? "your workspace")
+    : null;
   const activeCertifications = snapshot.certifications.filter(
     (item) =>
       !item.revokedAt &&
@@ -335,7 +395,9 @@ export function OnboardingCenter({
   const inactiveCertifications = snapshot.certifications.filter(
     (item) =>
       Boolean(item.revokedAt || item.supersededAt) ||
-      Boolean(item.expiresAt && new Date(item.expiresAt).getTime() <= Date.now()),
+      Boolean(
+        item.expiresAt && new Date(item.expiresAt).getTime() <= Date.now(),
+      ),
   );
   const activityRequirement = activeActivity
     ? view.requirements.find((item) => item.id === activeActivity.requirementId)
@@ -385,63 +447,120 @@ export function OnboardingCenter({
             />
           )}
       </Sheet>
-      {activeTraining && !getTrainingAdapter(activeTraining.simulationId)?.route && (
-        <OnboardingTrainingSession
-          requirementTitle={
-            view.requirements.find((item) => item.id === activeTraining.requirementId)
-              ?.title ?? "Role training"
-          }
-          assignmentRequirementId={activeTraining.assignmentRequirementId}
-          attemptId={activeTraining.attemptId}
-          scenarioId={activeTraining.simulationId}
-          launcherRef={launcherRef}
-          onCheckpoint={recordCheckpoint}
-          onClose={closeTraining}
-        />
-      )}
+      {activeTraining &&
+        !getTrainingAdapter(activeTraining.simulationId)?.route && (
+          <OnboardingTrainingSession
+            requirementTitle={
+              view.requirements.find(
+                (item) => item.id === activeTraining.requirementId,
+              )?.title ?? "Role training"
+            }
+            assignmentRequirementId={activeTraining.assignmentRequirementId}
+            attemptId={activeTraining.attemptId}
+            scenarioId={activeTraining.simulationId}
+            launcherRef={launcherRef}
+            onCheckpoint={recordCheckpoint}
+            onClose={closeTraining}
+          />
+        )}
       <header
         className="border-b border-line pb-5"
         data-onboarding-anchor="onboarding-role-context"
       >
         <p className="text-xs font-semibold uppercase text-brand-700 dark:text-brand-300">
-          {audience === "vendor" ? "Accreditation and access" : "Learning and access"}
+          {audience === "vendor"
+            ? "Accreditation and access"
+            : "Learning and access"}
         </p>
         <h1 className="mt-1 font-display text-2xl font-bold text-ink sm:text-3xl">
           {audience === "vendor" ? "Vendor onboarding" : "Role onboarding"}
         </h1>
-        <p className="mt-2 max-w-3xl text-sm text-muted">Practice the work your role performs. Live actions unlock only after the required controls are complete.</p>
+        <p className="mt-2 max-w-3xl text-sm text-muted">
+          Practice the work your role performs. Live actions unlock only after
+          the required controls are complete.
+        </p>
         <div className="mt-4 flex flex-wrap gap-2">
           {view.personas.map((persona) => (
-            <Badge key={persona.id} tone="brand">{persona.label}</Badge>
+            <Badge key={persona.id} tone="brand">
+              {persona.label}
+            </Badge>
           ))}
         </div>
       </header>
 
       {stale && (
-        <div role="alert" className="flex flex-col gap-3 border-b border-amber-300 bg-amber-50 px-4 py-3 text-amber-950 sm:flex-row sm:items-center sm:justify-between dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
+        <div
+          role="alert"
+          className="flex flex-col gap-3 border-b border-amber-300 bg-amber-50 px-4 py-3 text-amber-950 sm:flex-row sm:items-center sm:justify-between dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100"
+        >
           <div>
             <p className="font-semibold">Learning status may be out of date</p>
-            <p className="text-sm">{error ?? "The latest status could not be confirmed."}</p>
+            <p className="text-sm">
+              {error ?? "The latest status could not be confirmed."}
+            </p>
           </div>
-          <Button variant="outline" size="sm" icon="rotate" onClick={() => void refresh()}>Refresh status</Button>
+          <Button
+            variant="outline"
+            size="sm"
+            icon="rotate"
+            onClick={() => void refresh()}
+          >
+            Refresh status
+          </Button>
         </div>
       )}
 
       {trainingError && (
-        <div role="alert" className="border-b border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-900 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-100">
+        <div
+          role="alert"
+          className="border-b border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-900 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-100"
+        >
           <p className="font-semibold">Training could not start</p>
           <p>{trainingError}</p>
         </div>
       )}
 
       <section className="border-b border-line py-5">
-        <OnboardingProgress completed={view.completed} total={view.required.length} />
+        <OnboardingProgress
+          completed={view.completed}
+          total={view.required.length}
+        />
+        {audience === "internal" && returnPath && orientation.complete && (
+          <div className="mt-5 flex flex-col gap-3 border-l-4 border-emerald-500 bg-emerald-500/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase text-emerald-700 dark:text-emerald-300">
+                Role orientation complete
+              </p>
+              <p className="mt-1 font-display text-base font-bold text-ink">
+                {returnLabel} is ready
+              </p>
+              <p className="mt-1 text-sm text-muted">
+                You may enter the module now. Remaining learning continues to
+                govern its specific live actions.
+              </p>
+            </div>
+            <a
+              href={returnPath}
+              className="btn-primary btn-sm inline-flex justify-center"
+            >
+              Continue to {returnLabel}
+              <Icon name="arrowRight" className="h-4 w-4" />
+            </a>
+          </div>
+        )}
         {next && (
           <div className="mt-5 flex flex-col gap-3 border-l-4 border-brand-500 bg-brand-500/5 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-xs font-semibold uppercase text-brand-700 dark:text-brand-300">Next required action</p>
-              <p className="mt-1 font-display text-base font-bold text-ink">{next.title}</p>
-              <p className="mt-1 text-sm text-muted">{KIND_LABEL[next.kind]} | {next.mandatory ? "Required" : "Optional"}</p>
+              <p className="text-xs font-semibold uppercase text-brand-700 dark:text-brand-300">
+                Next required action
+              </p>
+              <p className="mt-1 font-display text-base font-bold text-ink">
+                {next.title}
+              </p>
+              <p className="mt-1 text-sm text-muted">
+                {KIND_LABEL[next.kind]} |{" "}
+                {next.mandatory ? "Required" : "Optional"}
+              </p>
             </div>
             <RequirementAction
               requirement={next}
@@ -475,7 +594,9 @@ export function OnboardingCenter({
             >
               Your required steps
             </h2>
-            <p className="text-sm text-muted">Complete these in order. Shared requirements appear once.</p>
+            <p className="text-sm text-muted">
+              Complete these in order. Shared requirements appear once.
+            </p>
           </div>
           <ol className="border-t border-line">
             {view.requirements.map((requirement, index) => {
@@ -485,20 +606,43 @@ export function OnboardingCenter({
                   key={requirement.id}
                   id={`onboarding-requirement-${encodeURIComponent(requirement.id)}`}
                   tabIndex={-1}
-                  aria-current={requestedRequirementId === requirement.id ? "step" : undefined}
+                  aria-current={
+                    requestedRequirementId === requirement.id
+                      ? "step"
+                      : undefined
+                  }
                   className={
                     requestedRequirementId === requirement.id
                       ? "grid gap-3 border-b border-brand-400 bg-brand-500/5 px-3 py-4 outline-none sm:grid-cols-[2rem_minmax(0,1fr)_auto] sm:items-center"
                       : "grid gap-3 border-b border-line py-4 outline-none sm:grid-cols-[2rem_minmax(0,1fr)_auto] sm:items-center"
                   }
                 >
-                  <span className="tnum grid h-8 w-8 place-items-center rounded-full border border-line text-xs font-bold text-muted">{index + 1}</span>
+                  <span className="tnum grid h-8 w-8 place-items-center rounded-full border border-line text-xs font-bold text-muted">
+                    {index + 1}
+                  </span>
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="font-semibold text-ink">{requirement.title}</h3>
-                      <Badge tone={progress?.state === "passed" ? "emerald" : progress?.state === "needs_support" ? "rose" : "slate"}>{STATUS_LABEL[progress?.state ?? "not_started"]}</Badge>
+                      <h3 className="font-semibold text-ink">
+                        {requirement.title}
+                      </h3>
+                      <Badge
+                        tone={
+                          progress?.state === "passed"
+                            ? "emerald"
+                            : progress?.state === "needs_support"
+                              ? "rose"
+                              : "slate"
+                        }
+                      >
+                        {STATUS_LABEL[progress?.state ?? "not_started"]}
+                      </Badge>
                     </div>
-                    <p className="mt-1 text-sm text-muted">{KIND_LABEL[requirement.kind]}{requirement.maxAttempts ? ` | ${progress?.attemptCount ?? 0} of ${requirement.maxAttempts} attempts used` : ""}</p>
+                    <p className="mt-1 text-sm text-muted">
+                      {KIND_LABEL[requirement.kind]}
+                      {requirement.maxAttempts
+                        ? ` | ${progress?.attemptCount ?? 0} of ${requirement.maxAttempts} attempts used`
+                        : ""}
+                    </p>
                   </div>
                   {requirement.id === next?.id ? (
                     <span className="text-sm font-semibold text-brand-700 dark:text-brand-300">
@@ -521,36 +665,71 @@ export function OnboardingCenter({
           </ol>
         </section>
 
-        <aside className="border-t border-line py-6 lg:border-l lg:border-t-0 lg:pl-8" aria-label="Access outcomes">
+        <aside
+          className="border-t border-line py-6 lg:border-l lg:border-t-0 lg:pl-8"
+          aria-label="Access outcomes"
+        >
           <section>
-            <h2 className="font-display text-base font-bold text-ink">Access outcomes</h2>
+            <h2 className="font-display text-base font-bold text-ink">
+              Access outcomes
+            </h2>
             {snapshot.lockedCapabilities.length > 0 ? (
               <ul className="mt-3 space-y-3">
                 {snapshot.lockedCapabilities.map((lock) => (
-                  <li key={`${lock.capability.module}:${lock.capability.capability}`} className="border-l-2 border-amber-500 pl-3">
-                    <p className="font-semibold text-ink">{capabilityLabel(lock.capability.capability)}</p>
-                    <p className="text-sm text-muted">{lockLabel(lock.reason)}</p>
-                    {lock.canRequestEmergencyException && <p className="mt-1 text-xs font-semibold text-amber-800 dark:text-amber-300">Temporary emergency access</p>}
+                  <li
+                    key={`${lock.capability.module}:${lock.capability.capability}`}
+                    className="border-l-2 border-amber-500 pl-3"
+                  >
+                    <p className="font-semibold text-ink">
+                      {capabilityLabel(lock.capability.capability)}
+                    </p>
+                    <p className="text-sm text-muted">
+                      {lockLabel(lock.reason)}
+                    </p>
+                    {lock.canRequestEmergencyException && (
+                      <p className="mt-1 text-xs font-semibold text-amber-800 dark:text-amber-300">
+                        Temporary emergency access
+                      </p>
+                    )}
                   </li>
                 ))}
               </ul>
-            ) : <p className="mt-2 text-sm text-muted">No capabilities are waiting on onboarding.</p>}
+            ) : (
+              <p className="mt-2 text-sm text-muted">
+                No capabilities are waiting on onboarding.
+              </p>
+            )}
           </section>
 
           <section className="mt-6 border-t border-line pt-6">
-            <h2 className="font-display text-base font-bold text-ink">Certifications</h2>
+            <h2 className="font-display text-base font-bold text-ink">
+              Certifications
+            </h2>
             {activeCertifications.length > 0 ? (
               <ul className="mt-3 space-y-3">
                 {activeCertifications.map((certification) => (
                   <li key={certification.id}>
-                    <p className="font-semibold text-emerald-700 dark:text-emerald-300">Certification active</p>
-                    <p className="text-sm text-ink">{capabilityLabel(certification.capability.capability)}</p>
-                    {certification.expiresAt && <p className="text-xs text-muted">Valid until {new Intl.DateTimeFormat("en-PH", { dateStyle: "medium" }).format(new Date(certification.expiresAt))}</p>}
+                    <p className="font-semibold text-emerald-700 dark:text-emerald-300">
+                      Certification active
+                    </p>
+                    <p className="text-sm text-ink">
+                      {capabilityLabel(certification.capability.capability)}
+                    </p>
+                    {certification.expiresAt && (
+                      <p className="text-xs text-muted">
+                        Valid until{" "}
+                        {new Intl.DateTimeFormat("en-PH", {
+                          dateStyle: "medium",
+                        }).format(new Date(certification.expiresAt))}
+                      </p>
+                    )}
                   </li>
                 ))}
               </ul>
             ) : inactiveCertifications.length === 0 ? (
-              <p className="mt-2 text-sm text-muted">Complete your first capability path to earn certification.</p>
+              <p className="mt-2 text-sm text-muted">
+                Complete your first capability path to earn certification.
+              </p>
             ) : null}
             {inactiveCertifications.length > 0 && (
               <ul className="mt-4 space-y-3 border-t border-line pt-4">
@@ -563,12 +742,19 @@ export function OnboardingCenter({
                           ? "Certification superseded"
                           : "Certification expired"}
                     </p>
-                    <p className="text-sm text-ink">{capabilityLabel(certification.capability.capability)}</p>
-                    {certification.expiresAt && !certification.revokedAt && !certification.supersededAt && (
-                      <p className="text-xs text-muted">
-                        Expired {new Intl.DateTimeFormat("en-PH", { dateStyle: "medium" }).format(new Date(certification.expiresAt))}
-                      </p>
-                    )}
+                    <p className="text-sm text-ink">
+                      {capabilityLabel(certification.capability.capability)}
+                    </p>
+                    {certification.expiresAt &&
+                      !certification.revokedAt &&
+                      !certification.supersededAt && (
+                        <p className="text-xs text-muted">
+                          Expired{" "}
+                          {new Intl.DateTimeFormat("en-PH", {
+                            dateStyle: "medium",
+                          }).format(new Date(certification.expiresAt))}
+                        </p>
+                      )}
                   </li>
                 ))}
               </ul>

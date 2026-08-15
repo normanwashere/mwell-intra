@@ -35,6 +35,11 @@ export {
 } from "./content";
 export { OnboardingProgress } from "./OnboardingProgress";
 export { OnboardingStatusBand } from "./OnboardingStatusBand";
+export {
+  roleOrientationState,
+  sanitizeOnboardingReturnPath,
+  type RoleOrientationState,
+} from "./orientationGate";
 export { OnboardingTrainingSession } from "./OnboardingTrainingSession";
 export { CoachOverlay } from "./CoachOverlay";
 export { AssessmentRunner, type AssessmentQuestion } from "./AssessmentRunner";

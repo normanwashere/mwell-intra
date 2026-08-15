@@ -5,6 +5,7 @@ import { Button, Icon } from "@intra/ui";
 import { useLearning } from "./LearningProvider";
 import { OnboardingProgress } from "./OnboardingProgress";
 import { sharedCompletionKey } from "./requirementIdentity";
+import { roleOrientationState } from "./orientationGate";
 
 const DONE_STATES = new Set(["passed", "waived"]);
 const BLOCKED_STATES = new Set(["needs_support", "expired"]);
@@ -21,7 +22,9 @@ export function OnboardingStatusBand() {
         <Icon name="rotate" className="h-5 w-5 animate-spin text-brand-600" />
         <div>
           <p className="font-semibold text-ink">Checking role readiness</p>
-          <p className="text-sm text-muted">Confirming your assigned learning and access.</p>
+          <p className="text-sm text-muted">
+            Confirming your assigned learning and access.
+          </p>
         </div>
       </section>
     );
@@ -38,7 +41,12 @@ export function OnboardingStatusBand() {
           <p className="font-semibold text-ink">Role readiness unavailable</p>
           <p className="text-sm text-muted">{error}</p>
         </div>
-        <Button variant="outline" size="sm" icon="rotate" onClick={() => void refresh()}>
+        <Button
+          variant="outline"
+          size="sm"
+          icon="rotate"
+          onClick={() => void refresh()}
+        >
           Retry
         </Button>
       </section>
@@ -48,7 +56,8 @@ export function OnboardingStatusBand() {
   const requirements = new Map(
     (snapshot?.curricula ?? []).flatMap((effective) =>
       effective.requirements.map(
-        (requirement) => [sharedCompletionKey(requirement), requirement] as const,
+        (requirement) =>
+          [sharedCompletionKey(requirement), requirement] as const,
       ),
     ),
   );
@@ -63,6 +72,8 @@ export function OnboardingStatusBand() {
     const state = progress.get(item.id)?.state ?? "not_started";
     return !DONE_STATES.has(state) && !BLOCKED_STATES.has(state);
   });
+  const orientation = roleOrientationState(snapshot);
+  const orientationBlocked = orientation.required && !orientation.complete;
 
   return (
     <section
@@ -72,7 +83,7 @@ export function OnboardingStatusBand() {
       <div className="min-w-0">
         <div className="flex items-center gap-2">
           <p className="text-xs font-semibold uppercase text-brand-700 dark:text-brand-300">
-            Role readiness
+            {orientationBlocked ? "First-time setup" : "Role readiness"}
           </p>
           {stale && (
             <span className="text-xs font-semibold text-amber-800 dark:text-amber-300">
@@ -81,15 +92,27 @@ export function OnboardingStatusBand() {
           )}
         </div>
         <p className="mt-1 font-semibold text-ink">
-          {next?.title ??
-            (required.length === 0
-              ? "No required learning assigned"
-              : "Required onboarding complete")}
+          {orientationBlocked
+            ? "Complete role orientation to enter your modules"
+            : (next?.title ??
+              (required.length === 0
+                ? "No required learning assigned"
+                : "Required onboarding complete"))}
         </p>
       </div>
-      <OnboardingProgress completed={completed} total={required.length} />
-      <Link href="/onboarding" className="btn-outline btn-sm inline-flex justify-center">
-        {next ? "Continue onboarding" : "View onboarding"}
+      <OnboardingProgress
+        completed={orientationBlocked ? orientation.completed : completed}
+        total={orientationBlocked ? orientation.total : required.length}
+      />
+      <Link
+        href="/onboarding"
+        className="btn-outline btn-sm inline-flex justify-center"
+      >
+        {orientationBlocked
+          ? "Start onboarding"
+          : next
+            ? "Continue onboarding"
+            : "View onboarding"}
       </Link>
     </section>
   );
