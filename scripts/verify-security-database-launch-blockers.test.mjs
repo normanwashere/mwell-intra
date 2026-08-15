@@ -10,6 +10,7 @@ const SERVICE_VERIFIER_MIGRATION_SUFFIX =
   "_add_service_role_launch_verifier.sql";
 const LIVE_CAP_CONVERGENCE_SUFFIX = "_converge_read_rpc_live_capabilities.sql";
 const LAUNCH_READ_CONTRACT_SUFFIX = "_restore_launch_read_contracts.sql";
+const COMMITMENT_BOUNDARY_SUFFIX = "_certify_commitment_readiness_boundary.sql";
 const VERIFIER = resolve(
   ROOT,
   "scripts",
@@ -70,6 +71,18 @@ function launchReadContractMigration() {
     files.length,
     1,
     "exactly one launch read-contract migration is required",
+  );
+  return readFileSync(resolve(MIGRATIONS, files[0]), "utf8");
+}
+
+function commitmentBoundaryMigration() {
+  const files = readdirSync(MIGRATIONS)
+    .filter((name) => name.endsWith(COMMITMENT_BOUNDARY_SUFFIX))
+    .sort();
+  assert.equal(
+    files.length,
+    1,
+    "exactly one commitment-boundary repair is required",
   );
   return readFileSync(resolve(MIGRATIONS, files[0]), "utf8");
 }
@@ -314,6 +327,19 @@ test("runtime verifier checks both critical read grants", () => {
   );
   assert.match(source, /\.rpc\("verify_launch_read_contracts"\)/);
   assert.match(source, /Critical launch grants are missing/);
+});
+
+test("authenticated commitment readiness uses live certified capabilities", () => {
+  const sql = commitmentBoundaryMigration();
+  const body = functionBody(sql, "procurement.commitment_readiness");
+  assert.match(body, /core\.has_live_cap\('procurement', 'view_dashboard'\)/i);
+  assert.match(body, /core\.has_live_cap\('procurement', 'author_po'\)/i);
+  assert.match(body, /core\.has_live_cap\('procurement', 'approve_award'\)/i);
+  assert.doesNotMatch(body, /core\.has_cap\(/i);
+  assert.match(
+    sql,
+    /grant execute on function procurement\.commitment_readiness\(jsonb\)[\s\S]*?authenticated/i,
+  );
 });
 
 test("package exposes the runtime database verification command", () => {
