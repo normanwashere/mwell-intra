@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
@@ -16,6 +17,18 @@ const registrySql = readFileSync(
 const migrationSql = existsSync(migrationPath)
   ? readFileSync(migrationPath, "utf8")
   : "";
+const migrationDirectory = dirname(migrationPath);
+const mutationRuleStatements = readdirSync(migrationDirectory)
+  .filter((name) => name.endsWith(".sql"))
+  .sort()
+  .flatMap((name) => {
+    const sql = readFileSync(resolve(migrationDirectory, name), "utf8");
+    return [
+      ...sql.matchAll(
+        /insert\s+into\s+learning\.mutation_capability_rules\s*\([^)]*\)\s*values\s*([\s\S]*?);/gi,
+      ),
+    ].map((match) => match[1]);
+  });
 
 const mutationCapabilities = [
   ...registrySql.matchAll(/mutationCapability\('([^']+)',\s*'([^']+)'\)/g),
@@ -47,7 +60,11 @@ test("creates the certified capability authority migration", () => {
 });
 
 test("keeps the SQL mutation rule catalog in exact RBAC parity", () => {
-  const seeded = [...migrationSql.matchAll(/\('([^']+)',\s*'([^']+)'\)/g)]
+  const seeded = [
+    ...mutationRuleStatements
+      .join("\n")
+      .matchAll(/\('([^']+)',\s*'([^']+)'\)/g),
+  ]
     .map((match) => `${match[1]}:${match[2]}`)
     .filter((key) => mutationCapabilities.includes(key))
     .sort();
@@ -100,7 +117,10 @@ test("requires both current role authority and current certification", () => {
     certification,
     /certification_scope\.department_id = certification\.department_id/i,
   );
-  assert.match(certification, /certification_scope\.effective_from <= current_date/i);
+  assert.match(
+    certification,
+    /certification_scope\.effective_from <= current_date/i,
+  );
 
   const live = functionBody("core.has_live_cap");
   assert.match(live, /core\.has_cap\(p_module, p_cap\)/i);

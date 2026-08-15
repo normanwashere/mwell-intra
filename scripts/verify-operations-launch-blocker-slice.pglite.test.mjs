@@ -4,7 +4,17 @@ import test from "node:test";
 import { PGlite } from "@electric-sql/pglite";
 
 const migration = readFileSync(
-  new URL("../supabase/migrations/20260815154910_operations_launch_blocker_slice.sql", import.meta.url),
+  new URL(
+    "../supabase/migrations/20260815154910_operations_launch_blocker_slice.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const attributableMigration = readFileSync(
+  new URL(
+    "../supabase/migrations/20260815163010_require_attributable_cycle_count_actor.sql",
+    import.meta.url,
+  ),
   "utf8",
 );
 
@@ -102,6 +112,7 @@ async function database() {
     end $$;
   `);
   await db.exec(migration);
+  await db.exec(attributableMigration);
   return db;
 }
 
@@ -112,8 +123,12 @@ async function actor(db, id) {
 test("enforces independent custody actors and atomic evidenced counts", async () => {
   const db = await database();
   await actor(db, RECEIVER);
-  await db.exec("insert into warehouse.receipts(id, location_id, actor) values('receipt-1','warehouse-1','spoofed')");
-  const stamped = await db.query("select received_by, actor from warehouse.receipts where id='receipt-1'");
+  await db.exec(
+    "insert into warehouse.receipts(id, location_id, actor) values('receipt-1','warehouse-1','spoofed')",
+  );
+  const stamped = await db.query(
+    "select received_by, actor from warehouse.receipts where id='receipt-1'",
+  );
   assert.equal(stamped.rows[0].received_by, RECEIVER);
   assert.equal(stamped.rows[0].actor, "receiver@mwell.test");
 
@@ -125,23 +140,34 @@ test("enforces independent custody actors and atomic evidenced counts", async ()
   await db.exec(`insert into warehouse.quality_inspections(source_type,source_id,product_id,location_id,quantity,disposition,inspected_by,inspected_by_email)
     values('receipt','receipt-1','product-1','warehouse-1',1,'pending','${RECEIVER}','receiver@mwell.test')`);
   await actor(db, INSPECTOR);
-  await db.exec("update warehouse.quality_inspections set disposition='accepted' where source_id='receipt-1'");
+  await db.exec(
+    "update warehouse.quality_inspections set disposition='accepted' where source_id='receipt-1'",
+  );
 
   await actor(db, RECEIVER);
-  const exception = await db.query(`insert into warehouse.exceptions(exception_type,severity,source_type,source_id,created_by)
+  const exception =
+    await db.query(`insert into warehouse.exceptions(exception_type,severity,source_type,source_id,created_by)
     values('quality','P2','quality_inspection','source-1','${RECEIVER}') returning id`);
   await assert.rejects(
-    db.exec(`update warehouse.exceptions set status='resolved' where id='${exception.rows[0].id}'`),
+    db.exec(
+      `update warehouse.exceptions set status='resolved' where id='${exception.rows[0].id}'`,
+    ),
     /creator cannot resolve/i,
   );
   await actor(db, INSPECTOR);
-  await db.exec(`update warehouse.exceptions set status='resolved' where id='${exception.rows[0].id}'`);
+  await db.exec(
+    `update warehouse.exceptions set status='resolved' where id='${exception.rows[0].id}'`,
+  );
 
   await assert.rejects(
-    db.query("select warehouse.create_and_submit_cycle_count('{\"idempotency_key\":\"atomic-count-no-evidence\",\"cycle_count\":{\"location_id\":\"warehouse-1\",\"lines\":[{\"productId\":\"product-1\",\"counted\":1}]},\"reason\":\"test\",\"evidence_urls\":[]}'::jsonb)"),
+    db.query(
+      'select warehouse.create_and_submit_cycle_count(\'{"idempotency_key":"atomic-count-no-evidence","cycle_count":{"location_id":"warehouse-1","lines":[{"productId":"product-1","counted":1}]},"reason":"test","evidence_urls":[]}\'::jsonb)',
+    ),
     /evidence is required/i,
   );
-  await db.query("select warehouse.create_and_submit_cycle_count('{\"idempotency_key\":\"atomic-count-with-evidence\",\"cycle_count\":{\"location_id\":\"warehouse-1\",\"lines\":[{\"productId\":\"product-1\",\"counted\":1}]},\"reason\":\"test\",\"evidence_urls\":[\"evidence/count.jpg\"]}'::jsonb)");
+  await db.query(
+    'select warehouse.create_and_submit_cycle_count(\'{"idempotency_key":"atomic-count-with-evidence","cycle_count":{"location_id":"warehouse-1","lines":[{"productId":"product-1","counted":1}]},"reason":"test","evidence_urls":["evidence/count.jpg"]}\'::jsonb)',
+  );
   const counts = await db.query("select status from warehouse.cycle_counts");
   assert.deepEqual(counts.rows, [{ status: "approved" }]);
   await db.close();
@@ -150,7 +176,9 @@ test("enforces independent custody actors and atomic evidenced counts", async ()
 test("keeps clean PO receipts held until a different inspector acts", async () => {
   const db = await database();
   await actor(db, RECEIVER);
-  const result = await db.query("select warehouse.receive_procurement_po('{\"idempotency_key\":\"receive-po-independent-01\",\"po_id\":\"po-1\"}'::jsonb) response");
+  const result = await db.query(
+    'select warehouse.receive_procurement_po(\'{"idempotency_key":"receive-po-independent-01","po_id":"po-1"}\'::jsonb) response',
+  );
   assert.equal(result.rows[0].response.receipt.quality_status, "pending");
   const state = await db.query(`select inspection.disposition, hold.status
     from warehouse.quality_inspections inspection
@@ -158,7 +186,9 @@ test("keeps clean PO receipts held until a different inspector acts", async () =
     where inspection.source_id='receipt-po'`);
   assert.deepEqual(state.rows, [{ disposition: "pending", status: "active" }]);
   await assert.rejects(
-    db.exec("update warehouse.quality_inspections set disposition='accepted' where source_id='receipt-po'"),
+    db.exec(
+      "update warehouse.quality_inspections set disposition='accepted' where source_id='receipt-po'",
+    ),
     /cannot inspect/i,
   );
   await db.close();

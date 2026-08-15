@@ -43,6 +43,16 @@ export const CERTIFICATION_PATHWAY_MIGRATION_NAME =
   "20260814084615_require_published_certification_pathway.sql";
 export const OPERATIONS_LAUNCH_BLOCKER_MIGRATION_NAME =
   "20260815154910_operations_launch_blocker_slice.sql";
+const LEGAL_VENDOR_LAUNCH_BLOCKER_MIGRATION_NAME =
+  "20260815154324_legal_vendor_launch_blockers.sql";
+const PROCUREMENT_FINANCE_PRIVACY_MIGRATION_NAME =
+  "20260815154702_procurement_finance_requester_privacy.sql";
+const ATTRIBUTABLE_CYCLE_COUNT_MIGRATION_NAME =
+  "20260815163010_require_attributable_cycle_count_actor.sql";
+const LEADERSHIP_INSIGHTS_LAUNCH_BLOCKER_MIGRATION_NAME =
+  "20260815183000_leadership_insights_launch_blockers.sql";
+const SECURITY_DATABASE_CONVERGENCE_MIGRATION_NAME =
+  "20260816090000_security_database_launch_blocker_convergence.sql";
 const PINNED_LEARNING_MIGRATION_SHA256 = Object.freeze({
   [FOUNDATION_MIGRATION_NAME]:
     "b5b954f0fdb9ff52748047ca4a17916896227934ecd43c22951ea4489fc129ad",
@@ -70,9 +80,29 @@ const PINNED_LEARNING_MIGRATION_SHA256 = Object.freeze({
     "9395622c616677faeb09567ecb4f4f92a1ecc7d763d41e2e5f02a8f94a8b680d",
   [CERTIFICATION_PATHWAY_MIGRATION_NAME]:
     "c4a57624d28b9a4a877d7122dd908b8d24bbf6904b84c6303c3c31da35154907",
+  [LEGAL_VENDOR_LAUNCH_BLOCKER_MIGRATION_NAME]:
+    "07242ea085091eae92749fccbe5134082db4a7ee14ac3e7d6da6b147064cfe9d",
+  [PROCUREMENT_FINANCE_PRIVACY_MIGRATION_NAME]:
+    "7d2eeef8f97f618ad27a29b4f1253d9c145da12e8675384ef69c0c0efe22a031",
   [OPERATIONS_LAUNCH_BLOCKER_MIGRATION_NAME]:
     "4af6fa3a809fb94df70f61ac05503bd6bce621ba53a40e694556321456f20657",
+  [ATTRIBUTABLE_CYCLE_COUNT_MIGRATION_NAME]:
+    "59272581efb7dc0792605914f93f882055737967b76db7592b63ca6b58482c91",
+  [LEADERSHIP_INSIGHTS_LAUNCH_BLOCKER_MIGRATION_NAME]:
+    "740dcac03abe862f4a74b3557c4e677014b9e3cf9338946df13158ba908e37b5",
+  [SECURITY_DATABASE_CONVERGENCE_MIGRATION_NAME]:
+    "ac434feb1fd32800dee0855e44bd90dce2445a9315594edd758fbcab01617f53",
 });
+const INDEPENDENTLY_VERIFIED_CROSS_MODULE_MIGRATIONS = new Set([
+  TASK1_AUTHORITY_REMEDIATION_MIGRATION_NAME,
+  RECEIPT_EXCEPTION_CONTRACT_MIGRATION_NAME,
+  LEGAL_VENDOR_LAUNCH_BLOCKER_MIGRATION_NAME,
+  PROCUREMENT_FINANCE_PRIVACY_MIGRATION_NAME,
+  OPERATIONS_LAUNCH_BLOCKER_MIGRATION_NAME,
+  ATTRIBUTABLE_CYCLE_COUNT_MIGRATION_NAME,
+  LEADERSHIP_INSIGHTS_LAUNCH_BLOCKER_MIGRATION_NAME,
+  SECURITY_DATABASE_CONVERGENCE_MIGRATION_NAME,
+]);
 export const PRIVATE_ANSWER_KEY_TABLE =
   "private.learning_assessment_answer_keys";
 export const LEARNING_SERVICE_FUNCTIONS = Object.freeze([
@@ -3966,14 +3996,10 @@ export function verifyLearningSchema(input) {
   for (const migration of migrations.filter(
     (entry) => entry.name >= FOUNDATION_MIGRATION_NAME,
   )) {
-    // This cross-schema authority migration is independently parsed and
-    // executed by verify-task1-database-authority-remediation.{test,pglite.test}.
-    // Its exact checksum above keeps this exception fail-closed.
-    if (
-      migration.name === TASK1_AUTHORITY_REMEDIATION_MIGRATION_NAME ||
-      migration.name === RECEIPT_EXCEPTION_CONTRACT_MIGRATION_NAME ||
-      migration.name === OPERATIONS_LAUNCH_BLOCKER_MIGRATION_NAME
-    ) continue;
+    // These cross-module migrations have dedicated static or applied-database
+    // verification. Exact checksums above keep each parser exception fail-closed.
+    if (INDEPENDENTLY_VERIFIED_CROSS_MODULE_MIGRATIONS.has(migration.name))
+      continue;
     let statements;
     try {
       statements = scanSql(migration.sql);

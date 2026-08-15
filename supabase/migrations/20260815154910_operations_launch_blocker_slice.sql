@@ -269,11 +269,12 @@ begin
   end if;
   v_command_id := (v_started->>'command_id')::uuid;
 
+  if auth.role() <> 'service_role'
+     and not core.has_live_cap('warehouse', 'cycle_count') then
+    raise exception 'Not authorized: warehouse.cycle_count';
+  end if;
   if auth.uid() is null then
     raise exception 'An attributable cycle-count actor is required';
-  end if;
-  if not core.has_live_cap('warehouse', 'cycle_count') then
-    raise exception 'Not authorized: warehouse.cycle_count';
   end if;
   if jsonb_typeof(v_count) <> 'object' then
     raise exception 'Cycle count must be an object';
