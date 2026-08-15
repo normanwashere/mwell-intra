@@ -31,7 +31,6 @@ jobs:
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.UAT_SUPABASE_SERVICE_ROLE_KEY }}
       AUDIT_PASSWORD: ${{ secrets.AUDIT_PASSWORD || secrets.UAT_AUDIT_MASTER_PASSWORD }}
       SUPABASE_PROJECT_REF: kkoitlvydytdhlpxhuah
-      SUPABASE_DB_PASSWORD: ${{ secrets.UAT_SUPABASE_DB_PASSWORD }}
       PRODUCTION_SUPABASE_PROJECT_REF: abbfziukjalyqtcuskhi
       POLICY_ALLOW_TEST_MUTATIONS: "true"
       GITHUB_SHA: ${{ github.sha }}

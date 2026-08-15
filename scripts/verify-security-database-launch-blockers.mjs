@@ -159,52 +159,51 @@ export async function verifySecurityDatabaseLaunchBlockers(query) {
   return { rawBoundaries, missingObjects };
 }
 
-export function resolveDatabaseUrl(env = process.env) {
-  const explicit = env.SUPABASE_DB_URL?.trim() || env.DATABASE_URL?.trim();
-  if (explicit) return explicit;
-
+export function resolveVerifierConfig(env = process.env) {
+  const url = env.NEXT_PUBLIC_SUPABASE_URL?.trim() || env.SUPABASE_URL?.trim();
+  const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY?.trim();
   const projectRef = env.SUPABASE_PROJECT_REF?.trim();
-  const password = env.SUPABASE_DB_PASSWORD;
-  if (!projectRef || !/^[a-z0-9]{20}$/.test(projectRef) || !password) {
+  if (!url || !serviceRoleKey || !projectRef || !/^[a-z0-9]{20}$/.test(projectRef)) {
     throw new Error(
-      "Set SUPABASE_DB_URL or provide a valid Supabase project ref and vaulted database password",
+      "Provide the UAT Supabase URL, project ref, and vaulted service-role credential",
     );
   }
-  return `postgresql://postgres:${encodeURIComponent(password)}@db.${projectRef}.supabase.co:5432/postgres`;
+  const parsed = new URL(url);
+  if (parsed.protocol !== "https:" || parsed.hostname !== `${projectRef}.supabase.co`) {
+    throw new Error("Supabase URL and project ref do not identify the same guarded project");
+  }
+  return { url: parsed.origin, serviceRoleKey };
 }
 
 async function runCli() {
-  const connectionString = resolveDatabaseUrl();
-
-  const { Client } = await import("pg");
-  const hostname = new URL(connectionString).hostname;
-  const isLocal = hostname === "localhost" || hostname === "127.0.0.1";
-  const client = new Client({
-    connectionString,
-    ssl: isLocal ? false : { rejectUnauthorized: false },
-    application_name: "mwell-intra-security-db-launch-verifier",
+  const { url, serviceRoleKey } = resolveVerifierConfig();
+  const { createClient } = await import("@supabase/supabase-js");
+  const client = createClient(url, serviceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
   });
-
-  try {
-    await client.connect();
-    await client.query("begin transaction read only");
-    const result = await verifySecurityDatabaseLaunchBlockers((sql) =>
-      client.query(sql),
-    );
-    await client.query("rollback");
-    process.stdout.write(
-      `Security/database launch-blocker verification passed: ${JSON.stringify(result)}\n`,
-    );
-  } catch (error) {
-    try {
-      await client.query("rollback");
-    } catch {
-      // The connection may have failed before a transaction was opened.
-    }
-    throw error;
-  } finally {
-    await client.end().catch(() => {});
+  const { data, error } = await client
+    .schema("core")
+    .rpc("verify_security_database_launch_blockers");
+  if (error) {
+    throw new Error(`UAT launch verifier RPC failed: ${error.message}`);
   }
+  const rawBoundaries = Number(data?.raw_boundaries ?? -1);
+  const examples = normalizeArray(data?.examples);
+  const missingObjects = normalizeArray(data?.missing_objects);
+  if (rawBoundaries !== 0) {
+    const detail = examples.length > 0 ? `: ${examples.join(", ")}` : "";
+    throw new Error(
+      `${rawBoundaries} authenticated raw-cap certification-controlled RPC boundary/boundaries remain${detail}`,
+    );
+  }
+  if (missingObjects.length > 0) {
+    throw new Error(
+      `Critical launch objects are missing: ${missingObjects.join(", ")}`,
+    );
+  }
+  process.stdout.write(
+    `Security/database launch-blocker verification passed: ${JSON.stringify({ rawBoundaries, missingObjects })}\n`,
+  );
 }
 
 const isDirectExecution =

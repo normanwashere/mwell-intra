@@ -6,6 +6,10 @@ import test from "node:test";
 const ROOT = resolve(import.meta.dirname, "..");
 const MIGRATIONS = resolve(ROOT, "supabase", "migrations");
 const MIGRATION_SUFFIX = "_security_database_launch_blocker_convergence.sql";
+const SERVICE_VERIFIER_MIGRATION_SUFFIX =
+  "_add_service_role_launch_verifier.sql";
+const LIVE_CAP_CONVERGENCE_SUFFIX =
+  "_converge_read_rpc_live_capabilities.sql";
 const VERIFIER = resolve(
   ROOT,
   "scripts",
@@ -29,6 +33,25 @@ function convergenceMigration() {
     file: files[0],
     sql: readFileSync(resolve(MIGRATIONS, files[0]), "utf8"),
   };
+}
+
+function serviceVerifierMigration() {
+  const files = readdirSync(MIGRATIONS)
+    .filter((name) => name.endsWith(SERVICE_VERIFIER_MIGRATION_SUFFIX))
+    .sort();
+  assert.equal(files.length, 1, "exactly one service-role verifier migration is required");
+  return {
+    file: files[0],
+    sql: readFileSync(resolve(MIGRATIONS, files[0]), "utf8"),
+  };
+}
+
+function liveCapConvergenceMigration() {
+  const files = readdirSync(MIGRATIONS)
+    .filter((name) => name.endsWith(LIVE_CAP_CONVERGENCE_SUFFIX))
+    .sort();
+  assert.equal(files.length, 1, "exactly one read-RPC convergence migration is required");
+  return readFileSync(resolve(MIGRATIONS, files[0]), "utf8");
 }
 
 function functionBody(sql, qualifiedName) {
@@ -174,25 +197,55 @@ test("runtime verifier fails closed on raw boundaries or missing critical object
   assert.deepEqual(result, { rawBoundaries: 0, missingObjects: [] });
 });
 
-test("runtime verifier builds a secret-safe UAT connection from vaulted inputs", async () => {
-  const { resolveDatabaseUrl } = await import(
+test("runtime verifier binds the vaulted service credential to the guarded UAT project", async () => {
+  const { resolveVerifierConfig } = await import(
     `./verify-security-database-launch-blockers.mjs?env=${Date.now()}`
   );
-  assert.equal(
-    resolveDatabaseUrl({
+  assert.deepEqual(
+    resolveVerifierConfig({
+      NEXT_PUBLIC_SUPABASE_URL: "https://kkoitlvydytdhlpxhuah.supabase.co",
       SUPABASE_PROJECT_REF: "kkoitlvydytdhlpxhuah",
-      SUPABASE_DB_PASSWORD: "space and #symbols",
+      SUPABASE_SERVICE_ROLE_KEY: "vaulted-test-key",
     }),
-    "postgresql://postgres:space%20and%20%23symbols@db.kkoitlvydytdhlpxhuah.supabase.co:5432/postgres",
+    {
+      url: "https://kkoitlvydytdhlpxhuah.supabase.co",
+      serviceRoleKey: "vaulted-test-key",
+    },
   );
   assert.throws(
     () =>
-      resolveDatabaseUrl({
+      resolveVerifierConfig({
+        NEXT_PUBLIC_SUPABASE_URL: "https://unsafe-project.supabase.co",
         SUPABASE_PROJECT_REF: "unsafe.host.example",
-        SUPABASE_DB_PASSWORD: "secret",
+        SUPABASE_SERVICE_ROLE_KEY: "secret",
       }),
-    /Set SUPABASE_DB_URL|valid Supabase project/i,
+    /vaulted service-role credential|guarded project/i,
   );
+});
+
+test("service-role launch verifier is read-only and unavailable to app roles", () => {
+  const { sql } = serviceVerifierMigration();
+  assert.match(sql, /core\.verify_security_database_launch_blockers\(\)/i);
+  assert.match(sql, /security definer[\s\S]*set search_path = ''/i);
+  assert.match(
+    sql,
+    /revoke all on function core\.verify_security_database_launch_blockers\(\) from authenticated/i,
+  );
+  assert.match(
+    sql,
+    /grant execute on function core\.verify_security_database_launch_blockers\(\) to service_role/i,
+  );
+  assert.doesNotMatch(sql, /\b(insert|update|delete|truncate)\b/i);
+});
+
+test("later authenticated read RPCs converge to live capabilities", () => {
+  const sql = liveCapConvergenceMigration();
+  assert.match(sql, /pg_catalog\.pg_get_functiondef/i);
+  assert.match(sql, /learning\.mutation_capability_rules/i);
+  assert.match(sql, /pg_catalog\.has_function_privilege\('authenticated'/i);
+  assert.match(sql, /core\.has_live_cap\(/i);
+  assert.match(sql, /execute revised_definition/i);
+  assert.doesNotMatch(sql, /revoke execute[\s\S]*authenticated/i);
 });
 
 test("package exposes the runtime database verification command", () => {

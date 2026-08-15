@@ -25,7 +25,8 @@ test("UAT CI certifies the deployed schema without mutating it", async () => {
   );
   assert.match(workflow, /codex\/uat-launch-blockers/);
   assert.doesNotMatch(workflow, /codex\/unified-finance-module/);
-  assert.match(workflow, /UAT_SUPABASE_DB_PASSWORD/);
+  assert.match(workflow, /UAT_SUPABASE_SERVICE_ROLE_KEY/);
+  assert.doesNotMatch(workflow, /UAT_SUPABASE_DB_PASSWORD/);
   assert.doesNotMatch(workflow, /supabase db push/);
   assert.doesNotMatch(workflow, /SUPABASE_ACCESS_TOKEN/);
   assert.match(workflow, /pnpm verify:security-db-launch-blockers/);
