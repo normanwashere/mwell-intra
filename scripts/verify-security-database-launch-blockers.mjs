@@ -1,4 +1,9 @@
+import { createRequire } from "node:module";
+import path from "node:path";
 import { pathToFileURL } from "node:url";
+
+const require = createRequire(path.resolve("apps/shell/package.json"));
+const { createClient } = require("@supabase/supabase-js");
 
 const RAW_BOUNDARY_QUERY = `
 with raw_boundaries as (
@@ -177,7 +182,6 @@ export function resolveVerifierConfig(env = process.env) {
 
 async function runCli() {
   const { url, serviceRoleKey } = resolveVerifierConfig();
-  const { createClient } = await import("@supabase/supabase-js");
   const client = createClient(url, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
