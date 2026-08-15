@@ -1806,6 +1806,44 @@ test("DOA activation sends the governed signature and proves independent review"
   );
 });
 
+test("quality acceptance and DOA activation converge their private contracts", async () => {
+  const migration = await readFile(
+    new URL(
+      "../../supabase/migrations/20260816230000_repair_quality_acceptance_and_doa_activation.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.match(
+    migration,
+    /v_disposition = 'accepted' and v_stock[.]quantity < v_quantity/,
+  );
+  assert.match(
+    migration,
+    /v_disposition <> 'accepted'[\s\S]*v_stock[.]quantity - v_exact_held < v_quantity/,
+  );
+  assert.match(
+    migration,
+    /payload \|\| pg_catalog[.]jsonb_build_object\('id', v_matrix_id\)/,
+  );
+  assert.match(
+    migration,
+    /A separate DOA checker must activate the matrix/,
+  );
+});
+
+test("procurement draft certification trusts route, heading, and persisted readback", async () => {
+  const source = await readFile(
+    new URL("./full-intra-live-e2e.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /checkpoint[.]matched === 1/);
+  assert.doesNotMatch(
+    source,
+    /\/Purchase request\|Line items\|Activity\|Business justification\/i[.]test/,
+  );
+});
+
 test("DOA revision loading follows business order and the schema restores its audit timestamp", async () => {
   const [page, migration] = await Promise.all([
     readFile(

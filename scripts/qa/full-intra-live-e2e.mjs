@@ -1519,11 +1519,9 @@ async function procurementCreateRequestWorkflow(page, marker) {
   return {
     name: "procurement request draft",
     ok:
-      /Purchase request|Line items|Activity|Business justification/i.test(
-        audit.text,
-      ) &&
       path.startsWith("/procurement/requests/") &&
-      !path.endsWith("/new"),
+      !path.endsWith("/new") &&
+      checkpoint.matched === 1,
     finalUrl: page.url().replace(baseUrl, ""),
     text: audit.text.slice(0, 260),
     checkpoint,

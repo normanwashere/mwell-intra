@@ -111,6 +111,21 @@ with checks(label, present) as (
       )
     ),
     (
+      'accepted quality classification independent of active holds',
+      pg_catalog.pg_get_functiondef(
+        'private.warehouse_inspect_quality_v2(jsonb)'::pg_catalog.regprocedure
+      ) ~ 'v_disposition[[:space:]]*=[[:space:]]*''accepted''[[:space:]]+and[[:space:]]+v_stock[.]quantity[[:space:]]*<[[:space:]]*v_quantity'
+      and pg_catalog.pg_get_functiondef(
+        'private.warehouse_inspect_quality_v2(jsonb)'::pg_catalog.regprocedure
+      ) ~ 'v_disposition[[:space:]]*<>[[:space:]]*''accepted''[[:space:]]+and[[:space:]]+v_stock[.]quantity[[:space:]]*-[[:space:]]*v_exact_held'
+    ),
+    (
+      'procurement.activate_doa_matrix private identity translation',
+      pg_catalog.pg_get_functiondef(
+        'procurement.activate_doa_matrix(jsonb)'::pg_catalog.regprocedure
+      ) ~ 'jsonb_build_object[[:space:]]*[(][[:space:]]*''id''[[:space:]]*,[[:space:]]*v_matrix_id[[:space:]]*[)]'
+    ),
+    (
       'core_user_roles_last_admin_guard trigger',
       exists (
         select 1

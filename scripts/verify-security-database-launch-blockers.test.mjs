@@ -387,6 +387,14 @@ test("runtime critical-object verification checks the exact quality boundary", (
     source,
     /private\.warehouse_inspect_quality_v2 unavailable to authenticated/i,
   );
+  assert.match(
+    source,
+    /accepted quality classification independent of active holds/i,
+  );
+  assert.match(
+    source,
+    /procurement\.activate_doa_matrix private identity translation/i,
+  );
 });
 
 test("package exposes the runtime database verification command", () => {
