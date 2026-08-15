@@ -192,7 +192,6 @@ export function LegalApp({ basename = "/legal" }: LegalAppProps) {
   return (
     <BrowserRouter
       basename={basename}
-      future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
     >
       {/* NOTE: no nested ToastProvider here — the shell's root Providers
           already mounts one. Nesting a second provider rendered a duplicate

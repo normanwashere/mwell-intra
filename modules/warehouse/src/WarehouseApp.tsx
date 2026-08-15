@@ -169,7 +169,6 @@ export function WarehouseApp({ basename = '/warehouse' }: WarehouseAppProps) {
   return (
     <BrowserRouter
       basename={basename}
-      future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
     >
       {/* No nested ToastProvider — the shell's root Providers already mounts
           one; nesting a second rendered a duplicate toast viewport. */}

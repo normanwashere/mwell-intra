@@ -85,7 +85,6 @@ export function renderWithProviders(
   return render(
     <MemoryRouter
       initialEntries={[route]}
-      future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
     >
       <SessionProvider
         config={{
