@@ -344,6 +344,25 @@ export function InviteVendorPage() {
               <label className="flex items-start gap-2.5 rounded-xl border border-line bg-inset/50 p-3 text-sm text-ink">
                 <input
                   type="checkbox"
+                  checked={tailoring.technologyServiceProvider}
+                  onChange={(e) =>
+                    patch("technologyServiceProvider", e.target.checked)
+                  }
+                  className="mt-1"
+                />
+                <span>
+                  <span className="font-semibold">
+                    This is a technology service provider
+                  </span>
+                  <span className="block text-xs text-muted">
+                    Assigns the technology MNDA and cybersecurity evidence
+                    instead of the standard vendor NDA.
+                  </span>
+                </span>
+              </label>
+              <label className="flex items-start gap-2.5 rounded-xl border border-line bg-inset/50 p-3 text-sm text-ink">
+                <input
+                  type="checkbox"
                   checked={tailoring.handlesPersonalData}
                   onChange={(e) =>
                     patch("handlesPersonalData", e.target.checked)
@@ -366,6 +385,7 @@ export function InviteVendorPage() {
 
         {step === 3 && (
           <div className="space-y-4">
+            <h2 className="sr-only">Requirements preview</h2>
             <Card>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="min-w-0">
@@ -398,6 +418,9 @@ export function InviteVendorPage() {
                   </Badge>
                   {tailoring.handlesPersonalData && (
                     <Badge tone="cyan">personal data</Badge>
+                  )}
+                  {tailoring.technologyServiceProvider && (
+                    <Badge tone="cyan">technology service</Badge>
                   )}
                 </div>
               </div>

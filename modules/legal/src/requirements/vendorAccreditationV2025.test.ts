@@ -83,7 +83,7 @@ describe('Vendor Accreditation Form v.2025', () => {
         'PH_CLIENT_PORTFOLIO',
         'PH_BANK_PROOF',
         'PH_OFFICIAL_RECEIPT',
-        'SIGN_NDA',
+        'SIGN_NDA_STANDARD',
       ]),
     );
   });
@@ -110,6 +110,20 @@ describe('Vendor Accreditation Form v.2025', () => {
       buildV2025Checklist('corporation', { technologyServiceProvider: true })
         .find((item) => item.code === 'PH_CYBERSECURITY_POLICIES')?.required,
     ).toBe(true);
+  });
+
+  it('selects the approved NDA instrument for the declared service type', () => {
+    const standard = buildV2025Checklist('corporation').filter((row) =>
+      row.code.startsWith('SIGN_'),
+    );
+    const technology = buildV2025Checklist('corporation', {
+      technologyServiceProvider: true,
+    }).filter((row) => row.code.startsWith('SIGN_'));
+
+    expect(standard.map((row) => row.code)).toContain('SIGN_NDA_STANDARD');
+    expect(standard.map((row) => row.code)).not.toContain('SIGN_MNDA_TECH');
+    expect(technology.map((row) => row.code)).toContain('SIGN_MNDA_TECH');
+    expect(technology.map((row) => row.code)).not.toContain('SIGN_NDA_STANDARD');
   });
 
   it('allows reviewer-controlled foreign equivalents', () => {

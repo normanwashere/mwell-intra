@@ -57,4 +57,29 @@ describe('Legal/vendor lifecycle UI integration', () => {
     expect(detail).toContain('aria-label={actionLabel}');
     expect(detail).toContain('min-h-11 min-w-11');
   });
+
+  it('captures technology-service status before the tailored invite preview', () => {
+    const invite = source('modules/legal/src/pages/InviteVendorPage.tsx');
+    expect(invite).toContain('technologyServiceProvider');
+    expect(invite).toContain('This is a technology service provider');
+    expect(invite.indexOf('This is a technology service provider')).toBeLessThan(
+      invite.indexOf('Requirements preview'),
+    );
+  });
+
+  it('collects lifecycle rationale, reinstatement, and a new renewal expiry', () => {
+    const lifecycle = source('modules/legal/src/components/VendorLifecyclePanel.tsx');
+    expect(lifecycle).toContain('<option value="reinstatement">Reinstatement</option>');
+    expect(lifecycle).toContain('Decision rationale');
+    expect(lifecycle).toContain('New accreditation expiry');
+    expect(lifecycle).toContain('expires_at: decision.expiresAt');
+    expect(lifecycle).not.toContain('recorded from the Legal lifecycle workspace');
+  });
+
+  it('requires an explicit accreditation decision rationale in the review sheet', () => {
+    const detail = source('modules/legal/src/pages/CaseDetailPage.tsx');
+    expect(detail).toContain('Decision rationale (required)');
+    expect(detail).toContain("if (!decisionNote.trim())");
+    expect(detail).toContain('disabled={!decisionSignature || !decisionNote.trim()}');
+  });
 });

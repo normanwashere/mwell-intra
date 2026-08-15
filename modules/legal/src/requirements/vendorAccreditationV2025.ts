@@ -34,19 +34,35 @@ export interface V2025ChecklistItem {
   source: typeof VENDOR_ACCREDITATION_V2025;
 }
 
-const common: readonly Omit<V2025ChecklistItem, 'required' | 'equivalentAllowed' | 'source'>[] = [
+type ChecklistSource = Omit<
+  V2025ChecklistItem,
+  'required' | 'equivalentAllowed' | 'source'
+>;
+
+const common: readonly ChecklistSource[] = [
   { code: 'PH_AFS_3Y', label: 'Audited Financial Statements for the last three years', authority: 'Vendor' },
   { code: 'PH_COMPANY_PROFILE', label: 'Company profile', authority: 'Vendor' },
   { code: 'PH_BANK_PROOF', label: 'Bank details / proof of bank account', authority: 'Insurer / Bank' },
   { code: 'PH_OFFICIAL_RECEIPT', label: 'Photocopy of Official Receipt', authority: 'BIR' },
   { code: 'PH_PRIVACY_COMPLIANCE', label: 'Privacy Impact Assessment or data privacy compliance evidence', authority: 'NPC', conditional: 'personal_data' },
   { code: 'PH_CYBERSECURITY_POLICIES', label: 'Cybersecurity policies', authority: 'Vendor', conditional: 'technology_service' },
-  { code: 'SIGN_NDA', label: 'Non-Disclosure Agreement', authority: 'mWell Legal' },
 ];
+
+const standardNda: ChecklistSource = {
+  code: 'SIGN_NDA_STANDARD',
+  label: 'Standard Non-Disclosure Agreement',
+  authority: 'mWell Legal' as Authority,
+};
+
+const technologyMnda: ChecklistSource = {
+  code: 'SIGN_MNDA_TECH',
+  label: 'Technology Service Provider Mutual Non-Disclosure Agreement',
+  authority: 'mWell Legal' as Authority,
+};
 
 const byEntity: Record<
   Extract<EntityType, 'corporation' | 'sole_prop' | 'partnership'>,
-  readonly Omit<V2025ChecklistItem, 'required' | 'equivalentAllowed' | 'source'>[]
+  readonly ChecklistSource[]
 > = {
   sole_prop: [
     { code: 'PH_DTI_REG', label: 'Registration of Trade Name with DTI', authority: 'DTI' },
@@ -78,7 +94,8 @@ export function buildV2025Checklist(
   options: V2025ChecklistOptions = {},
 ): V2025ChecklistItem[] {
   const foreign = (options.jurisdiction ?? 'PH') !== 'PH';
-  return [...byEntity[entityType], ...common].map((item) => ({
+  const instrument = options.technologyServiceProvider ? technologyMnda : standardNda;
+  return [...byEntity[entityType], ...common, instrument].map((item) => ({
     ...item,
     required:
       item.conditional === 'personal_data'

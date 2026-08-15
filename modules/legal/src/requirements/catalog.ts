@@ -724,12 +724,13 @@ const QUALITY: readonly RequirementDefinition[] = [
     authority: 'Vendor',
     jurisdictions: ['*'],
     entityTypes: ['*'],
-    categories: ['it_software', 'subscription', 'consulting'],
+    categories: ['*'],
     riskTiers: ['*'],
     required: true,
     evidenceFormat: 'any',
     group: 'quality',
     instrument: false,
+    requiresTechnologyService: true,
     tags: ['infosec'],
   },
 ];
@@ -1292,8 +1293,8 @@ const OWNERSHIP_ROWS: readonly RequirementDefinition[] = [
 // ---------------------------------------------------------------------------
 const INSTRUMENT_ROWS: readonly RequirementDefinition[] = [
   {
-    code: 'SIGN_NDA',
-    label: 'Mutual Non-Disclosure Agreement',
+    code: 'SIGN_MNDA_TECH',
+    label: 'Technology Service Provider Mutual Non-Disclosure Agreement',
     description:
       'Standard mutual NDA. Signable in-browser; countersigned by mWell Legal on approval.',
     whyWeNeedIt: 'Protects commercial + technical information exchanged during evaluation and delivery.',
@@ -1306,8 +1307,28 @@ const INSTRUMENT_ROWS: readonly RequirementDefinition[] = [
     evidenceFormat: 'signed',
     group: 'legal_instruments',
     instrument: true,
-    instrumentCode: 'SIGN_NDA',
+    instrumentCode: 'nda_mutual',
     templateVersion: TECHNOLOGY_MNDA_TEMPLATE_VERSION,
+    requiresTechnologyService: true,
+  },
+  {
+    code: 'SIGN_NDA_STANDARD',
+    label: 'Standard Non-Disclosure Agreement',
+    description:
+      'Standard one-way confidentiality agreement. Signable in-browser and countersigned by mWell Legal.',
+    whyWeNeedIt: 'Protects confidential information shared with non-technology vendors.',
+    authority: 'mWell Legal',
+    jurisdictions: ['*'],
+    entityTypes: ['*'],
+    categories: ['*'],
+    riskTiers: ['*'],
+    required: true,
+    evidenceFormat: 'signed',
+    group: 'legal_instruments',
+    instrument: true,
+    instrumentCode: 'nda_one_way',
+    templateVersion: '2026.07.01',
+    excludesTechnologyService: true,
   },
   {
     code: 'SIGN_DPA_PH',
@@ -1453,7 +1474,8 @@ const V2025_CATALOG_CODES = new Set([
   'PH_COMPANY_PROFILE',
   'PH_MANPOWER_EXPERIENCE',
   'CYBERSECURITY_POLICIES',
-  'SIGN_NDA',
+  'SIGN_MNDA_TECH',
+  'SIGN_NDA_STANDARD',
 ]);
 
 export const REQUIREMENT_CATALOG: readonly RequirementDefinition[] = Object.freeze([

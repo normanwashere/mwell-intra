@@ -387,6 +387,8 @@ const INSTRUMENT_BY_CODE = new Map<InstrumentCode, InstrumentTemplate>(
  */
 export const CATALOG_INSTRUMENT_ALIAS: Readonly<Record<string, InstrumentCode>> = {
   SIGN_NDA: 'nda_mutual',
+  SIGN_MNDA_TECH: 'nda_mutual',
+  SIGN_NDA_STANDARD: 'nda_one_way',
   SIGN_DPA_PH: 'dpa_ph',
   SIGN_DPA_GDPR: 'dpa_gdpr',
   SIGN_CODE_ETHICS: 'code_of_conduct',

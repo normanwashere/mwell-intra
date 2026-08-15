@@ -321,6 +321,10 @@ export function CaseDetailPage() {
 
   async function submitDecision() {
     if (!decisionOpen) return;
+    if (!decisionNote.trim()) {
+      error('A decision rationale is required.');
+      return;
+    }
     if (!decisionSignature) {
       error('An electronic signature is required to record the decision.');
       return;
@@ -1265,7 +1269,7 @@ export function CaseDetailPage() {
           )}
           <div>
             <label htmlFor="note" className="text-xs font-semibold uppercase tracking-wide text-faint">
-              Note {decisionOpen === 'rejected' ? '(recommended)' : '(optional)'}
+              Decision rationale (required)
             </label>
             <textarea
               id="note"
@@ -1300,7 +1304,7 @@ export function CaseDetailPage() {
             <button
               type="button"
               onClick={submitDecision}
-              disabled={!decisionSignature}
+              disabled={!decisionSignature || !decisionNote.trim()}
               className={
                 decisionOpen === 'rejected'
                   ? 'btn-outline w-full text-rose-700 disabled:cursor-not-allowed disabled:opacity-60 dark:text-rose-300 sm:w-auto'

@@ -182,6 +182,10 @@ export interface RequirementDefinition {
   minSpendBand?: SpendBand;
   /** True when required only if the vendor handles personal data. */
   requiresPersonalData?: boolean;
+  /** True when required only for a technology service provider. */
+  requiresTechnologyService?: boolean;
+  /** True when this requirement must not be assigned to a technology provider. */
+  excludesTechnologyService?: boolean;
   /** Free-form tags for filtering ("edd", "bond", "ph-mandatory"). */
   tags?: readonly string[];
   /** Governing source required before this row may block accreditation. */
@@ -316,6 +320,7 @@ export interface AccreditationCase {
   contractType?: ContractType;
   expectedAnnualSpend?: SpendBand;
   handlesPersonalData?: boolean;
+  technologyServiceProvider?: boolean;
   /** Last time a reminder was pushed to the vendor. */
   lastReminderAt?: string;
   /** Optional invited-by email captured on invite. */
@@ -363,6 +368,7 @@ export interface RequirementChecklistItem {
   renewsAfterMonths?: number;
   decision: ChecklistDecision;
   reviewerEmail?: string;
+  reviewerId?: string;
   reviewedAt?: string;
   reviewerNote?: string;
   /** Ids of AccreditationDoc rows attached to this checklist item. */
@@ -437,6 +443,7 @@ export interface VendorInvite {
   contractType?: ContractType;
   expectedAnnualSpend?: SpendBand;
   handlesPersonalData?: boolean;
+  technologyServiceProvider?: boolean;
   /** Live Supabase invite response links directly to the opened case. */
   caseId?: string;
   /** Live Supabase invite response links to the created core vendor. */

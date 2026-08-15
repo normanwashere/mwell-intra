@@ -239,6 +239,7 @@ function mapCase(row: LiveRow): AccreditationCase {
     contractType: row.contract_type ?? undefined,
     expectedAnnualSpend: row.expected_annual_spend ?? undefined,
     handlesPersonalData: row.handles_personal_data ?? undefined,
+    technologyServiceProvider: row.technology_service_provider ?? undefined,
     lastReminderAt: row.last_reminder_at ?? undefined,
     invitedByEmail: row.invited_by_email ?? undefined,
     contactEmail: row.contact_email ?? undefined,
@@ -277,6 +278,7 @@ function mapChecklist(row: LiveRow): RequirementChecklistItem {
     renewsAfterMonths: row.renews_after_months ?? undefined,
     decision: normalizeChecklistDecision(row.decision),
     reviewerEmail: row.reviewer_email ?? undefined,
+    reviewerId: row.reviewer_id ?? undefined,
     reviewedAt: row.reviewed_at ?? undefined,
     reviewerNote: row.reviewer_note ?? undefined,
     documentIds: row.document_ids ?? [],
@@ -347,6 +349,7 @@ function mapInvite(row: LiveRow): VendorInvite {
     contractType: row.profile?.contractType ?? undefined,
     expectedAnnualSpend: row.profile?.spendBand ?? undefined,
     handlesPersonalData: row.profile?.handlesPersonalData ?? undefined,
+    technologyServiceProvider: row.profile?.technologyServiceProvider ?? undefined,
   } as VendorInvite;
 }
 
@@ -700,6 +703,7 @@ export function useAccreditationCases(): CasesAPI {
               contractType: profile.contractType,
               expectedAnnualSpend: profile.spendBand,
               handlesPersonalData: profile.handlesPersonalData,
+              technologyServiceProvider: profile.technologyServiceProvider,
             }
           : {}),
       };
@@ -1428,6 +1432,7 @@ export function useVendorInvites(): InvitesAPI {
               contractType: input.profile.contractType,
               expectedAnnualSpend: input.profile.spendBand,
               handlesPersonalData: input.profile.handlesPersonalData,
+              technologyServiceProvider: input.profile.technologyServiceProvider,
             }
           : {}),
       };

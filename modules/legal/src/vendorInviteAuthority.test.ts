@@ -4,6 +4,7 @@ import {
   hasVendorInvitationLinkEvidence,
   readPendingVendorInvitation,
   readVendorInvitationEvidence,
+  stripVendorInvitationEvidence,
 } from "./vendorInviteAuthority";
 
 describe("vendor invitation authority client", () => {
@@ -59,6 +60,15 @@ describe("vendor invitation authority client", () => {
     ).toBe(true);
   });
 
+  it("removes invitation secrets from the persistent URL after exchange", () => {
+    const token = "a".repeat(64);
+    expect(
+      stripVendorInvitationEvidence(
+        `/vendor?invite_id=inv-1&generation=3&acceptance_token=${token}&campaign=legal#application`,
+      ),
+    ).toBe("/vendor?campaign=legal#application");
+  });
+
   it("accepts the exact pending generation and refreshes trusted claims", async () => {
     const token = "b".repeat(64);
     const getUser = vi.fn(async () => ({
@@ -88,12 +98,15 @@ describe("vendor invitation authority client", () => {
           { status: 200, headers: { "content-type": "application/json" } },
         ),
     );
+    const replaceLocation = vi.fn();
 
     await expect(
       acceptPendingVendorInvitation({
         client: { auth: { getUser, refreshSession } },
         fetcher,
         locationSearch: `?invite_id=inv-1&generation=4&acceptance_token=${token}`,
+        locationHref: `/vendor?invite_id=inv-1&generation=4&acceptance_token=${token}`,
+        replaceLocation,
       }),
     ).resolves.toMatchObject({ accepted: true, caseId: "case-1" });
 
@@ -110,6 +123,7 @@ describe("vendor invitation authority client", () => {
       }),
     );
     expect(refreshSession).toHaveBeenCalledOnce();
+    expect(replaceLocation).toHaveBeenCalledWith("/vendor");
   });
 
   it("surfaces expired, superseded, and replayed rejection messages", async () => {

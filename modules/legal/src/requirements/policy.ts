@@ -35,6 +35,7 @@ export interface TailoringProfile {
   contractType: ContractType;
   spendBand: SpendBand;
   handlesPersonalData: boolean;
+  technologyServiceProvider: boolean;
 }
 
 /**
@@ -47,6 +48,8 @@ export function matches(
   profile: TailoringProfile,
 ): boolean {
   if (req.requiresPersonalData && !profile.handlesPersonalData) return false;
+  if (req.requiresTechnologyService && !profile.technologyServiceProvider) return false;
+  if (req.excludesTechnologyService && profile.technologyServiceProvider) return false;
   if (
     req.jurisdictions.length &&
     !req.jurisdictions.includes('*') &&
@@ -142,6 +145,7 @@ export const DEFAULT_TAILORING_PROFILE: TailoringProfile = {
   contractType: 'spot_po',
   spendBand: 'below_100k',
   handlesPersonalData: false,
+  technologyServiceProvider: false,
 };
 
 /**
@@ -163,6 +167,7 @@ export function diffProfile(
   push('contractType');
   push('spendBand');
   push('handlesPersonalData');
+  push('technologyServiceProvider');
   return diffs;
 }
 

@@ -69,6 +69,7 @@ const UK_IT_PROFILE: TailoringProfile = {
   contractType: 'sla',
   spendBand: '1m_10m',
   handlesPersonalData: true,
+  technologyServiceProvider: true,
 };
 
 function baseCase(over: Partial<AccreditationCase> = {}): AccreditationCase {

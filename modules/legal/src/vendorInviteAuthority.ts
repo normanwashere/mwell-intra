@@ -98,10 +98,21 @@ export function hasVendorInvitationLinkEvidence(
   );
 }
 
+export function stripVendorInvitationEvidence(locationHref: string): string {
+  const url = new URL(locationHref, "https://mwell-intra.invalid");
+  url.searchParams.delete("invite_id");
+  url.searchParams.delete("generation");
+  url.searchParams.delete("acceptance_token");
+  const search = url.searchParams.toString();
+  return `${url.pathname}${search ? `?${search}` : ""}${url.hash}`;
+}
+
 export async function acceptPendingVendorInvitation(options: {
   client: VendorInviteAuthorityClient;
   fetcher?: typeof fetch;
   locationSearch?: string;
+  locationHref?: string;
+  replaceLocation?: (nextLocation: string) => void;
 }): Promise<VendorInvitationAcceptance> {
   const { data, error: userError } = await options.client.auth.getUser();
   if (userError) throw new Error(userError.message);
@@ -135,6 +146,19 @@ export async function acceptPendingVendorInvitation(options: {
     throw new Error(
       result.error ?? "This vendor invitation could not be accepted.",
     );
+  }
+
+  const locationHref =
+    options.locationHref ??
+    (typeof window === "undefined" ? undefined : window.location.href);
+  if (locationHref) {
+    const nextLocation = stripVendorInvitationEvidence(locationHref);
+    const replaceLocation =
+      options.replaceLocation ??
+      (typeof window === "undefined"
+        ? undefined
+        : (value: string) => window.history.replaceState(null, "", value));
+    replaceLocation?.(nextLocation);
   }
 
   const { error: refreshError } = await options.client.auth.refreshSession();

@@ -33,6 +33,7 @@ interface LifecycleReview {
     | "performance"
     | "reassessment"
     | "suspension"
+    | "reinstatement"
     | "offboarding";
   status:
     | "open"
@@ -46,6 +47,11 @@ interface LifecycleReview {
   score?: number;
   reason: string;
   evidenceUrl?: string;
+}
+
+interface LifecycleDecisionDraft {
+  rationale: string;
+  expiresAt: string;
 }
 
 function text(value: unknown): string {
@@ -74,6 +80,9 @@ export function VendorLifecyclePanel({ vendors }: { vendors: VendorOption[] }) {
   const [open, setOpen] = useState(false);
   const [workingId, setWorkingId] = useState<string>();
   const [saving, setSaving] = useState(false);
+  const [decisions, setDecisions] = useState<
+    Record<string, LifecycleDecisionDraft>
+  >({});
   const [draft, setDraft] = useState({
     vendorId: vendors[0]?.id ?? "",
     reviewType: "renewal" as LifecycleReview["reviewType"],
@@ -119,6 +128,7 @@ export function VendorLifecyclePanel({ vendors }: { vendors: VendorOption[] }) {
     action: "start" | "approve" | "reject" | "complete" | "cancel",
   ) => {
     if (!live) return;
+    const decision = decisions[review.id] ?? { rationale: "", expiresAt: "" };
     setWorkingId(review.id);
     const { error } = await live
       .schema("legal")
@@ -126,8 +136,8 @@ export function VendorLifecyclePanel({ vendors }: { vendors: VendorOption[] }) {
         payload: {
           id: review.id,
           action,
-          decision_note:
-            action + " recorded from the Legal lifecycle workspace",
+          decision_note: decision.rationale.trim() || null,
+          expires_at: decision.expiresAt,
         },
       });
     setWorkingId(undefined);
@@ -189,8 +199,8 @@ export function VendorLifecyclePanel({ vendors }: { vendors: VendorOption[] }) {
             Vendor lifecycle
           </h2>
           <p className="text-sm text-muted">
-            Renewals, expiry, performance, reassessment, suspension, and
-            offboarding.
+            Renewals, expiry, performance, reassessment, suspension,
+            reinstatement, and offboarding.
           </p>
         </div>
         <button
@@ -239,6 +249,54 @@ export function VendorLifecyclePanel({ vendors }: { vendors: VendorOption[] }) {
               <p className="text-xs text-muted">
                 {lifecyclePresentation(review.reviewType, review.status).detail}
               </p>
+              {review.status === "under_review" && (
+                <Field
+                  label="Decision rationale"
+                  htmlFor={`lifecycle-rationale-${review.id}`}
+                >
+                  <textarea
+                    id={`lifecycle-rationale-${review.id}`}
+                    className="input min-h-20"
+                    value={decisions[review.id]?.rationale ?? ""}
+                    onChange={(event) =>
+                      setDecisions((current) => ({
+                        ...current,
+                        [review.id]: {
+                          rationale: event.target.value,
+                          expiresAt: current[review.id]?.expiresAt ?? "",
+                        },
+                      }))
+                    }
+                    required
+                  />
+                </Field>
+              )}
+              {review.status === "approved" &&
+                (review.reviewType === "renewal" ||
+                  review.reviewType === "reinstatement") && (
+                  <Field
+                    label="New accreditation expiry"
+                    htmlFor={`lifecycle-expiry-${review.id}`}
+                  >
+                    <input
+                      id={`lifecycle-expiry-${review.id}`}
+                      className="input"
+                      type="date"
+                      min={new Date().toISOString().slice(0, 10)}
+                      value={decisions[review.id]?.expiresAt ?? ""}
+                      onChange={(event) =>
+                        setDecisions((current) => ({
+                          ...current,
+                          [review.id]: {
+                            rationale: current[review.id]?.rationale ?? "",
+                            expiresAt: event.target.value,
+                          },
+                        }))
+                      }
+                      required
+                    />
+                  </Field>
+                )}
               <div className="flex flex-wrap gap-2">
                 {review.status === "open" && (
                   <button
@@ -255,7 +313,10 @@ export function VendorLifecyclePanel({ vendors }: { vendors: VendorOption[] }) {
                     <button
                       type="button"
                       className="btn-primary btn-sm"
-                      disabled={workingId === review.id}
+                      disabled={
+                        workingId === review.id ||
+                        !(decisions[review.id]?.rationale ?? "").trim()
+                      }
                       onClick={() => void act(review, "approve")}
                     >
                       Approve outcome
@@ -263,7 +324,10 @@ export function VendorLifecyclePanel({ vendors }: { vendors: VendorOption[] }) {
                     <button
                       type="button"
                       className="btn-ghost btn-sm text-rose-700 dark:text-rose-300"
-                      disabled={workingId === review.id}
+                      disabled={
+                        workingId === review.id ||
+                        !(decisions[review.id]?.rationale ?? "").trim()
+                      }
                       onClick={() => void act(review, "reject")}
                     >
                       Reject
@@ -274,7 +338,12 @@ export function VendorLifecyclePanel({ vendors }: { vendors: VendorOption[] }) {
                   <button
                     type="button"
                     className="btn-primary btn-sm"
-                    disabled={workingId === review.id}
+                    disabled={
+                      workingId === review.id ||
+                      ((review.reviewType === "renewal" ||
+                        review.reviewType === "reinstatement") &&
+                        !(decisions[review.id]?.expiresAt ?? ""))
+                    }
                     onClick={() => void act(review, "complete")}
                   >
                     Complete review
@@ -344,6 +413,7 @@ export function VendorLifecyclePanel({ vendors }: { vendors: VendorOption[] }) {
               <option value="performance">Performance</option>
               <option value="reassessment">Reassessment</option>
               <option value="suspension">Suspension</option>
+              <option value="reinstatement">Reinstatement</option>
               <option value="offboarding">Offboarding</option>
             </select>
           </Field>
