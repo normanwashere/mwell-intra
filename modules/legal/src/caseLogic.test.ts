@@ -103,8 +103,8 @@ function signedRow(over: Partial<SignedInstrument> = {}): SignedInstrument {
   return {
     id: nextId(),
     caseId: 'case_1',
-    code: 'SIGN_NDA',
-    templateVersion: 'nda-v1',
+    code: 'nda_one_way',
+    templateVersion: '2026.07.01',
     signerName: 'Alice Vendor',
     signaturePng: 'data:image/png;base64,x',
     signatureMethod: 'drawn',
@@ -151,8 +151,8 @@ describe('buildTailoredChecklist', () => {
     const items = buildTailoredChecklist(UK_IT_PROFILE, 'case_1', nextId);
     const instruments = items.filter((i) => i.instrument);
     expect(instruments.length).toBeGreaterThanOrEqual(5);
-    const nda = instruments.find((i) => i.code === 'SIGN_NDA');
-    expect(nda?.instrumentCode).toBe('SIGN_NDA');
+    const nda = instruments.find((i) => i.code === 'SIGN_MNDA_TECH');
+    expect(nda?.instrumentCode).toBe('nda_mutual');
     expect(nda?.group).toBe('legal_instruments');
   });
 
@@ -275,7 +275,7 @@ describe('evidence + progress', () => {
 
   it('hasEvidence sees signed instruments for instrument rows (not docs)', () => {
     const items = buildTailoredChecklist(DEFAULT_TAILORING_PROFILE, 'case_1', nextId);
-    const nda = items.find((i) => i.code === 'SIGN_NDA')!;
+    const nda = items.find((i) => i.code === 'SIGN_NDA_STANDARD')!;
     expect(hasEvidence(nda, { docs: [], signed: [] })).toBe(false);
     expect(hasEvidence(nda, { docs: [], signed: [signedRow()] })).toBe(true);
     // Revoked signatures don't count.
