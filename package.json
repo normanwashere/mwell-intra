@@ -51,6 +51,7 @@
     "verify:learning-authority": "node scripts/verify-learning-authority.mjs",
     "test:onboarding-live": "node scripts/qa/onboarding-live-e2e.mjs",
     "verify:supabase-cutover": "node scripts/verify-supabase-cutover.mjs",
+    "verify:security-db-launch-blockers": "node scripts/verify-security-database-launch-blockers.mjs",
     "test:organization-contract": "node --test scripts/verify-organization-contract.test.mjs",
     "format": "prettier --write \"**/*.{ts,tsx,md,json}\""
   },
