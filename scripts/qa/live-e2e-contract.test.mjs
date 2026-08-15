@@ -1592,6 +1592,10 @@ test("live journeys enforce evidence, independent QC, current labels, and correc
   assert.match(source, /filename: `\$\{marker\}-receipt-spec\.pdf`/);
   assert.match(source, /filename: `\$\{marker\}-receipt-budget\.pdf`/);
   assert.match(source, /department: ids\.departmentCode/);
+  assert.match(
+    source,
+    /departmentCode: `audit\.x\$\{crypto\.randomUUID\(\)\.replaceAll\("-", ""\)\}`/,
+  );
   assert.match(source, /from\("department_cost_centers"\)/);
   assert.match(source, /query\.eq\("id", ids\.departmentCostCenter\)/);
   assert.match(source, /quality_status: "pending"/);

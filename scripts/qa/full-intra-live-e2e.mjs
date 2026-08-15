@@ -2323,7 +2323,7 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
     ],
     department: crypto.randomUUID(),
     departmentCostCenter: crypto.randomUUID(),
-    departmentCode: `audit.${crypto.randomUUID().replaceAll("-", "")}`,
+    departmentCode: `audit.x${crypto.randomUUID().replaceAll("-", "")}`,
   };
   const { data: approvalGroup, error: approvalGroupError } = await client
     .schema("core")
