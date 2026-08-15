@@ -174,6 +174,27 @@ test("runtime verifier fails closed on raw boundaries or missing critical object
   assert.deepEqual(result, { rawBoundaries: 0, missingObjects: [] });
 });
 
+test("runtime verifier builds a secret-safe UAT connection from vaulted inputs", async () => {
+  const { resolveDatabaseUrl } = await import(
+    `./verify-security-database-launch-blockers.mjs?env=${Date.now()}`
+  );
+  assert.equal(
+    resolveDatabaseUrl({
+      SUPABASE_PROJECT_REF: "kkoitlvydytdhlpxhuah",
+      SUPABASE_DB_PASSWORD: "space and #symbols",
+    }),
+    "postgresql://postgres:space%20and%20%23symbols@db.kkoitlvydytdhlpxhuah.supabase.co:5432/postgres",
+  );
+  assert.throws(
+    () =>
+      resolveDatabaseUrl({
+        SUPABASE_PROJECT_REF: "unsafe.host.example",
+        SUPABASE_DB_PASSWORD: "secret",
+      }),
+    /Set SUPABASE_DB_URL|valid Supabase project/i,
+  );
+});
+
 test("package exposes the runtime database verification command", () => {
   const packageJson = JSON.parse(
     readFileSync(resolve(ROOT, "package.json"), "utf8"),

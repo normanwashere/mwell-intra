@@ -28,7 +28,7 @@ test("UAT CI deploys schema before certification and follows the hardening branc
   assert.match(workflow, /UAT_SUPABASE_ACCESS_TOKEN/);
   assert.match(workflow, /UAT_SUPABASE_DB_PASSWORD/);
   assert.match(workflow, /supabase db push/);
-  assert.match(workflow, /verify-runtime-authority/);
+  assert.match(workflow, /pnpm verify:security-db-launch-blockers/);
 });
 
 test("UAT CI blocks high severity dependency and source vulnerabilities", async () => {

@@ -67,7 +67,7 @@ jobs:
             --password "$SUPABASE_DB_PASSWORD"
           pnpm exec supabase db push --linked --include-all --yes
       - name: Verify runtime authority convergence
-        run: node scripts/qa/verify-runtime-authority.mjs
+        run: pnpm verify:security-db-launch-blockers
       - name: Lint all workspaces
         run: pnpm lint
       - name: Typecheck all workspaces

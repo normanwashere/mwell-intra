@@ -159,14 +159,22 @@ export async function verifySecurityDatabaseLaunchBlockers(query) {
   return { rawBoundaries, missingObjects };
 }
 
-async function runCli() {
-  const connectionString =
-    process.env.SUPABASE_DB_URL ?? process.env.DATABASE_URL;
-  if (!connectionString) {
+export function resolveDatabaseUrl(env = process.env) {
+  const explicit = env.SUPABASE_DB_URL?.trim() || env.DATABASE_URL?.trim();
+  if (explicit) return explicit;
+
+  const projectRef = env.SUPABASE_PROJECT_REF?.trim();
+  const password = env.SUPABASE_DB_PASSWORD;
+  if (!projectRef || !/^[a-z0-9]{20}$/.test(projectRef) || !password) {
     throw new Error(
-      "Set SUPABASE_DB_URL or DATABASE_URL to a read-only verification target",
+      "Set SUPABASE_DB_URL or provide a valid Supabase project ref and vaulted database password",
     );
   }
+  return `postgresql://postgres:${encodeURIComponent(password)}@db.${projectRef}.supabase.co:5432/postgres`;
+}
+
+async function runCli() {
+  const connectionString = resolveDatabaseUrl();
 
   const { Client } = await import("pg");
   const hostname = new URL(connectionString).hostname;
