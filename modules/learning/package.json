@@ -19,7 +19,7 @@
     "@intra/auth": "workspace:*",
     "@intra/rbac": "workspace:*",
     "@intra/ui": "workspace:*",
-    "next": "^16.2.10"
+    "next": "^16.2.11"
   },
   "peerDependencies": {
     "react": "^18.2.0 || ^19.0.0",
