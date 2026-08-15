@@ -54,9 +54,22 @@ export function Guard<M extends Module>({
   const certificationRequired =
     mode === "supabase" &&
     roleCapabilities?.[module]?.includes(cap) === true;
-  // While the session is restoring (memory: sessionStorage read; supabase:
-  // getSession) render nothing rather than briefly flashing "Access denied".
-  if (loading) return null;
+  if (loading) {
+    return (
+      <div
+        role="status"
+        aria-live="polite"
+        className="intra-access-restoring grid min-h-48 place-items-center rounded-xl border border-black/10 bg-white/70 p-6 text-center dark:border-white/10 dark:bg-white/[0.03]"
+      >
+        <div className="grid gap-2">
+          <span className="font-semibold">Restoring your access...</span>
+          <span className="text-sm opacity-70">
+            Your current page will appear after the secure session check.
+          </span>
+        </div>
+      </div>
+    );
+  }
   if (allowed) return <>{children}</>;
   return (
     <>

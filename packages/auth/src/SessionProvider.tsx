@@ -62,6 +62,26 @@ const SessionContext = createContext<SessionValue | undefined>(undefined);
 /** Storage key for the memory-mode session snapshot (tab-scoped). */
 const MEMORY_SESSION_KEY = "intra.memory-session.v1";
 const CAPABILITY_MODULES = new Set<string>(MODULE_LIST);
+const INITIAL_SESSION_TIMEOUT_MS = 8_000;
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(
+      () => reject(new Error("Session restoration timed out.")),
+      timeoutMs,
+    );
+    promise.then(
+      (value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      },
+      (error: unknown) => {
+        window.clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
 
 function isCapabilityProjection(
   value: unknown,
@@ -290,16 +310,21 @@ export function SessionProvider({
 
     const initialGeneration = beginLiveRefresh(null);
 
-    client.auth
-      .getSession()
-      .then(({ data }) => {
-        if (!active || initialGeneration !== liveGeneration.current) return;
+    withTimeout(
+      client.auth.getSession().then(({ data }) => {
+        if (!active || initialGeneration !== liveGeneration.current) return false;
         return verifyAndApplyLiveUser(data.session ?? null, initialGeneration);
-      })
+      }),
+      INITIAL_SESSION_TIMEOUT_MS,
+    )
       .catch(() => {
         // Couldn't confirm a live session — treat as signed out (least privilege).
         if (!active || initialGeneration !== liveGeneration.current) return;
+        // Invalidate the unresolved work so a late response cannot overwrite
+        // the bounded fail-closed state.
+        liveGeneration.current += 1;
         applyUser(null);
+        setLoading(false);
       })
       .finally(() => {
         if (!active || initialGeneration !== liveGeneration.current) return;

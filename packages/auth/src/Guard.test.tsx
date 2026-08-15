@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import type { Session, SupabaseClient, User } from "@supabase/supabase-js";
 import type { MemoryProfile } from "./contracts";
@@ -10,6 +10,10 @@ beforeEach(() => {
   // The provider persists the memory-mode session per tab; make sure each test
   // starts signed out so the previous test's session doesn't leak in.
   window.sessionStorage.clear();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 // logistics_supervisor grants `receive_stock` (not `reserve_allocate`);
@@ -185,6 +189,55 @@ function transitionClient() {
 }
 
 describe("<Guard>", () => {
+  it("shows a visible restoration state instead of a blank page", () => {
+    const client = {
+      auth: {
+        getSession: vi.fn(() => new Promise(() => undefined)),
+        onAuthStateChange: vi.fn().mockReturnValue({
+          data: { subscription: { unsubscribe: vi.fn() } },
+        }),
+      },
+    } as unknown as SupabaseClient<Record<string, unknown>, string>;
+
+    render(
+      <SessionProvider config={{ mode: "supabase", client }}>
+        <Guard module="warehouse" cap="receive_stock">
+          <div>secret content</div>
+        </Guard>
+      </SessionProvider>,
+    );
+
+    expect(screen.getByRole("status").textContent).toContain(
+      "Restoring your access",
+    );
+  });
+
+  it("fails closed after a bounded initial session restore", async () => {
+    vi.useFakeTimers();
+    const client = {
+      auth: {
+        getSession: vi.fn(() => new Promise(() => undefined)),
+        onAuthStateChange: vi.fn().mockReturnValue({
+          data: { subscription: { unsubscribe: vi.fn() } },
+        }),
+      },
+    } as unknown as SupabaseClient<Record<string, unknown>, string>;
+
+    render(
+      <SessionProvider config={{ mode: "supabase", client }}>
+        <Guard module="warehouse" cap="receive_stock">
+          <div>secret content</div>
+        </Guard>
+      </SessionProvider>,
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+
+    expect(screen.getByRole("alert").textContent).toContain("Access denied");
+  });
+
   it("denies (renders accessible fallback) when the session has no roles", async () => {
     render(
       <SessionProvider config={{ mode: "memory", profiles: PROFILES }}>
@@ -193,7 +246,7 @@ describe("<Guard>", () => {
         </Guard>
       </SessionProvider>,
     );
-    // Guard renders null while the session is restoring; wait for the fallback.
+    // The visible restore state resolves to the fallback once storage is checked.
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("Access denied");
     expect(alert.textContent).toContain("Back to dashboard");
