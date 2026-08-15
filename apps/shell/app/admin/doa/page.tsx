@@ -218,8 +218,23 @@ function DoaWorkspace() {
       )
     )
       return;
+    const { data: currentMatrix, error: lookupError } = await procurement
+      .from("doa_matrices")
+      .select("id,status")
+      .eq("department", matrix.department)
+      .eq("version", matrix.version)
+      .maybeSingle();
+    if (lookupError) return toast.error(lookupError.message);
+    if (!currentMatrix?.id)
+      return toast.error(
+        "This DOA draft is no longer available. Refresh the workspace and try again.",
+      );
+    if (currentMatrix.status !== "draft") {
+      await load();
+      return toast.error("Only a current draft can be activated.");
+    }
     const { error } = await procurement.rpc("activate_doa_matrix", {
-      payload: { id: matrix.id },
+      payload: { id: currentMatrix.id },
     });
     if (error) return toast.error(error.message);
     toast.success(`${matrix.department} DOA activated.`);

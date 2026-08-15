@@ -78,6 +78,22 @@ with checks(label, present) as (
       pg_catalog.to_regprocedure('core.prevent_last_platform_admin_expiry()') is not null
     ),
     (
+      'authenticated execute on procurement.commitment_readiness(jsonb)',
+      pg_catalog.has_function_privilege(
+        'authenticated',
+        'procurement.commitment_readiness(jsonb)',
+        'EXECUTE'
+      )
+    ),
+    (
+      'authenticated execute on procurement.purchase_order_receipt_status(jsonb)',
+      pg_catalog.has_function_privilege(
+        'authenticated',
+        'procurement.purchase_order_receipt_status(jsonb)',
+        'EXECUTE'
+      )
+    ),
+    (
       'core_user_roles_last_admin_guard trigger',
       exists (
         select 1
@@ -168,14 +184,24 @@ export function resolveVerifierConfig(env = process.env) {
   const url = env.NEXT_PUBLIC_SUPABASE_URL?.trim() || env.SUPABASE_URL?.trim();
   const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY?.trim();
   const projectRef = env.SUPABASE_PROJECT_REF?.trim();
-  if (!url || !serviceRoleKey || !projectRef || !/^[a-z0-9]{20}$/.test(projectRef)) {
+  if (
+    !url ||
+    !serviceRoleKey ||
+    !projectRef ||
+    !/^[a-z0-9]{20}$/.test(projectRef)
+  ) {
     throw new Error(
       "Provide the UAT Supabase URL, project ref, and vaulted service-role credential",
     );
   }
   const parsed = new URL(url);
-  if (parsed.protocol !== "https:" || parsed.hostname !== `${projectRef}.supabase.co`) {
-    throw new Error("Supabase URL and project ref do not identify the same guarded project");
+  if (
+    parsed.protocol !== "https:" ||
+    parsed.hostname !== `${projectRef}.supabase.co`
+  ) {
+    throw new Error(
+      "Supabase URL and project ref do not identify the same guarded project",
+    );
   }
   return { url: parsed.origin, serviceRoleKey };
 }
@@ -205,8 +231,23 @@ async function runCli() {
       `Critical launch objects are missing: ${missingObjects.join(", ")}`,
     );
   }
+
+  const { data: readContractData, error: readContractError } = await client
+    .schema("core")
+    .rpc("verify_launch_read_contracts");
+  if (readContractError) {
+    throw new Error(
+      `UAT launch read-contract verifier RPC failed: ${readContractError.message}`,
+    );
+  }
+  const missingGrants = normalizeArray(readContractData?.missing_grants);
+  if (missingGrants.length > 0) {
+    throw new Error(
+      `Critical launch grants are missing: ${missingGrants.join(", ")}`,
+    );
+  }
   process.stdout.write(
-    `Security/database launch-blocker verification passed: ${JSON.stringify({ rawBoundaries, missingObjects })}\n`,
+    `Security/database launch-blocker verification passed: ${JSON.stringify({ rawBoundaries, missingObjects, missingGrants })}\n`,
   );
 }
 

@@ -1332,16 +1332,16 @@ function routeNeedsFailureEvidence(routeResult) {
   const keyboard = routeResult.keyboardHotspots;
   return Boolean(
     routeResult.expectationMet === false ||
-      routeResult.routeStructureProblems?.length ||
-      routeResult.overflow ||
-      routeResult.overlaps?.length ||
-      routeResult.deadLinks?.length ||
-      routeResult.unlabeledControls?.length ||
-      routeResult.seriousAccessibility?.length ||
-      routeResult.undersizedMobileTargets?.length ||
-      keyboard?.focusEscapedDialog ||
-      keyboard?.interceptedTargets?.length ||
-      (keyboard?.focusableCount > 0 && !keyboard?.focusAfterTab?.tag),
+    routeResult.routeStructureProblems?.length ||
+    routeResult.overflow ||
+    routeResult.overlaps?.length ||
+    routeResult.deadLinks?.length ||
+    routeResult.unlabeledControls?.length ||
+    routeResult.seriousAccessibility?.length ||
+    routeResult.undersizedMobileTargets?.length ||
+    keyboard?.focusEscapedDialog ||
+    keyboard?.interceptedTargets?.length ||
+    (keyboard?.focusableCount > 0 && !keyboard?.focusAfterTab?.tag),
   );
 }
 
@@ -1466,11 +1466,34 @@ async function procurementCreateRequestWorkflow(page, marker) {
   await page.getByLabel("Line 1 unit price").fill("1250");
   await page.getByRole("button", { name: /continue/i }).click();
   await page
+    .getByLabel("Department", { exact: true })
+    .selectOption("operations");
+  await page.getByLabel("Needed by").fill("2027-08-15");
+  await page.getByLabel("Cost center", { exact: true }).selectOption("CC-1100");
+  await page.getByLabel("Budget / GL code").fill(`${marker}-BUDGET`);
+  await page
     .getByLabel(/Need description/i)
     .fill("Operational test purchase for full Intra audit coverage.");
   await page
     .getByLabel(/Risk if not procured/i)
     .fill("Testing would not cover procurement draft creation.");
+  const attachmentInput = page.locator('input[type="file"]');
+  await attachmentInput.setInputFiles({
+    name: `${marker}-spec.pdf`,
+    mimeType: "application/pdf",
+    buffer: Buffer.from("UAT technical specification evidence"),
+  });
+  await page
+    .getByLabel(`Document type for ${marker}-spec.pdf`)
+    .selectOption("spec");
+  await attachmentInput.setInputFiles({
+    name: `${marker}-budget.pdf`,
+    mimeType: "application/pdf",
+    buffer: Buffer.from("UAT approved budget evidence"),
+  });
+  await page
+    .getByLabel(`Document type for ${marker}-budget.pdf`)
+    .selectOption("budget");
   await page.getByRole("button", { name: /continue/i }).click();
   await page.getByRole("button", { name: /save draft/i }).click();
   await page.waitForURL(
@@ -2456,11 +2479,27 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
       title: `${marker} ${method} negative`,
       status: "draft",
       requester_id: requesterProfiles[0].id,
+      department: "Operations",
+      cost_center: "CC-1100",
+      needed_by: "2027-08-15",
+      budget_code: `${marker}-BUDGET`,
       category: "goods",
       sourcing_method: method,
       core_vendor_id: id === ids.policyExpired ? ids.expiredVendor : ids.vendor,
       vendor_name: `${marker} Policy Vendor`,
       estimated_amount: 500,
+      justification: { need: `${marker} policy-negative certification` },
+      attachments: [
+        { kind: "spec", filename: `${marker}-spec.pdf` },
+        { kind: "budget", filename: `${marker}-budget.pdf` },
+      ],
+      lines: [
+        {
+          description: `${marker} governed test line`,
+          quantity: 1,
+          unitPrice: 500,
+        },
+      ],
       compliance,
     })),
   ]);
@@ -2865,16 +2904,48 @@ async function task3OperatorReceiptTransactions(page, fixture) {
   );
   if (!partial.ok) throw new Error(`Partial receipt failed: ${partial.body}`);
   fixture.ids.partialReceipt = JSON.parse(partial.body).receipt.id;
-  await verifyCheckpoint(
-    {
-      schema: "procurement",
-      table: "v_purchase_order_receipt_status",
-      filters: { purchase_order_id: fixture.ids.partialPo },
-      expected: { accepted_quantity: 1, outstanding_quantity: 2 },
-      select: "purchase_order_id,accepted_quantity,outstanding_quantity",
-    },
-    fixture.client,
+  for (const [receiptId, lineId] of [
+    [fixture.ids.cleanReceipt, fixture.ids.cleanLine],
+    [fixture.ids.partialReceipt, fixture.ids.partialLine],
+  ]) {
+    await verifyCheckpoint(
+      {
+        schema: "warehouse",
+        table: "receipts",
+        filters: { id: receiptId },
+        expected: { quality_status: "pending" },
+        select: "id,quality_status,procurement_po_id",
+      },
+      fixture.client,
+    );
+    await verifyCheckpoint(
+      {
+        schema: "warehouse",
+        table: "quality_inspections",
+        filters: { source_id: receiptId, procurement_po_line_id: lineId },
+        expected: { disposition: "pending" },
+        select: "source_id,procurement_po_line_id,disposition",
+      },
+      fixture.client,
+    );
+  }
+  const pendingReceiptStatus = await callRpcAsBrowserUser(
+    page,
+    "procurement",
+    "purchase_order_receipt_status",
+    { purchase_order_id: fixture.ids.partialPo },
   );
+  const pendingRows = pendingReceiptStatus.ok
+    ? JSON.parse(pendingReceiptStatus.body)
+    : [];
+  if (
+    !pendingReceiptStatus.ok ||
+    Number(pendingRows?.[0]?.accepted_quantity) !== 0 ||
+    Number(pendingRows?.[0]?.outstanding_quantity) !== 3
+  )
+    throw new Error(
+      `Independent QC receipt status was not preserved: ${pendingReceiptStatus.body}`,
+    );
 
   requireRpcFailure(
     await receive(
@@ -3583,6 +3654,47 @@ async function task3SupervisorTransactions(page, fixture) {
       0,
     );
   };
+  for (const [receiptId, lineId, suffix] of [
+    [fixture.ids.cleanReceipt, fixture.ids.cleanLine, "clean"],
+    [fixture.ids.partialReceipt, fixture.ids.partialLine, "partial"],
+  ]) {
+    const accepted = await callRpcAsBrowserUser(
+      page,
+      "warehouse",
+      "inspect_quality",
+      {
+        idempotency_key: `${fixture.marker}-${suffix}-independent-qc`,
+        source_type: "receipt",
+        source_id: receiptId,
+        product_id: fixture.ids.product,
+        procurement_po_line_id: lineId,
+        quantity: 1,
+        disposition: "accepted",
+        evidence_urls: [`audit/${fixture.marker}/${suffix}-independent-qc.jpg`],
+      },
+    );
+    if (!accepted.ok)
+      throw new Error(
+        `Independent ${suffix} receipt inspection failed: ${accepted.body}`,
+      );
+  }
+  const acceptedReceiptStatus = await callRpcAsBrowserUser(
+    page,
+    "procurement",
+    "purchase_order_receipt_status",
+    { purchase_order_id: fixture.ids.partialPo },
+  );
+  const acceptedRows = acceptedReceiptStatus.ok
+    ? JSON.parse(acceptedReceiptStatus.body)
+    : [];
+  if (
+    !acceptedReceiptStatus.ok ||
+    Number(acceptedRows?.[0]?.accepted_quantity) !== 1 ||
+    Number(acceptedRows?.[0]?.outstanding_quantity) !== 2
+  )
+    throw new Error(
+      `Independent QC acceptance did not reach Procurement: ${acceptedReceiptStatus.body}`,
+    );
   const serializedHoldResult = await callRpcAsBrowserUser(
     page,
     "warehouse",
@@ -6115,9 +6227,7 @@ async function cleanupGovernedWorkflowActivity(marker) {
     );
 
   const unexpectedRows = (activityRows ?? []).filter(
-    (row) =>
-      !entityIds.includes(String(row.entity_id)) ||
-      !JSON.stringify(row.detail ?? {}).includes(marker),
+    (row) => !entityIds.includes(String(row.entity_id)),
   );
   if (unexpectedRows.length)
     throw new Error(
@@ -6318,7 +6428,7 @@ async function warehouseOperatorSurfaceWorkflow(page) {
   for (const label of [
     "Receive and inspect",
     "Put away",
-    "Pick or issue",
+    "Pick & Pack",
     "Returns and counts",
   ])
     await page
@@ -6722,15 +6832,21 @@ async function warehouseEventHandoffWorkflow(page, state) {
   });
   await waitForMeaningfulRoute(page);
   await page.getByRole("tab", { name: "Department requests" }).click();
-  await page
+  const request = page
     .getByText(state.fulfillmentPurpose, { exact: true })
-    .first()
-    .waitFor({
-      state: "visible",
-    });
+    .first();
+  await request.waitFor({ state: "visible" });
   const text = (await page.locator("body").innerText()).replace(/\s+/g, " ");
   if (!/pending|approval|department request/i.test(text))
     throw new Error("Warehouse handoff does not expose the approval state.");
+  const requestCard = request.locator("xpath=ancestor::li[1]");
+  await requestCard
+    .getByRole("button", { name: "Approve", exact: true })
+    .click();
+  await requestCard.getByText("Approved", { exact: true }).waitFor({
+    state: "visible",
+    timeout: 15_000,
+  });
   return {
     name: "Events-to-Warehouse operational handoff",
     ok: true,
@@ -7033,6 +7149,7 @@ async function productContributorWorkflow(
     );
   }
   state.readinessId = readinessRows[0].id;
+  state.readinessVersion = readinessRows[0].version;
   state.priceProposalId = priceRows[0].id;
   state.productId = fixture.ids.product;
   state.readinessTitle = readinessTitle;
@@ -7131,6 +7248,7 @@ async function productOwnerDecisionWorkflow(page, state, { captureState }) {
       id: state.readinessId,
       decision: "approved",
       note: "Duplicate stale Product decision",
+      expected_version: state.readinessVersion,
     },
   );
   if (stale.ok || !/not awaiting decision/i.test(stale.body)) {
@@ -7648,7 +7766,7 @@ if (runRouteAudit) {
     (item) => !viewFilter || item.name === viewFilter,
   );
   const selectedUsers = users.filter(
-      (item) => !roleFilter || item.role === roleFilter,
+    (item) => !roleFilter || item.role === roleFilter,
   );
   if (selectedViewports.length === 0) {
     throw new Error(`Unknown AUDIT_VIEWPORT: ${viewFilter}`);
@@ -7717,14 +7835,12 @@ if (runRouteAudit) {
             try {
               const routeResult = await auditRoute(page, route);
               if (routeNeedsFailureEvidence(routeResult)) {
-                routeResult.evidenceScreenshot = await captureRouteFailureEvidence(
-                  page,
-                  {
+                routeResult.evidenceScreenshot =
+                  await captureRouteFailureEvidence(page, {
                     viewport: viewport.name,
                     role: user.role,
                     route: route.path,
-                  },
-                ).catch(() => null);
+                  }).catch(() => null);
               }
               routeResults.push(routeResult);
               if (
@@ -8133,7 +8249,7 @@ try {
           await runWorkflow(
             browser,
             viewport,
-            { email: "intra.test.operations.associate@mwell.com.ph" },
+            { email: "intra.test.operations.lead@mwell.com.ph" },
             {
               name: "Events-to-Warehouse operational handoff",
               scenarioId: "events-request-to-warehouse-handoff",

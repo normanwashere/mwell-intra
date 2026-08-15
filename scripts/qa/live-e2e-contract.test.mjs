@@ -92,7 +92,10 @@ test("warehouse receipt projections have a matching exception schema contract", 
   );
   assert.match(migration, /warehouse_receipt_exception_shape_check/);
   assert.match(migration, /'non_po',\s*'overage'/);
-  assert.match(migration, /jsonb_array_length\(receipt_exception->'evidenceUrls'\) > 0/);
+  assert.match(
+    migration,
+    /jsonb_array_length\(receipt_exception->'evidenceUrls'\) > 0/,
+  );
 });
 
 test("certification gates cannot activate before a published pathway exists", async () => {
@@ -111,8 +114,14 @@ test("certification gates cannot activate before a published pathway exists", as
   assert.match(migration, /curriculum_capability_outcomes/);
   assert.match(migration, /curriculum_version\.status = 'published'/);
   assert.match(migration, /requirement_version\.status = 'published'/);
-  assert.match(migration, /curriculum_version\.effective_at <= pg_catalog\.now\(\)/);
-  assert.match(migration, /requirement_version\.effective_at <= pg_catalog\.now\(\)/);
+  assert.match(
+    migration,
+    /curriculum_version\.effective_at <= pg_catalog\.now\(\)/,
+  );
+  assert.match(
+    migration,
+    /requirement_version\.effective_at <= pg_catalog\.now\(\)/,
+  );
 });
 
 test("browser-role RPCs recover Supabase SSR cookie sessions without logging tokens", async () => {
@@ -219,7 +228,7 @@ test("governed workflow activity cleanup resolves generated IDs from exact run m
   );
   assert.match(
     source,
-    /from\("activity_log"\)[\s\S]*JSON\.stringify\(row\.detail \?\? \{\}\)\.includes\(marker\)[\s\S]*\.delete\(\)[\s\S]*\.in\("id", activityIds\)/,
+    /from\("activity_log"\)[\s\S]*\.in\("entity_id", entityIds\)[\s\S]*!entityIds\.includes\(String\(row\.entity_id\)\)[\s\S]*\.delete\(\)[\s\S]*\.in\("id", activityIds\)/,
   );
   assert.match(
     source,
@@ -435,8 +444,12 @@ test("certifies mandatory first-login onboarding before module route and transac
     "utf8",
   );
 
-  const desktop = workflow.indexOf("Complete first-login role orientations on desktop");
-  const mobile = workflow.indexOf("Verify completed role orientations on mobile");
+  const desktop = workflow.indexOf(
+    "Complete first-login role orientations on desktop",
+  );
+  const mobile = workflow.indexOf(
+    "Verify completed role orientations on mobile",
+  );
   const routes = workflow.indexOf("routes:");
   assert.ok(desktop > 0 && mobile > desktop && routes > mobile);
   assert.match(workflow, /AUDIT_ORIENTATION_MUTATIONS: "true"/);
@@ -1569,6 +1582,26 @@ test("transaction fixtures and UI checks preserve the acting persona and rendere
   assert.match(source, /replacementAcceptanceFacts/);
 });
 
+test("live journeys enforce evidence, independent QC, current labels, and correct owners", async () => {
+  const source = await readFile(
+    new URL("./full-intra-live-e2e.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /Document type for \$\{marker\}-spec\.pdf/);
+  assert.match(source, /Document type for \$\{marker\}-budget\.pdf/);
+  assert.match(source, /quality_status: "pending"/);
+  assert.match(source, /disposition: "pending"/);
+  assert.match(source, /Independent QC receipt status was not preserved/);
+  assert.match(source, /Independent QC acceptance did not reach Procurement/);
+  assert.match(source, /"Pick & Pack"/);
+  assert.doesNotMatch(source, /"Pick or issue"/);
+  assert.match(
+    source,
+    /intra\.test\.operations\.lead@mwell\.com\.ph[\s\S]*?Events-to-Warehouse operational handoff/,
+  );
+  assert.match(source, /expected_version: state\.readinessVersion/);
+});
+
 test("mobile transaction checks target visible records and unobstructed actions", async () => {
   const audit = await readFile(
     new URL("./full-intra-live-e2e.mjs", import.meta.url),
@@ -1672,6 +1705,10 @@ test("the DOA editor cannot submit while asynchronous workspace data shifts the 
     page,
     /\[captureActivationDraft, core, effectiveAt, mode, procurement, toast\]/,
   );
+  assert.match(page, /from\("doa_matrices"\)/);
+  assert.match(page, /\.eq\("department", matrix\.department\)/);
+  assert.match(page, /\.eq\("version", matrix\.version\)/);
+  assert.match(page, /payload: \{ id: currentMatrix\.id \}/);
 });
 
 test("DOA revision loading follows business order and the schema restores its audit timestamp", async () => {

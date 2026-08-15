@@ -225,6 +225,12 @@
 .btn-primary:hover {
   background: var(--brand-800);
 }
+.btn-primary:disabled {
+  background: var(--muted);
+  color: var(--surface);
+  box-shadow: none;
+  opacity: 1;
+}
 
 .btn-accent {
   background: linear-gradient(120deg, var(--brand-600) 0%, var(--accent) 100%);

@@ -8,8 +8,8 @@ const MIGRATIONS = resolve(ROOT, "supabase", "migrations");
 const MIGRATION_SUFFIX = "_security_database_launch_blocker_convergence.sql";
 const SERVICE_VERIFIER_MIGRATION_SUFFIX =
   "_add_service_role_launch_verifier.sql";
-const LIVE_CAP_CONVERGENCE_SUFFIX =
-  "_converge_read_rpc_live_capabilities.sql";
+const LIVE_CAP_CONVERGENCE_SUFFIX = "_converge_read_rpc_live_capabilities.sql";
+const LAUNCH_READ_CONTRACT_SUFFIX = "_restore_launch_read_contracts.sql";
 const VERIFIER = resolve(
   ROOT,
   "scripts",
@@ -39,7 +39,11 @@ function serviceVerifierMigration() {
   const files = readdirSync(MIGRATIONS)
     .filter((name) => name.endsWith(SERVICE_VERIFIER_MIGRATION_SUFFIX))
     .sort();
-  assert.equal(files.length, 1, "exactly one service-role verifier migration is required");
+  assert.equal(
+    files.length,
+    1,
+    "exactly one service-role verifier migration is required",
+  );
   return {
     file: files[0],
     sql: readFileSync(resolve(MIGRATIONS, files[0]), "utf8"),
@@ -50,7 +54,23 @@ function liveCapConvergenceMigration() {
   const files = readdirSync(MIGRATIONS)
     .filter((name) => name.endsWith(LIVE_CAP_CONVERGENCE_SUFFIX))
     .sort();
-  assert.equal(files.length, 1, "exactly one read-RPC convergence migration is required");
+  assert.equal(
+    files.length,
+    1,
+    "exactly one read-RPC convergence migration is required",
+  );
+  return readFileSync(resolve(MIGRATIONS, files[0]), "utf8");
+}
+
+function launchReadContractMigration() {
+  const files = readdirSync(MIGRATIONS)
+    .filter((name) => name.endsWith(LAUNCH_READ_CONTRACT_SUFFIX))
+    .sort();
+  assert.equal(
+    files.length,
+    1,
+    "exactly one launch read-contract migration is required",
+  );
   return readFileSync(resolve(MIGRATIONS, files[0]), "utf8");
 }
 
@@ -246,6 +266,54 @@ test("later authenticated read RPCs converge to live capabilities", () => {
   assert.match(sql, /core\.has_live_cap\(/i);
   assert.match(sql, /execute revised_definition/i);
   assert.doesNotMatch(sql, /revoke execute[\s\S]*authenticated/i);
+});
+
+test("launch read contracts restore authenticated access and detect grant drift", () => {
+  const sql = launchReadContractMigration();
+  for (const signature of [
+    "procurement.commitment_readiness(jsonb)",
+    "procurement.purchase_order_receipt_status(jsonb)",
+  ]) {
+    assert.match(
+      sql,
+      new RegExp(
+        `grant execute on function ${signature.replace(/[().]/g, "\\$&")}[\\s\\S]*?authenticated`,
+        "i",
+      ),
+    );
+    assert.match(
+      sql,
+      new RegExp(
+        `has_function_privilege\\([\\s\\S]*?'authenticated'[\\s\\S]*?'${signature.replace(/[().]/g, "\\$&")}'`,
+        "i",
+      ),
+    );
+  }
+  assert.match(sql, /core\.verify_launch_read_contracts\(\)/i);
+  assert.match(sql, /auth\.role\(\) <> 'service_role'/i);
+  assert.match(
+    sql,
+    /revoke all on function core\.verify_launch_read_contracts\(\)[\s\S]*?authenticated/i,
+  );
+  assert.match(
+    sql,
+    /grant execute on function core\.verify_launch_read_contracts\(\)[\s\S]*?service_role/i,
+  );
+  assert.doesNotMatch(sql, /\b(drop|truncate)\b/i);
+});
+
+test("runtime verifier checks both critical read grants", () => {
+  const source = readFileSync(VERIFIER, "utf8");
+  assert.match(
+    source,
+    /authenticated execute on procurement\.commitment_readiness\(jsonb\)/i,
+  );
+  assert.match(
+    source,
+    /authenticated execute on procurement\.purchase_order_receipt_status\(jsonb\)/i,
+  );
+  assert.match(source, /\.rpc\("verify_launch_read_contracts"\)/);
+  assert.match(source, /Critical launch grants are missing/);
 });
 
 test("package exposes the runtime database verification command", () => {
