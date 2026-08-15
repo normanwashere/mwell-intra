@@ -40,3 +40,10 @@ test("UAT CI blocks high severity dependency and source vulnerabilities", async 
   assert.match(workflow, /security-events: write/);
   assert.match(workflow, /github\/codeql-action\/analyze/);
 });
+
+test("UAT builds receive the canonical application URL", async () => {
+  const turbo = JSON.parse(
+    await readFile(new URL("../../turbo.json", import.meta.url), "utf8"),
+  );
+  assert.ok(turbo.globalPassThroughEnv.includes("APP_URL"));
+});
