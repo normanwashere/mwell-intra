@@ -12,6 +12,14 @@ import type {
   InsightsData,
   InsightTargetDirection,
 } from "./types";
+export {
+  canShowGovernedExport,
+  getSourceActivityFreshness,
+  getSnapshotTruth,
+  resolveRequestedInsightArea,
+  safeInsightFollowupPayload,
+} from "./contracts";
+export type { FollowupReasonCode, FollowupRequestType } from "./contracts";
 
 type UnknownRow = Record<string, unknown>;
 const AREAS: InsightArea[] = [
@@ -38,20 +46,15 @@ const TARGET_DIRECTIONS: InsightTargetDirection[] = [
   "range",
   "informational",
 ];
-const DATA_STATUSES: InsightDataStatus[] = ["current", "stale", "no_data", "incomplete"];
+const DATA_STATUSES: InsightDataStatus[] = [
+  "current",
+  "stale",
+  "no_data",
+  "incomplete",
+];
 
-const PR_TO_PO_DEFINITION = "Approved PR submission to first issued PO, in calendar days.";
-
-export function getMetricFreshness(
-  extractedAt: string,
-  now = new Date(),
-): { stale: boolean; label: "Current extraction" | "Stale extraction" | "Awaiting data" } {
-  const extracted = Date.parse(extractedAt);
-  if (!extractedAt || Number.isNaN(extracted)) return { stale: true, label: "Awaiting data" };
-  return now.getTime() - extracted > 24 * 60 * 60 * 1000
-    ? { stale: true, label: "Stale extraction" }
-    : { stale: false, label: "Current extraction" };
-}
+const PR_TO_PO_DEFINITION =
+  "Approved PR submission to first issued PO, in calendar days.";
 
 export function evaluateMetricStatus(
   metric: Pick<
@@ -70,7 +73,8 @@ export function evaluateMetricStatus(
     metric.value == null
   )
     return "no_data";
-  if (metric.dataStatus === "incomplete" || metric.dataStatus === "stale") return "incomplete";
+  if (metric.dataStatus === "stale") return "stale";
+  if (metric.dataStatus === "incomplete") return "incomplete";
   if (metric.targetDirection === "informational") return "informational";
 
   if (metric.targetDirection === "minimum") {
@@ -147,8 +151,7 @@ export function resolveGovernedSource(
   const href = metric.sourceHref;
   const accessible =
     href === "/work" ||
-    (href === "/warehouse/data" &&
-      can(roles, "warehouse", "view_analytics")) ||
+    (href === "/warehouse/data" && can(roles, "warehouse", "view_analytics")) ||
     (href === "/warehouse/cycle-counts" &&
       (can(roles, "warehouse", "cycle_count") ||
         can(roles, "warehouse", "approve_stock_adjustment"))) ||
@@ -174,6 +177,7 @@ export function resolveGovernedSource(
 
 const STATUS_PRIORITY: Record<InsightMetricStatus, number> = {
   critical: 0,
+  stale: 1,
   incomplete: 1,
   no_data: 1,
   review: 2,
@@ -184,6 +188,7 @@ const STATUS_PRIORITY: Record<InsightMetricStatus, number> = {
 export function metricStatusPresentation(status: InsightMetricStatus) {
   const presentations = {
     critical: { label: "Critical", tone: "rose" },
+    stale: { label: "Stale source", tone: "amber" },
     review: { label: "Review", tone: "amber" },
     on_target: { label: "On target", tone: "emerald" },
     informational: { label: "Information", tone: "cyan" },
@@ -191,34 +196,6 @@ export function metricStatusPresentation(status: InsightMetricStatus) {
     incomplete: { label: "Incomplete", tone: "amber" },
   } as const;
   return presentations[status];
-}
-
-export function getSnapshotTruth(online: boolean, extractedAt: string) {
-  if (!online)
-    return {
-      label: "Offline snapshot",
-      tone: "amber" as const,
-      detail:
-        "Showing the last available extraction. Reconnect before making a decision.",
-    };
-  const freshness = getMetricFreshness(extractedAt);
-  if (freshness.label === "Awaiting data")
-    return {
-      label: "Awaiting data",
-      tone: "slate" as const,
-      detail: "No governed extraction is available yet.",
-    };
-  return freshness.stale
-    ? {
-        label: "Stale extraction",
-        tone: "amber" as const,
-        detail: "The latest governed extraction is over 24 hours old. Refresh or verify the source before making a decision.",
-      }
-    : {
-        label: "Current extraction",
-        tone: "emerald" as const,
-        detail: "Connected. Metric freshness is shown on each indicator.",
-      };
 }
 
 export function prioritizeMetrics(

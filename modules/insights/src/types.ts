@@ -5,6 +5,7 @@ export type InsightTargetDirection =
 export type InsightDataStatus = "current" | "stale" | "no_data" | "incomplete";
 export type InsightMetricStatus =
   | "critical"
+  | "stale"
   | "review"
   | "on_target"
   | "informational"

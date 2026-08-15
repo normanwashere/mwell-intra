@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  canShowGovernedExport,
   evaluateMetricStatus,
   getSnapshotTruth,
   mapInsightRow,
   metricStatusPresentation,
   prioritizeMetrics,
+  resolveRequestedInsightArea,
   resolveGovernedSource,
+  safeInsightFollowupPayload,
   scopeInsights,
   visibleInsightAreas,
 } from "./data";
@@ -136,12 +139,106 @@ describe("Insights KPI semantics", () => {
   });
 
   it("never describes an offline snapshot as live", () => {
-    expect(getSnapshotTruth(false, "2026-07-22T01:00:00Z")).toEqual({
+    expect(getSnapshotTruth(false, [])).toEqual({
       label: "Offline snapshot",
       tone: "amber",
       detail:
         "Showing the last available extraction. Reconnect before making a decision.",
     });
+  });
+
+  it("derives workspace freshness from source activity, not query time", () => {
+    const stale = {
+      ...INSIGHTS_DEMO_DATA.metrics[0],
+      dataStatus: "current" as const,
+      sourceUpdatedAt: "2026-08-12T00:00:00.000Z",
+      extractedAt: "2026-08-15T00:00:00.000Z",
+    };
+
+    expect(
+      getSnapshotTruth(true, [stale], new Date("2026-08-15T00:00:00.000Z")),
+    ).toEqual({
+      label: "Stale source activity",
+      tone: "amber",
+      detail:
+        "At least one visible indicator has source activity older than 24 hours. Validate the source before deciding.",
+    });
+  });
+
+  it("labels stale metrics explicitly instead of calling them incomplete", () => {
+    expect(
+      evaluateMetricStatus({
+        value: 8,
+        targetDirection: "maximum",
+        targetMax: 5,
+        dataStatus: "stale",
+        sampleCount: 4,
+      }),
+    ).toBe("stale");
+    expect(metricStatusPresentation("stale")).toMatchObject({
+      label: "Stale source",
+      tone: "amber",
+    });
+  });
+});
+
+describe("Insights role-load and command contracts", () => {
+  it("restores an authorized deep-link area after roles finish loading", () => {
+    expect(resolveRequestedInsightArea("finance", [], "all")).toBe("all");
+    expect(
+      resolveRequestedInsightArea("finance", ["warehouse", "finance"], "all"),
+    ).toBe("finance");
+    expect(
+      resolveRequestedInsightArea(
+        "finance",
+        ["warehouse", "finance"],
+        "warehouse",
+      ),
+    ).toBe("warehouse");
+  });
+
+  it("shows export only to a live analyst with the effective certified capability", () => {
+    expect(
+      canShowGovernedExport(
+        "supabase",
+        { insights: ["analyst"] },
+        { insights: [] },
+      ),
+    ).toBe(false);
+    expect(
+      canShowGovernedExport(
+        "supabase",
+        { insights: ["analyst"] },
+        { insights: ["prepare_exports"] },
+      ),
+    ).toBe(true);
+    expect(
+      canShowGovernedExport(
+        "supabase",
+        { insights: ["admin"] },
+        { insights: ["prepare_exports"] },
+      ),
+    ).toBe(false);
+  });
+
+  it("builds a controlled follow-up payload without protected metric detail", () => {
+    const metric = INSIGHTS_DEMO_DATA.metrics[0]!;
+    const payload = safeInsightFollowupPayload(
+      metric,
+      "validation",
+      "stale_source",
+      "INS-20260815-001",
+    );
+
+    expect(payload).toEqual({
+      metric_id: metric.id,
+      request_type: "validation",
+      reason_code: "stale_source",
+      idempotency_key: "INS-20260815-001",
+    });
+    expect(JSON.stringify(payload)).not.toContain(metric.detail);
+    expect(JSON.stringify(payload)).not.toContain(metric.sourceHref);
+    expect(JSON.stringify(payload)).not.toContain(String(metric.value));
   });
 });
 
@@ -231,7 +328,10 @@ describe("Insights source access and priority", () => {
 
 describe("Insights read-only UX contract", () => {
   it("uses a descriptive heading and exposes no client mutation path", () => {
-    const app = readFileSync(resolve(process.cwd(), "src/InsightsApp.tsx"), "utf8");
+    const app = readFileSync(
+      resolve(process.cwd(), "src/InsightsApp.tsx"),
+      "utf8",
+    );
     const data = readFileSync(resolve(process.cwd(), "src/data.ts"), "utf8");
 
     expect(app).toContain('title="Operational and executive insights"');

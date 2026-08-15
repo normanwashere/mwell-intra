@@ -3402,6 +3402,18 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "The source queue opens for investigation.",
         ),
         control(
+          "Export governed snapshot",
+          "Creates an attributable CSV of the caller's permitted Insights projection.",
+          "Only a Data Analyst with a current certification and the effective prepare_exports capability sees this action.",
+          "A checksum, row count, creator, and time-limited download are registered without changing source records.",
+        ),
+        control(
+          "Request validation or escalation",
+          "Routes an indicator reference and controlled reason to the accountable source owner.",
+          "The metric must be visible to the caller; protected values, source paths, and free-text detail are never copied into the handoff.",
+          "An attributable follow-up reference is created for validation or escalation.",
+        ),
+        control(
           "Retry",
           "Reloads the governed snapshot after a read failure.",
           "The retry cannot alter source data.",
@@ -3420,6 +3432,12 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "Shows the operating threshold when one is defined.",
           false,
           "The target is descriptive and cannot grant approval authority.",
+        ),
+        field(
+          "Source updated",
+          "Shows the latest activity timestamp from the governed source, not the time the dashboard was opened.",
+          true,
+          "Activity older than 24 hours is labeled Stale source and must be validated before a decision.",
         ),
       ],
     },

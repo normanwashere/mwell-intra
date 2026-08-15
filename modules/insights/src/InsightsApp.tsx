@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSession } from "@intra/auth";
 import {
   Badge,
@@ -10,17 +10,22 @@ import {
   Icon,
   ModuleHero,
   SegmentedControl,
+  Sheet,
   SignInPrompt,
   SkeletonStats,
 } from "@intra/ui";
 import {
+  canShowGovernedExport,
   getSnapshotTruth,
   metricStatusPresentation,
   prioritizeMetrics,
+  resolveRequestedInsightArea,
   resolveGovernedSource,
+  safeInsightFollowupPayload,
   useInsightsData,
   useOnlineStatus,
 } from "./data";
+import type { FollowupReasonCode, FollowupRequestType } from "./data";
 import type { InsightArea, InsightMetric } from "./types";
 
 const LABELS: Record<InsightArea, string> = {
@@ -54,12 +59,95 @@ function targetLabel(metric: InsightMetric) {
 }
 
 export function InsightsApp({ initialArea }: { initialArea?: InsightArea }) {
-  const { profile, userRoles, loading: sessionLoading } = useSession();
+  const {
+    profile,
+    userRoles,
+    userCapabilities,
+    mode,
+    supabaseClient,
+    loading: sessionLoading,
+  } = useSession();
   const { data, loading, error, refresh, areas } = useInsightsData();
   const online = useOnlineStatus();
-  const [area, setArea] = useState<InsightArea | "all">(
-    initialArea && areas.includes(initialArea) ? initialArea : "all",
+  const [area, setArea] = useState<InsightArea | "all">("all");
+  const [exporting, setExporting] = useState(false);
+  const [commandMessage, setCommandMessage] = useState<string | null>(null);
+  const [selectedMetric, setSelectedMetric] = useState<InsightMetric | null>(
+    null,
   );
+  const [followupType, setFollowupType] =
+    useState<FollowupRequestType>("validation");
+  const [followupReason, setFollowupReason] =
+    useState<FollowupReasonCode>("stale_source");
+  const [submittingFollowup, setSubmittingFollowup] = useState(false);
+
+  useEffect(() => {
+    setArea((current) =>
+      resolveRequestedInsightArea(initialArea, areas, current),
+    );
+  }, [areas.join("|"), initialArea]);
+
+  const mayExport = canShowGovernedExport(mode, userRoles, userCapabilities);
+
+  async function exportSnapshot() {
+    if (exporting) return;
+    setExporting(true);
+    setCommandMessage(null);
+    try {
+      const response = await fetch("/api/insights/export", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+      });
+      const result = (await response.json()) as {
+        error?: string;
+        download_url?: string;
+        row_count?: number;
+      };
+      if (!response.ok || !result.download_url)
+        throw new Error(result.error ?? "Insights export failed.");
+      setCommandMessage(
+        `Governed snapshot prepared with ${result.row_count ?? 0} rows. Download started.`,
+      );
+      window.location.assign(result.download_url);
+    } catch (cause) {
+      setCommandMessage(
+        cause instanceof Error ? cause.message : "Insights export failed.",
+      );
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function submitFollowup() {
+    if (!selectedMetric || !supabaseClient) {
+      setCommandMessage("A connected governed session is required.");
+      return;
+    }
+    setSubmittingFollowup(true);
+    setCommandMessage(null);
+    const payload = safeInsightFollowupPayload(
+      selectedMetric,
+      followupType,
+      followupReason,
+      `INS-${Date.now()}-${selectedMetric.id}`,
+    );
+    const { data: result, error: followupError } = await supabaseClient
+      .schema("core")
+      .rpc("request_insight_followup", { payload });
+    if (followupError) {
+      setCommandMessage(followupError.message);
+    } else {
+      const handoff = result as unknown as {
+        id?: string;
+        assigned_module?: string;
+      };
+      setCommandMessage(
+        `Follow-up ${handoff.id ?? "created"} routed to ${handoff.assigned_module ?? "the accountable owner"}.`,
+      );
+      setSelectedMetric(null);
+    }
+    setSubmittingFollowup(false);
+  }
   if (sessionLoading || (profile && loading))
     return (
       <div aria-busy="true">
@@ -90,7 +178,17 @@ export function InsightsApp({ initialArea }: { initialArea?: InsightArea }) {
       ? data.metrics
       : data.metrics.filter((metric) => metric.area === area),
   );
-  const snapshot = getSnapshotTruth(online, data.extractedAt);
+  const snapshot = getSnapshotTruth(online, visible);
+  const summary = {
+    critical: visible.filter((metric) => metric.status === "critical").length,
+    stale: visible.filter((metric) => metric.status === "stale").length,
+    review: visible.filter((metric) =>
+      ["review", "incomplete", "no_data"].includes(metric.status),
+    ).length,
+    current: visible.filter((metric) =>
+      ["on_target", "informational"].includes(metric.status),
+    ).length,
+  };
   const options = [
     { value: "all", label: "All available" },
     ...areas.map((value) => ({ value, label: LABELS[value] })),
@@ -103,9 +201,19 @@ export function InsightsApp({ initialArea }: { initialArea?: InsightArea }) {
         description="Role-scoped indicators with explicit targets, coverage, reporting periods, and source freshness."
         icon="trend"
         action={
-          <HeroChipButton href="/work" icon="clipboard">
-            Open My Work
-          </HeroChipButton>
+          <>
+            <HeroChipButton href="/work" icon="clipboard">
+              Open My Work
+            </HeroChipButton>
+            {mayExport && (
+              <HeroChipButton
+                icon="download"
+                onClick={() => void exportSnapshot()}
+              >
+                {exporting ? "Preparing..." : "Export governed snapshot"}
+              </HeroChipButton>
+            )}
+          </>
         }
         accessory={
           <div className="flex flex-wrap gap-2">
@@ -115,6 +223,18 @@ export function InsightsApp({ initialArea }: { initialArea?: InsightArea }) {
           </div>
         }
       />
+      {commandMessage && (
+        <div
+          role="status"
+          className="flex items-start gap-3 rounded-lg border border-line bg-surface px-4 py-3 text-sm text-muted"
+        >
+          <Icon
+            name="info"
+            className="mt-0.5 h-4 w-4 shrink-0 text-brand-700"
+          />
+          <span>{commandMessage}</span>
+        </div>
+      )}
       {!online && (
         <div
           role="status"
@@ -170,6 +290,44 @@ export function InsightsApp({ initialArea }: { initialArea?: InsightArea }) {
           onChange={(value) => setArea(value as InsightArea | "all")}
         />
       </div>
+      <section
+        aria-labelledby="insights-summary-title"
+        className="border-y border-line py-4"
+      >
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase text-brand-700">
+              Decision summary
+            </p>
+            <h2
+              id="insights-summary-title"
+              className="font-display text-lg font-bold text-ink"
+            >
+              What needs attention
+            </h2>
+          </div>
+          <p className="text-xs text-faint">
+            {visible.length} visible indicators
+          </p>
+        </div>
+        <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-line bg-line lg:grid-cols-4">
+          {[
+            ["Critical", summary.critical, "text-rose-700"],
+            ["Stale source", summary.stale, "text-amber-700"],
+            ["Review", summary.review, "text-amber-700"],
+            ["Current", summary.current, "text-emerald-700"],
+          ].map(([label, value, tone]) => (
+            <div key={String(label)} className="min-w-0 bg-surface px-4 py-3">
+              <dt className="text-xs font-semibold text-faint">{label}</dt>
+              <dd
+                className={`mt-1 font-display text-2xl font-extrabold ${tone}`}
+              >
+                {value}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </section>
       {visible.length === 0 ? (
         <EmptyState
           icon="trend"
@@ -179,7 +337,7 @@ export function InsightsApp({ initialArea }: { initialArea?: InsightArea }) {
       ) : (
         <section
           aria-label="Operational indicators"
-          className="grid gap-3 md:grid-cols-2 xl:grid-cols-3"
+          className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3"
         >
           {visible.map((metric) => {
             const presentation = metricStatusPresentation(metric.status);
@@ -234,20 +392,43 @@ export function InsightsApp({ initialArea }: { initialArea?: InsightArea }) {
                     </dd>
                   </div>
                 </dl>
-                {source.accessible ? (
-                  <a
-                    href={source.href ?? undefined}
-                    className="btn-ghost mt-auto justify-between"
+                <div className="mt-auto grid gap-2 sm:grid-cols-2">
+                  {source.accessible ? (
+                    <a
+                      href={source.href ?? undefined}
+                      className="btn-ghost min-h-11 justify-between"
+                    >
+                      {source.label}{" "}
+                      <Icon name="arrowRight" className="h-4 w-4" />
+                    </a>
+                  ) : (
+                    <div className="flex min-h-11 items-center gap-2 rounded-lg bg-inset px-3 text-sm font-semibold text-faint">
+                      <Icon name="lock" className="h-4 w-4" />
+                      {source.label}
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    className="btn-secondary min-h-11 justify-center"
+                    onClick={() => {
+                      setFollowupType(
+                        userRoles.insights?.includes("executive")
+                          ? "escalation"
+                          : "validation",
+                      );
+                      setFollowupReason(
+                        metric.status === "stale"
+                          ? "stale_source"
+                          : "target_breach",
+                      );
+                      setSelectedMetric(metric);
+                    }}
                   >
-                    {source.label}{" "}
-                    <Icon name="arrowRight" className="h-4 w-4" />
-                  </a>
-                ) : (
-                  <div className="mt-auto flex min-h-11 items-center gap-2 rounded-xl bg-inset px-3 text-sm font-semibold text-faint">
-                    <Icon name="lock" className="h-4 w-4" />
-                    {source.label}
-                  </div>
-                )}
+                    {userRoles.insights?.includes("executive")
+                      ? "Escalate indicator"
+                      : "Request validation"}
+                  </button>
+                </div>
               </Card>
             );
           })}
@@ -259,6 +440,84 @@ export function InsightsApp({ initialArea }: { initialArea?: InsightArea }) {
           indicator.
         </p>
       )}
+      <Sheet
+        open={Boolean(selectedMetric)}
+        onOpenChange={(open) => {
+          if (!open) setSelectedMetric(null);
+        }}
+        title={
+          followupType === "validation"
+            ? "Request validation"
+            : "Escalate indicator"
+        }
+        description="Send only the indicator reference and a controlled reason. Protected values and source details stay in their owning workflow."
+        footer={
+          <button
+            type="button"
+            className="btn-primary w-full justify-center"
+            disabled={submittingFollowup}
+            onClick={() => void submitFollowup()}
+          >
+            {submittingFollowup ? "Routing..." : "Create accountable follow-up"}
+          </button>
+        }
+      >
+        <div className="space-y-5">
+          <div className="rounded-lg border border-line bg-inset px-4 py-3">
+            <p className="text-xs font-semibold uppercase text-faint">
+              Indicator reference
+            </p>
+            <p className="mt-1 font-semibold text-ink">
+              {selectedMetric?.label}
+            </p>
+            <p className="mt-1 text-xs text-muted">
+              No metric value, detail, or protected source location will be
+              copied.
+            </p>
+          </div>
+          <label className="block space-y-1.5" htmlFor="insight-followup-type">
+            <span className="label">Handoff type</span>
+            <select
+              id="insight-followup-type"
+              className="input min-h-11"
+              value={followupType}
+              onChange={(event) =>
+                setFollowupType(event.target.value as FollowupRequestType)
+              }
+            >
+              <option value="validation">Request source validation</option>
+              <option value="escalation">
+                Escalate for accountable review
+              </option>
+            </select>
+          </label>
+          <label
+            className="block space-y-1.5"
+            htmlFor="insight-followup-reason"
+          >
+            <span className="label">Reason</span>
+            <select
+              id="insight-followup-reason"
+              className="input min-h-11"
+              value={followupReason}
+              onChange={(event) =>
+                setFollowupReason(event.target.value as FollowupReasonCode)
+              }
+            >
+              <option value="stale_source">Source activity is stale</option>
+              <option value="definition_question">
+                Metric definition needs validation
+              </option>
+              <option value="target_breach">
+                Target requires accountable review
+              </option>
+              <option value="access_issue">
+                Governed source access is unavailable
+              </option>
+            </select>
+          </label>
+        </div>
+      </Sheet>
     </div>
   );
 }

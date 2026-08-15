@@ -511,7 +511,7 @@ const ROLE_OPERATING_DETAILS: Record<string, RoleOperatingDetails> = {
   insights_analyst: {
     dailyTasks: [
       "Validate source freshness and review authorized operational indicators.",
-      "Prepare governed exports without changing source records.",
+      "Prepare a certified governed export without changing source records.",
     ],
     responsibilityStages: [
       stage(
@@ -529,7 +529,7 @@ const ROLE_OPERATING_DETAILS: Record<string, RoleOperatingDetails> = {
   insights_manager: {
     dailyTasks: [
       "Review department summaries and cross-functional risks.",
-      "Assign accountable follow-up through source workflows.",
+      "Request validation from a source owner through an accountable follow-up.",
     ],
     responsibilityStages: [
       stage(
@@ -547,7 +547,7 @@ const ROLE_OPERATING_DETAILS: Record<string, RoleOperatingDetails> = {
   insights_executive: {
     dailyTasks: [
       "Review executive indicators and priority exceptions.",
-      "Request accountable follow-up without editing operational evidence.",
+      "Escalate an indicator through accountable follow-up without editing operational evidence.",
     ],
     responsibilityStages: [
       stage(
@@ -1712,9 +1712,11 @@ export const LIVE_KNOWLEDGE_ROLES: KnowledgeRole[] = [
     authority: {
       accessibleRoutes: ["/insights"],
       canDo: [
-        "View department indicators and prepare exports within approved scope.",
+        "View department indicators and prepare a certified governed export when current certification grants the effective capability.",
       ],
-      cannotDo: ["Do not edit source records or claim executive-only access."],
+      cannotDo: [
+        "Do not edit source records, include protected detail in a follow-up, or claim executive-only access.",
+      ],
       decisions: [
         "Decide whether an analysis is sufficiently defined, fresh, and supported for communication.",
       ],
@@ -1734,7 +1736,9 @@ export const LIVE_KNOWLEDGE_ROLES: KnowledgeRole[] = [
       "Review department and executive indicators and route accountable corrective action to source owners.",
     authority: {
       accessibleRoutes: ["/insights"],
-      canDo: ["View released department summaries and executive indicators."],
+      canDo: [
+        "View released department summaries and executive indicators, then request validation without copying protected source detail.",
+      ],
       cannotDo: [
         "Do not change source data or use a KPI as substitute approval evidence.",
       ],
@@ -1762,9 +1766,11 @@ export const LIVE_KNOWLEDGE_ROLES: KnowledgeRole[] = [
       "Review executive-only summaries and assign accountable follow-up without source-level access or writes.",
     authority: {
       accessibleRoutes: ["/insights"],
-      canDo: ["View released executive indicators and priority exceptions."],
+      canDo: [
+        "View released executive indicators and escalate an indicator through an accountable reason-coded handoff.",
+      ],
       cannotDo: [
-        "Do not access source-level department detail unless separately assigned; do not alter operational evidence.",
+        "Do not access a protected source record unless separately assigned; do not alter operational evidence.",
       ],
       decisions: [
         "Decide executive follow-up priority and accountable management owner.",

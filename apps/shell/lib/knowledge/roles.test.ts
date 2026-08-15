@@ -239,4 +239,24 @@ describe("knowledge role authority registry", () => {
       );
     }
   });
+
+  it("documents certified exports and privacy-minimal Insights follow-ups", () => {
+    const analyst = KNOWLEDGE_ROLES.find(
+      (role) => role.id === "insights_analyst",
+    );
+    const manager = KNOWLEDGE_ROLES.find(
+      (role) => role.id === "insights_manager",
+    );
+    const executive = KNOWLEDGE_ROLES.find(
+      (role) => role.id === "insights_executive",
+    );
+
+    expect(analyst?.authority.canDo.join(" ")).toMatch(
+      /certif.*governed export/i,
+    );
+    expect(analyst?.authority.cannotDo.join(" ")).toMatch(/protected.*detail/i);
+    expect(manager?.authority.canDo.join(" ")).toMatch(/request validation/i);
+    expect(executive?.authority.canDo.join(" ")).toMatch(/escalat.*indicator/i);
+    expect(executive?.authority.cannotDo.join(" ")).toMatch(/source record/i);
+  });
 });
