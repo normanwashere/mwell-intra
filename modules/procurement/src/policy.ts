@@ -24,6 +24,7 @@ import type {
   RequestCategory,
   ImportationPlan,
   ProcurementExceptionPack,
+  ProcurementRequestLine,
   SourcingMethod,
   AcceptancePack,
   PaymentReadinessPack,
@@ -93,17 +94,66 @@ export interface CategoryMeta {
 }
 
 export const CATEGORY_META: readonly CategoryMeta[] = [
-  { code: 'goods',        label: 'Goods',                  description: 'Physical items, consumables, supplies.' },
-  { code: 'services',     label: 'Services',               description: 'Professional services, consulting, engagements.', requiresLegal: true },
-  { code: 'subscription', label: 'Subscriptions / SaaS',   description: 'Recurring software, tools, memberships.',        requiresLegal: true },
-  { code: 'capex',        label: 'CapEx / Equipment',      description: 'Fixed assets, equipment, machinery.',              highRisk: true },
-  { code: 'construction', label: 'Construction / Works',   description: 'Civil, fit-out, engineering works.',               highRisk: true, requiresLegal: true },
-  { code: 'manpower',     label: 'Manpower / Labor',       description: 'Labor-intensive service contracts.',               highRisk: true, requiresLegal: true },
-  { code: 'marketing',    label: 'Marketing collateral',   description: 'Print, signage, campaigns, events.' },
-  { code: 'it_software',  label: 'IT / Software',          description: 'Hardware, licenses, integrations, data access.',   requiresLegal: true },
-  { code: 'medical',      label: 'Medical / Clinical',     description: 'Medical devices, pharma, clinical supplies.',      highRisk: true },
-  { code: 'petty_cash',   label: 'Petty cash',             description: 'Ad-hoc reimbursement, minor expenses.' },
-  { code: 'other',        label: 'Other',                  description: 'Anything not covered above.' },
+  {
+    code: 'goods',
+    label: 'Goods',
+    description: 'Physical items, consumables, supplies.',
+  },
+  {
+    code: 'services',
+    label: 'Services',
+    description: 'Professional services, consulting, engagements.',
+    requiresLegal: true,
+  },
+  {
+    code: 'subscription',
+    label: 'Subscriptions / SaaS',
+    description: 'Recurring software, tools, memberships.',
+    requiresLegal: true,
+  },
+  {
+    code: 'capex',
+    label: 'CapEx / Equipment',
+    description: 'Fixed assets, equipment, machinery.',
+    highRisk: true,
+  },
+  {
+    code: 'construction',
+    label: 'Construction / Works',
+    description: 'Civil, fit-out, engineering works.',
+    highRisk: true,
+    requiresLegal: true,
+  },
+  {
+    code: 'manpower',
+    label: 'Manpower / Labor',
+    description: 'Labor-intensive service contracts.',
+    highRisk: true,
+    requiresLegal: true,
+  },
+  {
+    code: 'marketing',
+    label: 'Marketing collateral',
+    description: 'Print, signage, campaigns, events.',
+  },
+  {
+    code: 'it_software',
+    label: 'IT / Software',
+    description: 'Hardware, licenses, integrations, data access.',
+    requiresLegal: true,
+  },
+  {
+    code: 'medical',
+    label: 'Medical / Clinical',
+    description: 'Medical devices, pharma, clinical supplies.',
+    highRisk: true,
+  },
+  {
+    code: 'petty_cash',
+    label: 'Petty cash',
+    description: 'Ad-hoc reimbursement, minor expenses.',
+  },
+  { code: 'other', label: 'Other', description: 'Anything not covered above.' },
 ] as const;
 
 const CATEGORY_INDEX: Record<RequestCategory, CategoryMeta> = Object.fromEntries(
@@ -198,13 +248,20 @@ export function suggestSourcingMethod(input: SuggestSourcingInput): SourcingMeth
 
 export function sourcingMethodLabel(m: SourcingMethod): string {
   switch (m) {
-    case 'petty_cash':      return 'Petty cash';
-    case 'small_purchase':  return 'Small purchase';
-    case 'rfq':             return 'RFQ / Canvassing';
-    case 'rfp':             return 'RFP / Bidding';
-    case 'direct_award':    return 'Direct Award';
-    case 'repeat_order':    return 'Repeat Order';
-    case 'emergency':       return 'Emergency Purchase';
+    case 'petty_cash':
+      return 'Petty cash';
+    case 'small_purchase':
+      return 'Small purchase';
+    case 'rfq':
+      return 'RFQ / Canvassing';
+    case 'rfp':
+      return 'RFP / Bidding';
+    case 'direct_award':
+      return 'Direct Award';
+    case 'repeat_order':
+      return 'Repeat Order';
+    case 'emergency':
+      return 'Emergency Purchase';
   }
 }
 
@@ -247,11 +304,11 @@ export interface BuildLadderInput {
 }
 
 const TIER_LABEL: Record<ApproverTier, string> = {
-  dept_head:        'Department Head',
+  dept_head: 'Department Head',
   procurement_head: 'Procurement Head',
-  finance:          'Finance',
-  legal:            'Legal',
-  final_approver:   'Final Approver (DOA)',
+  finance: 'Finance',
+  legal: 'Legal',
+  final_approver: 'Final Approver (DOA)',
 };
 
 export function tierLabel(t: ApproverTier): string {
@@ -318,11 +375,11 @@ export function buildApprovalSteps(
 }
 
 /** Which step, if any, is the next one waiting on a decision. */
-export function nextPendingStep(steps: ApprovalStep[] | undefined | null): ApprovalStep | undefined {
+export function nextPendingStep(
+  steps: ApprovalStep[] | undefined | null,
+): ApprovalStep | undefined {
   if (!steps || steps.length === 0) return undefined;
-  return [...steps]
-    .sort((a, b) => a.order - b.order)
-    .find((s) => s.status === 'pending');
+  return [...steps].sort((a, b) => a.order - b.order).find((s) => s.status === 'pending');
 }
 
 /** Convenience: which tier is next to approve? */
@@ -400,22 +457,54 @@ export interface RequiredDoc {
 export function requiredDocuments(input: BuildLadderInput): RequiredDoc[] {
   const { sourcingMethod, category } = input;
   const docs: RequiredDoc[] = [
-    { key: 'spec',     label: 'Technical description / spec', why: 'Allows comparable vendor responses.' },
-    { key: 'budget',   label: 'Approved budget evidence',     why: 'Confirms funding before sourcing.' },
-    { key: 'previous', label: 'Previous purchase cost',       why: 'Supports price reasonableness.' },
+    {
+      key: 'spec',
+      label: 'Technical description / spec',
+      why: 'Allows comparable vendor responses.',
+    },
+    {
+      key: 'budget',
+      label: 'Approved budget evidence',
+      why: 'Confirms funding before sourcing.',
+    },
+    {
+      key: 'previous',
+      label: 'Previous purchase cost',
+      why: 'Supports price reasonableness.',
+    },
   ];
   if (sourcingMethod === 'rfp') {
-    docs.push({ key: 'ar', label: 'Award Recommendation draft', why: 'Required for RFP / bidding (Annex A).' });
-    docs.push({ key: 'bids', label: 'Vendor proposals', why: 'Supports the documented RFP evaluation and sourcing effort.' });
+    docs.push({
+      key: 'ar',
+      label: 'Award Recommendation draft',
+      why: 'Required for RFP / bidding (Annex A).',
+    });
+    docs.push({
+      key: 'bids',
+      label: 'Vendor proposals',
+      why: 'Supports the documented RFP evaluation and sourcing effort.',
+    });
   }
   if (sourcingMethod === 'rfq') {
-    docs.push({ key: 'quotes', label: 'Comparable quotations', why: 'Supports documented RFQ comparison where practicable.' });
+    docs.push({
+      key: 'quotes',
+      label: 'Comparable quotations',
+      why: 'Supports documented RFQ comparison where practicable.',
+    });
   }
   if (sourcingMethod === 'direct_award' || sourcingMethod === 'emergency') {
-    docs.push({ key: 'da_justification', label: 'Direct-award justification', why: 'Annex C — sole supplier / emergency basis.' });
+    docs.push({
+      key: 'da_justification',
+      label: 'Direct-award justification',
+      why: 'Annex C — sole supplier / emergency basis.',
+    });
   }
   if (category === 'construction' || category === 'manpower') {
-    docs.push({ key: 'bond', label: 'Bond / insurance plan', why: 'Financial protection matrix (policy §12).' });
+    docs.push({
+      key: 'bond',
+      label: 'Bond / insurance plan',
+      why: 'Financial protection matrix (policy §12).',
+    });
   }
   return docs;
 }
@@ -451,9 +540,7 @@ export function requiredDocumentsStatus(
   input: BuildLadderInput,
   attachments: readonly Pick<RequestAttachment, 'kind'>[] | undefined,
 ): RequiredDocStatus[] {
-  const kinds = new Set(
-    (attachments ?? []).map((a) => a.kind ?? 'other'),
-  );
+  const kinds = new Set((attachments ?? []).map((a) => a.kind ?? 'other'));
   return requiredDocuments(input).map((doc) => {
     const accepted = DOC_KIND_MATCH[doc.key] ?? [];
     return { ...doc, attached: accepted.some((k) => kinds.has(k)) };
@@ -482,6 +569,12 @@ export function evaluateSubmitReadiness(req: {
   sourcingMethod?: SourcingMethod;
   attachments?: readonly Pick<RequestAttachment, 'kind'>[];
   compliance?: { routeConfirmed?: boolean };
+  department?: string;
+  costCenter?: string;
+  neededBy?: string;
+  budgetCode?: string;
+  projectCode?: string;
+  lines?: readonly Pick<ProcurementRequestLine, 'description' | 'quantity'>[];
 }): SubmitReadiness {
   const input: BuildLadderInput = {
     category: req.category,
@@ -491,6 +584,26 @@ export function evaluateSubmitReadiness(req: {
   const missingDocs = requiredDocumentsStatus(input, req.attachments)
     .filter((d) => !d.attached)
     .map((d) => d.label);
+  if (!req.department?.trim()) missingDocs.unshift('Department');
+  if (!req.costCenter?.trim()) missingDocs.unshift('Cost center');
+  if (!req.neededBy || Number.isNaN(Date.parse(req.neededBy))) {
+    missingDocs.unshift('Needed-by date');
+  } else {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (new Date(`${req.neededBy}T00:00:00`).getTime() < today.getTime()) {
+      missingDocs.unshift('Needed-by date');
+    }
+  }
+  if (!req.budgetCode?.trim() && !req.projectCode?.trim()) {
+    missingDocs.unshift('Budget context');
+  }
+  if (!Number.isFinite(req.estimatedAmount) || Number(req.estimatedAmount) <= 0) {
+    missingDocs.unshift('Positive estimated amount');
+  }
+  if (!(req.lines ?? []).some((line) => line.description.trim() && Number(line.quantity) > 0)) {
+    missingDocs.unshift('At least one valid line item');
+  }
   if (!req.compliance?.routeConfirmed) {
     missingDocs.unshift('Procurement-confirmed sourcing route');
   }
@@ -501,10 +614,22 @@ export function evaluateSubmitReadiness(req: {
 }
 
 /** Keep the disabled submit CTA and submit mutation on the same policy gate. */
-export function canSubmitRequest(req: Pick<
-  ProcurementRequest,
-  'category' | 'estimatedAmount' | 'sourcingMethod' | 'attachments' | 'compliance'
->): { allowed: boolean; blockers: string[] } {
+export function canSubmitRequest(
+  req: Pick<
+    ProcurementRequest,
+    | 'category'
+    | 'estimatedAmount'
+    | 'sourcingMethod'
+    | 'attachments'
+    | 'compliance'
+    | 'department'
+    | 'costCenter'
+    | 'neededBy'
+    | 'budgetCode'
+    | 'projectCode'
+    | 'lines'
+  >,
+): { allowed: boolean; blockers: string[] } {
   const readiness = evaluateSubmitReadiness(req);
   return { allowed: readiness.ok, blockers: readiness.missingDocs };
 }
@@ -514,10 +639,16 @@ export function validatePurchaseOrderCancellation(
   reason: string,
 ): { allowed: boolean; reason?: string } {
   if (!['draft', 'approved', 'issued'].includes(status)) {
-    return { allowed: false, reason: 'Only draft, approved, or issued POs can be cancelled.' };
+    return {
+      allowed: false,
+      reason: 'Only draft, approved, or issued POs can be cancelled.',
+    };
   }
   if (reason.trim().length < 8) {
-    return { allowed: false, reason: 'Enter a cancellation reason of at least 8 characters.' };
+    return {
+      allowed: false,
+      reason: 'Enter a cancellation reason of at least 8 characters.',
+    };
   }
   return { allowed: true };
 }
@@ -578,7 +709,8 @@ export function evaluateCommitmentReadiness(input: CommitmentReadinessInput): st
   }
   if (input.sourcingMethod === 'petty_cash') {
     if (!pack?.justification?.trim()) blockers.push('one-time low-value petty-cash justification');
-    if (!pack?.financeEligibilityConfirmed) blockers.push('Finance petty-cash eligibility confirmation');
+    if (!pack?.financeEligibilityConfirmed)
+      blockers.push('Finance petty-cash eligibility confirmation');
     if (!pack?.nonRecurringNonSplitAttested) {
       blockers.push('non-recurring and non-split petty-cash attestation');
     }
@@ -606,8 +738,10 @@ export function evaluateCommitmentReadiness(input: CommitmentReadinessInput): st
   if (input.category === 'manpower' && !input.protections?.manpowerProtectionReviewed) {
     blockers.push('manpower payment-bond or equivalent review');
   }
-  if ((input.construction || input.category === 'construction') &&
-      !input.protections?.constructionProtectionsApproved) {
+  if (
+    (input.construction || input.category === 'construction') &&
+    !input.protections?.constructionProtectionsApproved
+  ) {
     blockers.push('construction performance, warranty, insurance, and regulatory review');
   }
   if (input.equipmentInstallation && !input.protections?.installationProtectionsApproved) {
@@ -656,9 +790,10 @@ export function calculateInvoiceMatch(input: {
 }): { matched: boolean; variance: number } {
   const variance = Number((input.acceptedAmount - input.invoiceAmount).toFixed(2));
   return {
-    matched: input.invoiceAmount > 0
-      && input.invoiceAmount <= input.purchaseOrderAmount
-      && Math.abs(variance) < 0.01,
+    matched:
+      input.invoiceAmount > 0 &&
+      input.invoiceAmount <= input.purchaseOrderAmount &&
+      Math.abs(variance) < 0.01,
     variance,
   };
 }
@@ -671,7 +806,8 @@ export function evaluateIssueReadiness(input: {
   const blockers: string[] = [];
   if (!input.poApproved) blockers.push('PO award approval');
   if (!input.sourceAwardApproved) blockers.push('approved source request');
-  if (!input.vendorEligible) blockers.push('current vendor accreditation or scoped temporary clearance');
+  if (!input.vendorEligible)
+    blockers.push('current vendor accreditation or scoped temporary clearance');
   return blockers;
 }
 
@@ -680,14 +816,21 @@ export function evaluatePaymentPackReadiness(
   pack: PaymentReadinessPack | undefined,
 ): string[] {
   const blockers: string[] = [];
-  const acceptances = (Array.isArray(acceptance) ? acceptance : acceptance ? [acceptance] : [])
-    .filter((item) => item.status !== 'superseded');
+  const acceptances = (
+    Array.isArray(acceptance) ? acceptance : acceptance ? [acceptance] : []
+  ).filter((item) => item.status !== 'superseded');
   if (acceptances.length === 0) blockers.push('requester or Warehouse acceptance');
-  if (acceptances.some((item) => item.exceptions.length > 0)) blockers.push('unresolved acceptance exceptions');
+  if (acceptances.some((item) => item.exceptions.length > 0))
+    blockers.push('unresolved acceptance exceptions');
   if (acceptances.length > 0 && pack) {
     const activeIds = acceptances.map((item) => item.id).sort();
-    const boundIds = [...(pack.acceptancePackIds ?? (pack.acceptancePackId ? [pack.acceptancePackId] : []))].sort();
-    if (activeIds.length !== boundIds.length || activeIds.some((id, index) => id !== boundIds[index])) {
+    const boundIds = [
+      ...(pack.acceptancePackIds ?? (pack.acceptancePackId ? [pack.acceptancePackId] : [])),
+    ].sort();
+    if (
+      activeIds.length !== boundIds.length ||
+      activeIds.some((id, index) => id !== boundIds[index])
+    ) {
       blockers.push('complete active acceptance evidence set');
     }
   }

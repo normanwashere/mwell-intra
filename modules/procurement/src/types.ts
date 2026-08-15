@@ -19,12 +19,7 @@
 // All new fields are optional to keep older localStorage drafts loading.
 
 export type RequestStatus =
-  | 'draft'
-  | 'submitted'
-  | 'under_review'
-  | 'approved'
-  | 'rejected'
-  | 'cancelled';
+  'draft' | 'submitted' | 'under_review' | 'approved' | 'rejected' | 'cancelled';
 
 /**
  * Policy §2 + §5 + Annex A: procurement covers "goods and services … including
@@ -56,24 +51,14 @@ export type RequestCategory =
  * operational clarity and need product-owner sign-off before go-live.
  */
 export type SourcingMethod =
-  | 'petty_cash'
-  | 'small_purchase'
-  | 'rfq'
-  | 'rfp'
-  | 'direct_award'
-  | 'repeat_order'
-  | 'emergency';
+  'petty_cash' | 'small_purchase' | 'rfq' | 'rfp' | 'direct_award' | 'repeat_order' | 'emergency';
 
 /**
  * Multi-tier approval ladder (policy §3 roles + §9 approval matrix). Real DOA
  * mapping lands post-MVP; the enum names the roles the ladder will consult.
  */
 export type ApproverTier =
-  | 'dept_head'
-  | 'procurement_head'
-  | 'finance'
-  | 'legal'
-  | 'final_approver';
+  'dept_head' | 'procurement_head' | 'finance' | 'legal' | 'final_approver';
 
 export type ApprovalStepStatus = 'pending' | 'approved' | 'rejected' | 'skipped';
 
@@ -187,11 +172,7 @@ export interface ComplianceChecks {
   philgepsReference?: string;
   /** Direct-award reason (policy Annex C). Only rendered when sourcing is
    *  `direct_award` or `emergency`. */
-  directAwardReason?:
-    | 'sole_supplier'
-    | 'emergency'
-    | 'repeat_continuity'
-    | 'other';
+  directAwardReason?: 'sole_supplier' | 'emergency' | 'repeat_continuity' | 'other';
   /** Free-text price-reasonableness note; required by Annex C for direct
    *  awards, optional otherwise. */
   priceReasonableness?: string;
@@ -208,7 +189,12 @@ export interface ProcurementRiskFacts {
 }
 
 export interface ProcurementExceptionPack {
-  type: 'direct_award' | 'emergency' | 'repeat_continuity' | 'insufficient_bids' | 'petty_cash_non_accredited';
+  type:
+    | 'direct_award'
+    | 'emergency'
+    | 'repeat_continuity'
+    | 'insufficient_bids'
+    | 'petty_cash_non_accredited';
   justification: string;
   priceReasonableness?: string;
   risksAndMitigations?: string;
@@ -256,6 +242,12 @@ export interface ProcurementRequest {
   decidedAt?: string;
   decisionNote?: string;
   decidedByEmail?: string;
+  cancellationVersion?: number;
+  cancellationReason?: string;
+  cancelledAt?: string;
+  cancelledBy?: string;
+  cancellationRecoveryRequired?: boolean;
+  cancellationBlockers?: Array<{ type: string; recovery: string }>;
   /** Derived: sum(line.quantity * line.unitPrice ?? 0) — computed at write time. */
   estimatedAmount?: number;
 
@@ -279,12 +271,7 @@ export interface ProcurementRequest {
 }
 
 export type PurchaseOrderStatus =
-  | 'draft'
-  | 'pending_approval'
-  | 'approved'
-  | 'issued'
-  | 'closed'
-  | 'cancelled';
+  'draft' | 'pending_approval' | 'approved' | 'issued' | 'closed' | 'cancelled';
 
 export interface PurchaseOrderLine {
   id: string;
@@ -328,7 +315,15 @@ export interface FinancialProtectionRecord {
   requiredAmount?: number;
   requiredPercentage?: number;
   dueBefore?: string;
-  status: 'required' | 'provided' | 'approved' | 'waived' | 'expired' | 'claim_pending' | 'claimed' | 'superseded';
+  status:
+    | 'required'
+    | 'provided'
+    | 'approved'
+    | 'waived'
+    | 'expired'
+    | 'claim_pending'
+    | 'claimed'
+    | 'superseded';
   reviewedAt?: string;
   waiverReason?: string;
   waiverBasis?: string;

@@ -2,15 +2,9 @@ import type { Module, RoleCapabilityRow, UserRoles } from './contracts';
 import { MODULE_LIST } from './contracts';
 import type { CoreCapability, CoreRole } from './modules/core';
 import { coreModule } from './modules/core';
-import type {
-  WarehouseCapability,
-  WarehouseRegistryRole,
-} from './modules/warehouse';
+import type { WarehouseCapability, WarehouseRegistryRole } from './modules/warehouse';
 import { warehouseModule } from './modules/warehouse';
-import type {
-  ProcurementCapability,
-  ProcurementRole,
-} from './modules/procurement';
+import type { ProcurementCapability, ProcurementRole } from './modules/procurement';
 import { procurementModule } from './modules/procurement';
 import type { LegalCapability, LegalRole } from './modules/legal';
 import { legalModule } from './modules/legal';
@@ -77,15 +71,17 @@ export const MODULES = {
   product: productModule,
 } as const;
 
-const readCapability = (
-  module: Module,
-  capability: string,
-): CapabilityClassification => ({ module, capability, access: 'read' });
+const readCapability = (module: Module, capability: string): CapabilityClassification => ({
+  module,
+  capability,
+  access: 'read',
+});
 
-const mutationCapability = (
-  module: Module,
-  capability: string,
-): CapabilityClassification => ({ module, capability, access: 'mutation' });
+const mutationCapability = (module: Module, capability: string): CapabilityClassification => ({
+  module,
+  capability,
+  access: 'mutation',
+});
 
 const onboardingWriteCapability = (
   module: Module,
@@ -144,11 +140,17 @@ export const CAPABILITY_CLASSIFICATIONS: readonly CapabilityClassification[] = [
   readCapability('procurement', 'view_dashboard'),
   mutationCapability('procurement', 'create_request'),
   mutationCapability('procurement', 'manage_rfp'),
+  mutationCapability('procurement', 'manage_request_collaborators'),
+  mutationCapability('procurement', 'cancel_request'),
   mutationCapability('procurement', 'author_po'),
   mutationCapability('procurement', 'approve_request'),
   mutationCapability('procurement', 'approve_award'),
+  mutationCapability('procurement', 'final_approve_po'),
   mutationCapability('procurement', 'manage_vendors'),
   readCapability('procurement', 'view_finance'),
+  mutationCapability('procurement', 'accept_payment_readiness'),
+  mutationCapability('procurement', 'review_payment_readiness'),
+  mutationCapability('procurement', 'release_payment'),
   mutationCapability('procurement', 'admin'),
   readCapability('legal', 'view_dashboard'),
   mutationCapability('legal', 'review_accreditation'),
@@ -187,9 +189,7 @@ function capabilityKey(module: Module, capability: string): string {
 function validateCapabilityClassifications(): void {
   const registryKeys = new Set(
     MODULE_LIST.flatMap((module) =>
-      MODULES[module].capabilities.map((capability) =>
-        capabilityKey(module, capability),
-      ),
+      MODULES[module].capabilities.map((capability) => capabilityKey(module, capability)),
     ),
   );
   const classificationKeys = CAPABILITY_CLASSIFICATIONS.map((item) =>
@@ -225,10 +225,7 @@ export function capabilityClassificationFor(
  * Whether a current capability grant also needs a live learning certification.
  * RBAC remains responsible for denying unknown or ungranted capabilities.
  */
-export function requiresLiveCertification(
-  module: Module,
-  capability: string,
-): boolean {
+export function requiresLiveCertification(module: Module, capability: string): boolean {
   return capabilityClassificationFor(module, capability)?.access === 'mutation';
 }
 
@@ -255,8 +252,7 @@ export function toRoleCapabilityRows(): RoleCapabilityRow[] {
  * Pre-computed flattened grants — mirror this into `core.role_capabilities`.
  * Shape: `{ module, role, cap }[]`.
  */
-export const roleCapabilities: readonly RoleCapabilityRow[] =
-  toRoleCapabilityRows();
+export const roleCapabilities: readonly RoleCapabilityRow[] = toRoleCapabilityRows();
 
 const GRANT_INDEX: ReadonlySet<string> = new Set(
   roleCapabilities.map((row) => grantKey(row.module, row.role, row.cap)),
@@ -294,9 +290,7 @@ export function can<M extends Module>(
 ): boolean {
   const rolesInModule = userRoles[module];
   if (!rolesInModule || rolesInModule.length === 0) return false;
-  return rolesInModule.some((role) =>
-    hasCapInModule(module, role, capability),
-  );
+  return rolesInModule.some((role) => hasCapInModule(module, role, capability));
 }
 
 /** The declared role names for a module (handy for UI role pickers). */

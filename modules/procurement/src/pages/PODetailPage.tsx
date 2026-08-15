@@ -27,15 +27,19 @@ import {
   useProcurementVendors,
   usePurchaseOrders,
 } from '../localStore';
-import { acceptanceTypeForCategory, evaluateCommitmentReadiness, evaluateIssueReadiness, validatePurchaseOrderCancellation } from '../policy';
-import { PaymentReadinessPanel, type PaymentReadinessDraft, type PaymentReleaseDraft } from '../components/PaymentReadinessPanel';
-import { ProcurementAccessDenied } from '../components/ProcurementAccessDenied';
 import {
-  accreditationLabel,
-  formatDate,
-  formatDateTime,
-  poStatusLabel,
-} from '../labels';
+  acceptanceTypeForCategory,
+  evaluateCommitmentReadiness,
+  evaluateIssueReadiness,
+  validatePurchaseOrderCancellation,
+} from '../policy';
+import {
+  PaymentReadinessPanel,
+  type PaymentReadinessDraft,
+  type PaymentReleaseDraft,
+} from '../components/PaymentReadinessPanel';
+import { ProcurementAccessDenied } from '../components/ProcurementAccessDenied';
+import { accreditationLabel, formatDate, formatDateTime, poStatusLabel } from '../labels';
 import { makeTypedSignature } from '../signature';
 
 const PO_TONE: Record<PurchaseOrderStatus, 'slate' | 'cyan' | 'amber' | 'emerald' | 'rose'> = {
@@ -49,8 +53,16 @@ const PO_TONE: Record<PurchaseOrderStatus, 'slate' | 'cyan' | 'amber' | 'emerald
 
 const lineColumns: Column<PurchaseOrderLine>[] = [
   { key: 'description', header: 'Description', render: (r) => r.description },
-  { key: 'quantity', header: 'Ordered', render: (r) => `${r.quantity} ${r.uom ?? 'ea'}` },
-  { key: 'received', header: 'Received', render: (r) => `${r.receivedQuantity} / ${r.quantity}` },
+  {
+    key: 'quantity',
+    header: 'Ordered',
+    render: (r) => `${r.quantity} ${r.uom ?? 'ea'}`,
+  },
+  {
+    key: 'received',
+    header: 'Received',
+    render: (r) => `${r.receivedQuantity} / ${r.quantity}`,
+  },
   {
     key: 'unitPrice',
     header: 'Unit price',
@@ -66,18 +78,32 @@ const lineColumns: Column<PurchaseOrderLine>[] = [
 export function PODetailPage() {
   const { id = '' } = useParams();
   const {
-    rows, approve, issue, cancel, recordAcceptance,
-    createPolicyEvidence, reviewPolicyEvidence, supersedePolicyEvidence,
-    createFinancialProtection, reviewFinancialProtection, supersedeFinancialProtection,
-    preparePayment, reviewPayment, releasePayment, loading,
+    rows,
+    approve,
+    issue,
+    cancel,
+    recordAcceptance,
+    createPolicyEvidence,
+    reviewPolicyEvidence,
+    supersedePolicyEvidence,
+    createFinancialProtection,
+    reviewFinancialProtection,
+    supersedeFinancialProtection,
+    preparePayment,
+    reviewPayment,
+    releasePayment,
+    loading,
   } = usePurchaseOrders();
   const { rows: requests } = useProcurementRequests();
   const vendors = useProcurementVendors();
   const { profile } = useSession();
   const { success, error } = useToast();
   const canApproveAward = useCan('procurement', 'approve_award');
+  const canFinalApprovePo = useCan('procurement', 'final_approve_po');
   const canAuthorPo = useCan('procurement', 'author_po');
   const canViewFinance = useCan('procurement', 'view_finance');
+  const canAcceptPayment = useCan('procurement', 'accept_payment_readiness');
+  const canReleasePayment = useCan('procurement', 'release_payment');
   const canAdmin = useCan('procurement', 'admin');
   const canReceiveInWarehouse = useCan('warehouse', 'receive_stock');
   const po: PurchaseOrder | undefined = useMemo(() => rows.find((r) => r.id === id), [rows, id]);
@@ -90,13 +116,18 @@ export function PODetailPage() {
     [po, requests],
   );
   const isSourceRequester = Boolean(
-    profile && sourceRequest && (
-      sourceRequest.requesterId === profile.id ||
-      (profile.email && sourceRequest.requesterEmail === profile.email)
-    ),
+    profile &&
+    sourceRequest &&
+    (sourceRequest.requesterId === profile.id ||
+      (profile.email && sourceRequest.requesterEmail === profile.email)),
   );
   const canViewPurchaseOrders =
-    canAuthorPo || canApproveAward || canViewFinance || canAdmin || isSourceRequester;
+    canAuthorPo ||
+    canApproveAward ||
+    canFinalApprovePo ||
+    canViewFinance ||
+    canAdmin ||
+    isSourceRequester;
 
   // Signature-capture sheet state for the award approval flow.
   const [signOpen, setSignOpen] = useState(false);
@@ -145,19 +176,26 @@ export function PODetailPage() {
   const accreditationOk = vendor ? isAccredited(vendor) : false;
   const sourceAwardOk = sourceRequest?.status === 'approved';
   const databaseCommitmentBlockers = po.commitmentReadiness?.blockers;
-  const issueBlockers = [...evaluateIssueReadiness({
-    poApproved: po.status === 'approved',
-    sourceAwardApproved: sourceAwardOk,
-    vendorEligible: accreditationOk,
-  }), ...(databaseCommitmentBlockers ?? evaluateCommitmentReadiness({
-    sourcingMethod: sourceRequest?.sourcingMethod ?? 'rfq',
-    vendorEligible: accreditationOk,
-    category: sourceRequest?.category,
-    exceptionPack: sourceRequest?.exceptionPack ?? sourceRequest?.compliance?.exceptionPack,
-    importationRequired: sourceRequest?.riskFacts?.importation ?? sourceRequest?.compliance?.riskFacts?.importation,
-    importationPlan: sourceRequest?.importationPlan ?? sourceRequest?.compliance?.importationPlan,
-    construction: sourceRequest?.category === 'construction',
-  }))];
+  const issueBlockers = [
+    ...evaluateIssueReadiness({
+      poApproved: po.status === 'approved',
+      sourceAwardApproved: sourceAwardOk,
+      vendorEligible: accreditationOk,
+    }),
+    ...(databaseCommitmentBlockers ??
+      evaluateCommitmentReadiness({
+        sourcingMethod: sourceRequest?.sourcingMethod ?? 'rfq',
+        vendorEligible: accreditationOk,
+        category: sourceRequest?.category,
+        exceptionPack: sourceRequest?.exceptionPack ?? sourceRequest?.compliance?.exceptionPack,
+        importationRequired:
+          sourceRequest?.riskFacts?.importation ??
+          sourceRequest?.compliance?.riskFacts?.importation,
+        importationPlan:
+          sourceRequest?.importationPlan ?? sourceRequest?.compliance?.importationPlan,
+        construction: sourceRequest?.category === 'construction',
+      })),
+  ];
   const fullyReceived = po.receiptStatus
     ? po.receiptStatus.outstandingQuantity <= 0
     : po.lines.every((line) => line.receivedQuantity >= line.quantity);
@@ -169,11 +207,15 @@ export function PODetailPage() {
       return;
     }
     if (!accreditationOk) {
-      error('Vendor accreditation or scoped temporary clearance must be current to approve this PO.');
+      error(
+        'Vendor accreditation or scoped temporary clearance must be current to approve this PO.',
+      );
       return;
     }
     if (!sourceAwardOk) {
-      error('The source request must complete its approval ladder before the PO award can be approved.');
+      error(
+        'The source request must complete its approval ladder before the PO award can be approved.',
+      );
       return;
     }
     setSignature(null);
@@ -210,7 +252,10 @@ export function PODetailPage() {
       vendorEligible: accreditationOk,
     });
     if (next) success(`PO ${next.poNumber} issued`);
-    else error('Could not issue the PO because a policy prerequisite changed. Refresh and review the blockers.');
+    else
+      error(
+        'Could not issue the PO because a policy prerequisite changed. Refresh and review the blockers.',
+      );
   }
   async function handleCancel() {
     if (!po) return;
@@ -221,19 +266,32 @@ export function PODetailPage() {
     }
     setCancelling(true);
     try {
-      const next = await cancel(po.id, { reason: cancellationReason, actorEmail: profile?.email });
-      if (!next) throw new Error('The PO could not be cancelled. Refresh and verify its current status.');
+      const next = await cancel(po.id, {
+        reason: cancellationReason,
+        actorEmail: profile?.email,
+      });
+      if (!next)
+        throw new Error('The PO could not be cancelled. Refresh and verify its current status.');
       success(`PO ${next.poNumber} cancelled`);
       setCancelOpen(false);
       setCancellationReason('');
     } catch (cause) {
-      error(cause instanceof Error ? cause.message : 'The cancellation could not be recorded. The PO remains unchanged.');
+      error(
+        cause instanceof Error
+          ? cause.message
+          : 'The cancellation could not be recorded. The PO remains unchanged.',
+      );
     } finally {
       setCancelling(false);
     }
   }
 
-  async function handleAcceptance(scope: string, exceptions: string[], acceptedLines: Array<{ poLineId: string; quantity: number }>, acceptedAmount?: number) {
+  async function handleAcceptance(
+    scope: string,
+    exceptions: string[],
+    acceptedLines: Array<{ poLineId: string; quantity: number }>,
+    acceptedAmount?: number,
+  ) {
     if (!po) return;
     const next = await recordAcceptance(po.id, {
       acceptanceType,
@@ -244,14 +302,15 @@ export function PODetailPage() {
       actorEmail: profile?.email,
     });
     if (next) {
-      const acceptanceLabel = acceptanceType === 'goods'
-        ? 'Technical'
-        : acceptanceType === 'service'
-          ? 'Service'
-          : 'Milestone';
+      const acceptanceLabel =
+        acceptanceType === 'goods'
+          ? 'Technical'
+          : acceptanceType === 'service'
+            ? 'Service'
+            : 'Milestone';
       success(`${acceptanceLabel} acceptance recorded`);
-    }
-    else error('Could not record acceptance. A goods receipt or authorized requester is required.');
+    } else
+      error('Could not record acceptance. A goods receipt or authorized requester is required.');
   }
 
   async function handleAddEvidence() {
@@ -259,54 +318,89 @@ export function PODetailPage() {
     let facts: Record<string, unknown>;
     try {
       const parsed = JSON.parse(evidenceFacts) as unknown;
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('object required');
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
+        throw new Error('object required');
       facts = parsed as Record<string, unknown>;
-    } catch { error('Evidence facts must be valid JSON.'); return; }
-    await createPolicyEvidence(po.requestId, { controlCode: evidenceControlCode.trim(), evidenceType: evidenceType.trim(), facts });
+    } catch {
+      error('Evidence facts must be valid JSON.');
+      return;
+    }
+    await createPolicyEvidence(po.requestId, {
+      controlCode: evidenceControlCode.trim(),
+      evidenceType: evidenceType.trim(),
+      facts,
+    });
     setEvidenceControlCode('');
     success('Policy evidence submitted for review');
   }
 
   async function handleAddProtection() {
     if (!po?.requestId || !protectionType.trim() || !protectionBasis.trim()) return;
-    await createFinancialProtection(po.requestId, { protectionType: protectionType.trim(), triggerBasis: protectionBasis.trim(), requiredAmount: protectionAmount ? Number(protectionAmount) : undefined });
+    await createFinancialProtection(po.requestId, {
+      protectionType: protectionType.trim(),
+      triggerBasis: protectionBasis.trim(),
+      requiredAmount: protectionAmount ? Number(protectionAmount) : undefined,
+    });
     success('Financial protection requirement added');
   }
 
   async function handleProtectionWaiver() {
-    if (!waiverProtectionId || !waiverReason.trim() || !waiverBasis.trim() || !waiverEvidence.trim()) return;
+    if (
+      !waiverProtectionId ||
+      !waiverReason.trim() ||
+      !waiverBasis.trim() ||
+      !waiverEvidence.trim()
+    )
+      return;
     await reviewFinancialProtection(waiverProtectionId, 'waived', {
-      reason: waiverReason.trim(), basis: waiverBasis.trim(), evidenceStoragePath: waiverEvidence.trim(),
+      reason: waiverReason.trim(),
+      basis: waiverBasis.trim(),
+      evidenceStoragePath: waiverEvidence.trim(),
     });
     setWaiverProtectionId(null);
-    setWaiverReason(''); setWaiverBasis(''); setWaiverEvidence('');
+    setWaiverReason('');
+    setWaiverBasis('');
+    setWaiverEvidence('');
     success('Governed protection waiver recorded');
   }
 
   async function handlePreparePayment(draft: PaymentReadinessDraft) {
     if (!po) return;
-    const next = await preparePayment(po.id, { ...draft, actorEmail: profile?.email });
+    const next = await preparePayment(po.id, {
+      ...draft,
+      actorEmail: profile?.email,
+    });
     if (next) success('Payment evidence sent to Finance');
     else error('Could not prepare payment readiness. Record acceptance first.');
   }
 
   async function handleReviewPayment(status: 'returned' | 'accepted', note: string) {
     if (!po) return;
-    const next = await reviewPayment(po.id, { status, note, actorEmail: profile?.email });
-    if (next) success(status === 'accepted' ? 'Payment pack accepted' : 'Payment pack returned for correction');
+    const next = await reviewPayment(po.id, {
+      status,
+      note,
+      actorEmail: profile?.email,
+    });
+    if (next)
+      success(
+        status === 'accepted' ? 'Payment pack accepted' : 'Payment pack returned for correction',
+      );
     else error('Could not save the Finance review.');
   }
 
   async function handleReleasePayment(draft: PaymentReleaseDraft) {
     if (!po) return;
-    const next = await releasePayment(po.id, { ...draft, actorEmail: profile?.email });
+    const next = await releasePayment(po.id, {
+      ...draft,
+      actorEmail: profile?.email,
+    });
     if (next) success('Payment release posted');
     else error('Could not post the payment release. Check the balance and payment reference.');
   }
 
   // PR-27: hero primary action = the PO's current lifecycle action.
   const heroAction =
-    po.status === 'draft' && canApproveAward && accreditationOk && sourceAwardOk ? (
+    po.status === 'draft' && canFinalApprovePo && accreditationOk && sourceAwardOk ? (
       <HeroChipButton icon="signature" onClick={openApprovalSheet}>
         Sign & approve award
       </HeroChipButton>
@@ -315,7 +409,10 @@ export function PODetailPage() {
         Issue to vendor
       </HeroChipButton>
     ) : po.status === 'issued' && !fullyReceived && canReceiveInWarehouse ? (
-      <HeroChipButton icon="box" href={`/warehouse/purchase-orders?po=${encodeURIComponent(po.id)}`}>
+      <HeroChipButton
+        icon="box"
+        href={`/warehouse/purchase-orders?po=${encodeURIComponent(po.id)}`}
+      >
         Open Warehouse handoff
       </HeroChipButton>
     ) : (
@@ -338,7 +435,9 @@ export function PODetailPage() {
               <Badge tone={PO_TONE[po.status]}>{poStatusLabel(po.status)}</Badge>
             </HeroStat>
             <HeroStat label="Total" align="right">
-              <p className="tnum font-display text-2xl font-extrabold text-ink">{money(po.total)}</p>
+              <p className="tnum font-display text-2xl font-extrabold text-ink">
+                {money(po.total)}
+              </p>
             </HeroStat>
           </div>
         }
@@ -355,11 +454,11 @@ export function PODetailPage() {
           </Badge>
         )}
         <span>
-          Authored by{' '}
-          <span className="font-medium text-ink">{po.actorEmail ?? '—'}</span>
+          Authored by <span className="font-medium text-ink">{po.actorEmail ?? '—'}</span>
           {sourceRequest && (
             <>
-              {' '}· from a request by{' '}
+              {' '}
+              · from a request by{' '}
               <span className="font-medium text-ink">
                 {sourceRequest.requesterName ?? sourceRequest.requesterEmail ?? '—'}
               </span>
@@ -375,7 +474,9 @@ export function PODetailPage() {
               {po.expectedDate && (
                 <span className="block">Expected {formatDate(po.expectedDate)}</span>
               )}
-              <span className="block">Origin: {po.origin === 'procurement' ? 'Procurement' : 'Warehouse'}</span>
+              <span className="block">
+                Origin: {po.origin === 'procurement' ? 'Procurement' : 'Warehouse'}
+              </span>
             </span>
           }
         />
@@ -388,7 +489,9 @@ export function PODetailPage() {
               <Icon name="alert" className="h-5 w-5" />
             </span>
             <div className="min-w-0">
-              <p className="font-semibold text-ink">Award blocked — vendor accreditation isn&apos;t current.</p>
+              <p className="font-semibold text-ink">
+                Award blocked — vendor accreditation isn&apos;t current.
+              </p>
               <p className="mt-0.5 text-sm text-muted">
                 Ask Legal to close the accreditation case (status must be
                 <span className="mx-1 font-semibold">Accredited</span>
@@ -399,20 +502,27 @@ export function PODetailPage() {
         </Card>
       )}
 
-      {!sourceAwardOk && (po.status === 'draft' || po.status === 'pending_approval' || po.status === 'approved') && (
-        <Card className="border-amber-500/30 bg-amber-500/5">
-          <div className="flex items-start gap-3">
-            <Icon name="alert" className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
-            <div>
-              <p className="font-semibold text-ink">PO blocked - source award is not approved.</p>
-              <p className="text-sm text-muted">Complete the request approval ladder and preserve the Award Recommendation before approval or issue.</p>
+      {!sourceAwardOk &&
+        (po.status === 'draft' || po.status === 'pending_approval' || po.status === 'approved') && (
+          <Card className="border-amber-500/30 bg-amber-500/5">
+            <div className="flex items-start gap-3">
+              <Icon name="alert" className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+              <div>
+                <p className="font-semibold text-ink">PO blocked - source award is not approved.</p>
+                <p className="text-sm text-muted">
+                  Complete the request approval ladder and preserve the Award Recommendation before
+                  approval or issue.
+                </p>
+              </div>
             </div>
-          </div>
-        </Card>
-      )}
+          </Card>
+        )}
 
       <div>
-        <SectionTitle title="Line items" subtitle={`${po.lines.length} line${po.lines.length === 1 ? '' : 's'}`} />
+        <SectionTitle
+          title="Line items"
+          subtitle={`${po.lines.length} line${po.lines.length === 1 ? '' : 's'}`}
+        />
         <DataTable rows={po.lines} columns={lineColumns} keyOf={(r) => r.id} />
       </div>
 
@@ -441,11 +551,12 @@ export function PODetailPage() {
             Issue to vendor
           </button>
         )}
-        {canAuthorPo && (po.status === 'draft' || po.status === 'approved' || po.status === 'issued') && (
-          <button type="button" onClick={() => setCancelOpen(true)} className="btn-outline">
-            Cancel PO
-          </button>
-        )}
+        {canAuthorPo &&
+          (po.status === 'draft' || po.status === 'approved' || po.status === 'issued') && (
+            <button type="button" onClick={() => setCancelOpen(true)} className="btn-outline">
+              Cancel PO
+            </button>
+          )}
         {po.requestId && (
           <Link to={`/requests/${po.requestId}`} className="btn-ghost">
             <Icon name="clipboard" className="h-4 w-4" />
@@ -465,24 +576,62 @@ export function PODetailPage() {
               <span className="font-semibold text-ink">
                 {po.commitmentReadiness.ready ? 'Ready to commit' : 'Commitment blocked'}
               </span>
-              <span className={po.commitmentReadiness.ready ? 'chip bg-emerald-500/15 text-emerald-700' : 'chip bg-rose-500/15 text-rose-700'}>
+              <span
+                className={
+                  po.commitmentReadiness.ready
+                    ? 'chip bg-emerald-500/15 text-emerald-700'
+                    : 'chip bg-rose-500/15 text-rose-700'
+                }
+              >
                 {po.commitmentReadiness.phase}
               </span>
             </div>
             {po.commitmentReadiness.blockers.length ? (
               <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-rose-700">
-                {po.commitmentReadiness.blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}
+                {po.commitmentReadiness.blockers.map((blocker) => (
+                  <li key={blocker}>{blocker}</li>
+                ))}
               </ul>
             ) : null}
             {po.commitmentReadiness.evidence.length ? (
               <div className="mt-4 divide-y divide-line border-t border-line">
                 {po.commitmentReadiness.evidence.map((evidence) => (
-                  <div key={evidence.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
+                  <div
+                    key={evidence.id}
+                    className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm"
+                  >
                     <span className="font-medium text-ink">{evidence.controlCode}</span>
-                    <span className="text-muted">{evidence.evidenceType} · {evidence.reviewStatus}</span>
+                    <span className="text-muted">
+                      {evidence.evidenceType} · {evidence.reviewStatus}
+                    </span>
                     <div className="flex gap-2">
-                      {canApproveAward && evidence.reviewStatus === 'submitted' ? <><button type="button" className="btn-ghost btn-sm" onClick={() => void reviewPolicyEvidence(evidence.id, 'approved')}>Approve</button><button type="button" className="btn-ghost btn-sm" onClick={() => void reviewPolicyEvidence(evidence.id, 'rejected')}>Reject</button></> : null}
-                      {canAuthorPo && evidence.reviewStatus !== 'superseded' ? <button type="button" className="btn-ghost btn-sm" onClick={() => void supersedePolicyEvidence(evidence.id)}>Supersede</button> : null}
+                      {canApproveAward && evidence.reviewStatus === 'submitted' ? (
+                        <>
+                          <button
+                            type="button"
+                            className="btn-ghost btn-sm"
+                            onClick={() => void reviewPolicyEvidence(evidence.id, 'approved')}
+                          >
+                            Approve
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-ghost btn-sm"
+                            onClick={() => void reviewPolicyEvidence(evidence.id, 'rejected')}
+                          >
+                            Reject
+                          </button>
+                        </>
+                      ) : null}
+                      {canAuthorPo && evidence.reviewStatus !== 'superseded' ? (
+                        <button
+                          type="button"
+                          className="btn-ghost btn-sm"
+                          onClick={() => void supersedePolicyEvidence(evidence.id)}
+                        >
+                          Supersede
+                        </button>
+                      ) : null}
                     </div>
                   </div>
                 ))}
@@ -491,26 +640,90 @@ export function PODetailPage() {
             {po.commitmentReadiness.protections.length ? (
               <div className="mt-4 divide-y divide-line border-t border-line">
                 {po.commitmentReadiness.protections.map((protection) => (
-                  <div key={protection.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
+                  <div
+                    key={protection.id}
+                    className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm"
+                  >
                     <span className="font-medium text-ink">{protection.protectionType}</span>
-                    <span className="text-muted">{protection.triggerBasis} · {protection.status}</span>
+                    <span className="text-muted">
+                      {protection.triggerBasis} · {protection.status}
+                    </span>
                     {protection.status === 'waived' ? (
                       <span className="basis-full text-xs text-muted">
-                        {protection.waiverBasis} · {protection.waiverReason} · {protection.waiverEvidenceStoragePath}
+                        {protection.waiverBasis} · {protection.waiverReason} ·{' '}
+                        {protection.waiverEvidenceStoragePath}
                       </span>
                     ) : null}
                     <div className="flex gap-2">
-                      {(canApproveAward || canViewFinance) && ['required', 'provided'].includes(protection.status) ? <><button type="button" className="btn-ghost btn-sm" onClick={() => void reviewFinancialProtection(protection.id, 'approved')}>Approve</button><button type="button" className="btn-ghost btn-sm" onClick={() => setWaiverProtectionId(protection.id)}>Waive with evidence</button></> : null}
-                      {canAuthorPo && protection.status !== 'superseded' ? <button type="button" className="btn-ghost btn-sm" onClick={() => void supersedeFinancialProtection(protection.id)}>Supersede</button> : null}
+                      {(canApproveAward || canViewFinance) &&
+                      ['required', 'provided'].includes(protection.status) ? (
+                        <>
+                          <button
+                            type="button"
+                            className="btn-ghost btn-sm"
+                            onClick={() =>
+                              void reviewFinancialProtection(protection.id, 'approved')
+                            }
+                          >
+                            Approve
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-ghost btn-sm"
+                            onClick={() => setWaiverProtectionId(protection.id)}
+                          >
+                            Waive with evidence
+                          </button>
+                        </>
+                      ) : null}
+                      {canAuthorPo && protection.status !== 'superseded' ? (
+                        <button
+                          type="button"
+                          className="btn-ghost btn-sm"
+                          onClick={() => void supersedeFinancialProtection(protection.id)}
+                        >
+                          Supersede
+                        </button>
+                      ) : null}
                     </div>
                   </div>
                 ))}
                 {waiverProtectionId ? (
                   <div className="space-y-2 py-3">
-                    <label className="block text-sm font-semibold text-ink">Waiver rationale<textarea className="input mt-1" value={waiverReason} onChange={(event) => setWaiverReason(event.target.value)} /></label>
-                    <label className="block text-sm font-semibold text-ink">Authorized waiver basis<input className="input mt-1" value={waiverBasis} onChange={(event) => setWaiverBasis(event.target.value)} /></label>
-                    <label className="block text-sm font-semibold text-ink">Supporting evidence path<input className="input mt-1" value={waiverEvidence} onChange={(event) => setWaiverEvidence(event.target.value)} /></label>
-                    <button type="button" className="btn-primary btn-sm" disabled={!waiverReason.trim() || !waiverBasis.trim() || !waiverEvidence.trim()} onClick={() => void handleProtectionWaiver()}>Confirm governed waiver</button>
+                    <label className="block text-sm font-semibold text-ink">
+                      Waiver rationale
+                      <textarea
+                        className="input mt-1"
+                        value={waiverReason}
+                        onChange={(event) => setWaiverReason(event.target.value)}
+                      />
+                    </label>
+                    <label className="block text-sm font-semibold text-ink">
+                      Authorized waiver basis
+                      <input
+                        className="input mt-1"
+                        value={waiverBasis}
+                        onChange={(event) => setWaiverBasis(event.target.value)}
+                      />
+                    </label>
+                    <label className="block text-sm font-semibold text-ink">
+                      Supporting evidence path
+                      <input
+                        className="input mt-1"
+                        value={waiverEvidence}
+                        onChange={(event) => setWaiverEvidence(event.target.value)}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className="btn-primary btn-sm"
+                      disabled={
+                        !waiverReason.trim() || !waiverBasis.trim() || !waiverEvidence.trim()
+                      }
+                      onClick={() => void handleProtectionWaiver()}
+                    >
+                      Confirm governed waiver
+                    </button>
                   </div>
                 ) : null}
               </div>
@@ -518,16 +731,76 @@ export function PODetailPage() {
             {canAuthorPo && po.requestId ? (
               <div className="mt-4 grid gap-4 border-t border-line pt-4 lg:grid-cols-2">
                 <section className="space-y-2">
-                  <label className="block text-sm font-semibold text-ink">Control code<input className="input mt-1" value={evidenceControlCode} onChange={(event) => setEvidenceControlCode(event.target.value)} /></label>
-                  <label className="block text-sm font-semibold text-ink">Evidence type<input className="input mt-1" value={evidenceType} onChange={(event) => setEvidenceType(event.target.value)} /></label>
-                  <label className="block text-sm font-semibold text-ink">Evidence facts (JSON)<textarea className="input mt-1" rows={3} value={evidenceFacts} onChange={(event) => setEvidenceFacts(event.target.value)} /></label>
-                  <button type="button" className="btn-outline" disabled={!evidenceControlCode.trim()} onClick={() => void handleAddEvidence()}><Icon name="plus" className="h-4 w-4" />Add policy evidence</button>
+                  <label className="block text-sm font-semibold text-ink">
+                    Control code
+                    <input
+                      className="input mt-1"
+                      value={evidenceControlCode}
+                      onChange={(event) => setEvidenceControlCode(event.target.value)}
+                    />
+                  </label>
+                  <label className="block text-sm font-semibold text-ink">
+                    Evidence type
+                    <input
+                      className="input mt-1"
+                      value={evidenceType}
+                      onChange={(event) => setEvidenceType(event.target.value)}
+                    />
+                  </label>
+                  <label className="block text-sm font-semibold text-ink">
+                    Evidence facts (JSON)
+                    <textarea
+                      className="input mt-1"
+                      rows={3}
+                      value={evidenceFacts}
+                      onChange={(event) => setEvidenceFacts(event.target.value)}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="btn-outline"
+                    disabled={!evidenceControlCode.trim()}
+                    onClick={() => void handleAddEvidence()}
+                  >
+                    <Icon name="plus" className="h-4 w-4" />
+                    Add policy evidence
+                  </button>
                 </section>
                 <section className="space-y-2">
-                  <label className="block text-sm font-semibold text-ink">Protection type<input className="input mt-1" value={protectionType} onChange={(event) => setProtectionType(event.target.value)} /></label>
-                  <label className="block text-sm font-semibold text-ink">Trigger basis<input className="input mt-1" value={protectionBasis} onChange={(event) => setProtectionBasis(event.target.value)} /></label>
-                  <label className="block text-sm font-semibold text-ink">Required amount<input className="input mt-1" type="number" min={0} value={protectionAmount} onChange={(event) => setProtectionAmount(event.target.value)} /></label>
-                  <button type="button" className="btn-outline" onClick={() => void handleAddProtection()}><Icon name="plus" className="h-4 w-4" />Add financial protection</button>
+                  <label className="block text-sm font-semibold text-ink">
+                    Protection type
+                    <input
+                      className="input mt-1"
+                      value={protectionType}
+                      onChange={(event) => setProtectionType(event.target.value)}
+                    />
+                  </label>
+                  <label className="block text-sm font-semibold text-ink">
+                    Trigger basis
+                    <input
+                      className="input mt-1"
+                      value={protectionBasis}
+                      onChange={(event) => setProtectionBasis(event.target.value)}
+                    />
+                  </label>
+                  <label className="block text-sm font-semibold text-ink">
+                    Required amount
+                    <input
+                      className="input mt-1"
+                      type="number"
+                      min={0}
+                      value={protectionAmount}
+                      onChange={(event) => setProtectionAmount(event.target.value)}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="btn-outline"
+                    onClick={() => void handleAddProtection()}
+                  >
+                    <Icon name="plus" className="h-4 w-4" />
+                    Add financial protection
+                  </button>
                 </section>
               </div>
             ) : null}
@@ -550,7 +823,9 @@ export function PODetailPage() {
                 </p>
               </div>
               <div>
-                <p className="text-xs font-semibold uppercase text-faint">Rejected or quarantined</p>
+                <p className="text-xs font-semibold uppercase text-faint">
+                  Rejected or quarantined
+                </p>
                 <p className="tnum mt-1 text-xl font-bold text-ink">
                   {po.receiptStatus?.rejectedOrQuarantinedQuantity ?? 0}
                 </p>
@@ -558,22 +833,29 @@ export function PODetailPage() {
               <div>
                 <p className="text-xs font-semibold uppercase text-faint">Outstanding</p>
                 <p className="tnum mt-1 text-xl font-bold text-ink">
-                  {po.receiptStatus?.outstandingQuantity ?? po.lines.reduce(
-                    (sum, line) => sum + Math.max(line.quantity - line.receivedQuantity, 0),
-                    0,
-                  )}
+                  {po.receiptStatus?.outstandingQuantity ??
+                    po.lines.reduce(
+                      (sum, line) => sum + Math.max(line.quantity - line.receivedQuantity, 0),
+                      0,
+                    )}
                 </p>
               </div>
             </div>
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4 text-sm text-muted">
               <span>
-                QC: <strong className="text-ink">{po.receiptStatus?.latestQcStatus ?? 'not_received'}</strong>
+                QC:{' '}
+                <strong className="text-ink">
+                  {po.receiptStatus?.latestQcStatus ?? 'not_received'}
+                </strong>
                 {po.receiptStatus?.latestReceiptReference
                   ? ` · Latest receipt ${po.receiptStatus.latestReceiptReference}`
                   : ''}
               </span>
               {canReceiveInWarehouse && po.status === 'issued' && !fullyReceived ? (
-                <a href={`/warehouse/purchase-orders?po=${encodeURIComponent(po.id)}`} className="btn-outline">
+                <a
+                  href={`/warehouse/purchase-orders?po=${encodeURIComponent(po.id)}`}
+                  className="btn-outline"
+                >
                   Open Warehouse handoff
                 </a>
               ) : null}
@@ -594,16 +876,22 @@ export function PODetailPage() {
               acceptances={po.acceptancePacks}
               acceptanceLines={(po.receiptStatus?.acceptedLines ?? []).map((line) => ({
                 poLineId: line.poLineId,
-                description: po.lines.find((poLine) => poLine.id === line.poLineId)?.description ?? line.poLineId,
+                description:
+                  po.lines.find((poLine) => poLine.id === line.poLineId)?.description ??
+                  line.poLineId,
                 qcAcceptedQuantity: line.acceptedQuantity,
               }))}
               pack={po.paymentReadiness}
               stalenessEvents={po.paymentReadinessStalenessEvents}
               purchaseOrderAmount={po.total}
               acceptanceType={acceptanceType}
-              canAccept={Boolean(po.commitmentReadiness?.canRecordAcceptance ?? isSourceRequester) && (acceptanceType !== 'goods' || (po.receiptStatus?.acceptedLines?.length ?? 0) > 0)}
+              canAccept={
+                Boolean(po.commitmentReadiness?.canRecordAcceptance ?? isSourceRequester) &&
+                (acceptanceType !== 'goods' || (po.receiptStatus?.acceptedLines?.length ?? 0) > 0)
+              }
               canPrepare={canAuthorPo}
-              canReview={canViewFinance}
+              canReview={canAcceptPayment}
+              canRelease={canReleasePayment}
               onAccept={handleAcceptance}
               onPrepare={handlePreparePayment}
               onReview={handleReviewPayment}
@@ -635,11 +923,7 @@ export function PODetailPage() {
         description={`PO ${po.poNumber} — ${po.vendorName}`}
         footer={
           <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => setSignOpen(false)}
-              className="btn-ghost"
-            >
+            <button type="button" onClick={() => setSignOpen(false)} className="btn-ghost">
               Cancel
             </button>
             <button
@@ -669,8 +953,8 @@ export function PODetailPage() {
           </div>
           <p className="text-sm text-muted">
             Approving this award authorises PO {po.poNumber} to be issued to{' '}
-            <span className="font-semibold text-ink">{po.vendorName}</span>. Your
-            signature is stored on the audit trail alongside the approval.
+            <span className="font-semibold text-ink">{po.vendorName}</span>. Your signature is
+            stored on the audit trail alongside the approval.
           </p>
           <div className="space-y-1">
             <label
@@ -701,8 +985,9 @@ export function PODetailPage() {
             {!signature && seededSignature && (
               <p className="rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-xs text-emerald-800 dark:text-emerald-300">
                 <Icon name="check" className="mr-1 inline h-3.5 w-3.5" />
-                Ready to sign as{' '}
-                <span className="font-semibold">{seededSignature.signerName}</span>{' '}
+                Ready to sign as <span className="font-semibold">
+                  {seededSignature.signerName}
+                </span>{' '}
                 (typed signature) — or draw / re-type to replace it.
               </p>
             )}
@@ -719,7 +1004,10 @@ export function PODetailPage() {
           <button
             type="button"
             className="btn-primary w-full"
-            disabled={cancelling || !validatePurchaseOrderCancellation(po.status, cancellationReason).allowed}
+            disabled={
+              cancelling ||
+              !validatePurchaseOrderCancellation(po.status, cancellationReason).allowed
+            }
             onClick={() => void handleCancel()}
           >
             {cancelling ? 'Recording cancellation...' : 'Confirm PO cancellation'}
@@ -737,7 +1025,6 @@ export function PODetailPage() {
           />
         </label>
       </Sheet>
-
     </div>
   );
 }

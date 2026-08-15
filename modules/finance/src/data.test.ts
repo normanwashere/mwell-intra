@@ -4,6 +4,7 @@ import {
   manageLiveFinanceCloseEntry,
   scopeFinanceData,
   summarizeFinanceData,
+  validateFinanceCloseEntry,
 } from './data';
 import { FINANCE_DEMO_DATA } from './seed';
 
@@ -66,6 +67,77 @@ describe('manageLiveFinanceCloseEntry', () => {
         }),
       },
     ]);
+  });
+});
+
+describe('Finance close source binding', () => {
+  it('requires canonical source and evidence record identities', () => {
+    expect(validateFinanceCloseEntry({ action: 'save', amount: 100 })).toEqual(
+      expect.arrayContaining(['Select a canonical source record.', 'Select registered evidence.']),
+    );
+  });
+
+  it('passes source, evidence, and actor-lineage fields to the governed RPC', async () => {
+    const calls: unknown[] = [];
+    const client = {
+      schema: () => ({
+        rpc: async (_name: string, args: unknown) => {
+          calls.push(args);
+          return {
+            data: {
+              id: 'close-2',
+              period_start: '2026-08-01',
+              period_end: '2026-08-31',
+              entry_type: 'cogs',
+              source_module: 'procurement',
+              source_reference: 'PO-1',
+              source_record_type: 'purchase_order',
+              source_record_id: 'po-1',
+              evidence_record_type: 'request_attachment',
+              evidence_record_id: 'att-1',
+              amount: 100,
+              status: 'ready',
+              prepared_by: 'finance-a',
+              prepared_by_name: 'Finance A',
+              prepared_by_email: 'finance-a@mwell.com.ph',
+              prepared_at: '2026-08-15T01:00:00Z',
+              updated_at: '2026-08-15T01:00:00Z',
+            },
+            error: null,
+          };
+        },
+      }),
+    };
+
+    const result = await manageLiveFinanceCloseEntry(client as never, {
+      action: 'save',
+      amount: 100,
+      periodStart: '2026-08-01',
+      periodEnd: '2026-08-31',
+      entryType: 'cogs',
+      sourceModule: 'procurement',
+      sourceReference: 'PO-1',
+      sourceRecordType: 'purchase_order',
+      sourceRecordId: 'po-1',
+      evidenceRecordType: 'request_attachment',
+      evidenceRecordId: 'att-1',
+    });
+
+    expect(calls).toEqual([
+      {
+        payload: expect.objectContaining({
+          source_record_type: 'purchase_order',
+          source_record_id: 'po-1',
+          evidence_record_type: 'request_attachment',
+          evidence_record_id: 'att-1',
+        }),
+      },
+    ]);
+    expect(result.preparedActor).toEqual({
+      id: 'finance-a',
+      name: 'Finance A',
+      email: 'finance-a@mwell.com.ph',
+    });
   });
 });
 

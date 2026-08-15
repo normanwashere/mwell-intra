@@ -1,8 +1,6 @@
-export type FinanceActivitySource =
-  "procurement_po" | "warehouse_receipt" | "warehouse_return";
+export type FinanceActivitySource = 'procurement_po' | 'warehouse_receipt' | 'warehouse_return';
 
-export type FinanceActivityFilter =
-  "all" | "procurement" | "receipts" | "returns";
+export type FinanceActivityFilter = 'all' | 'procurement' | 'receipts' | 'returns';
 
 export interface FinanceActivity {
   id: string;
@@ -16,12 +14,7 @@ export interface FinanceActivity {
 }
 
 export type PaymentReadinessStatus =
-  | "draft"
-  | "ready_for_finance"
-  | "returned"
-  | "accepted"
-  | "released"
-  | "superseded";
+  'draft' | 'ready_for_finance' | 'returned' | 'accepted' | 'released' | 'superseded';
 
 export interface FinancePaymentItem {
   id: string;
@@ -45,12 +38,33 @@ export interface FinancePaymentItem {
 }
 
 export type FinanceCloseEntryType =
-  | "inventory_valuation"
-  | "cogs"
-  | "merchandise_expense"
-  | "cost_center"
-  | "write_off"
-  | "event_settlement";
+  | 'inventory_valuation'
+  | 'cogs'
+  | 'merchandise_expense'
+  | 'cost_center'
+  | 'write_off'
+  | 'event_settlement';
+
+export type FinanceCloseSourceRecordType =
+  | 'procurement_request'
+  | 'purchase_order'
+  | 'payment_readiness_pack'
+  | 'payment_release'
+  | 'warehouse_receipt'
+  | 'event_reconciliation';
+
+export type FinanceCloseEvidenceRecordType =
+  | 'request_attachment'
+  | 'payment_readiness_pack'
+  | 'payment_release'
+  | 'core_document'
+  | 'warehouse_receipt';
+
+export interface FinanceActorLineage {
+  id: string;
+  name?: string;
+  email?: string;
+}
 
 export interface FinanceCloseEntry {
   id: string;
@@ -59,26 +73,39 @@ export interface FinanceCloseEntry {
   entryType: FinanceCloseEntryType;
   sourceModule: string;
   sourceReference: string;
+  sourceRecordType?: FinanceCloseSourceRecordType;
+  sourceRecordId?: string;
+  evidenceRecordType?: FinanceCloseEvidenceRecordType;
+  evidenceRecordId?: string;
   costCenter?: string;
   amount: number;
-  status: "draft" | "ready" | "posted" | "reconciled" | "exception";
+  status: 'draft' | 'ready' | 'posted' | 'reconciled' | 'exception';
   evidenceUrl?: string;
   reconciliationNote?: string;
   preparedBy: string;
   preparedAt: string;
   postedBy?: string;
   postedAt?: string;
+  reconciledBy?: string;
+  reconciledAt?: string;
+  preparedActor?: FinanceActorLineage;
+  postedActor?: FinanceActorLineage;
+  reconciledActor?: FinanceActorLineage;
   updatedAt: string;
 }
 
 export interface ManageFinanceCloseEntryInput {
-  action: "save" | "post" | "reconcile" | "exception";
+  action: 'save' | 'post' | 'reconcile' | 'exception';
   id?: string;
   periodStart?: string;
   periodEnd?: string;
   entryType?: FinanceCloseEntryType;
   sourceModule?: string;
   sourceReference?: string;
+  sourceRecordType?: FinanceCloseSourceRecordType;
+  sourceRecordId?: string;
+  evidenceRecordType?: FinanceCloseEvidenceRecordType;
+  evidenceRecordId?: string;
   costCenter?: string;
   amount?: number;
   evidenceUrl?: string;

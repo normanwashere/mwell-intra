@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 // Create-request wizard — 3-step stepper (UX-REVIEW-FULL-APP.md PR-7 / J2-1,
 // porting the legal invite wizard's house pattern):
@@ -13,9 +13,9 @@
 // loses input. The live approval-ladder preview + sourcing suggestion +
 // required-documents preview from the single-page version survive on step 3.
 
-import type { ChangeEvent, FormEvent } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import type { ChangeEvent, FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Badge,
   Button,
@@ -27,8 +27,8 @@ import {
   ModuleHero,
   Textarea,
   useToast,
-} from "@intra/ui";
-import { Guard, useCan, useSession } from "@intra/auth";
+} from '@intra/ui';
+import { Guard, useCan, useSession } from '@intra/auth';
 import type {
   ImportationPlan,
   ProcurementExceptionPack,
@@ -36,8 +36,8 @@ import type {
   RequestAttachmentKind,
   RequestCategory,
   SourcingMethod,
-} from "../types";
-import { useProcurementRequests, useProcurementVendors } from "../localStore";
+} from '../types';
+import { useProcurementRequests, useProcurementVendors } from '../localStore';
 import {
   CATEGORY_META,
   buildApprovalLadder,
@@ -45,26 +45,20 @@ import {
   requiredDocumentsStatus,
   sourcingMethodLabel,
   tierLabel,
-} from "../policy";
-import { SourcingDecisionPanel } from "../components/SourcingDecisionPanel";
-import { ExceptionPack } from "../components/ExceptionPack";
-import { FinancialProtectionPanel } from "../components/FinancialProtectionPanel";
-import {
-  EvaluationMatrix,
-  type EvaluationMatrixValue,
-} from "../components/EvaluationMatrix";
-import { ATTACHMENT_KIND_LABEL, accreditationLabel } from "../labels";
-import {
-  validateRequestAttachment,
-  type PendingRequestAttachment,
-} from "../attachments";
+} from '../policy';
+import { SourcingDecisionPanel } from '../components/SourcingDecisionPanel';
+import { ExceptionPack } from '../components/ExceptionPack';
+import { FinancialProtectionPanel } from '../components/FinancialProtectionPanel';
+import { EvaluationMatrix, type EvaluationMatrixValue } from '../components/EvaluationMatrix';
+import { ATTACHMENT_KIND_LABEL, accreditationLabel } from '../labels';
+import { validateRequestAttachment, type PendingRequestAttachment } from '../attachments';
 import {
   discardRequestDraft,
   loadLatestRequestDraft,
   saveRequestDraft,
   type RequestDraftClient,
-} from "../requestDrafts";
-import { validateRequestStep } from "../requestForm";
+} from '../requestDrafts';
+import { validateRequestStep } from '../requestForm';
 
 interface LineDraft {
   key: string;
@@ -77,7 +71,7 @@ interface LineDraft {
 interface PurchaseRequestDraftSnapshot {
   step: StepN;
   title: string;
-  category: RequestCategory | "";
+  category: RequestCategory | '';
   department: string;
   costCenter: string;
   projectCode: string;
@@ -89,7 +83,7 @@ interface PurchaseRequestDraftSnapshot {
   needDesc: string;
   alternatives: string;
   riskIfNot: string;
-  sourcingMethod: SourcingMethod | "";
+  sourcingMethod: SourcingMethod | '';
   sourcingOverride: boolean;
   emergency: boolean;
   repeat: boolean;
@@ -113,12 +107,11 @@ interface DepartmentCostCenterOption {
 
 function blankLine(): LineDraft {
   return {
-    key:
-      globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2),
-    description: "",
-    quantity: "1",
-    uom: "ea",
-    unitPrice: "",
+    key: globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2),
+    description: '',
+    quantity: '1',
+    uom: 'ea',
+    unitPrice: '',
   };
 }
 
@@ -128,22 +121,22 @@ function toNumber(v: string): number | undefined {
 }
 
 const KIND_OPTIONS: RequestAttachmentKind[] = [
-  "spec",
-  "budget",
-  "previous_cost",
-  "quote",
-  "award_recommendation",
-  "justification",
-  "bond",
-  "brochure",
-  "other",
+  'spec',
+  'budget',
+  'previous_cost',
+  'quote',
+  'award_recommendation',
+  'justification',
+  'bond',
+  'brochure',
+  'other',
 ];
 
 type StepN = 1 | 2 | 3;
 const STEPS = [
-  { n: 1 as StepN, label: "What are you buying?" },
-  { n: 2 as StepN, label: "Codes & justification" },
-  { n: 3 as StepN, label: "Sourcing & review" },
+  { n: 1 as StepN, label: 'What are you buying?' },
+  { n: 2 as StepN, label: 'Codes & justification' },
+  { n: 3 as StepN, label: 'Sourcing & review' },
 ] as const;
 
 export function CreateRequestPage() {
@@ -152,46 +145,46 @@ export function CreateRequestPage() {
   const { add } = useProcurementRequests();
   const vendors = useProcurementVendors();
   const { profile, mode, supabaseClient } = useSession();
-  const canConfirmRoute = useCan("procurement", "manage_rfp");
+  const canConfirmRoute = useCan('procurement', 'manage_rfp');
   const [compactLineEditor, setCompactLineEditor] = useState(false);
 
   useEffect(() => {
-    const media = window.matchMedia("(max-width: 639px)");
+    const media = window.matchMedia('(max-width: 639px)');
     const sync = () => setCompactLineEditor(media.matches);
     sync();
-    media.addEventListener("change", sync);
-    return () => media.removeEventListener("change", sync);
+    media.addEventListener('change', sync);
+    return () => media.removeEventListener('change', sync);
   }, []);
 
   const [step, setStep] = useState<StepN>(1);
 
-  const [title, setTitle] = useState("");
-  const [category, setCategory] = useState<RequestCategory | "">("");
-  const [department, setDepartment] = useState("");
-  const [costCenter, setCostCenter] = useState("");
+  const [title, setTitle] = useState('');
+  const [category, setCategory] = useState<RequestCategory | ''>('');
+  const [department, setDepartment] = useState('');
+  const [costCenter, setCostCenter] = useState('');
   const [departmentOptions, setDepartmentOptions] = useState<DepartmentCostCenterOption[]>([]);
-  const [projectCode, setProjectCode] = useState("");
-  const [budgetCode, setBudgetCode] = useState("");
-  const [neededBy, setNeededBy] = useState("");
-  const [description, setDescription] = useState("");
-  const [vendorId, setVendorId] = useState<string>("");
+  const [projectCode, setProjectCode] = useState('');
+  const [budgetCode, setBudgetCode] = useState('');
+  const [neededBy, setNeededBy] = useState('');
+  const [description, setDescription] = useState('');
+  const [vendorId, setVendorId] = useState<string>('');
   const [lines, setLines] = useState<LineDraft[]>([blankLine()]);
   const [submitting, setSubmitting] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [serverDraftId, setServerDraftId] = useState<string>();
-  const [serverDraftKey, setServerDraftKey] = useState("");
+  const [serverDraftKey, setServerDraftKey] = useState('');
   const [serverDraftVersion, setServerDraftVersion] = useState(0);
   const [serverDraftReady, setServerDraftReady] = useState(false);
-  const [serverDraftStatus, setServerDraftStatus] = useState("");
-  const lastSavedPayloadRef = useRef("");
+  const [serverDraftStatus, setServerDraftStatus] = useState('');
+  const lastSavedPayloadRef = useRef('');
 
   // Justification (Award Recommendation §9)
-  const [needDesc, setNeedDesc] = useState("");
-  const [alternatives, setAlternatives] = useState("");
-  const [riskIfNot, setRiskIfNot] = useState("");
+  const [needDesc, setNeedDesc] = useState('');
+  const [alternatives, setAlternatives] = useState('');
+  const [riskIfNot, setRiskIfNot] = useState('');
 
   // Sourcing method (auto-suggested, officer can override)
-  const [sourcingMethod, setSourcingMethod] = useState<SourcingMethod | "">("");
+  const [sourcingMethod, setSourcingMethod] = useState<SourcingMethod | ''>('');
   const [sourcingOverride, setSourcingOverride] = useState(false);
   const [emergency, setEmergency] = useState(false);
   const [repeat, setRepeat] = useState(false);
@@ -207,23 +200,23 @@ export function CreateRequestPage() {
   });
 
   // Compliance flags
-  const [philgeps, setPhilgeps] = useState("");
-  const [directAwardReason, setDirectAwardReason] = useState("");
-  const [priceReasonableness, setPriceReasonableness] = useState("");
+  const [philgeps, setPhilgeps] = useState('');
+  const [directAwardReason, setDirectAwardReason] = useState('');
+  const [priceReasonableness, setPriceReasonableness] = useState('');
   const [exceptionPack, setExceptionPack] = useState<ProcurementExceptionPack>({
-    type: "direct_award",
-    justification: "",
-    priceReasonableness: "",
-    risksAndMitigations: "",
+    type: 'direct_award',
+    justification: '',
+    priceReasonableness: '',
+    risksAndMitigations: '',
   });
   const [importationPlan, setImportationPlan] = useState<ImportationPlan>({
-    incoterms: "",
-    importerOfRecord: "",
-    permitsAndRegistrations: "",
-    customsBrokerAndLogistics: "",
-    dutiesTaxesFreightInsurance: "",
-    foreignPaymentTiming: "",
-    deliveryAcceptanceAndWarranty: "",
+    incoterms: '',
+    importerOfRecord: '',
+    permitsAndRegistrations: '',
+    customsBrokerAndLogistics: '',
+    dutiesTaxesFreightInsurance: '',
+    foreignPaymentTiming: '',
+    deliveryAcceptanceAndWarranty: '',
   });
   const [evaluation, setEvaluation] = useState<EvaluationMatrixValue>({
     intendedResponses: 0,
@@ -232,65 +225,99 @@ export function CreateRequestPage() {
     insufficientBidsExceptionApproved: false,
   });
 
-  const [attachments, setAttachments] = useState<PendingRequestAttachment[]>(
-    [],
-  );
+  const [attachments, setAttachments] = useState<PendingRequestAttachment[]>([]);
 
-  const liveDraftClient = mode === "supabase"
-    ? (supabaseClient as RequestDraftClient | null)
-    : null;
+  const liveDraftClient =
+    mode === 'supabase' ? (supabaseClient as RequestDraftClient | null) : null;
 
   useEffect(() => {
-    if (mode !== "supabase" || !supabaseClient) return;
+    if (mode !== 'supabase' || !supabaseClient) return;
     let active = true;
-    void supabaseClient.schema("warehouse").from("department_request_options")
-      .select("department_code,department_name,cost_center_code,cost_center_name")
+    void supabaseClient
+      .schema('warehouse')
+      .from('department_request_options')
+      .select('department_code,department_name,cost_center_code,cost_center_name')
       .then(({ data, error: queryError }) => {
         if (!active || queryError) return;
         setDepartmentOptions((data ?? []) as DepartmentCostCenterOption[]);
       });
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [mode, supabaseClient]);
 
-  const departments = useMemo(() => Array.from(new Map(
-    departmentOptions.map((option) => [option.department_code, option.department_name]),
-  )), [departmentOptions]);
-  const availableCostCenters = departmentOptions.filter((option) => option.department_code === department);
-  const draftSnapshot = useMemo<PurchaseRequestDraftSnapshot>(() => ({
-    step,
-    title,
-    category,
-    department,
-    costCenter,
-    projectCode,
-    budgetCode,
-    neededBy,
-    description,
-    vendorId,
-    lines,
-    needDesc,
-    alternatives,
-    riskIfNot,
-    sourcingMethod,
-    sourcingOverride,
-    emergency,
-    repeat,
-    routeConfirmed,
-    riskFacts,
-    philgeps,
-    directAwardReason,
-    priceReasonableness,
-    exceptionPack,
-    importationPlan,
-    evaluation,
-    requesterName: profile?.name,
-  }), [
-    alternatives, budgetCode, category, costCenter, department, description,
-    directAwardReason, emergency, evaluation, exceptionPack, importationPlan,
-    lines, needDesc, neededBy, philgeps, priceReasonableness, profile?.name,
-    projectCode, repeat, riskFacts, riskIfNot, routeConfirmed, sourcingMethod,
-    sourcingOverride, step, title, vendorId,
-  ]);
+  const departments = useMemo(
+    () =>
+      Array.from(
+        new Map(
+          departmentOptions.map((option) => [option.department_code, option.department_name]),
+        ),
+      ),
+    [departmentOptions],
+  );
+  const availableCostCenters = departmentOptions.filter(
+    (option) => option.department_code === department,
+  );
+  const draftSnapshot = useMemo<PurchaseRequestDraftSnapshot>(
+    () => ({
+      step,
+      title,
+      category,
+      department,
+      costCenter,
+      projectCode,
+      budgetCode,
+      neededBy,
+      description,
+      vendorId,
+      lines,
+      needDesc,
+      alternatives,
+      riskIfNot,
+      sourcingMethod,
+      sourcingOverride,
+      emergency,
+      repeat,
+      routeConfirmed,
+      riskFacts,
+      philgeps,
+      directAwardReason,
+      priceReasonableness,
+      exceptionPack,
+      importationPlan,
+      evaluation,
+      requesterName: profile?.name,
+    }),
+    [
+      alternatives,
+      budgetCode,
+      category,
+      costCenter,
+      department,
+      description,
+      directAwardReason,
+      emergency,
+      evaluation,
+      exceptionPack,
+      importationPlan,
+      lines,
+      needDesc,
+      neededBy,
+      philgeps,
+      priceReasonableness,
+      profile?.name,
+      projectCode,
+      repeat,
+      riskFacts,
+      riskIfNot,
+      routeConfirmed,
+      sourcingMethod,
+      sourcingOverride,
+      step,
+      title,
+      vendorId,
+    ],
+  );
 
   useEffect(() => {
     let active = true;
@@ -305,28 +332,28 @@ export function CreateRequestPage() {
         if (record) {
           const saved = record.payload;
           setStep(saved.step ?? 1);
-          setTitle(saved.title ?? "");
-          setCategory(saved.category ?? "");
-          setDepartment(saved.department ?? "");
-          setCostCenter(saved.costCenter ?? "");
-          setProjectCode(saved.projectCode ?? "");
-          setBudgetCode(saved.budgetCode ?? "");
-          setNeededBy(saved.neededBy ?? "");
-          setDescription(saved.description ?? "");
-          setVendorId(saved.vendorId ?? "");
+          setTitle(saved.title ?? '');
+          setCategory(saved.category ?? '');
+          setDepartment(saved.department ?? '');
+          setCostCenter(saved.costCenter ?? '');
+          setProjectCode(saved.projectCode ?? '');
+          setBudgetCode(saved.budgetCode ?? '');
+          setNeededBy(saved.neededBy ?? '');
+          setDescription(saved.description ?? '');
+          setVendorId(saved.vendorId ?? '');
           setLines(saved.lines?.length ? saved.lines : [blankLine()]);
-          setNeedDesc(saved.needDesc ?? "");
-          setAlternatives(saved.alternatives ?? "");
-          setRiskIfNot(saved.riskIfNot ?? "");
-          setSourcingMethod(saved.sourcingMethod ?? "");
+          setNeedDesc(saved.needDesc ?? '');
+          setAlternatives(saved.alternatives ?? '');
+          setRiskIfNot(saved.riskIfNot ?? '');
+          setSourcingMethod(saved.sourcingMethod ?? '');
           setSourcingOverride(saved.sourcingOverride ?? false);
           setEmergency(saved.emergency ?? false);
           setRepeat(saved.repeat ?? false);
           setRouteConfirmed(saved.routeConfirmed ?? false);
           if (saved.riskFacts) setRiskFacts(saved.riskFacts);
-          setPhilgeps(saved.philgeps ?? "");
-          setDirectAwardReason(saved.directAwardReason ?? "");
-          setPriceReasonableness(saved.priceReasonableness ?? "");
+          setPhilgeps(saved.philgeps ?? '');
+          setDirectAwardReason(saved.directAwardReason ?? '');
+          setPriceReasonableness(saved.priceReasonableness ?? '');
           if (saved.exceptionPack) setExceptionPack(saved.exceptionPack);
           if (saved.importationPlan) setImportationPlan(saved.importationPlan);
           if (saved.evaluation) setEvaluation(saved.evaluation);
@@ -334,7 +361,7 @@ export function CreateRequestPage() {
           setServerDraftKey(record.clientKey);
           setServerDraftVersion(record.version);
           lastSavedPayloadRef.current = JSON.stringify(saved);
-          setServerDraftStatus("Draft restored from the server.");
+          setServerDraftStatus('Draft restored from the server.');
         } else {
           setServerDraftKey(globalThis.crypto?.randomUUID?.() ?? `draft-${Date.now()}`);
         }
@@ -343,11 +370,13 @@ export function CreateRequestPage() {
       .catch((cause) => {
         if (!active) return;
         setServerDraftStatus(
-          cause instanceof Error ? cause.message : "Draft recovery is unavailable.",
+          cause instanceof Error ? cause.message : 'Draft recovery is unavailable.',
         );
         setServerDraftReady(true);
       });
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [liveDraftClient, profile]);
 
   useEffect(() => {
@@ -358,26 +387,33 @@ export function CreateRequestPage() {
     );
     if (!hasContent || serialized === lastSavedPayloadRef.current) return;
     const timer = window.setTimeout(() => {
-      setServerDraftStatus("Saving draft...");
+      setServerDraftStatus('Saving draft...');
       void saveRequestDraft(liveDraftClient, {
         clientKey: serverDraftKey,
         expectedVersion: serverDraftVersion,
         payload: draftSnapshot,
-      }).then((record) => {
-        setServerDraftId(record.id);
-        setServerDraftVersion(record.version);
-        lastSavedPayloadRef.current = JSON.stringify(record.payload);
-        setServerDraftStatus("Draft saved to the server.");
-      }).catch((cause) => {
-        setServerDraftStatus(
-          cause instanceof Error ? cause.message : "Draft autosave failed.",
-        );
-      });
+      })
+        .then((record) => {
+          setServerDraftId(record.id);
+          setServerDraftVersion(record.version);
+          lastSavedPayloadRef.current = JSON.stringify(record.payload);
+          setServerDraftStatus('Draft saved to the server.');
+        })
+        .catch((cause) => {
+          setServerDraftStatus(cause instanceof Error ? cause.message : 'Draft autosave failed.');
+        });
     }, 800);
     return () => window.clearTimeout(timer);
   }, [
-    category, draftSnapshot, lines, liveDraftClient, serverDraftKey,
-    serverDraftReady, serverDraftVersion, submitting, title,
+    category,
+    draftSnapshot,
+    lines,
+    liveDraftClient,
+    serverDraftKey,
+    serverDraftReady,
+    serverDraftVersion,
+    submitting,
+    title,
   ]);
 
   const total = useMemo(
@@ -410,8 +446,7 @@ export function CreateRequestPage() {
     setRouteConfirmed(false);
   }, [suggestedMethod, sourcingOverride]);
 
-  const effectiveSourcing: SourcingMethod = (sourcingMethod ||
-    suggestedMethod) as SourcingMethod;
+  const effectiveSourcing: SourcingMethod = (sourcingMethod || suggestedMethod) as SourcingMethod;
 
   const ladder = useMemo(
     () =>
@@ -439,44 +474,43 @@ export function CreateRequestPage() {
   const missingDocs = docsStatus.filter((d) => !d.attached);
 
   const step1Valid =
-    title.trim().length > 0 &&
-    category !== "" &&
-    lines.some((l) => l.description.trim());
+    title.trim().length > 0 && category !== '' && lines.some((l) => l.description.trim());
   const step2Valid = needDesc.trim().length > 0;
-  const canSubmit = step1Valid && step2Valid;
-  const exceptionRequired = [
-    "direct_award",
-    "emergency",
-    "repeat_order",
-    "petty_cash",
-  ].includes(effectiveSourcing);
+  const minimumEvidenceReady = ['spec', 'budget'].every((kind) =>
+    attachments.some((attachment) => attachment.kind === kind),
+  );
+  const governedContextReady =
+    department.trim().length > 0 &&
+    costCenter.trim().length > 0 &&
+    neededBy.trim().length > 0 &&
+    (budgetCode.trim().length > 0 || projectCode.trim().length > 0) &&
+    total > 0;
+  const canSubmit = step1Valid && step2Valid && governedContextReady && minimumEvidenceReady;
+  const exceptionRequired = ['direct_award', 'emergency', 'repeat_order', 'petty_cash'].includes(
+    effectiveSourcing,
+  );
   const exceptionReady =
     !exceptionRequired ||
     (exceptionPack.justification.trim().length > 0 &&
-      (effectiveSourcing === "petty_cash"
+      (effectiveSourcing === 'petty_cash'
         ? exceptionPack.financeEligibilityConfirmed === true &&
           exceptionPack.nonRecurringNonSplitAttested === true
-        : (exceptionPack.priceReasonableness ?? priceReasonableness).trim()
-            .length > 0));
+        : (exceptionPack.priceReasonableness ?? priceReasonableness).trim().length > 0));
   const importationReady =
     !riskFacts.importation ||
     Object.values(importationPlan).every((value) => value.trim().length > 0);
   const routeEvidenceReady = exceptionReady && importationReady;
 
   function updateLine(key: string, patch: Partial<LineDraft>) {
-    setLines((prev) =>
-      prev.map((l) => (l.key === key ? { ...l, ...patch } : l)),
-    );
+    setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l)));
   }
   function removeLine(key: string) {
-    setLines((prev) =>
-      prev.length === 1 ? prev : prev.filter((l) => l.key !== key),
-    );
+    setLines((prev) => (prev.length === 1 ? prev : prev.filter((l) => l.key !== key)));
   }
 
   function handleAttachmentPick(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    e.target.value = ""; // allow re-picking the same file
+    e.target.value = ''; // allow re-picking the same file
     if (!file) return;
     try {
       validateRequestAttachment(file);
@@ -488,13 +522,11 @@ export function CreateRequestPage() {
           mimeType: file.type,
           sizeBytes: file.size,
           uploadedByEmail: profile?.email,
-          kind: "other",
+          kind: 'other',
         },
       ]);
     } catch (err) {
-      error(
-        err instanceof Error ? err.message : "Could not use the selected file.",
-      );
+      error(err instanceof Error ? err.message : 'Could not use the selected file.');
     }
   }
 
@@ -503,48 +535,46 @@ export function CreateRequestPage() {
   }
 
   function setAttachmentKind(idx: number, kind: RequestAttachmentKind) {
-    setAttachments((prev) =>
-      prev.map((a, i) => (i === idx ? { ...a, kind } : a)),
-    );
+    setAttachments((prev) => prev.map((a, i) => (i === idx ? { ...a, kind } : a)));
   }
 
   function focusFirstInvalid(firstInvalidSelector?: string) {
     if (!firstInvalidSelector) return;
     window.setTimeout(() => {
       const target = document.querySelector<HTMLElement>(firstInvalidSelector);
-      target?.scrollIntoView({ block: "center", behavior: "smooth" });
+      target?.scrollIntoView({ block: 'center', behavior: 'smooth' });
       if (target) target.focus();
     });
   }
 
   async function discardServerDraft() {
     if (!liveDraftClient || !serverDraftId) return;
-    setServerDraftStatus("Discarding draft...");
+    setServerDraftStatus('Discarding draft...');
     try {
       await discardRequestDraft(liveDraftClient, serverDraftId);
-      lastSavedPayloadRef.current = "";
+      lastSavedPayloadRef.current = '';
       setServerDraftId(undefined);
       setServerDraftVersion(0);
       setServerDraftKey(globalThis.crypto?.randomUUID?.() ?? `draft-${Date.now()}`);
-      setTitle("");
-      setCategory("");
-      setDescription("");
-      setDepartment("");
-      setCostCenter("");
-      setProjectCode("");
-      setBudgetCode("");
-      setNeededBy("");
-      setVendorId("");
+      setTitle('');
+      setCategory('');
+      setDescription('');
+      setDepartment('');
+      setCostCenter('');
+      setProjectCode('');
+      setBudgetCode('');
+      setNeededBy('');
+      setVendorId('');
       setLines([blankLine()]);
-      setNeedDesc("");
-      setAlternatives("");
-      setRiskIfNot("");
+      setNeedDesc('');
+      setAlternatives('');
+      setRiskIfNot('');
       setStep(1);
       setFieldErrors({});
-      setServerDraftStatus("Draft discarded.");
+      setServerDraftStatus('Draft discarded.');
     } catch (cause) {
       setServerDraftStatus(
-        cause instanceof Error ? cause.message : "The draft could not be discarded.",
+        cause instanceof Error ? cause.message : 'The draft could not be discarded.',
       );
     }
   }
@@ -558,27 +588,25 @@ export function CreateRequestPage() {
     });
     setFieldErrors(validation.fieldErrors);
     if (validation.firstInvalidSelector) {
-      error("Complete the highlighted fields before continuing.");
+      error('Complete the highlighted fields before continuing.');
       focusFirstInvalid(validation.firstInvalidSelector);
       return;
     }
     if (step === 1 && !step1Valid) {
-      error(
-        "Pick a category, give the request a title, and describe at least one line item.",
-      );
+      error('Pick a category, give the request a title, and describe at least one line item.');
       return;
     }
     if (step === 2 && !step2Valid) {
-      error("Describe the need — approvers read it first.");
+      error('Describe the need — approvers read it first.');
       return;
     }
     setStep((s) => (s < 3 ? ((s + 1) as StepN) : s));
-    if (typeof window !== "undefined") window.scrollTo({ top: 0 });
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0 });
   }
 
   function goBack() {
     setStep((s) => (s > 1 ? ((s - 1) as StepN) : s));
-    if (typeof window !== "undefined") window.scrollTo({ top: 0 });
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0 });
   }
 
   async function handleSubmit(event: FormEvent, andSubmit = false) {
@@ -594,27 +622,20 @@ export function CreateRequestPage() {
       setStep(invalidStep);
       setFieldErrors(validation.fieldErrors);
       focusFirstInvalid(validation.firstInvalidSelector);
-      error(
-        "Give the request a title, category, need description, and at least one line item.",
-      );
+      error('Give the request a title, category, need description, and at least one line item.');
       return;
     }
     if (andSubmit && !routeConfirmed) {
-      error(
-        "Save the draft for Procurement route confirmation before approval submission.",
-      );
+      error('Save the draft for Procurement route confirmation before approval submission.');
       return;
     }
     // Explicit quantity guard — a line entered as 0 (or negative) must not
     // silently coerce to 1 on save.
     const invalidQtyLine = lines.find(
-      (l) =>
-        l.description.trim() &&
-        l.quantity.trim() !== "" &&
-        !(Number(l.quantity) >= 1),
+      (l) => l.description.trim() && l.quantity.trim() !== '' && !(Number(l.quantity) >= 1),
     );
     if (invalidQtyLine) {
-      error("Each line quantity must be a whole number of at least 1.");
+      error('Each line quantity must be a whole number of at least 1.');
       return;
     }
     setSubmitting(true);
@@ -624,40 +645,35 @@ export function CreateRequestPage() {
         .map((l) => ({
           description: l.description.trim(),
           quantity: toNumber(l.quantity) ?? 1,
-          uom: l.uom.trim() || "ea",
+          uom: l.uom.trim() || 'ea',
           unitPrice: toNumber(l.unitPrice),
         }));
       const vendor = vendors.find((v) => v.id === vendorId);
-      const exceptionType: ProcurementExceptionPack["type"] =
-        effectiveSourcing === "emergency"
-          ? "emergency"
-          : effectiveSourcing === "repeat_order"
-            ? "repeat_continuity"
-            : effectiveSourcing === "petty_cash"
-              ? "petty_cash_non_accredited"
-              : "direct_award";
+      const exceptionType: ProcurementExceptionPack['type'] =
+        effectiveSourcing === 'emergency'
+          ? 'emergency'
+          : effectiveSourcing === 'repeat_order'
+            ? 'repeat_continuity'
+            : effectiveSourcing === 'petty_cash'
+              ? 'petty_cash_non_accredited'
+              : 'direct_award';
 
-      const compliance: Parameters<typeof add>[0]["compliance"] = {
+      const compliance: Parameters<typeof add>[0]['compliance'] = {
         philgepsReference: philgeps.trim() || undefined,
         priceReasonableness: priceReasonableness.trim() || undefined,
         vendorAccreditationRequired:
-          effectiveSourcing !== "petty_cash" &&
-          effectiveSourcing !== "emergency",
+          effectiveSourcing !== 'petty_cash' && effectiveSourcing !== 'emergency',
         routeConfirmed,
         routeConfirmedByEmail: routeConfirmed ? profile?.email : undefined,
-        policyVersion: "procurement-policy-revised-2026",
+        policyVersion: 'procurement-policy-revised-2026',
         riskFacts,
-        exceptionPack: [
-          "direct_award",
-          "emergency",
-          "repeat_order",
-          "petty_cash",
-        ].includes(effectiveSourcing)
+        exceptionPack: ['direct_award', 'emergency', 'repeat_order', 'petty_cash'].includes(
+          effectiveSourcing,
+        )
           ? {
               ...exceptionPack,
               type: exceptionType,
-              priceReasonableness:
-                priceReasonableness.trim() || exceptionPack.priceReasonableness,
+              priceReasonableness: priceReasonableness.trim() || exceptionPack.priceReasonableness,
             }
           : undefined,
         importationPlan: riskFacts.importation ? importationPlan : undefined,
@@ -667,12 +683,9 @@ export function CreateRequestPage() {
         insufficientBidsExceptionApproved:
           evaluation.insufficientBidsExceptionApproved || undefined,
       };
-      if (
-        effectiveSourcing === "direct_award" ||
-        effectiveSourcing === "emergency"
-      ) {
-        const reason = (directAwardReason || "other") as
-          "sole_supplier" | "emergency" | "repeat_continuity" | "other";
+      if (effectiveSourcing === 'direct_award' || effectiveSourcing === 'emergency') {
+        const reason = (directAwardReason || 'other') as
+          'sole_supplier' | 'emergency' | 'repeat_continuity' | 'other';
         compliance.directAwardReason = reason;
       }
 
@@ -704,11 +717,11 @@ export function CreateRequestPage() {
       if (andSubmit) {
         navigate(`/requests/${created.id}?submit=1`);
       } else {
-        success("Draft request saved");
+        success('Draft request saved');
         navigate(`/requests/${created.id}`);
       }
     } catch (e) {
-      error(e instanceof Error ? e.message : "Could not save the draft.");
+      error(e instanceof Error ? e.message : 'Could not save the draft.');
     } finally {
       setSubmitting(false);
     }
@@ -732,55 +745,43 @@ export function CreateRequestPage() {
         {/* Compact stepper (legal invite-wizard house pattern) */}
         <ol className="flex items-center gap-1.5" aria-label="Request steps">
           {STEPS.map((s, i) => {
-            const state =
-              s.n === step ? "current" : s.n < step ? "done" : "todo";
+            const state = s.n === step ? 'current' : s.n < step ? 'done' : 'todo';
             return (
-              <li
-                key={s.n}
-                className="flex min-w-0 flex-1 items-center gap-1.5"
-              >
+              <li key={s.n} className="flex min-w-0 flex-1 items-center gap-1.5">
                 <button
                   type="button"
                   onClick={() => s.n < step && setStep(s.n)}
                   disabled={s.n >= step}
-                  aria-label={`Step ${s.n}: ${s.label}${state === "current" ? ", current step" : state === "done" ? ", completed" : ""}`}
+                  aria-label={`Step ${s.n}: ${s.label}${state === 'current' ? ', current step' : state === 'done' ? ', completed' : ''}`}
                   className={`flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-xl px-2.5 py-2 text-left transition ${
-                    state === "current"
-                      ? "bg-brand-500/10"
-                      : state === "done"
-                        ? "hover:bg-inset"
-                        : "opacity-60"
+                    state === 'current'
+                      ? 'bg-brand-500/10'
+                      : state === 'done'
+                        ? 'hover:bg-inset'
+                        : 'opacity-60'
                   }`}
-                  aria-current={state === "current" ? "step" : undefined}
+                  aria-current={state === 'current' ? 'step' : undefined}
                 >
                   <span
                     className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-bold ${
-                      state === "done"
-                        ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
-                        : state === "current"
-                          ? "bg-brand-600 text-white"
-                          : "bg-inset text-faint"
+                      state === 'done'
+                        ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                        : state === 'current'
+                          ? 'bg-brand-600 text-white'
+                          : 'bg-inset text-faint'
                     }`}
                   >
-                    {state === "done" ? (
-                      <Icon name="check" className="h-3.5 w-3.5" />
-                    ) : (
-                      s.n
-                    )}
+                    {state === 'done' ? <Icon name="check" className="h-3.5 w-3.5" /> : s.n}
                   </span>
                   <span
                     className={`hidden truncate text-xs font-semibold sm:block ${
-                      state === "current"
-                        ? "text-brand-700 dark:text-brand-300"
-                        : "text-muted"
+                      state === 'current' ? 'text-brand-700 dark:text-brand-300' : 'text-muted'
                     }`}
                   >
                     {s.label}
                   </span>
                 </button>
-                {i < STEPS.length - 1 && (
-                  <span aria-hidden className="h-px w-3 shrink-0 bg-line" />
-                )}
+                {i < STEPS.length - 1 && <span aria-hidden className="h-px w-3 shrink-0 bg-line" />}
               </li>
             );
           })}
@@ -795,7 +796,7 @@ export function CreateRequestPage() {
             className="flex min-h-11 flex-col gap-2 rounded-xl border border-line bg-surface px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between"
           >
             <span className="text-muted">
-              {!serverDraftReady ? "Checking for a saved draft..." : serverDraftStatus}
+              {!serverDraftReady ? 'Checking for a saved draft...' : serverDraftStatus}
             </span>
             {serverDraftId && (
               <button
@@ -815,15 +816,12 @@ export function CreateRequestPage() {
             <>
               <section className="card space-y-4 p-4 sm:p-5">
                 <div>
-                  <h2 className="font-display text-base font-bold text-ink">
-                    Category
-                  </h2>
+                  <h2 className="font-display text-base font-bold text-ink">Category</h2>
                   <p className="text-xs text-muted">
-                    Category drives sourcing path, approvers, and required
-                    documents.
+                    Category drives sourcing path, approvers, and required documents.
                   </p>
                 </div>
-                <fieldset aria-describedby={fieldErrors.category ? "category-error" : undefined}>
+                <fieldset aria-describedby={fieldErrors.category ? 'category-error' : undefined}>
                   <legend className="sr-only">Category</legend>
                   {/* PR-10: compact 2-col chips at 390px; descriptions appear
                       from sm upward. */}
@@ -834,11 +832,11 @@ export function CreateRequestPage() {
                         <label
                           key={c.code}
                           className={[
-                            "group flex min-h-11 cursor-pointer flex-col rounded-2xl border p-2.5 transition sm:p-3",
+                            'group flex min-h-11 cursor-pointer flex-col rounded-2xl border p-2.5 transition sm:p-3',
                             active
-                              ? "border-brand-500 bg-brand-500/10 ring-2 ring-brand-500/40"
-                              : "border-line bg-surface hover:border-brand-500/40",
-                          ].join(" ")}
+                              ? 'border-brand-500 bg-brand-500/10 ring-2 ring-brand-500/40'
+                              : 'border-line bg-surface hover:border-brand-500/40',
+                          ].join(' ')}
                         >
                           <input
                             type="radio"
@@ -853,20 +851,20 @@ export function CreateRequestPage() {
                             <span className="min-w-0 text-sm font-semibold leading-snug text-ink">
                               {c.label}
                             </span>
-                            {c.highRisk && (
-                              <Badge tone="amber">high-risk</Badge>
-                            )}
+                            {c.highRisk && <Badge tone="amber">high-risk</Badge>}
                           </div>
-                          <p className="mt-1 hidden text-xs text-muted sm:block">
-                            {c.description}
-                          </p>
+                          <p className="mt-1 hidden text-xs text-muted sm:block">{c.description}</p>
                         </label>
                       );
                     })}
                   </div>
                 </fieldset>
                 {fieldErrors.category && (
-                  <p id="category-error" role="alert" className="text-sm font-semibold text-rose-600">
+                  <p
+                    id="category-error"
+                    role="alert"
+                    className="text-sm font-semibold text-rose-600"
+                  >
                     {fieldErrors.category}
                   </p>
                 )}
@@ -874,9 +872,7 @@ export function CreateRequestPage() {
 
               <section className="card space-y-4 p-4 sm:p-5">
                 <div>
-                  <h2 className="font-display text-base font-bold text-ink">
-                    Title & context
-                  </h2>
+                  <h2 className="font-display text-base font-bold text-ink">Title & context</h2>
                 </div>
                 <Field label="Title" htmlFor="title" error={fieldErrors.title}>
                   <Input
@@ -888,10 +884,7 @@ export function CreateRequestPage() {
                     required
                   />
                 </Field>
-                <Field
-                  label="Additional context (optional)"
-                  htmlFor="description"
-                >
+                <Field label="Additional context (optional)" htmlFor="description">
                   <Textarea
                     id="description"
                     value={description}
@@ -905,12 +898,10 @@ export function CreateRequestPage() {
               <section className="card min-w-0 space-y-3 p-4 sm:p-5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <h2 className="font-display text-base font-bold text-ink">
-                      Line items
-                    </h2>
+                    <h2 className="font-display text-base font-bold text-ink">Line items</h2>
                     <p className="text-xs text-muted">
-                      Add each SKU / service / license with quantity + unit
-                      price. Estimated total updates live.
+                      Add each SKU / service / license with quantity + unit price. Estimated total
+                      updates live.
                     </p>
                   </div>
                   <button
@@ -923,213 +914,243 @@ export function CreateRequestPage() {
                   </button>
                 </div>
 
-                {compactLineEditor && <div className="space-y-3">
-                  {lines.map((line, index) => {
-                    const quantity = toNumber(line.quantity) ?? 0;
-                    const unitPrice = toNumber(line.unitPrice) ?? 0;
-                    return (
-                      <fieldset key={line.key} className="space-y-3 rounded-xl border border-line bg-surface p-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <legend className="text-sm font-semibold text-ink">Line {index + 1}</legend>
-                          <button
-                            type="button"
-                            onClick={() => removeLine(line.key)}
-                            disabled={lines.length === 1}
-                            aria-label={`Remove line ${index + 1}`}
-                            className="grid h-11 w-11 place-items-center rounded-lg text-faint transition hover:bg-inset hover:text-rose-600 disabled:opacity-30"
-                          >
-                            <Icon name="x" className="h-4 w-4" />
-                          </button>
-                        </div>
-                        <label className="block text-xs font-semibold text-muted">
-                          Description
-                          <input
-                            aria-label={`Line ${index + 1} description`}
-                            data-request-line-description="true"
-                            aria-invalid={Boolean(fieldErrors.lines)}
-                            className="input mt-1"
-                            value={line.description}
-                            onChange={(event) => updateLine(line.key, { description: event.target.value })}
-                            placeholder="Product or service"
-                          />
-                        </label>
-                        <div className="grid grid-cols-2 gap-3">
-                          <label className="block text-xs font-semibold text-muted">
-                            Quantity
-                            <input
-                              aria-label={`Line ${index + 1} quantity`}
-                              className="input mt-1"
-                              type="number"
-                              inputMode="numeric"
-                              min="0"
-                              step="1"
-                              value={line.quantity}
-                              onChange={(event) => updateLine(line.key, { quantity: event.target.value })}
-                            />
-                          </label>
-                          <label className="block text-xs font-semibold text-muted">
-                            Unit
-                            <input
-                              aria-label={`Line ${index + 1} unit of measure`}
-                              className="input mt-1"
-                              value={line.uom}
-                              onChange={(event) => updateLine(line.key, { uom: event.target.value })}
-                            />
-                          </label>
-                        </div>
-                        <div className="grid grid-cols-2 items-end gap-3">
-                          <label className="block text-xs font-semibold text-muted">
-                            Unit price
-                            <input
-                              aria-label={`Line ${index + 1} unit price`}
-                              className="input mt-1"
-                              type="number"
-                              inputMode="decimal"
-                              min="0"
-                              step="0.01"
-                              value={line.unitPrice}
-                              onChange={(event) => updateLine(line.key, { unitPrice: event.target.value })}
-                              placeholder="0.00"
-                            />
-                          </label>
-                          <div className="pb-2 text-right">
-                            <p className="text-xs font-semibold text-muted">Line total</p>
-                            <p className="tnum font-bold text-ink">
-                              ₱{(quantity * unitPrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </p>
+                {compactLineEditor && (
+                  <div className="space-y-3">
+                    {lines.map((line, index) => {
+                      const quantity = toNumber(line.quantity) ?? 0;
+                      const unitPrice = toNumber(line.unitPrice) ?? 0;
+                      return (
+                        <fieldset
+                          key={line.key}
+                          className="space-y-3 rounded-xl border border-line bg-surface p-3"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <legend className="text-sm font-semibold text-ink">
+                              Line {index + 1}
+                            </legend>
+                            <button
+                              type="button"
+                              onClick={() => removeLine(line.key)}
+                              disabled={lines.length === 1}
+                              aria-label={`Remove line ${index + 1}`}
+                              className="grid h-11 w-11 place-items-center rounded-lg text-faint transition hover:bg-inset hover:text-rose-600 disabled:opacity-30"
+                            >
+                              <Icon name="x" className="h-4 w-4" />
+                            </button>
                           </div>
-                        </div>
-                      </fieldset>
-                    );
-                  })}
-                  <div className="flex items-center justify-between border-t border-line pt-3">
-                    <span className="text-xs font-semibold uppercase text-muted">Estimated total</span>
-                    <span className="tnum text-base font-extrabold text-ink">
-                      ₱{total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
-                  </div>
-                </div>}
-
-                {!compactLineEditor && <div className="w-0 min-w-full max-w-full overflow-x-auto overscroll-x-contain">
-                  <table className="w-full min-w-[720px] table-fixed text-sm">
-                    <thead className="text-left text-xs uppercase tracking-wide text-faint">
-                      <tr>
-                        <th className="w-2/5 py-2 pr-3">Description</th>
-                        <th className="w-24 py-2 pr-3">Qty</th>
-                        <th className="w-24 py-2 pr-3">UoM</th>
-                        <th className="w-28 py-2 pr-3">Unit ₱</th>
-                        <th className="w-24 py-2 pr-3 text-right">Line ₱</th>
-                        <th className="w-12" aria-hidden />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {lines.map((l, i) => {
-                        const q = toNumber(l.quantity) ?? 0;
-                        const p = toNumber(l.unitPrice) ?? 0;
-                        return (
-                          <tr
-                            key={l.key}
-                            className="border-t border-line align-top"
-                          >
-                            <td className="py-2 pr-3">
+                          <label className="block text-xs font-semibold text-muted">
+                            Description
+                            <input
+                              aria-label={`Line ${index + 1} description`}
+                              data-request-line-description="true"
+                              aria-invalid={Boolean(fieldErrors.lines)}
+                              className="input mt-1"
+                              value={line.description}
+                              onChange={(event) =>
+                                updateLine(line.key, {
+                                  description: event.target.value,
+                                })
+                              }
+                              placeholder="Product or service"
+                            />
+                          </label>
+                          <div className="grid grid-cols-2 gap-3">
+                            <label className="block text-xs font-semibold text-muted">
+                              Quantity
                               <input
-                                aria-label={`Line ${i + 1} description`}
-                                data-request-line-description="true"
-                                aria-invalid={Boolean(fieldErrors.lines)}
-                                className="input"
-                                value={l.description}
-                                onChange={(e) =>
-                                  updateLine(l.key, {
-                                    description: e.target.value,
-                                  })
-                                }
-                                placeholder="Enterprise seat — SFDC Sales Cloud"
-                              />
-                            </td>
-                            <td className="py-2 pr-3">
-                              <input
-                                aria-label={`Line ${i + 1} quantity`}
-                                className="input"
+                                aria-label={`Line ${index + 1} quantity`}
+                                className="input mt-1"
                                 type="number"
                                 inputMode="numeric"
                                 min="0"
                                 step="1"
-                                value={l.quantity}
-                                onChange={(e) =>
-                                  updateLine(l.key, {
-                                    quantity: e.target.value,
+                                value={line.quantity}
+                                onChange={(event) =>
+                                  updateLine(line.key, {
+                                    quantity: event.target.value,
                                   })
                                 }
                               />
-                            </td>
-                            <td className="py-2 pr-3">
+                            </label>
+                            <label className="block text-xs font-semibold text-muted">
+                              Unit
                               <input
-                                aria-label={`Line ${i + 1} unit of measure`}
-                                className="input"
-                                value={l.uom}
-                                onChange={(e) =>
-                                  updateLine(l.key, { uom: e.target.value })
+                                aria-label={`Line ${index + 1} unit of measure`}
+                                className="input mt-1"
+                                value={line.uom}
+                                onChange={(event) =>
+                                  updateLine(line.key, {
+                                    uom: event.target.value,
+                                  })
                                 }
                               />
-                            </td>
-                            <td className="py-2 pr-3">
+                            </label>
+                          </div>
+                          <div className="grid grid-cols-2 items-end gap-3">
+                            <label className="block text-xs font-semibold text-muted">
+                              Unit price
                               <input
-                                aria-label={`Line ${i + 1} unit price`}
-                                className="input"
+                                aria-label={`Line ${index + 1} unit price`}
+                                className="input mt-1"
                                 type="number"
                                 inputMode="decimal"
                                 min="0"
                                 step="0.01"
-                                value={l.unitPrice}
-                                onChange={(e) =>
-                                  updateLine(l.key, {
-                                    unitPrice: e.target.value,
+                                value={line.unitPrice}
+                                onChange={(event) =>
+                                  updateLine(line.key, {
+                                    unitPrice: event.target.value,
                                   })
                                 }
                                 placeholder="0.00"
                               />
-                            </td>
-                            <td className="py-2 pr-3 text-right tnum font-semibold text-ink">
-                              {(q * p).toLocaleString(undefined, {
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 2,
-                              })}
-                            </td>
-                            <td className="py-2">
-                              <button
-                                type="button"
-                                onClick={() => removeLine(l.key)}
-                                disabled={lines.length === 1}
-                                aria-label={`Remove line ${i + 1}`}
-                                className="grid h-11 w-11 place-items-center rounded-lg text-faint transition hover:bg-inset hover:text-rose-600 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-faint"
-                              >
-                                <Icon name="x" className="h-4 w-4" />
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                    <tfoot>
-                      <tr className="border-t border-line">
-                        <td
-                          colSpan={4}
-                          className="py-2 pr-3 text-right text-xs uppercase tracking-wide text-faint"
-                        >
-                          Estimated total
-                        </td>
-                        <td className="py-2 pr-3 text-right tnum text-base font-extrabold text-ink">
-                          ₱
-                          {total.toLocaleString(undefined, {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })}
-                        </td>
-                        <td />
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>}
+                            </label>
+                            <div className="pb-2 text-right">
+                              <p className="text-xs font-semibold text-muted">Line total</p>
+                              <p className="tnum font-bold text-ink">
+                                ₱
+                                {(quantity * unitPrice).toLocaleString(undefined, {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                })}
+                              </p>
+                            </div>
+                          </div>
+                        </fieldset>
+                      );
+                    })}
+                    <div className="flex items-center justify-between border-t border-line pt-3">
+                      <span className="text-xs font-semibold uppercase text-muted">
+                        Estimated total
+                      </span>
+                      <span className="tnum text-base font-extrabold text-ink">
+                        ₱
+                        {total.toLocaleString(undefined, {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {!compactLineEditor && (
+                  <div className="w-0 min-w-full max-w-full overflow-x-auto overscroll-x-contain">
+                    <table className="w-full min-w-[720px] table-fixed text-sm">
+                      <thead className="text-left text-xs uppercase tracking-wide text-faint">
+                        <tr>
+                          <th className="w-2/5 py-2 pr-3">Description</th>
+                          <th className="w-24 py-2 pr-3">Qty</th>
+                          <th className="w-24 py-2 pr-3">UoM</th>
+                          <th className="w-28 py-2 pr-3">Unit ₱</th>
+                          <th className="w-24 py-2 pr-3 text-right">Line ₱</th>
+                          <th className="w-12" aria-hidden />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {lines.map((l, i) => {
+                          const q = toNumber(l.quantity) ?? 0;
+                          const p = toNumber(l.unitPrice) ?? 0;
+                          return (
+                            <tr key={l.key} className="border-t border-line align-top">
+                              <td className="py-2 pr-3">
+                                <input
+                                  aria-label={`Line ${i + 1} description`}
+                                  data-request-line-description="true"
+                                  aria-invalid={Boolean(fieldErrors.lines)}
+                                  className="input"
+                                  value={l.description}
+                                  onChange={(e) =>
+                                    updateLine(l.key, {
+                                      description: e.target.value,
+                                    })
+                                  }
+                                  placeholder="Enterprise seat — SFDC Sales Cloud"
+                                />
+                              </td>
+                              <td className="py-2 pr-3">
+                                <input
+                                  aria-label={`Line ${i + 1} quantity`}
+                                  className="input"
+                                  type="number"
+                                  inputMode="numeric"
+                                  min="0"
+                                  step="1"
+                                  value={l.quantity}
+                                  onChange={(e) =>
+                                    updateLine(l.key, {
+                                      quantity: e.target.value,
+                                    })
+                                  }
+                                />
+                              </td>
+                              <td className="py-2 pr-3">
+                                <input
+                                  aria-label={`Line ${i + 1} unit of measure`}
+                                  className="input"
+                                  value={l.uom}
+                                  onChange={(e) => updateLine(l.key, { uom: e.target.value })}
+                                />
+                              </td>
+                              <td className="py-2 pr-3">
+                                <input
+                                  aria-label={`Line ${i + 1} unit price`}
+                                  className="input"
+                                  type="number"
+                                  inputMode="decimal"
+                                  min="0"
+                                  step="0.01"
+                                  value={l.unitPrice}
+                                  onChange={(e) =>
+                                    updateLine(l.key, {
+                                      unitPrice: e.target.value,
+                                    })
+                                  }
+                                  placeholder="0.00"
+                                />
+                              </td>
+                              <td className="py-2 pr-3 text-right tnum font-semibold text-ink">
+                                {(q * p).toLocaleString(undefined, {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                })}
+                              </td>
+                              <td className="py-2">
+                                <button
+                                  type="button"
+                                  onClick={() => removeLine(l.key)}
+                                  disabled={lines.length === 1}
+                                  aria-label={`Remove line ${i + 1}`}
+                                  className="grid h-11 w-11 place-items-center rounded-lg text-faint transition hover:bg-inset hover:text-rose-600 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-faint"
+                                >
+                                  <Icon name="x" className="h-4 w-4" />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                      <tfoot>
+                        <tr className="border-t border-line">
+                          <td
+                            colSpan={4}
+                            className="py-2 pr-3 text-right text-xs uppercase tracking-wide text-faint"
+                          >
+                            Estimated total
+                          </td>
+                          <td className="py-2 pr-3 text-right tnum text-base font-extrabold text-ink">
+                            ₱
+                            {total.toLocaleString(undefined, {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
+                          </td>
+                          <td />
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
                 {fieldErrors.lines && (
                   <p role="alert" className="text-sm font-semibold text-rose-600">
                     {fieldErrors.lines}
@@ -1144,26 +1165,38 @@ export function CreateRequestPage() {
             <>
               <section className="card space-y-4 p-4 sm:p-5">
                 <div>
-                  <h2 className="font-display text-base font-bold text-ink">
-                    Who is it for?
-                  </h2>
+                  <h2 className="font-display text-base font-bold text-ink">Who is it for?</h2>
                   <p className="text-xs text-muted">
-                    Cost center + project/budget code so Finance can reconcile
-                    the spend.
+                    Cost center + project/budget code so Finance can reconcile the spend.
                   </p>
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Field label="Department" htmlFor="department">
-                    {departments.length > 0 ? <select
-                      id="department"
-                      className="input"
-                      value={department}
-                      onChange={(e) => { setDepartment(e.target.value); setCostCenter(""); }}
-                    ><option value="">Select department</option>{departments.map(([code, name]) => <option key={code} value={code}>{name}</option>)}</select> : <Input
-                      id="department" value={department}
-                      onChange={(e) => setDepartment(e.target.value)}
-                      placeholder="Department"
-                    />}
+                    {departments.length > 0 ? (
+                      <select
+                        id="department"
+                        className="input"
+                        value={department}
+                        onChange={(e) => {
+                          setDepartment(e.target.value);
+                          setCostCenter('');
+                        }}
+                      >
+                        <option value="">Select department</option>
+                        {departments.map(([code, name]) => (
+                          <option key={code} value={code}>
+                            {name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <Input
+                        id="department"
+                        value={department}
+                        onChange={(e) => setDepartment(e.target.value)}
+                        placeholder="Department"
+                      />
+                    )}
                   </Field>
                   <Field label="Needed by" htmlFor="neededBy">
                     <Input
@@ -1174,17 +1207,29 @@ export function CreateRequestPage() {
                     />
                   </Field>
                   <Field label="Cost center" htmlFor="costCenter">
-                    {departments.length > 0 ? <select
-                      id="costCenter"
-                      className="input"
-                      value={costCenter}
-                      disabled={!department}
-                      onChange={(e) => setCostCenter(e.target.value)}
-                    ><option value="">Select cost center</option>{availableCostCenters.map((option) => <option key={option.cost_center_code} value={option.cost_center_code}>{option.cost_center_code} / {option.cost_center_name}</option>)}</select> : <Input
-                      id="costCenter" value={costCenter}
-                      onChange={(e) => setCostCenter(e.target.value)}
-                      placeholder="Cost center"
-                    />}
+                    {departments.length > 0 ? (
+                      <select
+                        id="costCenter"
+                        className="input"
+                        value={costCenter}
+                        disabled={!department}
+                        onChange={(e) => setCostCenter(e.target.value)}
+                      >
+                        <option value="">Select cost center</option>
+                        {availableCostCenters.map((option) => (
+                          <option key={option.cost_center_code} value={option.cost_center_code}>
+                            {option.cost_center_code} / {option.cost_center_name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <Input
+                        id="costCenter"
+                        value={costCenter}
+                        onChange={(e) => setCostCenter(e.target.value)}
+                        placeholder="Cost center"
+                      />
+                    )}
                   </Field>
                   <Field label="Project code (optional)" htmlFor="projectCode">
                     <Input
@@ -1215,11 +1260,14 @@ export function CreateRequestPage() {
                     />
                   </h2>
                   <p className="text-xs text-muted">
-                    Approvers read &ldquo;need&rdquo; and &ldquo;risk if not
-                    procured&rdquo; first.
+                    Approvers read &ldquo;need&rdquo; and &ldquo;risk if not procured&rdquo; first.
                   </p>
                 </div>
-                <Field label="Need description *" htmlFor="need-description" error={fieldErrors.needDescription}>
+                <Field
+                  label="Need description *"
+                  htmlFor="need-description"
+                  error={fieldErrors.needDescription}
+                >
                   <Textarea
                     id="need-description"
                     aria-invalid={Boolean(fieldErrors.needDescription)}
@@ -1255,12 +1303,10 @@ export function CreateRequestPage() {
               <section className="card space-y-3 p-4 sm:p-5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <h2 className="font-display text-base font-bold text-ink">
-                      Attachments
-                    </h2>
+                    <h2 className="font-display text-base font-bold text-ink">Attachments</h2>
                     <p className="text-xs text-muted">
-                      JPEG, PNG, WebP, or PDF up to 10 MB each. Tag each file so
-                      the required-documents checklist can tick itself.
+                      JPEG, PNG, WebP, or PDF up to 10 MB each. Tag each file so the
+                      required-documents checklist can tick itself.
                     </p>
                   </div>
                   <label className="btn-outline btn-sm inline-flex cursor-pointer">
@@ -1285,10 +1331,7 @@ export function CreateRequestPage() {
                         className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-surface p-2"
                       >
                         <div className="min-w-0 flex-1">
-                          <p
-                            className="truncate text-sm font-semibold text-ink"
-                            title={a.filename}
-                          >
+                          <p className="truncate text-sm font-semibold text-ink" title={a.filename}>
                             {a.filename}
                           </p>
                           <p className="text-xs text-muted">
@@ -1298,12 +1341,9 @@ export function CreateRequestPage() {
                         <select
                           aria-label={`Document type for ${a.filename}`}
                           className="input w-auto text-xs"
-                          value={a.kind ?? "other"}
+                          value={a.kind ?? 'other'}
                           onChange={(e) =>
-                            setAttachmentKind(
-                              i,
-                              e.target.value as RequestAttachmentKind,
-                            )
+                            setAttachmentKind(i, e.target.value as RequestAttachmentKind)
                           }
                         >
                           {KIND_OPTIONS.map((k) => (
@@ -1334,12 +1374,10 @@ export function CreateRequestPage() {
               <section className="card space-y-3 p-4 sm:p-5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <h2 className="font-display text-base font-bold text-ink">
-                      Sourcing path
-                    </h2>
+                    <h2 className="font-display text-base font-bold text-ink">Sourcing path</h2>
                     <p className="text-xs text-muted">
-                      Suggested from category + estimated total. Override with
-                      justification if you must go direct.
+                      Suggested from category + estimated total. Override with justification if you
+                      must go direct.
                     </p>
                   </div>
                   <div className="flex items-center gap-2 text-xs">
@@ -1398,21 +1436,19 @@ export function CreateRequestPage() {
                 )}
                 {!routeEvidenceReady && (
                   <p className="text-xs text-amber-700 dark:text-amber-300">
-                    Complete the applicable exception and importation controls
-                    before Procurement confirms this route.
+                    Complete the applicable exception and importation controls before Procurement
+                    confirms this route.
                   </p>
                 )}
                 {sourcingOverride && (
                   <p className="text-xs text-amber-700 dark:text-amber-300">
                     <Icon name="alert" className="mr-1 inline h-3.5 w-3.5" />
-                    You&apos;re overriding the suggested path. Explain why in
-                    the justification — Procurement Head will review before
-                    approval.
+                    You&apos;re overriding the suggested path. Explain why in the justification —
+                    Procurement Head will review before approval.
                   </p>
                 )}
 
-                {(effectiveSourcing === "direct_award" ||
-                  effectiveSourcing === "emergency") && (
+                {(effectiveSourcing === 'direct_award' || effectiveSourcing === 'emergency') && (
                   <div className="grid gap-3 sm:grid-cols-2">
                     <Field label="Direct-award reason" htmlFor="daReason">
                       <select
@@ -1424,16 +1460,11 @@ export function CreateRequestPage() {
                         <option value="">— pick a reason —</option>
                         <option value="sole_supplier">Sole supplier</option>
                         <option value="emergency">Emergency</option>
-                        <option value="repeat_continuity">
-                          Repeat / continuity
-                        </option>
+                        <option value="repeat_continuity">Repeat / continuity</option>
                         <option value="other">Other approved exception</option>
                       </select>
                     </Field>
-                    <Field
-                      label="Price reasonableness note"
-                      htmlFor="priceReason"
-                    >
+                    <Field label="Price reasonableness note" htmlFor="priceReason">
                       <Input
                         id="priceReason"
                         value={priceReasonableness}
@@ -1444,12 +1475,9 @@ export function CreateRequestPage() {
                   </div>
                 )}
 
-                {[
-                  "direct_award",
-                  "emergency",
-                  "repeat_order",
-                  "petty_cash",
-                ].includes(effectiveSourcing) && (
+                {['direct_award', 'emergency', 'repeat_order', 'petty_cash'].includes(
+                  effectiveSourcing,
+                ) && (
                   <ExceptionPack
                     method={effectiveSourcing}
                     value={exceptionPack}
@@ -1460,45 +1488,31 @@ export function CreateRequestPage() {
                 {riskFacts.importation && (
                   <section className="space-y-3 rounded-lg border border-line p-4">
                     <div>
-                      <h3 className="font-semibold text-ink">
-                        Importation plan
-                      </h3>
+                      <h3 className="font-semibold text-ink">Importation plan</h3>
                       <p className="text-xs text-muted">
-                        Importation adds landed-cost, logistics, permit, and
-                        payment controls but does not automatically force RFP.
+                        Importation adds landed-cost, logistics, permit, and payment controls but
+                        does not automatically force RFP.
                       </p>
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2">
                       {(
                         [
-                          ["incoterms", "Incoterms / shipping terms"],
-                          ["importerOfRecord", "Importer of record"],
+                          ['incoterms', 'Incoterms / shipping terms'],
+                          ['importerOfRecord', 'Importer of record'],
+                          ['permitsAndRegistrations', 'Permits, licenses, and registrations'],
+                          ['customsBrokerAndLogistics', 'Customs broker and logistics'],
                           [
-                            "permitsAndRegistrations",
-                            "Permits, licenses, and registrations",
+                            'dutiesTaxesFreightInsurance',
+                            'Duties, taxes, freight, insurance, storage, FX, and bank charges',
                           ],
+                          ['foreignPaymentTiming', 'Foreign payment timing and protection'],
                           [
-                            "customsBrokerAndLogistics",
-                            "Customs broker and logistics",
-                          ],
-                          [
-                            "dutiesTaxesFreightInsurance",
-                            "Duties, taxes, freight, insurance, storage, FX, and bank charges",
-                          ],
-                          [
-                            "foreignPaymentTiming",
-                            "Foreign payment timing and protection",
-                          ],
-                          [
-                            "deliveryAcceptanceAndWarranty",
-                            "Delivery, acceptance, commissioning, defects, and warranty",
+                            'deliveryAcceptanceAndWarranty',
+                            'Delivery, acceptance, commissioning, defects, and warranty',
                           ],
                         ] as const
                       ).map(([key, label]) => (
-                        <label
-                          key={key}
-                          className="text-sm font-semibold text-ink"
-                        >
+                        <label key={key} className="text-sm font-semibold text-ink">
                           {label}
                           <textarea
                             rows={3}
@@ -1517,12 +1531,8 @@ export function CreateRequestPage() {
                   </section>
                 )}
 
-                {(effectiveSourcing === "rfp" ||
-                  effectiveSourcing === "rfq") && (
-                  <Field
-                    label="PhilGEPS reference (if applicable)"
-                    htmlFor="philgeps"
-                  >
+                {(effectiveSourcing === 'rfp' || effectiveSourcing === 'rfq') && (
+                  <Field label="PhilGEPS reference (if applicable)" htmlFor="philgeps">
                     <Input
                       id="philgeps"
                       value={philgeps}
@@ -1532,8 +1542,7 @@ export function CreateRequestPage() {
                   </Field>
                 )}
 
-                {(effectiveSourcing === "rfp" ||
-                  effectiveSourcing === "rfq") && (
+                {(effectiveSourcing === 'rfp' || effectiveSourcing === 'rfq') && (
                   <EvaluationMatrix
                     value={evaluation}
                     onChange={setEvaluation}
@@ -1548,8 +1557,8 @@ export function CreateRequestPage() {
                     Financial protection review
                   </h2>
                   <p className="text-xs text-muted">
-                    Policy triggers are shown before award so bonds, insurance,
-                    or SBLC evidence is not discovered after work starts.
+                    Policy triggers are shown before award so bonds, insurance, or SBLC evidence is
+                    not discovered after work starts.
                   </p>
                 </div>
                 <FinancialProtectionPanel
@@ -1571,7 +1580,7 @@ export function CreateRequestPage() {
                     </h2>
                   </div>
                   <span className="text-xs text-faint">
-                    {ladder.length} step{ladder.length === 1 ? "" : "s"}
+                    {ladder.length} step{ladder.length === 1 ? '' : 's'}
                   </span>
                 </div>
                 <ol className="flex flex-wrap items-center gap-2 text-xs">
@@ -1580,14 +1589,9 @@ export function CreateRequestPage() {
                       <span className="grid h-6 w-6 place-items-center rounded-full bg-brand-500/15 text-brand-700 dark:text-brand-300">
                         {i + 1}
                       </span>
-                      <span className="font-semibold text-ink">
-                        {tierLabel(t)}
-                      </span>
+                      <span className="font-semibold text-ink">{tierLabel(t)}</span>
                       {i < ladder.length - 1 && (
-                        <Icon
-                          name="arrowRight"
-                          className="h-3.5 w-3.5 text-faint"
-                        />
+                        <Icon name="arrowRight" className="h-3.5 w-3.5 text-faint" />
                       )}
                     </li>
                   ))}
@@ -1596,12 +1600,10 @@ export function CreateRequestPage() {
 
               <section className="card space-y-3 p-4 sm:p-5">
                 <div>
-                  <h2 className="font-display text-base font-bold text-ink">
-                    Preferred vendor
-                  </h2>
+                  <h2 className="font-display text-base font-bold text-ink">Preferred vendor</h2>
                   <p className="text-xs text-muted">
-                    Optional. Award is gated on accreditation (policy §7);
-                    Procurement can invite additional bidders.
+                    Optional. Award is gated on accreditation (policy §7); Procurement can invite
+                    additional bidders.
                   </p>
                 </div>
                 <Field label="Vendor" htmlFor="vendor">
@@ -1615,9 +1617,9 @@ export function CreateRequestPage() {
                     {vendors.map((v) => (
                       <option key={v.id} value={v.id}>
                         {v.legalName}
-                        {v.accreditationStatus !== "approved"
+                        {v.accreditationStatus !== 'approved'
                           ? ` — ${accreditationLabel(v.accreditationStatus)}`
-                          : ""}
+                          : ''}
                       </option>
                     ))}
                   </select>
@@ -1627,8 +1629,7 @@ export function CreateRequestPage() {
               <section className="card space-y-3 p-4 sm:p-5">
                 <div>
                   <h2 className="font-display text-base font-bold text-ink">
-                    Required documents for{" "}
-                    {sourcingMethodLabel(effectiveSourcing)}
+                    Required documents for {sourcingMethodLabel(effectiveSourcing)}
                   </h2>
                   <p className="text-xs text-muted">
                     Matched live against the files you attached on step 2.
@@ -1650,9 +1651,9 @@ export function CreateRequestPage() {
                       )}
                       <div className="min-w-0 flex-1">
                         <p className="font-semibold text-ink">
-                          {d.label}{" "}
-                          <Badge tone={d.attached ? "emerald" : "amber"}>
-                            {d.attached ? "attached" : "missing"}
+                          {d.label}{' '}
+                          <Badge tone={d.attached ? 'emerald' : 'amber'}>
+                            {d.attached ? 'attached' : 'missing'}
                           </Badge>
                         </p>
                         <p className="text-xs text-muted">{d.why}</p>
@@ -1664,10 +1665,8 @@ export function CreateRequestPage() {
                   <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
                     <Icon name="alert" className="mr-1 inline h-3.5 w-3.5" />
                     {missingDocs.length} required document
-                    {missingDocs.length === 1 ? "" : "s"} not attached yet —
-                    approvers will see{" "}
-                    {missingDocs.length === 1 ? "it" : "them"} flagged as
-                    missing on the request.
+                    {missingDocs.length === 1 ? '' : 's'} not attached yet — approvers will see{' '}
+                    {missingDocs.length === 1 ? 'it' : 'them'} flagged as missing on the request.
                   </p>
                 )}
               </section>
@@ -1697,12 +1696,8 @@ export function CreateRequestPage() {
               </Button>
             ) : (
               <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  type="submit"
-                  variant="outline"
-                  disabled={submitting || !canSubmit}
-                >
-                  {submitting ? "Saving…" : "Save draft"}
+                <Button type="submit" variant="outline" disabled={submitting || !canSubmit}>
+                  {submitting ? 'Saving…' : 'Save draft'}
                 </Button>
                 <Button
                   type="button"
@@ -1711,10 +1706,10 @@ export function CreateRequestPage() {
                   onClick={(e) => handleSubmit(e as unknown as FormEvent, true)}
                 >
                   {submitting
-                    ? "Submitting…"
+                    ? 'Submitting…'
                     : routeConfirmed
-                      ? "Save & submit for approval"
-                      : "Awaiting Procurement routing"}
+                      ? 'Save & submit for approval'
+                      : 'Awaiting Procurement routing'}
                 </Button>
               </div>
             )}

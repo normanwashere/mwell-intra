@@ -37,14 +37,23 @@ describe('sourcing policy', () => {
   });
 
   it('uses the sourced PHP 1,000,000 RFQ/RFP boundary', () => {
-    expect(suggestSourcingMethod({ category: 'goods', amount: RFP_THRESHOLD - 0.01 })).toBe('rfq');
+    expect(
+      suggestSourcingMethod({
+        category: 'goods',
+        amount: RFP_THRESHOLD - 0.01,
+      }),
+    ).toBe('rfq');
     expect(suggestSourcingMethod({ category: 'goods', amount: RFP_THRESHOLD })).toBe('rfp');
   });
 
   it('escalates complex and data-sensitive work regardless of amount', () => {
     expect(suggestSourcingMethod({ category: 'construction', amount: 10_000 })).toBe('rfp');
     expect(
-      deriveSourcingRecommendation({ amount: 10_000, comparable: true, dataSensitive: true }),
+      deriveSourcingRecommendation({
+        amount: 10_000,
+        comparable: true,
+        dataSensitive: true,
+      }),
     ).toMatchObject({ method: 'rfp', reasons: ['data_sensitive'] });
   });
 
@@ -53,46 +62,120 @@ describe('sourcing policy', () => {
   });
 });
 
+describe('minimum requester contract', () => {
+  it('blocks submission when governed ownership, budget, date, lines, or evidence is missing', () => {
+    expect(
+      evaluateSubmitReadiness({
+        category: 'goods',
+        estimatedAmount: 0,
+        sourcingMethod: 'rfq',
+        attachments: [],
+        compliance: { routeConfirmed: true },
+        lines: [],
+      }).missingDocs,
+    ).toEqual(
+      expect.arrayContaining([
+        'Department',
+        'Cost center',
+        'Needed-by date',
+        'Budget context',
+        'Positive estimated amount',
+        'At least one valid line item',
+        'Technical description / spec',
+        'Approved budget evidence',
+      ]),
+    );
+  });
+
+  it('accepts a fully identified, funded, evidence-backed request', () => {
+    expect(
+      evaluateSubmitReadiness({
+        category: 'goods',
+        estimatedAmount: 12_500,
+        sourcingMethod: 'rfq',
+        department: 'operations',
+        costCenter: 'OPS-100',
+        neededBy: '2099-01-31',
+        budgetCode: 'GL-6200',
+        lines: [{ description: 'ECG ring', quantity: 5 }],
+        attachments: [
+          { kind: 'spec' },
+          { kind: 'budget' },
+          { kind: 'previous_cost' },
+          { kind: 'quote' },
+        ],
+        compliance: { routeConfirmed: true },
+      }),
+    ).toEqual({ ok: true, missingDocs: [] });
+  });
+});
+
 describe('binding vendor-to-pay controls', () => {
   it.each([
-    ['simple comparable below threshold', { amount: RFP_THRESHOLD - 0.01, comparable: true }, 'rfq'],
+    [
+      'simple comparable below threshold',
+      { amount: RFP_THRESHOLD - 0.01, comparable: true },
+      'rfq',
+    ],
     ['threshold amount', { amount: RFP_THRESHOLD, comparable: true }, 'rfp'],
     ['low-value complex work', { amount: 25_000, comparable: true, complex: true }, 'rfp'],
     ['low-value technical work', { amount: 25_000, comparable: true, technical: true }, 'rfp'],
     ['low-value high-risk work', { amount: 25_000, comparable: true, highRisk: true }, 'rfp'],
-    ['low-value data-sensitive work', { amount: 25_000, comparable: true, dataSensitive: true }, 'rfp'],
+    [
+      'low-value data-sensitive work',
+      { amount: 25_000, comparable: true, dataSensitive: true },
+      'rfp',
+    ],
   ])('routes %s through the sourced method', (_label, input, expected) => {
     expect(deriveSourcingRecommendation(input).method).toBe(expected);
   });
 
   it('blocks unsupported Direct Award, repeat-order, emergency, and petty-cash exceptions', () => {
-    expect(evaluateCommitmentReadiness({
-      sourcingMethod: 'direct_award',
-      vendorEligible: true,
-      exceptionPack: {
-        type: 'direct_award', justification: '', priceReasonableness: '',
-        procurementHeadReviewed: false, doaApproved: false,
-      },
-    })).toEqual(expect.arrayContaining([
-      'allowed Direct Award basis',
-      'business justification',
-      'price-reasonableness support',
-      'Procurement Head review',
-      'final DOA approval',
-    ]));
-    expect(evaluateCommitmentReadiness({
-      sourcingMethod: 'repeat_order', vendorEligible: true,
-    })).toContain('repeat-order continuity evidence and approval');
-    expect(evaluateCommitmentReadiness({
-      sourcingMethod: 'emergency', vendorEligible: true,
-    })).toContain('documented emergency authority');
-    expect(evaluateCommitmentReadiness({
-      sourcingMethod: 'petty_cash', vendorEligible: false,
-      exceptionPack: {
-        type: 'petty_cash_non_accredited', justification: 'One-time office need',
-        financeEligibilityConfirmed: true, nonRecurringNonSplitAttested: false,
-      },
-    })).toContain('non-recurring and non-split petty-cash attestation');
+    expect(
+      evaluateCommitmentReadiness({
+        sourcingMethod: 'direct_award',
+        vendorEligible: true,
+        exceptionPack: {
+          type: 'direct_award',
+          justification: '',
+          priceReasonableness: '',
+          procurementHeadReviewed: false,
+          doaApproved: false,
+        },
+      }),
+    ).toEqual(
+      expect.arrayContaining([
+        'allowed Direct Award basis',
+        'business justification',
+        'price-reasonableness support',
+        'Procurement Head review',
+        'final DOA approval',
+      ]),
+    );
+    expect(
+      evaluateCommitmentReadiness({
+        sourcingMethod: 'repeat_order',
+        vendorEligible: true,
+      }),
+    ).toContain('repeat-order continuity evidence and approval');
+    expect(
+      evaluateCommitmentReadiness({
+        sourcingMethod: 'emergency',
+        vendorEligible: true,
+      }),
+    ).toContain('documented emergency authority');
+    expect(
+      evaluateCommitmentReadiness({
+        sourcingMethod: 'petty_cash',
+        vendorEligible: false,
+        exceptionPack: {
+          type: 'petty_cash_non_accredited',
+          justification: 'One-time office need',
+          financeEligibilityConfirmed: true,
+          nonRecurringNonSplitAttested: false,
+        },
+      }),
+    ).toContain('non-recurring and non-split petty-cash attestation');
   });
 
   it('permits petty-cash commitment before OR/SI and liquidation, which belong to payment', () => {
@@ -107,109 +190,173 @@ describe('binding vendor-to-pay controls', () => {
       },
     };
     expect(evaluateCommitmentReadiness(base)).toEqual([]);
-    expect(evaluatePaymentReadiness({
-      poOrAgreementApproved: true,
-      invoiceOrOfficialReceipt: false,
-      acceptedWarehouseQuantity: 0,
-      serviceAcceptance: true,
-      paymentTermsRecorded: true,
-      taxWithholdingSupport: true,
-      pettyCashLiquidationRecorded: false,
-    })).toEqual(expect.arrayContaining([
-      'invoice, official receipt, or sales invoice',
-      'petty-cash liquidation record',
-    ]));
+    expect(
+      evaluatePaymentReadiness({
+        poOrAgreementApproved: true,
+        invoiceOrOfficialReceipt: false,
+        acceptedWarehouseQuantity: 0,
+        serviceAcceptance: true,
+        paymentTermsRecorded: true,
+        taxWithholdingSupport: true,
+        pettyCashLiquidationRecorded: false,
+      }),
+    ).toEqual(
+      expect.arrayContaining([
+        'invoice, official receipt, or sales invoice',
+        'petty-cash liquidation record',
+      ]),
+    );
   });
 
   it('requires the complete foreign-vendor and importation control record', () => {
-    expect(evaluateCommitmentReadiness({
-      sourcingMethod: 'rfp', vendorEligible: true, foreignVendor: true,
-      importationRequired: true,
-      importationPlan: {
-        incoterms: 'DAP', importerOfRecord: '', permitsAndRegistrations: '',
-        customsBrokerAndLogistics: '', dutiesTaxesFreightInsurance: '',
-        foreignPaymentTiming: '', deliveryAcceptanceAndWarranty: '',
-      },
-    })).toEqual(expect.arrayContaining([
-      'importer of record',
-      'import permits and registrations',
-      'landed cost, duties, taxes, freight, and insurance',
-      'currency and foreign-payment risk',
-      'delivery, acceptance, and warranty point',
-    ]));
+    expect(
+      evaluateCommitmentReadiness({
+        sourcingMethod: 'rfp',
+        vendorEligible: true,
+        foreignVendor: true,
+        importationRequired: true,
+        importationPlan: {
+          incoterms: 'DAP',
+          importerOfRecord: '',
+          permitsAndRegistrations: '',
+          customsBrokerAndLogistics: '',
+          dutiesTaxesFreightInsurance: '',
+          foreignPaymentTiming: '',
+          deliveryAcceptanceAndWarranty: '',
+        },
+      }),
+    ).toEqual(
+      expect.arrayContaining([
+        'importer of record',
+        'import permits and registrations',
+        'landed cost, duties, taxes, freight, and insurance',
+        'currency and foreign-payment risk',
+        'delivery, acceptance, and warranty point',
+      ]),
+    );
   });
 
   it('blocks issue when accreditation is expired or temporary clearance lacks approved scope', () => {
-    expect(evaluateCommitmentReadiness({ sourcingMethod: 'rfq', vendorEligible: false }))
-      .toContain('current full accreditation or approved scoped temporary clearance');
+    expect(
+      evaluateCommitmentReadiness({
+        sourcingMethod: 'rfq',
+        vendorEligible: false,
+      }),
+    ).toContain('current full accreditation or approved scoped temporary clearance');
   });
 
   it('applies sourced down-payment, manpower, construction, and installation protections', () => {
-    expect(evaluateCommitmentReadiness({
-      sourcingMethod: 'rfp', vendorEligible: true, downPayment: true,
-      category: 'manpower', construction: true, equipmentInstallation: true,
-    })).toEqual(expect.arrayContaining([
-      'down-payment bond equal to the down payment',
-      'manpower payment-bond or equivalent review',
-      'construction performance, warranty, insurance, and regulatory review',
-      'installation commissioning, defects, warranty, and acceptance controls',
-    ]));
+    expect(
+      evaluateCommitmentReadiness({
+        sourcingMethod: 'rfp',
+        vendorEligible: true,
+        downPayment: true,
+        category: 'manpower',
+        construction: true,
+        equipmentInstallation: true,
+      }),
+    ).toEqual(
+      expect.arrayContaining([
+        'down-payment bond equal to the down payment',
+        'manpower payment-bond or equivalent review',
+        'construction performance, warranty, insurance, and regulatory review',
+        'installation commissioning, defects, warranty, and acceptance controls',
+      ]),
+    );
   });
 
   it('allows valid Direct Award, manpower, construction, down-payment, and installation paths', () => {
-    expect(evaluateCommitmentReadiness({
-      sourcingMethod: 'direct_award', vendorEligible: true, category: 'construction',
-      downPayment: true, construction: true, equipmentInstallation: true,
-      exceptionPack: {
-        type: 'direct_award', directAwardBasis: 'sole_supplier', supplierSelected: true,
-        justification: 'Only supported manufacturer', priceReasonableness: 'Prior PO benchmark',
-        procurementHeadReviewed: true, doaApproved: true,
-      },
-      protections: {
-        downPaymentBondApproved: true, manpowerProtectionReviewed: true,
-        constructionProtectionsApproved: true, installationProtectionsApproved: true,
-      },
-    })).toEqual([]);
+    expect(
+      evaluateCommitmentReadiness({
+        sourcingMethod: 'direct_award',
+        vendorEligible: true,
+        category: 'construction',
+        downPayment: true,
+        construction: true,
+        equipmentInstallation: true,
+        exceptionPack: {
+          type: 'direct_award',
+          directAwardBasis: 'sole_supplier',
+          supplierSelected: true,
+          justification: 'Only supported manufacturer',
+          priceReasonableness: 'Prior PO benchmark',
+          procurementHeadReviewed: true,
+          doaApproved: true,
+        },
+        protections: {
+          downPaymentBondApproved: true,
+          manpowerProtectionReviewed: true,
+          constructionProtectionsApproved: true,
+          installationProtectionsApproved: true,
+        },
+      }),
+    ).toEqual([]);
   });
 
   it('denies payment readiness without accepted receipt or service evidence', () => {
-    expect(evaluatePaymentReadiness({
-      poOrAgreementApproved: true,
-      invoiceOrOfficialReceipt: true,
-      acceptedWarehouseQuantity: 0,
-      serviceAcceptance: false,
-      paymentTermsRecorded: true,
-      taxWithholdingSupport: true,
-    })).toContain('accepted Warehouse receipt or service acceptance');
+    expect(
+      evaluatePaymentReadiness({
+        poOrAgreementApproved: true,
+        invoiceOrOfficialReceipt: true,
+        acceptedWarehouseQuantity: 0,
+        serviceAcceptance: false,
+        paymentTermsRecorded: true,
+        taxWithholdingSupport: true,
+      }),
+    ).toContain('accepted Warehouse receipt or service acceptance');
   });
 
   it('requires payment readiness to bind every active partial acceptance pack', () => {
     const acceptances = [
-      { id: 'accept-1', purchaseOrderId: 'po-1', acceptanceType: 'goods',
-        acceptedScope: 'first partial receipt', acceptedAt: '2026-07-15T01:00:00Z',
-        status: 'accepted', exceptions: [] },
-      { id: 'accept-2', purchaseOrderId: 'po-1', acceptanceType: 'goods',
-        acceptedScope: 'second partial receipt', acceptedAt: '2026-07-15T02:00:00Z',
-        status: 'accepted', exceptions: [] },
+      {
+        id: 'accept-1',
+        purchaseOrderId: 'po-1',
+        acceptanceType: 'goods',
+        acceptedScope: 'first partial receipt',
+        acceptedAt: '2026-07-15T01:00:00Z',
+        status: 'accepted',
+        exceptions: [],
+      },
+      {
+        id: 'accept-2',
+        purchaseOrderId: 'po-1',
+        acceptanceType: 'goods',
+        acceptedScope: 'second partial receipt',
+        acceptedAt: '2026-07-15T02:00:00Z',
+        status: 'accepted',
+        exceptions: [],
+      },
     ] satisfies AcceptancePack[];
     const readiness: PaymentReadinessPack = {
-      id: 'readiness-1', purchaseOrderId: 'po-1', status: 'ready_for_finance',
+      id: 'readiness-1',
+      purchaseOrderId: 'po-1',
+      status: 'ready_for_finance',
       preparedAt: '2026-07-15T03:00:00Z',
-      acceptancePackId: 'accept-2', acceptancePackIds: ['accept-1', 'accept-2'],
-      poMatch: true, invoiceOrSiReference: 'invoice.pdf',
-      milestoneSupportReference: 'delivery.pdf', taxWithholdingSupportReference: 'tax.pdf',
+      acceptancePackId: 'accept-2',
+      acceptancePackIds: ['accept-1', 'accept-2'],
+      poMatch: true,
+      invoiceOrSiReference: 'invoice.pdf',
+      milestoneSupportReference: 'delivery.pdf',
+      taxWithholdingSupportReference: 'tax.pdf',
     };
 
     expect(evaluatePaymentPackReadiness(acceptances, readiness)).toEqual([]);
-    expect(evaluatePaymentPackReadiness(acceptances, {
-      ...readiness, acceptancePackIds: ['accept-2'],
-    })).toContain('complete active acceptance evidence set');
+    expect(
+      evaluatePaymentPackReadiness(acceptances, {
+        ...readiness,
+        acceptancePackIds: ['accept-2'],
+      }),
+    ).toContain('complete active acceptance evidence set');
   });
 
   it('keeps issue lifecycle and Finance handoff checks after retiring Procurement receipts', () => {
-    expect(evaluateIssueReadiness({
-      poApproved: true, sourceAwardApproved: false, vendorEligible: false,
-    })).toEqual([
+    expect(
+      evaluateIssueReadiness({
+        poApproved: true,
+        sourceAwardApproved: false,
+        vendorEligible: false,
+      }),
+    ).toEqual([
       'approved source request',
       'current vendor accreditation or scoped temporary clearance',
     ]);
@@ -233,7 +380,12 @@ describe('sourcing response readiness', () => {
 
   it('requires an exception when Procurement recorded a higher intended response count', () => {
     expect(
-      evaluateSourcingReadiness({ method: 'rfp', intendedResponses: 3, invited: 4, responses: 1 }),
+      evaluateSourcingReadiness({
+        method: 'rfp',
+        intendedResponses: 3,
+        invited: 4,
+        responses: 1,
+      }),
     ).toEqual({ ready: false, insufficientBidsExceptionRequired: true });
   });
 });
@@ -248,16 +400,20 @@ describe('acceptance and invoice controls', () => {
   });
 
   it('computes the three-way amount match instead of trusting a checkbox', () => {
-    expect(calculateInvoiceMatch({
-      purchaseOrderAmount: 120_000,
-      acceptedAmount: 60_000,
-      invoiceAmount: 60_000,
-    })).toEqual({ matched: true, variance: 0 });
-    expect(calculateInvoiceMatch({
-      purchaseOrderAmount: 120_000,
-      acceptedAmount: 60_000,
-      invoiceAmount: 61_000,
-    })).toEqual({ matched: false, variance: -1_000 });
+    expect(
+      calculateInvoiceMatch({
+        purchaseOrderAmount: 120_000,
+        acceptedAmount: 60_000,
+        invoiceAmount: 60_000,
+      }),
+    ).toEqual({ matched: true, variance: 0 });
+    expect(
+      calculateInvoiceMatch({
+        purchaseOrderAmount: 120_000,
+        acceptedAmount: 60_000,
+        invoiceAmount: 61_000,
+      }),
+    ).toEqual({ matched: false, variance: -1_000 });
   });
 });
 
@@ -288,11 +444,13 @@ describe('DOA resolution', () => {
 
 describe('approval ladder', () => {
   it('keeps the policy process tiers and does not infer Finance from amount alone', () => {
-    expect(buildApprovalLadder({ category: 'goods', amount: 900_000, sourcingMethod: 'rfq' })).toEqual([
-      'dept_head',
-      'procurement_head',
-      'final_approver',
-    ]);
+    expect(
+      buildApprovalLadder({
+        category: 'goods',
+        amount: 900_000,
+        sourcingMethod: 'rfq',
+      }),
+    ).toEqual(['dept_head', 'procurement_head', 'final_approver']);
   });
 
   it('adds Finance for policy categories with financial-protection exposure', () => {
@@ -301,8 +459,20 @@ describe('approval ladder', () => {
   });
 
   it('adds Legal for contractual or exception routes', () => {
-    expect(buildApprovalLadder({ category: 'services', amount: 20_000, sourcingMethod: 'rfq' })).toContain('legal');
-    expect(buildApprovalLadder({ category: 'goods', amount: 20_000, sourcingMethod: 'direct_award' })).toContain('legal');
+    expect(
+      buildApprovalLadder({
+        category: 'services',
+        amount: 20_000,
+        sourcingMethod: 'rfq',
+      }),
+    ).toContain('legal');
+    expect(
+      buildApprovalLadder({
+        category: 'goods',
+        amount: 20_000,
+        sourcingMethod: 'direct_award',
+      }),
+    ).toContain('legal');
   });
 
   it('builds ordered pending steps with an unresolved DOA label', () => {
@@ -337,13 +507,18 @@ describe('approval progression', () => {
 
   it('advances only the active tier', () => {
     expect(applyStepDecision(steps, 'final_approver', 'approved', { at: now })).toBeNull();
-    const result = applyStepDecision(steps, 'dept_head', 'approved', { at: now, email: 'head@mwell.com.ph' });
+    const result = applyStepDecision(steps, 'dept_head', 'approved', {
+      at: now,
+      email: 'head@mwell.com.ph',
+    });
     expect(result?.steps[0]?.status).toBe('approved');
     expect(result?.outcome).toBe('in_progress');
   });
 
   it('terminates on rejection', () => {
-    expect(applyStepDecision(steps, 'dept_head', 'rejected', { at: now })?.outcome).toBe('rejected');
+    expect(applyStepDecision(steps, 'dept_head', 'rejected', { at: now })?.outcome).toBe(
+      'rejected',
+    );
   });
 });
 
@@ -355,8 +530,12 @@ describe('required evidence', () => {
   });
 
   it('uses count-neutral RFQ/RFP labels', () => {
-    expect(requiredDocuments({ sourcingMethod: 'rfq' }).find((doc) => doc.key === 'quotes')?.label).toBe('Comparable quotations');
-    expect(requiredDocuments({ sourcingMethod: 'rfp' }).find((doc) => doc.key === 'bids')?.label).toBe('Vendor proposals');
+    expect(
+      requiredDocuments({ sourcingMethod: 'rfq' }).find((doc) => doc.key === 'quotes')?.label,
+    ).toBe('Comparable quotations');
+    expect(
+      requiredDocuments({ sourcingMethod: 'rfp' }).find((doc) => doc.key === 'bids')?.label,
+    ).toBe('Vendor proposals');
   });
 
   it('matches uploaded evidence kinds', () => {
@@ -372,6 +551,13 @@ describe('required evidence', () => {
   it('blocks approval submission until Procurement confirms the route', () => {
     const input = {
       sourcingMethod: 'rfq' as const,
+      category: 'goods' as const,
+      department: 'operations',
+      costCenter: 'OPS-100',
+      neededBy: '2099-01-31',
+      budgetCode: 'GL-6200',
+      estimatedAmount: 10_000,
+      lines: [{ description: 'ECG ring', quantity: 1 }],
       attachments: [
         { kind: 'spec' as const },
         { kind: 'budget' as const },
@@ -379,8 +565,15 @@ describe('required evidence', () => {
         { kind: 'quote' as const },
       ],
     };
-    expect(evaluateSubmitReadiness(input).missingDocs).toContain('Procurement-confirmed sourcing route');
-    expect(evaluateSubmitReadiness({ ...input, compliance: { routeConfirmed: true } }).ok).toBe(true);
+    expect(evaluateSubmitReadiness(input).missingDocs).toContain(
+      'Procurement-confirmed sourcing route',
+    );
+    expect(
+      evaluateSubmitReadiness({
+        ...input,
+        compliance: { routeConfirmed: true },
+      }).ok,
+    ).toBe(true);
   });
 });
 

@@ -1,23 +1,19 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import {
-  Link,
-  Navigate,
-  useNavigate,
-  useParams,
-  useSearchParams,
-} from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   Badge,
   Card,
   DataTable,
+  Field,
   HeroChipButton,
   HeroStat,
   Icon,
   InfoTip,
   ModuleHero,
   SectionTitle,
+  Sheet,
   money,
   useToast,
   type Column,
@@ -56,10 +52,7 @@ import {
   statusLabel,
   stepStatusLabel,
 } from '../labels';
-import {
-  createGovernedAttachmentUrl,
-  type GovernedAccessClient,
-} from '../attachments';
+import { createGovernedAttachmentUrl, type GovernedAccessClient } from '../attachments';
 
 /** Compose a blocking message from an unmet submit-readiness result. */
 function readinessMessage(r: SubmitReadiness): string {
@@ -89,7 +82,11 @@ const DIRECT_AWARD_REASON_LABEL: Record<string, string> = {
 
 const lineColumns: Column<ProcurementRequestLine>[] = [
   { key: 'description', header: 'Description', render: (r) => r.description },
-  { key: 'quantity', header: 'Qty', render: (r) => `${r.quantity} ${r.uom ?? 'ea'}` },
+  {
+    key: 'quantity',
+    header: 'Qty',
+    render: (r) => `${r.quantity} ${r.uom ?? 'ea'}`,
+  },
   {
     key: 'unitPrice',
     header: 'Unit price',
@@ -123,6 +120,10 @@ export function RequestDetailPage() {
   const canConfirmRoute = useCan('procurement', 'manage_rfp');
   const canApproveSourcingException = useCan('procurement', 'approve_award');
   const [routeMethod, setRouteMethod] = useState<SourcingMethod>('rfq');
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelBusy, setCancelBusy] = useState(false);
+  const cancelCommandKey = useRef('');
   const [routeRiskFacts, setRouteRiskFacts] = useState<ProcurementRiskFacts>({
     comparable: true,
     complex: false,
@@ -158,10 +159,7 @@ export function RequestDetailPage() {
     }
   }, [req?.id, req?.status]);
 
-  const linkedPo = useMemo(
-    () => pos.find((p) => p.requestId === id),
-    [pos, id],
-  );
+  const linkedPo = useMemo(() => pos.find((p) => p.requestId === id), [pos, id]);
 
   // Single chronological order, newest first (PR-22) — creation, submission,
   // ladder decisions, and PO lifecycle/receipt events interleaved (J2-6).
@@ -239,7 +237,14 @@ export function RequestDetailPage() {
   }
   if (!req) return <Navigate to="/" replace />;
 
-  const isRequester = profile?.email && req.requesterEmail === profile.email;
+  const isRequester = Boolean(
+    profile && (req.requesterId === profile.id || req.requesterEmail === profile.email),
+  );
+
+  function openCancellation() {
+    cancelCommandKey.current = `request-cancel-${globalThis.crypto.randomUUID()}`;
+    setCancelOpen(true);
+  }
   const cat = categoryMeta(req.category);
   const routeRecommendation = deriveSourcingRecommendation({
     category: req.category,
@@ -252,9 +257,9 @@ export function RequestDetailPage() {
     const currentRequest = req;
     try {
       if (mode === 'supabase' && supabaseClient) {
-        const { error: rpcError } = await supabaseClient.schema('procurement').rpc(
-          'confirm_route_decision',
-          {
+        const { error: rpcError } = await supabaseClient
+          .schema('procurement')
+          .rpc('confirm_route_decision', {
             payload: {
               request_id: currentRequest.id,
               request_version: 1,
@@ -262,8 +267,7 @@ export function RequestDetailPage() {
               reasons: routeRecommendation.reasons,
               risk_facts: routeRiskFacts,
             },
-          },
-        );
+          });
         if (rpcError) throw new Error(rpcError.message);
         await refresh();
         success('Sourcing route confirmed');
@@ -299,8 +303,31 @@ export function RequestDetailPage() {
   }
   async function handleCancel() {
     if (!req) return;
-    const ok = await cancel(req.id);
-    if (ok) success('Request cancelled');
+    if (cancelReason.trim().length < 8) {
+      error('Enter a cancellation reason of at least 8 characters.');
+      return;
+    }
+    setCancelBusy(true);
+    try {
+      const result = await cancel(req.id, {
+        reason: cancelReason.trim(),
+        idempotencyKey: cancelCommandKey.current,
+      });
+      if (result?.status === 'cancelled') {
+        success('Request cancelled. Pending approvals were closed without deleting history.');
+        setCancelOpen(false);
+        setCancelReason('');
+        cancelCommandKey.current = '';
+      } else if (result?.cancellationBlockers?.length) {
+        error(result.cancellationBlockers.map((blocker) => blocker.recovery).join(' '));
+      } else {
+        error('The request could not be cancelled. Refresh and review downstream activity.');
+      }
+    } catch (cause) {
+      error(cause instanceof Error ? cause.message : 'The request could not be cancelled.');
+    } finally {
+      setCancelBusy(false);
+    }
   }
   async function handleAuthorPO() {
     if (!req || !req.vendorId || !req.vendorName) {
@@ -384,14 +411,22 @@ export function RequestDetailPage() {
           label="Full request record"
           content={
             <span className="block space-y-0.5">
-              <span className="block">Requester: {req.requesterName ?? '—'}{req.requesterEmail ? ` <${req.requesterEmail}>` : ''}</span>
+              <span className="block">
+                Requester: {req.requesterName ?? '—'}
+                {req.requesterEmail ? ` <${req.requesterEmail}>` : ''}
+              </span>
               <span className="block">Category: {cat?.label ?? '—'}</span>
-              <span className="block">Sourcing: {req.sourcingMethod ? sourcingMethodLabel(req.sourcingMethod) : '—'}{req.sourcingOverride ? ' (override)' : ''}</span>
+              <span className="block">
+                Sourcing: {req.sourcingMethod ? sourcingMethodLabel(req.sourcingMethod) : '—'}
+                {req.sourcingOverride ? ' (override)' : ''}
+              </span>
               <span className="block">Vendor: {req.vendorName ?? 'Open to bids'}</span>
               <span className="block">Cost center: {req.costCenter ?? '—'}</span>
               <span className="block">Project code: {req.projectCode ?? '—'}</span>
               <span className="block">Budget / GL: {req.budgetCode ?? '—'}</span>
-              <span className="block">Needed by: {req.neededBy ? formatDate(req.neededBy) : '—'}</span>
+              <span className="block">
+                Needed by: {req.neededBy ? formatDate(req.neededBy) : '—'}
+              </span>
               <span className="block">Created: {formatDateTime(req.createdAt)}</span>
             </span>
           }
@@ -415,7 +450,11 @@ export function RequestDetailPage() {
               confirmed={false}
             />
             {canConfirmRoute && (
-              <button type="button" className="btn-primary mt-4" onClick={() => void confirmRoute()}>
+              <button
+                type="button"
+                className="btn-primary mt-4"
+                onClick={() => void confirmRoute()}
+              >
                 <Icon name="check" className="h-4 w-4" />
                 Confirm sourcing route
               </button>
@@ -424,25 +463,27 @@ export function RequestDetailPage() {
         </div>
       )}
 
-      {req.status === 'draft' && req.compliance?.routeConfirmed && (req.sourcingMethod === 'rfq' || req.sourcingMethod === 'rfp') && (
-        <div>
-          <SectionTitle
-            title="Competitive sourcing"
-            subtitle="The sourcing record must be complete before the request enters approval."
-          />
-          <Card>
-            <SourcingWorkspace
-              requestId={req.id}
-              method={req.sourcingMethod}
-              canManage={canConfirmRoute}
-              canApprove={canApproveSourcingException}
-              client={mode === 'supabase' ? supabaseClient : null}
-              vendors={vendors}
-              onChanged={refresh}
+      {req.status === 'draft' &&
+        req.compliance?.routeConfirmed &&
+        (req.sourcingMethod === 'rfq' || req.sourcingMethod === 'rfp') && (
+          <div>
+            <SectionTitle
+              title="Competitive sourcing"
+              subtitle="The sourcing record must be complete before the request enters approval."
             />
-          </Card>
-        </div>
-      )}
+            <Card>
+              <SourcingWorkspace
+                requestId={req.id}
+                method={req.sourcingMethod}
+                canManage={canConfirmRoute}
+                canApprove={canApproveSourcingException}
+                client={mode === 'supabase' ? supabaseClient : null}
+                vendors={vendors}
+                onChanged={refresh}
+              />
+            </Card>
+          </div>
+        )}
 
       {req.justification && (
         <div>
@@ -459,17 +500,25 @@ export function RequestDetailPage() {
             <dl className="space-y-3 text-sm">
               <div>
                 <dt className="text-xs font-semibold uppercase tracking-wide text-faint">Need</dt>
-                <dd className="mt-0.5 whitespace-pre-line text-ink">{req.justification.need || '—'}</dd>
+                <dd className="mt-0.5 whitespace-pre-line text-ink">
+                  {req.justification.need || '—'}
+                </dd>
               </div>
               {req.justification.alternatives && (
                 <div>
-                  <dt className="text-xs font-semibold uppercase tracking-wide text-faint">Alternatives considered</dt>
-                  <dd className="mt-0.5 whitespace-pre-line text-ink">{req.justification.alternatives}</dd>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-faint">
+                    Alternatives considered
+                  </dt>
+                  <dd className="mt-0.5 whitespace-pre-line text-ink">
+                    {req.justification.alternatives}
+                  </dd>
                 </div>
               )}
               {req.justification.risk && (
                 <div>
-                  <dt className="text-xs font-semibold uppercase tracking-wide text-faint">Risk if not procured</dt>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-faint">
+                    Risk if not procured
+                  </dt>
                   <dd className="mt-0.5 whitespace-pre-line text-ink">{req.justification.risk}</dd>
                 </div>
               )}
@@ -502,7 +551,10 @@ export function RequestDetailPage() {
       )}
 
       <div>
-        <SectionTitle title="Line items" subtitle={`${req.lines.length} line${req.lines.length === 1 ? '' : 's'}`} />
+        <SectionTitle
+          title="Line items"
+          subtitle={`${req.lines.length} line${req.lines.length === 1 ? '' : 's'}`}
+        />
         <DataTable rows={req.lines} columns={lineColumns} keyOf={(r) => r.id} />
       </div>
 
@@ -533,9 +585,15 @@ export function RequestDetailPage() {
               {reqDocs.map((d) => (
                 <li key={d.key} className="flex items-start gap-2">
                   {d.attached ? (
-                    <Icon name="check" className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-300" />
+                    <Icon
+                      name="check"
+                      className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-300"
+                    />
                   ) : (
-                    <Icon name="alert" className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-300" />
+                    <Icon
+                      name="alert"
+                      className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-300"
+                    />
                   )}
                   <div className="min-w-0 flex-1">
                     <p className="font-semibold text-ink">
@@ -552,14 +610,16 @@ export function RequestDetailPage() {
             {missingDocs.length > 0 && (
               <p className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
                 <Icon name="alert" className="mr-1 inline h-3.5 w-3.5" />
-                {missingDocs.length} required document{missingDocs.length === 1 ? '' : 's'} missing —
-                attach and tag {missingDocs.length === 1 ? 'it' : 'them'} so approvers see a complete pack.
+                {missingDocs.length} required document
+                {missingDocs.length === 1 ? '' : 's'} missing — attach and tag{' '}
+                {missingDocs.length === 1 ? 'it' : 'them'} so approvers see a complete pack.
               </p>
             )}
             {(req.sourcingMethod === 'rfp' || req.sourcingMethod === 'rfq') && (
               <p className="mt-3 rounded-lg bg-inset px-3 py-2 text-xs text-muted">
                 <Icon name="info" className="mr-1 inline h-3.5 w-3.5" />
-                Procurement must record invited vendors, responses, and any approved insufficient-bids exception.
+                Procurement must record invited vendors, responses, and any approved
+                insufficient-bids exception.
               </p>
             )}
           </Card>
@@ -570,12 +630,17 @@ export function RequestDetailPage() {
         req.compliance?.philgepsReference ||
         req.compliance?.priceReasonableness) && (
         <div>
-          <SectionTitle title="Compliance references" subtitle="Direct-award basis, PhilGEPS, and price reasonableness." />
+          <SectionTitle
+            title="Compliance references"
+            subtitle="Direct-award basis, PhilGEPS, and price reasonableness."
+          />
           <Card>
             <dl className="grid gap-3 text-sm sm:grid-cols-2">
               {req.compliance?.directAwardReason && (
                 <div>
-                  <dt className="text-xs font-semibold uppercase tracking-wide text-faint">Direct-award reason</dt>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-faint">
+                    Direct-award reason
+                  </dt>
                   <dd className="mt-0.5 text-ink">
                     {DIRECT_AWARD_REASON_LABEL[req.compliance.directAwardReason] ??
                       req.compliance.directAwardReason}
@@ -584,14 +649,20 @@ export function RequestDetailPage() {
               )}
               {req.compliance?.philgepsReference && (
                 <div>
-                  <dt className="text-xs font-semibold uppercase tracking-wide text-faint">PhilGEPS reference</dt>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-faint">
+                    PhilGEPS reference
+                  </dt>
                   <dd className="mt-0.5 text-ink">{req.compliance.philgepsReference}</dd>
                 </div>
               )}
               {req.compliance?.priceReasonableness && (
                 <div className="sm:col-span-2">
-                  <dt className="text-xs font-semibold uppercase tracking-wide text-faint">Price reasonableness</dt>
-                  <dd className="mt-0.5 whitespace-pre-line text-ink">{req.compliance.priceReasonableness}</dd>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-faint">
+                    Price reasonableness
+                  </dt>
+                  <dd className="mt-0.5 whitespace-pre-line text-ink">
+                    {req.compliance.priceReasonableness}
+                  </dd>
                 </div>
               )}
             </dl>
@@ -608,21 +679,30 @@ export function RequestDetailPage() {
                 onClick={handleSubmit}
                 className="btn-primary disabled:cursor-not-allowed disabled:opacity-60"
                 disabled={!submitGate.allowed}
-                title={!submitGate.allowed ? readinessMessage(evaluateSubmitReadiness(req)) : undefined}
+                title={
+                  !submitGate.allowed ? readinessMessage(evaluateSubmitReadiness(req)) : undefined
+                }
               >
                 <Icon name="check" className="h-4 w-4" />
                 Submit for approval
               </button>
-              <button type="button" onClick={handleCancel} className="btn-outline">
+              <button type="button" onClick={openCancellation} className="btn-outline">
                 Cancel request
               </button>
             </>
           )}
           {(req.status === 'submitted' || req.status === 'under_review') && (
-            <Link to="/approvals" className="btn-outline">
-              <Icon name="rotate" className="h-4 w-4" />
-              Open approval inbox
-            </Link>
+            <>
+              <Link to="/approvals" className="btn-outline">
+                <Icon name="rotate" className="h-4 w-4" />
+                Open approval inbox
+              </Link>
+              {isRequester && (
+                <button type="button" onClick={openCancellation} className="btn-outline">
+                  Cancel request
+                </button>
+              )}
+            </>
           )}
           {req.status === 'approved' && !linkedPo && (
             <Guard module="procurement" cap="author_po" fallback={null}>
@@ -657,6 +737,33 @@ export function RequestDetailPage() {
           </ol>
         </Card>
       </div>
+      <Sheet
+        open={cancelOpen}
+        onOpenChange={setCancelOpen}
+        title="Cancel procurement request"
+        description="Cancellation preserves the request, decisions, and audit history. Active sourcing or purchase orders must be resolved first."
+        footer={
+          <button
+            type="button"
+            className="btn-primary w-full"
+            disabled={cancelBusy || cancelReason.trim().length < 8}
+            onClick={() => void handleCancel()}
+          >
+            {cancelBusy ? 'Cancelling...' : 'Confirm cancellation'}
+          </button>
+        }
+      >
+        <Field label="Cancellation reason" htmlFor="request-cancellation-reason">
+          <textarea
+            id="request-cancellation-reason"
+            className="input min-h-28"
+            value={cancelReason}
+            onChange={(event) => setCancelReason(event.target.value)}
+            placeholder="Explain why this request is being cancelled."
+            autoFocus
+          />
+        </Field>
+      </Sheet>
     </div>
   );
 }
@@ -682,7 +789,9 @@ function ApprovalStepRow({ step }: { step: ApprovalStep }) {
           {step.decidedAt && <> · {formatDateTime(step.decidedAt)}</>}
         </p>
         {step.note && (
-          <p className="mt-1 whitespace-pre-line text-xs italic text-muted">&ldquo;{step.note}&rdquo;</p>
+          <p className="mt-1 whitespace-pre-line text-xs italic text-muted">
+            &ldquo;{step.note}&rdquo;
+          </p>
         )}
         {step.signature && (
           /* Signature artifact — mirrors legal's SignatureArtifact styling
@@ -711,12 +820,32 @@ function ApprovalStepRow({ step }: { step: ApprovalStep }) {
 
 const STEP_STATUS: Record<
   ApprovalStep['status'],
-  { icon: 'rotate' | 'check' | 'x' | 'pin'; tone: string; badge: 'slate' | 'cyan' | 'emerald' | 'rose' | 'amber' }
+  {
+    icon: 'rotate' | 'check' | 'x' | 'pin';
+    tone: string;
+    badge: 'slate' | 'cyan' | 'emerald' | 'rose' | 'amber';
+  }
 > = {
-  pending: { icon: 'rotate', tone: 'bg-cyan-500/15 text-cyan-800 dark:text-cyan-300', badge: 'cyan' },
-  approved: { icon: 'check', tone: 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-300', badge: 'emerald' },
-  rejected: { icon: 'x', tone: 'bg-rose-500/15 text-rose-800 dark:text-rose-300', badge: 'rose' },
-  skipped: { icon: 'pin', tone: 'bg-slate-500/15 text-slate-800 dark:text-slate-300', badge: 'slate' },
+  pending: {
+    icon: 'rotate',
+    tone: 'bg-cyan-500/15 text-cyan-800 dark:text-cyan-300',
+    badge: 'cyan',
+  },
+  approved: {
+    icon: 'check',
+    tone: 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-300',
+    badge: 'emerald',
+  },
+  rejected: {
+    icon: 'x',
+    tone: 'bg-rose-500/15 text-rose-800 dark:text-rose-300',
+    badge: 'rose',
+  },
+  skipped: {
+    icon: 'pin',
+    tone: 'bg-slate-500/15 text-slate-800 dark:text-slate-300',
+    badge: 'slate',
+  },
 };
 
 function AttachmentRow({ att }: { att: RequestAttachment }) {
@@ -751,8 +880,7 @@ function AttachmentRow({ att }: { att: RequestAttachment }) {
     <li className="flex items-center justify-between gap-3 rounded-xl border border-line bg-surface p-2">
       <div className="min-w-0">
         <p className="truncate text-sm font-semibold text-ink" title={att.filename}>
-          {att.filename}{' '}
-          <Badge tone="slate">{attachmentKindLabel(att.kind)}</Badge>
+          {att.filename} <Badge tone="slate">{attachmentKindLabel(att.kind)}</Badge>
         </p>
         <p className="text-xs text-muted">
           {sizeKb} KB · {att.mimeType}
