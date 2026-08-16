@@ -977,11 +977,11 @@ test("Task 3 uses browser-role exception receipts and proves transactional clean
   assert.match(source, /Material stock change bypassed Finance handoff/);
   assert.match(
     source,
-    /Task 3 Finance warehouse stock-approval denial[\s\S]*intra\.test\.finance@mwell\.com\.ph/,
+    /Task 3 Finance negative-stock approval denial[\s\S]*intra\.test\.finance@mwell\.com\.ph/,
   );
   assert.match(
     source,
-    /Finance warehouse stock-change approval[\s\S]*expected: \{ status: "pending_finance" \}/,
+    /Finance negative-stock approval[\s\S]*expected: \{ status: "pending_finance" \}/,
   );
   assert.match(source, /valid public quality inspection/i);
   assert.match(

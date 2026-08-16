@@ -4903,8 +4903,8 @@ async function task3FinanceStockApprovalDenial(page, fixture) {
       decision: "approved",
       note: `${fixture.marker} Finance locked-stock denial`,
     }),
-    /not authorized|current stock-change approval tier/i,
-    "Finance warehouse stock-change approval",
+    /stock variance would make inventory negative/i,
+    "Finance negative-stock approval",
   );
   const after = await inventoryQuantity();
   if (after !== before)
@@ -4922,7 +4922,7 @@ async function task3FinanceStockApprovalDenial(page, fixture) {
     fixture.client,
   );
   return {
-    name: "Task 3 Finance warehouse stock-approval denial",
+    name: "Task 3 Finance negative-stock approval denial",
     ok: true,
     checkpoint,
   };
@@ -8525,7 +8525,7 @@ try {
             viewport,
             { email: "intra.test.finance@mwell.com.ph" },
             {
-              name: "Task 3 Finance warehouse stock-approval denial",
+              name: "Task 3 Finance negative-stock approval denial",
               run: (page) =>
                 task3FinanceStockApprovalDenial(page, task3Fixture),
             },
