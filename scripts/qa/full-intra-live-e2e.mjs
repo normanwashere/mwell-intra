@@ -4603,12 +4603,28 @@ async function task3SupervisorTransactions(page, fixture) {
         );
       let finalReservation = firstReservation;
       let allocationId = firstAllocationId;
+      let reservationQuantity = heldStock;
       if (!firstReservation.ok) {
         requireRpcFailure(
           firstReservation,
           /available after active inventory holds|only .* available/i,
           "hold reservation lock ordering",
         );
+        const postReleaseAtp = await callRpcArgsAsBrowserUser(
+          page,
+          "warehouse",
+          "available_to_promise",
+          { p_product_id: fixture.ids.product },
+        );
+        if (!postReleaseAtp.ok)
+          throw new Error(
+            `Post-release ATP readback failed: ${postReleaseAtp.body}`,
+          );
+        reservationQuantity = Number(JSON.parse(postReleaseAtp.body));
+        if (!Number.isInteger(reservationQuantity) || reservationQuantity <= 0)
+          throw new Error(
+            `Post-release ATP must expose reservable stock, received ${postReleaseAtp.body}.`,
+          );
         allocationId = retryAllocationId;
         finalReservation = await callRpcAsBrowserUser(
           page,
@@ -4616,12 +4632,12 @@ async function task3SupervisorTransactions(page, fixture) {
           "reserve",
           {
             product_id: fixture.ids.product,
-            quantity: heldStock,
+            quantity: reservationQuantity,
             allocation: {
               id: allocationId,
               event_id: fixture.ids.event,
               product_id: fixture.ids.product,
-              quantity: heldStock,
+              quantity: reservationQuantity,
               status: "reserved",
               promotional: false,
               created_at: new Date().toISOString(),
@@ -4650,7 +4666,7 @@ async function task3SupervisorTransactions(page, fixture) {
           filters: { id: allocationId },
           expected: {
             product_id: fixture.ids.product,
-            quantity: heldStock,
+            quantity: reservationQuantity,
             status: "reserved",
           },
           select: "id,product_id,quantity,status,event_id",

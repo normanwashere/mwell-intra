@@ -742,6 +742,9 @@ test("Task 3 asserts current DOA, PNG signatures, exact held-stock issue denial,
   assert.match(harness, /revoked current DOA assignment denial/i);
   assert.match(harness, /held serialized unit issue denial/i);
   assert.match(harness, /held exact lot issue denial/i);
+  assert.match(harness, /const postReleaseAtp = await callRpcArgsAsBrowserUser/);
+  assert.match(harness, /quantity: reservationQuantity/);
+  assert.match(harness, /authoritative hold race readback expected zero ATP/i);
   assert.match(
     migration,
     /Only a currently active DOA assignment and matrix may decide the next amendment step/i,
