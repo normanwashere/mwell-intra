@@ -200,6 +200,25 @@ test("scenario evidence is enforceable per shard and across the bundle", () => {
   assert.deepEqual(scenarioCoverageFailures(completeBundle), []);
 });
 
+test("every scenario evidence workflow is registered by the live runner", async () => {
+  const source = await readFile(
+    new URL("./full-intra-live-e2e.mjs", import.meta.url),
+    "utf8",
+  );
+
+  for (const item of WORKFLOW_SCENARIO_EVIDENCE) {
+    const insightsRole = item.workflow.match(/^(.+) Insights governance$/)?.[1];
+    const isRegisteredInsightsWorkflow =
+      insightsRole &&
+      CURRENT_LIVE_ROLES.some((role) => role.role === insightsRole) &&
+      source.includes('name: `${role} Insights governance`');
+    assert.ok(
+      source.includes(`name: "${item.workflow}"`) || isRegisteredInsightsWorkflow,
+      `Missing live workflow registration for scenario evidence: ${item.workflow}`,
+    );
+  }
+});
+
 test("the mutating harness is run-scoped and always invokes cleanup", async () => {
   const source = await readFile(
     new URL("./full-intra-live-e2e.mjs", import.meta.url),

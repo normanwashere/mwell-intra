@@ -477,7 +477,7 @@ export const WORKFLOW_SCENARIO_EVIDENCE = [
     ["supervisor-approved", "ledger-posted"],
   ),
   evidence(
-    "Task 3 Finance insufficient locked-stock denial",
+    "Task 3 Finance negative-stock approval denial",
     "warehouse-cycle-count",
     ["finance_controller"],
     ["unauthorized"],
