@@ -120,6 +120,26 @@ with checks(label, present) as (
       ) ~ 'v_disposition[[:space:]]*<>[[:space:]]*''accepted''[[:space:]]+and[[:space:]]+v_stock[.]quantity[[:space:]]*-[[:space:]]*v_exact_held'
     ),
     (
+      'receipt PO-line identity validation before controlled exception state',
+      pg_catalog.strpos(
+        pg_catalog.pg_get_functiondef(
+          'private.warehouse_inspect_quality_v2(jsonb)'::pg_catalog.regprocedure
+        ),
+        'Procurement PO line does not belong to the receipt'
+      ) > 0
+      and pg_catalog.strpos(
+        pg_catalog.pg_get_functiondef(
+          'private.warehouse_inspect_quality_v2(jsonb)'::pg_catalog.regprocedure
+        ),
+        'Procurement PO line does not belong to the receipt'
+      ) < pg_catalog.strpos(
+        pg_catalog.pg_get_functiondef(
+          'private.warehouse_inspect_quality_v2(jsonb)'::pg_catalog.regprocedure
+        ),
+        'Active controlled receipt exception must be finalized'
+      )
+    ),
+    (
       'procurement.activate_doa_matrix private identity translation',
       pg_catalog.pg_get_functiondef(
         'procurement.activate_doa_matrix(jsonb)'::pg_catalog.regprocedure

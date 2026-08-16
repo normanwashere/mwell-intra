@@ -1832,6 +1832,28 @@ test("quality acceptance and DOA activation converge their private contracts", a
   );
 });
 
+test("receipt quality validates exact PO-line identity before exception state", async () => {
+  const migration = await readFile(
+    new URL(
+      "../../supabase/migrations/20260816231000_enforce_quality_receipt_line_identity_precedence.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const identityGuard = migration.indexOf(
+    "Procurement PO line does not belong to the receipt",
+  );
+  const exceptionGuard = migration.indexOf(
+    "Active controlled receipt exception must be finalized",
+  );
+  assert.ok(identityGuard > 0);
+  assert.ok(exceptionGuard > identityGuard);
+  assert.match(
+    migration,
+    /receipt PO-line identity validation before controlled exception state/,
+  );
+});
+
 test("procurement draft certification trusts route, heading, and persisted readback", async () => {
   const source = await readFile(
     new URL("./full-intra-live-e2e.mjs", import.meta.url),

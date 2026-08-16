@@ -395,6 +395,10 @@ test("runtime critical-object verification checks the exact quality boundary", (
     source,
     /procurement\.activate_doa_matrix private identity translation/i,
   );
+  assert.match(
+    source,
+    /receipt PO-line identity validation before controlled exception state/i,
+  );
 });
 
 test("package exposes the runtime database verification command", () => {
