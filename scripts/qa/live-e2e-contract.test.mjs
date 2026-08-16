@@ -1857,6 +1857,19 @@ test("receipt quality validates exact PO-line identity before exception state", 
   );
 });
 
+test("cumulative acceptance certifies every received PO line before payment", async () => {
+  const source = await readFile(
+    new URL("./full-intra-live-e2e.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /concurrent-independent-qc/);
+  assert.match(source, /source_id: fixture[.]ids[.]concurrentReceipt/);
+  assert.match(source, /procurement_po_line_id: fixture[.]ids[.]concurrentLine/);
+  assert.match(source, /quantity: 2,[\s\S]*disposition: "accepted"/);
+  assert.match(source, /accepted_quantity\) !== 3/);
+  assert.match(source, /outstanding_quantity\) !== 0/);
+});
+
 test("procurement draft certification trusts route, heading, and persisted readback", async () => {
   const source = await readFile(
     new URL("./full-intra-live-e2e.mjs", import.meta.url),

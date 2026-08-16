@@ -3739,6 +3739,44 @@ async function task3SupervisorTransactions(page, fixture) {
     throw new Error(
       `Independent QC acceptance did not reach Procurement: ${acceptedReceiptStatus.body}`,
     );
+  const concurrentAccepted = await callRpcAsBrowserUser(
+    page,
+    "warehouse",
+    "inspect_quality",
+    {
+      idempotency_key: `${fixture.marker}-concurrent-independent-qc`,
+      source_type: "receipt",
+      source_id: fixture.ids.concurrentReceipt,
+      product_id: fixture.ids.product,
+      procurement_po_line_id: fixture.ids.concurrentLine,
+      quantity: 2,
+      disposition: "accepted",
+      evidence_urls: [
+        `audit/${fixture.marker}/concurrent-independent-qc.jpg`,
+      ],
+    },
+  );
+  if (!concurrentAccepted.ok)
+    throw new Error(
+      `Independent concurrent receipt inspection failed: ${concurrentAccepted.body}`,
+    );
+  const completedReceiptStatus = await callRpcAsBrowserUser(
+    page,
+    "procurement",
+    "purchase_order_receipt_status",
+    { purchase_order_id: fixture.ids.partialPo },
+  );
+  const completedRows = completedReceiptStatus.ok
+    ? JSON.parse(completedReceiptStatus.body)
+    : [];
+  if (
+    !completedReceiptStatus.ok ||
+    Number(completedRows?.[0]?.accepted_quantity) !== 3 ||
+    Number(completedRows?.[0]?.outstanding_quantity) !== 0
+  )
+    throw new Error(
+      `Completed independent QC did not reach Procurement: ${completedReceiptStatus.body}`,
+    );
   const serializedHoldResult = await callRpcAsBrowserUser(
     page,
     "warehouse",
