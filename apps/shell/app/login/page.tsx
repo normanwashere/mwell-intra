@@ -52,7 +52,7 @@ export default function LoginPage() {
   }, []);
 
   useEffect(() => {
-    if (!profile || loading || redirecting) return;
+    if (!profile || loading || signingIn || redirecting) return;
     const destination = authorizedPostLoginPath(
       redirectTo,
       { mode, userRoles, userCapabilities },
@@ -68,6 +68,7 @@ export default function LoginPage() {
     profile,
     redirectTo,
     redirecting,
+    signingIn,
     userCapabilities,
     userRoles,
   ]);
