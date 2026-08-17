@@ -11,6 +11,14 @@ const sql = readFileSync(
   ),
   "utf8",
 );
+const ecommerceSql = readFileSync(
+  resolve(
+    "supabase",
+    "migrations",
+    "20260817121220_ecommerce_fulfillment_intake_and_directed_pick.sql",
+  ),
+  "utf8",
+);
 
 const commands = [
   "create_fulfillment_order",
@@ -79,4 +87,61 @@ test("keeps receiving, return quarantine, packaging, and re-kit writes auditable
   assert.match(sql, /A quarantine bin is required before resolution/i);
   assert.match(sql, /re_kit/i);
   assert.match(sql, /insert into core\.activity_log/i);
+});
+
+test("persists and validates the app-native ecommerce order contract", () => {
+  for (const column of [
+    "ecommerce_channel",
+    "customer_name",
+    "customer_contact",
+    "delivery_area",
+    "delivery_address",
+    "payment_status",
+    "payment_rrn",
+    "payment_date",
+    "payment_provider_method",
+    "payment_provider_status",
+    "campaign_name",
+    "shipping_fee",
+    "other_fees",
+    "reported_total_amount",
+    "order_notes",
+    "delivery_link",
+    "shipment_events",
+  ]) {
+    assert.match(
+      ecommerceSql,
+      new RegExp(`add column if not exists ${column}`, "i"),
+    );
+  }
+  assert.match(
+    ecommerceSql,
+    /Ecommerce channel is required for controlled intake/i,
+  );
+  assert.match(ecommerceSql, /complete delivery address is required/i);
+  assert.match(ecommerceSql, /Payment must be paid, authorized, or COD/i);
+  assert.match(ecommerceSql, /Discount amount cannot exceed the line value/i);
+  assert.match(ecommerceSql, /Delivery tracking link is required/i);
+});
+
+test("enforces directed pick lineage and append-only shipment history", () => {
+  assert.match(ecommerceSql, /Serial % is not available in the scanned bin/i);
+  assert.match(ecommerceSql, /is not available in the scanned bin/i);
+  assert.match(
+    ecommerceSql,
+    /jsonb_build_object\('pickBinId', picked\.value->>'binId'\)/i,
+  );
+  assert.match(
+    ecommerceSql,
+    /jsonb_build_object\('fulfillmentEvidenceUrl', picked\.value->>'evidenceUrl'\)/i,
+  );
+  assert.match(
+    ecommerceSql,
+    /create trigger warehouse_zz_fulfillment_shipment_event_append/i,
+  );
+  assert.match(
+    ecommerceSql,
+    /new\.shipment_events := coalesce\(new\.shipment_events/i,
+  );
+  assert.match(ecommerceSql, /'actor', 'system:migration'/i);
 });

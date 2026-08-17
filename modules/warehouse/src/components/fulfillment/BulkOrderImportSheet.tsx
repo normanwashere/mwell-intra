@@ -1,81 +1,21 @@
 import { useRef, useState } from "react";
-import { parse } from "csv-parse/browser/esm/sync";
 import type { Product } from "@intra/data-kit";
 import { EmptyState, Field, Sheet, useToast } from "@/components/ui";
 import { Icon } from "@/components/Icon";
 import type { useWarehouse } from "@/app/store";
-
-interface CsvOrderRow {
-  order_reference?: string;
-  customer_reference?: string;
-  product_sku?: string;
-  quantity?: string;
-  bundle_set_codes?: string;
-}
-
-interface ImportRow {
-  rowNumber: number;
-  orderReference: string;
-  customerReference: string;
-  productId?: string;
-  productName: string;
-  productSku: string;
-  quantity: number;
-  bundleSetCodes: string[];
-  error?: string;
-}
-
-function normalizeHeader(value: string) {
-  return value.trim().toLowerCase().replace(/[\s-]+/g, "_");
-}
+import {
+  groupEcommerceImportRows,
+  parseEcommerceOrderCsv,
+  type EcommerceImportRow,
+} from "@/domain/ecommerceOrderImport";
 
 function readTextFile(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result ?? ""));
-    reader.onerror = () => reject(reader.error ?? new Error("File read failed."));
+    reader.onerror = () =>
+      reject(reader.error ?? new Error("File read failed."));
     reader.readAsText(file);
-  });
-}
-
-function parseOrderCsv(text: string, products: Product[]): ImportRow[] {
-  const records = parse(text, {
-    columns: (headers: string[]) => headers.map(normalizeHeader),
-    bom: true,
-    skip_empty_lines: true,
-    trim: true,
-  }) as CsvOrderRow[];
-  const productBySku = new Map(
-    products.map((product) => [product.sku.trim().toLowerCase(), product]),
-  );
-
-  return records.map((record, index) => {
-    const orderReference = record.order_reference?.trim() ?? "";
-    const productSku = record.product_sku?.trim() ?? "";
-    const product = productBySku.get(productSku.toLowerCase());
-    const quantity = Number(record.quantity);
-    const errors = [
-      !orderReference ? "Order reference is required" : "",
-      !productSku ? "Product SKU is required" : "",
-      productSku && !product ? "SKU was not found" : "",
-      !Number.isInteger(quantity) || quantity < 1
-        ? "Quantity must be a whole number of 1 or more"
-        : "",
-    ].filter(Boolean);
-    return {
-      rowNumber: index + 2,
-      orderReference,
-      customerReference: record.customer_reference?.trim() ?? "",
-      productId: product?.id,
-      productName: product?.name ?? "Unknown product",
-      productSku,
-      quantity,
-      bundleSetCodes: (record.bundle_set_codes ?? "")
-        .split(/[|;]/)
-        .map((value) => value.trim())
-        .filter(Boolean),
-      error: errors.join("; ") || undefined,
-    };
   });
 }
 
@@ -84,17 +24,19 @@ export function BulkOrderImportSheet({
   onOpenChange,
   products,
   locations,
+  existingReferences,
   create,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   products: Product[];
   locations: Array<{ id: string; name: string; type?: string }>;
+  existingReferences: string[];
   create: ReturnType<typeof useWarehouse>["createFulfillmentOrder"];
 }) {
   const toast = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
-  const [rows, setRows] = useState<ImportRow[]>([]);
+  const [rows, setRows] = useState<EcommerceImportRow[]>([]);
   const [fileName, setFileName] = useState("");
   const [locationId, setLocationId] = useState(
     locations.find((location) => location.type === "warehouse")?.id ?? "",
@@ -102,16 +44,22 @@ export function BulkOrderImportSheet({
   const [parseError, setParseError] = useState("");
   const [saving, setSaving] = useState(false);
   const invalidCount = rows.filter((row) => row.error).length;
-  const orderCount = new Set(rows.map((row) => row.orderReference).filter(Boolean))
-    .size;
+  const orderCount = new Set(
+    rows.map((row) => row.orderReference).filter(Boolean),
+  ).size;
 
   const readFile = async (file?: File) => {
     if (!file) return;
     setFileName(file.name);
     setParseError("");
     try {
-      const nextRows = parseOrderCsv(await readTextFile(file), products);
-      if (nextRows.length === 0) throw new Error("The file contains no order lines.");
+      const nextRows = parseEcommerceOrderCsv(
+        await readTextFile(file),
+        products,
+        existingReferences,
+      );
+      if (nextRows.length === 0)
+        throw new Error("The file contains no order lines.");
       setRows(nextRows);
     } catch (error) {
       setRows([]);
@@ -123,36 +71,23 @@ export function BulkOrderImportSheet({
 
   const importOrders = async () => {
     if (rows.length === 0 || invalidCount > 0) return;
-    const grouped = new Map<string, ImportRow[]>();
-    for (const row of rows) {
-      grouped.set(row.orderReference, [
-        ...(grouped.get(row.orderReference) ?? []),
-        row,
-      ]);
-    }
+    const grouped = groupEcommerceImportRows(rows);
     setSaving(true);
     let imported = 0;
     const importedReferences = new Set<string>();
-    for (const [reference, orderRows] of grouped) {
-      const first = orderRows[0]!;
+    for (const order of grouped) {
       const ok = await create({
         source: "ecommerce",
-        externalReference: reference,
-        customerReference: first.customerReference || undefined,
+        ...order,
         requestingDepartment: "sales_ecommerce",
         sourceLocationId: locationId || undefined,
-        lines: orderRows.map((row) => ({
-          productId: row.productId!,
-          quantity: row.quantity,
-          bundleSetCodes: row.bundleSetCodes,
-        })),
       });
       if (!ok) break;
       imported += 1;
-      importedReferences.add(reference);
+      importedReferences.add(order.externalReference);
     }
     setSaving(false);
-    if (imported === grouped.size) {
+    if (imported === grouped.length) {
       toast.success(`${imported} order(s) added to the fulfillment queue.`);
       setRows([]);
       setFileName("");
@@ -162,7 +97,7 @@ export function BulkOrderImportSheet({
         current.filter((row) => !importedReferences.has(row.orderReference)),
       );
       toast.error(
-        `${imported} of ${grouped.size} order(s) imported. Only the unprocessed orders remain available to retry.`,
+        `${imported} of ${grouped.length} order(s) imported. Only the unprocessed orders remain available to retry.`,
       );
     }
   };
@@ -172,7 +107,7 @@ export function BulkOrderImportSheet({
       open={open}
       onOpenChange={onOpenChange}
       title="Import ecommerce order list"
-      description="Use the controlled CSV intake while automated ecommerce ingestion is being completed."
+      description="Use CSV only to migrate existing tracker records. New orders should be created directly in Intra."
       footer={
         <button
           type="button"
@@ -186,14 +121,20 @@ export function BulkOrderImportSheet({
     >
       <div className="space-y-4">
         <div className="rounded-xl border border-line bg-inset p-4 text-sm text-muted">
-          <p className="font-semibold text-ink">Required CSV columns</p>
-          <p className="mt-1">
-            <span className="font-mono">order_reference, product_sku, quantity</span>
+          <p className="font-semibold text-ink">
+            Transition existing tracker records
+          </p>
+          <p className="mt-1 text-xs leading-5">
+            Required: order reference, channel, customer name and contact,
+            complete delivery address, payment status, product SKU, and
+            quantity. Accepted payment states are paid, authorized, and COD.
           </p>
           <p className="mt-2 text-xs">
-            Optional: customer_reference and bundle_set_codes. Repeat an order
-            reference on another row to add another product to the same order.
-            Separate bundle codes with a semicolon.
+            Tracker headings such as Order No, Date, Customer, Contact No, Area
+            of Delivery, Event Name, SKU, Qty, Price, RRN, Maya Method and
+            Status, Other Fees, Courier, Tracking No, and Delivery Link are
+            recognized. Repeat an order number for each item. After migration,
+            Intra is the authoritative order record.
           </p>
         </div>
         <Field label="Source warehouse" htmlFor="bulk-order-location">
@@ -218,7 +159,7 @@ export function BulkOrderImportSheet({
           className="btn-outline w-full"
           onClick={() => fileRef.current?.click()}
         >
-          <Icon name="upload" /> {fileName || "Choose CSV order list"}
+          <Icon name="upload" /> {fileName || "Choose exported tracker CSV"}
         </button>
         <input
           ref={fileRef}
@@ -238,13 +179,18 @@ export function BulkOrderImportSheet({
         ) : (
           <div className="overflow-hidden rounded-xl border border-line">
             <div className="max-h-80 overflow-auto">
-              <table className="w-full min-w-[42rem] text-left text-sm">
+              <table className="w-full min-w-[58rem] text-left text-sm">
                 <thead className="sticky top-0 bg-inset text-xs text-muted">
                   <tr>
                     <th className="px-3 py-2 font-semibold">Row</th>
                     <th className="px-3 py-2 font-semibold">Order</th>
+                    <th className="px-3 py-2 font-semibold">Channel</th>
+                    <th className="px-3 py-2 font-semibold">Customer</th>
                     <th className="px-3 py-2 font-semibold">Product</th>
                     <th className="px-3 py-2 text-right font-semibold">Qty</th>
+                    <th className="px-3 py-2 font-semibold">
+                      Commercial / dispatch
+                    </th>
                     <th className="px-3 py-2 font-semibold">Validation</th>
                   </tr>
                 </thead>
@@ -255,14 +201,39 @@ export function BulkOrderImportSheet({
                       <td className="px-3 py-2 font-medium text-ink">
                         {row.orderReference || "Missing"}
                       </td>
+                      <td className="px-3 py-2 text-ink">
+                        {row.ecommerceChannel || "Missing"}
+                      </td>
+                      <td className="px-3 py-2 text-ink">
+                        <span className="block">
+                          {row.customerName || "Missing"}
+                        </span>
+                        <span className="text-xs text-faint">
+                          {row.paymentStatus || "No payment status"}
+                        </span>
+                      </td>
                       <td className="px-3 py-2">
-                        <span className="block text-ink">{row.productName}</span>
+                        <span className="block text-ink">
+                          {row.productName}
+                        </span>
                         <span className="font-mono text-xs text-faint">
                           {row.productSku || "No SKU"}
                         </span>
                       </td>
                       <td className="px-3 py-2 text-right text-ink">
                         {Number.isFinite(row.quantity) ? row.quantity : "-"}
+                      </td>
+                      <td className="px-3 py-2 text-xs text-muted">
+                        <span className="block">
+                          {row.reportedTotalAmount !== undefined
+                            ? `PHP ${row.reportedTotalAmount.toLocaleString("en-PH")}`
+                            : "Calculated after import"}
+                        </span>
+                        <span className="block text-faint">
+                          {[row.courier, row.waybillNumber]
+                            .filter(Boolean)
+                            .join(" / ") || "Dispatch pending"}
+                        </span>
                       </td>
                       <td
                         className={`px-3 py-2 text-xs ${

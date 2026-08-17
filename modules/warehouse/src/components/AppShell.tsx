@@ -326,7 +326,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   onClick={() => toggleGroup(section.group)}
                   aria-expanded={!collapsedGroups.has(section.group)}
                   aria-controls={`warehouse-nav-${section.group}-items`}
-                  className="flex min-h-8 w-full items-center justify-between rounded-md px-3 text-[0.65rem] font-bold uppercase text-faint transition hover:bg-inset hover:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                  className="flex min-h-11 w-full items-center justify-between rounded-md px-3 text-[0.65rem] font-bold uppercase text-faint transition hover:bg-inset hover:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
                 >
                   <span>{MODULE_GROUP_LABELS[section.group]}</span>
                   <Icon

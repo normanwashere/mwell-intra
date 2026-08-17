@@ -41,7 +41,7 @@ export const DEMO_PROFILES: readonly MemoryProfile[] = [
     title: 'General Employee',
     roles: {
       core: ['staff'],
-      warehouse: ['business_unit'],
+      warehouse: ['operations', 'business_unit'],
       procurement: ['requester'],
       events: ['requester'],
       product: ['contributor'],

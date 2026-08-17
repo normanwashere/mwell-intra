@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { buildSeed } from "@intra/data-kit";
 import { FulfillmentPage } from "./FulfillmentPage";
 import { makeRepo, renderWithProviders } from "@/test/renderWithProviders";
 
@@ -54,8 +55,8 @@ describe("FulfillmentPage", () => {
       screen.getByRole("tab", { name: "Return cases" }),
     ).toBeInTheDocument();
     expect(screen.getByText("Waiting allocation")).toBeInTheDocument();
-    expect(screen.getByText("Picking")).toBeInTheDocument();
-    expect(screen.getByText("Packing")).toBeInTheDocument();
+    expect(screen.getAllByText("Picking").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Packing").length).toBeGreaterThan(0);
     const order = await screen.findByRole("listitem", { name: /SHOP-2201/i });
     expect(within(order).getByText("Received")).toBeInTheDocument();
     await user.click(
@@ -164,11 +165,14 @@ describe("FulfillmentPage", () => {
     renderWithProviders(<FulfillmentPage />, { role: "operations", repo });
 
     await user.click(
-      await screen.findByRole("button", { name: "New fulfillment demand" }),
+      await screen.findByRole("button", { name: "New order / demand" }),
     );
     const dialog = await screen.findByRole("dialog", {
-      name: "Create fulfillment demand",
+      name: "Create order or fulfillment demand",
     });
+    expect(
+      within(dialog).getByRole("option", { name: "Ecommerce customer order" }),
+    ).toBeInTheDocument();
     expect(
       within(dialog).queryByRole("option", { name: "Small Shipping Box" }),
     ).not.toBeInTheDocument();
@@ -221,16 +225,16 @@ describe("FulfillmentPage", () => {
     renderWithProviders(<FulfillmentPage />, { role: "operations", repo });
 
     await user.click(
-      await screen.findByRole("button", { name: "Import order list" }),
+      await screen.findByRole("button", { name: "Import existing tracker" }),
     );
     const dialog = await screen.findByRole("dialog", {
       name: "Import ecommerce order list",
     });
     const csv = [
-      "order_reference,customer_reference,product_sku,quantity,bundle_set_codes",
-      "SHOP-CSV-01,CUST-01,SMART-WATCH,1,OTG-001",
-      "SHOP-CSV-01,CUST-01,ECG-RING-8,1,OTG-001",
-      "SHOP-CSV-02,CUST-02,SMART-WATCH,2,",
+      "order_reference,order_date,channel,customer_reference,customer_name,customer_contact,delivery_address,city,province,postal_code,payment_status,payment_method,product_sku,quantity,bundle_set_codes",
+      "SHOP-CSV-01,2026-08-17,Shopee,CUST-01,Ana Reyes,09170000001,12 Main St,Pasig,Metro Manila,1600,paid,Maya,SMART-WATCH,1,OTG-001",
+      "SHOP-CSV-01,2026-08-17,Shopee,CUST-01,Ana Reyes,09170000001,12 Main St,Pasig,Metro Manila,1600,paid,Maya,ECG-RING-8,1,OTG-001",
+      "SHOP-CSV-02,2026-08-17,eShop,CUST-02,Ben Cruz,09170000002,45 High St,Taguig,Metro Manila,1630,cod,COD,SMART-WATCH,2,",
     ].join("\n");
     await user.upload(
       within(dialog).getByLabelText("Upload ecommerce order list"),
@@ -245,9 +249,305 @@ describe("FulfillmentPage", () => {
     await waitFor(async () => {
       const orders = (await repo.getData()).fulfillmentOrders;
       expect(orders).toHaveLength(2);
-      expect(orders.find((order) => order.externalReference === "SHOP-CSV-01")?.lines)
-        .toHaveLength(2);
+      expect(
+        orders.find((order) => order.externalReference === "SHOP-CSV-01")
+          ?.lines,
+      ).toHaveLength(2);
+      expect(
+        orders.find((order) => order.externalReference === "SHOP-CSV-01"),
+      ).toMatchObject({
+        ecommerceChannel: "Shopee",
+        customerName: "Ana Reyes",
+        paymentStatus: "paid",
+      });
     });
+  });
+
+  it("captures a complete multi-line ecommerce order without a tracker", async () => {
+    const repo = makeRepo();
+    const user = userEvent.setup();
+    renderWithProviders(<FulfillmentPage />, { role: "operations", repo });
+
+    await user.click(
+      await screen.findByRole("button", { name: "New order / demand" }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "Create order or fulfillment demand",
+    });
+    await user.type(
+      within(dialog).getByLabelText("Order reference"),
+      "WEB-2201",
+    );
+    await user.type(within(dialog).getByLabelText("Sales channel"), "Shopify");
+    await user.type(
+      within(dialog).getByLabelText("Campaign / event name"),
+      "Wellness Week",
+    );
+    await user.type(
+      within(dialog).getByLabelText("Customer name"),
+      "Ana Reyes",
+    );
+    await user.type(
+      within(dialog).getByLabelText("Contact number"),
+      "09171234567",
+    );
+    await user.type(
+      within(dialog).getByLabelText("Street address"),
+      "12 Main Street",
+    );
+    await user.type(within(dialog).getByLabelText("City"), "Pasig");
+    await user.type(within(dialog).getByLabelText("Province"), "Metro Manila");
+    await user.type(within(dialog).getByLabelText("Postal code"), "1600");
+    await user.type(
+      within(dialog).getByLabelText("Area of delivery"),
+      "Metro Manila",
+    );
+    await user.selectOptions(
+      within(dialog).getByLabelText("Product"),
+      "smart-watch",
+    );
+    await user.type(within(dialog).getByLabelText("Unit price"), "2999");
+    await user.type(within(dialog).getByLabelText("Line discount"), "100");
+    await user.click(within(dialog).getByRole("button", { name: "Add item" }));
+    await user.selectOptions(
+      within(dialog).getAllByLabelText("Product")[1]!,
+      "ecg-ring-8",
+    );
+    await user.type(
+      within(dialog).getAllByLabelText("Unit price")[1]!,
+      "13999",
+    );
+    await user.type(
+      within(dialog).getByLabelText("Payment reference"),
+      "PAY-2201",
+    );
+    await user.type(
+      within(dialog).getByLabelText("Payment date"),
+      "2026-08-17",
+    );
+    await user.type(within(dialog).getByLabelText("RRN"), "RRN-2201");
+    await user.type(within(dialog).getByLabelText("Provider method"), "Wallet");
+    await user.type(within(dialog).getByLabelText("Shipping fee"), "80");
+    await user.type(within(dialog).getByLabelText("Other fees"), "20");
+    await user.type(within(dialog).getByLabelText("Courier"), "LBC");
+    await user.type(
+      within(dialog).getByLabelText("Tracking / waybill number"),
+      "WB-2201",
+    );
+    await user.type(
+      within(dialog).getByLabelText("Delivery tracking link"),
+      "https://track.example/WB-2201",
+    );
+    await user.type(
+      within(dialog).getByLabelText("Order instructions"),
+      "Leave at reception",
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: "Create order" }),
+    );
+
+    await waitFor(async () => {
+      expect((await repo.getData()).fulfillmentOrders[0]).toMatchObject({
+        externalReference: "WEB-2201",
+        ecommerceChannel: "Shopify",
+        customerName: "Ana Reyes",
+        deliveryArea: "Metro Manila",
+        paymentReference: "PAY-2201",
+        paymentDate: "2026-08-17",
+        paymentRrn: "RRN-2201",
+        paymentProviderMethod: "Wallet",
+        campaignName: "Wellness Week",
+        shippingFee: 80,
+        otherFees: 20,
+        courier: "LBC",
+        waybillNumber: "WB-2201",
+        deliveryLink: "https://track.example/WB-2201",
+        orderNotes: "Leave at reception",
+        lines: [
+          expect.objectContaining({ productId: "smart-watch", quantity: 1 }),
+          expect.objectContaining({ productId: "ecg-ring-8", quantity: 1 }),
+        ],
+      });
+    });
+  }, 15_000);
+
+  it("requires a bin scan and records the directed pick location", async () => {
+    const seed = buildSeed();
+    const unit = seed.units.find(
+      (candidate) => candidate.serialNumber === "SMART-WATCH-SN0001",
+    )!;
+    unit.binId = "bin-pasig-a1";
+    const repo = makeRepo(seed);
+    await repo.createFulfillmentOrder({
+      source: "ecommerce",
+      externalReference: "SHOP-DIRECTED-01",
+      sourceLocationId: "loc-wh",
+      lines: [{ productId: "smart-watch", quantity: 1 }],
+      actor: "sales@mwell.com.ph",
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<FulfillmentPage />, {
+      role: "warehouse_operator",
+      repo,
+    });
+    const order = await screen.findByRole("listitem", {
+      name: /SHOP-DIRECTED-01/i,
+    });
+    await user.click(
+      within(order).getByRole("button", { name: "Allocate stock" }),
+    );
+    await user.click(
+      await within(order).findByRole("button", { name: "Start picking" }),
+    );
+    await user.click(
+      await within(order).findByRole("button", {
+        name: "Confirm scanned pick",
+      }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: /Confirm pick.*SHOP-DIRECTED-01/i,
+    });
+    expect(within(dialog).getByText(/Aisle A.*Rack 01/i)).toBeInTheDocument();
+    await user.type(
+      within(dialog).getByLabelText(/Scanned bin code.*Smart Watch/i),
+      "PASIG-A-01",
+    );
+    await user.type(
+      within(dialog).getByLabelText(/Scanned serial numbers.*Smart Watch/i),
+      "SMART-WATCH-SN0001",
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: "Confirm pick" }),
+    );
+
+    await waitFor(async () => {
+      expect(
+        (await repo.getData()).fulfillmentOrders[0]?.lines[0],
+      ).toMatchObject({
+        pickBinId: "bin-pasig-a1",
+      });
+    });
+  });
+
+  it("records every packaging material consumed by one shipment", async () => {
+    const repo = makeRepo();
+    const created = await repo.createFulfillmentOrder({
+      source: "ecommerce",
+      externalReference: "SHOP-PACK-02",
+      sourceLocationId: "loc-wh",
+      lines: [{ productId: "smart-watch", quantity: 1 }],
+      actor: "sales@mwell.com.ph",
+    });
+    await repo.advanceFulfillmentOrder({
+      orderId: created.id,
+      action: "allocate",
+      actor: "allocator@mwell.com.ph",
+    });
+    await repo.advanceFulfillmentOrder({
+      orderId: created.id,
+      action: "start_picking",
+      actor: "picker@mwell.com.ph",
+    });
+    await repo.advanceFulfillmentOrder({
+      orderId: created.id,
+      action: "confirm_pick",
+      actor: "picker@mwell.com.ph",
+      pickedLines: [
+        {
+          productId: "smart-watch",
+          quantity: 1,
+          serialNumbers: ["SMART-WATCH-SN0001"],
+        },
+      ],
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<FulfillmentPage />, {
+      role: "warehouse_operator",
+      repo,
+    });
+    const order = await screen.findByRole("listitem", {
+      name: /SHOP-PACK-02/i,
+    });
+    await user.click(
+      within(order).getByRole("button", { name: "Pack and add waybill" }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: /Pack order.*SHOP-PACK-02/i,
+    });
+    await user.type(within(dialog).getByLabelText("Courier"), "LBC");
+    await user.type(within(dialog).getByLabelText("Waybill number"), "WB-02");
+    await user.type(
+      within(dialog).getByLabelText("Delivery tracking link"),
+      "https://track.example/WB-02",
+    );
+    await user.selectOptions(
+      within(dialog).getByLabelText("Packaging supply 1"),
+      "pack-small-box",
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: "Add another supply" }),
+    );
+    await user.selectOptions(
+      within(dialog).getByLabelText("Packaging supply 2"),
+      "pack-label",
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: "Confirm packing" }),
+    );
+
+    await waitFor(async () => {
+      expect((await repo.getData()).fulfillmentOrders[0]?.packaging).toEqual([
+        { productId: "pack-small-box", quantity: 1 },
+        { productId: "pack-label", quantity: 1 },
+      ]);
+    });
+  });
+
+  it("shows a fulfillment-safe ecommerce order record and shipment timeline", async () => {
+    const repo = makeRepo();
+    await repo.createFulfillmentOrder({
+      source: "ecommerce",
+      externalReference: "SHOP-DETAIL-01",
+      ecommerceChannel: "Shopee",
+      orderDate: "2026-08-17",
+      customerName: "Ana Reyes",
+      customerContact: "09171234567",
+      customerEmail: "ana.reyes@example.com",
+      deliveryAddress: {
+        addressLine: "12 Main Street",
+        city: "Pasig",
+        province: "Metro Manila",
+        postalCode: "1600",
+      },
+      paymentStatus: "paid",
+      paymentMethod: "Maya",
+      sourceLocationId: "loc-wh",
+      lines: [{ productId: "smart-watch", quantity: 1, variant: "Blue" }],
+      actor: "sales@mwell.com.ph",
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<FulfillmentPage />, {
+      role: "warehouse_operator",
+      repo,
+    });
+    const order = await screen.findByRole("listitem", {
+      name: /SHOP-DETAIL-01/i,
+    });
+    expect(within(order).getByText(/Shopee/i)).toBeInTheDocument();
+    await user.click(
+      within(order).getByRole("button", { name: "View order details" }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: /Order details.*SHOP-DETAIL-01/i,
+    });
+    expect(within(dialog).getByText("Ana Reyes")).toBeInTheDocument();
+    expect(within(dialog).getByText(/0917.*567/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/a\*+@example.com/i)).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(/12 Main Street.*Pasig/i),
+    ).toBeInTheDocument();
+    expect(within(dialog).getByText(/Blue/)).toBeInTheDocument();
+    expect(within(dialog).getByText("Awaiting Dispatch")).toBeInTheDocument();
   });
 
   it("lets Marketing submit a governed department stock request", async () => {
@@ -314,13 +614,32 @@ describe("FulfillmentPage", () => {
     const dialog = await screen.findByRole("dialog", {
       name: "Request warehouse stock",
     });
-    await user.type(within(dialog).getByLabelText("Business purpose"), "Roadshow kit");
-    await user.selectOptions(within(dialog).getByLabelText("Cost center"), "CC-4100");
-    await user.type(within(dialog).getByLabelText("Required date"), "2026-08-20");
-    await user.selectOptions(within(dialog).getByLabelText("Product"), "doctor-token");
-    await user.click(within(dialog).getByRole("button", { name: "Add another item" }));
-    await user.selectOptions(within(dialog).getByLabelText("Product 2"), "shirt-l");
-    await user.click(within(dialog).getByRole("button", { name: "Submit request" }));
+    await user.type(
+      within(dialog).getByLabelText("Business purpose"),
+      "Roadshow kit",
+    );
+    await user.selectOptions(
+      within(dialog).getByLabelText("Cost center"),
+      "CC-4100",
+    );
+    await user.type(
+      within(dialog).getByLabelText("Required date"),
+      "2026-08-20",
+    );
+    await user.selectOptions(
+      within(dialog).getByLabelText("Product"),
+      "doctor-token",
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: "Add another item" }),
+    );
+    await user.selectOptions(
+      within(dialog).getByLabelText("Product 2"),
+      "shirt-l",
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: "Submit request" }),
+    );
 
     await waitFor(async () => {
       expect((await repo.getData()).departmentStockRequests[0]?.lines).toEqual([
@@ -367,6 +686,7 @@ describe("FulfillmentPage", () => {
       actor: "packer@mwell.com.ph",
       courier: "LBC",
       waybillNumber: "WB-POD-2201",
+      deliveryLink: "https://track.example/WB-POD-2201",
       packaging: [],
     });
     await repo.advanceFulfillmentOrder({
@@ -405,9 +725,13 @@ describe("FulfillmentPage", () => {
       within(dialog).getByLabelText("Upload proof-of-delivery image"),
       new File(["proof"], "pod.jpg", { type: "image/jpeg" }),
     );
-    await within(dialog).findByRole("list", { name: "Captured evidence" }, {
-      timeout: 5_000,
-    });
+    await within(dialog).findByRole(
+      "list",
+      { name: "Captured evidence" },
+      {
+        timeout: 5_000,
+      },
+    );
     expect(submit).toBeEnabled();
     await user.click(submit);
 
@@ -420,7 +744,9 @@ describe("FulfillmentPage", () => {
         shipmentStatus: "delivered",
         proofOfDeliveryReference: "POD-2201",
       });
-      expect(delivered?.proofOfDeliveryEvidenceUrl).toMatch(/^data:image\/jpeg/);
+      expect(delivered?.proofOfDeliveryEvidenceUrl).toMatch(
+        /^data:image\/jpeg/,
+      );
     });
   });
 

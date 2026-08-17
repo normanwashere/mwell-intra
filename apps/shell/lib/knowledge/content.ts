@@ -586,7 +586,10 @@ const procedureArticles: KnowledgeArticle[] = [
         "Select PO and destination",
         "Confirm supplier, warehouse, and remaining quantities.",
       ],
-      ["Record lines", "Use the receipt table to scan product and quantity, then capture cost, serial/lot or batch, device-test result, expiry, and evidence."],
+      [
+        "Record lines",
+        "Use the receipt table to scan product and quantity, then capture cost, serial/lot or batch, device-test result, expiry, and evidence.",
+      ],
       [
         "Inspect",
         "Choose disposition and provide evidence/reason when required.",
@@ -649,7 +652,7 @@ const procedureArticles: KnowledgeArticle[] = [
     [
       [
         "Record demand",
-        "Sales or ecommerce creates one demand or imports a validated CSV order list; Operations links third-party sales to an event, external location, and PHP value; or a department selects an active department and cost center, then submits purpose, due date, treatment, and one or more product lines.",
+        "Operations creates ecommerce orders directly in Intra with the order reference, channel and campaign, customer and complete address plus delivery area, payment date, method, provider references and invoice, one or more products and variants, prices and discounts, fees, optional courier details, and order instructions. The app calculates the total, net-of-VAT, VAT, and any difference from an imported tracker total. CSV remains available only to migrate existing tracker rows. Internal events, third-party sales, and department requests continue through their governed demand paths.",
       ],
       [
         "Approve when required",
@@ -661,11 +664,11 @@ const procedureArticles: KnowledgeArticle[] = [
       ],
       [
         "Allocate, split if short, and pick",
-        "Create an explicit reservation for available stock. If demand cannot be completed together, split the remaining quantity into a linked backorder. The picker scans the rack/bin and every serialized unit.",
+        "Create an explicit reservation for available stock. If demand cannot be completed together, split the remaining quantity into a linked backorder. The picker follows the recommended location, scans the exact rack/bin, scans every serialized unit, and may attach line-level photo evidence for bundles, damage, or exceptions. A serial or quantity found in another bin is rejected.",
       ],
       [
         "Prepare shipment or handover",
-        "For ecommerce, scan packing supplies and enter courier and waybill. For department, event, or third-party release, record the named recipient, receiving department, handover reference, and evidence.",
+        "For ecommerce, scan every packing supply consumed, including multiple boxes, pouches, labels, wrap, or tape rows when needed, then confirm courier, waybill, and the customer-facing tracking link. Values entered during order intake are prefilled for verification. For department, event, or third-party release, record the named recipient, receiving department, handover reference, and evidence.",
       ],
       [
         "Release with separation of duties",

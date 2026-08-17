@@ -9,7 +9,11 @@ import {
   type ToastRecord,
 } from './Toast';
 
-const item = (id: number, message: string, tone: ToastRecord['tone'] = 'info'): ToastRecord => ({
+const item = (
+  id: number,
+  message: string,
+  tone: ToastRecord['tone'] = 'info',
+): ToastRecord => ({
   id,
   message,
   tone,
@@ -40,6 +44,12 @@ describe('toast queue ergonomics', () => {
     expect(TOAST_STACK_CLASS).toContain('sm:px-6');
   });
 
+  it('keeps mobile notifications above navigation instead of covering page headers', () => {
+    expect(TOAST_STACK_CLASS).toContain('bottom-[calc(');
+    expect(TOAST_STACK_CLASS).toContain('--shell-mobile-nav-clearance');
+    expect(TOAST_STACK_CLASS).not.toContain('top-[calc(');
+  });
+
   it('coalesces an identical message and tone instead of stacking duplicates', () => {
     expect(coalesceToastQueue([item(1, 'Saved')], item(2, 'Saved'))).toEqual([
       { ...item(1, 'Saved'), count: 2 },
@@ -48,7 +58,10 @@ describe('toast queue ergonomics', () => {
 
   it('does not merge the same message across different tones', () => {
     expect(
-      coalesceToastQueue([item(1, 'Updated', 'success')], item(2, 'Updated', 'error')),
+      coalesceToastQueue(
+        [item(1, 'Updated', 'success')],
+        item(2, 'Updated', 'error'),
+      ),
     ).toHaveLength(2);
   });
 

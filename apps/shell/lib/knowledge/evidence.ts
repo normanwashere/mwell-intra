@@ -686,14 +686,14 @@ const ROLE_FEATURE_WALKTHROUGHS: RoleFeatureWalkthrough[] = [
     route: "/warehouse/fulfillment",
     roleId: "warehouse_operations",
     state:
-      "Operations is reviewing active demand and the controlled fulfillment entry point.",
-    landmark: "New fulfillment demand",
-    label: "Create fulfillment demand",
+      "Operations is reviewing active demand and the controlled ecommerce intake entry point.",
+    landmark: "Import order list",
+    label: "Import a validated ecommerce order list",
     instruction:
-      "Select New fulfillment demand only after the customer, event, or department need is confirmed.",
-    alt: "Fulfillment workspace with the New fulfillment demand control identified",
-    desktop: { x: 0.8934, y: 0.4098 },
-    mobile: { x: 0.5, y: 0.7118 },
+      "Select Import order list, choose the source warehouse, then upload the controlled CSV only after order, customer, delivery, payment, and SKU data are complete.",
+    alt: "Fulfillment workspace with the Import order list control identified",
+    desktop: { x: 0.7934, y: 0.4098 },
+    mobile: { x: 0.5, y: 0.6718 },
   },
   {
     id: "warehouse-exceptions",

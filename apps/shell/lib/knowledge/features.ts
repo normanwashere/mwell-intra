@@ -1015,15 +1015,15 @@ const definitions: FeatureDefinition[] = [
     module: "warehouse",
     route: "/warehouse/fulfillment",
     purpose:
-      "Coordinates manual or CSV ecommerce demand, third-party event demand, multi-item department stock requests, customer returns, Product-approved kits, packing supplies, shipments, accountable handovers, open-box re-kitting, and warehouse release in one governed workspace.",
+      "Coordinates app-native multi-line ecommerce intake, transitional CSV migration, internal and third-party event demand, multi-item department stock requests, customer returns, Product-approved kits, directed rack/bin picking, packing supplies, shipments, accountable handovers, open-box re-kitting, and warehouse release in one governed workspace.",
     reads:
       "Demand references, governed department and cost center, event and third-party locations, reported sales value, products, item classes, stock, explicit reservations, serial identities, fulfillment supplies, return cases, Product approval references, shipment or handover evidence, and request decisions.",
     writes:
-      "Creates validated single or CSV-grouped demand, multi-line department request, and return records; records independent request decisions; writes reservations; supports linked backorders; advances separated pick-pack-release-delivery states; uploads proof-of-delivery images; quarantines every customer return; and preserves replacement, Finance, supplier, closure, packaging, issue, and re-kit lineage.",
+      "Creates complete app-native ecommerce orders or validated CSV migration records, event demand, multi-line department requests, and returns; calculates commercial totals and VAT; records independent request decisions, reservations, scanned pick bins, optional line evidence, courier tracking, and linked backorders; advances separated pick-pack-release-delivery states with shipment history; and preserves replacement, Finance, supplier, closure, packaging, issue, and re-kit lineage.",
     statuses:
       "Received, allocated, picking, packing, ready, released, dispatched, in transit, delivery failed, returned to sender, delivered, completed, cancelled, pending approval, approved, rejected, submitted, resolved, customer closed, active, or inspection.",
     exception:
-      "Stop for insufficient or held stock, duplicate or missing serials, incomplete bundle sets, missing Product approval, unavailable packaging, missing courier, waybill, proof of delivery, quarantine bin, Finance evidence, supplier RMA, or customer closure evidence, same-person pack and release, stale status, invalid cost center, or self-approval.",
+      "Stop for incomplete ecommerce customer, address, payment, or line data; invalid commercial totals; insufficient or held stock; duplicate or missing serials; incomplete bundle sets; missing Product approval; unavailable packaging; missing courier, waybill, tracking link, or proof of delivery; quarantine, Finance, supplier RMA, or closure evidence; same-person pack and release; stale status; invalid cost center; or self-approval.",
     completionEvidence:
       "The source demand, departmental owner, reservation, backorder lineage, picked identities, packaging treatment, dispatch, delivery failure or proof, independent release, recipient acknowledgment, request decision, quarantine, replacement or refund evidence, customer closure, and return or re-kit outcome remain visible and attributable.",
   },

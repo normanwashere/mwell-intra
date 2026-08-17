@@ -1,14 +1,17 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import type {
   CustomerReturnCase,
   DepartmentRequestOption,
   DepartmentStockRequest,
   FulfillmentAction,
   FulfillmentOrder,
+  InventoryUnit,
   KitDefinition,
   Product,
   ReKitWorkOrder,
   ReturnResolution,
+  StockLevel,
+  StorageArea,
 } from "@intra/data-kit";
 import { useWarehouse } from "@/app/store";
 import {
@@ -22,6 +25,7 @@ import {
 import { Icon } from "@/components/Icon";
 import { EvidenceCapture } from "@/components/camera/EvidenceCapture";
 import { BulkOrderImportSheet } from "@/components/fulfillment/BulkOrderImportSheet";
+import { OrderIntakeSheet } from "@/components/fulfillment/OrderIntakeSheet";
 
 type WorkspaceTab = "orders" | "requests" | "returns" | "kits";
 
@@ -60,6 +64,26 @@ function titleCase(value: string) {
   return value
     .replaceAll("_", " ")
     .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function maskContact(value?: string) {
+  if (!value) return "Not provided";
+  if (value.length <= 7) return `${value.slice(0, 2)}***${value.slice(-2)}`;
+  return `${value.slice(0, 4)}****${value.slice(-3)}`;
+}
+
+function maskEmail(value?: string) {
+  if (!value) return "Not provided";
+  const [name, domain] = value.split("@");
+  return domain ? `${name?.slice(0, 1) ?? ""}***@${domain}` : "Not provided";
+}
+
+function formatPhp(value: number) {
+  return new Intl.NumberFormat("en-PH", {
+    style: "currency",
+    currency: "PHP",
+    currencyDisplay: "code",
+  }).format(value);
 }
 
 function fulfillmentItemClass(product: Product) {
@@ -168,8 +192,8 @@ function SummaryStrip({
           label: "Open returns / re-kits",
           value:
             returns.filter((row) => row.status !== "resolved").length +
-            reKits.filter((row) =>
-              !["completed", "cancelled"].includes(row.status),
+            reKits.filter(
+              (row) => !["completed", "cancelled"].includes(row.status),
             ).length,
         },
       ];
@@ -281,10 +305,14 @@ export function FulfillmentPage() {
           locations={data.locations}
           events={data.events}
           orders={data.fulfillmentOrders}
+          storageAreas={data.storageAreas}
+          units={data.units}
+          stockLevels={data.stockLevels}
           canCreate={canCreateOrder}
           canExecute={canExecute}
           canAcknowledge={canCreateOrder || canRequestStock || canExecute}
           actorIds={[actor, identityId]}
+          floorMode={isFloorOperator}
         />
       )}
       {tab === "requests" && (
@@ -337,6 +365,10 @@ function OrdersWorkspace({
   canExecute,
   canAcknowledge,
   actorIds,
+  storageAreas,
+  units,
+  stockLevels,
+  floorMode,
 }: {
   products: Product[];
   locations: Array<{ id: string; name: string; type?: string }>;
@@ -346,6 +378,10 @@ function OrdersWorkspace({
   canExecute: boolean;
   canAcknowledge: boolean;
   actorIds: string[];
+  storageAreas: StorageArea[];
+  units: InventoryUnit[];
+  stockLevels: StockLevel[];
+  floorMode: boolean;
 }) {
   const { createFulfillmentOrder, advanceFulfillmentOrder } = useWarehouse();
   const toast = useToast();
@@ -358,6 +394,35 @@ function OrdersWorkspace({
   const [cancelOrder, setCancelOrder] = useState<FulfillmentOrder>();
   const [acknowledgeOrder, setAcknowledgeOrder] = useState<FulfillmentOrder>();
   const [trackingOrder, setTrackingOrder] = useState<FulfillmentOrder>();
+  const [detailOrder, setDetailOrder] = useState<FulfillmentOrder>();
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("active");
+  const [channelFilter, setChannelFilter] = useState("all");
+  const channelOptions = [
+    ...new Set(
+      orders.map((order) => order.ecommerceChannel).filter(Boolean) as string[],
+    ),
+  ].sort();
+  const filteredOrders = orders.filter((order) => {
+    const normalized = query.trim().toLowerCase();
+    const matchesQuery =
+      !normalized ||
+      [
+        order.externalReference,
+        order.customerName,
+        order.customerReference,
+        order.courier,
+        order.waybillNumber,
+      ].some((value) => value?.toLowerCase().includes(normalized));
+    const matchesStatus =
+      statusFilter === "all" ||
+      (statusFilter === "active"
+        ? !["completed", "cancelled"].includes(order.status)
+        : order.status === statusFilter);
+    const matchesChannel =
+      channelFilter === "all" || order.ecommerceChannel === channelFilter;
+    return matchesQuery && matchesStatus && matchesChannel;
+  });
 
   const advance = async (
     order: FulfillmentOrder,
@@ -394,14 +459,14 @@ function OrdersWorkspace({
               className="btn-outline w-full sm:w-auto"
               onClick={() => setImportOpen(true)}
             >
-              <Icon name="upload" className="h-4 w-4" /> Import order list
+              <Icon name="upload" className="h-4 w-4" /> Import existing tracker
             </button>
             <button
               type="button"
               className="btn-primary w-full sm:w-auto"
               onClick={() => setCreateOpen(true)}
             >
-              <Icon name="plus" className="h-4 w-4" /> New fulfillment demand
+              <Icon name="plus" className="h-4 w-4" /> New order / demand
             </button>
           </div>
         )}
@@ -422,6 +487,59 @@ function OrdersWorkspace({
           },
         ]}
       />
+
+      <div className="grid gap-2 rounded-xl border border-line bg-surface p-3 md:grid-cols-[minmax(14rem,1fr)_12rem_12rem]">
+        <Field label="Search orders" htmlFor="fulfillment-search">
+          <input
+            id="fulfillment-search"
+            className="input"
+            type="search"
+            placeholder="Order, customer, courier, or waybill"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </Field>
+        <Field label="Status" htmlFor="fulfillment-status-filter">
+          <select
+            id="fulfillment-status-filter"
+            className="input"
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value)}
+          >
+            <option value="active">Active work</option>
+            <option value="all">All statuses</option>
+            {[
+              "received",
+              "allocated",
+              "picking",
+              "packing",
+              "ready",
+              "released",
+              "completed",
+              "cancelled",
+            ].map((status) => (
+              <option key={status} value={status}>
+                {titleCase(status)}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Channel" htmlFor="fulfillment-channel-filter">
+          <select
+            id="fulfillment-channel-filter"
+            className="input"
+            value={channelFilter}
+            onChange={(event) => setChannelFilter(event.target.value)}
+          >
+            <option value="all">All channels</option>
+            {channelOptions.map((channel) => (
+              <option key={channel} value={channel}>
+                {channel}
+              </option>
+            ))}
+          </select>
+        </Field>
+      </div>
 
       {orders.some((order) => order.source === "third_party") && (
         <div className="flex flex-col gap-1 border-l-4 border-emerald-500 bg-emerald-500/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
@@ -448,10 +566,12 @@ function OrdersWorkspace({
         </div>
       )}
 
-      {orders.length === 0 ? (
+      {filteredOrders.length === 0 ? (
         <EmptyState
           icon="cart"
-          title={canExecute ? "No orders ready to pick" : "No fulfillment demand"}
+          title={
+            canExecute ? "No orders ready to pick" : "No fulfillment demand"
+          }
           message={
             canExecute
               ? "Allocated ecommerce, event, and approved department orders will appear here for scanning and packing."
@@ -460,10 +580,10 @@ function OrdersWorkspace({
         />
       ) : (
         <ul
-          className="grid gap-3 lg:grid-cols-2"
+          className={floorMode ? "space-y-3" : "grid gap-3 lg:grid-cols-2"}
           aria-label="Fulfillment demand"
         >
-          {orders.map((order) => (
+          {filteredOrders.map((order) => (
             <li
               key={order.id}
               aria-label={`Order ${order.externalReference}`}
@@ -471,14 +591,22 @@ function OrdersWorkspace({
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="truncate font-semibold text-ink">
+                  <p className="break-words font-semibold text-ink">
                     {order.externalReference}
                   </p>
                   <p className="mt-0.5 text-xs text-muted">
-                    {titleCase(order.source)} ·{" "}
+                    {order.ecommerceChannel ?? titleCase(order.source)} ·{" "}
                     {order.lines.reduce((sum, line) => sum + line.quantity, 0)}{" "}
                     item(s)
                   </p>
+                  {order.customerName && (
+                    <p className="mt-1 truncate text-xs font-medium text-ink">
+                      {order.customerName}
+                      {order.paymentStatus
+                        ? ` · ${titleCase(order.paymentStatus)}`
+                        : ""}
+                    </p>
+                  )}
                   {order.grossSalesAmount !== undefined && (
                     <p className="mt-1 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
                       {new Intl.NumberFormat("en-PH", {
@@ -529,6 +657,14 @@ function OrdersWorkspace({
                     .join(", ")}
                 </p>
               )}
+              <button
+                type="button"
+                className="btn-ghost mt-3 w-full justify-between sm:w-auto"
+                onClick={() => setDetailOrder(order)}
+              >
+                View order details
+                <Icon name="chevron" className="h-4 w-4" />
+              </button>
               {canExecute &&
                 !["released", "completed", "cancelled"].includes(
                   order.status,
@@ -628,7 +764,7 @@ function OrdersWorkspace({
         </ul>
       )}
 
-      <CreateOrderSheet
+      <OrderIntakeSheet
         open={createOpen}
         onOpenChange={setCreateOpen}
         products={products}
@@ -643,11 +779,15 @@ function OrdersWorkspace({
           isFulfillmentProduct(product, "ecommerce"),
         )}
         locations={locations}
+        existingReferences={orders.map((order) => order.externalReference)}
         create={createFulfillmentOrder}
       />
       <PickSheet
         order={pickOrder}
         products={products}
+        storageAreas={storageAreas}
+        units={units}
+        stockLevels={stockLevels}
         onClose={() => setPickOrder(undefined)}
       />
       <PackSheet
@@ -672,7 +812,384 @@ function OrdersWorkspace({
         order={trackingOrder}
         onClose={() => setTrackingOrder(undefined)}
       />
+      <OrderDetailsSheet
+        order={detailOrder}
+        products={products}
+        storageAreas={storageAreas}
+        showCommercial={!floorMode}
+        onClose={() => setDetailOrder(undefined)}
+      />
     </section>
+  );
+}
+
+function OrderDetailsSheet({
+  order,
+  products,
+  storageAreas,
+  showCommercial,
+  onClose,
+}: {
+  order?: FulfillmentOrder;
+  products: Product[];
+  storageAreas: StorageArea[];
+  showCommercial: boolean;
+  onClose: () => void;
+}) {
+  if (!order) return null;
+  const address = order.deliveryAddress;
+  const subtotal = order.lines.reduce(
+    (sum, line) => sum + (line.unitPrice ?? 0) * line.quantity,
+    0,
+  );
+  const discounts = order.lines.reduce(
+    (sum, line) => sum + (line.discountAmount ?? 0),
+    0,
+  );
+  const calculatedTotal =
+    subtotal - discounts + (order.shippingFee ?? 0) + (order.otherFees ?? 0);
+  const netOfVat = calculatedTotal / 1.12;
+  return (
+    <Sheet
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+      title={`Order details / ${order.externalReference}`}
+      description="Fulfillment record, controlled customer details, and shipment history."
+    >
+      <div className="space-y-5">
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-xl border border-line bg-inset p-4 text-sm">
+          <div>
+            <dt className="text-xs text-faint">Channel</dt>
+            <dd className="mt-1 font-semibold text-ink">
+              {order.ecommerceChannel ?? titleCase(order.source)}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs text-faint">Order date</dt>
+            <dd className="mt-1 font-semibold text-ink">
+              {order.orderDate ?? "Not provided"}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs text-faint">Payment</dt>
+            <dd className="mt-1 font-semibold text-ink">
+              {order.paymentStatus
+                ? titleCase(order.paymentStatus)
+                : "Not provided"}
+              {order.paymentMethod ? ` / ${order.paymentMethod}` : ""}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs text-faint">Current status</dt>
+            <dd className="mt-1 font-semibold text-ink">
+              {titleCase(order.status)}
+            </dd>
+          </div>
+          {order.campaignName && (
+            <div className="col-span-2">
+              <dt className="text-xs text-faint">Campaign / event</dt>
+              <dd className="mt-1 font-semibold text-ink">
+                {order.campaignName}
+              </dd>
+            </div>
+          )}
+        </dl>
+
+        {order.source === "ecommerce" && showCommercial && (
+          <section aria-labelledby="commercial-title">
+            <h3
+              id="commercial-title"
+              className="font-display text-base font-bold text-ink"
+            >
+              Payment and commercial summary
+            </h3>
+            <dl className="mt-2 grid grid-cols-2 gap-3 rounded-xl border border-line p-4 text-sm sm:grid-cols-3">
+              <div>
+                <dt className="text-xs text-faint">Payment reference</dt>
+                <dd className="mt-1 break-all font-semibold text-ink">
+                  {order.paymentReference ?? "Not provided"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-faint">Payment date</dt>
+                <dd className="mt-1 font-semibold text-ink">
+                  {order.paymentDate ?? "Not provided"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-faint">RRN</dt>
+                <dd className="mt-1 break-all font-semibold text-ink">
+                  {order.paymentRrn ?? "Not provided"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-faint">Provider method</dt>
+                <dd className="mt-1 font-semibold text-ink">
+                  {order.paymentProviderMethod ?? "Not provided"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-faint">Provider status</dt>
+                <dd className="mt-1 font-semibold text-ink">
+                  {order.paymentProviderStatus ?? "Not provided"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-faint">Sales invoice</dt>
+                <dd className="mt-1 break-all font-semibold text-ink">
+                  {order.salesInvoiceNumber ?? "Not provided"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-faint">Subtotal</dt>
+                <dd className="mt-1 font-semibold text-ink">
+                  {formatPhp(subtotal)}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-faint">Discounts</dt>
+                <dd className="mt-1 font-semibold text-ink">
+                  {formatPhp(discounts)}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-faint">Shipping fee</dt>
+                <dd className="mt-1 font-semibold text-ink">
+                  {formatPhp(order.shippingFee ?? 0)}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-faint">Other fees</dt>
+                <dd className="mt-1 font-semibold text-ink">
+                  {formatPhp(order.otherFees ?? 0)}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-faint">Calculated total</dt>
+                <dd className="mt-1 font-bold text-ink">
+                  {formatPhp(calculatedTotal)}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-faint">Net of VAT</dt>
+                <dd className="mt-1 font-semibold text-ink">
+                  {formatPhp(netOfVat)}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-faint">VAT</dt>
+                <dd className="mt-1 font-semibold text-ink">
+                  {formatPhp(calculatedTotal - netOfVat)}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-faint">
+                  Imported total / variance
+                </dt>
+                <dd className="mt-1 font-semibold text-ink">
+                  {order.reportedTotalAmount === undefined
+                    ? "Not provided"
+                    : `${formatPhp(order.reportedTotalAmount)} / ${formatPhp(order.reportedTotalAmount - calculatedTotal)}`}
+                </dd>
+              </div>
+            </dl>
+          </section>
+        )}
+
+        {order.source === "ecommerce" && (
+          <section aria-labelledby="customer-title">
+            <h3
+              id="customer-title"
+              className="font-display text-base font-bold text-ink"
+            >
+              Customer and delivery
+            </h3>
+            <div className="mt-2 rounded-xl border border-line p-4 text-sm">
+              <p className="font-semibold text-ink">
+                {order.customerName ?? "Customer not provided"}
+              </p>
+              <p className="mt-1 text-muted">
+                {maskContact(order.customerContact)} ·{" "}
+                {maskEmail(order.customerEmail)}
+              </p>
+              {order.customerReference && (
+                <p className="mt-1 text-xs text-muted">
+                  Customer reference: {order.customerReference}
+                </p>
+              )}
+              <p className="mt-3 leading-6 text-ink">
+                {address
+                  ? `${address.addressLine}, ${address.city}, ${address.province} ${address.postalCode}`
+                  : "Delivery address not provided"}
+              </p>
+              {order.deliveryArea && (
+                <p className="mt-2 text-xs font-medium text-muted">
+                  Area of delivery: {order.deliveryArea}
+                </p>
+              )}
+            </div>
+          </section>
+        )}
+
+        <section aria-labelledby="order-lines-title">
+          <h3
+            id="order-lines-title"
+            className="font-display text-base font-bold text-ink"
+          >
+            Order lines
+          </h3>
+          <ul className="mt-2 divide-y divide-line overflow-hidden rounded-xl border border-line">
+            {order.lines.map((line) => {
+              const product = products.find(
+                (candidate) => candidate.id === line.productId,
+              );
+              const bin = storageAreas.find(
+                (candidate) => candidate.id === line.pickBinId,
+              );
+              return (
+                <li key={line.productId} className="p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-ink">
+                        {product?.name ?? line.productId}
+                      </p>
+                      <p className="mt-0.5 text-xs text-muted">
+                        {product?.sku}
+                        {line.variant ? ` · ${line.variant}` : ""}
+                      </p>
+                    </div>
+                    <span className="font-display text-lg font-bold text-ink">
+                      x{line.quantity}
+                    </span>
+                  </div>
+                  {bin && (
+                    <p className="mt-2 text-xs text-muted">
+                      Picked from {bin.label ?? bin.code}
+                    </p>
+                  )}
+                  {showCommercial && line.unitPrice !== undefined && (
+                    <p className="mt-2 text-xs text-muted">
+                      Unit price PHP {line.unitPrice.toLocaleString("en-PH")} ·
+                      Discount PHP{" "}
+                      {(line.discountAmount ?? 0).toLocaleString("en-PH")}
+                    </p>
+                  )}
+                  {line.fulfillmentEvidenceUrl && (
+                    <p className="mt-2 text-xs text-muted">
+                      Pick evidence captured
+                    </p>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+
+        {order.deliveryMethod === "shipment" && (
+          <section aria-labelledby="dispatch-title">
+            <h3
+              id="dispatch-title"
+              className="font-display text-base font-bold text-ink"
+            >
+              Dispatch
+            </h3>
+            <dl className="mt-2 grid grid-cols-2 gap-3 rounded-xl border border-line p-4 text-sm">
+              <div>
+                <dt className="text-xs text-faint">Courier</dt>
+                <dd className="mt-1 font-semibold text-ink">
+                  {order.courier ?? "Pending packing"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-faint">Waybill</dt>
+                <dd className="mt-1 break-all font-semibold text-ink">
+                  {order.waybillNumber ?? "Pending packing"}
+                </dd>
+              </div>
+              <div className="col-span-2">
+                <dt className="text-xs text-faint">Delivery link</dt>
+                <dd className="mt-1 break-all font-semibold text-ink">
+                  {order.deliveryLink ? (
+                    <a
+                      className="text-brand-600 underline"
+                      href={order.deliveryLink}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {order.deliveryLink}
+                    </a>
+                  ) : (
+                    "Pending packing"
+                  )}
+                </dd>
+              </div>
+            </dl>
+          </section>
+        )}
+
+        {order.orderNotes && (
+          <section aria-labelledby="order-notes-title">
+            <h3
+              id="order-notes-title"
+              className="font-display text-base font-bold text-ink"
+            >
+              Order instructions
+            </h3>
+            <p className="mt-2 whitespace-pre-wrap rounded-xl border border-line bg-inset p-4 text-sm text-ink">
+              {order.orderNotes}
+            </p>
+          </section>
+        )}
+
+        <section aria-labelledby="shipment-timeline-title">
+          <h3
+            id="shipment-timeline-title"
+            className="font-display text-base font-bold text-ink"
+          >
+            Shipment timeline
+          </h3>
+          {order.shipmentEvents.length === 0 ? (
+            <p className="mt-2 rounded-xl border border-dashed border-line p-4 text-sm text-muted">
+              No shipment events recorded yet.
+            </p>
+          ) : (
+            <ol className="mt-2 border-l-2 border-line pl-4">
+              {order.shipmentEvents.map((event, index) => (
+                <li
+                  key={`${event.status}-${event.occurredAt}-${index}`}
+                  className="relative pb-4 last:pb-0"
+                >
+                  <span className="absolute -left-[1.34rem] top-1 h-2.5 w-2.5 rounded-full bg-brand-500 ring-4 ring-surface" />
+                  <p className="font-semibold text-ink">
+                    {titleCase(event.status)}
+                  </p>
+                  <p className="text-xs text-muted">
+                    {new Date(event.occurredAt).toLocaleString("en-PH")}
+                  </p>
+                  {event.reason && (
+                    <p className="mt-1 text-sm text-rose-700 dark:text-rose-300">
+                      {event.reason}
+                    </p>
+                  )}
+                  {event.reference && (
+                    <p className="mt-1 text-xs text-muted">
+                      Reference: {event.reference}
+                    </p>
+                  )}
+                  {event.evidenceUrl && (
+                    <p className="mt-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                      Evidence attached
+                    </p>
+                  )}
+                </li>
+              ))}
+            </ol>
+          )}
+        </section>
+      </div>
+    </Sheet>
   );
 }
 
@@ -697,283 +1214,48 @@ function ActionButton({
   );
 }
 
-function CreateOrderSheet({
-  open,
-  onOpenChange,
-  products,
-  locations,
-  events,
-  create,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  products: Product[];
-  locations: Array<{ id: string; name: string; type?: string }>;
-  events: Array<{ id: string; name: string }>;
-  create: ReturnType<typeof useWarehouse>["createFulfillmentOrder"];
-}) {
-  const toast = useToast();
-  const [reference, setReference] = useState("");
-  const [source, setSource] = useState<"ecommerce" | "event" | "third_party">(
-    "ecommerce",
-  );
-  const [customer, setCustomer] = useState("");
-  const [productId, setProductId] = useState(products[0]?.id ?? "");
-  const [quantity, setQuantity] = useState(1);
-  const [locationId, setLocationId] = useState(
-    locations.find((row) => row.id)?.id ?? "",
-  );
-  const [bundleCodes, setBundleCodes] = useState("");
-  const [eventId, setEventId] = useState("");
-  const [thirdPartyLocationId, setThirdPartyLocationId] = useState("");
-  const [grossSalesAmount, setGrossSalesAmount] = useState("");
-  const [saving, setSaving] = useState(false);
-  const eligibleProducts = products.filter((product) =>
-    isFulfillmentProduct(product, source),
-  );
-
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
-    setSaving(true);
-    const ok = await create({
-      source,
-      externalReference: reference,
-      customerReference: customer || undefined,
-      requestingDepartment:
-        source === "event" ? "operations_events" : "sales_ecommerce",
-      eventId: source === "ecommerce" ? undefined : eventId,
-      thirdPartyLocationId:
-        source === "third_party" ? thirdPartyLocationId : undefined,
-      grossSalesAmount:
-        source === "third_party" ? Number(grossSalesAmount) : undefined,
-      sourceLocationId: locationId || undefined,
-      lines: [
-        {
-          productId,
-          quantity,
-          bundleSetCodes: bundleCodes
-            .split(",")
-            .map((value) => value.trim())
-            .filter(Boolean),
-        },
-      ],
-    });
-    setSaving(false);
-    if (ok) {
-      toast.success("Demand added to the fulfillment queue.");
-      onOpenChange(false);
-      setReference("");
-      setCustomer("");
-      setBundleCodes("");
-      setEventId("");
-      setThirdPartyLocationId("");
-      setGrossSalesAmount("");
-    }
-  };
-
-  return (
-    <Sheet
-      open={open}
-      onOpenChange={onOpenChange}
-      title="Create fulfillment demand"
-      description="Record the source and ownership before demand becomes Warehouse work."
-      footer={
-        <button
-          type="submit"
-          form="create-order-form"
-          className="btn-primary w-full"
-          disabled={saving}
-        >
-          {saving ? "Creating..." : "Create demand"}
-        </button>
-      }
-    >
-      <form
-        id="create-order-form"
-        className="space-y-4"
-        onSubmit={(event) => void submit(event)}
-      >
-        <Field label="Demand source" htmlFor="order-source">
-          <select
-            id="order-source"
-            className="input"
-            value={source}
-            onChange={(event) => {
-              const nextSource = event.target.value as typeof source;
-              setSource(nextSource);
-              setProductId(
-                products.find((product) =>
-                  isFulfillmentProduct(product, nextSource),
-                )?.id ?? "",
-              );
-              setEventId("");
-              setThirdPartyLocationId("");
-              setGrossSalesAmount("");
-            }}
-          >
-            <option value="ecommerce">Ecommerce order</option>
-            <option value="event">Internal event fulfillment</option>
-            <option value="third_party">Third-party event sale</option>
-          </select>
-        </Field>
-        <Field label="Order reference" htmlFor="order-reference">
-          <input
-            id="order-reference"
-            className="input"
-            value={reference}
-            onChange={(event) => setReference(event.target.value)}
-            required
-          />
-        </Field>
-        <Field label="Customer reference" htmlFor="customer-reference">
-          <input
-            id="customer-reference"
-            className="input"
-            value={customer}
-            onChange={(event) => setCustomer(event.target.value)}
-          />
-        </Field>
-        {source !== "ecommerce" && (
-          <Field label="Event" htmlFor="order-event">
-            <select
-              id="order-event"
-              className="input"
-              value={eventId}
-              onChange={(event) => setEventId(event.target.value)}
-              required
-            >
-              <option value="">Select an event</option>
-              {events.map((event) => (
-                <option key={event.id} value={event.id}>
-                  {event.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-        )}
-        {source === "third_party" && (
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field
-              label="Third-party inventory location"
-              htmlFor="third-party-location"
-            >
-              <select
-                id="third-party-location"
-                className="input"
-                value={thirdPartyLocationId}
-                onChange={(event) =>
-                  setThirdPartyLocationId(event.target.value)
-                }
-                required
-              >
-                <option value="">Select external location</option>
-                {locations
-                  .filter((location) => location.type !== "warehouse")
-                  .map((location) => (
-                    <option key={location.id} value={location.id}>
-                      {location.name}
-                    </option>
-                  ))}
-              </select>
-            </Field>
-            <Field label="Gross sales (PHP)" htmlFor="gross-sales">
-              <input
-                id="gross-sales"
-                className="input"
-                type="number"
-                min="0"
-                step="0.01"
-                value={grossSalesAmount}
-                onChange={(event) => setGrossSalesAmount(event.target.value)}
-                required
-              />
-            </Field>
-          </div>
-        )}
-        <Field label="Source warehouse" htmlFor="order-location">
-          <select
-            id="order-location"
-            className="input"
-            value={locationId}
-            onChange={(event) => setLocationId(event.target.value)}
-          >
-            <option value="">Assign on allocation</option>
-            {locations
-              .filter((row) => row.type === "warehouse")
-              .map((row) => (
-                <option key={row.id} value={row.id}>
-                  {row.name}
-                </option>
-              ))}
-          </select>
-        </Field>
-        <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_7rem]">
-          <Field label="Product" htmlFor="order-product">
-            <select
-              id="order-product"
-              className="input"
-              value={productId}
-              onChange={(event) => setProductId(event.target.value)}
-              required
-            >
-              {eligibleProducts.map((product) => (
-                <option key={product.id} value={product.id}>
-                  {product.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Quantity" htmlFor="order-quantity">
-            <input
-              id="order-quantity"
-              className="input"
-              type="number"
-              min="1"
-              value={quantity}
-              onChange={(event) => setQuantity(Number(event.target.value))}
-              required
-            />
-          </Field>
-        </div>
-        <Field
-          label="Bundle set codes"
-          htmlFor="bundle-codes"
-          hint="Optional. Give each complete customer bundle its own code, such as OTG-001, OTG-002. Separate codes with commas; pickers use them to keep component serials in the correct set."
-        >
-          <input
-            id="bundle-codes"
-            className="input"
-            value={bundleCodes}
-            onChange={(event) => setBundleCodes(event.target.value)}
-          />
-        </Field>
-        <div className="border-l-4 border-cyan-500 bg-cyan-500/10 px-4 py-3 text-sm">
-          <p className="font-semibold text-ink">How bundle control works</p>
-          <p className="mt-1 text-muted">
-            One set code represents one finished bundle. During picking, scan
-            every serialized component required for that set; during packing,
-            keep those components together under the same code.
-          </p>
-        </div>
-      </form>
-    </Sheet>
-  );
-}
-
 function PickSheet({
   order,
   products,
+  storageAreas,
+  units,
+  stockLevels,
   onClose,
 }: {
   order?: FulfillmentOrder;
   products: Product[];
+  storageAreas: StorageArea[];
+  units: InventoryUnit[];
+  stockLevels: StockLevel[];
   onClose: () => void;
 }) {
   const { advanceFulfillmentOrder } = useWarehouse();
   const toast = useToast();
   const [serials, setSerials] = useState<Record<string, string>>({});
+  const [binCodes, setBinCodes] = useState<Record<string, string>>({});
+  const [pickEvidence, setPickEvidence] = useState<Record<string, string[]>>(
+    {},
+  );
   const [saving, setSaving] = useState(false);
   if (!order) return null;
+  const recommendedBin = (productId: string) => {
+    const unitBin = units.find(
+      (unit) =>
+        unit.productId === productId &&
+        unit.status === "in_stock" &&
+        unit.binId &&
+        (!order.sourceLocationId || unit.locationId === order.sourceLocationId),
+    )?.binId;
+    const stockBin = stockLevels.find(
+      (level) =>
+        level.productId === productId &&
+        level.quantity > 0 &&
+        level.binId &&
+        (!order.sourceLocationId ||
+          level.locationId === order.sourceLocationId),
+    )?.binId;
+    return storageAreas.find((area) => area.id === (unitBin ?? stockBin));
+  };
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setSaving(true);
@@ -987,6 +1269,12 @@ function PickSheet({
           .split(/[\n,]/)
           .map((value) => value.trim())
           .filter(Boolean),
+        binId: storageAreas.find(
+          (area) =>
+            area.code.toLowerCase() ===
+            (binCodes[line.productId] ?? "").trim().toLowerCase(),
+        )?.id,
+        evidenceUrl: pickEvidence[line.productId]?.[0],
       })),
     });
     setSaving(false);
@@ -994,6 +1282,8 @@ function PickSheet({
       toast.success("Scanned pick confirmed. Move the order to packing.");
       onClose();
       setSerials({});
+      setBinCodes({});
+      setPickEvidence({});
     }
   };
   return (
@@ -1003,7 +1293,7 @@ function PickSheet({
         if (!open) onClose();
       }}
       title={`Confirm pick / ${order.externalReference}`}
-      description="Confirm the full quantity and one serial per serialized unit."
+      description="Scan the source bin and items, then attach line evidence before confirming the pick."
       footer={
         <button
           type="submit"
@@ -1023,13 +1313,14 @@ function PickSheet({
         <div className="border-l-4 border-emerald-500 bg-emerald-500/10 px-4 py-3 text-sm">
           <p className="font-semibold text-ink">Quality checkpoint</p>
           <p className="mt-1 text-muted">
-            Only accepted, put-away stock is pickable. If packaging, seals, or
-            a device condition looks wrong, stop the pick and route the item to
+            Only accepted, put-away stock is pickable. If packaging, seals, or a
+            device condition looks wrong, stop the pick and route the item to
             Quality Control instead of substituting it informally.
           </p>
         </div>
         {order.lines.map((line) => {
           const product = products.find((row) => row.id === line.productId);
+          const suggestion = recommendedBin(line.productId);
           return (
             <div
               key={line.productId}
@@ -1041,8 +1332,49 @@ function PickSheet({
               <p className="text-xs text-muted">
                 Required quantity: {line.quantity}
               </p>
+              {suggestion ? (
+                <div className="mt-3 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 dark:border-brand-800 dark:bg-brand-900/30">
+                  <p className="text-xs font-semibold text-brand-800 dark:text-brand-200">
+                    Pick location
+                  </p>
+                  <p className="mt-0.5 text-sm font-semibold text-ink">
+                    {suggestion.label ?? suggestion.code}
+                  </p>
+                  <p className="font-mono text-xs text-muted">
+                    {suggestion.code}
+                  </p>
+                </div>
+              ) : (
+                <p className="mt-3 rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
+                  No put-away bin is recorded. Confirm the general stock area
+                  and escalate repeated unbinned stock to the shift lead.
+                </p>
+              )}
+              {suggestion && (
+                <Field
+                  label={`Scanned bin code for ${product?.name ?? line.productId}`}
+                  htmlFor={`pick-bin-${line.productId}`}
+                  hint="Scan the rack or bin label before scanning the item."
+                >
+                  <input
+                    id={`pick-bin-${line.productId}`}
+                    className="input mt-3 font-mono"
+                    value={binCodes[line.productId] ?? ""}
+                    onChange={(event) =>
+                      setBinCodes((current) => ({
+                        ...current,
+                        [line.productId]: event.target.value,
+                      }))
+                    }
+                    required
+                  />
+                </Field>
+              )}
               {line.bundleSetCodes && line.bundleSetCodes.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1" aria-label="Bundle set codes">
+                <div
+                  className="mt-2 flex flex-wrap gap-1"
+                  aria-label="Bundle set codes"
+                >
                   {line.bundleSetCodes.map((code) => (
                     <Badge key={code} tone="cyan">
                       Set {code}
@@ -1052,7 +1384,7 @@ function PickSheet({
               )}
               {product?.serialized && (
                 <Field
-                  label="Scanned serial numbers"
+                  label={`Scanned serial numbers for ${product.name}`}
                   htmlFor={`pick-${line.productId}`}
                   hint="Enter one per line or separate with commas."
                 >
@@ -1070,6 +1402,23 @@ function PickSheet({
                   />
                 </Field>
               )}
+              <div className="mt-3 border-t border-line pt-3">
+                <EvidenceCapture
+                  reference={`fulfillment/${order.id}/pick/${line.productId}`}
+                  maxPhotos={1}
+                  label={`Attach pick evidence for ${product?.name ?? line.productId}`}
+                  onChange={(urls) =>
+                    setPickEvidence((current) => ({
+                      ...current,
+                      [line.productId]: urls,
+                    }))
+                  }
+                />
+                <p className="mt-2 text-xs text-muted">
+                  Optional when the scan record is sufficient; attach a photo
+                  for damaged packaging, bundle confirmation, or exceptions.
+                </p>
+              </div>
             </div>
           );
         })}
@@ -1094,13 +1443,20 @@ function PackSheet({
   );
   const [courier, setCourier] = useState("");
   const [waybill, setWaybill] = useState("");
+  const [deliveryLink, setDeliveryLink] = useState("");
   const [recipientName, setRecipientName] = useState("");
   const [recipientDepartment, setRecipientDepartment] = useState("");
   const [handoverReference, setHandoverReference] = useState("");
   const [handoverEvidenceUrl, setHandoverEvidenceUrl] = useState("");
-  const [supplyId, setSupplyId] = useState("");
-  const [quantity, setQuantity] = useState(1);
+  const [packaging, setPackaging] = useState([
+    { key: crypto.randomUUID(), productId: "", quantity: 1 },
+  ]);
   const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    setCourier(order?.courier ?? "");
+    setWaybill(order?.waybillNumber ?? "");
+    setDeliveryLink(order?.deliveryLink ?? "");
+  }, [order?.courier, order?.deliveryLink, order?.id, order?.waybillNumber]);
   if (!order) return null;
   const shipment = order.deliveryMethod === "shipment";
   const submit = async (event: FormEvent) => {
@@ -1111,11 +1467,14 @@ function PackSheet({
       action: "confirm_pack",
       courier,
       waybillNumber: waybill,
+      deliveryLink,
       handoverRecipientName: recipientName,
       handoverRecipientDepartment: recipientDepartment,
       handoverReference,
       handoverEvidenceUrl,
-      packaging: supplyId ? [{ productId: supplyId, quantity }] : [],
+      packaging: packaging
+        .filter((line) => line.productId)
+        .map(({ productId, quantity }) => ({ productId, quantity })),
     });
     setSaving(false);
     if (ok) {
@@ -1136,7 +1495,7 @@ function PackSheet({
       title={`Pack order / ${order.externalReference}`}
       description={
         shipment
-          ? "Record the courier, waybill, and fulfillment supplies consumed."
+          ? "Confirm the courier, waybill, delivery link, and fulfillment supplies consumed."
           : "Identify the recipient and attach handover evidence before release."
       }
       footer={
@@ -1172,6 +1531,20 @@ function PackSheet({
                 className="input"
                 value={waybill}
                 onChange={(event) => setWaybill(event.target.value)}
+                required
+              />
+            </Field>
+            <Field
+              label="Delivery tracking link"
+              htmlFor="pack-delivery-link"
+              hint="Paste the courier page the customer and support team will use."
+            >
+              <input
+                id="pack-delivery-link"
+                className="input"
+                type="url"
+                value={deliveryLink}
+                onChange={(event) => setDeliveryLink(event.target.value)}
                 required
               />
             </Field>
@@ -1226,33 +1599,94 @@ function PackSheet({
           </>
         )}
         {supplies.length > 0 ? (
-          <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_7rem]">
-            <Field label="Packaging supply" htmlFor="pack-supply">
-              <select
-                id="pack-supply"
-                className="input"
-                value={supplyId}
-                onChange={(event) => setSupplyId(event.target.value)}
+          <fieldset className="space-y-3">
+            <legend className="label">Packaging materials consumed</legend>
+            {packaging.map((line, index) => (
+              <div
+                key={line.key}
+                className="grid gap-3 rounded-lg border border-line p-3 sm:grid-cols-[minmax(0,1fr)_7rem_auto] sm:items-end"
               >
-                <option value="">No tracked supply</option>
-                {supplies.map((product) => (
-                  <option key={product.id} value={product.id}>
-                    {product.name}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Quantity" htmlFor="pack-supply-quantity">
-              <input
-                id="pack-supply-quantity"
-                className="input"
-                type="number"
-                min="1"
-                value={quantity}
-                onChange={(event) => setQuantity(Number(event.target.value))}
-              />
-            </Field>
-          </div>
+                <Field
+                  label={`Packaging supply ${index + 1}`}
+                  htmlFor={`pack-supply-${line.key}`}
+                >
+                  <select
+                    id={`pack-supply-${line.key}`}
+                    className="input"
+                    value={line.productId}
+                    onChange={(event) =>
+                      setPackaging((current) =>
+                        current.map((candidate) =>
+                          candidate.key === line.key
+                            ? { ...candidate, productId: event.target.value }
+                            : candidate,
+                        ),
+                      )
+                    }
+                  >
+                    <option value="">Select a supply</option>
+                    {supplies.map((product) => (
+                      <option key={product.id} value={product.id}>
+                        {product.name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field
+                  label={`Packaging quantity ${index + 1}`}
+                  htmlFor={`pack-supply-quantity-${line.key}`}
+                >
+                  <input
+                    id={`pack-supply-quantity-${line.key}`}
+                    className="input"
+                    type="number"
+                    min="1"
+                    value={line.quantity}
+                    onChange={(event) =>
+                      setPackaging((current) =>
+                        current.map((candidate) =>
+                          candidate.key === line.key
+                            ? {
+                                ...candidate,
+                                quantity: Number(event.target.value),
+                              }
+                            : candidate,
+                        ),
+                      )
+                    }
+                  />
+                </Field>
+                {packaging.length > 1 && (
+                  <button
+                    type="button"
+                    className="btn-ghost min-h-11 px-3"
+                    aria-label={`Remove packaging supply ${index + 1}`}
+                    onClick={() =>
+                      setPackaging((current) =>
+                        current.filter(
+                          (candidate) => candidate.key !== line.key,
+                        ),
+                      )
+                    }
+                  >
+                    <Icon name="trash" />
+                  </button>
+                )}
+              </div>
+            ))}
+            <button
+              type="button"
+              className="btn-outline w-full sm:w-auto"
+              onClick={() =>
+                setPackaging((current) => [
+                  ...current,
+                  { key: crypto.randomUUID(), productId: "", quantity: 1 },
+                ])
+              }
+            >
+              <Icon name="plus" /> Add another supply
+            </button>
+          </fieldset>
         ) : (
           <p className="rounded-lg bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-300">
             No fulfillment supplies are configured. Add boxes, pouches, labels,
@@ -1880,7 +2314,9 @@ function CreateRequestSheet({
           type="submit"
           form="department-request-form"
           className="btn-primary w-full"
-          disabled={saving || lines.some((line) => !line.productId || line.quantity < 1)}
+          disabled={
+            saving || lines.some((line) => !line.productId || line.quantity < 1)
+          }
         >
           {saving ? "Submitting..." : "Submit request"}
         </button>
@@ -1967,7 +2403,9 @@ function CreateRequestSheet({
           </select>
         </Field>
         <fieldset className="space-y-3">
-          <legend className="text-sm font-semibold text-ink">Requested items</legend>
+          <legend className="text-sm font-semibold text-ink">
+            Requested items
+          </legend>
           {lines.map((line, index) => (
             <div
               key={line.key}
@@ -2006,13 +2444,12 @@ function CreateRequestSheet({
                   ))}
                 </select>
               </Field>
-              <Field
-                label="Quantity"
-                htmlFor={`request-quantity-${line.key}`}
-              >
+              <Field label="Quantity" htmlFor={`request-quantity-${line.key}`}>
                 <input
                   id={`request-quantity-${line.key}`}
-                  aria-label={index === 0 ? "Quantity" : `Quantity for item ${index + 1}`}
+                  aria-label={
+                    index === 0 ? "Quantity" : `Quantity for item ${index + 1}`
+                  }
                   className="input"
                   type="number"
                   min="1"

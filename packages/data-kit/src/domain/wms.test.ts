@@ -23,6 +23,7 @@ const order = (patch: Partial<FulfillmentOrder> = {}): FulfillmentOrder => ({
     },
   ],
   packaging: [],
+  shipmentEvents: [],
   createdBy: "sales@mwell",
   createdAt: "2026-07-21T00:00:00.000Z",
   updatedAt: "2026-07-21T00:00:00.000Z",

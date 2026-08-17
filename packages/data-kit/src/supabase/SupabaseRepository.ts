@@ -175,7 +175,7 @@ const TABLE_PROJECTIONS: Record<string, string> = {
   procurement_po_handoff:
     "id,po_number,vendor_name,status,expected_date,total,lines,created_at",
   fulfillment_orders:
-    "id,source,external_reference,requesting_department,source_location_id,source_bin_id,customer_reference,event_id,third_party_location_id,gross_sales_amount,courier,waybill_number,delivery_method,shipment_status,dispatched_at,last_tracking_at,delivery_failure_reason,failed_delivery_at,proof_of_delivery_reference,proof_of_delivery_evidence_url,delivered_at,handover_recipient_name,handover_recipient_department,handover_reference,handover_evidence_url,status,lines,packaging,created_by,created_at,updated_at,parent_order_id,picked_by,picked_at,packed_by,packed_at,released_by,released_at,acknowledged_by,acknowledged_at,acknowledgement_reference,acknowledgement_evidence_url,cancellation_reason,packaging_disposition",
+    "id,source,external_reference,requesting_department,source_location_id,source_bin_id,customer_reference,ecommerce_channel,order_date,customer_name,customer_contact,customer_email,delivery_area,delivery_address,payment_status,payment_method,payment_reference,payment_date,payment_rrn,payment_provider_method,payment_provider_status,campaign_name,sales_invoice_number,shipping_fee,other_fees,reported_total_amount,order_notes,event_id,third_party_location_id,gross_sales_amount,courier,delivery_link,waybill_number,delivery_method,shipment_status,shipment_events,dispatched_at,last_tracking_at,delivery_failure_reason,failed_delivery_at,proof_of_delivery_reference,proof_of_delivery_evidence_url,delivered_at,handover_recipient_name,handover_recipient_department,handover_reference,handover_evidence_url,status,lines,packaging,created_by,created_at,updated_at,parent_order_id,picked_by,picked_at,packed_by,packed_at,released_by,released_at,acknowledged_by,acknowledged_at,acknowledgement_reference,acknowledgement_evidence_url,cancellation_reason,packaging_disposition",
   fulfillment_reservations:
     "id,order_id,product_id,location_id,bin_id,quantity,status,created_by,created_at,closed_at",
   department_stock_requests:
@@ -687,8 +687,7 @@ export class SupabaseRepository implements WarehouseControlRepository {
           id: `lot-${idempotencyKey}-${lineIndex}`,
           productId: product.id,
           lotCode:
-            line.lotCode ??
-            `LOT-${product.sku}-${idempotencyKey}-${lineIndex}`,
+            line.lotCode ?? `LOT-${product.sku}-${idempotencyKey}-${lineIndex}`,
           supplierId: input.supplierId,
           unitCost: line.unitCost ?? product.unitCost,
           receivedAt: createdAt,
@@ -794,7 +793,9 @@ export class SupabaseRepository implements WarehouseControlRepository {
     }
   }
 
-  private async findReceiptById(receiptId: string): Promise<Receipt | undefined> {
+  private async findReceiptById(
+    receiptId: string,
+  ): Promise<Receipt | undefined> {
     const { data, error } = await this.db
       .from("receipts")
       .select(TABLE_PROJECTIONS.receipts)
@@ -1071,11 +1072,19 @@ export class SupabaseRepository implements WarehouseControlRepository {
   }
 
   async recordReturn(input: ReturnInput): Promise<ReturnRecord> {
-    if (input.lines.some((line) => line.disposition && line.disposition !== "quarantine")) {
-      throw new Error("Return intake is quarantine-first; Quality controls final disposition.");
+    if (
+      input.lines.some(
+        (line) => line.disposition && line.disposition !== "quarantine",
+      )
+    ) {
+      throw new Error(
+        "Return intake is quarantine-first; Quality controls final disposition.",
+      );
     }
     if (input.lines.some((line) => !line.locationId)) {
-      throw new Error("A quarantine location is required for every returned line.");
+      throw new Error(
+        "A quarantine location is required for every returned line.",
+      );
     }
     const createdAt = new Date().toISOString();
     const data = await this.getData();
@@ -1592,6 +1601,29 @@ export class SupabaseRepository implements WarehouseControlRepository {
       external_reference: input.externalReference.trim(),
       requesting_department: input.requestingDepartment?.trim() || null,
       customer_reference: input.customerReference?.trim() || null,
+      ecommerce_channel: input.ecommerceChannel?.trim() || null,
+      order_date: input.orderDate ?? null,
+      customer_name: input.customerName?.trim() || null,
+      customer_contact: input.customerContact?.trim() || null,
+      customer_email: input.customerEmail?.trim() || null,
+      delivery_area: input.deliveryArea?.trim() || null,
+      delivery_address: input.deliveryAddress ?? null,
+      payment_status: input.paymentStatus ?? null,
+      payment_method: input.paymentMethod?.trim() || null,
+      payment_reference: input.paymentReference?.trim() || null,
+      payment_date: input.paymentDate || null,
+      payment_rrn: input.paymentRrn?.trim() || null,
+      payment_provider_method: input.paymentProviderMethod?.trim() || null,
+      payment_provider_status: input.paymentProviderStatus?.trim() || null,
+      campaign_name: input.campaignName?.trim() || null,
+      sales_invoice_number: input.salesInvoiceNumber?.trim() || null,
+      shipping_fee: input.shippingFee ?? null,
+      other_fees: input.otherFees ?? null,
+      reported_total_amount: input.reportedTotalAmount ?? null,
+      order_notes: input.orderNotes?.trim() || null,
+      courier: input.courier?.trim() || null,
+      delivery_link: input.deliveryLink?.trim() || null,
+      waybill_number: input.waybillNumber?.trim() || null,
       event_id: input.eventId ?? null,
       third_party_location_id: input.thirdPartyLocationId ?? null,
       gross_sales_amount: input.grossSalesAmount ?? null,
@@ -1604,6 +1636,14 @@ export class SupabaseRepository implements WarehouseControlRepository {
         pickedQuantity: 0,
         pickedSerialNumbers: [],
         ...(line.bundleSetCodes ? { bundleSetCodes: line.bundleSetCodes } : {}),
+        ...(line.variant ? { variant: line.variant } : {}),
+        ...(line.unitPrice !== undefined ? { unitPrice: line.unitPrice } : {}),
+        ...(line.discountAmount !== undefined
+          ? { discountAmount: line.discountAmount }
+          : {}),
+        ...(line.fulfillmentEvidenceUrl
+          ? { fulfillmentEvidenceUrl: line.fulfillmentEvidenceUrl }
+          : {}),
       })),
     });
     return rowToFulfillmentOrder(row);
@@ -1642,10 +1682,13 @@ export class SupabaseRepository implements WarehouseControlRepository {
           productId: line.productId,
           quantity: line.quantity,
           serialNumbers: line.serialNumbers ?? [],
+          binId: line.binId ?? null,
+          evidenceUrl: line.evidenceUrl?.trim() || null,
         })) ?? [],
       fulfilled_lines: input.fulfilledLines ?? [],
       packaging: input.packaging ?? [],
       courier: input.courier?.trim() || null,
+      delivery_link: input.deliveryLink?.trim() || null,
       waybill_number: input.waybillNumber?.trim() || null,
       handover_recipient_name: input.handoverRecipientName?.trim() || null,
       handover_recipient_department:

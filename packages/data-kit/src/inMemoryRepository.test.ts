@@ -80,7 +80,9 @@ beforeEach(() => {
 
 type ReceiveInput = Parameters<InMemoryRepository["receiveStock"]>[0];
 type ReturnInput = Parameters<InMemoryRepository["recordReturn"]>[0];
-type QualityOutcome = Parameters<InMemoryRepository["inspectQuality"]>[0]["disposition"];
+type QualityOutcome = Parameters<
+  InMemoryRepository["inspectQuality"]
+>[0]["disposition"];
 
 const DIRECT_RECEIPT_EXCEPTION = {
   type: "non_po" as const,
@@ -130,10 +132,12 @@ async function returnThroughQuality(
   input: ReturnInput,
   outcomes: QualityOutcome[] = input.lines.map(() => "accepted"),
 ) {
-  const quarantineLines = input.lines.map(({ disposition: _disposition, ...line }) => ({
-    ...line,
-    locationId: line.locationId ?? "loc-wh",
-  }));
+  const quarantineLines = input.lines.map(
+    ({ disposition: _disposition, ...line }) => ({
+      ...line,
+      locationId: line.locationId ?? "loc-wh",
+    }),
+  );
   const returned = await repository.recordReturn({
     ...input,
     lines: quarantineLines,
@@ -619,19 +623,23 @@ describe("recordReturn", () => {
       actor: "ops@mwell",
     });
     await repo.issue({ allocationId: alloc.id, actor: "ops@mwell" });
-    await returnThroughQuality(repo, {
-      source: "customer",
-      eventId: "e1",
-      actor: "ops@mwell",
-      lines: [
-        {
-          productId: "ring",
-          quantity: 1,
-          reason: "never came back",
-          serialNumber: "SN1",
-        },
-      ],
-    }, ["unavailable"]);
+    await returnThroughQuality(
+      repo,
+      {
+        source: "customer",
+        eventId: "e1",
+        actor: "ops@mwell",
+        lines: [
+          {
+            productId: "ring",
+            quantity: 1,
+            reason: "never came back",
+            serialNumber: "SN1",
+          },
+        ],
+      },
+      ["unavailable"],
+    );
     const data = await repo.getData();
     expect(data.units.find((u) => u.serialNumber === "SN1")!.status).toBe(
       "lost",
@@ -648,19 +656,23 @@ describe("recordReturn", () => {
       actor: "ops@mwell",
     });
     await repo.issue({ allocationId: alloc.id, actor: "ops@mwell" });
-    await returnThroughQuality(repo, {
-      source: "vendor",
-      eventId: "e1",
-      actor: "ops@mwell",
-      lines: [
-        {
-          productId: "ring",
-          quantity: 1,
-          reason: "RMA",
-          serialNumber: "SN1",
-        },
-      ],
-    }, ["vendor_return"]);
+    await returnThroughQuality(
+      repo,
+      {
+        source: "vendor",
+        eventId: "e1",
+        actor: "ops@mwell",
+        lines: [
+          {
+            productId: "ring",
+            quantity: 1,
+            reason: "RMA",
+            serialNumber: "SN1",
+          },
+        ],
+      },
+      ["vendor_return"],
+    );
     const data = await repo.getData();
     expect(data.units.find((u) => u.serialNumber === "SN1")!.status).toBe(
       "returned",
@@ -670,17 +682,21 @@ describe("recordReturn", () => {
   });
 
   it("records quarantine intake before Quality sets the final line disposition", async () => {
-    await returnThroughQuality(repo, {
-      source: "customer",
-      actor: "ops@mwell",
-      lines: [
-        {
-          productId: "shirt",
-          quantity: 2,
-          reason: "wrong size",
-        },
-      ],
-    }, ["unavailable"]);
+    await returnThroughQuality(
+      repo,
+      {
+        source: "customer",
+        actor: "ops@mwell",
+        lines: [
+          {
+            productId: "shirt",
+            quantity: 2,
+            reason: "wrong size",
+          },
+        ],
+      },
+      ["unavailable"],
+    );
     const data = await repo.getData();
     const mv = data.movements.find((m) => m.type === "return")!;
     expect(mv.reason).toBe("wrong size (quarantine)");
@@ -716,22 +732,26 @@ describe("recordReturn", () => {
   });
 
   it("does not restock non-serialized quantity when lost or vendor_return", async () => {
-    await returnThroughQuality(repo, {
-      source: "customer",
-      actor: "ops@mwell",
-      lines: [
-        {
-          productId: "shirt",
-          quantity: 4,
-          reason: "damaged",
-        },
-        {
-          productId: "shirt",
-          quantity: 3,
-          reason: "recall",
-        },
-      ],
-    }, ["unavailable", "vendor_return"]);
+    await returnThroughQuality(
+      repo,
+      {
+        source: "customer",
+        actor: "ops@mwell",
+        lines: [
+          {
+            productId: "shirt",
+            quantity: 4,
+            reason: "damaged",
+          },
+          {
+            productId: "shirt",
+            quantity: 3,
+            reason: "recall",
+          },
+        ],
+      },
+      ["unavailable", "vendor_return"],
+    );
     const state = await repo.getStockState();
     expect(availableForProduct(state, "shirt")).toBe(20);
   });
@@ -753,9 +773,13 @@ describe("return Quality completion", () => {
       ],
     });
 
-    expect(availableForProduct(await repo.getStockState(), "shirt", "loc-cebu")).toBe(0);
+    expect(
+      availableForProduct(await repo.getStockState(), "shirt", "loc-cebu"),
+    ).toBe(0);
     expect((await repo.listWarehouseTasks({})).rows).toEqual(
-      expect.arrayContaining([expect.objectContaining({ sourceId: returned.id })]),
+      expect.arrayContaining([
+        expect.objectContaining({ sourceId: returned.id }),
+      ]),
     );
 
     await repo.inspectQuality({
@@ -770,9 +794,13 @@ describe("return Quality completion", () => {
 
     const data = await repo.getData();
     expect(data.returns[0]!.lines[0]!.disposition).toBe("restock");
-    expect(availableForProduct(await repo.getStockState(), "shirt", "loc-cebu")).toBe(2);
+    expect(
+      availableForProduct(await repo.getStockState(), "shirt", "loc-cebu"),
+    ).toBe(2);
     expect((await repo.listWarehouseTasks({})).rows).not.toEqual(
-      expect.arrayContaining([expect.objectContaining({ sourceId: returned.id })]),
+      expect.arrayContaining([
+        expect.objectContaining({ sourceId: returned.id }),
+      ]),
     );
   });
 
@@ -803,8 +831,17 @@ describe("return Quality completion", () => {
     });
 
     const hold = (await repo.listHolds({ status: "active" })).rows[0]!;
-    expect((await repo.getData()).returns[0]!.lines[0]!.disposition).toBe("hold");
-    expect(availableForProduct(await repo.getStockState(), "shirt", "loc-wh", "bin-a")).toBe(0);
+    expect((await repo.getData()).returns[0]!.lines[0]!.disposition).toBe(
+      "hold",
+    );
+    expect(
+      availableForProduct(
+        await repo.getStockState(),
+        "shirt",
+        "loc-wh",
+        "bin-a",
+      ),
+    ).toBe(0);
     expect(
       (await repo.listInventoryPositions({})).rows.find(
         (row) => row.productId === "shirt" && row.binId === "bin-a",
@@ -814,7 +851,9 @@ describe("return Quality completion", () => {
       expect.arrayContaining([expect.objectContaining({ sourceId: hold.id })]),
     );
     expect((await repo.listWarehouseTasks({})).rows).not.toEqual(
-      expect.arrayContaining([expect.objectContaining({ sourceId: returned.id })]),
+      expect.arrayContaining([
+        expect.objectContaining({ sourceId: returned.id }),
+      ]),
     );
 
     await repo.releaseHold({
@@ -825,8 +864,17 @@ describe("return Quality completion", () => {
       evidenceUrls: ["memory/release.jpg"],
     });
 
-    expect((await repo.getData()).returns[0]!.lines[0]!.disposition).toBe("restock");
-    expect(availableForProduct(await repo.getStockState(), "shirt", "loc-wh", "bin-a")).toBe(2);
+    expect((await repo.getData()).returns[0]!.lines[0]!.disposition).toBe(
+      "restock",
+    );
+    expect(
+      availableForProduct(
+        await repo.getStockState(),
+        "shirt",
+        "loc-wh",
+        "bin-a",
+      ),
+    ).toBe(2);
     expect((await repo.listWarehouseTasks({})).rows).not.toEqual(
       expect.arrayContaining([expect.objectContaining({ sourceId: hold.id })]),
     );
@@ -868,9 +916,13 @@ describe("return Quality completion", () => {
     });
 
     const hold = (await repo.listHolds({ status: "active" })).rows[0]!;
-    expect((await repo.getData()).returns[0]!.lines[0]!.disposition).toBe("vendor_return");
+    expect((await repo.getData()).returns[0]!.lines[0]!.disposition).toBe(
+      "vendor_return",
+    );
     expect((await repo.listWarehouseTasks({})).rows).not.toEqual(
-      expect.arrayContaining([expect.objectContaining({ sourceId: returned.id })]),
+      expect.arrayContaining([
+        expect.objectContaining({ sourceId: returned.id }),
+      ]),
     );
 
     await repo.createVendorReturn({
@@ -882,9 +934,10 @@ describe("return Quality completion", () => {
       evidenceUrls: ["memory/rma.pdf"],
     });
 
-    expect((await repo.getData()).units.find((unit) => unit.serialNumber === "SN1")!.status).toBe(
-      "vendor_return",
-    );
+    expect(
+      (await repo.getData()).units.find((unit) => unit.serialNumber === "SN1")!
+        .status,
+    ).toBe("vendor_return");
     expect((await repo.listWarehouseTasks({})).rows).not.toEqual(
       expect.arrayContaining([expect.objectContaining({ sourceId: hold.id })]),
     );
@@ -926,10 +979,14 @@ describe("return Quality completion", () => {
 
     const data = await repo.getData();
     expect(data.returns[0]!.lines[0]!.disposition).toBe("lost");
-    expect(data.units.find((unit) => unit.serialNumber === "SN1")!.status).toBe("lost");
+    expect(data.units.find((unit) => unit.serialNumber === "SN1")!.status).toBe(
+      "lost",
+    );
     expect((await repo.listHolds({ status: "active" })).rows).toHaveLength(0);
     expect((await repo.listWarehouseTasks({})).rows).not.toEqual(
-      expect.arrayContaining([expect.objectContaining({ sourceId: returned.id })]),
+      expect.arrayContaining([
+        expect.objectContaining({ sourceId: returned.id }),
+      ]),
     );
   });
 });
@@ -1319,7 +1376,9 @@ describe("receiveAgainstPO", () => {
         lines: [{ productId: "shirt", quantityReceived: 12 }],
       }),
     ).rejects.toThrow(/overage.*exception/i);
-    expect((await repo.getData()).purchaseOrders[0]!.lines[0]!.quantityReceived).toBe(0);
+    expect(
+      (await repo.getData()).purchaseOrders[0]!.lines[0]!.quantityReceived,
+    ).toBe(0);
   });
 
   it("rejects receiving a product that is not on the PO", async () => {
@@ -2290,6 +2349,7 @@ describe("W1 control parity", () => {
       action: "confirm_pack",
       courier: "LBC",
       waybillNumber: "WB-001",
+      deliveryLink: "https://track.example/WB-001",
       packaging: [],
       actor: "packer",
     });

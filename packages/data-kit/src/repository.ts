@@ -327,6 +327,29 @@ export interface CreateFulfillmentOrderInput {
   externalReference: string;
   requestingDepartment?: string;
   customerReference?: string;
+  ecommerceChannel?: string;
+  orderDate?: string;
+  customerName?: string;
+  customerContact?: string;
+  customerEmail?: string;
+  deliveryArea?: string;
+  deliveryAddress?: import("./domain/wms").EcommerceDeliveryAddress;
+  paymentStatus?: import("./domain/wms").EcommercePaymentStatus;
+  paymentMethod?: string;
+  paymentReference?: string;
+  paymentDate?: string;
+  paymentRrn?: string;
+  paymentProviderMethod?: string;
+  paymentProviderStatus?: string;
+  campaignName?: string;
+  salesInvoiceNumber?: string;
+  shippingFee?: number;
+  otherFees?: number;
+  reportedTotalAmount?: number;
+  orderNotes?: string;
+  courier?: string;
+  deliveryLink?: string;
+  waybillNumber?: string;
   eventId?: string;
   thirdPartyLocationId?: string;
   grossSalesAmount?: number;
@@ -337,6 +360,10 @@ export interface CreateFulfillmentOrderInput {
     productId: string;
     quantity: number;
     bundleSetCodes?: string[];
+    variant?: string;
+    unitPrice?: number;
+    discountAmount?: number;
+    fulfillmentEvidenceUrl?: string;
   }>;
   actor: string;
 }
@@ -349,6 +376,8 @@ export interface AdvanceFulfillmentOrderInput {
     productId: string;
     quantity: number;
     serialNumbers?: string[];
+    binId?: string;
+    evidenceUrl?: string;
   }>;
   fulfilledLines?: Array<{
     productId: string;
@@ -356,6 +385,7 @@ export interface AdvanceFulfillmentOrderInput {
   }>;
   packaging?: PackagingConsumption[];
   courier?: string;
+  deliveryLink?: string;
   waybillNumber?: string;
   handoverRecipientName?: string;
   handoverRecipientDepartment?: string;

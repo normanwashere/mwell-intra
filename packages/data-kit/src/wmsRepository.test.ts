@@ -30,6 +30,143 @@ beforeEach(() => {
 });
 
 describe("cross-department WMS repository", () => {
+  it("preserves validated ecommerce intake metadata and shipment events", async () => {
+    const created = await repo.createFulfillmentOrder({
+      source: "ecommerce",
+      externalReference: "SHOP-META-1001",
+      ecommerceChannel: "Shopee",
+      orderDate: "2026-08-17",
+      customerReference: "CUST-1001",
+      customerName: "Ana Reyes",
+      customerContact: "09171234567",
+      customerEmail: "ana@example.com",
+      deliveryArea: "Metro Manila",
+      deliveryAddress: {
+        addressLine: "12 Main Street",
+        city: "Pasig",
+        province: "Metro Manila",
+        postalCode: "1600",
+      },
+      paymentStatus: "paid",
+      paymentMethod: "Maya",
+      paymentReference: "PAY-1001",
+      paymentDate: "2026-08-17",
+      paymentRrn: "RRN-1001",
+      paymentProviderMethod: "Wallet",
+      paymentProviderStatus: "Success",
+      campaignName: "Wellness Week",
+      salesInvoiceNumber: "SI-1001",
+      shippingFee: 80,
+      otherFees: 20,
+      reportedTotalAmount: 2999,
+      orderNotes: "Leave at reception",
+      courier: "LBC",
+      deliveryLink: "https://track.example/SHOP-META-1001",
+      waybillNumber: "WB-META-1001",
+      sourceLocationId: "loc-wh",
+      lines: [
+        {
+          productId: "smart-watch",
+          quantity: 1,
+          variant: "Blue",
+          unitPrice: 2999,
+          discountAmount: 100,
+        },
+      ],
+      actor: "sales@mwell",
+    });
+
+    expect(created).toMatchObject({
+      ecommerceChannel: "Shopee",
+      customerName: "Ana Reyes",
+      deliveryArea: "Metro Manila",
+      paymentStatus: "paid",
+      shippingFee: 80,
+      otherFees: 20,
+      paymentRrn: "RRN-1001",
+      paymentDate: "2026-08-17",
+      paymentProviderMethod: "Wallet",
+      paymentProviderStatus: "Success",
+      campaignName: "Wellness Week",
+      deliveryLink: "https://track.example/SHOP-META-1001",
+      shipmentEvents: [
+        expect.objectContaining({ status: "awaiting_dispatch" }),
+      ],
+      lines: [
+        expect.objectContaining({
+          variant: "Blue",
+          unitPrice: 2999,
+          discountAmount: 100,
+        }),
+      ],
+    });
+  });
+
+  it("records the scanned pick bin for every line", async () => {
+    const seed = buildSeed();
+    const unit = seed.units.find(
+      (candidate) => candidate.serialNumber === "SMART-WATCH-SN0001",
+    )!;
+    unit.binId = "bin-pasig-a1";
+    repo = new InMemoryRepository(seed, {
+      now: () => "2026-08-17T08:00:00.000Z",
+      id: (prefix) => `${prefix}-directed-pick`,
+    });
+    const created = await repo.createFulfillmentOrder({
+      source: "ecommerce",
+      externalReference: "SHOP-BIN-1001",
+      sourceLocationId: "loc-wh",
+      lines: [{ productId: "smart-watch", quantity: 1 }],
+      actor: "sales@mwell",
+    });
+    await repo.advanceFulfillmentOrder({
+      orderId: created.id,
+      action: "allocate",
+      actor: "allocator@mwell",
+    });
+    await repo.advanceFulfillmentOrder({
+      orderId: created.id,
+      action: "start_picking",
+      actor: "picker@mwell",
+    });
+
+    await expect(
+      repo.advanceFulfillmentOrder({
+        orderId: created.id,
+        action: "confirm_pick",
+        actor: "picker@mwell",
+        pickedLines: [
+          {
+            productId: "smart-watch",
+            quantity: 1,
+            serialNumbers: ["SMART-WATCH-SN0001"],
+            binId: "bin-pasig-a2",
+          },
+        ],
+      }),
+    ).rejects.toThrow(/scanned bin/i);
+
+    const picked = await repo.advanceFulfillmentOrder({
+      orderId: created.id,
+      action: "confirm_pick",
+      actor: "picker@mwell",
+      pickedLines: [
+        {
+          productId: "smart-watch",
+          quantity: 1,
+          serialNumbers: ["SMART-WATCH-SN0001"],
+          binId: "bin-pasig-a1",
+          evidenceUrl: "https://evidence.example/pick.jpg",
+        },
+      ],
+    });
+
+    expect(picked.lines[0]).toMatchObject({
+      pickBinId: "bin-pasig-a1",
+      fulfillmentEvidenceUrl: "https://evidence.example/pick.jpg",
+    });
+  });
+
   it("creates an ecommerce order and enforces pick-pack-release progression", async () => {
     const created = await repo.createFulfillmentOrder({
       source: "ecommerce",
@@ -68,6 +205,7 @@ describe("cross-department WMS repository", () => {
       actor: "warehouse@mwell",
       courier: "LBC",
       waybillNumber: "WB-1001",
+      deliveryLink: "https://track.example/WB-1001",
       packaging: [{ productId: "pack-small-box", quantity: 1 }],
     });
     const released = await repo.advanceFulfillmentOrder({
@@ -256,6 +394,7 @@ describe("cross-department WMS repository", () => {
       actor: "warehouse.operator@mwell",
       courier: "LBC",
       waybillNumber: "VOID-1001",
+      deliveryLink: "https://track.example/VOID-1001",
       packaging: [{ productId: "pack-small-box", quantity: 1 }],
     });
     await repo.advanceFulfillmentOrder({

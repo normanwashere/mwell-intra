@@ -60,6 +60,25 @@ export type FulfillmentDeliveryMethod =
 
 export type PackagingDisposition = "returned_to_stock" | "consumed";
 
+export type EcommercePaymentStatus =
+  "paid" | "authorized" | "cod" | "pending" | "failed" | "refunded";
+
+export interface EcommerceDeliveryAddress {
+  addressLine: string;
+  city: string;
+  province: string;
+  postalCode: string;
+}
+
+export interface ShipmentEvent {
+  status: ShipmentTrackingStatus;
+  occurredAt: string;
+  actor: string;
+  reference?: string;
+  reason?: string;
+  evidenceUrl?: string;
+}
+
 export function deliveryMethodForSource(
   source: FulfillmentSource,
 ): FulfillmentDeliveryMethod {
@@ -74,6 +93,13 @@ export interface FulfillmentOrderLine {
   quantity: number;
   pickedQuantity: number;
   pickedSerialNumbers: string[];
+  variant?: string;
+  unitPrice?: number;
+  discountAmount?: number;
+  /** Photo or document captured while confirming the picked line. */
+  fulfillmentEvidenceUrl?: string;
+  /** The scannable storage area confirmed by the picker for this line. */
+  pickBinId?: string;
   /** One code per customer-facing set, e.g. OTG1 and OTG2. */
   bundleSetCodes?: string[];
 }
@@ -91,12 +117,33 @@ export interface FulfillmentOrder {
   sourceLocationId?: string;
   sourceBinId?: string;
   customerReference?: string;
+  ecommerceChannel?: string;
+  orderDate?: string;
+  customerName?: string;
+  customerContact?: string;
+  customerEmail?: string;
+  deliveryArea?: string;
+  deliveryAddress?: EcommerceDeliveryAddress;
+  paymentStatus?: EcommercePaymentStatus;
+  paymentMethod?: string;
+  paymentReference?: string;
+  paymentDate?: string;
+  paymentRrn?: string;
+  paymentProviderMethod?: string;
+  paymentProviderStatus?: string;
+  campaignName?: string;
+  salesInvoiceNumber?: string;
+  shippingFee?: number;
+  otherFees?: number;
+  reportedTotalAmount?: number;
+  orderNotes?: string;
   eventId?: string;
   thirdPartyLocationId?: string;
   /** Commercial value reported by the selling channel for event reconciliation. */
   grossSalesAmount?: number;
   currency?: "PHP";
   courier?: string;
+  deliveryLink?: string;
   waybillNumber?: string;
   shipmentStatus?: ShipmentTrackingStatus;
   dispatchedAt?: string;
@@ -106,6 +153,7 @@ export interface FulfillmentOrder {
   proofOfDeliveryReference?: string;
   proofOfDeliveryEvidenceUrl?: string;
   deliveredAt?: string;
+  shipmentEvents: ShipmentEvent[];
   deliveryMethod: FulfillmentDeliveryMethod;
   handoverRecipientName?: string;
   handoverRecipientDepartment?: string;

@@ -169,6 +169,7 @@ export class InMemoryRepository implements WarehouseControlRepository {
       ...source,
       fulfillmentOrders: (source.fulfillmentOrders ?? []).map((order) => ({
         ...order,
+        shipmentEvents: order.shipmentEvents ?? [],
         deliveryMethod:
           order.deliveryMethod ?? deliveryMethodForSource(order.source),
       })),
@@ -395,12 +396,10 @@ export class InMemoryRepository implements WarehouseControlRepository {
         const serials =
           line.serialNumbers && line.serialNumbers.length > 0
             ? line.serialNumbers
-            : Array.from(
-                { length: line.quantity },
-                (_, i) =>
-                  idempotencyKey
-                    ? `${product.sku}-SN-${idempotencyKey}-${i}`
-                    : `${product.sku}-SN${Date.now()}${i}`,
+            : Array.from({ length: line.quantity }, (_, i) =>
+                idempotencyKey
+                  ? `${product.sku}-SN-${idempotencyKey}-${i}`
+                  : `${product.sku}-SN${Date.now()}${i}`,
               );
         for (const [serialIndex, serialNumber] of serials.entries()) {
           this.data.units.push({
@@ -642,11 +641,19 @@ export class InMemoryRepository implements WarehouseControlRepository {
   }
 
   async recordReturn(input: ReturnInput): Promise<ReturnRecord> {
-    if (input.lines.some((line) => line.disposition && line.disposition !== "quarantine")) {
-      throw new Error("Return intake is quarantine-first; Quality controls final disposition.");
+    if (
+      input.lines.some(
+        (line) => line.disposition && line.disposition !== "quarantine",
+      )
+    ) {
+      throw new Error(
+        "Return intake is quarantine-first; Quality controls final disposition.",
+      );
     }
     if (input.lines.some((line) => !line.locationId)) {
-      throw new Error("A quarantine location is required for every returned line.");
+      throw new Error(
+        "A quarantine location is required for every returned line.",
+      );
     }
     const createdAt = this.now();
     const quarantinedLines = input.lines.map((line) => ({
@@ -901,7 +908,9 @@ export class InMemoryRepository implements WarehouseControlRepository {
         })),
       actor: input.actor,
     });
-    const storedReceipt = this.data.receipts.find((row) => row.id === receipt.id)!;
+    const storedReceipt = this.data.receipts.find(
+      (row) => row.id === receipt.id,
+    )!;
     storedReceipt.procurementPoId = po.id;
 
     po.status = poStatusAfterReceipt(po);
@@ -1200,7 +1209,9 @@ export class InMemoryRepository implements WarehouseControlRepository {
   ): Promise<PageResult<WarehouseTask>> {
     const tasks: WarehouseTask[] = [
       ...this.data.receipts
-        .filter((receipt) => ["pending", "partial"].includes(receipt.qualityStatus ?? "pending"))
+        .filter((receipt) =>
+          ["pending", "partial"].includes(receipt.qualityStatus ?? "pending"),
+        )
         .map((receipt) => ({
           id: `quality-receipt-${receipt.id}`,
           type: "quality" as const,
@@ -1324,10 +1335,7 @@ export class InMemoryRepository implements WarehouseControlRepository {
   }
 
   private pendingInspectionUnits(
-    input: Pick<
-      InspectQualityInput,
-      "productId" | "serialNumber"
-    >,
+    input: Pick<InspectQualityInput, "productId" | "serialNumber">,
     locationId: string,
     binId?: string,
   ) {
@@ -1374,7 +1382,11 @@ export class InMemoryRepository implements WarehouseControlRepository {
     }
 
     let remaining = input.quantity;
-    for (let index = 0; index < returned.lines.length && remaining > 0; index += 1) {
+    for (
+      let index = 0;
+      index < returned.lines.length && remaining > 0;
+      index += 1
+    ) {
       const line = returned.lines[index]!;
       if (!matches(line)) continue;
       const resolvedQuantity = Math.min(line.quantity, remaining);
@@ -1426,10 +1438,7 @@ export class InMemoryRepository implements WarehouseControlRepository {
       if (!level || level.quantity < hold.quantity) {
         throw new Error("Held stock is not available for release.");
       }
-      level.unavailable = Math.max(
-        0,
-        (level.unavailable ?? 0) - hold.quantity,
-      );
+      level.unavailable = Math.max(0, (level.unavailable ?? 0) - hold.quantity);
     }
 
     if (inspection.sourceType === "return") {
@@ -1517,11 +1526,12 @@ export class InMemoryRepository implements WarehouseControlRepository {
           (row) => row.id === input.productId,
         );
         if (!product) throw new Error("Inspection product not found.");
-        const sourceBinId = input.binId ?? receipt?.lines.find(
-          (line) => line.productId === input.productId,
-        )?.binId ?? returned?.lines.find(
-          (line) => line.productId === input.productId,
-        )?.binId;
+        const sourceBinId =
+          input.binId ??
+          receipt?.lines.find((line) => line.productId === input.productId)
+            ?.binId ??
+          returned?.lines.find((line) => line.productId === input.productId)
+            ?.binId;
         const returnDisposition = returned
           ? this.returnDispositionForQuality(input.disposition)
           : undefined;
@@ -1537,7 +1547,9 @@ export class InMemoryRepository implements WarehouseControlRepository {
                 (sourceBinId === undefined || unit.binId === sourceBinId),
             );
             if (candidates.length < input.quantity) {
-              throw new Error("Pending serialized stock is not available for inspection.");
+              throw new Error(
+                "Pending serialized stock is not available for inspection.",
+              );
             }
             for (const unit of candidates.slice(0, input.quantity)) {
               unit.status = "in_stock";
@@ -1562,7 +1574,9 @@ export class InMemoryRepository implements WarehouseControlRepository {
               sourceBinId,
             );
             if (candidates.length < input.quantity) {
-              throw new Error("Pending serialized stock is not available for inspection.");
+              throw new Error(
+                "Pending serialized stock is not available for inspection.",
+              );
             }
             for (const unit of candidates.slice(0, input.quantity)) {
               unit.status = "lost";
@@ -1592,7 +1606,9 @@ export class InMemoryRepository implements WarehouseControlRepository {
               sourceBinId,
             );
             if (candidates.length < input.quantity) {
-              throw new Error("Pending serialized stock is not available for inspection.");
+              throw new Error(
+                "Pending serialized stock is not available for inspection.",
+              );
             }
             for (const unit of candidates.slice(0, input.quantity)) {
               unit.status = "returned";
@@ -1614,12 +1630,21 @@ export class InMemoryRepository implements WarehouseControlRepository {
         }
         if (receipt) {
           const inspected = this.qualityInspections
-            .filter((row) => row.sourceType === "receipt" && row.sourceId === receipt.id)
+            .filter(
+              (row) =>
+                row.sourceType === "receipt" && row.sourceId === receipt.id,
+            )
             .reduce((sum, row) => sum + row.quantity, input.quantity);
-          const received = receipt.lines.reduce((sum, line) => sum + line.quantity, 0);
-          receipt.qualityStatus = inspected >= received
-            ? input.disposition === "accepted" ? "accepted" : "hold"
-            : "partial";
+          const received = receipt.lines.reduce(
+            (sum, line) => sum + line.quantity,
+            0,
+          );
+          receipt.qualityStatus =
+            inspected >= received
+              ? input.disposition === "accepted"
+                ? "accepted"
+                : "hold"
+              : "partial";
         }
         this.qualityInspections.push(inspection);
         if (
@@ -2360,6 +2385,66 @@ export class InMemoryRepository implements WarehouseControlRepository {
     if (input.source === "event" && !input.eventId) {
       throw new Error("An event is required for event fulfillment.");
     }
+    const controlledEcommerceIntake =
+      input.source === "ecommerce" &&
+      Boolean(
+        input.ecommerceChannel?.trim() ||
+        input.customerName?.trim() ||
+        input.deliveryAddress ||
+        input.paymentStatus ||
+        input.requestingDepartment === "sales_ecommerce",
+      );
+    if (controlledEcommerceIntake) {
+      if (!input.ecommerceChannel?.trim())
+        throw new Error("Ecommerce channel is required.");
+      if (!input.customerName?.trim() || !input.customerContact?.trim())
+        throw new Error("Customer name and contact are required.");
+      if (
+        !input.deliveryAddress?.addressLine.trim() ||
+        !input.deliveryAddress.city.trim() ||
+        !input.deliveryAddress.province.trim() ||
+        !input.deliveryAddress.postalCode.trim()
+      )
+        throw new Error("A complete delivery address is required.");
+      if (
+        !input.paymentStatus ||
+        !["paid", "authorized", "cod"].includes(input.paymentStatus)
+      )
+        throw new Error(
+          "Payment must be paid, authorized, or COD before allocation.",
+        );
+      if (
+        input.customerEmail?.trim() &&
+        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.customerEmail.trim())
+      )
+        throw new Error("Customer email is invalid.");
+      if (
+        input.paymentDate &&
+        (!/^\d{4}-\d{2}-\d{2}$/.test(input.paymentDate) ||
+          Number.isNaN(Date.parse(input.paymentDate)))
+      )
+        throw new Error("Payment date must use YYYY-MM-DD.");
+      for (const amount of [
+        input.shippingFee,
+        input.otherFees,
+        input.reportedTotalAmount,
+      ]) {
+        if (amount !== undefined && amount < 0)
+          throw new Error("Order amounts cannot be negative.");
+      }
+      for (const line of input.lines) {
+        if (line.unitPrice !== undefined && line.unitPrice < 0)
+          throw new Error("Unit price cannot be negative.");
+        if (line.discountAmount !== undefined && line.discountAmount < 0)
+          throw new Error("Discount amount cannot be negative.");
+        if (
+          line.unitPrice !== undefined &&
+          line.discountAmount !== undefined &&
+          line.discountAmount > line.unitPrice * line.quantity
+        )
+          throw new Error("Discount amount cannot exceed the line value.");
+      }
+    }
     if (input.source === "third_party") {
       if (!input.thirdPartyLocationId)
         throw new Error("A third-party location is required.");
@@ -2378,6 +2463,33 @@ export class InMemoryRepository implements WarehouseControlRepository {
       externalReference: input.externalReference.trim(),
       requestingDepartment: input.requestingDepartment?.trim() || undefined,
       customerReference: input.customerReference?.trim() || undefined,
+      ecommerceChannel: input.ecommerceChannel?.trim() || undefined,
+      orderDate: input.orderDate,
+      customerName: input.customerName?.trim() || undefined,
+      customerContact: input.customerContact?.trim() || undefined,
+      customerEmail: input.customerEmail?.trim() || undefined,
+      deliveryArea: input.deliveryArea?.trim() || undefined,
+      deliveryAddress: input.deliveryAddress
+        ? {
+            addressLine: input.deliveryAddress.addressLine.trim(),
+            city: input.deliveryAddress.city.trim(),
+            province: input.deliveryAddress.province.trim(),
+            postalCode: input.deliveryAddress.postalCode.trim(),
+          }
+        : undefined,
+      paymentStatus: input.paymentStatus,
+      paymentMethod: input.paymentMethod?.trim() || undefined,
+      paymentReference: input.paymentReference?.trim() || undefined,
+      paymentDate: input.paymentDate,
+      paymentRrn: input.paymentRrn?.trim() || undefined,
+      paymentProviderMethod: input.paymentProviderMethod?.trim() || undefined,
+      paymentProviderStatus: input.paymentProviderStatus?.trim() || undefined,
+      campaignName: input.campaignName?.trim() || undefined,
+      salesInvoiceNumber: input.salesInvoiceNumber?.trim() || undefined,
+      shippingFee: input.shippingFee,
+      otherFees: input.otherFees,
+      reportedTotalAmount: input.reportedTotalAmount,
+      orderNotes: input.orderNotes?.trim() || undefined,
       eventId: input.eventId,
       thirdPartyLocationId: input.thirdPartyLocationId,
       grossSalesAmount: input.grossSalesAmount,
@@ -2389,8 +2501,22 @@ export class InMemoryRepository implements WarehouseControlRepository {
         "shipment"
           ? "awaiting_dispatch"
           : "not_applicable",
+      shipmentEvents: [
+        {
+          status:
+            (input.deliveryMethod ?? deliveryMethodForSource(input.source)) ===
+            "shipment"
+              ? "awaiting_dispatch"
+              : "not_applicable",
+          occurredAt: createdAt,
+          actor: input.actor,
+        },
+      ],
       sourceLocationId: input.sourceLocationId,
       sourceBinId: input.sourceBinId,
+      courier: input.courier?.trim() || undefined,
+      deliveryLink: input.deliveryLink?.trim() || undefined,
+      waybillNumber: input.waybillNumber?.trim() || undefined,
       status: "received",
       lines: input.lines.map((line) => ({
         productId: line.productId,
@@ -2398,6 +2524,11 @@ export class InMemoryRepository implements WarehouseControlRepository {
         pickedQuantity: 0,
         pickedSerialNumbers: [],
         bundleSetCodes: line.bundleSetCodes,
+        variant: line.variant?.trim() || undefined,
+        unitPrice: line.unitPrice,
+        discountAmount: line.discountAmount,
+        fulfillmentEvidenceUrl:
+          line.fulfillmentEvidenceUrl?.trim() || undefined,
       })),
       packaging: [],
       createdBy: input.actor,
@@ -2542,6 +2673,7 @@ export class InMemoryRepository implements WarehouseControlRepository {
           (row) => row.id === line.productId,
         )!;
         const serialNumbers = selection.serialNumbers ?? [];
+        const scannedBinId = selection.binId ?? order.sourceBinId;
         if (product.serialized && serialNumbers.length !== line.quantity) {
           throw new Error(`${product.name} requires one serial scan per unit.`);
         }
@@ -2555,15 +2687,33 @@ export class InMemoryRepository implements WarehouseControlRepository {
               row.serialNumber === serialNumber &&
               row.status === "in_stock" &&
               (!sourceLocationId || row.locationId === sourceLocationId) &&
-              (!order.sourceBinId || row.binId === order.sourceBinId),
+              (!scannedBinId || row.binId === scannedBinId),
           );
           if (!unit)
             throw new Error(
-              `Serial ${serialNumber} is not available at the pick location.`,
+              `Serial ${serialNumber} is not available in the scanned bin.`,
             );
+        }
+        if (!product.serialized && scannedBinId) {
+          const availableAtBin = this.data.stockLevels
+            .filter(
+              (level) =>
+                level.productId === product.id &&
+                level.binId === scannedBinId &&
+                (!sourceLocationId || level.locationId === sourceLocationId),
+            )
+            .reduce((sum, level) => sum + level.quantity, 0);
+          if (availableAtBin < line.quantity) {
+            throw new Error(
+              `${product.name} is not available in the scanned bin.`,
+            );
+          }
         }
         line.pickedQuantity = selection.quantity;
         line.pickedSerialNumbers = serialNumbers;
+        line.pickBinId = scannedBinId;
+        line.fulfillmentEvidenceUrl =
+          selection.evidenceUrl?.trim() || undefined;
       }
       order.pickedBy = input.actor;
       order.pickedAt = this.now();
@@ -2571,9 +2721,11 @@ export class InMemoryRepository implements WarehouseControlRepository {
 
     if (input.action === "confirm_pack") {
       if (order.deliveryMethod === "shipment") {
-        if (!input.courier?.trim())
+        if (!input.courier?.trim() && !order.courier?.trim())
           throw new Error("Courier is required at packing.");
-        if (!input.waybillNumber?.trim())
+        if (!input.deliveryLink?.trim() && !order.deliveryLink?.trim())
+          throw new Error("Delivery tracking link is required at packing.");
+        if (!input.waybillNumber?.trim() && !order.waybillNumber?.trim())
           throw new Error("Waybill number is required at packing.");
       } else if (
         !input.handoverRecipientName?.trim() ||
@@ -2608,8 +2760,9 @@ export class InMemoryRepository implements WarehouseControlRepository {
         if (available < material.quantity)
           throw new Error(`Insufficient ${product.name} for packing.`);
       }
-      order.courier = input.courier?.trim() || undefined;
-      order.waybillNumber = input.waybillNumber?.trim() || undefined;
+      order.courier = input.courier?.trim() || order.courier;
+      order.deliveryLink = input.deliveryLink?.trim() || order.deliveryLink;
+      order.waybillNumber = input.waybillNumber?.trim() || order.waybillNumber;
       order.handoverRecipientName =
         input.handoverRecipientName?.trim() || undefined;
       order.handoverRecipientDepartment =
@@ -2727,6 +2880,12 @@ export class InMemoryRepository implements WarehouseControlRepository {
         order.shipmentStatus = "dispatched";
         order.dispatchedAt = createdAt;
         order.lastTrackingAt = createdAt;
+        order.shipmentEvents.push({
+          status: "dispatched",
+          occurredAt: createdAt,
+          actor: input.actor,
+          reference: order.waybillNumber,
+        });
       }
       for (const reservation of this.data.fulfillmentReservations.filter(
         (row) => row.orderId === order.id && row.status === "active",
@@ -2751,6 +2910,12 @@ export class InMemoryRepository implements WarehouseControlRepository {
       order.dispatchedAt ??= this.now();
       order.lastTrackingAt = this.now();
       order.deliveryFailureReason = undefined;
+      order.shipmentEvents.push({
+        status: "in_transit",
+        occurredAt: order.lastTrackingAt,
+        actor: input.actor,
+        reference: input.trackingReference?.trim() || undefined,
+      });
     }
 
     if (input.action === "record_delivery_failed") {
@@ -2766,6 +2931,12 @@ export class InMemoryRepository implements WarehouseControlRepository {
       order.deliveryFailureReason = input.deliveryFailureReason.trim();
       order.failedDeliveryAt = this.now();
       order.lastTrackingAt = order.failedDeliveryAt;
+      order.shipmentEvents.push({
+        status: "delivery_failed",
+        occurredAt: order.failedDeliveryAt,
+        actor: input.actor,
+        reason: order.deliveryFailureReason,
+      });
     }
 
     if (input.action === "confirm_delivery") {
@@ -2789,6 +2960,13 @@ export class InMemoryRepository implements WarehouseControlRepository {
       order.proofOfDeliveryEvidenceUrl = input.trackingEvidenceUrl.trim();
       order.deliveredAt = this.now();
       order.lastTrackingAt = order.deliveredAt;
+      order.shipmentEvents.push({
+        status: "delivered",
+        occurredAt: order.deliveredAt,
+        actor: input.actor,
+        reference: order.proofOfDeliveryReference,
+        evidenceUrl: order.proofOfDeliveryEvidenceUrl,
+      });
     }
 
     if (input.action === "return_to_sender") {
@@ -2801,6 +2979,12 @@ export class InMemoryRepository implements WarehouseControlRepository {
       order.shipmentStatus = "returned_to_sender";
       order.deliveryFailureReason = input.deliveryFailureReason.trim();
       order.lastTrackingAt = this.now();
+      order.shipmentEvents.push({
+        status: "returned_to_sender",
+        occurredAt: order.lastTrackingAt,
+        actor: input.actor,
+        reason: order.deliveryFailureReason,
+      });
     }
     if (input.action === "acknowledge_receipt") {
       if (order.releasedBy === input.actor) {
@@ -3342,7 +3526,9 @@ export class InMemoryRepository implements WarehouseControlRepository {
       evidenceUrls: input.evidenceUrls,
       actor: "demo-procurement-receiver",
     });
-    const storedReceipt = this.data.receipts.find((row) => row.id === receipt.id)!;
+    const storedReceipt = this.data.receipts.find(
+      (row) => row.id === receipt.id,
+    )!;
     storedReceipt.procurementPoId = input.poId;
     this.persist();
     return clone(storedReceipt);
