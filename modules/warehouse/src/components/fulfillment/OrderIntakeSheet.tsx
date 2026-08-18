@@ -3,6 +3,14 @@ import type { Product } from "@intra/data-kit";
 import type { useWarehouse } from "@/app/store";
 import { Icon } from "@/components/Icon";
 import { Field, Sheet, useToast } from "@/components/ui";
+import {
+  ECOMMERCE_CHANNELS,
+  MAYA_REPORT_STATUSES,
+  PAYMENT_METHODS,
+  PH_CITY_PRESETS,
+  cityPreset,
+  paymentStatusFor,
+} from "@/domain/orderIntakeOptions";
 
 type Source = "ecommerce" | "event" | "third_party";
 
@@ -36,12 +44,13 @@ function eligible(product: Product, source: Source) {
 }
 
 function newLine(products: Product[], source: Source): OrderLineDraft {
+  const product = products.find((candidate) => eligible(candidate, source));
   return {
     key: crypto.randomUUID(),
-    productId: products.find((product) => eligible(product, source))?.id ?? "",
+    productId: product?.id ?? "",
     quantity: 1,
     variant: "",
-    unitPrice: "",
+    unitPrice: product?.price === undefined ? "" : String(product.price),
     discountAmount: "",
     bundleCodes: "",
   };
@@ -88,13 +97,10 @@ export function OrderIntakeSheet({
   const [city, setCity] = useState("");
   const [province, setProvince] = useState("");
   const [postalCode, setPostalCode] = useState("");
-  const [paymentStatus, setPaymentStatus] = useState("paid");
-  const [paymentMethod, setPaymentMethod] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("cash");
   const [paymentReference, setPaymentReference] = useState("");
   const [paymentDate, setPaymentDate] = useState("");
-  const [paymentRrn, setPaymentRrn] = useState("");
-  const [paymentProviderMethod, setPaymentProviderMethod] = useState("");
-  const [paymentProviderStatus, setPaymentProviderStatus] = useState("");
+  const [paymentProviderStatus, setPaymentProviderStatus] = useState("paid");
   const [campaignName, setCampaignName] = useState("");
   const [salesInvoiceNumber, setSalesInvoiceNumber] = useState("");
   const [shippingFee, setShippingFee] = useState("");
@@ -115,6 +121,7 @@ export function OrderIntakeSheet({
   ]);
   const [saving, setSaving] = useState(false);
   const ecommerce = source === "ecommerce";
+  const paymentStatus = paymentStatusFor(paymentMethod, paymentProviderStatus);
   const availableProducts = products.filter((product) =>
     eligible(product, source),
   );
@@ -146,11 +153,10 @@ export function OrderIntakeSheet({
     setCity("");
     setProvince("");
     setPostalCode("");
+    setPaymentMethod("cash");
     setPaymentReference("");
     setPaymentDate("");
-    setPaymentRrn("");
-    setPaymentProviderMethod("");
-    setPaymentProviderStatus("");
+    setPaymentProviderStatus("paid");
     setCampaignName("");
     setSalesInvoiceNumber("");
     setShippingFee("");
@@ -168,6 +174,14 @@ export function OrderIntakeSheet({
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (ecommerce && paymentStatus === "blocked") {
+      toast.error(
+        "This online payment is not cleared in the Maya report. Keep it out of Warehouse allocation until it is paid or authorized.",
+      );
+      return;
+    }
+    const acceptedPaymentStatus =
+      paymentStatus === "blocked" ? undefined : paymentStatus;
     setSaving(true);
     const ok = await create({
       source,
@@ -182,19 +196,13 @@ export function OrderIntakeSheet({
       deliveryAddress: ecommerce
         ? { addressLine, city, province, postalCode }
         : undefined,
-      paymentStatus: ecommerce
-        ? (paymentStatus as "paid" | "authorized" | "cod")
-        : undefined,
+      paymentStatus: ecommerce ? acceptedPaymentStatus : undefined,
       paymentMethod: ecommerce ? paymentMethod.trim() || undefined : undefined,
       paymentReference: ecommerce
         ? paymentReference.trim() || undefined
         : undefined,
       paymentDate: ecommerce ? paymentDate || undefined : undefined,
-      paymentRrn: ecommerce ? paymentRrn.trim() || undefined : undefined,
-      paymentProviderMethod: ecommerce
-        ? paymentProviderMethod.trim() || undefined
-        : undefined,
-      paymentProviderStatus: ecommerce
+      paymentProviderStatus: ecommerce && paymentMethod === "online_payment"
         ? paymentProviderStatus.trim() || undefined
         : undefined,
       campaignName: ecommerce ? campaignName.trim() || undefined : undefined,
@@ -300,10 +308,23 @@ export function OrderIntakeSheet({
               }}
             >
               <option value="ecommerce">Ecommerce customer order</option>
-              <option value="event">Internal event fulfillment</option>
+              <option value="event">Approved internal event fulfillment</option>
               <option value="third_party">Third-party event sale</option>
             </select>
           </Field>
+          {!ecommerce && (
+            <div className="rounded-xl border border-brand-200 bg-brand-50 p-3 text-sm text-brand-900 dark:border-brand-800 dark:bg-brand-950/30 dark:text-brand-100">
+              <p className="font-semibold">
+                This is event demand, not a department stock request.
+              </p>
+              <p className="mt-1 text-xs leading-5 opacity-80">
+                For routine department supplies or merchandise, close this form
+                and use the Department requests tab. That path generates the
+                request reference, records the requestor department, and routes
+                approval before Warehouse work begins.
+              </p>
+            </div>
+          )}
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Order reference" htmlFor="order-reference">
               <input
@@ -327,14 +348,20 @@ export function OrderIntakeSheet({
             )}
             {ecommerce && (
               <Field label="Sales channel" htmlFor="order-channel">
-                <input
+                <select
                   id="order-channel"
                   className="input"
-                  placeholder="Shopify, Lazada, Shopee..."
                   value={channel}
                   onChange={(event) => setChannel(event.target.value)}
                   required
-                />
+                >
+                  <option value="">Select sales channel</option>
+                  {ECOMMERCE_CHANNELS.map((item) => (
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
+                  ))}
+                </select>
               </Field>
             )}
             {ecommerce && (
@@ -494,12 +521,30 @@ export function OrderIntakeSheet({
                 <input
                   id="delivery-city"
                   className="input"
+                  list="delivery-city-options"
                   value={city}
-                  onChange={(event) => setCity(event.target.value)}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setCity(value);
+                    const preset = cityPreset(value);
+                    if (!preset) return;
+                    setProvince(preset.province);
+                    setPostalCode(preset.postalCode);
+                    setDeliveryArea(preset.area);
+                  }}
                   required
                 />
+                <datalist id="delivery-city-options">
+                  {PH_CITY_PRESETS.map((preset) => (
+                    <option key={preset.city} value={preset.city} />
+                  ))}
+                </datalist>
               </Field>
-              <Field label="Province" htmlFor="delivery-province">
+              <Field
+                label="Province"
+                htmlFor="delivery-province"
+                hint="Suggested from the selected city; edit when the exact address differs."
+              >
                 <input
                   id="delivery-province"
                   className="input"
@@ -508,7 +553,11 @@ export function OrderIntakeSheet({
                   required
                 />
               </Field>
-              <Field label="Postal code" htmlFor="delivery-postal">
+              <Field
+                label="Postal code"
+                htmlFor="delivery-postal"
+                hint="City-level suggestion. Confirm the exact barangay or district code."
+              >
                 <input
                   id="delivery-postal"
                   className="input"
@@ -589,15 +638,25 @@ export function OrderIntakeSheet({
                     id={`order-product-${line.key}`}
                     className="input"
                     value={line.productId}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      const product = products.find(
+                        (candidate) => candidate.id === event.target.value,
+                      );
                       setLines((current) =>
                         current.map((candidate) =>
                           candidate.key === line.key
-                            ? { ...candidate, productId: event.target.value }
+                            ? {
+                                ...candidate,
+                                productId: event.target.value,
+                                unitPrice:
+                                  product?.price === undefined
+                                    ? ""
+                                    : String(product.price),
+                              }
                             : candidate,
                         ),
-                      )
-                    }
+                      );
+                    }}
                     required
                   >
                     <option value="">Select product</option>
@@ -652,7 +711,11 @@ export function OrderIntakeSheet({
                   />
                 </Field>
                 {ecommerce && (
-                  <Field label="Unit price" htmlFor={`order-price-${line.key}`}>
+                  <Field
+                    label="Unit price (assigned)"
+                    htmlFor={`order-price-${line.key}`}
+                    hint="Loaded from the active Product price. Update Pricing before creating the order if this is incorrect."
+                  >
                     <input
                       id={`order-price-${line.key}`}
                       className="input"
@@ -660,15 +723,8 @@ export function OrderIntakeSheet({
                       min="0"
                       step="0.01"
                       value={line.unitPrice}
-                      onChange={(event) =>
-                        setLines((current) =>
-                          current.map((candidate) =>
-                            candidate.key === line.key
-                              ? { ...candidate, unitPrice: event.target.value }
-                              : candidate,
-                          ),
-                        )
-                      }
+                      readOnly
+                      required
                     />
                   </Field>
                 )}
@@ -701,9 +757,9 @@ export function OrderIntakeSheet({
                 )}
               </div>
               <Field
-                label="Bundle set codes"
+                label="Bundle set IDs"
                 htmlFor={`order-bundles-${line.key}`}
-                hint="Optional, comma-separated. Example: OTG-001, OTG-002."
+                hint="Leave blank for a standalone item. For bundles, enter one ID per customer set, such as OTG-001, OTG-002. Use the same set IDs on every component line in that bundle."
               >
                 <input
                   id={`order-bundles-${line.key}`}
@@ -743,27 +799,42 @@ export function OrderIntakeSheet({
                 </p>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Payment status" htmlFor="payment-status">
-                  <select
+                <Field
+                  label="Payment status"
+                  htmlFor="payment-status"
+                  hint="Derived from the payment method and Maya report; it cannot be manually overridden."
+                >
+                  <input
                     id="payment-status"
                     className="input"
-                    value={paymentStatus}
-                    onChange={(event) => setPaymentStatus(event.target.value)}
-                  >
-                    <option value="paid">Paid</option>
-                    <option value="authorized">Authorized</option>
-                    <option value="cod">Cash on delivery</option>
-                  </select>
+                    value={
+                      paymentStatus === "blocked"
+                        ? "Not cleared for allocation"
+                        : paymentStatus.replaceAll("_", " ")
+                    }
+                    readOnly
+                  />
                 </Field>
                 <Field label="Payment method" htmlFor="payment-method">
-                  <input
+                  <select
                     id="payment-method"
                     className="input"
                     value={paymentMethod}
                     onChange={(event) => setPaymentMethod(event.target.value)}
-                  />
+                    required
+                  >
+                    {PAYMENT_METHODS.map((method) => (
+                      <option key={method.value} value={method.value}>
+                        {method.label}
+                      </option>
+                    ))}
+                  </select>
                 </Field>
-                <Field label="Payment reference" htmlFor="payment-reference">
+                <Field
+                  label="Payment reference / RRN"
+                  htmlFor="payment-reference"
+                  hint="Use the gateway RRN or billing reference. This is the single payment identifier."
+                >
                   <input
                     id="payment-reference"
                     className="input"
@@ -782,39 +853,28 @@ export function OrderIntakeSheet({
                     onChange={(event) => setPaymentDate(event.target.value)}
                   />
                 </Field>
-                <Field label="RRN" htmlFor="payment-rrn">
-                  <input
-                    id="payment-rrn"
-                    className="input"
-                    value={paymentRrn}
-                    onChange={(event) => setPaymentRrn(event.target.value)}
-                  />
-                </Field>
-                <Field
-                  label="Provider method"
-                  htmlFor="payment-provider-method"
-                >
-                  <input
-                    id="payment-provider-method"
-                    className="input"
-                    placeholder="Maya wallet, card, QR..."
-                    value={paymentProviderMethod}
-                    onChange={(event) =>
-                      setPaymentProviderMethod(event.target.value)
-                    }
-                  />
-                </Field>
-                <Field label="Provider status" htmlFor="provider-status">
-                  <input
-                    id="provider-status"
-                    className="input"
-                    placeholder="Maya status or gateway result"
-                    value={paymentProviderStatus}
-                    onChange={(event) =>
-                      setPaymentProviderStatus(event.target.value)
-                    }
-                  />
-                </Field>
+                {paymentMethod === "online_payment" && (
+                  <Field
+                    label="Maya report result"
+                    htmlFor="provider-status"
+                    hint="Only Paid or Authorized may enter Warehouse allocation. Pending, failed, and refunded records remain blocked."
+                  >
+                    <select
+                      id="provider-status"
+                      className="input"
+                      value={paymentProviderStatus}
+                      onChange={(event) =>
+                        setPaymentProviderStatus(event.target.value)
+                      }
+                    >
+                      {MAYA_REPORT_STATUSES.map((status) => (
+                        <option key={status.value} value={status.value}>
+                          {status.label}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                )}
                 <Field label="Sales invoice number" htmlFor="sales-invoice">
                   <input
                     id="sales-invoice"

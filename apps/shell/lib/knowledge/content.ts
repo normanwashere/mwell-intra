@@ -652,7 +652,7 @@ const procedureArticles: KnowledgeArticle[] = [
     [
       [
         "Record demand",
-        "Operations creates ecommerce orders directly in Intra with the order reference, channel and campaign, customer and complete address plus delivery area, payment date, method, provider references and invoice, one or more products and variants, prices and discounts, fees, optional courier details, and order instructions. The app calculates the total, net-of-VAT, VAT, and any difference from an imported tracker total. CSV remains available only to migrate existing tracker rows. Internal events, third-party sales, and department requests continue through their governed demand paths.",
+        "Operations creates ecommerce orders directly in Intra with the order reference, a controlled sales channel, customer and complete address, payment reference, products, fees, optional dispatch details, and instructions. Selecting a supported city suggests province, city-level postal code, and delivery area for confirmation. Product price loads from the active Product record. Cash becomes COD, Billing becomes Authorized, and online payments may enter allocation only when the Maya report is Paid or Authorized. CSV remains available only to migrate existing tracker rows, with a downloadable template in the import panel. Approved event demand, third-party sales, and department stock requests use their separate governed paths.",
       ],
       [
         "Approve when required",
@@ -664,11 +664,11 @@ const procedureArticles: KnowledgeArticle[] = [
       ],
       [
         "Allocate, split if short, and pick",
-        "Create an explicit reservation for available stock. If demand cannot be completed together, split the remaining quantity into a linked backorder. The picker follows the recommended location, scans the exact rack/bin, scans every serialized unit, and may attach line-level photo evidence for bundles, damage, or exceptions. A serial or quantity found in another bin is rejected.",
+        "Create an explicit reservation for available stock. If demand cannot be completed together, split the remaining quantity into a linked backorder. The picker first scans the recommended rack or bin, then uses camera or manual capture for every serialized unit. The screen reports missing bin and serial scans before submission. Optional line evidence supports bundles, damage, or exceptions; a serial or quantity found in another bin is rejected.",
       ],
       [
         "Prepare shipment or handover",
-        "For ecommerce, scan every packing supply consumed, including multiple boxes, pouches, labels, wrap, or tape rows when needed, then confirm courier, waybill, and the customer-facing tracking link. Values entered during order intake are prefilled for verification. For department, event, or third-party release, record the named recipient, receiving department, handover reference, and evidence.",
+        "For ecommerce, record every packing supply consumed, including multiple boxes, pouches, labels, wrap, or tape rows when needed, then confirm courier, waybill, and the customer-facing tracking link. Values entered during order intake are prefilled for verification. For department, event, or third-party release, record the named recipient and receiving department. Intra generates the handover reference and audit record; add a photo when an exception or custody risk needs evidence.",
       ],
       [
         "Release with separation of duties",

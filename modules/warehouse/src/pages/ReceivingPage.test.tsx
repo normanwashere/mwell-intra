@@ -27,9 +27,13 @@ describe("ReceivingPage", () => {
     renderWithProviders(<ReceivingPage />);
 
     expect(
-      await screen.findByText(/approved purchase orders are the standard receiving route/i),
+      await screen.findByText(
+        /approved purchase orders are the standard receiving route/i,
+      ),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText("Receipt exception type")).toHaveValue("non_po");
+    expect(screen.getByLabelText("Receipt exception type")).toHaveValue(
+      "non_po",
+    );
     expect(screen.getByLabelText("Exception reason")).toBeInTheDocument();
   });
 
@@ -197,6 +201,11 @@ describe("ReceivingPage", () => {
       within(lines).getByText(/ECG Ring \(Size 10\)/i),
     ).toBeInTheDocument();
     expect(await screen.findByText(/added ecg ring/i)).toBeInTheDocument();
+    await user.type(
+      screen.getByLabelText(/enter barcode manually/i),
+      "ECG10-SN-RECEIVE-001",
+    );
+    await user.click(screen.getByRole("button", { name: /^add$/i }));
     await evidenceDirectReceipt(user);
 
     await user.click(screen.getByRole("button", { name: /receive .*item/i }));

@@ -1129,14 +1129,14 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
         control(
           "Confirm pick",
-          "Shows the recommended source location, records the scanned rack/bin, captures picked quantities and required serials, and accepts optional line photo evidence for bundle, damage, or exception traceability.",
+          "Shows the recommended source location as step one, requires the rack/bin scan before item capture, supports camera or manual serial scanning for every unit, and accepts optional line photo evidence for bundle, damage, or exception traceability.",
           "Every line must be complete; the scanned bin must be active at the source warehouse and hold the requested quantity or every scanned serial. Serialized products require one unique eligible serial per unit.",
           "The order advances to Packing with traceable picked identities, physical source bin, and any attached line evidence recorded together.",
         ),
         control(
           "Confirm pack",
           "Confirms prefilled or newly entered dispatch details, or an accountable internal, event, or third-party handover, plus every fulfillment supply used.",
-          "Shipments require courier, waybill, and a valid customer-facing tracking link. Handovers require recipient, receiving department, reference, and evidence. Each packaging row must identify available fulfillment supply and a positive quantity.",
+          "Shipments require courier, waybill, and a valid customer-facing tracking link. Handovers require recipient and receiving department; Intra generates the handover reference and internal audit evidence, while a photo remains optional for exceptions. Each packaging row must identify available fulfillment supply and a positive quantity.",
           "The order becomes Ready, the packer is attributable, and all packaging rows remain reserved for release.",
         ),
         control(

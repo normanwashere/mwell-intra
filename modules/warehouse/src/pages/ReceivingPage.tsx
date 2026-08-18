@@ -273,6 +273,7 @@ export function ReceivingPageSurface({
     "non_po",
   );
   const [exceptionReason, setExceptionReason] = useState("");
+  const [validationError, setValidationError] = useState("");
   const [lastReceiptStaged, setLastReceiptStaged] = useState(false);
   const receiptCommand = useRef<PendingReceiptCommand | null>(
     readPendingReceiptCommand(),
@@ -448,13 +449,44 @@ export function ReceivingPageSurface({
     setLines((prev) => prev.filter((l) => l.productId !== productId));
 
   const submit = async () => {
-    if (lines.length === 0 || !activeLocation) return;
     if (training) {
       await training
         .dispatch({ type: "submit-receipt" })
         .catch(() => undefined);
       return;
     }
+    if (!activeLocation) {
+      setValidationError("Select the warehouse receiving this delivery.");
+      return;
+    }
+    if (lines.length === 0) {
+      setValidationError("Scan or add at least one product before receiving.");
+      return;
+    }
+    if (!training && !exceptionReason.trim()) {
+      setValidationError(
+        "Enter the reason this delivery is being received outside the approved PO route.",
+      );
+      return;
+    }
+    if (!training && evidence.length === 0) {
+      setValidationError(
+        "Attach delivery evidence before receiving this exception.",
+      );
+      return;
+    }
+    const incompleteSerialLine = lines.find((line) => {
+      const product = productById(line.productId);
+      return product?.serialized && line.serials.length !== line.quantity;
+    });
+    if (incompleteSerialLine) {
+      const product = productById(incompleteSerialLine.productId);
+      setValidationError(
+        `Scan exactly ${incompleteSerialLine.quantity} serial number(s) for ${product?.name ?? incompleteSerialLine.productId}.`,
+      );
+      return;
+    }
+    setValidationError("");
     const receiptInput = {
       locationId: activeLocation,
       supplierId: supplierId || undefined,
@@ -497,7 +529,12 @@ export function ReceivingPageSurface({
       ...receiptInput,
       idempotencyKey: receiptCommand.current.key,
     });
-    if (!ok) return;
+    if (!ok) {
+      setValidationError(
+        "The receipt was not saved. Review the error message and correct the highlighted receiving details before retrying.",
+      );
+      return;
+    }
     receiptCommand.current = null;
     persistPendingReceiptCommand(null);
     toast.success(`Received ${totalItems} item(s) into inspection staging`);
@@ -526,6 +563,31 @@ export function ReceivingPageSurface({
         }
       />
 
+      <Card className="space-y-3">
+        <div>
+          <p className="font-semibold text-ink">Standard inbound flow</p>
+          <p className="mt-1 text-sm text-muted">
+            Start from the approved PO queue whenever a supplier delivery has a
+            PO or delivery receipt.
+          </p>
+        </div>
+        <ol className="grid gap-2 text-sm sm:grid-cols-2 xl:grid-cols-4">
+          {[
+            "1. Match PO and delivery receipt",
+            "2. Count, inspect, and test",
+            "3. Scan every required serial",
+            "4. Assign bin, put away, and release availability",
+          ].map((step) => (
+            <li
+              key={step}
+              className="rounded-lg border border-line bg-inset px-3 py-2 font-medium text-ink"
+            >
+              {step}
+            </li>
+          ))}
+        </ol>
+      </Card>
+
       {!training && (
         <Card className="space-y-3 border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30">
           <div>
@@ -533,11 +595,15 @@ export function ReceivingPageSurface({
               Approved purchase orders are the standard receiving route.
             </p>
             <p className="mt-1 text-sm text-muted">
-              Use this form only for a non-PO or overage exception. It stays unavailable until Quality accepts it.
+              Use this form only for a non-PO or overage exception. It stays
+              unavailable until Quality accepts it.
             </p>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Receipt exception type" htmlFor="receipt-exception-type">
+            <Field
+              label="Receipt exception type"
+              htmlFor="receipt-exception-type"
+            >
               <select
                 id="receipt-exception-type"
                 className="input"
@@ -887,198 +953,218 @@ export function ReceivingPageSurface({
               <EmptyState icon="truck" title="Nothing scanned yet" />
             ) : (
               <div className="overflow-hidden rounded-xl border border-line">
-              <table className="w-full text-left" aria-label="Receipt lines">
-                <thead className="hidden bg-inset text-xs text-muted lg:table-header-group">
-                  <tr>
-                    <th className="px-3 py-2 font-semibold">Product / quantity</th>
-                    <th className="px-3 py-2 font-semibold">Cost / traceability</th>
-                    <th className="px-3 py-2 font-semibold">Quality result</th>
-                    <th className="w-12 px-3 py-2"><span className="sr-only">Actions</span></th>
-                  </tr>
-                </thead>
-                <tbody className="block divide-y divide-line lg:table-row-group">
-                {lines.map((l) => {
-                  const p = productById(l.productId)!;
-                  return (
-                    <tr
-                      key={l.productId}
-                      className="grid gap-4 p-3 lg:table-row lg:p-0"
-                    >
-                      <td className="min-w-0 align-top lg:px-3 lg:py-3">
-                        <p className="truncate font-medium text-ink">
-                          {p.name}
-                        </p>
-                        <p className="font-mono text-xs text-faint">{p.sku}</p>
-                        {p.serialized ? (
-                          <p className="mt-0.5 text-xs text-faint">
-                            Qty {l.quantity} • serialized
-                          </p>
-                        ) : (
-                          <div className="mt-2">
-                            <QuantityStepper
-                              aria-label={`Quantity for ${p.name}`}
-                              value={l.quantity}
-                              onChange={(q) => setLineQuantity(l.productId, q)}
-                              min={1}
-                            />
-                          </div>
-                        )}
-                        {l.serials.length > 0 && (
-                          <div className="mt-2 flex flex-wrap gap-1">
-                            {l.serials.map((s) => (
-                              <Badge key={s} tone="brand">
-                                {s}
-                              </Badge>
-                            ))}
-                          </div>
-                        )}
-                      </td>
-                      <td className="grid gap-2 align-top sm:grid-cols-2 lg:px-3 lg:py-3">
-                          <Field
-                            label="Unit cost (PHP)"
-                            htmlFor={`rcv-cost-${l.productId}`}
-                          >
-                            <input
-                              id={`rcv-cost-${l.productId}`}
-                              type="number"
-                              inputMode="decimal"
-                              min={0}
-                              step="any"
-                              className="input"
-                              value={l.unitCost}
-                              onChange={(e) =>
-                                setLineField(
-                                  l.productId,
-                                  "unitCost",
-                                  e.target.value,
-                                )
-                              }
-                              placeholder={String(p.unitCost)}
-                            />
-                          </Field>
-                          <Field
-                            label="Lot code"
-                            htmlFor={`rcv-lot-${l.productId}`}
-                          >
-                            <input
-                              id={`rcv-lot-${l.productId}`}
-                              className="input"
-                              value={l.lotCode}
-                              onChange={(e) =>
-                                setLineField(
-                                  l.productId,
-                                  "lotCode",
-                                  e.target.value,
-                                )
-                              }
-                              placeholder="optional"
-                            />
-                          </Field>
-                          <div className="space-y-2">
+                <table className="w-full text-left" aria-label="Receipt lines">
+                  <thead className="hidden bg-inset text-xs text-muted lg:table-header-group">
+                    <tr>
+                      <th className="px-3 py-2 font-semibold">
+                        Product / quantity
+                      </th>
+                      <th className="px-3 py-2 font-semibold">
+                        Cost / traceability
+                      </th>
+                      <th className="px-3 py-2 font-semibold">
+                        Quality result
+                      </th>
+                      <th className="w-12 px-3 py-2">
+                        <span className="sr-only">Actions</span>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="block divide-y divide-line lg:table-row-group">
+                    {lines.map((l) => {
+                      const p = productById(l.productId)!;
+                      return (
+                        <tr
+                          key={l.productId}
+                          className="grid gap-4 p-3 lg:table-row lg:p-0"
+                        >
+                          <td className="min-w-0 align-top lg:px-3 lg:py-3">
+                            <p className="truncate font-medium text-ink">
+                              {p.name}
+                            </p>
+                            <p className="font-mono text-xs text-faint">
+                              {p.sku}
+                            </p>
+                            {p.serialized ? (
+                              <p className="mt-0.5 text-xs text-faint">
+                                Qty {l.quantity} • serialized
+                              </p>
+                            ) : (
+                              <div className="mt-2">
+                                <QuantityStepper
+                                  aria-label={`Quantity for ${p.name}`}
+                                  value={l.quantity}
+                                  onChange={(q) =>
+                                    setLineQuantity(l.productId, q)
+                                  }
+                                  min={1}
+                                />
+                              </div>
+                            )}
+                            {l.serials.length > 0 && (
+                              <div
+                                className="mt-2 max-h-44 space-y-1 overflow-y-auto"
+                                aria-label={`Serial numbers for ${p.name}`}
+                              >
+                                {l.serials.map((s) => (
+                                  <div
+                                    key={s}
+                                    className="rounded-md border border-brand-200 bg-brand-50 px-2 py-1 font-mono text-xs text-brand-900 dark:border-brand-800 dark:bg-brand-950/30 dark:text-brand-100"
+                                  >
+                                    {s}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </td>
+                          <td className="grid gap-2 align-top sm:grid-cols-2 lg:px-3 lg:py-3">
                             <Field
-                              label="Batch number"
-                              htmlFor={`rcv-batch-${l.productId}`}
+                              label="Unit cost (PHP)"
+                              htmlFor={`rcv-cost-${l.productId}`}
                             >
                               <input
-                                id={`rcv-batch-${l.productId}`}
+                                id={`rcv-cost-${l.productId}`}
+                                type="number"
+                                inputMode="decimal"
+                                min={0}
+                                step="any"
                                 className="input"
-                                value={l.batchNumber}
-                                onChange={(event) =>
+                                value={l.unitCost}
+                                onChange={(e) =>
                                   setLineField(
                                     l.productId,
-                                    "batchNumber",
-                                    event.target.value,
+                                    "unitCost",
+                                    e.target.value,
                                   )
                                 }
-                                placeholder="Supplier batch"
+                                placeholder={String(p.unitCost)}
                               />
                             </Field>
-                            {training && (
-                              <button
-                                type="button"
-                                className="btn-outline w-full"
-                                data-onboarding-anchor="receiving.batch-number"
-                                disabled={
-                                  training.currentStep.id !==
-                                    "traceability-batch" || training.busy
-                                }
-                                onClick={() =>
-                                  void training
-                                    .dispatch({
-                                      type: "set-batch-number",
-                                      payload: l.batchNumber,
-                                    })
-                                    .catch(() => undefined)
-                                }
-                              >
-                                Confirm batch number
-                              </button>
-                            )}
-                          </div>
-                      </td>
-                      <td className="grid gap-2 align-top lg:px-3 lg:py-3">
-                          <Field
-                            label="Device test result"
-                            htmlFor={`rcv-test-${l.productId}`}
-                          >
-                            <select
-                              id={`rcv-test-${l.productId}`}
-                              className="input"
-                              value={l.deviceTestStatus}
-                              onChange={(event) =>
-                                setLineField(
-                                  l.productId,
-                                  "deviceTestStatus",
-                                  event.target.value,
-                                )
-                              }
+                            <Field
+                              label="Lot code"
+                              htmlFor={`rcv-lot-${l.productId}`}
                             >
-                              <option value="not_tested">Not tested</option>
-                              <option value="passed">Passed</option>
-                              <option value="failed">
-                                Failed - send to hold
-                              </option>
-                              <option value="not_required">Not required</option>
-                            </select>
-                          </Field>
-                          {p.expiryTracked && (
-                            <div>
+                              <input
+                                id={`rcv-lot-${l.productId}`}
+                                className="input"
+                                value={l.lotCode}
+                                onChange={(e) =>
+                                  setLineField(
+                                    l.productId,
+                                    "lotCode",
+                                    e.target.value,
+                                  )
+                                }
+                                placeholder="optional"
+                              />
+                            </Field>
+                            <div className="space-y-2">
                               <Field
-                                label={`Expiry date for ${p.name}`}
-                                htmlFor={`rcv-expiry-${l.productId}`}
+                                label="Batch number"
+                                htmlFor={`rcv-batch-${l.productId}`}
                               >
                                 <input
-                                  id={`rcv-expiry-${l.productId}`}
-                                  type="date"
+                                  id={`rcv-batch-${l.productId}`}
                                   className="input"
-                                  value={l.expiryDate}
+                                  value={l.batchNumber}
                                   onChange={(event) =>
                                     setLineField(
                                       l.productId,
-                                      "expiryDate",
+                                      "batchNumber",
                                       event.target.value,
                                     )
                                   }
+                                  placeholder="Supplier batch"
                                 />
                               </Field>
+                              {training && (
+                                <button
+                                  type="button"
+                                  className="btn-outline w-full"
+                                  data-onboarding-anchor="receiving.batch-number"
+                                  disabled={
+                                    training.currentStep.id !==
+                                      "traceability-batch" || training.busy
+                                  }
+                                  onClick={() =>
+                                    void training
+                                      .dispatch({
+                                        type: "set-batch-number",
+                                        payload: l.batchNumber,
+                                      })
+                                      .catch(() => undefined)
+                                  }
+                                >
+                                  Confirm batch number
+                                </button>
+                              )}
                             </div>
-                          )}
-                      </td>
-                      <td className="align-top lg:px-3 lg:py-3">
-                      <button
-                        type="button"
-                        className="btn-ghost min-h-11 w-full px-3 text-rose-600 lg:w-11"
-                        aria-label={`Remove ${p.name}`}
-                        onClick={() => removeLine(l.productId)}
-                      >
-                        <Icon name="x" />
-                      </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-                </tbody>
-              </table>
+                          </td>
+                          <td className="grid gap-2 align-top lg:px-3 lg:py-3">
+                            <Field
+                              label="Device test result"
+                              htmlFor={`rcv-test-${l.productId}`}
+                            >
+                              <select
+                                id={`rcv-test-${l.productId}`}
+                                className="input"
+                                value={l.deviceTestStatus}
+                                onChange={(event) =>
+                                  setLineField(
+                                    l.productId,
+                                    "deviceTestStatus",
+                                    event.target.value,
+                                  )
+                                }
+                              >
+                                <option value="not_tested">Not tested</option>
+                                <option value="passed">Passed</option>
+                                <option value="failed">
+                                  Failed - send to hold
+                                </option>
+                                <option value="not_required">
+                                  Not required
+                                </option>
+                              </select>
+                            </Field>
+                            {p.expiryTracked && (
+                              <div>
+                                <Field
+                                  label={`Expiry date for ${p.name}`}
+                                  htmlFor={`rcv-expiry-${l.productId}`}
+                                >
+                                  <input
+                                    id={`rcv-expiry-${l.productId}`}
+                                    type="date"
+                                    className="input"
+                                    value={l.expiryDate}
+                                    onChange={(event) =>
+                                      setLineField(
+                                        l.productId,
+                                        "expiryDate",
+                                        event.target.value,
+                                      )
+                                    }
+                                  />
+                                </Field>
+                              </div>
+                            )}
+                          </td>
+                          <td className="align-top lg:px-3 lg:py-3">
+                            <button
+                              type="button"
+                              className="btn-ghost min-h-11 w-full px-3 text-rose-600 lg:w-11"
+                              aria-label={`Remove ${p.name}`}
+                              onClick={() => removeLine(l.productId)}
+                            >
+                              <Icon name="x" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             )}
           </Card>
@@ -1150,9 +1236,17 @@ export function ReceivingPageSurface({
       </div>
 
       {/* Sticky action bar */}
+      {validationError && (
+        <p
+          role="alert"
+          className="mx-auto w-full max-w-3xl rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-800 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-200"
+        >
+          {validationError}
+        </p>
+      )}
       {lines.length > 0 &&
         (training ? (
-          <div className="sticky bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-20 rounded-2xl border border-line bg-surface/95 p-2 shadow-e3 backdrop-blur md:bottom-4">
+          <div className="sticky bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-20 mx-auto w-full max-w-3xl rounded-xl border border-line bg-surface/95 p-2 shadow-e3 backdrop-blur md:bottom-4">
             <button
               type="button"
               className="btn-primary min-h-12 w-full shadow-pop"
@@ -1166,12 +1260,12 @@ export function ReceivingPageSurface({
         ) : (
           <CertifiedAction module="warehouse" capability="receive_stock">
             {({ execute, pending }) => (
-              <div className="sticky bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-20 rounded-2xl border border-line bg-surface/95 p-2 shadow-e3 backdrop-blur md:bottom-4">
+              <div className="sticky bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-20 mx-auto w-full max-w-3xl rounded-xl border border-line bg-surface/95 p-2 shadow-e3 backdrop-blur md:bottom-4">
                 <button
                   type="button"
                   className="btn-primary min-h-12 w-full shadow-pop"
                   onClick={() => void execute(submit)}
-                  disabled={pending || !exceptionReason.trim() || evidence.length === 0}
+                  disabled={pending}
                 >
                   Receive {totalItems} item(s)
                 </button>

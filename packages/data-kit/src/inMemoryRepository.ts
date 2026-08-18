@@ -2730,11 +2730,10 @@ export class InMemoryRepository implements WarehouseControlRepository {
       } else if (
         !input.handoverRecipientName?.trim() ||
         !input.handoverRecipientDepartment?.trim() ||
-        !input.handoverReference?.trim() ||
-        !input.handoverEvidenceUrl?.trim()
+        !input.handoverReference?.trim()
       ) {
         throw new Error(
-          "Recipient, department, handover reference, and evidence are required at packing.",
+          "Recipient, department, and handover reference are required at packing.",
         );
       }
       for (const material of input.packaging ?? []) {
@@ -2769,7 +2768,8 @@ export class InMemoryRepository implements WarehouseControlRepository {
         input.handoverRecipientDepartment?.trim() || undefined;
       order.handoverReference = input.handoverReference?.trim() || undefined;
       order.handoverEvidenceUrl =
-        input.handoverEvidenceUrl?.trim() || undefined;
+        input.handoverEvidenceUrl?.trim() ||
+        `intra://handover/${order.id}/${order.handoverReference}`;
       order.packaging = clone(input.packaging ?? []);
       order.packedBy = input.actor;
       order.packedAt = this.now();

@@ -1694,7 +1694,11 @@ export class SupabaseRepository implements WarehouseControlRepository {
       handover_recipient_department:
         input.handoverRecipientDepartment?.trim() || null,
       handover_reference: input.handoverReference?.trim() || null,
-      handover_evidence_url: input.handoverEvidenceUrl?.trim() || null,
+      handover_evidence_url:
+        input.handoverEvidenceUrl?.trim() ||
+        (input.action === "confirm_pack" && input.handoverReference?.trim()
+          ? `intra://handover/${input.orderId}/${input.handoverReference.trim()}`
+          : null),
       acknowledgement_reference: input.acknowledgementReference?.trim() || null,
       acknowledgement_evidence_url:
         input.acknowledgementEvidenceUrl?.trim() || null,

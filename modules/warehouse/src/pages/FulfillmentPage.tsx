@@ -23,6 +23,7 @@ import {
   useToast,
 } from "@/components/ui";
 import { Icon } from "@/components/Icon";
+import { BarcodeScanner } from "@/components/camera/BarcodeScanner";
 import { EvidenceCapture } from "@/components/camera/EvidenceCapture";
 import { BulkOrderImportSheet } from "@/components/fulfillment/BulkOrderImportSheet";
 import { OrderIntakeSheet } from "@/components/fulfillment/OrderIntakeSheet";
@@ -1236,6 +1237,7 @@ function PickSheet({
   const [pickEvidence, setPickEvidence] = useState<Record<string, string[]>>(
     {},
   );
+  const [validationError, setValidationError] = useState("");
   const [saving, setSaving] = useState(false);
   if (!order) return null;
   const recommendedBin = (productId: string) => {
@@ -1258,6 +1260,27 @@ function PickSheet({
   };
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    for (const line of order.lines) {
+      const product = products.find((row) => row.id === line.productId);
+      const suggestion = recommendedBin(line.productId);
+      if (suggestion && !binCodes[line.productId]?.trim()) {
+        setValidationError(
+          `Scan the source rack or bin for ${product?.name ?? line.productId} before scanning items.`,
+        );
+        return;
+      }
+      const capturedSerials = (serials[line.productId] ?? "")
+        .split(/[\n,]/)
+        .map((value) => value.trim())
+        .filter(Boolean);
+      if (product?.serialized && capturedSerials.length !== line.quantity) {
+        setValidationError(
+          `Scan exactly ${line.quantity} serial number(s) for ${product.name}. ${capturedSerials.length} captured.`,
+        );
+        return;
+      }
+    }
+    setValidationError("");
     setSaving(true);
     const ok = await advanceFulfillmentOrder({
       orderId: order.id,
@@ -1310,6 +1333,14 @@ function PickSheet({
         className="space-y-4"
         onSubmit={(event) => void submit(event)}
       >
+        {validationError && (
+          <p
+            role="alert"
+            className="rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-800 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-200"
+          >
+            {validationError}
+          </p>
+        )}
         <div className="border-l-4 border-emerald-500 bg-emerald-500/10 px-4 py-3 text-sm">
           <p className="font-semibold text-ink">Quality checkpoint</p>
           <p className="mt-1 text-muted">
@@ -1351,24 +1382,38 @@ function PickSheet({
                 </p>
               )}
               {suggestion && (
-                <Field
-                  label={`Scanned bin code for ${product?.name ?? line.productId}`}
-                  htmlFor={`pick-bin-${line.productId}`}
-                  hint="Scan the rack or bin label before scanning the item."
-                >
-                  <input
-                    id={`pick-bin-${line.productId}`}
-                    className="input mt-3 font-mono"
-                    value={binCodes[line.productId] ?? ""}
-                    onChange={(event) =>
-                      setBinCodes((current) => ({
-                        ...current,
-                        [line.productId]: event.target.value,
-                      }))
-                    }
-                    required
-                  />
-                </Field>
+                <div className="mt-3 rounded-xl border-2 border-brand-300 bg-surface p-3 dark:border-brand-700">
+                  <p className="text-sm font-semibold text-ink">
+                    1. Scan source rack or bin
+                  </p>
+                  <p className="mt-1 text-xs text-muted">
+                    Required before item scanning. Expected code:{" "}
+                    <span className="font-mono font-semibold">
+                      {suggestion.code}
+                    </span>
+                  </p>
+                  <div className="mt-3">
+                    <BarcodeScanner
+                      label="Scan rack or bin"
+                      manualLabel={`Scanned bin code for ${product?.name ?? line.productId}`}
+                      manualActionLabel="Use bin"
+                      onDetected={(code) =>
+                        setBinCodes((current) => ({
+                          ...current,
+                          [line.productId]: code,
+                        }))
+                      }
+                    />
+                  </div>
+                  {binCodes[line.productId] && (
+                    <p className="mt-2 text-xs text-muted">
+                      Captured:{" "}
+                      <span className="font-mono font-semibold text-ink">
+                        {binCodes[line.productId]}
+                      </span>
+                    </p>
+                  )}
+                </div>
               )}
               {line.bundleSetCodes && line.bundleSetCodes.length > 0 && (
                 <div
@@ -1383,14 +1428,37 @@ function PickSheet({
                 </div>
               )}
               {product?.serialized && (
-                <Field
-                  label={`Scanned serial numbers for ${product.name}`}
-                  htmlFor={`pick-${line.productId}`}
-                  hint="Enter one per line or separate with commas."
-                >
+                <div className="mt-3 rounded-xl border border-line bg-inset p-3">
+                  <p className="text-sm font-semibold text-ink">
+                    2. Scan serialized item
+                  </p>
+                  <p className="mt-1 text-xs text-muted">
+                    Use the camera or manual fallback once for every required
+                    unit.
+                  </p>
+                  <div className="mt-3">
+                    <BarcodeScanner
+                      label={`Scan serial for ${product.name}`}
+                      manualLabel={`Enter serial for ${product.name}`}
+                      manualActionLabel="Add serial"
+                      onDetected={(code) =>
+                        setSerials((current) => {
+                          const existing = (current[line.productId] ?? "")
+                            .split(/[\n,]/)
+                            .map((value) => value.trim())
+                            .filter(Boolean);
+                          if (existing.includes(code)) return current;
+                          return {
+                            ...current,
+                            [line.productId]: [...existing, code].join("\n"),
+                          };
+                        })
+                      }
+                    />
+                  </div>
                   <textarea
-                    id={`pick-${line.productId}`}
-                    className="input mt-3 min-h-24"
+                    aria-label={`Scanned serial numbers for ${product.name}`}
+                    className="input mt-3 min-h-24 font-mono"
                     value={serials[line.productId] ?? ""}
                     onChange={(event) =>
                       setSerials((current) => ({
@@ -1400,7 +1468,7 @@ function PickSheet({
                     }
                     required
                   />
-                </Field>
+                </div>
               )}
               <div className="mt-3 border-t border-line pt-3">
                 <EvidenceCapture
@@ -1447,7 +1515,7 @@ function PackSheet({
   const [recipientName, setRecipientName] = useState("");
   const [recipientDepartment, setRecipientDepartment] = useState("");
   const [handoverReference, setHandoverReference] = useState("");
-  const [handoverEvidenceUrl, setHandoverEvidenceUrl] = useState("");
+  const [handoverEvidence, setHandoverEvidence] = useState<string[]>([]);
   const [packaging, setPackaging] = useState([
     { key: crypto.randomUUID(), productId: "", quantity: 1 },
   ]);
@@ -1457,6 +1525,16 @@ function PackSheet({
     setWaybill(order?.waybillNumber ?? "");
     setDeliveryLink(order?.deliveryLink ?? "");
   }, [order?.courier, order?.deliveryLink, order?.id, order?.waybillNumber]);
+  useEffect(() => {
+    if (!order || order.deliveryMethod === "shipment") return;
+    setHandoverReference(
+      order.handoverReference ??
+        `HO-${order.externalReference}-${order.id.slice(-6).toUpperCase()}`,
+    );
+    setRecipientDepartment(
+      order.handoverRecipientDepartment ?? order.requestingDepartment ?? "",
+    );
+  }, [order]);
   if (!order) return null;
   const shipment = order.deliveryMethod === "shipment";
   const submit = async (event: FormEvent) => {
@@ -1471,7 +1549,9 @@ function PackSheet({
       handoverRecipientName: recipientName,
       handoverRecipientDepartment: recipientDepartment,
       handoverReference,
-      handoverEvidenceUrl,
+      handoverEvidenceUrl:
+        handoverEvidence[0] ??
+        `intra://handover/${order.id}/${handoverReference}`,
       packaging: packaging
         .filter((line) => line.productId)
         .map(({ productId, quantity }) => ({ productId, quantity })),
@@ -1496,7 +1576,7 @@ function PackSheet({
       description={
         shipment
           ? "Confirm the courier, waybill, delivery link, and fulfillment supplies consumed."
-          : "Identify the recipient and attach handover evidence before release."
+          : "Identify the recipient. Intra generates the handover reference; a photo is optional unless an exception requires evidence."
       }
       footer={
         <button
@@ -1578,24 +1658,22 @@ function PackSheet({
                 id="handover-reference"
                 className="input"
                 value={handoverReference}
-                onChange={(event) => setHandoverReference(event.target.value)}
+                readOnly
                 required
               />
             </Field>
-            <Field
-              label="Handover evidence URL"
-              htmlFor="handover-evidence"
-              hint="Attach the signed release form or handover photo."
-            >
-              <input
-                id="handover-evidence"
-                className="input"
-                type="url"
-                value={handoverEvidenceUrl}
-                onChange={(event) => setHandoverEvidenceUrl(event.target.value)}
-                required
+            <div className="rounded-xl border border-line p-3">
+              <EvidenceCapture
+                reference={`fulfillment/${order.id}/handover`}
+                maxPhotos={1}
+                label="Attach handover photo (optional)"
+                onChange={setHandoverEvidence}
               />
-            </Field>
+              <p className="mt-2 text-xs text-muted">
+                A system audit record is always created. Add a photo for damaged
+                packaging, disputed custody, or another exception.
+              </p>
+            </div>
           </>
         )}
         {supplies.length > 0 ? (

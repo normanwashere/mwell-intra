@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
-import clsx from 'clsx';
-import { Icon } from '../Icon';
-import { createScanEngine, type ScanEngine } from './scanEngine';
+import { useEffect, useRef, useState } from "react";
+import clsx from "clsx";
+import { Icon } from "../Icon";
+import { createScanEngine, type ScanEngine } from "./scanEngine";
 
 interface BarcodeScannerProps {
   onDetected: (code: string) => void;
@@ -19,15 +19,15 @@ interface BarcodeScannerProps {
 export function BarcodeScanner({
   onDetected,
   engineFactory = createScanEngine,
-  label = 'Scan barcode',
-  manualLabel = 'Enter barcode manually',
-  manualActionLabel = 'Add',
+  label = "Scan barcode",
+  manualLabel = "Enter barcode manually",
+  manualActionLabel = "Add",
 }: BarcodeScannerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const engineRef = useRef<ScanEngine | null>(null);
   const handledRef = useRef(false);
   const [scanning, setScanning] = useState(false);
-  const [manual, setManual] = useState('');
+  const [manual, setManual] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -52,14 +52,14 @@ export function BarcodeScanner({
         },
         () => {
           setError(
-            'Scanning needs camera access. Allow the camera in your browser settings, or type the code manually below.',
+            "Scanning needs camera access. Allow the camera in your browser settings, or type the code manually below.",
           );
           setScanning(false);
         },
       );
     } catch {
       setError(
-        'Scanning needs camera access. Allow the camera in your browser settings, or type the code manually below.',
+        "Scanning needs camera access. Allow the camera in your browser settings, or type the code manually below.",
       );
       stop();
     }
@@ -71,12 +71,11 @@ export function BarcodeScanner({
     setScanning(false);
   };
 
-  const submitManual = (e: React.FormEvent) => {
-    e.preventDefault();
+  const submitManual = () => {
     const code = manual.trim();
     if (!code) return;
     onDetected(code);
-    setManual('');
+    setManual("");
   };
 
   return (
@@ -85,8 +84,8 @@ export function BarcodeScanner({
           collapse the viewport while idle to avoid a large empty box. */}
       <div
         className={clsx(
-          'relative overflow-hidden rounded-2xl bg-slate-900',
-          !scanning && 'hidden',
+          "relative overflow-hidden rounded-2xl bg-slate-900",
+          !scanning && "hidden",
         )}
       >
         <video
@@ -114,7 +113,11 @@ export function BarcodeScanner({
       </div>
 
       {!scanning && (
-        <button type="button" className="btn-accent w-full" onClick={() => void start()}>
+        <button
+          type="button"
+          className="btn-accent w-full"
+          onClick={() => void start()}
+        >
           <Icon name="scan" />
           {label}
         </button>
@@ -126,25 +129,28 @@ export function BarcodeScanner({
         </p>
       )}
 
-      <form
-        onSubmit={submitManual}
-        className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-2"
-      >
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-2">
         <input
           className="input min-w-0"
           placeholder="Barcode / serial"
           aria-label={manualLabel}
           value={manual}
           onChange={(e) => setManual(e.target.value)}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter") return;
+            event.preventDefault();
+            submitManual();
+          }}
         />
         <button
-          type="submit"
+          type="button"
           className="btn-primary shrink-0"
           disabled={!manual.trim()}
+          onClick={submitManual}
         >
           {manualActionLabel}
         </button>
-      </form>
+      </div>
     </div>
   );
 }

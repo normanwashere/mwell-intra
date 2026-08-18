@@ -137,14 +137,11 @@ describe("FulfillmentPage", () => {
       within(dialog).getByLabelText("Recipient department"),
       "Marketing",
     );
-    await user.type(
-      within(dialog).getByLabelText("Handover reference"),
-      "HO-2201",
-    );
-    await user.type(
-      within(dialog).getByLabelText("Handover evidence URL"),
-      "https://evidence.example/ho-2201.jpg",
-    );
+    expect(
+      (within(dialog).getByLabelText("Handover reference") as HTMLInputElement)
+        .value,
+    ).toMatch(/^HO-REQ-MKT-2201-/);
+    expect(within(dialog).getByText(/photo is optional/i)).toBeInTheDocument();
     await user.click(
       within(dialog).getByRole("button", { name: "Confirm packing" }),
     );
@@ -278,7 +275,10 @@ describe("FulfillmentPage", () => {
       within(dialog).getByLabelText("Order reference"),
       "WEB-2201",
     );
-    await user.type(within(dialog).getByLabelText("Sales channel"), "Shopify");
+    await user.selectOptions(
+      within(dialog).getByLabelText("Sales channel"),
+      "Shopify",
+    );
     await user.type(
       within(dialog).getByLabelText("Campaign / event name"),
       "Wellness Week",
@@ -296,37 +296,37 @@ describe("FulfillmentPage", () => {
       "12 Main Street",
     );
     await user.type(within(dialog).getByLabelText("City"), "Pasig");
-    await user.type(within(dialog).getByLabelText("Province"), "Metro Manila");
-    await user.type(within(dialog).getByLabelText("Postal code"), "1600");
-    await user.type(
-      within(dialog).getByLabelText("Area of delivery"),
+    expect(within(dialog).getByLabelText("Province")).toHaveValue(
+      "Metro Manila",
+    );
+    expect(within(dialog).getByLabelText("Postal code")).toHaveValue("1600");
+    expect(within(dialog).getByLabelText("Area of delivery")).toHaveValue(
       "Metro Manila",
     );
     await user.selectOptions(
       within(dialog).getByLabelText("Product"),
       "smart-watch",
     );
-    await user.type(within(dialog).getByLabelText("Unit price"), "2999");
+    expect(
+      within(dialog).getByLabelText("Unit price (assigned)"),
+    ).not.toHaveValue("");
     await user.type(within(dialog).getByLabelText("Line discount"), "100");
     await user.click(within(dialog).getByRole("button", { name: "Add item" }));
     await user.selectOptions(
       within(dialog).getAllByLabelText("Product")[1]!,
       "ecg-ring-8",
     );
+    expect(
+      within(dialog).getAllByLabelText("Unit price (assigned)")[1],
+    ).not.toHaveValue("");
     await user.type(
-      within(dialog).getAllByLabelText("Unit price")[1]!,
-      "13999",
-    );
-    await user.type(
-      within(dialog).getByLabelText("Payment reference"),
+      within(dialog).getByLabelText("Payment reference / RRN"),
       "PAY-2201",
     );
     await user.type(
       within(dialog).getByLabelText("Payment date"),
       "2026-08-17",
     );
-    await user.type(within(dialog).getByLabelText("RRN"), "RRN-2201");
-    await user.type(within(dialog).getByLabelText("Provider method"), "Wallet");
     await user.type(within(dialog).getByLabelText("Shipping fee"), "80");
     await user.type(within(dialog).getByLabelText("Other fees"), "20");
     await user.type(within(dialog).getByLabelText("Courier"), "LBC");
@@ -354,8 +354,6 @@ describe("FulfillmentPage", () => {
         deliveryArea: "Metro Manila",
         paymentReference: "PAY-2201",
         paymentDate: "2026-08-17",
-        paymentRrn: "RRN-2201",
-        paymentProviderMethod: "Wallet",
         campaignName: "Wellness Week",
         shippingFee: 80,
         otherFees: 20,
@@ -412,6 +410,7 @@ describe("FulfillmentPage", () => {
       within(dialog).getByLabelText(/Scanned bin code.*Smart Watch/i),
       "PASIG-A-01",
     );
+    await user.click(within(dialog).getByRole("button", { name: "Use bin" }));
     await user.type(
       within(dialog).getByLabelText(/Scanned serial numbers.*Smart Watch/i),
       "SMART-WATCH-SN0001",

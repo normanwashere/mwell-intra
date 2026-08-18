@@ -8,6 +8,7 @@ import {
   parseEcommerceOrderCsv,
   type EcommerceImportRow,
 } from "@/domain/ecommerceOrderImport";
+import { trackerTemplateCsv } from "@/domain/orderIntakeOptions";
 
 function readTextFile(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -67,6 +68,17 @@ export function BulkOrderImportSheet({
         error instanceof Error ? error.message : "The CSV could not be read.",
       );
     }
+  };
+
+  const downloadTemplate = () => {
+    const url = URL.createObjectURL(
+      new Blob([trackerTemplateCsv()], { type: "text/csv;charset=utf-8" }),
+    );
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "mwell-intra-ecommerce-order-template.csv";
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   const importOrders = async () => {
@@ -154,13 +166,22 @@ export function BulkOrderImportSheet({
               ))}
           </select>
         </Field>
-        <button
-          type="button"
-          className="btn-outline w-full"
-          onClick={() => fileRef.current?.click()}
-        >
-          <Icon name="upload" /> {fileName || "Choose exported tracker CSV"}
-        </button>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <button
+            type="button"
+            className="btn-outline w-full"
+            onClick={downloadTemplate}
+          >
+            <Icon name="download" /> Download CSV template
+          </button>
+          <button
+            type="button"
+            className="btn-outline w-full"
+            onClick={() => fileRef.current?.click()}
+          >
+            <Icon name="upload" /> {fileName || "Choose exported tracker CSV"}
+          </button>
+        </div>
         <input
           ref={fileRef}
           type="file"
