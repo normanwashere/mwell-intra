@@ -21,6 +21,7 @@ interface OrderLineDraft {
   variant: string;
   unitPrice: string;
   discountAmount: string;
+  bundleMode: boolean;
   bundleCodes: string;
 }
 
@@ -52,8 +53,23 @@ function newLine(products: Product[], source: Source): OrderLineDraft {
     variant: "",
     unitPrice: product?.price === undefined ? "" : String(product.price),
     discountAmount: "",
+    bundleMode: false,
     bundleCodes: "",
   };
+}
+
+function generatedBundleCodes(reference: string, quantity: number) {
+  const prefix =
+    reference
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 18) || "ORDER";
+  return Array.from(
+    { length: Math.max(1, quantity) },
+    (_, index) => `${prefix}-SET-${String(index + 1).padStart(2, "0")}`,
+  ).join(", ");
 }
 
 function optionalMoney(value: string) {
@@ -202,9 +218,10 @@ export function OrderIntakeSheet({
         ? paymentReference.trim() || undefined
         : undefined,
       paymentDate: ecommerce ? paymentDate || undefined : undefined,
-      paymentProviderStatus: ecommerce && paymentMethod === "online_payment"
-        ? paymentProviderStatus.trim() || undefined
-        : undefined,
+      paymentProviderStatus:
+        ecommerce && paymentMethod === "online_payment"
+          ? paymentProviderStatus.trim() || undefined
+          : undefined,
       campaignName: ecommerce ? campaignName.trim() || undefined : undefined,
       salesInvoiceNumber: ecommerce
         ? salesInvoiceNumber.trim() || undefined
@@ -231,10 +248,12 @@ export function OrderIntakeSheet({
         discountAmount: ecommerce
           ? optionalMoney(line.discountAmount)
           : undefined,
-        bundleSetCodes: line.bundleCodes
-          .split(",")
-          .map((value) => value.trim())
-          .filter(Boolean),
+        bundleSetCodes: line.bundleMode
+          ? line.bundleCodes
+              .split(",")
+              .map((value) => value.trim())
+              .filter(Boolean)
+          : [],
       })),
     });
     setSaving(false);
@@ -712,7 +731,7 @@ export function OrderIntakeSheet({
                 </Field>
                 {ecommerce && (
                   <Field
-                    label="Unit price (assigned)"
+                    label="Selling price (assigned)"
                     htmlFor={`order-price-${line.key}`}
                     hint="Loaded from the active Product price. Update Pricing before creating the order if this is incorrect."
                   >
@@ -756,26 +775,86 @@ export function OrderIntakeSheet({
                   </Field>
                 )}
               </div>
-              <Field
-                label="Bundle set IDs"
-                htmlFor={`order-bundles-${line.key}`}
-                hint="Leave blank for a standalone item. For bundles, enter one ID per customer set, such as OTG-001, OTG-002. Use the same set IDs on every component line in that bundle."
-              >
-                <input
-                  id={`order-bundles-${line.key}`}
-                  className="input"
-                  value={line.bundleCodes}
-                  onChange={(event) =>
-                    setLines((current) =>
-                      current.map((candidate) =>
-                        candidate.key === line.key
-                          ? { ...candidate, bundleCodes: event.target.value }
-                          : candidate,
-                      ),
-                    )
-                  }
-                />
-              </Field>
+              <div className="rounded-xl border border-line bg-inset p-3">
+                <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm font-semibold text-ink">
+                  <input
+                    type="checkbox"
+                    className="h-5 w-5 accent-brand-600"
+                    checked={line.bundleMode}
+                    onChange={(event) =>
+                      setLines((current) =>
+                        current.map((candidate) =>
+                          candidate.key === line.key
+                            ? {
+                                ...candidate,
+                                bundleMode: event.target.checked,
+                                bundleCodes: event.target.checked
+                                  ? candidate.bundleCodes
+                                  : "",
+                              }
+                            : candidate,
+                        ),
+                      )
+                    }
+                  />
+                  This item is part of a customer bundle
+                </label>
+                <p className="mt-1 text-xs leading-5 text-muted">
+                  Buying two standalone rings is not a bundle: leave this off.
+                  Turn it on only when several component products form each
+                  customer set.
+                </p>
+                {line.bundleMode && (
+                  <div className="mt-3 space-y-2">
+                    <Field
+                      label="Bundle set IDs"
+                      htmlFor={`order-bundles-${line.key}`}
+                      hint={`Enter one ID per customer set. Quantity ${line.quantity} needs ${line.quantity} ID(s), and every component line in the same bundle must use the same IDs.`}
+                    >
+                      <input
+                        id={`order-bundles-${line.key}`}
+                        className="input"
+                        value={line.bundleCodes}
+                        onChange={(event) =>
+                          setLines((current) =>
+                            current.map((candidate) =>
+                              candidate.key === line.key
+                                ? {
+                                    ...candidate,
+                                    bundleCodes: event.target.value,
+                                  }
+                                : candidate,
+                            ),
+                          )
+                        }
+                        required
+                      />
+                    </Field>
+                    <button
+                      type="button"
+                      className="btn-outline w-full sm:w-auto"
+                      onClick={() =>
+                        setLines((current) =>
+                          current.map((candidate) =>
+                            candidate.key === line.key
+                              ? {
+                                  ...candidate,
+                                  bundleCodes: generatedBundleCodes(
+                                    reference,
+                                    line.quantity,
+                                  ),
+                                }
+                              : candidate,
+                          ),
+                        )
+                      }
+                    >
+                      <Icon name="plus" className="h-4 w-4" /> Generate{" "}
+                      {line.quantity} set ID(s)
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           ))}
         </section>

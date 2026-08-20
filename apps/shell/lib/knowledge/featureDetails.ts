@@ -1104,6 +1104,12 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "Each legacy order enters Intra once with its customer, payment, commercial, dispatch, notes, and line data. New orders must then be created directly in Intra.",
         ),
         control(
+          "Export current view",
+          "Downloads the fulfillment orders currently visible under the active status and search filters, with one row per product line and the operational, commercial, dispatch, handover, and audit fields needed for reconciliation.",
+          "The export follows the current queue filters. Sensitive customer details must only be shared with authorized operational users.",
+          "A dated CSV file is downloaded without changing any order or inventory record.",
+        ),
+        control(
           "Print barcode sheet",
           "Generates one scannable master label for each quantity-controlled merchandise, event-material, or fulfillment-supply item.",
           "The product must have a barcode and must not be a serialized unit.",
@@ -1165,9 +1171,9 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
         control(
           "Create return or re-kit work",
-          "Records Customer Service intake, warehouse resolution, and Product-approved open-box re-kit lineage.",
-          "Returns require a recognized product and serial when applicable; active kits require a Product approval reference.",
-          "The return receives a controlled resolution or a traceable re-kit work order.",
+          "Lets Customer Service scan or enter the returned serial, identifies its original released order when available, and records warehouse resolution and Product-approved open-box re-kit lineage.",
+          "Returns require a recognized product and serial when applicable. An unmatched serial is visibly flagged for investigation instead of being silently linked to the wrong order. Active kits require a Product approval reference.",
+          "The return preserves its original-order lineage when found and receives a controlled resolution or a traceable re-kit work order.",
         ),
         control(
           "Complete re-kit",
@@ -1238,10 +1244,10 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "When supplied, it stays attached to the matching order line and SKU.",
         ),
         field(
-          "Unit price",
-          "Preserves the non-negative selling price reported for one product unit.",
+          "Selling price",
+          "Uses the active Product selling price for one product unit so order entry and Product pricing remain consistent.",
           false,
-          "When supplied, it must be numeric and cannot be negative.",
+          "It is assigned from Product data and cannot be overridden during direct order entry. Imported historical values must be numeric and cannot be negative.",
         ),
         field(
           "Discount amount",
@@ -1388,10 +1394,16 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "The quantity must be a positive whole number and must agree with any supplied bundle-set codes.",
         ),
         field(
-          "Serial or bundle-set identity",
-          "Preserves unit and customer-facing set lineage.",
+          "Bundle mode",
+          "Distinguishes an ordinary multi-quantity product line from a customer-facing bundle line.",
           false,
-          "Required per unit for serialized SKUs and per set when bundle codes are used.",
+          "Turn it on only when several component products form each customer set. Two standalone units are not automatically a bundle.",
+        ),
+        field(
+          "Bundle set IDs",
+          "Preserves one traceable identity for every customer-facing set represented by a bundle line.",
+          false,
+          "When bundle mode is on, provide or generate exactly one unique set ID per ordered set. Serialized component identities are still captured during picking.",
         ),
         field(
           "Scanned rack or bin",

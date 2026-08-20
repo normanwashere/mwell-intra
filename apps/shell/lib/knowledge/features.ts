@@ -203,6 +203,7 @@ const FEATURE_RELATIONSHIPS: Record<string, FeatureRelationship> = {
       POLICY.event,
       POLICY.procurement,
       POLICY.payment,
+      POLICY.pricing,
     ],
     relatedFlowIds: [
       "outbound-fulfillment",
@@ -210,6 +211,7 @@ const FEATURE_RELATIONSHIPS: Record<string, FeatureRelationship> = {
       "receive-to-putaway",
       "returns-reconciliation",
       "procure-to-pay",
+      "pricing-and-costing",
     ],
   },
   "warehouse-returns": {

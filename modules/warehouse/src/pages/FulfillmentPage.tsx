@@ -27,6 +27,8 @@ import { BarcodeScanner } from "@/components/camera/BarcodeScanner";
 import { EvidenceCapture } from "@/components/camera/EvidenceCapture";
 import { BulkOrderImportSheet } from "@/components/fulfillment/BulkOrderImportSheet";
 import { OrderIntakeSheet } from "@/components/fulfillment/OrderIntakeSheet";
+import { downloadText } from "@/app/download";
+import { fulfillmentOrdersToCsv } from "@/domain/orderIntakeOptions";
 
 type WorkspaceTab = "orders" | "requests" | "returns" | "kits";
 
@@ -329,6 +331,7 @@ export function FulfillmentPage() {
       {tab === "returns" && (
         <ReturnsWorkspace
           products={data.products}
+          orders={data.fulfillmentOrders}
           returns={data.customerReturnCases}
           bins={data.storageAreas.filter((area) => area.active)}
           canCreate={canIntakeReturn}
@@ -453,22 +456,41 @@ function OrdersWorkspace({
             release, and settlement.
           </p>
         </div>
-        {canCreate && (
+        {(canCreate || filteredOrders.length > 0) && (
           <div className="grid gap-2 sm:flex">
-            <button
-              type="button"
-              className="btn-outline w-full sm:w-auto"
-              onClick={() => setImportOpen(true)}
-            >
-              <Icon name="upload" className="h-4 w-4" /> Import existing tracker
-            </button>
-            <button
-              type="button"
-              className="btn-primary w-full sm:w-auto"
-              onClick={() => setCreateOpen(true)}
-            >
-              <Icon name="plus" className="h-4 w-4" /> New order / demand
-            </button>
+            {filteredOrders.length > 0 && (
+              <button
+                type="button"
+                className="btn-outline w-full sm:w-auto"
+                onClick={() =>
+                  downloadText(
+                    `mwell-intra-orders-${new Date().toISOString().slice(0, 10)}.csv`,
+                    fulfillmentOrdersToCsv(filteredOrders, products),
+                  )
+                }
+              >
+                <Icon name="download" className="h-4 w-4" /> Export current view
+              </button>
+            )}
+            {canCreate && (
+              <>
+                <button
+                  type="button"
+                  className="btn-outline w-full sm:w-auto"
+                  onClick={() => setImportOpen(true)}
+                >
+                  <Icon name="upload" className="h-4 w-4" /> Import existing
+                  tracker
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary w-full sm:w-auto"
+                  onClick={() => setCreateOpen(true)}
+                >
+                  <Icon name="plus" className="h-4 w-4" /> New order / demand
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -2588,12 +2610,14 @@ function CreateRequestSheet({
 
 function ReturnsWorkspace({
   products,
+  orders,
   returns,
   bins,
   canCreate,
   resolutionMode,
 }: {
   products: Product[];
+  orders: FulfillmentOrder[];
   returns: CustomerReturnCase[];
   bins: Array<{ id: string; code: string; label?: string }>;
   canCreate: boolean;
@@ -2714,6 +2738,7 @@ function ReturnsWorkspace({
         open={open}
         onOpenChange={setOpen}
         products={products}
+        orders={orders}
         create={createCustomerReturnCase}
       />
       <ResolveReturnSheet
@@ -2736,11 +2761,13 @@ function CreateReturnSheet({
   open,
   onOpenChange,
   products,
+  orders,
   create,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   products: Product[];
+  orders: FulfillmentOrder[];
   create: ReturnType<typeof useWarehouse>["createCustomerReturnCase"];
 }) {
   const toast = useToast();
@@ -2750,6 +2777,28 @@ function CreateReturnSheet({
   const [defect, setDefect] = useState("");
   const [saving, setSaving] = useState(false);
   const selected = products.find((row) => row.id === productId);
+  const eligibleOrders = orders.filter((order) =>
+    order.lines.some((line) => line.productId === productId),
+  );
+  const matchedOrder = orders.find((order) =>
+    order.lines.some(
+      (line) =>
+        line.productId === productId &&
+        line.pickedSerialNumbers?.includes(serial.trim()),
+    ),
+  );
+  const captureSerial = (value: string) => {
+    const next = value.trim();
+    setSerial(next);
+    const origin = orders.find((order) =>
+      order.lines.some(
+        (line) =>
+          line.productId === productId &&
+          line.pickedSerialNumbers?.includes(next),
+      ),
+    );
+    setSourceOrder(origin?.id ?? "");
+  };
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setSaving(true);
@@ -2795,7 +2844,11 @@ function CreateReturnSheet({
             id="return-product"
             className="input"
             value={productId}
-            onChange={(event) => setProductId(event.target.value)}
+            onChange={(event) => {
+              setProductId(event.target.value);
+              setSerial("");
+              setSourceOrder("");
+            }}
           >
             {products.map((product) => (
               <option key={product.id} value={product.id}>
@@ -2804,30 +2857,63 @@ function CreateReturnSheet({
             ))}
           </select>
         </Field>
-        <Field
-          label="Serial number"
-          htmlFor="return-serial"
-          hint={
-            selected?.serialized
-              ? "Required for this serialized product."
-              : "Optional for non-serialized stock."
-          }
-        >
-          <input
-            id="return-serial"
-            className="input"
-            value={serial}
-            onChange={(event) => setSerial(event.target.value)}
-            required={selected?.serialized}
+        <div className="space-y-2 rounded-xl border border-line bg-inset p-3">
+          <div>
+            <p className="label">Serial number</p>
+            <p className="mt-1 text-xs text-muted">
+              {selected?.serialized
+                ? "Scan the returned unit. Intra will locate the order that released this exact serial."
+                : "Optional for non-serialized stock."}
+            </p>
+          </div>
+          <BarcodeScanner
+            label="Scan returned serial"
+            manualLabel="Enter returned serial"
+            manualActionLabel="Use serial"
+            onDetected={captureSerial}
           />
-        </Field>
-        <Field label="Original order reference" htmlFor="return-order">
-          <input
+          {serial && (
+            <p className="rounded-lg border border-line bg-surface px-3 py-2 text-xs text-muted">
+              Captured serial:{" "}
+              <span className="font-mono font-semibold text-ink">{serial}</span>
+            </p>
+          )}
+          {matchedOrder ? (
+            <p
+              role="status"
+              className="rounded-lg bg-emerald-500/10 px-3 py-2 text-sm font-medium text-emerald-800 dark:text-emerald-200"
+            >
+              Release found: {matchedOrder.externalReference} (
+              {titleCase(matchedOrder.status)})
+            </p>
+          ) : serial ? (
+            <p
+              role="alert"
+              className="rounded-lg bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-200"
+            >
+              No released order contains this serial. Verify the code or select
+              the original order below.
+            </p>
+          ) : null}
+        </div>
+        <Field
+          label="Original release order"
+          htmlFor="return-order"
+          hint="Filled automatically after a serial match; select manually only when the historical release has no serial record."
+        >
+          <select
             id="return-order"
             className="input"
             value={sourceOrder}
             onChange={(event) => setSourceOrder(event.target.value)}
-          />
+          >
+            <option value="">No release order matched</option>
+            {eligibleOrders.map((order) => (
+              <option key={order.id} value={order.id}>
+                {order.externalReference} / {titleCase(order.status)}
+              </option>
+            ))}
+          </select>
         </Field>
         <Field label="Defect description" htmlFor="return-defect">
           <textarea

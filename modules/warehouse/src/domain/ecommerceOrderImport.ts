@@ -121,6 +121,7 @@ const TRACKER_HEADER_ALIASES: Record<string, keyof CsvOrderRow> = {
   sku: "product_sku",
   remark_variant: "variant",
   price: "unit_price",
+  selling_price: "unit_price",
   qty: "quantity",
   discount: "discount_amount",
   discounts: "discount_amount",

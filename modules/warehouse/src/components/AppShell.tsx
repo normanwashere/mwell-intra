@@ -255,6 +255,19 @@ export function AppShell({ children }: { children: ReactNode }) {
     group,
     modules: modules.filter((module) => module.group === group),
   })).filter((section) => section.modules.length > 0);
+  const pendingModuleCounts = useMemo(
+    () => ({
+      allocations:
+        data?.allocations.filter((item) =>
+          ["reserved", "allocated"].includes(item.status),
+        ).length ?? 0,
+      fulfillment:
+        data?.fulfillmentOrders.filter(
+          (item) => !["completed", "cancelled"].includes(item.status),
+        ).length ?? 0,
+    }),
+    [data],
+  );
   const activeGroup = modules.find((module) =>
     module.path === "/"
       ? location.pathname === "/"
@@ -349,6 +362,11 @@ export function AppShell({ children }: { children: ReactNode }) {
                       to={module.path}
                       icon={module.icon as IconName}
                       label={module.label}
+                      count={
+                        pendingModuleCounts[
+                          module.id as keyof typeof pendingModuleCounts
+                        ]
+                      }
                     />
                   ))}
                 </div>
@@ -533,6 +551,11 @@ export function AppShell({ children }: { children: ReactNode }) {
                   to={m.path}
                   icon={m.icon as IconName}
                   label={m.shortLabel ?? m.label}
+                  count={
+                    pendingModuleCounts[
+                      m.id as keyof typeof pendingModuleCounts
+                    ]
+                  }
                 />
               </li>
             ))}
@@ -610,7 +633,26 @@ export function AppShell({ children }: { children: ReactNode }) {
                   <Icon name={m.icon as IconName} />
                 </span>
                 <span className="min-w-0">
-                  <span className="block">{m.label}</span>
+                  <span className="flex items-center gap-2">
+                    <span className="block">{m.label}</span>
+                    {(pendingModuleCounts[
+                      m.id as keyof typeof pendingModuleCounts
+                    ] ?? 0) > 0 && (
+                      <span
+                        className="grid min-h-5 min-w-5 place-items-center rounded-full bg-rose-600 px-1 text-[0.65rem] font-bold text-white"
+                        aria-hidden="true"
+                        title={`${pendingModuleCounts[m.id as keyof typeof pendingModuleCounts]} pending`}
+                      >
+                        {pendingModuleCounts[
+                          m.id as keyof typeof pendingModuleCounts
+                        ] > 99
+                          ? "99+"
+                          : pendingModuleCounts[
+                              m.id as keyof typeof pendingModuleCounts
+                            ]}
+                      </span>
+                    )}
+                  </span>
                   <span className="block truncate text-xs text-faint">
                     {m.description}
                   </span>
@@ -758,10 +800,12 @@ function SideLink({
   to,
   icon,
   label,
+  count = 0,
 }: {
   to: string;
   icon: IconName;
   label: string;
+  count?: number;
 }) {
   return (
     <NavLink
@@ -777,7 +821,16 @@ function SideLink({
       }
     >
       <Icon name={icon} />
-      {label}
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {count > 0 && (
+        <span
+          className="grid min-h-5 min-w-5 place-items-center rounded-full bg-rose-600 px-1 text-[0.65rem] font-bold text-white"
+          aria-hidden="true"
+          title={`${count} pending`}
+        >
+          {count > 99 ? "99+" : count}
+        </span>
+      )}
     </NavLink>
   );
 }
@@ -786,10 +839,12 @@ function BottomLink({
   to,
   icon,
   label,
+  count = 0,
 }: {
   to: string;
   icon: IconName;
   label: string;
+  count?: number;
 }) {
   return (
     <NavLink
@@ -806,11 +861,20 @@ function BottomLink({
         <>
           <span
             className={clsx(
-              "grid h-7 w-12 place-items-center rounded-full transition",
+              "relative grid h-7 w-12 place-items-center rounded-full transition",
               isActive && "bg-brand-500/10",
             )}
           >
             <Icon name={icon} className="h-5 w-5" />
+            {count > 0 && (
+              <span
+                className="absolute -right-1 -top-1 grid min-h-4 min-w-4 place-items-center rounded-full bg-rose-600 px-0.5 text-[0.55rem] font-bold text-white"
+                aria-hidden="true"
+                title={`${count} pending`}
+              >
+                {count > 99 ? "99+" : count}
+              </span>
+            )}
           </span>
           <span className="truncate">{label}</span>
         </>

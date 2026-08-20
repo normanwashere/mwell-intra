@@ -54,7 +54,9 @@ describe("AppShell navigation", () => {
       "Quality Control",
       "Exceptions",
     ]) {
-      expect(within(sidebar).getByRole("link", { name: label })).toBeInTheDocument();
+      expect(
+        within(sidebar).getByRole("link", { name: label }),
+      ).toBeInTheDocument();
     }
     for (const label of [
       "Replenishment",
@@ -232,6 +234,19 @@ describe("AppShell navigation", () => {
     expect(
       await screen.findByRole("dialog", { name: /notifications/i }),
     ).toBeInTheDocument();
+  });
+
+  it("shows red pending-work counts beside actionable modules", async () => {
+    renderWithProviders(<AppShell>content</AppShell>, {
+      role: "warehouse_operator",
+    });
+    const sidebar = await screen.findByRole("navigation", { name: "Primary" });
+    const allocations = within(sidebar).getByRole("link", {
+      name: "Allocations",
+    });
+    expect(allocations.querySelector('[title$="pending"]')).toHaveClass(
+      "bg-rose-600",
+    );
   });
 
   it("asks for confirmation before resetting demo data (WH-6)", async () => {

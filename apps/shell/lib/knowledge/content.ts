@@ -652,7 +652,7 @@ const procedureArticles: KnowledgeArticle[] = [
     [
       [
         "Record demand",
-        "Operations creates ecommerce orders directly in Intra with the order reference, a controlled sales channel, customer and complete address, payment reference, products, fees, optional dispatch details, and instructions. Selecting a supported city suggests province, city-level postal code, and delivery area for confirmation. Product price loads from the active Product record. Cash becomes COD, Billing becomes Authorized, and online payments may enter allocation only when the Maya report is Paid or Authorized. CSV remains available only to migrate existing tracker rows, with a downloadable template in the import panel. Approved event demand, third-party sales, and department stock requests use their separate governed paths.",
+        "Operations creates ecommerce orders directly in Intra with the order reference, a controlled sales channel, customer and complete address, payment reference, products, fees, optional dispatch details, and instructions. Selecting a supported city suggests province, city-level postal code, and delivery area for confirmation. Selling price loads from the active Product record and cannot be overridden during order entry. Cash becomes COD, Billing becomes Authorized, and online payments may enter allocation only when the Maya report is Paid or Authorized. CSV remains available only to migrate existing tracker rows, with a downloadable template in the import panel. Export current view downloads the orders matching the active queue filters for operational handoff or reconciliation. Approved event demand, third-party sales, and department stock requests use their separate governed paths.",
       ],
       [
         "Approve when required",
@@ -660,7 +660,7 @@ const procedureArticles: KnowledgeArticle[] = [
       ],
       [
         "Validate product and bundle rules",
-        "Confirm item class, serialization, source bin, and Product approval reference for active bundles. Give each finished customer bundle a unique set code and keep its component serials together through pick and pack.",
+        "Confirm item class, serialization, source bin, and Product approval reference for active bundles. A quantity of two standalone products is not automatically a bundle. Turn on the bundle control only when the line represents customer-facing sets, then generate or enter one unique set ID per ordered set and keep each set's component serials together through pick and pack.",
       ],
       [
         "Allocate, split if short, and pick",
@@ -688,7 +688,7 @@ const procedureArticles: KnowledgeArticle[] = [
       ],
       [
         "Resolve returns separately",
-        "For customer cases, Customer Service records the issue and serial before Warehouse quarantine and resolution. For event physical returns, open Returns receiving, choose Specific event, select the source event, product, receiving location and bin, then submit to Quality Control. Replacement creates a linked order; refund and write-off require Finance evidence; supplier return requires an RMA reference; Customer Service records closure evidence.",
+        "For customer cases, Customer Service scans or enters the returned serial. Intra searches released orders, selects the matching original release when found, and clearly flags an unmatched serial for investigation before Warehouse quarantine and resolution. For event physical returns, open Returns receiving, choose Specific event, select the source event, product, receiving location and bin, then submit to Quality Control. Replacement creates a linked order; refund and write-off require Finance evidence; supplier return requires an RMA reference; Customer Service records closure evidence.",
       ],
     ],
   ),

@@ -1,3 +1,5 @@
+import type { FulfillmentOrder, Product } from "@intra/data-kit";
+
 export const ECOMMERCE_CHANNELS = [
   "Eshop",
   "Shopify",
@@ -121,7 +123,7 @@ export function trackerTemplateCsv() {
       "payment_date",
       "product_sku",
       "quantity",
-      "unit_price",
+      "selling_price",
       "discount_amount",
       "bundle_set_codes",
       "shipping_fee",
@@ -133,4 +135,107 @@ export function trackerTemplateCsv() {
     ].join(","),
     "SHOP-0001,2026-08-18,Shopify,CUST-0001,Juan Dela Cruz,09170000000,juan@example.com,12 Main Street,Pasig,Metro Manila,1600,Metro Manila,paid,online_payment,RRN-0001,2026-08-18,PRODUCT-SKU,1,0,0,,0,0,,,,",
   ].join("\r\n");
+}
+
+function csvCell(value: unknown) {
+  const text = value === undefined || value === null ? "" : String(value);
+  return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+}
+
+/** One export row per order line so the file can replace the manual tracker. */
+export function fulfillmentOrdersToCsv(
+  orders: FulfillmentOrder[],
+  products: Product[],
+) {
+  const productById = new Map(products.map((product) => [product.id, product]));
+  const headers = [
+    "order_reference",
+    "order_date",
+    "source",
+    "channel",
+    "status",
+    "shipment_status",
+    "customer_reference",
+    "customer_name",
+    "customer_contact",
+    "customer_email",
+    "delivery_address",
+    "city",
+    "province",
+    "postal_code",
+    "delivery_area",
+    "payment_status",
+    "payment_method",
+    "payment_reference",
+    "payment_date",
+    "maya_report_result",
+    "sales_invoice_number",
+    "product_sku",
+    "product_name",
+    "variant",
+    "quantity",
+    "selling_price",
+    "discount_amount",
+    "bundle_set_ids",
+    "shipping_fee",
+    "other_fees",
+    "reported_total_amount",
+    "courier",
+    "waybill_number",
+    "delivery_link",
+    "handover_reference",
+    "order_notes",
+    "created_at",
+    "released_at",
+    "delivered_at",
+  ];
+  const rows = orders.flatMap((order) =>
+    order.lines.map((line) => {
+      const product = productById.get(line.productId);
+      return [
+        order.externalReference,
+        order.orderDate,
+        order.source,
+        order.ecommerceChannel,
+        order.status,
+        order.shipmentStatus,
+        order.customerReference,
+        order.customerName,
+        order.customerContact,
+        order.customerEmail,
+        order.deliveryAddress?.addressLine,
+        order.deliveryAddress?.city,
+        order.deliveryAddress?.province,
+        order.deliveryAddress?.postalCode,
+        order.deliveryArea,
+        order.paymentStatus,
+        order.paymentMethod,
+        order.paymentReference,
+        order.paymentDate,
+        order.paymentProviderStatus,
+        order.salesInvoiceNumber,
+        product?.sku ?? line.productId,
+        product?.name,
+        line.variant,
+        line.quantity,
+        line.unitPrice,
+        line.discountAmount,
+        line.bundleSetCodes?.join(" | "),
+        order.shippingFee,
+        order.otherFees,
+        order.reportedTotalAmount,
+        order.courier,
+        order.waybillNumber,
+        order.deliveryLink,
+        order.handoverReference,
+        order.orderNotes,
+        order.createdAt,
+        order.releasedAt,
+        order.deliveredAt,
+      ]
+        .map(csvCell)
+        .join(",");
+    }),
+  );
+  return [headers.join(","), ...rows].join("\r\n");
 }

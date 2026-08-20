@@ -74,7 +74,7 @@ test("tracker replacement intake is usable and stable", async ({
   await expect(dialog).toBeVisible();
 
   await dialog.getByLabel("Order reference").fill("VISUAL-TRACKER-01");
-  await dialog.getByLabel("Sales channel").fill("Shopify");
+  await dialog.getByLabel("Sales channel").selectOption("Shopify");
   await dialog.getByLabel("Customer name").fill("Visual QA Customer");
   await dialog.getByLabel("Contact number").fill("09171234567");
   await dialog.getByLabel("Street address").fill("12 Main Street");
@@ -82,11 +82,15 @@ test("tracker replacement intake is usable and stable", async ({
   await dialog.getByLabel("Province").fill("Metro Manila");
   await dialog.getByLabel("Postal code").fill("1600");
   await dialog.getByLabel("Product").selectOption("smart-watch");
-  await dialog.getByLabel("Unit price").fill("2999");
+  await expect(dialog.getByLabel("Selling price (assigned)")).not.toHaveValue(
+    "",
+  );
   await dialog.getByLabel("Line discount").fill("100");
   await dialog.getByRole("button", { name: "Add item" }).click();
   await dialog.getByLabel("Product").nth(1).selectOption("ecg-ring-8");
-  await dialog.getByLabel("Unit price").nth(1).fill("13999");
+  await expect(
+    dialog.getByLabel("Selling price (assigned)").nth(1),
+  ).not.toHaveValue("");
 
   const viewport = page.viewportSize()!;
   const prefix = viewport.width < 600 ? "mobile" : "desktop";
@@ -101,9 +105,22 @@ test("tracker replacement intake is usable and stable", async ({
     .scrollIntoViewIfNeeded();
   await dialog.getByLabel("Shipping fee").fill("80");
   await dialog.getByLabel("Other fees").fill("20");
+  const assignedPrices = await dialog
+    .getByLabel("Selling price (assigned)")
+    .evaluateAll((inputs) =>
+      inputs.map((input) => Number((input as HTMLInputElement).value)),
+    );
+  const expectedTotal = new Intl.NumberFormat("en-PH", {
+    style: "currency",
+    currency: "PHP",
+    currencyDisplay: "code",
+  }).format(assignedPrices.reduce((sum, value) => sum + value, 0));
   await expect(
-    dialog.getByText("PHP 16,998.00", { exact: true }).last(),
-  ).toBeVisible();
+    dialog
+      .getByText("Order total", { exact: true })
+      .locator("..")
+      .locator("dd"),
+  ).toHaveText(expectedTotal);
   await page.waitForTimeout(400);
   await page.screenshot({
     path: resolve(output, `${prefix}-02-commercial-summary.png`),
@@ -116,20 +133,32 @@ test("tracker replacement intake is usable and stable", async ({
     .getByLabel("Delivery tracking link")
     .fill("https://track.example/WB-VISUAL-01");
 
-  const geometry = await page.evaluate(() => {
+  const geometry = await dialog.evaluate((dialogElement) => {
     const viewportWidth = window.innerWidth;
     const visibleControls = Array.from(
-      document.querySelectorAll<HTMLElement>("button, input, select, textarea"),
+      dialogElement.querySelectorAll<HTMLElement>(
+        "button, input, select, textarea",
+      ),
     ).filter((element) => {
       const rect = element.getBoundingClientRect();
       return rect.width > 0 && rect.height > 0;
     });
     return {
       horizontalOverflow: document.documentElement.scrollWidth > viewportWidth,
-      clippedControls: visibleControls.filter((element) => {
-        const rect = element.getBoundingClientRect();
-        return rect.left < -1 || rect.right > viewportWidth + 1;
-      }).length,
+      clippedControls: visibleControls
+        .filter((element) => {
+          const rect = element.getBoundingClientRect();
+          return rect.left < -1 || rect.right > viewportWidth + 1;
+        })
+        .map((element) => {
+          const rect = element.getBoundingClientRect();
+          return {
+            tag: element.tagName,
+            label: element.getAttribute("aria-label") ?? element.textContent,
+            left: Math.round(rect.left),
+            right: Math.round(rect.right),
+          };
+        }),
       undersizedTargets: visibleControls.filter((element) => {
         const rect = element.getBoundingClientRect();
         return element.tagName === "BUTTON" && rect.height < 40;
@@ -137,7 +166,7 @@ test("tracker replacement intake is usable and stable", async ({
     };
   });
   expect(geometry.horizontalOverflow).toBe(false);
-  expect(geometry.clippedControls).toBe(0);
+  expect(geometry.clippedControls).toEqual([]);
   expect(geometry.undersizedTargets).toBeLessThanOrEqual(2);
   await dialog.getByRole("button", { name: "Create order" }).click();
   await expect(dialog).toBeHidden();

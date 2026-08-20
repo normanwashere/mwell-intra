@@ -308,7 +308,7 @@ describe("FulfillmentPage", () => {
       "smart-watch",
     );
     expect(
-      within(dialog).getByLabelText("Unit price (assigned)"),
+      within(dialog).getByLabelText("Selling price (assigned)"),
     ).not.toHaveValue("");
     await user.type(within(dialog).getByLabelText("Line discount"), "100");
     await user.click(within(dialog).getByRole("button", { name: "Add item" }));
@@ -317,7 +317,7 @@ describe("FulfillmentPage", () => {
       "ecg-ring-8",
     );
     expect(
-      within(dialog).getAllByLabelText("Unit price (assigned)")[1],
+      within(dialog).getAllByLabelText("Selling price (assigned)")[1],
     ).not.toHaveValue("");
     await user.type(
       within(dialog).getByLabelText("Payment reference / RRN"),
@@ -368,6 +368,44 @@ describe("FulfillmentPage", () => {
       });
     });
   }, 15_000);
+
+  it("keeps ordinary quantities separate from explicitly identified bundle sets", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<FulfillmentPage />, { role: "operations" });
+
+    await user.click(
+      await screen.findByRole("button", { name: "New order / demand" }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "Create order or fulfillment demand",
+    });
+    await user.type(
+      within(dialog).getByLabelText("Order reference"),
+      "WEB-BUNDLE-01",
+    );
+    const quantity = within(dialog).getByLabelText("Quantity");
+    await user.clear(quantity);
+    await user.type(quantity, "2");
+
+    expect(
+      within(dialog).queryByLabelText("Bundle set IDs"),
+    ).not.toBeInTheDocument();
+    await user.click(
+      within(dialog).getByRole("checkbox", {
+        name: "This item is part of a customer bundle",
+      }),
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: "Generate 2 set ID(s)" }),
+    );
+
+    expect(within(dialog).getByLabelText("Bundle set IDs")).toHaveValue(
+      "WEB-BUNDLE-01-SET-01, WEB-BUNDLE-01-SET-02",
+    );
+    expect(
+      within(dialog).getByText(/buying two standalone rings is not a bundle/i),
+    ).toBeInTheDocument();
+  });
 
   it("requires a bin scan and records the directed pick location", async () => {
     const seed = buildSeed();
@@ -776,6 +814,32 @@ describe("FulfillmentPage", () => {
 
   it("creates a customer-service return case and preserves the warehouse handoff", async () => {
     const repo = makeRepo();
+    const released = await repo.createFulfillmentOrder({
+      source: "ecommerce",
+      externalReference: "SHOP-RETURN-2201",
+      sourceLocationId: "loc-cebu",
+      lines: [{ productId: "smart-watch", quantity: 1 }],
+      actor: "operations@mwell.com.ph",
+    });
+    for (const action of ["allocate", "start_picking"] as const) {
+      await repo.advanceFulfillmentOrder({
+        orderId: released.id,
+        action,
+        actor: "warehouse_operator@mwell.com.ph",
+      });
+    }
+    await repo.advanceFulfillmentOrder({
+      orderId: released.id,
+      action: "confirm_pick",
+      actor: "warehouse_operator@mwell.com.ph",
+      pickedLines: [
+        {
+          productId: "smart-watch",
+          quantity: 1,
+          serialNumbers: ["SMART-WATCH-CB0001"],
+        },
+      ],
+    });
     const user = userEvent.setup();
     renderWithProviders(<FulfillmentPage />, { role: "operations", repo });
 
@@ -789,8 +853,17 @@ describe("FulfillmentPage", () => {
       "smart-watch",
     );
     await user.type(
-      within(dialog).getByLabelText("Serial number"),
-      "SMART-WATCH-VIP001",
+      within(dialog).getByLabelText("Enter returned serial"),
+      "SMART-WATCH-CB0001",
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: "Use serial" }),
+    );
+    expect(within(dialog).getByRole("status")).toHaveTextContent(
+      "Release found: SHOP-RETURN-2201",
+    );
+    expect(within(dialog).getByLabelText("Original release order")).toHaveValue(
+      released.id,
     );
     await user.type(
       within(dialog).getByLabelText("Defect description"),
@@ -802,7 +875,12 @@ describe("FulfillmentPage", () => {
 
     await waitFor(async () => {
       expect((await repo.getData()).customerReturnCases).toEqual([
-        expect.objectContaining({ resolution: "pending", status: "submitted" }),
+        expect.objectContaining({
+          resolution: "pending",
+          status: "submitted",
+          sourceOrderId: released.id,
+          serialNumber: "SMART-WATCH-CB0001",
+        }),
       ]);
     });
     expect(
