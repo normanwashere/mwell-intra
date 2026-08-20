@@ -407,8 +407,15 @@ test("shards UAT certification into bounded least-privilege jobs", async () => {
   assert.match(workflow, /AUDIT_PHASE: routes/);
   assert.match(workflow, /AUDIT_PHASE: transactions/);
   assert.match(workflow, /AUDIT_OUTPUT_PATH/);
-  assert.match(workflow, /max-parallel: 2/);
-  assert.match(workflow, /max-parallel: 1/);
+  assert.match(
+    workflow,
+    /routes:[\s\S]*?strategy:[\s\S]*?max-parallel: 1/,
+  );
+  assert.match(
+    workflow,
+    /transactions:[\s\S]*?strategy:[\s\S]*?max-parallel: 1/,
+  );
+  assert.doesNotMatch(workflow, /max-parallel:\s*[2-9]/);
   assert.match(workflow, /pnpm provision:test:uat/);
   assert.match(workflow, /secrets\.UAT_SUPABASE_SERVICE_ROLE_KEY/);
   assert.match(
