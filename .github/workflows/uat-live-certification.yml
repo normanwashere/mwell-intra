@@ -127,7 +127,9 @@ jobs:
     environment: uat
     strategy:
       fail-fast: false
-      max-parallel: 2
+      # UAT test identities enforce a single active session. Running viewport
+      # shards concurrently invalidates another shard's browser session.
+      max-parallel: 1
       matrix:
         include:
           - viewport: desktop-1440
@@ -191,7 +193,8 @@ jobs:
 
   transactions:
     name: Governed transactions (${{ matrix.viewport }})
-    needs: prepare
+    if: ${{ always() && needs.prepare.result == 'success' }}
+    needs: [prepare, routes]
     runs-on: ubuntu-latest
     timeout-minutes: 90
     environment: uat
