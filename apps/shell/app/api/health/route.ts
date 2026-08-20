@@ -65,6 +65,7 @@ function legalDocumentDeliveryStatus(): FeatureStatus {
 function deploymentCommit(): string | null {
   return (
     process.env.VERCEL_GIT_COMMIT_SHA?.trim() ||
+    process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA?.trim() ||
     process.env.GITHUB_SHA?.trim() ||
     process.env.DEPLOYMENT_COMMIT_SHA?.trim() ||
     null

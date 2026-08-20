@@ -115,4 +115,17 @@ describe('GET /api/health', () => {
 
     expect(body.commit).toBe('deployed-commit-sha');
   });
+
+  it('uses the build-time Vercel commit when the runtime system variable is unavailable', async () => {
+    delete process.env.VERCEL_GIT_COMMIT_SHA;
+    process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA = 'c'.repeat(40);
+
+    const response = await GET(
+      new Request('https://uat.example.com/api/health') as never,
+    );
+    const payload = await response.json();
+
+    expect(payload.commit).toBe('c'.repeat(40));
+    delete process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA;
+  });
 });
