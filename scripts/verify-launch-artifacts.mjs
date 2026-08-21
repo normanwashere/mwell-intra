@@ -17,6 +17,7 @@ const requiredDocs = [
   "docs/MIGRATION_CUTOVER_HYPERCARE_RUNBOOK.md",
   "docs/import-templates/README.md",
   "docs/manual/MWELL_INTRA_USER_MANUAL.md",
+  "docs/PROCESS_REFERENCE_LIBRARY.md",
 ];
 
 const csvHeaders = new Map([
@@ -233,10 +234,14 @@ export async function verifyStaticLaunchArtifacts(rootDir = process.cwd()) {
         failures.push(`manual missing heading: ${required}`);
       }
     }
-    if (
-      !/https:\/\/mwell-intra\.vercel\.app\/knowledge(?:\b|\/)/.test(manual)
-    ) {
-      failures.push("manual missing the live Knowledge Base link");
+    if (!/^# Mwell Intra Standalone Operating Handbook$/m.test(manual)) {
+      failures.push("manual missing the standalone handbook title");
+    }
+    if (!/Process Reference Library/.test(manual)) {
+      failures.push("manual missing the process reference library");
+    }
+    if (/Knowledge Base|knowledge-base|\/knowledge\b/i.test(manual)) {
+      failures.push("standalone handbook contains a Knowledge Base reference");
     }
   } catch {
     failures.push("docs/manual/MWELL_INTRA_USER_MANUAL.md: missing");

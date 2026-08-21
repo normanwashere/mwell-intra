@@ -172,4 +172,7 @@ test("static launch verifier no longer relies on quote-sensitive source includes
   assert.doesNotMatch(source, /providers\.includes\(/);
   assert.match(source, /hasRequiredEnvironmentGuard/);
   assert.match(source, /hasEnvironmentComparison/);
+  assert.match(source, /Mwell Intra Standalone Operating Handbook/);
+  assert.match(source, /Process Reference Library/);
+  assert.doesNotMatch(source, /manual missing the live Knowledge Base link/);
 });
