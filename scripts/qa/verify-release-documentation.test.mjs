@@ -35,7 +35,7 @@ test("blocks operational releases with stale documentation", () => {
     "modules/warehouse/src/pages/FulfillmentPage.tsx",
   ]);
   assert.equal(result.ready, false);
-  assert.equal(result.failures.length, 6);
+  assert.equal(result.failures.length, 7);
 });
 
 test("accepts operational releases with the complete documentation set", () => {
@@ -46,6 +46,7 @@ test("accepts operational releases with the complete documentation set", () => {
     "docs/USER_TRAINING_AND_OPERATIONS_MANUAL.md",
     "docs/TECHNICAL_AND_FUNCTIONAL_SPECIFICATION.md",
     "docs/TRAINING_AND_HANDOVER_CONTENT.md",
+    "docs/manual/index.html",
     "docs/releases/2026-08-21-fulfillment.md",
   ]);
   assert.equal(result.ready, true);

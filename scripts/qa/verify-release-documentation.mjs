@@ -18,6 +18,7 @@ export const REQUIRED_DOCUMENTS = [
   "docs/USER_TRAINING_AND_OPERATIONS_MANUAL.md",
   "docs/TECHNICAL_AND_FUNCTIONAL_SPECIFICATION.md",
   "docs/TRAINING_AND_HANDOVER_CONTENT.md",
+  "docs/manual/index.html",
 ];
 
 function normalized(file) {

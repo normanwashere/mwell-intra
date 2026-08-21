@@ -350,6 +350,7 @@ jobs:
         run: |
           mkdir -p certification-artifacts/documentation
           cp docs/manual/MWELL_INTRA_USER_MANUAL.md certification-artifacts/documentation/
+          cp docs/manual/index.html certification-artifacts/documentation/MWELL_INTRA_COMPLETE_DOCUMENTATION.html
           cp docs/USER_TRAINING_AND_OPERATIONS_MANUAL.md certification-artifacts/documentation/
           cp docs/TECHNICAL_AND_FUNCTIONAL_SPECIFICATION.md certification-artifacts/documentation/
           cp docs/TRAINING_AND_HANDOVER_CONTENT.md certification-artifacts/documentation/

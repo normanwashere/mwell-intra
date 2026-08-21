@@ -73,4 +73,4 @@ Every operational release must update:
 5. Training and handover content.
 6. A dated release note.
 
-CI compares operational source changes with this documentation set. UAT certification generates a commit-bound manifest and bundles current desktop/mobile audit screenshots. Production deployment is blocked when required documentation is stale.
+CI compares operational source changes with this documentation set. `pnpm docs:build` compiles the maintained sources and embedded screenshots into the searchable, printable, self-contained `docs/manual/index.html`. `pnpm verify:release-documentation` rejects a release when that HTML no longer matches its sources. UAT certification generates a commit-bound manifest and bundles the consolidated HTML with current desktop/mobile audit screenshots. Production deployment is blocked when required documentation is stale.

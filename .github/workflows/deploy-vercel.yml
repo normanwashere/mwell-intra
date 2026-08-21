@@ -52,6 +52,7 @@ jobs:
         run: |
           mkdir -p release-documentation/manual release-documentation/releases
           cp docs/manual/MWELL_INTRA_USER_MANUAL.md release-documentation/manual/
+          cp docs/manual/index.html release-documentation/MWELL_INTRA_COMPLETE_DOCUMENTATION.html
           cp docs/USER_TRAINING_AND_OPERATIONS_MANUAL.md release-documentation/manual/
           cp docs/TECHNICAL_AND_FUNCTIONAL_SPECIFICATION.md release-documentation/
           cp docs/TRAINING_AND_HANDOVER_CONTENT.md release-documentation/

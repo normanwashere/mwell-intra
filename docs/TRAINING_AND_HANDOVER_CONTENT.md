@@ -42,6 +42,7 @@ Learners must be able to:
 The release bundle must contain:
 
 - Commit-bound documentation manifest.
+- Self-contained `MWELL_INTRA_COMPLETE_DOCUMENTATION.html`, generated from the maintained source set and safe to open offline.
 - Current manuals, specification, training content, and release note.
 - Desktop, tablet, and mobile screenshots from live route audits.
 - Governed transaction and database-readback results.
