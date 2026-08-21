@@ -13,6 +13,10 @@ function normalize(file) {
   return file.replaceAll("\\", "/");
 }
 
+function normalizeText(value) {
+  return value.replace(/\r\n?/g, "\n");
+}
+
 function markdownFiles(directory) {
   const absolute = path.join(root, directory);
   if (!existsSync(absolute)) return [];
@@ -158,7 +162,7 @@ export function buildDocumentationHtml() {
   const sources = documentationSources();
   const sourceIds = new Map(sources.map((file) => [file, `doc-${slug(file.replace(/^docs\//, ""))}`]));
   const documents = sources.map((file) => {
-    const source = readFileSync(path.join(root, file), "utf8");
+    const source = normalizeText(readFileSync(path.join(root, file), "utf8"));
     return {
       file,
       id: sourceIds.get(file),

@@ -22,6 +22,7 @@ test("builds one self-contained handbook from every canonical source", () => {
   assert.doesNotMatch(html, /Knowledge Base/i);
   assert.doesNotMatch(html, /<script\s+src=/i);
   assert.doesNotMatch(html, /<link\s+[^>]*rel=["']stylesheet/i);
+  assert.doesNotMatch(html, /\r/);
   assert.ok(sources.length >= 15);
   assert.deepEqual(sources.slice(2), [...sources.slice(2)].sort());
 });
