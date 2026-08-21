@@ -6,7 +6,9 @@
 
 **Interactive Knowledge Base:** https://mwell-intra.vercel.app/knowledge
 
-**Reviewed:** July 11, 2026
+**Reviewed:** August 21, 2026
+
+**Current UAT reference:** `f88c9916c253546ae6960bd19ffd608b99fdd791`
 
 **Content owners:** Platform, Procurement, Legal, Warehouse
 
@@ -173,6 +175,18 @@ Select the PO and destination, record each line, scan serial/lot details, and at
 
 Reserve only available non-held stock. Scan custody on issue. Record consumed, returned, lost, and damaged quantities. Close the event only after all issued quantity reconciles.
 
+### Ecommerce Fulfillment and Pick & Pack
+
+Import orders with the provided CSV template or create an order in the app. Select a controlled sales channel and payment method; record the payment reference and Maya status when applicable. Customer address presets populate province, postal code, and service area, but the operator remains responsible for confirming the delivery address before release.
+
+Selling price is assigned by Product and is read-only in Warehouse. Do not type or override a commercial price during fulfillment. For bundle orders, mark the line as a bundle and verify the generated set ID for every set. A quantity of two standalone products is not automatically a bundle.
+
+Before picking, scan the displayed rack or bin and then scan each serialized unit. Confirm packaging supplies, waybill, courier, dispatch details, and the generated handover reference. Upload proof directly in Intra; an external evidence URL is not required. Use **Export current view** when a controlled CSV handoff is needed.
+
+### Customer Returns and Original Release Matching
+
+Customer Service or Operations scans the returned serial with the camera or enters it manually. Intra matches the serial to its original picked release and order when evidence exists. Verify the displayed source before accepting custody. An unmatched serial must remain visibly unresolved and be escalated for controlled investigation; do not attach it to an unrelated order.
+
 ### Counts and Adjustments
 
 Create a count draft, record physical quantity and evidence, review variance, and post only an approved stock-change request. Never edit stock levels directly.
@@ -193,6 +207,8 @@ Platform Admin or Legal Admin opens **Admin -> Delegation of Authority**. Select
 | Stale-state message            | Reload the current record and re-evaluate before acting                                 |
 | Vendor invitation not received | Legal checks delivery status and contact address before retrying                        |
 | Receipt variance or damage     | Use inspection/hold/vendor-return workflow with evidence                                |
+| Return serial has no source    | Quarantine the item, preserve the scanned serial, and investigate before replacement    |
+| Vendor invitation rate-limited | Do not repeatedly resend; verify delivery state and escalate SMTP capacity              |
 | Mobile control is obscured     | Scroll into the reserved safe area; report viewport and screenshot if still unreachable |
 
 Support evidence should contain route, time, role, safe record ID, expected outcome, visible error, and a redacted screenshot. Never include credentials or private document contents.

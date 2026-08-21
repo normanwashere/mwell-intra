@@ -14,6 +14,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - uses: pnpm/action-setup@v6
 
@@ -24,6 +26,13 @@ jobs:
 
       - name: Install Vercel CLI
         run: pnpm add -g vercel@55.0.0
+
+      - name: Verify release documentation is synchronized
+        env:
+          DOCUMENTATION_BASE_SHA: ${{ github.event.before }}
+        run: >-
+          node scripts/qa/verify-release-documentation.mjs
+          --manifest release-documentation/documentation-release-manifest.json
 
       - name: Pull Vercel env
         run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
@@ -36,3 +45,26 @@ jobs:
       - name: Deploy
         run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
         working-directory: apps/shell
+
+      - name: Bundle maintained release documentation
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p release-documentation/manual release-documentation/releases
+          cp docs/manual/MWELL_INTRA_USER_MANUAL.md release-documentation/manual/
+          cp docs/USER_TRAINING_AND_OPERATIONS_MANUAL.md release-documentation/manual/
+          cp docs/TECHNICAL_AND_FUNCTIONAL_SPECIFICATION.md release-documentation/
+          cp docs/TRAINING_AND_HANDOVER_CONTENT.md release-documentation/
+          cp -R docs/releases/. release-documentation/releases/
+          if [ -d apps/shell/public/knowledge/screenshots ]; then
+            cp -R apps/shell/public/knowledge/screenshots release-documentation/screenshots
+          fi
+
+      - name: Upload release documentation bundle
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: production-release-documentation-${{ github.run_number }}
+          path: release-documentation
+          if-no-files-found: error
+          retention-days: 90

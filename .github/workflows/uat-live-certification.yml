@@ -34,6 +34,7 @@ jobs:
       PRODUCTION_SUPABASE_PROJECT_REF: abbfziukjalyqtcuskhi
       POLICY_ALLOW_TEST_MUTATIONS: "true"
       GITHUB_SHA: ${{ github.sha }}
+      DOCUMENTATION_BASE_SHA: ${{ github.event.before }}
       DEPLOYMENT_EVIDENCE_PATH: test-results/deployment-readiness.json
     steps:
       - uses: actions/checkout@v5
@@ -73,6 +74,8 @@ jobs:
         run: pnpm verify:launch-artifacts
       - name: Verify live audit contracts
         run: pnpm test:intra-live-contract
+      - name: Verify release documentation is synchronized
+        run: pnpm verify:release-documentation -- --manifest test-results/documentation-sync-source.json
       - name: Verify CI resilience contracts
         run: node --test scripts/qa/uat-ci-resilience.test.mjs
       - name: Verify UAT persona provisioner contract
@@ -104,7 +107,9 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: uat-deployment-readiness-${{ github.run_number }}
-          path: test-results/deployment-readiness.json
+          path: |
+            test-results/deployment-readiness.json
+            test-results/documentation-sync-source.json
           if-no-files-found: error
           retention-days: 30
       - name: Upload onboarding evidence
@@ -333,6 +338,22 @@ jobs:
           merge-multiple: true
       - name: Verify complete cross-shard certification evidence
         run: node scripts/verify-launch-artifacts.mjs --certification-dir certification-artifacts
+      - name: Build commit-bound documentation manifest
+        env:
+          DOCUMENTATION_BASE_SHA: ${{ github.event.before }}
+        run: >-
+          node scripts/qa/verify-release-documentation.mjs
+          --manifest certification-artifacts/documentation-release-manifest.json
+          --evidence-dir certification-artifacts
+      - name: Add maintained manuals and release notes to the evidence bundle
+        shell: bash
+        run: |
+          mkdir -p certification-artifacts/documentation
+          cp docs/manual/MWELL_INTRA_USER_MANUAL.md certification-artifacts/documentation/
+          cp docs/USER_TRAINING_AND_OPERATIONS_MANUAL.md certification-artifacts/documentation/
+          cp docs/TECHNICAL_AND_FUNCTIONAL_SPECIFICATION.md certification-artifacts/documentation/
+          cp docs/TRAINING_AND_HANDOVER_CONTENT.md certification-artifacts/documentation/
+          cp -R docs/releases certification-artifacts/documentation/releases
       - uses: actions/upload-artifact@v6
         if: always()
         with:
