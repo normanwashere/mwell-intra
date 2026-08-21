@@ -5,7 +5,7 @@ import {
   validateDocumentationSync,
 } from "./verify-release-documentation.mjs";
 
-test("classifies rendered application source but not tests or Knowledge Base content", () => {
+test("classifies rendered application source but not tests or handbook content", () => {
   assert.equal(
     isOperationalSource("modules/warehouse/src/pages/FulfillmentPage.tsx"),
     true,

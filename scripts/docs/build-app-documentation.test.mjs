@@ -7,13 +7,18 @@ import {
 
 test("builds one self-contained handbook from every canonical source", () => {
   const html = buildDocumentationHtml();
-  assert.match(html, /Mwell Intra Complete Documentation/);
-  assert.match(html, /Search every document/);
+  assert.match(html, /Mwell Intra Standalone Operating Handbook/);
+  assert.match(html, /Search the complete handbook/);
   assert.match(html, /Technical and Functional Specification/);
   assert.match(html, /User Training And Operations Manual/);
   assert.match(html, /WMS Feedback Release/);
   assert.match(html, /Users V1/);
   assert.match(html, /user@example\.com/);
+  assert.match(html, /class="mermaid"/);
+  assert.match(html, /mermaid\.initialize/);
+  assert.match(html, /Mwell Intra Process Reference Library/);
+  assert.match(html, /id="doc-manual-mwell-intra-user-manual-md-start-here"/);
+  assert.doesNotMatch(html, /Knowledge Base/i);
   assert.doesNotMatch(html, /<script\s+src=/i);
   assert.doesNotMatch(html, /<link\s+[^>]*rel=["']stylesheet/i);
   assert.ok(documentationSources().length >= 15);

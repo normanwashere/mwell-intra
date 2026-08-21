@@ -13,7 +13,7 @@ Learners must be able to:
 - Complete one role-specific happy path, correction path, denial check, and recovery path.
 - Verify persisted state after a successful command.
 - Avoid duplicate writes after refresh, timeout, or uncertain network state.
-- Use the Knowledge Base to find the current procedure and source route.
+- Use the standalone handbook to find the current procedure, governing reference and application route.
 
 ## Updated Warehouse demonstration
 

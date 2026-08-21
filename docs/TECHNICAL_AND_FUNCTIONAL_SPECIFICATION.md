@@ -14,7 +14,7 @@ Mwell Intra is the shared operating platform for cross-department workflows. War
 - Supabase Auth for identity and session management.
 - PostgreSQL schemas, row-level security, guarded functions, and immutable activity records for live authority.
 - Role and capability resolution controls routes, commands, records, and onboarding curricula.
-- The in-app Knowledge Base is deployed with the application and links guidance to current routes and roles.
+- The standalone operating handbook is packaged with each certified release and maps guidance to current routes, roles, process diagrams and governing references.
 
 ## Warehouse fulfillment contract
 
@@ -66,7 +66,7 @@ Mwell Intra is the shared operating platform for cross-department workflows. War
 
 Every operational release must update:
 
-1. Live Knowledge Base content.
+1. Standalone operating handbook content and diagrams.
 2. User manual.
 3. Training and operations manual.
 4. This technical and functional specification.

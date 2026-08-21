@@ -1,42 +1,40 @@
-# Mwell Intra User Manual and Knowledge Base
+# Mwell Intra Standalone Operating Handbook
 
 **Audience:** All authenticated employees and vendors
 
 **Live app:** https://mwell-intra.vercel.app
 
-**Interactive Knowledge Base:** https://mwell-intra.vercel.app/knowledge
-
 **Reviewed:** August 21, 2026
 
-**Current UAT reference:** `f88c9916c253546ae6960bd19ffd608b99fdd791`
+**Release authority:** Use the commit-bound manifest packaged with this handbook.
 
 **Content owners:** Platform, Procurement, Legal, Warehouse
 
-The live Knowledge Base is the primary manual. Search by task, role, module, acronym, error, or workflow. Documentation is visible to every authenticated user; live operational routes still enforce role-based access.
+This handbook is the complete standalone operating reference for Mwell Intra. Use its contents, full-text search, process diagrams, role procedures, application screenshots, and governed source register without opening a separate help system. Operational routes continue to enforce role-based access.
 
 ## Start Here
 
-1. Sign in with your assigned Mwell identity.
-2. Open **Knowledge Base** from the desktop rail, mobile **More** menu, Home workspace, or command palette.
-3. Search the outcome you need, such as `receive stock`, `PR`, `vendor renewal`, `bins`, or `DOA`.
-4. Filter by role, module, or content type.
-5. Open a procedure or interactive flow. Use live-route links only when your assigned role permits the operation.
+1. Use the handbook search to find an outcome such as `receive stock`, `PR`, `vendor renewal`, `bins`, or `DOA`.
+2. Read the complete process diagram first, including every decision and exception branch.
+3. Confirm your role, authority, required evidence, and handoff before opening the application.
+4. Review the [Process Reference Library](../PROCESS_REFERENCE_LIBRARY.md) when a step is governed by policy, a legal form, a source tracker, or an approved control.
+5. Sign in with your assigned Mwell identity and execute only the procedure permitted by your role.
 
 Never share passwords, tokens, private keys, or confidential documents in support messages or screenshots.
 
 ## Navigation
 
 - **Desktop:** left icon rail; hover an icon for its label.
-- **Mobile:** bottom navigation; additional modules and Knowledge Base are under **More**.
+- **Mobile:** bottom navigation; additional modules are under **More**.
 - **Command palette:** `Ctrl+K` or `Cmd+K` opens task and destination search.
 - **Live badge:** the session is connected to Supabase.
-- **Access denied:** the documentation remains available, but the operational route requires a role review.
+- **Access denied:** stop and request a minimum-role review for the operational route.
 
 ## User Types and Responsibilities
 
 | User type                      | Primary responsibility                                       | Main handoff              |
 | ------------------------------ | ------------------------------------------------------------ | ------------------------- |
-| Core staff                     | Find the correct governed workflow and complete shared tasks | Platform Admin for access |
+| Core staff                     | Use this handbook to find the governed workflow and complete shared tasks | Platform Admin for access |
 | Platform Admin                 | Identities, scoped roles, audit review, DOA access           | Department owner          |
 | Vendor portal                  | Application, evidence, instruments, corrections, renewal     | Legal                     |
 | Warehouse Logistics Supervisor | Receiving, inspection, tagging, putaway                      | Operations / Finance      |
@@ -60,7 +58,7 @@ Never share passwords, tokens, private keys, or confidential documents in suppor
 ## Comprehensive Launch Flow
 
 ```mermaid
-flowchart LR
+flowchart TD
   Staff[Employee or Vendor] --> Auth[Supabase sign-in and role resolution]
   Auth -->|correct access| Work[Assigned workspace]
   Auth -->|incorrect access| Admin[Platform Admin role review]
@@ -200,7 +198,7 @@ Platform Admin or Legal Admin opens **Admin -> Delegation of Authority**. Select
 | Situation                      | Action                                                                                  |
 | ------------------------------ | --------------------------------------------------------------------------------------- |
 | Sign-in remains on login       | Verify identity, request reset, or ask Platform Admin to confirm provisioning           |
-| Access denied                  | Use Knowledge Base; request minimum-role review for the operational route               |
+| Access denied                  | Confirm the role matrix in this handbook; request minimum-role review for the route      |
 | Loading skeleton remains       | Check connection, wait once, refresh, then capture route/time/role                      |
 | Validation prevents submit     | Correct every labeled field and required evidence; do not bypass the gate               |
 | Possible duplicate transaction | Refresh and search the record before retrying                                           |
@@ -236,56 +234,43 @@ Support evidence should contain route, time, role, safe record ID, expected outc
 
 All items below are **proposed**, not current capabilities:
 
-1. Admin article drafting, approval, effective dating, and version history.
+1. Handbook section drafting, approval, effective dating, and version history.
 2. Contextual help launched from operational controls.
 3. Search analytics and unsuccessful-query reporting.
 4. Article feedback and correction requests.
 5. Policy-to-procedure traceability.
 6. Guided sandbox walkthroughs.
 7. Multilingual governed documentation.
-8. Offline Knowledge Base precaching.
+8. Managed offline handbook distribution and update notification.
 9. Role onboarding curricula and completion tracking.
 10. Workflow-linked release notes.
 
-## Documentation Assets
+## Application Screen Reference
 
-The standalone searchable handbook is `docs/manual/index.html`.
+The canonical standalone file is `docs/manual/index.html`. Screens below establish layout and control location; follow the written procedure and current field labels if a released screen has changed.
 
-![Knowledge Base desktop flow](assets/knowledge-base/employee-desktop.png)
+### Sign-in and Workspace
 
-![Knowledge Base vendor mobile](assets/knowledge-base/vendor-mobile.png)
+![Mwell Intra sign-in on desktop](assets/live-20260711/01-sign-in-desktop.png)
 
-![Knowledge Base narrow mobile](assets/knowledge-base/employee-narrow.png)
+![Mwell Intra sign-in on mobile](assets/live-20260711/02-sign-in-mobile.png)
 
-### Audited Interactive Flows
+![Administrator command center](assets/live-20260711/03-command-center-admin-desktop.png)
 
-The Knowledge Base begins with end-to-end workflows. Open a workflow to see its
-complete decision tree before reading individual instructions. Branch labels
-show governed outcomes such as Approve, Reject, Accept, Hold, and Return to
-vendor. Select any node to open its role, screenshot, hotspot instructions,
-expected result, database effect, and recovery path.
+### Procurement
 
-![Workflow-first Knowledge Base home](assets/knowledge-base/knowledge-home-desktop.png)
+![Procurement request list on desktop](assets/live-20260711/05-procurement-list-desktop.png)
 
-![Procure-to-pay flowchart on desktop](assets/knowledge-base/flowchart-procure-to-pay-desktop.png)
+![New procurement request on mobile](assets/live-20260711/06-procurement-request-mobile-320.png)
 
-![Receive-to-putaway flowchart on narrow mobile](assets/knowledge-base/flowchart-receive-to-putaway-mobile.png)
+![Created procurement request on desktop](assets/live-20260711/07-procurement-created-desktop.png)
 
-### Screenshot-Guided Steps
+### Legal and Vendor Accreditation
 
-Every workflow node resolves to reviewed application evidence. Numbered hotspots
-identify the relevant control while preserving the full screen context. Use the
-zoom controls on desktop; on mobile, pan the screenshot and follow the numbered
-instruction below it. The mobile action dock keeps the next governed outcome and
-live-screen link above the bottom navigation.
+![Legal accreditation cases on desktop](assets/live-20260711/08-legal-cases-desktop.png)
 
-![Receiving step workspace on desktop](assets/knowledge-base/step-receiving-desktop.png)
+![Vendor invitation on mobile](assets/live-20260711/09-legal-invite-mobile.png)
 
-![Receiving step workspace on mobile](assets/knowledge-base/step-receiving-mobile.png)
+![Vendor application portal on mobile](assets/live-20260711/10-vendor-portal-mobile.png)
 
-Procedure articles include current screen guides from the live application.
-Warehouse configuration and receiving guides use successful screens only; older
-screens marked as errors remain historical audit evidence and are not training
-instructions.
-
-Historical screenshots remain in `docs/manual/assets/`; screenshots showing retired blockers are evidence only and must not be used as current training guidance.
+Screenshots that show retired errors are historical audit evidence and are intentionally excluded from this handbook.
