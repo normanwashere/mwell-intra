@@ -18,6 +18,7 @@ function markdownFiles(directory) {
   if (!existsSync(absolute)) return [];
   return readdirSync(absolute)
     .filter((name) => name.endsWith(".md"))
+    .sort()
     .map((name) => normalize(path.join(directory, name)));
 }
 
@@ -26,20 +27,24 @@ function filesWithExtension(directory, extension) {
   if (!existsSync(absolute)) return [];
   return readdirSync(absolute)
     .filter((name) => name.endsWith(extension))
+    .sort()
     .map((name) => normalize(path.join(directory, name)));
 }
 
 export function documentationSources() {
-  return [
+  const prioritized = [
     "docs/manual/MWELL_INTRA_USER_MANUAL.md",
     "docs/PROCESS_REFERENCE_LIBRARY.md",
+  ];
+  const remaining = [
     ...markdownFiles("docs"),
     ...markdownFiles("docs/policy"),
     ...markdownFiles("docs/runbooks"),
     ...markdownFiles("docs/releases"),
     ...markdownFiles("docs/import-templates"),
     ...filesWithExtension("docs/import-templates", ".csv"),
-  ].filter(
+  ].sort();
+  return [...prioritized, ...remaining].filter(
     (file, index, files) =>
       files.indexOf(file) === index &&
       file !== "docs/knowledge-base-coverage-report.md",

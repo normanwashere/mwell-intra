@@ -7,6 +7,7 @@ import {
 
 test("builds one self-contained handbook from every canonical source", () => {
   const html = buildDocumentationHtml();
+  const sources = documentationSources();
   assert.match(html, /Mwell Intra Standalone Operating Handbook/);
   assert.match(html, /Search the complete handbook/);
   assert.match(html, /Technical and Functional Specification/);
@@ -21,7 +22,8 @@ test("builds one self-contained handbook from every canonical source", () => {
   assert.doesNotMatch(html, /Knowledge Base/i);
   assert.doesNotMatch(html, /<script\s+src=/i);
   assert.doesNotMatch(html, /<link\s+[^>]*rel=["']stylesheet/i);
-  assert.ok(documentationSources().length >= 15);
+  assert.ok(sources.length >= 15);
+  assert.deepEqual(sources.slice(2), [...sources.slice(2)].sort());
 });
 
 test("embeds local manual screenshots as data URLs", () => {
