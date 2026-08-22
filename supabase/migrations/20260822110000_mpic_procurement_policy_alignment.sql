@@ -1883,6 +1883,14 @@ end;
 $$;
 
 -- Task 9 fix round 1: issue-time authoritative lifecycle initialization.
+create table if not exists procurement.purchase_order_lifecycle_state (
+ purchase_order_id text primary key references procurement.purchase_orders(id) on delete restrict, revision integer not null default 1,
+ sent_at timestamptz, acknowledged_at timestamptz, acknowledgement_due_at timestamptz, acknowledgement_reference text,
+ delivery_notice_at timestamptz, delivery_notice_reference text, quality_recovery_status text not null default 'none', closure_status text not null default 'open',
+ closed_at timestamptz, closed_by uuid references core.profiles(id), closure_reason text, updated_at timestamptz not null default statement_timestamp());
+create table if not exists procurement.purchase_order_lifecycle_events (
+ id uuid primary key default gen_random_uuid(), purchase_order_id text not null references procurement.purchase_orders(id) on delete restrict, event_type text not null,
+ expected_revision integer not null, resulting_revision integer not null, actor_id uuid not null references core.profiles(id), evidence_reference text, payload jsonb not null default '{}'::jsonb, recorded_at timestamptz not null default statement_timestamp());
 create or replace function private.policy_po_issue_lifecycle()
 returns trigger language plpgsql security definer set search_path = '' as $$
 begin
@@ -1944,6 +1952,7 @@ begin
  return jsonb_build_object('closureRequestId',v_request.id,'approved',true);
 end;
 $$;
+create or replace function procurement.close_purchase_order(payload jsonb) returns jsonb language plpgsql security definer set search_path = '' as $$ begin raise exception 'Direct closure is retired; request governed closure'; end; $$;
 revoke all on function procurement.close_purchase_order(jsonb) from public, anon, authenticated, service_role;
 revoke all on function procurement.request_purchase_order_closure(jsonb),procurement.approve_purchase_order_closure(jsonb) from public, anon;
 grant execute on function procurement.request_purchase_order_closure(jsonb),procurement.approve_purchase_order_closure(jsonb) to authenticated;
@@ -2521,6 +2530,198 @@ begin
 end;
 $$;
 
+-- Task 9 terminal override. This is intentionally last: previous additive
+-- compatibility sections define the same RPC names during upgrade.
+create or replace function private.policy_po_lifecycle_transition(p_purchase_order_id text,p_expected_revision integer,p_event_type text,p_reference text,p_payload jsonb default '{}'::jsonb)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_state procurement.purchase_order_lifecycle_state; v_po procurement.purchase_orders; v_event procurement.purchase_order_lifecycle_events; v_request procurement.purchase_order_closure_requests;
+begin
+ if auth.uid() is null then raise exception 'Authenticated actor is required'; end if;
+ select * into v_po from procurement.purchase_orders where id=p_purchase_order_id for update;
+ if not found or v_po.status<>'issued' then raise exception 'An issued purchase order is required'; end if;
+ select * into v_state from procurement.purchase_order_lifecycle_state where purchase_order_id=p_purchase_order_id for update;
+ if not found then raise exception 'PO lifecycle is missing; refresh after governed issue'; end if;
+ if p_expected_revision<>v_state.revision then
+   select * into v_event from procurement.purchase_order_lifecycle_events where purchase_order_id=p_purchase_order_id and event_type=p_event_type and expected_revision=p_expected_revision and actor_id=auth.uid() and evidence_reference is not distinct from nullif(pg_catalog.btrim(p_reference),'');
+   if found then return private.policy_po_lifecycle_projection(p_purchase_order_id)||jsonb_build_object('replayed',true); end if;
+   raise exception 'The PO lifecycle changed; refresh before retrying';
+ end if;
+ if nullif(pg_catalog.btrim(p_reference),'') is null then raise exception 'A governed evidence reference is required'; end if;
+ if p_event_type='vendor_acknowledged' then
+   if core.current_vendor_id()::text is distinct from v_po.core_vendor_id::text then raise exception 'Only the awarded vendor may acknowledge this PO'; end if;
+   update procurement.purchase_order_lifecycle_state set acknowledged_at=statement_timestamp(),acknowledgement_reference=pg_catalog.btrim(p_reference),revision=revision+1,updated_at=statement_timestamp() where purchase_order_id=p_purchase_order_id returning * into v_state;
+ elsif p_event_type='delivery_notice' then
+   if not (core.has_live_cap('procurement','author_po') or core.has_live_cap('procurement','admin')) then raise exception 'Procurement authority is required'; end if;
+   update procurement.purchase_order_lifecycle_state set delivery_notice_at=statement_timestamp(),delivery_notice_reference=pg_catalog.btrim(p_reference),revision=revision+1,updated_at=statement_timestamp() where purchase_order_id=p_purchase_order_id returning * into v_state;
+ elsif p_event_type='closed' then
+   select * into v_request from procurement.purchase_order_closure_requests where id=(p_payload->>'closureRequestId')::uuid for update;
+   if not found or v_request.status<>'approved' or v_request.decided_by<>auth.uid() or v_request.purchase_order_id<>p_purchase_order_id then raise exception 'Approved independent closure request is required'; end if;
+   update procurement.purchase_order_lifecycle_state set revision=revision+1,closed_at=statement_timestamp(),closed_by=auth.uid(),closure_reason=pg_catalog.btrim(p_reference),closure_status='closed',updated_at=statement_timestamp() where purchase_order_id=p_purchase_order_id returning * into v_state;
+   update procurement.purchase_orders set status='closed',updated_at=statement_timestamp() where id=p_purchase_order_id;
+ else raise exception 'Unsupported PO lifecycle event'; end if;
+ insert into procurement.purchase_order_lifecycle_events(purchase_order_id,event_type,expected_revision,resulting_revision,actor_id,evidence_reference,payload) values(p_purchase_order_id,p_event_type,p_expected_revision,v_state.revision,auth.uid(),pg_catalog.btrim(p_reference),coalesce(p_payload,'{}'::jsonb));
+ return private.policy_po_lifecycle_projection(p_purchase_order_id)||jsonb_build_object('replayed',false);
+end;
+$$;
+revoke all on function private.policy_po_lifecycle_transition(text,integer,text,text,jsonb) from public, anon, authenticated;
+
+create or replace function procurement.review_open_purchase_orders(payload jsonb default '{}'::jsonb)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+begin
+ if not (core.has_live_cap('procurement','author_po') or core.has_live_cap('procurement','view_dashboard') or core.has_live_cap('procurement','admin')) then raise exception 'Procurement monitoring authority is required'; end if;
+ return coalesce((select jsonb_agg(jsonb_build_object('id',state.purchase_order_id||':weekly','purchaseOrderId',state.purchase_order_id,'kind',case when state.acknowledged_at is null and statement_timestamp()>=state.sent_at+interval '48 hours' then 'vendor_acknowledgement_overdue' when state.acknowledged_at is null and statement_timestamp()>=state.sent_at+interval '47 hours' then 'vendor_acknowledgement_due_soon' when receipt.rejected_or_quarantined_quantity>0 then 'quality_recovery' when receipt.outstanding_quantity>0 then 'open_receipt' else 'open_po' end,'owner','Procurement','dueAt',state.acknowledgement_due_at,'ageHours',floor(extract(epoch from statement_timestamp()-state.sent_at)/3600),'lastNoticeAt',state.delivery_notice_at,'nextAction',case when state.acknowledged_at is null and statement_timestamp()>=state.sent_at+interval '48 hours' then 'Escalate vendor acknowledgement' when state.acknowledged_at is null and statement_timestamp()>=state.sent_at+interval '47 hours' then 'Prepare vendor acknowledgement escalation' when receipt.rejected_or_quarantined_quantity>0 then 'Maintain vendor notice, RMA, credit, and payment hold' when receipt.outstanding_quantity>0 then 'Confirm delivery and receiving handoff' else 'Request governed closure' end)) from procurement.purchase_order_lifecycle_state state join procurement.purchase_orders po on po.id=state.purchase_order_id left join procurement.v_purchase_order_receipt_status receipt on receipt.purchase_order_id::text=po.id where po.status='issued'),'[]'::jsonb);
+end;
+$$;
+
+create or replace function procurement.close_purchase_order(payload jsonb)
+returns jsonb language plpgsql security definer set search_path = '' as $$ begin raise exception 'Direct closure is retired; request governed closure'; end; $$;
+revoke all on function procurement.close_purchase_order(jsonb) from public, anon, authenticated, service_role;
+revoke all on function procurement.review_open_purchase_orders(jsonb) from public, anon;
+grant execute on function procurement.review_open_purchase_orders(jsonb) to authenticated;
+
+-- Task 9 fix round 1 final definitions. This block deliberately follows the
+-- compatibility definitions above so an applied migration cannot retain an
+-- older direct-close or lazy lifecycle implementation.
+create or replace function private.policy_po_issue_lifecycle()
+returns trigger language plpgsql security definer set search_path = '' as $$
+declare v_actor uuid := coalesce(new.actor_id, auth.uid());
+begin
+  if new.status = 'issued' and old.status is distinct from 'issued' then
+    if new.issued_at is null or v_actor is null then raise exception 'An issued PO requires authoritative issued_at and actor'; end if;
+    insert into procurement.purchase_order_lifecycle_state(purchase_order_id,revision,sent_at,acknowledgement_due_at)
+    values(new.id,2,new.issued_at,new.issued_at + interval '48 hours')
+    on conflict (purchase_order_id) do nothing;
+    insert into procurement.purchase_order_lifecycle_events(purchase_order_id,event_type,expected_revision,resulting_revision,actor_id,evidence_reference,payload)
+    values(new.id,'sent',1,2,v_actor,'issued_at',jsonb_build_object('issuedAt',new.issued_at))
+    on conflict do nothing;
+  end if;
+  return new;
+end;
+$$;
+revoke all on function private.policy_po_issue_lifecycle() from public, anon, authenticated;
+drop trigger if exists purchase_order_issue_lifecycle on procurement.purchase_orders;
+create trigger purchase_order_issue_lifecycle after update of status on procurement.purchase_orders for each row execute function private.policy_po_issue_lifecycle();
+insert into procurement.purchase_order_lifecycle_state(purchase_order_id,revision,sent_at,acknowledgement_due_at)
+select po.id,2,po.issued_at,po.issued_at + interval '48 hours'
+from procurement.purchase_orders po where po.status='issued' and po.issued_at is not null
+on conflict (purchase_order_id) do update set sent_at=excluded.sent_at, acknowledgement_due_at=excluded.acknowledgement_due_at;
+insert into procurement.purchase_order_lifecycle_events(purchase_order_id,event_type,expected_revision,resulting_revision,actor_id,evidence_reference,payload)
+select po.id,'sent',1,2,po.actor_id,'issued_at',jsonb_build_object('issuedAt',po.issued_at,'backfilled',true)
+from procurement.purchase_orders po where po.status='issued' and po.issued_at is not null and po.actor_id is not null
+on conflict do nothing;
+
+create or replace function private.policy_po_lifecycle_transition(p_purchase_order_id text, p_expected_revision integer, p_event_type text, p_reference text, p_payload jsonb default '{}'::jsonb)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_state procurement.purchase_order_lifecycle_state; v_po procurement.purchase_orders; v_event procurement.purchase_order_lifecycle_events; v_request procurement.purchase_order_closure_requests;
+begin
+  if auth.uid() is null then raise exception 'Authenticated actor is required'; end if;
+  select * into v_po from procurement.purchase_orders where id=p_purchase_order_id for update;
+  if not found or v_po.status <> 'issued' then raise exception 'An issued purchase order is required'; end if;
+  select * into v_state from procurement.purchase_order_lifecycle_state where purchase_order_id=p_purchase_order_id for update;
+  if not found then raise exception 'PO lifecycle is missing; refresh after governed issue'; end if;
+  if p_expected_revision <> v_state.revision then
+    select * into v_event from procurement.purchase_order_lifecycle_events where purchase_order_id=p_purchase_order_id and event_type=p_event_type and expected_revision=p_expected_revision and actor_id=auth.uid() and evidence_reference is not distinct from nullif(pg_catalog.btrim(p_reference),'');
+    if found then return private.policy_po_lifecycle_projection(p_purchase_order_id) || jsonb_build_object('replayed',true); end if;
+    raise exception 'The PO lifecycle changed; refresh before retrying';
+  end if;
+  if nullif(pg_catalog.btrim(p_reference),'') is null then raise exception 'A governed evidence reference is required'; end if;
+  if p_event_type='vendor_acknowledged' then
+    if core.current_vendor_id()::text <> v_po.core_vendor_id::text then raise exception 'Only the awarded vendor may acknowledge this PO'; end if;
+    update procurement.purchase_order_lifecycle_state set acknowledged_at=statement_timestamp(),acknowledgement_reference=pg_catalog.btrim(p_reference),revision=revision+1,updated_at=statement_timestamp() where purchase_order_id=p_purchase_order_id returning * into v_state;
+  elsif p_event_type='delivery_notice' then
+    if not (core.has_live_cap('procurement','author_po') or core.has_live_cap('procurement','admin')) then raise exception 'Procurement authority is required'; end if;
+    update procurement.purchase_order_lifecycle_state set delivery_notice_at=statement_timestamp(),delivery_notice_reference=pg_catalog.btrim(p_reference),revision=revision+1,updated_at=statement_timestamp() where purchase_order_id=p_purchase_order_id returning * into v_state;
+  elsif p_event_type='closed' then
+    select * into v_request from procurement.purchase_order_closure_requests where id=(p_payload->>'closureRequestId')::uuid for update;
+    if not found or v_request.status <> 'approved' or v_request.decided_by <> auth.uid() or v_request.purchase_order_id <> p_purchase_order_id then raise exception 'Approved independent closure request is required'; end if;
+    update procurement.purchase_order_lifecycle_state set revision=revision+1,closed_at=statement_timestamp(),closed_by=auth.uid(),closure_reason=pg_catalog.btrim(p_reference),closure_status='closed',updated_at=statement_timestamp() where purchase_order_id=p_purchase_order_id returning * into v_state;
+    update procurement.purchase_orders set status='closed',updated_at=statement_timestamp() where id=p_purchase_order_id;
+  else raise exception 'Unsupported PO lifecycle event'; end if;
+  insert into procurement.purchase_order_lifecycle_events(purchase_order_id,event_type,expected_revision,resulting_revision,actor_id,evidence_reference,payload) values(p_purchase_order_id,p_event_type,p_expected_revision,v_state.revision,auth.uid(),pg_catalog.btrim(p_reference),coalesce(p_payload,'{}'::jsonb));
+  return private.policy_po_lifecycle_projection(p_purchase_order_id) || jsonb_build_object('replayed',false);
+end;
+$$;
+revoke all on function private.policy_po_lifecycle_transition(text,integer,text,text,jsonb) from public, anon, authenticated;
+
+create or replace function procurement.purchase_order_lifecycle(payload jsonb)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_po procurement.purchase_orders;
+begin
+  select * into v_po from procurement.purchase_orders where id=payload->>'purchase_order_id';
+  if not found then raise exception 'Purchase order not found'; end if;
+  if not (core.has_live_cap('procurement','author_po') or core.has_live_cap('procurement','view_dashboard') or core.has_live_cap('procurement','admin') or core.current_vendor_id()::text=v_po.core_vendor_id::text) then raise exception 'Not authorized to view PO lifecycle'; end if;
+  return private.policy_po_lifecycle_projection(v_po.id) || jsonb_build_object('purchaseOrderId',v_po.id,'issuedAt',v_po.issued_at);
+end;
+$$;
+
+create or replace function procurement.review_open_purchase_orders(payload jsonb default '{}'::jsonb)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+begin
+  if not (core.has_live_cap('procurement','author_po') or core.has_live_cap('procurement','view_dashboard') or core.has_live_cap('procurement','admin')) then raise exception 'Procurement monitoring authority is required'; end if;
+  return coalesce((select jsonb_agg(jsonb_build_object('id',state.purchase_order_id||':weekly','purchaseOrderId',state.purchase_order_id,'kind',case when state.acknowledged_at is null and statement_timestamp()>=state.sent_at+interval '48 hours' then 'vendor_acknowledgement_overdue' when state.acknowledged_at is null and statement_timestamp()>=state.sent_at+interval '47 hours' then 'vendor_acknowledgement_due_soon' when receipt.rejected_or_quarantined_quantity>0 then 'quality_recovery' when receipt.outstanding_quantity>0 then 'open_receipt' else 'open_po' end,'owner','Procurement','dueAt',state.acknowledgement_due_at,'ageHours',floor(extract(epoch from statement_timestamp()-state.sent_at)/3600),'lastNoticeAt',state.delivery_notice_at,'nextAction',case when state.acknowledged_at is null and statement_timestamp()>=state.sent_at+interval '48 hours' then 'Escalate vendor acknowledgement' when state.acknowledged_at is null and statement_timestamp()>=state.sent_at+interval '47 hours' then 'Prepare vendor acknowledgement escalation' when receipt.rejected_or_quarantined_quantity>0 then 'Maintain vendor notice, RMA, credit, and payment hold' when receipt.outstanding_quantity>0 then 'Confirm delivery and receiving handoff' else 'Request governed closure' end)) from procurement.purchase_order_lifecycle_state state join procurement.purchase_orders po on po.id=state.purchase_order_id left join procurement.v_purchase_order_receipt_status receipt on receipt.purchase_order_id::text=po.id where po.status='issued'),'[]'::jsonb);
+end;
+$$;
+
+create or replace function procurement.request_purchase_order_closure(payload jsonb)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_state procurement.purchase_order_lifecycle_state; v_request procurement.purchase_order_closure_requests; v_reason text:=nullif(pg_catalog.btrim(payload->>'closure_reason'),''); v_expected integer;
+begin
+  if auth.uid() is null or not (core.has_live_cap('procurement','author_po') or core.has_live_cap('procurement','admin')) then raise exception 'Procurement closure authority is required'; end if;
+  begin v_expected := (payload->>'expected_revision')::integer; exception when others then raise exception 'expected_revision is required'; end;
+  if v_reason is null then raise exception 'A governed closure reason is required'; end if;
+  select * into v_state from procurement.purchase_order_lifecycle_state where purchase_order_id=payload->>'purchase_order_id' for update;
+  if not found or v_state.revision<>v_expected then raise exception 'The PO lifecycle changed; refresh before closure'; end if;
+  select * into v_request from procurement.purchase_order_closure_requests where purchase_order_id=payload->>'purchase_order_id' and expected_revision=v_expected and requested_by=auth.uid() order by requested_at desc limit 1 for update;
+  if found then
+    if v_request.closure_reason <> v_reason then raise exception 'Closure reason changed; refresh and submit a new governed request'; end if;
+    return to_jsonb(v_request)||jsonb_build_object('replayed',true);
+  end if;
+  insert into procurement.purchase_order_closure_requests(purchase_order_id,expected_revision,closure_reason,requested_by) values(payload->>'purchase_order_id',v_expected,v_reason,auth.uid()) returning * into v_request;
+  return to_jsonb(v_request)||jsonb_build_object('replayed',false);
+end;
+$$;
+
+create or replace function procurement.approve_purchase_order_closure(payload jsonb)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_request procurement.purchase_order_closure_requests; v_po procurement.purchase_orders; v_state procurement.purchase_order_lifecycle_state; v_terminal jsonb;
+begin
+  if auth.uid() is null or not (core.has_live_cap('procurement','final_approve_po') or core.has_live_cap('procurement','admin')) then raise exception 'Independent PO closure approver authority is required'; end if;
+  select * into v_request from procurement.purchase_order_closure_requests where id=(payload->>'closure_request_id')::uuid for update;
+  if not found then raise exception 'Closure request not found'; end if;
+  if v_request.status='approved' and v_request.decided_by=auth.uid() then return jsonb_build_object('closureRequestId',v_request.id,'approved',true,'replayed',true); end if;
+  if v_request.status<>'pending' then raise exception 'A pending closure request is required'; end if;
+  if v_request.requested_by=auth.uid() then raise exception 'Closure maker and checker must be different actors'; end if;
+  select * into v_po from procurement.purchase_orders where id=v_request.purchase_order_id for update;
+  select * into v_state from procurement.purchase_order_lifecycle_state where purchase_order_id=v_po.id for update;
+  if not found or v_state.revision<>v_request.expected_revision then raise exception 'The PO lifecycle changed; refresh before closure approval'; end if;
+  if exists(select 1 from procurement.v_purchase_order_receipt_status r where r.purchase_order_id::text=v_po.id and (coalesce(r.outstanding_quantity,0)>0 or coalesce(r.rejected_or_quarantined_quantity,0)>0)) or not exists(select 1 from procurement.acceptance_packs p where p.purchase_order_id=v_po.id and p.status='accepted' and coalesce(jsonb_array_length(p.exceptions),0)=0) or v_state.quality_recovery_status not in ('none','resolved') or exists(select 1 from procurement.payment_readiness_packs p where p.purchase_order_id=v_po.id and p.status not in ('released','superseded')) then raise exception 'Closure is blocked by receipt, acceptance, quality, quarantine, replacement, RMA, credit, payment hold, or unpaid Finance state'; end if;
+  update procurement.purchase_order_closure_requests set status='approved',decided_by=auth.uid(),decided_at=statement_timestamp() where id=v_request.id;
+  v_terminal:=private.policy_po_lifecycle_transition(v_po.id,v_state.revision,'closed',v_request.closure_reason,jsonb_build_object('closureRequestId',v_request.id));
+  return v_terminal || jsonb_build_object('closureRequestId',v_request.id,'approved',true,'replayed',false);
+end;
+$$;
+
+create or replace function procurement.close_purchase_order(payload jsonb)
+returns jsonb language plpgsql security definer set search_path = '' as $$ begin raise exception 'Direct closure is retired; request governed closure'; end; $$;
+revoke all on function procurement.close_purchase_order(jsonb) from public, anon, authenticated, service_role;
+revoke all on function procurement.purchase_order_lifecycle(jsonb), procurement.review_open_purchase_orders(jsonb), procurement.request_purchase_order_closure(jsonb), procurement.approve_purchase_order_closure(jsonb) from public, anon;
+grant execute on function procurement.purchase_order_lifecycle(jsonb), procurement.review_open_purchase_orders(jsonb), procurement.request_purchase_order_closure(jsonb), procurement.approve_purchase_order_closure(jsonb) to authenticated;
+
+create or replace function procurement.commitment_readiness(payload jsonb)
+returns jsonb language plpgsql volatile security definer set search_path = '' as $$
+declare v_requester_id uuid; v_readiness jsonb; v_requirement jsonb;
+begin
+  select requester_id into v_requester_id from procurement.requests where id=payload->>'request_id';
+  if v_requester_id is null then raise exception 'Procurement request not found'; end if;
+  if auth.uid()<>v_requester_id and not core.has_cap('procurement','view_dashboard') and not core.has_cap('procurement','author_po') and not core.has_cap('procurement','approve_award') then raise exception 'Not authorized to view commitment readiness'; end if;
+  v_readiness:=private.procurement_commitment_readiness(payload->>'request_id',nullif(payload->>'vendor_id','')::uuid,coalesce(nullif(payload->>'phase',''),'issue'));
+  v_requirement:=coalesce((select jsonb_agg(jsonb_build_object('kind',coalesce(item->>'controlCode','required_control'),'label',coalesce(item->>'controlCode','Required control'),'status',case when item->>'reviewStatus'='approved' then 'present' else 'missing' end,'basis',coalesce(v_readiness->>'route','policy route'),'source','Governed policy evidence','owner','Procurement','recovery',case when item->>'reviewStatus'='approved' then 'No action required.' else 'Provide current approved evidence before issue.' end)) from jsonb_array_elements(coalesce(v_readiness->'evidence','[]'::jsonb)) item),'[]'::jsonb) || coalesce((select jsonb_agg(jsonb_build_object('kind','blocker:'||replace(value,' ','_'),'label',value,'status','missing','basis',coalesce(v_readiness->>'route','policy route'),'source','Server commitment predicate','owner','Procurement','recovery','Resolve this server-derived blocker before issue.')) from jsonb_array_elements_text(coalesce(v_readiness->'blockers','[]'::jsonb)) value),'[]'::jsonb);
+  return v_readiness || jsonb_build_object('requirements',v_requirement,'canRecordAcceptance',auth.uid()=v_requester_id or exists(select 1 from procurement.acceptance_reviewer_assignments assignment where assignment.request_id=payload->>'request_id' and assignment.reviewer_id=auth.uid() and assignment.superseded_at is null));
+end;
+$$;
+revoke all on function procurement.commitment_readiness(jsonb) from public, anon;
+grant execute on function procurement.commitment_readiness(jsonb) to authenticated, service_role;
+
 create or replace function private.policy_exception_award_guard()
 returns trigger language plpgsql security definer set search_path = '' as $$
 declare v_request procurement.requests; v_profile procurement.policy_profiles; v_blockers text[];
@@ -2872,6 +3073,53 @@ begin
   return to_jsonb(v_pack);
 end;
 $$;
+
+-- Task 9 terminal override: must remain at physical migration end.
+create or replace function private.policy_po_lifecycle_transition(p_purchase_order_id text,p_expected_revision integer,p_event_type text,p_reference text,p_payload jsonb default '{}'::jsonb)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_state procurement.purchase_order_lifecycle_state; v_po procurement.purchase_orders; v_event procurement.purchase_order_lifecycle_events; v_request procurement.purchase_order_closure_requests;
+begin
+ if auth.uid() is null then raise exception 'Authenticated actor is required'; end if;
+ select * into v_po from procurement.purchase_orders where id=p_purchase_order_id for update;
+ if not found or v_po.status<>'issued' then raise exception 'An issued purchase order is required'; end if;
+ select * into v_state from procurement.purchase_order_lifecycle_state where purchase_order_id=p_purchase_order_id for update;
+ if not found then raise exception 'PO lifecycle is missing; refresh after governed issue'; end if;
+ if p_expected_revision<>v_state.revision then
+   select * into v_event from procurement.purchase_order_lifecycle_events where purchase_order_id=p_purchase_order_id and event_type=p_event_type and expected_revision=p_expected_revision and actor_id=auth.uid() and evidence_reference is not distinct from nullif(pg_catalog.btrim(p_reference),'');
+   if found then return private.policy_po_lifecycle_projection(p_purchase_order_id)||jsonb_build_object('replayed',true); end if;
+   raise exception 'The PO lifecycle changed; refresh before retrying';
+ end if;
+ if nullif(pg_catalog.btrim(p_reference),'') is null then raise exception 'A governed evidence reference is required'; end if;
+ if p_event_type='vendor_acknowledged' then
+   if core.current_vendor_id()::text is distinct from v_po.core_vendor_id::text then raise exception 'Only the awarded vendor may acknowledge this PO'; end if;
+   update procurement.purchase_order_lifecycle_state set acknowledged_at=statement_timestamp(),acknowledgement_reference=pg_catalog.btrim(p_reference),revision=revision+1,updated_at=statement_timestamp() where purchase_order_id=p_purchase_order_id returning * into v_state;
+ elsif p_event_type='delivery_notice' then
+   if not (core.has_live_cap('procurement','author_po') or core.has_live_cap('procurement','admin')) then raise exception 'Procurement authority is required'; end if;
+   update procurement.purchase_order_lifecycle_state set delivery_notice_at=statement_timestamp(),delivery_notice_reference=pg_catalog.btrim(p_reference),revision=revision+1,updated_at=statement_timestamp() where purchase_order_id=p_purchase_order_id returning * into v_state;
+ elsif p_event_type='closed' then
+   select * into v_request from procurement.purchase_order_closure_requests where id=(p_payload->>'closureRequestId')::uuid for update;
+   if not found or v_request.status<>'approved' or v_request.decided_by<>auth.uid() or v_request.purchase_order_id<>p_purchase_order_id then raise exception 'Approved independent closure request is required'; end if;
+   update procurement.purchase_order_lifecycle_state set revision=revision+1,closed_at=statement_timestamp(),closed_by=auth.uid(),closure_reason=pg_catalog.btrim(p_reference),closure_status='closed',updated_at=statement_timestamp() where purchase_order_id=p_purchase_order_id returning * into v_state;
+   update procurement.purchase_orders set status='closed',updated_at=statement_timestamp() where id=p_purchase_order_id;
+ else raise exception 'Unsupported PO lifecycle event'; end if;
+ insert into procurement.purchase_order_lifecycle_events(purchase_order_id,event_type,expected_revision,resulting_revision,actor_id,evidence_reference,payload) values(p_purchase_order_id,p_event_type,p_expected_revision,v_state.revision,auth.uid(),pg_catalog.btrim(p_reference),coalesce(p_payload,'{}'::jsonb));
+ return private.policy_po_lifecycle_projection(p_purchase_order_id)||jsonb_build_object('replayed',false);
+end;
+$$;
+revoke all on function private.policy_po_lifecycle_transition(text,integer,text,text,jsonb) from public, anon, authenticated;
+
+create or replace function procurement.review_open_purchase_orders(payload jsonb default '{}'::jsonb)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+begin
+ if not (core.has_live_cap('procurement','author_po') or core.has_live_cap('procurement','view_dashboard') or core.has_live_cap('procurement','admin')) then raise exception 'Procurement monitoring authority is required'; end if;
+ return coalesce((select jsonb_agg(jsonb_build_object('id',state.purchase_order_id||':weekly','purchaseOrderId',state.purchase_order_id,'kind',case when state.acknowledged_at is null and statement_timestamp()>=state.sent_at+interval '48 hours' then 'vendor_acknowledgement_overdue' when state.acknowledged_at is null and statement_timestamp()>=state.sent_at+interval '47 hours' then 'vendor_acknowledgement_due_soon' when receipt.rejected_or_quarantined_quantity>0 then 'quality_recovery' when receipt.outstanding_quantity>0 then 'open_receipt' else 'open_po' end,'owner','Procurement','dueAt',state.acknowledgement_due_at,'ageHours',floor(extract(epoch from statement_timestamp()-state.sent_at)/3600),'lastNoticeAt',state.delivery_notice_at,'nextAction',case when state.acknowledged_at is null and statement_timestamp()>=state.sent_at+interval '48 hours' then 'Escalate vendor acknowledgement' when state.acknowledged_at is null and statement_timestamp()>=state.sent_at+interval '47 hours' then 'Prepare vendor acknowledgement escalation' when receipt.rejected_or_quarantined_quantity>0 then 'Maintain vendor notice, RMA, credit, and payment hold' when receipt.outstanding_quantity>0 then 'Confirm delivery and receiving handoff' else 'Request governed closure' end)) from procurement.purchase_order_lifecycle_state state join procurement.purchase_orders po on po.id=state.purchase_order_id left join procurement.v_purchase_order_receipt_status receipt on receipt.purchase_order_id::text=po.id where po.status='issued'),'[]'::jsonb);
+end;
+$$;
+create or replace function procurement.close_purchase_order(payload jsonb)
+returns jsonb language plpgsql security definer set search_path = '' as $$ begin raise exception 'Direct closure is retired; request governed closure'; end; $$;
+revoke all on function procurement.close_purchase_order(jsonb) from public, anon, authenticated, service_role;
+revoke all on function procurement.review_open_purchase_orders(jsonb) from public, anon;
+grant execute on function procurement.review_open_purchase_orders(jsonb) to authenticated;
 
 create or replace function procurement.exception_workspace(payload jsonb)
 returns jsonb language plpgsql security definer set search_path = '' as $$
@@ -3403,7 +3651,7 @@ begin
   end if;
   if nullif(pg_catalog.btrim(p_reference),'') is null then raise exception 'A governed evidence reference is required'; end if;
   if p_event_type='vendor_acknowledged' then
-    if core.current_vendor_id()::text <> v_po.core_vendor_id::text then raise exception 'Only the awarded vendor may acknowledge this PO'; end if;
+    if core.current_vendor_id()::text is distinct from v_po.core_vendor_id::text then raise exception 'Only the awarded vendor may acknowledge this PO'; end if;
     update procurement.purchase_order_lifecycle_state set acknowledged_at=statement_timestamp(), acknowledgement_reference=pg_catalog.btrim(p_reference), revision=revision+1, updated_at=statement_timestamp() where purchase_order_id=p_purchase_order_id returning * into v_state;
   elsif p_event_type='delivery_notice' then
     if not (core.has_live_cap('procurement','author_po') or core.has_live_cap('procurement','admin')) then raise exception 'Procurement authority is required'; end if;
@@ -3581,6 +3829,54 @@ begin
   return to_jsonb(v_decision) || jsonb_build_object('route', v_route);
 end;
 $$;
+
+-- Task 9 terminal override: this location is after all lifecycle compatibility
+-- definitions; do not move it above Task 9's additive tables and RPCs.
+create or replace function private.policy_po_lifecycle_transition(p_purchase_order_id text,p_expected_revision integer,p_event_type text,p_reference text,p_payload jsonb default '{}'::jsonb)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_state procurement.purchase_order_lifecycle_state; v_po procurement.purchase_orders; v_event procurement.purchase_order_lifecycle_events; v_request procurement.purchase_order_closure_requests;
+begin
+ if auth.uid() is null then raise exception 'Authenticated actor is required'; end if;
+ select * into v_po from procurement.purchase_orders where id=p_purchase_order_id for update;
+ if not found or v_po.status<>'issued' then raise exception 'An issued purchase order is required'; end if;
+ select * into v_state from procurement.purchase_order_lifecycle_state where purchase_order_id=p_purchase_order_id for update;
+ if not found then raise exception 'PO lifecycle is missing; refresh after governed issue'; end if;
+ if p_expected_revision<>v_state.revision then
+   select * into v_event from procurement.purchase_order_lifecycle_events where purchase_order_id=p_purchase_order_id and event_type=p_event_type and expected_revision=p_expected_revision and actor_id=auth.uid() and evidence_reference is not distinct from nullif(pg_catalog.btrim(p_reference),'');
+   if found then return private.policy_po_lifecycle_projection(p_purchase_order_id)||jsonb_build_object('replayed',true); end if;
+   raise exception 'The PO lifecycle changed; refresh before retrying';
+ end if;
+ if nullif(pg_catalog.btrim(p_reference),'') is null then raise exception 'A governed evidence reference is required'; end if;
+ if p_event_type='vendor_acknowledged' then
+   if core.current_vendor_id()::text is distinct from v_po.core_vendor_id::text then raise exception 'Only the awarded vendor may acknowledge this PO'; end if;
+   update procurement.purchase_order_lifecycle_state set acknowledged_at=statement_timestamp(),acknowledgement_reference=pg_catalog.btrim(p_reference),revision=revision+1,updated_at=statement_timestamp() where purchase_order_id=p_purchase_order_id returning * into v_state;
+ elsif p_event_type='delivery_notice' then
+   if not (core.has_live_cap('procurement','author_po') or core.has_live_cap('procurement','admin')) then raise exception 'Procurement authority is required'; end if;
+   update procurement.purchase_order_lifecycle_state set delivery_notice_at=statement_timestamp(),delivery_notice_reference=pg_catalog.btrim(p_reference),revision=revision+1,updated_at=statement_timestamp() where purchase_order_id=p_purchase_order_id returning * into v_state;
+ elsif p_event_type='closed' then
+   select * into v_request from procurement.purchase_order_closure_requests where id=(p_payload->>'closureRequestId')::uuid for update;
+   if not found or v_request.status<>'approved' or v_request.decided_by<>auth.uid() or v_request.purchase_order_id<>p_purchase_order_id then raise exception 'Approved independent closure request is required'; end if;
+   update procurement.purchase_order_lifecycle_state set revision=revision+1,closed_at=statement_timestamp(),closed_by=auth.uid(),closure_reason=pg_catalog.btrim(p_reference),closure_status='closed',updated_at=statement_timestamp() where purchase_order_id=p_purchase_order_id returning * into v_state;
+   update procurement.purchase_orders set status='closed',updated_at=statement_timestamp() where id=p_purchase_order_id;
+ else raise exception 'Unsupported PO lifecycle event'; end if;
+ insert into procurement.purchase_order_lifecycle_events(purchase_order_id,event_type,expected_revision,resulting_revision,actor_id,evidence_reference,payload) values(p_purchase_order_id,p_event_type,p_expected_revision,v_state.revision,auth.uid(),pg_catalog.btrim(p_reference),coalesce(p_payload,'{}'::jsonb));
+ return private.policy_po_lifecycle_projection(p_purchase_order_id)||jsonb_build_object('replayed',false);
+end;
+$$;
+revoke all on function private.policy_po_lifecycle_transition(text,integer,text,text,jsonb) from public, anon, authenticated;
+
+create or replace function procurement.review_open_purchase_orders(payload jsonb default '{}'::jsonb)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+begin
+ if not (core.has_live_cap('procurement','author_po') or core.has_live_cap('procurement','view_dashboard') or core.has_live_cap('procurement','admin')) then raise exception 'Procurement monitoring authority is required'; end if;
+ return coalesce((select jsonb_agg(jsonb_build_object('id',state.purchase_order_id||':weekly','purchaseOrderId',state.purchase_order_id,'kind',case when state.acknowledged_at is null and statement_timestamp()>=state.sent_at+interval '48 hours' then 'vendor_acknowledgement_overdue' when state.acknowledged_at is null and statement_timestamp()>=state.sent_at+interval '47 hours' then 'vendor_acknowledgement_due_soon' when receipt.rejected_or_quarantined_quantity>0 then 'quality_recovery' when receipt.outstanding_quantity>0 then 'open_receipt' else 'open_po' end,'owner','Procurement','dueAt',state.acknowledgement_due_at,'ageHours',floor(extract(epoch from statement_timestamp()-state.sent_at)/3600),'lastNoticeAt',state.delivery_notice_at,'nextAction',case when state.acknowledged_at is null and statement_timestamp()>=state.sent_at+interval '48 hours' then 'Escalate vendor acknowledgement' when state.acknowledged_at is null and statement_timestamp()>=state.sent_at+interval '47 hours' then 'Prepare vendor acknowledgement escalation' when receipt.rejected_or_quarantined_quantity>0 then 'Maintain vendor notice, RMA, credit, and payment hold' when receipt.outstanding_quantity>0 then 'Confirm delivery and receiving handoff' else 'Request governed closure' end)) from procurement.purchase_order_lifecycle_state state join procurement.purchase_orders po on po.id=state.purchase_order_id left join procurement.v_purchase_order_receipt_status receipt on receipt.purchase_order_id::text=po.id where po.status='issued'),'[]'::jsonb);
+end;
+$$;
+create or replace function procurement.close_purchase_order(payload jsonb)
+returns jsonb language plpgsql security definer set search_path = '' as $$ begin raise exception 'Direct closure is retired; request governed closure'; end; $$;
+revoke all on function procurement.close_purchase_order(jsonb) from public, anon, authenticated, service_role;
+revoke all on function procurement.review_open_purchase_orders(jsonb) from public, anon;
+grant execute on function procurement.review_open_purchase_orders(jsonb) to authenticated;
 
 create or replace function procurement.review_policy_exception_pack(payload jsonb)
 returns jsonb language plpgsql security definer set search_path = '' as $$

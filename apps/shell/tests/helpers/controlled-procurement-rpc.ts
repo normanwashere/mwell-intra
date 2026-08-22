@@ -3,7 +3,7 @@ import type { BrowserContext, Route } from '@playwright/test';
 export const CONTROLLED_SUPABASE_URL = 'http://127.0.0.1:54321';
 export const CONTROLLED_ANON_KEY = 'controlled-rpc-anon-key';
 
-type ActorKey = 'procurement' | 'admin' | 'legal' | 'operations' | 'deptHead' | 'finance' | 'financeNoCapability' | 'unrelated' | 'exceptionReviewer' | 'exceptionFinance' | 'exceptionDoa';
+type ActorKey = 'procurement' | 'vendor' | 'admin' | 'legal' | 'operations' | 'deptHead' | 'finance' | 'financeNoCapability' | 'unrelated' | 'exceptionReviewer' | 'exceptionFinance' | 'exceptionDoa';
 type Actor = {
   id: string;
   email: string;
@@ -11,6 +11,8 @@ type Actor = {
   title: string;
   roles: Record<string, string[]>;
   capabilities: Record<string, string[]>;
+  kind?: 'employee' | 'vendor';
+  vendorId?: string;
 };
 
 const ACTORS: Record<ActorKey, Actor> = {
@@ -24,6 +26,10 @@ const ACTORS: Record<ActorKey, Actor> = {
       core: ['view_directory', 'view_vendors', 'view_documents', 'view_approvals'],
       procurement: ['view_dashboard', 'create_request', 'manage_rfp', 'manage_request_collaborators', 'cancel_request', 'author_po', 'manage_vendors', 'approve_request'],
     },
+  },
+  vendor: {
+    id: 'controlled-awarded-vendor', email: 'vendor.controlled@mwell.test', name: 'Controlled Awarded Vendor', title: 'Vendor Contact', kind: 'vendor', vendorId: 'vendor-1',
+    roles: { core: ['vendor_portal'] }, capabilities: { core: ['vendor_portal'] },
   },
   admin: {
     id: 'controlled-admin',
@@ -175,7 +181,7 @@ function userFor(actor: Actor) {
     role: 'authenticated',
     email: actor.email,
     email_confirmed_at: '2026-08-22T00:00:00.000Z',
-    app_metadata: { roles: actor.roles, kind: 'employee' },
+    app_metadata: { roles: actor.roles, kind: actor.kind ?? 'employee', vendorId: actor.vendorId },
     user_metadata: { name: actor.name, title: actor.title },
     created_at: '2026-08-22T00:00:00.000Z',
     updated_at: '2026-08-22T00:00:00.000Z',
@@ -245,6 +251,9 @@ export class ControlledProcurementRpcFixture {
     failWorkspaceOnce: false,
     failSubmitOnce: false,
   };
+  purchaseOrder: Record<string, unknown> | null = null;
+  lifecycle: Record<string, unknown> | null = null;
+  monitoring: Array<Record<string, unknown>> = [];
   private readonly varianceAssignments = [
     { actorId: ACTORS.deptHead.id, stage: 'department_head' as const, assignmentId: 'controlled-department_head-assignment' },
     { actorId: ACTORS.finance.id, stage: 'finance' as const, assignmentId: 'controlled-finance-assignment' },
@@ -418,6 +427,12 @@ export class ControlledProcurementRpcFixture {
       failWorkspaceOnce: false,
       failSubmitOnce: false,
     };
+  }
+
+  prepareTask9PurchaseOrder() {
+    this.purchaseOrder = { id: 'controlled-po-task-9', po_number: 'PO-CONTROLLED-009', core_vendor_id: 'vendor-1', vendor_name: 'Acme Medical Supplies, Inc.', status: 'issued', total: 1000, lines: [{ id: 'line-1', description: 'Controlled clinical supply', quantity: 1, receivedQuantity: 0 }], created_at: '2026-08-22T00:00:00.000Z', updated_at: '2026-08-22T00:00:00.000Z' };
+    this.lifecycle = { purchaseOrderId: 'controlled-po-task-9', revision: 2, issuedAt: '2026-08-22T00:00:00.000Z', sentAt: '2026-08-22T00:00:00.000Z', acknowledgementDueAt: '2026-08-24T00:00:00.000Z', acknowledgementStatus: 'pending', deliveryNoticeStatus: 'pending', qualityRecoveryStatus: 'payment_hold', closureStatus: 'blocked' };
+    this.monitoring = [{ id: 'controlled-po-task-9:weekly', purchaseOrderId: 'controlled-po-task-9', kind: 'quality_recovery', owner: 'Procurement', ageHours: 52, dueAt: '2026-08-24T00:00:00.000Z', nextAction: 'Maintain vendor notice, RMA, credit, and payment hold' }];
   }
 
   failNextExceptionSubmit() {
@@ -639,7 +654,8 @@ export class ControlledProcurementRpcFixture {
       return rows.filter((row) => String(row.id) === id.slice(3));
     };
     if (table === 'requests') return filtered([{ ...this.request }]);
-    if (table === 'approval_steps' || table === 'purchase_orders' || table === 'acceptance_packs') return [];
+    if (table === 'purchase_orders') return this.purchaseOrder ? filtered([{ ...this.purchaseOrder }]) : [];
+    if (table === 'approval_steps' || table === 'acceptance_packs') return [];
     if (table === 'vendors') return [
       { id: 'vendor-1', legal_name: 'Acme Medical Supplies, Inc.', accreditation_status: 'approved' },
       { id: 'vendor-2', legal_name: 'North Star Logistics Corp.', accreditation_status: 'approved' },
@@ -649,7 +665,7 @@ export class ControlledProcurementRpcFixture {
     if (table === 'policy_profiles') return filtered(this.profileRows());
     if (table === 'policy_conflicts') return this.conflicts.map((conflict) => ({ ...conflict }));
     if (table === 'policy_profile_events') return this.events.map((event) => ({ ...event }));
-    if (table === 'profiles') return Object.values(ACTORS).map((actor) => ({ id: actor.id, full_name: actor.name, title: actor.title, kind: 'employee', status: 'active' }));
+    if (table === 'profiles') return Object.values(ACTORS).map((actor) => ({ id: actor.id, full_name: actor.name, title: actor.title, kind: actor.kind ?? 'employee', vendor_id: actor.vendorId, status: 'active' }));
     if (table === 'doa_matrices') return [{ id: 'controlled-doa', department: 'Operations', version: 'OPS-2026.08', status: 'active', active: true, effective_at: '2026-08-01', source_document: 'Controlled fixture' }];
     if (table === 'department_request_options') return [{ department_code: 'Operations', department_name: 'Operations', cost_center_code: 'OPS-001', cost_center_name: 'Operations' }];
     return [];
@@ -663,6 +679,20 @@ export class ControlledProcurementRpcFixture {
       return response(route, { curricula: [], progress: [], certifications: [], lockedCapabilities: [], refreshedAt: '2026-08-22T00:00:00.000Z' });
     }
     if (schema !== 'procurement') return response(route, null);
+
+    if (name === 'purchase_order_lifecycle') return this.lifecycle ? response(route, { ...this.lifecycle }) : failure(route, 'PO lifecycle not found', 404);
+    if (name === 'review_open_purchase_orders') return actor.id === ACTORS.procurement.id ? response(route, this.monitoring) : failure(route, 'Procurement monitoring authority is required', 403);
+    if (name === 'acknowledge_purchase_order') {
+      if (actor.id !== ACTORS.vendor.id || payload.purchase_order_id !== this.purchaseOrder?.id || Number(payload.expected_revision) !== Number(this.lifecycle?.revision)) return failure(route, 'Only the awarded vendor may acknowledge this PO', 403);
+      this.lifecycle = { ...this.lifecycle!, revision: Number(this.lifecycle!.revision) + 1, acknowledgedAt: '2026-08-23T00:00:00.000Z', acknowledgementStatus: 'acknowledged' };
+      return response(route, { ...this.lifecycle, replayed: false });
+    }
+    if (name === 'record_vendor_delivery_notice') {
+      if (actor.id !== ACTORS.procurement.id || Number(payload.expected_revision) !== Number(this.lifecycle?.revision)) return failure(route, 'Procurement authority is required', 403);
+      this.lifecycle = { ...this.lifecycle!, revision: Number(this.lifecycle!.revision) + 1, deliveryNoticeStatus: 'recorded' };
+      this.monitoring = [{ ...this.monitoring[0]!, kind: 'quality_recovery', nextAction: 'Maintain vendor notice, RMA, credit, and payment hold' }];
+      return response(route, { ...this.lifecycle, replayed: false });
+    }
 
     if (name === 'exception_workspace' || name === 'submit_policy_exception_pack' || name === 'review_policy_exception_pack') {
       return this.handleExceptionRpc(route, actor, name, payload);

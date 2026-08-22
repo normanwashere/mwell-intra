@@ -26,6 +26,7 @@ import type {
   PaymentReadinessPack,
   PaymentReadinessStalenessEvent,
   PurchaseOrderLifecycle,
+  OpenPurchaseOrderMonitoringItem,
   ProcurementRequest,
   ProcurementRequestLine,
   ProcurementRoute,
@@ -389,6 +390,8 @@ function mapPurchaseOrder(
   paymentReadiness?: PaymentReadinessPack,
   commitmentReadiness?: PurchaseOrder['commitmentReadiness'],
   paymentReadinessStalenessEvents: PaymentReadinessStalenessEvent[] = [],
+  lifecycle?: PurchaseOrderLifecycle,
+  openMonitoringItems: OpenPurchaseOrderMonitoringItem[] = [],
 ): PurchaseOrder {
   return {
     id: row.id,
@@ -414,6 +417,8 @@ function mapPurchaseOrder(
     acceptancePacks,
     paymentReadiness,
     paymentReadinessStalenessEvents,
+    lifecycle,
+    openMonitoringItems,
     total: Number(row.total ?? 0),
   } as PurchaseOrder;
 }
@@ -430,6 +435,19 @@ function mapReceiptStatus(row: LiveRow): PurchaseOrderReceiptStatus & { purchase
     lastReceiptAt: row.last_received_at ?? undefined,
     acceptedLines: Array.isArray(row.accepted_lines) ? row.accepted_lines : [],
   } as unknown as PurchaseOrderReceiptStatus & { purchaseOrderId: string };
+}
+
+function mapLifecycle(row: LiveRow): PurchaseOrderLifecycle & { purchaseOrderId: string } {
+  return {
+    purchaseOrderId: String(row.purchase_order_id ?? row.purchaseOrderId),
+    revision: Number(row.revision), issuedAt: row.issued_at ?? row.issuedAt,
+    sentAt: row.sent_at ?? row.sentAt, acknowledgedAt: row.acknowledged_at ?? row.acknowledgedAt,
+    acknowledgementDueAt: row.acknowledgement_due_at ?? row.acknowledgementDueAt,
+    acknowledgementStatus: row.acknowledgement_status ?? row.acknowledgementStatus ?? 'pending',
+    deliveryNoticeStatus: row.delivery_notice_status ?? row.deliveryNoticeStatus ?? 'pending',
+    qualityRecoveryStatus: row.quality_recovery_status ?? row.qualityRecoveryStatus ?? 'none',
+    closureStatus: row.closure_status ?? row.closureStatus ?? 'open',
+  } as PurchaseOrderLifecycle & { purchaseOrderId: string };
 }
 
 // ---------------------------------------------------------------------------
@@ -1173,6 +1191,8 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
       }
     >
   >([]);
+  const [liveLifecycle, setLiveLifecycle] = useState<Array<PurchaseOrderLifecycle & { purchaseOrderId: string }>>([]);
+  const [liveMonitoring, setLiveMonitoring] = useState<OpenPurchaseOrderMonitoringItem[]>([]);
   const [liveCommitmentLoading, setLiveCommitmentLoading] = useState(Boolean(live));
   const refreshCommitmentReadiness = useCallback(async () => {
     if (!live) {
@@ -1210,6 +1230,14 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
   useEffect(() => {
     void refreshCommitmentReadiness();
   }, [refreshCommitmentReadiness]);
+  const refreshLifecycle = useCallback(async () => {
+    if (!live) { setLiveLifecycle([]); setLiveMonitoring([]); return; }
+    const lifecycle = await Promise.all(liveBaseRows.filter((row) => row.status === 'issued').map(async (row) => mapLifecycle({ ...(await liveRpc<LiveRow>(live, 'procurement', 'purchase_order_lifecycle', { purchase_order_id: row.id })), purchase_order_id: row.id })));
+    setLiveLifecycle(lifecycle);
+    const monitoring = await liveRpc<OpenPurchaseOrderMonitoringItem[]>(live, 'procurement', 'review_open_purchase_orders', {});
+    setLiveMonitoring(monitoring ?? []);
+  }, [live, liveBaseRows]);
+  useEffect(() => { void refreshLifecycle().catch(() => { setLiveLifecycle([]); setLiveMonitoring([]); }); }, [refreshLifecycle]);
   const [livePaymentPacks, livePaymentPacksLoading, refreshPaymentPacks] =
     useLiveRows<PaymentReadinessPack>(
       live,
@@ -1274,6 +1302,8 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
       ),
       liveCommitmentReadiness.find((readiness) => readiness.purchaseOrderId === row.id),
       liveStalenessEvents.filter((event) => event.purchaseOrderId === row.id),
+      liveLifecycle.find((item) => item.purchaseOrderId === row.id),
+      liveMonitoring.filter((item) => (item as { purchaseOrderId?: string }).purchaseOrderId === row.id),
     ),
   );
   const rows = isLive(live) ? liveRows : localRows;
@@ -1293,6 +1323,7 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
       refreshPaymentPacks(),
       refreshCommitmentReadiness(),
       refreshStalenessEvents(),
+      refreshLifecycle(),
     ]);
   }, [
     refreshPos,
@@ -1301,6 +1332,7 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
     refreshPaymentPacks,
     refreshCommitmentReadiness,
     refreshStalenessEvents,
+    refreshLifecycle,
   ]);
 
   const add = useCallback(
@@ -1768,12 +1800,13 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
   const acknowledgePurchaseOrder = useCallback((id: string, reference: string): MaybePromise<PurchaseOrder | null> => {
     const current = rows.find((row) => row.id === id);
     if (!current || current.status !== 'issued') return null;
-    const expectedRevision = current.lifecycle?.revision ?? 1;
     if (isLive(live)) {
+      if (!current.lifecycle) return Promise.reject(new Error('The server lifecycle projection is still loading; refresh before acknowledging.'));
       return liveRpc<LiveRow>(live, 'procurement', 'acknowledge_purchase_order', {
-        purchase_order_id: id, expected_revision: expectedRevision, acknowledgement_reference: reference,
+        purchase_order_id: id, expected_revision: current.lifecycle.revision, acknowledgement_reference: reference,
       }).then(() => refreshLive().then(() => current));
     }
+    const expectedRevision = current.lifecycle?.revision ?? 1;
     return patch(id, { lifecycle: {
       revision: expectedRevision + 1, issuedAt: current.lifecycle?.issuedAt ?? current.updatedAt,
       sentAt: current.lifecycle?.sentAt ?? current.updatedAt, acknowledgedAt: nowIso(),
@@ -1786,26 +1819,28 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
   const recordVendorDeliveryNotice = useCallback((id: string, reference: string): MaybePromise<PurchaseOrder | null> => {
     const current = rows.find((row) => row.id === id);
     if (!current || current.status !== 'issued') return null;
-    const expectedRevision = current.lifecycle?.revision ?? 1;
     if (isLive(live)) {
+      if (!current.lifecycle) return Promise.reject(new Error('The server lifecycle projection is still loading; refresh before recording delivery.'));
       return liveRpc<LiveRow>(live, 'procurement', 'record_vendor_delivery_notice', {
-        purchase_order_id: id, expected_revision: expectedRevision, delivery_notice_reference: reference,
+        purchase_order_id: id, expected_revision: current.lifecycle.revision, delivery_notice_reference: reference,
       }).then(() => refreshLive().then(() => current));
     }
+    const expectedRevision = current.lifecycle?.revision ?? 1;
     return patch(id, { lifecycle: { ...(current.lifecycle ?? { issuedAt: current.updatedAt, acknowledgementStatus: 'pending', qualityRecoveryStatus: 'none', closureStatus: 'open' }), revision: expectedRevision + 1, deliveryNoticeStatus: 'recorded' } as PurchaseOrderLifecycle });
   }, [live, patch, refreshLive, rows]);
 
   const requestPurchaseOrderClosure = useCallback((id: string, reason: string): MaybePromise<PurchaseOrder | null> => {
     const current = rows.find((row) => row.id === id);
     if (!current || current.status !== 'issued') return null;
-    const expectedRevision = current.lifecycle?.revision ?? 1;
     if (isLive(live)) {
-      return liveRpc<LiveRow>(live, 'procurement', 'close_purchase_order', {
-        purchase_order_id: id, expected_revision: expectedRevision, closure_reason: reason,
+      if (!current.lifecycle) return Promise.reject(new Error('The server lifecycle projection is still loading; refresh before requesting closure.'));
+      return liveRpc<LiveRow>(live, 'procurement', 'request_purchase_order_closure', {
+        purchase_order_id: id, expected_revision: current.lifecycle.revision, closure_reason: reason,
       }).then(() => refreshLive().then(() => current));
     }
+    const expectedRevision = current.lifecycle?.revision ?? 1;
     if (current.lifecycle?.closureStatus !== 'ready') return null;
-    return patch(id, { status: 'closed', lifecycle: { ...current.lifecycle, revision: expectedRevision + 1, closureStatus: 'closed' } });
+    return patch(id, { lifecycle: { ...current.lifecycle, revision: expectedRevision + 1, closureStatus: 'open' } });
   }, [live, patch, refreshLive, rows]);
 
   const getById = useCallback((id: string) => rows.find((r) => r.id === id), [rows]);

@@ -774,6 +774,10 @@ export interface CommitmentEvidenceRequirement {
   kind: string;
   label: string;
   status: 'present' | 'missing';
+  basis: string;
+  source: string;
+  owner: string;
+  recovery: string;
 }
 
 /**
@@ -793,9 +797,17 @@ export function evaluateCommitmentReadiness(input: CommitmentReadinessInput): Co
   const route = input.route;
   const sourcingMethod = input.sourcingMethod ?? (route ? legacySourcingMethod(route) : 'rfq');
   const evidenceKinds = new Set(input.evidenceKinds ?? []);
-  const requireEvidence = (kind: string, label: string, blocker: string) => {
+  const requireEvidence = (kind: string, label: string, blocker: string, basis = 'Commitment route', owner = 'Procurement') => {
     const present = evidenceKinds.has(kind);
-    requiredEvidence.push({ kind, label, status: present ? 'present' : 'missing' });
+    requiredEvidence.push({
+      kind,
+      label,
+      status: present ? 'present' : 'missing',
+      basis,
+      source: route?.policyProfileId ? `Policy profile ${route.policyProfileId}` : 'Procurement policy',
+      owner,
+      recovery: present ? 'No action required.' : `Provide and govern ${label.toLowerCase()} before issue.`,
+    });
     if (!present) blockers.push(blocker);
   };
 

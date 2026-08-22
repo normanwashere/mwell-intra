@@ -57,9 +57,10 @@ export function CommitmentReadinessPanel({
 
       <div className="grid gap-2 sm:grid-cols-2">
         {readiness.requiredEvidence.map((item) => (
-          <div key={item.kind} className="flex min-h-11 items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-sm">
-            <span className="font-medium text-ink">{item.label}</span>
-            <Badge tone={item.status === 'present' ? 'emerald' : 'amber'}>{item.status}</Badge>
+          <div key={item.kind} className="min-h-11 rounded-lg border border-line px-3 py-2 text-sm">
+            <div className="flex items-center justify-between gap-2"><span className="font-medium text-ink">{item.label}</span><Badge tone={item.status === 'present' ? 'emerald' : 'amber'}>{item.status}</Badge></div>
+            <p className="mt-1 text-xs text-muted">{item.basis} / {item.source}</p>
+            <p className="text-xs text-muted">Owner: {item.owner}. {item.recovery}</p>
           </div>
         ))}
       </div>

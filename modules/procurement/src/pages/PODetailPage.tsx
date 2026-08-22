@@ -109,7 +109,7 @@ export function PODetailPage() {
   const canAcceptPayment = useCan('procurement', 'accept_payment_readiness');
   const canReleasePayment = useCan('procurement', 'release_payment');
   const canAdmin = useCan('procurement', 'admin');
-  const canVendorPortal = useCan('core', 'vendor_portal');
+  const canVendorPortal = profile?.kind === 'vendor';
   const canReceiveInWarehouse = useCan('warehouse', 'receive_stock');
   const po: PurchaseOrder | undefined = useMemo(() => rows.find((r) => r.id === id), [rows, id]);
   const vendor = useMemo(
@@ -132,7 +132,8 @@ export function PODetailPage() {
     canFinalApprovePo ||
     canViewFinance ||
     canAdmin ||
-    isSourceRequester;
+    isSourceRequester ||
+    (canVendorPortal && profile?.vendorId === po?.vendorId);
 
   // Signature-capture sheet state for the award approval flow.
   const [signOpen, setSignOpen] = useState(false);
@@ -822,7 +823,7 @@ export function PODetailPage() {
               readiness={po.commitmentReadiness ? {
                 ready: po.commitmentReadiness.ready,
                 blockers: po.commitmentReadiness.blockers,
-                requiredEvidence: po.commitmentReadiness.evidence.map((item) => ({ kind: item.controlCode, label: item.controlCode, status: item.reviewStatus === 'approved' ? 'present' as const : 'missing' as const })),
+                requiredEvidence: po.commitmentReadiness.requirements ?? po.commitmentReadiness.evidence.map((item) => ({ kind: item.controlCode, label: item.controlCode, status: item.reviewStatus === 'approved' ? 'present' as const : 'missing' as const, basis: 'Server evidence review', source: 'Governed policy evidence', owner: 'Procurement', recovery: 'Provide an approved current evidence record.' })),
               } : { ready: issueBlockers.length === 0, blockers: issueBlockers, requiredEvidence: [] }}
               lifecycle={po.lifecycle}
               monitoring={po.openMonitoringItems}

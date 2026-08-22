@@ -124,8 +124,17 @@ async function createGovernedRouteFixture() {
       core_vendor_id uuid references core.vendors(id),
       status text not null default 'draft',
       total numeric not null default 0,
-      lines jsonb not null default '[]'::jsonb
+      lines jsonb not null default '[]'::jsonb,
+      issued_at timestamptz,
+      actor_id uuid references core.profiles(id),
+      updated_at timestamptz not null default now()
     );
+    create table procurement.purchase_order_lifecycle_state (purchase_order_id text primary key references procurement.purchase_orders(id), revision integer not null default 1, sent_at timestamptz, acknowledged_at timestamptz, acknowledgement_due_at timestamptz, acknowledgement_reference text, delivery_notice_at timestamptz, delivery_notice_reference text, quality_recovery_status text not null default 'none', closure_status text not null default 'open', closed_at timestamptz, closed_by uuid, closure_reason text, updated_at timestamptz default now());
+    create table procurement.purchase_order_lifecycle_events (id uuid primary key default gen_random_uuid(), purchase_order_id text not null references procurement.purchase_orders(id), event_type text not null, expected_revision integer not null, resulting_revision integer not null, actor_id uuid not null references core.profiles(id), evidence_reference text, payload jsonb not null default '{}'::jsonb, recorded_at timestamptz default now());
+    create table procurement.acceptance_packs (id uuid primary key default gen_random_uuid(), purchase_order_id text, status text, exceptions jsonb default '[]'::jsonb);
+    create table procurement.payment_readiness_packs (id uuid primary key default gen_random_uuid(), purchase_order_id text, status text);
+    create table procurement.receipt_status_fixture (purchase_order_id text primary key, outstanding_quantity numeric default 0, rejected_or_quarantined_quantity numeric default 0);
+    create view procurement.v_purchase_order_receipt_status as select * from procurement.receipt_status_fixture;
     create table procurement.sourcing_events (
       id uuid primary key default gen_random_uuid(),
       request_id uuid not null references procurement.requests(id),
@@ -1151,8 +1160,8 @@ test("executes the public exception lifecycle matrix without actor, evidence, or
     const review = (id, stage, decision, revision, note = "Independent governed review is complete.") => db.query(`select procurement.review_policy_exception_pack(${sqlJson({ id, stage, decision, expected_revision: revision, note })}) as pack`);
     const confirm = (id, mode, expectedRouteVersion = 0) => db.query(`select procurement.confirm_route_decision(${sqlJson({ request_id: id, expected_route_version: expectedRouteVersion, requested_mode: mode })}) as route`);
     const issuePo = async (id, poId, amount) => {
-      await db.exec(`insert into procurement.purchase_orders(id,request_id,core_vendor_id,status,total,lines) values ('${poId}','${id}','${vendorId}','draft',${amount},${sqlJson([{ description: 'controlled item', quantity: 1, unitPrice: amount }])});`);
-      await db.exec(`update procurement.purchase_orders set status='issued' where id='${poId}';`);
+      await db.exec(`insert into procurement.purchase_orders(id,request_id,core_vendor_id,status,total,lines,actor_id) values ('${poId}','${id}','${vendorId}','draft',${amount},${sqlJson([{ description: 'controlled item', quantity: 1, unitPrice: amount }])},'${submitter}');`);
+      await db.exec(`update procurement.purchase_orders set status='issued', issued_at='2026-08-22T00:00:00Z' where id='${poId}';`);
       const issued = await db.query(`select status from procurement.purchase_orders where id='${poId}'`);
       assert.equal(issued.rows[0].status, 'issued', `${poId} must issue after an approved, route-bound exception`);
     };
@@ -1243,7 +1252,7 @@ test("executes the public exception lifecycle matrix without actor, evidence, or
       values ('${evaluationId}','${eventId}','${vendorId}',1,statement_timestamp(),'${procurementReviewer}','[{"criterion":"technicalCompliance","score":100,"evidenceReference":"e"},{"criterion":"quality","score":100,"evidenceReference":"e"},{"criterion":"leadTime","score":100,"evidenceReference":"e"},{"criterion":"totalLifecycleCost","score":100,"evidenceReference":"e"},{"criterion":"warranty","score":100,"evidenceReference":"e"},{"criterion":"support","score":100,"evidenceReference":"e"},{"criterion":"price","score":100,"evidenceReference":"e"},{"criterion":"paymentTerms","score":100,"evidenceReference":"e"},{"criterion":"training","score":100,"evidenceReference":"e"}]','100','private/evaluation.pdf','submitted');
       insert into procurement.award_recommendations(id,sourcing_event_id,evaluated_vendor_id,recommended_vendor_id,commercial_tabulation_id,technical_evaluation_id,rationale,status,created_by)
       values ('${awardId}','${eventId}','${vendorId}','${vendorId}','${tabulationId}','${evaluationId}','best value','approved','${submitter}');
-      insert into procurement.purchase_orders(id,request_id,core_vendor_id,status,total,lines) values ('prior-po','${priorId}','${vendorId}','issued',50000,${sqlJson(sameLines)});
+      insert into procurement.purchase_orders(id,request_id,core_vendor_id,status,total,lines,issued_at,actor_id) values ('prior-po','${priorId}','${vendorId}','issued',50000,${sqlJson(sameLines)},'2026-08-22T00:00:00Z','${submitter}');
       insert into procurement.purchase_orders(id,request_id,core_vendor_id,status,total,lines) values
         ('prior-po-draft','${priorId}','${vendorId}','draft',50000,${sqlJson(sameLines)}),
         ('prior-po-pending','${priorId}','${vendorId}','pending_approval',50000,${sqlJson(sameLines)}),
@@ -1575,6 +1584,65 @@ test("executes public governed sourcing controls and independent failed-bid reco
     );
   } catch (cause) {
     throw new Error(`${stage}: ${cause instanceof Error ? cause.message : String(cause)}`);
+  } finally {
+    await db.close();
+  }
+});
+
+test("executes the disposable public Task 9 RPC and RLS matrix", async () => {
+  const db = await createGovernedRouteFixture();
+  const maker = "74000000-0000-0000-0000-000000000001";
+  const checker = "74000000-0000-0000-0000-000000000002";
+  const vendorActor = "74000000-0000-0000-0000-000000000003";
+  const vendorId = "74000000-0000-0000-0000-000000000004";
+  const poId = "task-9-public-po";
+  try {
+    await db.exec(migrationBeforeBackfillForPglite);
+    await db.exec(migrationTask6);
+    await db.exec(`insert into core.profiles(id,status) values ('${maker}','active'),('${checker}','active'),('${vendorActor}','active'); insert into core.vendors(id,legal_name,accreditation_status) values ('${vendorId}','Task 9 vendor','approved');`);
+    await setPolicyActor(db, maker, false, ['author_po']);
+    await db.exec(`insert into procurement.purchase_orders(id,core_vendor_id,status,total,lines,actor_id) values ('${poId}','${vendorId}','draft',100,'[]'::jsonb,'${maker}'); update procurement.purchase_orders set status='issued',issued_at=statement_timestamp()-interval '47 hours' where id='${poId}';`);
+
+    const issued = await db.query(`select procurement.purchase_order_lifecycle(${sqlJson({ purchase_order_id: poId })}) as lifecycle`);
+    assert.equal(issued.rows[0].lifecycle.revision, 2);
+    assert.ok(issued.rows[0].lifecycle.sentAt, 'issued_at is projected as authoritative sent_at');
+    const monitoring = await db.query(`select procurement.review_open_purchase_orders('{}'::jsonb) as items`);
+    assert.equal(monitoring.rows[0].items[0].purchaseOrderId, poId);
+    assert.equal(monitoring.rows[0].items[0].kind, 'vendor_acknowledgement_due_soon');
+    await db.exec(`update procurement.purchase_order_lifecycle_state set sent_at=statement_timestamp()-interval '48 hours',acknowledgement_due_at=statement_timestamp() where purchase_order_id='${poId}';`);
+    const overdue = await db.query(`select procurement.review_open_purchase_orders('{}'::jsonb) as items`);
+    assert.equal(overdue.rows[0].items[0].kind, 'vendor_acknowledgement_overdue');
+
+    await assert.rejects(() => db.query(`select procurement.acknowledge_purchase_order(${sqlJson({ purchase_order_id: poId, expected_revision: 2, acknowledgement_reference: 'ACK-1' })})`), /awarded vendor/i);
+    await db.exec(`create or replace function core.current_vendor_id() returns uuid language sql stable as $$ select '${vendorId}'::uuid $$;`);
+    await setPolicyActor(db, vendorActor, false);
+    const acknowledged = await db.query(`select procurement.acknowledge_purchase_order(${sqlJson({ purchase_order_id: poId, expected_revision: 2, acknowledgement_reference: 'ACK-1' })}) as lifecycle`);
+    assert.equal(acknowledged.rows[0].lifecycle.revision, 3);
+    const acknowledgementReplay = await db.query(`select procurement.acknowledge_purchase_order(${sqlJson({ purchase_order_id: poId, expected_revision: 2, acknowledgement_reference: 'ACK-1' })}) as lifecycle`);
+    assert.equal(acknowledgementReplay.rows[0].lifecycle.replayed, true);
+    await assert.rejects(() => db.query(`select procurement.acknowledge_purchase_order(${sqlJson({ purchase_order_id: poId, expected_revision: 2, acknowledgement_reference: 'ACK-CHANGED' })})`), /changed/i);
+
+    await setPolicyActor(db, maker, false, ['author_po']);
+    await db.exec(`create or replace function core.current_vendor_id() returns uuid language sql stable as $$ select null::uuid $$;`);
+    const delivery = await db.query(`select procurement.record_vendor_delivery_notice(${sqlJson({ purchase_order_id: poId, expected_revision: 3, delivery_notice_reference: 'DELIVERY-1' })}) as lifecycle`);
+    assert.equal(delivery.rows[0].lifecycle.revision, 4);
+    const requested = await db.query(`select procurement.request_purchase_order_closure(${sqlJson({ purchase_order_id: poId, expected_revision: 4, closure_reason: 'All contractual obligations have completed.' })}) as request`);
+    assert.equal(requested.rows[0].request.replayed, false);
+    const requestReplay = await db.query(`select procurement.request_purchase_order_closure(${sqlJson({ purchase_order_id: poId, expected_revision: 4, closure_reason: 'All contractual obligations have completed.' })}) as request`);
+    assert.equal(requestReplay.rows[0].request.replayed, true);
+    await assert.rejects(() => db.query(`select procurement.request_purchase_order_closure(${sqlJson({ purchase_order_id: poId, expected_revision: 4, closure_reason: 'Changed close reason.' })})`), /reason changed/i);
+
+    await setPolicyActor(db, checker, false, ['final_approve_po']);
+    await assert.rejects(() => db.query(`select procurement.approve_purchase_order_closure(${sqlJson({ closure_request_id: requested.rows[0].request.id })})`), /Closure is blocked/i);
+    await db.exec(`insert into procurement.acceptance_packs(purchase_order_id,status,exceptions) values ('${poId}','accepted','[]'::jsonb);`);
+    const closed = await db.query(`select procurement.approve_purchase_order_closure(${sqlJson({ closure_request_id: requested.rows[0].request.id })}) as closure`);
+    assert.equal(closed.rows[0].closure.approved, true);
+    assert.equal(closed.rows[0].closure.closureStatus, 'closed');
+    const closureReplay = await db.query(`select procurement.approve_purchase_order_closure(${sqlJson({ closure_request_id: requested.rows[0].request.id })}) as closure`);
+    assert.equal(closureReplay.rows[0].closure.replayed, true);
+
+    const grants = await db.query(`select pg_catalog.has_function_privilege('authenticated','procurement.close_purchase_order(jsonb)','EXECUTE') as direct_close, pg_catalog.has_function_privilege('authenticated','private.policy_po_lifecycle_transition(text,integer,text,text,jsonb)','EXECUTE') as helper, pg_catalog.has_table_privilege('authenticated','procurement.purchase_order_lifecycle_state','UPDATE') as direct_state_write`);
+    assert.deepEqual(grants.rows[0], { direct_close: false, helper: false, direct_state_write: false });
   } finally {
     await db.close();
   }

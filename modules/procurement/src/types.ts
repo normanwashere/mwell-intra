@@ -586,7 +586,19 @@ export interface CommitmentReadiness {
   blockers: string[];
   evidence: PolicyEvidenceRecord[];
   protections: FinancialProtectionRecord[];
+  /** Server-derived requirement matrix for the selected route and exception basis. */
+  requirements?: CommitmentRequirementMatrixItem[];
   canRecordAcceptance?: boolean;
+}
+
+export interface CommitmentRequirementMatrixItem {
+  kind: string;
+  label: string;
+  status: 'present' | 'missing';
+  basis: string;
+  source: string;
+  owner: string;
+  recovery: string;
 }
 
 /** Server-derived PO lifecycle; each command advances the revision under a row lock. */

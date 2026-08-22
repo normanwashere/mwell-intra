@@ -42,10 +42,16 @@ const requiredFunctions = [
     placeholderFailure: "placeholder record_vendor_delivery_notice body",
   },
   {
-    name: "procurement.close_purchase_order",
+    name: "procurement.request_purchase_order_closure",
     parameterType: "jsonb",
-    requiredBody: ["for update", "closurestatus", "updated_at"],
-    placeholderFailure: "placeholder close_purchase_order body",
+    requiredBody: ["for update", "expected_revision", "closure_reason", "replayed"],
+    placeholderFailure: "placeholder request_purchase_order_closure body",
+  },
+  {
+    name: "procurement.approve_purchase_order_closure",
+    parameterType: "jsonb",
+    requiredBody: ["maker and checker", "private.policy_po_lifecycle_transition", "for update"],
+    placeholderFailure: "placeholder approve_purchase_order_closure body",
   },
   {
     name: "procurement.save_policy_profile",
@@ -101,7 +107,9 @@ function functionDefinition(text, functionName, parameterType) {
   const expression = new RegExp(
     `create\\s+(?:or\\s+replace\\s+)?function\\s+${signature}\\s*\\(\\s*(?:[a-z_]+\\s+)?${parameterType}\\s*\\)[\\s\\S]*?\\$\\$;`,
   );
-  return text.match(expression)?.[0] ?? null;
+  const definitions = [...text.matchAll(new RegExp(expression.source, 'g'))];
+  const finalTask9Definition = functionName.includes('purchase_order') || functionName.includes('po_lifecycle');
+  return definitions.at(finalTask9Definition ? -1 : 0)?.[0] ?? null;
 }
 
 function escapeRegExp(value) {
