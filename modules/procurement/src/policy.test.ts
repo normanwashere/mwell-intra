@@ -36,25 +36,27 @@ describe('sourcing policy', () => {
     expect(suggestSourcingMethod({ category: 'goods', amount: 99_999 })).toBe('rfq');
   });
 
-  it('uses the sourced PHP 1,000,000 RFQ/RFP boundary', () => {
+  it('keeps material requests on RFQ at the formal-bid threshold', () => {
     expect(
       suggestSourcingMethod({
         category: 'goods',
         amount: RFP_THRESHOLD - 0.01,
       }),
     ).toBe('rfq');
-    expect(suggestSourcingMethod({ category: 'goods', amount: RFP_THRESHOLD })).toBe('rfp');
+    expect(suggestSourcingMethod({ category: 'goods', amount: RFP_THRESHOLD })).toBe('rfq');
   });
 
   it('escalates complex and data-sensitive work regardless of amount', () => {
     expect(suggestSourcingMethod({ category: 'construction', amount: 10_000 })).toBe('rfp');
     expect(
       deriveSourcingRecommendation({
+        requirementKind: 'services',
+        category: 'services',
         amount: 10_000,
         comparable: true,
         dataSensitive: true,
       }),
-    ).toMatchObject({ method: 'rfp', reasons: ['data_sensitive'] });
+    ).toMatchObject({ method: 'rfp', reasons: ['service_requirement', 'mode:competitive_bidding', 'tier:high_risk'] });
   });
 
   it('defaults incomplete intake to an RFQ recommendation pending Procurement confirmation', () => {
@@ -114,19 +116,19 @@ describe('binding vendor-to-pay controls', () => {
   it.each([
     [
       'simple comparable below threshold',
-      { amount: RFP_THRESHOLD - 0.01, comparable: true },
+      { requirementKind: 'materials', category: 'goods', amount: RFP_THRESHOLD - 0.01, comparable: true },
       'rfq',
     ],
-    ['threshold amount', { amount: RFP_THRESHOLD, comparable: true }, 'rfp'],
-    ['low-value complex work', { amount: 25_000, comparable: true, complex: true }, 'rfp'],
-    ['low-value technical work', { amount: 25_000, comparable: true, technical: true }, 'rfp'],
-    ['low-value high-risk work', { amount: 25_000, comparable: true, highRisk: true }, 'rfp'],
+    ['formal-bid material', { requirementKind: 'materials', category: 'goods', amount: RFP_THRESHOLD, comparable: true }, 'rfq'],
+    ['low-value complex material', { requirementKind: 'materials', category: 'goods', amount: 25_000, comparable: true, complex: true }, 'rfq'],
+    ['low-value technical service', { requirementKind: 'services', category: 'services', amount: 25_000, comparable: true, technical: true }, 'rfp'],
+    ['low-value high-risk service', { requirementKind: 'services', category: 'services', amount: 25_000, comparable: true, highRisk: true }, 'rfp'],
     [
-      'low-value data-sensitive work',
-      { amount: 25_000, comparable: true, dataSensitive: true },
+      'low-value data-sensitive service',
+      { requirementKind: 'services', category: 'services', amount: 25_000, comparable: true, dataSensitive: true },
       'rfp',
     ],
-  ])('routes %s through the sourced method', (_label, input, expected) => {
+  ] as const)('routes %s through the sourced method', (_label, input, expected) => {
     expect(deriveSourcingRecommendation(input).method).toBe(expected);
   });
 

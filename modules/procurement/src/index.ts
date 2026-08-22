@@ -11,6 +11,16 @@ export {
   selectEffectivePolicyProfile,
   validatePolicyProfile,
 } from "./policyProfile";
+export {
+  deriveProcurementRoute,
+  inferLegacyRequirementKind,
+  legacySourcingMethod,
+  routeFromLegacy,
+} from "./policyRoute";
+export type {
+  ProcurementRouteInput,
+  ProcurementRouteRecommendation,
+} from "./policyRoute";
 export type {
   GovernanceTier,
   ProcurementMode,

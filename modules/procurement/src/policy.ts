@@ -4,7 +4,7 @@
 // specs can consume them.
 //
 // Policy references throughout use the numbered sections in the source doc:
-//   §5   Sourcing Strategy (RFQ / RFP thresholds)
+//   §5   Sourcing Strategy (solicitation, mode, and governance controls)
 //   §7   Vendor Accreditation
 //   §9   Award Recommendation
 //   §11  Exceptions (Direct Award, Repeat, Emergency, Insufficient Bids)
@@ -25,18 +25,29 @@ import type {
   ImportationPlan,
   ProcurementExceptionPack,
   ProcurementRequestLine,
+  RequirementKind,
   SourcingMethod,
   AcceptancePack,
   PaymentReadinessPack,
   ProcurementRequest,
   PurchaseOrderStatus,
 } from './types';
+import { MWELL_OPERATING_PROFILE } from './policyProfile';
+import {
+  deriveProcurementRoute,
+  inferLegacyRequirementKind,
+  legacySourcingMethod,
+  routeFromLegacy,
+} from './policyRoute';
 
 // ---------------------------------------------------------------------------
 // Thresholds (in PHP)
 // ---------------------------------------------------------------------------
 
-/** Policy §5: RFP / bidding kicks in at PHP 1,000,000 and above. */
+/**
+ * @deprecated Amount is a formal-bid governance threshold, not an RFQ/RFP
+ * boundary. New route derivation reads the active policy profile instead.
+ */
 export const RFP_THRESHOLD = 1_000_000;
 
 /** Policy §12: construction contracts at PHP 5M+ trigger performance bonds. */
@@ -170,6 +181,8 @@ export function categoryMeta(code: RequestCategory | undefined): CategoryMeta | 
 
 export interface SuggestSourcingInput {
   category?: RequestCategory;
+  /** New callers must supply this. Missing values are handled only as legacy compatibility. */
+  requirementKind?: RequirementKind;
   /** Estimated PHP total (sum of qty * unit price). */
   amount?: number;
   /** Requester flagged this as an emergency (policy §11). */
@@ -182,20 +195,11 @@ export interface SuggestSourcingInput {
   strategic?: boolean;
   highRisk?: boolean;
   dataSensitive?: boolean;
+  importation?: boolean;
 }
 
-export type SourcingReason =
-  | 'emergency'
-  | 'repeat_continuity'
-  | 'explicit_petty_cash'
-  | 'complex'
-  | 'technical'
-  | 'strategic'
-  | 'high_risk'
-  | 'data_sensitive'
-  | 'amount_threshold'
-  | 'clear_comparable_below_threshold'
-  | 'procurement_confirmation_required';
+/** @deprecated Read-only explanation strings from the legacy method projection. */
+export type SourcingReason = string;
 
 export interface SourcingRecommendation {
   method: SourcingMethod;
@@ -204,44 +208,60 @@ export interface SourcingRecommendation {
 }
 
 /**
- * Suggest a sourcing path per policy §5 + §11. The rules:
- *   1. Emergency overrides everything → 'emergency'.
- *   2. Repeat order flag → 'repeat_order'.
- *   3. Explicit petty-cash category → 'petty_cash', pending Finance confirmation.
- *   4. High-risk categories (capex/construction/manpower/medical) escalate to
- *      RFP regardless of amount (policy §5 "complex, technical, strategic,
- *      or high-risk work regardless of amount").
- *   5. Amount ≥ RFP_THRESHOLD (PHP 1,000,000) → 'rfp'.
- *   6. Amount below the RFP threshold → 'rfq'.
- *   7. Amount unknown → 'rfq', pending Procurement confirmation.
- *
- * The officer can override any suggestion with a justification stored in
- * `compliance.directAwardReason` + `compliance.priceReasonableness`.
+ * @deprecated New request intake must call deriveProcurementRoute with an
+ * explicit requirementKind. This compatibility wrapper projects the route for
+ * legacy screens and reads; it never treats amount as an RFQ/RFP boundary.
  */
 export function deriveSourcingRecommendation(input: SuggestSourcingInput): SourcingRecommendation {
-  const { category, amount, emergency, repeat } = input;
-  const result = (method: SourcingMethod, reasons: SourcingReason[]): SourcingRecommendation => ({
-    method,
-    reasons,
-    requiresProcurementConfirmation: true,
-  });
-  if (emergency) return result('emergency', ['emergency']);
-  if (repeat) return result('repeat_order', ['repeat_continuity']);
-  if (category === 'petty_cash') return result('petty_cash', ['explicit_petty_cash']);
-  if (input.dataSensitive) return result('rfp', ['data_sensitive']);
-  if (input.complex) return result('rfp', ['complex']);
-  if (input.technical) return result('rfp', ['technical']);
-  if (input.strategic) return result('rfp', ['strategic']);
-  if (input.highRisk) return result('rfp', ['high_risk']);
-  const meta = categoryMeta(category);
-  if (meta?.highRisk) return result('rfp', ['high_risk']);
-  if (typeof amount !== 'number' || amount <= 0) {
-    return result('rfq', ['procurement_confirmation_required']);
+  const requestedMode = input.emergency
+    ? 'emergency_purchase'
+    : input.repeat
+      ? 'repeat_order'
+      : input.category === 'petty_cash'
+        ? 'petty_cash'
+        : undefined;
+  const requirementKind = input.requirementKind ?? inferLegacyRequirementKind(input.category);
+
+  if (requirementKind) {
+    const recommendation = deriveProcurementRoute({
+      requirementKind,
+      category: input.category,
+      amount: input.amount,
+      requestedMode,
+      complex: input.complex,
+      technical: input.technical,
+      strategic: input.strategic,
+      highRisk: input.highRisk ?? categoryMeta(input.category)?.highRisk,
+      dataSensitive: input.dataSensitive,
+      importation: input.importation,
+    }, MWELL_OPERATING_PROFILE);
+    return {
+      method: legacySourcingMethod(recommendation.route),
+      reasons: recommendation.route.reasons,
+      requiresProcurementConfirmation: true,
+    };
   }
-  if (amount >= RFP_THRESHOLD) return result('rfp', ['amount_threshold']);
-  return result('rfq', ['clear_comparable_below_threshold']);
+
+  // Old, under-classified records remain legible, but carry a remediation
+  // signal. New requests use deriveProcurementRoute and cannot reach here.
+  const legacyMethod: SourcingMethod = requestedMode === 'emergency_purchase'
+    ? 'emergency'
+    : requestedMode === 'repeat_order'
+      ? 'repeat_order'
+      : requestedMode === 'petty_cash'
+        ? 'petty_cash'
+        : input.complex || input.technical || input.strategic || input.highRisk || input.dataSensitive || categoryMeta(input.category)?.highRisk
+          ? 'rfp'
+          : 'rfq';
+  const route = routeFromLegacy(legacyMethod, input.category, input.amount, MWELL_OPERATING_PROFILE);
+  return {
+    method: legacySourcingMethod(route),
+    reasons: [...route.reasons, 'procurement_confirmation_required'],
+    requiresProcurementConfirmation: true,
+  };
 }
 
+/** @deprecated Use deriveProcurementRoute and store its three route axes. */
 export function suggestSourcingMethod(input: SuggestSourcingInput): SourcingMethod {
   return deriveSourcingRecommendation(input).method;
 }

@@ -110,6 +110,9 @@ export interface ProcurementPolicyProfile {
 }
 
 /**
+ * @deprecated Read-only compatibility projection for records created before
+ * the three-axis route backfill. New writes use ProcurementRoute instead.
+ *
  * Policy §5 + §11 sourcing paths. The system suggests one based on category
  * and estimated total; the officer can override with justification.
  *
