@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parse as parseCsv } from "csv-parse/sync";
 import { marked, Renderer } from "marked";
+import { HANDBOOK_TABS, resolveHandbookCatalog } from "./handbook-catalog.mjs";
 
 const root = path.resolve(fileURLToPath(new URL("../../", import.meta.url)));
 export const outputFile = "docs/manual/index.html";
@@ -53,18 +54,6 @@ export function documentationSources() {
       files.indexOf(file) === index &&
       file !== "docs/knowledge-base-coverage-report.md",
   );
-}
-
-function categoryFor(file) {
-  const name = normalize(file).toLowerCase();
-  if (name.includes("/import-templates/")) return "Import templates";
-  if (name.includes("/releases/")) return "Release notes";
-  if (name.includes("/policy/") || /control_matrix|process_reference/.test(name)) return "Policy and controls";
-  if (name.includes("/runbooks/") || /cutover|retention|issue_management/.test(name)) return "Operations and runbooks";
-  if (/technical|erd|traceability/.test(name)) return "Engineering reference";
-  if (/training|user_manual/.test(name)) return "Manuals and training";
-  if (/ux-review|coverage-report|release-evidence/.test(name)) return "Review and evidence";
-  return "Platform reference";
 }
 
 function slug(value) {
@@ -161,13 +150,21 @@ export function buildDocumentationHtml() {
   const mermaidBundle = readFileSync(mermaidBundleFile, "utf8").replace(/[ \t]+$/gm, "");
   const sources = documentationSources();
   const sourceIds = new Map(sources.map((file) => [file, `doc-${slug(file.replace(/^docs\//, ""))}`]));
+  const { documents: catalogDocuments, warnings } = resolveHandbookCatalog(sources);
+  const catalogBySource = new Map(catalogDocuments.map((document) => [document.source, document]));
+  const tabById = new Map(HANDBOOK_TABS.map((tab) => [tab.id, tab]));
+  for (const warning of warnings) console.warn(warning);
   const documents = sources.map((file) => {
     const source = normalizeText(readFileSync(path.join(root, file), "utf8"));
+    const catalog = catalogBySource.get(file);
+    const { id: catalogId, ...metadata } = catalog;
     return {
+      ...metadata,
       file,
       id: sourceIds.get(file),
+      catalogId,
       title: titleOf(source, file),
-      category: categoryFor(file),
+      category: tabById.get(metadata.primaryTab).label,
       html: renderSource(source, file, sourceIds),
       hash: createHash("sha256").update(source).digest("hex").slice(0, 12),
     };
@@ -187,7 +184,7 @@ export function buildDocumentationHtml() {
     .join("");
   const articles = documents
     .map(
-      (document, index) => `<article id="${document.id}" data-document data-category="${escapeHtml(document.category)}" data-search="${escapeHtml(`${document.title} ${document.category} ${document.file}`.toLowerCase())}">
+      (document, index) => `<article id="${document.id}" data-document data-category="${escapeHtml(document.category)}" data-search="${escapeHtml(`${document.title} ${document.category} ${document.file} ${document.summary} ${document.keywords.join(" ")} ${document.audience.join(" ")}`.toLowerCase())}">
         <header class="article-header"><div><span class="category">${escapeHtml(document.category)}</span><h1>${escapeHtml(document.title)}</h1><p>${escapeHtml(document.file)}</p></div><span class="source-hash" title="Source checksum">${document.hash}</span></header>
         <div class="article-body">${document.html}</div>
         <a class="back-link" href="#top">Back to contents</a>
