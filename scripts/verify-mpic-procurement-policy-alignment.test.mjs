@@ -88,6 +88,19 @@ test("rejects unsafe policy-governance migration variants", () => {
       ),
       failure: "placeholder save_policy_profile body",
     },
+    {
+      name: "route confirmation without an optimistic version guard",
+      sql: migration.replace(
+        "if v_expected_version is null or v_expected_version <> v_current_version then",
+        "if false then",
+      ),
+      failure: "placeholder confirm_route_decision body",
+    },
+    {
+      name: "legacy ambiguity silently bypasses remediation",
+      sql: migration.replaceAll("legacy_mapping_requires_review", "legacy_mapping_removed"),
+      failure: "missing legacy route remediation marker",
+    },
   ];
 
   for (const { name, sql, failure } of cases) {
@@ -123,9 +136,59 @@ test("PGlite parse smoke loads the migration without a live database", async () 
       create function auth.uid() returns uuid language sql stable as $$ select null::uuid $$;
       create function auth.role() returns text language sql stable as $$ select 'authenticated'::text $$;
       create function core.has_live_cap(text, text) returns boolean language sql stable as $$ select true $$;
+      create function private.policy_submit_procurement_request(jsonb) returns jsonb language sql as $$ select '{}'::jsonb $$;
       create table core.profiles (id uuid primary key, status text not null default 'active');
       create table core.vendors (id uuid primary key);
-      create table procurement.requests (id uuid primary key, status text);
+      create table procurement.requests (
+        id uuid primary key,
+        status text,
+        estimated_amount numeric,
+        requirement_kind text,
+        solicitation_type text,
+        procurement_mode text,
+        governance_tier text,
+        policy_profile_id uuid,
+        route_reasons jsonb,
+        sourcing_method text,
+        sourcing_override boolean,
+        category text,
+        lines jsonb default '[]'::jsonb,
+        compliance jsonb default '{}'::jsonb,
+        attachments jsonb default '[]'::jsonb,
+        department text,
+        requester_id uuid,
+        updated_at timestamptz default now()
+      );
+      create table procurement.route_decisions (
+        id uuid primary key default gen_random_uuid(),
+        request_id uuid not null references procurement.requests(id),
+        policy_version text not null,
+        request_version integer not null default 1,
+        method text not null,
+        reasons text[] not null default '{}',
+        risk_facts jsonb not null default '{}'::jsonb,
+        status text not null default 'confirmed',
+        confirmed_by uuid references core.profiles(id),
+        confirmed_at timestamptz not null default now(),
+        unique(request_id, request_version)
+      );
+      create table procurement.exception_packs (
+        id uuid primary key default gen_random_uuid(),
+        request_id uuid not null references procurement.requests(id),
+        exception_type text not null,
+        status text not null default 'draft'
+      );
+      create table core.policy_remediation_queue (
+        id uuid primary key default gen_random_uuid(),
+        module text not null,
+        entity_type text not null,
+        entity_id text not null,
+        policy_version text not null,
+        reason_code text not null,
+        details jsonb not null default '{}'::jsonb,
+        status text not null default 'open',
+        unique(module, entity_type, entity_id, policy_version, reason_code)
+      );
     `);
 
     await db.exec(migration);

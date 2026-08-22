@@ -62,6 +62,18 @@ const requiredFunctions = [
     requiredBody: ["relationship = 'mwell_operating'", "status = 'active'"],
     placeholderFailure: "placeholder get_effective_policy_profile body",
   },
+  {
+    name: "private.policy_confirm_route_decision",
+    parameterType: "jsonb",
+    requiredBody: [
+      "expected_route_version",
+      "v_expected_version <> v_current_version",
+      "private.policy_derive_procurement_route",
+      "route confirmation is stale",
+      "client-provided solicitation, tier, profile, and reasons are intentionally ignored",
+    ],
+    placeholderFailure: "placeholder confirm_route_decision body",
+  },
 ];
 
 const normalized = (sql) => sql.toLowerCase().replace(/\s+/g, " ").trim();
@@ -247,6 +259,35 @@ export function verifyMigrationText(sql) {
   }
   if (/estimated_amount[^;]{0,500}then\s*'rfp'/.test(text)) {
     failures.push("amount-driven RFP route logic is forbidden");
+  }
+  const deriveStart = text.indexOf(
+    "create or replace function private.policy_derive_procurement_route(",
+  );
+  const deriveDefinition = deriveStart === -1
+    ? ""
+    : text.slice(deriveStart, text.indexOf("$$;", deriveStart) + 3);
+  if (!deriveDefinition || [
+    "request_id text",
+    "requested_mode text default null",
+    "for update",
+    "effective_policy_profile_required",
+    "requirement_kind_required",
+    "private.policy_route_exception_is_eligible",
+    "solicitation_type",
+    "procurement_mode",
+    "governance_tier",
+  ].some((token) => !deriveDefinition.includes(token))) {
+    failures.push("placeholder policy_derive_procurement_route body");
+  }
+  if (!text.includes("legacy_mapping_requires_review")) {
+    failures.push("missing legacy route remediation marker");
+  }
+  if (!text.includes("insert into core.policy_remediation_queue(module, entity_type, entity_id, policy_version, reason_code, details)")) {
+    failures.push("missing legacy route remediation queue insert");
+  }
+  if (!text.includes("create or replace function procurement.submit_request(payload jsonb)") ||
+      !text.includes("as $$ select private.policy_submit_procurement_request(payload) $$")) {
+    failures.push("missing governed procurement submission delegation");
   }
 
   return { failures };

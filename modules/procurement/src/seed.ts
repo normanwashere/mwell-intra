@@ -16,12 +16,16 @@ import type {
   ApproverTier,
   ProcurementRequest,
   ProcurementRequestLine,
+  ProcurementRoute,
   PurchaseOrder,
   PurchaseOrderLine,
   RequestCategory,
+  RequirementKind,
   SourcingMethod,
 } from './types';
 import { applyStepDecision, buildApprovalSteps } from './policy';
+import { deriveProcurementRoute } from './policyRoute';
+import { MWELL_OPERATING_PROFILE } from './policyProfile';
 
 // ---------------------------------------------------------------------------
 // Deterministic helpers
@@ -173,6 +177,46 @@ function totalOf(lines: Array<{ quantity: number; unitPrice?: number }>): number
   return lines.reduce((s, l) => s + l.quantity * (l.unitPrice ?? 0), 0);
 }
 
+function requirementKindForSeed(category: RequestCategory): RequirementKind {
+  switch (category) {
+    case 'services':
+    case 'subscription':
+    case 'construction':
+    case 'manpower':
+    case 'it_software':
+      return 'services';
+    default:
+      // Demo fixtures are deliberately classified. Production legacy rows that
+      // lack this evidence are routed to remediation by the SQL migration.
+      return 'materials';
+  }
+}
+
+function requestedModeForSeed(method: SourcingMethod) {
+  switch (method) {
+    case 'direct_award': return 'sole_source' as const;
+    case 'repeat_order': return 'repeat_order' as const;
+    case 'emergency': return 'emergency_purchase' as const;
+    case 'petty_cash': return 'petty_cash' as const;
+    default: return 'competitive_bidding' as const;
+  }
+}
+
+function routeForSeed(
+  category: RequestCategory,
+  method: SourcingMethod,
+  amount: number,
+  requirementKind = requirementKindForSeed(category),
+): ProcurementRoute {
+  return deriveProcurementRoute({
+    requirementKind,
+    category,
+    amount,
+    requestedMode: requestedModeForSeed(method),
+    highRisk: category === 'construction' || category === 'manpower',
+  }, MWELL_OPERATING_PROFILE).route;
+}
+
 // ---------------------------------------------------------------------------
 // The seed itself
 // ---------------------------------------------------------------------------
@@ -194,11 +238,13 @@ export function buildProcurementSeed(now: Date = new Date()): ProcurementSeed {
   const nextPoNumber = () => `PO-${year}-${(++poSeq).toString().padStart(4, '0')}`;
 
   const mkRequest = (opts: {
+    id?: string;
     title: string;
     description?: string;
     department: string;
     costCenter?: string;
     category: RequestCategory;
+    requirementKind?: RequirementKind;
     sourcingMethod: SourcingMethod;
     requesterName: string;
     requesterEmail: string;
@@ -211,7 +257,7 @@ export function buildProcurementSeed(now: Date = new Date()): ProcurementSeed {
     /** Ladder simulation. Omit for drafts. */
     ladder?: { startDaysAgo: number; approveCount: number; rejectNote?: string };
   }): ProcurementRequest => {
-    const id = reqId();
+    const id = opts.id ?? reqId();
     const lines = linesOf(lineId, opts.lines);
     const estimatedAmount = totalOf(lines);
     let status: ProcurementRequest['status'] = 'draft';
@@ -264,6 +310,13 @@ export function buildProcurementSeed(now: Date = new Date()): ProcurementSeed {
       decidedByEmail,
       estimatedAmount,
       category: opts.category,
+      requirementKind: opts.requirementKind ?? requirementKindForSeed(opts.category),
+      route: routeForSeed(
+        opts.category,
+        opts.sourcingMethod,
+        estimatedAmount,
+        opts.requirementKind ?? requirementKindForSeed(opts.category),
+      ),
       sourcingMethod: opts.sourcingMethod,
       justification: opts.justification,
       approvalSteps,
@@ -370,6 +423,63 @@ export function buildProcurementSeed(now: Date = new Date()): ProcurementSeed {
     neededByDays: 45,
     createdDaysAgo: 5,
     lines: [{ description: 'Ergonomic mesh chair', quantity: 10, uom: 'pc', unitPrice: 8500 }],
+  });
+
+  // Policy-routing fixtures exercise the three independent axes without
+  // teaching the UI to infer a route from the legacy sourcing label.
+  mkRequest({
+    id: 'procurement-formal-goods',
+    title: 'Regional device fulfillment supply',
+    description: 'Serialized device stock for the Q4 regional fulfillment programme.',
+    department: 'Warehouse & Logistics',
+    costCenter: 'CC-4100',
+    category: 'goods',
+    requirementKind: 'materials',
+    sourcingMethod: 'rfq',
+    requesterName: 'Bea Santos',
+    requesterEmail: 'logistics@mwell.demo',
+    neededByDays: 60,
+    createdDaysAgo: 4,
+    lines: [{ description: 'Fulfillment device kit', quantity: 160, uom: 'set', unitPrice: 7500 }],
+  });
+
+  mkRequest({
+    title: 'Sole-source telemetry connector renewal',
+    department: 'IT',
+    costCenter: 'CC-3300',
+    category: 'it_software',
+    sourcingMethod: 'direct_award',
+    requesterName: 'Jules Aquino',
+    requesterEmail: 'bi@mwell.demo',
+    neededByDays: 45,
+    createdDaysAgo: 2,
+    lines: [{ description: 'Proprietary telemetry connector renewal', quantity: 1, uom: 'year', unitPrice: 240000 }],
+  });
+
+  mkRequest({
+    title: 'Repeat order for approved delivery pouches',
+    department: 'Warehouse & Logistics',
+    costCenter: 'CC-4100',
+    category: 'goods',
+    sourcingMethod: 'repeat_order',
+    requesterName: 'Bea Santos',
+    requesterEmail: 'logistics@mwell.demo',
+    neededByDays: 20,
+    createdDaysAgo: 1,
+    lines: [{ description: 'Approved courier pouch', quantity: 2000, uom: 'pc', unitPrice: 18 }],
+  });
+
+  mkRequest({
+    title: 'Petty-cash replacement scanner cable',
+    department: 'Warehouse & Logistics',
+    costCenter: 'CC-4100',
+    category: 'petty_cash',
+    sourcingMethod: 'petty_cash',
+    requesterName: 'Bea Santos',
+    requesterEmail: 'logistics@mwell.demo',
+    neededByDays: 2,
+    createdDaysAgo: 1,
+    lines: [{ description: 'Scanner data cable', quantity: 1, uom: 'pc', unitPrice: 1200 }],
   });
 
   // ── Submitted, waiting at the FIRST tier ─────────────────────────────────

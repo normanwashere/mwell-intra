@@ -7,6 +7,33 @@ const NOW = new Date('2026-07-06T12:00:00.000Z');
 describe('buildProcurementSeed', () => {
   const seed = buildProcurementSeed(NOW);
 
+  it('seeds high-value goods as RFQ under formal bidding', () => {
+    const request = seed.requests.find(({ id }) => id === 'procurement-formal-goods');
+    expect(request?.route).toMatchObject({
+      solicitationType: 'rfq',
+      procurementMode: 'competitive_bidding',
+      governanceTier: 'formal_bid',
+    });
+  });
+
+  it('covers every governed exception mode with a no-solicitation route', () => {
+    const modes = new Set(
+      seed.requests
+        .map((request) => request.route)
+        .filter((route) => route?.procurementMode !== 'competitive_bidding')
+        .map((route) => route?.procurementMode),
+    );
+    expect(modes).toEqual(new Set([
+      'sole_source',
+      'repeat_order',
+      'emergency_purchase',
+      'petty_cash',
+    ]));
+    for (const request of seed.requests.filter((item) => item.route?.procurementMode !== 'competitive_bidding')) {
+      expect(request.route?.solicitationType).toBe('none');
+    }
+  });
+
   it('seeds a full spread of request states', () => {
     const byStatus = (s: string) => seed.requests.filter((r) => r.status === s);
     expect(seed.requests.length).toBeGreaterThanOrEqual(12);

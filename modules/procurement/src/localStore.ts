@@ -27,6 +27,7 @@ import type {
   PaymentReadinessStalenessEvent,
   ProcurementRequest,
   ProcurementRequestLine,
+  ProcurementRoute,
   ProcurementVendor,
   PurchaseOrder,
   PurchaseOrderLine,
@@ -236,7 +237,8 @@ function mapStep(row: LiveRow): ApprovalStep {
   } as ApprovalStep;
 }
 
-function mapRequest(row: LiveRow, steps: ApprovalStep[] = []): ProcurementRequest {
+export function mapProcurementRequest(row: LiveRow, steps: ApprovalStep[] = []): ProcurementRequest {
+  const route = mapRoute(row);
   return {
     id: row.id,
     title: row.title,
@@ -266,13 +268,36 @@ function mapRequest(row: LiveRow, steps: ApprovalStep[] = []): ProcurementReques
     cancellationBlockers: Array.isArray(row.blockers) ? row.blockers : undefined,
     estimatedAmount: row.estimated_amount == null ? undefined : Number(row.estimated_amount),
     category: row.category ?? undefined,
-    sourcingMethod: row.sourcing_method ?? undefined,
+    // Deprecated compatibility output only. Governed fields arrive through
+    // `route`; an old row keeps its stored projection until backfilled.
+    sourcingMethod: route?.legacySourcingMethod ?? row.sourcing_method ?? undefined,
+    requirementKind: row.requirement_kind ?? undefined,
+    route,
     sourcingOverride: row.sourcing_override ?? undefined,
     justification: row.justification ?? undefined,
     attachments: row.attachments ?? undefined,
     compliance: row.compliance ?? undefined,
     approvalSteps: steps,
   } as ProcurementRequest;
+}
+
+function mapRoute(row: LiveRow): ProcurementRoute | undefined {
+  if (!row.solicitation_type || !row.procurement_mode || !row.governance_tier || !row.policy_profile_id) {
+    return undefined;
+  }
+  const routeReasons: unknown = row.route_reasons;
+  return {
+    solicitationType: row.solicitation_type as ProcurementRoute['solicitationType'],
+    procurementMode: row.procurement_mode as ProcurementRoute['procurementMode'],
+    governanceTier: row.governance_tier as ProcurementRoute['governanceTier'],
+    policyProfileId: String(row.policy_profile_id),
+    reasons: Array.isArray(routeReasons)
+      ? routeReasons.filter((reason): reason is string => typeof reason === 'string')
+      : [],
+    legacySourcingMethod: row.sourcing_method as ProcurementRoute['legacySourcingMethod'],
+    confirmedAt: row.route_confirmed_at ?? undefined,
+    confirmedByEmail: row.route_confirmed_by_email ?? undefined,
+  };
 }
 
 function mapAcceptancePack(row: LiveRow): AcceptancePack {
@@ -706,7 +731,7 @@ export function useProcurementRequests(): ProcurementRequestsAPI {
     { column: 'step_order', ascending: true },
   );
   const liveRows = liveBaseRows.map((row) =>
-    mapRequest(
+    mapProcurementRequest(
       row,
       liveSteps.filter((s) => s.requestId === row.id).sort((a, b) => a.order - b.order),
     ),
@@ -789,7 +814,7 @@ export function useProcurementRequests(): ProcurementRequestsAPI {
               compliance: next.compliance,
             },
           );
-          const mapped = mapRequest(row);
+          const mapped = mapProcurementRequest(row);
           await refreshLive();
           return mapped;
         } catch (error) {
@@ -834,7 +859,7 @@ export function useProcurementRequests(): ProcurementRequestsAPI {
         return liveRpc<LiveRow>(live, 'procurement', 'submit_request', {
           id,
         }).then((row) => {
-          const mapped = mapRequest(row);
+          const mapped = mapProcurementRequest(row);
           return refreshLive().then(() => mapped);
         });
       }
@@ -875,7 +900,7 @@ export function useProcurementRequests(): ProcurementRequestsAPI {
           expected_version: current?.cancellationVersion ?? 1,
           idempotency_key: input.idempotencyKey ?? newId('request-cancel'),
         }).then((row) => {
-          const mapped = mapRequest(row);
+          const mapped = mapProcurementRequest(row);
           return refreshLive().then(() => mapped);
         });
       }
@@ -905,7 +930,7 @@ export function useProcurementRequests(): ProcurementRequestsAPI {
           note: actor.note,
           signature: actor.signature,
         }).then((row) => {
-          const mapped = mapRequest(row);
+          const mapped = mapProcurementRequest(row);
           return refreshLive().then(() => mapped);
         });
       }
