@@ -1475,6 +1475,29 @@ alter table procurement.sourcing_events
   add column if not exists package_hash text,
   add column if not exists failed_bid_reason text;
 
+-- Preserve the pre-Task-6 deadline as the immutable extension baseline before
+-- any governed RPC becomes callable. A missing legacy deadline is unsafe: it
+-- would let later extensions establish their own cap.
+update procurement.sourcing_events
+set original_submission_deadline = submission_deadline
+where original_submission_deadline is null
+  and submission_deadline is not null;
+
+do $$
+begin
+  if exists (
+    select 1
+    from procurement.sourcing_events
+    where original_submission_deadline is null
+  ) then
+    raise exception 'Every governed sourcing event needs its original submission deadline before Task 6 controls are exposed';
+  end if;
+end;
+$$;
+
+alter table procurement.sourcing_events
+  alter column original_submission_deadline set not null;
+
 alter table procurement.sourcing_events
   drop constraint if exists sourcing_event_status_check,
   add constraint sourcing_event_status_check check (
@@ -1490,16 +1513,24 @@ alter table procurement.sourcing_events
 
 alter table procurement.sourcing_responses
   add column if not exists invitation_delivered_at timestamptz,
-  add column if not exists invitation_acknowledged_at timestamptz;
+  add column if not exists invitation_acknowledged_at timestamptz,
+  add column if not exists current_invitation_communication_id uuid,
+  add column if not exists current_invitation_group_id uuid,
+  add column if not exists current_invitation_package_version text,
+  add column if not exists current_invitation_package_hash text;
 
 alter table procurement.solicitation_communications
   drop constraint if exists solicitation_communications_type_check,
   add constraint solicitation_communications_type_check check (
-    communication_type in ('invitation', 'clarification', 'extension', 'requote', 'award_notice', 'failed_bid_notice')
+    communication_type in ('invitation', 'invitation_acknowledgement', 'clarification', 'extension', 'requote', 'award_notice', 'failed_bid_notice')
   );
 
 create index if not exists solicitation_communications_request_group_idx
   on procurement.solicitation_communications(request_id, (detail->>'notificationGroupId'));
+
+create unique index if not exists solicitation_communications_acknowledgement_once_idx
+  on procurement.solicitation_communications ((detail->>'acknowledgedCommunicationId'))
+  where communication_type = 'invitation_acknowledgement';
 
 create or replace function private.policy_sourcing_can_manage()
 returns boolean
@@ -1612,7 +1643,7 @@ $$;
 create or replace function procurement.invite_sourcing_vendors(payload jsonb)
 returns jsonb language plpgsql security definer set search_path = '' as $$
 declare v_event procurement.sourcing_events; v_profile procurement.policy_profiles; v_group uuid := gen_random_uuid();
-  v_vendor_ids uuid[]; v_count integer; v_duplicate integer;
+  v_vendor_ids uuid[]; v_count integer; v_duplicate integer; v_vendor_id uuid; v_communication_id uuid;
 begin
   if not private.policy_sourcing_can_manage() then raise exception 'Not authorized to manage sourcing'; end if;
   select * into v_event from procurement.sourcing_events where id = (payload->>'sourcing_event_id')::uuid for update;
@@ -1625,29 +1656,69 @@ begin
   if v_count <> cardinality(v_vendor_ids) then raise exception 'Only currently accredited vendors may be invited'; end if;
   select count(*) into v_duplicate from procurement.sourcing_responses response where response.sourcing_event_id = v_event.id and response.vendor_id = any(v_vendor_ids);
   if v_duplicate > 0 then raise exception 'Each vendor may receive a controlled invitation only once'; end if;
-  insert into procurement.sourcing_responses(sourcing_event_id, vendor_id, invited_at, invitation_delivered_at)
-  select v_event.id, vendor_id, statement_timestamp(), statement_timestamp() from unnest(v_vendor_ids) vendor_id;
-  insert into procurement.solicitation_communications(request_id, policy_profile_id, communication_type, sent_by, audience, content_hash, detail)
-  select v_event.request_id, v_profile.id, 'invitation', auth.uid(), vendor_id::text,
-    encode(extensions.digest(convert_to(jsonb_build_object('type', 'invitation', 'group', v_group, 'vendor', vendor_id, 'version', v_event.package_version, 'hash', v_event.package_hash, 'deadline', v_event.submission_deadline)::text, 'UTF8'), 'sha256'), 'hex'),
-    jsonb_build_object('notificationGroupId', v_group, 'recipientVendorId', vendor_id, 'packageVersion', v_event.package_version, 'packageHash', v_event.package_hash, 'submissionDeadline', v_event.submission_deadline, 'sentAt', statement_timestamp(), 'deliveredAt', statement_timestamp())
-  from unnest(v_vendor_ids) vendor_id;
+  foreach v_vendor_id in array v_vendor_ids loop
+    insert into procurement.sourcing_responses(sourcing_event_id, vendor_id, invited_at, invitation_delivered_at)
+    values(v_event.id, v_vendor_id, statement_timestamp(), statement_timestamp());
+    insert into procurement.solicitation_communications(request_id, policy_profile_id, communication_type, sent_by, audience, content_hash, detail)
+    values(
+      v_event.request_id, v_profile.id, 'invitation', auth.uid(), v_vendor_id::text,
+      encode(extensions.digest(convert_to(jsonb_build_object('type', 'invitation', 'group', v_group, 'vendor', v_vendor_id, 'version', v_event.package_version, 'hash', v_event.package_hash, 'deadline', v_event.submission_deadline)::text, 'UTF8'), 'sha256'), 'hex'),
+      jsonb_build_object('notificationGroupId', v_group, 'recipientVendorId', v_vendor_id, 'packageVersion', v_event.package_version, 'packageHash', v_event.package_hash, 'submissionDeadline', v_event.submission_deadline, 'sentAt', statement_timestamp(), 'deliveredAt', statement_timestamp())
+    ) returning id into v_communication_id;
+    update procurement.sourcing_responses
+    set current_invitation_communication_id = v_communication_id,
+      current_invitation_group_id = v_group,
+      current_invitation_package_version = v_event.package_version,
+      current_invitation_package_hash = v_event.package_hash,
+      invitation_acknowledged_at = null
+    where sourcing_event_id = v_event.id and vendor_id = v_vendor_id;
+  end loop;
   return jsonb_build_object('notification_group_id', v_group, 'recipient_count', cardinality(v_vendor_ids));
 end;
 $$;
 
 create or replace function procurement.acknowledge_sourcing_invitation(payload jsonb)
 returns jsonb language plpgsql security definer set search_path = '' as $$
-declare v_response procurement.sourcing_responses; v_event procurement.sourcing_events; v_vendor_id uuid := (payload->>'vendor_id')::uuid; v_replayed boolean;
+declare v_response procurement.sourcing_responses; v_event procurement.sourcing_events; v_vendor_id uuid := (payload->>'vendor_id')::uuid;
+  v_communication procurement.solicitation_communications; v_acknowledgement procurement.solicitation_communications;
+  v_communication_id uuid := (payload->>'communication_id')::uuid; v_group_id uuid := (payload->>'notification_group_id')::uuid;
+  v_package_version text := nullif(btrim(payload->>'package_version'), ''); v_package_hash text := nullif(btrim(payload->>'package_hash'), '');
 begin
   if auth.uid() is null or core.current_vendor_id() is distinct from v_vendor_id then raise exception 'Only the invited vendor may acknowledge this invitation'; end if;
   select response.* into v_response from procurement.sourcing_responses response where response.sourcing_event_id = (payload->>'sourcing_event_id')::uuid and response.vendor_id = v_vendor_id for update;
   if not found then raise exception 'Controlled invitation not found'; end if;
   select * into v_event from procurement.sourcing_events where id = v_response.sourcing_event_id;
-  if not exists(select 1 from procurement.solicitation_communications communication where communication.request_id = v_event.request_id and communication.communication_type = 'invitation' and communication.detail->>'recipientVendorId' = v_vendor_id::text) then raise exception 'Invitation delivery evidence not found'; end if;
-  v_replayed := v_response.invitation_acknowledged_at is not null;
-  if not v_replayed then update procurement.sourcing_responses set invitation_acknowledged_at = statement_timestamp() where id = v_response.id returning * into v_response; end if;
-  return jsonb_build_object('sourcing_event_id', v_response.sourcing_event_id, 'vendor_id', v_vendor_id, 'acknowledged_at', v_response.invitation_acknowledged_at, 'replayed', v_replayed);
+  if v_communication_id is null or v_group_id is null or v_package_version is null or v_package_hash is null then raise exception 'Current communication, notification group, package version, and package hash are required'; end if;
+  if v_response.current_invitation_communication_id is distinct from v_communication_id
+    or v_response.current_invitation_group_id is distinct from v_group_id
+    or v_response.current_invitation_package_version is distinct from v_package_version
+    or v_response.current_invitation_package_hash is distinct from v_package_hash then
+    raise exception 'Acknowledgement must match the vendor current controlled invitation package';
+  end if;
+  select * into v_communication from procurement.solicitation_communications communication
+  where communication.id = v_communication_id
+    and communication.request_id = v_event.request_id
+    and communication.communication_type in ('invitation', 'requote')
+    and communication.detail->>'recipientVendorId' = v_vendor_id::text
+    and communication.detail->>'notificationGroupId' = v_group_id::text
+    and communication.detail->>'packageVersion' = v_package_version
+    and communication.detail->>'packageHash' = v_package_hash;
+  if not found then raise exception 'Current invitation delivery evidence not found'; end if;
+  select * into v_acknowledgement from procurement.solicitation_communications acknowledgement
+  where acknowledgement.communication_type = 'invitation_acknowledgement'
+    and acknowledgement.detail->>'acknowledgedCommunicationId' = v_communication_id::text
+    and acknowledgement.detail->>'recipientVendorId' = v_vendor_id::text;
+  if found then
+    return jsonb_build_object('sourcing_event_id', v_response.sourcing_event_id, 'vendor_id', v_vendor_id, 'communication_id', v_communication_id, 'notification_group_id', v_group_id, 'package_version', v_package_version, 'package_hash', v_package_hash, 'acknowledged_at', coalesce(v_acknowledgement.detail->>'acknowledgedAt', v_acknowledgement.sent_at::text), 'replayed', true);
+  end if;
+  insert into procurement.solicitation_communications(request_id, policy_profile_id, communication_type, sent_by, audience, content_hash, detail)
+  values(
+    v_event.request_id, v_communication.policy_profile_id, 'invitation_acknowledgement', auth.uid(), 'governed-audit',
+    encode(extensions.digest(convert_to(jsonb_build_object('type', 'invitation_acknowledgement', 'communication', v_communication_id, 'group', v_group_id, 'vendor', v_vendor_id, 'version', v_package_version, 'hash', v_package_hash)::text, 'UTF8'), 'sha256'), 'hex'),
+    jsonb_build_object('acknowledgedCommunicationId', v_communication_id, 'notificationGroupId', v_group_id, 'recipientVendorId', v_vendor_id, 'packageVersion', v_package_version, 'packageHash', v_package_hash, 'acknowledgedAt', statement_timestamp())
+  ) returning * into v_acknowledgement;
+  update procurement.sourcing_responses set invitation_acknowledged_at = v_acknowledgement.sent_at where id = v_response.id;
+  return jsonb_build_object('sourcing_event_id', v_response.sourcing_event_id, 'vendor_id', v_vendor_id, 'communication_id', v_communication_id, 'notification_group_id', v_group_id, 'package_version', v_package_version, 'package_hash', v_package_hash, 'acknowledged_at', v_acknowledgement.sent_at, 'replayed', false);
 end;
 $$;
 
@@ -1688,7 +1759,7 @@ begin
   elsif v_type = 'extension' then
     if v_extension < 1 or v_extension > v_profile.max_extension_working_days then raise exception 'Extension must be between 1 and % working days', v_profile.max_extension_working_days; end if;
     v_new_deadline := private.policy_add_working_days(v_event.submission_deadline, v_extension);
-    v_extension_cap := private.policy_add_working_days(coalesce(v_event.original_submission_deadline, v_event.submission_deadline), v_profile.max_extension_working_days);
+    v_extension_cap := private.policy_add_working_days(v_event.original_submission_deadline, v_profile.max_extension_working_days);
     if v_new_deadline > v_extension_cap then raise exception 'Cumulative extension cannot exceed % working days from the original submission deadline', v_profile.max_extension_working_days; end if;
     update procurement.sourcing_events set submission_deadline = v_new_deadline, status = 'issued', failed_bid_reason = null where id = v_event.id;
   else raise exception 'Unsupported solicitation communication'; end if;
@@ -1708,7 +1779,7 @@ $$;
 create or replace function procurement.transition_sourcing_event(payload jsonb)
 returns jsonb language plpgsql security definer set search_path = '' as $$
 declare v_event procurement.sourcing_events; v_profile procurement.policy_profiles; v_action text := payload->>'action';
-  v_invited integer; v_accredited integer; v_usable integer; v_min_deadline timestamptz; v_requote_deadline timestamptz; v_extension_cap timestamptz; v_group uuid := gen_random_uuid(); v_has_exception boolean; v_vendor core.vendors;
+  v_invited integer; v_accredited integer; v_usable integer; v_min_deadline timestamptz; v_requote_deadline timestamptz; v_extension_cap timestamptz; v_group uuid := gen_random_uuid(); v_has_exception boolean; v_vendor core.vendors; v_response procurement.sourcing_responses; v_communication_id uuid;
 begin
   if not private.policy_sourcing_can_manage() then raise exception 'Not authorized to manage sourcing'; end if;
   select * into v_event from procurement.sourcing_events where id = (payload->>'id')::uuid for update;
@@ -1746,16 +1817,29 @@ begin
     if exists(select 1 from procurement.sourcing_responses response where response.sourcing_event_id = v_event.id and response.vendor_id = v_vendor.id) then raise exception 'Select an additional vendor who has not already been invited'; end if;
     v_requote_deadline := nullif(payload->>'submission_deadline', '')::timestamptz;
     if v_requote_deadline is null or v_requote_deadline <= v_event.submission_deadline then raise exception 'A later requote deadline is required'; end if;
-    v_extension_cap := private.policy_add_working_days(coalesce(v_event.original_submission_deadline, v_event.submission_deadline), v_profile.max_extension_working_days);
+    v_extension_cap := private.policy_add_working_days(v_event.original_submission_deadline, v_profile.max_extension_working_days);
     if v_requote_deadline > v_extension_cap then raise exception 'Requote deadline cannot exceed % working days from the original submission deadline', v_profile.max_extension_working_days; end if;
     if nullif(btrim(payload->>'package_version'), '') is null or nullif(btrim(payload->>'package_hash'), '') is null or (btrim(payload->>'package_version') = v_event.package_version and btrim(payload->>'package_hash') = v_event.package_hash) then raise exception 'A new controlled package version or hash is required for requote'; end if;
     insert into procurement.sourcing_responses(sourcing_event_id, vendor_id, invited_at, invitation_delivered_at) values(v_event.id, v_vendor.id, statement_timestamp(), statement_timestamp());
     update procurement.sourcing_events set status = 'issued', failed_bid_reason = null, submission_deadline = v_requote_deadline, package_version = btrim(payload->>'package_version'), package_hash = btrim(payload->>'package_hash') where id = v_event.id returning * into v_event;
-    insert into procurement.solicitation_communications(request_id, policy_profile_id, communication_type, sent_by, audience, content_hash, detail)
-    select v_event.request_id, v_profile.id, 'requote', auth.uid(), response.vendor_id::text,
-      encode(extensions.digest(convert_to(jsonb_build_object('type', 'requote', 'event', v_event.id, 'group', v_group, 'version', v_event.package_version, 'hash', v_event.package_hash, 'deadline', v_event.submission_deadline)::text, 'UTF8'), 'sha256'), 'hex'),
-      jsonb_build_object('notificationGroupId', v_group, 'recipientVendorId', response.vendor_id, 'packageVersion', v_event.package_version, 'packageHash', v_event.package_hash, 'submissionDeadline', v_event.submission_deadline, 'sentAt', statement_timestamp(), 'deliveredAt', statement_timestamp())
-    from procurement.sourcing_responses response where response.sourcing_event_id = v_event.id and response.invited_at is not null;
+    for v_response in
+      select * from procurement.sourcing_responses response
+      where response.sourcing_event_id = v_event.id and response.invited_at is not null
+    loop
+      insert into procurement.solicitation_communications(request_id, policy_profile_id, communication_type, sent_by, audience, content_hash, detail)
+      values(
+        v_event.request_id, v_profile.id, 'requote', auth.uid(), v_response.vendor_id::text,
+        encode(extensions.digest(convert_to(jsonb_build_object('type', 'requote', 'event', v_event.id, 'group', v_group, 'vendor', v_response.vendor_id, 'version', v_event.package_version, 'hash', v_event.package_hash, 'deadline', v_event.submission_deadline)::text, 'UTF8'), 'sha256'), 'hex'),
+        jsonb_build_object('notificationGroupId', v_group, 'recipientVendorId', v_response.vendor_id, 'packageVersion', v_event.package_version, 'packageHash', v_event.package_hash, 'submissionDeadline', v_event.submission_deadline, 'sentAt', statement_timestamp(), 'deliveredAt', statement_timestamp())
+      ) returning id into v_communication_id;
+      update procurement.sourcing_responses
+      set current_invitation_communication_id = v_communication_id,
+        current_invitation_group_id = v_group,
+        current_invitation_package_version = v_event.package_version,
+        current_invitation_package_hash = v_event.package_hash,
+        invitation_acknowledged_at = null
+      where id = v_response.id;
+    end loop;
   elsif v_action = 'evaluation' then
     v_has_exception := private.policy_sourcing_approved_exception(v_event.request_id::text, 'evaluation');
     if v_event.status not in ('response_closed', 'failed_bid') then raise exception 'Response closure or failed-bid recovery is required before evaluation'; end if;
@@ -1824,11 +1908,55 @@ begin
   select * into v_event from procurement.sourcing_events where request_id = v_request.id and status <> 'cancelled' order by created_at desc limit 1;
   if not found then return jsonb_build_object('requestId', v_request.id, 'event', null); end if;
   select coalesce(jsonb_agg(jsonb_build_object('id', response.id, 'vendorId', response.vendor_id, 'vendorName', vendor.legal_name, 'accredited', vendor.accreditation_status = 'approved' and (vendor.accreditation_expires_at is null or vendor.accreditation_expires_at > statement_timestamp()), 'invitedAt', response.invited_at, 'receivedAt', response.received_at, 'deadlineCompliant', response.deadline_compliant, 'proposalReference', response.proposal_storage_path, 'commercial', response.commercial, 'technical', response.technical) order by vendor.legal_name), '[]'::jsonb) into v_responses from procurement.sourcing_responses response join core.vendors vendor on vendor.id = response.vendor_id where response.sourcing_event_id = v_event.id;
-  select coalesce(jsonb_agg(jsonb_build_object('id', communication.id, 'communicationType', communication.communication_type, 'notificationGroupId', communication.detail->>'notificationGroupId', 'sentAt', communication.detail->>'sentAt', 'deliveredAt', communication.detail->>'deliveredAt', 'acknowledgedAt', response.invitation_acknowledged_at, 'acknowledgementState', case when communication.communication_type = 'invitation' and response.invitation_acknowledged_at is null and communication.sent_at + make_interval(hours => v_profile.vendor_acknowledgement_hours) < statement_timestamp() then 'overdue' when response.invitation_acknowledged_at is not null then 'acknowledged' else 'pending' end, 'clarificationState', case when communication.communication_type = 'clarification' and communication.sent_at + make_interval(hours => v_profile.clarification_hours) < statement_timestamp() then 'overdue' else 'answered' end) order by communication.sent_at desc), '[]'::jsonb) into v_comms from procurement.solicitation_communications communication left join procurement.sourcing_responses response on response.sourcing_event_id = v_event.id and response.vendor_id::text = communication.detail->>'recipientVendorId' where communication.request_id = v_request.id;
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'id', communication.id,
+    'communicationType', communication.communication_type,
+    'notificationGroupId', communication.detail->>'notificationGroupId',
+    'packageVersion', communication.detail->>'packageVersion',
+    'packageHash', communication.detail->>'packageHash',
+    'sentAt', communication.detail->>'sentAt',
+    'deliveredAt', communication.detail->>'deliveredAt',
+    'acknowledgedAt', acknowledgement.detail->>'acknowledgedAt',
+    'acknowledgementState', case
+      when communication.communication_type not in ('invitation', 'requote') then null
+      when response.current_invitation_communication_id is distinct from communication.id then 'superseded'
+      when acknowledgement.id is not null then 'acknowledged'
+      when communication.sent_at + make_interval(hours => v_profile.vendor_acknowledgement_hours) < statement_timestamp() then 'overdue'
+      else 'pending'
+    end,
+    'clarificationState', case when communication.communication_type = 'clarification' and communication.sent_at + make_interval(hours => v_profile.clarification_hours) < statement_timestamp() then 'overdue' when communication.communication_type = 'clarification' then 'answered' else null end
+  ) order by communication.sent_at desc), '[]'::jsonb) into v_comms
+  from procurement.solicitation_communications communication
+  left join procurement.sourcing_responses response
+    on response.sourcing_event_id = v_event.id
+    and response.vendor_id::text = communication.detail->>'recipientVendorId'
+  left join lateral (
+    select acknowledgement.*
+    from procurement.solicitation_communications acknowledgement
+    where acknowledgement.communication_type = 'invitation_acknowledgement'
+      and acknowledgement.detail->>'acknowledgedCommunicationId' = communication.id::text
+      and acknowledgement.detail->>'recipientVendorId' = communication.detail->>'recipientVendorId'
+    order by acknowledgement.sent_at desc
+    limit 1
+  ) acknowledgement on true
+  where communication.request_id = v_request.id
+    and communication.communication_type <> 'invitation_acknowledgement';
   return jsonb_build_object('requestId', v_request.id, 'event', jsonb_build_object('id', v_event.id, 'status', v_event.status, 'submissionDeadline', v_event.submission_deadline, 'originalSubmissionDeadline', v_event.original_submission_deadline, 'intendedResponses', v_event.intended_responses, 'packageVersion', v_event.package_version, 'packageHash', v_event.package_hash, 'failedBidReason', v_event.failed_bid_reason, 'selectedVendorId', v_event.selected_vendor_id, 'closureNote', v_event.closure_note, 'responses', v_responses, 'communications', v_comms, 'policyControls', jsonb_build_object('formalBidAmount', v_profile.formal_bid_amount, 'inviteTargetMin', v_profile.invite_target_min, 'inviteTargetMax', v_profile.invite_target_max, 'sealedBidMinimumResponses', v_profile.sealed_bid_minimum_responses, 'bidWindowWorkingDays', v_profile.bid_window_working_days, 'maxExtensionWorkingDays', v_profile.max_extension_working_days, 'vendorAcknowledgementHours', v_profile.vendor_acknowledgement_hours, 'clarificationHours', v_profile.clarification_hours, 'tabulationHours', v_profile.tabulation_hours, 'technicalEvaluationWorkingDays', v_profile.technical_evaluation_working_days, 'poAcknowledgementHours', v_profile.po_acknowledgement_hours, 'repeatOrderMaxAmount', v_profile.repeat_order_max_amount, 'repeatOrderMaxAgeDays', v_profile.repeat_order_max_age_days, 'pettyCashMaxAmount', v_profile.petty_cash_max_amount, 'poInvoiceThreshold', v_profile.po_invoice_threshold, 'vendorProbationMonths', v_profile.vendor_probation_months)));
 end;
 $$;
 
 revoke all on function private.policy_sourcing_can_manage(), private.policy_sourcing_can_review(), private.policy_add_working_days(timestamptz, integer), private.policy_sourcing_profile(text), private.policy_sourcing_approved_exception(text, text) from public, anon, authenticated;
 revoke all on function procurement.invite_sourcing_vendors(jsonb), procurement.acknowledge_sourcing_invitation(jsonb), procurement.record_solicitation_communication(jsonb) from public, anon;
+
+-- Governed sourcing data is writeable only by its security-definer commands.
+-- In particular, a CI-only service credential cannot forge a response,
+-- acknowledgement, communication, deadline, or audit event by table access.
+revoke insert, update, delete on procurement.sourcing_events,
+  procurement.sourcing_responses,
+  procurement.solicitation_communications,
+  procurement.policy_sla_events,
+  procurement.policy_profile_events,
+  procurement.policy_conflicts
+from authenticated, service_role;
+
 grant execute on function procurement.save_sourcing_event(jsonb), procurement.invite_sourcing_vendors(jsonb), procurement.acknowledge_sourcing_invitation(jsonb), procurement.record_sourcing_response(jsonb), procurement.record_solicitation_communication(jsonb), procurement.transition_sourcing_event(jsonb), procurement.sourcing_workspace(jsonb), procurement.submit_insufficient_bid_exception(jsonb), procurement.review_insufficient_bid_exception(jsonb), procurement.insufficient_bid_exception(jsonb) to authenticated, service_role;

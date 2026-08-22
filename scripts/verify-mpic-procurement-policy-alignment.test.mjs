@@ -1058,13 +1058,33 @@ test("executes public governed sourcing controls and independent failed-bid reco
   const additionalVendorId = "72000000-0000-0000-0000-000000000014";
   const overflowVendorId = "72000000-0000-0000-0000-000000000015";
   const vendorActorId = "72000000-0000-0000-0000-000000000016";
+  const additionalVendorActorId = "72000000-0000-0000-0000-000000000017";
   try {
     stage = "base migration";
     await db.exec(migrationBeforeBackfillForPglite);
     await seedActivePolicyProfiles(db);
     await db.exec(`insert into core.profiles(id, status) values ('${checkerId}', 'active');`);
+    await db.exec(`
+      grant usage on schema procurement to service_role;
+      grant all on procurement.sourcing_events, procurement.sourcing_responses,
+        procurement.solicitation_communications, procurement.policy_sla_events,
+        procurement.policy_profile_events, procurement.policy_conflicts to service_role;
+    `);
     stage = "Task 6 migration";
     await db.exec(migrationTask6);
+    stage = "service role write denial";
+    await db.exec('set role service_role');
+    await assert.rejects(
+      () => db.query(`insert into procurement.sourcing_events(request_id, route_decision_id, submission_deadline, original_submission_deadline) values ('00000000-0000-0000-0000-000000000001', gen_random_uuid(), statement_timestamp(), statement_timestamp())`),
+      /permission denied/i,
+      'service_role must not forge governed sourcing events by direct table write',
+    );
+    await assert.rejects(
+      () => db.query(`insert into procurement.solicitation_communications(request_id, communication_type, content_hash) values ('00000000-0000-0000-0000-000000000001', 'invitation', 'forged')`),
+      /permission denied/i,
+      'service_role must not forge invitation or acknowledgement evidence by direct table write',
+    );
+    await db.exec('reset role');
     stage = "request and vendors";
     await insertRequest(db, { id: requestId, requirementKind: "materials" });
     await db.exec(`
@@ -1082,7 +1102,9 @@ test("executes public governed sourcing controls and independent failed-bid reco
         ('${vendorIds[2]}', 'Accredited three', 'approved'),
         ('${additionalVendorId}', 'Accredited four', 'approved'),
         ('${overflowVendorId}', 'Accredited five', 'approved');
-      insert into core.profiles(id, vendor_id, status) values ('${vendorActorId}', '${vendorIds[0]}', 'active');
+      insert into core.profiles(id, vendor_id, status) values
+        ('${vendorActorId}', '${vendorIds[0]}', 'active'),
+        ('${additionalVendorActorId}', '${additionalVendorId}', 'active');
     `);
 
     await setPolicyActor(db, unauthorizedActorId, false);
@@ -1117,6 +1139,23 @@ test("executes public governed sourcing controls and independent failed-bid reco
       from procurement.solicitation_communications where request_id = '${requestId}' and communication_type = 'invitation'
     `);
     assert.deepEqual(invitationEvidence.rows[0], { recipients: 3, groups: 1, complete: true }, 'invitation evidence must be immutable, per-recipient, and grouped');
+    const acknowledgementPayload = async (sourcingEventId, vendorId) => {
+      const current = await db.query(`
+        select current_invitation_communication_id, current_invitation_group_id,
+          current_invitation_package_version, current_invitation_package_hash
+        from procurement.sourcing_responses
+        where sourcing_event_id = '${sourcingEventId}' and vendor_id = '${vendorId}'
+      `);
+      const row = current.rows[0];
+      return {
+        sourcing_event_id: sourcingEventId,
+        vendor_id: vendorId,
+        communication_id: row.current_invitation_communication_id,
+        notification_group_id: row.current_invitation_group_id,
+        package_version: row.current_invitation_package_version,
+        package_hash: row.current_invitation_package_hash,
+      };
+    };
     const normalAcknowledgement = await db.query(`select procurement.sourcing_workspace(${sqlJson({ request_id: requestId })}) as workspace`);
     assert.ok(normalAcknowledgement.rows[0].workspace.event.communications.some((item) => item.communicationType === 'invitation' && item.acknowledgementState === 'pending'));
     await db.exec(`
@@ -1125,13 +1164,20 @@ test("executes public governed sourcing controls and independent failed-bid reco
       create or replace function auth.uid() returns uuid language sql stable as $$ select '${vendorActorId}'::uuid $$;
       create or replace function core.current_vendor_id() returns uuid language sql stable as $$ select '${vendorIds[0]}'::uuid $$;
     `);
+    const unauthorizedVendorAcknowledgement = await acknowledgementPayload(eventId, vendorIds[1]);
     await assert.rejects(
-      () => db.query(`select procurement.acknowledge_sourcing_invitation(${sqlJson({ sourcing_event_id: eventId, vendor_id: vendorIds[1] })})`),
+      () => db.query(`select procurement.acknowledge_sourcing_invitation(${sqlJson(unauthorizedVendorAcknowledgement)})`),
       /Only the invited vendor/i,
     );
-    const acknowledgement = await db.query(`select procurement.acknowledge_sourcing_invitation(${sqlJson({ sourcing_event_id: eventId, vendor_id: vendorIds[0] })}) as result`);
+    const firstAcknowledgement = await acknowledgementPayload(eventId, vendorIds[0]);
+    await assert.rejects(
+      () => db.query(`select procurement.acknowledge_sourcing_invitation(${sqlJson({ ...firstAcknowledgement, notification_group_id: vendorIds[1] })})`),
+      /must match the vendor current controlled invitation package/i,
+      'a vendor cannot acknowledge an arbitrary notification group',
+    );
+    const acknowledgement = await db.query(`select procurement.acknowledge_sourcing_invitation(${sqlJson(firstAcknowledgement)}) as result`);
     assert.equal(acknowledgement.rows[0].result.replayed, false);
-    const replay = await db.query(`select procurement.acknowledge_sourcing_invitation(${sqlJson({ sourcing_event_id: eventId, vendor_id: vendorIds[0] })}) as result`);
+    const replay = await db.query(`select procurement.acknowledge_sourcing_invitation(${sqlJson(firstAcknowledgement)}) as result`);
     assert.equal(replay.rows[0].result.replayed, true, 'acknowledgement replay must be idempotent');
     await db.exec(`
       create or replace function auth.uid() returns uuid language sql stable as $$ select '${actorId}'::uuid $$;
@@ -1200,6 +1246,41 @@ test("executes public governed sourcing controls and independent failed-bid reco
     assert.equal(requoteSuccess.rows[0].event.status, 'issued');
     const requoteEvidence = await db.query(`select count(*)::integer as recipients, count(distinct detail->>'notificationGroupId')::integer as groups from procurement.solicitation_communications where request_id = '${requestId}' and communication_type = 'requote'`);
     assert.deepEqual(requoteEvidence.rows[0], { recipients: 4, groups: 1 }, 'requote must notify every existing and additional invitee equally');
+    const existingRequoteAcknowledgement = await acknowledgementPayload(requoteEventId, vendorIds[0]);
+    const additionalRequoteAcknowledgement = await acknowledgementPayload(requoteEventId, additionalVendorId);
+    await db.exec(`
+      create or replace function auth.uid() returns uuid language sql stable as $$ select '${vendorActorId}'::uuid $$;
+      create or replace function core.current_vendor_id() returns uuid language sql stable as $$ select '${vendorIds[0]}'::uuid $$;
+    `);
+    await assert.rejects(
+      () => db.query(`select procurement.acknowledge_sourcing_invitation(${sqlJson({ ...firstAcknowledgement, sourcing_event_id: requoteEventId })})`),
+      /must match the vendor current controlled invitation package/i,
+      'an acknowledgement for a superseded package must not satisfy the requote',
+    );
+    const existingRequoteAck = await db.query(`select procurement.acknowledge_sourcing_invitation(${sqlJson(existingRequoteAcknowledgement)}) as result`);
+    assert.equal(existingRequoteAck.rows[0].result.replayed, false);
+    const existingRequoteReplay = await db.query(`select procurement.acknowledge_sourcing_invitation(${sqlJson(existingRequoteAcknowledgement)}) as result`);
+    assert.equal(existingRequoteReplay.rows[0].result.replayed, true, 'requote acknowledgement replay must be idempotent');
+    await db.exec(`
+      create or replace function auth.uid() returns uuid language sql stable as $$ select '${additionalVendorActorId}'::uuid $$;
+      create or replace function core.current_vendor_id() returns uuid language sql stable as $$ select '${additionalVendorId}'::uuid $$;
+    `);
+    await assert.rejects(
+      () => db.query(`select procurement.acknowledge_sourcing_invitation(${sqlJson({ ...existingRequoteAcknowledgement, vendor_id: additionalVendorId })})`),
+      /must match the vendor current controlled invitation package/i,
+      'a new vendor cannot reuse another recipient acknowledgement evidence',
+    );
+    const additionalRequoteAck = await db.query(`select procurement.acknowledge_sourcing_invitation(${sqlJson(additionalRequoteAcknowledgement)}) as result`);
+    assert.equal(additionalRequoteAck.rows[0].result.replayed, false, 'the additional vendor must acknowledge the current requote package');
+    await db.exec(`
+      create or replace function auth.uid() returns uuid language sql stable as $$ select '${actorId}'::uuid $$;
+      create or replace function core.current_vendor_id() returns uuid language sql stable as $$ select null::uuid $$;
+      update procurement.solicitation_communications set sent_at = statement_timestamp() - interval '25 hours'
+      where id = '${additionalRequoteAcknowledgement.communication_id}';
+    `);
+    const requoteWorkspace = await db.query(`select procurement.sourcing_workspace(${sqlJson({ request_id: requestId })}) as workspace`);
+    assert.ok(requoteWorkspace.rows[0].workspace.event.communications.some((item) => item.id === existingRequoteAcknowledgement.communication_id && item.acknowledgementState === 'acknowledged'));
+    assert.ok(requoteWorkspace.rows[0].workspace.event.communications.some((item) => item.id === additionalRequoteAcknowledgement.communication_id && item.acknowledgementState === 'acknowledged'));
     await db.query(`select procurement.transition_sourcing_event(${sqlJson({ id: requoteEventId, action: "failed_bid", failed_bid_reason: "insufficient_responses" })})`);
     await assert.rejects(
       () => db.query(`select procurement.transition_sourcing_event(${sqlJson({ id: requoteEventId, action: "source_additional_and_requote", vendor_id: overflowVendorId, submission_deadline: "2030-01-25T00:00:00.000Z", package_version: "RFQ-2030-v4", package_hash: "c".repeat(64) })})`),
@@ -1207,6 +1288,95 @@ test("executes public governed sourcing controls and independent failed-bid reco
     );
   } catch (cause) {
     throw new Error(`${stage}: ${cause instanceof Error ? cause.message : String(cause)}`);
+  } finally {
+    await db.close();
+  }
+});
+
+test("backfills legacy sourcing deadlines before enforcing cumulative extension and requote caps", async () => {
+  const db = await createGovernedRouteFixture();
+  const requestId = "73000000-0000-0000-0000-000000000001";
+  const routeId = "73000000-0000-0000-0000-000000000002";
+  const issuedSevenId = "73000000-0000-0000-0000-000000000003";
+  const issuedEightId = "73000000-0000-0000-0000-000000000004";
+  const issuedFourId = "73000000-0000-0000-0000-000000000005";
+  const failedBidId = "73000000-0000-0000-0000-000000000006";
+  const invitedVendorId = "73000000-0000-0000-0000-000000000011";
+  const additionalVendorId = "73000000-0000-0000-0000-000000000012";
+  const baseline = "2030-01-15T00:00:00.000Z";
+  try {
+    await db.exec(migrationBeforeBackfillForPglite);
+    await seedActivePolicyProfiles(db);
+    await db.exec(`
+      insert into procurement.requests(
+        id, status, estimated_amount, requirement_kind, solicitation_type, procurement_mode,
+        governance_tier, policy_profile_id, requester_id
+      ) values (
+        '${requestId}', 'draft', 500000, 'materials', 'rfq', 'competitive_bidding',
+        'standard', '${operatingProfileId}', '${actorId}'
+      );
+      insert into procurement.route_decisions(
+        id, request_id, policy_version, request_version, method, reasons, risk_facts, status,
+        confirmed_by, solicitation_type, procurement_mode, governance_tier, policy_profile_id
+      ) values (
+        '${routeId}', '${requestId}', 'MWELL-FIXTURE:2026.01', 1, 'rfq', array['legacy'], '{}'::jsonb,
+        'confirmed', '${actorId}', 'rfq', 'competitive_bidding', 'standard', '${operatingProfileId}'
+      );
+      insert into core.vendors(id, legal_name, accreditation_status) values
+        ('${invitedVendorId}', 'Legacy invited vendor', 'approved'),
+        ('${additionalVendorId}', 'Legacy additional vendor', 'approved');
+      insert into procurement.sourcing_events(
+        id, request_id, route_decision_id, issued_at, submission_deadline, intended_responses,
+        status, clarification_log
+      ) values
+        ('${issuedSevenId}', '${requestId}', '${routeId}', statement_timestamp(), '${baseline}', 3, 'issued', '[]'::jsonb),
+        ('${issuedEightId}', '${requestId}', '${routeId}', statement_timestamp(), '${baseline}', 3, 'issued', '[]'::jsonb),
+        ('${issuedFourId}', '${requestId}', '${routeId}', statement_timestamp(), '${baseline}', 3, 'issued', '[]'::jsonb),
+        ('${failedBidId}', '${requestId}', '${routeId}', statement_timestamp(), '${baseline}', 3, 'failed_bid', '[]'::jsonb);
+      insert into procurement.sourcing_responses(sourcing_event_id, vendor_id, invited_at)
+      values
+        ('${issuedSevenId}', '${invitedVendorId}', statement_timestamp()),
+        ('${issuedEightId}', '${invitedVendorId}', statement_timestamp()),
+        ('${issuedFourId}', '${invitedVendorId}', statement_timestamp()),
+        ('${failedBidId}', '${invitedVendorId}', statement_timestamp());
+    `);
+    await db.exec(migrationTask6);
+    const backfilled = await db.query(`
+      select id, submission_deadline, original_submission_deadline
+      from procurement.sourcing_events
+      where id in ('${issuedSevenId}', '${issuedEightId}', '${issuedFourId}', '${failedBidId}')
+      order by id
+    `);
+    assert.equal(backfilled.rows.length, 4);
+    for (const event of backfilled.rows) {
+      assert.equal(new Date(event.original_submission_deadline).toISOString(), new Date(baseline).toISOString(), 'legacy baseline must be backfilled before public RPC exposure');
+    }
+    await setPolicyActor(db, actorId, true);
+    await db.query(`select procurement.record_solicitation_communication(${sqlJson({ sourcing_event_id: issuedSevenId, communication_type: "extension", extension_working_days: 7 })})`);
+    await assert.rejects(
+      () => db.query(`select procurement.record_solicitation_communication(${sqlJson({ sourcing_event_id: issuedEightId, communication_type: "extension", extension_working_days: 8 })})`),
+      /between 1 and 7 working days/i,
+      'an eight-working-day legacy extension must be denied',
+    );
+    await db.query(`select procurement.record_solicitation_communication(${sqlJson({ sourcing_event_id: issuedFourId, communication_type: "extension", extension_working_days: 4 })})`);
+    await assert.rejects(
+      () => db.query(`select procurement.record_solicitation_communication(${sqlJson({ sourcing_event_id: issuedFourId, communication_type: "extension", extension_working_days: 4 })})`),
+      /Cumulative extension/i,
+      'legacy 4 + 4 must be capped from the original deadline rather than the latest deadline',
+    );
+    const requoteOverflow = await db.query(`select private.policy_add_working_days('${baseline}'::timestamptz, 8) as deadline`);
+    await assert.rejects(
+      () => db.query(`select procurement.transition_sourcing_event(${sqlJson({
+        id: failedBidId,
+        action: "source_additional_and_requote",
+        vendor_id: additionalVendorId,
+        submission_deadline: requoteOverflow.rows[0].deadline,
+        package_version: "LEGACY-RFQ-v2",
+        package_hash: "d".repeat(64),
+      })})`),
+      /Requote deadline cannot exceed/i,
+      'legacy failed-bid recovery must retain the original deadline cap',
+    );
   } finally {
     await db.close();
   }

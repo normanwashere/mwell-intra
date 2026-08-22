@@ -5,12 +5,26 @@ test('disposable governed database executes sourcing controls through browser ac
   const database = new GovernedSourcingPglite();
   await database.start();
   try {
-    await page.exposeFunction('governedRpc', async (actor: 'procurement' | 'reviewer' | 'operations' | 'vendor', name: string, payload: Record<string, unknown>) => {
+    await database.db.exec('set role service_role');
+    await expect(database.db.query(`insert into procurement.sourcing_events(request_id, route_decision_id, submission_deadline, original_submission_deadline) values ('${database.requestId}', (select id from procurement.route_decisions limit 1), statement_timestamp(), statement_timestamp())`)).rejects.toThrow(/permission denied/i);
+    await expect(database.db.query(`insert into procurement.solicitation_communications(request_id, communication_type, content_hash) values ('${database.requestId}', 'invitation', 'forged')`)).rejects.toThrow(/permission denied/i);
+    await database.db.exec('reset role');
+    await page.exposeFunction('governedRpc', async (actor: 'procurement' | 'reviewer' | 'operations' | 'vendor' | 'vendor-additional', name: string, payload: Record<string, unknown>) => {
       try { return { ok: true, result: await database.rpc(actor, name, payload) }; }
       catch (cause) { return { ok: false, error: cause instanceof Error ? cause.message : String(cause) }; }
     });
     await page.setContent(`<main><h1>Governed sourcing database</h1><output id="result"></output><script>window.run = async (actor,name,payload) => { const value = await window.governedRpc(actor,name,payload); document.querySelector('#result').textContent = JSON.stringify(value); return value; }</script></main>`);
-    const call = (actor: 'procurement' | 'reviewer' | 'operations' | 'vendor', name: string, payload: Record<string, unknown>) => page.evaluate(([a, n, p]) => (window as any).run(a, n, p), [actor, name, payload] as const);
+    const call = (actor: 'procurement' | 'reviewer' | 'operations' | 'vendor' | 'vendor-additional', name: string, payload: Record<string, unknown>) => page.evaluate(([a, n, p]) => (window as any).run(a, n, p), [actor, name, payload] as const);
+    const acknowledgementPayload = async (sourcingEventId: string, vendorId: string) => {
+      const current = await database.db.query<{
+        current_invitation_communication_id: string;
+        current_invitation_group_id: string;
+        current_invitation_package_version: string;
+        current_invitation_package_hash: string;
+      }>(`select current_invitation_communication_id, current_invitation_group_id, current_invitation_package_version, current_invitation_package_hash from procurement.sourcing_responses where sourcing_event_id = '${sourcingEventId}' and vendor_id = '${vendorId}'`);
+      const row = current.rows[0]!;
+      return { sourcing_event_id: sourcingEventId, vendor_id: vendorId, communication_id: row.current_invitation_communication_id, notification_group_id: row.current_invitation_group_id, package_version: row.current_invitation_package_version, package_hash: row.current_invitation_package_hash };
+    };
     const plan = { request_id: database.requestId, submission_deadline: governedSourcing.eventDeadline, intended_responses: 3, package_version: 'DB-RFQ-v1', package_hash: 'a'.repeat(64) };
     expect((await call('operations', 'save_sourcing_event', plan)).ok).toBe(false);
     const saved = await call('procurement', 'save_sourcing_event', plan);
@@ -22,8 +36,10 @@ test('disposable governed database executes sourcing controls through browser ac
     await database.db.exec(`update procurement.solicitation_communications set sent_at = statement_timestamp() - interval '25 hours' where communication_type = 'invitation' and detail->>'recipientVendorId' = '${database.vendorIds[1]}'`);
     const overdueSla = await call('procurement', 'sourcing_workspace', { request_id: database.requestId });
     expect((overdueSla.result as any).event.communications.some((item: any) => item.communicationType === 'invitation' && item.acknowledgementState === 'overdue')).toBe(true);
-    expect((await call('vendor', 'acknowledge_sourcing_invitation', { sourcing_event_id: eventId, vendor_id: database.vendorIds[0] })).ok).toBe(true);
-    expect((await call('vendor', 'acknowledge_sourcing_invitation', { sourcing_event_id: eventId, vendor_id: database.vendorIds[0] })).result).toMatchObject({ replayed: true });
+    const initialAcknowledgement = await acknowledgementPayload(eventId, database.vendorIds[0]);
+    expect((await call('vendor', 'acknowledge_sourcing_invitation', { ...initialAcknowledgement, notification_group_id: database.vendorIds[1] })).ok).toBe(false);
+    expect((await call('vendor', 'acknowledge_sourcing_invitation', initialAcknowledgement)).ok).toBe(true);
+    expect((await call('vendor', 'acknowledge_sourcing_invitation', initialAcknowledgement)).result).toMatchObject({ replayed: true });
     expect((await call('procurement', 'transition_sourcing_event', { id: eventId, action: 'issue' })).ok).toBe(true);
     expect((await call('procurement', 'transition_sourcing_event', { id: eventId, action: 'award', selected_vendor_id: database.vendorIds[0], closure_note: 'Too early' })).ok).toBe(false);
     expect((await call('procurement', 'record_solicitation_communication', { sourcing_event_id: eventId, communication_type: 'extension', extension_working_days: 7 })).ok).toBe(true);
@@ -36,6 +52,17 @@ test('disposable governed database executes sourcing controls through browser ac
     expect((await call('procurement', 'record_sourcing_response', { sourcing_event_id: requoteEventId, vendor_id: database.vendorIds[0], received_at: '2026-08-22T00:00:00.000Z', proposal_storage_path: 'proposal.pdf', commercial: { amount: 100 }, technical: { score: 90 } })).ok).toBe(true);
     expect((await call('procurement', 'transition_sourcing_event', { id: requoteEventId, action: 'failed_bid', failed_bid_reason: 'insufficient_responses' })).ok).toBe(true);
     expect((await call('procurement', 'transition_sourcing_event', { id: requoteEventId, action: 'source_additional_and_requote', vendor_id: database.vendorIds[3], submission_deadline: '2030-01-22T00:00:00.000Z', package_version: 'DB-RFQ-v3', package_hash: 'c'.repeat(64) })).ok).toBe(true);
+    const originalVendorRequote = await acknowledgementPayload(requoteEventId, database.vendorIds[0]);
+    const additionalVendorRequote = await acknowledgementPayload(requoteEventId, database.vendorIds[3]);
+    expect((await call('vendor', 'acknowledge_sourcing_invitation', { ...initialAcknowledgement, sourcing_event_id: requoteEventId })).ok).toBe(false);
+    expect((await call('vendor', 'acknowledge_sourcing_invitation', { ...originalVendorRequote, vendor_id: database.vendorIds[3] })).ok).toBe(false);
+    expect((await call('vendor', 'acknowledge_sourcing_invitation', originalVendorRequote)).result).toMatchObject({ replayed: false, package_version: 'DB-RFQ-v3' });
+    expect((await call('vendor-additional', 'acknowledge_sourcing_invitation', additionalVendorRequote)).result).toMatchObject({ replayed: false, vendor_id: database.vendorIds[3] });
+    expect((await call('vendor-additional', 'acknowledge_sourcing_invitation', additionalVendorRequote)).result).toMatchObject({ replayed: true });
+    await database.db.exec(`update procurement.solicitation_communications set sent_at = statement_timestamp() - interval '25 hours' where id = '${additionalVendorRequote.communication_id}'`);
+    const requoteAcknowledgement = await call('procurement', 'sourcing_workspace', { request_id: database.requestId });
+    expect((requoteAcknowledgement.result as any).event.communications.some((item: any) => item.id === initialAcknowledgement.communication_id && item.acknowledgementState === 'superseded')).toBe(true);
+    expect((requoteAcknowledgement.result as any).event.communications.some((item: any) => item.id === additionalVendorRequote.communication_id && item.acknowledgementState === 'acknowledged')).toBe(true);
     expect((await call('procurement', 'transition_sourcing_event', { id: requoteEventId, action: 'failed_bid', failed_bid_reason: 'insufficient_responses' })).ok).toBe(true);
     expect((await call('procurement', 'submit_insufficient_bid_exception', { sourcing_event_id: requoteEventId, phase: 'evaluation', justification: 'Documented market outreach did not generate three usable compliant submissions.', price_reasonableness: 'Independent comparison confirms available pricing remains reasonable.' })).ok).toBe(true);
     const workspace = await call('procurement', 'sourcing_workspace', { request_id: database.requestId });
