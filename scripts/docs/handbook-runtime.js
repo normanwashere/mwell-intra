@@ -93,11 +93,11 @@
       return `#${params}`;
     }
 
-    function isDrawerViewport(name) { return name === 'contents' ? window.matchMedia('(max-width: 767px)').matches : window.matchMedia('(max-width: 1023px)').matches; }
+    function isDrawerViewport() { return window.matchMedia('(max-width: 1180px)').matches; }
     function setHeaderOffset() { document.documentElement.style.setProperty('--handbook-header-height', `${topbar.offsetHeight}px`); }
     function setDrawerVisible(name, visible, { restoreFocus = true } = {}) {
       const drawer = drawers[name];
-      if (!drawer || !isDrawerViewport(name)) return;
+      if (!drawer || !isDrawerViewport()) return;
       if (!visible) {
         drawer.hidden = true; drawer.removeAttribute('role'); drawer.removeAttribute('aria-modal');
         drawerTriggers.filter((button) => button.dataset.openDrawer === name).forEach((button) => button.setAttribute('aria-expanded', 'false'));
@@ -117,7 +117,7 @@
     function resetDrawers() {
       Object.entries(drawers).forEach(([name, drawer]) => {
         if (!drawer) return;
-        if (isDrawerViewport(name)) drawer.hidden = true;
+        if (isDrawerViewport()) drawer.hidden = true;
         else { drawer.hidden = false; drawer.removeAttribute('role'); drawer.removeAttribute('aria-modal'); }
       });
       activeDrawer = null; document.body.classList.remove('drawer-open');
@@ -246,7 +246,7 @@
       if (isSearching) openSearchMatches();
       renderSearchResults();
       window.clearTimeout(searchDrawerTimer);
-      if (isSearching && isDrawerViewport('contents')) {
+      if (isSearching && isDrawerViewport()) {
         searchDrawerTimer = window.setTimeout(() => {
           if (searchState.query === next.query && document.activeElement === search) setDrawerVisible('contents', true);
         }, 350);
@@ -268,7 +268,7 @@
       });
       const pageTocDrawer = pageToc.parentElement;
       if (headings.length === 0) pageTocDrawer.hidden = true;
-      else if (!isDrawerViewport('toc') || activeDrawer === 'toc') pageTocDrawer.hidden = false;
+      else if (!isDrawerViewport() || activeDrawer === 'toc') pageTocDrawer.hidden = false;
     }
 
     function isRouteValid({ tabId, articleId, headingId }) {
@@ -409,7 +409,7 @@
     drawerTriggers.forEach((button) => button.addEventListener('click', () => setDrawerVisible(button.dataset.openDrawer, true)));
     document.querySelectorAll('[data-close-drawer]').forEach((button) => button.addEventListener('click', () => setDrawerVisible(button.dataset.closeDrawer, false)));
     Object.entries(drawers).forEach(([name, drawer]) => drawer?.addEventListener('keydown', (event) => {
-      if (!isDrawerViewport(name)) return;
+      if (!isDrawerViewport()) return;
       if (event.key === 'Escape') { event.preventDefault(); setDrawerVisible(name, false); return; }
       if (event.key !== 'Tab') return;
       const items = focusableIn(drawer); if (!items.length) return;
