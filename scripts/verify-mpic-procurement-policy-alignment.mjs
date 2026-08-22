@@ -316,6 +316,10 @@ export function verifyMigrationText(sql) {
   }
   for (const token of [
     "record_solicitation_communication",
+    "invite_sourcing_vendors",
+    "acknowledge_sourcing_invitation",
+    "source_additional_and_requote",
+    "cumulative extension cannot exceed",
     "bid_window_working_days",
     "max_extension_working_days",
     "failed_bid_reason",

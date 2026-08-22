@@ -1492,6 +1492,12 @@ alter table procurement.sourcing_responses
   add column if not exists invitation_delivered_at timestamptz,
   add column if not exists invitation_acknowledged_at timestamptz;
 
+alter table procurement.solicitation_communications
+  drop constraint if exists solicitation_communications_type_check,
+  add constraint solicitation_communications_type_check check (
+    communication_type in ('invitation', 'clarification', 'extension', 'requote', 'award_notice', 'failed_bid_notice')
+  );
+
 create index if not exists solicitation_communications_request_group_idx
   on procurement.solicitation_communications(request_id, (detail->>'notificationGroupId'));
 
@@ -1603,42 +1609,64 @@ begin
 end;
 $$;
 
+create or replace function procurement.invite_sourcing_vendors(payload jsonb)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_event procurement.sourcing_events; v_profile procurement.policy_profiles; v_group uuid := gen_random_uuid();
+  v_vendor_ids uuid[]; v_count integer; v_duplicate integer;
+begin
+  if not private.policy_sourcing_can_manage() then raise exception 'Not authorized to manage sourcing'; end if;
+  select * into v_event from procurement.sourcing_events where id = (payload->>'sourcing_event_id')::uuid for update;
+  if not found or v_event.status <> 'draft' then raise exception 'Vendors can only be invited while the sourcing event is in controlled invitation state'; end if;
+  v_profile := private.policy_sourcing_profile(v_event.request_id::text);
+  select coalesce(array_agg(distinct value::uuid), '{}'::uuid[]) into v_vendor_ids from jsonb_array_elements_text(coalesce(payload->'vendor_ids', '[]'::jsonb));
+  if cardinality(v_vendor_ids) is null or cardinality(v_vendor_ids) = 0 then raise exception 'At least one vendor is required'; end if;
+  select count(*) into v_count from core.vendors vendor where vendor.id = any(v_vendor_ids)
+    and vendor.accreditation_status = 'approved' and (vendor.accreditation_expires_at is null or vendor.accreditation_expires_at > statement_timestamp());
+  if v_count <> cardinality(v_vendor_ids) then raise exception 'Only currently accredited vendors may be invited'; end if;
+  select count(*) into v_duplicate from procurement.sourcing_responses response where response.sourcing_event_id = v_event.id and response.vendor_id = any(v_vendor_ids);
+  if v_duplicate > 0 then raise exception 'Each vendor may receive a controlled invitation only once'; end if;
+  insert into procurement.sourcing_responses(sourcing_event_id, vendor_id, invited_at, invitation_delivered_at)
+  select v_event.id, vendor_id, statement_timestamp(), statement_timestamp() from unnest(v_vendor_ids) vendor_id;
+  insert into procurement.solicitation_communications(request_id, policy_profile_id, communication_type, sent_by, audience, content_hash, detail)
+  select v_event.request_id, v_profile.id, 'invitation', auth.uid(), vendor_id::text,
+    encode(extensions.digest(convert_to(jsonb_build_object('type', 'invitation', 'group', v_group, 'vendor', vendor_id, 'version', v_event.package_version, 'hash', v_event.package_hash, 'deadline', v_event.submission_deadline)::text, 'UTF8'), 'sha256'), 'hex'),
+    jsonb_build_object('notificationGroupId', v_group, 'recipientVendorId', vendor_id, 'packageVersion', v_event.package_version, 'packageHash', v_event.package_hash, 'submissionDeadline', v_event.submission_deadline, 'sentAt', statement_timestamp(), 'deliveredAt', statement_timestamp())
+  from unnest(v_vendor_ids) vendor_id;
+  return jsonb_build_object('notification_group_id', v_group, 'recipient_count', cardinality(v_vendor_ids));
+end;
+$$;
+
+create or replace function procurement.acknowledge_sourcing_invitation(payload jsonb)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_response procurement.sourcing_responses; v_event procurement.sourcing_events; v_vendor_id uuid := (payload->>'vendor_id')::uuid; v_replayed boolean;
+begin
+  if auth.uid() is null or core.current_vendor_id() is distinct from v_vendor_id then raise exception 'Only the invited vendor may acknowledge this invitation'; end if;
+  select response.* into v_response from procurement.sourcing_responses response where response.sourcing_event_id = (payload->>'sourcing_event_id')::uuid and response.vendor_id = v_vendor_id for update;
+  if not found then raise exception 'Controlled invitation not found'; end if;
+  select * into v_event from procurement.sourcing_events where id = v_response.sourcing_event_id;
+  if not exists(select 1 from procurement.solicitation_communications communication where communication.request_id = v_event.request_id and communication.communication_type = 'invitation' and communication.detail->>'recipientVendorId' = v_vendor_id::text) then raise exception 'Invitation delivery evidence not found'; end if;
+  v_replayed := v_response.invitation_acknowledged_at is not null;
+  if not v_replayed then update procurement.sourcing_responses set invitation_acknowledged_at = statement_timestamp() where id = v_response.id returning * into v_response; end if;
+  return jsonb_build_object('sourcing_event_id', v_response.sourcing_event_id, 'vendor_id', v_vendor_id, 'acknowledged_at', v_response.invitation_acknowledged_at, 'replayed', v_replayed);
+end;
+$$;
+
 create or replace function procurement.record_sourcing_response(payload jsonb)
 returns jsonb language plpgsql security definer set search_path = '' as $$
 declare v_event procurement.sourcing_events; v_response procurement.sourcing_responses; v_vendor core.vendors; v_received timestamptz;
 begin
   if not private.policy_sourcing_can_manage() then raise exception 'Not authorized to manage sourcing'; end if;
   select * into v_event from procurement.sourcing_events where id = (payload->>'sourcing_event_id')::uuid for update;
-  if not found or v_event.status in ('response_closed', 'failed_bid', 'evaluation', 'awarded', 'cancelled') then raise exception 'Sourcing event is not open'; end if;
+  if not found or v_event.status <> 'issued' then raise exception 'Issue the event before recording a response'; end if;
   select * into v_vendor from core.vendors where id = (payload->>'vendor_id')::uuid;
   if not found then raise exception 'Vendor not found'; end if;
   v_received := nullif(payload->>'received_at', '')::timestamptz;
-  if v_received is null then
-    if v_event.status <> 'draft' then raise exception 'Vendors can only be invited before issue'; end if;
-    if v_vendor.accreditation_status <> 'approved' or (v_vendor.accreditation_expires_at is not null and v_vendor.accreditation_expires_at <= statement_timestamp()) then
-      raise exception 'Only currently accredited vendors may be invited';
-    end if;
-  else
-    if v_event.status <> 'issued' then raise exception 'Issue the event before recording a response'; end if;
-    if not exists(select 1 from procurement.sourcing_responses prior where prior.sourcing_event_id = v_event.id and prior.vendor_id = v_vendor.id and prior.invited_at is not null) then
-      raise exception 'Only an invited vendor may submit a response';
-    end if;
-    if nullif(btrim(payload->>'proposal_storage_path'), '') is null then raise exception 'A proposal evidence reference is required'; end if;
-  end if;
-  insert into procurement.sourcing_responses(
-    sourcing_event_id, vendor_id, invited_at, invitation_delivered_at, received_at, deadline_compliant,
-    proposal_storage_path, commercial, technical, material_exceptions
-  ) values (
-    v_event.id, v_vendor.id, coalesce(nullif(payload->>'invited_at', '')::timestamptz, statement_timestamp()),
-    case when v_received is null then statement_timestamp() else null end, v_received,
-    case when v_received is null or v_event.submission_deadline is null then null else v_received <= v_event.submission_deadline end,
-    nullif(btrim(payload->>'proposal_storage_path'), ''), coalesce(payload->'commercial', '{}'::jsonb),
-    coalesce(payload->'technical', '{}'::jsonb), coalesce(payload->'material_exceptions', '[]'::jsonb)
-  ) on conflict(sourcing_event_id, vendor_id) do update set
-    received_at = excluded.received_at, deadline_compliant = excluded.deadline_compliant,
-    proposal_storage_path = excluded.proposal_storage_path, commercial = excluded.commercial,
-    technical = excluded.technical, material_exceptions = excluded.material_exceptions
-  returning * into v_response;
+  if v_received is null then raise exception 'Use the governed invitation command before issue'; end if;
+  if not exists(select 1 from procurement.sourcing_responses prior where prior.sourcing_event_id = v_event.id and prior.vendor_id = v_vendor.id and prior.invited_at is not null) then raise exception 'Only an invited vendor may submit a response'; end if;
+  if nullif(btrim(payload->>'proposal_storage_path'), '') is null then raise exception 'A proposal evidence reference is required'; end if;
+  update procurement.sourcing_responses set received_at = v_received, deadline_compliant = v_received <= v_event.submission_deadline,
+    proposal_storage_path = btrim(payload->>'proposal_storage_path'), commercial = coalesce(payload->'commercial', '{}'::jsonb), technical = coalesce(payload->'technical', '{}'::jsonb), material_exceptions = coalesce(payload->'material_exceptions', '[]'::jsonb)
+  where sourcing_event_id = v_event.id and vendor_id = v_vendor.id returning * into v_response;
   return to_jsonb(v_response);
 end;
 $$;
@@ -1647,7 +1675,7 @@ create or replace function procurement.record_solicitation_communication(payload
 returns jsonb language plpgsql security definer set search_path = '' as $$
 declare v_event procurement.sourcing_events; v_profile procurement.policy_profiles; v_type text := payload->>'communication_type';
   v_group uuid := gen_random_uuid(); v_extension integer := coalesce((payload->>'extension_working_days')::integer, 0);
-  v_new_deadline timestamptz; v_count integer;
+  v_new_deadline timestamptz; v_extension_cap timestamptz; v_count integer;
 begin
   if not private.policy_sourcing_can_manage() then raise exception 'Not authorized to manage sourcing'; end if;
   select * into v_event from procurement.sourcing_events where id = (payload->>'sourcing_event_id')::uuid for update;
@@ -1660,6 +1688,8 @@ begin
   elsif v_type = 'extension' then
     if v_extension < 1 or v_extension > v_profile.max_extension_working_days then raise exception 'Extension must be between 1 and % working days', v_profile.max_extension_working_days; end if;
     v_new_deadline := private.policy_add_working_days(v_event.submission_deadline, v_extension);
+    v_extension_cap := private.policy_add_working_days(coalesce(v_event.original_submission_deadline, v_event.submission_deadline), v_profile.max_extension_working_days);
+    if v_new_deadline > v_extension_cap then raise exception 'Cumulative extension cannot exceed % working days from the original submission deadline', v_profile.max_extension_working_days; end if;
     update procurement.sourcing_events set submission_deadline = v_new_deadline, status = 'issued', failed_bid_reason = null where id = v_event.id;
   else raise exception 'Unsupported solicitation communication'; end if;
   insert into procurement.solicitation_communications(
@@ -1678,7 +1708,7 @@ $$;
 create or replace function procurement.transition_sourcing_event(payload jsonb)
 returns jsonb language plpgsql security definer set search_path = '' as $$
 declare v_event procurement.sourcing_events; v_profile procurement.policy_profiles; v_action text := payload->>'action';
-  v_invited integer; v_accredited integer; v_usable integer; v_min_deadline timestamptz; v_has_exception boolean;
+  v_invited integer; v_accredited integer; v_usable integer; v_min_deadline timestamptz; v_requote_deadline timestamptz; v_extension_cap timestamptz; v_group uuid := gen_random_uuid(); v_has_exception boolean; v_vendor core.vendors;
 begin
   if not private.policy_sourcing_can_manage() then raise exception 'Not authorized to manage sourcing'; end if;
   select * into v_event from procurement.sourcing_events where id = (payload->>'id')::uuid for update;
@@ -1709,6 +1739,23 @@ begin
     update procurement.sourcing_events set status = 'failed_bid', failed_bid_reason = payload->>'failed_bid_reason' where id = v_event.id returning * into v_event;
     insert into procurement.solicitation_communications(request_id, policy_profile_id, communication_type, sent_by, audience, content_hash, detail)
     values(v_event.request_id, v_profile.id, 'failed_bid_notice', auth.uid(), 'governed-audit', encode(extensions.digest(convert_to(v_event.id::text || ':' || (payload->>'failed_bid_reason'), 'UTF8'), 'sha256'), 'hex'), jsonb_build_object('failedBidReason', payload->>'failed_bid_reason'));
+  elsif v_action = 'source_additional_and_requote' then
+    if v_event.status <> 'failed_bid' then raise exception 'Failed-bid recovery is required before sourcing additional vendors'; end if;
+    select * into v_vendor from core.vendors where id = (payload->>'vendor_id')::uuid;
+    if not found or v_vendor.accreditation_status <> 'approved' or (v_vendor.accreditation_expires_at is not null and v_vendor.accreditation_expires_at <= statement_timestamp()) then raise exception 'Only an additional currently accredited vendor may be requoted'; end if;
+    if exists(select 1 from procurement.sourcing_responses response where response.sourcing_event_id = v_event.id and response.vendor_id = v_vendor.id) then raise exception 'Select an additional vendor who has not already been invited'; end if;
+    v_requote_deadline := nullif(payload->>'submission_deadline', '')::timestamptz;
+    if v_requote_deadline is null or v_requote_deadline <= v_event.submission_deadline then raise exception 'A later requote deadline is required'; end if;
+    v_extension_cap := private.policy_add_working_days(coalesce(v_event.original_submission_deadline, v_event.submission_deadline), v_profile.max_extension_working_days);
+    if v_requote_deadline > v_extension_cap then raise exception 'Requote deadline cannot exceed % working days from the original submission deadline', v_profile.max_extension_working_days; end if;
+    if nullif(btrim(payload->>'package_version'), '') is null or nullif(btrim(payload->>'package_hash'), '') is null or (btrim(payload->>'package_version') = v_event.package_version and btrim(payload->>'package_hash') = v_event.package_hash) then raise exception 'A new controlled package version or hash is required for requote'; end if;
+    insert into procurement.sourcing_responses(sourcing_event_id, vendor_id, invited_at, invitation_delivered_at) values(v_event.id, v_vendor.id, statement_timestamp(), statement_timestamp());
+    update procurement.sourcing_events set status = 'issued', failed_bid_reason = null, submission_deadline = v_requote_deadline, package_version = btrim(payload->>'package_version'), package_hash = btrim(payload->>'package_hash') where id = v_event.id returning * into v_event;
+    insert into procurement.solicitation_communications(request_id, policy_profile_id, communication_type, sent_by, audience, content_hash, detail)
+    select v_event.request_id, v_profile.id, 'requote', auth.uid(), response.vendor_id::text,
+      encode(extensions.digest(convert_to(jsonb_build_object('type', 'requote', 'event', v_event.id, 'group', v_group, 'version', v_event.package_version, 'hash', v_event.package_hash, 'deadline', v_event.submission_deadline)::text, 'UTF8'), 'sha256'), 'hex'),
+      jsonb_build_object('notificationGroupId', v_group, 'recipientVendorId', response.vendor_id, 'packageVersion', v_event.package_version, 'packageHash', v_event.package_hash, 'submissionDeadline', v_event.submission_deadline, 'sentAt', statement_timestamp(), 'deliveredAt', statement_timestamp())
+    from procurement.sourcing_responses response where response.sourcing_event_id = v_event.id and response.invited_at is not null;
   elsif v_action = 'evaluation' then
     v_has_exception := private.policy_sourcing_approved_exception(v_event.request_id::text, 'evaluation');
     if v_event.status not in ('response_closed', 'failed_bid') then raise exception 'Response closure or failed-bid recovery is required before evaluation'; end if;
@@ -1777,11 +1824,11 @@ begin
   select * into v_event from procurement.sourcing_events where request_id = v_request.id and status <> 'cancelled' order by created_at desc limit 1;
   if not found then return jsonb_build_object('requestId', v_request.id, 'event', null); end if;
   select coalesce(jsonb_agg(jsonb_build_object('id', response.id, 'vendorId', response.vendor_id, 'vendorName', vendor.legal_name, 'accredited', vendor.accreditation_status = 'approved' and (vendor.accreditation_expires_at is null or vendor.accreditation_expires_at > statement_timestamp()), 'invitedAt', response.invited_at, 'receivedAt', response.received_at, 'deadlineCompliant', response.deadline_compliant, 'proposalReference', response.proposal_storage_path, 'commercial', response.commercial, 'technical', response.technical) order by vendor.legal_name), '[]'::jsonb) into v_responses from procurement.sourcing_responses response join core.vendors vendor on vendor.id = response.vendor_id where response.sourcing_event_id = v_event.id;
-  select coalesce(jsonb_agg(jsonb_build_object('id', communication.id, 'communicationType', communication.communication_type, 'notificationGroupId', communication.detail->>'notificationGroupId', 'acknowledgedAt', response.invitation_acknowledged_at, 'acknowledgementState', case when communication.communication_type = 'invitation' and response.invitation_acknowledged_at is null and communication.sent_at + make_interval(hours => v_profile.vendor_acknowledgement_hours) < statement_timestamp() then 'overdue' when response.invitation_acknowledged_at is not null then 'acknowledged' else 'pending' end, 'clarificationState', case when communication.communication_type = 'clarification' and communication.sent_at + make_interval(hours => v_profile.clarification_hours) < statement_timestamp() then 'overdue' else 'answered' end) order by communication.sent_at desc), '[]'::jsonb) into v_comms from procurement.solicitation_communications communication left join procurement.sourcing_responses response on response.sourcing_event_id = v_event.id and response.vendor_id::text = communication.detail->>'recipientVendorId' where communication.request_id = v_request.id;
-  return jsonb_build_object('requestId', v_request.id, 'event', jsonb_build_object('id', v_event.id, 'status', v_event.status, 'submissionDeadline', v_event.submission_deadline, 'originalSubmissionDeadline', v_event.original_submission_deadline, 'intendedResponses', v_event.intended_responses, 'failedBidReason', v_event.failed_bid_reason, 'selectedVendorId', v_event.selected_vendor_id, 'closureNote', v_event.closure_note, 'responses', v_responses, 'communications', v_comms, 'policyControls', jsonb_build_object('formalBidAmount', v_profile.formal_bid_amount, 'inviteTargetMin', v_profile.invite_target_min, 'inviteTargetMax', v_profile.invite_target_max, 'sealedBidMinimumResponses', v_profile.sealed_bid_minimum_responses, 'bidWindowWorkingDays', v_profile.bid_window_working_days, 'maxExtensionWorkingDays', v_profile.max_extension_working_days, 'vendorAcknowledgementHours', v_profile.vendor_acknowledgement_hours, 'clarificationHours', v_profile.clarification_hours, 'tabulationHours', v_profile.tabulation_hours, 'technicalEvaluationWorkingDays', v_profile.technical_evaluation_working_days, 'poAcknowledgementHours', v_profile.po_acknowledgement_hours, 'repeatOrderMaxAmount', v_profile.repeat_order_max_amount, 'repeatOrderMaxAgeDays', v_profile.repeat_order_max_age_days, 'pettyCashMaxAmount', v_profile.petty_cash_max_amount, 'poInvoiceThreshold', v_profile.po_invoice_threshold, 'vendorProbationMonths', v_profile.vendor_probation_months)));
+  select coalesce(jsonb_agg(jsonb_build_object('id', communication.id, 'communicationType', communication.communication_type, 'notificationGroupId', communication.detail->>'notificationGroupId', 'sentAt', communication.detail->>'sentAt', 'deliveredAt', communication.detail->>'deliveredAt', 'acknowledgedAt', response.invitation_acknowledged_at, 'acknowledgementState', case when communication.communication_type = 'invitation' and response.invitation_acknowledged_at is null and communication.sent_at + make_interval(hours => v_profile.vendor_acknowledgement_hours) < statement_timestamp() then 'overdue' when response.invitation_acknowledged_at is not null then 'acknowledged' else 'pending' end, 'clarificationState', case when communication.communication_type = 'clarification' and communication.sent_at + make_interval(hours => v_profile.clarification_hours) < statement_timestamp() then 'overdue' else 'answered' end) order by communication.sent_at desc), '[]'::jsonb) into v_comms from procurement.solicitation_communications communication left join procurement.sourcing_responses response on response.sourcing_event_id = v_event.id and response.vendor_id::text = communication.detail->>'recipientVendorId' where communication.request_id = v_request.id;
+  return jsonb_build_object('requestId', v_request.id, 'event', jsonb_build_object('id', v_event.id, 'status', v_event.status, 'submissionDeadline', v_event.submission_deadline, 'originalSubmissionDeadline', v_event.original_submission_deadline, 'intendedResponses', v_event.intended_responses, 'packageVersion', v_event.package_version, 'packageHash', v_event.package_hash, 'failedBidReason', v_event.failed_bid_reason, 'selectedVendorId', v_event.selected_vendor_id, 'closureNote', v_event.closure_note, 'responses', v_responses, 'communications', v_comms, 'policyControls', jsonb_build_object('formalBidAmount', v_profile.formal_bid_amount, 'inviteTargetMin', v_profile.invite_target_min, 'inviteTargetMax', v_profile.invite_target_max, 'sealedBidMinimumResponses', v_profile.sealed_bid_minimum_responses, 'bidWindowWorkingDays', v_profile.bid_window_working_days, 'maxExtensionWorkingDays', v_profile.max_extension_working_days, 'vendorAcknowledgementHours', v_profile.vendor_acknowledgement_hours, 'clarificationHours', v_profile.clarification_hours, 'tabulationHours', v_profile.tabulation_hours, 'technicalEvaluationWorkingDays', v_profile.technical_evaluation_working_days, 'poAcknowledgementHours', v_profile.po_acknowledgement_hours, 'repeatOrderMaxAmount', v_profile.repeat_order_max_amount, 'repeatOrderMaxAgeDays', v_profile.repeat_order_max_age_days, 'pettyCashMaxAmount', v_profile.petty_cash_max_amount, 'poInvoiceThreshold', v_profile.po_invoice_threshold, 'vendorProbationMonths', v_profile.vendor_probation_months)));
 end;
 $$;
 
 revoke all on function private.policy_sourcing_can_manage(), private.policy_sourcing_can_review(), private.policy_add_working_days(timestamptz, integer), private.policy_sourcing_profile(text), private.policy_sourcing_approved_exception(text, text) from public, anon, authenticated;
-revoke all on function procurement.record_solicitation_communication(jsonb) from public, anon;
-grant execute on function procurement.save_sourcing_event(jsonb), procurement.record_sourcing_response(jsonb), procurement.record_solicitation_communication(jsonb), procurement.transition_sourcing_event(jsonb), procurement.sourcing_workspace(jsonb), procurement.submit_insufficient_bid_exception(jsonb), procurement.review_insufficient_bid_exception(jsonb), procurement.insufficient_bid_exception(jsonb) to authenticated, service_role;
+revoke all on function procurement.invite_sourcing_vendors(jsonb), procurement.acknowledge_sourcing_invitation(jsonb), procurement.record_solicitation_communication(jsonb) from public, anon;
+grant execute on function procurement.save_sourcing_event(jsonb), procurement.invite_sourcing_vendors(jsonb), procurement.acknowledge_sourcing_invitation(jsonb), procurement.record_sourcing_response(jsonb), procurement.record_solicitation_communication(jsonb), procurement.transition_sourcing_event(jsonb), procurement.sourcing_workspace(jsonb), procurement.submit_insufficient_bid_exception(jsonb), procurement.review_insufficient_bid_exception(jsonb), procurement.insufficient_bid_exception(jsonb) to authenticated, service_role;

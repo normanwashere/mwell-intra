@@ -76,11 +76,25 @@ test('stateful controlled RPC covers procurement confirmation, sourcing, submiss
   expect(fixture.sourcing).toMatchObject({ status: 'awarded', selectedVendorId: 'vendor-1' });
   expect(fixture.sourcing?.responses.filter((response) => response.receivedAt)).toHaveLength(3);
   expect(fixture.callsNamed('save_sourcing_event')).toHaveLength(1);
-  expect(fixture.callsNamed('record_sourcing_response')).toHaveLength(6);
+  expect(fixture.callsNamed('invite_sourcing_vendors')).toHaveLength(3);
+  expect(fixture.callsNamed('record_sourcing_response')).toHaveLength(3);
   expect(fixture.callsNamed('record_solicitation_communication').at(-1)).toMatchObject({
     payload: { communication_type: 'clarification' },
   });
   expect(fixture.callsNamed('transition_sourcing_event').map((call) => call.payload.action)).toEqual(['issue', 'response_closed', 'evaluation', 'award']);
+
+  fixture.sourcing!.status = 'failed_bid';
+  await procurementPage.reload();
+  await procurementPage.getByLabel('Requote deadline').fill('2026-10-07T12:00');
+  await procurementPage.getByLabel('Requote package version').fill('RFQ-CONTROLLED-v2');
+  await procurementPage.getByLabel('Requote package SHA-256').fill('b'.repeat(64));
+  await procurementPage.getByLabel('Vendor to invite').selectOption('vendor-4');
+  await procurementPage.getByRole('button', { name: 'Source and requote' }).click();
+  await expect(procurementPage.getByText('Additional vendor sourced and equal requote issued')).toBeVisible();
+  expect(fixture.callsNamed('transition_sourcing_event').at(-1)).toMatchObject({ payload: { action: 'source_additional_and_requote', vendor_id: 'vendor-4' } });
+  fixture.sourcing!.status = 'awarded';
+  fixture.sourcing!.selectedVendorId = 'vendor-1';
+  await procurementPage.reload();
 
   await procurementPage.getByRole('button', { name: 'Submit for approval' }).click();
   await expect(procurementPage.getByText('Request submitted for approval')).toBeVisible();

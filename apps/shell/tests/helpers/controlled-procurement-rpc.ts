@@ -178,6 +178,8 @@ export class ControlledProcurementRpcFixture {
     status: 'draft' | 'issued' | 'response_closed' | 'failed_bid' | 'evaluation' | 'awarded' | 'cancelled';
     submissionDeadline?: string;
     intendedResponses?: number;
+    packageVersion?: string;
+    packageHash?: string;
     selectedVendorId?: string;
     closureNote?: string;
     responses: Array<Record<string, unknown>>;
@@ -292,6 +294,8 @@ export class ControlledProcurementRpcFixture {
             status: this.sourcing.status,
             submissionDeadline: this.sourcing.submissionDeadline,
             intendedResponses: this.sourcing.intendedResponses,
+            packageVersion: this.sourcing.packageVersion,
+            packageHash: this.sourcing.packageHash,
             selectedVendorId: this.sourcing.selectedVendorId,
             closureNote: this.sourcing.closureNote,
             responses: this.sourcing.responses,
@@ -343,6 +347,7 @@ export class ControlledProcurementRpcFixture {
       { id: 'vendor-1', legal_name: 'Acme Medical Supplies, Inc.', accreditation_status: 'approved' },
       { id: 'vendor-2', legal_name: 'North Star Logistics Corp.', accreditation_status: 'approved' },
       { id: 'vendor-3', legal_name: 'TechBridge IT Solutions, Inc.', accreditation_status: 'approved' },
+      { id: 'vendor-4', legal_name: 'Pacific Clinical Devices, Inc.', accreditation_status: 'approved' },
     ];
     if (table === 'policy_profiles') return filtered(this.profileRows());
     if (table === 'policy_conflicts') return this.conflicts.map((conflict) => ({ ...conflict }));
@@ -390,28 +395,26 @@ export class ControlledProcurementRpcFixture {
       this.sourcing ??= { id: 'controlled-sourcing-event', status: 'draft', responses: [] };
       this.sourcing.submissionDeadline = String(payload.submission_deadline ?? '');
       this.sourcing.intendedResponses = Number(payload.intended_responses ?? 3);
+      this.sourcing.packageVersion = String(payload.package_version ?? '');
+      this.sourcing.packageHash = String(payload.package_hash ?? '');
       return response(route, this.workspace());
+    }
+    if (name === 'invite_sourcing_vendors') {
+      if (!this.sourcing) return failure(route, 'Sourcing event is required');
+      for (const value of Array.isArray(payload.vendor_ids) ? payload.vendor_ids : []) {
+        const vendorId = String(value);
+        const vendor = this.rowsFor('vendors', new URL(`${CONTROLLED_SUPABASE_URL}/rest/v1/vendors`)).find((item) => item.id === vendorId);
+        this.sourcing.responses.push({ id: `response-${vendorId}`, vendorId, vendorName: String(vendor?.legal_name ?? vendorId), invitedAt: '2026-08-22T01:05:00.000Z' });
+      }
+      return response(route, { recipient_count: this.sourcing.responses.length });
     }
     if (name === 'record_sourcing_response') {
       if (!this.sourcing) return failure(route, 'Sourcing event is required');
       const vendorId = String(payload.vendor_id);
-      const vendor = this.rowsFor('vendors', new URL(`${CONTROLLED_SUPABASE_URL}/rest/v1/vendors`)).find((item) => item.id === vendorId);
       const existing = this.sourcing.responses.find((item) => item.vendorId === vendorId);
-      const next = {
-        id: existing?.id ?? `response-${vendorId}`,
-        vendorId,
-        vendorName: String(vendor?.legal_name ?? vendorId),
-        invitedAt: existing?.invitedAt ?? '2026-08-22T01:05:00.000Z',
-        ...(payload.received_at ? {
-          receivedAt: String(payload.received_at),
-          deadlineCompliant: true,
-          proposalReference: String(payload.proposal_storage_path ?? ''),
-          commercial: payload.commercial,
-          technical: payload.technical,
-        } : {}),
-      };
-      if (existing) Object.assign(existing, next); else this.sourcing.responses.push(next);
-      return response(route, next);
+      if (!existing) return failure(route, 'Only an invited vendor may submit a response');
+      Object.assign(existing, { receivedAt: String(payload.received_at), deadlineCompliant: true, proposalReference: String(payload.proposal_storage_path ?? ''), commercial: payload.commercial, technical: payload.technical });
+      return response(route, existing);
     }
     if (name === 'record_solicitation_communication') {
       if (!this.sourcing || this.sourcing.status !== 'issued') return failure(route, 'Sourcing event is not available for communication');
@@ -437,6 +440,16 @@ export class ControlledProcurementRpcFixture {
         this.sourcing.closureNote = String(payload.closure_note);
       }
       if (payload.action === 'failed_bid') this.sourcing.status = 'failed_bid';
+      if (payload.action === 'source_additional_and_requote') {
+        const vendorId = String(payload.vendor_id);
+        const vendor = this.rowsFor('vendors', new URL(`${CONTROLLED_SUPABASE_URL}/rest/v1/vendors`)).find((item) => item.id === vendorId);
+        if (this.sourcing.responses.some((item) => item.vendorId === vendorId)) return failure(route, 'Select an additional vendor who has not already been invited');
+        this.sourcing.responses.push({ id: `response-${vendorId}`, vendorId, vendorName: String(vendor?.legal_name ?? vendorId), invitedAt: '2026-08-22T01:10:00.000Z' });
+        this.sourcing.status = 'issued';
+        this.sourcing.submissionDeadline = String(payload.submission_deadline);
+        this.sourcing.packageVersion = String(payload.package_version);
+        this.sourcing.packageHash = String(payload.package_hash);
+      }
       if (payload.action === 'cancel') this.sourcing.status = 'cancelled';
       return response(route, this.workspace());
     }
