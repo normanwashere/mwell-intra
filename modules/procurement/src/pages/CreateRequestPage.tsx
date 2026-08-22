@@ -33,6 +33,9 @@ import type {
   ImportationPlan,
   ProcurementExceptionPack,
   ProcurementRiskFacts,
+  ProcurementMode,
+  ProcurementRoute,
+  RequirementKind,
   RequestAttachmentKind,
   RequestCategory,
   SourcingMethod,
@@ -41,12 +44,12 @@ import { useProcurementRequests, useProcurementVendors } from '../localStore';
 import {
   CATEGORY_META,
   buildApprovalLadder,
-  deriveSourcingRecommendation,
   requiredDocumentsStatus,
-  sourcingMethodLabel,
   tierLabel,
 } from '../policy';
-import { SourcingDecisionPanel } from '../components/SourcingDecisionPanel';
+import { deriveProcurementRoute, legacySourcingMethod } from '../policyRoute';
+import { MWELL_OPERATING_PROFILE } from '../policyProfile';
+import { ProcurementRoutePanel } from '../components/ProcurementRoutePanel';
 import { ExceptionPack } from '../components/ExceptionPack';
 import { FinancialProtectionPanel } from '../components/FinancialProtectionPanel';
 import { EvaluationMatrix, type EvaluationMatrixValue } from '../components/EvaluationMatrix';
@@ -56,6 +59,7 @@ import {
   discardRequestDraft,
   loadLatestRequestDraft,
   saveRequestDraft,
+  type GovernedRequestDraftFields,
   type RequestDraftClient,
 } from '../requestDrafts';
 import { validateRequestStep } from '../requestForm';
@@ -68,7 +72,7 @@ interface LineDraft {
   unitPrice: string;
 }
 
-interface PurchaseRequestDraftSnapshot {
+interface PurchaseRequestDraftSnapshot extends GovernedRequestDraftFields {
   step: StepN;
   title: string;
   category: RequestCategory | '';
@@ -83,10 +87,9 @@ interface PurchaseRequestDraftSnapshot {
   needDesc: string;
   alternatives: string;
   riskIfNot: string;
-  sourcingMethod: SourcingMethod | '';
-  sourcingOverride: boolean;
-  emergency: boolean;
-  repeat: boolean;
+  requirementKind: RequirementKind | '';
+  requestedMode: ProcurementMode;
+  route?: ProcurementRoute;
   routeConfirmed: boolean;
   riskFacts: ProcurementRiskFacts;
   philgeps: string;
@@ -183,11 +186,10 @@ export function CreateRequestPage() {
   const [alternatives, setAlternatives] = useState('');
   const [riskIfNot, setRiskIfNot] = useState('');
 
-  // Sourcing method (auto-suggested, officer can override)
-  const [sourcingMethod, setSourcingMethod] = useState<SourcingMethod | ''>('');
-  const [sourcingOverride, setSourcingOverride] = useState(false);
-  const [emergency, setEmergency] = useState(false);
-  const [repeat, setRepeat] = useState(false);
+  // Requirement kind is explicit for every new write. Category is a reporting
+  // label and must never infer RFQ/RFP in a live request.
+  const [requirementKind, setRequirementKind] = useState<RequirementKind | ''>('');
+  const [requestedMode, setRequestedMode] = useState<ProcurementMode>('competitive_bidding');
   const [routeConfirmed, setRouteConfirmed] = useState(false);
   const [riskFacts, setRiskFacts] = useState<ProcurementRiskFacts>({
     comparable: true,
@@ -274,10 +276,17 @@ export function CreateRequestPage() {
       needDesc,
       alternatives,
       riskIfNot,
-      sourcingMethod,
-      sourcingOverride,
-      emergency,
-      repeat,
+      requirementKind,
+      requestedMode,
+      route: requirementKind
+        ? deriveProcurementRoute({
+            requirementKind,
+            category: category || undefined,
+            amount: lines.reduce((sum, line) => sum + (toNumber(line.quantity) ?? 0) * (toNumber(line.unitPrice) ?? 0), 0),
+            requestedMode,
+            ...riskFacts,
+          }, MWELL_OPERATING_PROFILE).route
+        : undefined,
       routeConfirmed,
       riskFacts,
       philgeps,
@@ -296,7 +305,6 @@ export function CreateRequestPage() {
       department,
       description,
       directAwardReason,
-      emergency,
       evaluation,
       exceptionPack,
       importationPlan,
@@ -307,12 +315,11 @@ export function CreateRequestPage() {
       priceReasonableness,
       profile?.name,
       projectCode,
-      repeat,
+      requestedMode,
+      requirementKind,
       riskFacts,
       riskIfNot,
       routeConfirmed,
-      sourcingMethod,
-      sourcingOverride,
       step,
       title,
       vendorId,
@@ -345,10 +352,8 @@ export function CreateRequestPage() {
           setNeedDesc(saved.needDesc ?? '');
           setAlternatives(saved.alternatives ?? '');
           setRiskIfNot(saved.riskIfNot ?? '');
-          setSourcingMethod(saved.sourcingMethod ?? '');
-          setSourcingOverride(saved.sourcingOverride ?? false);
-          setEmergency(saved.emergency ?? false);
-          setRepeat(saved.repeat ?? false);
+          setRequirementKind(saved.requirementKind ?? '');
+          setRequestedMode(saved.requestedMode ?? saved.route?.procurementMode ?? 'competitive_bidding');
           setRouteConfirmed(saved.routeConfirmed ?? false);
           if (saved.riskFacts) setRiskFacts(saved.riskFacts);
           setPhilgeps(saved.philgeps ?? '');
@@ -426,36 +431,31 @@ export function CreateRequestPage() {
     [lines],
   );
 
-  const recommendation = useMemo(
-    () =>
-      deriveSourcingRecommendation({
-        category: category || undefined,
-        amount: total,
-        emergency,
-        repeat,
-        ...riskFacts,
-      }),
-    [category, total, emergency, repeat, riskFacts],
+  const routeRecommendation = useMemo(
+    () => requirementKind
+      ? deriveProcurementRoute({
+          requirementKind,
+          category: category || undefined,
+          amount: total,
+          requestedMode,
+          ...riskFacts,
+        }, MWELL_OPERATING_PROFILE)
+      : undefined,
+    [category, requirementKind, requestedMode, riskFacts, total],
   );
-  const suggestedMethod = recommendation.method;
-
-  // Keep the sourcing method in sync with the suggestion until the officer
-  // explicitly overrides.
-  useEffect(() => {
-    if (!sourcingOverride) setSourcingMethod(suggestedMethod);
-    setRouteConfirmed(false);
-  }, [suggestedMethod, sourcingOverride]);
-
-  const effectiveSourcing: SourcingMethod = (sourcingMethod || suggestedMethod) as SourcingMethod;
+  const route = routeRecommendation?.route;
+  // Compatibility only: legacy downstream readers still receive the old field
+  // until the server migration and later workflow tasks retire it.
+  const legacyProjection: SourcingMethod | undefined = route ? legacySourcingMethod(route) : undefined;
 
   const ladder = useMemo(
     () =>
       buildApprovalLadder({
         category: category || undefined,
         amount: total,
-        sourcingMethod: effectiveSourcing,
+        sourcingMethod: legacyProjection,
       }),
-    [category, total, effectiveSourcing],
+    [category, total, legacyProjection],
   );
 
   // PR-19: the required-docs checklist reflects the actual attachments.
@@ -465,11 +465,11 @@ export function CreateRequestPage() {
         {
           category: category || undefined,
           amount: total,
-          sourcingMethod: effectiveSourcing,
+          sourcingMethod: legacyProjection,
         },
         attachments,
       ),
-    [category, total, effectiveSourcing, attachments],
+    [category, total, legacyProjection, attachments],
   );
   const missingDocs = docsStatus.filter((d) => !d.attached);
 
@@ -485,14 +485,12 @@ export function CreateRequestPage() {
     neededBy.trim().length > 0 &&
     (budgetCode.trim().length > 0 || projectCode.trim().length > 0) &&
     total > 0;
-  const canSubmit = step1Valid && step2Valid && governedContextReady && minimumEvidenceReady;
-  const exceptionRequired = ['direct_award', 'emergency', 'repeat_order', 'petty_cash'].includes(
-    effectiveSourcing,
-  );
+  const canSubmit = step1Valid && step2Valid && governedContextReady && minimumEvidenceReady && Boolean(route);
+  const exceptionRequired = route != null && route.procurementMode !== 'competitive_bidding';
   const exceptionReady =
     !exceptionRequired ||
     (exceptionPack.justification.trim().length > 0 &&
-      (effectiveSourcing === 'petty_cash'
+      (route?.procurementMode === 'petty_cash'
         ? exceptionPack.financeEligibilityConfirmed === true &&
           exceptionPack.nonRecurringNonSplitAttested === true
         : (exceptionPack.priceReasonableness ?? priceReasonableness).trim().length > 0));
@@ -625,6 +623,10 @@ export function CreateRequestPage() {
       error('Give the request a title, category, need description, and at least one line item.');
       return;
     }
+    if (!route || !requirementKind) {
+      error('Classify this request as goods/materials or services before saving.');
+      return;
+    }
     if (andSubmit && !routeConfirmed) {
       error('Save the draft for Procurement route confirmation before approval submission.');
       return;
@@ -650,11 +652,11 @@ export function CreateRequestPage() {
         }));
       const vendor = vendors.find((v) => v.id === vendorId);
       const exceptionType: ProcurementExceptionPack['type'] =
-        effectiveSourcing === 'emergency'
+        route.procurementMode === 'emergency_purchase'
           ? 'emergency'
-          : effectiveSourcing === 'repeat_order'
+          : route.procurementMode === 'repeat_order'
             ? 'repeat_continuity'
-            : effectiveSourcing === 'petty_cash'
+            : route.procurementMode === 'petty_cash'
               ? 'petty_cash_non_accredited'
               : 'direct_award';
 
@@ -662,14 +664,12 @@ export function CreateRequestPage() {
         philgepsReference: philgeps.trim() || undefined,
         priceReasonableness: priceReasonableness.trim() || undefined,
         vendorAccreditationRequired:
-          effectiveSourcing !== 'petty_cash' && effectiveSourcing !== 'emergency',
+          route.procurementMode !== 'petty_cash' && route.procurementMode !== 'emergency_purchase',
         routeConfirmed,
         routeConfirmedByEmail: routeConfirmed ? profile?.email : undefined,
         policyVersion: 'procurement-policy-revised-2026',
         riskFacts,
-        exceptionPack: ['direct_award', 'emergency', 'repeat_order', 'petty_cash'].includes(
-          effectiveSourcing,
-        )
+        exceptionPack: route.procurementMode !== 'competitive_bidding'
           ? {
               ...exceptionPack,
               type: exceptionType,
@@ -683,7 +683,7 @@ export function CreateRequestPage() {
         insufficientBidsExceptionApproved:
           evaluation.insufficientBidsExceptionApproved || undefined,
       };
-      if (effectiveSourcing === 'direct_award' || effectiveSourcing === 'emergency') {
+      if (route.procurementMode === 'sole_source' || route.procurementMode === 'emergency_purchase') {
         const reason = (directAwardReason || 'other') as
           'sole_supplier' | 'emergency' | 'repeat_continuity' | 'other';
         compliance.directAwardReason = reason;
@@ -704,8 +704,9 @@ export function CreateRequestPage() {
         requesterEmail: profile?.email,
         lines: cleanLines,
         category: (category || undefined) as RequestCategory | undefined,
-        sourcingMethod: effectiveSourcing,
-        sourcingOverride,
+        sourcingMethod: legacyProjection,
+        requirementKind,
+        route,
         justification: {
           need: needDesc.trim(),
           alternatives: alternatives.trim() || undefined,
@@ -868,6 +869,29 @@ export function CreateRequestPage() {
                     {fieldErrors.category}
                   </p>
                 )}
+                <fieldset className="border-t border-line pt-4">
+                  <legend className="text-sm font-semibold text-ink">Requirement classification</legend>
+                  <p className="mt-1 text-xs text-muted">This determines the solicitation document. Choose it explicitly; category does not decide RFQ versus RFP.</p>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    {([
+                      ['materials', 'Goods / materials', 'Uses an RFQ when competitively sourced.'],
+                      ['services', 'Services', 'Uses an RFP when competitively sourced.'],
+                    ] as const).map(([kind, label, helper]) => (
+                      <label key={kind} className={`cursor-pointer rounded-lg border p-3 ${requirementKind === kind ? 'border-brand-500 bg-brand-500/10 ring-1 ring-brand-500/40' : 'border-line bg-surface'}`}>
+                        <input
+                          type="radio"
+                          name="requirement-kind"
+                          value={kind}
+                          checked={requirementKind === kind}
+                          onChange={() => { setRequirementKind(kind); setRouteConfirmed(false); }}
+                          className="sr-only"
+                        />
+                        <span className="block text-sm font-semibold text-ink">{label}</span>
+                        <span className="mt-1 block text-xs text-muted">{helper}</span>
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
               </section>
 
               <section className="card space-y-4 p-4 sm:p-5">
@@ -1374,65 +1398,22 @@ export function CreateRequestPage() {
               <section className="card space-y-3 p-4 sm:p-5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <h2 className="font-display text-base font-bold text-ink">Sourcing path</h2>
+                    <h2 className="font-display text-base font-bold text-ink">Procurement route</h2>
                     <p className="text-xs text-muted">
-                      Suggested from category + estimated total. Override with justification if you
-                      must go direct.
+                      Requirement type determines RFQ or RFP. Mode and control tier are separately governed.
                     </p>
                   </div>
-                  <div className="flex items-center gap-2 text-xs">
-                    <Badge tone="cyan">Suggested</Badge>
-                    <span className="font-semibold text-ink">
-                      {sourcingMethodLabel(suggestedMethod)}
-                    </span>
-                  </div>
                 </div>
-
-                <div className="flex flex-wrap items-center gap-3">
-                  <label className="inline-flex min-h-11 items-center gap-2 text-sm text-muted">
-                    <input
-                      type="checkbox"
-                      checked={emergency}
-                      onChange={(e) => setEmergency(e.target.checked)}
-                    />
-                    Emergency purchase
-                  </label>
-                  <label className="inline-flex min-h-11 items-center gap-2 text-sm text-muted">
-                    <input
-                      type="checkbox"
-                      checked={repeat}
-                      onChange={(e) => setRepeat(e.target.checked)}
-                    />
-                    Repeat order / continuity
-                  </label>
-                </div>
-
-                <SourcingDecisionPanel
-                  riskFacts={riskFacts}
-                  onRiskFactsChange={(value) => {
-                    setRiskFacts(value);
-                    setRouteConfirmed(false);
-                  }}
-                  recommendation={recommendation}
-                  value={effectiveSourcing}
-                  onChange={(method) => {
-                    setSourcingMethod(method);
-                    setSourcingOverride(method !== suggestedMethod);
-                    setRouteConfirmed(false);
-                  }}
-                  canConfirm={canConfirmRoute}
-                  confirmed={routeConfirmed}
-                />
-                {canConfirmRoute && !routeConfirmed && (
-                  <button
-                    type="button"
-                    className="btn-primary"
-                    disabled={!routeEvidenceReady}
-                    onClick={() => setRouteConfirmed(true)}
-                  >
-                    <Icon name="check" className="h-4 w-4" />
-                    Confirm sourcing route
-                  </button>
+                {route && routeRecommendation ? (
+                  <ProcurementRoutePanel
+                    value={route}
+                    recommendation={routeRecommendation}
+                    profile={MWELL_OPERATING_PROFILE}
+                    canConfirm={canConfirmRoute}
+                    onModeChange={(mode) => { setRequestedMode(mode); setRouteConfirmed(false); }}
+                  />
+                ) : (
+                  <p className="rounded-lg border border-amber-500/35 bg-amber-500/10 p-3 text-sm text-amber-900 dark:text-amber-200">Choose a requirement classification on step 1 to compute the governed procurement route.</p>
                 )}
                 {!routeEvidenceReady && (
                   <p className="text-xs text-amber-700 dark:text-amber-300">
@@ -1440,15 +1421,23 @@ export function CreateRequestPage() {
                     confirms this route.
                   </p>
                 )}
-                {sourcingOverride && (
-                  <p className="text-xs text-amber-700 dark:text-amber-300">
-                    <Icon name="alert" className="mr-1 inline h-3.5 w-3.5" />
-                    You&apos;re overriding the suggested path. Explain why in the justification —
-                    Procurement Head will review before approval.
-                  </p>
-                )}
-
-                {(effectiveSourcing === 'direct_award' || effectiveSourcing === 'emergency') && (
+                <fieldset>
+                  <legend className="text-sm font-semibold text-ink">Risk and delivery facts</legend>
+                  <p className="mt-1 text-xs text-muted">These facts can raise governance controls but cannot change a goods RFQ into an RFP.</p>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                    {([
+                      ['complex', 'Complex scope or delivery'], ['technical', 'Technical evaluation required'],
+                      ['strategic', 'Strategic engagement'], ['highRisk', 'High operational, financial, or legal risk'],
+                      ['dataSensitive', 'Sensitive data involved'], ['importation', 'Importation or offshore delivery'],
+                    ] as const).map(([key, label]) => (
+                      <label key={key} className="flex min-h-11 items-center gap-2 rounded-md border border-line bg-surface px-3 text-sm text-ink">
+                        <input type="checkbox" checked={riskFacts[key]} onChange={(event) => { setRiskFacts({ ...riskFacts, [key]: event.target.checked }); setRouteConfirmed(false); }} />
+                        {label}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+                {(route?.procurementMode === 'sole_source' || route?.procurementMode === 'emergency_purchase') && (
                   <div className="grid gap-3 sm:grid-cols-2">
                     <Field label="Direct-award reason" htmlFor="daReason">
                       <select
@@ -1475,11 +1464,9 @@ export function CreateRequestPage() {
                   </div>
                 )}
 
-                {['direct_award', 'emergency', 'repeat_order', 'petty_cash'].includes(
-                  effectiveSourcing,
-                ) && (
+                {route != null && route.procurementMode !== 'competitive_bidding' && legacyProjection && (
                   <ExceptionPack
-                    method={effectiveSourcing}
+                    method={legacyProjection}
                     value={exceptionPack}
                     onChange={setExceptionPack}
                   />
@@ -1531,7 +1518,7 @@ export function CreateRequestPage() {
                   </section>
                 )}
 
-                {(effectiveSourcing === 'rfp' || effectiveSourcing === 'rfq') && (
+                {route?.procurementMode === 'competitive_bidding' && (
                   <Field label="PhilGEPS reference (if applicable)" htmlFor="philgeps">
                     <Input
                       id="philgeps"
@@ -1542,7 +1529,7 @@ export function CreateRequestPage() {
                   </Field>
                 )}
 
-                {(effectiveSourcing === 'rfp' || effectiveSourcing === 'rfq') && (
+                {route?.procurementMode === 'competitive_bidding' && (
                   <EvaluationMatrix
                     value={evaluation}
                     onChange={setEvaluation}
@@ -1629,7 +1616,7 @@ export function CreateRequestPage() {
               <section className="card space-y-3 p-4 sm:p-5">
                 <div>
                   <h2 className="font-display text-base font-bold text-ink">
-                    Required documents for {sourcingMethodLabel(effectiveSourcing)}
+                    Required documents for {route ? `${route.solicitationType.toUpperCase()} / ${route.procurementMode.replaceAll('_', ' ')}` : 'this route'}
                   </h2>
                   <p className="text-xs text-muted">
                     Matched live against the files you attached on step 2.

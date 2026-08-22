@@ -22,10 +22,11 @@ import { Guard, useCan, useSession } from '@intra/auth';
 import type {
   ApprovalStep,
   ProcurementRiskFacts,
+  ProcurementMode,
+  ProcurementRoute,
   ProcurementRequestLine,
   RequestAttachment,
   RequestStatus,
-  SourcingMethod,
 } from '../types';
 import {
   useApprovalHistory,
@@ -36,14 +37,15 @@ import {
 import {
   categoryMeta,
   canSubmitRequest,
-  deriveSourcingRecommendation,
   evaluateSubmitReadiness,
   requiredDocumentsStatus,
   sourcingMethodLabel,
   tierLabel,
   type SubmitReadiness,
 } from '../policy';
-import { SourcingDecisionPanel } from '../components/SourcingDecisionPanel';
+import { deriveProcurementRoute, legacySourcingMethod } from '../policyRoute';
+import { MWELL_OPERATING_PROFILE } from '../policyProfile';
+import { ProcurementRoutePanel } from '../components/ProcurementRoutePanel';
 import { SourcingWorkspace } from '../components/SourcingWorkspace';
 import {
   attachmentKindLabel,
@@ -119,7 +121,8 @@ export function RequestDetailPage() {
   const { profile, mode, supabaseClient } = useSession();
   const canConfirmRoute = useCan('procurement', 'manage_rfp');
   const canApproveSourcingException = useCan('procurement', 'approve_award');
-  const [routeMethod, setRouteMethod] = useState<SourcingMethod>('rfq');
+  const [requestedMode, setRequestedMode] = useState<ProcurementMode>('competitive_bidding');
+  const [returnedRoute, setReturnedRoute] = useState<ProcurementRoute | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelBusy, setCancelBusy] = useState(false);
@@ -138,7 +141,8 @@ export function RequestDetailPage() {
 
   useEffect(() => {
     if (!req) return;
-    setRouteMethod(req.sourcingMethod ?? 'rfq');
+    setRequestedMode(req.route?.procurementMode ?? 'competitive_bidding');
+    setReturnedRoute(null);
     if (req.compliance?.riskFacts) setRouteRiskFacts(req.compliance.riskFacts);
   }, [req?.id]);
 
@@ -246,36 +250,70 @@ export function RequestDetailPage() {
     setCancelOpen(true);
   }
   const cat = categoryMeta(req.category);
-  const routeRecommendation = deriveSourcingRecommendation({
-    category: req.category,
-    amount: req.estimatedAmount,
-    ...routeRiskFacts,
-  });
+  const routeRecommendation = req.requirementKind
+    ? deriveProcurementRoute({
+        requirementKind: req.requirementKind,
+        category: req.category,
+        amount: req.estimatedAmount,
+        requestedMode,
+        ...routeRiskFacts,
+      }, MWELL_OPERATING_PROFILE)
+    : undefined;
+  const displayedRoute = returnedRoute ?? req.route ?? routeRecommendation?.route;
 
   async function confirmRoute() {
     if (!canConfirmRoute || !req) return;
     const currentRequest = req;
     try {
       if (mode === 'supabase' && supabaseClient) {
-        const { error: rpcError } = await supabaseClient
+        const { data, error: rpcError } = await supabaseClient
           .schema('procurement')
           .rpc('confirm_route_decision', {
             payload: {
               request_id: currentRequest.id,
-              request_version: 1,
-              method: routeMethod,
-              reasons: routeRecommendation.reasons,
-              risk_facts: routeRiskFacts,
+              expected_route_version: displayedRoute?.routeVersion ?? 0,
+              requested_mode: requestedMode,
             },
           });
         if (rpcError) throw new Error(rpcError.message);
         await refresh();
-        success('Sourcing route confirmed');
+        const returnedRoutePayload = data && typeof data === 'object' && 'route' in data
+          ? (data as { route?: { solicitation_type?: string; procurement_mode?: string; governance_tier?: string; policy_profile_id?: string; reasons?: string[] } }).route
+          : undefined;
+        if (returnedRoutePayload?.solicitation_type && returnedRoutePayload.procurement_mode && returnedRoutePayload.governance_tier && returnedRoutePayload.policy_profile_id) {
+          setReturnedRoute({
+            solicitationType: returnedRoutePayload.solicitation_type as ProcurementRoute['solicitationType'],
+            procurementMode: returnedRoutePayload.procurement_mode as ProcurementMode,
+            governanceTier: returnedRoutePayload.governance_tier as ProcurementRoute['governanceTier'],
+            policyProfileId: returnedRoutePayload.policy_profile_id,
+            reasons: returnedRoutePayload.reasons ?? [],
+            routeVersion: (displayedRoute?.routeVersion ?? 0) + 1,
+          });
+        }
+        const serverRecomputed = Boolean(returnedRoutePayload
+          && displayedRoute
+          && (
+            returnedRoutePayload.solicitation_type !== displayedRoute.solicitationType
+            || returnedRoutePayload.procurement_mode !== displayedRoute.procurementMode
+            || returnedRoutePayload.governance_tier !== displayedRoute.governanceTier
+            || returnedRoutePayload.policy_profile_id !== displayedRoute.policyProfileId
+            || (returnedRoutePayload.reasons ?? []).slice().sort().join('|') !== displayedRoute.reasons.slice().sort().join('|')
+          ));
+        if (serverRecomputed) {
+          error('The active policy recomputed this route. Review the returned route and confirm again.');
+        } else {
+          success('Sourcing route confirmed');
+        }
         return;
       }
+      if (!displayedRoute || !routeRecommendation) {
+        throw new Error('This legacy request needs an explicit requirement classification before Procurement can confirm a route.');
+      }
       await update(currentRequest.id, {
-        sourcingMethod: routeMethod,
-        sourcingOverride: routeMethod !== routeRecommendation.method,
+        sourcingMethod: legacySourcingMethod(displayedRoute),
+        requirementKind: currentRequest.requirementKind,
+        route: displayedRoute,
+        sourcingOverride: displayedRoute.procurementMode !== 'competitive_bidding',
         compliance: {
           ...currentRequest.compliance,
           routeConfirmed: true,
@@ -368,7 +406,7 @@ export function RequestDetailPage() {
   const metaLine = [
     req.requesterName ?? req.requesterEmail,
     cat?.label,
-    req.sourcingMethod ? sourcingMethodLabel(req.sourcingMethod) : undefined,
+    displayedRoute ? `${displayedRoute.solicitationType.toUpperCase()} · ${displayedRoute.procurementMode.replaceAll('_', ' ')}` : undefined,
     req.vendorName ?? 'Open to bids',
     req.neededBy ? `needed ${formatDate(req.neededBy)}` : undefined,
   ]
@@ -436,27 +474,25 @@ export function RequestDetailPage() {
       {req.status === 'draft' && !req.compliance?.routeConfirmed && (
         <div>
           <SectionTitle
-            title="Sourcing route decision"
-            subtitle="The requester supplies facts; Procurement confirms the route before approval submission."
+            title="Procurement route decision"
+            subtitle="Procurement chooses the mode; the policy computes the solicitation document and governance tier."
           />
           <Card>
-            <SourcingDecisionPanel
-              riskFacts={routeRiskFacts}
-              onRiskFactsChange={setRouteRiskFacts}
+            {displayedRoute && routeRecommendation ? <ProcurementRoutePanel
+              value={displayedRoute}
               recommendation={routeRecommendation}
-              value={routeMethod}
-              onChange={setRouteMethod}
+              profile={MWELL_OPERATING_PROFILE}
               canConfirm={canConfirmRoute}
-              confirmed={false}
-            />
-            {canConfirmRoute && (
+              onModeChange={setRequestedMode}
+            /> : <p role="alert" className="rounded-lg border border-amber-500/35 bg-amber-500/10 p-3 text-sm text-amber-900 dark:text-amber-200">This legacy request is missing its requirement classification. Update it through the controlled remediation queue before routing.</p>}
+            {canConfirmRoute && displayedRoute && (
               <button
                 type="button"
                 className="btn-primary mt-4"
                 onClick={() => void confirmRoute()}
               >
                 <Icon name="check" className="h-4 w-4" />
-                Confirm sourcing route
+                Confirm procurement route
               </button>
             )}
           </Card>
@@ -465,7 +501,7 @@ export function RequestDetailPage() {
 
       {req.status === 'draft' &&
         req.compliance?.routeConfirmed &&
-        (req.sourcingMethod === 'rfq' || req.sourcingMethod === 'rfp') && (
+        req.route?.procurementMode === 'competitive_bidding' && (
           <div>
             <SectionTitle
               title="Competitive sourcing"
@@ -474,7 +510,7 @@ export function RequestDetailPage() {
             <Card>
               <SourcingWorkspace
                 requestId={req.id}
-                method={req.sourcingMethod}
+                method={req.route.solicitationType === 'rfp' ? 'rfp' : 'rfq'}
                 canManage={canConfirmRoute}
                 canApprove={canApproveSourcingException}
                 client={mode === 'supabase' ? supabaseClient : null}

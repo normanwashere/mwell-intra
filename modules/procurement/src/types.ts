@@ -67,6 +67,8 @@ export interface ProcurementRoute {
   governanceTier: GovernanceTier;
   policyProfileId: string;
   reasons: string[];
+  /** Optimistic concurrency version returned by the governed route decision. */
+  routeVersion?: number;
   /** Preserves a pre-three-axis stored method during deterministic backfill reads. */
   legacySourcingMethod?: SourcingMethod;
   confirmedAt?: string;

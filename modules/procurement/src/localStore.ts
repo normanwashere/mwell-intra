@@ -28,6 +28,7 @@ import type {
   ProcurementRequest,
   ProcurementRequestLine,
   ProcurementRoute,
+  RequirementKind,
   ProcurementVendor,
   PurchaseOrder,
   PurchaseOrderLine,
@@ -294,6 +295,7 @@ function mapRoute(row: LiveRow): ProcurementRoute | undefined {
     reasons: Array.isArray(routeReasons)
       ? routeReasons.filter((reason): reason is string => typeof reason === 'string')
       : [],
+    ...(row.route_version == null ? {} : { routeVersion: Number(row.route_version) }),
     legacySourcingMethod: row.sourcing_method as ProcurementRoute['legacySourcingMethod'],
     confirmedAt: row.route_confirmed_at ?? undefined,
     confirmedByEmail: row.route_confirmed_by_email ?? undefined,
@@ -662,6 +664,10 @@ export interface NewRequestInput {
   lines: Array<Omit<ProcurementRequestLine, 'id'>>;
   // Policy-aligned optional fields
   category?: RequestCategory;
+  /** Required for new request writes. Category is never used to infer this. */
+  requirementKind: RequirementKind;
+  /** Client preview only; the governed route is recomputed by Supabase. */
+  route: ProcurementRoute;
   sourcingMethod?: SourcingMethod;
   sourcingOverride?: boolean;
   justification?: ProcurementRequest['justification'];
@@ -749,12 +755,9 @@ export function useProcurementRequests(): ProcurementRequestsAPI {
         id: newId('rl'),
       }));
       const estimatedAmount = totalOf(lines);
-      // Auto-suggest a sourcing method if the caller didn't provide one so
-      // even legacy callers (no category picker yet) get policy alignment.
-      const suggested = suggestSourcingMethod({
-        category: input.category,
-        amount: estimatedAmount,
-      });
+      if (!input.requirementKind || !input.route) {
+        throw new Error('New purchase requests require an explicit requirement classification and governed route.');
+      }
       const requestId = input.draftId ?? newId('req');
       const attachments: RequestAttachment[] = isLive(live)
         ? await uploadRequestAttachments(live, requestId, input.attachments ?? [])
@@ -777,10 +780,10 @@ export function useProcurementRequests(): ProcurementRequestsAPI {
         lines,
         estimatedAmount,
         category: input.category,
-        sourcingMethod: input.sourcingMethod ?? suggested,
-        sourcingOverride:
-          input.sourcingOverride ??
-          (input.sourcingMethod !== undefined && input.sourcingMethod !== suggested),
+        sourcingMethod: input.sourcingMethod,
+        requirementKind: input.requirementKind,
+        route: input.route,
+        sourcingOverride: input.sourcingOverride,
         justification: input.justification,
         attachments: attachments.length > 0 ? attachments : undefined,
         compliance: input.compliance,
@@ -807,6 +810,7 @@ export function useProcurementRequests(): ProcurementRequestsAPI {
               lines: next.lines,
               estimated_amount: next.estimatedAmount,
               category: next.category,
+              requirement_kind: next.requirementKind,
               sourcing_method: next.sourcingMethod,
               sourcing_override: next.sourcingOverride,
               justification: next.justification,

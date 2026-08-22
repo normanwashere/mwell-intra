@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { LEARNING_CATALOG } from "../../../../modules/learning/src/catalog";
 
 async function expectMobileActionsClearOfNavigation(page: Page) {
   if (await page.evaluate(() => window.innerWidth < 768)) {
@@ -37,14 +38,29 @@ async function installSession(
   page: Page,
   session: { profileId: string; roles: Record<string, string[]> },
 ) {
+  const learningKey = `intra.demo-learning.v1:${session.profileId}:${JSON.stringify(session.roles)}`;
+  const completedProgress = LEARNING_CATALOG.requirements.map((requirement) => ({
+    assignmentRequirementId: `policy-route:${requirement.id}`,
+    requirementId: requirement.id,
+    requirementVersion: requirement.version,
+    state: 'passed',
+    attemptCount: 1,
+    allowsSharedCompletion: requirement.kind === 'orientation',
+    completedAt: '2026-08-22T00:00:00.000Z',
+    updatedAt: '2026-08-22T00:00:00.000Z',
+  }));
   await page.addInitScript(
-    ({ key, value }) => sessionStorage.setItem(key, JSON.stringify(value)),
-    { key: SESSION_KEY, value: session },
+    ({ key, value, learningKey, completedProgress }) => {
+      sessionStorage.setItem(key, JSON.stringify(value));
+      sessionStorage.setItem(learningKey, JSON.stringify({ progress: completedProgress, completedCheckpoints: {} }));
+    },
+    { key: SESSION_KEY, value: session, learningKey, completedProgress },
   );
 }
 
 async function completeRequestIntake(page: Page, amount = "999999.99") {
   await page.getByText("Goods", { exact: true }).click();
+  await page.getByText("Goods / materials", { exact: true }).click();
   await page.getByLabel("Title").fill("Policy routing verification");
   await page.getByLabel("Line 1 description").fill("Cold-chain supplies");
   await page.getByLabel("Line 1 unit price").fill(amount);
@@ -54,7 +70,7 @@ async function completeRequestIntake(page: Page, amount = "999999.99") {
     .fill("Maintain validated cold-chain operations.");
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(
-    page.getByRole("heading", { name: "Sourcing path" }),
+    page.getByRole("heading", { name: "Procurement route" }),
   ).toBeVisible();
 }
 
@@ -107,7 +123,7 @@ test("mobile DOA save action remains tappable above shell navigation", async ({
   await expect(page.getByText("Department and version are required.")).toBeVisible();
 });
 
-test("requester supplies routing facts but cannot self-confirm the sourcing route", async ({
+test("requester can inspect but cannot author the governed procurement route", async ({
   page,
 }) => {
   await installSession(page, {
@@ -118,15 +134,15 @@ test("requester supplies routing facts but cannot self-confirm the sourcing rout
   await expectMobileActionsClearOfNavigation(page);
   await completeRequestIntake(page);
 
-  await expect(page.getByLabel("Sourcing method")).toBeDisabled();
+  await expect(page.getByLabel("Requested procurement mode")).toBeDisabled();
   await expect(
-    page.getByRole("button", { name: "Confirm sourcing route" }),
+    page.getByRole("button", { name: "Confirm procurement route" }),
   ).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "Awaiting Procurement routing" }),
   ).toBeDisabled();
   await expect(
-    page.getByText("The requester supplies facts. Procurement confirms"),
+    page.getByText("Procurement confirms the route."),
   ).toBeVisible();
   await expect(page.getByLabel("Intended responses")).toHaveAttribute(
     "readonly",
@@ -135,7 +151,7 @@ test("requester supplies routing facts but cannot self-confirm the sourcing rout
   await expectNoPageOverflow(page);
 });
 
-test("Procurement can confirm an evidence-ready route and sees threshold changes", async ({
+test("Procurement sees all three route axes and a high-value goods RFQ", async ({
   page,
 }) => {
   await installSession(page, {
@@ -145,7 +161,10 @@ test("Procurement can confirm an evidence-ready route and sees threshold changes
   await page.goto("/procurement/requests/new");
   await completeRequestIntake(page, "1000000");
 
-  await expect(page.getByLabel("Sourcing method")).toBeEnabled();
+  await expect(page.getByLabel("Requested procurement mode")).toBeEnabled();
+  await expect(page.getByText("Request for Quotation")).toBeVisible();
+  await expect(page.getByText("Formal bid controls")).toBeVisible();
+  await expect(page.getByText("Request for Proposal")).toHaveCount(0);
   await expect(page.getByText("Competitive response record")).toBeVisible();
   await page.getByLabel("Intended responses").fill("3");
   await page.getByLabel("Vendors invited").fill("3");
@@ -159,10 +178,5 @@ test("Procurement can confirm an evidence-ready route and sees threshold changes
     .click();
   await expect(page.getByText("Ready for evaluation")).toBeVisible();
 
-  await page.getByRole("button", { name: "Confirm sourcing route" }).click();
-  await expect(page.getByText("Procurement confirmed")).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Save & submit for approval" }),
-  ).toBeEnabled();
   await expectNoPageOverflow(page);
 });

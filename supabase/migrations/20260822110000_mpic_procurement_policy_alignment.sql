@@ -1341,6 +1341,53 @@ security definer
 set search_path = ''
 as $$ select private.policy_submit_procurement_request(payload) $$;
 
+-- New request callers must classify the requirement explicitly. Keep the
+-- existing hardened attachment/create implementation intact, then persist the
+-- only route input the requester may author. Solicitation, mode, tier, profile
+-- and reasons are deliberately left for private.policy_derive_procurement_route.
+alter function procurement.create_request(jsonb)
+  rename to create_request_pre_policy_route;
+
+create or replace function procurement.create_request(payload jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_requirement_kind text := nullif(pg_catalog.btrim(payload->>'requirement_kind'), '');
+  v_created jsonb;
+  v_request procurement.requests;
+begin
+  if jsonb_typeof(payload) <> 'object' then
+    raise exception 'Request payload must be an object';
+  end if;
+  if v_requirement_kind not in ('materials', 'services') then
+    raise exception 'An explicit requirement_kind of materials or services is required';
+  end if;
+
+  v_created := procurement.create_request_pre_policy_route(payload);
+  select * into v_request
+  from procurement.requests
+  where id = v_created->>'id'
+  for update;
+  if not found then
+    raise exception 'Created request could not be loaded for route classification';
+  end if;
+
+  update procurement.requests
+  set requirement_kind = v_requirement_kind,
+      updated_at = pg_catalog.now()
+  where id = v_request.id
+  returning * into v_request;
+  return to_jsonb(v_request);
+end;
+$$;
+
+revoke all on function procurement.create_request_pre_policy_route(jsonb) from public, anon, authenticated;
+revoke all on function procurement.create_request(jsonb) from public, anon;
+grant execute on function procurement.create_request(jsonb) to authenticated, service_role;
+
 revoke all on function private.policy_route_legacy_method(text, text) from public, anon, authenticated;
 revoke all on function private.policy_legacy_requirement_kind(text, jsonb) from public, anon, authenticated;
 revoke all on function private.policy_normalized_risk_facts(jsonb) from public, anon, authenticated;

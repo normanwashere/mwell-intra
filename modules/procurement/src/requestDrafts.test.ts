@@ -76,6 +76,22 @@ describe("purchase request server drafts", () => {
     }]);
   });
 
+  it('keeps explicit requirement classification and governed route axes in a draft payload', async () => {
+    const { client, calls } = clientReturning({
+      id: 'req_draft_route', client_key: 'route-key', draft_version: 1,
+      draft_payload: {}, updated_at: '2026-08-22T00:00:00Z',
+    });
+    const route = {
+      solicitationType: 'rfq', procurementMode: 'competitive_bidding', governanceTier: 'formal_bid',
+      policyProfileId: 'mwell-operating-policy-2026-08', reasons: ['material_requirement', 'tier:formal_bid'],
+    };
+    await saveRequestDraft(client, {
+      clientKey: 'route-key',
+      payload: { requirementKind: 'materials', requestedMode: 'competitive_bidding', route },
+    });
+    expect(calls[0]?.payload.draft).toEqual({ requirementKind: 'materials', requestedMode: 'competitive_bidding', route });
+  });
+
   it("discards only the identified server draft", async () => {
     const { client, calls } = clientReturning(null);
 

@@ -1,3 +1,15 @@
+import type { ProcurementMode, ProcurementRoute, RequirementKind } from './types';
+
+/**
+ * The policy facts retained with a request draft. These are client recovery
+ * data only; the governed server route is recomputed when the request is made.
+ */
+export interface GovernedRequestDraftFields {
+  requirementKind?: RequirementKind | '';
+  requestedMode?: ProcurementMode;
+  route?: ProcurementRoute;
+}
+
 export interface RequestDraftRecord<TPayload = Record<string, unknown>> {
   id: string;
   clientKey: string;

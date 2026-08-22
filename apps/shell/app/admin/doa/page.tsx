@@ -11,6 +11,7 @@ import {
   useToast,
 } from "@intra/ui";
 import { useCan, useSession } from "@intra/auth";
+import { PolicyProfileSection } from "./PolicyProfileSection";
 
 type Tier =
   "dept_head" | "procurement_head" | "finance" | "legal" | "final_approver";
@@ -71,10 +72,10 @@ export default function DoaAdministrationPage() {
         </p>
       </div>
     );
-  return <DoaWorkspace />;
+  return <DoaWorkspace canManagePolicy={allowed} />;
 }
 
-function DoaWorkspace() {
+function DoaWorkspace({ canManagePolicy }: { canManagePolicy: boolean }) {
   const { mode, supabaseClient } = useSession();
   const toast = useToast();
   const procurement = useMemo(
@@ -353,6 +354,11 @@ function DoaWorkspace() {
           )}
         </div>
       </section>
+      <PolicyProfileSection
+        canManage={canManagePolicy}
+        mode={mode}
+        client={supabaseClient as never}
+      />
       <div id="doa-editor" className="scroll-mt-24">
         <Card className="p-4 sm:p-5">
           <h2 className="text-lg font-semibold text-ink">

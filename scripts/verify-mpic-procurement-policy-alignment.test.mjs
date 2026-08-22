@@ -267,6 +267,17 @@ test("requires profile, route, RLS, and hardened RPC controls", () => {
   assert.ok(result.failures.includes("missing governed write RLS policy"));
 });
 
+test("requires explicit requirement classification before the create wrapper persists a request", () => {
+  assert.match(migration, /alter function procurement\.create_request\(jsonb\)\s+rename to create_request_pre_policy_route/i);
+  assert.match(migration, /v_requirement_kind not in \('materials', 'services'\)/);
+  assert.match(migration, /An explicit requirement_kind of materials or services is required/);
+  assert.match(migration, /set requirement_kind = v_requirement_kind/);
+  assert.doesNotMatch(
+    migration.slice(migration.indexOf('alter function procurement.create_request(jsonb)')),
+    /set\s+solicitation_type\s*=/i,
+  );
+});
+
 test("executes the migration backfill against persisted legacy procurement records", async () => {
   const db = await createGovernedRouteFixture();
   try {
@@ -565,6 +576,7 @@ test("PGlite parse smoke loads the migration without a live database", async () 
       create function auth.role() returns text language sql stable as $$ select 'authenticated'::text $$;
       create function core.has_live_cap(text, text) returns boolean language sql stable as $$ select true $$;
       create function private.policy_submit_procurement_request(jsonb) returns jsonb language sql as $$ select '{}'::jsonb $$;
+      create function procurement.create_request(jsonb) returns jsonb language sql as $$ select $1 $$;
       create table core.profiles (id uuid primary key, status text not null default 'active');
       create table core.vendors (id uuid primary key);
       create table procurement.requests (
