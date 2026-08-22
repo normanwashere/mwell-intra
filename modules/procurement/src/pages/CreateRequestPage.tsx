@@ -897,6 +897,7 @@ export function CreateRequestPage() {
                         <input
                           type="radio"
                           name="requirement-kind"
+                          aria-label={label}
                           value={kind}
                           checked={requirementKind === kind}
                           onChange={() => { setRequirementKind(kind); setRouteConfirmed(false); }}

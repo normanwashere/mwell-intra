@@ -28,6 +28,7 @@ type PolicyProfileHistory = {
   effective_from: string;
   created_by: string;
   activated_by: string | null;
+  source_filename?: string;
 };
 
 type PolicyConflict = {
@@ -105,7 +106,7 @@ export function PolicyProfileSection({
       const procurement = client.schema('procurement');
       if (!procurement.from) return;
       const [profiles, conflicts, profileEvents, effective] = await Promise.all([
-        procurement.from('policy_profiles').select('id,code,version,status,relationship,effective_from,created_by,activated_by').order('effective_from', { ascending: false }),
+        procurement.from('policy_profiles').select('id,code,version,status,relationship,effective_from,created_by,activated_by,source_filename').order('effective_from', { ascending: false }),
         procurement.from('policy_conflicts').select('id,parent_rule,local_rule,impact,status,created_at').order('created_at', { ascending: false }),
         procurement.from('policy_profile_events').select('id,policy_profile_id,event_type,actor_id,profile_actor_id,event_at').order('event_at', { ascending: false }),
         procurement.rpc('get_effective_policy_profile', { as_of: null }),
@@ -247,9 +248,11 @@ export function PolicyProfileSection({
             <p className="mt-1 text-xs text-faint">Required before a policy revision can be saved for independent review.</p>
           </Field>
           <Field label="Governed parent source profile" htmlFor="policy-parent-profile">
-            <Input id="policy-parent-profile" disabled={!canManage} value={parentProfileId} onChange={(event) => setParentProfileId(event.target.value.trim())} placeholder="Select the MPIC source profile UUID" list="policy-parent-profile-options" />
-            <datalist id="policy-parent-profile-options">{profileHistory.filter((profile) => profile.relationship === 'parent_source').map((profile) => <option key={profile.id} value={profile.id}>{profile.code} {profile.version}</option>)}</datalist>
-            <p className="mt-1 text-xs text-faint">The canonical MPIC source must already be governed before an Mwell mapping can be saved.</p>
+            <select id="policy-parent-profile" className="input" disabled={!canManage} value={parentProfileId} onChange={(event) => setParentProfileId(event.target.value)}>
+              <option value="">Select a governed parent source</option>
+              {profileHistory.filter((profile) => profile.relationship === 'parent_source').map((profile) => <option key={profile.id} value={profile.id}>{profile.code} {profile.version}</option>)}
+            </select>
+            <p className="mt-1 text-xs text-faint">{profileHistory.find((profile) => profile.id === parentProfileId) ? `${profileHistory.find((profile) => profile.id === parentProfileId)?.code} ${profileHistory.find((profile) => profile.id === parentProfileId)?.version} · ${profileHistory.find((profile) => profile.id === parentProfileId)?.source_filename ?? 'controlled source'} ` : 'The canonical MPIC source must already be governed before an Mwell mapping can be saved.'}</p>
           </Field>
         </div>
         <div className="mt-5 flex flex-wrap gap-2">

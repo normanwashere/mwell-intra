@@ -517,6 +517,20 @@ export function RequestDetailPage() {
         </div>
       )}
 
+      {req.status === 'draft' && req.compliance?.routeConfirmed && displayedRoute && (
+        <Card aria-label="Confirmed procurement route" className="p-4 sm:p-5">
+          <h2 className="text-base font-semibold text-ink">Confirmed procurement route</h2>
+          <dl className="mt-3 grid gap-3 sm:grid-cols-3 text-sm">
+            <div><dt className="text-muted">Solicitation</dt><dd className="font-semibold text-ink">{displayedRoute.solicitationType.toUpperCase()}</dd></div>
+            <div><dt className="text-muted">Mode</dt><dd className="font-semibold text-ink">{displayedRoute.procurementMode.replaceAll('_', ' ')}</dd></div>
+            <div><dt className="text-muted">Governance</dt><dd className="font-semibold text-ink">{displayedRoute.governanceTier.replaceAll('_', ' ')}</dd></div>
+          </dl>
+          <div className="mt-3 rounded-md border border-line bg-inset p-3 text-sm text-muted">
+            <strong className="text-ink">Applied policy profile:</strong> {routeProfile ? `${routeProfile.code} ${routeProfile.version}` : 'Loading governed profile'} · effective {routeProfile?.effectiveFrom ?? '...'} · ID {displayedRoute.policyProfileId}
+          </div>
+        </Card>
+      )}
+
       {req.status === 'draft' &&
         req.compliance?.routeConfirmed &&
         req.route?.procurementMode === 'competitive_bidding' && (

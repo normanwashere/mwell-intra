@@ -66,7 +66,7 @@ async function installSession(
 
 async function completeRequestIntake(page: Page, amount = "999999.99", kind: 'materials' | 'services' = 'materials') {
   await page.getByText("Goods", { exact: true }).click();
-  await page.getByText(kind === 'materials' ? "Goods / materials" : "Services", { exact: true }).click();
+  await page.getByRole('radio', { name: kind === 'materials' ? 'Goods / materials' : 'Services' }).check();
   await page.getByLabel("Title").fill("Policy routing verification");
   await page.getByLabel("Line 1 description").fill("Cold-chain supplies");
   await page.getByLabel("Line 1 unit price").fill(amount);
@@ -169,7 +169,7 @@ test("Procurement sees all three route axes and a high-value goods RFQ", async (
 
   await expect(page.getByLabel("Requested procurement mode")).toBeEnabled();
   await expect(page.getByText("Request for Quotation")).toBeVisible();
-  await expect(page.getByText("Formal bid controls")).toBeVisible();
+  await expect(page.locator('dt', { hasText: 'Governance tier' }).locator('..').getByText('Formal bid controls', { exact: true })).toBeVisible();
   await expect(page.getByText("Request for Proposal")).toHaveCount(0);
   await expect(page.getByText("Competitive response record")).toBeVisible();
   await page.getByLabel("Intended responses").fill("3");

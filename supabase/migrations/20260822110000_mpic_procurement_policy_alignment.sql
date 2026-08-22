@@ -1028,6 +1028,36 @@ begin
 end;
 $$;
 
+create or replace function private.policy_normalize_solicitation_requirements(
+  p_requirements jsonb,
+  p_solicitation_type text
+)
+returns jsonb
+language plpgsql
+immutable
+security definer
+set search_path = ''
+as $$
+declare
+  v_requirements jsonb := coalesce(p_requirements, '{}'::jsonb);
+  v_key text;
+  v_required text[] := case p_solicitation_type
+    when 'rfq' then array['acceptanceCriteria', 'deliveryTerms', 'paymentTerms', 'shippingTerms', 'validityPeriod', 'responseDeadline']
+    when 'rfp' then array['scopeOfWork', 'evaluationApproach', 'responseDeadline']
+    else array[]::text[] end;
+begin
+  if jsonb_typeof(v_requirements) <> 'object' then
+    raise exception 'Solicitation requirements must be an object';
+  end if;
+  foreach v_key in array v_required loop
+    if nullif(pg_catalog.btrim(v_requirements->>v_key), '') is null then
+      raise exception 'Missing required % solicitation requirement', v_key;
+    end if;
+  end loop;
+  return jsonb_strip_nulls(v_requirements);
+end;
+$$;
+
 create or replace function private.policy_route_exception_contract(
   p_procurement_mode text,
   p_amount numeric,
@@ -1173,6 +1203,7 @@ declare
   v_current_version integer;
   v_requested_mode text;
   v_confirmation jsonb;
+  v_requirements jsonb;
 begin
   if not (core.has_live_cap('procurement', 'manage_rfp') or core.has_live_cap('procurement', 'admin')) then
     raise exception 'Not authorized to confirm sourcing route';
@@ -1195,6 +1226,9 @@ begin
   if v_route->>'status' <> 'derived' then
     raise exception 'Route cannot be confirmed: %', coalesce(v_route->'blockers', '[]'::jsonb);
   end if;
+  v_requirements := private.policy_normalize_solicitation_requirements(
+    v_request.solicitation_requirements, v_route->>'solicitation_type'
+  );
   insert into procurement.route_decisions(
     request_id, policy_version, request_version, method, reasons, risk_facts, status, confirmed_by,
     solicitation_type, procurement_mode, governance_tier, policy_profile_id
@@ -1218,6 +1252,7 @@ begin
     route_version = v_decision.request_version,
     route_confirmed_at = v_decision.confirmed_at,
     route_confirmed_by = v_decision.confirmed_by,
+    solicitation_requirements = v_requirements,
     compliance = jsonb_set(
       coalesce(compliance, '{}'::jsonb), '{routeConfirmed}', 'true'::jsonb, true
     ),
@@ -1371,6 +1406,9 @@ set search_path = ''
 as $$
 declare
   v_requirement_kind text := nullif(pg_catalog.btrim(payload->>'requirement_kind'), '');
+  v_requested_mode text := coalesce(nullif(pg_catalog.btrim(payload->>'requested_mode'), ''), 'competitive_bidding');
+  v_solicitation_type text;
+  v_requirements jsonb;
   v_created jsonb;
   v_request procurement.requests;
 begin
@@ -1380,6 +1418,13 @@ begin
   if v_requirement_kind not in ('materials', 'services') then
     raise exception 'An explicit requirement_kind of materials or services is required';
   end if;
+  if v_requested_mode not in ('competitive_bidding', 'sole_source', 'repeat_order', 'emergency_purchase', 'petty_cash', 'approved_exception') then
+    raise exception 'Unsupported procurement mode';
+  end if;
+  v_solicitation_type := case when v_requested_mode = 'competitive_bidding'
+    then case when v_requirement_kind = 'services' then 'rfp' else 'rfq' end
+    else 'none' end;
+  v_requirements := private.policy_normalize_solicitation_requirements(payload->'solicitation_requirements', v_solicitation_type);
 
   v_created := procurement.create_request_pre_policy_route(payload);
   select * into v_request
@@ -1392,6 +1437,7 @@ begin
 
   update procurement.requests
   set requirement_kind = v_requirement_kind,
+      solicitation_requirements = v_requirements,
       updated_at = pg_catalog.now()
   where id = v_request.id
   returning * into v_request;
@@ -1409,6 +1455,7 @@ revoke all on function private.policy_normalized_risk_facts(jsonb) from public, 
 revoke all on function private.policy_normalized_risk_reasons(jsonb) from public, anon, authenticated;
 revoke all on function private.policy_legacy_route_mapping(text, text, jsonb, jsonb, numeric, numeric) from public, anon, authenticated;
 revoke all on function private.policy_route_confirmation_input(jsonb, integer) from public, anon, authenticated;
+revoke all on function private.policy_normalize_solicitation_requirements(jsonb, text) from public, anon, authenticated;
 revoke all on function private.policy_route_exception_contract(text, numeric, numeric, numeric, text) from public, anon, authenticated;
 revoke all on function private.policy_route_exception_is_eligible(text, text, procurement.policy_profiles, numeric) from public, anon, authenticated;
 revoke all on function private.policy_derive_procurement_route(text, text) from public, anon, authenticated;

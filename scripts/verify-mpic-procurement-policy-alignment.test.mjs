@@ -135,16 +135,17 @@ async function insertRequest(db, {
   category = "goods",
   amount = 250000,
   requirementKind = null,
+  solicitationRequirements = { acceptanceCriteria: "accept", deliveryTerms: "deliver", paymentTerms: "net 30", shippingTerms: "DAP", validityPeriod: "30 days", responseDeadline: "2026-10-01" },
   compliance = {},
   lines = [{ description: "fixture evidence" }],
 }) {
   await db.exec(`
     insert into procurement.requests(
       id, status, estimated_amount, requirement_kind, sourcing_method, category, lines,
-      compliance, requester_id
+      compliance, solicitation_requirements, requester_id
     ) values (
       '${id}', 'draft', ${amount}, ${requirementKind ? `'${requirementKind}'` : "null"},
-      '${sourcingMethod}', '${category}', ${sqlJson(lines)}, ${sqlJson(compliance)}, '${actorId}'
+      '${sourcingMethod}', '${category}', ${sqlJson(lines)}, ${sqlJson(compliance)}, ${sqlJson(solicitationRequirements)}, '${actorId}'
     );
   `);
 }

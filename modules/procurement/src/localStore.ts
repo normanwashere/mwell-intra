@@ -817,6 +817,7 @@ export function useProcurementRequests(): ProcurementRequestsAPI {
               estimated_amount: next.estimatedAmount,
               category: next.category,
               requirement_kind: next.requirementKind,
+              requested_mode: next.route?.procurementMode,
               sourcing_method: next.sourcingMethod,
               sourcing_override: next.sourcingOverride,
               solicitation_requirements: next.solicitationRequirements,
