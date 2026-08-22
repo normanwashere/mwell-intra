@@ -191,10 +191,10 @@ export function PolicyProfileSection({
     toast.success('Policy conflict resolved and recorded in immutable history.');
   };
 
-  const activateDraft = async () => {
-    if (!draftId || mode !== 'supabase' || !client) return;
+  const activateDraft = async (profileId = draftId) => {
+    if (!profileId || mode !== 'supabase' || !client) return;
     setBusy(true);
-    const { error } = await client.schema('procurement').rpc('activate_policy_profile', { payload: { id: draftId } });
+    const { error } = await client.schema('procurement').rpc('activate_policy_profile', { payload: { id: profileId } });
     setBusy(false);
     if (error) return toast.error(error.message);
     setReloadKey((value) => value + 1);
@@ -271,7 +271,7 @@ export function PolicyProfileSection({
         <p className="mt-1 text-sm text-muted">Activation history, draft author, checker, and unresolved policy conflicts are read from the governed profile records. A conflict needs a documented mapping and rationale before activation.</p>
         {historyError ? <p role="alert" className="mt-3 text-sm text-danger">Could not load policy history: {historyError}</p> : null}
         <div className="mt-4 grid gap-3 lg:grid-cols-3">
-          <div><h4 className="text-sm font-semibold text-ink">Profiles</h4><ul className="mt-2 space-y-2 text-sm text-muted">{profileHistory.length ? profileHistory.slice(0, 4).map((profile) => <li key={profile.id}><strong className="text-ink">{profile.code} {profile.version}</strong><br />{profile.status} · effective {policyEffectiveDate(profile.effective_from)}<br />Maker {profile.created_by} · checker {profile.activated_by ?? 'Pending'}</li>) : <li>No governed profile history is available yet.</li>}</ul></div>
+          <div><h4 className="text-sm font-semibold text-ink">Profiles</h4><ul className="mt-2 space-y-2 text-sm text-muted">{profileHistory.length ? profileHistory.slice(0, 4).map((profile) => <li key={profile.id}><strong className="text-ink">{profile.code} {profile.version}</strong><br />{profile.status} · effective {policyEffectiveDate(profile.effective_from)}<br />Maker {profile.created_by} · checker {profile.activated_by ?? 'Pending'}{profile.status === 'draft' && canManage ? <button type="button" className="mt-1 text-link underline disabled:opacity-50" disabled={busy} onClick={() => void activateDraft(profile.id)}>Activate this draft as checker</button> : null}</li>) : <li>No governed profile history is available yet.</li>}</ul></div>
           <div><h4 className="text-sm font-semibold text-ink">Open conflicts</h4><ul className="mt-2 space-y-2 text-sm text-muted">{openConflicts.length ? openConflicts.slice(0, 4).map((conflict) => <li key={conflict.id}><strong className="text-ink">{conflict.parent_rule}</strong><br />{conflict.impact}<br /><button type="button" className="mt-1 text-link underline" onClick={() => { setConflictId(conflict.id); setConflictOpen(true); }}>Resolve this conflict</button></li>) : <li>No unresolved policy conflicts.</li>}</ul></div>
           <div><h4 className="text-sm font-semibold text-ink">Activation events</h4><ul className="mt-2 space-y-2 text-sm text-muted">{events.length ? events.slice(0, 4).map((event) => <li key={event.id}><strong className="text-ink">{event.event_type.replaceAll('_', ' ')}</strong><br />{event.event_at.slice(0, 10)} · actor {event.actor_id}</li>) : <li>No activation events are available yet.</li>}</ul></div>
         </div>

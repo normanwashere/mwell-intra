@@ -503,6 +503,67 @@ test("executes public create and draft finalization with normalized RFQ and RFP 
         );
       }
     }
+
+    const invalidFinalizations = [
+      {
+        name: "RFQ finalization missing delivery terms",
+        id: "31000000-0000-0000-0000-000000000020",
+        requirementKind: "materials",
+        category: "goods",
+        requirements: Object.fromEntries(
+          Object.entries(rfqRequirements).filter(([key]) => key !== "deliveryTerms" && key !== "ignoredNull"),
+        ),
+        expected: /Missing required deliveryTerms solicitation requirement/,
+      },
+      {
+        name: "RFP finalization missing scope of work",
+        id: "31000000-0000-0000-0000-000000000021",
+        requirementKind: "services",
+        category: "services",
+        requirements: Object.fromEntries(
+          Object.entries(rfpRequirements).filter(([key]) => key !== "scopeOfWork"),
+        ),
+        expected: /Missing required scopeOfWork solicitation requirement/,
+      },
+    ];
+    for (const scenario of invalidFinalizations) {
+      const originalDraft = {
+        id: scenario.id,
+        marker: `${scenario.requirementKind}-owned-draft-must-survive`,
+        solicitation_requirements: scenario.requirements,
+      };
+      await db.exec(`
+        insert into procurement.requests(
+          id, status, estimated_amount, sourcing_method, category, lines, compliance, requester_id, draft_payload
+        ) values (
+          '${scenario.id}', 'draft', 1, '${scenario.requirementKind === "materials" ? "rfq" : "rfp"}', '${scenario.category}',
+          ${sqlJson([{ description: "Rollback fixture" }])}, '{}'::jsonb, '${actorId}', ${sqlJson(originalDraft)}
+        )
+      `);
+      await assert.rejects(
+        () => db.query(`select procurement.finalize_request_draft(${sqlJson({
+          id: scenario.id,
+          requirement_kind: scenario.requirementKind,
+          requested_mode: "competitive_bidding",
+          estimated_amount: 1,
+          category: scenario.category,
+          lines: [{ description: "Rollback fixture" }],
+          solicitation_requirements: scenario.requirements,
+        })})`),
+        scenario.expected,
+        scenario.name,
+      );
+      const retainedDraft = await db.query(`
+        select id, status, requester_id, draft_payload
+        from procurement.requests where id = '${scenario.id}'
+      `);
+      assert.equal(retainedDraft.rows.length, 1, `${scenario.name} must not consume the owned draft`);
+      assert.deepEqual(
+        retainedDraft.rows[0],
+        { id: scenario.id, status: "draft", requester_id: actorId, draft_payload: originalDraft },
+        `${scenario.name} must rollback the delete before the delegated public create fails`,
+      );
+    }
   } finally {
     await db.close();
   }

@@ -5,13 +5,16 @@ import { withSerwist } from '@serwist/turbopack';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const warehouseSrc = path.join(__dirname, '../../modules/warehouse/src');
 const isDev = process.env.NODE_ENV !== 'production';
+const controlledRpcTestOrigin = process.env.MWELL_CONTROLLED_RPC_TEST === '1'
+  ? ' http://127.0.0.1:54321'
+  : '';
 const contentSecurityPolicy = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''}`,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
+  `connect-src 'self' https://*.supabase.co wss://*.supabase.co${controlledRpcTestOrigin}`,
   "worker-src 'self' blob:",
   "manifest-src 'self'",
   "base-uri 'self'",
