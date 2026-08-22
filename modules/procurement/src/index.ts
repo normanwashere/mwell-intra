@@ -6,6 +6,21 @@ export { ProcurementApp } from "./ProcurementApp";
 export type { ProcurementAppProps } from "./ProcurementApp";
 export { ensureProcurementSeed } from "./localStore";
 export {
+  MPIC_SOURCE_PROFILE,
+  MWELL_OPERATING_PROFILE,
+  selectEffectivePolicyProfile,
+  validatePolicyProfile,
+} from "./policyProfile";
+export type {
+  GovernanceTier,
+  ProcurementMode,
+  ProcurementPolicyControls,
+  ProcurementPolicyProfile,
+  ProcurementRoute,
+  RequirementKind,
+  SolicitationType,
+} from "./types";
+export {
   PROCUREMENT_ROUTE_BY_ID,
   PROCUREMENT_ROUTE_CONTRACTS,
   procurementRoutesForAudience,

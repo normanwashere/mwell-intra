@@ -41,6 +41,74 @@ export type RequestCategory =
   | 'petty_cash'
   | 'other';
 
+/** The business nature of the requirement. It determines the solicitation
+ * document and remains separate from procurement mode and governance tier. */
+export type RequirementKind = 'materials' | 'services';
+
+/** The document used to solicit suppliers. Materials use RFQ; services use
+ * RFP. Approved exception modes may use no solicitation document. */
+export type SolicitationType = 'rfq' | 'rfp' | 'none';
+
+/** The governed way a purchase is made, independent of its solicitation. */
+export type ProcurementMode =
+  | 'competitive_bidding'
+  | 'sole_source'
+  | 'repeat_order'
+  | 'emergency_purchase'
+  | 'petty_cash'
+  | 'approved_exception';
+
+/** The level of control required for a route, independent of solicitation. */
+export type GovernanceTier = 'standard' | 'formal_bid' | 'high_risk';
+
+export interface ProcurementRoute {
+  solicitationType: SolicitationType;
+  procurementMode: ProcurementMode;
+  governanceTier: GovernanceTier;
+  policyProfileId: string;
+  reasons: string[];
+  confirmedAt?: string;
+  confirmedByEmail?: string;
+}
+
+/** Numeric and time-bound controls provided by an effective policy profile. */
+export interface ProcurementPolicyControls {
+  /** Null means the parent source does not establish a local formal-bid amount. */
+  formalBidAmount: number | null;
+  inviteTargetMin: number;
+  inviteTargetMax: number;
+  sealedBidMinimumResponses: number;
+  bidWindowWorkingDays: number;
+  maxExtensionWorkingDays: number;
+  vendorAcknowledgementHours: number;
+  clarificationHours: number;
+  tabulationHours: number;
+  technicalEvaluationWorkingDays: number;
+  poAcknowledgementHours: number;
+  repeatOrderMaxAmount: number;
+  repeatOrderMaxAgeDays: number;
+  pettyCashMaxAmount: number;
+  poInvoiceThreshold: number;
+  vendorProbationMonths: number;
+}
+
+/** A versioned parent-source or local operating policy profile. */
+export interface ProcurementPolicyProfile {
+  id: string;
+  code: string;
+  version: string;
+  name: string;
+  sourceFilename: string;
+  sourceOrganization: string;
+  relationship: 'parent_source' | 'mwell_operating';
+  inheritedFromProfileId?: string;
+  controlSources: Partial<Record<keyof ProcurementPolicyControls, string>>;
+  status: 'draft' | 'active' | 'superseded' | 'suspended';
+  effectiveFrom: string;
+  effectiveTo?: string;
+  controls: ProcurementPolicyControls;
+}
+
 /**
  * Policy §5 + §11 sourcing paths. The system suggests one based on category
  * and estimated total; the officer can override with justification.
@@ -253,10 +321,15 @@ export interface ProcurementRequest {
 
   // ── Policy-aligned fields ────────────────────────────────────────────────
   category?: RequestCategory;
-  /** Suggested by policy from category + total; officer may override before
-   *  submit. Persisted so the AR + PO carry the source of the sourcing
-   *  decision (policy §5 + §11). */
+  /**
+   * @deprecated Read-only compatibility data after route backfill. New code
+   * should read the three-axis `route` instead.
+   */
   sourcingMethod?: SourcingMethod;
+  /** Business classification used to derive the solicitation document. */
+  requirementKind?: RequirementKind;
+  /** Governed three-axis route bound to the effective policy profile. */
+  route?: ProcurementRoute;
   /** True when the officer overrode the system-suggested method. */
   sourcingOverride?: boolean;
   justification?: BusinessJustification;
