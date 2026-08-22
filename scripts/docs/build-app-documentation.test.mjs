@@ -32,3 +32,11 @@ test("embeds local manual screenshots as data URLs", () => {
   assert.match(html, /src="data:image\/(?:png|jpeg|webp);base64,/);
   assert.doesNotMatch(html, /src="assets\/knowledge-base\//);
 });
+
+test("embeds local presentation assets without external requests", () => {
+  const html = buildDocumentationHtml();
+  assert.match(html, /<style data-handbook-styles>/);
+  assert.match(html, /<script data-handbook-runtime>/);
+  assert.doesNotMatch(html, /<script\s+src=/i);
+  assert.doesNotMatch(html, /<link\s+[^>]*rel=["']stylesheet/i);
+});
