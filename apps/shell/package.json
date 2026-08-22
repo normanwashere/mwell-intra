@@ -14,7 +14,8 @@
     "test:smoke": "playwright test tests/smoke",
     "test:e2e": "playwright test tests/smoke tests/e2e",
     "capture:knowledge-evidence": "playwright test --config=playwright.capture.config.ts",
-    "test:e2e:live": "playwright test tests/e2e/warehouse-w1-live.spec.ts --config=playwright.live.config.ts"
+    "test:e2e:live": "playwright test tests/e2e/warehouse-w1-live.spec.ts --config=playwright.live.config.ts",
+    "test:handbook": "playwright test tests/e2e/standalone-handbook.spec.ts --config=playwright.handbook.config.ts"
   },
   "dependencies": {
     "@intra/auth": "workspace:*",

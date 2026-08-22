@@ -114,6 +114,7 @@ test("embeds heading-level search records with match metadata", () => {
   assert.equal(new Set(index.map((record) => record.articleId)).size, (index.filter((record, position) => position === 0 || record.articleId !== index[position - 1].articleId)).length);
   assert.deepEqual(Object.keys(heading), [
     "tabId",
+    "tabIds",
     "articleId",
     "headingId",
     "title",
@@ -123,8 +124,10 @@ test("embeds heading-level search records with match metadata", () => {
     "keywords",
     "source",
     "text",
+    "searchText",
   ]);
   assert.ok(heading.text.length <= 240);
+  assert.ok(index.some((record) => record.tabIds.includes("workflows") && /three-way match/i.test(record.searchText)), "workflow diagram labels remain searchable without exposing source fences");
   assert.match(html, /"scope":"all"/);
   assert.match(html, /aria-live="polite"/);
   assert.doesNotMatch(indexMatch[1], /<\/script/i);

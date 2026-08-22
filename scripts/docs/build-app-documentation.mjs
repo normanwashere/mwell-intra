@@ -253,7 +253,7 @@ function decorateArticleHtml(document, html) {
       .map(([view, label]) => `<button type="button" data-diagram-view-control="${view}" aria-pressed="${view === "overview"}">${label}</button>`).join("");
     const ribbon = stages.map((stage, stageIndex) => `<li data-process-stage="${stageIndex}">${escapeHtml(stage)}</li>`).join("");
     const figures = group.map((diagram) => diagram[0].replace("<figure ", `<figure data-diagram-view="${diagram[2]}" `)).join("");
-    groupedHtml += `<section class="diagram-group" data-diagram-group="${escapeHtml(`${document.id}:flow:${workflow}`)}" data-workflow-id="${escapeHtml(workflow)}" data-active-diagram-view="overview"><div class="diagram-group-header"><div class="diagram-view-controls" role="group" aria-label="Workflow diagram perspective">${controls}</div><ol class="process-ribbon" aria-label="Workflow lifecycle">${ribbon}</ol></div>${figures}</section>`;
+    groupedHtml += `<section class="diagram-group" data-diagram-group="${escapeHtml(`${document.id}:flow:${workflow}`)}" data-workflow-id="${escapeHtml(workflow)}" data-active-diagram-view="overview"><div class="diagram-group-header"><div class="diagram-view-controls" role="group" aria-label="Workflow diagram perspective">${controls}</div><div class="process-ribbon-viewport" role="region" tabindex="0" aria-label="Workflow stages. Use left and right arrow keys to scroll stages."><ol class="process-ribbon">${ribbon}</ol></div></div>${figures}</section>`;
     cursor = groupEnd;
     index = end;
   }
@@ -273,8 +273,14 @@ function decorateArticleHtml(document, html) {
 
 function buildSearchIndex(documents) {
   return documents.flatMap((document) => {
+    const searchableTabs = [...new Set([document.primaryTab, ...document.relatedTabs])];
+    const diagramLabels = (text) => [...String(text).matchAll(/```mermaid\s*([\s\S]*?)```/g)]
+      .flatMap(([, diagram]) => [...diagram.matchAll(/\[([^\]]+)\]/g)].map(([, label]) => label))
+      .join(" ");
+    const sourceSearchText = `${plainMarkdownText(document.sourceText)} ${diagramLabels(document.sourceText)}`;
     const records = [{
       tabId: document.primaryTab,
+      tabIds: searchableTabs,
       articleId: document.id,
       headingId: null,
       title: document.title,
@@ -283,7 +289,8 @@ function buildSearchIndex(documents) {
       audience: document.audience,
       keywords: document.keywords,
       source: document.file,
-      text: searchExcerpt(plainMarkdownText(document.sourceText)),
+      text: searchExcerpt(sourceSearchText),
+      searchText: sourceSearchText,
     }];
 
     if (path.extname(document.file).toLowerCase() === ".csv") return records;
@@ -297,8 +304,10 @@ function buildSearchIndex(documents) {
         sectionTokens.push(tokens[cursor]);
       }
       const heading = plainMarkdownText(token.text);
+      const sectionSearchText = sectionTokens.map((sectionToken) => `${plainMarkdownText(sectionToken.text ?? sectionToken.raw)} ${diagramLabels(sectionToken.raw)}`).join(" ");
       records.push({
         tabId: document.primaryTab,
+        tabIds: searchableTabs,
         articleId: document.id,
         headingId: `${document.id}-${slug(token.text)}`,
         title: document.title,
@@ -307,7 +316,8 @@ function buildSearchIndex(documents) {
         audience: document.audience,
         keywords: document.keywords,
         source: document.file,
-        text: searchExcerpt(sectionTokens.map((sectionToken) => plainMarkdownText(sectionToken.text ?? sectionToken.raw)).join(" ")),
+        text: searchExcerpt(sectionSearchText),
+        searchText: sectionSearchText,
       });
     }
     return records;
@@ -371,7 +381,7 @@ export function buildDocumentationHtml() {
       const related = document.relatedSources
         .map((source) => documentBySource.get(source))
         .filter(Boolean);
-      return `<article id="${document.id}" data-document data-tab="${escapeHtml(document.primaryTab)}" data-category="${escapeHtml(document.category)}" data-search="${escapeHtml(`${document.title} ${document.category} ${document.file} ${document.summary} ${document.keywords.join(" ")} ${document.audience.join(" ")}`.toLowerCase())}" hidden>
+      return `<article id="${document.id}" data-document data-tab="${escapeHtml(document.primaryTab)}" data-related-tabs="${escapeHtml(document.relatedTabs.join("|"))}" data-category="${escapeHtml(document.category)}" data-search="${escapeHtml(`${document.title} ${document.category} ${document.file} ${document.summary} ${document.keywords.join(" ")} ${document.audience.join(" ")}`.toLowerCase())}" hidden>
         <header class="article-header"><div><span class="category">${escapeHtml(document.category)}</span><h1>${escapeHtml(document.title)}</h1><p>${escapeHtml(document.file)}</p></div><span class="source-hash" title="Source checksum">${document.hash}</span></header>
         <div class="article-disclosure-controls" data-article-disclosures aria-label="Article section controls"><button type="button" data-disclosure-action="expand">Expand all</button><button type="button" data-disclosure-action="collapse">Collapse all</button></div>
         <div class="article-body">${document.html}</div>
@@ -397,18 +407,18 @@ ${styles}
   <header class="topbar">
     <div class="brand"><strong>mwell</strong><span>Intra handbook</span></div>
     <div class="search-wrap"><input id="search" type="search" placeholder="Search the complete handbook" aria-label="Search handbook" autocomplete="off"><div class="search-scope" role="group" aria-label="Search scope"><button type="button" data-search-scope="tab" aria-pressed="false">This tab</button><button type="button" data-search-scope="all" aria-pressed="true">All tabs</button></div></div>
-    <div class="toolbar"><button id="theme" type="button" aria-label="Toggle color theme">Theme</button><button type="button" onclick="window.print()" aria-label="Print documentation">Print</button></div>
+    <div class="toolbar"><button class="drawer-trigger" type="button" data-open-drawer="contents" aria-controls="contents-rail" aria-expanded="false">Contents</button><button class="drawer-trigger" type="button" data-open-drawer="toc" aria-controls="page-toc" aria-expanded="false">On this page</button><button id="theme" type="button" aria-label="Toggle color theme">Theme</button><div class="print-control"><button type="button" data-print-trigger aria-controls="print-menu" aria-expanded="false">Print</button><div id="print-menu" class="print-menu" hidden><button type="button" data-print-scope="article">Current article</button><button type="button" data-print-scope="tab">Active tab</button><button type="button" data-print-scope="all">Complete handbook</button></div></div></div>
   </header>
   <div class="handbook-shell">
     <nav class="tab-rail" role="tablist" aria-label="Handbook sections">${HANDBOOK_TABS.map((tab, index) => `<button role="tab" id="tab-${tab.id}" aria-controls="panel-${tab.id}" aria-selected="${index === 0}" tabindex="${index === 0 ? 0 : -1}" type="button" data-tab-button data-tab="${tab.id}">${escapeHtml(tab.label)}</button>`).join("")}</nav>
-    <aside class="contents-rail" aria-label="Selected tab contents"><div class="summary"><strong>${documents.length}</strong>maintained source documents<div class="result-count" id="result-count" aria-live="polite">Choose an article to read</div></div><section class="search-results" id="search-results" aria-label="Search results" hidden></section>${panels}</aside>
+    <aside id="contents-rail" class="contents-rail" aria-labelledby="contents-title"><div class="drawer-heading"><h2 id="contents-title">Contents</h2><button type="button" data-close-drawer="contents" aria-label="Close contents">Close</button></div><div class="summary"><strong>${documents.length}</strong>maintained source documents<div class="result-count" id="result-count" aria-live="polite">Choose an article to read</div></div><section class="search-results" id="search-results" aria-label="Search results" hidden></section>${panels}</aside>
     <main class="reading-canvas" tabindex="-1">
       <section class="route-notice" id="route-notice" role="status" hidden><span>This handbook link is no longer available. You are back at Start Here.</span><div><button type="button" data-recovery-search>Search</button><button type="button" data-dismiss-notice aria-label="Dismiss message">Dismiss</button></div></section>
       <section class="hero"><span class="category">Standalone operating handbook</span><h1>Mwell Intra</h1><p>One searchable, printable reference for users, trainers, developers, infrastructure teams, control owners, and release reviewers. It includes rendered process diagrams, application procedures, screenshots, governed reference extracts, technical specifications, and release controls.</p><div class="hero-meta"><span>${documents.length} maintained sources</span><span>Source-controlled release set</span><span>Self-contained HTML</span></div></section>
       <p class="empty" id="empty" hidden>No document matches this search and category.</p>
       ${articles}
     </main>
-    <aside class="page-toc" aria-label="Article table of contents"><nav data-page-toc aria-label="On this page"></nav></aside>
+    <aside id="page-toc" class="page-toc" aria-labelledby="page-toc-title"><div class="drawer-heading"><h2 id="page-toc-title">On this page</h2><button type="button" data-close-drawer="toc" aria-label="Close table of contents">Close</button></div><nav data-page-toc aria-label="On this page"></nav></aside>
   </div>
   <script data-handbook-index>window.__HANDBOOK_INDEX__ = ${serializeForScript(searchIndex)}; window.__HANDBOOK_SEARCH_STATE__ = ${serializeForScript(initialSearchState)};</script>
   <script>${mermaidBundle}</script>

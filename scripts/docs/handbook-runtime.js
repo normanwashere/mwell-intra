@@ -11,6 +11,11 @@
     const readingCanvas = document.querySelector('.reading-canvas');
     const pageToc = document.querySelector('[data-page-toc]');
     const routeNotice = document.querySelector('#route-notice');
+    const topbar = document.querySelector('.topbar');
+    const drawerTriggers = [...document.querySelectorAll('[data-open-drawer]')];
+    const drawers = { contents: document.querySelector('#contents-rail'), toc: document.querySelector('#page-toc') };
+    const printTrigger = document.querySelector('[data-print-trigger]');
+    const printMenu = document.querySelector('#print-menu');
     const tabIds = new Set(tabs.map((tab) => tab.dataset.tab));
     const handbookIndex = Array.isArray(window.__HANDBOOK_INDEX__) ? window.__HANDBOOK_INDEX__ : [];
     const storageKey = 'mwell-intra-handbook:v2';
@@ -27,6 +32,10 @@
     let tabScroll = { ...restoredState.tabScroll };
     let persistenceTimer = null;
     let diagramsReady = false;
+    let activeDrawer = null;
+    let drawerReturnFocus = null;
+    let printScope = 'article';
+    let searchDrawerTimer = null;
 
     function normalizeStoredState(value) {
       const stored = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
@@ -84,6 +93,48 @@
       return `#${params}`;
     }
 
+    function isDrawerViewport(name) { return name === 'contents' ? window.matchMedia('(max-width: 767px)').matches : window.matchMedia('(max-width: 1023px)').matches; }
+    function setHeaderOffset() { document.documentElement.style.setProperty('--handbook-header-height', `${topbar.offsetHeight}px`); }
+    function setDrawerVisible(name, visible, { restoreFocus = true } = {}) {
+      const drawer = drawers[name];
+      if (!drawer || !isDrawerViewport(name)) return;
+      if (!visible) {
+        drawer.hidden = true; drawer.removeAttribute('role'); drawer.removeAttribute('aria-modal');
+        drawerTriggers.filter((button) => button.dataset.openDrawer === name).forEach((button) => button.setAttribute('aria-expanded', 'false'));
+        if (activeDrawer === name) activeDrawer = null;
+        document.body.classList.toggle('drawer-open', Boolean(activeDrawer));
+        if (restoreFocus && drawerReturnFocus) drawerReturnFocus.focus();
+        drawerReturnFocus = null;
+        return;
+      }
+      if (activeDrawer && activeDrawer !== name) setDrawerVisible(activeDrawer, false, { restoreFocus: false });
+      drawerReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      drawer.hidden = false; drawer.setAttribute('role', 'dialog'); drawer.setAttribute('aria-modal', 'true');
+      drawerTriggers.filter((button) => button.dataset.openDrawer === name).forEach((button) => button.setAttribute('aria-expanded', 'true'));
+      activeDrawer = name; document.body.classList.add('drawer-open');
+      drawer.querySelector('[data-close-drawer]')?.focus();
+    }
+    function resetDrawers() {
+      Object.entries(drawers).forEach(([name, drawer]) => {
+        if (!drawer) return;
+        if (isDrawerViewport(name)) drawer.hidden = true;
+        else { drawer.hidden = false; drawer.removeAttribute('role'); drawer.removeAttribute('aria-modal'); }
+      });
+      activeDrawer = null; document.body.classList.remove('drawer-open');
+      drawerTriggers.forEach((button) => button.setAttribute('aria-expanded', 'false'));
+      setHeaderOffset();
+    }
+    function closeOpenDrawer() { if (activeDrawer) setDrawerVisible(activeDrawer, false, { restoreFocus: false }); }
+    function focusableIn(element) { return [...element.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])')].filter((candidate) => !candidate.hidden && candidate.getClientRects().length > 0); }
+    function applyPrintScope(scope) {
+      printScope = ['article', 'tab', 'all'].includes(scope) ? scope : 'article';
+      document.documentElement.dataset.printScope = printScope;
+      articles.forEach((article) => {
+        const include = printScope === 'all' || (printScope === 'tab' && article.dataset.tab === activeRoute.tabId) || (printScope === 'article' && article.id === activeRoute.articleId);
+        article.dataset.printInScope = String(include);
+      });
+    }
+
     function captureDisclosureState() {
       disclosureStateBeforeSearch = new Set([...document.querySelectorAll('details[data-section-id]')].filter((details) => details.open).map((details) => details.dataset.sectionId));
     }
@@ -123,7 +174,7 @@
     }
 
     function describeMatch(record, query) {
-      const fields = { title: normalizeSearchText(record.title), heading: normalizeSearchText(record.heading), keywords: normalizeSearchText((record.keywords || []).join(' ')), summary: normalizeSearchText(record.summary), audience: normalizeSearchText((record.audience || []).join(' ')), source: normalizeSearchText(record.source), text: normalizeSearchText(record.text) };
+      const fields = { title: normalizeSearchText(record.title), heading: normalizeSearchText(record.heading), keywords: normalizeSearchText((record.keywords || []).join(' ')), summary: normalizeSearchText(record.summary), audience: normalizeSearchText((record.audience || []).join(' ')), source: normalizeSearchText(record.source), text: normalizeSearchText(record.searchText || record.text) };
       if (fields.title === query) return { rank: 0, reason: 'Exact article title match' };
       if (fields.title.startsWith(query)) return { rank: 1, reason: 'Article title starts with your search' };
       if (fields.heading.includes(query)) return { rank: 2, reason: 'Matching section heading' };
@@ -135,10 +186,20 @@
       return null;
     }
 
+    function searchExcerptForQuery(value, query, limit = 240) {
+      const text = String(value || '').replace(/\s+/g, ' ').trim();
+      const needle = normalizeSearchText(query);
+      const index = normalizeSearchText(text).indexOf(needle);
+      if (index < 0 || text.length <= limit) return text.slice(0, limit).trimEnd();
+      const start = Math.max(0, index - Math.floor((limit - needle.length) / 2));
+      const end = Math.min(text.length, start + limit);
+      return `${start > 0 ? '...' : ''}${text.slice(start, end).trim()}${end < text.length ? '...' : ''}`;
+    }
+
     function rankSearchResults() {
       const query = normalizeSearchText(searchState.query);
       if (!query) return [];
-      return handbookIndex.filter((record) => searchState.scope === 'all' || record.tabId === activeRoute.tabId).map((record, index) => ({ record, index, match: describeMatch(record, query) })).filter(({ match }) => match).sort((left, right) => left.match.rank - right.match.rank || left.index - right.index);
+      return handbookIndex.filter((record) => searchState.scope === 'all' || (record.tabIds || [record.tabId]).includes(activeRoute.tabId)).map((record, index) => ({ record, index, match: describeMatch(record, query) })).filter(({ match }) => match).sort((left, right) => left.match.rank - right.match.rank || left.index - right.index);
     }
 
     function openSearchMatches() {
@@ -155,18 +216,19 @@
       count.textContent = searching ? `${results.length} ${results.length === 1 ? 'result' : 'results'} in ${searchState.scope === 'all' ? 'all tabs' : 'this tab'}` : 'Choose an article to read';
       if (!searching) return;
       results.forEach(({ record, match }) => {
+        const resultTab = (record.tabIds || [record.tabId]).includes(activeRoute.tabId) ? activeRoute.tabId : record.tabId;
         const result = document.createElement('a');
-        result.href = routeHash({ tabId: record.tabId, articleId: record.articleId, headingId: record.headingId });
+        result.href = routeHash({ tabId: resultTab, articleId: record.articleId, headingId: record.headingId });
         result.dataset.searchResult = '';
-        result.dataset.tab = record.tabId;
+        result.dataset.tab = resultTab;
         result.dataset.article = record.articleId;
         if (record.headingId) result.dataset.heading = record.headingId;
         const location = document.createElement('span');
         location.className = 'search-result-location';
-        location.textContent = `${tabs.find((tab) => tab.dataset.tab === record.tabId)?.textContent || record.tabId} / ${record.title}`;
+        location.textContent = `${tabs.find((tab) => tab.dataset.tab === resultTab)?.textContent || resultTab} / ${record.title}`;
         const heading = document.createElement('strong'); heading.textContent = record.heading;
         const reason = document.createElement('small'); reason.className = 'search-result-reason'; reason.textContent = match.reason;
-        const excerpt = document.createElement('small'); excerpt.className = 'search-result-excerpt'; excerpt.textContent = record.text;
+        const excerpt = document.createElement('small'); excerpt.className = 'search-result-excerpt'; excerpt.textContent = searchExcerptForQuery(record.searchText || record.text, searchState.query);
         result.append(location, heading, reason, excerpt);
         searchResults.append(result);
       });
@@ -183,6 +245,12 @@
       searchScopeButtons.forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.searchScope === next.scope)));
       if (isSearching) openSearchMatches();
       renderSearchResults();
+      window.clearTimeout(searchDrawerTimer);
+      if (isSearching && isDrawerViewport('contents')) {
+        searchDrawerTimer = window.setTimeout(() => {
+          if (searchState.query === next.query && document.activeElement === search) setDrawerVisible('contents', true);
+        }, 350);
+      }
       if (writeHash) history.replaceState({}, '', routeHash(activeRoute));
       schedulePersistence();
     }
@@ -198,14 +266,16 @@
         link.className = `toc-level-${heading.tagName.toLowerCase()}`; link.textContent = heading.textContent; link.setAttribute('aria-current', String(heading.id === headingId));
         pageToc.append(link);
       });
-      pageToc.parentElement.hidden = headings.length === 0;
+      const pageTocDrawer = pageToc.parentElement;
+      if (headings.length === 0) pageTocDrawer.hidden = true;
+      else if (!isDrawerViewport('toc') || activeDrawer === 'toc') pageTocDrawer.hidden = false;
     }
 
     function isRouteValid({ tabId, articleId, headingId }) {
       if (!tabIds.has(tabId)) return false;
       if (!articleId) return !headingId;
       const article = articles.find((candidate) => candidate.id === articleId);
-      return Boolean(article && article.dataset.tab === tabId && (!headingId || document.getElementById(headingId)));
+      return Boolean(article && (article.dataset.tab === tabId || article.dataset.relatedTabs.split('|').includes(tabId)) && (!headingId || document.getElementById(headingId)));
     }
 
     function recoverRoute(route) {
@@ -215,11 +285,13 @@
     }
 
     function activateRoute({ tabId, articleId, headingId, historyMode, restoreScroll }) {
+      closeOpenDrawer();
       const article = articles.find((candidate) => candidate.id === articleId) || null;
-      const activeTabId = article ? article.dataset.tab : (tabIds.has(tabId) ? tabId : 'start');
+      const activeTabId = article && (article.dataset.tab === tabId || article.dataset.relatedTabs.split('|').includes(tabId)) ? tabId : (article?.dataset.tab || (tabIds.has(tabId) ? tabId : 'start'));
       const heading = article && headingId ? document.getElementById(headingId) : null;
       const activeHeadingId = heading ? heading.id : null;
       activeRoute = { tabId: activeTabId, articleId: article?.id || null, headingId: activeHeadingId };
+      applyPrintScope(printScope);
       const hash = routeHash(activeRoute);
       tabs.forEach((tab) => { const active = tab.dataset.tab === activeTabId; tab.setAttribute('aria-selected', String(active)); tab.tabIndex = active ? 0 : -1; if (restoreScroll === 'keyboard' && active) tab.focus(); });
       articles.forEach((candidate) => { candidate.hidden = candidate !== article; });
@@ -271,9 +343,9 @@
       diagram.style.width = `${width}px`;
       diagram.style.height = `${height}px`;
       diagram.style.transform = `translate(24px, 24px) scale(${resolvedScale})`;
-      svg.style.setProperty('width', `${width}px`, 'important');
-      svg.style.setProperty('height', `${height}px`, 'important');
-      svg.style.setProperty('max-width', 'none', 'important');
+      svg.style.width = `${width}px`;
+      svg.style.height = `${height}px`;
+      svg.style.maxWidth = 'none';
       return true;
     }
 
@@ -297,7 +369,9 @@
     }
 
     function prepareMermaidLayout() {
-      const hiddenElements = [...document.querySelectorAll('[hidden]')];
+      // Mermaid only needs hidden reading content revealed while it measures diagrams.
+      // Do not include header controls: users can interact with them before rendering completes.
+      const hiddenElements = [...readingCanvas.querySelectorAll('[hidden]')];
       const closedSections = [...document.querySelectorAll('details:not([open])')];
       hiddenElements.forEach((element) => { element.hidden = false; });
       closedSections.forEach((section) => { section.open = true; });
@@ -309,6 +383,8 @@
 
     applyStoredDisclosures();
     document.documentElement.dataset.theme = restoredState.theme;
+    resetDrawers();
+    applyPrintScope(printScope);
     tabs.forEach((tab, index) => {
       tab.addEventListener('click', () => activateRoute({ tabId: tab.dataset.tab, articleId: null, headingId: null, historyMode: 'push', restoreScroll: false }));
       tab.addEventListener('keydown', (event) => {
@@ -319,6 +395,7 @@
     document.addEventListener('click', (event) => {
       const disclosureAction = event.target.closest('button[data-disclosure-action]');
       if (disclosureAction) { const article = disclosureAction.closest('article[data-document]'); article.querySelectorAll('details[data-section-id]').forEach((details) => { details.open = disclosureAction.dataset.disclosureAction === 'expand'; }); syncDisclosureState(); return; }
+      if (printMenu && !printMenu.hidden && !event.target.closest('.print-control')) setPrintMenuVisible(false);
       const link = event.target.closest('a[data-search-result], a[data-article-link], a[data-heading-link], a[data-route-link]');
       if (!link || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       event.preventDefault();
@@ -329,10 +406,45 @@
     search.addEventListener('input', () => setSearchState({ query: search.value, scope: searchState.scope }, { writeHash: true }));
     searchScopeButtons.forEach((button) => button.addEventListener('click', () => setSearchState({ query: searchState.query, scope: button.dataset.searchScope }, { writeHash: true })));
     document.querySelector('#theme').addEventListener('click', () => { const root = document.documentElement; root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark'; schedulePersistence(); });
+    drawerTriggers.forEach((button) => button.addEventListener('click', () => setDrawerVisible(button.dataset.openDrawer, true)));
+    document.querySelectorAll('[data-close-drawer]').forEach((button) => button.addEventListener('click', () => setDrawerVisible(button.dataset.closeDrawer, false)));
+    Object.entries(drawers).forEach(([name, drawer]) => drawer?.addEventListener('keydown', (event) => {
+      if (!isDrawerViewport(name)) return;
+      if (event.key === 'Escape') { event.preventDefault(); setDrawerVisible(name, false); return; }
+      if (event.key !== 'Tab') return;
+      const items = focusableIn(drawer); if (!items.length) return;
+      const first = items[0]; const last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    }));
+    function setPrintMenuVisible(visible, { focusOption = false } = {}) {
+      if (!printMenu || !printTrigger) return;
+      printMenu.hidden = !visible;
+      printTrigger.setAttribute('aria-expanded', String(visible));
+      if (visible && focusOption) printMenu.querySelector('button')?.focus();
+    }
+    printTrigger?.addEventListener('click', () => setPrintMenuVisible(printMenu.hidden));
+    printTrigger?.addEventListener('keydown', (event) => {
+      if (event.key !== 'ArrowDown' || !printMenu.hidden) return;
+      event.preventDefault();
+      setPrintMenuVisible(true, { focusOption: true });
+    });
+    document.querySelectorAll('button[data-print-scope]').forEach((button) => button.addEventListener('click', () => { applyPrintScope(button.dataset.printScope); setPrintMenuVisible(false); window.print(); }));
+    window.addEventListener('beforeprint', () => applyPrintScope(printScope));
     document.querySelector('[data-recovery-search]').addEventListener('click', () => { routeNotice.hidden = true; search.focus(); });
     document.querySelector('[data-dismiss-notice]').addEventListener('click', () => { routeNotice.hidden = true; });
     window.addEventListener('scroll', () => { tabScroll = { ...tabScroll, [activeRoute.tabId]: window.scrollY }; schedulePersistence(); }, { passive: true });
-    document.addEventListener('keydown', (event) => { if (event.key === '/' && !/input|textarea|select/i.test(document.activeElement.tagName)) { event.preventDefault(); search.focus(); } });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && printMenu && !printMenu.hidden) { event.preventDefault(); setPrintMenuVisible(false); printTrigger?.focus(); return; }
+      if (event.key === '/' && !/input|textarea|select/i.test(document.activeElement.tagName)) { event.preventDefault(); search.focus(); }
+    });
+    document.querySelectorAll('.process-ribbon-viewport').forEach((ribbon) => ribbon.addEventListener('keydown', (event) => {
+      const amount = Math.max(120, Math.floor(ribbon.clientWidth * .7));
+      if (event.key === 'ArrowRight') { event.preventDefault(); ribbon.scrollBy({ left: amount, behavior: 'smooth' }); }
+      if (event.key === 'ArrowLeft') { event.preventDefault(); ribbon.scrollBy({ left: -amount, behavior: 'smooth' }); }
+      if (event.key === 'Home') { event.preventDefault(); ribbon.scrollTo({ left: 0, behavior: 'smooth' }); }
+      if (event.key === 'End') { event.preventDefault(); ribbon.scrollTo({ left: ribbon.scrollWidth, behavior: 'smooth' }); }
+    }));
     document.querySelectorAll('[data-diagram-group]').forEach((group) => {
       const id = group.dataset.diagramGroup;
       group.dataset.pendingDiagramView = diagramModes[id] || 'overview';
@@ -366,4 +478,4 @@
       window.requestAnimationFrame(refreshDiagramCanvases);
       restoreStoredPosition(recoveredInitialRoute);
     });
-    window.addEventListener('resize', () => window.requestAnimationFrame(refreshDiagramCanvases), { passive: true });
+    window.addEventListener('resize', () => window.requestAnimationFrame(() => { resetDrawers(); refreshDiagramCanvases(); }), { passive: true });
