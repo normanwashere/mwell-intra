@@ -1,9 +1,18 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   buildDocumentationHtml,
   documentationSources,
 } from "./build-app-documentation.mjs";
+
+function runtimeFunction(name, nextFunction, bindings = {}) {
+  const runtime = readFileSync(new URL("./handbook-runtime.js", import.meta.url), "utf8");
+  const match = runtime.match(new RegExp(`function ${name}\\([\\s\\S]*?\\n    }\\n\\n    function ${nextFunction}`));
+  assert.ok(match, `could not extract ${name} from the handbook runtime`);
+  const source = match[0].slice(0, match[0].lastIndexOf(`function ${nextFunction}`));
+  return new Function(...Object.keys(bindings), `${source}; return ${name};`)(...Object.values(bindings));
+}
 
 test("builds one self-contained handbook from every canonical source", () => {
   const html = buildDocumentationHtml();
@@ -77,6 +86,11 @@ test("embeds heading-level search records with match metadata", () => {
 
   assert.equal(index[0].tabId, "start");
   assert.ok(heading, "the index contains a heading-level record");
+  assert.deepEqual(index.map((record) => record.tabId), [...index.map((record) => record.tabId)].sort((left, right) => {
+    const tabOrder = ["start", "workflows", "roles", "architecture", "infrastructure", "security", "release"];
+    return tabOrder.indexOf(left) - tabOrder.indexOf(right);
+  }));
+  assert.equal(new Set(index.map((record) => record.articleId)).size, (index.filter((record, position) => position === 0 || record.articleId !== index[position - 1].articleId)).length);
   assert.deepEqual(Object.keys(heading), [
     "tabId",
     "articleId",
@@ -106,6 +120,23 @@ test("renders scoped explainable search without navigation reloads", () => {
   assert.match(html, /params\.set\("scope", scope\)/);
   assert.match(html, /function openContainingDisclosure/);
   assert.doesNotMatch(html, /location\.(?:href|reload)/);
+});
+
+test("serializes a tab-only scope without a query and parses it on refresh", () => {
+  const routeHash = runtimeFunction("routeHash", "captureDisclosureState", { searchState: { query: "", scope: "tab" } });
+  const parseRoute = runtimeFunction("parseRoute", "routeHash");
+  const hash = routeHash({ tabId: "start", articleId: null, headingId: null });
+
+  assert.equal(hash, "#tab=start&scope=tab");
+  assert.deepEqual(parseRoute(hash), {
+    tabId: "start",
+    articleId: null,
+    headingId: null,
+    query: "",
+    scope: "tab",
+  });
+  const defaultScopeHash = runtimeFunction("routeHash", "captureDisclosureState", { searchState: { query: "", scope: "all" } })({ tabId: "start" });
+  assert.equal(defaultScopeHash, "#tab=start");
 });
 
 test("serializes tab routes safely while preserving browser query semantics", () => {

@@ -37,10 +37,8 @@
       const { query, scope } = searchState;
       if (articleId) params.set('article', articleId);
       if (headingId) params.set('heading', headingId);
-      if (query) {
-        params.set("q", query);
-        params.set("scope", scope);
-      }
+      if (query) params.set("q", query);
+      if (query || scope === 'tab') params.set("scope", scope);
       return `#${params}`;
     }
 
