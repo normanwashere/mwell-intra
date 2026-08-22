@@ -1,6 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 import {
   actor,
+  CONTROLLED_ANON_KEY,
+  CONTROLLED_SUPABASE_URL,
   ControlledProcurementRpcFixture,
   installControlledRpc,
 } from '../helpers/controlled-procurement-rpc';
@@ -29,6 +31,29 @@ async function expectNoScopedWorkspace(page: Page) {
   await expect(page.getByText('Variance review:', { exact: false })).toHaveCount(0);
 }
 
+async function expectSourcingRpcDenied(page: Page, fixture: ControlledProcurementRpcFixture, actorKey: ActorKey) {
+  const result = await page.evaluate(async ({ actorId, requestId, url, anonKey }) => {
+    const response = await fetch(`${url}/rest/v1/rpc/sourcing_workspace`, {
+      method: 'POST',
+      headers: {
+        apikey: anonKey,
+        Authorization: `Bearer controlled-${actorId}`,
+        'Content-Profile': 'procurement',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ payload: { request_id: requestId } }),
+    });
+    return { status: response.status, body: await response.json() as { message?: string } };
+  }, {
+    actorId: actor(actorKey).id,
+    requestId: fixture.requestId,
+    url: CONTROLLED_SUPABASE_URL,
+    anonKey: CONTROLLED_ANON_KEY,
+  });
+  expect(result.status).toBe(403);
+  expect(result.body.message).toMatch(/No procurement sourcing access is assigned/i);
+}
+
 test('DOA variance reviewers enter only their exact governed request on desktop and mobile', async ({ browser }) => {
   const fixture = new ControlledProcurementRpcFixture();
   fixture.preparePendingVariance();
@@ -51,6 +76,7 @@ test('DOA variance reviewers enter only their exact governed request on desktop 
   await expectNoScopedWorkspace(departmentPage);
   await departmentPage.goto(`${requestPath}/sourcing`);
   await expectNoScopedWorkspace(departmentPage);
+  await expectSourcingRpcDenied(departmentPage, fixture, 'deptHead');
   await departmentPage.goto('/admin/doa');
   await expect(departmentPage.getByRole('heading', { name: 'Procurement policy profiles' })).toHaveCount(0);
   await departmentPage.goto(requestPath);
@@ -76,6 +102,7 @@ test('DOA variance reviewers enter only their exact governed request on desktop 
   await expectNoScopedWorkspace(financePage);
   await financePage.goto(`${requestPath}/sourcing`);
   await expectNoScopedWorkspace(financePage);
+  await expectSourcingRpcDenied(financePage, fixture, 'finance');
   await financePage.goto(requestPath);
   await financePage.getByLabel('Variance approval note').fill('Finance confirms the evidence and active authority.');
   await financePage.getByRole('button', { name: 'Record Finance approval' }).click();

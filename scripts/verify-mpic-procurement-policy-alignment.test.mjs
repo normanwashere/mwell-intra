@@ -1454,6 +1454,7 @@ test("executes versioned tabulation, technical best-value evidence, and independ
   const matrixId = "74000000-0000-0000-0000-000000000015";
   const nonCurrentDepartmentHeadId = "74000000-0000-0000-0000-000000000016";
   const financeWithoutCapabilityId = "74000000-0000-0000-0000-000000000017";
+  const recommendationAuthorId = "74000000-0000-0000-0000-000000000018";
   const criteria = (score) => [
     "technicalCompliance", "quality", "leadTime", "totalLifecycleCost", "warranty",
     "support", "price", "paymentTerms", "training",
@@ -1467,13 +1468,15 @@ test("executes versioned tabulation, technical best-value evidence, and independ
         ('${checkerId}', 'active'),
         ('${financeActorId}', 'active'),
         ('${nonCurrentDepartmentHeadId}', 'active'),
-        ('${financeWithoutCapabilityId}', 'active');
+        ('${financeWithoutCapabilityId}', 'active'),
+        ('${recommendationAuthorId}', 'active');
       insert into procurement.doa_matrices(id, version, department, status, active, effective_at)
       values ('${matrixId}', 'OPS-TEST-1', 'Operations', 'active', true, statement_timestamp() - interval '1 day');
       insert into procurement.doa_assignments(matrix_id, department, min_amount, max_amount, tier, approver_user_id, active) values
         ('${matrixId}', 'Operations', 0, null, 'dept_head', '${actorId}', true),
         ('${matrixId}', 'Operations', 0, null, 'dept_head', '${checkerId}', true),
         ('${matrixId}', 'Operations', 0, null, 'dept_head', '${nonCurrentDepartmentHeadId}', true),
+        ('${matrixId}', 'Operations', 0, null, 'dept_head', '${recommendationAuthorId}', true),
         ('${matrixId}', 'Operations', 0, null, 'finance', '${checkerId}', true),
         ('${matrixId}', 'Operations', 0, null, 'finance', '${financeActorId}', true),
         ('${matrixId}', 'Operations', 0, null, 'finance', '${financeWithoutCapabilityId}', true);
@@ -1581,6 +1584,11 @@ test("executes versioned tabulation, technical best-value evidence, and independ
       variance_justification: "Lifecycle cost, lead time, and support evidence outweigh the technical score difference.",
     })}) as recommendation`);
     assert.equal(recommendation.rows[0].recommendation.status, 'pending_variance');
+    await db.exec(`
+      update procurement.award_recommendations
+      set created_by = '${recommendationAuthorId}'
+      where id = '${recommendation.rows[0].recommendation.id}'
+    `);
     await assert.rejects(
       () => db.query(`select procurement.transition_sourcing_event(${sqlJson({ id: eventId, action: "award", selected_vendor_id: vendorIds[1], closure_note: "Score must not award by itself." })})`),
       /approved best-value recommendation/i,
@@ -1591,13 +1599,26 @@ test("executes versioned tabulation, technical best-value evidence, and independ
         /No governed variance decision is assigned to this account for this request/i,
         'a denied workspace call must return no request, vendor, evidence, or decision payload',
       ));
+    const deniedSourcingWorkspace = (actor, capabilities = []) => setPolicyActor(db, actor, false, capabilities)
+      .then(() => assert.rejects(
+        () => db.query(`select procurement.sourcing_workspace(${sqlJson({ request_id: requestId })}) as workspace`),
+        /No procurement sourcing access is assigned to this account/i,
+        'a DOA-only or unrelated caller must receive no sourcing workspace payload',
+      ));
+    await deniedSourcingWorkspace(financeActorId, ['view_finance']);
+    await deniedSourcingWorkspace(checkerId);
+    await deniedSourcingWorkspace(recommendationAuthorId);
+    await deniedSourcingWorkspace(unauthorizedActorId);
+    await setPolicyActor(db, actorId, true);
+    const sourcingWorkspace = await db.query(`select procurement.sourcing_workspace(${sqlJson({ request_id: requestId })}) as workspace`);
+    assert.equal(sourcingWorkspace.rows[0].workspace.event.id, eventId, 'a Procurement sourcing manager retains governed sourcing access');
     await deniedWorkspace(financeActorId, ['view_finance']);
-    await deniedWorkspace(actorId);
+    await deniedWorkspace(recommendationAuthorId);
     await setPolicyActor(db, checkerId, true);
     const departmentWorkspace = await db.query(`select procurement.evaluation_workspace(${sqlJson({ request_id: requestId })}) as workspace`);
     assert.equal(departmentWorkspace.rows[0].workspace.varianceEligibility.canReview, true);
     assert.equal(departmentWorkspace.rows[0].workspace.varianceEligibility.nextStage, 'department_head');
-    await setPolicyActor(db, actorId, true);
+    await setPolicyActor(db, recommendationAuthorId, false);
     await assert.rejects(
       () => db.query(`select procurement.review_recommendation_variance(${sqlJson({ award_recommendation_id: recommendation.rows[0].recommendation.id, expected_version: 1, decision: "approved", note: "Self approval attempt." })})`),
       /cannot approve their own/i,

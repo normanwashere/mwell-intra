@@ -400,6 +400,12 @@ export class ControlledProcurementRpcFixture {
     return actor.capabilities[module]?.includes(capability) === true;
   }
 
+  private canReadSourcing(actor: Actor) {
+    return this.hasCapability(actor, 'procurement', 'view_dashboard')
+      || this.hasCapability(actor, 'procurement', 'manage_rfp')
+      || this.hasCapability(actor, 'procurement', 'approve_award');
+  }
+
   private varianceEligibility(actor: Actor) {
     const departmentApproved = this.varianceDecisions.some((decision) => decision.decisionType === 'department_head' && decision.decision === 'approved');
     const nextStage = this.awardRecommendation?.status === 'pending_variance' ? (departmentApproved ? 'finance' : 'department_head') : undefined;
@@ -523,7 +529,12 @@ export class ControlledProcurementRpcFixture {
       this.request.submitted_at = '2026-08-22T02:00:00.000Z';
       return response(route, { ...this.request });
     }
-    if (name === 'sourcing_workspace') return response(route, this.workspace());
+    if (name === 'sourcing_workspace') {
+      if (payload.request_id !== this.requestId || !this.canReadSourcing(actor)) {
+        return failure(route, 'No procurement sourcing access is assigned to this account.', 403);
+      }
+      return response(route, this.workspace());
+    }
     if (name === 'insufficient_bid_exception') return response(route, null);
     if (name === 'evaluation_workspace') {
       const eligibility = this.varianceEligibility(actor);

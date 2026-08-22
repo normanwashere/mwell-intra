@@ -2531,9 +2531,19 @@ create or replace function procurement.sourcing_workspace(payload jsonb default 
 returns jsonb language plpgsql stable security definer set search_path = '' as $$
 declare v_request procurement.requests; v_event procurement.sourcing_events; v_profile procurement.policy_profiles; v_responses jsonb; v_comms jsonb;
 begin
+  -- Sourcing evidence is visible only to Procurement sourcing readers. A
+  -- request-scoped DOA assignment is deliberately not a sourcing-read grant;
+  -- variance reviewers receive their narrow evidence model from
+  -- evaluation_workspace after its current-stage server admission.
+  if not (
+    core.has_live_cap('procurement', 'view_dashboard')
+    or private.policy_sourcing_can_manage()
+    or private.policy_sourcing_can_review()
+  ) then
+    raise exception 'No procurement sourcing access is assigned to this account.';
+  end if;
   select * into v_request from procurement.requests where id::text = payload->>'request_id';
   if not found then raise exception 'Request not found'; end if;
-  if v_request.requester_id <> auth.uid() and not core.has_live_cap('procurement', 'view_dashboard') and not private.policy_sourcing_can_manage() and not private.policy_sourcing_can_review() and not private.policy_can_view_variance_request(v_request) then raise exception 'Not authorized to view sourcing'; end if;
   v_profile := private.policy_sourcing_profile(v_request.id::text);
   select * into v_event from procurement.sourcing_events where request_id = v_request.id and status <> 'cancelled' order by created_at desc limit 1;
   if not found then return jsonb_build_object('requestId', v_request.id, 'event', null); end if;
