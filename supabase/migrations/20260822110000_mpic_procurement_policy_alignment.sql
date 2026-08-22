@@ -2649,7 +2649,15 @@ declare v_po procurement.purchase_orders;
 begin
   select * into v_po from procurement.purchase_orders where id=payload->>'purchase_order_id';
   if not found then raise exception 'Purchase order not found'; end if;
-  if not (core.has_live_cap('procurement','author_po') or core.has_live_cap('procurement','view_dashboard') or core.has_live_cap('procurement','admin') or core.current_vendor_id()::text=v_po.core_vendor_id::text) then raise exception 'Not authorized to view PO lifecycle'; end if;
+  if not (
+    core.has_live_cap('procurement','author_po')
+    or core.has_live_cap('procurement','view_dashboard')
+    or core.has_live_cap('procurement','admin')
+    or (
+      core.current_vendor_id() is not null
+      and core.current_vendor_id()::text = v_po.core_vendor_id::text
+    )
+  ) then raise exception 'Not authorized to view PO lifecycle'; end if;
   return private.policy_po_lifecycle_projection(v_po.id) || jsonb_build_object('purchaseOrderId',v_po.id,'issuedAt',v_po.issued_at);
 end;
 $$;

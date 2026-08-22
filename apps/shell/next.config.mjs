@@ -6,7 +6,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const warehouseSrc = path.join(__dirname, '../../modules/warehouse/src');
 const isDev = process.env.NODE_ENV !== 'production';
 const controlledRpcTestOrigin = process.env.MWELL_CONTROLLED_RPC_TEST === '1'
-  ? ' http://127.0.0.1:54321'
+  ? ` http://127.0.0.1:${process.env.CONTROLLED_SUPABASE_PORT ?? '54321'}`
   : '';
 const contentSecurityPolicy = [
   "default-src 'self'",

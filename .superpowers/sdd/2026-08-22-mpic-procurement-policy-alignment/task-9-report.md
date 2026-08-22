@@ -17,23 +17,29 @@
 - The commitment panel renders the server-derived requirement matrix with status, route/exception basis, source, owner, and recovery action.
 - Added a disposable public Task 9 PGlite matrix plus desktop/mobile controlled-RPC fixture and lifecycle browser spec.
 
-## Fix Round 2 In Progress
+## Fix Round 2 Delivered
 
 - Added the vendor-only `/vendor/purchase-orders` acknowledgement surface and a server-scoped awarded-PO list RPC. Lifecycle and procurement-only monitoring refreshes are now independent.
 - Overrode `release_payment` to leave even fully paid POs issued; an independent approved closure request remains required for the only governed terminal path. The issued-PO backfill now normalizes the state revision to the immutable sent-event revision.
-- Added a Task-9-only Playwright configuration with dynamic controlled-auth port propagation, HTML/JUnit output, failure screenshots, traces, and a Node22 runner.
+- Added an explicitly vendor-scoped `/vendor/purchase-orders` acknowledgement surface, backed only by the awarded-vendor PO list, lifecycle projection, and acknowledgement RPC. Procurement retains delivery, monitoring, and closure controls.
+- Separated lifecycle and monitoring refreshes so a monitoring authorization denial cannot erase an allowed vendor lifecycle projection.
+- Replaced the role-matrix privilege inspection with disposable `SET ROLE` sessions. It executes every Task 9 public RPC as anon, unrelated authenticated, awarded vendor, Procurement author, dashboard reader, Finance, independent closure approver, and service role; it also exercises direct table/event/request writes and private helpers.
+- The matrix proves exact acknowledgement/request/terminal replay, changed-reference/reason rejection, 47/48-hour monitoring, vendor binding, direct-close/payment-close denial, and receipt/acceptance/quarantine/RMA/credit/payment-hold/unpaid-Finance closure blockers.
+- Added a Task-9-only Playwright configuration with dynamically allocated app/auth ports, runtime CSP propagation, deterministic inspectable HTML/JUnit artifacts under `apps/shell/artifacts`, failure screenshots/traces, and a Node 22 runner that streams child output and returns the Playwright exit code.
+- Captured passing desktop and mobile vendor-acknowledgement and Procurement delivery/quality-recovery screenshots in `docs/qa/evidence/`.
 
 ## Verification
 
-- `& 'C:\Users\NormanArisDeocareza\.cache\node-runtimes\node-v22.17.0-win-x64\node.exe' 'C:\Users\NormanArisDeocareza\.cache\node-runtimes\node-v22.17.0-win-x64\node_modules\corepack\dist\pnpm.js' --filter @intra/procurement test`: passed, 178 tests.
+- `& 'C:\Users\NormanArisDeocareza\.cache\node-runtimes\node-v22.17.0-win-x64\node.exe' 'C:\Users\NormanArisDeocareza\.cache\node-runtimes\node-v22.17.0-win-x64\node_modules\corepack\dist\pnpm.js' --filter @intra/procurement test`: passed, 26 files / 178 tests.
 - `& 'C:\Users\NormanArisDeocareza\.cache\node-runtimes\node-v22.17.0-win-x64\node.exe' 'C:\Users\NormanArisDeocareza\.cache\node-runtimes\node-v22.17.0-win-x64\node_modules\corepack\dist\pnpm.js' --filter @intra/procurement typecheck`: passed.
-- `& 'C:\Users\NormanArisDeocareza\.cache\node-runtimes\node-v22.17.0-win-x64\node.exe' scripts/verify-mpic-procurement-policy-alignment.mjs`: passed.
-- `& 'C:\Users\NormanArisDeocareza\.cache\node-runtimes\node-v22.17.0-win-x64\node_modules\corepack\dist\pnpm.js' exec node --test --test-name-pattern "Task 9 RPC" scripts/verify-mpic-procurement-policy-alignment.test.mjs`: passed the disposable public lifecycle/RLS matrix.
 - `& 'C:\Users\NormanArisDeocareza\.cache\node-runtimes\node-v22.17.0-win-x64\node.exe' 'C:\Users\NormanArisDeocareza\.cache\node-runtimes\node-v22.17.0-win-x64\node_modules\corepack\dist\pnpm.js' --filter @intra/shell typecheck`: passed.
+- `& 'C:\Users\NormanArisDeocareza\.cache\node-runtimes\node-v22.17.0-win-x64\node.exe' scripts/verify-mpic-procurement-policy-alignment.mjs`: passed (`MPIC procurement policy alignment migration contract verified.`).
+- `& 'C:\Users\NormanArisDeocareza\.cache\node-runtimes\node-v22.17.0-win-x64\node.exe' 'C:\Users\NormanArisDeocareza\.cache\node-runtimes\node-v22.17.0-win-x64\node_modules\corepack\dist\pnpm.js' exec node --test scripts/verify-mpic-procurement-policy-alignment.test.mjs`: passed, 19 tests. Focused reruns also passed `disposable public Task 9 RPC and RLS matrix` and `Task 9 public contracts under disposable database roles`.
+- `& 'C:\Users\NormanArisDeocareza\.cache\node-runtimes\node-v22.17.0-win-x64\node.exe' scripts/run-task-9-browser.mjs` from `apps/shell`: passed desktop and mobile. The latest run allocated app `62031` and auth `62030`; both web servers were pinned to the same Node 22 runtime. `apps/shell/artifacts/task-9-junit.xml` records 2 tests, 0 failures. HTML is at `apps/shell/artifacts/task-9-html/index.html`.
 - `git diff --check`: passed.
 
 ## Limits And Blockers
 
 - No Supabase migration, deployment, UAT, or production mutation was performed.
 - The migration was not applied and no shared Supabase target was changed.
-- Browser fixture source is present and typechecked, but the three current controlled runs start both dynamically ported web servers and then return no Playwright completion, report, JUnit file, trace, or screenshot to this shell. This is an external local-runner/process-handoff limitation; desktop/mobile evidence is not claimed.
+- Playwright HTML/JUnit files are deterministic, inspectable run artifacts rather than committed source. The passing screenshots and this report are committed evidence.

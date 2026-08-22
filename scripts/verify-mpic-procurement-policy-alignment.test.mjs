@@ -122,6 +122,8 @@ async function createGovernedRouteFixture() {
       id text primary key,
       request_id uuid references procurement.requests(id),
       core_vendor_id uuid references core.vendors(id),
+      po_number text,
+      vendor_name text,
       status text not null default 'draft',
       total numeric not null default 0,
       lines jsonb not null default '[]'::jsonb,
@@ -269,7 +271,7 @@ async function seedActivePolicyProfiles(db) {
   `);
 }
 
-async function setPolicyActor(db, actor, canManage, procurementCapabilities = []) {
+async function setPolicyActor(db, actor, canManage, procurementCapabilities = [], vendorId = null) {
   const capabilityArray = procurementCapabilities.length === 0
     ? "ARRAY[]::text[]"
     : `ARRAY[${procurementCapabilities.map((capability) => `'${capability.replaceAll("'", "''")}'`).join(", ")}]::text[]`;
@@ -278,19 +280,23 @@ async function setPolicyActor(db, actor, canManage, procurementCapabilities = []
     create table if not exists test.policy_actor_context (
       actor_id uuid not null,
       can_manage boolean not null,
-      procurement_capabilities text[] not null default '{}'
+      procurement_capabilities text[] not null default '{}',
+      vendor_id uuid
     );
     alter table test.policy_actor_context add column if not exists procurement_capabilities text[] not null default '{}';
     truncate test.policy_actor_context;
-    insert into test.policy_actor_context(actor_id, can_manage, procurement_capabilities)
-    values ('${actor}', ${canManage ? 'true' : 'false'}, ${capabilityArray});
-    create or replace function auth.uid() returns uuid language sql stable as $$
+    insert into test.policy_actor_context(actor_id, can_manage, procurement_capabilities, vendor_id)
+    values ('${actor}', ${canManage ? 'true' : 'false'}, ${capabilityArray}, ${vendorId ? `'${vendorId}'::uuid` : 'null'});
+    create or replace function auth.uid() returns uuid language sql stable security definer as $$
       select actor_id from test.policy_actor_context limit 1
     $$;
-    create or replace function core.has_live_cap(text, text) returns boolean language sql stable as $$
+    create or replace function core.has_live_cap(text, text) returns boolean language sql stable security definer as $$
       select can_manage or ($1 = 'procurement' and $2 = any(procurement_capabilities))
       from test.policy_actor_context
       limit 1
+    $$;
+    create or replace function core.current_vendor_id() returns uuid language sql stable security definer as $$
+      select vendor_id from test.policy_actor_context limit 1
     $$;
   `);
 }
@@ -1615,8 +1621,7 @@ test("executes the disposable public Task 9 RPC and RLS matrix", async () => {
     assert.equal(overdue.rows[0].items[0].kind, 'vendor_acknowledgement_overdue');
 
     await assert.rejects(() => db.query(`select procurement.acknowledge_purchase_order(${sqlJson({ purchase_order_id: poId, expected_revision: 2, acknowledgement_reference: 'ACK-1' })})`), /awarded vendor/i);
-    await db.exec(`create or replace function core.current_vendor_id() returns uuid language sql stable as $$ select '${vendorId}'::uuid $$;`);
-    await setPolicyActor(db, vendorActor, false);
+    await setPolicyActor(db, vendorActor, false, [], vendorId);
     const acknowledged = await db.query(`select procurement.acknowledge_purchase_order(${sqlJson({ purchase_order_id: poId, expected_revision: 2, acknowledgement_reference: 'ACK-1' })}) as lifecycle`);
     assert.equal(acknowledged.rows[0].lifecycle.revision, 3);
     const acknowledgementReplay = await db.query(`select procurement.acknowledge_purchase_order(${sqlJson({ purchase_order_id: poId, expected_revision: 2, acknowledgement_reference: 'ACK-1' })}) as lifecycle`);
@@ -1647,6 +1652,148 @@ test("executes the disposable public Task 9 RPC and RLS matrix", async () => {
   } finally {
     await db.close();
   }
+});
+
+test("executes Task 9 public contracts under disposable database roles", async () => {
+  const db = await createGovernedRouteFixture();
+  const procurementActor = "75000000-0000-0000-0000-000000000001";
+  const vendorActor = "75000000-0000-0000-0000-000000000002";
+  const unrelatedActor = "75000000-0000-0000-0000-000000000003";
+  const dashboardActor = "75000000-0000-0000-0000-000000000005";
+  const approverActor = "75000000-0000-0000-0000-000000000006";
+  const financeActor = "75000000-0000-0000-0000-000000000007";
+  const vendorId = "75000000-0000-0000-0000-000000000004";
+  const poId = "task-9-role-po";
+  const lifecycle = (payload) => db.query(`select procurement.purchase_order_lifecycle(${sqlJson(payload)}) as result`);
+  const monitoring = () => db.query(`select procurement.review_open_purchase_orders('{}'::jsonb) as result`);
+  const vendorAcknowledgements = () => db.query(`select procurement.vendor_purchase_order_acknowledgements('{}'::jsonb) as result`);
+  const withRole = async (role, actor, capabilities, vendor, action) => {
+    await db.exec('reset role');
+    await setPolicyActor(db, actor, false, capabilities, vendor);
+    await db.exec(`set role ${role}`);
+    try {
+      return await action();
+    } finally {
+      await db.exec('reset role');
+    }
+  };
+  try {
+    await db.exec(migrationBeforeBackfillForPglite);
+    await db.exec(migrationTask6);
+    await db.exec(`
+      grant usage on schema procurement, core, auth, private to anon, authenticated, service_role;
+      insert into core.profiles(id,status) values
+        ('${procurementActor}','active'),('${vendorActor}','active'),('${unrelatedActor}','active'),
+        ('${dashboardActor}','active'),('${approverActor}','active'),('${financeActor}','active');
+      insert into core.vendors(id,legal_name,accreditation_status) values ('${vendorId}','Role matrix vendor','approved');
+      insert into procurement.purchase_orders(id,core_vendor_id,status,total,lines,actor_id) values ('${poId}','${vendorId}','draft',100,'[]'::jsonb,'${procurementActor}');
+      update procurement.purchase_orders set status='issued',issued_at=statement_timestamp()-interval '48 hours' where id='${poId}';
+    `);
+
+    await withRole('anon', unrelatedActor, [], null, async () => {
+      await assert.rejects(() => lifecycle({ purchase_order_id: poId }), /permission denied/i, 'anon cannot execute lifecycle read');
+      await assert.rejects(monitoring, /permission denied/i, 'anon cannot execute monitoring');
+      await assert.rejects(vendorAcknowledgements, /permission denied/i, 'anon cannot list vendor POs');
+      await assert.rejects(() => db.query(`select procurement.acknowledge_purchase_order(${sqlJson({ purchase_order_id: poId, expected_revision: 2, acknowledgement_reference: 'FORGED' })})`), /permission denied/i, 'anon cannot acknowledge');
+      await assert.rejects(() => db.query(`select procurement.record_vendor_delivery_notice(${sqlJson({ purchase_order_id: poId, expected_revision: 2, delivery_notice_reference: 'FORGED' })})`), /permission denied/i, 'anon cannot record delivery');
+      await assert.rejects(() => db.query(`select procurement.request_purchase_order_closure(${sqlJson({ purchase_order_id: poId, expected_revision: 2, closure_reason: 'FORGED' })})`), /permission denied/i, 'anon cannot request closure');
+      await assert.rejects(() => db.query(`select procurement.approve_purchase_order_closure(${sqlJson({ closure_request_id: '00000000-0000-0000-0000-000000000001' })})`), /permission denied/i, 'anon cannot approve closure');
+      await assert.rejects(() => db.query(`select procurement.release_payment(${sqlJson({ payment_readiness_pack_id: '00000000-0000-0000-0000-000000000001', amount: 1, payment_reference: 'FORGED', paid_at: '2026-08-22' })})`), /permission denied/i, 'anon cannot release payment');
+    });
+
+    await withRole('authenticated', unrelatedActor, [], null, async () => {
+      await assert.rejects(() => lifecycle({ purchase_order_id: poId }), /Not authorized/i, 'unrelated authenticated actor cannot read PO lifecycle');
+      await assert.rejects(monitoring, /monitoring authority/i, 'unrelated actor cannot monitor open POs');
+      await assert.rejects(vendorAcknowledgements, /Vendor session/i, 'unrelated actor cannot list vendor POs');
+      await assert.rejects(() => db.query(`select procurement.acknowledge_purchase_order(${sqlJson({ purchase_order_id: poId, expected_revision: 2, acknowledgement_reference: 'FORGED' })})`), /awarded vendor/i, 'unrelated actor cannot acknowledge');
+      await assert.rejects(() => db.query(`select procurement.record_vendor_delivery_notice(${sqlJson({ purchase_order_id: poId, expected_revision: 2, delivery_notice_reference: 'FORGED' })})`), /Procurement authority/i, 'unrelated actor cannot record delivery');
+      await assert.rejects(() => db.query(`select procurement.request_purchase_order_closure(${sqlJson({ purchase_order_id: poId, expected_revision: 2, closure_reason: 'FORGED' })})`), /closure authority/i, 'unrelated actor cannot request closure');
+      await assert.rejects(() => db.query(`select procurement.approve_purchase_order_closure(${sqlJson({ closure_request_id: '00000000-0000-0000-0000-000000000001' })})`), /approver authority/i, 'unrelated actor cannot approve closure');
+      await assert.rejects(() => db.query(`select procurement.release_payment(${sqlJson({ payment_readiness_pack_id: '00000000-0000-0000-0000-000000000001', amount: 1, payment_reference: 'FORGED', paid_at: '2026-08-22' })})`), /Not authorized/i, 'unrelated actor cannot release payment');
+      await assert.rejects(() => db.query(`select * from procurement.purchase_order_lifecycle_state`), /permission denied|row-level security/i, 'authenticated cannot directly read lifecycle state');
+      await assert.rejects(() => db.query(`update procurement.purchase_order_lifecycle_state set revision=999 where purchase_order_id='${poId}'`), /permission denied|row-level security/i, 'authenticated cannot write lifecycle state');
+      await assert.rejects(() => db.query(`insert into procurement.purchase_order_lifecycle_events(purchase_order_id,event_type,expected_revision,resulting_revision,actor_id,evidence_reference) values('${poId}','vendor_acknowledged',2,3,'${unrelatedActor}','FORGED')`), /permission denied|row-level security/i, 'authenticated cannot forge lifecycle events');
+      await assert.rejects(() => db.query(`select * from procurement.purchase_order_closure_requests`), /permission denied|row-level security/i, 'authenticated cannot directly read closure requests');
+      await assert.rejects(() => db.query(`select private.policy_po_lifecycle_transition('${poId}',2,'vendor_acknowledged','forged','{}'::jsonb)`), /permission denied/i, 'authenticated cannot call private lifecycle helper');
+      await assert.rejects(() => db.query(`select private.policy_po_lifecycle_projection('${poId}')`), /permission denied/i, 'authenticated cannot call private lifecycle projection');
+      await assert.rejects(() => db.query(`select procurement.close_purchase_order(${sqlJson({ purchase_order_id: poId, expected_revision: 2, closure_reason: 'FORGED' })})`), /permission denied/i, 'direct close stays revoked');
+    });
+
+    await withRole('authenticated', vendorActor, [], vendorId, async () => {
+      const vendorRead = await lifecycle({ purchase_order_id: poId });
+      assert.equal(vendorRead.rows[0].result.revision, 2, 'issued-at backfill supplies the same revision expected by the sent event');
+      const awarded = await vendorAcknowledgements();
+      assert.equal(awarded.rows[0].result.length, 1, 'awarded vendor sees only its issued PO');
+      await assert.rejects(monitoring, /monitoring authority/i, 'vendor cannot read procurement monitoring');
+      await assert.rejects(() => db.query(`select procurement.record_vendor_delivery_notice(${sqlJson({ purchase_order_id: poId, expected_revision: 2, delivery_notice_reference: 'VENDOR-FORGED' })})`), /Procurement authority/i, 'vendor cannot record delivery');
+      await assert.rejects(() => db.query(`select procurement.request_purchase_order_closure(${sqlJson({ purchase_order_id: poId, expected_revision: 2, closure_reason: 'VENDOR-FORGED' })})`), /closure authority/i, 'vendor cannot request closure');
+      const acknowledged = await db.query(`select procurement.acknowledge_purchase_order(${sqlJson({ purchase_order_id: poId, expected_revision: 2, acknowledgement_reference: 'ROLE-ACK' })}) as result`);
+      assert.equal(acknowledged.rows[0].result.replayed, false);
+      const replay = await db.query(`select procurement.acknowledge_purchase_order(${sqlJson({ purchase_order_id: poId, expected_revision: 2, acknowledgement_reference: 'ROLE-ACK' })}) as result`);
+      assert.equal(replay.rows[0].result.replayed, true, 'vendor acknowledgement retry is exact and idempotent');
+      await assert.rejects(() => db.query(`select procurement.acknowledge_purchase_order(${sqlJson({ purchase_order_id: poId, expected_revision: 2, acknowledgement_reference: 'ROLE-ACK-CHANGED' })})`), /changed|lifecycle changed/i, 'changed vendor acknowledgement is rejected');
+    });
+
+    await withRole('authenticated', dashboardActor, ['view_dashboard'], null, async () => {
+      assert.equal((await lifecycle({ purchase_order_id: poId })).rows[0].result.revision, 3, 'dashboard reader can consume the governed lifecycle projection');
+      assert.equal((await monitoring()).rows[0].result[0].kind, 'open_po', 'dashboard reader receives the post-acknowledgement governed monitoring projection');
+      await assert.rejects(() => db.query(`select procurement.record_vendor_delivery_notice(${sqlJson({ purchase_order_id: poId, expected_revision: 3, delivery_notice_reference: 'DASHBOARD-FORGED' })})`), /Procurement authority/i, 'dashboard reader cannot mutate lifecycle');
+    });
+
+    await withRole('authenticated', procurementActor, ['author_po'], null, async () => {
+      await assert.rejects(() => db.query(`select procurement.acknowledge_purchase_order(${sqlJson({ purchase_order_id: poId, expected_revision: 3, acknowledgement_reference: 'PROCUREMENT-FORGED' })})`), /awarded vendor/i, 'procurement cannot acknowledge for a vendor');
+      const delivery = await db.query(`select procurement.record_vendor_delivery_notice(${sqlJson({ purchase_order_id: poId, expected_revision: 3, delivery_notice_reference: 'ROLE-DELIVERY' })}) as result`);
+      assert.equal(delivery.rows[0].result.replayed, false, 'procurement records delivery through the public command');
+      const requested = await db.query(`select procurement.request_purchase_order_closure(${sqlJson({ purchase_order_id: poId, expected_revision: 4, closure_reason: 'All controlled handoffs are complete.' })}) as result`);
+      assert.equal(requested.rows[0].result.replayed, false);
+      const requestReplay = await db.query(`select procurement.request_purchase_order_closure(${sqlJson({ purchase_order_id: poId, expected_revision: 4, closure_reason: 'All controlled handoffs are complete.' })}) as result`);
+      assert.equal(requestReplay.rows[0].result.replayed, true, 'closure request retry is exact and idempotent');
+      await assert.rejects(() => db.query(`select procurement.request_purchase_order_closure(${sqlJson({ purchase_order_id: poId, expected_revision: 4, closure_reason: 'Changed reason.' })})`), /reason changed/i, 'changed closure reason is rejected');
+      await assert.rejects(() => db.query(`select procurement.approve_purchase_order_closure(${sqlJson({ closure_request_id: requested.rows[0].result.id })})`), /approver authority|maker and checker/i, 'maker cannot self-approve closure');
+    });
+
+    let closureRequestId;
+    await withRole('authenticated', procurementActor, ['author_po'], null, async () => {
+      const request = await db.query(`select procurement.request_purchase_order_closure(${sqlJson({ purchase_order_id: poId, expected_revision: 4, closure_reason: 'All controlled handoffs are complete.' })}) as result`);
+      closureRequestId = request.rows[0].result.id;
+    });
+    await withRole('authenticated', approverActor, ['final_approve_po'], null, async () => {
+      await assert.rejects(() => db.query(`select procurement.approve_purchase_order_closure(${sqlJson({ closure_request_id: closureRequestId })})`), /Closure is blocked/i, 'missing service/goods acceptance blocks closure');
+    });
+    await db.exec(`
+      insert into procurement.acceptance_packs(purchase_order_id,status,exceptions) values ('${poId}','accepted','[]'::jsonb);
+      insert into procurement.receipt_status_fixture(purchase_order_id,outstanding_quantity,rejected_or_quarantined_quantity) values ('${poId}',1,0);
+    `);
+    await withRole('authenticated', approverActor, ['final_approve_po'], null, async () => {
+      await assert.rejects(() => db.query(`select procurement.approve_purchase_order_closure(${sqlJson({ closure_request_id: closureRequestId })})`), /Closure is blocked/i, 'unreceived goods block closure');
+    });
+    await db.exec(`update procurement.receipt_status_fixture set outstanding_quantity=0,rejected_or_quarantined_quantity=1 where purchase_order_id='${poId}'; update procurement.purchase_order_lifecycle_state set quality_recovery_status='payment_hold' where purchase_order_id='${poId}';`);
+    await withRole('authenticated', approverActor, ['final_approve_po'], null, async () => {
+      await assert.rejects(() => db.query(`select procurement.approve_purchase_order_closure(${sqlJson({ closure_request_id: closureRequestId })})`), /Closure is blocked/i, 'quarantine, RMA, credit, and payment-hold recovery block closure');
+    });
+    await db.exec(`update procurement.receipt_status_fixture set rejected_or_quarantined_quantity=0 where purchase_order_id='${poId}'; update procurement.purchase_order_lifecycle_state set quality_recovery_status='resolved' where purchase_order_id='${poId}'; insert into procurement.payment_readiness_packs(purchase_order_id,status,invoice_amount,released_amount,accepted_amount,purchase_order_amount) values ('${poId}','accepted',100,0,100,100);`);
+    const paymentPack = await db.query(`select id from procurement.payment_readiness_packs where purchase_order_id='${poId}'`);
+    await withRole('authenticated', financeActor, ['view_finance'], null, async () => {
+      const released = await db.query(`select procurement.release_payment(${sqlJson({ payment_readiness_pack_id: paymentPack.rows[0].id, amount: 100, payment_reference: 'ROLE-PAYMENT-1', payment_method: 'bank_transfer', paid_at: '2026-08-23' })}) as result`);
+      assert.equal(released.rows[0].result.closureRequired, true, 'fully paid PO remains issued pending independent closure');
+    });
+    const paidButOpen = await db.query(`select status from procurement.purchase_orders where id='${poId}'`);
+    assert.equal(paidButOpen.rows[0].status, 'issued', 'payment release cannot bypass the closure terminal path');
+    await withRole('authenticated', approverActor, ['final_approve_po'], null, async () => {
+      const approved = await db.query(`select procurement.approve_purchase_order_closure(${sqlJson({ closure_request_id: closureRequestId })}) as result`);
+      assert.equal(approved.rows[0].result.replayed, false);
+      const replay = await db.query(`select procurement.approve_purchase_order_closure(${sqlJson({ closure_request_id: closureRequestId })}) as result`);
+      assert.equal(replay.rows[0].result.replayed, true, 'the governed terminal replay is exact and idempotent');
+    });
+    const terminal = await db.query(`select status from procurement.purchase_orders where id='${poId}'`);
+    const closedEvent = await db.query(`select event_type,expected_revision,resulting_revision from procurement.purchase_order_lifecycle_events where purchase_order_id='${poId}' and event_type='closed'`);
+    assert.equal(terminal.rows[0].status, 'closed');
+    assert.deepEqual(closedEvent.rows[0], { event_type: 'closed', expected_revision: 4, resulting_revision: 5 }, 'only the private terminal helper creates the immutable closure event');
+    await withRole('service_role', approverActor, ['admin'], null, async () => {
+      await assert.rejects(() => db.query(`select procurement.close_purchase_order(${sqlJson({ purchase_order_id: poId, expected_revision: 4, closure_reason: 'FORGED' })})`), /permission denied/i, 'service role cannot execute retired direct close');
+      await assert.rejects(() => db.query(`select private.policy_po_lifecycle_transition('${poId}',4,'closed','FORGED','{}'::jsonb)`), /permission denied/i, 'service role cannot execute the private terminal helper');
+    });
+  } finally { await db.close(); }
 });
 
 test("backfills legacy sourcing deadlines before enforcing cumulative extension and requote caps", async () => {
