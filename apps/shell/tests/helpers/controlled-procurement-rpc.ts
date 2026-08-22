@@ -3,7 +3,7 @@ import type { BrowserContext, Route } from '@playwright/test';
 export const CONTROLLED_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'http://127.0.0.1:54321';
 export const CONTROLLED_ANON_KEY = 'controlled-rpc-anon-key';
 
-type ActorKey = 'procurement' | 'vendor' | 'unrelatedVendor' | 'admin' | 'legal' | 'operations' | 'deptHead' | 'finance' | 'financeNoCapability' | 'unrelated' | 'exceptionReviewer' | 'exceptionFinance' | 'exceptionDoa';
+type ActorKey = 'procurement' | 'vendor' | 'unrelatedVendor' | 'admin' | 'legal' | 'legalMaker' | 'legalDecider' | 'operations' | 'deptHead' | 'finance' | 'financeNoCapability' | 'unrelated' | 'exceptionReviewer' | 'exceptionFinance' | 'exceptionDoa';
 type Actor = {
   id: string;
   email: string;
@@ -55,6 +55,14 @@ const ACTORS: Record<ActorKey, Actor> = {
       core: ['view_directory', 'view_vendors', 'view_documents', 'view_approvals'],
       legal: ['view_dashboard', 'review_accreditation', 'manage_checklist', 'approve_accreditation', 'manage_documents', 'manage_doa', 'admin'],
     },
+  },
+  legalMaker: {
+    id: 'controlled-legal-maker', email: 'legal.maker.controlled@mwell.test', name: 'Controlled Legal Maker', title: 'Vendor Management Officer',
+    roles: { core: ['staff'], legal: ['reviewer'] }, capabilities: { core: ['view_directory', 'view_vendors'], legal: ['review_accreditation'] },
+  },
+  legalDecider: {
+    id: 'controlled-legal-decider', email: 'legal.decider.controlled@mwell.test', name: 'Controlled Legal Decider', title: 'Legal Approver',
+    roles: { core: ['staff'], legal: ['approver'] }, capabilities: { core: ['view_directory', 'view_vendors'], legal: ['approve_accreditation'] },
   },
   operations: {
     id: 'controlled-operations',
@@ -258,6 +266,7 @@ export class ControlledProcurementRpcFixture {
   purchaseOrder: Record<string, unknown> | null = null;
   lifecycle: Record<string, unknown> | null = null;
   monitoring: Array<Record<string, unknown>> = [];
+  task10: { acceptance: boolean; prepared: boolean; accepted: boolean; released: boolean; closureRequested: boolean; closed: boolean; vendorCurrent: boolean; legalRevision: number } | null = null;
   private readonly varianceAssignments = [
     { actorId: ACTORS.deptHead.id, stage: 'department_head' as const, assignmentId: 'controlled-department_head-assignment' },
     { actorId: ACTORS.finance.id, stage: 'finance' as const, assignmentId: 'controlled-finance-assignment' },
@@ -437,6 +446,14 @@ export class ControlledProcurementRpcFixture {
     this.purchaseOrder = { id: 'controlled-po-task-9', po_number: 'PO-CONTROLLED-009', core_vendor_id: 'vendor-1', vendor_name: 'Acme Medical Supplies, Inc.', status: 'issued', total: 1000, lines: [{ id: 'line-1', description: 'Controlled clinical supply', quantity: 1, receivedQuantity: 0 }], created_at: '2026-08-22T00:00:00.000Z', updated_at: '2026-08-22T00:00:00.000Z' };
     this.lifecycle = { purchaseOrderId: 'controlled-po-task-9', revision: 2, issuedAt: '2026-08-22T00:00:00.000Z', sentAt: '2026-08-22T00:00:00.000Z', acknowledgementDueAt: '2026-08-24T00:00:00.000Z', acknowledgementStatus: 'pending', deliveryNoticeStatus: 'pending', qualityRecoveryStatus: 'payment_hold', closureStatus: 'blocked' };
     this.monitoring = [{ id: 'controlled-po-task-9:weekly', purchaseOrderId: 'controlled-po-task-9', kind: 'quality_recovery', owner: 'Procurement', ageHours: 52, dueAt: '2026-08-24T00:00:00.000Z', nextAction: 'Maintain vendor notice, RMA, credit, and payment hold' }];
+  }
+
+  prepareTask10PurchaseOrder() {
+    this.purchaseOrder = { id: 'controlled-po-task-10', po_number: 'PO-CONTROLLED-010', request_id: this.requestId, core_vendor_id: 'vendor-1', vendor_name: 'Acme Medical Supplies, Inc.', status: 'issued', total: 1000, lines: [{ id: 'line-1', description: 'Governed clinical supply', quantity: 1, receivedQuantity: 1 }], created_at: '2026-08-22T00:00:00.000Z', updated_at: '2026-08-22T00:00:00.000Z' };
+    this.request.requester_id = ACTORS.operations.id;
+    this.request.requester_email = ACTORS.operations.email;
+    this.lifecycle = { purchaseOrderId: 'controlled-po-task-10', revision: 4, issuedAt: '2026-08-22T00:00:00.000Z', acknowledgementStatus: 'acknowledged', deliveryNoticeStatus: 'recorded', qualityRecoveryStatus: 'resolved', closureStatus: 'ready' };
+    this.task10 = { acceptance: false, prepared: false, accepted: false, released: false, closureRequested: false, closed: false, vendorCurrent: false, legalRevision: 0 };
   }
 
   failNextExceptionSubmit() {
@@ -622,6 +639,9 @@ export class ControlledProcurementRpcFixture {
 
   async handle(route: Route) {
     const request = route.request();
+    if (request.method() === 'OPTIONS') {
+      return route.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'authorization, content-type, content-profile, accept-profile', 'access-control-allow-methods': 'GET, POST, OPTIONS' } });
+    }
     const url = new URL(request.url());
     const actor = actorForToken(request.headers());
     if (url.pathname.startsWith('/auth/v1/')) {
@@ -682,7 +702,60 @@ export class ControlledProcurementRpcFixture {
     if (schema === 'learning' && (name === 'resolve_assignments' || name === 'my_learning_snapshot')) {
       return response(route, { curricula: [], progress: [], certifications: [], lockedCapabilities: [], refreshedAt: '2026-08-22T00:00:00.000Z' });
     }
+    if (schema === 'legal' && this.task10) {
+      if (name === 'record_vendor_probation_review') {
+        if (actor.id !== ACTORS.legalMaker.id || Number(payload.expected_revision) !== this.task10.legalRevision) return failure(route, 'Legal maker authority and current revision are required', 403);
+        this.task10.legalRevision += 1;
+        return response(route, { revision: this.task10.legalRevision, replayed: false, status: 'completed' });
+      }
+      if (name === 'record_vendor_eligibility_decision') {
+        if (actor.id !== ACTORS.legalDecider.id || Number(payload.expected_revision) !== 0) return failure(route, 'Independent Legal decision authority is required', 403);
+        this.task10.vendorCurrent = true;
+        return response(route, { status: 'approved', decision: 'pass', replayed: false, revision: 1 });
+      }
+      return failure(route, 'Controlled Legal RPC is not available', 404);
+    }
     if (schema !== 'procurement') return response(route, null);
+
+    if (this.task10) {
+      const isProcurement = actor.id === ACTORS.procurement.id;
+      const isFinance = actor.id === ACTORS.finance.id;
+      if (name === 'record_acceptance_pack') {
+        if (actor.id !== ACTORS.operations.id || payload.purchase_order_id !== this.purchaseOrder?.id) return failure(route, 'Requester or Warehouse acceptance authority is required', 403);
+        this.task10.acceptance = true;
+        return response(route, { id: 'controlled-acceptance-10', status: 'accepted', accepted_amount: 1000 });
+      }
+      if (name === 'prepare_invoice_payment_readiness') {
+        if (!isProcurement || !this.task10.acceptance || !this.task10.vendorCurrent) return failure(route, 'Current Legal eligibility and acceptance evidence are required', 403);
+        this.task10.prepared = true;
+        return response(route, { id: 'controlled-payment-10', status: 'ready_for_finance', invoice_amount: 1000 });
+      }
+      if (name === 'review_payment_readiness') {
+        if (!isFinance || !this.task10.prepared || payload.status !== 'accepted') return failure(route, 'Finance acceptance authority is required', 403);
+        this.task10.accepted = true;
+        return response(route, { id: 'controlled-payment-10', status: 'accepted' });
+      }
+      if (name === 'release_payment') {
+        if (!isFinance || !this.task10.accepted) return failure(route, 'Finance release authority is required', 403);
+        this.task10.released = true;
+        return response(route, { pack: { id: 'controlled-payment-10', status: 'released' }, closureRequired: true });
+      }
+      if (name === 'request_purchase_order_closure') {
+        if (!isProcurement || !this.task10.released) return failure(route, 'Procurement closure authority and Finance release are required', 403);
+        this.task10.closureRequested = true;
+        return response(route, { id: 'controlled-closure-10', status: 'pending', replayed: false });
+      }
+      if (name === 'approve_purchase_order_closure') {
+        if (actor.id !== ACTORS.deptHead.id || !this.task10.closureRequested) return failure(route, 'Independent closure approver authority is required', 403);
+        this.task10.closed = true;
+        this.purchaseOrder = { ...this.purchaseOrder!, status: 'closed' };
+        return response(route, { id: 'controlled-closure-10', status: 'approved', closureStatus: 'closed', replayed: false });
+      }
+      if (name === 'invite_sourcing_vendors' || name === 'issue_purchase_order') {
+        if (!isProcurement || !this.task10.vendorCurrent) return failure(route, 'Legal/VMO vendor eligibility is not current', 403);
+        return response(route, { status: name === 'issue_purchase_order' ? 'issued' : 'invited' });
+      }
+    }
 
     if (name === 'vendor_purchase_order_acknowledgements') return actor.vendorId === 'vendor-1' && this.purchaseOrder && this.lifecycle ? response(route, [{ id: this.purchaseOrder.id, poNumber: this.purchaseOrder.po_number, vendorName: this.purchaseOrder.vendor_name, lifecycle: this.lifecycle }]) : response(route, []);
     if (name === 'purchase_order_lifecycle') return this.lifecycle ? response(route, { ...this.lifecycle }) : failure(route, 'PO lifecycle not found', 404);
@@ -929,6 +1002,7 @@ export class ControlledProcurementRpcFixture {
 
 export async function installControlledRpc(context: BrowserContext, fixture: ControlledProcurementRpcFixture, actor: ActorKey) {
   await context.route(`${CONTROLLED_SUPABASE_URL}/**`, (route) => fixture.handle(route));
+  await context.route('**/rest/v1/**', (route) => fixture.handle(route));
 }
 
 export function actor(key: ActorKey) {

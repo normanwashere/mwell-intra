@@ -49,3 +49,12 @@
 ### Migration Status Ruling
 
 The shared-target migration-status ruling remains the Task 12 stop gate. This workspace is intentionally unlinked: `20260822110000_mpic_procurement_policy_alignment.sql` was not applied locally or remotely, and no shared target was queried. Before Task 12/UAT proceeds, retain a read-only linked-target status artifact proving this migration is pending and the remote chain has not drifted; stop UAT if it is already applied or drift is found.
+
+## Fix Round 2
+
+- Effective public Finance acceptance and release now call a private revoked assertion that fails closed on `evidence_stale`, acceptance-evidence version drift, or acceptance-set mismatch. The invoice endpoint preserves finalized-stale `corrected_from` recovery.
+- The Node 22 disposable matrix passed (2/2): real Finance acceptance, governed acceptance-change staleness, denied Finance accept/release, and corrected-pack acceptance/release; anon, unrelated, Procurement, Legal maker/decider, Finance, vendor, and service roles cover public endpoints, direct DML/private-helper denials, replay, expiry, clearance scope/window, invitation/issue, and foreign evidence.
+- Controlled browser/RPC evidence passed (2/2) at `desktop-1440` and `mobile-390`. The fixture owns authority state without localStorage mutation: Legal maker then independent decider restores eligibility; Procurement invites/issues; requester accepts; Procurement prepares; Finance accepts/releases; Procurement requests closure; independent department head approves.
+- Retained evidence: `docs/qa/evidence/task-10-controlled-authority-desktop-1440.png`, `docs/qa/evidence/task-10-controlled-authority-mobile-390.png`, and matching `.trace.json` traces.
+- Verification: `node scripts/verify-mpic-procurement-policy-alignment.mjs`; focused PGlite/parse test; Shell TypeScript; and `playwright ... task-10-controlled-authority-journey.spec.ts --project=desktop-1440 --project=mobile-390 --timeout=30000` all passed with Node `v22.17.0` and pinned Corepack.
+- The Task 12 linked-target status ruling above is unchanged. No migration was applied or deployed.

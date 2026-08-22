@@ -2800,6 +2800,21 @@ begin
   select coalesce(sum(prior.invoice_amount),0) into v_prior from procurement.payment_readiness_packs prior where prior.purchase_order_id=v_po.id and prior.status in ('accepted','released') and not coalesce(prior.evidence_stale,false);
   if v_invoice>v_accepted-v_prior or v_invoice>v_po.total-v_prior then raise exception 'Invoice exceeds the accepted unpaid value'; end if;
   v_corrected:=nullif(payload->>'corrected_from','')::uuid;
+  if v_corrected is not null then
+    select * into v_pack from procurement.payment_readiness_packs
+      where id=v_corrected and purchase_order_id=v_po.id for update;
+    if not found then raise exception 'Corrected Finance readiness pack not found for this purchase order'; end if;
+    if v_pack.status<>'returned'
+       and not (v_pack.status in ('accepted','released') and v_pack.evidence_stale) then
+      raise exception 'Only returned or finalized stale Finance evidence may be replaced';
+    end if;
+  elsif exists (
+    select 1 from procurement.payment_readiness_packs stale_pack
+    where stale_pack.purchase_order_id=v_po.id
+      and stale_pack.status in ('accepted','released') and stale_pack.evidence_stale
+  ) then
+    raise exception 'A replacement for finalized stale Finance evidence must identify corrected_from';
+  end if;
   update procurement.payment_readiness_packs set status='superseded' where purchase_order_id=v_po.id and status in ('draft','returned','ready_for_finance');
   insert into procurement.payment_readiness_packs(purchase_order_id,acceptance_pack_id,acceptance_pack_ids,accepted_quantity,acceptance_evidence_version,policy_version,po_match,invoice_or_si_storage_path,milestone_support_storage_path,tax_withholding_support_storage_path,foreign_vendor_evidence_storage_path,invoice_number,invoice_date,due_date,invoice_amount,tax_amount,withholding_amount,purchase_order_amount,accepted_amount,variance_amount,status,corrected_from)
   values(v_po.id,v_ids[1],v_ids,0,v_po.acceptance_evidence_version,'request-bound-policy-profile',true,payload->>'invoice_or_si_storage_path',payload->>'milestone_support_storage_path',payload->>'tax_withholding_support_storage_path',nullif(pg_catalog.btrim(payload->>'foreign_vendor_evidence_storage_path'),''),payload->>'invoice_number',(payload->>'invoice_date')::date,nullif(payload->>'due_date','')::date,v_invoice,coalesce((payload->>'tax_amount')::numeric,0),coalesce((payload->>'withholding_amount')::numeric,0),v_po.total,v_accepted,v_accepted-v_prior-v_invoice,'ready_for_finance',v_corrected) returning * into v_pack;
@@ -3185,7 +3200,7 @@ declare v_po procurement.purchase_orders;
 begin
   select * into v_po from procurement.purchase_orders where id = payload->>'id' for share;
   if not found then raise exception 'Purchase order not found'; end if;
-  perform private.policy_assert_request_vendor_eligible(v_po.core_vendor_id, v_po.request_id, 'issue_purchase_order');
+  perform private.policy_assert_request_vendor_eligible(v_po.core_vendor_id, v_po.request_id::text, 'issue_purchase_order');
   return procurement.issue_purchase_order_pre_task_10(payload);
 end;
 $$;
@@ -4639,6 +4654,92 @@ $$;
 revoke all on function private.policy_payment_evidence_blockers(procurement.purchase_orders,procurement.requests,jsonb) from public, anon, authenticated, service_role;
 revoke all on function procurement.prepare_invoice_payment_readiness(jsonb) from public, anon, service_role;
 grant execute on function procurement.prepare_invoice_payment_readiness(jsonb) to authenticated;
+
+-- Finance cannot accept or release a pack once the accepted evidence set changes.
+-- A stale finalized pack remains immutable evidence and is replaced through the
+-- corrected_from preparation path above; it is never silently payable.
+create or replace function private.policy_assert_payment_pack_current(
+  p_pack procurement.payment_readiness_packs
+)
+returns void language plpgsql security definer set search_path = '' as $$
+declare
+  v_po procurement.purchase_orders;
+  v_acceptance_pack_ids uuid[];
+begin
+  select * into v_po from procurement.purchase_orders
+    where id=p_pack.purchase_order_id for share;
+  if not found then raise exception 'Purchase order not found'; end if;
+  select array_agg(acceptance.id order by acceptance.accepted_at,acceptance.id)
+    into v_acceptance_pack_ids
+  from procurement.acceptance_packs acceptance
+  where acceptance.purchase_order_id=p_pack.purchase_order_id
+    and acceptance.status='accepted'
+    and coalesce(jsonb_array_length(acceptance.exceptions),0)=0;
+  if coalesce(p_pack.evidence_stale,false)
+     or p_pack.acceptance_evidence_version is distinct from v_po.acceptance_evidence_version
+     or p_pack.acceptance_pack_ids is distinct from v_acceptance_pack_ids then
+    update procurement.payment_readiness_packs
+      set evidence_stale=true
+      where id=p_pack.id and not evidence_stale;
+    raise exception 'Payment evidence is stale; prepare a governed correction';
+  end if;
+end;
+$$;
+revoke all on function private.policy_assert_payment_pack_current(procurement.payment_readiness_packs) from public, anon, authenticated, service_role;
+
+create or replace function procurement.review_payment_readiness(payload jsonb)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+  v_pack procurement.payment_readiness_packs;
+  v_status text:=payload->>'status';
+begin
+  if not (core.has_live_cap('procurement','view_finance') or core.has_live_cap('procurement','admin')) then
+    raise exception 'Not authorized to review payment readiness';
+  end if;
+  if v_status not in ('returned','accepted') then
+    raise exception 'Invalid Finance readiness decision';
+  end if;
+  select * into v_pack from procurement.payment_readiness_packs
+    where id=(payload->>'id')::uuid for update;
+  if not found then raise exception 'Payment readiness pack not found'; end if;
+  if v_status='accepted' then
+    perform private.policy_assert_payment_pack_current(v_pack);
+    if v_pack.status<>'ready_for_finance' then
+      raise exception 'Payment readiness pack cannot transition from %',v_pack.status;
+    end if;
+    if not v_pack.po_match or v_pack.invoice_or_si_storage_path is null
+       or v_pack.milestone_support_storage_path is null
+       or v_pack.tax_withholding_support_storage_path is null then
+      raise exception 'Payment readiness evidence is incomplete';
+    end if;
+  elsif v_pack.status not in ('ready_for_finance','accepted') then
+    raise exception 'Payment readiness pack cannot transition from %',v_pack.status;
+  end if;
+  update procurement.payment_readiness_packs
+    set status=v_status,finance_reviewed_by=auth.uid(),finance_reviewed_at=statement_timestamp(),finance_note=payload->>'note'
+    where id=v_pack.id returning * into v_pack;
+  return to_jsonb(v_pack);
+end;
+$$;
+
+create or replace function procurement.release_payment(payload jsonb)
+returns jsonb language plpgsql security definer set search_path='' as $$
+declare v_pack procurement.payment_readiness_packs; v_release procurement.payment_releases; v_total numeric;
+begin
+ if not core.has_live_cap('procurement','view_finance') and not core.has_live_cap('procurement','admin') then raise exception 'Not authorized to release payment'; end if;
+ select * into v_pack from procurement.payment_readiness_packs where id=(payload->>'payment_readiness_pack_id')::uuid for update;
+ if not found or v_pack.status<>'accepted' then raise exception 'Finance acceptance is required before release'; end if;
+ perform private.policy_assert_payment_pack_current(v_pack);
+ if (payload->>'amount')::numeric<=0 or (payload->>'amount')::numeric>v_pack.invoice_amount-v_pack.released_amount then raise exception 'Release amount exceeds the unpaid invoice balance'; end if;
+ if nullif(trim(payload->>'payment_reference'),'') is null or nullif(payload->>'paid_at','') is null then raise exception 'Payment reference and date are required'; end if;
+ insert into procurement.payment_releases(payment_readiness_pack_id,purchase_order_id,amount,payment_reference,payment_method,paid_at) values(v_pack.id,v_pack.purchase_order_id,(payload->>'amount')::numeric,payload->>'payment_reference',payload->>'payment_method',(payload->>'paid_at')::date) returning * into v_release;
+ select coalesce(sum(amount),0) into v_total from procurement.payment_releases where payment_readiness_pack_id=v_pack.id and status='posted';
+ update procurement.payment_readiness_packs set released_amount=v_total,status=case when v_total>=invoice_amount then 'released' else 'accepted' end where id=v_pack.id returning * into v_pack;
+ return jsonb_build_object('pack',to_jsonb(v_pack),'release',to_jsonb(v_release),'closureRequired',v_pack.status='released');
+end;
+$$;
+revoke all on function procurement.review_payment_readiness(jsonb), procurement.release_payment(jsonb) from public, anon, service_role;
+grant execute on function procurement.review_payment_readiness(jsonb), procurement.release_payment(jsonb) to authenticated;
 
 -- Task 9 terminal override: this location is after all lifecycle compatibility
 -- definitions; do not move it above Task 9's additive tables and RPCs.

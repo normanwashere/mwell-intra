@@ -12,6 +12,10 @@ const migration = readFileSync(
   ),
   "utf8",
 );
+const singlePoReceiptMigration = readFileSync(
+  resolve("supabase/migrations/20260714175318_single_po_receipt_authority.sql"),
+  "utf8",
+);
 
 const BACKFILL_MARKER = "-- Deterministic legacy backfill. Ambiguous values are explicitly marked and";
 const RESTORE_MARKER = "-- Restore the effective public submission contract without editing historical";
@@ -31,6 +35,10 @@ const TASK_10_MARKER = '-- Task 10 terminal controls. Legal/VMO owns vendor stat
 const TASK_10_END_MARKER = '-- Task 10 terminal controls end.';
 const TASK_10_FIX_TERMINAL_MARKER = '-- Task 10 fix round 1 terminal override. All later definitions are PO-only.';
 const TASK_9_LAST_MARKER = '-- Task 9 terminal override: this location is after all lifecycle compatibility';
+const PAYMENT_STALENESS_TRIGGER_MARKER = 'create or replace function private.invalidate_payment_readiness_for_acceptance_change()';
+const PAYMENT_STALENESS_TRIGGER_END = 'from public,anon,authenticated;';
+const LEGACY_CLEARANCE_BACKFILL_MARKER = '-- Preserve the former Legal authority deterministically before the stricter';
+const LEGACY_CLEARANCE_BACKFILL_END = 'on conflict (legacy_disposition_id) do nothing;';
 const migrationTask6 = migration.slice(
   migration.indexOf(TASK_6_MARKER),
   migration.indexOf(TASK_10_MARKER),
@@ -41,6 +49,14 @@ const migrationTask10 = migration.slice(
 ) + migration.slice(
   migration.indexOf(TASK_10_FIX_TERMINAL_MARKER),
   migration.indexOf(TASK_9_LAST_MARKER),
+);
+const migrationPaymentStalenessTrigger = singlePoReceiptMigration.slice(
+  singlePoReceiptMigration.indexOf(PAYMENT_STALENESS_TRIGGER_MARKER),
+  singlePoReceiptMigration.indexOf(PAYMENT_STALENESS_TRIGGER_END, singlePoReceiptMigration.indexOf(PAYMENT_STALENESS_TRIGGER_MARKER)) + PAYMENT_STALENESS_TRIGGER_END.length,
+);
+const migrationLegacyClearanceBackfill = migration.slice(
+  migration.indexOf(LEGACY_CLEARANCE_BACKFILL_MARKER),
+  migration.indexOf(LEGACY_CLEARANCE_BACKFILL_END, migration.indexOf(LEGACY_CLEARANCE_BACKFILL_MARKER)) + LEGACY_CLEARANCE_BACKFILL_END.length,
 );
 // PGlite 0.5 does not implement jsonb_object_length. The production migration
 // retains PostgreSQL's native function; this equivalent fixture expression
@@ -287,27 +303,34 @@ async function seedActivePolicyProfiles(db) {
   `);
 }
 
-async function setPolicyActor(db, actor, canManage, procurementCapabilities = [], vendorId = null) {
+async function setPolicyActor(db, actor, canManage, procurementCapabilities = [], vendorId = null, legalCapabilities = []) {
   const capabilityArray = procurementCapabilities.length === 0
     ? "ARRAY[]::text[]"
     : `ARRAY[${procurementCapabilities.map((capability) => `'${capability.replaceAll("'", "''")}'`).join(", ")}]::text[]`;
+  const legalCapabilityArray = legalCapabilities.length === 0
+    ? "ARRAY[]::text[]"
+    : `ARRAY[${legalCapabilities.map((capability) => `'${capability.replaceAll("'", "''")}'`).join(", ")}]::text[]`;
   await db.exec(`
     create schema if not exists test;
     create table if not exists test.policy_actor_context (
       actor_id uuid not null,
       can_manage boolean not null,
       procurement_capabilities text[] not null default '{}',
+      legal_capabilities text[] not null default '{}',
       vendor_id uuid
     );
     alter table test.policy_actor_context add column if not exists procurement_capabilities text[] not null default '{}';
+    alter table test.policy_actor_context add column if not exists legal_capabilities text[] not null default '{}';
     truncate test.policy_actor_context;
-    insert into test.policy_actor_context(actor_id, can_manage, procurement_capabilities, vendor_id)
-    values ('${actor}', ${canManage ? 'true' : 'false'}, ${capabilityArray}, ${vendorId ? `'${vendorId}'::uuid` : 'null'});
+    insert into test.policy_actor_context(actor_id, can_manage, procurement_capabilities, legal_capabilities, vendor_id)
+    values ('${actor}', ${canManage ? 'true' : 'false'}, ${capabilityArray}, ${legalCapabilityArray}, ${vendorId ? `'${vendorId}'::uuid` : 'null'});
     create or replace function auth.uid() returns uuid language sql stable security definer as $$
       select actor_id from test.policy_actor_context limit 1
     $$;
     create or replace function core.has_live_cap(text, text) returns boolean language sql stable security definer as $$
-      select can_manage or ($1 = 'procurement' and $2 = any(procurement_capabilities))
+      select can_manage
+        or ($1 = 'procurement' and $2 = any(procurement_capabilities))
+        or ($1 = 'legal' and $2 = any(legal_capabilities))
       from test.policy_actor_context
       limit 1
     $$;
@@ -2215,9 +2238,14 @@ test('executes the disposable public Task 10 vendor and payment authority matrix
   const vendorId = '76000000-0000-0000-0000-000000000004';
   const reviewId = '76000000-0000-0000-0000-000000000005';
   const pendingReviewId = '76000000-0000-0000-0000-000000000007';
-  const withRole = async (role, actor, canManage, capabilities, action) => {
+  const procurement = '76000000-0000-0000-0000-000000000008';
+  const finance = '76000000-0000-0000-0000-000000000009';
+  const vendorActor = '76000000-0000-0000-0000-000000000010';
+  const legacyVendorId = '76000000-0000-0000-0000-000000000013';
+  const legacyDispositionId = '76000000-0000-0000-0000-000000000014';
+  const withRole = async (role, actor, procurementCapabilities, legalCapabilities, action, actorVendorId = null) => {
     await db.exec('reset role');
-    await setPolicyActor(db, actor, canManage, capabilities, null);
+    await setPolicyActor(db, actor, false, procurementCapabilities, actorVendorId, legalCapabilities);
     await db.exec(`set role ${role}`);
     try { return await action(); } finally { await db.exec('reset role'); }
   };
@@ -2225,15 +2253,24 @@ test('executes the disposable public Task 10 vendor and payment authority matrix
     await db.exec(migrationBeforeBackfillForPglite);
     await seedActivePolicyProfiles(db);
     await db.exec(migrationTask6);
+    await db.exec(`
+      insert into core.profiles(id,status) values ('${maker}','active');
+      insert into core.vendors(id,legal_name,accreditation_status) values ('${legacyVendorId}','Legacy clearance vendor','approved');
+      insert into legal.accreditation_cases(id,vendor_id,jurisdiction) values ('legacy-clearance-case','${legacyVendorId}','PH');
+      insert into legal.accreditation_dispositions(id,case_id,disposition,conditions,follow_up_due_at,decided_by)
+      values ('${legacyDispositionId}','legacy-clearance-case','temporary_clearance',jsonb_build_object('approved',true,'category','goods','max_amount',25000,'valid_from','2025-01-01T00:00:00.000Z','valid_until','2027-01-01T00:00:00.000Z'), '2027-01-01T00:00:00.000Z','${maker}');
+    `);
     await db.exec(migrationTask10);
+    await db.exec(migrationLegacyClearanceBackfill);
     await db.exec(`
       grant usage on schema legal, procurement, core, auth, private to anon, authenticated, service_role;
       grant select on core.vendors, procurement.requests, procurement.purchase_orders, procurement.acceptance_packs, procurement.payment_readiness_packs, legal.accreditation_cases to authenticated;
       create policy task10_fixture_vendor_read on core.vendors for select to authenticated using (true);
       alter table procurement.purchase_orders add column acceptance_evidence_version integer not null default 1;
-      alter table procurement.acceptance_packs add column accepted_amount numeric, add column accepted_at timestamptz default statement_timestamp();
-      alter table procurement.payment_readiness_packs add column acceptance_pack_id uuid, add column acceptance_pack_ids uuid[], add column accepted_quantity numeric default 0, add column acceptance_evidence_version integer, add column policy_version text, add column po_match boolean, add column invoice_or_si_storage_path text, add column milestone_support_storage_path text, add column tax_withholding_support_storage_path text, add column invoice_number text, add column invoice_date date, add column due_date date, add column tax_amount numeric default 0, add column withholding_amount numeric default 0, add column variance_amount numeric default 0, add column corrected_from uuid, add column evidence_stale boolean not null default false;
-      insert into core.profiles(id,status) values ('${maker}','active'),('${legalDecider}','active'),('${unrelated}','active');
+      alter table procurement.acceptance_packs add column accepted_amount numeric, add column accepted_at timestamptz default statement_timestamp(), add column accepted_scope jsonb default '{}'::jsonb;
+      alter table procurement.payment_readiness_packs add column acceptance_pack_id uuid, add column acceptance_pack_ids uuid[], add column accepted_quantity numeric default 0, add column acceptance_evidence_version integer, add column policy_version text, add column po_match boolean, add column invoice_or_si_storage_path text, add column milestone_support_storage_path text, add column tax_withholding_support_storage_path text, add column invoice_number text, add column invoice_date date, add column due_date date, add column tax_amount numeric default 0, add column withholding_amount numeric default 0, add column variance_amount numeric default 0, add column corrected_from uuid, add column evidence_stale boolean not null default false, add column evidence_stale_at timestamptz, add column finance_reviewed_by uuid, add column finance_reviewed_at timestamptz, add column finance_note text;
+      create table procurement.payment_readiness_staleness_events(id uuid primary key default gen_random_uuid(),payment_readiness_pack_id uuid not null,purchase_order_id text not null,prior_status text not null,prior_acceptance_evidence_version bigint not null,acceptance_evidence_version bigint not null,reason text not null,recorded_at timestamptz not null default now(),unique(payment_readiness_pack_id,acceptance_evidence_version));
+      insert into core.profiles(id,status) values ('${maker}','active'),('${legalDecider}','active'),('${unrelated}','active'),('${procurement}','active'),('${finance}','active'),('${vendorActor}','active') on conflict (id) do nothing;
       insert into core.vendors(id,legal_name,accreditation_status) values ('${vendorId}','Task 10 vendor','approved');
       insert into legal.vendor_probation_reviews(
         id,vendor_id,policy_profile_id,due_at,status,opened_by,po_win_rate,delivery_commitment_rate,
@@ -2242,18 +2279,36 @@ test('executes the disposable public Task 10 vendor and payment authority matrix
       insert into legal.vendor_probation_reviews(id,vendor_id,policy_profile_id,due_at,status,opened_by)
       values ('${pendingReviewId}','${vendorId}','${operatingProfileId}',statement_timestamp(),'open','${maker}');
       insert into procurement.requests(id,status,estimated_amount,category,policy_profile_id,updated_at) values ('76000000-0000-0000-0000-000000000006','approved',50000,'goods','${operatingProfileId}',statement_timestamp());
+      insert into procurement.route_decisions(id,request_id,status,request_version,policy_profile_id,policy_version,method,reasons,confirmed_by) values ('76000000-0000-0000-0000-000000000011','76000000-0000-0000-0000-000000000006','confirmed',1,'${operatingProfileId}','MWELL-OPS-1','rfq',ARRAY['controlled fixture'],'${procurement}');
+      insert into procurement.sourcing_events(id,request_id,route_decision_id,status,intended_responses,submission_deadline,original_submission_deadline,package_version,package_hash,created_by) values ('76000000-0000-0000-0000-000000000012','76000000-0000-0000-0000-000000000006','76000000-0000-0000-0000-000000000011','draft',3,statement_timestamp()+interval '7 days',statement_timestamp()+interval '7 days','controlled-v1',repeat('a',32),'${procurement}');
       insert into procurement.purchase_orders(id,request_id,core_vendor_id,status,total,acceptance_evidence_version) values ('PO-TASK10','76000000-0000-0000-0000-000000000006','${vendorId}','issued',50000,1);
       insert into procurement.acceptance_packs(purchase_order_id,status,exceptions,accepted_amount) values ('PO-TASK10','accepted','[]'::jsonb,50000);
     `);
+    await db.exec(migrationPaymentStalenessTrigger);
 
-    await withRole('anon', unrelated, false, [], async () => {
+    await withRole('anon', unrelated, [], [], async () => {
       await assert.rejects(
         () => db.query(`select legal.record_vendor_eligibility_decision(${sqlJson({ probation_review_id: reviewId, expected_revision: 0, decision: 'pass', evidence_reference: 'private/review.pdf', notice_reference: 'private/pass.pdf' })})`),
         /permission denied/i,
         'anon cannot decide vendor eligibility',
       );
+      await assert.rejects(
+        () => db.query(`select procurement.prepare_invoice_payment_readiness(${sqlJson({ purchase_order_id: 'PO-TASK10' })})`),
+        /permission denied/i,
+        'anon cannot invoke the live invoice preparation endpoint',
+      );
+      await assert.rejects(
+        () => db.query(`select procurement.review_payment_readiness(${sqlJson({ id: '00000000-0000-0000-0000-000000000001', status: 'accepted' })})`),
+        /permission denied/i,
+        'anon cannot invoke the Finance acceptance endpoint',
+      );
+      await assert.rejects(
+        () => db.query(`select procurement.release_payment(${sqlJson({ payment_readiness_pack_id: '00000000-0000-0000-0000-000000000001', amount: 1, payment_reference: 'FORGED', paid_at: '2030-01-03' })})`),
+        /permission denied/i,
+        'anon cannot invoke the Finance release endpoint',
+      );
     });
-    await withRole('authenticated', unrelated, false, [], async () => {
+    await withRole('authenticated', unrelated, [], [], async () => {
       await assert.rejects(
         () => db.query(`select legal.record_vendor_eligibility_decision(${sqlJson({ probation_review_id: reviewId, expected_revision: 0, decision: 'pass', evidence_reference: 'private/review.pdf', notice_reference: 'private/pass.pdf' })})`),
         /authority/i,
@@ -2264,8 +2319,13 @@ test('executes the disposable public Task 10 vendor and payment authority matrix
         /permission denied/i,
         'application roles cannot execute the private eligibility projection',
       );
+      await assert.rejects(
+        () => db.query(`insert into procurement.payment_readiness_packs(purchase_order_id,status,invoice_amount) values ('PO-TASK10','accepted',1)`),
+        /permission denied|row-level security/i,
+        'unrelated authenticated actor cannot write a Finance pack directly',
+      );
     });
-    await withRole('authenticated', maker, true, [], async () => {
+    await withRole('authenticated', maker, [], ['review_accreditation'], async () => {
       await assert.rejects(
         () => db.query(`select legal.record_vendor_probation_review(${sqlJson({ probation_review_id: pendingReviewId, expected_revision: 1, po_win_rate: .2 })})`),
         /Evidence and issued notice|metrics are required/i,
@@ -2280,8 +2340,13 @@ test('executes the disposable public Task 10 vendor and payment authority matrix
         /refresh before retrying/i,
         'non-identical probation-review retry is rejected as stale',
       );
+      await assert.rejects(
+        () => db.query(`select legal.record_vendor_eligibility_decision(${sqlJson({ probation_review_id: reviewId, expected_revision: 0, decision: 'pass', evidence_reference: 'private/review.pdf', notice_reference: 'private/pass.pdf' })})`),
+        /decision authority|maker and decision actor/i,
+        'Legal maker cannot self-decide vendor eligibility',
+      );
     });
-    await withRole('authenticated', legalDecider, true, [], async () => {
+    await withRole('authenticated', legalDecider, [], ['review_accreditation', 'approve_accreditation'], async () => {
       const decided = await db.query(`select legal.record_vendor_eligibility_decision(${sqlJson({ probation_review_id: reviewId, expected_revision: 0, decision: 'pass', evidence_reference: 'private/review.pdf', notice_reference: 'private/pass.pdf' })}) as result`);
       assert.equal(decided.rows[0].result.replayed, false);
       const replay = await db.query(`select legal.record_vendor_eligibility_decision(${sqlJson({ probation_review_id: reviewId, expected_revision: 0, decision: 'pass', evidence_reference: 'private/review.pdf', notice_reference: 'private/pass.pdf' })}) as result`);
@@ -2294,27 +2359,73 @@ test('executes the disposable public Task 10 vendor and payment authority matrix
       const sample = await db.query(`select legal.record_vendor_sample_custody(${sqlJson({ vendor_id: vendorId, expected_revision: 0, purpose: 'Clinical evaluation', custodian_id: maker, evaluation_reference: 'private/evaluation.pdf', disposition: 'returned', evidence_reference: 'private/custody.pdf', mwell_requested: false })}) as result`);
       assert.equal(sample.rows[0].result.replayed, false);
     });
-    await withRole('authenticated', legalDecider, true, [], async () => {
+    await withRole('authenticated', procurement, ['author_po'], [], async () => {
       await assert.rejects(
         () => db.query(`select procurement.prepare_invoice_payment_readiness(${sqlJson({ purchase_order_id: 'PO-TASK10', invoice_number: 'INV-TASK10-1', invoice_date: '2030-01-01', invoice_amount: 50000, invoice_or_si_storage_path: 'private/invoice.pdf', milestone_support_storage_path: 'private/acceptance.pdf' })})`),
         /tax and withholding/i,
         'the live invoice-preparation endpoint rejects incomplete Finance evidence',
       );
       await db.query(`select procurement.prepare_invoice_payment_readiness(${sqlJson({ purchase_order_id: 'PO-TASK10', invoice_number: 'INV-TASK10-1', invoice_date: '2030-01-01', invoice_amount: 50000, tax_amount: 6000, withholding_amount: 500, invoice_or_si_storage_path: 'private/invoice.pdf', milestone_support_storage_path: 'private/acceptance.pdf', tax_withholding_support_storage_path: 'private/tax.pdf' })}) as pack`);
+      await assert.rejects(
+        () => db.query(`select procurement.review_payment_readiness(${sqlJson({ id: '00000000-0000-0000-0000-000000000001', status: 'accepted' })})`),
+        /Not authorized/i,
+        'Procurement cannot accept payment readiness for Finance',
+      );
+    });
+    await withRole('authenticated', vendorActor, [], [], async () => {
+      await assert.rejects(
+        () => db.query(`select procurement.prepare_invoice_payment_readiness(${sqlJson({ purchase_order_id: 'PO-TASK10' })})`),
+        /Not authorized/i,
+        'vendor cannot prepare payment readiness',
+      );
+      await assert.rejects(
+        () => db.query(`select procurement.release_payment(${sqlJson({ payment_readiness_pack_id: '00000000-0000-0000-0000-000000000001', amount: 1, payment_reference: 'FORGED', paid_at: '2030-01-03' })})`),
+        /Not authorized/i,
+        'vendor cannot release payments',
+      );
+    }, vendorId);
+    await withRole('service_role', procurement, ['admin'], [], async () => {
+      await assert.rejects(
+        () => db.query(`select procurement.prepare_invoice_payment_readiness(${sqlJson({ purchase_order_id: 'PO-TASK10' })})`),
+        /permission denied/i,
+        'service role cannot invoke the retired-or-bypassed live preparation path',
+      );
+      await assert.rejects(
+        () => db.query(`select private.policy_prepare_invoice_payment_readiness(${sqlJson({ purchase_order_id: 'PO-TASK10' })})`),
+        /permission denied/i,
+        'service role cannot invoke the private readiness implementation',
+      );
+      await assert.rejects(
+        () => db.query(`insert into procurement.payment_readiness_packs(purchase_order_id,status,invoice_amount) values ('PO-TASK10','accepted',1)`),
+        /permission denied|row-level security/i,
+        'service role cannot forge Finance readiness directly',
+      );
     });
     await db.exec(`update core.vendors set accreditation_expires_at = current_date - 1 where id='${vendorId}'`);
-    await withRole('authenticated', legalDecider, true, [], async () => {
+    await withRole('authenticated', procurement, ['author_po'], [], async () => {
       await assert.rejects(
         () => db.query(`select procurement.prepare_invoice_payment_readiness(${sqlJson({ purchase_order_id: 'PO-TASK10', invoice_number: 'INV-TASK10-2', invoice_date: '2030-01-02', invoice_amount: 1, tax_amount: 1, withholding_amount: 0, invoice_or_si_storage_path: 'private/invoice-2.pdf', milestone_support_storage_path: 'private/acceptance.pdf', tax_withholding_support_storage_path: 'private/tax.pdf' })})`),
         /eligibility/i,
         'core accreditation expiry blocks the actual invoice-preparation endpoint',
       );
     });
-    const openClearance = async (scope, effectiveAt, expiresAt) => withRole('authenticated', maker, true, [], async () => {
+    await withRole('authenticated', procurement, ['author_po', 'manage_rfp'], [], async () => {
+      await assert.rejects(
+        () => db.query(`select procurement.invite_sourcing_vendors(${sqlJson({ sourcing_event_id: '76000000-0000-0000-0000-000000000012', vendor_ids: [vendorId] })})`),
+        /eligibility/i,
+        'core accreditation expiry blocks the live invitation endpoint before an invitation can issue',
+      );
+      await assert.rejects(
+        () => db.query(`select procurement.issue_purchase_order(${sqlJson({ id: 'PO-TASK10' })})`),
+        /eligibility/i,
+        'core accreditation expiry blocks the live PO issue endpoint before issue processing',
+      );
+    });
+    const openClearance = async (scope, effectiveAt, expiresAt) => withRole('authenticated', maker, [], ['review_accreditation'], async () => {
       const opened = await db.query(`select legal.open_vendor_temporary_clearance(${sqlJson({ vendor_id: vendorId, expected_revision: 0, scope, amount_limit: 50000, effective_at: effectiveAt, expires_at: expiresAt, evidence_reference: `private/${scope}-clearance.pdf`, notice_reference: `private/${scope}-notice.pdf` })}) as result`);
       return opened.rows[0].result.id;
     });
-    const approveClearance = async (clearanceId) => withRole('authenticated', legalDecider, true, [], async () => {
+    const approveClearance = async (clearanceId) => withRole('authenticated', legalDecider, [], ['review_accreditation', 'approve_accreditation'], async () => {
       const decided = await db.query(`select legal.decide_vendor_temporary_clearance(${sqlJson({ clearance_id: clearanceId, expected_revision: 1, decision: 'approve' })}) as result`);
       assert.equal(decided.rows[0].result.replayed, false);
       const replay = await db.query(`select legal.decide_vendor_temporary_clearance(${sqlJson({ clearance_id: clearanceId, expected_revision: 1, decision: 'approve' })}) as result`);
@@ -2328,7 +2439,7 @@ test('executes the disposable public Task 10 vendor and payment authority matrix
     ]) {
       const clearanceId = await openClearance(scope, effectiveAt, expiresAt);
       await approveClearance(clearanceId);
-      await withRole('authenticated', legalDecider, true, [], async () => {
+      await withRole('authenticated', procurement, ['author_po'], [], async () => {
         await assert.rejects(
           () => db.query(`select procurement.prepare_invoice_payment_readiness(${paymentPayload(`INV-${name}`)})`),
           /eligibility/i,
@@ -2338,29 +2449,68 @@ test('executes the disposable public Task 10 vendor and payment authority matrix
     }
     const clearanceId = await openClearance('goods', '2025-01-01T00:00:00.000Z', '2027-01-01T00:00:00.000Z');
     await approveClearance(clearanceId);
-    await withRole('authenticated', legalDecider, true, [], async () => {
+    await withRole('authenticated', procurement, ['author_po'], [], async () => {
       const clearance = await db.query(`select legal.vendor_eligibility_projection(${sqlJson({ vendor_id: vendorId, scope: 'goods' })}) as projection`);
       assert.equal(clearance.rows[0].projection.status, 'temporary_clearance');
       assert.equal(clearance.rows[0].projection.eligible, true);
-      await db.query(`select procurement.prepare_invoice_payment_readiness(${paymentPayload('INV-CLEARANCE-ACTIVE')}) as result`);
+      const prepared = await db.query(`select procurement.prepare_invoice_payment_readiness(${paymentPayload('INV-CLEARANCE-ACTIVE')}) as result`);
+      assert.equal(prepared.rows[0].result.status, 'ready_for_finance');
     });
-    await db.exec(`update procurement.purchase_orders set acceptance_evidence_version=2 where id='PO-TASK10'`);
+    await withRole('authenticated', procurement, ['author_po', 'manage_rfp'], [], async () => {
+      const guardedEndpoints = [
+        () => db.query(`select procurement.invite_sourcing_vendors(${sqlJson({ sourcing_event_id: '76000000-0000-0000-0000-000000000012', vendor_ids: [vendorId] })})`),
+        () => db.query(`select procurement.issue_purchase_order(${sqlJson({ id: 'PO-TASK10' })})`),
+      ];
+      for (const invoke of guardedEndpoints) {
+        await invoke().catch((cause) => assert.doesNotMatch(String(cause), /vendor eligibility is not current/i, 'active exact clearance passes the shared invitation/issue eligibility guard'));
+      }
+    });
+    const acceptedPack = await db.query(`select id from procurement.payment_readiness_packs where purchase_order_id='PO-TASK10' and invoice_number='INV-CLEARANCE-ACTIVE'`);
+    await withRole('authenticated', finance, ['view_finance'], [], async () => {
+      const accepted = await db.query(`select procurement.review_payment_readiness(${sqlJson({ id: acceptedPack.rows[0].id, status: 'accepted', note: 'Finance accepted the complete governed pack.' })}) as result`);
+      assert.equal(accepted.rows[0].result.status, 'accepted', 'real Finance actor accepts the governed evidence');
+    });
+    await db.exec(`insert into procurement.acceptance_packs(purchase_order_id,status,exceptions,accepted_amount) values ('PO-TASK10','accepted','[]'::jsonb,1)`);
+    await withRole('authenticated', finance, ['view_finance'], [], async () => {
+      await assert.rejects(
+        () => db.query(`select procurement.review_payment_readiness(${sqlJson({ id: acceptedPack.rows[0].id, status: 'accepted', note: 'Forged stale reacceptance.' })})`),
+        /stale/i,
+        'Finance cannot accept evidence after the authoritative acceptance version changes',
+      );
+      await assert.rejects(
+        () => db.query(`select procurement.release_payment(${sqlJson({ payment_readiness_pack_id: acceptedPack.rows[0].id, amount: 1, payment_reference: 'STALE-RELEASE', paid_at: '2030-01-03' })})`),
+        /stale/i,
+        'Finance cannot release an accepted pack after the authoritative acceptance set changes',
+      );
+    });
+    const stale = await db.query(`select evidence_stale,status from procurement.payment_readiness_packs where id='${acceptedPack.rows[0].id}'`);
+    assert.deepEqual(stale.rows[0], { evidence_stale: true, status: 'accepted' }, 'stale finalized evidence remains auditable and cannot become payable');
     await db.exec(`insert into legal.accreditation_cases(id,vendor_id,jurisdiction) values ('foreign-case','${vendorId}','US')`);
-    await withRole('authenticated', legalDecider, true, [], async () => {
+    let correctedPackId;
+    await withRole('authenticated', procurement, ['author_po'], [], async () => {
       await assert.rejects(
         () => db.query(`select procurement.prepare_invoice_payment_readiness(${paymentPayload('INV-FOREIGN-MISSING')})`),
         /Foreign-vendor/i,
         'foreign vendors require their own tax and payment-control evidence',
       );
-      await db.query(`select procurement.prepare_invoice_payment_readiness(${paymentPayload('INV-FOREIGN-SUPPORTED', 'private/foreign-tax.pdf')}) as result`);
-      const stale = await db.query(`select count(*)::integer as count from procurement.payment_readiness_packs where purchase_order_id='PO-TASK10' and evidence_stale=true and status='returned'`);
-      assert.ok(stale.rows[0].count >= 1, 'a changed acceptance version invalidates the previous payment evidence');
+      const correctedPayload = { purchase_order_id: 'PO-TASK10', invoice_number: 'INV-FOREIGN-SUPPORTED', invoice_date: '2030-01-03', invoice_amount: 1, tax_amount: 0, withholding_amount: 0, invoice_or_si_storage_path: 'private/invoice-clearance.pdf', milestone_support_storage_path: 'private/acceptance.pdf', tax_withholding_support_storage_path: 'private/tax.pdf', foreign_vendor_evidence_storage_path: 'private/foreign-tax.pdf', corrected_from: acceptedPack.rows[0].id };
+      const corrected = await db.query(`select procurement.prepare_invoice_payment_readiness(${sqlJson(correctedPayload)}) as result`);
+      correctedPackId = corrected.rows[0].result.id;
+      assert.equal(corrected.rows[0].result.corrected_from, acceptedPack.rows[0].id, 'governed correction links its stale finalized evidence');
+    });
+    await withRole('authenticated', finance, ['view_finance'], [], async () => {
+      const accepted = await db.query(`select procurement.review_payment_readiness(${sqlJson({ id: correctedPackId, status: 'accepted', note: 'Corrected evidence accepted.' })}) as result`);
+      assert.equal(accepted.rows[0].result.status, 'accepted');
+      const released = await db.query(`select procurement.release_payment(${sqlJson({ payment_readiness_pack_id: correctedPackId, amount: 1, payment_reference: 'CORRECTED-RELEASE', paid_at: '2030-01-03' })}) as result`);
+      assert.equal(released.rows[0].result.pack.status, 'released', 'corrected current evidence can be accepted and released by Finance');
     });
     const grants = await db.query(`select
       has_function_privilege('authenticated','legal.record_vendor_eligibility_decision(jsonb)','EXECUTE') as legal_rpc,
       has_function_privilege('authenticated','private.policy_assert_request_vendor_eligible(uuid,text,text)','EXECUTE') as private_guard,
       has_table_privilege('authenticated','legal.vendor_sample_custody_events','INSERT') as direct_sample_write`);
     assert.deepEqual(grants.rows[0], { legal_rpc: true, private_guard: false, direct_sample_write: false });
+    const legacyClearance = await db.query(`select vendor_id,scope,amount_limit,status,legacy_disposition_id from legal.vendor_temporary_clearances where legacy_disposition_id='${legacyDispositionId}'`);
+    assert.deepEqual(legacyClearance.rows[0], { vendor_id: legacyVendorId, scope: 'goods', amount_limit: '25000', status: 'approved', legacy_disposition_id: legacyDispositionId }, 'approved legacy Legal temporary clearance is deterministically backfilled once');
   } finally { await db.close(); }
 });
 
