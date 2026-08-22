@@ -2220,7 +2220,34 @@ test("PGlite parse smoke loads the migration without a live database", async () 
         request_id uuid references procurement.requests(id),
         core_vendor_id uuid references core.vendors(id),
         status text not null default 'draft',
+        issued_at timestamptz,
+        actor_id uuid references core.profiles(id),
         updated_at timestamptz default now()
+      );
+      create table procurement.acceptance_packs (
+        id uuid primary key default gen_random_uuid(),
+        purchase_order_id text references procurement.purchase_orders(id),
+        status text not null default 'draft',
+        exceptions jsonb not null default '[]'::jsonb
+      );
+      create table procurement.payment_readiness_packs (
+        id uuid primary key default gen_random_uuid(),
+        purchase_order_id text references procurement.purchase_orders(id),
+        status text not null default 'draft',
+        invoice_amount numeric not null default 0,
+        released_amount numeric not null default 0,
+        accepted_amount numeric not null default 0,
+        purchase_order_amount numeric not null default 0
+      );
+      create table procurement.payment_releases (
+        id uuid primary key default gen_random_uuid(),
+        payment_readiness_pack_id uuid references procurement.payment_readiness_packs(id),
+        purchase_order_id text references procurement.purchase_orders(id),
+        amount numeric not null,
+        payment_reference text unique,
+        payment_method text,
+        paid_at date,
+        status text not null default 'posted'
       );
       create table procurement.v_purchase_order_receipt_status_fixture (
         purchase_order_id text primary key,

@@ -28,9 +28,19 @@
 - Added a Task-9-only Playwright configuration with dynamically allocated app/auth ports, runtime CSP propagation, deterministic inspectable HTML/JUnit artifacts under `apps/shell/artifacts`, failure screenshots/traces, and a Node 22 runner that streams child output and returns the Playwright exit code.
 - Captured passing desktop and mobile vendor-acknowledgement and Procurement delivery/quality-recovery screenshots in `docs/qa/evidence/`.
 
+## Fix Round 3 Delivered
+
+- The non-live payment fallback now records a fully released payment pack without changing an issued PO to `closed`. The PO remains on the modeled governed closure path, which requires the server-side revision-bound request, independent approver, immutable terminal event, and replay checks. A focused `applyLocalPaymentRelease` regression test covers the full-payment case.
+- The Task 9 browser runner canonicalizes child `PATH` by prepending `dirname(process.execPath)` while preserving the inherited value. It fails immediately unless its direct runtime is Node 22; the controlled Next build and server also fail when `MWELL_CONTROLLED_RPC_TEST=1` under any non-Node-22 runtime.
+- Reviewed the reviewer-regenerated `docs/qa/evidence/task-9-quality-recovery-mobile-390.png`. It is current passing controlled-RPC evidence for the mobile Procurement quality-recovery/payment-hold handoff and is retained with this change.
+
+## Migration Status Ruling
+
+Remote shared-target migration status is deliberately deferred to Task 12. This workspace is intentionally unlinked, and Task 9 forbids applying the migration; no remote migration status is asserted here. The migration remains unapplied in this local worktree and no shared target was changed. Before Task 12 proceeds, it must obtain a read-only linked migration-status artifact for the intended target and stop the UAT path if this migration is unexpectedly applied or the chain has drifted.
+
 ## Verification
 
-- `& 'C:\Users\NormanArisDeocareza\.cache\node-runtimes\node-v22.17.0-win-x64\node.exe' 'C:\Users\NormanArisDeocareza\.cache\node-runtimes\node-v22.17.0-win-x64\node_modules\corepack\dist\pnpm.js' --filter @intra/procurement test`: passed, 26 files / 178 tests.
+- `& 'C:\Users\NormanArisDeocareza\.cache\node-runtimes\node-v22.17.0-win-x64\node.exe' 'C:\Users\NormanArisDeocareza\.cache\node-runtimes\node-v22.17.0-win-x64\node_modules\corepack\dist\pnpm.js' --filter @intra/procurement test`: passed, 26 files / 179 tests.
 - `& 'C:\Users\NormanArisDeocareza\.cache\node-runtimes\node-v22.17.0-win-x64\node.exe' 'C:\Users\NormanArisDeocareza\.cache\node-runtimes\node-v22.17.0-win-x64\node_modules\corepack\dist\pnpm.js' --filter @intra/procurement typecheck`: passed.
 - `& 'C:\Users\NormanArisDeocareza\.cache\node-runtimes\node-v22.17.0-win-x64\node.exe' 'C:\Users\NormanArisDeocareza\.cache\node-runtimes\node-v22.17.0-win-x64\node_modules\corepack\dist\pnpm.js' --filter @intra/shell typecheck`: passed.
 - `& 'C:\Users\NormanArisDeocareza\.cache\node-runtimes\node-v22.17.0-win-x64\node.exe' scripts/verify-mpic-procurement-policy-alignment.mjs`: passed (`MPIC procurement policy alignment migration contract verified.`).
@@ -38,8 +48,16 @@
 - `& 'C:\Users\NormanArisDeocareza\.cache\node-runtimes\node-v22.17.0-win-x64\node.exe' scripts/run-task-9-browser.mjs` from `apps/shell`: passed desktop and mobile. The latest run allocated app `62031` and auth `62030`; both web servers were pinned to the same Node 22 runtime. `apps/shell/artifacts/task-9-junit.xml` records 2 tests, 0 failures. HTML is at `apps/shell/artifacts/task-9-html/index.html`.
 - `git diff --check`: passed.
 
+### Fix Round 3 Verification
+
+- `& 'C:\Users\NormanArisDeocareza\.cache\node-runtimes\node-v22.17.0-win-x64\node.exe' 'C:\Users\NormanArisDeocareza\.cache\node-runtimes\node-v22.17.0-win-x64\node_modules\corepack\dist\pnpm.js' --filter @intra/procurement test -- localStore.test.ts`: passed, 26 files / 179 tests, including the full-payment local-closure regression.
+- `& 'C:\Users\NormanArisDeocareza\.cache\node-runtimes\node-v22.17.0-win-x64\node.exe' scripts/run-task-9-browser.mjs` from `apps/shell`: passed. The runner logged `node=v22.17.0` and allocated app `57027`, auth `57026`; the controlled Next build/start assertion ran under the same Node 22 path. JUnit records 2 tests, 0 failures; no Node20 runtime warning was emitted. HTML/JUnit remain at `apps/shell/artifacts/task-9-html/index.html` and `apps/shell/artifacts/task-9-junit.xml`.
+- `$env:PATH = 'C:\Users\NormanArisDeocareza\.cache\node-runtimes\node-v22.17.0-win-x64;' + $env:PATH; & 'C:\Users\NormanArisDeocareza\.cache\node-runtimes\node-v22.17.0-win-x64\node.exe' 'C:\Users\NormanArisDeocareza\.cache\node-runtimes\node-v22.17.0-win-x64\node_modules\corepack\dist\pnpm.js' exec node --test scripts/verify-mpic-procurement-policy-alignment.test.mjs`: passed, 19 tests. The explicit child `PATH` guard ensures Corepack's `node` executable resolves to Node 22 rather than the system installation.
+- `& 'C:\Users\NormanArisDeocareza\.cache\node-runtimes\node-v22.17.0-win-x64\node.exe' 'C:\Users\NormanArisDeocareza\.cache\node-runtimes\node-v22.17.0-win-x64\node_modules\corepack\dist\pnpm.js' --filter @intra/procurement typecheck` and `--filter @intra/shell typecheck`: passed.
+- `& 'C:\Users\NormanArisDeocareza\.cache\node-runtimes\node-v22.17.0-win-x64\node.exe' scripts/verify-mpic-procurement-policy-alignment.mjs`: passed (`MPIC procurement policy alignment migration contract verified.`).
+
 ## Limits And Blockers
 
 - No Supabase migration, deployment, UAT, or production mutation was performed.
-- The migration was not applied and no shared Supabase target was changed.
+- No local persistent or shared Supabase target was changed. Remote status was intentionally not queried from this unlinked workspace; the Task 12 read-only linked-status stop gate is recorded above.
 - Playwright HTML/JUnit files are deterministic, inspectable run artifacts rather than committed source. The passing screenshots and this report are committed evidence.

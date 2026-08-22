@@ -94,6 +94,32 @@ function isLive(client: LiveClient | null): client is LiveClient {
   return Boolean(client);
 }
 
+/**
+ * Local preview data can reflect Finance's payment record, but it cannot
+ * emulate the independent, revision-bound terminal closure decision.
+ */
+export function applyLocalPaymentRelease(
+  purchaseOrder: PurchaseOrder,
+  amount: number,
+): Pick<PurchaseOrder, 'status' | 'paymentReadiness'> {
+  if (!purchaseOrder.paymentReadiness) {
+    throw new Error('A payment readiness pack is required before recording a local payment release.');
+  }
+
+  const releasedAmount = (purchaseOrder.paymentReadiness.releasedAmount ?? 0) + amount;
+  const fullyReleased = releasedAmount >= (purchaseOrder.paymentReadiness.invoiceAmount ?? 0);
+
+  return {
+    // A governed server closure request and independent approval remain required.
+    status: purchaseOrder.status,
+    paymentReadiness: {
+      ...purchaseOrder.paymentReadiness,
+      releasedAmount,
+      status: fullyReleased ? 'released' : 'accepted',
+    },
+  };
+}
+
 async function liveRpc<T>(
   client: LiveClient,
   schema: 'procurement',
@@ -1789,16 +1815,7 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
           paid_at: input.paidAt,
         }).then(() => refreshLive().then(() => current));
       }
-      const releasedAmount = (current.paymentReadiness.releasedAmount ?? 0) + input.amount;
-      const complete = releasedAmount >= (current.paymentReadiness.invoiceAmount ?? 0);
-      return patch(id, {
-        status: complete ? 'closed' : current.status,
-        paymentReadiness: {
-          ...current.paymentReadiness,
-          releasedAmount,
-          status: complete ? 'released' : 'accepted',
-        },
-      });
+      return patch(id, applyLocalPaymentRelease(current, input.amount));
     },
     [live, patch, refreshLive, rows],
   );

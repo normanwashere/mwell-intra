@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { mapProcurementRequest } from './localStore';
+import { applyLocalPaymentRelease, mapProcurementRequest } from './localStore';
+import type { PurchaseOrder } from './types';
 
 describe('mapProcurementRequest', () => {
   it('maps governed route axes while retaining the legacy projection for old consumers', () => {
@@ -40,5 +41,36 @@ describe('mapProcurementRequest', () => {
 
     expect(request.route).toBeUndefined();
     expect(request.sourcingMethod).toBe('small_purchase');
+  });
+});
+
+describe('applyLocalPaymentRelease', () => {
+  it('keeps a fully paid issued PO out of the terminal state until the governed independent closure path runs', () => {
+    const issued = {
+      id: 'po-local-payment-001',
+      status: 'issued',
+      lifecycle: {
+        revision: 9,
+        acknowledgementStatus: 'acknowledged',
+        deliveryNoticeStatus: 'recorded',
+        qualityRecoveryStatus: 'none',
+        closureStatus: 'ready',
+      },
+      paymentReadiness: {
+        id: 'payment-local-001',
+        purchaseOrderId: 'po-local-payment-001',
+        acceptancePackId: 'acceptance-local-001',
+        invoiceAmount: 1_000,
+        releasedAmount: 500,
+        status: 'accepted',
+        preparedAt: '2026-08-23T00:00:00.000Z',
+      },
+    } as PurchaseOrder;
+
+    const updated = { ...issued, ...applyLocalPaymentRelease(issued, 500) };
+
+    expect(updated.paymentReadiness).toMatchObject({ releasedAmount: 1_000, status: 'released' });
+    expect(updated.status).toBe('issued');
+    expect(updated.lifecycle?.closureStatus).toBe('ready');
   });
 });

@@ -5,6 +5,9 @@ import { withSerwist } from '@serwist/turbopack';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const warehouseSrc = path.join(__dirname, '../../modules/warehouse/src');
 const isDev = process.env.NODE_ENV !== 'production';
+if (process.env.MWELL_CONTROLLED_RPC_TEST === '1' && !process.version.startsWith('v22.')) {
+  throw new Error(`Task 9 controlled web/build requires Node 22; received ${process.version} at ${process.execPath}.`);
+}
 const controlledRpcTestOrigin = process.env.MWELL_CONTROLLED_RPC_TEST === '1'
   ? ` http://127.0.0.1:${process.env.CONTROLLED_SUPABASE_PORT ?? '54321'}`
   : '';
