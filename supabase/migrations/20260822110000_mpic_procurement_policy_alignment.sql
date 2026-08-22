@@ -1064,7 +1064,7 @@ declare v_exception_type text;
 begin
   select exception_pack.exception_type into v_exception_type
   from procurement.exception_packs exception_pack
-  where exception_pack.request_id = p_request_id and exception_pack.status = 'approved'
+    where exception_pack.request_id::text = p_request_id and exception_pack.status = 'approved'
   order by exception_pack.id
   limit 1;
   return private.policy_route_exception_contract(
@@ -1095,7 +1095,7 @@ declare
   v_risk jsonb;
   v_risk_reasons text[];
 begin
-  select * into v_request from procurement.requests where id = request_id for update;
+  select * into v_request from procurement.requests where id::text = request_id for update;
   if not found then raise exception 'Request not found'; end if;
   if v_request.estimated_amount is null or v_request.estimated_amount < 0 then
     v_blockers := array_append(v_blockers, 'estimated_amount_required');
@@ -1134,7 +1134,7 @@ begin
   else
     v_tier := 'standard';
   end if;
-  v_blockers := private.policy_route_exception_is_eligible(v_request.id, v_mode, v_profile, v_request.estimated_amount);
+  v_blockers := private.policy_route_exception_is_eligible(v_request.id::text, v_mode, v_profile, v_request.estimated_amount);
   if cardinality(v_blockers) > 0 then
     return jsonb_build_object('status', 'blocked', 'blockers', to_jsonb(v_blockers));
   end if;
@@ -1171,7 +1171,7 @@ begin
   if jsonb_typeof(payload) <> 'object' or nullif(pg_catalog.btrim(payload->>'request_id'), '') is null then
     raise exception 'A request identity is required';
   end if;
-  select * into v_request from procurement.requests where id = payload->>'request_id' for update;
+  select * into v_request from procurement.requests where id::text = payload->>'request_id' for update;
   if not found then raise exception 'Request not found'; end if;
   perform 1 from procurement.route_decisions
   where request_id = v_request.id
@@ -1182,7 +1182,7 @@ begin
   v_expected_version := (v_confirmation->>'expected_route_version')::integer;
   v_requested_mode := nullif(pg_catalog.btrim(v_confirmation->>'requested_mode'), '');
   -- Client-provided solicitation, tier, profile, and reasons are intentionally ignored.
-  v_route := private.policy_derive_procurement_route(v_request.id, v_requested_mode);
+  v_route := private.policy_derive_procurement_route(v_request.id::text, v_requested_mode);
   if v_route->>'status' <> 'derived' then
     raise exception 'Route cannot be confirmed: %', coalesce(v_route->'blockers', '[]'::jsonb);
   end if;
