@@ -40,3 +40,29 @@ test("embeds local presentation assets without external requests", () => {
   assert.doesNotMatch(html, /<script\s+src=/i);
   assert.doesNotMatch(html, /<link\s+[^>]*rel=["']stylesheet/i);
 });
+
+test("renders seven accessible tabs and every source once", () => {
+  const html = buildDocumentationHtml();
+  assert.equal((html.match(/role="tab"/g) ?? []).length, 7);
+  assert.equal((html.match(/role="tabpanel"/g) ?? []).length, 7);
+  for (const id of ["start", "workflows", "roles", "architecture", "infrastructure", "security", "release"]) {
+    assert.match(html, new RegExp(`id="tab-${id}"`));
+    assert.match(html, new RegExp(`id="panel-${id}"`));
+  }
+  assert.equal((html.match(/<article[^>]+data-document/g) ?? []).length, documentationSources().length);
+});
+
+test("renders primary article navigation and in-place route support", () => {
+  const html = buildDocumentationHtml();
+  assert.match(html, /data-article-link/);
+  assert.match(html, /data-page-toc/);
+  assert.match(html, /data-related-link/);
+  assert.match(html, /data-previous-link/);
+  assert.match(html, /data-next-link/);
+  assert.match(html, /data-previous-link[^>]+data-title=/);
+  assert.match(html, /data-next-link[^>]+data-content-type=/);
+  assert.match(html, /function activateRoute\(\{ tabId, articleId, headingId, historyMode, restoreScroll \}\)/);
+  assert.match(html, /history\.pushState/);
+  assert.match(html, /history\.replaceState/);
+  assert.doesNotMatch(html, /location\.(?:href|reload)/);
+});
