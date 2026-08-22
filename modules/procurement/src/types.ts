@@ -158,6 +158,91 @@ export interface SourcingCommunicationEvidence {
   notificationGroupId?: string;
 }
 
+/** A complete best-value review is deliberately broader than price. */
+export type EvaluationCriterionKey =
+  | 'technicalCompliance'
+  | 'quality'
+  | 'leadTime'
+  | 'totalLifecycleCost'
+  | 'warranty'
+  | 'support'
+  | 'price'
+  | 'paymentTerms'
+  | 'training';
+
+export interface EvaluationCriterionScore {
+  criterion: EvaluationCriterionKey;
+  score: number;
+  evidenceReference: string;
+  comments: string;
+}
+
+export interface CommercialTabulation {
+  id: string;
+  sourcingEventId: string;
+  version: number;
+  responseClosedAt: string;
+  dueAt: string;
+  submittedAt?: string;
+  submittedByEmail?: string;
+  entries: Array<{
+    vendorId: string;
+    quotedAmount?: number;
+    totalLifecycleCost?: number;
+    leadTime?: string;
+    paymentTerms?: string;
+    evidenceReference: string;
+    comments?: string;
+  }>;
+  evidenceReference: string;
+  comments?: string;
+  status: 'draft' | 'submitted' | 'superseded';
+  escalationStatus: 'on_track' | 'overdue' | 'escalated';
+}
+
+export interface TechnicalEvaluation {
+  id: string;
+  sourcingEventId: string;
+  vendorId: string;
+  version: number;
+  dueAt: string;
+  submittedAt?: string;
+  reviewerEmail?: string;
+  criteria: EvaluationCriterionScore[];
+  totalScore: number;
+  evidenceReference: string;
+  comments?: string;
+  status: 'draft' | 'submitted' | 'superseded';
+  escalationStatus: 'on_track' | 'overdue' | 'escalated';
+}
+
+export interface AwardRecommendation {
+  id: string;
+  sourcingEventId: string;
+  evaluatedVendorId: string;
+  recommendedVendorId: string;
+  rationale: string;
+  commercialTabulationId: string;
+  technicalEvaluationId: string;
+  riskEvidenceReference?: string;
+  varianceJustification?: string;
+  status: 'draft' | 'pending_variance' | 'approved' | 'rejected' | 'superseded';
+  version: number;
+  createdByEmail?: string;
+  createdAt: string;
+}
+
+export interface RecommendationVarianceDecision {
+  id: string;
+  awardRecommendationId: string;
+  decisionType: 'department_head' | 'finance';
+  decision: 'approved' | 'rejected';
+  rationale: string;
+  decidedByEmail?: string;
+  decidedAt: string;
+  doaMatrixVersion?: string;
+}
+
 /**
  * @deprecated Read-only compatibility projection for records created before
  * the three-axis route backfill. New writes use ProcurementRoute instead.

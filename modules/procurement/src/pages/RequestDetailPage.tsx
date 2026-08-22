@@ -122,7 +122,7 @@ export function RequestDetailPage() {
   const { success, error } = useToast();
   const { profile, mode, supabaseClient } = useSession();
   const canConfirmRoute = useCan('procurement', 'manage_rfp');
-  const canApproveSourcingException = useCan('procurement', 'approve_award');
+  const canReviewBestValue = useCan('procurement', 'approve_award');
   const [requestedMode, setRequestedMode] = useState<ProcurementMode>('competitive_bidding');
   const [returnedRoute, setReturnedRoute] = useState<ProcurementRoute | null>(null);
   const [routeProfile, setRouteProfile] = useState<ProcurementPolicyProfile | null>(null);
@@ -537,14 +537,14 @@ export function RequestDetailPage() {
           <div>
             <SectionTitle
               title="Competitive sourcing"
-              subtitle="The sourcing record must be complete before the request enters approval."
+              subtitle="Close the response window, document commercial and technical evidence, then record an explicit best-value recommendation before award."
             />
             <Card>
               <SourcingWorkspace
                 requestId={req.id}
                 method={req.route.solicitationType === 'rfp' ? 'rfp' : 'rfq'}
                 canManage={canConfirmRoute}
-                canApprove={canApproveSourcingException}
+                canApprove={canReviewBestValue}
                 client={mode === 'supabase' ? supabaseClient : null}
                 vendors={vendors}
                 onChanged={refresh}

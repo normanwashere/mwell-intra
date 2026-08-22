@@ -1960,3 +1960,371 @@ revoke insert, update, delete on procurement.sourcing_events,
 from authenticated, service_role;
 
 grant execute on function procurement.save_sourcing_event(jsonb), procurement.invite_sourcing_vendors(jsonb), procurement.acknowledge_sourcing_invitation(jsonb), procurement.record_sourcing_response(jsonb), procurement.record_solicitation_communication(jsonb), procurement.transition_sourcing_event(jsonb), procurement.sourcing_workspace(jsonb), procurement.submit_insufficient_bid_exception(jsonb), procurement.review_insufficient_bid_exception(jsonb), procurement.insufficient_bid_exception(jsonb) to authenticated, service_role;
+
+-- Task 7: tabulation and best-value controls are versioned evidence, not an
+-- automatic selection or final award. All dates are persisted in UTC while working
+-- day decisions use Asia/Manila and the configured holiday calendar.
+create table if not exists procurement.policy_holidays (
+  holiday_date date primary key,
+  label text not null,
+  active boolean not null default true,
+  created_by uuid references core.profiles(id) on delete restrict,
+  created_at timestamptz not null default pg_catalog.now()
+);
+
+alter table procurement.sourcing_events
+  add column if not exists response_closed_at timestamptz;
+
+create table if not exists procurement.commercial_tabulations (
+  id uuid primary key default gen_random_uuid(),
+  sourcing_event_id uuid not null references procurement.sourcing_events(id) on delete restrict,
+  version integer not null,
+  response_closed_at timestamptz not null,
+  due_at timestamptz not null,
+  submitted_at timestamptz not null default pg_catalog.now(),
+  submitted_by uuid not null references core.profiles(id) on delete restrict,
+  entries jsonb not null,
+  evidence_reference text not null,
+  comments text,
+  status text not null default 'submitted',
+  escalation_status text not null default 'on_track',
+  constraint commercial_tabulations_version_check check (version > 0),
+  constraint commercial_tabulations_entries_check check (jsonb_typeof(entries) = 'array' and jsonb_array_length(entries) > 0),
+  constraint commercial_tabulations_evidence_check check (nullif(pg_catalog.btrim(evidence_reference), '') is not null),
+  constraint commercial_tabulations_status_check check (status in ('draft', 'submitted', 'superseded')),
+  constraint commercial_tabulations_escalation_check check (escalation_status in ('on_track', 'overdue', 'escalated')),
+  unique (sourcing_event_id, version)
+);
+
+create table if not exists procurement.technical_evaluations (
+  id uuid primary key default gen_random_uuid(),
+  sourcing_event_id uuid not null references procurement.sourcing_events(id) on delete restrict,
+  vendor_id uuid not null references core.vendors(id) on delete restrict,
+  version integer not null,
+  due_at timestamptz not null,
+  submitted_at timestamptz not null default pg_catalog.now(),
+  reviewer_id uuid not null references core.profiles(id) on delete restrict,
+  criteria jsonb not null,
+  total_score numeric(8, 2) not null,
+  evidence_reference text not null,
+  comments text,
+  status text not null default 'submitted',
+  escalation_status text not null default 'on_track',
+  constraint technical_evaluations_version_check check (version > 0),
+  constraint technical_evaluations_criteria_check check (jsonb_typeof(criteria) = 'array' and jsonb_array_length(criteria) = 9),
+  constraint technical_evaluations_score_check check (total_score >= 0 and total_score <= 100),
+  constraint technical_evaluations_evidence_check check (nullif(pg_catalog.btrim(evidence_reference), '') is not null),
+  constraint technical_evaluations_status_check check (status in ('draft', 'submitted', 'superseded')),
+  constraint technical_evaluations_escalation_check check (escalation_status in ('on_track', 'overdue', 'escalated')),
+  unique (sourcing_event_id, vendor_id, version)
+);
+
+create table if not exists procurement.award_recommendations (
+  id uuid primary key default gen_random_uuid(),
+  sourcing_event_id uuid not null references procurement.sourcing_events(id) on delete restrict,
+  evaluated_vendor_id uuid not null references core.vendors(id) on delete restrict,
+  recommended_vendor_id uuid not null references core.vendors(id) on delete restrict,
+  commercial_tabulation_id uuid not null references procurement.commercial_tabulations(id) on delete restrict,
+  technical_evaluation_id uuid not null references procurement.technical_evaluations(id) on delete restrict,
+  rationale text not null,
+  risk_evidence_reference text,
+  variance_justification text,
+  status text not null,
+  revision integer not null default 1,
+  created_by uuid not null references core.profiles(id) on delete restrict,
+  created_at timestamptz not null default pg_catalog.now(),
+  updated_at timestamptz not null default pg_catalog.now(),
+  constraint award_recommendations_rationale_check check (nullif(pg_catalog.btrim(rationale), '') is not null),
+  constraint award_recommendations_variance_check check (
+    evaluated_vendor_id = recommended_vendor_id
+    or nullif(pg_catalog.btrim(variance_justification), '') is not null
+  ),
+  constraint award_recommendations_status_check check (status in ('draft', 'pending_variance', 'approved', 'rejected', 'superseded')),
+  constraint award_recommendations_revision_check check (revision > 0)
+);
+
+create table if not exists procurement.award_recommendation_variance_decisions (
+  id uuid primary key default gen_random_uuid(),
+  award_recommendation_id uuid not null references procurement.award_recommendations(id) on delete restrict,
+  decision_type text not null,
+  decision text not null,
+  rationale text not null,
+  doa_matrix_id uuid references procurement.doa_matrices(id) on delete restrict,
+  doa_assignment_id uuid references procurement.doa_assignments(id) on delete restrict,
+  decided_by uuid not null references core.profiles(id) on delete restrict,
+  decided_at timestamptz not null default pg_catalog.now(),
+  constraint award_recommendation_variance_type_check check (decision_type in ('department_head', 'finance')),
+  constraint award_recommendation_variance_decision_check check (decision in ('approved', 'rejected')),
+  constraint award_recommendation_variance_rationale_check check (nullif(pg_catalog.btrim(rationale), '') is not null),
+  unique (award_recommendation_id, decision_type)
+);
+
+create index if not exists commercial_tabulations_event_status_idx
+  on procurement.commercial_tabulations(sourcing_event_id, status, version desc);
+create index if not exists technical_evaluations_event_vendor_idx
+  on procurement.technical_evaluations(sourcing_event_id, vendor_id, status, version desc);
+create index if not exists award_recommendations_event_status_idx
+  on procurement.award_recommendations(sourcing_event_id, status, revision desc);
+
+create or replace function private.policy_add_manila_working_days(p_from timestamptz, p_days integer)
+returns timestamptz language plpgsql stable security definer set search_path = '' as $$
+declare v_date date := (p_from at time zone 'Asia/Manila')::date;
+  v_time time := (p_from at time zone 'Asia/Manila')::time;
+  v_remaining integer := p_days;
+begin
+  if p_days < 0 then raise exception 'Working days cannot be negative'; end if;
+  while v_remaining > 0 loop
+    v_date := v_date + 1;
+    if extract(isodow from v_date) < 6 and not exists (
+      select 1 from procurement.policy_holidays holiday
+      where holiday.holiday_date = v_date and holiday.active
+    ) then v_remaining := v_remaining - 1; end if;
+  end loop;
+  return ((v_date::timestamp + v_time) at time zone 'Asia/Manila');
+end;
+$$;
+
+create or replace function private.policy_sourcing_response_closed_stamp()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  if new.status = 'response_closed' and old.status is distinct from 'response_closed' then
+    new.response_closed_at := coalesce(new.response_closed_at, statement_timestamp());
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists policy_sourcing_response_closed_stamp on procurement.sourcing_events;
+create trigger policy_sourcing_response_closed_stamp
+before update on procurement.sourcing_events
+for each row execute function private.policy_sourcing_response_closed_stamp();
+
+create or replace function private.policy_evaluation_event(p_sourcing_event_id uuid)
+returns procurement.sourcing_events language plpgsql security definer set search_path = '' as $$
+declare v_event procurement.sourcing_events;
+begin
+  select * into v_event from procurement.sourcing_events where id = p_sourcing_event_id for update;
+  if not found or v_event.status <> 'evaluation' then raise exception 'Controlled evaluation must be open'; end if;
+  if v_event.response_closed_at is null then raise exception 'Response closure evidence is required before evaluation'; end if;
+  return v_event;
+end;
+$$;
+
+create or replace function private.policy_variance_doa_assignment(
+  p_request procurement.requests,
+  p_tier text
+)
+returns procurement.doa_assignments language plpgsql stable security definer set search_path = '' as $$
+declare v_assignment procurement.doa_assignments;
+begin
+  select assignment.* into v_assignment
+  from procurement.doa_assignments assignment
+  join procurement.doa_matrices matrix on matrix.id = assignment.matrix_id
+  join core.profiles approver on approver.id = assignment.approver_user_id
+  where matrix.active and matrix.status = 'active'
+    and matrix.effective_at <= statement_timestamp()
+    and (matrix.expires_at is null or matrix.expires_at > statement_timestamp())
+    and assignment.active and assignment.approver_user_id = auth.uid()
+    and assignment.tier = p_tier
+    and lower(assignment.department) = lower(p_request.department)
+    and (assignment.category is null or assignment.category = p_request.category)
+    and coalesce(p_request.estimated_amount, 0) >= assignment.min_amount
+    and (assignment.max_amount is null or coalesce(p_request.estimated_amount, 0) <= assignment.max_amount)
+    and approver.status = 'active'
+  order by matrix.effective_at desc, assignment.min_amount desc limit 1;
+  if not found then raise exception 'An active Department DOA assignment is required for this variance decision'; end if;
+  return v_assignment;
+end;
+$$;
+
+create or replace function private.policy_evaluation_criteria_are_valid(p_criteria jsonb)
+returns boolean language sql immutable security definer set search_path = '' as $$
+  select jsonb_typeof(p_criteria) = 'array'
+    and jsonb_array_length(p_criteria) = 9
+    and (select count(distinct item->>'criterion') from jsonb_array_elements(p_criteria) item) = 9
+    and (select bool_and(
+      item->>'criterion' in ('technicalCompliance', 'quality', 'leadTime', 'totalLifecycleCost', 'warranty', 'support', 'price', 'paymentTerms', 'training')
+      and coalesce((item->>'score')::numeric, -1) between 0 and 100
+      and nullif(btrim(item->>'evidence_reference'), '') is not null
+    ) from jsonb_array_elements(p_criteria) item)
+$$;
+
+create or replace function procurement.save_commercial_tabulation(payload jsonb)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_event procurement.sourcing_events; v_profile procurement.policy_profiles; v_version integer; v_due timestamptz;
+  v_entries jsonb := coalesce(payload->'entries', '[]'::jsonb); v_tabulation procurement.commercial_tabulations;
+begin
+  if not private.policy_sourcing_can_manage() then raise exception 'Not authorized to save commercial tabulation'; end if;
+  v_event := private.policy_evaluation_event((payload->>'sourcing_event_id')::uuid);
+  v_profile := private.policy_sourcing_profile(v_event.request_id::text);
+  if jsonb_typeof(v_entries) <> 'array' or jsonb_array_length(v_entries) = 0 then raise exception 'Commercial tabulation entries are required'; end if;
+  if nullif(btrim(payload->>'evidence_reference'), '') is null then raise exception 'Commercial tabulation evidence is required'; end if;
+  if exists (
+    select 1 from procurement.sourcing_responses response
+    where response.sourcing_event_id = v_event.id and response.received_at is not null and response.deadline_compliant is distinct from false
+      and not exists (select 1 from jsonb_array_elements(v_entries) item where item->>'vendor_id' = response.vendor_id::text)
+  ) then raise exception 'The tabulation must include every usable response'; end if;
+  -- The event row is already locked by policy_evaluation_event, serializing
+  -- versions without attempting an illegal aggregate FOR UPDATE.
+  select coalesce(max(version), 0) + 1 into v_version from procurement.commercial_tabulations where sourcing_event_id = v_event.id;
+  v_due := v_event.response_closed_at + make_interval(hours => v_profile.tabulation_hours);
+  update procurement.commercial_tabulations set status = 'superseded' where sourcing_event_id = v_event.id and status = 'submitted';
+  insert into procurement.commercial_tabulations(sourcing_event_id, version, response_closed_at, due_at, submitted_by, entries, evidence_reference, comments, escalation_status)
+  values(v_event.id, v_version, v_event.response_closed_at, v_due, auth.uid(), v_entries, btrim(payload->>'evidence_reference'), nullif(btrim(payload->>'comments'), ''), case when statement_timestamp() > v_due then 'overdue' else 'on_track' end)
+  returning * into v_tabulation;
+  insert into procurement.policy_sla_events(request_id, policy_profile_id, sla_type, owner_id, due_at, completed_at, status, detail)
+  values(v_event.request_id, v_profile.id, 'commercial_tabulation', auth.uid(), v_due, v_tabulation.submitted_at, case when v_tabulation.escalation_status = 'on_track' then 'completed' else 'overdue' end, jsonb_build_object('commercialTabulationId', v_tabulation.id, 'version', v_version));
+  return to_jsonb(v_tabulation);
+end;
+$$;
+
+create or replace function procurement.submit_technical_evaluation(payload jsonb)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_event procurement.sourcing_events; v_profile procurement.policy_profiles; v_due timestamptz; v_version integer;
+  v_criteria jsonb := coalesce(payload->'criteria', '[]'::jsonb); v_evaluation procurement.technical_evaluations;
+begin
+  if not private.policy_sourcing_can_manage() then raise exception 'Not authorized to submit technical evaluation'; end if;
+  v_event := private.policy_evaluation_event((payload->>'sourcing_event_id')::uuid);
+  v_profile := private.policy_sourcing_profile(v_event.request_id::text);
+  if not exists(select 1 from procurement.commercial_tabulations tabulation where tabulation.sourcing_event_id = v_event.id and tabulation.status = 'submitted') then raise exception 'A submitted commercial tabulation is required'; end if;
+  if not exists(select 1 from procurement.sourcing_responses response where response.sourcing_event_id = v_event.id and response.vendor_id = (payload->>'vendor_id')::uuid and response.received_at is not null and response.deadline_compliant is distinct from false) then raise exception 'Technical evaluation requires a compliant received response'; end if;
+  if not private.policy_evaluation_criteria_are_valid(v_criteria) then raise exception 'Every best-value criterion needs a score and evidence reference'; end if;
+  if nullif(btrim(payload->>'evidence_reference'), '') is null then raise exception 'Technical evaluation evidence is required'; end if;
+  select coalesce(max(version), 0) + 1 into v_version from procurement.technical_evaluations where sourcing_event_id = v_event.id and vendor_id = (payload->>'vendor_id')::uuid;
+  v_due := private.policy_add_manila_working_days(v_event.response_closed_at, v_profile.technical_evaluation_working_days);
+  update procurement.technical_evaluations set status = 'superseded' where sourcing_event_id = v_event.id and vendor_id = (payload->>'vendor_id')::uuid and status = 'submitted';
+  insert into procurement.technical_evaluations(sourcing_event_id, vendor_id, version, due_at, reviewer_id, criteria, total_score, evidence_reference, comments, escalation_status)
+  values(v_event.id, (payload->>'vendor_id')::uuid, v_version, v_due, auth.uid(), v_criteria, (select avg((item->>'score')::numeric) from jsonb_array_elements(v_criteria) item), btrim(payload->>'evidence_reference'), nullif(btrim(payload->>'comments'), ''), case when statement_timestamp() > v_due then 'overdue' else 'on_track' end)
+  returning * into v_evaluation;
+  insert into procurement.policy_sla_events(request_id, policy_profile_id, sla_type, owner_id, due_at, completed_at, status, detail)
+  values(v_event.request_id, v_profile.id, 'technical_evaluation', auth.uid(), v_due, v_evaluation.submitted_at, case when v_evaluation.escalation_status = 'on_track' then 'completed' else 'overdue' end, jsonb_build_object('technicalEvaluationId', v_evaluation.id, 'vendorId', v_evaluation.vendor_id, 'version', v_version));
+  return to_jsonb(v_evaluation);
+end;
+$$;
+
+create or replace function procurement.submit_award_recommendation(payload jsonb)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_event procurement.sourcing_events; v_request procurement.requests; v_tabulation procurement.commercial_tabulations;
+  v_technical procurement.technical_evaluations; v_evaluated uuid; v_recommendation procurement.award_recommendations;
+  v_risk_required boolean; v_status text;
+begin
+  if not private.policy_sourcing_can_manage() then raise exception 'Not authorized to submit award recommendation'; end if;
+  v_event := private.policy_evaluation_event((payload->>'sourcing_event_id')::uuid);
+  select * into v_request from procurement.requests where id = v_event.request_id for update;
+  select * into v_tabulation from procurement.commercial_tabulations where id = (payload->>'commercial_tabulation_id')::uuid and sourcing_event_id = v_event.id and status = 'submitted';
+  if not found then raise exception 'A current commercial tabulation is required'; end if;
+  select * into v_technical from procurement.technical_evaluations where id = (payload->>'technical_evaluation_id')::uuid and sourcing_event_id = v_event.id and vendor_id = (payload->>'recommended_vendor_id')::uuid and status = 'submitted';
+  if not found then raise exception 'A submitted technical evaluation for the recommended vendor is required'; end if;
+  select vendor_id into v_evaluated from procurement.technical_evaluations
+  where sourcing_event_id = v_event.id and status = 'submitted' order by total_score desc, submitted_at asc limit 1;
+  if v_evaluated is null or v_evaluated <> (payload->>'evaluated_vendor_id')::uuid then raise exception 'The evaluated vendor must be the top submitted technical evaluation'; end if;
+  if nullif(btrim(payload->>'rationale'), '') is null then raise exception 'Recommendation rationale is required'; end if;
+  v_risk_required := coalesce((v_request.compliance->'riskFacts'->>'complex')::boolean, false)
+    or coalesce((v_request.compliance->'riskFacts'->>'technical')::boolean, false)
+    or coalesce((v_request.compliance->'riskFacts'->>'strategic')::boolean, false)
+    or coalesce((v_request.compliance->'riskFacts'->>'highRisk')::boolean, false)
+    or coalesce((v_request.compliance->'riskFacts'->>'dataSensitive')::boolean, false)
+    or coalesce((v_request.compliance->'riskFacts'->>'importation')::boolean, false);
+  if v_risk_required and nullif(btrim(payload->>'risk_evidence_reference'), '') is null then raise exception 'Applicable risk evidence is required'; end if;
+  if v_evaluated <> (payload->>'recommended_vendor_id')::uuid and nullif(btrim(payload->>'variance_justification'), '') is null then raise exception 'Written variance justification is required'; end if;
+  v_status := case when v_evaluated = (payload->>'recommended_vendor_id')::uuid then 'approved' else 'pending_variance' end;
+  update procurement.award_recommendations set status = 'superseded', updated_at = statement_timestamp() where sourcing_event_id = v_event.id and status in ('draft', 'pending_variance', 'approved');
+  insert into procurement.award_recommendations(sourcing_event_id, evaluated_vendor_id, recommended_vendor_id, commercial_tabulation_id, technical_evaluation_id, rationale, risk_evidence_reference, variance_justification, status, created_by)
+  values(v_event.id, v_evaluated, (payload->>'recommended_vendor_id')::uuid, v_tabulation.id, v_technical.id, btrim(payload->>'rationale'), nullif(btrim(payload->>'risk_evidence_reference'), ''), nullif(btrim(payload->>'variance_justification'), ''), v_status, auth.uid()) returning * into v_recommendation;
+  return to_jsonb(v_recommendation);
+end;
+$$;
+
+create or replace function procurement.review_recommendation_variance(payload jsonb)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_recommendation procurement.award_recommendations; v_event procurement.sourcing_events; v_request procurement.requests;
+  v_assignment procurement.doa_assignments; v_decision_type text; v_decision text := payload->>'decision'; v_has_department boolean;
+begin
+  select * into v_recommendation from procurement.award_recommendations where id = (payload->>'award_recommendation_id')::uuid for update;
+  if not found or v_recommendation.status <> 'pending_variance' then raise exception 'A pending variance recommendation is required'; end if;
+  if coalesce((payload->>'expected_version')::integer, -1) <> v_recommendation.revision then raise exception 'The variance recommendation has changed; refresh before deciding'; end if;
+  if v_recommendation.created_by = auth.uid() then raise exception 'The recommendation author cannot approve their own variance'; end if;
+  if v_decision not in ('approved', 'rejected') or nullif(btrim(payload->>'note'), '') is null then raise exception 'A decision and written decision note are required'; end if;
+  select * into v_event from procurement.sourcing_events where id = v_recommendation.sourcing_event_id;
+  select * into v_request from procurement.requests where id = v_event.request_id;
+  select exists(select 1 from procurement.award_recommendation_variance_decisions where award_recommendation_id = v_recommendation.id and decision_type = 'department_head' and decision = 'approved') into v_has_department;
+  if not v_has_department then
+    v_decision_type := 'department_head';
+    v_assignment := private.policy_variance_doa_assignment(v_request, 'dept_head');
+  else
+    v_decision_type := 'finance';
+    if not (core.has_live_cap('procurement', 'view_finance') or core.has_live_cap('procurement', 'admin')) then raise exception 'Controller or Finance authority is required for variance approval'; end if;
+    v_assignment := private.policy_variance_doa_assignment(v_request, 'finance');
+  end if;
+  if exists(select 1 from procurement.award_recommendation_variance_decisions where award_recommendation_id = v_recommendation.id and decision_type = v_decision_type) then raise exception 'This variance decision was already recorded'; end if;
+  insert into procurement.award_recommendation_variance_decisions(award_recommendation_id, decision_type, decision, rationale, doa_matrix_id, doa_assignment_id, decided_by)
+  values(v_recommendation.id, v_decision_type, v_decision, btrim(payload->>'note'), v_assignment.matrix_id, v_assignment.id, auth.uid());
+  update procurement.award_recommendations set status = case when v_decision = 'rejected' then 'rejected' when v_decision_type = 'finance' then 'approved' else 'pending_variance' end,
+    revision = revision + 1, updated_at = statement_timestamp() where id = v_recommendation.id returning * into v_recommendation;
+  return to_jsonb(v_recommendation);
+end;
+$$;
+
+create or replace function private.policy_award_requires_recommendation()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  if new.status = 'awarded' and old.status is distinct from 'awarded' and not exists (
+    select 1 from procurement.award_recommendations recommendation
+    where recommendation.sourcing_event_id = new.id
+      and recommendation.status = 'approved'
+      and recommendation.recommended_vendor_id = new.selected_vendor_id
+  ) then raise exception 'An approved best-value recommendation is required before award'; end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists policy_award_requires_recommendation on procurement.sourcing_events;
+create trigger policy_award_requires_recommendation
+before update on procurement.sourcing_events
+for each row execute function private.policy_award_requires_recommendation();
+
+alter table procurement.policy_holidays enable row level security;
+alter table procurement.policy_holidays force row level security;
+alter table procurement.commercial_tabulations enable row level security;
+alter table procurement.commercial_tabulations force row level security;
+alter table procurement.technical_evaluations enable row level security;
+alter table procurement.technical_evaluations force row level security;
+alter table procurement.award_recommendations enable row level security;
+alter table procurement.award_recommendations force row level security;
+alter table procurement.award_recommendation_variance_decisions enable row level security;
+alter table procurement.award_recommendation_variance_decisions force row level security;
+
+create policy policy_holidays_read on procurement.policy_holidays for select to authenticated using (private.policy_profile_can_manage() or core.has_live_cap('procurement', 'view_dashboard'));
+create policy commercial_tabulations_read on procurement.commercial_tabulations for select to authenticated using (private.policy_sourcing_can_manage() or private.policy_sourcing_can_review() or core.has_live_cap('procurement', 'view_dashboard'));
+create policy technical_evaluations_read on procurement.technical_evaluations for select to authenticated using (private.policy_sourcing_can_manage() or private.policy_sourcing_can_review() or core.has_live_cap('procurement', 'view_dashboard'));
+create policy award_recommendations_read on procurement.award_recommendations for select to authenticated using (private.policy_sourcing_can_manage() or private.policy_sourcing_can_review() or core.has_live_cap('procurement', 'view_dashboard'));
+create policy award_recommendation_variance_decisions_read on procurement.award_recommendation_variance_decisions for select to authenticated using (private.policy_sourcing_can_manage() or private.policy_sourcing_can_review() or core.has_live_cap('procurement', 'view_finance'));
+
+revoke all on procurement.policy_holidays, procurement.commercial_tabulations, procurement.technical_evaluations, procurement.award_recommendations, procurement.award_recommendation_variance_decisions from public, anon, authenticated, service_role;
+grant select on procurement.policy_holidays, procurement.commercial_tabulations, procurement.technical_evaluations, procurement.award_recommendations, procurement.award_recommendation_variance_decisions to authenticated, service_role;
+revoke all on function private.policy_add_manila_working_days(timestamptz, integer), private.policy_sourcing_response_closed_stamp(), private.policy_evaluation_event(uuid), private.policy_variance_doa_assignment(procurement.requests, text), private.policy_evaluation_criteria_are_valid(jsonb), private.policy_award_requires_recommendation() from public, anon, authenticated;
+revoke all on function procurement.save_commercial_tabulation(jsonb), procurement.submit_technical_evaluation(jsonb), procurement.submit_award_recommendation(jsonb), procurement.review_recommendation_variance(jsonb) from public, anon;
+grant execute on function procurement.save_commercial_tabulation(jsonb), procurement.submit_technical_evaluation(jsonb), procurement.submit_award_recommendation(jsonb), procurement.review_recommendation_variance(jsonb) to authenticated, service_role;
+
+create or replace function procurement.evaluation_workspace(payload jsonb default '{}'::jsonb)
+returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare v_event procurement.sourcing_events; v_tabulations jsonb; v_evaluations jsonb; v_recommendation jsonb; v_variances jsonb;
+begin
+  perform procurement.sourcing_workspace(payload);
+  select * into v_event from procurement.sourcing_events event where event.request_id::text = payload->>'request_id' and event.status <> 'cancelled' order by event.created_at desc limit 1;
+  if not found then return jsonb_build_object('commercialTabulations', '[]'::jsonb, 'technicalEvaluations', '[]'::jsonb, 'awardRecommendation', null, 'varianceDecisions', '[]'::jsonb); end if;
+  select coalesce(jsonb_agg(jsonb_build_object('id', tabulation.id, 'sourcingEventId', tabulation.sourcing_event_id, 'version', tabulation.version, 'responseClosedAt', tabulation.response_closed_at, 'dueAt', tabulation.due_at, 'submittedAt', tabulation.submitted_at, 'entries', tabulation.entries, 'evidenceReference', tabulation.evidence_reference, 'comments', tabulation.comments, 'status', tabulation.status, 'escalationStatus', tabulation.escalation_status) order by tabulation.version desc), '[]'::jsonb) into v_tabulations
+  from procurement.commercial_tabulations tabulation where tabulation.sourcing_event_id = v_event.id;
+  select coalesce(jsonb_agg(jsonb_build_object('id', evaluation.id, 'sourcingEventId', evaluation.sourcing_event_id, 'vendorId', evaluation.vendor_id, 'version', evaluation.version, 'dueAt', evaluation.due_at, 'submittedAt', evaluation.submitted_at, 'criteria', evaluation.criteria, 'totalScore', evaluation.total_score, 'evidenceReference', evaluation.evidence_reference, 'comments', evaluation.comments, 'status', evaluation.status, 'escalationStatus', evaluation.escalation_status) order by evaluation.vendor_id, evaluation.version desc), '[]'::jsonb) into v_evaluations
+  from procurement.technical_evaluations evaluation where evaluation.sourcing_event_id = v_event.id;
+  select jsonb_build_object('id', recommendation.id, 'sourcingEventId', recommendation.sourcing_event_id, 'evaluatedVendorId', recommendation.evaluated_vendor_id, 'recommendedVendorId', recommendation.recommended_vendor_id, 'rationale', recommendation.rationale, 'commercialTabulationId', recommendation.commercial_tabulation_id, 'technicalEvaluationId', recommendation.technical_evaluation_id, 'riskEvidenceReference', recommendation.risk_evidence_reference, 'varianceJustification', recommendation.variance_justification, 'status', recommendation.status, 'version', recommendation.revision, 'createdAt', recommendation.created_at) into v_recommendation
+  from procurement.award_recommendations recommendation where recommendation.sourcing_event_id = v_event.id and recommendation.status <> 'superseded' order by recommendation.created_at desc limit 1;
+  select coalesce(jsonb_agg(jsonb_build_object('id', decision.id, 'awardRecommendationId', decision.award_recommendation_id, 'decisionType', decision.decision_type, 'decision', decision.decision, 'rationale', decision.rationale, 'decidedAt', decision.decided_at) order by decision.decided_at), '[]'::jsonb) into v_variances
+  from procurement.award_recommendation_variance_decisions decision
+  where v_recommendation is not null and decision.award_recommendation_id = (v_recommendation->>'id')::uuid;
+  return jsonb_build_object('commercialTabulations', v_tabulations, 'technicalEvaluations', v_evaluations, 'awardRecommendation', v_recommendation, 'varianceDecisions', v_variances);
+end;
+$$;
+
+revoke all on function procurement.evaluation_workspace(jsonb) from public, anon;
+grant execute on function procurement.evaluation_workspace(jsonb) to authenticated, service_role;

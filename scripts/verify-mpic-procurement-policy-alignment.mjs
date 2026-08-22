@@ -340,6 +340,36 @@ export function verifyMigrationText(sql) {
     failures.push("missing governed sourcing transition enforcement");
   }
 
+  for (const token of [
+    "create table if not exists procurement.commercial_tabulations",
+    "create table if not exists procurement.technical_evaluations",
+    "create table if not exists procurement.award_recommendations",
+    "create table if not exists procurement.award_recommendation_variance_decisions",
+    "create or replace function private.policy_add_manila_working_days",
+    "asia/manila",
+    "procurement.policy_holidays",
+    "technicalcompliance",
+    "totallifecyclecost",
+    "paymentterms",
+    "written variance justification is required",
+    "the recommendation author cannot approve their own variance",
+    "an approved best-value recommendation is required before award",
+    "revoke all on procurement.policy_holidays, procurement.commercial_tabulations",
+  ]) {
+    if (!text.includes(token)) failures.push(`missing best-value governance control ${token}`);
+  }
+  for (const [name, required] of [
+    ["procurement.save_commercial_tabulation", "policy_evaluation_event"],
+    ["procurement.submit_technical_evaluation", "policy_add_manila_working_days"],
+    ["procurement.submit_award_recommendation", "risk_evidence_reference"],
+    ["procurement.review_recommendation_variance", "expected_version"],
+  ]) {
+    const definition = functionDefinition(text, name, "jsonb");
+    if (!definition?.includes(required) || !definition.includes("security definer") || !definition.includes("set search_path = ''")) {
+      failures.push(`missing hardened best-value RPC ${name}`);
+    }
+  }
+
   return { failures };
 }
 

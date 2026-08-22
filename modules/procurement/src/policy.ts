@@ -43,6 +43,42 @@ import {
   routeFromLegacy,
 } from './policyRoute';
 
+export interface AwardRecommendationValidationInput {
+  evaluatedVendorId?: string;
+  recommendedVendorId?: string;
+  rationale?: string;
+  commercialTabulationId?: string;
+  technicalEvaluationId?: string;
+  riskEvidenceReference?: string;
+  riskEvidenceRequired?: boolean;
+  varianceJustification?: string;
+}
+
+/**
+ * Scorecards rank a best-value recommendation; they never select or award a
+ * vendor by themselves. The database repeats these checks before persistence.
+ */
+export function validateAwardRecommendation(input: AwardRecommendationValidationInput): string[] {
+  const blockers: string[] = [];
+  if (!input.evaluatedVendorId) blockers.push('Evaluated vendor is required.');
+  if (!input.recommendedVendorId) blockers.push('Recommended vendor is required.');
+  if (!input.rationale?.trim()) blockers.push('Recommendation rationale is required.');
+  if (!input.commercialTabulationId) blockers.push('Commercial tabulation is required.');
+  if (!input.technicalEvaluationId) blockers.push('Technical evaluation is required.');
+  if (input.riskEvidenceRequired !== false && !input.riskEvidenceReference?.trim()) {
+    blockers.push('Applicable risk evidence is required.');
+  }
+  if (
+    input.evaluatedVendorId &&
+    input.recommendedVendorId &&
+    input.evaluatedVendorId !== input.recommendedVendorId &&
+    !input.varianceJustification?.trim()
+  ) {
+    blockers.push('Written variance justification is required.');
+  }
+  return blockers;
+}
+
 // ---------------------------------------------------------------------------
 // Thresholds (in PHP)
 // ---------------------------------------------------------------------------

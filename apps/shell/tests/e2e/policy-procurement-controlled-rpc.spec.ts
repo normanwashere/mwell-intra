@@ -69,15 +69,35 @@ test('stateful controlled RPC covers procurement confirmation, sourcing, submiss
   }
   await procurementPage.getByRole('button', { name: 'Close response window' }).click();
   await procurementPage.getByRole('button', { name: 'Open controlled evaluation' }).click();
-  await procurementPage.getByLabel('Recommended vendor').selectOption('vendor-1');
-  await procurementPage.getByLabel('Award rationale').fill('Acme is the lowest evaluated compliant offer with complete proposal evidence.');
-  await procurementPage.getByRole('button', { name: 'Award selected vendor' }).click();
+  await procurementPage.getByLabel('Tabulation evidence reference').fill('controlled-commercial-tabulation-v1.pdf');
+  await procurementPage.getByLabel('Commercial comparison notes').fill('Three compliant commercial responses were compared against the controlled package.');
+  await procurementPage.getByRole('button', { name: 'Save commercial tabulation' }).click();
+  await expect(procurementPage.getByText('Commercial tabulation submitted for the governed record')).toBeVisible();
+  const criterionLabels = ['Technical compliance', 'Quality', 'Lead time', 'Total lifecycle cost', 'Warranty and support', 'Support', 'Price', 'Payment terms', 'Training'];
+  for (const [index, vendorId] of ['vendor-1', 'vendor-2', 'vendor-3'].entries()) {
+    const score = String(90 - index * 10);
+    await procurementPage.getByLabel('Technical evaluation vendor').selectOption(vendorId);
+    await procurementPage.getByLabel('Technical evidence reference').fill(`controlled-technical-${vendorId}.pdf`);
+    await procurementPage.getByLabel('Technical review comments').fill(`Controlled technical evidence for ${vendorId}.`);
+    for (const criterion of criterionLabels) await procurementPage.getByLabel(`${criterion} score`).fill(score);
+    await procurementPage.getByRole('button', { name: 'Submit technical evaluation' }).click();
+    await expect(procurementPage.getByText('Technical evaluation submitted with evidence')).toBeVisible();
+  }
+  await procurementPage.getByLabel('Best-value recommended vendor').selectOption('vendor-1');
+  await procurementPage.getByLabel('Risk evidence reference').fill('controlled-risk-review-v1.pdf');
+  await procurementPage.getByLabel('Best-value rationale').fill('Acme is the highest evaluated compliant offer with complete commercial, technical, and risk evidence.');
+  await procurementPage.getByRole('button', { name: 'Submit recommendation' }).click();
+  await expect(procurementPage.getByText('Best-value recommendation submitted')).toBeVisible();
+  await procurementPage.getByRole('button', { name: 'Record controlled award' }).click();
   await expect(procurementPage.getByText('Sourcing award recorded')).toBeVisible();
   expect(fixture.sourcing).toMatchObject({ status: 'awarded', selectedVendorId: 'vendor-1' });
   expect(fixture.sourcing?.responses.filter((response) => response.receivedAt)).toHaveLength(3);
   expect(fixture.callsNamed('save_sourcing_event')).toHaveLength(1);
   expect(fixture.callsNamed('invite_sourcing_vendors')).toHaveLength(3);
   expect(fixture.callsNamed('record_sourcing_response')).toHaveLength(3);
+  expect(fixture.callsNamed('save_commercial_tabulation')).toHaveLength(1);
+  expect(fixture.callsNamed('submit_technical_evaluation')).toHaveLength(3);
+  expect(fixture.callsNamed('submit_award_recommendation')).toHaveLength(1);
   expect(fixture.callsNamed('record_solicitation_communication').at(-1)).toMatchObject({
     payload: { communication_type: 'clarification' },
   });

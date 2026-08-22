@@ -184,6 +184,10 @@ export class ControlledProcurementRpcFixture {
     closureNote?: string;
     responses: Array<Record<string, unknown>>;
   } | null = null;
+  commercialTabulations: Array<Record<string, unknown>> = [];
+  technicalEvaluations: Array<Record<string, unknown>> = [];
+  awardRecommendation: Record<string, unknown> | null = null;
+  varianceDecisions: Array<Record<string, unknown>> = [];
 
   constructor() {
     this.request = {
@@ -304,6 +308,15 @@ export class ControlledProcurementRpcFixture {
     };
   }
 
+  private evaluationWorkspace() {
+    return {
+      commercialTabulations: this.commercialTabulations.map((item) => ({ ...item })),
+      technicalEvaluations: this.technicalEvaluations.map((item) => ({ ...item })),
+      awardRecommendation: this.awardRecommendation ? { ...this.awardRecommendation } : null,
+      varianceDecisions: this.varianceDecisions.map((item) => ({ ...item })),
+    };
+  }
+
   async handle(route: Route) {
     const request = route.request();
     const url = new URL(request.url());
@@ -391,6 +404,7 @@ export class ControlledProcurementRpcFixture {
     }
     if (name === 'sourcing_workspace') return response(route, this.workspace());
     if (name === 'insufficient_bid_exception') return response(route, null);
+    if (name === 'evaluation_workspace') return response(route, this.evaluationWorkspace());
     if (name === 'save_sourcing_event') {
       this.sourcing ??= { id: 'controlled-sourcing-event', status: 'draft', responses: [] };
       this.sourcing.submissionDeadline = String(payload.submission_deadline ?? '');
@@ -421,6 +435,69 @@ export class ControlledProcurementRpcFixture {
       if (payload.communication_type === 'clarification' && (!payload.question || !payload.answer)) return failure(route, 'Clarification question and answer are required');
       return response(route, { notification_group_id: 'controlled-equal-notice', recipient_count: this.sourcing.responses.length });
     }
+    if (name === 'save_commercial_tabulation') {
+      if (!this.sourcing || this.sourcing.status !== 'evaluation') return failure(route, 'Controlled evaluation is required before tabulation');
+      if (!String(payload.evidence_reference ?? '').trim()) return failure(route, 'Tabulation evidence is required');
+      const entries = Array.isArray(payload.entries) ? payload.entries : [];
+      if (entries.length !== this.sourcing.responses.filter((item) => item.receivedAt).length) return failure(route, 'Every usable response must be tabulated');
+      const tabulation = {
+        id: `controlled-tabulation-${this.commercialTabulations.length + 1}`,
+        version: this.commercialTabulations.length + 1,
+        status: 'submitted',
+        escalationStatus: 'on_track',
+        dueAt: '2026-08-24T00:00:00.000Z',
+        evidenceReference: String(payload.evidence_reference),
+        comments: String(payload.comments ?? ''),
+        entries,
+      };
+      this.commercialTabulations.forEach((item) => { item.status = 'superseded'; });
+      this.commercialTabulations.push(tabulation);
+      return response(route, tabulation);
+    }
+    if (name === 'submit_technical_evaluation') {
+      if (!this.sourcing || this.sourcing.status !== 'evaluation') return failure(route, 'Controlled evaluation is required');
+      if (this.commercialTabulations.at(-1)?.status !== 'submitted') return failure(route, 'Commercial tabulation is required');
+      const vendorId = String(payload.vendor_id ?? '');
+      const criteria = Array.isArray(payload.criteria) ? payload.criteria as Array<Record<string, unknown>> : [];
+      if (!this.sourcing.responses.some((item) => item.vendorId === vendorId && item.receivedAt) || criteria.length !== 9 || !String(payload.evidence_reference ?? '').trim()) return failure(route, 'Complete technical evidence is required');
+      const totalScore = criteria.reduce((sum, criterion) => sum + Number(criterion.score ?? 0), 0) / criteria.length;
+      const evaluation = {
+        id: `controlled-technical-${vendorId}-${this.technicalEvaluations.filter((item) => item.vendorId === vendorId).length + 1}`,
+        version: this.technicalEvaluations.filter((item) => item.vendorId === vendorId).length + 1,
+        vendorId,
+        totalScore,
+        status: 'submitted',
+        escalationStatus: 'on_track',
+        dueAt: '2026-08-29T00:00:00.000Z',
+        evidenceReference: String(payload.evidence_reference),
+        comments: String(payload.comments ?? ''),
+        criteria,
+      };
+      this.technicalEvaluations.filter((item) => item.vendorId === vendorId).forEach((item) => { item.status = 'superseded'; });
+      this.technicalEvaluations.push(evaluation);
+      return response(route, evaluation);
+    }
+    if (name === 'submit_award_recommendation') {
+      if (!this.sourcing || this.sourcing.status !== 'evaluation') return failure(route, 'Controlled evaluation is required');
+      const evaluatedVendorId = String(payload.evaluated_vendor_id ?? '');
+      const recommendedVendorId = String(payload.recommended_vendor_id ?? '');
+      const top = [...this.technicalEvaluations].filter((item) => item.status === 'submitted').sort((left, right) => Number(right.totalScore) - Number(left.totalScore))[0];
+      if (!top || top.vendorId !== evaluatedVendorId || !recommendedVendorId || !String(payload.rationale ?? '').trim() || !payload.commercial_tabulation_id || !payload.technical_evaluation_id || !String(payload.risk_evidence_reference ?? '').trim()) return failure(route, 'Complete best-value evidence is required');
+      const variance = evaluatedVendorId !== recommendedVendorId;
+      if (variance && !String(payload.variance_justification ?? '').trim()) return failure(route, 'Written variance justification is required');
+      this.awardRecommendation = {
+        id: 'controlled-award-recommendation-1',
+        version: 1,
+        evaluatedVendorId,
+        recommendedVendorId,
+        rationale: String(payload.rationale),
+        commercialTabulationId: String(payload.commercial_tabulation_id),
+        technicalEvaluationId: String(payload.technical_evaluation_id),
+        riskEvidenceReference: String(payload.risk_evidence_reference),
+        status: variance ? 'pending_variance' : 'approved',
+      };
+      return response(route, this.awardRecommendation);
+    }
     if (name === 'transition_sourcing_event') {
       if (!this.sourcing) return failure(route, 'Sourcing event is required');
       if (payload.action === 'issue') this.sourcing.status = 'issued';
@@ -435,6 +512,7 @@ export class ControlledProcurementRpcFixture {
       if (payload.action === 'award') {
         if (this.sourcing.status !== 'evaluation') return failure(route, 'Controlled evaluation is required before award');
         if (this.sourcing.responses.filter((item) => item.receivedAt).length < 3) return failure(route, 'Three received responses are required');
+        if (this.awardRecommendation?.status !== 'approved' || this.awardRecommendation.recommendedVendorId !== payload.selected_vendor_id) return failure(route, 'An approved best-value recommendation is required before award');
         this.sourcing.status = 'awarded';
         this.sourcing.selectedVendorId = String(payload.selected_vendor_id);
         this.sourcing.closureNote = String(payload.closure_note);
