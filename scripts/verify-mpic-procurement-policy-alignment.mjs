@@ -66,10 +66,8 @@ const requiredFunctions = [
     name: "private.policy_confirm_route_decision",
     parameterType: "jsonb",
     requiredBody: [
-      "expected_route_version",
-      "v_expected_version <> v_current_version",
+      "private.policy_route_confirmation_input",
       "private.policy_derive_procurement_route",
-      "route confirmation is stale",
       "client-provided solicitation, tier, profile, and reasons are intentionally ignored",
     ],
     placeholderFailure: "placeholder confirm_route_decision body",
@@ -281,6 +279,33 @@ export function verifyMigrationText(sql) {
   }
   if (!text.includes("legacy_mapping_requires_review")) {
     failures.push("missing legacy route remediation marker");
+  }
+  const confirmationStart = text.indexOf(
+    "create or replace function private.policy_route_confirmation_input(",
+  );
+  const confirmationDefinition = confirmationStart === -1
+    ? ""
+    : text.slice(confirmationStart, text.indexOf("$$;", confirmationStart) + 3);
+  if (!confirmationDefinition || !confirmationDefinition.includes(
+    "v_expected_version is null or v_expected_version <> p_current_version",
+  )) {
+    failures.push("missing governed route version guard");
+  }
+  for (const token of [
+    "create or replace function private.policy_normalized_risk_facts",
+    "create or replace function private.policy_normalized_risk_reasons",
+    "create or replace function private.policy_legacy_route_mapping",
+    "risk:complex",
+    "risk:technical",
+    "risk:strategic",
+    "risk:high_risk",
+    "risk:data_sensitive",
+    "risk:importation",
+    "p_method = 'small_purchase'",
+    "private.policy_route_confirmation_input",
+    "private.policy_route_exception_contract",
+  ]) {
+    if (!text.includes(token)) failures.push("missing governed route backfill contract");
   }
   if (!text.includes("insert into core.policy_remediation_queue(module, entity_type, entity_id, policy_version, reason_code, details)")) {
     failures.push("missing legacy route remediation queue insert");

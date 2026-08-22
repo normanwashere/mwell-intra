@@ -91,10 +91,10 @@ test("rejects unsafe policy-governance migration variants", () => {
     {
       name: "route confirmation without an optimistic version guard",
       sql: migration.replace(
-        "if v_expected_version is null or v_expected_version <> v_current_version then",
+        "if v_expected_version is null or v_expected_version <> p_current_version then",
         "if false then",
       ),
-      failure: "placeholder confirm_route_decision body",
+      failure: "missing governed route version guard",
     },
     {
       name: "legacy ambiguity silently bypasses remediation",
@@ -192,6 +192,106 @@ test("PGlite parse smoke loads the migration without a live database", async () 
     `);
 
     await db.exec(migration);
+
+    const mapLegacyRoute = async (method, category, compliance = {}) => {
+      const result = await db.query(`
+        select private.policy_legacy_route_mapping(
+          '${method}', '${category}', '[{"description":"evidence"}]'::jsonb,
+          '${JSON.stringify(compliance)}'::jsonb, 250000::numeric, 1000000::numeric
+        ) as route
+      `);
+      return result.rows[0].route;
+    };
+
+    for (const [riskKey, reason] of [
+      ['complex', 'risk:complex'],
+      ['technical', 'risk:technical'],
+      ['strategic', 'risk:strategic'],
+      ['highRisk', 'risk:high_risk'],
+      ['high_risk', 'risk:high_risk'],
+      ['dataSensitive', 'risk:data_sensitive'],
+      ['data_sensitive', 'risk:data_sensitive'],
+      ['importation', 'risk:importation'],
+    ]) {
+      const route = await mapLegacyRoute('rfq', 'goods', { riskFacts: { [riskKey]: true } });
+      assert.equal(route.governance_tier, 'high_risk', `${riskKey} must preserve high-risk governance`);
+      assert.ok(route.reasons.includes(reason), `${riskKey} must retain its normalized reason`);
+      assert.equal(route.compliance.riskFacts[reason.split(':')[1] === 'high_risk' ? 'highRisk' : reason.split(':')[1] === 'data_sensitive' ? 'dataSensitive' : riskKey], true);
+    }
+
+    for (const [method, category, expected] of [
+      ['rfq', 'goods', { solicitation_type: 'rfq', procurement_mode: 'competitive_bidding' }],
+      ['rfp', 'services', { solicitation_type: 'rfp', procurement_mode: 'competitive_bidding' }],
+      ['direct_award', 'goods', { solicitation_type: 'none', procurement_mode: 'sole_source' }],
+      ['repeat_order', 'goods', { solicitation_type: 'none', procurement_mode: 'repeat_order' }],
+      ['emergency', 'services', { solicitation_type: 'none', procurement_mode: 'emergency_purchase' }],
+      ['petty_cash', 'petty_cash', { solicitation_type: 'none', procurement_mode: 'petty_cash' }],
+    ]) {
+      const route = await mapLegacyRoute(method, category);
+      assert.equal(route.requires_review, false, `${method} must remain deterministic`);
+      assert.equal(route.solicitation_type, expected.solicitation_type);
+      assert.equal(route.procurement_mode, expected.procurement_mode);
+    }
+    for (const method of ['small_purchase', 'unsupported_legacy_method']) {
+      const first = await mapLegacyRoute(method, 'goods');
+      const second = await mapLegacyRoute(method, 'goods');
+      assert.deepEqual(second, first, `${method} mapping must be idempotent`);
+      assert.equal(first.requires_review, true);
+      assert.equal(first.solicitation_type, null);
+      assert.equal(first.procurement_mode, null);
+      assert.equal(first.governance_tier, null);
+      assert.ok(first.reasons.includes('legacy_mapping_requires_review'));
+    }
+
+    const confirmationPayload = JSON.stringify({
+      request_id: 'req-contract-001',
+      expected_route_version: 0,
+      requested_mode: 'competitive_bidding',
+      method: 'rfp',
+      solicitation_type: 'rfp',
+      governance_tier: 'high_risk',
+      policy_profile_id: 'client-controlled',
+      reasons: ['client-controlled'],
+    });
+    const confirmation = await db.query(`
+      select private.policy_route_confirmation_input('${confirmationPayload}'::jsonb, 0) as contract
+    `);
+    assert.deepEqual(confirmation.rows[0].contract, {
+      request_id: 'req-contract-001',
+      expected_route_version: 0,
+      requested_mode: 'competitive_bidding',
+    });
+    const minimalConfirmation = await db.query(`
+      select private.policy_route_confirmation_input(
+        '{"request_id":"req-contract-001","expected_route_version":0,"requested_mode":"sole_source"}'::jsonb,
+        0
+      ) as contract
+    `);
+    assert.deepEqual(minimalConfirmation.rows[0].contract, {
+      request_id: 'req-contract-001',
+      expected_route_version: 0,
+      requested_mode: 'sole_source',
+    });
+    await assert.rejects(
+      () => db.query("select private.policy_route_confirmation_input('{\"request_id\":\"req-contract-001\"}'::jsonb, 0)"),
+      /stale/,
+    );
+    await assert.rejects(
+      () => db.query("select private.policy_route_confirmation_input('{\"request_id\":\"req-contract-001\",\"expected_route_version\":0}'::jsonb, 1)"),
+      /stale/,
+    );
+
+    const approvedException = await db.query(`
+      select private.policy_route_exception_contract('sole_source', 100, 2000, 250000, 'sole_supplier') as blockers
+    `);
+    assert.deepEqual(approvedException.rows[0].blockers, []);
+    const missingException = await db.query(`
+      select private.policy_route_exception_contract('petty_cash', 2500, 2000, 250000, null) as blockers
+    `);
+    assert.deepEqual(missingException.rows[0].blockers, [
+      'approved_exception_evidence',
+      'petty_cash_amount_exceeds_policy',
+    ]);
   } finally {
     await db.close();
   }

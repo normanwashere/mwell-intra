@@ -868,6 +868,186 @@ begin
 end;
 $$;
 
+create or replace function private.policy_normalized_risk_facts(p_compliance jsonb)
+returns jsonb
+language plpgsql
+immutable
+security definer
+set search_path = ''
+as $$
+declare
+  v_source jsonb := coalesce(p_compliance->'riskFacts', p_compliance->'risk_facts', p_compliance, '{}'::jsonb);
+  v_true_values constant text[] := array['true', '1', 'yes'];
+begin
+  if jsonb_typeof(v_source) <> 'object' then v_source := '{}'::jsonb; end if;
+  return jsonb_build_object(
+    'complex', lower(coalesce(v_source->>'complex', 'false')) = any(v_true_values),
+    'technical', lower(coalesce(v_source->>'technical', 'false')) = any(v_true_values),
+    'strategic', lower(coalesce(v_source->>'strategic', 'false')) = any(v_true_values),
+    'highRisk', lower(coalesce(v_source->>'highRisk', v_source->>'high_risk', 'false')) = any(v_true_values),
+    'dataSensitive', lower(coalesce(v_source->>'dataSensitive', v_source->>'data_sensitive', 'false')) = any(v_true_values),
+    'importation', lower(coalesce(v_source->>'importation', 'false')) = any(v_true_values)
+  );
+end;
+$$;
+
+create or replace function private.policy_normalized_risk_reasons(p_compliance jsonb)
+returns text[]
+language plpgsql
+immutable
+security definer
+set search_path = ''
+as $$
+declare v_facts jsonb := private.policy_normalized_risk_facts(p_compliance); v_reasons text[] := '{}';
+begin
+  if coalesce((v_facts->>'complex')::boolean, false) then v_reasons := array_append(v_reasons, 'risk:complex'); end if;
+  if coalesce((v_facts->>'technical')::boolean, false) then v_reasons := array_append(v_reasons, 'risk:technical'); end if;
+  if coalesce((v_facts->>'strategic')::boolean, false) then v_reasons := array_append(v_reasons, 'risk:strategic'); end if;
+  if coalesce((v_facts->>'highRisk')::boolean, false) then v_reasons := array_append(v_reasons, 'risk:high_risk'); end if;
+  if coalesce((v_facts->>'dataSensitive')::boolean, false) then v_reasons := array_append(v_reasons, 'risk:data_sensitive'); end if;
+  if coalesce((v_facts->>'importation')::boolean, false) then v_reasons := array_append(v_reasons, 'risk:importation'); end if;
+  return v_reasons;
+end;
+$$;
+
+create or replace function private.policy_legacy_route_mapping(
+  p_method text,
+  p_category text,
+  p_lines jsonb,
+  p_compliance jsonb,
+  p_amount numeric,
+  p_formal_bid_amount numeric
+)
+returns jsonb
+language plpgsql
+immutable
+security definer
+set search_path = ''
+as $$
+declare
+  v_classification jsonb := private.policy_legacy_requirement_kind(p_category, p_lines);
+  v_requirement_kind text := v_classification->>'requirement_kind';
+  v_supported boolean := coalesce(p_method in ('rfq', 'rfp', 'direct_award', 'repeat_order', 'emergency', 'petty_cash'), false);
+  v_mode text;
+  v_solicitation text;
+  v_tier text;
+  v_reasons text[] := array['legacy_method:' || coalesce(p_method, 'missing')];
+  v_risk_reasons text[] := private.policy_normalized_risk_reasons(p_compliance);
+  v_requires_review boolean := coalesce((v_classification->>'requires_review')::boolean, false);
+  v_compliance jsonb := case when jsonb_typeof(coalesce(p_compliance, '{}'::jsonb)) = 'object' then p_compliance else '{}'::jsonb end;
+begin
+  v_compliance := jsonb_set(v_compliance, '{riskFacts}', private.policy_normalized_risk_facts(p_compliance), true);
+  v_reasons := v_reasons || v_risk_reasons;
+  if p_method = 'small_purchase' then
+    -- This legacy value has no governed three-axis equivalent.
+    v_supported := false;
+    v_requires_review := true;
+  elsif not v_supported then
+    v_requires_review := true;
+  elsif p_formal_bid_amount is null or v_requirement_kind not in ('materials', 'services') then
+    v_requires_review := true;
+  end if;
+  if v_requires_review then
+    return jsonb_build_object(
+      'requirement_kind', v_requirement_kind,
+      'solicitation_type', null,
+      'procurement_mode', null,
+      'governance_tier', null,
+      'requires_review', true,
+      'reasons', to_jsonb(v_reasons || array['legacy_mapping_requires_review']),
+      'compliance', v_compliance
+    );
+  end if;
+  v_mode := case p_method
+    when 'direct_award' then 'sole_source'
+    when 'repeat_order' then 'repeat_order'
+    when 'emergency' then 'emergency_purchase'
+    when 'petty_cash' then 'petty_cash'
+    else 'competitive_bidding'
+  end;
+  v_solicitation := case when v_mode = 'competitive_bidding'
+    then case when v_requirement_kind = 'services' then 'rfp' else 'rfq' end
+    else 'none' end;
+  v_tier := case
+    when cardinality(v_risk_reasons) > 0 then 'high_risk'
+    when coalesce(p_amount, 0) >= p_formal_bid_amount then 'formal_bid'
+    else 'standard'
+  end;
+  return jsonb_build_object(
+    'requirement_kind', v_requirement_kind,
+    'solicitation_type', v_solicitation,
+    'procurement_mode', v_mode,
+    'governance_tier', v_tier,
+    'requires_review', false,
+    'reasons', to_jsonb(v_reasons || array['legacy_mapping_deterministic', 'mode:' || v_mode, 'tier:' || v_tier]),
+    'compliance', v_compliance
+  );
+end;
+$$;
+
+create or replace function private.policy_route_confirmation_input(
+  p_payload jsonb,
+  p_current_version integer
+)
+returns jsonb
+language plpgsql
+immutable
+security definer
+set search_path = ''
+as $$
+declare v_expected_version integer; v_requested_mode text;
+begin
+  if jsonb_typeof(p_payload) <> 'object' or nullif(pg_catalog.btrim(p_payload->>'request_id'), '') is null then
+    raise exception 'A request identity is required';
+  end if;
+  begin
+    v_expected_version := (p_payload->>'expected_route_version')::integer;
+  exception when invalid_text_representation then
+    raise exception 'expected_route_version must be an integer';
+  end;
+  if v_expected_version is null or v_expected_version <> p_current_version then
+    raise exception 'Route confirmation is stale; reload the request before confirming';
+  end if;
+  v_requested_mode := nullif(pg_catalog.btrim(p_payload->>'requested_mode'), '');
+  if v_requested_mode is not null and v_requested_mode not in (
+    'competitive_bidding', 'sole_source', 'repeat_order', 'emergency_purchase', 'petty_cash', 'approved_exception'
+  ) then
+    raise exception 'Unsupported procurement mode';
+  end if;
+  -- Authority fields are deliberately excluded from the returned contract.
+  return jsonb_build_object('request_id', p_payload->>'request_id', 'expected_route_version', v_expected_version, 'requested_mode', v_requested_mode);
+end;
+$$;
+
+create or replace function private.policy_route_exception_contract(
+  p_procurement_mode text,
+  p_amount numeric,
+  p_petty_cash_max_amount numeric,
+  p_repeat_order_max_amount numeric,
+  p_exception_type text
+)
+returns text[]
+language plpgsql
+immutable
+security definer
+set search_path = ''
+as $$
+declare v_missing text[] := '{}';
+begin
+  if p_procurement_mode = 'competitive_bidding' then return v_missing; end if;
+  if not coalesce((
+    (p_procurement_mode = 'sole_source' and p_exception_type in ('direct_award', 'sole_supplier'))
+    or (p_procurement_mode = 'repeat_order' and p_exception_type = 'repeat_continuity')
+    or (p_procurement_mode = 'emergency_purchase' and p_exception_type = 'emergency')
+    or (p_procurement_mode = 'petty_cash' and p_exception_type = 'petty_cash_non_accredited')
+    or (p_procurement_mode = 'approved_exception' and p_exception_type in ('direct_award', 'sole_supplier', 'emergency', 'repeat_continuity', 'insufficient_bids', 'petty_cash_non_accredited'))
+  ), false) then v_missing := array_append(v_missing, 'approved_exception_evidence'); end if;
+  if p_procurement_mode = 'petty_cash' and p_amount > p_petty_cash_max_amount then v_missing := array_append(v_missing, 'petty_cash_amount_exceeds_policy'); end if;
+  if p_procurement_mode = 'repeat_order' and p_amount > p_repeat_order_max_amount then v_missing := array_append(v_missing, 'repeat_order_amount_exceeds_policy'); end if;
+  return v_missing;
+end;
+$$;
+
 create or replace function private.policy_route_exception_is_eligible(
   p_request_id text,
   p_procurement_mode text,
@@ -880,31 +1060,17 @@ stable
 security definer
 set search_path = ''
 as $$
-declare v_missing text[] := '{}';
+declare v_exception_type text;
 begin
-  if p_procurement_mode = 'competitive_bidding' then return v_missing; end if;
-  if not exists (
-    select 1
-    from procurement.exception_packs exception_pack
-    where exception_pack.request_id = p_request_id
-      and exception_pack.status = 'approved'
-      and (
-        (p_procurement_mode = 'sole_source' and exception_pack.exception_type in ('direct_award', 'sole_supplier'))
-        or (p_procurement_mode = 'repeat_order' and exception_pack.exception_type = 'repeat_continuity')
-        or (p_procurement_mode = 'emergency_purchase' and exception_pack.exception_type = 'emergency')
-        or (p_procurement_mode = 'petty_cash' and exception_pack.exception_type = 'petty_cash_non_accredited')
-        or (p_procurement_mode = 'approved_exception' and exception_pack.exception_type in ('direct_award', 'sole_supplier', 'emergency', 'repeat_continuity', 'insufficient_bids', 'petty_cash_non_accredited'))
-      )
-  ) then
-    v_missing := array_append(v_missing, 'approved_exception_evidence');
-  end if;
-  if p_procurement_mode = 'petty_cash' and p_amount > p_profile.petty_cash_max_amount then
-    v_missing := array_append(v_missing, 'petty_cash_amount_exceeds_policy');
-  end if;
-  if p_procurement_mode = 'repeat_order' and p_amount > p_profile.repeat_order_max_amount then
-    v_missing := array_append(v_missing, 'repeat_order_amount_exceeds_policy');
-  end if;
-  return v_missing;
+  select exception_pack.exception_type into v_exception_type
+  from procurement.exception_packs exception_pack
+  where exception_pack.request_id = p_request_id and exception_pack.status = 'approved'
+  order by exception_pack.id
+  limit 1;
+  return private.policy_route_exception_contract(
+    p_procurement_mode, p_amount, p_profile.petty_cash_max_amount,
+    p_profile.repeat_order_max_amount, v_exception_type
+  );
 end;
 $$;
 
@@ -927,6 +1093,7 @@ declare
   v_reasons text[] := '{}';
   v_blockers text[] := '{}';
   v_risk jsonb;
+  v_risk_reasons text[];
 begin
   select * into v_request from procurement.requests where id = request_id for update;
   if not found then raise exception 'Request not found'; end if;
@@ -955,18 +1122,12 @@ begin
     return jsonb_build_object('status', 'blocked', 'blockers', to_jsonb(v_blockers));
   end if;
 
-  v_risk := coalesce(v_request.compliance->'riskFacts', v_request.compliance->'risk_facts', '{}'::jsonb);
+  v_risk := private.policy_normalized_risk_facts(v_request.compliance);
+  v_risk_reasons := private.policy_normalized_risk_reasons(v_request.compliance);
   v_solicitation := case when v_mode = 'competitive_bidding'
     then case when v_requirement_kind = 'services' then 'rfp' else 'rfq' end
     else 'none' end;
-  if coalesce((v_risk->>'complex')::boolean, false)
-    or coalesce((v_risk->>'technical')::boolean, false)
-    or coalesce((v_risk->>'strategic')::boolean, false)
-    or coalesce((v_risk->>'highRisk')::boolean, false)
-    or coalesce((v_risk->>'high_risk')::boolean, false)
-    or coalesce((v_risk->>'dataSensitive')::boolean, false)
-    or coalesce((v_risk->>'data_sensitive')::boolean, false)
-    or coalesce((v_risk->>'importation')::boolean, false) then
+  if cardinality(v_risk_reasons) > 0 then
     v_tier := 'high_risk';
   elsif v_request.estimated_amount >= v_profile.formal_bid_amount then
     v_tier := 'formal_bid';
@@ -978,6 +1139,7 @@ begin
     return jsonb_build_object('status', 'blocked', 'blockers', to_jsonb(v_blockers));
   end if;
   v_reasons := array_append(v_reasons, case when v_requirement_kind = 'services' then 'service_requirement' else 'material_requirement' end);
+  v_reasons := v_reasons || v_risk_reasons;
   v_reasons := array_append(v_reasons, 'mode:' || v_mode);
   v_reasons := array_append(v_reasons, 'tier:' || v_tier);
   return jsonb_build_object(
@@ -1001,6 +1163,7 @@ declare
   v_expected_version integer;
   v_current_version integer;
   v_requested_mode text;
+  v_confirmation jsonb;
 begin
   if not (core.has_live_cap('procurement', 'manage_rfp') or core.has_live_cap('procurement', 'admin')) then
     raise exception 'Not authorized to confirm sourcing route';
@@ -1010,20 +1173,14 @@ begin
   end if;
   select * into v_request from procurement.requests where id = payload->>'request_id' for update;
   if not found then raise exception 'Request not found'; end if;
-  begin
-    v_expected_version := (payload->>'expected_route_version')::integer;
-  exception when invalid_text_representation then
-    raise exception 'expected_route_version must be an integer';
-  end;
   perform 1 from procurement.route_decisions
   where request_id = v_request.id
   for update;
   select coalesce(max(request_version), 0) into v_current_version
   from procurement.route_decisions where request_id = v_request.id;
-  if v_expected_version is null or v_expected_version <> v_current_version then
-    raise exception 'Route confirmation is stale; reload the request before confirming';
-  end if;
-  v_requested_mode := nullif(pg_catalog.btrim(payload->>'requested_mode'), '');
+  v_confirmation := private.policy_route_confirmation_input(payload, v_current_version);
+  v_expected_version := (v_confirmation->>'expected_route_version')::integer;
+  v_requested_mode := nullif(pg_catalog.btrim(v_confirmation->>'requested_mode'), '');
   -- Client-provided solicitation, tier, profile, and reasons are intentionally ignored.
   v_route := private.policy_derive_procurement_route(v_request.id, v_requested_mode);
   if v_route->>'status' <> 'derived' then
@@ -1038,7 +1195,7 @@ begin
     v_current_version + 1,
     private.policy_route_legacy_method(v_route->>'solicitation_type', v_route->>'procurement_mode'),
     array(select jsonb_array_elements_text(v_route->'reasons')),
-    coalesce(v_request.compliance->'riskFacts', v_request.compliance->'risk_facts', '{}'::jsonb),
+    private.policy_normalized_risk_facts(v_request.compliance),
     'confirmed', auth.uid(),
     v_route->>'solicitation_type', v_route->>'procurement_mode', v_route->>'governance_tier', (v_route->>'policy_profile_id')::uuid
   ) returning * into v_decision;
@@ -1075,9 +1232,11 @@ with active_profile as (
   order by effective_from desc
   limit 1
 ), classified as (
-  select request_row.id, request_row.category, request_row.sourcing_method, request_row.estimated_amount,
-    request_row.requirement_kind as stored_requirement_kind,
-    private.policy_legacy_requirement_kind(request_row.category, request_row.lines) as legacy_classification,
+  select request_row.id, request_row.requirement_kind as stored_requirement_kind,
+    private.policy_legacy_route_mapping(
+      request_row.sourcing_method, request_row.category, request_row.lines,
+      request_row.compliance, request_row.estimated_amount, active_profile.formal_bid_amount
+    ) as route_mapping,
     active_profile.id as policy_profile_id, active_profile.code || ':' || active_profile.version as policy_version,
     active_profile.formal_bid_amount
   from procurement.requests request_row
@@ -1086,49 +1245,35 @@ with active_profile as (
     or request_row.procurement_mode is null
     or request_row.governance_tier is null
     or request_row.policy_profile_id is null
-), mapped as (
-  select *,
-    coalesce(stored_requirement_kind, legacy_classification->>'requirement_kind') as requirement_kind,
-    coalesce((legacy_classification->>'requires_review')::boolean, false) as requires_review,
-    case sourcing_method
-      when 'direct_award' then 'sole_source'
-      when 'repeat_order' then 'repeat_order'
-      when 'emergency' then 'emergency_purchase'
-      when 'petty_cash' then 'petty_cash'
-      else 'competitive_bidding'
-    end as procurement_mode
-  from classified
-), routed as (
-  select *,
-    case when procurement_mode = 'competitive_bidding'
-      then case when requirement_kind = 'services' then 'rfp' else 'rfq' end
-      else 'none' end as solicitation_type,
-    case
-      when category in ('construction', 'manpower') then 'high_risk'
-      when formal_bid_amount is not null and coalesce(estimated_amount, 0) >= formal_bid_amount then 'formal_bid'
-      else 'standard'
-    end as governance_tier
-  from mapped
 )
 update procurement.requests request_row set
-  requirement_kind = routed.requirement_kind,
-  solicitation_type = case when routed.requirement_kind is null or routed.policy_profile_id is null then null else routed.solicitation_type end,
-  procurement_mode = case when routed.requirement_kind is null or routed.policy_profile_id is null then null else routed.procurement_mode end,
-  governance_tier = case when routed.requirement_kind is null or routed.policy_profile_id is null then null else routed.governance_tier end,
-  policy_profile_id = routed.policy_profile_id,
-  route_reasons = jsonb_build_array(
-    'legacy_method:' || coalesce(routed.sourcing_method, 'missing'),
-    case when routed.requires_review or routed.requirement_kind is null then 'legacy_mapping_requires_review' else 'legacy_mapping_deterministic' end
-  ),
+  requirement_kind = coalesce(classified.stored_requirement_kind, classified.route_mapping->>'requirement_kind'),
+  solicitation_type = classified.route_mapping->>'solicitation_type',
+  procurement_mode = classified.route_mapping->>'procurement_mode',
+  governance_tier = classified.route_mapping->>'governance_tier',
+  policy_profile_id = classified.policy_profile_id,
+  route_reasons = classified.route_mapping->'reasons',
+  compliance = classified.route_mapping->'compliance',
   updated_at = pg_catalog.now()
-from routed
-where request_row.id = routed.id;
+from classified
+where request_row.id = classified.id;
+
+update procurement.route_decisions decision set status = 'policy_decision_required'
+from procurement.requests request_row
+where decision.request_id = request_row.id
+  and coalesce(request_row.route_reasons, '[]'::jsonb) ? 'legacy_mapping_requires_review'
+  and decision.status = 'confirmed';
 
 insert into core.policy_remediation_queue(module, entity_type, entity_id, policy_version, reason_code, details)
 select 'procurement', 'request', request_row.id,
   coalesce(profile.code || ':' || profile.version, 'policy-profile-unavailable'),
   'legacy_mapping_requires_review',
-  jsonb_build_object('category', request_row.category, 'sourcing_method', request_row.sourcing_method, 'lines', request_row.lines)
+  jsonb_build_object(
+    'category', request_row.category,
+    'sourcing_method', request_row.sourcing_method,
+    'lines', request_row.lines,
+    'normalized_risk_facts', coalesce(request_row.compliance->'riskFacts', '{}'::jsonb)
+  )
 from procurement.requests request_row
 left join procurement.policy_profiles profile on profile.id = request_row.policy_profile_id
 where profile.id is null
@@ -1198,6 +1343,11 @@ as $$ select private.policy_submit_procurement_request(payload) $$;
 
 revoke all on function private.policy_route_legacy_method(text, text) from public, anon, authenticated;
 revoke all on function private.policy_legacy_requirement_kind(text, jsonb) from public, anon, authenticated;
+revoke all on function private.policy_normalized_risk_facts(jsonb) from public, anon, authenticated;
+revoke all on function private.policy_normalized_risk_reasons(jsonb) from public, anon, authenticated;
+revoke all on function private.policy_legacy_route_mapping(text, text, jsonb, jsonb, numeric, numeric) from public, anon, authenticated;
+revoke all on function private.policy_route_confirmation_input(jsonb, integer) from public, anon, authenticated;
+revoke all on function private.policy_route_exception_contract(text, numeric, numeric, numeric, text) from public, anon, authenticated;
 revoke all on function private.policy_route_exception_is_eligible(text, text, procurement.policy_profiles, numeric) from public, anon, authenticated;
 revoke all on function private.policy_derive_procurement_route(text, text) from public, anon, authenticated;
 revoke all on function private.policy_confirm_route_decision(jsonb) from public, anon, authenticated;
