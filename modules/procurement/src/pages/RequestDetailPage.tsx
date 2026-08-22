@@ -46,6 +46,7 @@ import {
 } from '../policy';
 import { deriveProcurementRoute, legacySourcingMethod } from '../policyRoute';
 import { MWELL_OPERATING_PROFILE } from '../policyProfile';
+import { evaluateProcurementException, type ProcurementExceptionInput } from '../procurementExceptions';
 import { appliedPolicyProfileSummary, mapLivePolicyProfile } from '../policyProfileAdapter';
 import { ProcurementRoutePanel } from '../components/ProcurementRoutePanel';
 import { SourcingWorkspace } from '../components/SourcingWorkspace';
@@ -83,6 +84,28 @@ const DIRECT_AWARD_REASON_LABEL: Record<string, string> = {
   repeat_continuity: 'Repeat / continuity',
   other: 'Other approved exception',
 };
+
+function exceptionGuidanceForRequest(
+  request: NonNullable<ReturnType<typeof useProcurementRequests>['rows'][number]>,
+  route: ProcurementRoute,
+) {
+  const pack = request.exceptionPack;
+  const amount = request.estimatedAmount ?? 0;
+  const base = { amount, procurementReviewed: false, doaApproved: false };
+  const references = pack?.evidenceReferences ?? [];
+  const repeat = pack?.repeatOrder ?? { samePrice: false, sameTerms: false, sameVendor: false, sameConsiderations: false, priorCompetitiveAward: false, materialScopeChange: false };
+  const emergency = pack?.emergency ?? {};
+  const input: ProcurementExceptionInput = route.procurementMode === 'sole_source'
+    ? { ...base, mode: 'sole_source', basis: pack?.soleSourceBasis, evidenceReferences: references, priceReasonableness: pack?.priceReasonableness ?? '' }
+    : route.procurementMode === 'repeat_order'
+      ? { ...base, mode: 'repeat_order', ...repeat }
+      : route.procurementMode === 'emergency_purchase'
+        ? { ...base, mode: 'emergency_purchase', basis: emergency.basis, authorityRecorded: Boolean(emergency.authorityReference?.trim()), commitmentTimestamp: emergency.commitmentTimestamp, minimizedVerbalCommitment: emergency.minimizedVerbalCommitment === true, retrospectivePoDueAt: emergency.retrospectivePoDueAt }
+        : route.procurementMode === 'petty_cash'
+          ? { ...base, mode: 'petty_cash', splitPurchase: pack?.nonRecurringNonSplitAttested === false, recurring: pack?.nonRecurringNonSplitAttested === false, financeEligible: false, receiptPresent: pack?.receiptOrInvoiceSupported === true, liquidationRecorded: pack?.liquidationRecorded === true }
+          : { ...base, mode: 'approved_exception', approvedExceptionPackId: pack?.approvedExceptionPackId, evidenceReferences: references };
+  return evaluateProcurementException(input, MWELL_OPERATING_PROFILE);
+}
 
 const lineColumns: Column<ProcurementRequestLine>[] = [
   { key: 'description', header: 'Description', render: (r) => r.description },
@@ -278,6 +301,9 @@ export function RequestDetailPage() {
       }, MWELL_OPERATING_PROFILE)
     : undefined;
   const displayedRoute = returnedRoute ?? req.route ?? routeRecommendation?.route;
+  const exceptionGuidance = displayedRoute && displayedRoute.procurementMode !== 'competitive_bidding'
+    ? exceptionGuidanceForRequest(req, displayedRoute)
+    : undefined;
 
   async function confirmRoute() {
     if (!canConfirmRoute || !req) return;
@@ -527,6 +553,17 @@ export function RequestDetailPage() {
           </dl>
           <div className="mt-3 rounded-md border border-line bg-inset p-3 text-sm text-muted">
             <strong className="text-ink">Applied policy profile:</strong> {appliedPolicyProfileSummary(routeProfile, displayedRoute.policyProfileId)}
+          </div>
+        </Card>
+      )}
+
+      {displayedRoute && displayedRoute.procurementMode !== 'competitive_bidding' && exceptionGuidance && (
+        <Card aria-label="Exception control status" className="p-4 sm:p-5">
+          <h2 className="text-base font-semibold text-ink">Exception control status</h2>
+          <p className="mt-1 text-sm text-muted">This request cannot proceed on requester inputs alone. The evidence below is rechecked by the server at route confirmation, award, and PO issue.</p>
+          <div className="mt-3 grid gap-4 lg:grid-cols-2">
+            <section><h3 className="text-sm font-semibold text-ink">Required evidence</h3><ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted">{exceptionGuidance.requiredEvidence.map((item) => <li key={item}>{item}</li>)}</ul></section>
+            <section><h3 className="text-sm font-semibold text-ink">Current blockers</h3><ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-amber-800 dark:text-amber-200">{exceptionGuidance.blockers.map((item) => <li key={item}>{item}</li>)}</ul></section>
           </div>
         </Card>
       )}

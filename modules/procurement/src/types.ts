@@ -423,6 +423,30 @@ export interface ProcurementExceptionPack {
   doaApproved?: boolean;
   receiptOrInvoiceSupported?: boolean;
   liquidationRecorded?: boolean;
+  /** Requester-supplied evidence only. Server-recorded reviews remain authoritative. */
+  evidenceReferences?: string[];
+  soleSourceBasis?: 'only_acceptable_source' | 'compatibility' | 'specialization' | 'unique_capability' | 'manufacturer' | 'authorized_distributor';
+  repeatOrder?: {
+    samePrice: boolean;
+    sameTerms: boolean;
+    sameVendor: boolean;
+    sameConsiderations: boolean;
+    priorCompetitiveAward: boolean;
+    priorAwardAgeDays?: number;
+    materialScopeChange: boolean;
+    priorRequestId?: string;
+    priorSourcingEventId?: string;
+    priorAwardId?: string;
+    priorPurchaseOrderId?: string;
+  };
+  emergency?: {
+    basis?: 'life_safety' | 'environmental' | 'serious_disruption';
+    authorityReference?: string;
+    commitmentTimestamp?: string;
+    minimizedVerbalCommitment?: boolean;
+    retrospectivePoDueAt?: string;
+  };
+  approvedExceptionPackId?: string;
 }
 
 export interface ImportationPlan {

@@ -50,6 +50,7 @@ import {
 } from '../policy';
 import { deriveProcurementRoute, legacySourcingMethod } from '../policyRoute';
 import { MWELL_OPERATING_PROFILE } from '../policyProfile';
+import { evaluateProcurementException, type ProcurementExceptionInput } from '../procurementExceptions';
 import { ProcurementRoutePanel } from '../components/ProcurementRoutePanel';
 import { ExceptionPack } from '../components/ExceptionPack';
 import { FinancialProtectionPanel } from '../components/FinancialProtectionPanel';
@@ -491,13 +492,25 @@ export function CreateRequestPage() {
     (budgetCode.trim().length > 0 || projectCode.trim().length > 0) &&
     total > 0;
   const exceptionRequired = route != null && route.procurementMode !== 'competitive_bidding';
-  const exceptionReady =
-    !exceptionRequired ||
-    (exceptionPack.justification.trim().length > 0 &&
-      (route?.procurementMode === 'petty_cash'
-        ? exceptionPack.financeEligibilityConfirmed === true &&
-          exceptionPack.nonRecurringNonSplitAttested === true
-        : (exceptionPack.priceReasonableness ?? priceReasonableness).trim().length > 0));
+  const exceptionGuidance = useMemo(() => {
+    if (!route || route.procurementMode === 'competitive_bidding') return undefined;
+    const mode = route.procurementMode;
+    const references = exceptionPack.evidenceReferences ?? [];
+    const repeat = exceptionPack.repeatOrder ?? { samePrice: false, sameTerms: false, sameVendor: false, sameConsiderations: false, priorCompetitiveAward: false, materialScopeChange: false };
+    const emergency = exceptionPack.emergency ?? {};
+    const base = { amount: total, procurementReviewed: false, doaApproved: false };
+    const input: ProcurementExceptionInput = mode === 'sole_source'
+      ? { ...base, mode, basis: exceptionPack.soleSourceBasis, evidenceReferences: references, priceReasonableness: exceptionPack.priceReasonableness ?? priceReasonableness }
+      : mode === 'repeat_order'
+        ? { ...base, mode, ...repeat }
+        : mode === 'emergency_purchase'
+          ? { ...base, mode, basis: emergency.basis, authorityRecorded: Boolean(emergency.authorityReference?.trim()), commitmentTimestamp: emergency.commitmentTimestamp, minimizedVerbalCommitment: emergency.minimizedVerbalCommitment === true, retrospectivePoDueAt: emergency.retrospectivePoDueAt }
+          : mode === 'petty_cash'
+            ? { ...base, mode, splitPurchase: exceptionPack.nonRecurringNonSplitAttested === false, recurring: exceptionPack.nonRecurringNonSplitAttested === false, financeEligible: false, receiptPresent: exceptionPack.receiptOrInvoiceSupported === true, liquidationRecorded: exceptionPack.liquidationRecorded === true }
+            : { ...base, mode, approvedExceptionPackId: exceptionPack.approvedExceptionPackId, evidenceReferences: references };
+    return evaluateProcurementException(input, MWELL_OPERATING_PROFILE);
+  }, [exceptionPack, priceReasonableness, route, total]);
+  const exceptionReady = !exceptionRequired || (exceptionPack.justification.trim().length > 0 && (exceptionGuidance?.blockers ?? []).every((blocker) => blocker === 'Procurement review is required.' || blocker === 'Active DOA approval is required.' || blocker === 'Governed Finance eligibility is required.'));
   const importationReady =
     !riskFacts.importation ||
     Object.values(importationPlan).every((value) => value.trim().length > 0);
@@ -1497,6 +1510,8 @@ export function CreateRequestPage() {
                 {route != null && route.procurementMode !== 'competitive_bidding' && legacyProjection && (
                   <ExceptionPack
                     method={legacyProjection}
+                    mode={route.procurementMode}
+                    amount={total}
                     value={exceptionPack}
                     onChange={setExceptionPack}
                   />

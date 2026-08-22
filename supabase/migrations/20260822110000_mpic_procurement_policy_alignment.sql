@@ -2326,6 +2326,181 @@ begin
 end;
 $$;
 
+-- Task 8: exception decisions are deliberately stored separately from the
+-- requester evidence. Recomputing this record at every live transition keeps
+-- a client checkbox from becoming an approval authority.
+create table if not exists procurement.exception_doa_decisions (
+  exception_pack_id uuid primary key references procurement.exception_packs(id) on delete restrict,
+  decision text not null check (decision in ('approved', 'rejected')),
+  rationale text not null,
+  doa_matrix_id uuid not null references procurement.doa_matrices(id) on delete restrict,
+  doa_assignment_id uuid not null references procurement.doa_assignments(id) on delete restrict,
+  decided_by uuid not null references core.profiles(id) on delete restrict,
+  decided_at timestamptz not null default statement_timestamp()
+);
+alter table procurement.exception_doa_decisions enable row level security;
+alter table procurement.exception_doa_decisions force row level security;
+revoke all on procurement.exception_doa_decisions from public, anon, authenticated;
+grant select on procurement.exception_doa_decisions to authenticated;
+grant all on procurement.exception_doa_decisions to service_role;
+
+create or replace function private.policy_exception_pack_blockers(
+  p_request_id text,
+  p_mode text,
+  p_profile procurement.policy_profiles,
+  p_amount numeric
+)
+returns text[] language plpgsql stable security definer set search_path = '' as $$
+declare v_pack procurement.exception_packs; v_evidence jsonb; v_blockers text[] := '{}';
+begin
+  if p_mode = 'competitive_bidding' then return v_blockers; end if;
+  select * into v_pack from procurement.exception_packs
+  where request_id = p_request_id and status = 'approved'
+  order by procurement_head_reviewed_at desc nulls last, id desc limit 1;
+  if not found then return array['approved_exception_pack_required']; end if;
+  v_evidence := coalesce(v_pack.evidence, '{}'::jsonb);
+  if v_pack.procurement_head_reviewed_by is null or v_pack.procurement_head_reviewed_at is null then
+    v_blockers := array_append(v_blockers, 'procurement_review_required');
+  end if;
+  if not exists (select 1 from procurement.exception_doa_decisions decision where decision.exception_pack_id = v_pack.id and decision.decision = 'approved') then
+    v_blockers := array_append(v_blockers, 'active_doa_approval_required');
+  end if;
+  if p_mode = 'sole_source' then
+    if v_pack.exception_type not in ('direct_award', 'sole_supplier') then v_blockers := array_append(v_blockers, 'sole_source_pack_type_required'); end if;
+    if coalesce(v_evidence->>'soleSourceBasis', '') not in ('only_acceptable_source','compatibility','specialization','unique_capability','manufacturer','authorized_distributor') then v_blockers := array_append(v_blockers, 'sole_source_basis_required'); end if;
+    if jsonb_typeof(v_evidence->'evidenceReferences') <> 'array' or jsonb_array_length(v_evidence->'evidenceReferences') = 0 then v_blockers := array_append(v_blockers, 'sole_source_evidence_required'); end if;
+    if nullif(btrim(v_pack.price_reasonableness), '') is null then v_blockers := array_append(v_blockers, 'price_reasonableness_required'); end if;
+  elsif p_mode = 'repeat_order' then
+    if v_pack.exception_type <> 'repeat_continuity' then v_blockers := array_append(v_blockers, 'repeat_order_pack_type_required'); end if;
+    if coalesce((v_evidence->>'samePrice')::boolean, false) is not true then v_blockers := array_append(v_blockers, 'repeat_same_price_required'); end if;
+    if coalesce((v_evidence->>'sameTerms')::boolean, false) is not true then v_blockers := array_append(v_blockers, 'repeat_same_terms_required'); end if;
+    if coalesce((v_evidence->>'sameVendor')::boolean, false) is not true then v_blockers := array_append(v_blockers, 'repeat_same_vendor_required'); end if;
+    if coalesce((v_evidence->>'sameConsiderations')::boolean, false) is not true then v_blockers := array_append(v_blockers, 'repeat_same_considerations_required'); end if;
+    if coalesce((v_evidence->>'priorCompetitiveAward')::boolean, false) is not true then v_blockers := array_append(v_blockers, 'prior_competitive_award_required'); end if;
+    if nullif(v_evidence->>'priorRequestId', '') is null or nullif(v_evidence->>'priorSourcingEventId', '') is null or nullif(v_evidence->>'priorAwardId', '') is null or nullif(v_evidence->>'priorPurchaseOrderId', '') is null then v_blockers := array_append(v_blockers, 'prior_competitive_links_required'); end if;
+    if coalesce((v_evidence->>'priorAwardAgeDays')::numeric, p_profile.repeat_order_max_age_days + 1) > p_profile.repeat_order_max_age_days then v_blockers := array_append(v_blockers, 'repeat_source_age_exceeds_policy'); end if;
+    if p_amount > p_profile.repeat_order_max_amount then v_blockers := array_append(v_blockers, 'repeat_amount_exceeds_policy'); end if;
+    if coalesce((v_evidence->>'materialScopeChange')::boolean, false) then v_blockers := array_append(v_blockers, 'repeat_material_scope_change'); end if;
+  elsif p_mode = 'emergency_purchase' then
+    if v_pack.exception_type <> 'emergency' then v_blockers := array_append(v_blockers, 'emergency_pack_type_required'); end if;
+    if coalesce(v_evidence->>'emergencyBasis', '') not in ('life_safety','environmental','serious_disruption') then v_blockers := array_append(v_blockers, 'qualifying_emergency_basis_required'); end if;
+    if nullif(v_evidence->>'authorityReference', '') is null then v_blockers := array_append(v_blockers, 'emergency_authority_required'); end if;
+    if nullif(v_evidence->>'commitmentTimestamp', '') is null then v_blockers := array_append(v_blockers, 'emergency_commitment_timestamp_required'); end if;
+    if coalesce((v_evidence->>'minimizedVerbalCommitment')::boolean, false) is not true then v_blockers := array_append(v_blockers, 'minimized_verbal_commitment_required'); end if;
+    if nullif(v_evidence->>'retrospectivePoDueAt', '') is null then v_blockers := array_append(v_blockers, 'retrospective_po_due_required'); end if;
+  elsif p_mode = 'petty_cash' then
+    if v_pack.exception_type <> 'petty_cash_non_accredited' then v_blockers := array_append(v_blockers, 'petty_cash_pack_type_required'); end if;
+    if p_amount > p_profile.petty_cash_max_amount then v_blockers := array_append(v_blockers, 'petty_cash_amount_exceeds_policy'); end if;
+    if coalesce((v_evidence->>'splitPurchase')::boolean, false) then v_blockers := array_append(v_blockers, 'petty_cash_split_purchase'); end if;
+    if coalesce((v_evidence->>'recurring')::boolean, false) then v_blockers := array_append(v_blockers, 'petty_cash_recurring_purchase'); end if;
+    if nullif(v_evidence->>'financeReviewedBy', '') is null then v_blockers := array_append(v_blockers, 'governed_finance_eligibility_required'); end if;
+    if coalesce((v_evidence->>'receiptPresent')::boolean, false) is not true then v_blockers := array_append(v_blockers, 'petty_cash_receipt_required'); end if;
+    if coalesce((v_evidence->>'liquidationRecorded')::boolean, false) is not true then v_blockers := array_append(v_blockers, 'petty_cash_liquidation_required'); end if;
+  elsif p_mode = 'approved_exception' then
+    if nullif(v_evidence->>'approvedExceptionPackId', '') is null then v_blockers := array_append(v_blockers, 'approved_exception_reference_required'); end if;
+    if jsonb_typeof(v_evidence->'evidenceReferences') <> 'array' or jsonb_array_length(v_evidence->'evidenceReferences') = 0 then v_blockers := array_append(v_blockers, 'approved_exception_evidence_required'); end if;
+  else v_blockers := array_append(v_blockers, 'unsupported_procurement_mode');
+  end if;
+  return v_blockers;
+end;
+$$;
+
+create or replace function private.policy_route_exception_is_eligible(
+  p_request_id text, p_procurement_mode text, p_profile procurement.policy_profiles, p_amount numeric
+)
+returns text[] language sql stable security definer set search_path = '' as $$
+  select private.policy_exception_pack_blockers(p_request_id, p_procurement_mode, p_profile, p_amount)
+$$;
+
+create or replace function procurement.submit_policy_exception_pack(payload jsonb)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_request procurement.requests; v_pack procurement.exception_packs; v_mode text := payload->>'mode'; v_type text;
+begin
+  if auth.uid() is null or not private.policy_sourcing_can_manage() then raise exception 'Procurement authority is required to submit an exception pack'; end if;
+  select * into v_request from procurement.requests where id::text = payload->>'request_id' for update;
+  if not found or v_request.status <> 'draft' then raise exception 'A draft request is required'; end if;
+  if v_mode not in ('sole_source','repeat_order','emergency_purchase','petty_cash','approved_exception') then raise exception 'Unsupported exception mode'; end if;
+  v_type := case v_mode when 'sole_source' then 'direct_award' when 'repeat_order' then 'repeat_continuity' when 'emergency_purchase' then 'emergency' when 'petty_cash' then 'petty_cash_non_accredited' else 'direct_award' end;
+  update procurement.exception_packs set status = 'superseded' where request_id = v_request.id and status in ('draft','under_review','rejected');
+  insert into procurement.exception_packs(request_id, exception_type, vendor_id, justification, evidence, price_reasonableness, risks_and_mitigations, status)
+  values(v_request.id, v_type, nullif(payload->>'vendor_id','')::uuid, coalesce(nullif(btrim(payload->>'justification'),''), 'Pending policy exception evidence'), coalesce(payload->'evidence','{}'::jsonb) || jsonb_build_object('submittedBy',auth.uid(),'submittedAt',statement_timestamp(),'mode',v_mode), nullif(btrim(payload->>'price_reasonableness'),''), coalesce(payload->'risks_and_mitigations','{}'::jsonb), 'under_review') returning * into v_pack;
+  return to_jsonb(v_pack);
+end;
+$$;
+
+create or replace function procurement.review_policy_exception_pack(payload jsonb)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_pack procurement.exception_packs; v_request procurement.requests; v_assignment procurement.doa_assignments; v_stage text := payload->>'stage'; v_decision text := payload->>'decision';
+begin
+  select * into v_pack from procurement.exception_packs where id = (payload->>'id')::uuid for update;
+  if not found or v_pack.status <> 'under_review' then raise exception 'An exception awaiting review is required'; end if;
+  if v_decision not in ('approved','rejected') or nullif(btrim(payload->>'note'),'') is null then raise exception 'A decision and review note are required'; end if;
+  select * into v_request from procurement.requests where id = v_pack.request_id for share;
+  if v_stage = 'procurement' then
+    if not private.policy_sourcing_can_review() or v_pack.evidence->>'submittedBy' = auth.uid()::text then raise exception 'An independent Procurement reviewer is required'; end if;
+    update procurement.exception_packs set procurement_head_reviewed_by = auth.uid(), procurement_head_reviewed_at = statement_timestamp(), status = case when v_decision = 'rejected' then 'rejected' else 'under_review' end, evidence = evidence || jsonb_build_object('procurementReviewNote',btrim(payload->>'note'),'procurementReviewedBy',auth.uid()) where id=v_pack.id returning * into v_pack;
+  elsif v_stage = 'finance' then
+    if v_pack.exception_type <> 'petty_cash' and v_pack.exception_type <> 'petty_cash_non_accredited' then raise exception 'Finance eligibility applies only to petty cash'; end if;
+    if not (core.has_live_cap('procurement','view_finance') or core.has_live_cap('procurement','admin')) then raise exception 'Finance authority is required'; end if;
+    update procurement.exception_packs set status = case when v_decision = 'rejected' then 'rejected' else 'under_review' end, evidence = evidence || jsonb_build_object('financeReviewedBy',auth.uid(),'financeReviewNote',btrim(payload->>'note')) where id=v_pack.id returning * into v_pack;
+  elsif v_stage = 'doa' then
+    if v_pack.procurement_head_reviewed_by is null then raise exception 'Independent Procurement review is required before DOA'; end if;
+    v_assignment := private.policy_variance_doa_assignment(v_request, 'final_approver');
+    insert into procurement.exception_doa_decisions(exception_pack_id,decision,rationale,doa_matrix_id,doa_assignment_id,decided_by) values(v_pack.id,v_decision,btrim(payload->>'note'),v_assignment.matrix_id,v_assignment.id,auth.uid()) on conflict(exception_pack_id) do nothing;
+    update procurement.exception_packs set status = case when v_decision = 'approved' then 'approved' else 'rejected' end, final_approval_step_id = null where id=v_pack.id returning * into v_pack;
+  else raise exception 'Review stage must be procurement, finance, or doa'; end if;
+  return to_jsonb(v_pack);
+end;
+$$;
+
+create or replace function private.policy_exception_award_guard()
+returns trigger language plpgsql security definer set search_path = '' as $$
+declare v_request procurement.requests; v_profile procurement.policy_profiles; v_blockers text[];
+begin
+  if new.status = 'awarded' and old.status is distinct from 'awarded' then
+    select * into v_request from procurement.requests where id = new.request_id;
+    if v_request.procurement_mode <> 'competitive_bidding' then
+      select * into v_profile from procurement.policy_profiles where id = v_request.policy_profile_id;
+      v_blockers := private.policy_exception_pack_blockers(v_request.id::text, v_request.procurement_mode, v_profile, v_request.estimated_amount);
+      if cardinality(v_blockers) > 0 then raise exception 'Exception evidence is incomplete before award: %', array_to_string(v_blockers, ', '); end if;
+    end if;
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists policy_exception_award_guard on procurement.sourcing_events;
+create trigger policy_exception_award_guard before update on procurement.sourcing_events for each row execute function private.policy_exception_award_guard();
+
+create or replace function private.policy_exception_po_issue_guard()
+returns trigger language plpgsql security definer set search_path = '' as $$
+declare v_request procurement.requests; v_profile procurement.policy_profiles; v_blockers text[];
+begin
+  if new.status = 'issued' and old.status is distinct from 'issued' then
+    select * into v_request from procurement.requests where id = new.request_id;
+    if v_request.procurement_mode <> 'competitive_bidding' then
+      select * into v_profile from procurement.policy_profiles where id = v_request.policy_profile_id;
+      v_blockers := private.policy_exception_pack_blockers(v_request.id::text, v_request.procurement_mode, v_profile, v_request.estimated_amount);
+      if cardinality(v_blockers) > 0 then raise exception 'Exception evidence is incomplete before PO issue: %', array_to_string(v_blockers, ', '); end if;
+    end if;
+  end if;
+  return new;
+end;
+$$;
+do $$
+begin
+  -- PGlite contract fixtures intentionally omit the PO table. In a deployed
+  -- application schema the guard is installed on the governed table.
+  if to_regclass('procurement.purchase_orders') is not null then
+    execute 'drop trigger if exists policy_exception_po_issue_guard on procurement.purchase_orders';
+    execute 'create trigger policy_exception_po_issue_guard before update on procurement.purchase_orders for each row execute function private.policy_exception_po_issue_guard()';
+  end if;
+end;
+$$;
+
+revoke all on function private.policy_exception_pack_blockers(text,text,procurement.policy_profiles,numeric), private.policy_exception_award_guard(), private.policy_exception_po_issue_guard(), private.policy_route_exception_is_eligible(text,text,procurement.policy_profiles,numeric) from public, anon, authenticated;
+revoke all on function procurement.submit_policy_exception_pack(jsonb), procurement.review_policy_exception_pack(jsonb) from public, anon;
+grant execute on function procurement.submit_policy_exception_pack(jsonb), procurement.review_policy_exception_pack(jsonb) to authenticated, service_role;
+
 revoke all on function procurement.evaluation_workspace(jsonb) from public, anon;
 grant execute on function procurement.evaluation_workspace(jsonb) to authenticated, service_role;
 

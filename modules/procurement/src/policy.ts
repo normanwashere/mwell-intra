@@ -42,6 +42,8 @@ import {
   legacySourcingMethod,
   routeFromLegacy,
 } from './policyRoute';
+export { evaluateProcurementException } from './procurementExceptions';
+export type { ProcurementExceptionEvaluation, ProcurementExceptionInput } from './procurementExceptions';
 
 export interface AwardRecommendationValidationInput {
   evaluatedVendorId?: string;
