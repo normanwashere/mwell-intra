@@ -5,6 +5,7 @@
 export { ProcurementApp } from "./ProcurementApp";
 export type { ProcurementAppProps } from "./ProcurementApp";
 export { ensureProcurementSeed } from "./localStore";
+export { VendorPurchaseOrderAcknowledgements } from './components/VendorPurchaseOrderAcknowledgements';
 export {
   MPIC_SOURCE_PROFILE,
   MWELL_OPERATING_PROFILE,

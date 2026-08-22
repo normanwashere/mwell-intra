@@ -2604,7 +2604,7 @@ create trigger purchase_order_issue_lifecycle after update of status on procurem
 insert into procurement.purchase_order_lifecycle_state(purchase_order_id,revision,sent_at,acknowledgement_due_at)
 select po.id,2,po.issued_at,po.issued_at + interval '48 hours'
 from procurement.purchase_orders po where po.status='issued' and po.issued_at is not null
-on conflict (purchase_order_id) do update set sent_at=excluded.sent_at, acknowledgement_due_at=excluded.acknowledgement_due_at;
+on conflict (purchase_order_id) do update set revision=2, sent_at=excluded.sent_at, acknowledgement_due_at=excluded.acknowledgement_due_at;
 insert into procurement.purchase_order_lifecycle_events(purchase_order_id,event_type,expected_revision,resulting_revision,actor_id,evidence_reference,payload)
 select po.id,'sent',1,2,po.actor_id,'issued_at',jsonb_build_object('issuedAt',po.issued_at,'backfilled',true)
 from procurement.purchase_orders po where po.status='issued' and po.issued_at is not null and po.actor_id is not null
@@ -3022,6 +3022,34 @@ begin
   return to_jsonb(v_pack);
 end;
 $$;
+
+-- Task 9 fix round 2: vendor-safe acknowledgement list and payment release
+-- deliberately leave an issued PO open for the independent closure workflow.
+create or replace function procurement.vendor_purchase_order_acknowledgements(payload jsonb default '{}'::jsonb)
+returns jsonb language plpgsql security definer set search_path='' as $$
+begin
+ if auth.uid() is null or core.current_vendor_id() is null then raise exception 'Vendor session is required'; end if;
+ return coalesce((select jsonb_agg(jsonb_build_object('id',po.id,'poNumber',po.po_number,'vendorName',po.vendor_name,'lifecycle',private.policy_po_lifecycle_projection(po.id)) order by po.issued_at desc) from procurement.purchase_orders po where po.status='issued' and po.core_vendor_id=core.current_vendor_id()),'[]'::jsonb);
+end;
+$$;
+
+create or replace function procurement.release_payment(payload jsonb)
+returns jsonb language plpgsql security definer set search_path='' as $$
+declare v_pack procurement.payment_readiness_packs; v_release procurement.payment_releases; v_total numeric;
+begin
+ if not core.has_live_cap('procurement','view_finance') and not core.has_live_cap('procurement','admin') then raise exception 'Not authorized to release payment'; end if;
+ select * into v_pack from procurement.payment_readiness_packs where id=(payload->>'payment_readiness_pack_id')::uuid for update;
+ if not found or v_pack.status<>'accepted' then raise exception 'Finance acceptance is required before release'; end if;
+ if (payload->>'amount')::numeric<=0 or (payload->>'amount')::numeric>v_pack.invoice_amount-v_pack.released_amount then raise exception 'Release amount exceeds the unpaid invoice balance'; end if;
+ if nullif(trim(payload->>'payment_reference'),'') is null or nullif(payload->>'paid_at','') is null then raise exception 'Payment reference and date are required'; end if;
+ insert into procurement.payment_releases(payment_readiness_pack_id,purchase_order_id,amount,payment_reference,payment_method,paid_at) values(v_pack.id,v_pack.purchase_order_id,(payload->>'amount')::numeric,payload->>'payment_reference',payload->>'payment_method',(payload->>'paid_at')::date) returning * into v_release;
+ select coalesce(sum(amount),0) into v_total from procurement.payment_releases where payment_readiness_pack_id=v_pack.id and status='posted';
+ update procurement.payment_readiness_packs set released_amount=v_total,status=case when v_total>=invoice_amount then 'released' else 'accepted' end where id=v_pack.id returning * into v_pack;
+ return jsonb_build_object('pack',to_jsonb(v_pack),'release',to_jsonb(v_release),'closureRequired',v_pack.status='released');
+end;
+$$;
+revoke all on function procurement.vendor_purchase_order_acknowledgements(jsonb), procurement.release_payment(jsonb) from public, anon;
+grant execute on function procurement.vendor_purchase_order_acknowledgements(jsonb), procurement.release_payment(jsonb) to authenticated;
 
 create or replace function procurement.review_policy_exception_pack(payload jsonb)
 returns jsonb language plpgsql security definer set search_path = '' as $$

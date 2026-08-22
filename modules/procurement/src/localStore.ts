@@ -1231,13 +1231,17 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
     void refreshCommitmentReadiness();
   }, [refreshCommitmentReadiness]);
   const refreshLifecycle = useCallback(async () => {
-    if (!live) { setLiveLifecycle([]); setLiveMonitoring([]); return; }
+    if (!live) { setLiveLifecycle([]); return; }
     const lifecycle = await Promise.all(liveBaseRows.filter((row) => row.status === 'issued').map(async (row) => mapLifecycle({ ...(await liveRpc<LiveRow>(live, 'procurement', 'purchase_order_lifecycle', { purchase_order_id: row.id })), purchase_order_id: row.id })));
     setLiveLifecycle(lifecycle);
+  }, [live, liveBaseRows]);
+  const refreshMonitoring = useCallback(async () => {
+    if (!live) { setLiveMonitoring([]); return; }
     const monitoring = await liveRpc<OpenPurchaseOrderMonitoringItem[]>(live, 'procurement', 'review_open_purchase_orders', {});
     setLiveMonitoring(monitoring ?? []);
-  }, [live, liveBaseRows]);
-  useEffect(() => { void refreshLifecycle().catch(() => { setLiveLifecycle([]); setLiveMonitoring([]); }); }, [refreshLifecycle]);
+  }, [live]);
+  useEffect(() => { void refreshLifecycle().catch(() => setLiveLifecycle([])); }, [refreshLifecycle]);
+  useEffect(() => { void refreshMonitoring().catch(() => setLiveMonitoring([])); }, [refreshMonitoring]);
   const [livePaymentPacks, livePaymentPacksLoading, refreshPaymentPacks] =
     useLiveRows<PaymentReadinessPack>(
       live,
@@ -1324,6 +1328,7 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
       refreshCommitmentReadiness(),
       refreshStalenessEvents(),
       refreshLifecycle(),
+      refreshMonitoring(),
     ]);
   }, [
     refreshPos,
@@ -1333,6 +1338,7 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
     refreshCommitmentReadiness,
     refreshStalenessEvents,
     refreshLifecycle,
+    refreshMonitoring,
   ]);
 
   const add = useCallback(

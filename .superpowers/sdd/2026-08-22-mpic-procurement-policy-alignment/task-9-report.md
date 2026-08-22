@@ -17,6 +17,12 @@
 - The commitment panel renders the server-derived requirement matrix with status, route/exception basis, source, owner, and recovery action.
 - Added a disposable public Task 9 PGlite matrix plus desktop/mobile controlled-RPC fixture and lifecycle browser spec.
 
+## Fix Round 2 In Progress
+
+- Added the vendor-only `/vendor/purchase-orders` acknowledgement surface and a server-scoped awarded-PO list RPC. Lifecycle and procurement-only monitoring refreshes are now independent.
+- Overrode `release_payment` to leave even fully paid POs issued; an independent approved closure request remains required for the only governed terminal path. The issued-PO backfill now normalizes the state revision to the immutable sent-event revision.
+- Added a Task-9-only Playwright configuration with dynamic controlled-auth port propagation, HTML/JUnit output, failure screenshots, traces, and a Node22 runner.
+
 ## Verification
 
 - `& 'C:\Users\NormanArisDeocareza\.cache\node-runtimes\node-v22.17.0-win-x64\node.exe' 'C:\Users\NormanArisDeocareza\.cache\node-runtimes\node-v22.17.0-win-x64\node_modules\corepack\dist\pnpm.js' --filter @intra/procurement test`: passed, 178 tests.
@@ -30,4 +36,4 @@
 
 - No Supabase migration, deployment, UAT, or production mutation was performed.
 - The migration was not applied and no shared Supabase target was changed.
-- Browser fixture source is present, typechecked, and configured for desktop/mobile; three controlled runs did not yield Playwright completion or screenshots in this shell. One retry reported temporary port `54321` contention after the first run; later retries started the controlled web servers but terminated without a report or artifacts. This is an external local-runner/process-handoff limitation, not production acceptance evidence.
+- Browser fixture source is present and typechecked, but the three current controlled runs start both dynamically ported web servers and then return no Playwright completion, report, JUnit file, trace, or screenshot to this shell. This is an external local-runner/process-handoff limitation; desktop/mobile evidence is not claimed.

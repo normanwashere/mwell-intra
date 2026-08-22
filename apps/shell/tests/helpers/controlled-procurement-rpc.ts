@@ -1,9 +1,9 @@
 import type { BrowserContext, Route } from '@playwright/test';
 
-export const CONTROLLED_SUPABASE_URL = 'http://127.0.0.1:54321';
+export const CONTROLLED_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'http://127.0.0.1:54321';
 export const CONTROLLED_ANON_KEY = 'controlled-rpc-anon-key';
 
-type ActorKey = 'procurement' | 'vendor' | 'admin' | 'legal' | 'operations' | 'deptHead' | 'finance' | 'financeNoCapability' | 'unrelated' | 'exceptionReviewer' | 'exceptionFinance' | 'exceptionDoa';
+type ActorKey = 'procurement' | 'vendor' | 'unrelatedVendor' | 'admin' | 'legal' | 'operations' | 'deptHead' | 'finance' | 'financeNoCapability' | 'unrelated' | 'exceptionReviewer' | 'exceptionFinance' | 'exceptionDoa';
 type Actor = {
   id: string;
   email: string;
@@ -29,6 +29,10 @@ const ACTORS: Record<ActorKey, Actor> = {
   },
   vendor: {
     id: 'controlled-awarded-vendor', email: 'vendor.controlled@mwell.test', name: 'Controlled Awarded Vendor', title: 'Vendor Contact', kind: 'vendor', vendorId: 'vendor-1',
+    roles: { core: ['vendor_portal'] }, capabilities: { core: ['vendor_portal'] },
+  },
+  unrelatedVendor: {
+    id: 'controlled-unrelated-vendor', email: 'vendor.unrelated@mwell.test', name: 'Controlled Unrelated Vendor', title: 'Vendor Contact', kind: 'vendor', vendorId: 'vendor-2',
     roles: { core: ['vendor_portal'] }, capabilities: { core: ['vendor_portal'] },
   },
   admin: {
@@ -680,6 +684,7 @@ export class ControlledProcurementRpcFixture {
     }
     if (schema !== 'procurement') return response(route, null);
 
+    if (name === 'vendor_purchase_order_acknowledgements') return actor.vendorId === 'vendor-1' && this.purchaseOrder && this.lifecycle ? response(route, [{ id: this.purchaseOrder.id, poNumber: this.purchaseOrder.po_number, vendorName: this.purchaseOrder.vendor_name, lifecycle: this.lifecycle }]) : response(route, []);
     if (name === 'purchase_order_lifecycle') return this.lifecycle ? response(route, { ...this.lifecycle }) : failure(route, 'PO lifecycle not found', 404);
     if (name === 'review_open_purchase_orders') return actor.id === ACTORS.procurement.id ? response(route, this.monitoring) : failure(route, 'Procurement monitoring authority is required', 403);
     if (name === 'acknowledge_purchase_order') {
