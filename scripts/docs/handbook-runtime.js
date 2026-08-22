@@ -249,15 +249,32 @@
     }
 
     function applyDiagramZoom(shell, scale) {
+      const viewport = shell.querySelector('[data-diagram-viewport]');
+      const canvas = shell.querySelector('.diagram-canvas');
       const diagram = shell.querySelector('.mermaid');
-      const baseMin = matchMedia('(max-width:520px)').matches ? 520 : 720;
-      if (scale === 'fit') {
-        shell.dataset.diagramScale = 'fit';
-        diagram.style.width = '100%'; diagram.style.minWidth = '0';
-        return;
-      }
-      shell.dataset.diagramScale = String(scale);
-      diagram.style.width = `${scale * 100}%`; diagram.style.minWidth = `${baseMin * scale}px`;
+      const svg = diagram?.querySelector('svg');
+      const viewBox = svg?.viewBox?.baseVal;
+      const width = viewBox?.width || Number(shell.dataset.diagramWidth);
+      const height = viewBox?.height || Number(shell.dataset.diagramHeight);
+      if (!viewport || !canvas || !diagram || !svg || !width || !height) return false;
+      shell.dataset.diagramWidth = String(width);
+      shell.dataset.diagramHeight = String(height);
+      const availableWidth = Math.max(1, viewport.clientWidth - 48);
+      const availableHeight = Math.max(1, viewport.clientHeight - 48);
+      const resolvedScale = scale === 'fit'
+        ? Math.min(1.8, Math.max(.6, Math.min(availableWidth / width, availableHeight / height)))
+        : Math.min(1.8, Math.max(.6, scale));
+      shell.dataset.diagramScale = scale === 'fit' ? 'fit' : String(resolvedScale);
+      shell.dataset.diagramRenderedScale = String(resolvedScale);
+      canvas.style.width = `${Math.ceil(width * resolvedScale + 48)}px`;
+      canvas.style.height = `${Math.ceil(height * resolvedScale + 48)}px`;
+      diagram.style.width = `${width}px`;
+      diagram.style.height = `${height}px`;
+      diagram.style.transform = `translate(24px, 24px) scale(${resolvedScale})`;
+      svg.style.setProperty('width', `${width}px`, 'important');
+      svg.style.setProperty('height', `${height}px`, 'important');
+      svg.style.setProperty('max-width', 'none', 'important');
+      return true;
     }
 
     function applyDiagramMode(group, mode) {
@@ -265,9 +282,18 @@
       group.dataset.activeDiagramView = selected;
       group.querySelectorAll('.diagram-shell[data-diagram-view]').forEach((shell) => { shell.hidden = shell.dataset.diagramView !== selected; });
       group.querySelectorAll('[data-diagram-view-control]').forEach((button) => { button.setAttribute('aria-pressed', String(button.dataset.diagramViewControl === selected)); });
-      const stages = [...group.querySelectorAll('[data-process-stage]')];
-      const activeStage = selected === 'overview' ? 0 : selected === 'role' ? Math.floor(Math.max(0, stages.length - 1) / 2) : Math.max(0, stages.length - 1);
-      stages.forEach((stage, index) => { if (index === activeStage) stage.setAttribute('aria-current', 'step'); else stage.removeAttribute('aria-current'); });
+      window.requestAnimationFrame(refreshDiagramCanvases);
+    }
+
+    function refreshDiagramCanvases() {
+      document.querySelectorAll('.diagram-shell[data-diagram-id]').forEach((shell) => {
+        if (shell.closest('[hidden]')) return;
+        const id = shell.dataset.diagramId;
+        if (!applyDiagramZoom(shell, diagramZoom[id] || 'fit')) return;
+        const view = diagramViews[id];
+        const viewport = shell.querySelector('[data-diagram-viewport]');
+        if (view) { viewport.scrollLeft = view.left; viewport.scrollTop = view.top; }
+      });
     }
 
     function prepareMermaidLayout() {
@@ -319,8 +345,7 @@
       }));
     });
     document.querySelectorAll('.diagram-shell[data-diagram-id]').forEach((shell) => {
-      const id = shell.dataset.diagramId; const viewport = shell.querySelector('.diagram-viewport'); let scale = diagramZoom[id] || 'fit';
-      applyDiagramZoom(shell, scale); const view = diagramViews[id]; if (view) { viewport.scrollLeft = view.left; viewport.scrollTop = view.top; }
+      const id = shell.dataset.diagramId; const viewport = shell.querySelector('[data-diagram-viewport]'); let scale = diagramZoom[id] || 'fit';
       viewport.addEventListener('scroll', () => { diagramViews = { ...diagramViews, [id]: { left: viewport.scrollLeft, top: viewport.scrollTop } }; schedulePersistence(); });
       shell.querySelector('[data-diagram-fit]')?.addEventListener('click', () => { scale = 'fit'; diagramZoom = { ...diagramZoom, [id]: scale }; applyDiagramZoom(shell, scale); schedulePersistence(); });
       shell.querySelectorAll('[data-diagram-zoom]').forEach((button) => button.addEventListener('click', () => { const action = button.dataset.diagramZoom; const current = typeof scale === 'number' ? scale : 1; scale = action === 'reset' ? 1 : Math.min(1.8, Math.max(.6, current + (action === 'in' ? .1 : -.1))); diagramZoom = { ...diagramZoom, [id]: scale }; applyDiagramZoom(shell, scale); schedulePersistence(); }));
@@ -338,5 +363,7 @@
       document.querySelectorAll('[data-diagram-group]').forEach((group) => applyDiagramMode(group, group.dataset.pendingDiagramView || 'overview'));
       setSearchState(initialRoute);
       activateRoute({ ...recoveredInitialRoute, historyMode: 'replace', restoreScroll: false });
+      window.requestAnimationFrame(refreshDiagramCanvases);
       restoreStoredPosition(recoveredInitialRoute);
     });
+    window.addEventListener('resize', () => window.requestAnimationFrame(refreshDiagramCanvases), { passive: true });

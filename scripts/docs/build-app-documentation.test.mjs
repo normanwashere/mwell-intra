@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import {
   buildDocumentationHtml,
   documentationSources,
@@ -144,12 +145,27 @@ test("renders scoped explainable search without navigation reloads", () => {
 
 test("renders maintained flow views before workflow prose", () => {
   const html = buildDocumentationHtml();
+  const workflows = [
+    "procurement-to-payment",
+    "vendor-accreditation",
+    "receiving-putaway",
+    "ecommerce-fulfillment",
+    "returns-replacements",
+    "inventory-release",
+    "event-custody",
+    "inventory-integrity",
+  ];
 
   assert.ok((html.match(/class="mermaid"/g) ?? []).length >= 6);
-  assert.match(html, /data-diagram-group/);
-  assert.match(html, /data-diagram-view="overview"/);
-  assert.match(html, /data-diagram-view="role"/);
-  assert.match(html, /data-diagram-view="decision"/);
+  for (const workflow of workflows) {
+    const group = html.match(new RegExp(`<section class="diagram-group"[^>]+data-workflow-id="${workflow}"[\\s\\S]*?</section>`));
+    assert.ok(group, `renders ${workflow} as a maintained diagram group`);
+    for (const view of ["overview", "role", "decision"]) assert.match(group[0], new RegExp(`data-diagram-view="${view}"`));
+    assert.match(group[0], /--&gt;\|[^|]+\|/, `${workflow} includes labeled decision edges`);
+    const nextGroup = html.indexOf('<section class="diagram-group"', group.index + group[0].length);
+    const completion = html.indexOf('<strong>Completion criteria:</strong>', group.index + group[0].length);
+    assert.ok(completion > group.index && (nextGroup < 0 || completion < nextGroup), `${workflow} keeps completion criteria after its diagram group`);
+  }
   assert.match(html, /class="process-ribbon"/);
   assert.match(html, /data-diagram-fit/);
   assert.doesNotMatch(html, /```mermaid/);
@@ -195,16 +211,25 @@ test("normalizes persisted handbook state without accepting malformed values", (
   });
 });
 
-test("keeps diagram state IDs stable when source text is inserted before a diagram", () => {
+test("keeps semantic diagram state IDs stable when diagrams are inserted or reordered", () => {
   const decorateArticleHtml = generatorFunction("decorateArticleHtml", "buildSearchIndex", {
     escapeHtml: (value) => value,
     disclosureDefaultOpen: () => true,
+    createHash,
   });
   const document = { id: "doc-example", collapse: "none" };
-  const diagram = '<figure class="diagram-shell"><div class="mermaid">flowchart TD</div></figure>';
+  const overview = '<figure class="diagram-shell" data-flow-workflow="procurement-to-payment" data-flow-view="overview" data-flow-stages="Request|Pay"><div class="mermaid">flowchart TD\nA[Request] --&gt; B[Pay]</div></figure>';
+  const role = '<figure class="diagram-shell" data-flow-workflow="procurement-to-payment" data-flow-view="role" data-flow-stages="Request|Pay"><div class="mermaid">flowchart TD\nA[Requester] --&gt; B[Finance]</div></figure>';
+  const decision = '<figure class="diagram-shell" data-flow-workflow="procurement-to-payment" data-flow-view="decision" data-flow-stages="Request|Pay"><div class="mermaid">flowchart TD\nA{Approved?} --&gt;|Yes| B[Pay]</div></figure>';
+  const fallback = '<figure class="diagram-shell"><div class="mermaid">flowchart TD\nA[Stable fallback] --&gt; B[Done]</div></figure>';
+  const inserted = '<figure class="diagram-shell"><div class="mermaid">flowchart TD\nX[Inserted] --&gt; Y[Other]</div></figure>';
+  const original = decorateArticleHtml(document, `${overview}${role}${decision}${fallback}`);
+  const reordered = decorateArticleHtml(document, `${inserted}${fallback}${overview}${role}${decision}`);
+  const idFor = (html, marker) => html.match(new RegExp(`data-diagram-id="([^"]+)"[^>]*>(?:(?!<figure)[\\s\\S])*?${marker}`))?.[1];
 
-  assert.match(decorateArticleHtml(document, diagram), /data-diagram-id="doc-example:diagram-1"/);
-  assert.match(decorateArticleHtml(document, `<p>Inserted source text.</p>${diagram}`), /data-diagram-id="doc-example:diagram-1"/);
+  assert.equal(idFor(original, "Request] --&gt; B\\[Pay"), idFor(reordered, "Request] --&gt; B\\[Pay"));
+  assert.equal(idFor(original, "Stable fallback"), idFor(reordered, "Stable fallback"));
+  assert.match(original, /data-diagram-id="doc-example:flow:procurement-to-payment:overview"/);
 });
 
 test("restores a saved tab position through the document viewport", () => {

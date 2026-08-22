@@ -188,7 +188,7 @@ function renderMarkdown(markdown, sourceFile, sourceIds, sourceRoutes) {
     const flowAttributes = metadata.workflow
       ? ` data-flow-workflow="${escapeHtml(metadata.workflow)}" data-flow-view="${metadata.view}" data-flow-stages="${escapeHtml(metadata.stages.join("|"))}"`
       : "";
-    return `<figure class="diagram-shell"${flowAttributes}><div class="diagram-toolbar" aria-label="Diagram zoom controls"><button type="button" data-diagram-fit aria-label="Fit diagram to available space">Fit</button><button type="button" data-diagram-zoom="reset" aria-label="Show diagram at 100 percent">100%</button><button type="button" data-diagram-zoom="out" aria-label="Zoom diagram out">−</button><button type="button" data-diagram-zoom="in" aria-label="Zoom diagram in">+</button></div><div class="diagram-viewport"><div class="mermaid">${escapeHtml(metadata.source)}</div></div><figcaption>Process flow. Decision branches are shown as labeled paths.</figcaption></figure>`;
+    return `<figure class="diagram-shell"${flowAttributes}><div class="diagram-toolbar" aria-label="Diagram zoom controls"><button type="button" data-diagram-fit aria-label="Fit diagram to available space">Fit</button><button type="button" data-diagram-zoom="reset" aria-label="Show diagram at 100 percent">100%</button><button type="button" data-diagram-zoom="out" aria-label="Zoom diagram out">−</button><button type="button" data-diagram-zoom="in" aria-label="Zoom diagram in">+</button></div><div class="diagram-viewport" data-diagram-viewport role="region" tabindex="0" aria-label="Diagram canvas. Scroll or pan in both directions to inspect it."><div class="diagram-canvas"><div class="mermaid">${escapeHtml(metadata.source)}</div></div></div><figcaption>Process flow. Decision branches are shown as labeled paths.</figcaption></figure>`;
   };
 
   return marked.parse(markdown.replace(/^#\s+.+(?:\r?\n)+/, ""), {
@@ -220,10 +220,18 @@ function disclosureDefaultOpen(document, heading, index, section) {
 }
 
 function decorateArticleHtml(document, html) {
-  let diagramIndex = 0;
-  const withDiagramIds = html.replace(/<figure class="diagram-shell"([^>]*)>/g, (_, attributes) => {
-    diagramIndex += 1;
-    return `<figure class="diagram-shell" data-diagram-id="${escapeHtml(`${document.id}:diagram-${diagramIndex}`)}"${attributes}>`;
+  const duplicateFallbackIds = new Map();
+  const withDiagramIds = html.replace(/<figure class="diagram-shell"([^>]*)>([\s\S]*?)<\/figure>/g, (match, attributes, contents) => {
+    const workflow = attributes.match(/\bdata-flow-workflow="([^"]+)"/)?.[1];
+    const view = attributes.match(/\bdata-flow-view="([^"]+)"/)?.[1];
+    const source = contents.match(/<div class="mermaid">([\s\S]*?)<\/div>/)?.[1] ?? contents;
+    const baseId = workflow && view
+      ? `${document.id}:flow:${workflow}:${view}`
+      : `${document.id}:diagram:${createHash("sha256").update(source).digest("hex").slice(0, 12)}`;
+    const duplicateCount = duplicateFallbackIds.get(baseId) ?? 0;
+    duplicateFallbackIds.set(baseId, duplicateCount + 1);
+    const id = duplicateCount === 0 ? baseId : `${baseId}:${duplicateCount + 1}`;
+    return `<figure class="diagram-shell" data-diagram-id="${escapeHtml(id)}"${attributes}>${contents}</figure>`;
   });
   const flowPattern = /<figure\b(?=[^>]*\bclass="diagram-shell")(?=[^>]*\bdata-flow-workflow="([^"]+)")(?=[^>]*\bdata-flow-view="([^"]+)")(?=[^>]*\bdata-flow-stages="([^"]*)")[^>]*>[\s\S]*?<\/figure>/g;
   const diagrams = [...withDiagramIds.matchAll(flowPattern)];
@@ -243,9 +251,9 @@ function decorateArticleHtml(document, html) {
     groupedHtml += withDiagramIds.slice(cursor, groupStart);
     const controls = [["overview", "Overview"], ["role", "By role"], ["decision", "Decisions"]]
       .map(([view, label]) => `<button type="button" data-diagram-view-control="${view}" aria-pressed="${view === "overview"}">${label}</button>`).join("");
-    const ribbon = stages.map((stage, stageIndex) => `<li data-process-stage="${stageIndex}"${stageIndex === 0 ? ' aria-current="step"' : ""}>${escapeHtml(stage)}</li>`).join("");
+    const ribbon = stages.map((stage, stageIndex) => `<li data-process-stage="${stageIndex}">${escapeHtml(stage)}</li>`).join("");
     const figures = group.map((diagram) => diagram[0].replace("<figure ", `<figure data-diagram-view="${diagram[2]}" `)).join("");
-    groupedHtml += `<section class="diagram-group" data-diagram-group="${escapeHtml(workflow)}" data-active-diagram-view="overview"><div class="diagram-group-header"><div class="diagram-view-controls" role="group" aria-label="Workflow diagram perspective">${controls}</div><ol class="process-ribbon" aria-label="Workflow lifecycle">${ribbon}</ol></div>${figures}</section>`;
+    groupedHtml += `<section class="diagram-group" data-diagram-group="${escapeHtml(`${document.id}:flow:${workflow}`)}" data-workflow-id="${escapeHtml(workflow)}" data-active-diagram-view="overview"><div class="diagram-group-header"><div class="diagram-view-controls" role="group" aria-label="Workflow diagram perspective">${controls}</div><ol class="process-ribbon" aria-label="Workflow lifecycle">${ribbon}</ol></div>${figures}</section>`;
     cursor = groupEnd;
     index = end;
   }
