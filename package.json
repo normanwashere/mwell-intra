@@ -29,6 +29,7 @@
     "verify:procurement-contract": "node scripts/verify-effective-procurement-contract.mjs",
     "verify:advisor-hardening": "node scripts/verify-current-function-advisor-hardening.mjs",
     "verify:policy-alignment-schema": "node scripts/verify-policy-alignment-schema.mjs",
+    "verify:mpic-procurement-policy-alignment": "node scripts/verify-mpic-procurement-policy-alignment.mjs",
     "verify:warehouse-w1-schema": "node scripts/verify-warehouse-w1-schema.mjs",
     "verify:warehouse-w1-contract": "node scripts/verify-warehouse-w1-contract.mjs",
     "verify:cross-department-wms": "node --test scripts/verify-cross-department-wms.test.mjs",
