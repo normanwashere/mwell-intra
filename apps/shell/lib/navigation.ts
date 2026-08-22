@@ -247,6 +247,15 @@ export function authorizedPostLoginPath(
 ): string | null {
   if (!authorizationReady) return null;
   if (requestedPath === "/") return "/";
+  // A DOA variance reviewer may have no Procurement module role at all. Let
+  // an employee reach one concrete request after sign-in so the page can ask
+  // the authoritative evaluation_workspace RPC whether a decision is assigned.
+  // This is navigation admission only: list, authoring, sourcing, and admin
+  // paths still fall through to their normal capability checks.
+  const varianceRequestId = requestedPath.match(/^\/procurement\/requests\/([^/]+)$/)?.[1];
+  if (varianceRequestId && varianceRequestId !== "new") {
+    return profileKind === "employee" ? requestedPath : "/";
+  }
   if (
     requestedPath === ONBOARDING_NAV.href ||
     requestedPath.startsWith(`${ONBOARDING_NAV.href}/`)

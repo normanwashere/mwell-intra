@@ -2367,40 +2367,46 @@ create or replace function private.policy_variance_review_eligibility(
   p_recommendation procurement.award_recommendations
 )
 returns jsonb language plpgsql stable security definer set search_path = '' as $$
-declare v_stage text; v_assignment procurement.doa_assignments; v_matrix procurement.doa_matrices;
-  v_department_decider uuid; v_can_review boolean := false;
+declare v_stage text; v_assignment_id uuid; v_matrix_id uuid; v_matrix_version text; v_actor uuid := auth.uid();
+  v_department text; v_category text; v_amount numeric; v_department_decider uuid; v_can_review boolean := false;
 begin
   if p_recommendation.status <> 'pending_variance' then return jsonb_build_object('canReview', false); end if;
+  select request.department, request.category, request.estimated_amount
+    into v_department, v_category, v_amount
+  from procurement.requests request where request.id = p_request.id;
   select decided_by into v_department_decider from procurement.award_recommendation_variance_decisions
   where award_recommendation_id = p_recommendation.id and decision_type = 'department_head' and decision = 'approved';
   v_stage := case when v_department_decider is null then 'department_head' else 'finance' end;
-  select assignment.* into v_assignment
+  -- Select scalar authority references for the read model. The conditions
+  -- mirror the write resolver so the page cannot advertise a decision the
+  -- decision RPC would reject.
+  select assignment.id, assignment.matrix_id, matrix.version
+    into v_assignment_id, v_matrix_id, v_matrix_version
   from procurement.doa_assignments assignment
   join procurement.doa_matrices matrix on matrix.id = assignment.matrix_id
   join core.profiles approver on approver.id = assignment.approver_user_id
   where matrix.active and matrix.status = 'active'
     and matrix.effective_at <= statement_timestamp()
     and (matrix.expires_at is null or matrix.expires_at > statement_timestamp())
-    and assignment.active and assignment.approver_user_id = auth.uid()
+    and assignment.active and assignment.approver_user_id = v_actor
     and assignment.tier = v_stage
-    and lower(assignment.department) = lower(p_request.department)
-    and (assignment.category is null or assignment.category = p_request.category)
-    and coalesce(p_request.estimated_amount, 0) >= assignment.min_amount
-    and (assignment.max_amount is null or coalesce(p_request.estimated_amount, 0) <= assignment.max_amount)
+    and lower(assignment.department) = lower(v_department)
+    and (assignment.category is null or assignment.category = v_category)
+    and coalesce(v_amount, 0) >= assignment.min_amount
+    and (assignment.max_amount is null or coalesce(v_amount, 0) <= assignment.max_amount)
     and approver.status = 'active'
   order by matrix.effective_at desc, assignment.min_amount desc limit 1;
-  if found then
-    select * into v_matrix from procurement.doa_matrices where id = v_assignment.matrix_id;
-    v_can_review := auth.uid() <> p_recommendation.created_by
+  if v_assignment_id is not null then
+    v_can_review := v_actor <> p_recommendation.created_by
       and (v_stage <> 'finance' or (core.has_live_cap('procurement', 'view_finance') or core.has_live_cap('procurement', 'admin')))
-      and (v_stage <> 'finance' or auth.uid() <> v_department_decider);
+      and (v_stage <> 'finance' or v_actor <> v_department_decider);
   end if;
   return jsonb_build_object(
     'nextStage', v_stage,
     'canReview', v_can_review,
-    'doaMatrixId', v_matrix.id,
-    'doaMatrixVersion', v_matrix.version,
-    'doaAssignmentId', v_assignment.id
+    'doaMatrixId', v_matrix_id,
+    'doaMatrixVersion', v_matrix_version,
+    'doaAssignmentId', v_assignment_id
   );
 end;
 $$;
@@ -2582,3 +2588,62 @@ end;
 $$;
 
 revoke all on function private.policy_can_view_variance_request(procurement.requests), private.policy_variance_review_eligibility(procurement.requests, procurement.award_recommendations) from public, anon, authenticated;
+
+-- Task 7 re-review: DOA reviewers enter only this server-scoped detail model.
+-- It deliberately contains enough request and evaluation context to decide the
+-- variance without granting a client route to request lists or sourcing tools.
+create or replace function procurement.evaluation_workspace(payload jsonb default '{}'::jsonb)
+returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare v_event procurement.sourcing_events; v_request procurement.requests; v_responses jsonb; v_tabulations jsonb; v_evaluations jsonb; v_recommendation jsonb; v_variances jsonb; v_recommendation_row procurement.award_recommendations; v_eligibility jsonb;
+begin
+  perform procurement.sourcing_workspace(payload);
+  select * into v_request from procurement.requests request where request.id::text = payload->>'request_id';
+  select * into v_event from procurement.sourcing_events event where event.request_id = v_request.id and event.status <> 'cancelled' order by event.created_at desc limit 1;
+  if not found then
+    return jsonb_build_object(
+      'request', jsonb_build_object('id', v_request.id, 'title', v_request.title, 'department', v_request.department, 'costCenter', v_request.cost_center, 'category', v_request.category, 'estimatedAmount', v_request.estimated_amount, 'status', v_request.status),
+      'event', null,
+      'commercialTabulations', '[]'::jsonb,
+      'technicalEvaluations', '[]'::jsonb,
+      'awardRecommendation', null,
+      'varianceDecisions', '[]'::jsonb,
+      'varianceEligibility', jsonb_build_object('canReview', false)
+    );
+  end if;
+  select coalesce(jsonb_agg(jsonb_build_object('vendorId', response.vendor_id, 'vendorName', vendor.legal_name, 'receivedAt', response.received_at, 'deadlineCompliant', response.deadline_compliant, 'commercial', response.commercial) order by vendor.legal_name), '[]'::jsonb)
+    into v_responses
+    from procurement.sourcing_responses response join core.vendors vendor on vendor.id = response.vendor_id
+    where response.sourcing_event_id = v_event.id;
+  select coalesce(jsonb_agg(jsonb_build_object('id', tabulation.id, 'sourcingEventId', tabulation.sourcing_event_id, 'version', tabulation.version, 'responseClosedAt', tabulation.response_closed_at, 'dueAt', tabulation.due_at, 'submittedAt', tabulation.submitted_at, 'submittedByName', coalesce(submitter.full_name, tabulation.submitted_by::text), 'entries', tabulation.entries, 'evidenceReference', tabulation.evidence_reference, 'comments', tabulation.comments, 'status', tabulation.status, 'escalationStatus', tabulation.escalation_status) order by tabulation.version desc), '[]'::jsonb)
+    into v_tabulations
+    from procurement.commercial_tabulations tabulation left join core.profiles submitter on submitter.id = tabulation.submitted_by
+    where tabulation.sourcing_event_id = v_event.id;
+  select coalesce(jsonb_agg(jsonb_build_object('id', evaluation.id, 'sourcingEventId', evaluation.sourcing_event_id, 'vendorId', evaluation.vendor_id, 'version', evaluation.version, 'dueAt', evaluation.due_at, 'submittedAt', evaluation.submitted_at, 'reviewerName', coalesce(reviewer.full_name, evaluation.reviewer_id::text), 'criteria', evaluation.criteria, 'totalScore', evaluation.total_score, 'evidenceReference', evaluation.evidence_reference, 'comments', evaluation.comments, 'status', evaluation.status, 'escalationStatus', evaluation.escalation_status) order by evaluation.vendor_id, evaluation.version desc), '[]'::jsonb)
+    into v_evaluations
+    from procurement.technical_evaluations evaluation left join core.profiles reviewer on reviewer.id = evaluation.reviewer_id
+    where evaluation.sourcing_event_id = v_event.id;
+  select * into v_recommendation_row from procurement.award_recommendations recommendation where recommendation.sourcing_event_id = v_event.id and recommendation.status <> 'superseded' order by recommendation.created_at desc limit 1;
+  if found then
+    v_recommendation := jsonb_build_object('id', v_recommendation_row.id, 'sourcingEventId', v_recommendation_row.sourcing_event_id, 'evaluatedVendorId', v_recommendation_row.evaluated_vendor_id, 'recommendedVendorId', v_recommendation_row.recommended_vendor_id, 'rationale', v_recommendation_row.rationale, 'commercialTabulationId', v_recommendation_row.commercial_tabulation_id, 'technicalEvaluationId', v_recommendation_row.technical_evaluation_id, 'riskEvidenceReference', v_recommendation_row.risk_evidence_reference, 'varianceJustification', v_recommendation_row.variance_justification, 'status', v_recommendation_row.status, 'version', v_recommendation_row.revision, 'createdAt', v_recommendation_row.created_at);
+    v_eligibility := private.policy_variance_review_eligibility(v_request, v_recommendation_row);
+  else
+    v_recommendation := null;
+    v_eligibility := jsonb_build_object('canReview', false);
+  end if;
+  select coalesce(jsonb_agg(jsonb_build_object('id', decision.id, 'awardRecommendationId', decision.award_recommendation_id, 'decisionType', decision.decision_type, 'decision', decision.decision, 'rationale', decision.rationale, 'decidedByName', coalesce(decider.full_name, decision.decided_by::text), 'decidedAt', decision.decided_at, 'doaMatrixId', decision.doa_matrix_id, 'doaMatrixVersion', matrix.version, 'doaAssignmentId', decision.doa_assignment_id) order by decision.decided_at), '[]'::jsonb)
+    into v_variances
+    from procurement.award_recommendation_variance_decisions decision
+    left join core.profiles decider on decider.id = decision.decided_by
+    left join procurement.doa_matrices matrix on matrix.id = decision.doa_matrix_id
+    where v_recommendation_row is not null and decision.award_recommendation_id = v_recommendation_row.id;
+  return jsonb_build_object(
+    'request', jsonb_build_object('id', v_request.id, 'title', v_request.title, 'department', v_request.department, 'costCenter', v_request.cost_center, 'category', v_request.category, 'estimatedAmount', v_request.estimated_amount, 'status', v_request.status),
+    'event', jsonb_build_object('id', v_event.id, 'status', v_event.status, 'responses', v_responses),
+    'commercialTabulations', v_tabulations,
+    'technicalEvaluations', v_evaluations,
+    'awardRecommendation', v_recommendation,
+    'varianceDecisions', v_variances,
+    'varianceEligibility', v_eligibility
+  );
+end;
+$$;

@@ -116,6 +116,34 @@ describe("authorized post-login destinations", () => {
     ).toBe("/");
   });
 
+  it("passes only a concrete variance request deep link to its server-governed route", () => {
+    const reviewerWithoutProcurementRole = memoryAccess({
+      core: ["staff"],
+    });
+
+    expect(
+      authorizedPostLoginPath(
+        "/procurement/requests/request-doa-001",
+        reviewerWithoutProcurementRole,
+        "employee",
+      ),
+    ).toBe("/procurement/requests/request-doa-001");
+    expect(
+      authorizedPostLoginPath(
+        "/procurement/requests/new",
+        reviewerWithoutProcurementRole,
+        "employee",
+      ),
+    ).toBe("/");
+    expect(
+      authorizedPostLoginPath(
+        "/procurement/requests/request-doa-001/sourcing",
+        reviewerWithoutProcurementRole,
+        "employee",
+      ),
+    ).toBe("/");
+  });
+
   it("keeps employee and vendor shared areas separated", () => {
     expect(
       authorizedPostLoginPath(

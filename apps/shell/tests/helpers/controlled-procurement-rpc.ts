@@ -3,7 +3,7 @@ import type { BrowserContext, Route } from '@playwright/test';
 export const CONTROLLED_SUPABASE_URL = 'http://127.0.0.1:54321';
 export const CONTROLLED_ANON_KEY = 'controlled-rpc-anon-key';
 
-type ActorKey = 'procurement' | 'admin' | 'legal' | 'operations' | 'deptHead' | 'finance';
+type ActorKey = 'procurement' | 'admin' | 'legal' | 'operations' | 'deptHead' | 'finance' | 'unrelated';
 type Actor = {
   id: string;
   email: string;
@@ -60,12 +60,17 @@ const ACTORS: Record<ActorKey, Actor> = {
   deptHead: {
     id: 'controlled-department-head', email: 'department.head.controlled@mwell.test', name: 'Controlled Department Head', title: 'Operations Department Head',
     roles: { core: ['staff'], operations: ['department_head'] },
-    capabilities: { core: ['view_directory', 'view_vendors'], procurement: ['view_dashboard'] },
+    capabilities: { core: ['view_directory', 'view_vendors'] },
   },
   finance: {
     id: 'controlled-finance', email: 'finance.controlled@mwell.test', name: 'Controlled Finance Controller', title: 'Finance Controller',
     roles: { core: ['staff'], finance: ['controller'] },
-    capabilities: { core: ['view_directory', 'view_vendors'], procurement: ['view_dashboard', 'view_finance'] },
+    capabilities: { core: ['view_directory', 'view_vendors'] },
+  },
+  unrelated: {
+    id: 'controlled-unrelated', email: 'unrelated.controlled@mwell.test', name: 'Controlled Unrelated Employee', title: 'Customer Service Associate',
+    roles: { core: ['staff'], operations: ['customer_service'] },
+    capabilities: { core: ['view_directory'] },
   },
 };
 
@@ -280,6 +285,69 @@ export class ControlledProcurementRpcFixture {
     ];
   }
 
+  /** A compact, server-shaped record for testing the restricted variance UI. */
+  preparePendingVariance() {
+    this.sourcing = {
+      id: 'controlled-sourcing-event',
+      status: 'evaluation',
+      submissionDeadline: '2026-09-30T04:00:00.000Z',
+      intendedResponses: 3,
+      packageVersion: 'RFQ-CONTROLLED-v1',
+      packageHash: 'a'.repeat(64),
+      responses: ['vendor-1', 'vendor-2', 'vendor-3'].map((vendorId, index) => ({
+        id: `response-${vendorId}`,
+        vendorId,
+        vendorName: ['Acme Medical Supplies, Inc.', 'North Star Logistics Corp.', 'TechBridge IT Solutions, Inc.'][index]!,
+        receivedAt: '2026-08-22T04:00:00.000Z',
+        deadlineCompliant: true,
+        commercial: { amount: 200_000 + index * 10_000 },
+      })),
+    };
+    this.commercialTabulations = [{
+      id: 'controlled-tabulation-1',
+      version: 1,
+      status: 'submitted',
+      escalationStatus: 'on_track',
+      responseClosedAt: '2026-08-22T03:00:00.000Z',
+      dueAt: '2026-08-24T03:00:00.000Z',
+      submittedAt: '2026-08-22T04:00:00.000Z',
+      submittedByName: ACTORS.procurement.name,
+      evidenceReference: 'controlled-commercial-tabulation-v1.pdf',
+      comments: 'Controlled comparable commercial record.',
+      entries: this.sourcing!.responses.map((response) => ({ vendorId: response.vendorId, quotedAmount: response.commercial?.amount, evidenceReference: 'controlled-proposal.pdf' })),
+    }];
+    this.technicalEvaluations = this.sourcing!.responses.map((response, index) => ({
+      id: `controlled-technical-${response.vendorId}-1`,
+      sourcingEventId: this.sourcing!.id,
+      vendorId: response.vendorId,
+      version: 1,
+      dueAt: '2026-08-29T03:00:00.000Z',
+      submittedAt: '2026-08-22T04:00:00.000Z',
+      reviewerName: ACTORS.procurement.name,
+      criteria: [],
+      totalScore: 95 - index * 5,
+      evidenceReference: `controlled-technical-${response.vendorId}.pdf`,
+      comments: 'Controlled technical evidence.',
+      status: 'submitted',
+      escalationStatus: 'on_track',
+    }));
+    this.awardRecommendation = {
+      id: 'controlled-award-recommendation-1',
+      sourcingEventId: this.sourcing.id,
+      version: 1,
+      evaluatedVendorId: 'vendor-1',
+      recommendedVendorId: 'vendor-2',
+      rationale: 'Documented best-value rationale.',
+      commercialTabulationId: 'controlled-tabulation-1',
+      technicalEvaluationId: 'controlled-technical-vendor-2-1',
+      riskEvidenceReference: 'controlled-risk-review-v1.pdf',
+      varianceJustification: 'Lifecycle value and contracted support justify the variance.',
+      createdBy: ACTORS.procurement.id,
+      status: 'pending_variance',
+    };
+    this.varianceDecisions = [];
+  }
+
   callsNamed(name: string) {
     return this.calls.filter((call) => call.name === name);
   }
@@ -325,6 +393,16 @@ export class ControlledProcurementRpcFixture {
       ? actor.id === ACTORS.deptHead.id
       : nextStage === 'finance' && actor.id === ACTORS.finance.id;
     return {
+      request: {
+        id: this.requestId,
+        title: this.request.title,
+        department: this.request.department,
+        costCenter: this.request.cost_center,
+        category: this.request.category,
+        estimatedAmount: this.request.estimated_amount,
+        status: this.request.status,
+      },
+      event: this.workspace().event,
       commercialTabulations: this.commercialTabulations.map((item) => ({ ...item })),
       technicalEvaluations: this.technicalEvaluations.map((item) => ({ ...item })),
       awardRecommendation: this.awardRecommendation ? { ...this.awardRecommendation } : null,
@@ -420,7 +498,12 @@ export class ControlledProcurementRpcFixture {
     }
     if (name === 'sourcing_workspace') return response(route, this.workspace());
     if (name === 'insufficient_bid_exception') return response(route, null);
-    if (name === 'evaluation_workspace') return response(route, this.evaluationWorkspace(actor));
+    if (name === 'evaluation_workspace') {
+      const workspace = this.evaluationWorkspace(actor);
+      const canViewAssignedVariance = actor.id === ACTORS.deptHead.id || actor.id === ACTORS.finance.id;
+      if (payload.request_id !== this.requestId || !canViewAssignedVariance) return failure(route, 'No governed variance decision is assigned to this account for this request.', 403);
+      return response(route, workspace);
+    }
     if (name === 'save_sourcing_event') {
       this.sourcing ??= { id: 'controlled-sourcing-event', status: 'draft', responses: [] };
       this.sourcing.submissionDeadline = String(payload.submission_deadline ?? '');

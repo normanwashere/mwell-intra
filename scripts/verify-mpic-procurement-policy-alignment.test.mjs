@@ -90,6 +90,8 @@ async function createGovernedRouteFixture() {
       vendor_name text,
       requester_id uuid,
       draft_payload jsonb,
+      title text,
+      cost_center text,
       updated_at timestamptz default now()
     );
     create table procurement.route_decisions (

@@ -19,6 +19,7 @@ import { ApprovalInboxPage } from "./pages/ApprovalInboxPage";
 import { PurchaseOrdersPage } from "./pages/PurchaseOrdersPage";
 import { AcceptanceWorkItemPage } from "./pages/AcceptanceWorkItemPage";
 import { PurchaseOrderDetailRoute } from "./pages/PurchaseOrderDetailRoute";
+import { VarianceReviewPage } from "./pages/VarianceReviewPage";
 import { resolveTiers, type UserRolesShape } from "./tiers";
 import {
   PROCUREMENT_REQUESTS_ALIAS_PATH,
@@ -68,10 +69,23 @@ export function ProcurementApp({
     : "";
   const acceptanceDeepLink = currentPath.startsWith(`${basename}/purchase-orders/`);
   const amendmentQueueDeepLink = currentPath === `${basename}/purchase-orders`;
+  const varianceReviewCandidate = currentPath.startsWith(`${basename}/requests/`)
+    ? currentPath.slice(`${basename}/requests/`.length)
+    : "";
+  // A DOA reviewer can enter only a concrete request deep link. The page
+  // itself calls evaluation_workspace and admits the session only if the
+  // server reports the currently eligible variance stage.
+  const varianceReviewDeepLink = Boolean(
+    varianceReviewCandidate &&
+    varianceReviewCandidate !== "new" &&
+    !varianceReviewCandidate.includes("/"),
+  );
   const acceptanceOnly = !canViewDashboard && myTiers.length === 0 && acceptanceDeepLink;
   const amendmentOnly = !canViewDashboard && myTiers.length === 0 && amendmentQueueDeepLink;
+  const varianceReviewOnly =
+    !canViewDashboard && myTiers.length === 0 && varianceReviewDeepLink;
   const hasAccess =
-    canViewDashboard || myTiers.length > 0 || acceptanceOnly || amendmentOnly;
+    canViewDashboard || myTiers.length > 0 || acceptanceOnly || amendmentOnly || varianceReviewOnly;
   const approvalsOnly = !canViewDashboard && myTiers.length > 0;
   const canApprove =
     can(userRoles, "procurement", "approve_request") || myTiers.length > 0;
@@ -125,7 +139,7 @@ export function ProcurementApp({
       {/* No nested ToastProvider — the shell's root Providers already mounts
           one; nesting a second rendered a duplicate toast viewport. */}
       <ScrollToTopOnRouteChange />
-      {!acceptanceOnly && !amendmentOnly && (
+      {!acceptanceOnly && !amendmentOnly && !varianceReviewOnly && (
         <ProcurementTabs
           canApprove={canApprove}
           showRequests={!approvalsOnly}
@@ -145,6 +159,14 @@ export function ProcurementApp({
           <>
             <Route path={PROCUREMENT_ROUTE_BY_ID["po-detail"].path} element={<AcceptanceWorkItemPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
+          </>
+        ) : varianceReviewOnly ? (
+          <>
+            <Route
+              path={PROCUREMENT_ROUTE_BY_ID["request-detail"].path}
+              element={<VarianceReviewPage />}
+            />
+            <Route path="*" element={<Navigate to={`/requests/${varianceReviewCandidate}`} replace />} />
           </>
         ) : approvalsOnly ? (
           <>
