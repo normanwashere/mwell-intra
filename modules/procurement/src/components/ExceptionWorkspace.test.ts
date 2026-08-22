@@ -21,4 +21,7 @@ it('keeps reviewer controls role-specific and gives failures a recovery path', (
   expect(source).toContain('Server blockers');
   expect(source).toContain('workspace.recovery');
   expect(source).toContain('Decision history');
+  expect(source).toContain('Refresh exception workspace');
+  expect(source).toContain('Replace stale exception evidence');
+  expect(source).toContain('staleBinding');
 });

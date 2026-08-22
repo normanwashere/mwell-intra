@@ -3,7 +3,7 @@ import type { BrowserContext, Route } from '@playwright/test';
 export const CONTROLLED_SUPABASE_URL = 'http://127.0.0.1:54321';
 export const CONTROLLED_ANON_KEY = 'controlled-rpc-anon-key';
 
-type ActorKey = 'procurement' | 'admin' | 'legal' | 'operations' | 'deptHead' | 'finance' | 'financeNoCapability' | 'unrelated';
+type ActorKey = 'procurement' | 'admin' | 'legal' | 'operations' | 'deptHead' | 'finance' | 'financeNoCapability' | 'unrelated' | 'exceptionReviewer' | 'exceptionFinance' | 'exceptionDoa';
 type Actor = {
   id: string;
   email: string;
@@ -77,6 +77,21 @@ const ACTORS: Record<ActorKey, Actor> = {
     roles: { core: ['staff'], operations: ['customer_service'] },
     capabilities: { core: ['view_directory'] },
   },
+  exceptionReviewer: {
+    id: 'controlled-exception-procurement-reviewer', email: 'exception.procurement.reviewer@mwell.test', name: 'Controlled Exception Procurement Reviewer', title: 'Procurement Review Lead',
+    roles: { core: ['staff'], procurement: ['procurement_officer'] },
+    capabilities: { core: ['view_directory', 'view_vendors'], procurement: ['view_dashboard', 'approve_award'] },
+  },
+  exceptionFinance: {
+    id: 'controlled-exception-finance-reviewer', email: 'exception.finance.reviewer@mwell.test', name: 'Controlled Exception Finance Reviewer', title: 'Finance Controller',
+    roles: { core: ['staff'], procurement: ['finance'] },
+    capabilities: { core: ['view_directory', 'view_vendors'], procurement: ['view_dashboard', 'view_finance'] },
+  },
+  exceptionDoa: {
+    id: 'controlled-exception-doa-reviewer', email: 'exception.doa.reviewer@mwell.test', name: 'Controlled Exception DOA Reviewer', title: 'Operations Approver',
+    roles: { core: ['staff'], procurement: ['admin'] },
+    capabilities: { core: ['view_directory', 'view_vendors'], procurement: ['view_dashboard'] },
+  },
 };
 
 type RpcCall = {
@@ -84,6 +99,21 @@ type RpcCall = {
   schema: string;
   name: string;
   payload: Record<string, unknown>;
+};
+
+type ControlledExceptionState = {
+  pack: null | {
+    id: string;
+    status: 'under_review' | 'approved' | 'rejected' | 'superseded';
+    revision: number;
+    evidence: Record<string, unknown>;
+    priceReasonableness: string;
+    submittedBy: string;
+  };
+  history: Array<{ stage: string; decision: string; actorId: string; decidedAt: string; note: string; revision: number }>;
+  blockers: string[];
+  failWorkspaceOnce: boolean;
+  failSubmitOnce: boolean;
 };
 
 type FixtureProfile = {
@@ -208,6 +238,13 @@ export class ControlledProcurementRpcFixture {
   technicalEvaluations: Array<Record<string, unknown>> = [];
   awardRecommendation: Record<string, unknown> | null = null;
   varianceDecisions: Array<Record<string, unknown>> = [];
+  exception: ControlledExceptionState = {
+    pack: null,
+    history: [],
+    blockers: ['approved_exception_pack_required'],
+    failWorkspaceOnce: false,
+    failSubmitOnce: false,
+  };
   private readonly varianceAssignments = [
     { actorId: ACTORS.deptHead.id, stage: 'department_head' as const, assignmentId: 'controlled-department_head-assignment' },
     { actorId: ACTORS.finance.id, stage: 'finance' as const, assignmentId: 'controlled-finance-assignment' },
@@ -358,6 +395,45 @@ export class ControlledProcurementRpcFixture {
     this.varianceDecisions = [];
   }
 
+  prepareExceptionWorkspace() {
+    Object.assign(this.request, {
+      title: 'Controlled petty-cash exception',
+      description: 'Stateful exception-workspace browser evidence.',
+      requester_id: ACTORS.procurement.id,
+      requester_name: ACTORS.procurement.name,
+      requester_email: ACTORS.procurement.email,
+      estimated_amount: 1_500,
+      sourcing_method: 'petty_cash',
+      solicitation_type: 'none',
+      procurement_mode: 'petty_cash',
+      governance_tier: 'standard',
+      route_reasons: ['controlled_exception_fixture'],
+      route_version: 1,
+      compliance: { routeConfirmed: true },
+    });
+    this.exception = {
+      pack: null,
+      history: [],
+      blockers: ['approved_exception_pack_required'],
+      failWorkspaceOnce: false,
+      failSubmitOnce: false,
+    };
+  }
+
+  failNextExceptionSubmit() {
+    this.exception.failSubmitOnce = true;
+  }
+
+  failNextExceptionWorkspaceLoad() {
+    this.exception.failWorkspaceOnce = true;
+  }
+
+  markExceptionStale() {
+    if (!this.exception.pack) throw new Error('An exception pack is required before it can become stale.');
+    this.exception.pack.status = 'approved';
+    this.exception.blockers = ['policy_profile_changed_restart_exception'];
+  }
+
   callsNamed(name: string) {
     return this.calls.filter((call) => call.name === name);
   }
@@ -444,6 +520,87 @@ export class ControlledProcurementRpcFixture {
     };
   }
 
+  private exceptionWorkspace(actor: Actor) {
+    const pack = this.exception.pack;
+    const procurementApproved = this.exception.history.some((item) => item.stage === 'procurement' && item.decision === 'approved');
+    const financeApproved = this.exception.history.some((item) => item.stage === 'finance' && item.decision === 'approved');
+    return {
+      requestId: this.requestId,
+      mode: 'petty_cash',
+      profile: {
+        id: this.activeProfileId,
+        code: 'MWELL-CONTROLLED-OPERATING',
+        version: '2026.08',
+        repeatOrderMaxAmount: 250_000,
+        repeatOrderMaxAgeDays: 365,
+        pettyCashMaxAmount: 2_000,
+      },
+      pack: pack ? {
+        id: pack.id,
+        status: pack.status,
+        revision: pack.revision,
+        evidence: pack.evidence,
+        priceReasonableness: pack.priceReasonableness,
+      } : null,
+      blockers: this.exception.blockers,
+      history: this.exception.history,
+      actions: {
+        canSubmit: actor.id === ACTORS.procurement.id,
+        canProcurementReview: actor.id === ACTORS.exceptionReviewer.id && pack?.status === 'under_review' && !procurementApproved,
+        canFinanceReview: actor.id === ACTORS.exceptionFinance.id && pack?.status === 'under_review' && procurementApproved && !financeApproved,
+        canDoaReview: actor.id === ACTORS.exceptionDoa.id && pack?.status === 'under_review' && procurementApproved && financeApproved,
+      },
+      recovery: this.exception.blockers.some((blocker) => blocker.endsWith('_restart_exception'))
+        ? 'The active policy changed. Submit a new pack using the current request state.'
+        : 'This controlled fixture is ready for the next independent decision.',
+    };
+  }
+
+  private handleExceptionRpc(route: Route, actor: Actor, name: string, payload: Record<string, unknown>) {
+    if (name === 'exception_workspace') {
+      if (payload.request_id !== this.requestId) return failure(route, 'Request not found', 404);
+      if (this.exception.failWorkspaceOnce) {
+        this.exception.failWorkspaceOnce = false;
+        return failure(route, 'Controlled workspace refresh failure');
+      }
+      return response(route, this.exceptionWorkspace(actor));
+    }
+    if (name === 'submit_policy_exception_pack') {
+      if (actor.id !== ACTORS.procurement.id) return failure(route, 'Procurement authority is required to submit an exception pack', 403);
+      if (this.exception.failSubmitOnce) {
+        this.exception.failSubmitOnce = false;
+        return failure(route, 'Controlled server validation failed; correct the evidence and try again.');
+      }
+      if (payload.request_id !== this.requestId || payload.mode !== 'petty_cash' || Number(payload.expected_route_version) !== Number(this.request.route_version)) return failure(route, 'The request route changed; refresh before submitting exception evidence');
+      const evidence = (payload.evidence && typeof payload.evidence === 'object' ? payload.evidence : {}) as Record<string, unknown>;
+      if (evidence.splitPurchase === true || evidence.recurring === true || evidence.receiptPresent !== true || evidence.liquidationRecorded !== true) return failure(route, 'Petty cash requires the controlled receipt, liquidation, and non-split attestations.');
+      const id = `controlled-exception-pack-${this.exception.history.length + 1}`;
+      this.exception.pack = { id, status: 'under_review', revision: 1, evidence, priceReasonableness: String(payload.price_reasonableness ?? ''), submittedBy: actor.id };
+      this.exception.history = [{ stage: 'submitted', decision: 'submitted', actorId: actor.id, decidedAt: '2026-08-23T01:00:00.000Z', note: String(payload.justification ?? ''), revision: 1 }];
+      this.exception.blockers = [];
+      return response(route, { ...this.exception.pack });
+    }
+    if (name === 'review_policy_exception_pack') {
+      const pack = this.exception.pack;
+      if (!pack || payload.id !== pack.id || pack.status !== 'under_review') return failure(route, 'An exception awaiting review is required');
+      if (Number(payload.expected_revision) !== pack.revision) return failure(route, 'The exception pack changed; refresh before deciding');
+      if (!String(payload.note ?? '').trim()) return failure(route, 'A decision and review note are required');
+      const stage = String(payload.stage ?? '');
+      const expectedActor = stage === 'procurement' ? ACTORS.exceptionReviewer.id : stage === 'finance' ? ACTORS.exceptionFinance.id : stage === 'doa' ? ACTORS.exceptionDoa.id : '';
+      const procurementApproved = this.exception.history.some((item) => item.stage === 'procurement' && item.decision === 'approved');
+      const financeApproved = this.exception.history.some((item) => item.stage === 'finance' && item.decision === 'approved');
+      if (actor.id !== expectedActor || (stage === 'finance' && !procurementApproved) || (stage === 'doa' && (!procurementApproved || !financeApproved))) return failure(route, 'The server did not find active independent authority for this decision', 403);
+      const decision = String(payload.decision ?? '');
+      if (decision !== 'approved' && decision !== 'rejected') return failure(route, 'A decision is required');
+      this.exception.history.push({ stage, decision, actorId: actor.id, decidedAt: `2026-08-23T01:0${this.exception.history.length}:00.000Z`, note: String(payload.note), revision: pack.revision });
+      pack.revision += 1;
+      if (decision === 'rejected') pack.status = 'rejected';
+      if (stage === 'doa' && decision === 'approved') pack.status = 'approved';
+      return response(route, { ...pack });
+    }
+    return null;
+  }
+
   async handle(route: Route) {
     const request = route.request();
     const url = new URL(request.url());
@@ -506,6 +663,10 @@ export class ControlledProcurementRpcFixture {
       return response(route, { curricula: [], progress: [], certifications: [], lockedCapabilities: [], refreshedAt: '2026-08-22T00:00:00.000Z' });
     }
     if (schema !== 'procurement') return response(route, null);
+
+    if (name === 'exception_workspace' || name === 'submit_policy_exception_pack' || name === 'review_policy_exception_pack') {
+      return this.handleExceptionRpc(route, actor, name, payload);
+    }
 
     if (name === 'confirm_route_decision') {
       if (!actor.capabilities.procurement?.includes('manage_rfp')) return failure(route, 'Not authorized to confirm procurement route', 403);

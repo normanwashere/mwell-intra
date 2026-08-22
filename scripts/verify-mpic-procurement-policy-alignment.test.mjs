@@ -1105,8 +1105,15 @@ test("executes the public exception lifecycle matrix without actor, evidence, or
       await insertRequest(db, { id, requirementKind: "materials", amount, lines });
       await db.exec(`update procurement.requests set department='operations', core_vendor_id='${vendorId}' where id='${id}';`);
     };
-    const submitPack = (id, mode, evidence, amount = 1000) => db.query(`select procurement.submit_policy_exception_pack(${sqlJson({ request_id: id, mode, expected_route_version: 0, justification: "Documented policy exception with complete business rationale.", price_reasonableness: "Independent benchmark and prior commercial evidence attached.", evidence })}) as pack`);
+    const submitPack = (id, mode, evidence, amount = 1000, expectedRouteVersion = 0) => db.query(`select procurement.submit_policy_exception_pack(${sqlJson({ request_id: id, mode, expected_route_version: expectedRouteVersion, justification: "Documented policy exception with complete business rationale.", price_reasonableness: "Independent benchmark and prior commercial evidence attached.", evidence })}) as pack`);
     const review = (id, stage, decision, revision, note = "Independent governed review is complete.") => db.query(`select procurement.review_policy_exception_pack(${sqlJson({ id, stage, decision, expected_revision: revision, note })}) as pack`);
+    const confirm = (id, mode, expectedRouteVersion = 0) => db.query(`select procurement.confirm_route_decision(${sqlJson({ request_id: id, expected_route_version: expectedRouteVersion, requested_mode: mode })}) as route`);
+    const issuePo = async (id, poId, amount) => {
+      await db.exec(`insert into procurement.purchase_orders(id,request_id,core_vendor_id,status,total,lines) values ('${poId}','${id}','${vendorId}','draft',${amount},${sqlJson([{ description: 'controlled item', quantity: 1, unitPrice: amount }])});`);
+      await db.exec(`update procurement.purchase_orders set status='issued' where id='${poId}';`);
+      const issued = await db.query(`select status from procurement.purchase_orders where id='${poId}'`);
+      assert.equal(issued.rows[0].status, 'issued', `${poId} must issue after an approved, route-bound exception`);
+    };
     const approve = async (packId, petty = false) => {
       await setPolicyActor(db, procurementReviewer, true, ["approve_award"]);
       let pack = (await review(packId, "procurement", "approved", 1)).rows[0].pack;
@@ -1138,8 +1145,12 @@ test("executes the public exception lifecycle matrix without actor, evidence, or
     const soleApproved = (await review(sole.id, "doa", "approved", soleProcurement.revision)).rows[0].pack;
     assert.equal(soleApproved.status, "approved");
     await setPolicyActor(db, submitter, true);
-    const confirmed = await db.query(`select procurement.confirm_route_decision(${sqlJson({ request_id: requestId, expected_route_version: 0, requested_mode: "sole_source" })}) as result`);
-    assert.equal(confirmed.rows[0].result.route.procurement_mode, "sole_source", "approved bound sole-source pack permits route confirmation");
+    const confirmed = await confirm(requestId, 'sole_source');
+    assert.equal(confirmed.rows[0].route.route.procurement_mode, "sole_source", "approved bound sole-source pack permits route confirmation");
+    const soleBinding = await db.query(`select route_decision_id, request_version from procurement.exception_packs where id='${sole.id}'`);
+    assert.ok(soleBinding.rows[0].route_decision_id, 'confirmation atomically binds the approved sole-source pack to its route decision');
+    assert.equal(soleBinding.rows[0].request_version, 1, 'confirmation rebinds the pack to the confirmed route version');
+    await issuePo(requestId, 'sole-post-confirm-po', 120000);
 
     await addRequest(pettyId, 1000);
     await setPolicyActor(db, submitter, true);
@@ -1153,6 +1164,9 @@ test("executes the public exception lifecycle matrix without actor, evidence, or
     await assert.rejects(() => review(petty.id, "doa", "approved", pettyFinance.revision), /independent/i, "Finance reviewer cannot become DOA");
     await setPolicyActor(db, doaReviewer, false);
     assert.equal((await review(petty.id, "doa", "approved", pettyFinance.revision)).rows[0].pack.status, "approved");
+    await setPolicyActor(db, submitter, true);
+    await confirm(pettyId, 'petty_cash');
+    await issuePo(pettyId, 'petty-post-confirm-po', 1000);
 
     await addRequest(emergencyId, 10000);
     await setPolicyActor(db, submitter, true);
@@ -1160,6 +1174,9 @@ test("executes the public exception lifecycle matrix without actor, evidence, or
     await assert.rejects(() => submitPack(emergencyId, "emergency_purchase", { emergencyBasis: "life_safety", authorityReference: "OPS-EM-1", commitmentTimestamp: "2026-08-01T00:00:00Z", minimizedVerbalCommitment: true, retrospectivePoDueAt: "2026-09-02T00:00:00Z" }), /30-day policy window/i, "emergency retro PO must remain inside its policy window");
     const emergency = (await submitPack(emergencyId, "emergency_purchase", { emergencyBasis: "life_safety", authorityReference: "OPS-EM-1", commitmentTimestamp: "2026-08-01T00:00:00Z", minimizedVerbalCommitment: true, retrospectivePoDueAt: "2026-08-15T00:00:00Z" })).rows[0].pack;
     assert.equal((await approve(emergency.id)).status, "approved", "valid emergency completes independent review");
+    await setPolicyActor(db, submitter, true);
+    await confirm(emergencyId, 'emergency_purchase');
+    await issuePo(emergencyId, 'emergency-post-confirm-po', 10000);
 
     await addRequest(approvedId, 120000);
     await setPolicyActor(db, submitter, true);
@@ -1167,6 +1184,9 @@ test("executes the public exception lifecycle matrix without actor, evidence, or
     const sourcePackId = sole.id;
     const approved = (await submitPack(approvedId, "approved_exception", { approvedExceptionPackId: sourcePackId, evidenceReferences: ["private/source.pdf"] })).rows[0].pack;
     assert.equal((await approve(approved.id)).status, "approved", "approved-exception source is a real immutable approved pack");
+    await setPolicyActor(db, submitter, true);
+    await confirm(approvedId, 'approved_exception');
+    await issuePo(approvedId, 'approved-exception-post-confirm-po', 120000);
 
     const sameLines = [{ description: "controlled tablet", quantity: 1, unitPrice: 50000 }];
     await addRequest(priorId, 50000, sameLines);
@@ -1182,15 +1202,73 @@ test("executes the public exception lifecycle matrix without actor, evidence, or
       insert into procurement.award_recommendations(id,sourcing_event_id,evaluated_vendor_id,recommended_vendor_id,commercial_tabulation_id,technical_evaluation_id,rationale,status,created_by)
       values ('${awardId}','${eventId}','${vendorId}','${vendorId}','${tabulationId}','${evaluationId}','best value','approved','${submitter}');
       insert into procurement.purchase_orders(id,request_id,core_vendor_id,status,total,lines) values ('prior-po','${priorId}','${vendorId}','issued',50000,${sqlJson(sameLines)});
+      insert into procurement.purchase_orders(id,request_id,core_vendor_id,status,total,lines) values
+        ('prior-po-draft','${priorId}','${vendorId}','draft',50000,${sqlJson(sameLines)}),
+        ('prior-po-pending','${priorId}','${vendorId}','pending_approval',50000,${sqlJson(sameLines)}),
+        ('prior-po-approved','${priorId}','${vendorId}','approved',50000,${sqlJson(sameLines)}),
+        ('prior-po-cancelled','${priorId}','${vendorId}','cancelled',50000,${sqlJson(sameLines)}),
+        ('prior-po-closed','${priorId}','${vendorId}','closed',50000,${sqlJson(sameLines)});
     `);
+    for (const [index, sourcePoId] of ['prior-po-draft','prior-po-pending','prior-po-approved','prior-po-cancelled'].entries()) {
+      const invalidRepeatId = `73000000-0000-0000-0000-00000000004${index}`;
+      await addRequest(invalidRepeatId, 50000, sameLines);
+      await setPolicyActor(db, submitter, true);
+      await assert.rejects(
+        () => submitPack(invalidRepeatId, 'repeat_order', { priorRequestId: priorId, priorSourcingEventId: eventId, priorAwardId: awardId, priorPurchaseOrderId: sourcePoId }),
+        /issued or closed/i,
+        `${sourcePoId} cannot establish a repeat-order source`,
+      );
+    }
     await addRequest(repeatId, 50000, sameLines);
     await setPolicyActor(db, submitter, true);
     await assert.rejects(() => submitPack(repeatId, "repeat_order", { priorRequestId: priorId, priorSourcingEventId: eventId, priorAwardId: awardId, priorPurchaseOrderId: "forged-po", samePrice: true, sameTerms: true, sameVendor: true }), /prior PO/i, "forged repeat PO link is rejected");
     const repeat = (await submitPack(repeatId, "repeat_order", { priorRequestId: priorId, priorSourcingEventId: eventId, priorAwardId: awardId, priorPurchaseOrderId: "prior-po", samePrice: true, sameTerms: true, sameVendor: true, sameConsiderations: true, priorCompetitiveAward: true })).rows[0].pack;
     assert.equal((await approve(repeat.id)).status, "approved", "repeat order derives and locks cross-linked competitive facts");
-    await db.exec(`update procurement.requests set lines='[{"description":"changed scope","quantity":1,"unitPrice":50000}]'::jsonb where id='${repeatId}';`);
     await setPolicyActor(db, submitter, true);
-    await assert.rejects(() => db.query(`select procurement.confirm_route_decision(${sqlJson({ request_id: repeatId, expected_route_version: 0, requested_mode: "repeat_order" })})`), /restart_exception|approved_exception_pack_required/i, "scope change invalidates repeat-order eligibility");
+    await confirm(repeatId, 'repeat_order');
+    await issuePo(repeatId, 'repeat-post-confirm-po', 50000);
+    const closedRepeatId = "73000000-0000-0000-0000-000000000050";
+    await addRequest(closedRepeatId, 50000, sameLines);
+    const closedRepeat = (await submitPack(closedRepeatId, 'repeat_order', { priorRequestId: priorId, priorSourcingEventId: eventId, priorAwardId: awardId, priorPurchaseOrderId: 'prior-po-closed' })).rows[0].pack;
+    assert.equal((await approve(closedRepeat.id)).status, 'approved', 'a closed policy-valid prior PO remains an allowed repeat source');
+    await setPolicyActor(db, submitter, true);
+    await confirm(closedRepeatId, 'repeat_order');
+    await issuePo(closedRepeatId, 'repeat-closed-post-confirm-po', 50000);
+
+    await db.exec(`update procurement.requests set lines='[{"description":"changed scope","quantity":1,"unitPrice":50000}]'::jsonb where id='${repeatId}';`);
+    await assert.rejects(
+      () => db.exec(`update procurement.purchase_orders set status='closed' where id='repeat-post-confirm-po'; update procurement.purchase_orders set status='issued' where id='repeat-post-confirm-po';`),
+      /restart_exception|source changed|approved_exception_pack_required/i,
+      'post-confirmation scope changes invalidate a previously route-bound exception',
+    );
+
+    const nextProfileId = '73000000-0000-0000-0000-000000000060';
+    await db.exec(`
+      update procurement.policy_profiles set status='superseded' where id='${operatingProfileId}';
+      insert into procurement.policy_profiles(
+        id,code,version,name,relationship,source_profile_id,source_filename,source_organization,control_sources,
+        formal_bid_amount,invite_target_min,invite_target_max,sealed_bid_minimum_responses,bid_window_working_days,
+        max_extension_working_days,vendor_acknowledgement_hours,clarification_hours,tabulation_hours,
+        technical_evaluation_working_days,po_acknowledgement_hours,repeat_order_max_amount,repeat_order_max_age_days,
+        petty_cash_max_amount,po_invoice_threshold,vendor_probation_months,status,effective_from,document_hash,created_by,last_modified_by
+      ) select
+        '${nextProfileId}',code,'2026.02',name,relationship,source_profile_id,source_filename,source_organization,control_sources,
+        formal_bid_amount,invite_target_min,invite_target_max,sealed_bid_minimum_responses,bid_window_working_days,
+        max_extension_working_days,vendor_acknowledgement_hours,clarification_hours,tabulation_hours,
+        technical_evaluation_working_days,po_acknowledgement_hours,repeat_order_max_amount,repeat_order_max_age_days,
+        petty_cash_max_amount,po_invoice_threshold,vendor_probation_months,'active',statement_timestamp(),repeat('c',32),'${submitter}','${submitter}'
+      from procurement.policy_profiles where id='${operatingProfileId}';
+    `);
+    await setPolicyActor(db, submitter, true);
+    const staleWorkspace = await db.query(`select procurement.exception_workspace(${sqlJson({ request_id: requestId })}) as workspace`);
+    assert.ok(staleWorkspace.rows[0].workspace.blockers.includes('policy_profile_changed_restart_exception'), 'a newly effective profile invalidates the old bound pack');
+    assert.equal(staleWorkspace.rows[0].workspace.actions.canSubmit, true, 'the authoritative workspace permits recovery when a replacement is possible');
+    assert.match(staleWorkspace.rows[0].workspace.recovery, /submit a new pack/i, 'the workspace returns server recovery guidance for a stale profile');
+    const replacement = (await submitPack(requestId, 'sole_source', { soleSourceBasis: 'compatibility', evidenceReferences: ['private/sole-replacement.pdf'] }, 120000, 1)).rows[0].pack;
+    assert.equal((await approve(replacement.id)).status, 'approved', 'replacement evidence can complete the independent lifecycle under the new profile');
+    await setPolicyActor(db, submitter, true);
+    await confirm(requestId, 'sole_source', 1);
+    await issuePo(requestId, 'sole-profile-recovery-po', 120000);
 
     await addRequest(gateId, 50000);
     await db.exec(`

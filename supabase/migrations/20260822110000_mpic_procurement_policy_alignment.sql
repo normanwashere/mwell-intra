@@ -2629,6 +2629,7 @@ begin
   if v_event.status <> 'awarded' then raise exception 'Prior sourcing event was not competitively awarded'; end if;
   select po.* into v_po from procurement.purchase_orders po where po.id::text = v_po_id for share;
   if not found or v_po.request_id::text <> v_prior_request.id::text then raise exception 'Prior PO is not linked to the prior request'; end if;
+  if v_po.status not in ('issued', 'closed') then raise exception 'Prior repeat-order PO must be issued or closed'; end if;
   if v_award.recommended_vendor_id <> v_po.core_vendor_id or v_po.core_vendor_id is distinct from p_request.core_vendor_id then raise exception 'Repeat order must use the same awarded vendor'; end if;
   v_award_at := coalesce(v_event.closed_at, v_event.created_at);
   if v_award_at < statement_timestamp() - make_interval(days => p_profile.repeat_order_max_age_days) then raise exception 'Prior competitive award is older than the active policy limit'; end if;
@@ -2745,7 +2746,7 @@ begin
   v_snapshot := private.policy_exception_submission_snapshot(v_request, v_mode, v_evidence, v_profile);
   v_fingerprint := private.policy_exception_request_fingerprint(v_request,v_mode,v_profile.id,v_request.route_version);
   v_type := case v_mode when 'sole_source' then 'direct_award' when 'repeat_order' then 'repeat_continuity' when 'emergency_purchase' then 'emergency' when 'petty_cash' then 'petty_cash_non_accredited' else 'direct_award' end;
-  update procurement.exception_packs set status='superseded', revision=revision+1 where request_id::text=v_request.id::text and status in ('draft','under_review','rejected');
+  update procurement.exception_packs set status='superseded', revision=revision+1 where request_id::text=v_request.id::text and status in ('draft','under_review','rejected','approved');
   insert into procurement.exception_packs(request_id,exception_type,mode,justification,evidence,price_reasonableness,status,submitted_by,submitted_at,request_version,policy_profile_id,request_fingerprint,evidence_fingerprint,immutable_snapshot,approved_exception_source_id)
   values(v_request.id,v_type,v_mode,coalesce(nullif(btrim(payload->>'justification'),''),'Pending policy exception evidence'),v_evidence,nullif(btrim(payload->>'price_reasonableness'),''),'under_review',auth.uid(),statement_timestamp(),v_request.route_version,v_profile.id,v_fingerprint,private.policy_exception_evidence_fingerprint(v_evidence),v_snapshot,case when v_mode='approved_exception' then (v_snapshot->>'approvedExceptionSourceId')::uuid else null end)
   returning * into v_pack;
@@ -3174,5 +3175,256 @@ begin
     'varianceDecisions', v_variances,
     'varianceEligibility', v_eligibility
   );
+end;
+$$;
+
+-- Task 8 fix round 2: an approved exception first binds to the pending request
+-- revision. Route confirmation is the only operation that may atomically bind it
+-- to the resulting route decision. Other request, profile, evidence, or source
+-- changes remain invalidating events.
+create or replace function private.policy_exception_pack_binding_blockers(
+  p_pack procurement.exception_packs,
+  p_request procurement.requests,
+  p_profile procurement.policy_profiles
+)
+returns text[] language plpgsql stable security definer set search_path = '' as $$
+declare
+  v_blockers text[] := '{}';
+  v_fingerprint text;
+  v_route procurement.route_decisions;
+  v_repeat_snapshot jsonb;
+  v_source procurement.exception_packs;
+begin
+  if p_pack.policy_profile_id is distinct from p_profile.id then
+    v_blockers := array_append(v_blockers, 'policy_profile_changed_restart_exception');
+  end if;
+
+  if p_pack.route_decision_id is null then
+    if p_pack.request_version is distinct from p_request.route_version then
+      v_blockers := array_append(v_blockers, 'request_route_changed_restart_exception');
+    end if;
+  else
+    select * into v_route
+    from procurement.route_decisions
+    where request_id = p_request.id and status = 'confirmed'
+    order by request_version desc
+    limit 1;
+    if not found
+      or v_route.id is distinct from p_pack.route_decision_id
+      or v_route.request_version is distinct from p_request.route_version
+      or v_route.procurement_mode is distinct from p_pack.mode
+      or v_route.policy_profile_id is distinct from p_pack.policy_profile_id
+      or p_pack.request_version is distinct from p_request.route_version then
+      v_blockers := array_append(v_blockers, 'request_route_changed_restart_exception');
+    end if;
+  end if;
+
+  v_fingerprint := private.policy_exception_request_fingerprint(
+    p_request, p_pack.mode, p_profile.id, p_request.route_version
+  );
+  if p_pack.request_fingerprint is distinct from v_fingerprint then
+    v_blockers := array_append(v_blockers, 'request_evidence_changed_restart_exception');
+  end if;
+
+  if p_pack.mode = 'repeat_order' then
+    begin
+      v_repeat_snapshot := private.policy_exception_repeat_snapshot(p_request, p_pack.evidence, p_profile);
+      if (p_pack.immutable_snapshot->'repeatOrder') is distinct from v_repeat_snapshot then
+        v_blockers := array_append(v_blockers, 'repeat_order_source_changed_restart_exception');
+      end if;
+    exception when others then
+      v_blockers := array_append(v_blockers, 'repeat_order_source_changed_restart_exception');
+    end;
+  elsif p_pack.mode = 'approved_exception' then
+    select * into v_source from procurement.exception_packs where id = p_pack.approved_exception_source_id;
+    if not found
+      or v_source.status <> 'approved'
+      or v_source.immutable_snapshot = '{}'::jsonb
+      or v_source.revision is distinct from (p_pack.immutable_snapshot->>'approvedExceptionSourceRevision')::integer then
+      v_blockers := array_append(v_blockers, 'approved_exception_source_changed_restart_exception');
+    end if;
+  end if;
+  return v_blockers;
+end;
+$$;
+
+create or replace function private.policy_exception_pack_blockers(
+  p_request_id text,
+  p_mode text,
+  p_profile procurement.policy_profiles,
+  p_amount numeric
+)
+returns text[] language plpgsql stable security definer set search_path = '' as $$
+declare
+  v_pack procurement.exception_packs;
+  v_request procurement.requests;
+  v_blockers text[] := '{}';
+begin
+  if p_mode = 'competitive_bidding' then return v_blockers; end if;
+  select * into v_request from procurement.requests where id::text = p_request_id;
+  if not found then return array['request_not_found']; end if;
+  select * into v_pack from procurement.exception_packs
+  where request_id::text = p_request_id and mode = p_mode and status = 'approved'
+  order by submitted_at desc nulls last, revision desc
+  limit 1;
+  if not found then return array['approved_exception_pack_required']; end if;
+
+  v_blockers := private.policy_exception_pack_binding_blockers(v_pack, v_request, p_profile);
+  if v_pack.submitted_by is null or v_pack.procurement_head_reviewed_by is null then
+    v_blockers := array_append(v_blockers, 'independent_procurement_review_required');
+  end if;
+  if p_mode = 'petty_cash' and not exists (
+    select 1 from procurement.exception_pack_reviews review
+    where review.exception_pack_id = v_pack.id and review.stage = 'finance' and review.decision = 'approved'
+  ) then
+    v_blockers := array_append(v_blockers, 'independent_finance_review_required');
+  end if;
+  if not exists (
+    select 1 from procurement.exception_doa_decisions decision
+    where decision.exception_pack_id = v_pack.id and decision.decision = 'approved'
+  ) then
+    v_blockers := array_append(v_blockers, 'active_doa_approval_required');
+  end if;
+  return v_blockers;
+end;
+$$;
+
+create or replace function private.policy_confirm_route_decision(payload jsonb)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+  v_request procurement.requests;
+  v_rebound_request procurement.requests;
+  v_route jsonb;
+  v_decision procurement.route_decisions;
+  v_pack procurement.exception_packs;
+  v_profile procurement.policy_profiles;
+  v_expected_version integer;
+  v_current_version integer;
+  v_requested_mode text;
+  v_confirmation jsonb;
+  v_requirements jsonb;
+begin
+  if not (core.has_live_cap('procurement', 'manage_rfp') or core.has_live_cap('procurement', 'admin')) then
+    raise exception 'Not authorized to confirm sourcing route';
+  end if;
+  if jsonb_typeof(payload) <> 'object' or nullif(pg_catalog.btrim(payload->>'request_id'), '') is null then
+    raise exception 'A request identity is required';
+  end if;
+  select * into v_request from procurement.requests where id::text = payload->>'request_id' for update;
+  if not found then raise exception 'Request not found'; end if;
+  perform 1 from procurement.route_decisions where request_id = v_request.id for update;
+  select coalesce(max(request_version), 0) into v_current_version from procurement.route_decisions where request_id = v_request.id;
+  v_confirmation := private.policy_route_confirmation_input(payload, v_current_version);
+  v_expected_version := (v_confirmation->>'expected_route_version')::integer;
+  v_requested_mode := nullif(pg_catalog.btrim(v_confirmation->>'requested_mode'), '');
+  v_route := private.policy_derive_procurement_route(v_request.id::text, v_requested_mode);
+  if v_route->>'status' <> 'derived' then raise exception 'Route cannot be confirmed: %', coalesce(v_route->'blockers', '[]'::jsonb); end if;
+  v_requirements := private.policy_normalize_solicitation_requirements(v_request.solicitation_requirements, v_route->>'solicitation_type');
+  insert into procurement.route_decisions(
+    request_id, policy_version, request_version, method, reasons, risk_facts, status, confirmed_by,
+    solicitation_type, procurement_mode, governance_tier, policy_profile_id
+  ) values (
+    v_request.id,
+    (select code || ':' || version from procurement.policy_profiles where id = (v_route->>'policy_profile_id')::uuid),
+    v_current_version + 1,
+    private.policy_route_legacy_method(v_route->>'solicitation_type', v_route->>'procurement_mode'),
+    array(select jsonb_array_elements_text(v_route->'reasons')),
+    private.policy_normalized_risk_facts(v_request.compliance),
+    'confirmed', auth.uid(),
+    v_route->>'solicitation_type', v_route->>'procurement_mode', v_route->>'governance_tier', (v_route->>'policy_profile_id')::uuid
+  ) returning * into v_decision;
+  update procurement.requests set
+    requirement_kind = case when requirement_kind in ('materials', 'services') then requirement_kind else null end,
+    solicitation_type = v_route->>'solicitation_type',
+    procurement_mode = v_route->>'procurement_mode',
+    governance_tier = v_route->>'governance_tier',
+    policy_profile_id = (v_route->>'policy_profile_id')::uuid,
+    route_reasons = v_route->'reasons',
+    route_version = v_decision.request_version,
+    route_confirmed_at = v_decision.confirmed_at,
+    route_confirmed_by = v_decision.confirmed_by,
+    solicitation_requirements = v_requirements,
+    compliance = jsonb_set(coalesce(compliance, '{}'::jsonb), '{routeConfirmed}', 'true'::jsonb, true),
+    sourcing_method = v_decision.method,
+    sourcing_override = v_requested_mode is not null and v_requested_mode <> 'competitive_bidding',
+    updated_at = pg_catalog.now()
+  where id = v_request.id
+  returning * into v_rebound_request;
+
+  if v_decision.procurement_mode <> 'competitive_bidding' then
+    select * into v_pack from procurement.exception_packs
+    where request_id = v_request.id
+      and mode = v_decision.procurement_mode
+      and status = 'approved'
+      and route_decision_id is null
+      and request_version = v_current_version
+      and policy_profile_id = v_decision.policy_profile_id
+    order by submitted_at desc nulls last, revision desc
+    limit 1
+    for update;
+    if not found then raise exception 'Approved exception evidence must remain current before route confirmation'; end if;
+    select * into v_profile from procurement.policy_profiles where id = v_decision.policy_profile_id;
+    if cardinality(private.policy_exception_pack_binding_blockers(v_pack, v_request, v_profile)) > 0 then
+      raise exception 'The approved exception changed; submit a new exception pack';
+    end if;
+    update procurement.exception_packs set
+      route_decision_id = v_decision.id,
+      request_version = v_decision.request_version,
+      request_fingerprint = private.policy_exception_request_fingerprint(v_rebound_request, v_pack.mode, v_decision.policy_profile_id, v_decision.request_version),
+      revision = revision + 1
+    where id = v_pack.id;
+  end if;
+  return to_jsonb(v_decision) || jsonb_build_object('route', v_route);
+end;
+$$;
+
+create or replace function procurement.review_policy_exception_pack(payload jsonb)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_pack procurement.exception_packs; v_request procurement.requests; v_profile procurement.policy_profiles; v_assignment procurement.doa_assignments; v_stage text:=payload->>'stage'; v_decision text:=payload->>'decision'; v_expected integer; v_prior_actor uuid; v_existing procurement.exception_pack_reviews; v_binding_blockers text[];
+begin
+  if auth.uid() is null then raise exception 'Authenticated reviewer is required'; end if;
+  begin v_expected := (payload->>'expected_revision')::integer; exception when others then raise exception 'expected_revision is required'; end;
+  select * into v_pack from procurement.exception_packs where id=(payload->>'id')::uuid for update;
+  if not found then raise exception 'Exception pack not found'; end if;
+  if v_decision not in ('approved','rejected') or nullif(btrim(payload->>'note'),'') is null then raise exception 'A decision and review note are required'; end if;
+  if v_expected <> v_pack.revision then
+    if v_stage in ('procurement','finance') then select * into v_existing from procurement.exception_pack_reviews where exception_pack_id=v_pack.id and stage=v_stage; if found and v_existing.expected_revision=v_expected and v_existing.decided_by=auth.uid() and v_existing.decision=v_decision and v_existing.rationale=btrim(payload->>'note') then return to_jsonb(v_pack); end if; end if;
+    if v_stage='doa' and exists(select 1 from procurement.exception_doa_decisions where exception_pack_id=v_pack.id and expected_revision=v_expected and decided_by=auth.uid() and decision=v_decision and rationale=btrim(payload->>'note')) then return to_jsonb(v_pack); end if;
+    raise exception 'The exception pack changed; refresh before deciding';
+  end if;
+  if v_pack.status <> 'under_review' then raise exception 'An exception awaiting review is required'; end if;
+  select * into v_request from procurement.requests where id::text=v_pack.request_id::text for share;
+  v_profile := private.policy_exception_active_profile();
+  v_binding_blockers := private.policy_exception_pack_binding_blockers(v_pack, v_request, v_profile);
+  if cardinality(v_binding_blockers) > 0 then
+    update procurement.exception_packs set status='superseded',revision=revision+1 where id=v_pack.id returning * into v_pack;
+    raise exception 'The request, route, policy, or source changed; submit a new exception pack';
+  end if;
+  if v_stage='procurement' then
+    if not private.policy_sourcing_can_review() then raise exception 'Independent Procurement reviewer authority is required'; end if;
+    if auth.uid()=v_pack.submitted_by then raise exception 'Submitter cannot review the same exception'; end if;
+    if exists(select 1 from procurement.exception_pack_reviews where exception_pack_id=v_pack.id and stage='procurement') then raise exception 'Procurement review was already recorded'; end if;
+    insert into procurement.exception_pack_reviews(exception_pack_id,stage,decision,rationale,decided_by,expected_revision) values(v_pack.id,v_stage,v_decision,btrim(payload->>'note'),auth.uid(),v_expected);
+    update procurement.exception_packs set procurement_head_reviewed_by=auth.uid(),procurement_head_reviewed_at=statement_timestamp(),status=case when v_decision='rejected' then 'rejected' else 'under_review' end,revision=revision+1 where id=v_pack.id returning * into v_pack;
+  elsif v_stage='finance' then
+    if v_pack.mode <> 'petty_cash' then raise exception 'Finance eligibility applies only to petty cash'; end if;
+    if not (core.has_live_cap('procurement','view_finance') or core.has_live_cap('procurement','admin')) then raise exception 'Finance authority is required'; end if;
+    select decided_by into v_prior_actor from procurement.exception_pack_reviews where exception_pack_id=v_pack.id and stage='procurement';
+    if v_prior_actor is null then raise exception 'Independent Procurement review is required before Finance'; end if;
+    if auth.uid() in (v_pack.submitted_by,v_prior_actor) then raise exception 'Finance reviewer must be independent from submitter and Procurement reviewer'; end if;
+    if exists(select 1 from procurement.exception_pack_reviews where exception_pack_id=v_pack.id and stage='finance') then raise exception 'Finance review was already recorded'; end if;
+    insert into procurement.exception_pack_reviews(exception_pack_id,stage,decision,rationale,decided_by,expected_revision) values(v_pack.id,v_stage,v_decision,btrim(payload->>'note'),auth.uid(),v_expected);
+    update procurement.exception_packs set status=case when v_decision='rejected' then 'rejected' else 'under_review' end,revision=revision+1 where id=v_pack.id returning * into v_pack;
+  elsif v_stage='doa' then
+    select decided_by into v_prior_actor from procurement.exception_pack_reviews where exception_pack_id=v_pack.id and stage='procurement';
+    if v_prior_actor is null then raise exception 'Independent Procurement review is required before DOA'; end if;
+    if v_pack.mode='petty_cash' and not exists(select 1 from procurement.exception_pack_reviews where exception_pack_id=v_pack.id and stage='finance' and decision='approved') then raise exception 'Independent Finance review is required before DOA'; end if;
+    if auth.uid()=v_pack.submitted_by or auth.uid()=v_prior_actor or exists(select 1 from procurement.exception_pack_reviews where exception_pack_id=v_pack.id and stage='finance' and decided_by=auth.uid()) then raise exception 'DOA actor must be independent from submitter and prior reviewers'; end if;
+    v_assignment := private.policy_variance_doa_assignment(v_request,'final_approver');
+    if exists(select 1 from procurement.exception_doa_decisions where exception_pack_id=v_pack.id) then raise exception 'DOA decision was already recorded'; end if;
+    insert into procurement.exception_doa_decisions(exception_pack_id,decision,rationale,doa_matrix_id,doa_assignment_id,decided_by,expected_revision,pack_revision) values(v_pack.id,v_decision,btrim(payload->>'note'),v_assignment.matrix_id,v_assignment.id,auth.uid(),v_expected,v_expected);
+    update procurement.exception_packs set status=case when v_decision='approved' then 'approved' else 'rejected' end,revision=revision+1 where id=v_pack.id returning * into v_pack;
+  else raise exception 'Review stage must be procurement, finance, or doa'; end if;
+  return to_jsonb(v_pack);
 end;
 $$;
