@@ -14,6 +14,14 @@ function runtimeFunction(name, nextFunction, bindings = {}) {
   return new Function(...Object.keys(bindings), `${source}; return ${name};`)(...Object.values(bindings));
 }
 
+function generatorFunction(name, nextFunction, bindings = {}) {
+  const generator = readFileSync(new URL("./build-app-documentation.mjs", import.meta.url), "utf8");
+  const match = generator.match(new RegExp(`function ${name}\\([\\s\\S]*?\\n}\\n\\nfunction ${nextFunction}`));
+  assert.ok(match, `could not extract ${name} from the documentation generator`);
+  const source = match[0].slice(0, match[0].lastIndexOf(`function ${nextFunction}`));
+  return new Function(...Object.keys(bindings), `${source}; return ${name};`)(...Object.values(bindings));
+}
+
 test("builds one self-contained handbook from every canonical source", () => {
   const html = buildDocumentationHtml();
   const sources = documentationSources();
@@ -169,6 +177,39 @@ test("normalizes persisted handbook state without accepting malformed values", (
     tabScroll: {},
     theme: "light",
   });
+});
+
+test("keeps diagram state IDs stable when source text is inserted before a diagram", () => {
+  const decorateArticleHtml = generatorFunction("decorateArticleHtml", "buildSearchIndex", {
+    escapeHtml: (value) => value,
+    disclosureDefaultOpen: () => true,
+  });
+  const document = { id: "doc-example", collapse: "none" };
+  const diagram = '<figure class="diagram-shell"><div class="mermaid">flowchart TD</div></figure>';
+
+  assert.match(decorateArticleHtml(document, diagram), /data-diagram-id="doc-example:diagram-1"/);
+  assert.match(decorateArticleHtml(document, `<p>Inserted source text.</p>${diagram}`), /data-diagram-id="doc-example:diagram-1"/);
+});
+
+test("restores a saved tab position through the document viewport", () => {
+  const calls = [];
+  const restoreStoredPosition = runtimeFunction("restoreStoredPosition", "activateLinkedRoute", {
+    document: { getElementById: () => null },
+    openContainingDisclosure: () => {},
+    tabScroll: { architecture: 480 },
+    window: { scrollTo: (options) => calls.push(options) },
+  });
+
+  restoreStoredPosition({ tabId: "architecture", headingId: null });
+
+  assert.deepEqual(calls, [{ left: 0, top: 480, behavior: "auto" }]);
+});
+
+test("uses window as the handbook reading scroll owner", () => {
+  const html = buildDocumentationHtml();
+
+  assert.match(html, /window\.addEventListener\('scroll'/);
+  assert.doesNotMatch(html, /readingCanvas\.addEventListener\('scroll'/);
 });
 
 test("serializes a tab-only scope without a query and parses it on refresh", () => {

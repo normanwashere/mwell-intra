@@ -200,9 +200,11 @@ function disclosureDefaultOpen(document, heading, index, section) {
 }
 
 function decorateArticleHtml(document, html) {
-  const withDiagramIds = html.replace(/<figure class="diagram-shell">/g, (_, index) =>
-    `<figure class="diagram-shell" data-diagram-id="${escapeHtml(`${document.id}:diagram-${index + 1}`)}">`,
-  );
+  let diagramIndex = 0;
+  const withDiagramIds = html.replace(/<figure class="diagram-shell">/g, () => {
+    diagramIndex += 1;
+    return `<figure class="diagram-shell" data-diagram-id="${escapeHtml(`${document.id}:diagram-${diagramIndex}`)}">`;
+  });
   if (document.collapse === "none") return withDiagramIds;
 
   let sectionIndex = 0;

@@ -230,7 +230,7 @@
     function restoreStoredPosition(route) {
       const heading = route.headingId ? document.getElementById(route.headingId) : null;
       if (heading) { openContainingDisclosure(heading); heading.scrollIntoView({ block: 'start' }); return; }
-      readingCanvas.scrollTop = tabScroll[route.tabId] || 0;
+      window.scrollTo({ left: 0, top: tabScroll[route.tabId] || 0, behavior: 'auto' });
     }
 
     function activateLinkedRoute(link, restoreScroll) {
@@ -273,7 +273,7 @@
     document.querySelector('#theme').addEventListener('click', () => { const root = document.documentElement; root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark'; schedulePersistence(); });
     document.querySelector('[data-recovery-search]').addEventListener('click', () => { routeNotice.hidden = true; search.focus(); });
     document.querySelector('[data-dismiss-notice]').addEventListener('click', () => { routeNotice.hidden = true; });
-    readingCanvas.addEventListener('scroll', (event) => { if (event.currentTarget !== readingCanvas) return; tabScroll = { ...tabScroll, [activeRoute.tabId]: readingCanvas.scrollTop }; schedulePersistence(); });
+    window.addEventListener('scroll', () => { tabScroll = { ...tabScroll, [activeRoute.tabId]: window.scrollY }; schedulePersistence(); }, { passive: true });
     document.addEventListener('keydown', (event) => { if (event.key === '/' && !/input|textarea|select/i.test(document.activeElement.tagName)) { event.preventDefault(); search.focus(); } });
     document.querySelectorAll('.diagram-shell[data-diagram-id]').forEach((shell) => {
       const id = shell.dataset.diagramId; const viewport = shell.querySelector('.diagram-viewport'); let scale = diagramZoom[id] || 1;
