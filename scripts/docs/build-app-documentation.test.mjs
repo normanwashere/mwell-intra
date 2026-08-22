@@ -66,3 +66,15 @@ test("renders primary article navigation and in-place route support", () => {
   assert.match(html, /history\.replaceState/);
   assert.doesNotMatch(html, /location\.(?:href|reload)/);
 });
+
+test("serializes tab routes safely while preserving browser query semantics", () => {
+  const html = buildDocumentationHtml();
+  const match = html.match(/href="(#tab=start&amp;article=doc-manual-mwell-intra-user-manual-md)" data-article-link/);
+  assert.ok(match);
+  const browserHref = match[1].replaceAll("&amp;", "&");
+  const params = new URLSearchParams(browserHref.slice(1));
+  assert.deepEqual(Object.fromEntries(params), {
+    tab: "start",
+    article: "doc-manual-mwell-intra-user-manual-md",
+  });
+});
