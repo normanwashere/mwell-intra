@@ -118,6 +118,14 @@ async function createGovernedRouteFixture() {
       procurement_head_reviewed_at timestamptz,
       status text not null default 'draft'
     );
+    create table procurement.purchase_orders (
+      id text primary key,
+      request_id uuid references procurement.requests(id),
+      core_vendor_id uuid references core.vendors(id),
+      status text not null default 'draft',
+      total numeric not null default 0,
+      lines jsonb not null default '[]'::jsonb
+    );
     create table procurement.sourcing_events (
       id uuid primary key default gen_random_uuid(),
       request_id uuid not null references procurement.requests(id),
@@ -1019,84 +1027,9 @@ test("executes public governed route confirmation with persisted authority and e
       "stale expected_route_version must reject through the public RPC",
     );
 
-    const exceptions = [
-      {
-        id: "30000000-0000-0000-0000-000000000002",
-        mode: "sole_source",
-        amount: 5000,
-        expected: /approved_exception_evidence/,
-      },
-      {
-        id: "30000000-0000-0000-0000-000000000003",
-        mode: "sole_source",
-        amount: 5000,
-        exceptionType: "sole_supplier",
-        expected: "confirmed",
-      },
-      {
-        id: "30000000-0000-0000-0000-000000000004",
-        mode: "repeat_order",
-        amount: 250001,
-        exceptionType: "repeat_continuity",
-        expected: /repeat_order_amount_exceeds_policy/,
-      },
-      {
-        id: "30000000-0000-0000-0000-000000000007",
-        mode: "repeat_order",
-        amount: 250000,
-        exceptionType: "repeat_continuity",
-        expected: "confirmed",
-      },
-      {
-        id: "30000000-0000-0000-0000-000000000005",
-        mode: "petty_cash",
-        amount: 2001,
-        exceptionType: "petty_cash_non_accredited",
-        expected: /petty_cash_amount_exceeds_policy/,
-      },
-      {
-        id: "30000000-0000-0000-0000-000000000008",
-        mode: "petty_cash",
-        amount: 2000,
-        exceptionType: "petty_cash_non_accredited",
-        expected: "confirmed",
-      },
-      {
-        id: "30000000-0000-0000-0000-000000000006",
-        mode: "emergency_purchase",
-        amount: 5000,
-        exceptionType: "emergency",
-        expected: "confirmed",
-      },
-    ];
-    for (const scenario of exceptions) {
-      await insertRequest(db, {
-        id: scenario.id,
-        requirementKind: "materials",
-        amount: scenario.amount,
-      });
-      if (scenario.exceptionType) {
-        await db.exec(`
-          insert into procurement.exception_packs(request_id, exception_type, status)
-          values ('${scenario.id}', '${scenario.exceptionType}', 'approved')
-        `);
-      }
-      const confirmation = sqlJson({
-        request_id: scenario.id,
-        expected_route_version: 0,
-        requested_mode: scenario.mode,
-      });
-      if (scenario.expected instanceof RegExp) {
-        await assert.rejects(
-          () => db.query(`select procurement.confirm_route_decision(${confirmation})`),
-          scenario.expected,
-          `${scenario.mode} must enforce its public evidence or amount gate`,
-        );
-      } else {
-        const result = await db.query(`select procurement.confirm_route_decision(${confirmation}) as decision`);
-        assert.equal(result.rows[0].decision.status, scenario.expected);
-      }
-    }
+    // Exception mode coverage is deliberately exercised through the public
+    // submit/review matrix below. A bare legacy row is no longer a valid
+    // route gate because it has no immutable binding or independent history.
   } finally {
     await db.close();
   }
@@ -1112,27 +1045,165 @@ test("executes public parameterized exception review and active-DOA completion",
     await db.exec(migrationTask6);
     await db.exec(`insert into core.profiles(id, status) values ('${checkerId}', 'active'), ('${doaReviewerId}', 'active');`);
     await insertRequest(db, { id: requestId, requirementKind: "materials", amount: 120000 });
+    await db.exec(`update procurement.requests set department = 'operations' where id = '${requestId}';`);
     await setPolicyActor(db, actorId, true);
     const submitted = await db.query(`select procurement.submit_policy_exception_pack(${sqlJson({
       request_id: requestId, mode: "sole_source", justification: "Only the compatible manufacturer can support this clinical integration.", price_reasonableness: "Prior PO and manufacturer list price are attached.", evidence: { soleSourceBasis: "compatibility", evidenceReferences: ["private/sole-source/compatibility.pdf"] },
+      expected_route_version: 0,
     })}) as pack`);
     await assert.rejects(
-      () => db.query(`select procurement.review_policy_exception_pack(${sqlJson({ id: submitted.rows[0].pack.id, stage: "procurement", decision: "approved", note: "Self review is prohibited." })})`),
-      /independent Procurement reviewer/i,
+      () => db.query(`select procurement.review_policy_exception_pack(${sqlJson({ id: submitted.rows[0].pack.id, stage: "procurement", decision: "approved", expected_revision: 1, note: "Self review is prohibited." })})`),
+      /submitter cannot review/i,
     );
     await setPolicyActor(db, checkerId, true);
-    await db.query(`select procurement.review_policy_exception_pack(${sqlJson({ id: submitted.rows[0].pack.id, stage: "procurement", decision: "approved", note: "Evidence and benchmark reviewed independently." })})`);
+    const procurementReview = await db.query(`select procurement.review_policy_exception_pack(${sqlJson({ id: submitted.rows[0].pack.id, stage: "procurement", decision: "approved", expected_revision: 1, note: "Evidence and benchmark reviewed independently." })}) as pack`);
     await db.exec(`
       insert into procurement.doa_matrices(id, version, department, status, active) values ('71000000-0000-0000-0000-000000000003', 'FIXTURE-DOA', 'operations', 'active', true);
       insert into procurement.doa_assignments(id, matrix_id, department, min_amount, max_amount, tier, approver_user_id, active) values ('71000000-0000-0000-0000-000000000004', '71000000-0000-0000-0000-000000000003', 'operations', 0, 250000, 'final_approver', '${doaReviewerId}', true);
-      update procurement.requests set department = 'operations' where id = '${requestId}';
     `);
     await setPolicyActor(db, doaReviewerId, true);
-    const approved = await db.query(`select procurement.review_policy_exception_pack(${sqlJson({ id: submitted.rows[0].pack.id, stage: "doa", decision: "approved", note: "Active DOA approval recorded." })}) as pack`);
+    const approved = await db.query(`select procurement.review_policy_exception_pack(${sqlJson({ id: submitted.rows[0].pack.id, stage: "doa", decision: "approved", expected_revision: procurementReview.rows[0].pack.revision, note: "Active DOA approval recorded." })}) as pack`);
     assert.equal(approved.rows[0].pack.status, "approved");
     await setPolicyActor(db, actorId, true);
     const route = await db.query(`select procurement.confirm_route_decision(${sqlJson({ request_id: requestId, expected_route_version: 0, requested_mode: "sole_source" })}) as route`);
     assert.equal(route.rows[0].route.route.procurement_mode, "sole_source");
+  } finally {
+    await db.close();
+  }
+});
+
+test("executes the public exception lifecycle matrix without actor, evidence, or replay bypasses", async () => {
+  const db = await createGovernedRouteFixture();
+  const submitter = "73000000-0000-0000-0000-000000000001";
+  const procurementReviewer = "73000000-0000-0000-0000-000000000002";
+  const financeReviewer = "73000000-0000-0000-0000-000000000003";
+  const doaReviewer = "73000000-0000-0000-0000-000000000004";
+  const vendorId = "73000000-0000-0000-0000-000000000005";
+  const requestId = "73000000-0000-0000-0000-000000000010";
+  const pettyId = "73000000-0000-0000-0000-000000000011";
+  const emergencyId = "73000000-0000-0000-0000-000000000012";
+  const approvedId = "73000000-0000-0000-0000-000000000013";
+  const priorId = "73000000-0000-0000-0000-000000000014";
+  const repeatId = "73000000-0000-0000-0000-000000000015";
+  const gateId = "73000000-0000-0000-0000-000000000016";
+  const routeId = "73000000-0000-0000-0000-000000000020";
+  const eventId = "73000000-0000-0000-0000-000000000021";
+  const tabulationId = "73000000-0000-0000-0000-000000000022";
+  const evaluationId = "73000000-0000-0000-0000-000000000023";
+  const awardId = "73000000-0000-0000-0000-000000000024";
+  try {
+    await db.exec(migrationBeforeBackfillForPglite);
+    await seedActivePolicyProfiles(db);
+    await db.exec(migrationTask6);
+    await db.exec(`
+      insert into core.profiles(id, status) values ('${submitter}','active'),('${procurementReviewer}','active'),('${financeReviewer}','active'),('${doaReviewer}','active');
+      insert into core.vendors(id, legal_name, accreditation_status) values ('${vendorId}','Governed vendor','approved');
+      insert into procurement.doa_matrices(id,version,department,status,active) values ('73000000-0000-0000-0000-000000000030','EXC-DOA','operations','active',true);
+      insert into procurement.doa_assignments(id,matrix_id,department,min_amount,max_amount,tier,approver_user_id,active) values ('73000000-0000-0000-0000-000000000031','73000000-0000-0000-0000-000000000030','operations',0,250000,'final_approver','${doaReviewer}',true);
+    `);
+    const addRequest = async (id, amount, lines = [{ description: "controlled tablet", quantity: 1, unitPrice: amount }]) => {
+      await insertRequest(db, { id, requirementKind: "materials", amount, lines });
+      await db.exec(`update procurement.requests set department='operations', core_vendor_id='${vendorId}' where id='${id}';`);
+    };
+    const submitPack = (id, mode, evidence, amount = 1000) => db.query(`select procurement.submit_policy_exception_pack(${sqlJson({ request_id: id, mode, expected_route_version: 0, justification: "Documented policy exception with complete business rationale.", price_reasonableness: "Independent benchmark and prior commercial evidence attached.", evidence })}) as pack`);
+    const review = (id, stage, decision, revision, note = "Independent governed review is complete.") => db.query(`select procurement.review_policy_exception_pack(${sqlJson({ id, stage, decision, expected_revision: revision, note })}) as pack`);
+    const approve = async (packId, petty = false) => {
+      await setPolicyActor(db, procurementReviewer, true, ["approve_award"]);
+      let pack = (await review(packId, "procurement", "approved", 1)).rows[0].pack;
+      if (petty) {
+        await setPolicyActor(db, financeReviewer, false, ["view_finance"]);
+        pack = (await review(packId, "finance", "approved", pack.revision)).rows[0].pack;
+      }
+      await setPolicyActor(db, doaReviewer, false);
+      return (await review(packId, "doa", "approved", pack.revision)).rows[0].pack;
+    };
+
+    await addRequest(requestId, 120000);
+    await setPolicyActor(db, submitter, true);
+    await assert.rejects(
+      () => submitPack(requestId, "sole_source", { soleSourceBasis: "compatibility", evidenceReferences: [] }),
+      /evidence references/i,
+      "sole source must require durable evidence",
+    );
+    const sole = (await submitPack(requestId, "sole_source", { soleSourceBasis: "compatibility", evidenceReferences: ["private/sole.pdf"], procurementReviewed: true, doaApproved: true })).rows[0].pack;
+    await assert.rejects(() => review(sole.id, "procurement", "approved", 1), /submitter cannot review/i, "submitter cannot self-review");
+    await setPolicyActor(db, procurementReviewer, true, ["approve_award"]);
+    const soleProcurement = (await review(sole.id, "procurement", "approved", 1)).rows[0].pack;
+    const idempotentReplay = await review(sole.id, "procurement", "approved", 1);
+    assert.equal(idempotentReplay.rows[0].pack.revision, soleProcurement.revision, "identical replay is idempotent and creates no second decision");
+    await assert.rejects(() => review(sole.id, "procurement", "approved", 1, "Forged replacement decision."), /changed|already recorded/i, "conflicting replay is rejected");
+    await setPolicyActor(db, procurementReviewer, true, ["approve_award"]);
+    await assert.rejects(() => review(sole.id, "doa", "approved", soleProcurement.revision), /independent/i, "Procurement reviewer cannot become DOA");
+    await setPolicyActor(db, doaReviewer, false);
+    const soleApproved = (await review(sole.id, "doa", "approved", soleProcurement.revision)).rows[0].pack;
+    assert.equal(soleApproved.status, "approved");
+    await setPolicyActor(db, submitter, true);
+    const confirmed = await db.query(`select procurement.confirm_route_decision(${sqlJson({ request_id: requestId, expected_route_version: 0, requested_mode: "sole_source" })}) as result`);
+    assert.equal(confirmed.rows[0].result.route.procurement_mode, "sole_source", "approved bound sole-source pack permits route confirmation");
+
+    await addRequest(pettyId, 1000);
+    await setPolicyActor(db, submitter, true);
+    await assert.rejects(() => submitPack(pettyId, "petty_cash", { splitPurchase: true, recurring: false, receiptPresent: true, liquidationRecorded: true }), /split or recurring/i, "petty cash rejects split purchases");
+    const petty = (await submitPack(pettyId, "petty_cash", { splitPurchase: false, recurring: false, receiptPresent: true, liquidationRecorded: true })).rows[0].pack;
+    await setPolicyActor(db, procurementReviewer, true, ["approve_award"]);
+    const pettyProcurement = (await review(petty.id, "procurement", "approved", 1)).rows[0].pack;
+    await assert.rejects(() => review(petty.id, "finance", "approved", pettyProcurement.revision), /independent from submitter and Procurement reviewer/i, "Procurement and Finance must be different actors");
+    await setPolicyActor(db, financeReviewer, false, ["view_finance"]);
+    const pettyFinance = (await review(petty.id, "finance", "approved", pettyProcurement.revision)).rows[0].pack;
+    await assert.rejects(() => review(petty.id, "doa", "approved", pettyFinance.revision), /independent/i, "Finance reviewer cannot become DOA");
+    await setPolicyActor(db, doaReviewer, false);
+    assert.equal((await review(petty.id, "doa", "approved", pettyFinance.revision)).rows[0].pack.status, "approved");
+
+    await addRequest(emergencyId, 10000);
+    await setPolicyActor(db, submitter, true);
+    await assert.rejects(() => submitPack(emergencyId, "emergency_purchase", { emergencyBasis: "life_safety", authorityReference: "OPS-EM-1", commitmentTimestamp: "invalid", minimizedVerbalCommitment: true, retrospectivePoDueAt: "2026-09-01T00:00:00Z" }), /commitment timestamp is invalid/i, "emergency timestamp must parse");
+    await assert.rejects(() => submitPack(emergencyId, "emergency_purchase", { emergencyBasis: "life_safety", authorityReference: "OPS-EM-1", commitmentTimestamp: "2026-08-01T00:00:00Z", minimizedVerbalCommitment: true, retrospectivePoDueAt: "2026-09-02T00:00:00Z" }), /30-day policy window/i, "emergency retro PO must remain inside its policy window");
+    const emergency = (await submitPack(emergencyId, "emergency_purchase", { emergencyBasis: "life_safety", authorityReference: "OPS-EM-1", commitmentTimestamp: "2026-08-01T00:00:00Z", minimizedVerbalCommitment: true, retrospectivePoDueAt: "2026-08-15T00:00:00Z" })).rows[0].pack;
+    assert.equal((await approve(emergency.id)).status, "approved", "valid emergency completes independent review");
+
+    await addRequest(approvedId, 120000);
+    await setPolicyActor(db, submitter, true);
+    await assert.rejects(() => submitPack(approvedId, "approved_exception", { approvedExceptionPackId: "73000000-0000-0000-0000-000000000099", evidenceReferences: ["private/source.pdf"] }), /immutable approved eligible pack/i, "forged approved-exception ID is rejected");
+    const sourcePackId = sole.id;
+    const approved = (await submitPack(approvedId, "approved_exception", { approvedExceptionPackId: sourcePackId, evidenceReferences: ["private/source.pdf"] })).rows[0].pack;
+    assert.equal((await approve(approved.id)).status, "approved", "approved-exception source is a real immutable approved pack");
+
+    const sameLines = [{ description: "controlled tablet", quantity: 1, unitPrice: 50000 }];
+    await addRequest(priorId, 50000, sameLines);
+    await db.exec(`
+      insert into procurement.route_decisions(id,request_id,policy_version,request_version,method,reasons,risk_facts,status,confirmed_by,solicitation_type,procurement_mode,governance_tier,policy_profile_id)
+      values ('${routeId}','${priorId}','FIXTURE:1',1,'rfq',array['fixture'],'{}','confirmed','${submitter}','rfq','competitive_bidding','standard','${operatingProfileId}');
+      insert into procurement.sourcing_events(id,request_id,route_decision_id,status,selected_vendor_id,submission_deadline,original_submission_deadline,closed_at,created_by)
+      values ('${eventId}','${priorId}','${routeId}','awarded','${vendorId}',statement_timestamp(),statement_timestamp(),statement_timestamp(),'${submitter}');
+      insert into procurement.commercial_tabulations(id,sourcing_event_id,version,response_closed_at,due_at,submitted_by,entries,evidence_reference,status)
+      values ('${tabulationId}','${eventId}',1,statement_timestamp(),statement_timestamp(),'${submitter}','[{"vendorId":"${vendorId}","quotedAmount":50000,"paymentTerms":"net 30"}]','private/tabulation.pdf','submitted');
+      insert into procurement.technical_evaluations(id,sourcing_event_id,vendor_id,version,due_at,reviewer_id,criteria,total_score,evidence_reference,status)
+      values ('${evaluationId}','${eventId}','${vendorId}',1,statement_timestamp(),'${procurementReviewer}','[{"criterion":"technicalCompliance","score":100,"evidenceReference":"e"},{"criterion":"quality","score":100,"evidenceReference":"e"},{"criterion":"leadTime","score":100,"evidenceReference":"e"},{"criterion":"totalLifecycleCost","score":100,"evidenceReference":"e"},{"criterion":"warranty","score":100,"evidenceReference":"e"},{"criterion":"support","score":100,"evidenceReference":"e"},{"criterion":"price","score":100,"evidenceReference":"e"},{"criterion":"paymentTerms","score":100,"evidenceReference":"e"},{"criterion":"training","score":100,"evidenceReference":"e"}]','100','private/evaluation.pdf','submitted');
+      insert into procurement.award_recommendations(id,sourcing_event_id,evaluated_vendor_id,recommended_vendor_id,commercial_tabulation_id,technical_evaluation_id,rationale,status,created_by)
+      values ('${awardId}','${eventId}','${vendorId}','${vendorId}','${tabulationId}','${evaluationId}','best value','approved','${submitter}');
+      insert into procurement.purchase_orders(id,request_id,core_vendor_id,status,total,lines) values ('prior-po','${priorId}','${vendorId}','issued',50000,${sqlJson(sameLines)});
+    `);
+    await addRequest(repeatId, 50000, sameLines);
+    await setPolicyActor(db, submitter, true);
+    await assert.rejects(() => submitPack(repeatId, "repeat_order", { priorRequestId: priorId, priorSourcingEventId: eventId, priorAwardId: awardId, priorPurchaseOrderId: "forged-po", samePrice: true, sameTerms: true, sameVendor: true }), /prior PO/i, "forged repeat PO link is rejected");
+    const repeat = (await submitPack(repeatId, "repeat_order", { priorRequestId: priorId, priorSourcingEventId: eventId, priorAwardId: awardId, priorPurchaseOrderId: "prior-po", samePrice: true, sameTerms: true, sameVendor: true, sameConsiderations: true, priorCompetitiveAward: true })).rows[0].pack;
+    assert.equal((await approve(repeat.id)).status, "approved", "repeat order derives and locks cross-linked competitive facts");
+    await db.exec(`update procurement.requests set lines='[{"description":"changed scope","quantity":1,"unitPrice":50000}]'::jsonb where id='${repeatId}';`);
+    await setPolicyActor(db, submitter, true);
+    await assert.rejects(() => db.query(`select procurement.confirm_route_decision(${sqlJson({ request_id: repeatId, expected_route_version: 0, requested_mode: "repeat_order" })})`), /restart_exception|approved_exception_pack_required/i, "scope change invalidates repeat-order eligibility");
+
+    await addRequest(gateId, 50000);
+    await db.exec(`
+      update procurement.requests set procurement_mode='sole_source', policy_profile_id='${operatingProfileId}' where id='${gateId}';
+      insert into procurement.route_decisions(id,request_id,policy_version,request_version,method,reasons,risk_facts,status,confirmed_by,solicitation_type,procurement_mode,governance_tier,policy_profile_id)
+      values ('73000000-0000-0000-0000-000000000032','${gateId}','FIXTURE:1',1,'direct_award',array['fixture'],'{}','confirmed','${submitter}','none','sole_source','standard','${operatingProfileId}');
+      insert into procurement.sourcing_events(id,request_id,route_decision_id,status,submission_deadline,original_submission_deadline,created_by)
+      values ('73000000-0000-0000-0000-000000000033','${gateId}','73000000-0000-0000-0000-000000000032','draft',statement_timestamp(),statement_timestamp(),'${submitter}');
+      insert into procurement.purchase_orders(id,request_id,core_vendor_id,status,total,lines)
+      values ('gate-po','${gateId}','${vendorId}','draft',50000,${sqlJson(sameLines)});
+    `);
+    await assert.rejects(() => db.exec(`update procurement.sourcing_events set status='awarded' where id='73000000-0000-0000-0000-000000000033';`), /approved best-value recommendation|approved_exception_pack_required/i, "award is blocked before an ungoverned exception route can award");
+    await assert.rejects(() => db.exec(`update procurement.purchase_orders set status='issued' where id='gate-po';`), /approved_exception_pack_required/i, "PO issue is blocked without a current approved exception pack");
   } finally {
     await db.close();
   }

@@ -13,9 +13,10 @@ it('sends only the governed route confirmation inputs and requires a re-confirma
   expect(source).toContain('returnedRoutePayload.policy_profile_id !== displayedRoute.policyProfileId');
 });
 
-it('renders server-governed exception evidence and blockers for non-competitive routes', () => {
+it('renders the authoritative exception workspace for non-competitive routes', () => {
   const source = readFileSync(resolve(process.cwd(), 'src/pages/RequestDetailPage.tsx'), 'utf8');
-  expect(source).toContain('Exception control status');
-  expect(source).toContain('rechecked by the server at route confirmation, award, and PO issue');
-  expect(source).toContain('evaluateProcurementException');
+  expect(source).toContain('ExceptionWorkspace');
+  expect(source).toContain('aria-label="Governed exception workspace"');
+  expect(source).toContain('expectedRouteVersion={displayedRoute.routeVersion ?? req.route?.routeVersion ?? 0}');
+  expect(source).not.toContain('evaluateProcurementException');
 });
