@@ -27,7 +27,16 @@ const migrationCreateWrapper = migration.slice(
   migration.indexOf(CREATE_WRAPPER_END_MARKER),
 );
 const TASK_6_MARKER = "-- Task 6: competitive sourcing is governed by the effective profile";
-const migrationTask6 = migration.slice(migration.indexOf(TASK_6_MARKER));
+const TASK_10_MARKER = '-- Task 10 terminal controls. Legal/VMO owns vendor state; Procurement only';
+const TASK_10_END_MARKER = '-- Task 10 terminal controls end.';
+const migrationTask6 = migration.slice(
+  migration.indexOf(TASK_6_MARKER),
+  migration.indexOf(TASK_10_MARKER),
+) + migration.slice(migration.indexOf(TASK_10_END_MARKER) + TASK_10_END_MARKER.length);
+const migrationTask10 = migration.slice(
+  migration.indexOf(TASK_10_MARKER),
+  migration.indexOf(TASK_10_END_MARKER),
+);
 // PGlite 0.5 does not implement jsonb_object_length. The production migration
 // retains PostgreSQL's native function; this equivalent fixture expression
 // lets the public policy RPCs execute locally rather than reducing the test
@@ -525,6 +534,25 @@ test("rejects migration variants that weaken best-value or variance controls", (
   for (const { sql, failure } of cases) {
     assert.ok(verifyMigrationText(sql).failures.includes(failure));
   }
+});
+
+test('requires Task 10 Legal/VMO authority, scope-bound clearance, custody, and server-derived payment controls', () => {
+  const result = verifyMigrationText(migration);
+  assert.deepEqual(
+    result.failures.filter((failure) => failure.includes('Task 10')),
+    [],
+    'Task 10 controls must be present in the authoritative migration',
+  );
+
+  const weakened = migration.replaceAll(
+    'private.policy_assert_request_vendor_eligible',
+    'removed_vendor_eligibility_guard',
+  );
+  assert.ok(
+    verifyMigrationText(weakened).failures.includes(
+      'missing hardened Task 10 RPC procurement.invite_sourcing_vendors',
+    ),
+  );
 });
 
 test("requires explicit requirement classification before the create wrapper persists a request", () => {
@@ -2170,6 +2198,74 @@ test("executes an approved insufficient-bids exception through best-value varian
   } finally {
     await db.close();
   }
+});
+
+test('executes the disposable public Task 10 vendor and payment authority matrix', async () => {
+  const db = await createGovernedRouteFixture();
+  const maker = '76000000-0000-0000-0000-000000000001';
+  const legalDecider = '76000000-0000-0000-0000-000000000002';
+  const unrelated = '76000000-0000-0000-0000-000000000003';
+  const vendorId = '76000000-0000-0000-0000-000000000004';
+  const reviewId = '76000000-0000-0000-0000-000000000005';
+  const withRole = async (role, actor, canManage, capabilities, action) => {
+    await db.exec('reset role');
+    await setPolicyActor(db, actor, canManage, capabilities, null);
+    await db.exec(`set role ${role}`);
+    try { return await action(); } finally { await db.exec('reset role'); }
+  };
+  try {
+    await db.exec(migrationBeforeBackfillForPglite);
+    await seedActivePolicyProfiles(db);
+    await db.exec(migrationTask6);
+    await db.exec(migrationTask10);
+    await db.exec(`
+      grant usage on schema legal, procurement, core, auth, private to anon, authenticated, service_role;
+      insert into core.profiles(id,status) values ('${maker}','active'),('${legalDecider}','active'),('${unrelated}','active');
+      insert into core.vendors(id,legal_name,accreditation_status) values ('${vendorId}','Task 10 vendor','approved');
+      insert into legal.vendor_probation_reviews(
+        id,vendor_id,policy_profile_id,due_at,status,opened_by,po_win_rate,delivery_commitment_rate,
+        return_or_rejection_count,document_timeliness_rate,evidence_reference,notice_reference
+      ) values ('${reviewId}','${vendorId}','${operatingProfileId}',statement_timestamp(),'completed','${maker}',.2,1,0,1,'private/review.pdf','private/notice.pdf');
+    `);
+
+    await withRole('anon', unrelated, false, [], async () => {
+      await assert.rejects(
+        () => db.query(`select legal.record_vendor_eligibility_decision(${sqlJson({ probation_review_id: reviewId, expected_revision: 0, decision: 'pass', evidence_reference: 'private/review.pdf', notice_reference: 'private/pass.pdf' })})`),
+        /permission denied/i,
+        'anon cannot decide vendor eligibility',
+      );
+    });
+    await withRole('authenticated', unrelated, false, [], async () => {
+      await assert.rejects(
+        () => db.query(`select legal.record_vendor_eligibility_decision(${sqlJson({ probation_review_id: reviewId, expected_revision: 0, decision: 'pass', evidence_reference: 'private/review.pdf', notice_reference: 'private/pass.pdf' })})`),
+        /authority/i,
+        'unrelated authenticated actor cannot decide vendor eligibility',
+      );
+      await assert.rejects(
+        () => db.query(`select private.policy_vendor_eligibility_projection('${vendorId}'::uuid, 'goods', statement_timestamp())`),
+        /permission denied/i,
+        'application roles cannot execute the private eligibility projection',
+      );
+    });
+    await withRole('authenticated', legalDecider, true, [], async () => {
+      const decided = await db.query(`select legal.record_vendor_eligibility_decision(${sqlJson({ probation_review_id: reviewId, expected_revision: 0, decision: 'pass', evidence_reference: 'private/review.pdf', notice_reference: 'private/pass.pdf' })}) as result`);
+      assert.equal(decided.rows[0].result.replayed, false);
+      const replay = await db.query(`select legal.record_vendor_eligibility_decision(${sqlJson({ probation_review_id: reviewId, expected_revision: 0, decision: 'pass', evidence_reference: 'private/review.pdf', notice_reference: 'private/pass.pdf' })}) as result`);
+      assert.equal(replay.rows[0].result.replayed, true, 'identical Legal decision retry is replayed');
+      await assert.rejects(
+        () => db.query(`insert into legal.vendor_eligibility_decisions(vendor_id,status,evidence_reference,notice_reference,opened_by,decided_by) values ('${vendorId}','approved','forged','forged','${maker}','${legalDecider}')`),
+        /permission denied|row-level security/i,
+        'Legal must use the governed decision RPC rather than direct writes',
+      );
+      const sample = await db.query(`select legal.record_vendor_sample_custody(${sqlJson({ vendor_id: vendorId, expected_revision: 0, purpose: 'Clinical evaluation', custodian_id: maker, evaluation_reference: 'private/evaluation.pdf', disposition: 'returned', evidence_reference: 'private/custody.pdf', mwell_requested: false })}) as result`);
+      assert.equal(sample.rows[0].result.replayed, false);
+    });
+    const grants = await db.query(`select
+      has_function_privilege('authenticated','legal.record_vendor_eligibility_decision(jsonb)','EXECUTE') as legal_rpc,
+      has_function_privilege('authenticated','private.policy_assert_request_vendor_eligible(uuid,text,text)','EXECUTE') as private_guard,
+      has_table_privilege('authenticated','legal.vendor_sample_custody_events','INSERT') as direct_sample_write`);
+    assert.deepEqual(grants.rows[0], { legal_rpc: true, private_guard: false, direct_sample_write: false });
+  } finally { await db.close(); }
 });
 
 test("PGlite parse smoke loads the migration without a live database", async () => {

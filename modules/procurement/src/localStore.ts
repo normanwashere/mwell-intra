@@ -673,15 +673,22 @@ export function useProcurementVendors(): ProcurementVendor[] {
   return mergeVendorsWithLegal(DEMO_VENDORS);
 }
 
-export function isAccredited(v: ProcurementVendor): boolean {
+export function isAccredited(v: ProcurementVendor, requestScope?: string): boolean {
   const now = new Date();
-  if (v.accreditationStatus === 'approved') {
+  if (v.eligibility) {
+    return v.eligibility.eligible
+      && (!v.eligibility.expiresAt || new Date(v.eligibility.expiresAt) >= now)
+      && (!v.eligibility.scope || (Boolean(requestScope) && v.eligibility.scope.toLowerCase() === requestScope!.toLowerCase()));
+  }
+  if (v.accreditationStatus === 'approved' || v.accreditationStatus === 'probation') {
     return !v.accreditationExpiresAt || new Date(v.accreditationExpiresAt) >= now;
   }
-  if (v.accreditationStatus !== 'provisional') return false;
+  if (v.accreditationStatus !== 'provisional' && v.accreditationStatus !== 'temporary_clearance') return false;
   return Boolean(
     v.temporaryClearanceApproved &&
     v.temporaryClearanceScope?.trim() &&
+    requestScope?.trim() &&
+    v.temporaryClearanceScope.toLowerCase() === requestScope.toLowerCase() &&
     v.accreditationExpiresAt &&
     new Date(v.accreditationExpiresAt) >= now &&
     (!v.temporaryClearanceEffectiveAt || new Date(v.temporaryClearanceEffectiveAt) <= now),

@@ -54,6 +54,22 @@ interface LifecycleDecisionDraft {
   expiresAt: string;
 }
 
+export interface VendorEligibilityProjectionRecord {
+  vendorId: string;
+  vendorName: string;
+  status: 'approved' | 'probation' | 'provisional' | 'expired' | 'suspended' | 'rejected' | 'temporary_clearance';
+  eligible: boolean;
+  authority: 'Legal/VMO';
+  reviewDueAt?: string;
+  decision?: 'pass' | 'extend' | 'revoke' | 'suspend';
+  poWinRate?: number;
+  deliveryCommitmentRate?: number;
+  returnOrRejectionCount?: number;
+  documentTimelinessRate?: number;
+  evidenceReference?: string;
+  noticeReference?: string;
+}
+
 function text(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
@@ -72,11 +88,72 @@ function mapReview(row: Record<string, unknown>): LifecycleReview {
   };
 }
 
+function mapEligibilityProjection(row: Record<string, unknown>): VendorEligibilityProjectionRecord {
+  return {
+    vendorId: text(row.vendorId ?? row.vendor_id),
+    vendorName: text(row.vendorName ?? row.vendor_name),
+    status: text(row.status) as VendorEligibilityProjectionRecord['status'],
+    eligible: row.eligible === true,
+    authority: 'Legal/VMO',
+    reviewDueAt: text(row.reviewDueAt ?? row.review_due_at) || undefined,
+    decision: text(row.decision) as VendorEligibilityProjectionRecord['decision'],
+    poWinRate: row.poWinRate == null && row.po_win_rate == null ? undefined : Number(row.poWinRate ?? row.po_win_rate),
+    deliveryCommitmentRate: row.deliveryCommitmentRate == null && row.delivery_commitment_rate == null ? undefined : Number(row.deliveryCommitmentRate ?? row.delivery_commitment_rate),
+    returnOrRejectionCount: row.returnOrRejectionCount == null && row.return_or_rejection_count == null ? undefined : Number(row.returnOrRejectionCount ?? row.return_or_rejection_count),
+    documentTimelinessRate: row.documentTimelinessRate == null && row.document_timeliness_rate == null ? undefined : Number(row.documentTimelinessRate ?? row.document_timeliness_rate),
+    evidenceReference: text(row.evidenceReference ?? row.evidence_reference) || undefined,
+    noticeReference: text(row.noticeReference ?? row.notice_reference) || undefined,
+  };
+}
+
+function percentage(value: number | undefined): string {
+  return `${Math.round((value ?? 0) * 100)}%`;
+}
+
+/** Legal/VMO's authoritative eligibility projection. Procurement only renders it. */
+export function VendorEligibilityProjection({
+  projection,
+}: {
+  projection: VendorEligibilityProjectionRecord;
+}) {
+  return (
+    <section className="space-y-2 rounded-lg border border-line bg-inset p-3" aria-label="Vendor eligibility projection">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-sm font-semibold text-ink">{projection.vendorName}</p>
+          <p className="text-xs text-muted">Read-only Procurement eligibility projection</p>
+        </div>
+        <Badge tone={projection.eligible ? 'emerald' : 'rose'}>
+          {projection.status.replaceAll('_', ' ')}
+        </Badge>
+      </div>
+      <p className="text-xs text-muted">Authority: {projection.authority}</p>
+      {projection.status === 'probation' && (
+        <div className="grid gap-1 text-xs text-ink sm:grid-cols-2">
+          <span>Six-month probation review{projection.reviewDueAt ? ` / due ${projection.reviewDueAt}` : ''}</span>
+          <span>Decision: {projection.decision ?? 'pending'}</span>
+          <span>PO win rate {percentage(projection.poWinRate)}</span>
+          <span>Delivery commitment {percentage(projection.deliveryCommitmentRate)}</span>
+          <span>Returns/rejections {projection.returnOrRejectionCount ?? 0}</span>
+          <span>Document timeliness {percentage(projection.documentTimelinessRate)}</span>
+        </div>
+      )}
+      {(projection.evidenceReference || projection.noticeReference) && (
+        <div className="grid gap-1 text-xs text-muted sm:grid-cols-2">
+          {projection.evidenceReference && <span>Evidence: {projection.evidenceReference}</span>}
+          {projection.noticeReference && <span>Notice: {projection.noticeReference}</span>}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function VendorLifecyclePanel({ vendors }: { vendors: VendorOption[] }) {
   const { mode, supabaseClient } = useSession();
   const live = mode === "supabase" ? supabaseClient : null;
   const toast = useToast();
   const [reviews, setReviews] = useState<LifecycleReview[]>([]);
+  const [eligibilityProjections, setEligibilityProjections] = useState<VendorEligibilityProjectionRecord[]>([]);
   const [open, setOpen] = useState(false);
   const [workingId, setWorkingId] = useState<string>();
   const [saving, setSaving] = useState(false);
@@ -117,6 +194,14 @@ export function VendorLifecyclePanel({ vendors }: { vendors: VendorOption[] }) {
         mapReview(row as Record<string, unknown>),
       ),
     );
+    const { data: projections } = await live
+      .schema('legal')
+      .rpc('vendor_eligibility_projection', { payload: {} });
+    if (Array.isArray(projections)) {
+      setEligibilityProjections(
+        projections.map((row) => mapEligibilityProjection(row as Record<string, unknown>)),
+      );
+    }
   }, [live, toast]);
 
   useEffect(() => {
@@ -351,6 +436,13 @@ export function VendorLifecyclePanel({ vendors }: { vendors: VendorOption[] }) {
                 )}
               </div>
             </Card>
+          ))}
+        </div>
+      )}
+      {eligibilityProjections.length > 0 && (
+        <div className="space-y-2" aria-label="Legal vendor eligibility decisions">
+          {eligibilityProjections.map((projection) => (
+            <VendorEligibilityProjection key={`${projection.vendorId}:${projection.status}`} projection={projection} />
           ))}
         </div>
       )}

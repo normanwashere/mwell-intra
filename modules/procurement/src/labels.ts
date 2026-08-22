@@ -64,9 +64,12 @@ export const ACCREDITATION_LABEL: Record<
   submitted: 'Accreditation under review',
   under_review: 'Accreditation under review',
   approved: 'Accredited',
+  probation: 'Accredited on probation',
   provisional: 'Provisional clearance',
+  temporary_clearance: 'Scoped temporary clearance',
   rejected: 'Accreditation rejected',
   expired: 'Accreditation expired',
+  suspended: 'Vendor suspended',
   renewal_due: 'Accreditation renewal due',
 };
 

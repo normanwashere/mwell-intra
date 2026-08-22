@@ -4,6 +4,7 @@ import { expect, it, vi } from 'vitest';
 
 import { PaymentReadinessPanel } from './PaymentReadinessPanel';
 import type { AcceptancePack, PaymentReadinessPack } from '../types';
+import { MWELL_OPERATING_PROFILE } from '../policyProfile';
 
 it('enables Finance preparation when the preview binds every active acceptance and aggregate quantity', () => {
   const acceptances: AcceptancePack[] = [
@@ -237,4 +238,42 @@ it('does not offer payment release to a Finance acceptor without release authori
   );
 
   expect(html).not.toContain('Record payment release');
+});
+
+it('shows the request-bound profile threshold and itemized evidence without accepting a client readiness assertion', () => {
+  const html = renderToStaticMarkup(
+    createElement(PaymentReadinessPanel, {
+      acceptances: [],
+      pack: {
+        id: 'pack-evidence',
+        purchaseOrderId: 'po-1',
+        acceptancePackId: 'accept-1',
+        poMatch: false,
+        invoiceOrSiReference: 'invoice.pdf',
+        milestoneSupportReference: 'acceptance.pdf',
+        status: 'draft',
+        preparedAt: '2026-08-22T12:00:00Z',
+        invoiceNumber: 'INV-1004',
+        invoiceAmount: 50_000,
+      },
+      policyProfile: MWELL_OPERATING_PROFILE,
+      foreignVendor: true,
+      canAccept: false,
+      canPrepare: false,
+      canReview: false,
+      canRelease: false,
+      purchaseOrderAmount: 50_000,
+      acceptanceType: 'goods',
+      onAccept: vi.fn(),
+      onPrepare: vi.fn(),
+      onReview: vi.fn(),
+      onRelease: vi.fn(),
+    }),
+  );
+
+  expect(html).toContain('Active Mwell threshold: PHP 50,000');
+  expect(html).toContain('Invoice, OR, or SI evidence');
+  expect(html).toContain('Purchase order or agreement evidence');
+  expect(html).toContain('Foreign-vendor tax, withholding, and payment controls');
+  expect(html).toContain('Server recomputes payment readiness');
 });

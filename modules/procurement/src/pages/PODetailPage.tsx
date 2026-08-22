@@ -42,6 +42,7 @@ import { CommitmentReadinessPanel } from '../components/CommitmentReadinessPanel
 import { ProcurementAccessDenied } from '../components/ProcurementAccessDenied';
 import { accreditationLabel, formatDate, formatDateTime, poStatusLabel } from '../labels';
 import { makeTypedSignature } from '../signature';
+import { MWELL_OPERATING_PROFILE } from '../policyProfile';
 
 const PO_TONE: Record<PurchaseOrderStatus, 'slate' | 'cyan' | 'amber' | 'emerald' | 'rose'> = {
   draft: 'slate',
@@ -180,7 +181,7 @@ export function PODetailPage() {
   }
   if (!po) return <Navigate to="/purchase-orders" replace />;
 
-  const accreditationOk = vendor ? isAccredited(vendor) : false;
+  const accreditationOk = vendor ? isAccredited(vendor, sourceRequest?.category) : false;
   const sourceAwardOk = sourceRequest?.status === 'approved';
   const databaseCommitmentBlockers = po.commitmentReadiness?.blockers;
   const issueBlockers = [
@@ -912,6 +913,12 @@ export function PODetailPage() {
               }))}
               pack={po.paymentReadiness}
               stalenessEvents={po.paymentReadinessStalenessEvents}
+              policyProfile={
+                sourceRequest?.route?.policyProfileId === MWELL_OPERATING_PROFILE.id
+                  ? MWELL_OPERATING_PROFILE
+                  : undefined
+              }
+              foreignVendor={Boolean(sourceRequest?.importationPlan)}
               purchaseOrderAmount={po.total}
               acceptanceType={acceptanceType}
               canAccept={

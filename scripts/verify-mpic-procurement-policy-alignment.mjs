@@ -108,8 +108,12 @@ function functionDefinition(text, functionName, parameterType) {
     `create\\s+(?:or\\s+replace\\s+)?function\\s+${signature}\\s*\\(\\s*(?:[a-z_]+\\s+)?${parameterType}\\s*\\)[\\s\\S]*?\\$\\$;`,
   );
   const definitions = [...text.matchAll(new RegExp(expression.source, 'g'))];
-  const finalTask9Definition = functionName.includes('purchase_order') || functionName.includes('po_lifecycle');
-  return definitions.at(finalTask9Definition ? -1 : 0)?.[0] ?? null;
+  const finalGovernedDefinition = functionName.includes('purchase_order')
+    || functionName.includes('po_lifecycle')
+    || functionName.includes('payment')
+    || functionName.includes('vendor')
+    || functionName.includes('invite_sourcing');
+  return definitions.at(finalGovernedDefinition ? -1 : 0)?.[0] ?? null;
 }
 
 function escapeRegExp(value) {
@@ -444,6 +448,55 @@ export function verifyMigrationText(sql) {
     const definition = functionDefinition(text, name, "jsonb");
     if (!definition?.includes(required) || !definition.includes("security definer") || !definition.includes("set search_path = ''")) {
       failures.push(`missing hardened best-value RPC ${name}`);
+    }
+  }
+
+  for (const table of [
+    'legal.vendor_eligibility_decisions',
+    'legal.vendor_sample_custody_events',
+  ]) {
+    if (!text.includes(`create table if not exists ${table}`)) {
+      failures.push(`missing Task 10 table ${table}`);
+    }
+    if (!text.includes(`alter table ${table} force row level security`)) {
+      failures.push(`missing forced RLS for Task 10 table ${table}`);
+    }
+  }
+  for (const token of [
+    "status in ('approved', 'probation', 'provisional', 'expired', 'suspended', 'rejected', 'temporary_clearance')",
+    "decision in ('pass', 'extend', 'revoke', 'suspend')",
+    'po_win_rate',
+    'delivery_commitment_rate',
+    'return_or_rejection_count',
+    'document_timeliness_rate',
+    'sample purpose, custodian, evaluation, disposition, and an mwell-requested po link are required',
+    'private.policy_vendor_eligibility_projection',
+    'private.policy_assert_request_vendor_eligible',
+    'client-provided payment readiness is intentionally ignored',
+    'foreign-vendor tax, withholding, and payment-control evidence is required',
+  ]) {
+    if (!text.includes(token)) failures.push(`missing Task 10 control ${token}`);
+  }
+  for (const [name, required] of [
+    ['legal.record_vendor_eligibility_decision', 'expected_revision'],
+    ['legal.record_vendor_sample_custody', 'expected_revision'],
+    ['legal.vendor_eligibility_projection', 'legal/vmo'],
+    ['procurement.invite_sourcing_vendors', 'private.policy_assert_request_vendor_eligible'],
+    ['procurement.issue_purchase_order', 'private.policy_assert_request_vendor_eligible'],
+    ['procurement.prepare_payment_readiness', 'client-provided payment readiness is intentionally ignored'],
+  ]) {
+    const definition = functionDefinition(text, name, 'jsonb');
+    if (!definition?.includes(required) || !definition.includes('security definer') || !definition.includes("set search_path = ''")) {
+      failures.push(`missing hardened Task 10 RPC ${name}`);
+    }
+  }
+  for (const signature of [
+    'private.policy_vendor_eligibility_projection(uuid,text,timestamptz)',
+    'private.policy_assert_request_vendor_eligible(uuid,text,text)',
+    'private.policy_payment_evidence_blockers(procurement.purchase_orders,procurement.requests,jsonb)',
+  ]) {
+    if (!hasPrivateTask8ExecutionRevocation(text, signature)) {
+      failures.push(`missing private Task 10 execution revocation ${signature}`);
     }
   }
 

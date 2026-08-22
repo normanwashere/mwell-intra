@@ -684,6 +684,32 @@ export interface PaymentReadinessPack {
   correctedFrom?: string;
   evidenceStale?: boolean;
   evidenceStaleAt?: string;
+  /** Request-bound profile values returned by the governed payment projection. */
+  policyProfileId?: string;
+  policyProfileThreshold?: number;
+  policyProfileThresholdSource?: string;
+  foreignVendorEvidenceReference?: string;
+}
+
+export type VendorEligibilityStatus =
+  | 'approved'
+  | 'probation'
+  | 'provisional'
+  | 'expired'
+  | 'suspended'
+  | 'rejected'
+  | 'temporary_clearance';
+
+/** Legal/VMO-owned projection. Procurement has no mutation authority. */
+export interface VendorEligibilityProjection {
+  vendorId: string;
+  status: VendorEligibilityStatus;
+  eligible: boolean;
+  authority: 'Legal/VMO';
+  scope?: string;
+  effectiveAt?: string;
+  expiresAt?: string;
+  revision: number;
 }
 
 export interface PaymentRelease {
@@ -767,12 +793,18 @@ export interface ProcurementVendor {
     | 'submitted'
     | 'under_review'
     | 'approved'
+    | 'probation'
     | 'provisional'
+    | 'temporary_clearance'
     | 'rejected'
     | 'expired'
+    | 'suspended'
     | 'renewal_due';
   accreditationExpiresAt?: string;
   temporaryClearanceApproved?: boolean;
   temporaryClearanceScope?: string;
   temporaryClearanceEffectiveAt?: string;
+  temporaryClearanceExpiresAt?: string;
+  /** Read-only Legal/VMO server projection; never a client authorization input. */
+  eligibility?: VendorEligibilityProjection;
 }

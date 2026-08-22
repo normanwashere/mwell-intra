@@ -6,8 +6,10 @@ import type {
   AcceptancePack,
   PaymentReadinessPack,
   PaymentReadinessStalenessEvent,
+  ProcurementPolicyProfile,
 } from '../types';
 import { evaluatePaymentPackReadiness } from '../policy';
+import { evaluatePaymentEvidence } from '../vendorEligibility';
 
 export interface PaymentReadinessDraft {
   invoiceNumber: string;
@@ -46,6 +48,8 @@ export function PaymentReadinessPanel({
   canRelease,
   purchaseOrderAmount,
   acceptanceType,
+  policyProfile,
+  foreignVendor = false,
   onAccept,
   onPrepare,
   onReview,
@@ -62,6 +66,9 @@ export function PaymentReadinessPanel({
   canRelease: boolean;
   purchaseOrderAmount: number;
   acceptanceType: AcceptancePack['acceptanceType'];
+  /** The request-bound active profile returned by the governed PO projection. */
+  policyProfile?: ProcurementPolicyProfile;
+  foreignVendor?: boolean;
   onAccept: (
     scope: string,
     exceptions: string[],
@@ -142,6 +149,23 @@ export function PaymentReadinessPanel({
     [activeAcceptances, draft, pack],
   );
   const blockers = evaluatePaymentPackReadiness(activeAcceptances, preview);
+  const evidence = useMemo(
+    () =>
+      policyProfile
+        ? evaluatePaymentEvidence({
+            invoiceAmount: draft.invoiceAmount,
+            policyProfile,
+            invoicePresent: Boolean(draft.invoiceNumber.trim() && draft.invoiceOrSiReference.trim()),
+            poPresent: Boolean(pack?.purchaseOrderId),
+            acceptancePresent: activeAcceptances.length > 0 && Boolean(draft.milestoneSupportReference.trim()),
+            taxEvidencePresent: Boolean(draft.taxWithholdingSupportReference.trim()),
+            amountQuantityMatch: Boolean(pack?.poMatch),
+            foreignVendor,
+            foreignVendorEvidencePresent: !foreignVendor || Boolean(draft.taxWithholdingSupportReference.trim()),
+          })
+        : undefined,
+    [activeAcceptances.length, draft, foreignVendor, pack?.poMatch, pack?.purchaseOrderId, policyProfile],
+  );
   const exceptions = exceptionsText
     .split('\n')
     .map((value) => value.trim())
@@ -167,6 +191,29 @@ export function PaymentReadinessPanel({
               : `${blockers.length} blocker${blockers.length === 1 ? '' : 's'}`}
         </Badge>
       </div>
+
+      {evidence && (
+        <section className="space-y-2 rounded-lg border border-line bg-inset p-3" aria-label="Itemized Finance payment evidence">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-semibold text-ink">Itemized Finance payment evidence</p>
+            <Badge tone={evidence.ready ? 'emerald' : 'amber'}>
+              Active Mwell threshold: PHP {evidence.threshold.toLocaleString('en-PH')}
+            </Badge>
+          </div>
+          <p className="text-xs text-muted">
+            Source: {evidence.thresholdSource}. Server recomputes payment readiness from governed
+            request, PO, acceptance, invoice, tax, and payment records.
+          </p>
+          <ul className="grid gap-2 sm:grid-cols-2">
+            {evidence.items.map((item) => (
+              <li key={item.label} className="flex items-center gap-2 text-xs text-ink">
+                <Icon name={item.present ? 'check' : 'alert'} className={item.present ? 'h-4 w-4 text-emerald-600' : 'h-4 w-4 text-amber-600'} />
+                {item.label}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {canAccept && (
         <section className="space-y-3 rounded-lg border border-line p-4">
