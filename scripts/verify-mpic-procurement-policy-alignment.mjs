@@ -314,6 +314,22 @@ export function verifyMigrationText(sql) {
       !text.includes("as $$ select private.policy_submit_procurement_request(payload) $$")) {
     failures.push("missing governed procurement submission delegation");
   }
+  for (const token of [
+    "record_solicitation_communication",
+    "bid_window_working_days",
+    "max_extension_working_days",
+    "failed_bid_reason",
+    "notificationgroupid",
+    "vendor_acknowledgement_hours",
+    "clarification_hours",
+    "the exception author cannot approve their own request",
+  ]) {
+    if (!text.includes(token)) failures.push(`missing governed sourcing control ${token}`);
+  }
+  const sourcingTransition = functionDefinition(text, "procurement.transition_sourcing_event", "jsonb");
+  if (!sourcingTransition?.includes("for update") || !sourcingTransition.includes("approved evaluation exception")) {
+    failures.push("missing governed sourcing transition enforcement");
+  }
 
   return { failures };
 }

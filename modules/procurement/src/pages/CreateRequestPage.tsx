@@ -223,10 +223,9 @@ export function CreateRequestPage() {
     deliveryAcceptanceAndWarranty: '',
   });
   const [evaluation, setEvaluation] = useState<EvaluationMatrixValue>({
-    intendedResponses: 0,
+    intendedResponses: 3,
     vendorsInvited: 0,
     responsesReceived: 0,
-    insufficientBidsExceptionApproved: false,
   });
   const [solicitationRequirements, setSolicitationRequirements] = useState<SolicitationRequirements>({});
 
@@ -695,8 +694,6 @@ export function CreateRequestPage() {
         intendedResponses: evaluation.intendedResponses || undefined,
         vendorsInvited: evaluation.vendorsInvited || undefined,
         responsesReceived: evaluation.responsesReceived || undefined,
-        insufficientBidsExceptionApproved:
-          evaluation.insufficientBidsExceptionApproved || undefined,
       };
       if (route.procurementMode === 'sole_source' || route.procurementMode === 'emergency_purchase') {
         const reason = (directAwardReason || 'other') as

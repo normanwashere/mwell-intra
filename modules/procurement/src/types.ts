@@ -124,6 +124,40 @@ export interface ProcurementPolicyProfile {
   controls: ProcurementPolicyControls;
 }
 
+/** Why a competitive event could not proceed to evaluation. The server stores
+ * one of these reasons when it moves an event to `failed_bid`. */
+export type FailedBidReason =
+  | 'insufficient_responses'
+  | 'non_compliant_submissions'
+  | 'all_technically_non_compliant'
+  | 'implausible_pricing';
+
+/** Governed lifecycle for an RFQ/RFP event. `response_closed` separates the
+ * receipt deadline from evaluation so sealed-bid evidence cannot be altered
+ * while an evaluator is making a decision. */
+export type SourcingEventStatus =
+  | 'draft'
+  | 'issued'
+  | 'response_closed'
+  | 'failed_bid'
+  | 'evaluation'
+  | 'awarded'
+  | 'cancelled';
+
+export interface SourcingCommunicationEvidence {
+  id: string;
+  communicationType: 'invitation' | 'clarification' | 'extension' | 'award_notice' | 'failed_bid_notice';
+  recipientVendorId?: string;
+  packageVersion?: string;
+  packageHash?: string;
+  sentAt?: string;
+  deliveredAt?: string;
+  acknowledgedAt?: string;
+  question?: string;
+  answer?: string;
+  notificationGroupId?: string;
+}
+
 /**
  * @deprecated Read-only compatibility projection for records created before
  * the three-axis route backfill. New writes use ProcurementRoute instead.
@@ -247,7 +281,6 @@ export interface ComplianceChecks {
   intendedResponses?: number;
   vendorsInvited?: number;
   responsesReceived?: number;
-  insufficientBidsExceptionApproved?: boolean;
   routeConfirmed?: boolean;
   routeConfirmedByEmail?: string;
   policyVersion?: string;

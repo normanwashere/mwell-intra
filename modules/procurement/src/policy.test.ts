@@ -23,6 +23,7 @@ import {
   calculateInvoiceMatch,
 } from './policy';
 import type { AcceptancePack, ApprovalStep, PaymentReadinessPack } from './types';
+import { MWELL_OPERATING_PROFILE } from './policyProfile';
 
 describe('sourcing policy', () => {
   it('routes emergencies and repeat-continuity cases explicitly', () => {
@@ -373,22 +374,36 @@ describe('binding vendor-to-pay controls', () => {
 });
 
 describe('sourcing response readiness', () => {
-  it('does not fabricate a fixed quote shortfall', () => {
-    expect(evaluateSourcingReadiness({ method: 'rfq', invited: 3, responses: 1 })).toEqual({
-      ready: true,
-      insufficientBidsExceptionRequired: false,
+  it('blocks sealed-bid opening below three usable responses', () => {
+    expect(evaluateSourcingReadiness({
+      route: {
+        solicitationType: 'rfq',
+        procurementMode: 'competitive_bidding',
+        governanceTier: 'formal_bid',
+        policyProfileId: MWELL_OPERATING_PROFILE.id,
+        reasons: ['material_requirement'],
+      },
+      invited: 4,
+      usableResponses: 2,
+      profile: MWELL_OPERATING_PROFILE,
+      exceptionApproved: false,
+    })).toEqual({
+      ready: false,
+      state: 'failed_bid',
+      blocker: 'Three usable responses are required before sealed-bid opening.',
     });
   });
 
-  it('requires an exception when Procurement recorded a higher intended response count', () => {
-    expect(
-      evaluateSourcingReadiness({
-        method: 'rfp',
-        intendedResponses: 3,
-        invited: 4,
-        responses: 1,
-      }),
-    ).toEqual({ ready: false, insufficientBidsExceptionRequired: true });
+  it('blocks issue below the accredited invitation minimum and permits an approved server exception', () => {
+    expect(evaluateSourcingReadiness({ method: 'rfq', invited: 2, usableResponses: 0 })).toMatchObject({
+      ready: false,
+      state: 'draft',
+      blocker: 'At least 3 accredited vendors are required before issue.',
+    });
+    expect(evaluateSourcingReadiness({ method: 'rfp', invited: 3, usableResponses: 2, exceptionApproved: true })).toMatchObject({
+      ready: true,
+      state: 'evaluation',
+    });
   });
 });
 

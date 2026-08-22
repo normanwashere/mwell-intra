@@ -175,7 +175,7 @@ export class ControlledProcurementRpcFixture {
   }];
   sourcing: {
     id: string;
-    status: 'draft' | 'issued' | 'closed';
+    status: 'draft' | 'issued' | 'response_closed' | 'failed_bid' | 'evaluation' | 'awarded' | 'cancelled';
     submissionDeadline?: string;
     intendedResponses?: number;
     selectedVendorId?: string;
@@ -379,7 +379,7 @@ export class ControlledProcurementRpcFixture {
     }
     if (name === 'submit_request') {
       if (payload.id !== this.requestId) return failure(route, 'Unknown request');
-      if (!(this.request.compliance as Record<string, unknown>).routeConfirmed || this.sourcing?.status !== 'closed') return failure(route, 'Confirmed sourcing must be closed before submission');
+      if (!(this.request.compliance as Record<string, unknown>).routeConfirmed || this.sourcing?.status !== 'awarded') return failure(route, 'Confirmed sourcing must be awarded before submission');
       this.request.status = 'submitted';
       this.request.submitted_at = '2026-08-22T02:00:00.000Z';
       return response(route, { ...this.request });
@@ -413,15 +413,31 @@ export class ControlledProcurementRpcFixture {
       if (existing) Object.assign(existing, next); else this.sourcing.responses.push(next);
       return response(route, next);
     }
+    if (name === 'record_solicitation_communication') {
+      if (!this.sourcing || this.sourcing.status !== 'issued') return failure(route, 'Sourcing event is not available for communication');
+      if (payload.communication_type === 'clarification' && (!payload.question || !payload.answer)) return failure(route, 'Clarification question and answer are required');
+      return response(route, { notification_group_id: 'controlled-equal-notice', recipient_count: this.sourcing.responses.length });
+    }
     if (name === 'transition_sourcing_event') {
       if (!this.sourcing) return failure(route, 'Sourcing event is required');
       if (payload.action === 'issue') this.sourcing.status = 'issued';
-      if (payload.action === 'close') {
+      if (payload.action === 'response_closed') {
         if (this.sourcing.responses.filter((item) => item.receivedAt).length < 3) return failure(route, 'Three received responses are required');
-        this.sourcing.status = 'closed';
+        this.sourcing.status = 'response_closed';
+      }
+      if (payload.action === 'evaluation') {
+        if (this.sourcing.status !== 'response_closed') return failure(route, 'Response closure is required before evaluation');
+        this.sourcing.status = 'evaluation';
+      }
+      if (payload.action === 'award') {
+        if (this.sourcing.status !== 'evaluation') return failure(route, 'Controlled evaluation is required before award');
+        if (this.sourcing.responses.filter((item) => item.receivedAt).length < 3) return failure(route, 'Three received responses are required');
+        this.sourcing.status = 'awarded';
         this.sourcing.selectedVendorId = String(payload.selected_vendor_id);
         this.sourcing.closureNote = String(payload.closure_note);
       }
+      if (payload.action === 'failed_bid') this.sourcing.status = 'failed_bid';
+      if (payload.action === 'cancel') this.sourcing.status = 'cancelled';
       return response(route, this.workspace());
     }
     if (name === 'get_effective_policy_profile') return response(route, this.effectiveProfile());

@@ -2,12 +2,12 @@
 
 import { Badge, Icon } from '@intra/ui';
 import { evaluateSourcingReadiness } from '../policy';
+import { MWELL_OPERATING_PROFILE } from '../policyProfile';
 
 export interface EvaluationMatrixValue {
   intendedResponses: number;
   vendorsInvited: number;
   responsesReceived: number;
-  insufficientBidsExceptionApproved: boolean;
 }
 
 export function EvaluationMatrix({
@@ -21,10 +21,9 @@ export function EvaluationMatrix({
 }) {
   const readiness = evaluateSourcingReadiness({
     method: 'rfq',
-    intendedResponses: value.intendedResponses,
     invited: value.vendorsInvited,
-    responses: value.responsesReceived,
-    insufficientBidsExceptionApproved: value.insufficientBidsExceptionApproved,
+    usableResponses: value.responsesReceived,
+    profile: MWELL_OPERATING_PROFILE,
   });
   const patch = (next: Partial<EvaluationMatrixValue>) => onChange?.({ ...value, ...next });
 
@@ -34,17 +33,17 @@ export function EvaluationMatrix({
         <div>
           <h3 className="font-semibold text-ink">Competitive response record</h3>
           <p className="text-xs text-muted">
-            Record the intended response count, actual outreach, and usable responses. Policy does not impose a fixed quote count.
+            Competitive sourcing normally targets 3-4 accredited vendors. Sealed-bid evaluation requires three usable responses unless the governed exception workflow approves otherwise.
           </p>
         </div>
         <Badge tone={readiness.ready ? 'emerald' : 'amber'}>
-          {readiness.ready ? 'Ready for evaluation' : 'Exception required'}
+          {readiness.ready ? 'Ready for evaluation' : readiness.state === 'failed_bid' ? 'Exception workflow required' : 'Invitation minimum required'}
         </Badge>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
         {([
-          ['intendedResponses', 'Intended responses'],
+          ['intendedResponses', 'Invitation target (3 or 4)'],
           ['vendorsInvited', 'Vendors invited'],
           ['responsesReceived', 'Usable responses'],
         ] as const).map(([key, label]) => (
@@ -55,7 +54,8 @@ export function EvaluationMatrix({
               className="input mt-1.5"
               type="number"
               inputMode="numeric"
-              min="0"
+              min={key === 'intendedResponses' ? 3 : 0}
+              max={key === 'intendedResponses' ? 4 : undefined}
               step="1"
               readOnly={readOnly}
               value={value[key]}
@@ -65,18 +65,7 @@ export function EvaluationMatrix({
         ))}
       </div>
 
-      {!readiness.ready && (
-        <label className="flex min-h-11 items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-sm text-ink">
-          <input
-            type="checkbox"
-            className="h-5 w-5"
-            checked={value.insufficientBidsExceptionApproved}
-            disabled={readOnly}
-            onChange={(event) => patch({ insufficientBidsExceptionApproved: event.target.checked })}
-          />
-          Approved insufficient-bids exception is attached to the sourcing record
-        </label>
-      )}
+      {!readiness.ready && <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-sm text-ink">{readiness.blocker} Submit and review an exception from the governed sourcing workspace; this form cannot approve it.</p>}
 
       <p className="flex gap-2 text-xs text-muted">
         <Icon name="info" className="h-4 w-4 shrink-0" />

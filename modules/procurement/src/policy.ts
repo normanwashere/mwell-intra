@@ -31,6 +31,9 @@ import type {
   PaymentReadinessPack,
   ProcurementRequest,
   PurchaseOrderStatus,
+  FailedBidReason,
+  ProcurementPolicyProfile,
+  ProcurementRoute,
 } from './types';
 import { MWELL_OPERATING_PROFILE } from './policyProfile';
 import {
@@ -289,27 +292,51 @@ export function sourcingMethodLabel(m: SourcingMethod): string {
  *  on the request-detail page when the officer can't yet demonstrate a
  *  quorum. `null` means "no explicit minimum — Procurement judgement". */
 export interface SourcingReadinessInput {
-  method: SourcingMethod;
+  /** Legacy callers may supply the historic method while live sourcing uses a
+   * confirmed three-axis route. */
+  method?: SourcingMethod;
+  route?: ProcurementRoute;
   invited: number;
-  responses: number;
-  intendedResponses?: number;
-  insufficientBidsExceptionApproved?: boolean;
+  responses?: number;
+  usableResponses?: number;
+  failedBidReason?: FailedBidReason;
+  /** This value is a server projection of an approved exception pack. */
+  exceptionApproved?: boolean;
+  profile?: ProcurementPolicyProfile;
 }
 
 export interface SourcingReadiness {
   ready: boolean;
-  insufficientBidsExceptionRequired: boolean;
+  state: 'draft' | 'failed_bid' | 'evaluation';
+  blocker?: string;
 }
 
 export function evaluateSourcingReadiness(input: SourcingReadinessInput): SourcingReadiness {
-  const shortfall =
-    typeof input.intendedResponses === 'number' &&
-    input.intendedResponses > 0 &&
-    input.responses < input.intendedResponses;
+  const profile = input.profile ?? MWELL_OPERATING_PROFILE;
+  const usableResponses = input.usableResponses ?? input.responses ?? 0;
+  const competitive = input.route
+    ? input.route.procurementMode === 'competitive_bidding' && input.route.solicitationType !== 'none'
+    : input.method === 'rfq' || input.method === 'rfp';
+  if (!competitive) {
+    return { ready: true, state: 'evaluation' };
+  }
+  if (input.invited < profile.controls.inviteTargetMin) {
+    return {
+      ready: false,
+      state: 'draft',
+      blocker: `At least ${profile.controls.inviteTargetMin} accredited vendors are required before issue.`,
+    };
+  }
+  if (usableResponses < profile.controls.sealedBidMinimumResponses && !input.exceptionApproved) {
+    return {
+      ready: false,
+      state: 'failed_bid',
+      blocker: `${profile.controls.sealedBidMinimumResponses === 3 ? 'Three' : profile.controls.sealedBidMinimumResponses} usable responses are required before sealed-bid opening.`,
+    };
+  }
   return {
-    ready: !shortfall || input.insufficientBidsExceptionApproved === true,
-    insufficientBidsExceptionRequired:
-      shortfall && input.insufficientBidsExceptionApproved !== true,
+    ready: true,
+    state: 'evaluation',
   };
 }
 

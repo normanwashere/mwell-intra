@@ -2,63 +2,32 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Badge, Icon, money, useToast } from '@intra/ui';
-import type { ProcurementVendor, SourcingMethod } from '../types';
+import { MWELL_OPERATING_PROFILE } from '../policyProfile';
+import { evaluateSourcingReadiness } from '../policy';
+import type { FailedBidReason, ProcurementPolicyControls, ProcurementVendor, SourcingEventStatus, SourcingMethod } from '../types';
 
-interface RpcClient {
-  schema(name: string): {
-    rpc(name: string, args: { payload: Record<string, unknown> }): PromiseLike<{
-      data: unknown;
-      error: { message: string } | null;
-    }>;
-  };
+interface RpcClient { schema(name: string): { rpc(name: string, args: { payload: Record<string, unknown> }): PromiseLike<{ data: unknown; error: { message: string } | null }> } }
+interface SourcingResponse { id: string; vendorId: string; vendorName: string; accredited?: boolean; invitedAt?: string; receivedAt?: string; deadlineCompliant?: boolean; proposalReference?: string; commercial?: { amount?: number }; technical?: { score?: number } }
+interface Communication { id: string; communicationType: 'invitation' | 'clarification' | 'extension' | 'award_notice' | 'failed_bid_notice'; notificationGroupId?: string; acknowledgedAt?: string; acknowledgementState?: 'pending' | 'overdue' | 'acknowledged'; clarificationState?: 'pending' | 'overdue' | 'answered' }
+interface SourcingEvent { id: string; status: SourcingEventStatus; submissionDeadline?: string; intendedResponses?: number; failedBidReason?: FailedBidReason; selectedVendorId?: string; closureNote?: string; responses: SourcingResponse[]; communications?: Communication[]; policyControls?: ProcurementPolicyControls }
+interface BidException { id: string; status: 'under_review' | 'approved' | 'rejected'; justification: string; price_reasonableness?: string }
+
+const failedBidOptions: Array<{ value: FailedBidReason; label: string }> = [
+  { value: 'insufficient_responses', label: 'Insufficient usable responses' },
+  { value: 'non_compliant_submissions', label: 'Submissions are non-compliant' },
+  { value: 'all_technically_non_compliant', label: 'All submissions failed technical evaluation' },
+  { value: 'implausible_pricing', label: 'Pricing is implausible' },
+];
+
+function statusTone(status: SourcingEventStatus | undefined) {
+  if (status === 'awarded') return 'emerald' as const;
+  if (status === 'failed_bid') return 'rose' as const;
+  if (status === 'issued' || status === 'response_closed' || status === 'evaluation') return 'cyan' as const;
+  return 'slate' as const;
 }
 
-interface SourcingResponse {
-  id: string;
-  vendorId: string;
-  vendorName: string;
-  invitedAt?: string;
-  receivedAt?: string;
-  deadlineCompliant?: boolean;
-  proposalReference?: string;
-  commercial?: { amount?: number };
-  technical?: { score?: number };
-  materialExceptions?: string[];
-}
-
-interface SourcingEvent {
-  id: string;
-  status: 'draft' | 'issued' | 'closed' | 'cancelled';
-  submissionDeadline?: string;
-  intendedResponses?: number;
-  selectedVendorId?: string;
-  closureNote?: string;
-  responses: SourcingResponse[];
-}
-
-interface BidException {
-  id: string;
-  status: 'under_review' | 'approved' | 'rejected';
-  justification: string;
-  price_reasonableness?: string;
-}
-
-export function SourcingWorkspace({
-  requestId,
-  method,
-  canManage,
-  canApprove,
-  client,
-  vendors,
-  onChanged,
-}: {
-  requestId: string;
-  method: SourcingMethod;
-  canManage: boolean;
-  canApprove: boolean;
-  client: RpcClient | null;
-  vendors: ProcurementVendor[];
-  onChanged?: () => Promise<void>;
+export function SourcingWorkspace({ requestId, method, canManage, canApprove, client, vendors, onChanged }: {
+  requestId: string; method: SourcingMethod; canManage: boolean; canApprove: boolean; client: RpcClient | null; vendors: ProcurementVendor[]; onChanged?: () => Promise<void>;
 }) {
   const { success, error } = useToast();
   const [event, setEvent] = useState<SourcingEvent | null>(null);
@@ -66,13 +35,19 @@ export function SourcingWorkspace({
   const [loading, setLoading] = useState(Boolean(client));
   const [busy, setBusy] = useState(false);
   const [deadline, setDeadline] = useState('');
-  const [intendedResponses, setIntendedResponses] = useState(3);
+  const [invitationTarget, setInvitationTarget] = useState(3);
+  const [packageVersion, setPackageVersion] = useState('');
+  const [packageHash, setPackageHash] = useState('');
   const [vendorId, setVendorId] = useState('');
   const [proposalReference, setProposalReference] = useState('');
   const [quotedAmount, setQuotedAmount] = useState(0);
   const [technicalScore, setTechnicalScore] = useState(0);
   const [selectedVendorId, setSelectedVendorId] = useState('');
   const [awardRationale, setAwardRationale] = useState('');
+  const [failedBidReason, setFailedBidReason] = useState<FailedBidReason>('insufficient_responses');
+  const [extensionDays, setExtensionDays] = useState(1);
+  const [clarificationQuestion, setClarificationQuestion] = useState('');
+  const [clarificationAnswer, setClarificationAnswer] = useState('');
   const [exceptionJustification, setExceptionJustification] = useState('');
   const [priceReasonableness, setPriceReasonableness] = useState('');
   const [exceptionReviewNote, setExceptionReviewNote] = useState('');
@@ -83,7 +58,6 @@ export function SourcingWorkspace({
     if (rpcError) throw new Error(rpcError.message);
     return data;
   }, [client]);
-
   const load = useCallback(async () => {
     if (!client) { setLoading(false); return; }
     setLoading(true);
@@ -92,150 +66,61 @@ export function SourcingWorkspace({
         call('sourcing_workspace', { request_id: requestId }) as Promise<{ event?: SourcingEvent | null }>,
         call('insufficient_bid_exception', { request_id: requestId }) as Promise<BidException | null>,
       ]);
-      setEvent(data.event ?? null);
-      setBidException(exception);
-      if (data.event?.submissionDeadline) setDeadline(data.event.submissionDeadline.slice(0, 16));
-      if (data.event?.intendedResponses) setIntendedResponses(data.event.intendedResponses);
-      if (data.event?.selectedVendorId) setSelectedVendorId(data.event.selectedVendorId);
-      if (data.event?.closureNote) setAwardRationale(data.event.closureNote);
-    } catch (cause) {
-      error(cause instanceof Error ? cause.message : 'Could not load sourcing.');
-    } finally { setLoading(false); }
+      const next = data.event ?? null;
+      setEvent(next); setBidException(exception);
+      if (next?.submissionDeadline) setDeadline(next.submissionDeadline.slice(0, 16));
+      if (next?.intendedResponses) setInvitationTarget(next.intendedResponses);
+      if (next?.selectedVendorId) setSelectedVendorId(next.selectedVendorId);
+      if (next?.closureNote) setAwardRationale(next.closureNote);
+      if (next?.failedBidReason) setFailedBidReason(next.failedBidReason);
+    } catch (cause) { error(cause instanceof Error ? cause.message : 'Could not load sourcing.'); } finally { setLoading(false); }
   }, [call, client, error, requestId]);
-
   useEffect(() => { void load(); }, [load]);
 
+  const controls = event?.policyControls ?? MWELL_OPERATING_PROFILE.controls;
   const received = useMemo(() => event?.responses.filter((item) => item.receivedAt) ?? [], [event]);
-  const hasResponseShortfall = Boolean(event?.status === 'issued' && event.intendedResponses && received.length < event.intendedResponses);
+  const accreditedInvites = useMemo(() => event?.responses.filter((item) => item.accredited !== false).length ?? 0, [event]);
+  const readiness = evaluateSourcingReadiness({ method, invited: accreditedInvites, usableResponses: received.length, failedBidReason: event?.failedBidReason, exceptionApproved: bidException?.status === 'approved', profile: { ...MWELL_OPERATING_PROFILE, controls } });
   const invitedVendorIds = useMemo(() => new Set(event?.responses.map((item) => item.vendorId) ?? []), [event]);
   const availableVendors = vendors.filter((item) => !invitedVendorIds.has(item.id));
+  const canInvite = event?.status === 'draft' || event?.status === 'failed_bid';
+  const canOpenEvaluation = event?.status === 'response_closed' || (event?.status === 'failed_bid' && bidException?.status === 'approved');
+  const canEvaluate = event?.status === 'evaluation';
+  const issueReady = accreditedInvites >= controls.inviteTargetMin;
 
   async function run(action: () => Promise<void>, message: string) {
     setBusy(true);
-    try {
-      await action();
-      await load();
-      await onChanged?.();
-      success(message);
-    } catch (cause) {
-      error(cause instanceof Error ? cause.message : 'Could not update sourcing.');
-    } finally { setBusy(false); }
+    try { await action(); await load(); await onChanged?.(); success(message); }
+    catch (cause) { error(cause instanceof Error ? cause.message : 'Could not update sourcing.'); }
+    finally { setBusy(false); }
   }
-
-  async function saveEvent() {
-    await run(async () => {
-      await call('save_sourcing_event', {
-        request_id: requestId,
-        submission_deadline: deadline ? new Date(deadline).toISOString() : null,
-        intended_responses: intendedResponses,
-      });
-    }, event ? 'Sourcing plan updated' : 'Sourcing plan created');
-  }
-
-  async function inviteVendor() {
-    if (!event || !vendorId) return;
-    await run(async () => {
-      await call('record_sourcing_response', {
-        sourcing_event_id: event.id, vendor_id: vendorId,
-      });
-      setVendorId('');
-    }, 'Vendor invitation recorded');
-  }
-
-  async function recordResponse() {
-    if (!event || !vendorId) return;
-    await run(async () => {
-      await call('record_sourcing_response', {
-        sourcing_event_id: event.id, vendor_id: vendorId,
-        received_at: new Date().toISOString(), proposal_storage_path: proposalReference.trim(),
-        commercial: { amount: quotedAmount }, technical: { score: technicalScore },
-      });
-      setVendorId(''); setProposalReference(''); setQuotedAmount(0); setTechnicalScore(0);
-    }, 'Vendor response recorded');
-  }
-
-  async function submitException() {
-    if (!event) return;
-    await run(async () => {
-      await call('submit_insufficient_bid_exception', {
-        sourcing_event_id: event.id,
-        justification: exceptionJustification.trim(),
-        price_reasonableness: priceReasonableness.trim(),
-      });
-      setExceptionJustification(''); setPriceReasonableness('');
-    }, 'Insufficient-bids exception submitted for independent review');
-  }
-
-  async function reviewException(decision: 'approved' | 'rejected') {
-    if (!bidException) return;
-    await run(async () => {
-      await call('review_insufficient_bid_exception', {
-        id: bidException.id, decision, note: exceptionReviewNote.trim(),
-      });
-      setExceptionReviewNote('');
-    }, decision === 'approved' ? 'Sourcing exception approved' : 'Sourcing exception rejected');
-  }
+  const saveEvent = () => run(() => call('save_sourcing_event', { request_id: requestId, submission_deadline: deadline ? new Date(deadline).toISOString() : null, intended_responses: invitationTarget, package_version: packageVersion.trim(), package_hash: packageHash.trim() }).then(() => undefined), event ? 'Sourcing plan updated' : 'Sourcing plan created');
+  const inviteVendor = () => event && vendorId ? run(() => call('record_sourcing_response', { sourcing_event_id: event.id, vendor_id: vendorId }).then(() => undefined), 'Accredited vendor invitation recorded').finally(() => setVendorId('')) : undefined;
+  const recordResponse = () => event && vendorId ? run(() => call('record_sourcing_response', { sourcing_event_id: event.id, vendor_id: vendorId, received_at: new Date().toISOString(), proposal_storage_path: proposalReference.trim(), commercial: { amount: quotedAmount }, technical: { score: technicalScore } }).then(() => undefined), 'Vendor response recorded').finally(() => { setVendorId(''); setProposalReference(''); setQuotedAmount(0); setTechnicalScore(0); }) : undefined;
+  const transition = (action: string, message: string, extra: Record<string, unknown> = {}) => event && run(() => call('transition_sourcing_event', { id: event.id, action, ...extra }).then(() => undefined), message);
+  const communicate = (communicationType: 'clarification' | 'extension') => event && run(() => call('record_solicitation_communication', communicationType === 'clarification' ? { sourcing_event_id: event.id, communication_type: 'clarification', question: clarificationQuestion.trim(), answer: clarificationAnswer.trim() } : { sourcing_event_id: event.id, communication_type: 'extension', extension_working_days: extensionDays }).then(() => undefined), communicationType === 'clarification' ? 'Clarification broadcast to every invitee' : 'Deadline extended and every invitee notified').finally(() => { if (communicationType === 'clarification') { setClarificationQuestion(''); setClarificationAnswer(''); } });
+  const submitException = () => event && run(() => call('submit_insufficient_bid_exception', { sourcing_event_id: event.id, phase: event.status === 'draft' ? 'pre_issue' : 'evaluation', justification: exceptionJustification.trim(), price_reasonableness: priceReasonableness.trim() }).then(() => undefined), event.status === 'draft' ? 'Pre-issue invitation exception submitted for independent review' : 'Evaluation-with-fewer-than-three exception submitted for independent review').finally(() => { setExceptionJustification(''); setPriceReasonableness(''); });
+  const reviewException = (decision: 'approved' | 'rejected') => bidException && run(() => call('review_insufficient_bid_exception', { id: bidException.id, decision, note: exceptionReviewNote.trim() }).then(() => undefined), decision === 'approved' ? 'Sourcing exception approved' : 'Sourcing exception rejected').finally(() => setExceptionReviewNote(''));
 
   if (loading) return <div className="h-32 animate-pulse rounded-lg bg-inset" aria-busy="true" />;
-
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="font-semibold text-ink">{method.toUpperCase()} sourcing event</p>
-          <p className="text-xs text-muted">Plan, invite, receive, evaluate, and preserve the award rationale in one record.</p>
-        </div>
-        <Badge tone={event?.status === 'closed' ? 'emerald' : event?.status === 'issued' ? 'cyan' : 'slate'}>
-          {event?.status ?? 'Not started'}
-        </Badge>
-      </div>
-
-      {!client && <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-ink">Connect to the live database to operate governed sourcing.</p>}
-
-      {canManage && (!event || event.status === 'draft') && (
-        <section className="grid gap-3 border-t border-line pt-4 sm:grid-cols-[1fr_10rem_auto] sm:items-end">
-          <label className="block text-sm font-semibold text-ink">Submission deadline<input type="datetime-local" className="input mt-1.5" value={deadline} onChange={(e) => setDeadline(e.target.value)} /></label>
-          <label className="block text-sm font-semibold text-ink">Target responses<input type="number" min={1} className="input mt-1.5" value={intendedResponses} onChange={(e) => setIntendedResponses(Math.max(1, Number(e.target.value) || 1))} /></label>
-          <button type="button" className="btn-primary w-full sm:w-auto" disabled={busy || !deadline} onClick={() => void saveEvent()}><Icon name="check" className="h-4 w-4" />{event ? 'Save plan' : 'Create plan'}</button>
-        </section>
-      )}
-
-      {event && (
-        <section className="space-y-3 border-t border-line pt-4">
-          <div className="grid grid-cols-2 gap-3 text-sm sm:flex sm:gap-8">
-            <div><span className="block text-xs text-muted">Invited</span><strong className="text-ink">{event.responses.length}</strong></div>
-            <div><span className="block text-xs text-muted">Received</span><strong className="text-ink">{received.length}</strong></div>
-            <div><span className="block text-xs text-muted">Target</span><strong className="text-ink">{event.intendedResponses ?? 'Not set'}</strong></div>
-            <div><span className="block text-xs text-muted">Deadline</span><strong className="text-ink">{event.submissionDeadline ? new Date(event.submissionDeadline).toLocaleString() : 'Not set'}</strong></div>
-          </div>
-
-          {event.responses.length > 0 && <div className="overflow-x-auto rounded-lg border border-line"><table className="min-w-full text-left text-sm"><thead className="bg-inset text-xs text-muted"><tr><th className="px-3 py-2">Vendor</th><th className="px-3 py-2">State</th><th className="px-3 py-2">Quote</th><th className="px-3 py-2">Technical</th></tr></thead><tbody className="divide-y divide-line">{event.responses.map((response) => <tr key={response.id}><td className="px-3 py-3 font-medium text-ink">{response.vendorName}</td><td className="px-3 py-3"><Badge tone={response.receivedAt ? response.deadlineCompliant === false ? 'amber' : 'emerald' : 'slate'}>{response.receivedAt ? response.deadlineCompliant === false ? 'Late response' : 'Received' : 'Invited'}</Badge></td><td className="px-3 py-3 text-ink">{response.commercial?.amount ? money(response.commercial.amount) : 'Pending'}</td><td className="px-3 py-3 text-ink">{response.technical?.score ?? 'Pending'}</td></tr>)}</tbody></table></div>}
-
-          {canManage && event.status === 'draft' && <div className="grid gap-2 sm:grid-cols-[1fr_auto]"><select aria-label="Vendor to invite" className="input" value={vendorId} onChange={(e) => setVendorId(e.target.value)}><option value="">Select vendor to invite</option>{availableVendors.map((vendor) => <option key={vendor.id} value={vendor.id}>{vendor.legalName}</option>)}</select><button type="button" className="btn-outline w-full sm:w-auto" disabled={busy || !vendorId} onClick={() => void inviteVendor()}><Icon name="plus" className="h-4 w-4" />Record invitation</button></div>}
-
-          {canManage && event.status === 'draft' && <button type="button" className="btn-primary w-full sm:w-auto" disabled={busy || event.responses.length === 0} onClick={() => void run(() => call('transition_sourcing_event', { id: event.id, action: 'issue' }).then(() => undefined), 'Sourcing event issued')}><Icon name="arrowRight" className="h-4 w-4" />Issue to invited vendors</button>}
-
-          {canManage && event.status === 'issued' && <div className="grid gap-3 rounded-lg bg-inset p-3 sm:grid-cols-2">
-            <label className="block text-sm font-semibold text-ink">Vendor<select aria-label="Invited vendor" className="input mt-1.5" value={vendorId} onChange={(e) => setVendorId(e.target.value)}><option value="">Select invited vendor</option>{event.responses.filter((response) => !response.receivedAt).map((response) => <option key={response.vendorId} value={response.vendorId}>{response.vendorName}</option>)}</select></label>
-            <label className="block text-sm font-semibold text-ink">Proposal evidence reference<input className="input mt-1.5" value={proposalReference} onChange={(e) => setProposalReference(e.target.value)} /></label>
-            <label className="block text-sm font-semibold text-ink">Quoted amount<input type="number" min={0} step="0.01" className="input mt-1.5" value={quotedAmount} onChange={(e) => setQuotedAmount(Math.max(0, Number(e.target.value) || 0))} /></label>
-            <label className="block text-sm font-semibold text-ink">Technical score (0-100)<input type="number" min={0} max={100} className="input mt-1.5" value={technicalScore} onChange={(e) => setTechnicalScore(Math.min(100, Math.max(0, Number(e.target.value) || 0)))} /></label>
-            <button type="button" className="btn-primary w-full sm:col-span-2 sm:w-auto" disabled={busy || !vendorId || !proposalReference.trim() || quotedAmount <= 0} onClick={() => void recordResponse()}><Icon name="check" className="h-4 w-4" />Record response</button>
-          </div>}
-
-          {canManage && event.status === 'issued' && received.length > 0 && <div className="grid gap-3 rounded-lg border border-line p-3 sm:grid-cols-2">
-            <label className="block text-sm font-semibold text-ink">Recommended vendor<select aria-label="Recommended vendor" className="input mt-1.5" value={selectedVendorId} onChange={(e) => setSelectedVendorId(e.target.value)}><option value="">Select received response</option>{received.map((response) => <option key={response.vendorId} value={response.vendorId}>{response.vendorName}</option>)}</select></label>
-            <label className="block text-sm font-semibold text-ink sm:col-span-2">Award rationale<textarea className="input mt-1.5" rows={3} value={awardRationale} onChange={(e) => setAwardRationale(e.target.value)} /></label>
-            <button type="button" className="btn-primary w-full sm:w-auto" disabled={busy || !selectedVendorId || !awardRationale.trim() || (hasResponseShortfall && bidException?.status !== 'approved')} onClick={() => void run(() => call('transition_sourcing_event', { id: event.id, action: 'close', selected_vendor_id: selectedVendorId, closure_note: awardRationale.trim() }).then(() => undefined), 'Sourcing event closed and vendor selected')}><Icon name="check" className="h-4 w-4" />Close and select vendor</button>
-          </div>}
-
-          {hasResponseShortfall && <section className="space-y-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
-            <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="font-semibold text-ink">Response target not met</p><p className="text-xs text-muted">{received.length} of {event.intendedResponses} intended responses received. Closing requires an independently approved exception.</p></div>{bidException && <Badge tone={bidException.status === 'approved' ? 'emerald' : bidException.status === 'rejected' ? 'rose' : 'amber'}>{bidException.status.replace('_', ' ')}</Badge>}</div>
-            {canManage && (!bidException || bidException.status === 'rejected') && <div className="grid gap-3 sm:grid-cols-2"><label className="block text-sm font-semibold text-ink sm:col-span-2">Why sourcing should proceed<textarea className="input mt-1.5" rows={3} value={exceptionJustification} onChange={(e) => setExceptionJustification(e.target.value)} /></label><label className="block text-sm font-semibold text-ink sm:col-span-2">Price reasonableness evidence<textarea className="input mt-1.5" rows={2} value={priceReasonableness} onChange={(e) => setPriceReasonableness(e.target.value)} /></label><button type="button" className="btn-outline w-full sm:w-auto" disabled={busy || exceptionJustification.trim().length < 20 || priceReasonableness.trim().length < 10} onClick={() => void submitException()}><Icon name="arrowRight" className="h-4 w-4" />Submit exception</button></div>}
-            {canApprove && bidException?.status === 'under_review' && <div className="space-y-3 border-t border-amber-500/20 pt-3"><p className="text-sm text-ink">{bidException.justification}</p><label className="block text-sm font-semibold text-ink">Independent review note<textarea className="input mt-1.5" rows={2} value={exceptionReviewNote} onChange={(e) => setExceptionReviewNote(e.target.value)} /></label><div className="grid gap-2 sm:flex"><button type="button" className="btn-outline" disabled={busy || !exceptionReviewNote.trim()} onClick={() => void reviewException('rejected')}>Reject exception</button><button type="button" className="btn-primary" disabled={busy || !exceptionReviewNote.trim()} onClick={() => void reviewException('approved')}><Icon name="check" className="h-4 w-4" />Approve exception</button></div></div>}
-          </section>}
-        </section>
-      )}
-    </div>
-  );
+  return <section className="space-y-4" aria-label="Governed competitive sourcing">
+    <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-semibold text-ink">{method.toUpperCase()} competitive sourcing</h2><p className="max-w-2xl text-sm text-muted">Issue one controlled package, capture equal communications, and open only compliant responses. The server owns deadline, quorum, exception, and transition decisions.</p></div><Badge tone={statusTone(event?.status)}>{event?.status?.replaceAll('_', ' ') ?? 'Not started'}</Badge></div>
+    {!client && <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-ink">Connect to the live database to operate governed sourcing.</p>}
+    {canManage && (!event || event.status === 'draft') && <section className="grid gap-3 border-t border-line pt-4 lg:grid-cols-[minmax(15rem,1fr)_10rem_12rem_auto] lg:items-end"><label className="block text-sm font-semibold text-ink">Submission deadline<input aria-label="Submission deadline" type="datetime-local" className="input mt-1.5" value={deadline} onChange={(e) => setDeadline(e.target.value)} /></label><label className="block text-sm font-semibold text-ink">Invite target<select aria-label="Invite target" className="input mt-1.5" value={invitationTarget} onChange={(e) => setInvitationTarget(Number(e.target.value))}><option value={3}>3 vendors</option><option value={4}>4 vendors</option></select></label><label className="block text-sm font-semibold text-ink">Package version<input aria-label="Package version" className="input mt-1.5" value={packageVersion} onChange={(e) => setPackageVersion(e.target.value)} placeholder="RFQ-2026.08-v1" /></label><button type="button" className="btn-primary min-h-11 w-full lg:w-auto" disabled={busy || !deadline || !packageVersion.trim() || !packageHash.trim()} onClick={() => void saveEvent()}><Icon name="check" className="h-4 w-4" />{event ? 'Save plan' : 'Create plan'}</button><label className="block text-sm font-semibold text-ink lg:col-span-3">Package SHA-256<input aria-label="Package SHA-256" className="input mt-1.5" value={packageHash} onChange={(e) => setPackageHash(e.target.value)} placeholder="Evidence digest" /></label><p className="text-xs text-muted lg:col-span-1">Issue requires {controls.inviteTargetMin} accredited invitees and at least {controls.bidWindowWorkingDays} working days.</p></section>}
+    {event && <>
+      <dl className="grid grid-cols-2 gap-3 rounded-lg border border-line bg-inset p-3 text-sm sm:grid-cols-4"><div><dt className="text-xs text-muted">Accredited invitees</dt><dd className="font-semibold text-ink">{accreditedInvites}</dd></div><div><dt className="text-xs text-muted">Usable responses</dt><dd className="font-semibold text-ink">{received.length}</dd></div><div><dt className="text-xs text-muted">Target</dt><dd className="font-semibold text-ink">{event.intendedResponses ?? 3}</dd></div><div><dt className="text-xs text-muted">Deadline</dt><dd className="font-semibold text-ink">{event.submissionDeadline ? new Date(event.submissionDeadline).toLocaleString() : 'Not set'}</dd></div></dl>
+      {event.responses.length > 0 && <div className="overflow-x-auto rounded-lg border border-line"><table className="min-w-[42rem] w-full text-left text-sm"><thead className="bg-inset text-xs text-muted"><tr><th className="px-3 py-2">Vendor</th><th className="px-3 py-2">Accreditation</th><th className="px-3 py-2">Response</th><th className="px-3 py-2">Quote</th><th className="px-3 py-2">Technical</th></tr></thead><tbody className="divide-y divide-line">{event.responses.map((response) => <tr key={response.id}><td className="px-3 py-3 font-medium text-ink">{response.vendorName}</td><td className="px-3 py-3"><Badge tone={response.accredited === false ? 'rose' : 'emerald'}>{response.accredited === false ? 'Not accredited' : 'Accredited'}</Badge></td><td className="px-3 py-3"><Badge tone={response.receivedAt ? response.deadlineCompliant === false ? 'amber' : 'emerald' : 'slate'}>{response.receivedAt ? response.deadlineCompliant === false ? 'Late' : 'Received' : 'Invited'}</Badge></td><td className="px-3 py-3 text-ink">{response.commercial?.amount ? money(response.commercial.amount) : 'Pending'}</td><td className="px-3 py-3 text-ink">{response.technical?.score ?? 'Pending'}</td></tr>)}</tbody></table></div>}
+      {canManage && canInvite && <section className="space-y-2"><p className="text-sm text-muted">{event.status === 'failed_bid' ? 'Source additional accredited vendors, then extend the deadline to requote every invitee.' : 'Invite accredited vendors to the controlled package.'}</p><div className="grid gap-2 sm:grid-cols-[1fr_auto]"><select aria-label="Vendor to invite" className="input" value={vendorId} onChange={(e) => setVendorId(e.target.value)}><option value="">Select accredited vendor to invite</option>{availableVendors.map((vendor) => <option key={vendor.id} value={vendor.id}>{vendor.legalName}</option>)}</select><button type="button" className="btn-outline min-h-11 w-full sm:w-auto" disabled={busy || !vendorId} onClick={() => void inviteVendor()}><Icon name="plus" className="h-4 w-4" />{event.status === 'failed_bid' ? 'Source and requote' : 'Record invitation'}</button></div></section>}
+      {canManage && event.status === 'draft' && <><button type="button" className="btn-primary min-h-11 w-full sm:w-auto" disabled={busy || !issueReady} onClick={() => void transition('issue', 'Sourcing event issued to every invited vendor')}><Icon name="arrowRight" className="h-4 w-4" />Issue controlled package</button>{!issueReady && <section className="space-y-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-ink"><p>At least {controls.inviteTargetMin} accredited invitees are required before issue. Submit a pre-issue exception only when the documented vendor search cannot meet that minimum.</p>{(!bidException || bidException.status === 'rejected') && <div className="grid gap-3 md:grid-cols-2"><label className="block text-sm font-semibold text-ink md:col-span-2">Why issue may proceed<textarea className="input mt-1.5" rows={3} value={exceptionJustification} onChange={(e) => setExceptionJustification(e.target.value)} /></label><label className="block text-sm font-semibold text-ink md:col-span-2">Price reasonableness evidence<textarea className="input mt-1.5" rows={2} value={priceReasonableness} onChange={(e) => setPriceReasonableness(e.target.value)} /></label><button type="button" className="btn-outline min-h-11 w-full md:w-auto" disabled={busy || exceptionJustification.trim().length < 20 || priceReasonableness.trim().length < 10} onClick={() => void submitException()}><Icon name="arrowRight" className="h-4 w-4" />Submit pre-issue exception</button></div>}</section>}</>}
+      {canManage && event.status === 'issued' && <section className="grid gap-3 rounded-lg bg-inset p-3 md:grid-cols-2"><label className="block text-sm font-semibold text-ink">Invited vendor<select aria-label="Invited vendor" className="input mt-1.5" value={vendorId} onChange={(e) => setVendorId(e.target.value)}><option value="">Select invited vendor</option>{event.responses.filter((response) => !response.receivedAt).map((response) => <option key={response.vendorId} value={response.vendorId}>{response.vendorName}</option>)}</select></label><label className="block text-sm font-semibold text-ink">Proposal evidence reference<input aria-label="Proposal evidence reference" className="input mt-1.5" value={proposalReference} onChange={(e) => setProposalReference(e.target.value)} /></label><label className="block text-sm font-semibold text-ink">Quoted amount<input aria-label="Quoted amount" type="number" min={0} step="0.01" className="input mt-1.5" value={quotedAmount} onChange={(e) => setQuotedAmount(Math.max(0, Number(e.target.value) || 0))} /></label><label className="block text-sm font-semibold text-ink">Technical score (0-100)<input aria-label="Technical score (0-100)" type="number" min={0} max={100} className="input mt-1.5" value={technicalScore} onChange={(e) => setTechnicalScore(Math.min(100, Math.max(0, Number(e.target.value) || 0)))} /></label><button type="button" className="btn-primary min-h-11 w-full md:col-span-2 md:w-auto" disabled={busy || !vendorId || !proposalReference.trim() || quotedAmount <= 0} onClick={() => void recordResponse()}><Icon name="check" className="h-4 w-4" />Record response</button></section>}
+      {canManage && event.status === 'issued' && <div className="flex flex-wrap gap-2"><button type="button" className="btn-outline min-h-11" disabled={busy} onClick={() => void transition('response_closed', 'Response window closed for controlled opening')}><Icon name="check" className="h-4 w-4" />Close response window</button><button type="button" className="btn-outline min-h-11" disabled={busy} onClick={() => void transition('failed_bid', 'Failed-bid recovery opened', { failed_bid_reason: failedBidReason })}><Icon name="alert" className="h-4 w-4" />Mark failed bid</button><select aria-label="Failed bid reason" className="input min-h-11" value={failedBidReason} onChange={(e) => setFailedBidReason(e.target.value as FailedBidReason)}>{failedBidOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></div>}
+      {canManage && (event.status === 'issued' || event.status === 'failed_bid') && <section className="grid gap-3 rounded-lg border border-line p-3 md:grid-cols-[1fr_auto]"><label className="block text-sm font-semibold text-ink">Extend deadline (working days)<input aria-label="Extension working days" type="number" min={1} max={controls.maxExtensionWorkingDays} className="input mt-1.5" value={extensionDays} onChange={(e) => setExtensionDays(Math.min(controls.maxExtensionWorkingDays, Math.max(1, Number(e.target.value) || 1)))} /></label><button type="button" className="btn-outline min-h-11 w-full md:w-auto" disabled={busy || extensionDays > controls.maxExtensionWorkingDays} onClick={() => void communicate('extension')}><Icon name="arrowRight" className="h-4 w-4" />Extend and notify all</button><p className="text-xs text-muted md:col-span-2">An extension is limited to {controls.maxExtensionWorkingDays} working days and sends the same notice to every invitee.</p></section>}
+      {canManage && (event.status === 'issued' || event.status === 'response_closed' || event.status === 'evaluation') && <section className="grid gap-3 rounded-lg border border-line p-3 md:grid-cols-2"><label className="block text-sm font-semibold text-ink">Clarification question<textarea aria-label="Clarification question" className="input mt-1.5" rows={2} value={clarificationQuestion} onChange={(e) => setClarificationQuestion(e.target.value)} /></label><label className="block text-sm font-semibold text-ink">Approved answer<textarea aria-label="Approved answer" className="input mt-1.5" rows={2} value={clarificationAnswer} onChange={(e) => setClarificationAnswer(e.target.value)} /></label><button type="button" className="btn-outline min-h-11 w-full md:w-auto" disabled={busy || !clarificationQuestion.trim() || !clarificationAnswer.trim()} onClick={() => void communicate('clarification')}><Icon name="arrowRight" className="h-4 w-4" />Broadcast identical clarification</button></section>}
+      {event.status === 'failed_bid' && <section className="space-y-3 rounded-lg border border-rose-500/30 bg-rose-500/5 p-3"><div><p className="font-semibold text-ink">Failed-bid recovery</p><p className="text-sm text-muted">Reason: {failedBidOptions.find((item) => item.value === event.failedBidReason)?.label ?? 'Not recorded'}. Requote, extend, or submit an independently reviewed evaluation exception.</p></div>{canManage && (!bidException || bidException.status === 'rejected') && <div className="grid gap-3 md:grid-cols-2"><label className="block text-sm font-semibold text-ink md:col-span-2">Why evaluation may proceed<textarea className="input mt-1.5" rows={3} value={exceptionJustification} onChange={(e) => setExceptionJustification(e.target.value)} /></label><label className="block text-sm font-semibold text-ink md:col-span-2">Price reasonableness evidence<textarea className="input mt-1.5" rows={2} value={priceReasonableness} onChange={(e) => setPriceReasonableness(e.target.value)} /></label><button type="button" className="btn-outline min-h-11 w-full md:w-auto" disabled={busy || exceptionJustification.trim().length < 20 || priceReasonableness.trim().length < 10} onClick={() => void submitException()}><Icon name="arrowRight" className="h-4 w-4" />Submit evaluation exception</button></div>}{canApprove && bidException?.status === 'under_review' && <div className="space-y-3 border-t border-rose-500/20 pt-3"><p className="text-sm text-ink">{bidException.justification}</p><label className="block text-sm font-semibold text-ink">Independent review note<textarea className="input mt-1.5" rows={2} value={exceptionReviewNote} onChange={(e) => setExceptionReviewNote(e.target.value)} /></label><div className="flex flex-wrap gap-2"><button type="button" className="btn-outline min-h-11" disabled={busy || !exceptionReviewNote.trim()} onClick={() => void reviewException('rejected')}>Reject exception</button><button type="button" className="btn-primary min-h-11" disabled={busy || !exceptionReviewNote.trim()} onClick={() => void reviewException('approved')}><Icon name="check" className="h-4 w-4" />Approve exception</button></div></div>}</section>}
+      {canManage && canOpenEvaluation && <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-cyan-500/30 bg-cyan-500/5 p-3"><div><p className="font-semibold text-ink">Controlled opening ready</p><p className="text-sm text-muted">Open evaluation only after the response evidence and any approved exception are complete.</p></div><button type="button" className="btn-primary min-h-11 w-full sm:w-auto" disabled={busy || !readiness.ready} onClick={() => void transition('evaluation', 'Controlled evaluation opened')}><Icon name="arrowRight" className="h-4 w-4" />Open controlled evaluation</button></section>}
+      {canEvaluate && <section className="grid gap-3 rounded-lg border border-line p-3 md:grid-cols-2"><label className="block text-sm font-semibold text-ink">Recommended vendor<select aria-label="Recommended vendor" className="input mt-1.5" value={selectedVendorId} onChange={(e) => setSelectedVendorId(e.target.value)}><option value="">Select compliant received response</option>{received.map((response) => <option key={response.vendorId} value={response.vendorId}>{response.vendorName}</option>)}</select></label><label className="block text-sm font-semibold text-ink md:col-span-2">Award rationale<textarea aria-label="Award rationale" className="input mt-1.5" rows={3} value={awardRationale} onChange={(e) => setAwardRationale(e.target.value)} /></label><button type="button" className="btn-primary min-h-11 w-full md:w-auto" disabled={busy || !selectedVendorId || !awardRationale.trim() || !readiness.ready} onClick={() => void transition('award', 'Sourcing award recorded', { selected_vendor_id: selectedVendorId, closure_note: awardRationale.trim() })}><Icon name="check" className="h-4 w-4" />Award selected vendor</button></section>}
+      {event.communications && event.communications.length > 0 && <section className="rounded-lg border border-line p-3"><h3 className="font-semibold text-ink">Equal communication evidence</h3><ul className="mt-2 space-y-2 text-sm">{event.communications.map((item) => <li key={item.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-line pt-2 first:border-0 first:pt-0"><span className="text-ink">{item.communicationType.replaceAll('_', ' ')} {item.notificationGroupId ? `· ${item.notificationGroupId}` : ''}</span><span className="text-xs text-muted">{item.acknowledgementState === 'overdue' ? 'Acknowledgment overdue' : item.clarificationState === 'overdue' ? 'Clarification overdue' : item.acknowledgedAt ? 'Acknowledged' : 'Sent'}</span></li>)}</ul></section>}
+      {canManage && !['awarded', 'cancelled'].includes(event.status) && <button type="button" className="btn-outline min-h-11" disabled={busy} onClick={() => void transition('cancel', 'Sourcing event cancelled', { closure_note: 'Cancelled by Procurement' })}><Icon name="x" className="h-4 w-4" />Cancel event</button>}
+    </>}
+  </section>;
 }

@@ -26,6 +26,8 @@ const migrationCreateWrapper = migration.slice(
   migration.indexOf(CREATE_WRAPPER_MARKER),
   migration.indexOf(CREATE_WRAPPER_END_MARKER),
 );
+const TASK_6_MARKER = "-- Task 6: competitive sourcing is governed by the effective profile";
+const migrationTask6 = migration.slice(migration.indexOf(TASK_6_MARKER));
 // PGlite 0.5 does not implement jsonb_object_length. The production migration
 // retains PostgreSQL's native function; this equivalent fixture expression
 // lets the public policy RPCs execute locally rather than reducing the test
@@ -56,13 +58,16 @@ async function createGovernedRouteFixture() {
     create schema procurement;
     create schema legal;
     create schema private;
+    create schema extensions;
     create function auth.uid() returns uuid language sql stable as $$ select '${actorId}'::uuid $$;
     create function auth.role() returns text language sql stable as $$ select 'authenticated'::text $$;
     create function core.has_live_cap(text, text) returns boolean language sql stable as $$ select true $$;
     create function core.has_cap(text, text) returns boolean language sql stable as $$ select true $$;
+    create function extensions.digest(bytea, text) returns bytea language sql immutable as $$ select decode('00', 'hex') $$;
     create function private.policy_submit_procurement_request(jsonb) returns jsonb language sql as $$ select '{}'::jsonb $$;
+    create function procurement.insufficient_bid_exception(jsonb) returns jsonb language sql as $$ select null::jsonb $$;
     create table core.profiles (id uuid primary key, status text not null default 'active');
-    create table core.vendors (id uuid primary key);
+    create table core.vendors (id uuid primary key, legal_name text, accreditation_status text default 'approved', accreditation_expires_at timestamptz);
     create table procurement.requests (
       id uuid primary key,
       status text,
@@ -101,7 +106,40 @@ async function createGovernedRouteFixture() {
       id uuid primary key default gen_random_uuid(),
       request_id uuid not null references procurement.requests(id),
       exception_type text not null,
+      justification text not null default 'fixture justification value',
+      evidence jsonb not null default '{}'::jsonb,
+      price_reasonableness text,
+      procurement_head_reviewed_by uuid references core.profiles(id),
+      procurement_head_reviewed_at timestamptz,
       status text not null default 'draft'
+    );
+    create table procurement.sourcing_events (
+      id uuid primary key default gen_random_uuid(),
+      request_id uuid not null references procurement.requests(id),
+      route_decision_id uuid not null references procurement.route_decisions(id),
+      issued_at timestamptz,
+      submission_deadline timestamptz,
+      intended_responses integer,
+      clarification_log jsonb not null default '[]'::jsonb,
+      status text not null default 'draft',
+      selected_vendor_id uuid references core.vendors(id),
+      closure_note text,
+      closed_at timestamptz,
+      created_by uuid references core.profiles(id),
+      created_at timestamptz not null default now()
+    );
+    create table procurement.sourcing_responses (
+      id uuid primary key default gen_random_uuid(),
+      sourcing_event_id uuid not null references procurement.sourcing_events(id),
+      vendor_id uuid not null references core.vendors(id),
+      invited_at timestamptz,
+      received_at timestamptz,
+      deadline_compliant boolean,
+      proposal_storage_path text,
+      commercial jsonb not null default '{}'::jsonb,
+      technical jsonb not null default '{}'::jsonb,
+      material_exceptions jsonb not null default '[]'::jsonb,
+      unique(sourcing_event_id, vendor_id)
     );
     create table core.policy_remediation_queue (
       id uuid primary key default gen_random_uuid(),
@@ -1007,6 +1045,100 @@ test("executes public governed route confirmation with persisted authority and e
   }
 });
 
+test("executes public governed sourcing controls and independent failed-bid recovery", async () => {
+  const db = await createGovernedRouteFixture();
+  let stage = "fixture";
+  const requestId = "72000000-0000-0000-0000-000000000001";
+  const vendorIds = [
+    "72000000-0000-0000-0000-000000000011",
+    "72000000-0000-0000-0000-000000000012",
+    "72000000-0000-0000-0000-000000000013",
+  ];
+  try {
+    stage = "base migration";
+    await db.exec(migrationBeforeBackfillForPglite);
+    await seedActivePolicyProfiles(db);
+    await db.exec(`insert into core.profiles(id, status) values ('${checkerId}', 'active');`);
+    stage = "Task 6 migration";
+    await db.exec(migrationTask6);
+    stage = "request and vendors";
+    await insertRequest(db, { id: requestId, requirementKind: "materials" });
+    await db.exec(`
+      update procurement.requests set policy_profile_id = '${operatingProfileId}' where id = '${requestId}';
+      insert into procurement.route_decisions(
+        request_id, policy_version, request_version, method, reasons, risk_facts, status, confirmed_by,
+        solicitation_type, procurement_mode, governance_tier, policy_profile_id
+      ) values (
+        '${requestId}', 'MWELL-FIXTURE:2026.01', 1, 'rfq', array['fixture'], '{}'::jsonb, 'confirmed', '${actorId}',
+        'rfq', 'competitive_bidding', 'standard', '${operatingProfileId}'
+      );
+      insert into core.vendors(id, legal_name, accreditation_status) values
+        ('${vendorIds[0]}', 'Accredited one', 'approved'),
+        ('${vendorIds[1]}', 'Accredited two', 'approved'),
+        ('${vendorIds[2]}', 'Accredited three', 'approved');
+    `);
+
+    stage = "source profile";
+    await db.query(`select private.policy_sourcing_profile('${requestId}')`);
+    stage = "source capability";
+    await db.query(`select private.policy_sourcing_can_manage()`);
+    stage = "save sourcing event";
+    const saved = await db.query(`select procurement.save_sourcing_event(${sqlJson({
+      request_id: requestId,
+      submission_deadline: "2030-01-15T00:00:00.000Z",
+      intended_responses: 3,
+      package_version: "RFQ-2030-v1",
+      package_hash: "f".repeat(64),
+    })}) as event`);
+    const eventId = saved.rows[0].event.id;
+    await assert.rejects(
+      () => db.query(`select procurement.transition_sourcing_event(${sqlJson({ id: eventId, action: "issue" })})`),
+      /3 accredited invitees/i,
+    );
+    for (const vendorId of vendorIds) {
+      await db.query(`select procurement.record_sourcing_response(${sqlJson({ sourcing_event_id: eventId, vendor_id: vendorId })})`);
+    }
+    await db.query(`select procurement.transition_sourcing_event(${sqlJson({ id: eventId, action: "issue" })})`);
+    await assert.rejects(
+      () => db.query(`select procurement.record_solicitation_communication(${sqlJson({ sourcing_event_id: eventId, communication_type: "extension", extension_working_days: 8 })})`),
+      /between 1 and 7 working days/i,
+    );
+    await db.query(`select procurement.record_solicitation_communication(${sqlJson({
+      sourcing_event_id: eventId, communication_type: "clarification", question: "Confirm warranty coverage.", answer: "Warranty must be 12 months.",
+    })})`);
+    const communication = await db.query(`
+      select count(*)::integer as recipients, count(distinct detail->>'notificationGroupId')::integer as groups
+      from procurement.solicitation_communications
+      where request_id = '${requestId}' and communication_type = 'clarification'
+    `);
+    assert.deepEqual(communication.rows[0], { recipients: 3, groups: 1 }, "clarification must be identical and visible to every invitee");
+
+    await db.query(`select procurement.transition_sourcing_event(${sqlJson({ id: eventId, action: "failed_bid", failed_bid_reason: "insufficient_responses" })})`);
+    await assert.rejects(
+      () => db.query(`select procurement.transition_sourcing_event(${sqlJson({ id: eventId, action: "evaluation" })})`),
+      /approved evaluation exception/i,
+    );
+    const exception = await db.query(`select procurement.submit_insufficient_bid_exception(${sqlJson({
+      sourcing_event_id: eventId,
+      phase: "evaluation",
+      justification: "The verified market search produced fewer than three usable responses despite documented outreach.",
+      price_reasonableness: "Prior price history and an independent market check support the available offer.",
+    })}) as pack`);
+    await assert.rejects(
+      () => db.query(`select procurement.review_insufficient_bid_exception(${sqlJson({ id: exception.rows[0].pack.id, decision: "approved", note: "Independent review complete." })})`),
+      /cannot approve their own/i,
+    );
+    await db.exec(`create or replace function auth.uid() returns uuid language sql stable as $$ select '${checkerId}'::uuid $$;`);
+    await db.query(`select procurement.review_insufficient_bid_exception(${sqlJson({ id: exception.rows[0].pack.id, decision: "approved", note: "Independent review confirms the exception evidence." })})`);
+    const evaluation = await db.query(`select procurement.transition_sourcing_event(${sqlJson({ id: eventId, action: "evaluation" })}) as event`);
+    assert.equal(evaluation.rows[0].event.status, "evaluation");
+  } catch (cause) {
+    throw new Error(`${stage}: ${cause instanceof Error ? cause.message : String(cause)}`);
+  } finally {
+    await db.close();
+  }
+});
+
 test("PGlite parse smoke loads the migration without a live database", async () => {
   const db = new PGlite();
   try {
@@ -1024,8 +1156,9 @@ test("PGlite parse smoke loads the migration without a live database", async () 
       create function core.has_live_cap(text, text) returns boolean language sql stable as $$ select true $$;
       create function private.policy_submit_procurement_request(jsonb) returns jsonb language sql as $$ select '{}'::jsonb $$;
       create function procurement.create_request(jsonb) returns jsonb language sql as $$ select $1 $$;
+      create function procurement.insufficient_bid_exception(jsonb) returns jsonb language sql as $$ select null::jsonb $$;
       create table core.profiles (id uuid primary key, status text not null default 'active');
-      create table core.vendors (id uuid primary key);
+      create table core.vendors (id uuid primary key, legal_name text, accreditation_status text default 'approved', accreditation_expires_at timestamptz);
       create table procurement.requests (
         id uuid primary key,
         status text,
@@ -1063,7 +1196,40 @@ test("PGlite parse smoke loads the migration without a live database", async () 
         id uuid primary key default gen_random_uuid(),
         request_id uuid not null references procurement.requests(id),
         exception_type text not null,
+        justification text not null default 'fixture justification value',
+        evidence jsonb not null default '{}'::jsonb,
+        price_reasonableness text,
+        procurement_head_reviewed_by uuid references core.profiles(id),
+        procurement_head_reviewed_at timestamptz,
         status text not null default 'draft'
+      );
+      create table procurement.sourcing_events (
+        id uuid primary key default gen_random_uuid(),
+        request_id uuid not null references procurement.requests(id),
+        route_decision_id uuid not null references procurement.route_decisions(id),
+        issued_at timestamptz,
+        submission_deadline timestamptz,
+        intended_responses integer,
+        clarification_log jsonb not null default '[]'::jsonb,
+        status text not null default 'draft',
+        selected_vendor_id uuid references core.vendors(id),
+        closure_note text,
+        closed_at timestamptz,
+        created_by uuid references core.profiles(id),
+        created_at timestamptz not null default now()
+      );
+      create table procurement.sourcing_responses (
+        id uuid primary key default gen_random_uuid(),
+        sourcing_event_id uuid not null references procurement.sourcing_events(id),
+        vendor_id uuid not null references core.vendors(id),
+        invited_at timestamptz,
+        received_at timestamptz,
+        deadline_compliant boolean,
+        proposal_storage_path text,
+        commercial jsonb not null default '{}'::jsonb,
+        technical jsonb not null default '{}'::jsonb,
+        material_exceptions jsonb not null default '[]'::jsonb,
+        unique(sourcing_event_id, vendor_id)
       );
       create table core.policy_remediation_queue (
         id uuid primary key default gen_random_uuid(),

@@ -47,13 +47,19 @@ test('stateful controlled RPC covers procurement confirmation, sourcing, submiss
   expect(fixture.callsNamed('read:requests').length).toBeGreaterThanOrEqual(2);
 
   await procurementPage.getByLabel('Submission deadline').fill('2026-09-30T12:00');
+  await procurementPage.getByLabel('Package version').fill('RFQ-CONTROLLED-v1');
+  await procurementPage.getByLabel('Package SHA-256').fill('a'.repeat(64));
   await procurementPage.getByRole('button', { name: 'Create plan' }).click();
   await expect(procurementPage.getByText('Sourcing plan created')).toBeVisible();
   for (const vendorId of ['vendor-1', 'vendor-2', 'vendor-3']) {
     await procurementPage.getByLabel('Vendor to invite').selectOption(vendorId);
     await procurementPage.getByRole('button', { name: 'Record invitation' }).click();
   }
-  await procurementPage.getByRole('button', { name: 'Issue to invited vendors' }).click();
+  await procurementPage.getByRole('button', { name: 'Issue controlled package' }).click();
+  await procurementPage.getByLabel('Clarification question').fill('Confirm the required warranty period.');
+  await procurementPage.getByLabel('Approved answer').fill('Provide a minimum 12-month warranty.');
+  await procurementPage.getByRole('button', { name: 'Broadcast identical clarification' }).click();
+  await expect(procurementPage.getByText('Clarification broadcast to every invitee')).toBeVisible();
   for (const [index, vendorId] of ['vendor-1', 'vendor-2', 'vendor-3'].entries()) {
     await procurementPage.getByLabel('Invited vendor').selectOption(vendorId);
     await procurementPage.getByLabel('Proposal evidence reference').fill(`controlled-proposal-${index + 1}.pdf`);
@@ -61,15 +67,20 @@ test('stateful controlled RPC covers procurement confirmation, sourcing, submiss
     await procurementPage.getByLabel('Technical score (0-100)').fill(String(90 - index));
     await procurementPage.getByRole('button', { name: 'Record response' }).click();
   }
+  await procurementPage.getByRole('button', { name: 'Close response window' }).click();
+  await procurementPage.getByRole('button', { name: 'Open controlled evaluation' }).click();
   await procurementPage.getByLabel('Recommended vendor').selectOption('vendor-1');
   await procurementPage.getByLabel('Award rationale').fill('Acme is the lowest evaluated compliant offer with complete proposal evidence.');
-  await procurementPage.getByRole('button', { name: 'Close and select vendor' }).click();
-  await expect(procurementPage.getByText('Sourcing event closed and vendor selected')).toBeVisible();
-  expect(fixture.sourcing).toMatchObject({ status: 'closed', selectedVendorId: 'vendor-1' });
+  await procurementPage.getByRole('button', { name: 'Award selected vendor' }).click();
+  await expect(procurementPage.getByText('Sourcing award recorded')).toBeVisible();
+  expect(fixture.sourcing).toMatchObject({ status: 'awarded', selectedVendorId: 'vendor-1' });
   expect(fixture.sourcing?.responses.filter((response) => response.receivedAt)).toHaveLength(3);
   expect(fixture.callsNamed('save_sourcing_event')).toHaveLength(1);
   expect(fixture.callsNamed('record_sourcing_response')).toHaveLength(6);
-  expect(fixture.callsNamed('transition_sourcing_event').map((call) => call.payload.action)).toEqual(['issue', 'close']);
+  expect(fixture.callsNamed('record_solicitation_communication').at(-1)).toMatchObject({
+    payload: { communication_type: 'clarification' },
+  });
+  expect(fixture.callsNamed('transition_sourcing_event').map((call) => call.payload.action)).toEqual(['issue', 'response_closed', 'evaluation', 'award']);
 
   await procurementPage.getByRole('button', { name: 'Submit for approval' }).click();
   await expect(procurementPage.getByText('Request submitted for approval')).toBeVisible();
