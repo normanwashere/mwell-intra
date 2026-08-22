@@ -20,7 +20,7 @@ Route: `/procurement/requests/controlled-request-0001`
 | Review | Independent Procurement reviewer | Procurement may record only the Procurement decision. |
 | Review | Independent Finance reviewer | Finance may record only petty-cash eligibility. |
 | Approval and refresh | Independent DOA actor | DOA records the final decision; a deliberate workspace refresh failure is visible and a subsequent refresh restores decision history. |
-| Recovery | Procurement submitter | A policy-profile change produces the server blocker and exposes the actionable `Replace stale exception evidence` form. |
+| Recovery | Procurement submitter | A policy-profile change produces the server blocker and exposes `Replace stale exception evidence`. The submit control is scrolled into an unobscured viewport position, its center point is verified as receiving pointer events, and fresh replacement evidence is submitted into a new `under review` pack with submitted history. |
 
 The fixture asserts that exactly the intentional submit and refresh 400 responses appear in the browser console. No other console errors are accepted. It also asserts the three review RPC calls come from distinct role actors in the required order.
 
@@ -28,10 +28,10 @@ The fixture asserts that exactly the intentional submit and refresh 400 response
 
 | Viewport | Submitter state | Approval/history state | Stale recovery state |
 | --- | --- | --- | --- |
-| Desktop, 1440 x 900 | `evidence/task-8-exception-submitter-desktop-1440.png` | `evidence/task-8-exception-history-desktop-1440.png` | `evidence/task-8-exception-recovery-desktop-1440.png` |
-| Mobile, 390 x 844 | `evidence/task-8-exception-submitter-mobile-390.png` | `evidence/task-8-exception-history-mobile-390.png` | `evidence/task-8-exception-recovery-mobile-390.png` |
+| Desktop, 1440 x 900 | `evidence/task-8-exception-submitter-desktop-1440.png` | `evidence/task-8-exception-history-desktop-1440.png` | `evidence/task-8-exception-recovery-desktop-1440.png`, then `evidence/task-8-exception-recovery-submitted-desktop-1440.png` |
+| Mobile, 390 x 844 | `evidence/task-8-exception-submitter-mobile-390.png` | `evidence/task-8-exception-history-mobile-390.png` | `evidence/task-8-exception-recovery-mobile-390.png`, then `evidence/task-8-exception-recovery-submitted-mobile-390.png` |
 
-The captured renders were manually inspected. Desktop retains clear stage cards and history; mobile remains one-column with visible blockers and no observed clipped actions or horizontal overflow.
+The captured renders were manually inspected. Desktop retains clear stage cards and history; mobile remains one-column with visible blockers and no observed clipped actions or horizontal overflow. The automated recovery assertion additionally proves that the mobile submit control is fully in view and not covered by persistent application chrome when tapped.
 
 ## Controlled-test boundary
 

@@ -44,3 +44,9 @@
 ### Fix-round-2 verification boundary
 
 - Migration remains unapplied. No live Supabase, UAT, production, or deployment mutation was performed.
+
+## Fix Round 3
+
+- Explicitly revoked `EXECUTE` from `PUBLIC`, `anon`, and `authenticated` on the Task 8 private security-definer binding helper. The static verifier now requires a revocation for every Task 8 private helper, and the PGlite privilege contract verifies that `anon`, `authenticated`, and `service_role` cannot execute the binding helper directly.
+- Extended the rendered stale-profile recovery path on desktop and mobile: the Procurement submitter fills replacement evidence, the test scrolls the submit control into an unobscured position, verifies its center point receives pointer events, submits it, refreshes the authoritative workspace, and captures the resulting `under review` pack plus submitted history. The controlled console allowlist remains exactly the two intentional earlier 400 responses.
+- Node 22.14.0 / pnpm 10.23.0 verification passed: static alignment contract, focused Procurement typecheck, full PGlite suite (17/17), and controlled Playwright evidence at desktop 1440 x 900 and mobile 390 x 844 (2/2). No unexpected browser console errors were accepted.

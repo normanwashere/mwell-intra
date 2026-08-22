@@ -23,6 +23,25 @@ async function completePettyEvidence(page: Page) {
   await page.getByLabel('Liquidation recorded').check();
 }
 
+async function assertActionableInViewport(page: Page, buttonName: string) {
+  const button = page.getByRole('button', { name: buttonName });
+  await button.evaluate((element) => element.scrollIntoView({ block: 'center', inline: 'nearest' }));
+  await expect(button).toBeVisible();
+  const visibility = await button.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    const target = document.elementFromPoint(x, y);
+    return {
+      inViewport: rect.top >= 0 && rect.bottom <= window.innerHeight && rect.left >= 0 && rect.right <= window.innerWidth,
+      receivesPointer: target === element || element.contains(target),
+    };
+  });
+  expect(visibility.inViewport, `${buttonName} must be fully visible before activation`).toBe(true);
+  expect(visibility.receivesPointer, `${buttonName} center point must not be covered by app chrome`).toBe(true);
+  return button;
+}
+
 test('Task 8 governed exception workspace is usable across independent desktop and mobile lifecycle actors', async ({ browser }, testInfo) => {
   const fixture = new ControlledProcurementRpcFixture();
   fixture.prepareExceptionWorkspace();
@@ -85,7 +104,18 @@ test('Task 8 governed exception workspace is usable across independent desktop a
   await recovery.page.getByRole('button', { name: 'Refresh exception workspace' }).click();
   await expect(recovery.page.getByText('policy profile changed restart exception')).toBeVisible();
   await expect(recovery.page.getByRole('heading', { name: 'Replace stale exception evidence' })).toBeVisible();
+  await recovery.page.getByLabel('Business justification').fill('Replacement petty-cash evidence reflects the current effective policy profile and retained receipt plus liquidation proof.');
+  await recovery.page.getByLabel('Receipt or invoice attached').uncheck();
+  await recovery.page.getByLabel('Receipt or invoice attached').check();
+  await recovery.page.getByLabel('Liquidation recorded').uncheck();
+  await recovery.page.getByLabel('Liquidation recorded').check();
+  const replacementSubmit = await assertActionableInViewport(recovery.page, 'Submit governed evidence');
   await recovery.page.screenshot({ path: resolve(evidenceDir, `task-8-exception-recovery-${testInfo.project.name}.png`), fullPage: true });
+  await replacementSubmit.click();
+  await expect(recovery.page.getByText('under review', { exact: true })).toBeVisible();
+  await expect(recovery.page.getByText('Evidence submitted: submitted')).toBeVisible();
+  await expect(recovery.page.getByText('policy profile changed restart exception')).toHaveCount(0);
+  await recovery.page.screenshot({ path: resolve(evidenceDir, `task-8-exception-recovery-submitted-${testInfo.project.name}.png`), fullPage: true });
   await recovery.context.close();
 
   // These are the two deliberate 400 responses exercised above: submit
@@ -96,6 +126,7 @@ test('Task 8 governed exception workspace is usable across independent desktop a
     'exceptionDoa: Failed to load resource: the server responded with a status of 400 (Bad Request)',
   ]);
   expect(fixture.callsNamed('submit_policy_exception_pack').map((call) => call.actor)).toEqual([
+    actor('procurement').id,
     actor('procurement').id,
     actor('procurement').id,
   ]);

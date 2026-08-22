@@ -3248,6 +3248,11 @@ begin
 end;
 $$;
 
+-- This security-definer helper is internal to the route and exception guards.
+-- Keep it non-callable by browser/API roles even if PostgreSQL's default
+-- PUBLIC EXECUTE behavior changes around adjacent function definitions.
+revoke execute on function private.policy_exception_pack_binding_blockers(procurement.exception_packs,procurement.requests,procurement.policy_profiles) from public, anon, authenticated;
+
 create or replace function private.policy_exception_pack_blockers(
   p_request_id text,
   p_mode text,

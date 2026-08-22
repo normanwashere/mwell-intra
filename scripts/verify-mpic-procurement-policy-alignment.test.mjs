@@ -448,6 +448,25 @@ test("rejects unsafe policy-governance migration variants", () => {
       sql: migration.replaceAll("legacy_mapping_requires_review", "legacy_mapping_removed"),
       failure: "missing legacy route remediation marker",
     },
+    {
+      name: "private Task 8 binding helper is directly executable",
+      sql: migration.replace(
+        "revoke execute on function private.policy_exception_pack_binding_blockers(procurement.exception_packs,procurement.requests,procurement.policy_profiles) from public, anon, authenticated;",
+        "-- private Task 8 binding helper revocation removed",
+      ),
+      failure: "missing private Task 8 execution revocation private.policy_exception_pack_binding_blockers(procurement.exception_packs,procurement.requests,procurement.policy_profiles)",
+    },
+    {
+      name: "private Task 8 binding helper revocation appears before its final definition",
+      sql: (() => {
+        const bindingDefinition = "create or replace function private.policy_exception_pack_binding_blockers(";
+        const bindingRevocation = "revoke execute on function private.policy_exception_pack_binding_blockers(procurement.exception_packs,procurement.requests,procurement.policy_profiles) from public, anon, authenticated;";
+        return migration
+          .replace(bindingRevocation, "")
+          .replace(bindingDefinition, `${bindingRevocation}\n\n${bindingDefinition}`);
+      })(),
+      failure: "private binding helper revocation must immediately follow its final definition",
+    },
   ];
 
   for (const { name, sql, failure } of cases) {
@@ -501,6 +520,29 @@ test("requires explicit requirement classification before the create wrapper per
     migration.slice(migration.indexOf('alter function procurement.create_request(jsonb)')),
     /set\s+solicitation_type\s*=/i,
   );
+});
+
+test("keeps every Task 8 private helper non-executable by application roles", async () => {
+  const db = await createGovernedRouteFixture();
+  const signature = "private.policy_exception_pack_binding_blockers(procurement.exception_packs,procurement.requests,procurement.policy_profiles)";
+  try {
+    await db.exec(migrationBeforeBackfillForPglite);
+    await seedActivePolicyProfiles(db);
+    await db.exec(migrationTask6);
+    const privileges = await db.query(`
+      select
+        has_function_privilege('anon', '${signature}'::regprocedure, 'execute') as anon_execute,
+        has_function_privilege('authenticated', '${signature}'::regprocedure, 'execute') as authenticated_execute,
+        has_function_privilege('service_role', '${signature}'::regprocedure, 'execute') as service_role_execute
+    `);
+    assert.deepEqual(privileges.rows[0], {
+      anon_execute: false,
+      authenticated_execute: false,
+      service_role_execute: false,
+    });
+  } finally {
+    await db.close();
+  }
 });
 
 test("executes public create and draft finalization with normalized RFQ and RFP briefs", async () => {

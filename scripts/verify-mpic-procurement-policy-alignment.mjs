@@ -84,6 +84,17 @@ function functionDefinition(text, functionName, parameterType) {
   return text.match(expression)?.[0] ?? null;
 }
 
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function hasPrivateTask8ExecutionRevocation(text, signature) {
+  return new RegExp(
+    `revoke\\s+(?:all|execute)\\s+on\\s+function\\s+[^;]*${escapeRegExp(signature)}[^;]*from\\s+public,\\s*anon,\\s*authenticated`,
+    "i",
+  ).test(text);
+}
+
 export function verifyMigrationText(sql) {
   const text = normalized(sql);
   const failures = [];
@@ -254,6 +265,34 @@ export function verifyMigrationText(sql) {
     !text.includes("to authenticated, service_role")
   ) {
     failures.push("missing narrowed function grant");
+  }
+  for (const signature of [
+    "private.policy_exception_active_profile()",
+    "private.policy_exception_request_fingerprint(procurement.requests,text,uuid,integer)",
+    "private.policy_exception_evidence_fingerprint(jsonb)",
+    "private.policy_exception_repeat_snapshot(procurement.requests,jsonb,procurement.policy_profiles)",
+    "private.policy_exception_submission_snapshot(procurement.requests,text,jsonb,procurement.policy_profiles)",
+    "private.policy_exception_pack_blockers(text,text,procurement.policy_profiles,numeric)",
+    "private.policy_exception_pack_binding_blockers(procurement.exception_packs,procurement.requests,procurement.policy_profiles)",
+  ]) {
+    if (!hasPrivateTask8ExecutionRevocation(text, signature)) {
+      failures.push(`missing private Task 8 execution revocation ${signature}`);
+    }
+  }
+  const bindingDefinition = "create or replace function private.policy_exception_pack_binding_blockers(";
+  const bindingRevocation = "revoke execute on function private.policy_exception_pack_binding_blockers(procurement.exception_packs,procurement.requests,procurement.policy_profiles) from public, anon, authenticated;";
+  const bindingDefinitionIndex = text.lastIndexOf(bindingDefinition);
+  const bindingRevocationIndex = text.indexOf(bindingRevocation);
+  const nextPrivateFunctionIndex = text.indexOf(
+    "create or replace function private.policy_exception_pack_blockers(",
+    bindingDefinitionIndex,
+  );
+  if (
+    bindingDefinitionIndex === -1 ||
+    bindingRevocationIndex < bindingDefinitionIndex ||
+    (nextPrivateFunctionIndex !== -1 && bindingRevocationIndex > nextPrivateFunctionIndex)
+  ) {
+    failures.push("private binding helper revocation must immediately follow its final definition");
   }
   if (/estimated_amount[^;]{0,500}then\s*'rfp'/.test(text)) {
     failures.push("amount-driven RFP route logic is forbidden");
