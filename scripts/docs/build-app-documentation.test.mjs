@@ -67,6 +67,47 @@ test("renders primary article navigation and in-place route support", () => {
   assert.doesNotMatch(html, /location\.(?:href|reload)/);
 });
 
+test("embeds heading-level search records with match metadata", () => {
+  const html = buildDocumentationHtml();
+  const indexMatch = html.match(/window\.__HANDBOOK_INDEX__ = (\[[\s\S]*?\]);/);
+
+  assert.ok(indexMatch, "the generated handbook embeds a search index");
+  const index = JSON.parse(indexMatch[1]);
+  const heading = index.find((record) => record.headingId && record.headingId !== record.articleId);
+
+  assert.equal(index[0].tabId, "start");
+  assert.ok(heading, "the index contains a heading-level record");
+  assert.deepEqual(Object.keys(heading), [
+    "tabId",
+    "articleId",
+    "headingId",
+    "title",
+    "heading",
+    "summary",
+    "audience",
+    "keywords",
+    "source",
+    "text",
+  ]);
+  assert.ok(heading.text.length <= 240);
+  assert.match(html, /"scope":"all"/);
+  assert.match(html, /aria-live="polite"/);
+  assert.doesNotMatch(indexMatch[1], /<\/script/i);
+});
+
+test("renders scoped explainable search without navigation reloads", () => {
+  const html = buildDocumentationHtml();
+
+  assert.match(html, /data-search-scope="tab"/);
+  assert.match(html, /data-search-scope="all"/);
+  assert.match(html, /data-search-result/);
+  assert.match(html, /function rankSearchResults/);
+  assert.match(html, /params\.set\("q", query\)/);
+  assert.match(html, /params\.set\("scope", scope\)/);
+  assert.match(html, /function openContainingDisclosure/);
+  assert.doesNotMatch(html, /location\.(?:href|reload)/);
+});
+
 test("serializes tab routes safely while preserving browser query semantics", () => {
   const html = buildDocumentationHtml();
   const match = html.match(/href="(#tab=start&amp;article=doc-manual-mwell-intra-user-manual-md)" data-article-link/);

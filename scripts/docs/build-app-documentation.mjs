@@ -74,6 +74,34 @@ function escapeHtml(value) {
     .replaceAll("'", "&#39;");
 }
 
+function collapseWhitespace(value) {
+  return String(value).replace(/\s+/g, " ").trim();
+}
+
+function plainMarkdownText(value) {
+  return collapseWhitespace(
+    String(value)
+      .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+      .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+      .replace(/<[^>]*>/g, " ")
+      .replace(/[`*_~>#|]/g, " "),
+  );
+}
+
+function searchExcerpt(value, limit = 240) {
+  const text = collapseWhitespace(value);
+  return text.length <= limit ? text : `${text.slice(0, limit - 3).trimEnd()}...`;
+}
+
+function serializeForScript(value) {
+  return JSON.stringify(value)
+    .replaceAll("<", "\\u003c")
+    .replaceAll(">", "\\u003e")
+    .replaceAll("&", "\\u0026")
+    .replaceAll("\u2028", "\\u2028")
+    .replaceAll("\u2029", "\\u2029");
+}
+
 function titleOf(source, file) {
   if (path.extname(file).toLowerCase() === ".csv") {
     return path.basename(file, ".csv").replaceAll("-", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -163,6 +191,49 @@ function renderSource(source, sourceFile, sourceIds, sourceRoutes) {
     : renderMarkdown(source, sourceFile, sourceIds, sourceRoutes);
 }
 
+function buildSearchIndex(documents) {
+  return documents.flatMap((document) => {
+    const records = [{
+      tabId: document.primaryTab,
+      articleId: document.id,
+      headingId: null,
+      title: document.title,
+      heading: document.title,
+      summary: document.summary,
+      audience: document.audience,
+      keywords: document.keywords,
+      source: document.file,
+      text: searchExcerpt(plainMarkdownText(document.sourceText)),
+    }];
+
+    if (path.extname(document.file).toLowerCase() === ".csv") return records;
+
+    const tokens = marked.lexer(document.sourceText);
+    for (let index = 0; index < tokens.length; index += 1) {
+      const token = tokens[index];
+      if (token.type !== "heading" || token.depth === 1) continue;
+      const sectionTokens = [token];
+      for (let cursor = index + 1; cursor < tokens.length && tokens[cursor].type !== "heading"; cursor += 1) {
+        sectionTokens.push(tokens[cursor]);
+      }
+      const heading = plainMarkdownText(token.text);
+      records.push({
+        tabId: document.primaryTab,
+        articleId: document.id,
+        headingId: `${document.id}-${slug(token.text)}`,
+        title: document.title,
+        heading,
+        summary: document.summary,
+        audience: document.audience,
+        keywords: document.keywords,
+        source: document.file,
+        text: searchExcerpt(sectionTokens.map((sectionToken) => plainMarkdownText(sectionToken.text ?? sectionToken.raw)).join(" ")),
+      });
+    }
+    return records;
+  });
+}
+
 export function buildDocumentationHtml() {
   const mermaidBundle = readFileSync(mermaidBundleFile, "utf8").replace(/[ \t]+$/gm, "");
   const styles = normalizeText(readFileSync(handbookStylesFile, "utf8")).replace(/[ \t]+$/gm, "");
@@ -187,6 +258,7 @@ export function buildDocumentationHtml() {
       catalogId,
       title: titleOf(source, file),
       category: tabById.get(metadata.primaryTab).label,
+      sourceText: source,
       html: renderSource(source, file, sourceIds, sourceRoutes),
       hash: createHash("sha256").update(source).digest("hex").slice(0, 12),
     };
@@ -196,6 +268,8 @@ export function buildDocumentationHtml() {
     left.sortOrder - right.sortOrder ||
     left.file.localeCompare(right.file),
   );
+  const searchIndex = buildSearchIndex(orderedDocuments);
+  const initialSearchState = { query: "", scope: "all" };
   const documentBySource = new Map(documents.map((document) => [document.file, document]));
   const articleLink = (document, { related = false, relationLabel } = {}) => {
     const label = relationLabel ?? document.title;
@@ -241,12 +315,12 @@ ${styles}
 <body id="top">
   <header class="topbar">
     <div class="brand"><strong>mwell</strong><span>Intra handbook</span></div>
-    <div class="search-wrap"><input id="search" type="search" placeholder="Search the complete handbook" aria-label="Search handbook"></div>
+    <div class="search-wrap"><input id="search" type="search" placeholder="Search the complete handbook" aria-label="Search handbook" autocomplete="off"><div class="search-scope" role="group" aria-label="Search scope"><button type="button" data-search-scope="tab" aria-pressed="false">This tab</button><button type="button" data-search-scope="all" aria-pressed="true">All tabs</button></div></div>
     <div class="toolbar"><button id="theme" type="button" aria-label="Toggle color theme">Theme</button><button type="button" onclick="window.print()" aria-label="Print documentation">Print</button></div>
   </header>
   <div class="handbook-shell">
     <nav class="tab-rail" role="tablist" aria-label="Handbook sections">${HANDBOOK_TABS.map((tab, index) => `<button role="tab" id="tab-${tab.id}" aria-controls="panel-${tab.id}" aria-selected="${index === 0}" tabindex="${index === 0 ? 0 : -1}" type="button" data-tab-button data-tab="${tab.id}">${escapeHtml(tab.label)}</button>`).join("")}</nav>
-    <aside class="contents-rail" aria-label="Selected tab contents"><div class="summary"><strong>${documents.length}</strong>maintained source documents<div class="result-count" id="result-count">Choose an article to read</div></div>${panels}</aside>
+    <aside class="contents-rail" aria-label="Selected tab contents"><div class="summary"><strong>${documents.length}</strong>maintained source documents<div class="result-count" id="result-count" aria-live="polite">Choose an article to read</div></div><section class="search-results" id="search-results" aria-label="Search results" hidden></section>${panels}</aside>
     <main class="reading-canvas" tabindex="-1">
       <section class="hero"><span class="category">Standalone operating handbook</span><h1>Mwell Intra</h1><p>One searchable, printable reference for users, trainers, developers, infrastructure teams, control owners, and release reviewers. It includes rendered process diagrams, application procedures, screenshots, governed reference extracts, technical specifications, and release controls.</p><div class="hero-meta"><span>${documents.length} maintained sources</span><span>Source-controlled release set</span><span>Self-contained HTML</span></div></section>
       <p class="empty" id="empty" hidden>No document matches this search and category.</p>
@@ -254,6 +328,7 @@ ${styles}
     </main>
     <aside class="page-toc" aria-label="Article table of contents"><nav data-page-toc aria-label="On this page"></nav></aside>
   </div>
+  <script data-handbook-index>window.__HANDBOOK_INDEX__ = ${serializeForScript(searchIndex)}; window.__HANDBOOK_SEARCH_STATE__ = ${serializeForScript(initialSearchState)};</script>
   <script>${mermaidBundle}</script>
   <script data-handbook-runtime>
 ${runtime}
