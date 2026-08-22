@@ -13,6 +13,91 @@ const migration = readFileSync(
   "utf8",
 );
 
+test("accepts the hardened MPIC procurement policy migration", () => {
+  assert.deepEqual(verifyMigrationText(migration).failures, []);
+});
+
+test("rejects unsafe policy-governance migration variants", () => {
+  const cases = [
+    {
+      name: "permissive governed RLS write policy",
+      sql: migration.replace(
+        "with check (private.policy_profile_can_manage());",
+        "with check (true);",
+      ),
+      failure: "permissive governed write RLS policy",
+    },
+    {
+      name: "broad service-role table mutation grant",
+      sql: `${migration}\ngrant all on procurement.policy_profiles to service_role;`,
+      failure: "broad service_role policy-table grant",
+    },
+    {
+      name: "unsafe public policy RPC search path",
+      sql: migration.replace(
+        "create or replace function procurement.save_policy_profile(payload jsonb)\nreturns jsonb\nlanguage plpgsql\nsecurity definer\nset search_path = ''",
+        "create or replace function procurement.save_policy_profile(payload jsonb)\nreturns jsonb\nlanguage plpgsql\nsecurity definer\nset search_path = procurement, public",
+      ),
+      failure: "unsafe policy RPC search_path",
+    },
+    {
+      name: "two-actor draft-edit then self-activation bypass",
+      sql: migration.replace(
+        "if v_profile.last_modified_by is not distinct from v_actor then\n    raise exception 'A separate policy checker must activate the profile';",
+        "if v_profile.created_by is not distinct from v_actor then\n    raise exception 'A separate policy checker must activate the profile';",
+      ),
+      failure: "missing latest-modifier maker-checker control",
+    },
+    {
+      name: "missing operating-profile lineage validation",
+      sql: migration.replaceAll(
+        "private.policy_profile_validate_profile",
+        "private.removed_policy_profile_validation",
+      ),
+      failure: "missing policy lineage and control-source validation",
+    },
+    {
+      name: "missing sealed-bid invitation ceiling",
+      sql: migration.replace(
+        "and sealed_bid_minimum_responses <= invite_target_max",
+        "",
+      ),
+      failure: "missing sealed-bid invitation ceiling",
+    },
+    {
+      name: "missing positive formal-bid threshold for the operating profile",
+      sql: migration.replace(
+        "and formal_bid_amount is not null and formal_bid_amount > 0",
+        "",
+      ),
+      failure: "missing relationship-aware operating-profile constraint",
+    },
+    {
+      name: "incomplete control-source mapping can include unknown controls",
+      sql: migration.replace(
+        "jsonb_object_length(p_profile.control_sources) <> 16 or ",
+        "",
+      ),
+      failure: "missing complete control_sources constraint",
+    },
+    {
+      name: "placeholder governed RPC body",
+      sql: migration.replace(
+        "perform private.policy_profile_validate_profile(v_profile, false);",
+        "return to_jsonb(v_profile);",
+      ),
+      failure: "placeholder save_policy_profile body",
+    },
+  ];
+
+  for (const { name, sql, failure } of cases) {
+    assert.ok(
+      verifyMigrationText(sql).failures.includes(failure),
+      `${name} was accepted by the migration verifier`,
+    );
+  }
+});
+
 test("requires profile, route, RLS, and hardened RPC controls", () => {
   const result = verifyMigrationText("");
 
@@ -23,74 +108,7 @@ test("requires profile, route, RLS, and hardened RPC controls", () => {
   assert.ok(result.failures.includes("missing governed write RLS policy"));
 });
 
-test("requires every governed policy RPC to carry the hardened function contract", () => {
-  const result = verifyMigrationText(`
-    create function procurement.save_policy_profile(payload jsonb) returns jsonb language plpgsql as $$ begin return payload; end $$;
-    create function procurement.activate_policy_profile(payload jsonb) returns jsonb language plpgsql as $$ begin return payload; end $$;
-    create function procurement.resolve_policy_conflict(payload jsonb) returns jsonb language plpgsql as $$ begin return payload; end $$;
-    create function procurement.get_effective_policy_profile(as_of timestamptz) returns jsonb language plpgsql as $$ begin return '{}'::jsonb; end $$;
-  `);
-
-  assert.ok(result.failures.includes("missing hardened policy RPC"));
-});
-
-test("accepts a migration with the mandatory policy governance controls", () => {
-  const result = verifyMigrationText(`
-    create table if not exists procurement.policy_profiles (
-      id uuid primary key,
-      formal_bid_amount numeric,
-      control_sources jsonb,
-      source_filename text,
-      source_organization text,
-      effective_from timestamptz,
-      effective_to timestamptz,
-      document_hash text,
-      exclude using gist (tstzrange(effective_from, effective_to, '[)') with &&)
-    );
-    create table if not exists procurement.policy_profile_events (id uuid primary key);
-    create table if not exists procurement.policy_conflicts (id uuid primary key);
-    create table if not exists procurement.solicitation_communications (id uuid primary key);
-    create table if not exists procurement.policy_sla_events (id uuid primary key);
-    create table if not exists legal.vendor_probation_reviews (id uuid primary key);
-    alter table procurement.policy_profiles enable row level security;
-    alter table procurement.policy_profiles force row level security;
-    alter table procurement.policy_profile_events enable row level security;
-    alter table procurement.policy_profile_events force row level security;
-    alter table procurement.policy_conflicts enable row level security;
-    alter table procurement.policy_conflicts force row level security;
-    alter table procurement.solicitation_communications enable row level security;
-    alter table procurement.solicitation_communications force row level security;
-    alter table procurement.policy_sla_events enable row level security;
-    alter table procurement.policy_sla_events force row level security;
-    alter table legal.vendor_probation_reviews enable row level security;
-    alter table legal.vendor_probation_reviews force row level security;
-    create policy policy_profiles_governed_insert on procurement.policy_profiles for insert to authenticated with check (true);
-    create policy policy_profiles_governed_update on procurement.policy_profiles for update to authenticated using (true) with check (true);
-    create policy policy_profile_events_governed_insert on procurement.policy_profile_events for insert to authenticated with check (true);
-    create policy policy_conflicts_governed_update on procurement.policy_conflicts for update to authenticated using (true) with check (true);
-    alter table procurement.requests add column requirement_kind text;
-    alter table procurement.requests add column solicitation_type text;
-    alter table procurement.requests add column procurement_mode text;
-    alter table procurement.requests add column governance_tier text;
-    alter table procurement.requests add column policy_profile_id uuid references procurement.policy_profiles(id);
-    alter table procurement.requests add column route_reasons jsonb;
-    create function procurement.save_policy_profile(payload jsonb) returns jsonb language plpgsql security definer set search_path = '' as $$ begin if core.has_live_cap('core', 'manage_rbac') or core.has_live_cap('legal', 'manage_doa') then return payload; end if; end $$;
-    create function procurement.activate_policy_profile(payload jsonb) returns jsonb language plpgsql security definer set search_path = '' as $$ begin -- unresolved conflicts block activation
-      perform 1 from procurement.policy_profiles for update; return payload; end $$;
-    create function procurement.resolve_policy_conflict(payload jsonb) returns jsonb language plpgsql security definer set search_path = '' as $$ begin if created_by is not distinct from v_actor then return payload; end if; return payload; end $$;
-    create function procurement.get_effective_policy_profile(as_of timestamptz) returns jsonb language sql security definer set search_path = '' as $$ select '{}'::jsonb $$;
-    -- policy profile events are immutable
-    revoke all on function procurement.save_policy_profile(jsonb) from public, anon, authenticated;
-    revoke all on function procurement.activate_policy_profile(jsonb) from public, anon, authenticated;
-    revoke all on function procurement.resolve_policy_conflict(jsonb) from public, anon, authenticated;
-    revoke all on function procurement.get_effective_policy_profile(timestamptz) from public, anon, authenticated;
-    grant execute on function procurement.save_policy_profile(jsonb), procurement.activate_policy_profile(jsonb), procurement.resolve_policy_conflict(jsonb), procurement.get_effective_policy_profile(timestamptz) to authenticated, service_role;
-  `);
-
-  assert.deepEqual(result.failures, []);
-});
-
-test("loads against the governed procurement schema without a live database", async () => {
+test("PGlite parse smoke loads the migration without a live database", async () => {
   const db = new PGlite();
   try {
     await db.exec(`

@@ -27,10 +27,41 @@ const requiredRequestColumns = [
 ];
 
 const requiredFunctions = [
-  ["procurement.save_policy_profile", "jsonb"],
-  ["procurement.activate_policy_profile", "jsonb"],
-  ["procurement.resolve_policy_conflict", "jsonb"],
-  ["procurement.get_effective_policy_profile", "timestamptz"],
+  {
+    name: "procurement.save_policy_profile",
+    parameterType: "jsonb",
+    requiredBody: [
+      "private.policy_profile_validate_profile(v_profile, false)",
+      "last_modified_by = v_actor",
+      "revision = revision + 1",
+    ],
+    placeholderFailure: "placeholder save_policy_profile body",
+  },
+  {
+    name: "procurement.activate_policy_profile",
+    parameterType: "jsonb",
+    requiredBody: [
+      "private.policy_profile_validate_profile(v_profile, true)",
+      "last_modified_by is not distinct from v_actor",
+      "for update",
+    ],
+    placeholderFailure: "placeholder activate_policy_profile body",
+  },
+  {
+    name: "procurement.resolve_policy_conflict",
+    parameterType: "jsonb",
+    requiredBody: [
+      "last_modified_by is not distinct from v_actor",
+      "for update",
+    ],
+    placeholderFailure: "placeholder resolve_policy_conflict body",
+  },
+  {
+    name: "procurement.get_effective_policy_profile",
+    parameterType: "timestamptz",
+    requiredBody: ["relationship = 'mwell_operating'", "status = 'active'"],
+    placeholderFailure: "placeholder get_effective_policy_profile body",
+  },
 ];
 
 const normalized = (sql) => sql.toLowerCase().replace(/\s+/g, " ").trim();
@@ -80,15 +111,22 @@ export function verifyMigrationText(sql) {
       failures.push(`missing profile control ${control}`);
   }
 
-  for (const [functionName, parameterType] of requiredFunctions) {
-    const definition = functionDefinition(text, functionName, parameterType);
+  for (const {
+    name,
+    parameterType,
+    requiredBody,
+    placeholderFailure,
+  } of requiredFunctions) {
+    const definition = functionDefinition(text, name, parameterType);
     if (!definition) {
-      failures.push(`missing ${functionName}(${parameterType})`);
+      failures.push(`missing ${name}(${parameterType})`);
     } else if (
       !definition.includes("security definer") ||
       !definition.includes("set search_path = ''")
     ) {
-      failures.push("missing hardened policy RPC");
+      failures.push("unsafe policy RPC search_path");
+    } else if (requiredBody.some((token) => !definition.includes(token))) {
+      failures.push(placeholderFailure);
     }
   }
 
@@ -104,22 +142,93 @@ export function verifyMigrationText(sql) {
   if (!text.includes("for update")) {
     failures.push("missing governed activation locking");
   }
-  for (const writePolicy of [
+  const governedWritePolicies = [
     "create policy policy_profiles_governed_insert",
     "create policy policy_profiles_governed_update",
     "create policy policy_profile_events_governed_insert",
     "create policy policy_conflicts_governed_update",
-  ]) {
-    if (!text.includes(writePolicy)) {
+  ];
+  for (const writePolicy of governedWritePolicies) {
+    const start = text.indexOf(writePolicy);
+    const statement =
+      start === -1 ? "" : text.slice(start, text.indexOf(";", start) + 1);
+    if (!statement) {
       failures.push("missing governed write RLS policy");
       break;
     }
+    if (
+      !statement.includes("private.policy_profile_can_manage()") ||
+      /(?:using|with check)\s*\(\s*true\s*\)/.test(statement)
+    ) {
+      failures.push("permissive governed write RLS policy");
+      break;
+    }
+  }
+  if (
+    /grant\s+(?:all|insert|update|delete)[^;]*\bon\s+(?:procurement\.(?:policy_profiles|policy_profile_events|policy_conflicts|solicitation_communications|policy_sla_events)|legal\.vendor_probation_reviews)[^;]*\bto\s+[^;]*\bservice_role\b/.test(
+      text,
+    )
+  ) {
+    failures.push("broad service_role policy-table grant");
+  }
+  if (
+    !text.includes("revoke all on procurement.policy_profiles,") ||
+    !text.includes("from service_role")
+  ) {
+    failures.push("missing service_role policy-table mutation revocation");
+  }
+  if (
+    !text.includes("last_modified_by uuid not null") ||
+    !text.includes("revision integer not null default 1") ||
+    !text.includes("profile_actor_id uuid not null") ||
+    !text.includes("profile_revision integer not null")
+  ) {
+    failures.push("missing latest-modifier maker-checker control");
+  }
+  if (
+    !text.includes("formal_bid_amount is not null and formal_bid_amount > 0") ||
+    !text.includes("source_profile_id is not null")
+  ) {
+    failures.push("missing relationship-aware operating-profile constraint");
+  }
+  if (
+    !text.includes("control_sources ?& array[") ||
+    !text.includes("jsonb_object_length(p_profile.control_sources) <> 16")
+  ) {
+    failures.push("missing complete control_sources constraint");
+  }
+  if (!text.includes("sealed_bid_minimum_responses <= invite_target_max")) {
+    failures.push("missing sealed-bid invitation ceiling");
+  }
+  if (
+    !text.includes("private.policy_profile_validate_profile") ||
+    !text.includes("private.policy_profile_source_lineage_is_valid") ||
+    !text.includes("private.policy_profile_control_sources_are_complete") ||
+    !text.includes("mpic procurement policy february2025.docx") ||
+    !text.includes(
+      "mwell procurement policy and procedures - revised modern visual updated.docx",
+    ) ||
+    !text.includes("v_parent.status = 'active'")
+  ) {
+    failures.push("missing policy lineage and control-source validation");
   }
   if (!text.includes("unresolved conflicts block activation")) {
     failures.push("missing unresolved-conflict activation gate");
   }
-  if (!text.includes("created_by is not distinct from v_actor")) {
-    failures.push("missing maker-checker conflict resolution");
+  if (!text.includes("last_modified_by is not distinct from v_actor")) {
+    failures.push("missing latest-modifier maker-checker control");
+  }
+  const activationDefinition = functionDefinition(
+    text,
+    "procurement.activate_policy_profile",
+    "jsonb",
+  );
+  if (
+    !activationDefinition?.includes(
+      "last_modified_by is not distinct from v_actor",
+    )
+  ) {
+    failures.push("missing latest-modifier maker-checker control");
   }
   if (!text.includes("policy profile events are immutable")) {
     failures.push("missing immutable policy events");

@@ -35,6 +35,9 @@ create table if not exists procurement.policy_profiles (
   effective_to timestamptz,
   document_hash text not null,
   created_by uuid not null references core.profiles(id) on delete restrict,
+  last_modified_by uuid not null references core.profiles(id) on delete restrict,
+  revision integer not null default 1,
+  last_modified_at timestamptz not null default pg_catalog.now(),
   activated_by uuid references core.profiles(id) on delete restrict,
   activated_at timestamptz,
   created_at timestamptz not null default pg_catalog.now(),
@@ -53,6 +56,7 @@ create table if not exists procurement.policy_profiles (
     and invite_target_min > 0
     and invite_target_max >= invite_target_min
     and sealed_bid_minimum_responses > 0
+    and sealed_bid_minimum_responses <= invite_target_max
     and bid_window_working_days > 0
     and max_extension_working_days > 0
     and vendor_acknowledgement_hours > 0
@@ -71,6 +75,27 @@ create table if not exists procurement.policy_profiles (
   ),
   constraint policy_profiles_control_sources_check check (
     jsonb_typeof(control_sources) = 'object'
+    and control_sources ?& array[
+      'formalBidAmount', 'inviteTargetMin', 'inviteTargetMax',
+      'sealedBidMinimumResponses', 'bidWindowWorkingDays', 'maxExtensionWorkingDays',
+      'vendorAcknowledgementHours', 'clarificationHours', 'tabulationHours',
+      'technicalEvaluationWorkingDays', 'poAcknowledgementHours', 'repeatOrderMaxAmount',
+      'repeatOrderMaxAgeDays', 'pettyCashMaxAmount', 'poInvoiceThreshold',
+      'vendorProbationMonths'
+    ]
+  ),
+  constraint policy_profiles_relationship_controls_check check (
+    (relationship = 'parent_source' and source_profile_id is null)
+    or (
+      relationship = 'mwell_operating'
+      and formal_bid_amount is not null and formal_bid_amount > 0
+      and source_profile_id is not null
+    )
+  ),
+  constraint policy_profiles_revision_check check (revision > 0),
+  constraint policy_profiles_last_modified_at_check check (last_modified_at >= created_at),
+  constraint policy_profiles_revision_identity_check check (
+    last_modified_by is not null
   ),
   unique (code, version),
   exclude using gist (
@@ -83,12 +108,15 @@ create table if not exists procurement.policy_profile_events (
   policy_profile_id uuid not null references procurement.policy_profiles(id) on delete restrict,
   event_type text not null,
   actor_id uuid not null references core.profiles(id) on delete restrict,
+  profile_actor_id uuid not null references core.profiles(id) on delete restrict,
+  profile_revision integer not null,
   event_at timestamptz not null default pg_catalog.now(),
   detail jsonb not null default '{}'::jsonb,
   constraint policy_profile_events_type_check check (
     event_type in ('draft_saved', 'conflict_resolved', 'activated', 'superseded', 'suspended')
   ),
-  constraint policy_profile_events_detail_check check (jsonb_typeof(detail) = 'object')
+  constraint policy_profile_events_detail_check check (jsonb_typeof(detail) = 'object'),
+  constraint policy_profile_events_revision_check check (profile_revision > 0)
 );
 
 create table if not exists procurement.policy_conflicts (
@@ -314,14 +342,18 @@ grant select on procurement.policy_profiles, procurement.policy_profile_events,
   procurement.policy_conflicts, procurement.solicitation_communications,
   procurement.policy_sla_events to authenticated, service_role;
 grant select on legal.vendor_probation_reviews to authenticated, service_role;
-grant all on procurement.policy_profiles, procurement.policy_profile_events,
-  procurement.policy_conflicts, procurement.solicitation_communications,
-  procurement.policy_sla_events to service_role;
-grant all on legal.vendor_probation_reviews to service_role;
 revoke insert, update, delete on procurement.policy_profiles,
   procurement.policy_profile_events, procurement.policy_conflicts,
-  procurement.solicitation_communications, procurement.policy_sla_events from authenticated;
-revoke insert, update, delete on legal.vendor_probation_reviews from authenticated;
+  procurement.solicitation_communications, procurement.policy_sla_events from authenticated, service_role;
+revoke insert, update, delete on legal.vendor_probation_reviews from authenticated, service_role;
+revoke all on procurement.policy_profiles,
+  procurement.policy_profile_events, procurement.policy_conflicts,
+  procurement.solicitation_communications, procurement.policy_sla_events,
+  legal.vendor_probation_reviews from service_role;
+grant select on procurement.policy_profiles, procurement.policy_profile_events,
+  procurement.policy_conflicts, procurement.solicitation_communications,
+  procurement.policy_sla_events to service_role;
+grant select on legal.vendor_probation_reviews to service_role;
 
 create or replace function private.policy_profiles_controls_are_valid(
   p_profile procurement.policy_profiles
@@ -336,6 +368,7 @@ as $$
     and p_profile.invite_target_min > 0
     and p_profile.invite_target_max >= p_profile.invite_target_min
     and p_profile.sealed_bid_minimum_responses > 0
+    and p_profile.sealed_bid_minimum_responses <= p_profile.invite_target_max
     and p_profile.bid_window_working_days > 0
     and p_profile.max_extension_working_days > 0
     and p_profile.vendor_acknowledgement_hours > 0
@@ -348,6 +381,112 @@ as $$
     and p_profile.petty_cash_max_amount >= 0
     and p_profile.po_invoice_threshold >= 0
     and p_profile.vendor_probation_months > 0
+    and (
+      p_profile.relationship = 'parent_source'
+      or (
+        p_profile.relationship = 'mwell_operating'
+        and p_profile.formal_bid_amount is not null and p_profile.formal_bid_amount > 0
+        and p_profile.source_profile_id is not null
+      )
+    )
+$$;
+
+create or replace function private.policy_profile_control_sources_are_complete(
+  p_profile procurement.policy_profiles
+)
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  v_source text;
+  v_mpic_source constant text := 'MPIC Procurement Policy February2025.docx (February 2025)';
+  v_mwell_source constant text := 'mWell Procurement Policy and Procedures - Revised Modern Visual Updated.docx (local operating policy)';
+begin
+  if jsonb_object_length(p_profile.control_sources) <> 16 or not (
+    p_profile.control_sources ?& array[
+      'formalBidAmount', 'inviteTargetMin', 'inviteTargetMax',
+      'sealedBidMinimumResponses', 'bidWindowWorkingDays', 'maxExtensionWorkingDays',
+      'vendorAcknowledgementHours', 'clarificationHours', 'tabulationHours',
+      'technicalEvaluationWorkingDays', 'poAcknowledgementHours', 'repeatOrderMaxAmount',
+      'repeatOrderMaxAgeDays', 'pettyCashMaxAmount', 'poInvoiceThreshold',
+      'vendorProbationMonths'
+    ]
+  ) then
+    return false;
+  end if;
+  for v_source in select value from pg_catalog.jsonb_each_text(p_profile.control_sources)
+  loop
+    if nullif(pg_catalog.btrim(v_source), '') is null then return false; end if;
+    if p_profile.relationship = 'parent_source' and v_source <> v_mpic_source then
+      return false;
+    end if;
+    if p_profile.relationship = 'mwell_operating'
+      and v_source not in (v_mpic_source, v_mwell_source) then
+      return false;
+    end if;
+  end loop;
+  return p_profile.relationship <> 'mwell_operating'
+    or p_profile.control_sources->>'formalBidAmount' = v_mwell_source;
+end;
+$$;
+
+create or replace function private.policy_profile_source_lineage_is_valid(
+  p_profile procurement.policy_profiles,
+  p_require_active_parent boolean
+)
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare v_parent procurement.policy_profiles;
+begin
+  if p_profile.relationship = 'parent_source' then
+    return p_profile.source_profile_id is null
+      and p_profile.source_filename = 'MPIC Procurement Policy February2025.docx'
+      and p_profile.source_organization = 'MPIC';
+  end if;
+  if p_profile.relationship <> 'mwell_operating'
+    or p_profile.source_profile_id is null
+    or p_profile.source_filename <> 'mWell Procurement Policy and Procedures - Revised Modern Visual Updated.docx'
+    or p_profile.source_organization <> 'Mwell' then
+    return false;
+  end if;
+  select * into v_parent from procurement.policy_profiles
+  where id = p_profile.source_profile_id;
+  return found
+    and v_parent.relationship = 'parent_source'
+    and v_parent.code = 'MPIC-PROCUREMENT-2025-02'
+    and v_parent.source_filename = 'MPIC Procurement Policy February2025.docx'
+    and v_parent.source_organization = 'MPIC'
+    and (not p_require_active_parent or v_parent.status = 'active');
+end;
+$$;
+
+create or replace function private.policy_profile_validate_profile(
+  p_profile procurement.policy_profiles,
+  p_require_active_parent boolean
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if not private.policy_profiles_controls_are_valid(p_profile) then
+    raise exception 'Policy profile numeric and relationship controls are invalid';
+  end if;
+  if not private.policy_profile_control_sources_are_complete(p_profile) then
+    raise exception 'Policy profile control sources are incomplete or unrecognized';
+  end if;
+  if not private.policy_profile_source_lineage_is_valid(p_profile, p_require_active_parent) then
+    raise exception 'Policy profile source lineage is invalid';
+  end if;
+end;
 $$;
 
 create or replace function procurement.prevent_policy_profile_event_mutation()
@@ -415,7 +554,7 @@ begin
       tabulation_hours, technical_evaluation_working_days, po_acknowledgement_hours,
       repeat_order_max_amount, repeat_order_max_age_days, petty_cash_max_amount,
       po_invoice_threshold, vendor_probation_months, effective_from, effective_to,
-      document_hash, created_by
+      document_hash, created_by, last_modified_by
     ) values (
       pg_catalog.btrim(payload->>'code'), pg_catalog.btrim(payload->>'version'),
       pg_catalog.btrim(payload->>'name'), payload->>'relationship',
@@ -431,7 +570,7 @@ begin
       (v_controls->>'pettyCashMaxAmount')::numeric, (v_controls->>'poInvoiceThreshold')::numeric,
       (v_controls->>'vendorProbationMonths')::integer,
       (payload->>'effective_from')::timestamptz, nullif(payload->>'effective_to', '')::timestamptz,
-      pg_catalog.btrim(payload->>'document_hash'), v_actor
+      pg_catalog.btrim(payload->>'document_hash'), v_actor, v_actor
     ) returning * into v_profile;
   else
     update procurement.policy_profiles set
@@ -459,12 +598,19 @@ begin
       vendor_probation_months = (v_controls->>'vendorProbationMonths')::integer,
       effective_from = (payload->>'effective_from')::timestamptz,
       effective_to = nullif(payload->>'effective_to', '')::timestamptz,
-      document_hash = pg_catalog.btrim(payload->>'document_hash'), updated_at = pg_catalog.now()
+      document_hash = pg_catalog.btrim(payload->>'document_hash'),
+      last_modified_by = v_actor, last_modified_at = pg_catalog.now(),
+      revision = revision + 1, updated_at = pg_catalog.now()
     where id = v_profile_id returning * into v_profile;
   end if;
 
-  insert into procurement.policy_profile_events (policy_profile_id, event_type, actor_id, detail)
-  values (v_profile.id, 'draft_saved', v_actor, jsonb_build_object('version', v_profile.version));
+  perform private.policy_profile_validate_profile(v_profile, false);
+  insert into procurement.policy_profile_events (
+    policy_profile_id, event_type, actor_id, profile_actor_id, profile_revision, detail
+  ) values (
+    v_profile.id, 'draft_saved', v_actor, v_profile.last_modified_by, v_profile.revision,
+    jsonb_build_object('version', v_profile.version, 'revision', v_profile.revision)
+  );
   return to_jsonb(v_profile);
 end;
 $$;
@@ -498,15 +644,19 @@ begin
   select * into v_conflict from procurement.policy_conflicts where id = v_conflict_id for update;
   if not found or v_conflict.status <> 'open' then raise exception 'Open policy conflict not found'; end if;
   select * into v_profile from procurement.policy_profiles where id = v_conflict.policy_profile_id for update;
-  if v_profile.created_by is not distinct from v_actor then
-    raise exception 'The policy profile maker cannot resolve its own conflict';
+  if v_profile.last_modified_by is not distinct from v_actor then
+    raise exception 'The latest policy profile modifier cannot resolve its own conflict';
   end if;
   update procurement.policy_conflicts set
     status = 'resolved', selected_mapping = v_mapping, rationale = v_rationale,
     resolved_by = v_actor, resolved_at = pg_catalog.now()
   where id = v_conflict.id returning * into v_conflict;
-  insert into procurement.policy_profile_events (policy_profile_id, event_type, actor_id, detail)
-  values (v_profile.id, 'conflict_resolved', v_actor, jsonb_build_object('conflict_id', v_conflict.id));
+  insert into procurement.policy_profile_events (
+    policy_profile_id, event_type, actor_id, profile_actor_id, profile_revision, detail
+  ) values (
+    v_profile.id, 'conflict_resolved', v_actor, v_profile.last_modified_by, v_profile.revision,
+    jsonb_build_object('conflict_id', v_conflict.id, 'revision', v_profile.revision)
+  );
   return to_jsonb(v_conflict);
 end;
 $$;
@@ -521,7 +671,7 @@ declare
   v_profile procurement.policy_profiles;
   v_actor uuid := private.policy_profile_actor(payload);
   v_profile_id uuid;
-  v_superseded_id uuid;
+  v_superseded procurement.policy_profiles;
 begin
   if not private.policy_profile_can_manage() then
     raise exception 'Not authorized to activate procurement policy profiles';
@@ -535,15 +685,13 @@ begin
   select * into v_profile from procurement.policy_profiles where id = v_profile_id for update;
   if not found then raise exception 'Policy profile not found'; end if;
   if v_profile.status <> 'draft' then raise exception 'Only draft policy profiles can be activated'; end if;
-  if v_profile.created_by is not distinct from v_actor then
+  if v_profile.last_modified_by is not distinct from v_actor then
     raise exception 'A separate policy checker must activate the profile';
   end if;
   if v_profile.effective_from > pg_catalog.statement_timestamp() then
     raise exception 'Future-effective profiles must remain draft until activation';
   end if;
-  if not private.policy_profiles_controls_are_valid(v_profile) then
-    raise exception 'Policy profile numeric controls are invalid';
-  end if;
+  perform private.policy_profile_validate_profile(v_profile, true);
   perform 1 from procurement.policy_conflicts
     where policy_profile_id = v_profile.id and status = 'open'
     for update;
@@ -551,8 +699,8 @@ begin
 
   -- Locks competing active profiles before superseding them in this transaction.
   if v_profile.relationship = 'mwell_operating' then
-    for v_superseded_id in
-      select id from procurement.policy_profiles
+    for v_superseded in
+      select * from procurement.policy_profiles
       where relationship = 'mwell_operating' and status = 'active' and id <> v_profile.id
       for update
     loop
@@ -560,13 +708,17 @@ begin
         status = 'superseded',
         effective_to = least(coalesce(effective_to, v_profile.effective_from), v_profile.effective_from),
         updated_at = pg_catalog.now()
-      where id = v_superseded_id;
-      insert into procurement.policy_profile_events (policy_profile_id, event_type, actor_id, detail)
-      values (v_superseded_id, 'superseded', v_actor, jsonb_build_object('superseded_by', v_profile.id));
+      where id = v_superseded.id;
+      insert into procurement.policy_profile_events (
+        policy_profile_id, event_type, actor_id, profile_actor_id, profile_revision, detail
+      ) values (
+        v_superseded.id, 'superseded', v_actor, v_superseded.last_modified_by,
+        v_superseded.revision, jsonb_build_object('superseded_by', v_profile.id)
+      );
     end loop;
   else
-    for v_superseded_id in
-      select id from procurement.policy_profiles
+    for v_superseded in
+      select * from procurement.policy_profiles
       where relationship = 'parent_source' and code = v_profile.code
         and status = 'active' and id <> v_profile.id
       for update
@@ -575,17 +727,25 @@ begin
         status = 'superseded',
         effective_to = least(coalesce(effective_to, v_profile.effective_from), v_profile.effective_from),
         updated_at = pg_catalog.now()
-      where id = v_superseded_id;
-      insert into procurement.policy_profile_events (policy_profile_id, event_type, actor_id, detail)
-      values (v_superseded_id, 'superseded', v_actor, jsonb_build_object('superseded_by', v_profile.id));
+      where id = v_superseded.id;
+      insert into procurement.policy_profile_events (
+        policy_profile_id, event_type, actor_id, profile_actor_id, profile_revision, detail
+      ) values (
+        v_superseded.id, 'superseded', v_actor, v_superseded.last_modified_by,
+        v_superseded.revision, jsonb_build_object('superseded_by', v_profile.id)
+      );
     end loop;
   end if;
 
   update procurement.policy_profiles set
     status = 'active', activated_by = v_actor, activated_at = pg_catalog.now(), updated_at = pg_catalog.now()
   where id = v_profile.id returning * into v_profile;
-  insert into procurement.policy_profile_events (policy_profile_id, event_type, actor_id, detail)
-  values (v_profile.id, 'activated', v_actor, jsonb_build_object('effective_from', v_profile.effective_from));
+  insert into procurement.policy_profile_events (
+    policy_profile_id, event_type, actor_id, profile_actor_id, profile_revision, detail
+  ) values (
+    v_profile.id, 'activated', v_actor, v_profile.last_modified_by, v_profile.revision,
+    jsonb_build_object('effective_from', v_profile.effective_from, 'revision', v_profile.revision)
+  );
   return to_jsonb(v_profile);
 end;
 $$;
@@ -617,6 +777,9 @@ $$;
 revoke all on function private.policy_profile_can_manage() from public, anon, authenticated;
 revoke all on function private.policy_profile_actor(jsonb) from public, anon, authenticated;
 revoke all on function private.policy_profiles_controls_are_valid(procurement.policy_profiles) from public, anon, authenticated;
+revoke all on function private.policy_profile_control_sources_are_complete(procurement.policy_profiles) from public, anon, authenticated;
+revoke all on function private.policy_profile_source_lineage_is_valid(procurement.policy_profiles, boolean) from public, anon, authenticated;
+revoke all on function private.policy_profile_validate_profile(procurement.policy_profiles, boolean) from public, anon, authenticated;
 revoke all on function procurement.prevent_policy_profile_event_mutation() from public, anon, authenticated;
 revoke all on function procurement.save_policy_profile(jsonb),
   procurement.activate_policy_profile(jsonb), procurement.resolve_policy_conflict(jsonb),
