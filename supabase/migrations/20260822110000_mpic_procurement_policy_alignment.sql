@@ -1429,7 +1429,7 @@ begin
   v_created := procurement.create_request_pre_policy_route(payload);
   select * into v_request
   from procurement.requests
-  where id = v_created->>'id'
+  where id::text = v_created->>'id'
   for update;
   if not found then
     raise exception 'Created request could not be loaded for route classification';

@@ -20,10 +20,26 @@ const migrationBackfill = migration.slice(
   migration.indexOf(BACKFILL_MARKER),
   migration.indexOf(RESTORE_MARKER),
 );
+const CREATE_WRAPPER_MARKER = "alter function procurement.create_request(jsonb)\n  rename to create_request_pre_policy_route;";
+const CREATE_WRAPPER_END_MARKER = "revoke all on function procurement.create_request_pre_policy_route(jsonb)";
+const migrationCreateWrapper = migration.slice(
+  migration.indexOf(CREATE_WRAPPER_MARKER),
+  migration.indexOf(CREATE_WRAPPER_END_MARKER),
+);
+// PGlite 0.5 does not implement jsonb_object_length. The production migration
+// retains PostgreSQL's native function; this equivalent fixture expression
+// lets the public policy RPCs execute locally rather than reducing the test
+// to source inspection.
+const migrationBeforeBackfillForPglite = migrationBeforeBackfill.replace(
+  "jsonb_object_length(p_profile.control_sources) <> 16",
+  "(select count(*) from pg_catalog.jsonb_object_keys(p_profile.control_sources)) <> 16",
+);
 
 const actorId = "00000000-0000-0000-0000-000000000001";
 const parentProfileId = "00000000-0000-0000-0000-000000000002";
 const operatingProfileId = "00000000-0000-0000-0000-000000000003";
+const checkerId = "00000000-0000-0000-0000-000000000004";
+const unauthorizedActorId = "00000000-0000-0000-0000-000000000005";
 
 function sqlJson(value) {
   return `'${JSON.stringify(value).replaceAll("'", "''")}'::jsonb`;
@@ -43,6 +59,7 @@ async function createGovernedRouteFixture() {
     create function auth.uid() returns uuid language sql stable as $$ select '${actorId}'::uuid $$;
     create function auth.role() returns text language sql stable as $$ select 'authenticated'::text $$;
     create function core.has_live_cap(text, text) returns boolean language sql stable as $$ select true $$;
+    create function core.has_cap(text, text) returns boolean language sql stable as $$ select true $$;
     create function private.policy_submit_procurement_request(jsonb) returns jsonb language sql as $$ select '{}'::jsonb $$;
     create table core.profiles (id uuid primary key, status text not null default 'active');
     create table core.vendors (id uuid primary key);
@@ -64,6 +81,7 @@ async function createGovernedRouteFixture() {
       attachments jsonb default '[]'::jsonb,
       department text,
       requester_id uuid,
+      draft_payload jsonb,
       updated_at timestamptz default now()
     );
     create table procurement.route_decisions (
@@ -96,6 +114,47 @@ async function createGovernedRouteFixture() {
       status text not null default 'open',
       unique(module, entity_type, entity_id, policy_version, reason_code)
     );
+    -- This represents the already-applied request contract. The policy
+    -- migration renames this public function, then layers classification and
+    -- solicitation-brief validation around the same public boundary.
+    create function procurement.create_request(payload jsonb)
+    returns jsonb
+    language plpgsql
+    as $$
+    declare v_id uuid := coalesce(nullif(payload->>'id', '')::uuid, gen_random_uuid());
+    begin
+      if not core.has_cap('procurement', 'create_request') then
+        raise exception 'Not authorized: procurement.create_request';
+      end if;
+      insert into procurement.requests(
+        id, status, estimated_amount, sourcing_method, category, lines,
+        compliance, requester_id, draft_payload
+      ) values (
+        v_id, 'draft', coalesce((payload->>'estimated_amount')::numeric, 0),
+        coalesce(payload->>'sourcing_method', 'rfq'), coalesce(payload->>'category', 'goods'),
+        coalesce(payload->'lines', '[]'::jsonb), coalesce(payload->'compliance', '{}'::jsonb),
+        auth.uid(), null
+      );
+      return jsonb_build_object('id', v_id);
+    end;
+    $$;
+    create function procurement.finalize_request_draft(payload jsonb)
+    returns jsonb
+    language plpgsql
+    as $$
+    declare v_id uuid := (payload->>'id')::uuid;
+    begin
+      if not core.has_cap('procurement', 'create_request') then
+        raise exception 'Not authorized: procurement.finalize_request_draft';
+      end if;
+      perform 1 from procurement.requests
+      where id = v_id and requester_id = auth.uid() and status = 'draft' and draft_payload is not null
+      for update;
+      if not found then raise exception 'Owned server draft not found'; end if;
+      delete from procurement.requests where id = v_id and requester_id = auth.uid();
+      return procurement.create_request(payload);
+    end;
+    $$;
     insert into core.profiles(id, status) values ('${actorId}', 'active');
   `);
   return db;
@@ -127,6 +186,68 @@ async function seedActivePolicyProfiles(db) {
        3, 4, 3, 7, 7, 24, 48, 48, 5, 48, 250000, 365, 2000, 50000, 6,
        'active', now() - interval '1 day', repeat('b', 32), '${actorId}', '${actorId}');
   `);
+}
+
+async function setPolicyActor(db, actor, canManage) {
+  await db.exec(`
+    create schema if not exists test;
+    create table if not exists test.policy_actor_context (
+      actor_id uuid not null,
+      can_manage boolean not null
+    );
+    truncate test.policy_actor_context;
+    insert into test.policy_actor_context(actor_id, can_manage) values ('${actor}', ${canManage ? 'true' : 'false'});
+    create or replace function auth.uid() returns uuid language sql stable as $$
+      select actor_id from test.policy_actor_context limit 1
+    $$;
+    create or replace function core.has_live_cap(text, text) returns boolean language sql stable as $$
+      select can_manage from test.policy_actor_context limit 1
+    $$;
+  `);
+}
+
+function policyControlSources(relationship) {
+  const mpic = "MPIC Procurement Policy February2025.docx (February 2025)";
+  const mwell = "mWell Procurement Policy and Procedures - Revised Modern Visual Updated.docx (local operating policy)";
+  return Object.fromEntries([
+    "formalBidAmount", "inviteTargetMin", "inviteTargetMax", "sealedBidMinimumResponses",
+    "bidWindowWorkingDays", "maxExtensionWorkingDays", "vendorAcknowledgementHours",
+    "clarificationHours", "tabulationHours", "technicalEvaluationWorkingDays",
+    "poAcknowledgementHours", "repeatOrderMaxAmount", "repeatOrderMaxAgeDays",
+    "pettyCashMaxAmount", "poInvoiceThreshold", "vendorProbationMonths",
+  ].map((key) => [key, relationship === "mwell_operating" && key === "formalBidAmount" ? mwell : mpic]));
+}
+
+function policyControls() {
+  return {
+    formalBidAmount: 1000000,
+    inviteTargetMin: 3,
+    inviteTargetMax: 4,
+    sealedBidMinimumResponses: 3,
+    bidWindowWorkingDays: 7,
+    maxExtensionWorkingDays: 7,
+    vendorAcknowledgementHours: 24,
+    clarificationHours: 48,
+    tabulationHours: 48,
+    technicalEvaluationWorkingDays: 5,
+    poAcknowledgementHours: 48,
+    repeatOrderMaxAmount: 250000,
+    repeatOrderMaxAgeDays: 365,
+    pettyCashMaxAmount: 2000,
+    poInvoiceThreshold: 50000,
+    vendorProbationMonths: 6,
+  };
+}
+
+function formatManilaDate(value) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(value));
+  const part = (type) => parts.find((item) => item.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
 }
 
 async function insertRequest(db, {
@@ -277,6 +398,264 @@ test("requires explicit requirement classification before the create wrapper per
     migration.slice(migration.indexOf('alter function procurement.create_request(jsonb)')),
     /set\s+solicitation_type\s*=/i,
   );
+});
+
+test("executes public create and draft finalization with normalized RFQ and RFP briefs", async () => {
+  const db = await createGovernedRouteFixture();
+  try {
+    await db.exec(migrationBeforeBackfillForPglite);
+    await seedActivePolicyProfiles(db);
+    await db.exec(migrationCreateWrapper);
+
+    const rfqRequirements = {
+      acceptanceCriteria: "Serialized devices match the approved specification",
+      deliveryTerms: "Deliver to Pasig warehouse",
+      paymentTerms: "Net 30 after accepted receipt",
+      shippingTerms: "DAP Pasig",
+      validityPeriod: "30 calendar days",
+      responseDeadline: "2026-09-30",
+      ignoredNull: null,
+    };
+    const rfqId = "31000000-0000-0000-0000-000000000001";
+    const created = await db.query(`
+      select procurement.create_request(${sqlJson({
+        id: rfqId,
+        requirement_kind: "materials",
+        requested_mode: "competitive_bidding",
+        estimated_amount: 250000,
+        category: "goods",
+        lines: [{ description: "Serialized device" }],
+        solicitation_requirements: rfqRequirements,
+      })}) as request
+    `);
+    assert.equal(created.rows[0].request.id, rfqId);
+    const reloadedRfq = await db.query(`
+      select requirement_kind, solicitation_requirements from procurement.requests where id = '${rfqId}'
+    `);
+    assert.equal(reloadedRfq.rows[0].requirement_kind, "materials");
+    assert.deepEqual(reloadedRfq.rows[0].solicitation_requirements, {
+      acceptanceCriteria: rfqRequirements.acceptanceCriteria,
+      deliveryTerms: rfqRequirements.deliveryTerms,
+      paymentTerms: rfqRequirements.paymentTerms,
+      shippingTerms: rfqRequirements.shippingTerms,
+      validityPeriod: rfqRequirements.validityPeriod,
+      responseDeadline: rfqRequirements.responseDeadline,
+    });
+    assert.ok(!("ignoredNull" in reloadedRfq.rows[0].solicitation_requirements), "public create strips null brief fields before persistence");
+
+    const rfpRequirements = {
+      scopeOfWork: "Operate the managed fulfillment service",
+      evaluationApproach: "Assess technical capability, delivery plan, and commercial value",
+      responseDeadline: "2026-10-07",
+    };
+    const rfpDraftId = "31000000-0000-0000-0000-000000000002";
+    await db.exec(`
+      insert into procurement.requests(
+        id, status, estimated_amount, sourcing_method, category, lines, compliance, requester_id, draft_payload
+      ) values (
+        '${rfpDraftId}', 'draft', 350000, 'rfp', 'services',
+        ${sqlJson([{ description: "Managed service" }])}, '{}'::jsonb, '${actorId}',
+        ${sqlJson({ id: rfpDraftId, requirement_kind: "services", solicitation_requirements: rfpRequirements })}
+      )
+    `);
+    const finalized = await db.query(`
+      select procurement.finalize_request_draft(${sqlJson({
+        id: rfpDraftId,
+        requirement_kind: "services",
+        requested_mode: "competitive_bidding",
+        estimated_amount: 350000,
+        category: "services",
+        lines: [{ description: "Managed service" }],
+        solicitation_requirements: rfpRequirements,
+      })}) as request
+    `);
+    assert.equal(finalized.rows[0].request.id, rfpDraftId);
+    const reloadedRfp = await db.query(`
+      select requirement_kind, solicitation_requirements, draft_payload from procurement.requests where id = '${rfpDraftId}'
+    `);
+    assert.equal(reloadedRfp.rows[0].requirement_kind, "services");
+    assert.deepEqual(reloadedRfp.rows[0].solicitation_requirements, rfpRequirements);
+    assert.equal(reloadedRfp.rows[0].draft_payload, null, "finalization replaces the server draft atomically");
+
+    const requiredKeys = {
+      rfq: ["acceptanceCriteria", "deliveryTerms", "paymentTerms", "shippingTerms", "validityPeriod", "responseDeadline"],
+      rfp: ["scopeOfWork", "evaluationApproach", "responseDeadline"],
+    };
+    let invalidCase = 3;
+    for (const [solicitation, keys] of Object.entries(requiredKeys)) {
+      const complete = solicitation === "rfq" ? rfqRequirements : rfpRequirements;
+      for (const key of keys) {
+        const invalid = { ...complete };
+        delete invalid[key];
+        const invalidId = `31000000-0000-0000-0000-${String(invalidCase++).padStart(12, "0")}`;
+        await assert.rejects(
+          () => db.query(`select procurement.create_request(${sqlJson({
+            id: invalidId,
+            requirement_kind: solicitation === "rfq" ? "materials" : "services",
+            requested_mode: "competitive_bidding",
+            estimated_amount: 1,
+            category: solicitation === "rfq" ? "goods" : "services",
+            lines: [{ description: "Validation fixture" }],
+            solicitation_requirements: invalid,
+          })})`),
+          new RegExp(`Missing required ${key} solicitation requirement`),
+          `${solicitation.toUpperCase()} ${key} must be rejected at the public create boundary`,
+        );
+      }
+    }
+  } finally {
+    await db.close();
+  }
+});
+
+test("executes governed policy-profile hydration, conflict resolution, independent activation, and history", async () => {
+  const db = await createGovernedRouteFixture();
+  try {
+    await db.exec(migrationBeforeBackfillForPglite);
+    await db.exec(`
+      insert into core.profiles(id, status) values
+        ('${checkerId}', 'active'),
+        ('${unauthorizedActorId}', 'active');
+    `);
+    await setPolicyActor(db, actorId, true);
+
+    const parentControls = policyControls();
+    parentControls.formalBidAmount = null;
+    await db.exec(`
+      insert into procurement.policy_profiles (
+        id, code, version, name, relationship, source_profile_id, source_filename, source_organization,
+        control_sources, formal_bid_amount, invite_target_min, invite_target_max, sealed_bid_minimum_responses,
+        bid_window_working_days, max_extension_working_days, vendor_acknowledgement_hours,
+        clarification_hours, tabulation_hours, technical_evaluation_working_days, po_acknowledgement_hours,
+        repeat_order_max_amount, repeat_order_max_age_days, petty_cash_max_amount, po_invoice_threshold,
+        vendor_probation_months, status, effective_from, document_hash, created_by, last_modified_by
+      ) values (
+        '${parentProfileId}', 'MPIC-PROCUREMENT-2025-02', '2025.02', 'MPIC parent source', 'parent_source', null,
+        'MPIC Procurement Policy February2025.docx', 'MPIC', ${sqlJson(policyControlSources('parent_source'))}, null,
+        3, 4, 3, 7, 7, 24, 48, 48, 5, 48, 250000, 365, 2000, 50000, 6,
+        'active', now() - interval '1 day', repeat('c', 64), '${actorId}', '${actorId}'
+      )
+    `);
+
+    const payload = {
+      code: "MWELL-UAT-POLICY-REV",
+      version: "2026.08.22",
+      name: "Mwell operating policy revision",
+      relationship: "mwell_operating",
+      source_profile_id: parentProfileId,
+      source_filename: "mWell Procurement Policy and Procedures - Revised Modern Visual Updated.docx",
+      source_organization: "Mwell",
+      control_sources: policyControlSources("mwell_operating"),
+      controls: policyControls(),
+      effective_from: "2026-08-01T00:00:00+08:00",
+      document_hash: "d".repeat(64),
+    };
+
+    await setPolicyActor(db, unauthorizedActorId, false);
+    await assert.rejects(
+      () => db.query(`select procurement.save_policy_profile(${sqlJson(payload)})`),
+      /Not authorized to manage procurement policy profiles/,
+      "unauthorized users cannot create governed policy drafts",
+    );
+
+    await setPolicyActor(db, actorId, true);
+    const saved = await db.query(`select procurement.save_policy_profile(${sqlJson(payload)}) as profile`);
+    const draftId = saved.rows[0].profile.id;
+    assert.ok(draftId, "save returns the persisted draft identity");
+    const draftReload = await db.query(`
+      select id, code, version, source_profile_id, status, created_by, last_modified_by
+      from procurement.policy_profiles where id = '${draftId}'
+    `);
+    assert.deepEqual(draftReload.rows[0], {
+      id: draftId,
+      code: payload.code,
+      version: payload.version,
+      source_profile_id: parentProfileId,
+      status: "draft",
+      created_by: actorId,
+      last_modified_by: actorId,
+    });
+
+    const conflictId = "32000000-0000-0000-0000-000000000001";
+    await db.exec(`
+      insert into procurement.policy_conflicts(
+        id, policy_profile_id, parent_rule, local_rule, impact, created_by
+      ) values (
+        '${conflictId}', '${draftId}', 'parent invite target', 'local formal-bid procedure',
+        'Requires recorded resolution before activation', '${actorId}'
+      )
+    `);
+    await assert.rejects(
+      () => db.query(`select procurement.activate_policy_profile(${sqlJson({ id: draftId })})`),
+      /separate policy checker/,
+      "a policy author cannot activate their own draft",
+    );
+
+    await setPolicyActor(db, checkerId, true);
+    const resolved = await db.query(`select procurement.resolve_policy_conflict(${sqlJson({
+      id: conflictId,
+      selected_mapping: "retain_mwell_mapping",
+      rationale: "The local operating threshold is separately controlled and attributable.",
+    })}) as conflict`);
+    assert.equal(resolved.rows[0].conflict.status, "resolved");
+    const activated = await db.query(`select procurement.activate_policy_profile(${sqlJson({ id: draftId })}) as profile`);
+    assert.equal(activated.rows[0].profile.status, "active");
+    assert.equal(activated.rows[0].profile.activated_by, checkerId);
+
+    const effective = await db.query(`select procurement.get_effective_policy_profile(null) as profile`);
+    assert.deepEqual(
+      [effective.rows[0].profile.id, effective.rows[0].profile.code, effective.rows[0].profile.version, effective.rows[0].profile.effective_from.slice(0, 10)],
+      [draftId, payload.code, payload.version, "2026-08-01"],
+      "a fresh effective-profile read returns the exact activated revision",
+    );
+    const requestId = "32000000-0000-0000-0000-000000000002";
+    await insertRequest(db, {
+      id: requestId,
+      requirementKind: "materials",
+      amount: 250000,
+      solicitationRequirements: {
+        acceptanceCriteria: "Match the approved serialized specification",
+        deliveryTerms: "Deliver to Pasig warehouse",
+        paymentTerms: "Net 30",
+        shippingTerms: "DAP Pasig",
+        validityPeriod: "30 days",
+        responseDeadline: "2026-09-30",
+      },
+    });
+    await db.query(`select procurement.confirm_route_decision(${sqlJson({
+      request_id: requestId,
+      expected_route_version: 0,
+      requested_mode: "competitive_bidding",
+    })})`);
+    const refreshedRequest = await db.query(`
+      select policy_profile_id, route_version, compliance from procurement.requests where id = '${requestId}'
+    `);
+    const refreshedProfile = await db.query(`
+      select id, code, version, effective_from from procurement.policy_profiles
+      where id = '${refreshedRequest.rows[0].policy_profile_id}'
+    `);
+    assert.deepEqual(
+      [
+        refreshedRequest.rows[0].policy_profile_id,
+        refreshedRequest.rows[0].route_version,
+        refreshedRequest.rows[0].compliance.routeConfirmed,
+        refreshedProfile.rows[0].id,
+        refreshedProfile.rows[0].code,
+        refreshedProfile.rows[0].version,
+        formatManilaDate(refreshedProfile.rows[0].effective_from),
+      ],
+      [draftId, 1, true, draftId, payload.code, payload.version, "2026-08-01"],
+      "confirmed request refresh retains the exact non-default applied profile",
+    );
+    const history = await db.query(`
+      select event_type, actor_id, profile_actor_id from procurement.policy_profile_events
+      where policy_profile_id = '${draftId}' order by event_at, id
+    `);
+    assert.deepEqual(history.rows.map((event) => event.event_type), ["draft_saved", "conflict_resolved", "activated"]);
+    assert.equal(history.rows.at(-1).actor_id, checkerId);
+  } finally {
+    await db.close();
+  }
 });
 
 test("executes the migration backfill against persisted legacy procurement records", async () => {

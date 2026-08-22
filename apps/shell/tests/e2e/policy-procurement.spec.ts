@@ -35,6 +35,7 @@ async function expectMobileActionsClearOfNavigation(page: Page) {
 }
 
 const SESSION_KEY = "intra.memory-session.v1";
+const PROCUREMENT_REQUESTS_KEY = "intra.procurement.v2.requests";
 
 async function installSession(
   page: Page,
@@ -78,6 +79,61 @@ async function completeRequestIntake(page: Page, amount = "999999.99", kind: 'ma
   await expect(
     page.getByRole("heading", { name: "Procurement route" }),
   ).toBeVisible();
+}
+
+async function createCompleteCompetitiveDraft(page: Page) {
+  await page.getByText("Goods", { exact: true }).click();
+  await page
+    .getByRole('group', { name: 'Requirement classification' })
+    .getByText('Goods / materials', { exact: true })
+    .click();
+  await page.getByLabel("Title").fill("Controlled route refresh verification");
+  await page.getByLabel("Line 1 description").fill("Serialized cold-chain device");
+  await page.getByLabel("Line 1 unit price").fill("250000");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByLabel("Department").fill("Operations");
+  await page.getByLabel("Cost center").fill("OPS-001");
+  await page.getByLabel("Needed by").fill("2026-10-15");
+  await page.getByLabel("Budget / GL code").fill("GL-5100");
+  await page.getByLabel("Need description").fill("Keep the cold-chain device fleet operational.");
+  const attachmentPicker = page.locator('input[type="file"]');
+  await attachmentPicker.setInputFiles({
+    name: 'spec.pdf',
+    mimeType: 'application/pdf',
+    buffer: Buffer.from('%PDF-1.4 specification'),
+  });
+  await page.getByLabel('Document type for spec.pdf').selectOption('spec');
+  await attachmentPicker.setInputFiles({
+    name: 'budget.pdf',
+    mimeType: 'application/pdf',
+    buffer: Buffer.from('%PDF-1.4 budget'),
+  });
+  await page.getByLabel('Document type for budget.pdf').selectOption('budget');
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByLabel("Acceptance criteria").fill("Match the approved serialised specification.");
+  await page.getByLabel("Delivery terms").fill("Deliver to Pasig warehouse.");
+  await page.getByLabel("Payment terms").fill("Net 30 after accepted receipt.");
+  await page.getByLabel("Shipping terms").fill("DAP Pasig.");
+  await page.getByLabel("Quotation validity").fill("30 calendar days.");
+  await page.getByLabel("Response deadline").fill("2026-09-30");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await expect(page.getByRole("heading", { name: "Controlled route refresh verification" })).toBeVisible();
+}
+
+async function attachCompleteRfqEvidence(page: Page) {
+  await page.evaluate((key) => {
+    const rows = JSON.parse(localStorage.getItem(key) ?? '[]') as Array<Record<string, unknown>>;
+    const current = rows.find((row) => row.title === 'Controlled route refresh verification');
+    if (!current) throw new Error('controlled request was not stored');
+    current.attachments = ['spec', 'budget', 'previous_cost', 'quote'].map((kind) => ({
+      id: `evidence-${kind}`,
+      kind,
+      filename: `${kind}.pdf`,
+      size: 1,
+      uploadedAt: '2026-08-22T00:00:00.000Z',
+    }));
+    localStorage.setItem(key, JSON.stringify(rows));
+  }, PROCUREMENT_REQUESTS_KEY);
 }
 
 async function expectNoPageOverflow(page: Page) {
@@ -127,6 +183,43 @@ test("mobile DOA save action remains tappable above shell navigation", async ({
 
   await saveDraft.click();
   await expect(page.getByText("Department and version are required.")).toBeVisible();
+});
+
+test("policy governance controls are available to Admin and Legal but denied to an operations requester", async ({
+  page,
+}) => {
+  await installSession(page, {
+    profileId: "demo-admin",
+    roles: { core: ["platform_admin", "staff"] },
+  });
+  await page.goto("/admin/doa");
+  await expect(
+    page.getByRole("heading", { name: "Procurement policy profiles" }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save policy draft" })).toBeEnabled();
+  await expectNoPageOverflow(page);
+
+  await installSession(page, {
+    profileId: "demo-legal",
+    roles: { core: ["staff"], legal: ["legal_reviewer", "compliance", "admin"] },
+  });
+  await page.goto("/admin/doa");
+  await expect(
+    page.getByRole("heading", { name: "Procurement policy profiles" }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save policy draft" })).toBeEnabled();
+  await expectNoPageOverflow(page);
+
+  await installSession(page, {
+    profileId: "demo-operations",
+    roles: { core: ["staff"], procurement: ["requester"] },
+  });
+  await page.goto("/admin/doa");
+  await expect(page.getByRole("heading", { name: "Access denied" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Procurement policy profiles" }),
+  ).toHaveCount(0);
+  await expectNoPageOverflow(page);
 });
 
 test("requester can inspect but cannot author the governed procurement route", async ({
@@ -198,5 +291,33 @@ test("Procurement sees the service RFP brief with focusable structured fields", 
   await scope.fill('Deliver and operate the managed service.');
   await page.getByLabel('Evaluation approach').fill('Evaluate technical capability, delivery plan, and commercial value.');
   await page.getByLabel('Proposal deadline').fill('2026-09-30');
+  await expectNoPageOverflow(page);
+});
+
+test("Procurement route confirmation survives refresh and unlocks sourcing and approval readiness", async ({ page }) => {
+  await installSession(page, {
+    profileId: "demo-procurement",
+    roles: { core: ["staff"], procurement: ["procurement_officer"] },
+  });
+  await page.goto("/procurement/requests/new");
+  await createCompleteCompetitiveDraft(page);
+
+  await page.getByRole("button", { name: "Confirm procurement route" }).click();
+  await expect(page.getByText("Sourcing route confirmed")).toBeVisible();
+  await page.reload();
+
+  const confirmed = page.getByLabel("Confirmed procurement route");
+  await expect(confirmed).toContainText("RFQ");
+  await expect(confirmed).toContainText("MWELL-PROCUREMENT-OPERATING 2026-08");
+  await expect(confirmed).toContainText("ID mwell-operating-policy-2026-08");
+  await expect(page.getByText("RFQ sourcing event")).toBeVisible();
+  await expect(page.getByText("Connect to the live database to operate governed sourcing.")).toBeVisible();
+
+  await attachCompleteRfqEvidence(page);
+  await page.reload();
+  const submit = page.getByRole("button", { name: "Submit for approval" });
+  await expect(submit).toBeEnabled();
+  await submit.click();
+  await expect(page.getByText("Request submitted for approval")).toBeVisible();
   await expectNoPageOverflow(page);
 });

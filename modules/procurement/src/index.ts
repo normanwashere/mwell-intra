@@ -12,6 +12,11 @@ export {
   validatePolicyProfile,
 } from "./policyProfile";
 export {
+  appliedPolicyProfileSummary,
+  mapLivePolicyProfile,
+  policyEffectiveDate,
+} from "./policyProfileAdapter";
+export {
   deriveProcurementRoute,
   inferLegacyRequirementKind,
   legacySourcingMethod,

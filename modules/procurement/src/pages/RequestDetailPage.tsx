@@ -46,6 +46,7 @@ import {
 } from '../policy';
 import { deriveProcurementRoute, legacySourcingMethod } from '../policyRoute';
 import { MWELL_OPERATING_PROFILE } from '../policyProfile';
+import { appliedPolicyProfileSummary, mapLivePolicyProfile } from '../policyProfileAdapter';
 import { ProcurementRoutePanel } from '../components/ProcurementRoutePanel';
 import { SourcingWorkspace } from '../components/SourcingWorkspace';
 import {
@@ -158,8 +159,7 @@ export function RequestDetailPage() {
     let active = true;
     void supabaseClient.schema('procurement').from('policy_profiles').select('*').eq('id', route.policyProfileId).maybeSingle().then(({ data, error: profileError }) => {
       if (!active || profileError || !data || typeof data !== 'object') return;
-      const raw = data as Record<string, unknown>;
-      setRouteProfile({ ...MWELL_OPERATING_PROFILE, id: String(raw.id), code: String(raw.code), version: String(raw.version), name: String(raw.name), sourceFilename: String(raw.source_filename), sourceOrganization: String(raw.source_organization), effectiveFrom: String(raw.effective_from).slice(0, 10), controlSources: raw.control_sources && typeof raw.control_sources === 'object' ? raw.control_sources as ProcurementPolicyProfile['controlSources'] : {} });
+      setRouteProfile(mapLivePolicyProfile(data as Record<string, unknown>));
     });
     return () => { active = false; };
   }, [mode, req?.route, returnedRoute, supabaseClient]);
@@ -526,7 +526,7 @@ export function RequestDetailPage() {
             <div><dt className="text-muted">Governance</dt><dd className="font-semibold text-ink">{displayedRoute.governanceTier.replaceAll('_', ' ')}</dd></div>
           </dl>
           <div className="mt-3 rounded-md border border-line bg-inset p-3 text-sm text-muted">
-            <strong className="text-ink">Applied policy profile:</strong> {routeProfile ? `${routeProfile.code} ${routeProfile.version}` : 'Loading governed profile'} · effective {routeProfile?.effectiveFrom ?? '...'} · ID {displayedRoute.policyProfileId}
+            <strong className="text-ink">Applied policy profile:</strong> {appliedPolicyProfileSummary(routeProfile, displayedRoute.policyProfileId)}
           </div>
         </Card>
       )}
