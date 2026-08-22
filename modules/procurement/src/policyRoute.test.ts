@@ -62,6 +62,57 @@ describe('three-axis procurement routing', () => {
     expect(legacySourcingMethod(route)).toBe('rfq');
   });
 
+  it.each([
+    'petty_cash',
+    'small_purchase',
+    'rfq',
+    'rfp',
+    'direct_award',
+    'repeat_order',
+    'emergency',
+  ] as const)('round-trips legacy %s without semantic loss', (method) => {
+    const route = routeFromLegacy(method, 'goods', 50_000, MWELL_OPERATING_PROFILE);
+    expect(route.legacySourcingMethod).toBe(method);
+    expect(legacySourcingMethod(route)).toBe(method);
+  });
+
+  it.each([
+    ['complex', { complex: true }, 'risk:complex'],
+    ['technical', { technical: true }, 'risk:technical'],
+    ['strategic', { strategic: true }, 'risk:strategic'],
+    ['high risk', { highRisk: true }, 'risk:high_risk'],
+    ['data sensitivity', { dataSensitive: true }, 'risk:data_sensitive'],
+    ['importation', { importation: true }, 'risk:importation'],
+  ] as const)('records the %s governance trigger', (_name, input, expectedReason) => {
+    const route = deriveProcurementRoute({
+      requirementKind: 'services',
+      category: 'services',
+      amount: 50_000,
+      ...input,
+    }, MWELL_OPERATING_PROFILE).route;
+    expect(route.governanceTier).toBe('high_risk');
+    expect(route.reasons).toEqual(expect.arrayContaining([
+      'service_requirement',
+      expectedReason,
+      'mode:competitive_bidding',
+      'tier:high_risk',
+    ]));
+  });
+
+  it('retains each applicable risk trigger on a multi-risk route', () => {
+    const route = deriveProcurementRoute({
+      requirementKind: 'services',
+      complex: true,
+      dataSensitive: true,
+      importation: true,
+    }, MWELL_OPERATING_PROFILE).route;
+    expect(route.reasons).toEqual(expect.arrayContaining([
+      'risk:complex',
+      'risk:data_sensitive',
+      'risk:importation',
+    ]));
+  });
+
   it.each(['marketing', 'medical', 'capex', 'other'] as const)(
     'places an ambiguous legacy %s category in remediation review',
     (category) => {

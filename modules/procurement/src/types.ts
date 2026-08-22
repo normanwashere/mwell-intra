@@ -67,6 +67,8 @@ export interface ProcurementRoute {
   governanceTier: GovernanceTier;
   policyProfileId: string;
   reasons: string[];
+  /** Preserves a pre-three-axis stored method during deterministic backfill reads. */
+  legacySourcingMethod?: SourcingMethod;
   confirmedAt?: string;
   confirmedByEmail?: string;
 }

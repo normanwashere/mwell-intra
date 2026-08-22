@@ -78,6 +78,20 @@ function governanceTier(
   return (input.amount ?? 0) >= formalBidAmount ? 'formal_bid' : 'standard';
 }
 
+function normalizedRiskReasons(
+  input: Pick<ProcurementRouteInput, 'complex' | 'technical' | 'strategic' | 'highRisk' | 'dataSensitive' | 'importation'>,
+): string[] {
+  const triggers: Array<[keyof typeof input, string]> = [
+    ['complex', 'risk:complex'],
+    ['technical', 'risk:technical'],
+    ['strategic', 'risk:strategic'],
+    ['highRisk', 'risk:high_risk'],
+    ['dataSensitive', 'risk:data_sensitive'],
+    ['importation', 'risk:importation'],
+  ];
+  return triggers.filter(([key]) => input[key]).map(([, reason]) => reason);
+}
+
 function assertActiveMwellOperatingProfile(profile: ProcurementPolicyProfile): void {
   if (profile.relationship !== 'mwell_operating' || profile.status !== 'active') {
     throw new Error('An active Mwell operating policy profile is required.');
@@ -100,6 +114,7 @@ export function deriveProcurementRoute(
 
   const procurementMode = input.requestedMode ?? 'competitive_bidding';
   const tier = governanceTier(input, profile);
+  const riskReasons = normalizedRiskReasons(input);
   const solicitationType = procurementMode === 'competitive_bidding'
     ? input.requirementKind === 'services' ? 'rfp' : 'rfq'
     : 'none';
@@ -112,6 +127,7 @@ export function deriveProcurementRoute(
       policyProfileId: profile.id,
       reasons: [
         input.requirementKind === 'services' ? 'service_requirement' : 'material_requirement',
+        ...riskReasons,
         `mode:${procurementMode}`,
         `tier:${tier}`,
       ],
@@ -122,6 +138,7 @@ export function deriveProcurementRoute(
 
 /** Projects the new route onto the deprecated legacy field for old consumers. */
 export function legacySourcingMethod(route: ProcurementRoute): SourcingMethod {
+  if (route.legacySourcingMethod) return route.legacySourcingMethod;
   switch (route.procurementMode) {
     case 'petty_cash':
       return 'petty_cash';
@@ -179,6 +196,7 @@ export function routeFromLegacy(
     procurementMode,
     governanceTier: tier,
     policyProfileId: profile.id,
+    legacySourcingMethod: method,
     reasons: [
       `legacy_method:${method}`,
       `mode:${procurementMode}`,

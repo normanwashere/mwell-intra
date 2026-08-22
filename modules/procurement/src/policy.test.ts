@@ -56,7 +56,7 @@ describe('sourcing policy', () => {
         comparable: true,
         dataSensitive: true,
       }),
-    ).toMatchObject({ method: 'rfp', reasons: ['service_requirement', 'mode:competitive_bidding', 'tier:high_risk'] });
+    ).toMatchObject({ method: 'rfp', reasons: ['service_requirement', 'risk:data_sensitive', 'mode:competitive_bidding', 'tier:high_risk'] });
   });
 
   it('defaults incomplete intake to an RFQ recommendation pending Procurement confirmation', () => {
