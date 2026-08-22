@@ -483,7 +483,7 @@ export function verifyMigrationText(sql) {
     ['legal.vendor_eligibility_projection', 'legal/vmo'],
     ['procurement.invite_sourcing_vendors', 'private.policy_assert_request_vendor_eligible'],
     ['procurement.issue_purchase_order', 'private.policy_assert_request_vendor_eligible'],
-    ['procurement.prepare_payment_readiness', 'client-provided payment readiness is intentionally ignored'],
+    ['procurement.prepare_invoice_payment_readiness', 'private.policy_prepare_invoice_payment_readiness'],
   ]) {
     const definition = functionDefinition(text, name, 'jsonb');
     if (!definition?.includes(required) || !definition.includes('security definer') || !definition.includes("set search_path = ''")) {
@@ -494,6 +494,7 @@ export function verifyMigrationText(sql) {
     'private.policy_vendor_eligibility_projection(uuid,text,timestamptz)',
     'private.policy_assert_request_vendor_eligible(uuid,text,text)',
     'private.policy_payment_evidence_blockers(procurement.purchase_orders,procurement.requests,jsonb)',
+    'private.policy_prepare_invoice_payment_readiness(jsonb)',
   ]) {
     if (!hasPrivateTask8ExecutionRevocation(text, signature)) {
       failures.push(`missing private Task 10 execution revocation ${signature}`);

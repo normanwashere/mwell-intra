@@ -2530,6 +2530,292 @@ begin
 end;
 $$;
 
+-- Task 10 fix round 1 terminal controls. These overrides deliberately sit after
+-- all earlier compatibility definitions so the live public RPCs have one gate.
+alter table legal.vendor_probation_reviews
+  add column if not exists completed_by uuid references core.profiles(id) on delete restrict;
+
+create table if not exists legal.vendor_eligibility_decisions (
+  id uuid primary key default gen_random_uuid(),
+  vendor_id uuid not null references core.vendors(id) on delete restrict,
+  probation_review_id uuid references legal.vendor_probation_reviews(id) on delete restrict,
+  status text not null,
+  decision text,
+  scope text,
+  effective_at timestamptz not null default statement_timestamp(),
+  expires_at timestamptz,
+  evidence_reference text not null,
+  notice_reference text not null,
+  revision integer not null default 1,
+  opened_by uuid not null references core.profiles(id) on delete restrict,
+  decided_by uuid not null references core.profiles(id) on delete restrict,
+  decided_at timestamptz not null default statement_timestamp(),
+  created_at timestamptz not null default statement_timestamp(),
+  constraint vendor_eligibility_decisions_status_check check (
+    status in ('approved', 'probation', 'provisional', 'expired', 'suspended', 'rejected', 'temporary_clearance')
+  ),
+  constraint vendor_eligibility_decisions_decision_check check (
+    decision is null or decision in ('pass', 'extend', 'revoke', 'suspend')
+  ),
+  constraint vendor_eligibility_decisions_window_check check (
+    expires_at is null or expires_at > effective_at
+  ),
+  constraint vendor_eligibility_decisions_evidence_check check (
+    pg_catalog.length(pg_catalog.btrim(evidence_reference)) > 0
+    and pg_catalog.length(pg_catalog.btrim(notice_reference)) > 0
+  )
+);
+
+create table if not exists legal.vendor_temporary_clearances (
+  id uuid primary key default gen_random_uuid(),
+  vendor_id uuid not null references core.vendors(id) on delete restrict,
+  request_id text,
+  scope text not null,
+  amount_limit numeric,
+  effective_at timestamptz not null,
+  expires_at timestamptz not null,
+  evidence_reference text not null,
+  notice_reference text not null,
+  status text not null default 'pending',
+  revision integer not null default 1,
+  made_by uuid not null references core.profiles(id) on delete restrict,
+  decided_by uuid references core.profiles(id) on delete restrict,
+  decided_at timestamptz,
+  legacy_disposition_id uuid unique references legal.accreditation_dispositions(id) on delete restrict,
+  created_at timestamptz not null default statement_timestamp(),
+  constraint vendor_temporary_clearances_window_check check (expires_at > effective_at),
+  constraint vendor_temporary_clearances_status_check check (status in ('pending', 'approved', 'revoked')),
+  constraint vendor_temporary_clearances_amount_check check (amount_limit is null or amount_limit >= 0)
+);
+alter table legal.vendor_temporary_clearances enable row level security;
+alter table legal.vendor_temporary_clearances force row level security;
+create policy vendor_temporary_clearances_legal_or_procurement_read on legal.vendor_temporary_clearances
+  for select to authenticated using (
+    core.has_live_cap('legal', 'review_accreditation')
+    or core.has_live_cap('procurement', 'view_dashboard')
+  );
+revoke all on legal.vendor_temporary_clearances from public, anon, authenticated, service_role;
+grant select on legal.vendor_temporary_clearances to authenticated;
+
+-- Preserve the former Legal authority deterministically before the stricter
+-- request gate consumes it. The source disposition stays intact as evidence.
+insert into legal.vendor_temporary_clearances(
+  vendor_id, request_id, scope, amount_limit, effective_at, expires_at,
+  evidence_reference, notice_reference, status, revision, made_by, decided_by,
+  decided_at, legacy_disposition_id
+)
+select
+  c.vendor_id,
+  nullif(d.conditions->>'request_id', ''),
+  coalesce(nullif(pg_catalog.btrim(d.conditions->>'category'), ''), '*'),
+  nullif(d.conditions->>'max_amount', '')::numeric,
+  coalesce(nullif(d.conditions->>'valid_from', '')::timestamptz, d.decided_at),
+  coalesce(nullif(d.conditions->>'valid_until', '')::timestamptz, d.follow_up_due_at),
+  'legacy-disposition:' || d.id::text,
+  'legacy-disposition-notice:' || d.id::text,
+  'approved', 1, d.decided_by, d.decided_by, d.decided_at, d.id
+from legal.accreditation_dispositions d
+join legal.accreditation_cases c on c.id = d.case_id
+where d.disposition = 'temporary_clearance'
+  and coalesce((d.conditions->>'approved')::boolean, false) is true
+  and coalesce(nullif(d.conditions->>'valid_until', '')::timestamptz, d.follow_up_due_at) is not null
+on conflict (legacy_disposition_id) do nothing;
+
+create or replace function private.policy_request_vendor_eligibility_projection(
+  p_vendor_id uuid,
+  p_request procurement.requests,
+  p_as_of timestamptz default statement_timestamp()
+)
+returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare
+  v_vendor core.vendors;
+  v_decision legal.vendor_eligibility_decisions;
+  v_clearance legal.vendor_temporary_clearances;
+  v_now timestamptz := coalesce(p_as_of, statement_timestamp());
+  v_core_expired boolean := false;
+  v_current boolean := false;
+begin
+  select * into v_vendor from core.vendors where id = p_vendor_id;
+  if not found then raise exception 'Vendor not found'; end if;
+  v_core_expired := v_vendor.accreditation_expires_at is not null and v_vendor.accreditation_expires_at < v_now::date;
+  select * into v_decision from legal.vendor_eligibility_decisions
+    where vendor_id = p_vendor_id and effective_at <= v_now
+    order by decided_at desc, revision desc limit 1;
+  select * into v_clearance from legal.vendor_temporary_clearances
+    where vendor_id = p_vendor_id and status = 'approved'
+      and effective_at <= v_now and expires_at > v_now
+      and (request_id is null or request_id = p_request.id::text)
+      and (scope = '*' or pg_catalog.lower(scope) = pg_catalog.lower(pg_catalog.btrim(p_request.category)))
+      and (amount_limit is null or coalesce(p_request.estimated_amount, 0) <= amount_limit)
+    order by decided_at desc nulls last, revision desc, id desc limit 1;
+  v_current := v_decision.id is not null and (v_decision.expires_at is null or v_decision.expires_at > v_now);
+  if v_decision.status in ('suspended', 'rejected') and v_current then
+    return jsonb_build_object('eligible', false, 'status', v_decision.status, 'current', true, 'authority', 'Legal/VMO');
+  end if;
+  if v_clearance.id is not null then
+    return jsonb_build_object('eligible', true, 'status', 'temporary_clearance', 'current', true, 'scopeEligible', true, 'authority', 'Legal/VMO', 'clearanceId', v_clearance.id, 'revision', v_clearance.revision, 'expiresAt', v_clearance.expires_at);
+  end if;
+  if v_core_expired then
+    return jsonb_build_object('eligible', false, 'status', 'expired', 'current', false, 'scopeEligible', false, 'authority', 'Legal/VMO', 'expiresAt', v_vendor.accreditation_expires_at);
+  end if;
+  if v_current and v_decision.status in ('approved', 'probation') then
+    return jsonb_build_object('eligible', true, 'status', v_decision.status, 'current', true, 'scopeEligible', true, 'authority', 'Legal/VMO', 'decisionId', v_decision.id, 'revision', v_decision.revision);
+  end if;
+  return jsonb_build_object('eligible', v_vendor.accreditation_status = 'approved', 'status', case when v_vendor.accreditation_status = 'approved' then 'approved' else coalesce(v_vendor.accreditation_status, 'rejected') end, 'current', v_vendor.accreditation_status = 'approved', 'scopeEligible', v_vendor.accreditation_status = 'approved', 'authority', 'Legal/VMO');
+end;
+$$;
+
+create or replace function private.policy_vendor_eligibility_projection(
+  p_vendor_id uuid, p_scope text, p_as_of timestamptz
+)
+returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare v_vendor core.vendors; v_request procurement.requests; v_projection jsonb; v_as_of timestamptz := coalesce(p_as_of, statement_timestamp());
+begin
+  select * into v_vendor from core.vendors where id = p_vendor_id;
+  if not found then raise exception 'Vendor not found'; end if;
+  select * into v_request from procurement.requests where category is not distinct from p_scope order by updated_at desc nulls last limit 1;
+  if found then return private.policy_request_vendor_eligibility_projection(p_vendor_id, v_request, v_as_of); end if;
+  if v_vendor.accreditation_expires_at is not null and v_vendor.accreditation_expires_at < v_as_of::date then
+    return jsonb_build_object('vendorId', p_vendor_id, 'status', 'expired', 'eligible', false, 'current', false, 'scopeEligible', false, 'authority', 'Legal/VMO', 'expiresAt', v_vendor.accreditation_expires_at);
+  end if;
+  return jsonb_build_object('vendorId', p_vendor_id, 'status', case when v_vendor.accreditation_status = 'approved' then 'approved' else coalesce(v_vendor.accreditation_status, 'rejected') end, 'eligible', v_vendor.accreditation_status = 'approved', 'current', v_vendor.accreditation_status = 'approved', 'scopeEligible', v_vendor.accreditation_status = 'approved', 'authority', 'Legal/VMO');
+end;
+$$;
+
+create or replace function private.policy_assert_request_vendor_eligible(p_vendor_id uuid, p_request_id text, p_action text)
+returns void language plpgsql security definer set search_path = '' as $$
+declare v_request procurement.requests; v_projection jsonb;
+begin
+  if p_action not in ('invite', 'issue_purchase_order', 'prepare_payment') then raise exception 'Unsupported vendor eligibility action'; end if;
+  select * into v_request from procurement.requests where id::text = p_request_id for share;
+  if not found then raise exception 'Request not found'; end if;
+  v_projection := private.policy_request_vendor_eligibility_projection(p_vendor_id, v_request, statement_timestamp());
+  if coalesce((v_projection->>'eligible')::boolean, false) is not true then raise exception 'Legal/VMO vendor eligibility is not current, approved, and scoped for this request'; end if;
+end;
+$$;
+
+create or replace function legal.record_vendor_probation_review(payload jsonb)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_actor uuid := auth.uid(); v_review legal.vendor_probation_reviews; v_expected integer := coalesce(nullif(payload->>'expected_revision','')::integer,-1); v_projection jsonb;
+begin
+  if v_actor is null or not core.has_live_cap('legal','review_accreditation') then raise exception 'Legal/VMO probation review authority is required'; end if;
+  select * into v_review from legal.vendor_probation_reviews where id=(payload->>'probation_review_id')::uuid for update;
+  if not found then raise exception 'Probation review not found'; end if;
+  if v_expected <> v_review.revision then
+    if v_review.completed_by=v_actor and v_review.status='completed'
+      and v_review.po_win_rate=(payload->>'po_win_rate')::numeric
+      and v_review.delivery_commitment_rate=(payload->>'delivery_commitment_rate')::numeric
+      and v_review.return_or_rejection_count=(payload->>'return_or_rejection_count')::integer
+      and v_review.document_timeliness_rate=(payload->>'document_timeliness_rate')::numeric
+      and v_review.evidence_reference=pg_catalog.btrim(payload->>'evidence_reference')
+      and v_review.notice_reference=pg_catalog.btrim(payload->>'notice_reference') then return to_jsonb(v_review)||jsonb_build_object('replayed',true); end if;
+    raise exception 'Probation review changed; refresh before retrying';
+  end if;
+  if nullif(pg_catalog.btrim(payload->>'evidence_reference'),'') is null or nullif(pg_catalog.btrim(payload->>'notice_reference'),'') is null then raise exception 'Evidence and issued notice references are required'; end if;
+  if nullif(payload->>'po_win_rate','') is null or nullif(payload->>'delivery_commitment_rate','') is null or nullif(payload->>'return_or_rejection_count','') is null or nullif(payload->>'document_timeliness_rate','') is null then raise exception 'All six-month probation metrics are required'; end if;
+  if (payload->>'po_win_rate')::numeric not between 0 and 1 or (payload->>'delivery_commitment_rate')::numeric not between 0 and 1 or (payload->>'document_timeliness_rate')::numeric not between 0 and 1 or (payload->>'return_or_rejection_count')::integer < 0 then raise exception 'Probation metrics must be valid non-negative rates and counts'; end if;
+  update legal.vendor_probation_reviews set status='completed',po_win_rate=(payload->>'po_win_rate')::numeric,delivery_commitment_rate=(payload->>'delivery_commitment_rate')::numeric,return_or_rejection_count=(payload->>'return_or_rejection_count')::integer,document_timeliness_rate=(payload->>'document_timeliness_rate')::numeric,evidence_reference=pg_catalog.btrim(payload->>'evidence_reference'),notice_reference=pg_catalog.btrim(payload->>'notice_reference'),completed_by=v_actor,revision=revision+1,updated_at=statement_timestamp() where id=v_review.id returning to_jsonb(legal.vendor_probation_reviews.*)||jsonb_build_object('replayed',false) into v_projection;
+  return v_projection;
+end;
+$$;
+
+create or replace function legal.record_vendor_eligibility_decision(payload jsonb)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_actor uuid:=auth.uid(); v_review legal.vendor_probation_reviews; v_prior legal.vendor_eligibility_decisions; v_expected integer:=coalesce(nullif(payload->>'expected_revision','')::integer,-1); v_decision text:=nullif(pg_catalog.btrim(payload->>'decision'),''); v_status text; v_result jsonb;
+begin
+  if v_actor is null or not core.has_live_cap('legal','approve_accreditation') then raise exception 'Legal/VMO decision authority is required'; end if;
+  select * into v_review from legal.vendor_probation_reviews where id=(payload->>'probation_review_id')::uuid for update;
+  if not found or v_review.status<>'completed' then raise exception 'A completed probation review is required'; end if;
+  if coalesce(v_review.completed_by,v_review.opened_by)=v_actor then raise exception 'Probation review maker and decision actor must be different'; end if;
+  if v_decision not in ('pass','extend','revoke','suspend') then raise exception 'Pass, extend, revoke, or suspend decision is required'; end if;
+  if nullif(pg_catalog.btrim(payload->>'evidence_reference'),'') is null or nullif(pg_catalog.btrim(payload->>'notice_reference'),'') is null then raise exception 'Evidence and issued notice references are required'; end if;
+  if v_decision='pass' and (coalesce(v_review.po_win_rate,-1)<.2 or coalesce(v_review.delivery_commitment_rate,-1)<>1 or coalesce(v_review.return_or_rejection_count,1)<>0 or coalesce(v_review.document_timeliness_rate,-1)<>1) then raise exception 'A pass requires 20%% PO win rate, 100%% delivery and documents, and zero returns/rejections'; end if;
+  select * into v_prior from legal.vendor_eligibility_decisions where probation_review_id=v_review.id order by revision desc limit 1 for update;
+  if found and v_expected<>v_prior.revision then
+    if v_prior.decided_by=v_actor and v_prior.decision=v_decision and v_prior.evidence_reference=pg_catalog.btrim(payload->>'evidence_reference') and v_prior.notice_reference=pg_catalog.btrim(payload->>'notice_reference') then return to_jsonb(v_prior)||jsonb_build_object('replayed',true); end if;
+    raise exception 'Vendor eligibility decision changed; refresh before retrying';
+  elsif not found and v_expected<>0 then raise exception 'Vendor eligibility decision changed; refresh before retrying'; end if;
+  v_status:=case v_decision when 'pass' then 'approved' when 'extend' then 'probation' when 'revoke' then 'rejected' else 'suspended' end;
+  insert into legal.vendor_eligibility_decisions(vendor_id,probation_review_id,status,decision,evidence_reference,notice_reference,revision,opened_by,decided_by)
+  values(v_review.vendor_id,v_review.id,v_status,v_decision,pg_catalog.btrim(payload->>'evidence_reference'),pg_catalog.btrim(payload->>'notice_reference'),coalesce(v_prior.revision,0)+1,coalesce(v_review.completed_by,v_review.opened_by),v_actor)
+  returning to_jsonb(legal.vendor_eligibility_decisions.*)||jsonb_build_object('replayed',false) into v_result;
+  return v_result;
+end;
+$$;
+
+create or replace function legal.open_vendor_temporary_clearance(payload jsonb)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_actor uuid:=auth.uid(); v_clearance legal.vendor_temporary_clearances; v_expected integer:=coalesce(nullif(payload->>'expected_revision','')::integer,-1); v_result jsonb;
+begin
+  if v_actor is null or not core.has_live_cap('legal','review_accreditation') then raise exception 'Legal/VMO temporary-clearance maker authority is required'; end if;
+  if v_expected<>0 then raise exception 'Temporary clearance changed; refresh before retrying'; end if;
+  if nullif(pg_catalog.btrim(payload->>'scope'),'') is null or nullif(payload->>'effective_at','') is null or nullif(payload->>'expires_at','') is null or nullif(pg_catalog.btrim(payload->>'evidence_reference'),'') is null or nullif(pg_catalog.btrim(payload->>'notice_reference'),'') is null then raise exception 'Scope, effective date, expiry, evidence, and notice are required'; end if;
+  insert into legal.vendor_temporary_clearances(vendor_id,request_id,scope,amount_limit,effective_at,expires_at,evidence_reference,notice_reference,made_by)
+  values((payload->>'vendor_id')::uuid,nullif(payload->>'request_id',''),pg_catalog.btrim(payload->>'scope'),nullif(payload->>'amount_limit','')::numeric,(payload->>'effective_at')::timestamptz,(payload->>'expires_at')::timestamptz,pg_catalog.btrim(payload->>'evidence_reference'),pg_catalog.btrim(payload->>'notice_reference'),v_actor)
+  returning to_jsonb(legal.vendor_temporary_clearances.*)||jsonb_build_object('replayed',false) into v_result;
+  return v_result;
+end;
+$$;
+
+create or replace function legal.decide_vendor_temporary_clearance(payload jsonb)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_actor uuid:=auth.uid(); v_clearance legal.vendor_temporary_clearances; v_expected integer:=coalesce(nullif(payload->>'expected_revision','')::integer,-1); v_decision text:=nullif(pg_catalog.btrim(payload->>'decision'),''); v_result jsonb;
+begin
+  if v_actor is null or not core.has_live_cap('legal','approve_accreditation') then raise exception 'Legal/VMO temporary-clearance decision authority is required'; end if;
+  select * into v_clearance from legal.vendor_temporary_clearances where id=(payload->>'clearance_id')::uuid for update;
+  if not found then raise exception 'Temporary clearance not found'; end if;
+  if v_expected<>v_clearance.revision then
+    if v_clearance.decided_by=v_actor and v_clearance.status=(case when v_decision='approve' then 'approved' else 'revoked' end) then return to_jsonb(v_clearance)||jsonb_build_object('replayed',true); end if;
+    raise exception 'Temporary clearance changed; refresh before retrying';
+  end if;
+  if v_clearance.made_by=v_actor then raise exception 'Temporary clearance maker and decision actor must be different'; end if;
+  if v_decision not in ('approve','revoke') then raise exception 'Approve or revoke decision is required'; end if;
+  update legal.vendor_temporary_clearances set status=case when v_decision='approve' then 'approved' else 'revoked' end,decided_by=v_actor,decided_at=statement_timestamp(),revision=revision+1 where id=v_clearance.id returning to_jsonb(legal.vendor_temporary_clearances.*)||jsonb_build_object('replayed',false) into v_result;
+  return v_result;
+end;
+$$;
+
+do $$ begin
+  if to_regprocedure('procurement.prepare_invoice_payment_readiness(jsonb)') is not null then execute 'alter function procurement.prepare_invoice_payment_readiness(jsonb) rename to prepare_invoice_payment_readiness_pre_task_10_fix'; end if;
+end $$;
+alter table procurement.payment_readiness_packs
+  add column if not exists foreign_vendor_evidence_storage_path text;
+create or replace function private.policy_prepare_invoice_payment_readiness(payload jsonb)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_po procurement.purchase_orders; v_request procurement.requests; v_pack procurement.payment_readiness_packs; v_ids uuid[]; v_accepted numeric; v_prior numeric; v_invoice numeric; v_corrected uuid; v_blockers text[];
+begin
+  if not (core.has_live_cap('procurement','author_po') or core.has_live_cap('procurement','admin')) then raise exception 'Not authorized to prepare payment'; end if;
+  select * into v_po from procurement.purchase_orders where id=payload->>'purchase_order_id' for update;
+  if not found or v_po.status<>'issued' then raise exception 'An issued purchase order is required'; end if;
+  select * into v_request from procurement.requests where id::text=v_po.request_id::text for share;
+  if not found then raise exception 'Request not found'; end if;
+  perform private.policy_assert_request_vendor_eligible(v_po.core_vendor_id,v_request.id::text,'prepare_payment');
+  v_blockers:=private.policy_payment_evidence_blockers(v_po,v_request,payload);
+  if cardinality(v_blockers)>0 then raise exception 'Payment readiness evidence is incomplete: %',array_to_string(v_blockers,'; '); end if;
+  v_invoice:=(payload->>'invoice_amount')::numeric;
+  if exists(select 1 from procurement.payment_readiness_packs prior join procurement.purchase_orders prior_po on prior_po.id=prior.purchase_order_id where prior_po.core_vendor_id=v_po.core_vendor_id and pg_catalog.lower(prior.invoice_number)=pg_catalog.lower(payload->>'invoice_number') and prior.purchase_order_id<>v_po.id and prior.status<>'superseded') then raise exception 'Duplicate vendor invoice number'; end if;
+  select array_agg(pack.id order by pack.accepted_at,pack.id),coalesce(sum(coalesce(pack.accepted_amount,0)),0) into v_ids,v_accepted from procurement.acceptance_packs pack where pack.purchase_order_id=v_po.id and pack.status='accepted' and coalesce(jsonb_array_length(pack.exceptions),0)=0;
+  if coalesce(cardinality(v_ids),0)=0 then raise exception 'Acceptance evidence is required'; end if;
+  update procurement.payment_readiness_packs set evidence_stale=true,status='returned' where purchase_order_id=v_po.id and status in ('ready_for_finance','accepted') and acceptance_evidence_version is distinct from v_po.acceptance_evidence_version;
+  select coalesce(sum(prior.invoice_amount),0) into v_prior from procurement.payment_readiness_packs prior where prior.purchase_order_id=v_po.id and prior.status in ('accepted','released') and not coalesce(prior.evidence_stale,false);
+  if v_invoice>v_accepted-v_prior or v_invoice>v_po.total-v_prior then raise exception 'Invoice exceeds the accepted unpaid value'; end if;
+  v_corrected:=nullif(payload->>'corrected_from','')::uuid;
+  update procurement.payment_readiness_packs set status='superseded' where purchase_order_id=v_po.id and status in ('draft','returned','ready_for_finance');
+  insert into procurement.payment_readiness_packs(purchase_order_id,acceptance_pack_id,acceptance_pack_ids,accepted_quantity,acceptance_evidence_version,policy_version,po_match,invoice_or_si_storage_path,milestone_support_storage_path,tax_withholding_support_storage_path,foreign_vendor_evidence_storage_path,invoice_number,invoice_date,due_date,invoice_amount,tax_amount,withholding_amount,purchase_order_amount,accepted_amount,variance_amount,status,corrected_from)
+  values(v_po.id,v_ids[1],v_ids,0,v_po.acceptance_evidence_version,'request-bound-policy-profile',true,payload->>'invoice_or_si_storage_path',payload->>'milestone_support_storage_path',payload->>'tax_withholding_support_storage_path',nullif(pg_catalog.btrim(payload->>'foreign_vendor_evidence_storage_path'),''),payload->>'invoice_number',(payload->>'invoice_date')::date,nullif(payload->>'due_date','')::date,v_invoice,coalesce((payload->>'tax_amount')::numeric,0),coalesce((payload->>'withholding_amount')::numeric,0),v_po.total,v_accepted,v_accepted-v_prior-v_invoice,'ready_for_finance',v_corrected) returning * into v_pack;
+  return to_jsonb(v_pack);
+end;
+$$;
+create or replace function procurement.prepare_invoice_payment_readiness(payload jsonb)
+returns jsonb language plpgsql security definer set search_path = '' as $$ begin return private.policy_prepare_invoice_payment_readiness(payload); end; $$;
+revoke all on function private.policy_request_vendor_eligibility_projection(uuid,procurement.requests,timestamptz), private.policy_prepare_invoice_payment_readiness(jsonb) from public, anon, authenticated, service_role;
+do $$ begin
+  revoke all on function procurement.prepare_invoice_payment_readiness_pre_task_10_fix(jsonb) from public, anon, authenticated, service_role;
+exception when undefined_function then null;
+end $$;
+revoke all on function legal.record_vendor_probation_review(jsonb), legal.open_vendor_temporary_clearance(jsonb), legal.decide_vendor_temporary_clearance(jsonb), procurement.prepare_invoice_payment_readiness(jsonb) from public, anon;
+grant execute on function legal.record_vendor_probation_review(jsonb), legal.open_vendor_temporary_clearance(jsonb), legal.decide_vendor_temporary_clearance(jsonb), procurement.prepare_invoice_payment_readiness(jsonb) to authenticated;
+
 -- Task 9 terminal override. This is intentionally last: previous additive
 -- compatibility sections define the same RPC names during upgrade.
 create or replace function private.policy_po_lifecycle_transition(p_purchase_order_id text,p_expected_revision integer,p_event_type text,p_reference text,p_payload jsonb default '{}'::jsonb)
@@ -4245,6 +4531,114 @@ begin
   return to_jsonb(v_decision) || jsonb_build_object('route', v_route);
 end;
 $$;
+
+-- Task 10 fix round 1 terminal override. All later definitions are PO-only.
+create or replace function private.policy_vendor_eligibility_projection(p_vendor_id uuid,p_scope text,p_as_of timestamptz)
+returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare v_vendor core.vendors; v_request procurement.requests; v_as_of timestamptz:=coalesce(p_as_of,statement_timestamp());
+begin
+ select * into v_vendor from core.vendors where id=p_vendor_id;
+ if not found then raise exception 'Vendor not found'; end if;
+ select * into v_request from procurement.requests where category is not distinct from p_scope order by updated_at desc nulls last limit 1;
+ if found then return private.policy_request_vendor_eligibility_projection(p_vendor_id,v_request,v_as_of); end if;
+ if v_vendor.accreditation_expires_at is not null and v_vendor.accreditation_expires_at<v_as_of::date then return jsonb_build_object('vendorId',p_vendor_id,'status','expired','eligible',false,'current',false,'scopeEligible',false,'authority','Legal/VMO','expiresAt',v_vendor.accreditation_expires_at); end if;
+ return jsonb_build_object('vendorId',p_vendor_id,'status',case when v_vendor.accreditation_status='approved' then 'approved' else coalesce(v_vendor.accreditation_status,'rejected') end,'eligible',v_vendor.accreditation_status='approved','current',v_vendor.accreditation_status='approved','scopeEligible',v_vendor.accreditation_status='approved','authority','Legal/VMO');
+end;
+$$;
+create or replace function private.policy_assert_request_vendor_eligible(p_vendor_id uuid,p_request_id text,p_action text)
+returns void language plpgsql security definer set search_path = '' as $$
+declare v_request procurement.requests; v_projection jsonb;
+begin
+ if p_action not in ('invite','issue_purchase_order','prepare_payment') then raise exception 'Unsupported vendor eligibility action'; end if;
+ select * into v_request from procurement.requests where id::text=p_request_id for share;
+ if not found then raise exception 'Request not found'; end if;
+ v_projection:=private.policy_request_vendor_eligibility_projection(p_vendor_id,v_request,statement_timestamp());
+ if coalesce((v_projection->>'eligible')::boolean,false) is not true then raise exception 'Legal/VMO vendor eligibility is not current, approved, and scoped for this request'; end if;
+end;
+$$;
+create or replace function legal.record_vendor_eligibility_decision(payload jsonb)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_actor uuid:=auth.uid(); v_review legal.vendor_probation_reviews; v_prior legal.vendor_eligibility_decisions; v_expected integer:=coalesce(nullif(payload->>'expected_revision','')::integer,-1); v_decision text:=nullif(pg_catalog.btrim(payload->>'decision'),''); v_status text; v_result jsonb;
+begin
+ if v_actor is null or not core.has_live_cap('legal','approve_accreditation') then raise exception 'Legal/VMO decision authority is required'; end if;
+ select * into v_review from legal.vendor_probation_reviews where id=(payload->>'probation_review_id')::uuid for update;
+ if not found or v_review.status<>'completed' then raise exception 'A completed probation review is required'; end if;
+ if coalesce(v_review.completed_by,v_review.opened_by)=v_actor then raise exception 'Probation review maker and decision actor must be different'; end if;
+ if v_decision not in ('pass','extend','revoke','suspend') then raise exception 'Pass, extend, revoke, or suspend decision is required'; end if;
+ if nullif(pg_catalog.btrim(payload->>'evidence_reference'),'') is null or nullif(pg_catalog.btrim(payload->>'notice_reference'),'') is null then raise exception 'Evidence and issued notice references are required'; end if;
+ if v_decision='pass' and (coalesce(v_review.po_win_rate,-1)<.2 or coalesce(v_review.delivery_commitment_rate,-1)<>1 or coalesce(v_review.return_or_rejection_count,1)<>0 or coalesce(v_review.document_timeliness_rate,-1)<>1) then raise exception 'A pass requires 20%% PO win rate, 100%% delivery and documents, and zero returns/rejections'; end if;
+ select * into v_prior from legal.vendor_eligibility_decisions where probation_review_id=v_review.id order by revision desc limit 1 for update;
+ if found and v_expected<>v_prior.revision then if v_prior.decided_by=v_actor and v_prior.decision=v_decision and v_prior.evidence_reference=pg_catalog.btrim(payload->>'evidence_reference') and v_prior.notice_reference=pg_catalog.btrim(payload->>'notice_reference') then return to_jsonb(v_prior)||jsonb_build_object('replayed',true); end if; raise exception 'Vendor eligibility decision changed; refresh before retrying'; elsif not found and v_expected<>0 then raise exception 'Vendor eligibility decision changed; refresh before retrying'; end if;
+ v_status:=case v_decision when 'pass' then 'approved' when 'extend' then 'probation' when 'revoke' then 'rejected' else 'suspended' end;
+ insert into legal.vendor_eligibility_decisions(vendor_id,probation_review_id,status,decision,evidence_reference,notice_reference,revision,opened_by,decided_by) values(v_review.vendor_id,v_review.id,v_status,v_decision,pg_catalog.btrim(payload->>'evidence_reference'),pg_catalog.btrim(payload->>'notice_reference'),coalesce(v_prior.revision,0)+1,coalesce(v_review.completed_by,v_review.opened_by),v_actor) returning to_jsonb(legal.vendor_eligibility_decisions.*)||jsonb_build_object('replayed',false) into v_result;
+ return v_result;
+end;
+$$;
+
+-- The public invoice endpoint delegates here. Every readiness predicate is
+-- recomputed from the locked request/PO/acceptance state and its bound profile.
+create or replace function private.policy_payment_evidence_blockers(
+  p_po procurement.purchase_orders,
+  p_request procurement.requests,
+  p_payload jsonb
+)
+returns text[] language plpgsql security definer set search_path = '' as $$
+declare
+  v_profile procurement.policy_profiles;
+  v_invoice numeric := nullif(p_payload->>'invoice_amount', '')::numeric;
+  v_accepted numeric := 0;
+  v_is_foreign boolean := false;
+  v_blockers text[] := '{}'::text[];
+begin
+  select * into v_profile from procurement.policy_profiles
+    where id = p_request.policy_profile_id
+      and relationship = 'mwell_operating'
+      and status = 'active'
+      and effective_from <= statement_timestamp()
+      and (effective_to is null or effective_to > statement_timestamp());
+  if not found then
+    v_blockers := array_append(v_blockers, 'Request-bound active policy profile is required');
+  end if;
+  select coalesce(sum(accepted_amount), 0) into v_accepted
+    from procurement.acceptance_packs
+    where purchase_order_id = p_po.id
+      and status = 'accepted'
+      and coalesce(jsonb_array_length(exceptions), 0) = 0;
+  if nullif(pg_catalog.btrim(p_payload->>'invoice_number'), '') is null
+    or nullif(pg_catalog.btrim(p_payload->>'invoice_or_si_storage_path'), '') is null then
+    v_blockers := array_append(v_blockers, 'Invoice, OR, or SI evidence is required');
+  end if;
+  if v_invoice is null or v_invoice <= 0 then
+    v_blockers := array_append(v_blockers, 'A positive itemized invoice amount is required');
+  elsif p_po.request_id is distinct from p_request.id or v_invoice > p_po.total or v_invoice > v_accepted then
+    v_blockers := array_append(v_blockers, 'Amount and quantity must match governed PO and acceptance records');
+  end if;
+  if nullif(pg_catalog.btrim(p_payload->>'milestone_support_storage_path'), '') is null or v_accepted <= 0 then
+    v_blockers := array_append(v_blockers, 'Receipt or acceptance evidence is required');
+  end if;
+  if nullif(pg_catalog.btrim(p_payload->>'tax_withholding_support_storage_path'), '') is null
+    or coalesce(nullif(p_payload->>'tax_amount', '')::numeric, 0) < 0
+    or coalesce(nullif(p_payload->>'withholding_amount', '')::numeric, 0) < 0
+    or coalesce(nullif(p_payload->>'tax_amount', '')::numeric, 0) + coalesce(nullif(p_payload->>'withholding_amount', '')::numeric, 0) > coalesce(v_invoice, 0) then
+    v_blockers := array_append(v_blockers, 'Tax and withholding support is required');
+  end if;
+  select exists(
+    select 1 from legal.accreditation_cases c
+    where c.vendor_id = p_po.core_vendor_id and coalesce(c.jurisdiction, 'PH') <> 'PH'
+  ) into v_is_foreign;
+  if v_is_foreign and nullif(pg_catalog.btrim(p_payload->>'foreign_vendor_evidence_storage_path'), '') is null then
+    v_blockers := array_append(v_blockers, 'Foreign-vendor tax, withholding, and payment-control evidence is required');
+  end if;
+  if v_profile.id is not null and v_invoice is not null and v_invoice >= v_profile.po_invoice_threshold
+    and (p_po.status <> 'issued' or p_po.request_id is null or p_po.total < v_invoice) then
+    v_blockers := array_append(v_blockers, 'Purchase order evidence is required at or above the request-bound threshold');
+  end if;
+  return v_blockers;
+end;
+$$;
+revoke all on function private.policy_payment_evidence_blockers(procurement.purchase_orders,procurement.requests,jsonb) from public, anon, authenticated, service_role;
+revoke all on function procurement.prepare_invoice_payment_readiness(jsonb) from public, anon, service_role;
+grant execute on function procurement.prepare_invoice_payment_readiness(jsonb) to authenticated;
 
 -- Task 9 terminal override: this location is after all lifecycle compatibility
 -- definitions; do not move it above Task 9's additive tables and RPCs.

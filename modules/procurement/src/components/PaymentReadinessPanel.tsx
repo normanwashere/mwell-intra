@@ -21,6 +21,7 @@ export interface PaymentReadinessDraft {
   invoiceOrSiReference: string;
   milestoneSupportReference: string;
   taxWithholdingSupportReference: string;
+  foreignVendorEvidenceReference?: string;
 }
 
 export interface PaymentReleaseDraft {
@@ -100,6 +101,7 @@ export function PaymentReadinessPanel({
     invoiceOrSiReference: pack?.invoiceOrSiReference ?? '',
     milestoneSupportReference: pack?.milestoneSupportReference ?? '',
     taxWithholdingSupportReference: pack?.taxWithholdingSupportReference ?? '',
+    foreignVendorEvidenceReference: '',
   });
   useEffect(() => {
     setDraft({
@@ -112,6 +114,7 @@ export function PaymentReadinessPanel({
       invoiceOrSiReference: pack?.invoiceOrSiReference ?? '',
       milestoneSupportReference: pack?.milestoneSupportReference ?? '',
       taxWithholdingSupportReference: pack?.taxWithholdingSupportReference ?? '',
+      foreignVendorEvidenceReference: '',
     });
   }, [pack?.id]);
   useEffect(() => {
@@ -161,7 +164,7 @@ export function PaymentReadinessPanel({
             taxEvidencePresent: Boolean(draft.taxWithholdingSupportReference.trim()),
             amountQuantityMatch: Boolean(pack?.poMatch),
             foreignVendor,
-            foreignVendorEvidencePresent: !foreignVendor || Boolean(draft.taxWithholdingSupportReference.trim()),
+            foreignVendorEvidencePresent: !foreignVendor || Boolean(draft.foreignVendorEvidenceReference?.trim()),
           })
         : undefined,
     [activeAcceptances.length, draft, foreignVendor, pack?.poMatch, pack?.purchaseOrderId, policyProfile],
@@ -457,6 +460,9 @@ export function PaymentReadinessPanel({
               ['invoiceOrSiReference', 'Invoice, OR, or SI private reference'],
               ['milestoneSupportReference', 'Delivery or milestone private reference'],
               ['taxWithholdingSupportReference', 'Tax and withholding private reference'],
+              ...(foreignVendor
+                ? [['foreignVendorEvidenceReference', 'Foreign-vendor tax and payment-control reference'] as const]
+                : []),
             ] as const
           ).map(([key, label]) => (
             <label key={key} className="block text-sm font-semibold text-ink">
@@ -477,7 +483,8 @@ export function PaymentReadinessPanel({
               draft.invoiceAmount <= 0 ||
               !draft.invoiceOrSiReference.trim() ||
               !draft.milestoneSupportReference.trim() ||
-              !draft.taxWithholdingSupportReference.trim()
+              !draft.taxWithholdingSupportReference.trim() ||
+              (foreignVendor && !draft.foreignVendorEvidenceReference?.trim())
             }
             onClick={() => void onPrepare(draft)}
           >

@@ -1166,6 +1166,7 @@ export interface PurchaseOrdersAPI {
       invoiceOrSiReference: string;
       milestoneSupportReference: string;
       taxWithholdingSupportReference: string;
+      foreignVendorEvidenceReference?: string;
       actorEmail?: string;
     },
   ) => MaybePromise<PurchaseOrder | null>;
@@ -1706,6 +1707,7 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
         invoiceOrSiReference: string;
         milestoneSupportReference: string;
         taxWithholdingSupportReference: string;
+        foreignVendorEvidenceReference?: string;
         actorEmail?: string;
       },
     ): MaybePromise<PurchaseOrder | null> => {
@@ -1725,6 +1727,7 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
           invoice_or_si_storage_path: input.invoiceOrSiReference,
           milestone_support_storage_path: input.milestoneSupportReference,
           tax_withholding_support_storage_path: input.taxWithholdingSupportReference,
+          foreign_vendor_evidence_storage_path: input.foreignVendorEvidenceReference || undefined,
           corrected_from:
             current.paymentReadiness?.status === 'returned' ||
             current.paymentReadiness?.evidenceStale

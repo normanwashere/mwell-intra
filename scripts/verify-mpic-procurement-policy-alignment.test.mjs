@@ -29,6 +29,8 @@ const migrationCreateWrapper = migration.slice(
 const TASK_6_MARKER = "-- Task 6: competitive sourcing is governed by the effective profile";
 const TASK_10_MARKER = '-- Task 10 terminal controls. Legal/VMO owns vendor state; Procurement only';
 const TASK_10_END_MARKER = '-- Task 10 terminal controls end.';
+const TASK_10_FIX_TERMINAL_MARKER = '-- Task 10 fix round 1 terminal override. All later definitions are PO-only.';
+const TASK_9_LAST_MARKER = '-- Task 9 terminal override: this location is after all lifecycle compatibility';
 const migrationTask6 = migration.slice(
   migration.indexOf(TASK_6_MARKER),
   migration.indexOf(TASK_10_MARKER),
@@ -36,6 +38,9 @@ const migrationTask6 = migration.slice(
 const migrationTask10 = migration.slice(
   migration.indexOf(TASK_10_MARKER),
   migration.indexOf(TASK_10_END_MARKER),
+) + migration.slice(
+  migration.indexOf(TASK_10_FIX_TERMINAL_MARKER),
+  migration.indexOf(TASK_9_LAST_MARKER),
 );
 // PGlite 0.5 does not implement jsonb_object_length. The production migration
 // retains PostgreSQL's native function; this equivalent fixture expression
@@ -78,6 +83,8 @@ async function createGovernedRouteFixture() {
     create function procurement.insufficient_bid_exception(jsonb) returns jsonb language sql as $$ select null::jsonb $$;
     create table core.profiles (id uuid primary key, vendor_id uuid, full_name text, status text not null default 'active');
     create table core.vendors (id uuid primary key, legal_name text, accreditation_status text default 'approved', accreditation_expires_at timestamptz);
+    create table legal.accreditation_cases (id text primary key, vendor_id uuid references core.vendors(id), jurisdiction text);
+    create table legal.accreditation_dispositions (id uuid primary key default gen_random_uuid(), case_id text references legal.accreditation_cases(id), disposition text, reason text not null default 'fixture', conditions jsonb not null default '{}'::jsonb, follow_up_due_at timestamptz, decided_by uuid references core.profiles(id), decided_at timestamptz not null default statement_timestamp());
     create table procurement.requests (
       id uuid primary key,
       status text,
@@ -2207,6 +2214,7 @@ test('executes the disposable public Task 10 vendor and payment authority matrix
   const unrelated = '76000000-0000-0000-0000-000000000003';
   const vendorId = '76000000-0000-0000-0000-000000000004';
   const reviewId = '76000000-0000-0000-0000-000000000005';
+  const pendingReviewId = '76000000-0000-0000-0000-000000000007';
   const withRole = async (role, actor, canManage, capabilities, action) => {
     await db.exec('reset role');
     await setPolicyActor(db, actor, canManage, capabilities, null);
@@ -2220,12 +2228,22 @@ test('executes the disposable public Task 10 vendor and payment authority matrix
     await db.exec(migrationTask10);
     await db.exec(`
       grant usage on schema legal, procurement, core, auth, private to anon, authenticated, service_role;
+      grant select on core.vendors, procurement.requests, procurement.purchase_orders, procurement.acceptance_packs, procurement.payment_readiness_packs, legal.accreditation_cases to authenticated;
+      create policy task10_fixture_vendor_read on core.vendors for select to authenticated using (true);
+      alter table procurement.purchase_orders add column acceptance_evidence_version integer not null default 1;
+      alter table procurement.acceptance_packs add column accepted_amount numeric, add column accepted_at timestamptz default statement_timestamp();
+      alter table procurement.payment_readiness_packs add column acceptance_pack_id uuid, add column acceptance_pack_ids uuid[], add column accepted_quantity numeric default 0, add column acceptance_evidence_version integer, add column policy_version text, add column po_match boolean, add column invoice_or_si_storage_path text, add column milestone_support_storage_path text, add column tax_withholding_support_storage_path text, add column invoice_number text, add column invoice_date date, add column due_date date, add column tax_amount numeric default 0, add column withholding_amount numeric default 0, add column variance_amount numeric default 0, add column corrected_from uuid, add column evidence_stale boolean not null default false;
       insert into core.profiles(id,status) values ('${maker}','active'),('${legalDecider}','active'),('${unrelated}','active');
       insert into core.vendors(id,legal_name,accreditation_status) values ('${vendorId}','Task 10 vendor','approved');
       insert into legal.vendor_probation_reviews(
         id,vendor_id,policy_profile_id,due_at,status,opened_by,po_win_rate,delivery_commitment_rate,
         return_or_rejection_count,document_timeliness_rate,evidence_reference,notice_reference
       ) values ('${reviewId}','${vendorId}','${operatingProfileId}',statement_timestamp(),'completed','${maker}',.2,1,0,1,'private/review.pdf','private/notice.pdf');
+      insert into legal.vendor_probation_reviews(id,vendor_id,policy_profile_id,due_at,status,opened_by)
+      values ('${pendingReviewId}','${vendorId}','${operatingProfileId}',statement_timestamp(),'open','${maker}');
+      insert into procurement.requests(id,status,estimated_amount,category,policy_profile_id,updated_at) values ('76000000-0000-0000-0000-000000000006','approved',50000,'goods','${operatingProfileId}',statement_timestamp());
+      insert into procurement.purchase_orders(id,request_id,core_vendor_id,status,total,acceptance_evidence_version) values ('PO-TASK10','76000000-0000-0000-0000-000000000006','${vendorId}','issued',50000,1);
+      insert into procurement.acceptance_packs(purchase_order_id,status,exceptions,accepted_amount) values ('PO-TASK10','accepted','[]'::jsonb,50000);
     `);
 
     await withRole('anon', unrelated, false, [], async () => {
@@ -2247,6 +2265,22 @@ test('executes the disposable public Task 10 vendor and payment authority matrix
         'application roles cannot execute the private eligibility projection',
       );
     });
+    await withRole('authenticated', maker, true, [], async () => {
+      await assert.rejects(
+        () => db.query(`select legal.record_vendor_probation_review(${sqlJson({ probation_review_id: pendingReviewId, expected_revision: 1, po_win_rate: .2 })})`),
+        /Evidence and issued notice|metrics are required/i,
+        'Legal cannot complete a six-month review without all required metrics and evidence',
+      );
+      const completed = await db.query(`select legal.record_vendor_probation_review(${sqlJson({ probation_review_id: pendingReviewId, expected_revision: 1, po_win_rate: .2, delivery_commitment_rate: 1, return_or_rejection_count: 0, document_timeliness_rate: 1, evidence_reference: 'private/pending-review.pdf', notice_reference: 'private/pending-notice.pdf' })}) as result`);
+      assert.equal(completed.rows[0].result.replayed, false);
+      const replay = await db.query(`select legal.record_vendor_probation_review(${sqlJson({ probation_review_id: pendingReviewId, expected_revision: 1, po_win_rate: .2, delivery_commitment_rate: 1, return_or_rejection_count: 0, document_timeliness_rate: 1, evidence_reference: 'private/pending-review.pdf', notice_reference: 'private/pending-notice.pdf' })}) as result`);
+      assert.equal(replay.rows[0].result.replayed, true, 'identical probation-review retry is replayed');
+      await assert.rejects(
+        () => db.query(`select legal.record_vendor_probation_review(${sqlJson({ probation_review_id: pendingReviewId, expected_revision: 1, po_win_rate: .3, delivery_commitment_rate: 1, return_or_rejection_count: 0, document_timeliness_rate: 1, evidence_reference: 'private/pending-review.pdf', notice_reference: 'private/pending-notice.pdf' })})`),
+        /refresh before retrying/i,
+        'non-identical probation-review retry is rejected as stale',
+      );
+    });
     await withRole('authenticated', legalDecider, true, [], async () => {
       const decided = await db.query(`select legal.record_vendor_eligibility_decision(${sqlJson({ probation_review_id: reviewId, expected_revision: 0, decision: 'pass', evidence_reference: 'private/review.pdf', notice_reference: 'private/pass.pdf' })}) as result`);
       assert.equal(decided.rows[0].result.replayed, false);
@@ -2259,6 +2293,68 @@ test('executes the disposable public Task 10 vendor and payment authority matrix
       );
       const sample = await db.query(`select legal.record_vendor_sample_custody(${sqlJson({ vendor_id: vendorId, expected_revision: 0, purpose: 'Clinical evaluation', custodian_id: maker, evaluation_reference: 'private/evaluation.pdf', disposition: 'returned', evidence_reference: 'private/custody.pdf', mwell_requested: false })}) as result`);
       assert.equal(sample.rows[0].result.replayed, false);
+    });
+    await withRole('authenticated', legalDecider, true, [], async () => {
+      await assert.rejects(
+        () => db.query(`select procurement.prepare_invoice_payment_readiness(${sqlJson({ purchase_order_id: 'PO-TASK10', invoice_number: 'INV-TASK10-1', invoice_date: '2030-01-01', invoice_amount: 50000, invoice_or_si_storage_path: 'private/invoice.pdf', milestone_support_storage_path: 'private/acceptance.pdf' })})`),
+        /tax and withholding/i,
+        'the live invoice-preparation endpoint rejects incomplete Finance evidence',
+      );
+      await db.query(`select procurement.prepare_invoice_payment_readiness(${sqlJson({ purchase_order_id: 'PO-TASK10', invoice_number: 'INV-TASK10-1', invoice_date: '2030-01-01', invoice_amount: 50000, tax_amount: 6000, withholding_amount: 500, invoice_or_si_storage_path: 'private/invoice.pdf', milestone_support_storage_path: 'private/acceptance.pdf', tax_withholding_support_storage_path: 'private/tax.pdf' })}) as pack`);
+    });
+    await db.exec(`update core.vendors set accreditation_expires_at = current_date - 1 where id='${vendorId}'`);
+    await withRole('authenticated', legalDecider, true, [], async () => {
+      await assert.rejects(
+        () => db.query(`select procurement.prepare_invoice_payment_readiness(${sqlJson({ purchase_order_id: 'PO-TASK10', invoice_number: 'INV-TASK10-2', invoice_date: '2030-01-02', invoice_amount: 1, tax_amount: 1, withholding_amount: 0, invoice_or_si_storage_path: 'private/invoice-2.pdf', milestone_support_storage_path: 'private/acceptance.pdf', tax_withholding_support_storage_path: 'private/tax.pdf' })})`),
+        /eligibility/i,
+        'core accreditation expiry blocks the actual invoice-preparation endpoint',
+      );
+    });
+    const openClearance = async (scope, effectiveAt, expiresAt) => withRole('authenticated', maker, true, [], async () => {
+      const opened = await db.query(`select legal.open_vendor_temporary_clearance(${sqlJson({ vendor_id: vendorId, expected_revision: 0, scope, amount_limit: 50000, effective_at: effectiveAt, expires_at: expiresAt, evidence_reference: `private/${scope}-clearance.pdf`, notice_reference: `private/${scope}-notice.pdf` })}) as result`);
+      return opened.rows[0].result.id;
+    });
+    const approveClearance = async (clearanceId) => withRole('authenticated', legalDecider, true, [], async () => {
+      const decided = await db.query(`select legal.decide_vendor_temporary_clearance(${sqlJson({ clearance_id: clearanceId, expected_revision: 1, decision: 'approve' })}) as result`);
+      assert.equal(decided.rows[0].result.replayed, false);
+      const replay = await db.query(`select legal.decide_vendor_temporary_clearance(${sqlJson({ clearance_id: clearanceId, expected_revision: 1, decision: 'approve' })}) as result`);
+      assert.equal(replay.rows[0].result.replayed, true, 'identical clearance decision retry is replayed');
+    });
+    const paymentPayload = (invoiceNumber, foreignEvidence) => sqlJson({ purchase_order_id: 'PO-TASK10', invoice_number: invoiceNumber, invoice_date: '2030-01-03', invoice_amount: 1, tax_amount: 0, withholding_amount: 0, invoice_or_si_storage_path: 'private/invoice-clearance.pdf', milestone_support_storage_path: 'private/acceptance.pdf', tax_withholding_support_storage_path: 'private/tax.pdf', foreign_vendor_evidence_storage_path: foreignEvidence });
+    for (const [scope, effectiveAt, expiresAt, name] of [
+      ['services', '2025-01-01T00:00:00.000Z', '2027-01-01T00:00:00.000Z', 'wrong scope'],
+      ['goods', '2031-01-01T00:00:00.000Z', '2032-01-01T00:00:00.000Z', 'future'],
+      ['goods', '2020-01-01T00:00:00.000Z', '2021-01-01T00:00:00.000Z', 'expired'],
+    ]) {
+      const clearanceId = await openClearance(scope, effectiveAt, expiresAt);
+      await approveClearance(clearanceId);
+      await withRole('authenticated', legalDecider, true, [], async () => {
+        await assert.rejects(
+          () => db.query(`select procurement.prepare_invoice_payment_readiness(${paymentPayload(`INV-${name}`)})`),
+          /eligibility/i,
+          `${name} temporary clearance cannot authorize payment`,
+        );
+      });
+    }
+    const clearanceId = await openClearance('goods', '2025-01-01T00:00:00.000Z', '2027-01-01T00:00:00.000Z');
+    await approveClearance(clearanceId);
+    await withRole('authenticated', legalDecider, true, [], async () => {
+      const clearance = await db.query(`select legal.vendor_eligibility_projection(${sqlJson({ vendor_id: vendorId, scope: 'goods' })}) as projection`);
+      assert.equal(clearance.rows[0].projection.status, 'temporary_clearance');
+      assert.equal(clearance.rows[0].projection.eligible, true);
+      await db.query(`select procurement.prepare_invoice_payment_readiness(${paymentPayload('INV-CLEARANCE-ACTIVE')}) as result`);
+    });
+    await db.exec(`update procurement.purchase_orders set acceptance_evidence_version=2 where id='PO-TASK10'`);
+    await db.exec(`insert into legal.accreditation_cases(id,vendor_id,jurisdiction) values ('foreign-case','${vendorId}','US')`);
+    await withRole('authenticated', legalDecider, true, [], async () => {
+      await assert.rejects(
+        () => db.query(`select procurement.prepare_invoice_payment_readiness(${paymentPayload('INV-FOREIGN-MISSING')})`),
+        /Foreign-vendor/i,
+        'foreign vendors require their own tax and payment-control evidence',
+      );
+      await db.query(`select procurement.prepare_invoice_payment_readiness(${paymentPayload('INV-FOREIGN-SUPPORTED', 'private/foreign-tax.pdf')}) as result`);
+      const stale = await db.query(`select count(*)::integer as count from procurement.payment_readiness_packs where purchase_order_id='PO-TASK10' and evidence_stale=true and status='returned'`);
+      assert.ok(stale.rows[0].count >= 1, 'a changed acceptance version invalidates the previous payment evidence');
     });
     const grants = await db.query(`select
       has_function_privilege('authenticated','legal.record_vendor_eligibility_decision(jsonb)','EXECUTE') as legal_rpc,
@@ -2289,6 +2385,8 @@ test("PGlite parse smoke loads the migration without a live database", async () 
       create function procurement.insufficient_bid_exception(jsonb) returns jsonb language sql as $$ select null::jsonb $$;
       create table core.profiles (id uuid primary key, vendor_id uuid, full_name text, status text not null default 'active');
       create table core.vendors (id uuid primary key, legal_name text, accreditation_status text default 'approved', accreditation_expires_at timestamptz);
+      create table legal.accreditation_cases (id text primary key, vendor_id uuid references core.vendors(id), jurisdiction text);
+      create table legal.accreditation_dispositions (id uuid primary key default gen_random_uuid(), case_id text references legal.accreditation_cases(id), disposition text, reason text not null default 'fixture', conditions jsonb not null default '{}'::jsonb, follow_up_due_at timestamptz, decided_by uuid references core.profiles(id), decided_at timestamptz not null default statement_timestamp());
       create table procurement.requests (
         id uuid primary key,
         status text,

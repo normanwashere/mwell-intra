@@ -27,3 +27,25 @@
 - Mwell-requested samples require purpose, custodian, evaluation, disposition, evidence, and a PO link. Sample evaluation does not accredit or award a vendor.
 - No migration, deployment, remote UAT, production mutation, `.codex-tmp`, `apps/shell/artifacts`, `deliverables`, or `outputs` path was touched.
 - Controlled desktop/mobile browser certification did not pass. The memory role flow reached the payment surface and rendered the itemized evidence panel, but the current closed seed PO has no acceptance editor required by the existing recovery scenario; Legal/Vendor fixtures also rely on an outdated form action. Browser evidence therefore remains a release gate and is not claimed by this report.
+
+## Fix Round 1
+
+- The locally used `procurement.prepare_invoice_payment_readiness(jsonb)` is now the sole public invoice-preparation entry point. It delegates to `private.policy_prepare_invoice_payment_readiness(jsonb)`; the former public implementation is renamed and revoked. The private command locks and recomputes the issued PO, request, current Legal/VMO eligibility, request-bound active operating profile, itemized invoice amount, accepted unpaid value, PO match, tax/withholding, foreign-vendor evidence, and acceptance-version staleness. Client booleans are ignored.
+- Core expiry is fail-closed. `core.vendors.accreditation_expires_at` blocks invitation, issue, and payment unless a separate Legal/VMO, maker-decider, revision-bound temporary clearance is approved for the exact request/category, amount, effective window, evidence, and notice. Existing approved `legal.accreditation_dispositions.temporary_clearance` data is deterministically imported as immutable legacy evidence.
+- Legal/VMO now has a reachable authority workspace in the Legal cases route for six-month review metrics, governed pass/extend/revoke/suspend decisions, clearance opening/independent approval or revocation, and sample custody. Procurement continues to render only the authority projection. Exact replay validates the original metrics/evidence/notice instead of accepting a changed retry.
+- The Finance UI now collects a separate foreign-vendor tax/payment-control reference and forwards it solely as evidence. The server persists it with the payment pack and decides whether it is required.
+- The real-role PGlite matrix now covers anon and unrelated denial, private-helper/direct-DML denial, review maker/decider separation, exact replay and stale retry rejection, expired core accreditation, wrong/future/expired/active clearance, the actual invoice endpoint, foreign-evidence recovery, and acceptance-version invalidation. It does not apply the migration.
+- The stale browser fixture now starts from an issued ECG PO. It executes requester/Warehouse acceptance, Procurement evidence, Finance acceptance, two payment releases, verifies that payment does not close the PO, and retains desktop/mobile screenshots at `docs/qa/evidence/task-10-finance-recovery-desktop-1280.png` and `docs/qa/evidence/task-10-finance-recovery-mobile-390.png`. Trace-enabled runs are retained in the Playwright test results directory.
+
+### Fix Round Verification
+
+- Node `22.17.0` was used explicitly through `C:\Users\NormanArisDeocareza\.cache\node-runtimes\node-v22.17.0-win-x64\node.exe`, Corepack `dist\pnpm.js`, and a child `PATH` prefixed with that Node directory.
+- `pnpm --filter @intra/legal test`: passed, 158 tests.
+- Procurement, Legal, and Shell `typecheck`: passed.
+- `node scripts/verify-mpic-procurement-policy-alignment.mjs`: passed.
+- `pnpm exec node --test --test-name-pattern "Task 10 vendor|PGlite parse smoke" scripts/verify-mpic-procurement-policy-alignment.test.mjs`: passed.
+- Trace-enabled Playwright `policy-payment-readiness.spec.ts`: passed on `desktop-1280` and `mobile-390`.
+
+### Migration Status Ruling
+
+The shared-target migration-status ruling remains the Task 12 stop gate. This workspace is intentionally unlinked: `20260822110000_mpic_procurement_policy_alignment.sql` was not applied locally or remotely, and no shared target was queried. Before Task 12/UAT proceeds, retain a read-only linked-target status artifact proving this migration is pending and the remote chain has not drifted; stop UAT if it is already applied or drift is found.
