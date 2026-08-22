@@ -32,3 +32,13 @@ it('requires the governed evidence pack before a recommendation can be submitted
     'Applicable risk evidence is required.',
   ]));
 });
+
+it('renders server-led variance stages and audit evidence instead of a generic review gate', () => {
+  const source = readFileSync(new URL('./BestValueEvaluation.tsx', import.meta.url), 'utf8');
+  expect(source).toContain('Variance review: {varianceStageLabel}');
+  expect(source).toContain("'Department Head'");
+  expect(source).toContain("'Finance'");
+  expect(source).toContain('Submitted by');
+  expect(source).toContain('DOA assignment');
+  expect(source).not.toContain('canReview,');
+});

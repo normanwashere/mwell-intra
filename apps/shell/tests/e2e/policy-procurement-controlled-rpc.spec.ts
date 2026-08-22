@@ -5,7 +5,7 @@ import {
   installControlledRpc,
 } from '../helpers/controlled-procurement-rpc';
 
-async function signIn(page: import('@playwright/test').Page, fixture: ControlledProcurementRpcFixture, actorKey: 'procurement' | 'admin' | 'legal' | 'operations', redirect: string) {
+async function signIn(page: import('@playwright/test').Page, fixture: ControlledProcurementRpcFixture, actorKey: 'procurement' | 'admin' | 'legal' | 'operations' | 'deptHead' | 'finance', redirect: string) {
   await page.goto(`/login?redirect=${encodeURIComponent(redirect)}`);
   await page.getByLabel('Email').fill(actor(actorKey).email);
   await page.getByLabel('Password').fill('Controlled-Rpc-Only-2026!');
@@ -79,18 +79,46 @@ test('stateful controlled RPC covers procurement confirmation, sourcing, submiss
     await procurementPage.getByLabel('Technical evaluation vendor').selectOption(vendorId);
     await procurementPage.getByLabel('Technical evidence reference').fill(`controlled-technical-${vendorId}.pdf`);
     await procurementPage.getByLabel('Technical review comments').fill(`Controlled technical evidence for ${vendorId}.`);
-    for (const criterion of criterionLabels) await procurementPage.getByLabel(`${criterion} score`).fill(score);
+    for (const criterion of criterionLabels) await procurementPage.getByLabel(`${criterion} score`, { exact: true }).fill(score);
     await procurementPage.getByRole('button', { name: 'Submit technical evaluation' }).click();
     await expect(procurementPage.getByText('Technical evaluation submitted with evidence')).toBeVisible();
   }
-  await procurementPage.getByLabel('Best-value recommended vendor').selectOption('vendor-1');
+  await procurementPage.getByLabel('Best-value recommended vendor').selectOption('vendor-2');
   await procurementPage.getByLabel('Risk evidence reference').fill('controlled-risk-review-v1.pdf');
-  await procurementPage.getByLabel('Best-value rationale').fill('Acme is the highest evaluated compliant offer with complete commercial, technical, and risk evidence.');
+  await procurementPage.getByLabel('Best-value rationale').fill('North Star offers the governed best-value balance with complete commercial, technical, and risk evidence.');
+  await procurementPage.getByLabel('Written variance justification').fill('Lifecycle cost and contracted support outweigh the higher technical score, with documented evidence.');
   await procurementPage.getByRole('button', { name: 'Submit recommendation' }).click();
-  await expect(procurementPage.getByText('Best-value recommendation submitted')).toBeVisible();
-  await procurementPage.getByRole('button', { name: 'Record controlled award' }).click();
-  await expect(procurementPage.getByText('Sourcing award recorded')).toBeVisible();
-  expect(fixture.sourcing).toMatchObject({ status: 'awarded', selectedVendorId: 'vendor-1' });
+  await expect(procurementPage.getByText('Variance recommendation submitted for independent approval')).toBeVisible();
+  await expect(procurementPage.getByRole('button', { name: 'Record controlled award' })).toHaveCount(0);
+  await procurementContext.close();
+
+  const departmentContext = await browser.newContext();
+  await installControlledRpc(departmentContext, fixture, 'deptHead');
+  const departmentPage = await departmentContext.newPage();
+  await signIn(departmentPage, fixture, 'deptHead', `/procurement/requests/${fixture.requestId}`);
+  await expect(departmentPage.getByText('Variance review: Department Head')).toBeVisible();
+  await departmentPage.getByLabel('Variance approval note').fill('Department Head confirms the documented operating variance.');
+  await departmentPage.getByRole('button', { name: 'Record Department Head approval' }).click();
+  await expect(departmentPage.getByText('Variance Department Head decision recorded')).toBeVisible();
+  await departmentContext.close();
+
+  const financeContext = await browser.newContext();
+  await installControlledRpc(financeContext, fixture, 'finance');
+  const financePage = await financeContext.newPage();
+  await signIn(financePage, fixture, 'finance', `/procurement/requests/${fixture.requestId}`);
+  await expect(financePage.getByText('Variance review: Finance')).toBeVisible();
+  await financePage.getByLabel('Variance approval note').fill('Finance confirms the evidence and active authority.');
+  await financePage.getByRole('button', { name: 'Record Finance approval' }).click();
+  await expect(financePage.getByText('Variance Finance decision recorded')).toBeVisible();
+  await financeContext.close();
+
+  const awardContext = await browser.newContext();
+  await installControlledRpc(awardContext, fixture, 'procurement');
+  const awardPage = await awardContext.newPage();
+  await signIn(awardPage, fixture, 'procurement', `/procurement/requests/${fixture.requestId}`);
+  await awardPage.getByRole('button', { name: 'Record controlled award' }).click();
+  await expect(awardPage.getByText('Sourcing award recorded')).toBeVisible();
+  expect(fixture.sourcing).toMatchObject({ status: 'awarded', selectedVendorId: 'vendor-2' });
   expect(fixture.sourcing?.responses.filter((response) => response.receivedAt)).toHaveLength(3);
   expect(fixture.callsNamed('save_sourcing_event')).toHaveLength(1);
   expect(fixture.callsNamed('invite_sourcing_vendors')).toHaveLength(3);
@@ -104,20 +132,20 @@ test('stateful controlled RPC covers procurement confirmation, sourcing, submiss
   expect(fixture.callsNamed('transition_sourcing_event').map((call) => call.payload.action)).toEqual(['issue', 'response_closed', 'evaluation', 'award']);
 
   fixture.sourcing!.status = 'failed_bid';
-  await procurementPage.reload();
-  await procurementPage.getByLabel('Requote deadline').fill('2026-10-07T12:00');
-  await procurementPage.getByLabel('Requote package version').fill('RFQ-CONTROLLED-v2');
-  await procurementPage.getByLabel('Requote package SHA-256').fill('b'.repeat(64));
-  await procurementPage.getByLabel('Vendor to invite').selectOption('vendor-4');
-  await procurementPage.getByRole('button', { name: 'Source and requote' }).click();
-  await expect(procurementPage.getByText('Additional vendor sourced and equal requote issued')).toBeVisible();
+  await awardPage.reload();
+  await awardPage.getByLabel('Requote deadline').fill('2026-10-07T12:00');
+  await awardPage.getByLabel('Requote package version').fill('RFQ-CONTROLLED-v2');
+  await awardPage.getByLabel('Requote package SHA-256').fill('b'.repeat(64));
+  await awardPage.getByLabel('Vendor to invite').selectOption('vendor-4');
+  await awardPage.getByRole('button', { name: 'Source and requote' }).click();
+  await expect(awardPage.getByText('Additional vendor sourced and equal requote issued')).toBeVisible();
   expect(fixture.callsNamed('transition_sourcing_event').at(-1)).toMatchObject({ payload: { action: 'source_additional_and_requote', vendor_id: 'vendor-4' } });
   fixture.sourcing!.status = 'awarded';
-  fixture.sourcing!.selectedVendorId = 'vendor-1';
-  await procurementPage.reload();
+  fixture.sourcing!.selectedVendorId = 'vendor-2';
+  await awardPage.reload();
 
-  await procurementPage.getByRole('button', { name: 'Submit for approval' }).click();
-  await expect(procurementPage.getByText('Request submitted for approval')).toBeVisible();
+  await awardPage.getByRole('button', { name: 'Submit for approval' }).click();
+  await expect(awardPage.getByText('Request submitted for approval')).toBeVisible();
   expect(fixture.callsNamed('submit_request')).toContainEqual({
     actor: 'controlled-procurement',
     schema: 'procurement',
@@ -125,7 +153,7 @@ test('stateful controlled RPC covers procurement confirmation, sourcing, submiss
     payload: { id: fixture.requestId },
   });
   expect(fixture.request.status).toBe('submitted');
-  await procurementContext.close();
+  await awardContext.close();
 
   const adminContext = await browser.newContext();
   await installControlledRpc(adminContext, fixture, 'admin');

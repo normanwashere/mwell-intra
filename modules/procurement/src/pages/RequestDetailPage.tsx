@@ -122,7 +122,7 @@ export function RequestDetailPage() {
   const { success, error } = useToast();
   const { profile, mode, supabaseClient } = useSession();
   const canConfirmRoute = useCan('procurement', 'manage_rfp');
-  const canReviewBestValue = useCan('procurement', 'approve_award');
+  const canApproveSourcingException = useCan('procurement', 'approve_award');
   const [requestedMode, setRequestedMode] = useState<ProcurementMode>('competitive_bidding');
   const [returnedRoute, setReturnedRoute] = useState<ProcurementRoute | null>(null);
   const [routeProfile, setRouteProfile] = useState<ProcurementPolicyProfile | null>(null);
@@ -544,7 +544,7 @@ export function RequestDetailPage() {
                 requestId={req.id}
                 method={req.route.solicitationType === 'rfp' ? 'rfp' : 'rfq'}
                 canManage={canConfirmRoute}
-                canApprove={canReviewBestValue}
+                canApprove={canApproveSourcingException}
                 client={mode === 'supabase' ? supabaseClient : null}
                 vendors={vendors}
                 onChanged={refresh}

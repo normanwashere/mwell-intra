@@ -67,7 +67,7 @@ async function createGovernedRouteFixture() {
     create function extensions.digest(bytea, text) returns bytea language sql immutable as $$ select decode('00', 'hex') $$;
     create function private.policy_submit_procurement_request(jsonb) returns jsonb language sql as $$ select '{}'::jsonb $$;
     create function procurement.insufficient_bid_exception(jsonb) returns jsonb language sql as $$ select null::jsonb $$;
-    create table core.profiles (id uuid primary key, vendor_id uuid, status text not null default 'active');
+    create table core.profiles (id uuid primary key, vendor_id uuid, full_name text, status text not null default 'active');
     create table core.vendors (id uuid primary key, legal_name text, accreditation_status text default 'approved', accreditation_expires_at timestamptz);
     create table procurement.requests (
       id uuid primary key,
@@ -453,12 +453,20 @@ test("requires profile, route, RLS, and hardened RPC controls", () => {
 test("rejects migration variants that weaken best-value or variance controls", () => {
   const cases = [
     {
-      sql: migration.replace("The recommendation author cannot approve their own variance", "Variance self approval allowed"),
+      sql: migration.replaceAll("The recommendation author cannot approve their own variance", "Variance self approval allowed"),
       failure: "missing best-value governance control the recommendation author cannot approve their own variance",
     },
     {
       sql: migration.replaceAll("policy_evaluation_event", "removed_evaluation_event"),
       failure: "missing hardened best-value RPC procurement.save_commercial_tabulation",
+    },
+    {
+      sql: migration.replaceAll("Finance approval must be independent from the Department Head decision", "dual stage approval allowed"),
+      failure: "missing best-value governance control finance approval must be independent from the department head decision",
+    },
+    {
+      sql: migration.replaceAll("A submitted technical evaluation is required for every usable response", "single evaluation accepted"),
+      failure: "missing best-value governance control a submitted technical evaluation is required for every usable response",
     },
   ];
   for (const { sql, failure } of cases) {
@@ -1244,7 +1252,11 @@ test("executes public governed sourcing controls and independent failed-bid reco
     `);
     assert.deepEqual(communication.rows[0], { recipients: 3, groups: 1 }, "clarification must be identical and visible to every invitee");
 
-    await db.query(`select procurement.transition_sourcing_event(${sqlJson({ id: eventId, action: "failed_bid", failed_bid_reason: "insufficient_responses" })})`);
+    await db.exec(`update procurement.sourcing_events set submission_deadline = statement_timestamp() - interval '1 minute' where id = '${eventId}'`);
+    const formallyClosedFailedBid = await db.query(`select procurement.transition_sourcing_event(${sqlJson({ id: eventId, action: "response_closed" })}) as event`);
+    assert.equal(formallyClosedFailedBid.rows[0].event.status, 'failed_bid');
+    const closureEvidence = await db.query(`select response_closed_at from procurement.sourcing_events where id = '${eventId}'`);
+    assert.ok(closureEvidence.rows[0].response_closed_at, 'an insufficient-response formal close must retain closure evidence for the approved exception route');
     await assert.rejects(
       () => db.query(`select procurement.transition_sourcing_event(${sqlJson({ id: eventId, action: "evaluation" })})`),
       /approved evaluation exception/i,
@@ -1444,6 +1456,7 @@ test("executes versioned tabulation, technical best-value evidence, and independ
       values ('${matrixId}', 'OPS-TEST-1', 'Operations', 'active', true, statement_timestamp() - interval '1 day');
       insert into procurement.doa_assignments(matrix_id, department, min_amount, max_amount, tier, approver_user_id, active) values
         ('${matrixId}', 'Operations', 0, null, 'dept_head', '${checkerId}', true),
+        ('${matrixId}', 'Operations', 0, null, 'finance', '${checkerId}', true),
         ('${matrixId}', 'Operations', 0, null, 'finance', '${financeActorId}', true);
       insert into core.vendors(id, legal_name, accreditation_status) values
         ('${vendorIds[0]}', 'Best technical vendor', 'approved'),
@@ -1509,6 +1522,21 @@ test("executes versioned tabulation, technical best-value evidence, and independ
         criteria: criteria(index === 0 ? 92 : index === 1 ? 84 : 72),
       })}) as evaluation`);
       evaluations.push(evaluation.rows[0].evaluation);
+      if (index === 0) {
+        await assert.rejects(
+          () => db.query(`select procurement.submit_award_recommendation(${sqlJson({
+            sourcing_event_id: eventId,
+            evaluated_vendor_id: vendorIds[0],
+            recommended_vendor_id: vendorIds[0],
+            commercial_tabulation_id: tabulation.rows[0].tabulation.id,
+            technical_evaluation_id: evaluation.rows[0].evaluation.id,
+            rationale: 'Incomplete comparison must not recommend a vendor.',
+            risk_evidence_reference: 'private/risk/high-risk.pdf',
+          })})`),
+          /every usable response/i,
+          'a public recommendation RPC must reject incomplete technical coverage',
+        );
+      }
     }
     assert.equal(evaluations[0].total_score, 92, 'the complete criterion average must be stored');
     await assert.rejects(
@@ -1545,14 +1573,99 @@ test("executes versioned tabulation, technical best-value evidence, and independ
     await setPolicyActor(db, checkerId, true);
     const departmentDecision = await db.query(`select procurement.review_recommendation_variance(${sqlJson({ award_recommendation_id: recommendation.rows[0].recommendation.id, expected_version: 1, decision: "approved", note: "Department Head confirms the documented variance rationale." })}) as recommendation`);
     assert.equal(departmentDecision.rows[0].recommendation.status, 'pending_variance');
+    await assert.rejects(
+      () => db.query(`select procurement.review_recommendation_variance(${sqlJson({ award_recommendation_id: recommendation.rows[0].recommendation.id, expected_version: 2, decision: "approved", note: "Dual-assignment actor attempts Finance approval." })})`),
+      /independent from the Department Head/i,
+      'a dual-assignment actor cannot complete both variance stages',
+    );
     await setPolicyActor(db, financeActorId, true);
     const financeDecision = await db.query(`select procurement.review_recommendation_variance(${sqlJson({ award_recommendation_id: recommendation.rows[0].recommendation.id, expected_version: 2, decision: "approved", note: "Finance confirms the value and active delegated authority." })}) as recommendation`);
     assert.equal(financeDecision.rows[0].recommendation.status, 'approved');
+    await setPolicyActor(db, actorId, true);
+    await db.query(`select procurement.submit_technical_evaluation(${sqlJson({
+      sourcing_event_id: eventId,
+      vendor_id: vendorIds[0],
+      evidence_reference: 'private/technical/1-revised.pdf',
+      comments: 'A corrected technical record supersedes the recommendation evidence.',
+      criteria: criteria(91),
+    })})`);
+    await assert.rejects(
+      () => db.query(`select procurement.transition_sourcing_event(${sqlJson({ id: eventId, action: "award", selected_vendor_id: vendorIds[1], closure_note: "Stale recommendation must not award." })})`),
+      /current approved best-value recommendation/i,
+      'a superseding technical evaluation must invalidate the earlier recommendation',
+    );
+    const refreshedRecommendation = await db.query(`select procurement.submit_award_recommendation(${sqlJson({
+      sourcing_event_id: eventId,
+      evaluated_vendor_id: vendorIds[0],
+      recommended_vendor_id: vendorIds[1],
+      commercial_tabulation_id: tabulation.rows[0].tabulation.id,
+      technical_evaluation_id: evaluations[1].id,
+      rationale: 'A refreshed evidence pack supports the variance recommendation.',
+      risk_evidence_reference: 'private/risk/high-risk.pdf',
+      variance_justification: 'Lifecycle cost, lead time, and support evidence outweigh the technical score difference.',
+    })}) as recommendation`);
+    await setPolicyActor(db, checkerId, true);
+    await db.query(`select procurement.review_recommendation_variance(${sqlJson({ award_recommendation_id: refreshedRecommendation.rows[0].recommendation.id, expected_version: 1, decision: "approved", note: "Department Head approves the refreshed evidence." })})`);
+    await setPolicyActor(db, financeActorId, true);
+    await db.query(`select procurement.review_recommendation_variance(${sqlJson({ award_recommendation_id: refreshedRecommendation.rows[0].recommendation.id, expected_version: 2, decision: "approved", note: "Finance approves the refreshed evidence." })})`);
     await db.query(`select procurement.transition_sourcing_event(${sqlJson({ id: eventId, action: "award", selected_vendor_id: vendorIds[1], closure_note: "Final award follows approved best-value recommendation." })}) as event`);
     const workspace = await db.query(`select procurement.evaluation_workspace(${sqlJson({ request_id: requestId })}) as workspace`);
     assert.equal(workspace.rows[0].workspace.commercialTabulations.length, 1);
-    assert.equal(workspace.rows[0].workspace.technicalEvaluations.length, 3);
+    assert.equal(workspace.rows[0].workspace.technicalEvaluations.length, 4);
     assert.equal(workspace.rows[0].workspace.varianceDecisions.length, 2);
+  } finally {
+    await db.close();
+  }
+});
+
+test("executes an approved insufficient-bids exception through best-value variance and final award", async () => {
+  const db = await createGovernedRouteFixture();
+  const requestId = "75000000-0000-0000-0000-000000000001";
+  const vendorIds = ["75000000-0000-0000-0000-000000000011", "75000000-0000-0000-0000-000000000012", "75000000-0000-0000-0000-000000000015"];
+  const financeActorId = "75000000-0000-0000-0000-000000000013";
+  const matrixId = "75000000-0000-0000-0000-000000000014";
+  const criteria = (score) => ["technicalCompliance", "quality", "leadTime", "totalLifecycleCost", "warranty", "support", "price", "paymentTerms", "training"].map((criterion) => ({ criterion, score, evidence_reference: `private/exception/${criterion}.pdf` }));
+  try {
+    await db.exec(migrationBeforeBackfillForPglite);
+    await seedActivePolicyProfiles(db);
+    await db.exec(migrationTask6);
+    await db.exec(`
+      insert into core.profiles(id, status) values ('${checkerId}', 'active'), ('${financeActorId}', 'active');
+      insert into procurement.doa_matrices(id, version, department, status, active, effective_at) values ('${matrixId}', 'OPS-EXCEPTION-1', 'Operations', 'active', true, statement_timestamp() - interval '1 day');
+      insert into procurement.doa_assignments(matrix_id, department, min_amount, max_amount, tier, approver_user_id, active) values
+        ('${matrixId}', 'Operations', 0, null, 'dept_head', '${checkerId}', true),
+        ('${matrixId}', 'Operations', 0, null, 'finance', '${financeActorId}', true);
+      insert into core.vendors(id, legal_name, accreditation_status) values ('${vendorIds[0]}', 'Exception technical vendor', 'approved'), ('${vendorIds[1]}', 'Exception value vendor', 'approved'), ('${vendorIds[2]}', 'Exception non-response vendor', 'approved');
+    `);
+    await insertRequest(db, { id: requestId, requirementKind: "materials", compliance: { riskFacts: { highRisk: true } } });
+    await db.exec(`update procurement.requests set policy_profile_id = '${operatingProfileId}', department = 'Operations' where id = '${requestId}'; insert into procurement.route_decisions(request_id, policy_version, request_version, method, reasons, risk_facts, status, confirmed_by, solicitation_type, procurement_mode, governance_tier, policy_profile_id) values ('${requestId}', 'MWELL-FIXTURE:2026.01', 1, 'rfq', array['fixture'], '{}'::jsonb, 'confirmed', '${actorId}', 'rfq', 'competitive_bidding', 'standard', '${operatingProfileId}');`);
+    await setPolicyActor(db, actorId, true);
+    const event = await db.query(`select procurement.save_sourcing_event(${sqlJson({ request_id: requestId, submission_deadline: "2030-01-15T00:00:00.000Z", intended_responses: 3, package_version: "RFQ-EXCEPTION-v1", package_hash: "e".repeat(64) })}) as event`);
+    const eventId = event.rows[0].event.id;
+    await db.query(`select procurement.invite_sourcing_vendors(${sqlJson({ sourcing_event_id: eventId, vendor_ids: vendorIds })})`);
+    await db.query(`select procurement.transition_sourcing_event(${sqlJson({ id: eventId, action: "issue" })})`);
+    for (const [index, vendorId] of vendorIds.slice(0, 2).entries()) await db.query(`select procurement.record_sourcing_response(${sqlJson({ sourcing_event_id: eventId, vendor_id: vendorId, received_at: "2029-12-30T00:00:00.000Z", proposal_storage_path: `private/exception/${index}.pdf`, commercial: { amount: 100000 + index * 10000 } })})`);
+    await db.exec(`update procurement.sourcing_events set submission_deadline = statement_timestamp() - interval '1 minute' where id = '${eventId}'`);
+    const close = await db.query(`select procurement.transition_sourcing_event(${sqlJson({ id: eventId, action: "response_closed" })}) as event`);
+    assert.equal(close.rows[0].event.status, 'failed_bid');
+    assert.ok(close.rows[0].event.response_closed_at, 'failed-bid formal closure must retain the timestamp used by Task 7 SLAs');
+    const exception = await db.query(`select procurement.submit_insufficient_bid_exception(${sqlJson({ sourcing_event_id: eventId, phase: "evaluation", justification: "The documented market search established only two compliant offers after exhaustive accredited outreach.", price_reasonableness: "Independent comparison and prior purchasing records support both commercial offers." })}) as pack`);
+    await setPolicyActor(db, checkerId, true);
+    await db.query(`select procurement.review_insufficient_bid_exception(${sqlJson({ id: exception.rows[0].pack.id, decision: "approved", note: "Independent reviewer approves the exception." })})`);
+    await db.query(`select procurement.transition_sourcing_event(${sqlJson({ id: eventId, action: "evaluation" })})`);
+    await setPolicyActor(db, actorId, true);
+    const tabulation = await db.query(`select procurement.save_commercial_tabulation(${sqlJson({ sourcing_event_id: eventId, evidence_reference: "private/exception/tabulation.xlsx", entries: vendorIds.slice(0, 2).map((vendor_id, index) => ({ vendor_id, quoted_amount: 100000 + index * 10000, evidence_reference: `private/exception/${index}.pdf` })) })}) as tabulation`);
+    const evaluations = [];
+    for (const [index, vendorId] of vendorIds.slice(0, 2).entries()) {
+      const evaluation = await db.query(`select procurement.submit_technical_evaluation(${sqlJson({ sourcing_event_id: eventId, vendor_id: vendorId, evidence_reference: `private/exception/technical-${index}.pdf`, criteria: criteria(index === 0 ? 90 : 80) })}) as evaluation`);
+      evaluations.push(evaluation.rows[0].evaluation);
+    }
+    const recommendation = await db.query(`select procurement.submit_award_recommendation(${sqlJson({ sourcing_event_id: eventId, evaluated_vendor_id: vendorIds[0], recommended_vendor_id: vendorIds[1], commercial_tabulation_id: tabulation.rows[0].tabulation.id, technical_evaluation_id: evaluations[1].id, rationale: "The documented best-value comparison supports the second offer.", risk_evidence_reference: "private/exception/risk.pdf", variance_justification: "Commercial value and support evidence justify the variance." })}) as recommendation`);
+    await setPolicyActor(db, checkerId, true);
+    await db.query(`select procurement.review_recommendation_variance(${sqlJson({ award_recommendation_id: recommendation.rows[0].recommendation.id, expected_version: 1, decision: "approved", note: "Department Head approves the exception route variance." })})`);
+    await setPolicyActor(db, financeActorId, true);
+    await db.query(`select procurement.review_recommendation_variance(${sqlJson({ award_recommendation_id: recommendation.rows[0].recommendation.id, expected_version: 2, decision: "approved", note: "Finance independently approves the exception route variance." })})`);
+    await db.query(`select procurement.transition_sourcing_event(${sqlJson({ id: eventId, action: "award", selected_vendor_id: vendorIds[1], closure_note: "Approved exception route final award." })})`);
   } finally {
     await db.close();
   }
@@ -1577,7 +1690,7 @@ test("PGlite parse smoke loads the migration without a live database", async () 
       create function private.policy_submit_procurement_request(jsonb) returns jsonb language sql as $$ select '{}'::jsonb $$;
       create function procurement.create_request(jsonb) returns jsonb language sql as $$ select $1 $$;
       create function procurement.insufficient_bid_exception(jsonb) returns jsonb language sql as $$ select null::jsonb $$;
-      create table core.profiles (id uuid primary key, vendor_id uuid, status text not null default 'active');
+      create table core.profiles (id uuid primary key, vendor_id uuid, full_name text, status text not null default 'active');
       create table core.vendors (id uuid primary key, legal_name text, accreditation_status text default 'approved', accreditation_expires_at timestamptz);
       create table procurement.requests (
         id uuid primary key,

@@ -184,6 +184,7 @@ export interface CommercialTabulation {
   responseClosedAt: string;
   dueAt: string;
   submittedAt?: string;
+  submittedByName?: string;
   submittedByEmail?: string;
   entries: Array<{
     vendorId: string;
@@ -207,6 +208,7 @@ export interface TechnicalEvaluation {
   version: number;
   dueAt: string;
   submittedAt?: string;
+  reviewerName?: string;
   reviewerEmail?: string;
   criteria: EvaluationCriterionScore[];
   totalScore: number;
@@ -238,9 +240,20 @@ export interface RecommendationVarianceDecision {
   decisionType: 'department_head' | 'finance';
   decision: 'approved' | 'rejected';
   rationale: string;
+  decidedByName?: string;
   decidedByEmail?: string;
   decidedAt: string;
+  doaMatrixId?: string;
   doaMatrixVersion?: string;
+  doaAssignmentId?: string;
+}
+
+export interface VarianceReviewEligibility {
+  nextStage?: 'department_head' | 'finance';
+  canReview: boolean;
+  doaMatrixId?: string;
+  doaMatrixVersion?: string;
+  doaAssignmentId?: string;
 }
 
 /**
