@@ -25,6 +25,7 @@ import type {
   AcceptancePack,
   PaymentReadinessPack,
   PaymentReadinessStalenessEvent,
+  PurchaseOrderLifecycle,
   ProcurementRequest,
   ProcurementRequestLine,
   ProcurementRoute,
@@ -1135,6 +1136,9 @@ export interface PurchaseOrdersAPI {
       actorEmail?: string;
     },
   ) => MaybePromise<PurchaseOrder | null>;
+  acknowledgePurchaseOrder: (id: string, reference: string) => MaybePromise<PurchaseOrder | null>;
+  recordVendorDeliveryNotice: (id: string, reference: string) => MaybePromise<PurchaseOrder | null>;
+  requestPurchaseOrderClosure: (id: string, reason: string) => MaybePromise<PurchaseOrder | null>;
   getById: (id: string) => PurchaseOrder | undefined;
 }
 
@@ -1418,7 +1422,20 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
           return refreshLive().then(() => mapped);
         });
       }
-      return patch(id, { status: 'issued' });
+      const issuedAt = nowIso();
+      return patch(id, {
+        status: 'issued',
+        lifecycle: {
+          revision: 1,
+          issuedAt,
+          sentAt: issuedAt,
+          acknowledgementDueAt: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
+          acknowledgementStatus: 'pending',
+          deliveryNoticeStatus: 'pending',
+          qualityRecoveryStatus: 'none',
+          closureStatus: 'open',
+        },
+      });
     },
     [patch, live, refreshLive, rows],
   );
@@ -1748,6 +1765,49 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
     [live, patch, refreshLive, rows],
   );
 
+  const acknowledgePurchaseOrder = useCallback((id: string, reference: string): MaybePromise<PurchaseOrder | null> => {
+    const current = rows.find((row) => row.id === id);
+    if (!current || current.status !== 'issued') return null;
+    const expectedRevision = current.lifecycle?.revision ?? 1;
+    if (isLive(live)) {
+      return liveRpc<LiveRow>(live, 'procurement', 'acknowledge_purchase_order', {
+        purchase_order_id: id, expected_revision: expectedRevision, acknowledgement_reference: reference,
+      }).then(() => refreshLive().then(() => current));
+    }
+    return patch(id, { lifecycle: {
+      revision: expectedRevision + 1, issuedAt: current.lifecycle?.issuedAt ?? current.updatedAt,
+      sentAt: current.lifecycle?.sentAt ?? current.updatedAt, acknowledgedAt: nowIso(),
+      acknowledgementDueAt: current.lifecycle?.acknowledgementDueAt,
+      acknowledgementStatus: 'acknowledged', deliveryNoticeStatus: current.lifecycle?.deliveryNoticeStatus ?? 'pending',
+      qualityRecoveryStatus: current.lifecycle?.qualityRecoveryStatus ?? 'none', closureStatus: current.lifecycle?.closureStatus ?? 'open',
+    } });
+  }, [live, patch, refreshLive, rows]);
+
+  const recordVendorDeliveryNotice = useCallback((id: string, reference: string): MaybePromise<PurchaseOrder | null> => {
+    const current = rows.find((row) => row.id === id);
+    if (!current || current.status !== 'issued') return null;
+    const expectedRevision = current.lifecycle?.revision ?? 1;
+    if (isLive(live)) {
+      return liveRpc<LiveRow>(live, 'procurement', 'record_vendor_delivery_notice', {
+        purchase_order_id: id, expected_revision: expectedRevision, delivery_notice_reference: reference,
+      }).then(() => refreshLive().then(() => current));
+    }
+    return patch(id, { lifecycle: { ...(current.lifecycle ?? { issuedAt: current.updatedAt, acknowledgementStatus: 'pending', qualityRecoveryStatus: 'none', closureStatus: 'open' }), revision: expectedRevision + 1, deliveryNoticeStatus: 'recorded' } as PurchaseOrderLifecycle });
+  }, [live, patch, refreshLive, rows]);
+
+  const requestPurchaseOrderClosure = useCallback((id: string, reason: string): MaybePromise<PurchaseOrder | null> => {
+    const current = rows.find((row) => row.id === id);
+    if (!current || current.status !== 'issued') return null;
+    const expectedRevision = current.lifecycle?.revision ?? 1;
+    if (isLive(live)) {
+      return liveRpc<LiveRow>(live, 'procurement', 'close_purchase_order', {
+        purchase_order_id: id, expected_revision: expectedRevision, closure_reason: reason,
+      }).then(() => refreshLive().then(() => current));
+    }
+    if (current.lifecycle?.closureStatus !== 'ready') return null;
+    return patch(id, { status: 'closed', lifecycle: { ...current.lifecycle, revision: expectedRevision + 1, closureStatus: 'closed' } });
+  }, [live, patch, refreshLive, rows]);
+
   const getById = useCallback((id: string) => rows.find((r) => r.id === id), [rows]);
 
   return {
@@ -1767,6 +1827,9 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
     preparePayment,
     reviewPayment,
     releasePayment,
+    acknowledgePurchaseOrder,
+    recordVendorDeliveryNotice,
+    requestPurchaseOrderClosure,
     getById,
   };
 }

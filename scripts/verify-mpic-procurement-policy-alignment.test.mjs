@@ -1999,6 +1999,21 @@ test("PGlite parse smoke loads the migration without a live database", async () 
         requester_id uuid,
         updated_at timestamptz default now()
       );
+      create table procurement.purchase_orders (
+        id text primary key,
+        request_id uuid references procurement.requests(id),
+        core_vendor_id uuid references core.vendors(id),
+        status text not null default 'draft',
+        updated_at timestamptz default now()
+      );
+      create table procurement.v_purchase_order_receipt_status_fixture (
+        purchase_order_id text primary key,
+        rejected_or_quarantined_quantity numeric default 0,
+        outstanding_quantity numeric default 0
+      );
+      create view procurement.v_purchase_order_receipt_status as
+        select purchase_order_id, rejected_or_quarantined_quantity, outstanding_quantity
+        from procurement.v_purchase_order_receipt_status_fixture;
       create table procurement.route_decisions (
         id uuid primary key default gen_random_uuid(),
         request_id uuid not null references procurement.requests(id),

@@ -745,7 +745,14 @@ export function validateRejectionReason(reason: string | undefined): string | un
 }
 
 export interface CommitmentReadinessInput {
-  sourcingMethod: SourcingMethod;
+  /** Legacy projection retained for existing PO drafts. Route wins when present. */
+  sourcingMethod?: SourcingMethod;
+  route?: ProcurementRoute;
+  policyProfile?: ProcurementPolicyProfile;
+  /** Authoritative package kinds, projected by the governed PO-readiness RPC. */
+  evidenceKinds?: string[];
+  /** Approved ladder tiers projected by the server; client booleans cannot authorize issue. */
+  approvedApprovalTiers?: ApproverTier[];
   vendorEligible: boolean;
   category?: RequestCategory;
   exceptionPack?: ProcurementExceptionPack;
@@ -763,12 +770,53 @@ export interface CommitmentReadinessInput {
   };
 }
 
+export interface CommitmentEvidenceRequirement {
+  kind: string;
+  label: string;
+  status: 'present' | 'missing';
+}
+
+/**
+ * The array shape is deliberately retained for legacy callers. Named fields
+ * are non-enumerable so older equality checks still see the original array.
+ */
+export type CommitmentReadinessResult = string[] & {
+  blockers: string[];
+  requiredEvidence: CommitmentEvidenceRequirement[];
+  ready: boolean;
+};
+
 /** Binding controls that must be satisfied before a PO can be issued. */
-export function evaluateCommitmentReadiness(input: CommitmentReadinessInput): string[] {
+export function evaluateCommitmentReadiness(input: CommitmentReadinessInput): CommitmentReadinessResult {
   const blockers: string[] = [];
+  const requiredEvidence: CommitmentEvidenceRequirement[] = [];
+  const route = input.route;
+  const sourcingMethod = input.sourcingMethod ?? (route ? legacySourcingMethod(route) : 'rfq');
+  const evidenceKinds = new Set(input.evidenceKinds ?? []);
+  const requireEvidence = (kind: string, label: string, blocker: string) => {
+    const present = evidenceKinds.has(kind);
+    requiredEvidence.push({ kind, label, status: present ? 'present' : 'missing' });
+    if (!present) blockers.push(blocker);
+  };
+
+  if (route) {
+    requireEvidence('approved_requisition', 'Approved requisition', 'Approved requisition is required.');
+    if (route.solicitationType !== 'none') {
+      requireEvidence(route.solicitationType, route.solicitationType.toUpperCase(), `${route.solicitationType.toUpperCase()} solicitation is required.`);
+      requireEvidence(route.solicitationType === 'rfq' ? 'quotation' : 'proposal', route.solicitationType === 'rfq' ? 'Quotation' : 'Proposal', `${route.solicitationType === 'rfq' ? 'Quotation' : 'Proposal'} evidence is required.`);
+      requireEvidence('commercial_tabulation', 'Commercial tabulation', 'Commercial tabulation is required.');
+      requireEvidence('award_recommendation', 'Award recommendation', 'Award recommendation is required.');
+    }
+    if (route.governanceTier !== 'standard') {
+      requireEvidence('technical_evaluation', 'Technical evaluation', 'Technical evaluation is required.');
+    }
+    if (input.approvedApprovalTiers && input.approvedApprovalTiers.length === 0) {
+      blockers.push('Complete approval ladder is required.');
+    }
+  }
   const pack = input.exceptionPack;
   const validPettyCashException =
-    input.sourcingMethod === 'petty_cash' &&
+    sourcingMethod === 'petty_cash' &&
     pack?.type === 'petty_cash_non_accredited' &&
     Boolean(pack.justification?.trim()) &&
     pack.financeEligibilityConfirmed === true &&
@@ -778,7 +826,7 @@ export function evaluateCommitmentReadiness(input: CommitmentReadinessInput): st
     blockers.push('current full accreditation or approved scoped temporary clearance');
   }
 
-  if (input.sourcingMethod === 'direct_award') {
+  if (sourcingMethod === 'direct_award') {
     if (!pack?.directAwardBasis) blockers.push('allowed Direct Award basis');
     if (!pack?.supplierSelected) blockers.push('identified supplier');
     if (!pack?.justification?.trim()) blockers.push('business justification');
@@ -786,13 +834,13 @@ export function evaluateCommitmentReadiness(input: CommitmentReadinessInput): st
     if (!pack?.procurementHeadReviewed) blockers.push('Procurement Head review');
     if (!pack?.doaApproved) blockers.push('final DOA approval');
   }
-  if (input.sourcingMethod === 'repeat_order' && pack?.type !== 'repeat_continuity') {
+  if (sourcingMethod === 'repeat_order' && pack?.type !== 'repeat_continuity') {
     blockers.push('repeat-order continuity evidence and approval');
   }
-  if (input.sourcingMethod === 'emergency' && pack?.type !== 'emergency') {
+  if (sourcingMethod === 'emergency' && pack?.type !== 'emergency') {
     blockers.push('documented emergency authority');
   }
-  if (input.sourcingMethod === 'petty_cash') {
+  if (sourcingMethod === 'petty_cash') {
     if (!pack?.justification?.trim()) blockers.push('one-time low-value petty-cash justification');
     if (!pack?.financeEligibilityConfirmed)
       blockers.push('Finance petty-cash eligibility confirmation');
@@ -832,7 +880,13 @@ export function evaluateCommitmentReadiness(input: CommitmentReadinessInput): st
   if (input.equipmentInstallation && !input.protections?.installationProtectionsApproved) {
     blockers.push('installation commissioning, defects, warranty, and acceptance controls');
   }
-  return blockers;
+  const result = blockers as CommitmentReadinessResult;
+  Object.defineProperties(result, {
+    blockers: { value: blockers, enumerable: false },
+    requiredEvidence: { value: requiredEvidence, enumerable: false },
+    ready: { value: blockers.length === 0, enumerable: false },
+  });
+  return result;
 }
 
 export interface PaymentReadinessInput {

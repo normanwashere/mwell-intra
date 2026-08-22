@@ -394,6 +394,26 @@ describe('sourcing response readiness', () => {
     });
   });
 
+  it('blocks PO issue when the governed package is incomplete', () => {
+    const result = evaluateCommitmentReadiness({
+      route: {
+        solicitationType: 'rfq',
+        procurementMode: 'competitive_bidding',
+        governanceTier: 'formal_bid',
+        policyProfileId: MWELL_OPERATING_PROFILE.id,
+        reasons: ['material_requirement'],
+      },
+      vendorEligible: true,
+      evidenceKinds: ['approved_requisition', 'rfq', 'quotation'],
+      policyProfile: MWELL_OPERATING_PROFILE,
+    });
+
+    expect(result.blockers).toEqual(expect.arrayContaining([
+      'Commercial tabulation is required.',
+      'Award recommendation is required.',
+    ]));
+  });
+
   it('blocks issue below the accredited invitation minimum and permits an approved server exception', () => {
     expect(evaluateSourcingReadiness({ method: 'rfq', invited: 2, usableResponses: 0 })).toMatchObject({
       ready: false,

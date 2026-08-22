@@ -15,6 +15,8 @@ const requiredTables = [
   "procurement.solicitation_communications",
   "procurement.policy_sla_events",
   "legal.vendor_probation_reviews",
+  "procurement.purchase_order_lifecycle_state",
+  "procurement.purchase_order_lifecycle_events",
 ];
 
 const requiredRequestColumns = [
@@ -27,6 +29,24 @@ const requiredRequestColumns = [
 ];
 
 const requiredFunctions = [
+  {
+    name: "procurement.acknowledge_purchase_order",
+    parameterType: "jsonb",
+    requiredBody: ["private.policy_po_lifecycle_transition", "vendor_acknowledged"],
+    placeholderFailure: "placeholder acknowledge_purchase_order body",
+  },
+  {
+    name: "procurement.record_vendor_delivery_notice",
+    parameterType: "jsonb",
+    requiredBody: ["private.policy_po_lifecycle_transition", "delivery_notice"],
+    placeholderFailure: "placeholder record_vendor_delivery_notice body",
+  },
+  {
+    name: "procurement.close_purchase_order",
+    parameterType: "jsonb",
+    requiredBody: ["for update", "closurestatus", "updated_at"],
+    placeholderFailure: "placeholder close_purchase_order body",
+  },
   {
     name: "procurement.save_policy_profile",
     parameterType: "jsonb",

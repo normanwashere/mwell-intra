@@ -38,6 +38,7 @@ import {
   type PaymentReadinessDraft,
   type PaymentReleaseDraft,
 } from '../components/PaymentReadinessPanel';
+import { CommitmentReadinessPanel } from '../components/CommitmentReadinessPanel';
 import { ProcurementAccessDenied } from '../components/ProcurementAccessDenied';
 import { accreditationLabel, formatDate, formatDateTime, poStatusLabel } from '../labels';
 import { makeTypedSignature } from '../signature';
@@ -92,6 +93,9 @@ export function PODetailPage() {
     preparePayment,
     reviewPayment,
     releasePayment,
+    acknowledgePurchaseOrder,
+    recordVendorDeliveryNotice,
+    requestPurchaseOrderClosure,
     loading,
   } = usePurchaseOrders();
   const { rows: requests } = useProcurementRequests();
@@ -146,6 +150,7 @@ export function PODetailPage() {
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancellationReason, setCancellationReason] = useState('');
   const [cancelling, setCancelling] = useState(false);
+  const [closureReason, setClosureReason] = useState('All contractual delivery and acceptance obligations are complete.');
 
   // PR-15 parity with the approval inbox: a prefilled signer name arms the
   // confirm button; the pad can still replace the seeded typed signature.
@@ -807,6 +812,28 @@ export function PODetailPage() {
           </Card>
         </div>
       ) : null}
+
+      {(po.status === 'approved' || po.status === 'issued' || po.status === 'closed') && (
+        <div>
+          <SectionTitle title="PO package and monitoring" subtitle="Acknowledgement, delivery, quality recovery, and closure are server-governed." />
+          <Card>
+            <CommitmentReadinessPanel
+              readiness={po.commitmentReadiness ? {
+                ready: po.commitmentReadiness.ready,
+                blockers: po.commitmentReadiness.blockers,
+                requiredEvidence: po.commitmentReadiness.evidence.map((item) => ({ kind: item.controlCode, label: item.controlCode, status: item.reviewStatus === 'approved' ? 'present' as const : 'missing' as const })),
+              } : { ready: issueBlockers.length === 0, blockers: issueBlockers, requiredEvidence: [] }}
+              lifecycle={po.lifecycle}
+              monitoring={po.openMonitoringItems}
+              canAcknowledge={canAuthorPo && po.status === 'issued'}
+              canRecordDeliveryNotice={canAuthorPo && po.status === 'issued'}
+              onAcknowledge={async (reference) => { const next = await acknowledgePurchaseOrder(po.id, reference); if (next) success('Vendor acknowledgement recorded'); else error('Acknowledgement was rejected; refresh the PO.'); }}
+              onRecordDeliveryNotice={async (reference) => { const next = await recordVendorDeliveryNotice(po.id, reference); if (next) success('Vendor delivery notice recorded'); else error('Delivery notice was rejected; refresh the PO.'); }}
+            />
+            {canAuthorPo && po.status === 'issued' && po.lifecycle?.closureStatus === 'ready' ? <div className="mt-3 flex flex-wrap gap-2 border-t border-line pt-3"><input className="input min-w-64 flex-1" value={closureReason} onChange={(event) => setClosureReason(event.target.value)} aria-label="Governed closure reason" /><button type="button" className="btn-outline" disabled={!closureReason.trim()} onClick={() => void requestPurchaseOrderClosure(po.id, closureReason.trim())}>Request governed closure</button></div> : null}
+          </Card>
+        </div>
+      )}
 
       {(po.status === 'issued' || po.status === 'closed') && (
         <div>

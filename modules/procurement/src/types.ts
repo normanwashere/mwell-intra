@@ -589,6 +589,29 @@ export interface CommitmentReadiness {
   canRecordAcceptance?: boolean;
 }
 
+/** Server-derived PO lifecycle; each command advances the revision under a row lock. */
+export interface PurchaseOrderLifecycle {
+  revision: number;
+  issuedAt?: string;
+  sentAt?: string;
+  acknowledgedAt?: string;
+  acknowledgementDueAt?: string;
+  acknowledgementStatus: 'pending' | 'acknowledged' | 'overdue';
+  deliveryNoticeStatus: 'pending' | 'recorded' | 'late';
+  qualityRecoveryStatus: 'none' | 'vendor_notice' | 'replacement_rma' | 'payment_hold' | 'resolved';
+  closureStatus: 'open' | 'ready' | 'blocked' | 'closed';
+}
+
+export interface OpenPurchaseOrderMonitoringItem {
+  id: string;
+  kind: string;
+  owner: string;
+  dueAt?: string;
+  ageHours?: number;
+  lastNoticeAt?: string;
+  nextAction: string;
+}
+
 export interface AcceptancePack {
   id: string;
   purchaseOrderId: string;
@@ -695,6 +718,9 @@ export interface PurchaseOrder {
   paymentReadiness?: PaymentReadinessPack;
   /** Immutable evidence-version changes that occurred after a finalized Finance decision. */
   paymentReadinessStalenessEvents?: PaymentReadinessStalenessEvent[];
+  /** Read-only lifecycle and monitoring data supplied by governed PO RPCs. */
+  lifecycle?: PurchaseOrderLifecycle;
+  openMonitoringItems?: OpenPurchaseOrderMonitoringItem[];
   /** sum(qty * unitPrice ?? 0). */
   total: number;
 }
