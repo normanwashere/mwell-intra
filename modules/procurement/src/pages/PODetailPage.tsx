@@ -109,6 +109,7 @@ export function PODetailPage() {
   const canAcceptPayment = useCan('procurement', 'accept_payment_readiness');
   const canReleasePayment = useCan('procurement', 'release_payment');
   const canAdmin = useCan('procurement', 'admin');
+  const canVendorPortal = useCan('core', 'vendor_portal');
   const canReceiveInWarehouse = useCan('warehouse', 'receive_stock');
   const po: PurchaseOrder | undefined = useMemo(() => rows.find((r) => r.id === id), [rows, id]);
   const vendor = useMemo(
@@ -825,7 +826,7 @@ export function PODetailPage() {
               } : { ready: issueBlockers.length === 0, blockers: issueBlockers, requiredEvidence: [] }}
               lifecycle={po.lifecycle}
               monitoring={po.openMonitoringItems}
-              canAcknowledge={canAuthorPo && po.status === 'issued'}
+              canAcknowledge={canVendorPortal && profile?.vendorId === po.vendorId && po.status === 'issued'}
               canRecordDeliveryNotice={canAuthorPo && po.status === 'issued'}
               onAcknowledge={async (reference) => { const next = await acknowledgePurchaseOrder(po.id, reference); if (next) success('Vendor acknowledgement recorded'); else error('Acknowledgement was rejected; refresh the PO.'); }}
               onRecordDeliveryNotice={async (reference) => { const next = await recordVendorDeliveryNotice(po.id, reference); if (next) success('Vendor delivery notice recorded'); else error('Delivery notice was rejected; refresh the PO.'); }}

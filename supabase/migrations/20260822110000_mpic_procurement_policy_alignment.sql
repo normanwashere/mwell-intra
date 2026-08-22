@@ -296,6 +296,8 @@ begin
 end;
 $$;
 
+
+
 create policy policy_profiles_active_read on procurement.policy_profiles
   for select to authenticated
   using (status = 'active' or private.policy_profile_can_manage());
@@ -1879,6 +1881,72 @@ begin
   return to_jsonb(v_pack);
 end;
 $$;
+
+-- Task 9 fix round 1: issue-time authoritative lifecycle initialization.
+create or replace function private.policy_po_issue_lifecycle()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  if new.status='issued' and old.status is distinct from 'issued' then
+    insert into procurement.purchase_order_lifecycle_state(purchase_order_id,revision,sent_at,acknowledgement_due_at)
+    values(new.id,1,new.issued_at,new.issued_at + interval '48 hours') on conflict (purchase_order_id) do nothing;
+    insert into procurement.purchase_order_lifecycle_events(purchase_order_id,event_type,expected_revision,resulting_revision,actor_id,evidence_reference,payload)
+    values(new.id,'sent',1,2,coalesce(new.actor_id,auth.uid()),'issued_at',jsonb_build_object('issuedAt',new.issued_at)) on conflict do nothing;
+  end if; return new;
+end;
+$$;
+revoke execute on function private.policy_po_issue_lifecycle() from public, anon, authenticated;
+drop trigger if exists purchase_order_issue_lifecycle on procurement.purchase_orders;
+create trigger purchase_order_issue_lifecycle after update of status on procurement.purchase_orders for each row execute function private.policy_po_issue_lifecycle();
+insert into procurement.purchase_order_lifecycle_state(purchase_order_id,revision,sent_at,acknowledgement_due_at)
+select id,1,issued_at,issued_at + interval '48 hours' from procurement.purchase_orders where status='issued' and issued_at is not null on conflict (purchase_order_id) do nothing;
+
+create or replace function procurement.review_open_purchase_orders(payload jsonb default '{}'::jsonb)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+begin
+ if not (core.has_live_cap('procurement','author_po') or core.has_live_cap('procurement','view_dashboard') or core.has_live_cap('procurement','admin')) then raise exception 'Procurement monitoring authority is required'; end if;
+ return coalesce((select jsonb_agg(jsonb_build_object('id',po.id||':weekly','purchaseOrderId',po.id,'kind',case when state.acknowledged_at is null and statement_timestamp()>=po.issued_at+interval '48 hours' then 'vendor_acknowledgement_overdue' when state.acknowledged_at is null and statement_timestamp()>=po.issued_at+interval '47 hours' then 'vendor_acknowledgement_due_soon' else 'open_po' end,'owner','Procurement','dueAt',po.issued_at+interval '48 hours','ageHours',floor(extract(epoch from statement_timestamp()-po.issued_at)/3600),'nextAction',case when state.acknowledged_at is null and statement_timestamp()>=po.issued_at+interval '48 hours' then 'Escalate vendor acknowledgement' when state.acknowledged_at is null and statement_timestamp()>=po.issued_at+interval '47 hours' then 'Prepare vendor acknowledgement escalation' else 'Confirm delivery and receiving handoff' end)) from procurement.purchase_orders po left join procurement.purchase_order_lifecycle_state state on state.purchase_order_id=po.id where po.status='issued'),'[]'::jsonb);
+end;
+$$;
+
+create table if not exists procurement.purchase_order_closure_requests (
+ id uuid primary key default gen_random_uuid(), purchase_order_id text not null references procurement.purchase_orders(id), expected_revision integer not null, closure_reason text not null, requested_by uuid not null references core.profiles(id), requested_at timestamptz not null default statement_timestamp(), status text not null default 'pending', decided_by uuid references core.profiles(id), decided_at timestamptz, unique(purchase_order_id,expected_revision,requested_by,closure_reason));
+alter table procurement.purchase_order_closure_requests enable row level security;
+alter table procurement.purchase_order_closure_requests force row level security;
+revoke all on procurement.purchase_order_closure_requests from public, anon, authenticated, service_role;
+
+create or replace function procurement.request_purchase_order_closure(payload jsonb)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_state procurement.purchase_order_lifecycle_state; v_request procurement.purchase_order_closure_requests;
+begin
+ if auth.uid() is null or not (core.has_live_cap('procurement','author_po') or core.has_live_cap('procurement','admin')) then raise exception 'Procurement closure authority is required'; end if;
+ select * into v_state from procurement.purchase_order_lifecycle_state where purchase_order_id=payload->>'purchase_order_id' for update;
+ if not found or v_state.revision<>(payload->>'expected_revision')::integer then raise exception 'The PO lifecycle changed; refresh before closure'; end if;
+ if nullif(btrim(payload->>'closure_reason'),'') is null then raise exception 'A governed closure reason is required'; end if;
+ select * into v_request from procurement.purchase_order_closure_requests where purchase_order_id=payload->>'purchase_order_id' and expected_revision=(payload->>'expected_revision')::integer and requested_by=auth.uid() and closure_reason=btrim(payload->>'closure_reason');
+ if found then return to_jsonb(v_request)||jsonb_build_object('replayed',true); end if;
+ insert into procurement.purchase_order_closure_requests(purchase_order_id,expected_revision,closure_reason,requested_by) values(payload->>'purchase_order_id',(payload->>'expected_revision')::integer,btrim(payload->>'closure_reason'),auth.uid()) returning * into v_request;
+ return to_jsonb(v_request)||jsonb_build_object('replayed',false);
+end;
+$$;
+
+create or replace function procurement.approve_purchase_order_closure(payload jsonb)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_request procurement.purchase_order_closure_requests; v_po procurement.purchase_orders; v_blocked boolean;
+begin
+ if auth.uid() is null or not (core.has_live_cap('procurement','final_approve_po') or core.has_live_cap('procurement','admin')) then raise exception 'Independent PO closure approver authority is required'; end if;
+ select * into v_request from procurement.purchase_order_closure_requests where id=(payload->>'closure_request_id')::uuid for update;
+ if not found or v_request.status<>'pending' then raise exception 'A pending closure request is required'; end if;
+ if v_request.requested_by=auth.uid() then raise exception 'Closure maker and checker must be different actors'; end if;
+ select * into v_po from procurement.purchase_orders where id=v_request.purchase_order_id for update;
+ v_blocked:=not exists(select 1 from procurement.acceptance_packs p where p.purchase_order_id=v_po.id and p.status='accepted' and jsonb_array_length(p.exceptions)=0) or exists(select 1 from procurement.v_purchase_order_receipt_status r where r.purchase_order_id::text=v_po.id and (r.outstanding_quantity>0 or r.rejected_or_quarantined_quantity>0)) or exists(select 1 from procurement.payment_readiness_packs p where p.purchase_order_id=v_po.id and p.status not in ('released','superseded'));
+ if v_blocked then raise exception 'Closure is blocked by receipt, acceptance, quality, RMA, credit, payment hold, or unpaid Finance state'; end if;
+ update procurement.purchase_order_closure_requests set status='approved',decided_by=auth.uid(),decided_at=statement_timestamp() where id=v_request.id;
+ return jsonb_build_object('closureRequestId',v_request.id,'approved',true);
+end;
+$$;
+revoke all on function procurement.close_purchase_order(jsonb) from public, anon, authenticated, service_role;
+revoke all on function procurement.request_purchase_order_closure(jsonb),procurement.approve_purchase_order_closure(jsonb) from public, anon;
+grant execute on function procurement.request_purchase_order_closure(jsonb),procurement.approve_purchase_order_closure(jsonb) to authenticated;
 
 create or replace function procurement.review_insufficient_bid_exception(payload jsonb)
 returns jsonb language plpgsql security definer set search_path = '' as $$
