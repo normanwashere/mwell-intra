@@ -66,7 +66,7 @@ async function installSession(
 
 async function completeRequestIntake(page: Page, amount = "999999.99", kind: 'materials' | 'services' = 'materials') {
   await page.getByText("Goods", { exact: true }).click();
-  await page.getByRole('radio', { name: kind === 'materials' ? 'Goods / materials' : 'Services' }).check();
+  await page.getByRole('group', { name: 'Requirement classification' }).getByText(kind === 'materials' ? 'Goods / materials' : 'Services', { exact: true }).click();
   await page.getByLabel("Title").fill("Policy routing verification");
   await page.getByLabel("Line 1 description").fill("Cold-chain supplies");
   await page.getByLabel("Line 1 unit price").fill(amount);
