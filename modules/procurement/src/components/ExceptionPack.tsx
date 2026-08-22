@@ -35,10 +35,11 @@ export function ExceptionPack({
       </label>
       {pettyCash && (
         <div className="grid gap-2 sm:grid-cols-2">
-          <label className="flex min-h-11 items-center gap-3 rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink"><input type="checkbox" className="h-5 w-5" checked={value.financeEligibilityConfirmed ?? false} onChange={(event) => patch({ financeEligibilityConfirmed: event.target.checked })} />Finance confirmed petty-cash eligibility</label>
+          <label className="flex min-h-11 items-center gap-3 rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink"><input type="checkbox" className="h-5 w-5" checked={value.financeEligibilityConfirmed ?? false} onChange={(event) => patch({ financeEligibilityConfirmed: event.target.checked })} />I attest this request is eligible for Finance review</label>
           <label className="flex min-h-11 items-center gap-3 rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink"><input type="checkbox" className="h-5 w-5" checked={value.nonRecurringNonSplitAttested ?? false} onChange={(event) => patch({ nonRecurringNonSplitAttested: event.target.checked })} />One-time, non-recurring, and not split</label>
         </div>
       )}
+      {pettyCash && <p role="status" className="rounded-md bg-amber-500/10 p-3 text-sm text-amber-900 dark:text-amber-200">Finance review is pending. This attestation is not Finance approval and cannot authorize petty cash.</p>}
     </section>
   );
 }

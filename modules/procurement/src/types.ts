@@ -75,6 +75,17 @@ export interface ProcurementRoute {
   confirmedByEmail?: string;
 }
 
+export interface SolicitationRequirements {
+  acceptanceCriteria?: string;
+  deliveryTerms?: string;
+  paymentTerms?: string;
+  shippingTerms?: string;
+  validityPeriod?: string;
+  responseDeadline?: string;
+  scopeOfWork?: string;
+  evaluationApproach?: string;
+}
+
 /** Numeric and time-bound controls provided by an effective policy profile. */
 export interface ProcurementPolicyControls {
   /** Null means the parent source does not establish a local formal-bid amount. */
@@ -337,6 +348,7 @@ export interface ProcurementRequest {
   requirementKind?: RequirementKind;
   /** Governed three-axis route bound to the effective policy profile. */
   route?: ProcurementRoute;
+  solicitationRequirements?: SolicitationRequirements;
   /** True when the officer overrode the system-suggested method. */
   sourcingOverride?: boolean;
   justification?: BusinessJustification;

@@ -35,6 +35,7 @@ import type {
   ProcurementRiskFacts,
   ProcurementMode,
   ProcurementRoute,
+  SolicitationRequirements,
   RequirementKind,
   RequestAttachmentKind,
   RequestCategory,
@@ -91,6 +92,7 @@ interface PurchaseRequestDraftSnapshot extends GovernedRequestDraftFields {
   requestedMode: ProcurementMode;
   route?: ProcurementRoute;
   routeConfirmed: boolean;
+  solicitationRequirements: SolicitationRequirements;
   riskFacts: ProcurementRiskFacts;
   philgeps: string;
   directAwardReason: string;
@@ -226,6 +228,7 @@ export function CreateRequestPage() {
     responsesReceived: 0,
     insufficientBidsExceptionApproved: false,
   });
+  const [solicitationRequirements, setSolicitationRequirements] = useState<SolicitationRequirements>({});
 
   const [attachments, setAttachments] = useState<PendingRequestAttachment[]>([]);
 
@@ -295,6 +298,7 @@ export function CreateRequestPage() {
       exceptionPack,
       importationPlan,
       evaluation,
+      solicitationRequirements,
       requesterName: profile?.name,
     }),
     [
@@ -321,6 +325,7 @@ export function CreateRequestPage() {
       riskIfNot,
       routeConfirmed,
       step,
+      solicitationRequirements,
       title,
       vendorId,
     ],
@@ -362,6 +367,7 @@ export function CreateRequestPage() {
           if (saved.exceptionPack) setExceptionPack(saved.exceptionPack);
           if (saved.importationPlan) setImportationPlan(saved.importationPlan);
           if (saved.evaluation) setEvaluation(saved.evaluation);
+          if (saved.solicitationRequirements) setSolicitationRequirements(saved.solicitationRequirements);
           setServerDraftId(record.id);
           setServerDraftKey(record.clientKey);
           setServerDraftVersion(record.version);
@@ -485,7 +491,6 @@ export function CreateRequestPage() {
     neededBy.trim().length > 0 &&
     (budgetCode.trim().length > 0 || projectCode.trim().length > 0) &&
     total > 0;
-  const canSubmit = step1Valid && step2Valid && governedContextReady && minimumEvidenceReady && Boolean(route);
   const exceptionRequired = route != null && route.procurementMode !== 'competitive_bidding';
   const exceptionReady =
     !exceptionRequired ||
@@ -498,6 +503,12 @@ export function CreateRequestPage() {
     !riskFacts.importation ||
     Object.values(importationPlan).every((value) => value.trim().length > 0);
   const routeEvidenceReady = exceptionReady && importationReady;
+  const solicitationReady = route?.solicitationType === 'rfq'
+    ? ['acceptanceCriteria', 'deliveryTerms', 'paymentTerms', 'shippingTerms', 'validityPeriod', 'responseDeadline'].every((key) => solicitationRequirements[key as keyof SolicitationRequirements]?.trim())
+    : route?.solicitationType === 'rfp'
+      ? ['scopeOfWork', 'evaluationApproach', 'responseDeadline'].every((key) => solicitationRequirements[key as keyof SolicitationRequirements]?.trim())
+      : true;
+  const canSubmit = step1Valid && step2Valid && governedContextReady && minimumEvidenceReady && Boolean(route) && solicitationReady && routeEvidenceReady;
 
   function updateLine(key: string, patch: Partial<LineDraft>) {
     setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l)));
@@ -627,6 +638,10 @@ export function CreateRequestPage() {
       error('Classify this request as goods/materials or services before saving.');
       return;
     }
+    if (!solicitationReady || !routeEvidenceReady) {
+      error('Complete the route-specific solicitation fields and required exception evidence before saving.');
+      return;
+    }
     if (andSubmit && !routeConfirmed) {
       error('Save the draft for Procurement route confirmation before approval submission.');
       return;
@@ -707,6 +722,7 @@ export function CreateRequestPage() {
         sourcingMethod: legacyProjection,
         requirementKind,
         route,
+        solicitationRequirements,
         justification: {
           need: needDesc.trim(),
           alternatives: alternatives.trim() || undefined,
@@ -1420,6 +1436,22 @@ export function CreateRequestPage() {
                     Complete the applicable exception and importation controls before Procurement
                     confirms this route.
                   </p>
+                )}
+                {route?.solicitationType === 'rfq' && (
+                  <section className="space-y-3 rounded-lg border border-line bg-surface p-4" aria-labelledby="rfq-brief-heading">
+                    <div><h3 id="rfq-brief-heading" className="font-semibold text-ink">RFQ requirements</h3><p className="text-xs text-muted">These structured terms become the quotation brief for suppliers.</p></div>
+                    <div className="grid gap-3 sm:grid-cols-2">{([
+                      ['acceptanceCriteria', 'Acceptance criteria'], ['deliveryTerms', 'Delivery terms'], ['paymentTerms', 'Payment terms'], ['shippingTerms', 'Shipping terms'], ['validityPeriod', 'Quotation validity'], ['responseDeadline', 'Response deadline'],
+                    ] as const).map(([key, label]) => <Field key={key} label={label} htmlFor={`rfq-${key}`}><Input id={`rfq-${key}`} value={solicitationRequirements[key] ?? ''} onChange={(event) => setSolicitationRequirements((current) => ({ ...current, [key]: event.target.value }))} /></Field>)}</div>
+                  </section>
+                )}
+                {route?.solicitationType === 'rfp' && (
+                  <section className="space-y-3 rounded-lg border border-line bg-surface p-4" aria-labelledby="rfp-brief-heading">
+                    <div><h3 id="rfp-brief-heading" className="font-semibold text-ink">RFP requirements</h3><p className="text-xs text-muted">These structured terms become the proposal brief and evaluation record.</p></div>
+                    <Field label="Scope of work" htmlFor="rfp-scope"><Textarea id="rfp-scope" value={solicitationRequirements.scopeOfWork ?? ''} onChange={(event) => setSolicitationRequirements((current) => ({ ...current, scopeOfWork: event.target.value }))} /></Field>
+                    <Field label="Evaluation approach" htmlFor="rfp-evaluation"><Textarea id="rfp-evaluation" value={solicitationRequirements.evaluationApproach ?? ''} onChange={(event) => setSolicitationRequirements((current) => ({ ...current, evaluationApproach: event.target.value }))} /></Field>
+                    <Field label="Proposal deadline" htmlFor="rfp-responseDeadline"><Input id="rfp-responseDeadline" value={solicitationRequirements.responseDeadline ?? ''} onChange={(event) => setSolicitationRequirements((current) => ({ ...current, responseDeadline: event.target.value }))} /></Field>
+                  </section>
                 )}
                 <fieldset>
                   <legend className="text-sm font-semibold text-ink">Risk and delivery facts</legend>

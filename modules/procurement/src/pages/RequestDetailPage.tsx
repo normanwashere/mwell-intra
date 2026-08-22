@@ -24,6 +24,7 @@ import type {
   ProcurementRiskFacts,
   ProcurementMode,
   ProcurementRoute,
+  ProcurementPolicyProfile,
   ProcurementRequestLine,
   RequestAttachment,
   RequestStatus,
@@ -123,6 +124,7 @@ export function RequestDetailPage() {
   const canApproveSourcingException = useCan('procurement', 'approve_award');
   const [requestedMode, setRequestedMode] = useState<ProcurementMode>('competitive_bidding');
   const [returnedRoute, setReturnedRoute] = useState<ProcurementRoute | null>(null);
+  const [routeProfile, setRouteProfile] = useState<ProcurementPolicyProfile | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelBusy, setCancelBusy] = useState(false);
@@ -145,6 +147,22 @@ export function RequestDetailPage() {
     setReturnedRoute(null);
     if (req.compliance?.riskFacts) setRouteRiskFacts(req.compliance.riskFacts);
   }, [req?.id]);
+
+  useEffect(() => {
+    const route = returnedRoute ?? req?.route;
+    if (!route) return;
+    if (mode !== 'supabase' || !supabaseClient) {
+      setRouteProfile(route.policyProfileId === MWELL_OPERATING_PROFILE.id ? MWELL_OPERATING_PROFILE : null);
+      return;
+    }
+    let active = true;
+    void supabaseClient.schema('procurement').from('policy_profiles').select('*').eq('id', route.policyProfileId).maybeSingle().then(({ data, error: profileError }) => {
+      if (!active || profileError || !data || typeof data !== 'object') return;
+      const raw = data as Record<string, unknown>;
+      setRouteProfile({ ...MWELL_OPERATING_PROFILE, id: String(raw.id), code: String(raw.code), version: String(raw.version), name: String(raw.name), sourceFilename: String(raw.source_filename), sourceOrganization: String(raw.source_organization), effectiveFrom: String(raw.effective_from).slice(0, 10), controlSources: raw.control_sources && typeof raw.control_sources === 'object' ? raw.control_sources as ProcurementPolicyProfile['controlSources'] : {} });
+    });
+    return () => { active = false; };
+  }, [mode, req?.route, returnedRoute, supabaseClient]);
 
   useEffect(() => {
     if (!req) return;
@@ -481,7 +499,7 @@ export function RequestDetailPage() {
             {displayedRoute && routeRecommendation ? <ProcurementRoutePanel
               value={displayedRoute}
               recommendation={routeRecommendation}
-              profile={MWELL_OPERATING_PROFILE}
+              profile={routeProfile ?? MWELL_OPERATING_PROFILE}
               canConfirm={canConfirmRoute}
               onModeChange={setRequestedMode}
             /> : <p role="alert" className="rounded-lg border border-amber-500/35 bg-amber-500/10 p-3 text-sm text-amber-900 dark:text-amber-200">This legacy request is missing its requirement classification. Update it through the controlled remediation queue before routing.</p>}

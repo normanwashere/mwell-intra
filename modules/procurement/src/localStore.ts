@@ -28,6 +28,7 @@ import type {
   ProcurementRequest,
   ProcurementRequestLine,
   ProcurementRoute,
+  SolicitationRequirements,
   RequirementKind,
   ProcurementVendor,
   PurchaseOrder,
@@ -274,6 +275,9 @@ export function mapProcurementRequest(row: LiveRow, steps: ApprovalStep[] = []):
     sourcingMethod: route?.legacySourcingMethod ?? row.sourcing_method ?? undefined,
     requirementKind: row.requirement_kind ?? undefined,
     route,
+    solicitationRequirements: row.solicitation_requirements && typeof row.solicitation_requirements === 'object'
+      ? row.solicitation_requirements as SolicitationRequirements
+      : undefined,
     sourcingOverride: row.sourcing_override ?? undefined,
     justification: row.justification ?? undefined,
     attachments: row.attachments ?? undefined,
@@ -668,6 +672,7 @@ export interface NewRequestInput {
   requirementKind: RequirementKind;
   /** Client preview only; the governed route is recomputed by Supabase. */
   route: ProcurementRoute;
+  solicitationRequirements?: SolicitationRequirements;
   sourcingMethod?: SourcingMethod;
   sourcingOverride?: boolean;
   justification?: ProcurementRequest['justification'];
@@ -783,6 +788,7 @@ export function useProcurementRequests(): ProcurementRequestsAPI {
         sourcingMethod: input.sourcingMethod,
         requirementKind: input.requirementKind,
         route: input.route,
+        solicitationRequirements: input.solicitationRequirements,
         sourcingOverride: input.sourcingOverride,
         justification: input.justification,
         attachments: attachments.length > 0 ? attachments : undefined,
@@ -813,6 +819,7 @@ export function useProcurementRequests(): ProcurementRequestsAPI {
               requirement_kind: next.requirementKind,
               sourcing_method: next.sourcingMethod,
               sourcing_override: next.sourcingOverride,
+              solicitation_requirements: next.solicitationRequirements,
               justification: next.justification,
               attachments: attachments.map(attachmentMetadataForRpc),
               compliance: next.compliance,

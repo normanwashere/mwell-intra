@@ -1,5 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { LEARNING_CATALOG } from "../../../../modules/learning/src/catalog";
+import { ROLE_CURRICULA } from "../../../../modules/learning/src/catalog";
+import { DEMO_PROFILES } from "../../lib/demoProfiles";
 
 async function expectMobileActionsClearOfNavigation(page: Page) {
   if (await page.evaluate(() => window.innerWidth < 768)) {
@@ -38,8 +40,12 @@ async function installSession(
   page: Page,
   session: { profileId: string; roles: Record<string, string[]> },
 ) {
-  const learningKey = `intra.demo-learning.v1:${session.profileId}:${JSON.stringify(session.roles)}`;
-  const completedProgress = LEARNING_CATALOG.requirements.map((requirement) => ({
+  const profile = DEMO_PROFILES.find((candidate) => candidate.id === session.profileId);
+  const roles = profile?.roles ?? session.roles;
+  const learningKey = `intra.demo-learning.v1:${session.profileId}:${JSON.stringify(roles)}`;
+  const roleKeys = new Set(Object.entries(roles).flatMap(([module, roles]) => roles.map((role) => `${module}:${role}`)));
+  const requirementIds = new Set(ROLE_CURRICULA.filter((curriculum) => roleKeys.has(`${curriculum.module}:${curriculum.role}`)).flatMap((curriculum) => curriculum.requirementIds));
+  const completedProgress = LEARNING_CATALOG.requirements.filter((requirement) => requirementIds.has(requirement.id)).map((requirement) => ({
     assignmentRequirementId: `policy-route:${requirement.id}`,
     requirementId: requirement.id,
     requirementVersion: requirement.version,
@@ -54,13 +60,13 @@ async function installSession(
       sessionStorage.setItem(key, JSON.stringify(value));
       sessionStorage.setItem(learningKey, JSON.stringify({ progress: completedProgress, completedCheckpoints: {} }));
     },
-    { key: SESSION_KEY, value: session, learningKey, completedProgress },
+    { key: SESSION_KEY, value: { profileId: session.profileId, roles }, learningKey, completedProgress },
   );
 }
 
-async function completeRequestIntake(page: Page, amount = "999999.99") {
+async function completeRequestIntake(page: Page, amount = "999999.99", kind: 'materials' | 'services' = 'materials') {
   await page.getByText("Goods", { exact: true }).click();
-  await page.getByText("Goods / materials", { exact: true }).click();
+  await page.getByText(kind === 'materials' ? "Goods / materials" : "Services", { exact: true }).click();
   await page.getByLabel("Title").fill("Policy routing verification");
   await page.getByLabel("Line 1 description").fill("Cold-chain supplies");
   await page.getByLabel("Line 1 unit price").fill(amount);
@@ -178,5 +184,19 @@ test("Procurement sees all three route axes and a high-value goods RFQ", async (
     .click();
   await expect(page.getByText("Ready for evaluation")).toBeVisible();
 
+  await expectNoPageOverflow(page);
+});
+
+test("Procurement sees the service RFP brief with focusable structured fields", async ({ page }) => {
+  await installSession(page, { profileId: 'demo-procurement', roles: { core: ['staff'], procurement: ['procurement_officer'] } });
+  await page.goto('/procurement/requests/new');
+  await completeRequestIntake(page, '250000', 'services');
+  await expect(page.getByText('Request for Proposal')).toBeVisible();
+  const scope = page.getByLabel('Scope of work');
+  await scope.focus();
+  await expect(scope).toBeFocused();
+  await scope.fill('Deliver and operate the managed service.');
+  await page.getByLabel('Evaluation approach').fill('Evaluate technical capability, delivery plan, and commercial value.');
+  await page.getByLabel('Proposal deadline').fill('2026-09-30');
   await expectNoPageOverflow(page);
 });

@@ -396,7 +396,8 @@ test("executes the migration backfill against persisted legacy procurement recor
     await insertConfirmedDecision(db, missingControlsId);
     await db.exec(migrationBackfill);
     const missingControls = await db.query(`
-      select solicitation_type, procurement_mode, governance_tier, policy_profile_id, route_reasons
+      select solicitation_type, procurement_mode, governance_tier, policy_profile_id, route_reasons,
+        route_version, route_confirmed_at, route_confirmed_by, compliance
       from procurement.requests where id = '${missingControlsId}'
     `);
     assert.deepEqual(
@@ -457,7 +458,8 @@ test("executes public governed route confirmation with persisted authority and e
     );
     assert.ok(!persisted.rows[0].reasons.includes("client-controlled"));
     const request = await db.query(`
-      select solicitation_type, procurement_mode, governance_tier, policy_profile_id, route_reasons
+      select solicitation_type, procurement_mode, governance_tier, policy_profile_id, route_reasons,
+        route_version, route_confirmed_at, route_confirmed_by, compliance
       from procurement.requests where id = '${normalId}'
     `);
     assert.deepEqual(
@@ -465,6 +467,10 @@ test("executes public governed route confirmation with persisted authority and e
       ["rfq", "competitive_bidding", "standard", operatingProfileId],
     );
     assert.ok(!request.rows[0].route_reasons.includes("client-controlled"));
+    assert.equal(request.rows[0].route_version, 1, "request read model must expose the latest decision version after refresh");
+    assert.ok(request.rows[0].route_confirmed_at, "request read model must expose confirmation time after refresh");
+    assert.equal(request.rows[0].route_confirmed_by, actorId, "request read model must expose the confirming actor after refresh");
+    assert.equal(request.rows[0].compliance.routeConfirmed, true, "refresh-shaped request mapping must unlock governed sourcing and submission readiness");
 
     await assert.rejects(
       () => db.query(`select procurement.confirm_route_decision(${sqlJson({ request_id: normalId, requested_mode: "competitive_bidding" })})`),

@@ -10,7 +10,7 @@ import type { ProcurementPolicyControls } from '@intra/procurement';
 
 type PolicyClient = {
   schema(name: 'procurement'): {
-    rpc(name: string, args: { payload: Record<string, unknown> }): Promise<{ data: unknown; error: { message: string } | null }>;
+    rpc(name: string, args: Record<string, unknown>): Promise<{ data: unknown; error: { message: string } | null }>;
     from?: (table: string) => {
       select(columns: string): {
         order(column: string, options?: { ascending?: boolean }): Promise<{ data: unknown; error: { message: string } | null }>;
@@ -91,6 +91,8 @@ export function PolicyProfileSection({
   const [openConflicts, setOpenConflicts] = useState<PolicyConflict[]>([]);
   const [events, setEvents] = useState<PolicyEvent[]>([]);
   const [historyError, setHistoryError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [activeMapping, setActiveMapping] = useState({ code: MWELL_OPERATING_PROFILE.code, version: MWELL_OPERATING_PROFILE.version, effectiveFrom: MWELL_OPERATING_PROFILE.effectiveFrom, sourceFilename: MWELL_OPERATING_PROFILE.sourceFilename, controlSources: MWELL_OPERATING_PROFILE.controlSources });
   const controlEntries = useMemo(
     () => Object.entries(CONTROL_LABELS) as Array<[keyof ProcurementPolicyControls, string]>,
     [],
@@ -102,13 +104,14 @@ export function PolicyProfileSection({
       if (mode !== 'supabase' || !client) return;
       const procurement = client.schema('procurement');
       if (!procurement.from) return;
-      const [profiles, conflicts, profileEvents] = await Promise.all([
+      const [profiles, conflicts, profileEvents, effective] = await Promise.all([
         procurement.from('policy_profiles').select('id,code,version,status,relationship,effective_from,created_by,activated_by').order('effective_from', { ascending: false }),
         procurement.from('policy_conflicts').select('id,parent_rule,local_rule,impact,status,created_at').order('created_at', { ascending: false }),
         procurement.from('policy_profile_events').select('id,policy_profile_id,event_type,actor_id,profile_actor_id,event_at').order('event_at', { ascending: false }),
+        procurement.rpc('get_effective_policy_profile', { as_of: null }),
       ]);
       if (!active) return;
-      const firstError = profiles.error ?? conflicts.error ?? profileEvents.error;
+      const firstError = profiles.error ?? conflicts.error ?? profileEvents.error ?? effective.error;
       if (firstError) {
         setHistoryError(firstError.message);
         return;
@@ -117,10 +120,17 @@ export function PolicyProfileSection({
       setProfileHistory((profiles.data ?? []) as PolicyProfileHistory[]);
       setOpenConflicts(((conflicts.data ?? []) as PolicyConflict[]).filter((conflict) => conflict.status === 'open'));
       setEvents((profileEvents.data ?? []) as PolicyEvent[]);
+      if (effective.data && typeof effective.data === 'object') {
+        const raw = effective.data as Record<string, unknown>;
+        const nextControls = Object.fromEntries(Object.keys(CONTROL_LABELS).map((key) => [key, raw[key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)] ?? null])) as unknown as ProcurementPolicyControls;
+        setControls(nextControls);
+        setEffectiveFrom(String(raw.effective_from ?? MWELL_OPERATING_PROFILE.effectiveFrom).slice(0, 10));
+        setActiveMapping({ code: String(raw.code ?? MWELL_OPERATING_PROFILE.code), version: String(raw.version ?? MWELL_OPERATING_PROFILE.version), effectiveFrom: String(raw.effective_from ?? MWELL_OPERATING_PROFILE.effectiveFrom).slice(0, 10), sourceFilename: String(raw.source_filename ?? MWELL_OPERATING_PROFILE.sourceFilename), controlSources: raw.control_sources && typeof raw.control_sources === 'object' ? raw.control_sources as typeof MWELL_OPERATING_PROFILE.controlSources : MWELL_OPERATING_PROFILE.controlSources });
+      }
     };
     void loadHistory();
     return () => { active = false; };
-  }, [client, mode]);
+  }, [client, mode, reloadKey]);
 
   const saveDraft = async () => {
     if (!canManage) return;
@@ -139,14 +149,14 @@ export function PolicyProfileSection({
     setBusy(true);
     const { data, error } = await client.schema('procurement').rpc('save_policy_profile', {
       payload: {
-        code: `${MWELL_OPERATING_PROFILE.code}-REV`,
-        version: `${MWELL_OPERATING_PROFILE.version}-REV`,
-        name: `${MWELL_OPERATING_PROFILE.name} revision`,
+        code: `${activeMapping.code}-REV`,
+        version: `${activeMapping.version}-REV`,
+        name: `${activeMapping.code} revision`,
         relationship: 'mwell_operating',
         source_profile_id: parentProfileId,
-        source_filename: MWELL_OPERATING_PROFILE.sourceFilename,
+        source_filename: activeMapping.sourceFilename,
         source_organization: 'Mwell',
-        control_sources: MWELL_OPERATING_PROFILE.controlSources,
+        control_sources: activeMapping.controlSources,
         controls,
         effective_from: new Date(`${effectiveFrom}T00:00:00+08:00`).toISOString(),
         document_hash: documentHash,
@@ -157,6 +167,7 @@ export function PolicyProfileSection({
     const id = data && typeof data === 'object' && 'id' in data ? String((data as { id: unknown }).id) : null;
     setDraftId(id);
     setDocumentHash('');
+    setReloadKey((value) => value + 1);
     toast.success('Procurement policy revision saved as a draft. A separate checker must activate it.');
   };
 
@@ -171,6 +182,7 @@ export function PolicyProfileSection({
     if (error) return toast.error(error.message);
     setConflictOpen(false);
     setRationale('');
+    setReloadKey((value) => value + 1);
     toast.success('Policy conflict resolved and recorded in immutable history.');
   };
 
@@ -180,6 +192,7 @@ export function PolicyProfileSection({
     const { error } = await client.schema('procurement').rpc('activate_policy_profile', { payload: { id: draftId } });
     setBusy(false);
     if (error) return toast.error(error.message);
+    setReloadKey((value) => value + 1);
     toast.success('Policy profile activated by the checker. The prior active profile was retained as history.');
   };
 
@@ -190,7 +203,7 @@ export function PolicyProfileSection({
           <h2 id="procurement-policy-heading" className="text-lg font-semibold text-ink">Procurement policy profiles</h2>
           <p className="mt-1 text-sm text-muted">Separate from DOA. This controls route thresholds and operating timeframes, while DOA assigns approval authority.</p>
         </div>
-        <Badge tone="emerald">{MWELL_OPERATING_PROFILE.status}</Badge>
+        <Badge tone="emerald">Governed active mapping</Badge>
       </div>
 
       <div className="grid gap-3 lg:grid-cols-2">
@@ -201,7 +214,7 @@ export function PolicyProfileSection({
         </Card>
         <Card className="p-4">
           <h3 className="font-semibold text-ink">Active Mwell mapping</h3>
-          <p className="mt-2 text-sm text-muted">{MWELL_OPERATING_PROFILE.code} {MWELL_OPERATING_PROFILE.version} · effective {MWELL_OPERATING_PROFILE.effectiveFrom}</p>
+          <p className="mt-2 text-sm text-muted">{activeMapping.code} {activeMapping.version} · effective {activeMapping.effectiveFrom}</p>
           <p className="mt-1 text-xs text-faint">Maker: policy author. Checker: a different authorized Admin or Legal user.</p>
         </Card>
       </div>
@@ -223,7 +236,7 @@ export function PolicyProfileSection({
                 value={controls[key] ?? ''}
                 onChange={(event) => setControls((current) => ({ ...current, [key]: event.target.value === '' ? null : Number(event.target.value) }))}
               />
-              <p className="mt-1 text-xs text-faint">{MWELL_OPERATING_PROFILE.controlSources[key] ?? 'Source mapping required'}</p>
+              <p className="mt-1 text-xs text-faint">{activeMapping.controlSources[key] ?? 'Source mapping required'}</p>
             </Field>
           ))}
           <Field label="Effective date" htmlFor="policy-effective-from">

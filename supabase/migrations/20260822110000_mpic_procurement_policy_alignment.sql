@@ -799,6 +799,15 @@ alter table procurement.route_decisions
   add column if not exists governance_tier text,
   add column if not exists policy_profile_id uuid references procurement.policy_profiles(id) on delete restrict;
 
+-- Request rows are the read model used by the client. Keep the latest
+-- governed decision projection here atomically so refresh cannot strand a
+-- successfully confirmed request behind an obsolete local compliance flag.
+alter table procurement.requests
+  add column if not exists route_version integer not null default 0,
+  add column if not exists route_confirmed_at timestamptz,
+  add column if not exists route_confirmed_by uuid references core.profiles(id) on delete restrict,
+  add column if not exists solicitation_requirements jsonb not null default '{}'::jsonb;
+
 alter table procurement.route_decisions
   drop constraint if exists route_decisions_solicitation_type_check,
   add constraint route_decisions_solicitation_type_check check (
@@ -1206,6 +1215,12 @@ begin
     governance_tier = v_route->>'governance_tier',
     policy_profile_id = (v_route->>'policy_profile_id')::uuid,
     route_reasons = v_route->'reasons',
+    route_version = v_decision.request_version,
+    route_confirmed_at = v_decision.confirmed_at,
+    route_confirmed_by = v_decision.confirmed_by,
+    compliance = jsonb_set(
+      coalesce(compliance, '{}'::jsonb), '{routeConfirmed}', 'true'::jsonb, true
+    ),
     sourcing_method = v_decision.method,
     sourcing_override = v_requested_mode is not null and v_requested_mode <> 'competitive_bidding',
     updated_at = pg_catalog.now()
