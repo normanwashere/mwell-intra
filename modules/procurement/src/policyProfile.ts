@@ -10,6 +10,40 @@ export const MWELL_OPERATING_SOURCE_FILENAME =
 const MPIC_CONTROL_SOURCE = `${MPIC_SOURCE_FILENAME} (February 2025)`;
 const MWELL_CONTROL_SOURCE = `${MWELL_OPERATING_SOURCE_FILENAME} (local operating policy)`;
 
+const CONTROL_KEYS: Array<keyof ProcurementPolicyControls> = [
+  'formalBidAmount',
+  'inviteTargetMin',
+  'inviteTargetMax',
+  'sealedBidMinimumResponses',
+  'bidWindowWorkingDays',
+  'maxExtensionWorkingDays',
+  'vendorAcknowledgementHours',
+  'clarificationHours',
+  'tabulationHours',
+  'technicalEvaluationWorkingDays',
+  'poAcknowledgementHours',
+  'repeatOrderMaxAmount',
+  'repeatOrderMaxAgeDays',
+  'pettyCashMaxAmount',
+  'poInvoiceThreshold',
+  'vendorProbationMonths',
+];
+
+const POSITIVE_INTEGER_CONTROLS: Array<keyof ProcurementPolicyControls> = [
+  'inviteTargetMin',
+  'inviteTargetMax',
+  'sealedBidMinimumResponses',
+  'bidWindowWorkingDays',
+  'maxExtensionWorkingDays',
+  'vendorAcknowledgementHours',
+  'clarificationHours',
+  'tabulationHours',
+  'technicalEvaluationWorkingDays',
+  'poAcknowledgementHours',
+  'repeatOrderMaxAgeDays',
+  'vendorProbationMonths',
+];
+
 const MPIC_CONTROLS: ProcurementPolicyControls = {
   // The parent source contains no Mwell-specific formal-bid amount.
   formalBidAmount: null,
@@ -31,7 +65,7 @@ const MPIC_CONTROLS: ProcurementPolicyControls = {
 };
 
 const inheritedControlSources = Object.fromEntries(
-  (Object.keys(MPIC_CONTROLS) as Array<keyof ProcurementPolicyControls>)
+  CONTROL_KEYS
     .filter((control) => control !== 'formalBidAmount')
     .map((control) => [control, MPIC_CONTROL_SOURCE]),
 ) as Partial<Record<keyof ProcurementPolicyControls, string>>;
@@ -49,7 +83,7 @@ export const MPIC_SOURCE_PROFILE: ProcurementPolicyProfile = {
   sourceOrganization: 'MPIC',
   relationship: 'parent_source',
   controlSources: Object.fromEntries(
-    (Object.keys(MPIC_CONTROLS) as Array<keyof ProcurementPolicyControls>)
+    CONTROL_KEYS
       .map((control) => [control, MPIC_CONTROL_SOURCE]),
   ) as Partial<Record<keyof ProcurementPolicyControls, string>>,
   status: 'draft',
@@ -101,11 +135,32 @@ function assertExactSourceFilename(profile: ProcurementPolicyProfile): void {
   ) {
     throw new Error(`Parent source profile must reference ${MPIC_SOURCE_FILENAME}.`);
   }
+  if (
+    profile.relationship === 'mwell_operating'
+    && profile.sourceFilename !== MWELL_OPERATING_SOURCE_FILENAME
+  ) {
+    throw new Error(`Mwell operating source profile must reference ${MWELL_OPERATING_SOURCE_FILENAME}.`);
+  }
+}
+
+function assertOperatingProfileProvenance(profile: ProcurementPolicyProfile): void {
+  if (profile.relationship !== 'mwell_operating') return;
+  if (!profile.inheritedFromProfileId?.trim()) {
+    throw new Error('Mwell operating profiles must identify their inherited parent profile.');
+  }
+  if (profile.status !== 'active') return;
+
+  for (const control of CONTROL_KEYS) {
+    if (!profile.controlSources[control]?.trim()) {
+      throw new Error(`A source attribution is required for policy control ${control} before activation.`);
+    }
+  }
 }
 
 /** Validates the invariant controls that must exist before a profile is saved. */
 export function validatePolicyProfile(profile: ProcurementPolicyProfile): ProcurementPolicyProfile {
   assertExactSourceFilename(profile);
+  assertOperatingProfileProvenance(profile);
 
   if (!isIsoDate(profile.effectiveFrom)) {
     throw new Error('Profile effective-from date must be a valid ISO date.');
@@ -119,12 +174,18 @@ export function validatePolicyProfile(profile: ProcurementPolicyProfile): Procur
     }
   }
 
-  for (const [key, value] of Object.entries(profile.controls) as Array<
-    [keyof ProcurementPolicyControls, number | null]
-  >) {
+  for (const key of CONTROL_KEYS) {
+    const value = profile.controls[key];
     if (key === 'formalBidAmount' && value === null) continue;
     if (value === null || !Number.isFinite(value) || value < 0) {
       throw new Error(`Policy control ${key} must be a non-negative value.`);
+    }
+  }
+
+  for (const key of POSITIVE_INTEGER_CONTROLS) {
+    const value = profile.controls[key];
+    if (value === null || !Number.isInteger(value) || value <= 0) {
+      throw new Error(`Policy control ${key} must be a positive integer.`);
     }
   }
 
