@@ -1102,6 +1102,42 @@ test("executes public governed route confirmation with persisted authority and e
   }
 });
 
+test("executes public parameterized exception review and active-DOA completion", async () => {
+  const db = await createGovernedRouteFixture();
+  const requestId = "71000000-0000-0000-0000-000000000001";
+  const doaReviewerId = "71000000-0000-0000-0000-000000000002";
+  try {
+    await db.exec(migrationBeforeBackfillForPglite);
+    await seedActivePolicyProfiles(db);
+    await db.exec(migrationTask6);
+    await db.exec(`insert into core.profiles(id, status) values ('${checkerId}', 'active'), ('${doaReviewerId}', 'active');`);
+    await insertRequest(db, { id: requestId, requirementKind: "materials", amount: 120000 });
+    await setPolicyActor(db, actorId, true);
+    const submitted = await db.query(`select procurement.submit_policy_exception_pack(${sqlJson({
+      request_id: requestId, mode: "sole_source", justification: "Only the compatible manufacturer can support this clinical integration.", price_reasonableness: "Prior PO and manufacturer list price are attached.", evidence: { soleSourceBasis: "compatibility", evidenceReferences: ["private/sole-source/compatibility.pdf"] },
+    })}) as pack`);
+    await assert.rejects(
+      () => db.query(`select procurement.review_policy_exception_pack(${sqlJson({ id: submitted.rows[0].pack.id, stage: "procurement", decision: "approved", note: "Self review is prohibited." })})`),
+      /independent Procurement reviewer/i,
+    );
+    await setPolicyActor(db, checkerId, true);
+    await db.query(`select procurement.review_policy_exception_pack(${sqlJson({ id: submitted.rows[0].pack.id, stage: "procurement", decision: "approved", note: "Evidence and benchmark reviewed independently." })})`);
+    await db.exec(`
+      insert into procurement.doa_matrices(id, version, department, status, active) values ('71000000-0000-0000-0000-000000000003', 'FIXTURE-DOA', 'operations', 'active', true);
+      insert into procurement.doa_assignments(id, matrix_id, department, min_amount, max_amount, tier, approver_user_id, active) values ('71000000-0000-0000-0000-000000000004', '71000000-0000-0000-0000-000000000003', 'operations', 0, 250000, 'final_approver', '${doaReviewerId}', true);
+      update procurement.requests set department = 'operations' where id = '${requestId}';
+    `);
+    await setPolicyActor(db, doaReviewerId, true);
+    const approved = await db.query(`select procurement.review_policy_exception_pack(${sqlJson({ id: submitted.rows[0].pack.id, stage: "doa", decision: "approved", note: "Active DOA approval recorded." })}) as pack`);
+    assert.equal(approved.rows[0].pack.status, "approved");
+    await setPolicyActor(db, actorId, true);
+    const route = await db.query(`select procurement.confirm_route_decision(${sqlJson({ request_id: requestId, expected_route_version: 0, requested_mode: "sole_source" })}) as route`);
+    assert.equal(route.rows[0].route.route.procurement_mode, "sole_source");
+  } finally {
+    await db.close();
+  }
+});
+
 test("executes public governed sourcing controls and independent failed-bid recovery", async () => {
   const db = await createGovernedRouteFixture();
   let stage = "fixture";

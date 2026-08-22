@@ -2355,7 +2355,7 @@ declare v_pack procurement.exception_packs; v_evidence jsonb; v_blockers text[] 
 begin
   if p_mode = 'competitive_bidding' then return v_blockers; end if;
   select * into v_pack from procurement.exception_packs
-  where request_id = p_request_id and status = 'approved'
+  where request_id::text = p_request_id and status = 'approved'
   order by procurement_head_reviewed_at desc nulls last, id desc limit 1;
   if not found then return array['approved_exception_pack_required']; end if;
   v_evidence := coalesce(v_pack.evidence, '{}'::jsonb);
@@ -2421,9 +2421,9 @@ begin
   if not found or v_request.status <> 'draft' then raise exception 'A draft request is required'; end if;
   if v_mode not in ('sole_source','repeat_order','emergency_purchase','petty_cash','approved_exception') then raise exception 'Unsupported exception mode'; end if;
   v_type := case v_mode when 'sole_source' then 'direct_award' when 'repeat_order' then 'repeat_continuity' when 'emergency_purchase' then 'emergency' when 'petty_cash' then 'petty_cash_non_accredited' else 'direct_award' end;
-  update procurement.exception_packs set status = 'superseded' where request_id = v_request.id and status in ('draft','under_review','rejected');
-  insert into procurement.exception_packs(request_id, exception_type, vendor_id, justification, evidence, price_reasonableness, risks_and_mitigations, status)
-  values(v_request.id, v_type, nullif(payload->>'vendor_id','')::uuid, coalesce(nullif(btrim(payload->>'justification'),''), 'Pending policy exception evidence'), coalesce(payload->'evidence','{}'::jsonb) || jsonb_build_object('submittedBy',auth.uid(),'submittedAt',statement_timestamp(),'mode',v_mode), nullif(btrim(payload->>'price_reasonableness'),''), coalesce(payload->'risks_and_mitigations','{}'::jsonb), 'under_review') returning * into v_pack;
+  update procurement.exception_packs set status = 'superseded' where request_id::text = v_request.id::text and status in ('draft','under_review','rejected');
+  insert into procurement.exception_packs(request_id, exception_type, justification, evidence, price_reasonableness, status)
+  values(v_request.id, v_type, coalesce(nullif(btrim(payload->>'justification'),''), 'Pending policy exception evidence'), coalesce(payload->'evidence','{}'::jsonb) || jsonb_build_object('submittedBy',auth.uid(),'submittedAt',statement_timestamp(),'mode',v_mode), nullif(btrim(payload->>'price_reasonableness'),''), 'under_review') returning * into v_pack;
   return to_jsonb(v_pack);
 end;
 $$;
@@ -2435,7 +2435,7 @@ begin
   select * into v_pack from procurement.exception_packs where id = (payload->>'id')::uuid for update;
   if not found or v_pack.status <> 'under_review' then raise exception 'An exception awaiting review is required'; end if;
   if v_decision not in ('approved','rejected') or nullif(btrim(payload->>'note'),'') is null then raise exception 'A decision and review note are required'; end if;
-  select * into v_request from procurement.requests where id = v_pack.request_id for share;
+  select * into v_request from procurement.requests where id::text = v_pack.request_id::text for share;
   if v_stage = 'procurement' then
     if not private.policy_sourcing_can_review() or v_pack.evidence->>'submittedBy' = auth.uid()::text then raise exception 'An independent Procurement reviewer is required'; end if;
     update procurement.exception_packs set procurement_head_reviewed_by = auth.uid(), procurement_head_reviewed_at = statement_timestamp(), status = case when v_decision = 'rejected' then 'rejected' else 'under_review' end, evidence = evidence || jsonb_build_object('procurementReviewNote',btrim(payload->>'note'),'procurementReviewedBy',auth.uid()) where id=v_pack.id returning * into v_pack;
@@ -2447,7 +2447,7 @@ begin
     if v_pack.procurement_head_reviewed_by is null then raise exception 'Independent Procurement review is required before DOA'; end if;
     v_assignment := private.policy_variance_doa_assignment(v_request, 'final_approver');
     insert into procurement.exception_doa_decisions(exception_pack_id,decision,rationale,doa_matrix_id,doa_assignment_id,decided_by) values(v_pack.id,v_decision,btrim(payload->>'note'),v_assignment.matrix_id,v_assignment.id,auth.uid()) on conflict(exception_pack_id) do nothing;
-    update procurement.exception_packs set status = case when v_decision = 'approved' then 'approved' else 'rejected' end, final_approval_step_id = null where id=v_pack.id returning * into v_pack;
+    update procurement.exception_packs set status = case when v_decision = 'approved' then 'approved' else 'rejected' end where id=v_pack.id returning * into v_pack;
   else raise exception 'Review stage must be procurement, finance, or doa'; end if;
   return to_jsonb(v_pack);
 end;
