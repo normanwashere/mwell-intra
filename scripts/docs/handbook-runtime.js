@@ -23,8 +23,10 @@
     let disclosureStateBeforeSearch = null;
     let diagramViews = { ...restoredState.diagramViews };
     let diagramZoom = { ...restoredState.diagramZoom };
+    let diagramModes = { ...restoredState.diagramModes };
     let tabScroll = { ...restoredState.tabScroll };
     let persistenceTimer = null;
+    let diagramsReady = false;
 
     function normalizeStoredState(value) {
       const stored = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
@@ -34,8 +36,10 @@
         diagramViews[id] = { left: Math.max(0, view.left), top: Math.max(0, view.top) };
       });
       const diagramZoom = Object.fromEntries(Object.entries(stored.diagramZoom && typeof stored.diagramZoom === 'object' ? stored.diagramZoom : {})
-        .filter(([, zoom]) => Number.isFinite(zoom))
-        .map(([id, zoom]) => [id, Math.min(1.8, Math.max(.6, zoom))]));
+        .filter(([, zoom]) => zoom === 'fit' || Number.isFinite(zoom))
+        .map(([id, zoom]) => [id, zoom === 'fit' ? zoom : Math.min(1.8, Math.max(.6, zoom))]));
+      const diagramModes = Object.fromEntries(Object.entries(stored.diagramModes && typeof stored.diagramModes === 'object' ? stored.diagramModes : {})
+        .filter(([, mode]) => ['overview', 'role', 'decision'].includes(mode)));
       const tabScroll = Object.fromEntries(Object.entries(stored.tabScroll && typeof stored.tabScroll === 'object' ? stored.tabScroll : {})
         .filter(([, position]) => Number.isFinite(position) && position >= 0));
       return {
@@ -46,6 +50,7 @@
         expandedIds: [...new Set(Array.isArray(stored.expandedIds) ? stored.expandedIds.filter((id) => typeof id === 'string') : [])],
         diagramViews,
         diagramZoom,
+        diagramModes,
         tabScroll,
         theme: stored.theme === 'dark' ? 'dark' : 'light',
       };
@@ -107,7 +112,7 @@
     }
 
     function currentStoredState() {
-      return { activeTab: activeRoute.tabId, activeArticle: activeRoute.articleId, query: searchState.query, scope: searchState.scope, expandedIds: [...savedExpandedIds].sort(), diagramViews, diagramZoom, tabScroll, theme: document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light' };
+      return { activeTab: activeRoute.tabId, activeArticle: activeRoute.articleId, query: searchState.query, scope: searchState.scope, expandedIds: [...savedExpandedIds].sort(), diagramViews, diagramZoom, diagramModes, tabScroll, theme: document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light' };
     }
 
     function schedulePersistence() {
@@ -246,7 +251,34 @@
     function applyDiagramZoom(shell, scale) {
       const diagram = shell.querySelector('.mermaid');
       const baseMin = matchMedia('(max-width:520px)').matches ? 520 : 720;
+      if (scale === 'fit') {
+        shell.dataset.diagramScale = 'fit';
+        diagram.style.width = '100%'; diagram.style.minWidth = '0';
+        return;
+      }
+      shell.dataset.diagramScale = String(scale);
       diagram.style.width = `${scale * 100}%`; diagram.style.minWidth = `${baseMin * scale}px`;
+    }
+
+    function applyDiagramMode(group, mode) {
+      const selected = ['overview', 'role', 'decision'].includes(mode) ? mode : 'overview';
+      group.dataset.activeDiagramView = selected;
+      group.querySelectorAll('.diagram-shell[data-diagram-view]').forEach((shell) => { shell.hidden = shell.dataset.diagramView !== selected; });
+      group.querySelectorAll('[data-diagram-view-control]').forEach((button) => { button.setAttribute('aria-pressed', String(button.dataset.diagramViewControl === selected)); });
+      const stages = [...group.querySelectorAll('[data-process-stage]')];
+      const activeStage = selected === 'overview' ? 0 : selected === 'role' ? Math.floor(Math.max(0, stages.length - 1) / 2) : Math.max(0, stages.length - 1);
+      stages.forEach((stage, index) => { if (index === activeStage) stage.setAttribute('aria-current', 'step'); else stage.removeAttribute('aria-current'); });
+    }
+
+    function prepareMermaidLayout() {
+      const hiddenElements = [...document.querySelectorAll('[hidden]')];
+      const closedSections = [...document.querySelectorAll('details:not([open])')];
+      hiddenElements.forEach((element) => { element.hidden = false; });
+      closedSections.forEach((section) => { section.open = true; });
+      return () => {
+        hiddenElements.forEach((element) => { element.hidden = true; });
+        closedSections.forEach((section) => { section.open = false; });
+      };
     }
 
     applyStoredDisclosures();
@@ -275,18 +307,36 @@
     document.querySelector('[data-dismiss-notice]').addEventListener('click', () => { routeNotice.hidden = true; });
     window.addEventListener('scroll', () => { tabScroll = { ...tabScroll, [activeRoute.tabId]: window.scrollY }; schedulePersistence(); }, { passive: true });
     document.addEventListener('keydown', (event) => { if (event.key === '/' && !/input|textarea|select/i.test(document.activeElement.tagName)) { event.preventDefault(); search.focus(); } });
+    document.querySelectorAll('[data-diagram-group]').forEach((group) => {
+      const id = group.dataset.diagramGroup;
+      group.dataset.pendingDiagramView = diagramModes[id] || 'overview';
+      group.querySelectorAll('[data-diagram-view-control]').forEach((button) => button.addEventListener('click', () => {
+        const mode = button.dataset.diagramViewControl;
+        diagramModes = { ...diagramModes, [id]: mode };
+        group.dataset.pendingDiagramView = mode;
+        if (diagramsReady) applyDiagramMode(group, mode);
+        schedulePersistence();
+      }));
+    });
     document.querySelectorAll('.diagram-shell[data-diagram-id]').forEach((shell) => {
-      const id = shell.dataset.diagramId; const viewport = shell.querySelector('.diagram-viewport'); let scale = diagramZoom[id] || 1;
+      const id = shell.dataset.diagramId; const viewport = shell.querySelector('.diagram-viewport'); let scale = diagramZoom[id] || 'fit';
       applyDiagramZoom(shell, scale); const view = diagramViews[id]; if (view) { viewport.scrollLeft = view.left; viewport.scrollTop = view.top; }
       viewport.addEventListener('scroll', () => { diagramViews = { ...diagramViews, [id]: { left: viewport.scrollLeft, top: viewport.scrollTop } }; schedulePersistence(); });
-      shell.querySelectorAll('[data-diagram-zoom]').forEach((button) => button.addEventListener('click', () => { const action = button.dataset.diagramZoom; scale = action === 'reset' ? 1 : Math.min(1.8, Math.max(.6, scale + (action === 'in' ? .1 : -.1))); diagramZoom = { ...diagramZoom, [id]: scale }; applyDiagramZoom(shell, scale); schedulePersistence(); }));
+      shell.querySelector('[data-diagram-fit]')?.addEventListener('click', () => { scale = 'fit'; diagramZoom = { ...diagramZoom, [id]: scale }; applyDiagramZoom(shell, scale); schedulePersistence(); });
+      shell.querySelectorAll('[data-diagram-zoom]').forEach((button) => button.addEventListener('click', () => { const action = button.dataset.diagramZoom; const current = typeof scale === 'number' ? scale : 1; scale = action === 'reset' ? 1 : Math.min(1.8, Math.max(.6, current + (action === 'in' ? .1 : -.1))); diagramZoom = { ...diagramZoom, [id]: scale }; applyDiagramZoom(shell, scale); schedulePersistence(); }));
     });
+    const restoreMermaidLayout = prepareMermaidLayout();
     mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'base', flowchart: { htmlLabels: true, useMaxWidth: true }, themeVariables: { primaryColor: '#e7f2fb', primaryTextColor: '#17233b', primaryBorderColor: '#0875bd', lineColor: '#506681', secondaryColor: '#e8faf5', tertiaryColor: '#fff4e8', fontFamily: 'Inter, Segoe UI, Arial, sans-serif' } });
     const mermaidReady = mermaid.run({ querySelector: '.mermaid' }).catch((error) => { console.error('Diagram rendering failed', error); });
     window.addEventListener('popstate', () => activateParsedRoute('none', false));
     window.addEventListener('hashchange', () => activateParsedRoute('none', false));
     const initialRoute = location.hash ? parseRoute() : { tabId: restoredState.activeTab, articleId: restoredState.activeArticle, headingId: null, query: restoredState.query, scope: restoredState.scope };
-    setSearchState(initialRoute);
     const recoveredInitialRoute = recoverRoute(initialRoute);
-    activateRoute({ ...recoveredInitialRoute, historyMode: 'replace', restoreScroll: false });
-    mermaidReady.finally(() => restoreStoredPosition(recoveredInitialRoute));
+    mermaidReady.finally(() => {
+      restoreMermaidLayout();
+      diagramsReady = true;
+      document.querySelectorAll('[data-diagram-group]').forEach((group) => applyDiagramMode(group, group.dataset.pendingDiagramView || 'overview'));
+      setSearchState(initialRoute);
+      activateRoute({ ...recoveredInitialRoute, historyMode: 'replace', restoreScroll: false });
+      restoreStoredPosition(recoveredInitialRoute);
+    });

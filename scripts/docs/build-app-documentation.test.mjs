@@ -142,6 +142,19 @@ test("renders scoped explainable search without navigation reloads", () => {
   assert.doesNotMatch(html, /location\.(?:href|reload)/);
 });
 
+test("renders maintained flow views before workflow prose", () => {
+  const html = buildDocumentationHtml();
+
+  assert.ok((html.match(/class="mermaid"/g) ?? []).length >= 6);
+  assert.match(html, /data-diagram-group/);
+  assert.match(html, /data-diagram-view="overview"/);
+  assert.match(html, /data-diagram-view="role"/);
+  assert.match(html, /data-diagram-view="decision"/);
+  assert.match(html, /class="process-ribbon"/);
+  assert.match(html, /data-diagram-fit/);
+  assert.doesNotMatch(html, /```mermaid/);
+});
+
 test("normalizes persisted handbook state without accepting malformed values", () => {
   const normalizeStoredState = runtimeFunction("normalizeStoredState", "readStoredState");
 
@@ -152,7 +165,8 @@ test("normalizes persisted handbook state without accepting malformed values", (
     scope: "tab",
     expandedIds: ["doc-technical-and-functional-specification-md:runtime-architecture", 4],
     diagramViews: { "doc-technical-and-functional-specification-md:diagram-1": { left: 18, top: 32 } },
-    diagramZoom: { "doc-technical-and-functional-specification-md:diagram-1": 1.4, broken: "big" },
+    diagramZoom: { "doc-technical-and-functional-specification-md:diagram-1": 1.4, fit: "fit", broken: "big" },
+    diagramModes: { "procurement-to-payment": "decision", broken: "sideways" },
     tabScroll: { architecture: 480, release: "bottom" },
     theme: "dark",
   }), {
@@ -162,7 +176,8 @@ test("normalizes persisted handbook state without accepting malformed values", (
     scope: "tab",
     expandedIds: ["doc-technical-and-functional-specification-md:runtime-architecture"],
     diagramViews: { "doc-technical-and-functional-specification-md:diagram-1": { left: 18, top: 32 } },
-    diagramZoom: { "doc-technical-and-functional-specification-md:diagram-1": 1.4 },
+    diagramZoom: { "doc-technical-and-functional-specification-md:diagram-1": 1.4, fit: "fit" },
+    diagramModes: { "procurement-to-payment": "decision" },
     tabScroll: { architecture: 480 },
     theme: "dark",
   });
@@ -174,6 +189,7 @@ test("normalizes persisted handbook state without accepting malformed values", (
     expandedIds: [],
     diagramViews: {},
     diagramZoom: {},
+    diagramModes: {},
     tabScroll: {},
     theme: "light",
   });

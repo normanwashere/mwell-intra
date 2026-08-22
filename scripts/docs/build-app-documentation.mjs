@@ -150,6 +150,22 @@ function resolveDocumentLink(href, sourceFile, sourceIds, sourceRoutes) {
     : href;
 }
 
+function flowDiagramMetadata(text) {
+  const directive = String(text).match(/^\s*%%\s*handbook-flow:\s*([^\n]+)\n?/i);
+  if (!directive) return { source: text, workflow: null, view: null, stages: [] };
+  const values = Object.fromEntries(directive[1].split(";").map((part) => {
+    const [key, ...rest] = part.trim().split("=");
+    return [key?.trim().toLowerCase(), rest.join("=").trim()];
+  }));
+  const view = ["overview", "role", "decision"].includes(values.view) ? values.view : "overview";
+  return {
+    source: String(text).slice(directive[0].length),
+    workflow: slug(values.workflow || "workflow"),
+    view,
+    stages: (values.stages || "").split("|").map((stage) => stage.trim()).filter(Boolean),
+  };
+}
+
 function renderMarkdown(markdown, sourceFile, sourceIds, sourceRoutes) {
   const renderer = new Renderer();
   renderer.heading = function ({ depth, text, tokens }) {
@@ -166,10 +182,14 @@ function renderMarkdown(markdown, sourceFile, sourceIds, sourceRoutes) {
     const internalRoute = /^#tab=/.test(target);
     return `<a href="${escapeHtml(target)}"${internalRoute ? " data-route-link" : ""}${title ? ` title="${escapeHtml(title)}"` : ""}${external ? ' target="_blank" rel="noreferrer"' : ""}>${this.parser.parseInline(tokens)}</a>`;
   };
-  renderer.code = ({ text, lang }) =>
-    lang === "mermaid"
-      ? `<figure class="diagram-shell"><div class="diagram-toolbar" aria-label="Diagram zoom controls"><button type="button" data-diagram-zoom="out" aria-label="Zoom diagram out">−</button><button type="button" data-diagram-zoom="reset">Reset</button><button type="button" data-diagram-zoom="in" aria-label="Zoom diagram in">+</button></div><div class="diagram-viewport"><div class="mermaid">${escapeHtml(text)}</div></div><figcaption>Process flow. Decision branches are shown as labeled paths.</figcaption></figure>`
-      : `<pre class="code-block"${lang ? ` data-language="${escapeHtml(lang)}"` : ""}><code>${escapeHtml(text)}</code></pre>`;
+  renderer.code = ({ text, lang }) => {
+    if (lang !== "mermaid") return `<pre class="code-block"${lang ? ` data-language="${escapeHtml(lang)}"` : ""}><code>${escapeHtml(text)}</code></pre>`;
+    const metadata = flowDiagramMetadata(text);
+    const flowAttributes = metadata.workflow
+      ? ` data-flow-workflow="${escapeHtml(metadata.workflow)}" data-flow-view="${metadata.view}" data-flow-stages="${escapeHtml(metadata.stages.join("|"))}"`
+      : "";
+    return `<figure class="diagram-shell"${flowAttributes}><div class="diagram-toolbar" aria-label="Diagram zoom controls"><button type="button" data-diagram-fit aria-label="Fit diagram to available space">Fit</button><button type="button" data-diagram-zoom="reset" aria-label="Show diagram at 100 percent">100%</button><button type="button" data-diagram-zoom="out" aria-label="Zoom diagram out">−</button><button type="button" data-diagram-zoom="in" aria-label="Zoom diagram in">+</button></div><div class="diagram-viewport"><div class="mermaid">${escapeHtml(metadata.source)}</div></div><figcaption>Process flow. Decision branches are shown as labeled paths.</figcaption></figure>`;
+  };
 
   return marked.parse(markdown.replace(/^#\s+.+(?:\r?\n)+/, ""), {
     async: false,
@@ -201,14 +221,39 @@ function disclosureDefaultOpen(document, heading, index, section) {
 
 function decorateArticleHtml(document, html) {
   let diagramIndex = 0;
-  const withDiagramIds = html.replace(/<figure class="diagram-shell">/g, () => {
+  const withDiagramIds = html.replace(/<figure class="diagram-shell"([^>]*)>/g, (_, attributes) => {
     diagramIndex += 1;
-    return `<figure class="diagram-shell" data-diagram-id="${escapeHtml(`${document.id}:diagram-${diagramIndex}`)}">`;
+    return `<figure class="diagram-shell" data-diagram-id="${escapeHtml(`${document.id}:diagram-${diagramIndex}`)}"${attributes}>`;
   });
-  if (document.collapse === "none") return withDiagramIds;
+  const flowPattern = /<figure\b(?=[^>]*\bclass="diagram-shell")(?=[^>]*\bdata-flow-workflow="([^"]+)")(?=[^>]*\bdata-flow-view="([^"]+)")(?=[^>]*\bdata-flow-stages="([^"]*)")[^>]*>[\s\S]*?<\/figure>/g;
+  const diagrams = [...withDiagramIds.matchAll(flowPattern)];
+  let groupedHtml = "";
+  let cursor = 0;
+  for (let index = 0; index < diagrams.length;) {
+    const first = diagrams[index];
+    const workflow = first[1];
+    let end = index + 1;
+    while (end < diagrams.length && diagrams[end][1] === workflow && withDiagramIds.slice(diagrams[end - 1].index + diagrams[end - 1][0].length, diagrams[end].index).trim() === "") end += 1;
+    const group = diagrams.slice(index, end);
+    const views = new Set(group.map((diagram) => diagram[2]));
+    if (!["overview", "role", "decision"].every((view) => views.has(view))) { index = end; continue; }
+    const stages = first[3].split("|").filter(Boolean);
+    const groupStart = first.index;
+    const groupEnd = group[group.length - 1].index + group[group.length - 1][0].length;
+    groupedHtml += withDiagramIds.slice(cursor, groupStart);
+    const controls = [["overview", "Overview"], ["role", "By role"], ["decision", "Decisions"]]
+      .map(([view, label]) => `<button type="button" data-diagram-view-control="${view}" aria-pressed="${view === "overview"}">${label}</button>`).join("");
+    const ribbon = stages.map((stage, stageIndex) => `<li data-process-stage="${stageIndex}"${stageIndex === 0 ? ' aria-current="step"' : ""}>${escapeHtml(stage)}</li>`).join("");
+    const figures = group.map((diagram) => diagram[0].replace("<figure ", `<figure data-diagram-view="${diagram[2]}" `)).join("");
+    groupedHtml += `<section class="diagram-group" data-diagram-group="${escapeHtml(workflow)}" data-active-diagram-view="overview"><div class="diagram-group-header"><div class="diagram-view-controls" role="group" aria-label="Workflow diagram perspective">${controls}</div><ol class="process-ribbon" aria-label="Workflow lifecycle">${ribbon}</ol></div>${figures}</section>`;
+    cursor = groupEnd;
+    index = end;
+  }
+  groupedHtml += withDiagramIds.slice(cursor);
+  if (document.collapse === "none") return groupedHtml;
 
   let sectionIndex = 0;
-  return withDiagramIds.split(/(?=<h2\b)/).map((section) => {
+  return groupedHtml.split(/(?=<h2\b)/).map((section) => {
     const heading = section.match(/^<h2 id="([^"]+)">([\s\S]*?)<\/h2>/);
     if (!heading) return section;
     const [, headingId, headingHtml] = heading;

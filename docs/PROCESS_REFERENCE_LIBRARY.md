@@ -134,3 +134,9 @@ The **Export current view** function produces one row per order line with order,
 4. Finance reviews changes to DOA, valuation, payment, tax, write-off or reconciliation controls.
 5. Operations validates Warehouse, fulfillment, return, event and custody behavior in UAT.
 6. The release manifest records source checksums and the deployed commit. A changed source with an unchanged handbook blocks release certification.
+
+## Flow-First Handbook Source Rules
+
+The standalone handbook renders its governed operational journeys from the maintained manual. Each of the following journeys must lead with an overview flow, completion criteria, role/handoff view, and a decision/exception view: procurement to payment, vendor accreditation, receiving and putaway, ecommerce fulfillment, returns and replacements, inventory release, event custody, and inventory integrity.
+
+The overview is the primary lifecycle statement. Role and decision views explain who may act and what happens when normal progression is blocked. Diagrams complement, but never replace, source records, policy evidence, role assignments, or released application controls.

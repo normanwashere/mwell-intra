@@ -245,6 +245,252 @@ All items below are **proposed**, not current capabilities:
 9. Role onboarding curricula and completion tracking.
 10. Workflow-linked release notes.
 
+## Flow-First Operational Journeys
+
+Read the overview before performing work. Use **By role** to confirm the handoff owner and **Decisions** before taking an exception path. The lifecycle ribbon is a reading aid; the underlying record, evidence, role assignment, and audit trail remain the source of truth.
+
+### Procurement to Payment
+
+```mermaid
+%% handbook-flow: workflow=procurement-to-payment; view=overview; stages=Request|Budget|DOA|Source|PO|Receive|Pay
+flowchart LR
+  R[Request] --> B[Budget check] --> D[DOA approval] --> S[Sourcing] --> P[Purchase order] --> G[Receive and inspect] --> Y[Three-way match and payment]
+```
+```mermaid
+%% handbook-flow: workflow=procurement-to-payment; view=role; stages=Request|Budget|DOA|Source|PO|Receive|Pay
+flowchart LR
+  A[Requester] --> B[Procurement]
+  B --> C[Named approver]
+  C --> D[Procurement]
+  D --> E[Vendor]
+  E --> F[Warehouse]
+  F --> G[Finance]
+```
+```mermaid
+%% handbook-flow: workflow=procurement-to-payment; view=decision; stages=Request|Budget|DOA|Source|PO|Receive|Pay
+flowchart TD
+  A[Route and evidence ready] --> B{DOA approved?}
+  B -->|No: return with reason| A
+  B -->|Yes| C{Vendor accredited?}
+  C -->|No: block award| D[Legal remediation]
+  C -->|Yes| E[Issue PO]
+  E --> F{Receipt and invoice match?}
+  F -->|No: resolve variance| G[Hold payment]
+  F -->|Yes| H[Release payment]
+```
+
+**Completion criteria:** the request, budget/DOA decision, sourcing evidence, active vendor accreditation, issued PO, receipt/inspection evidence, invoice and acceptance are linked before Finance releases payment.
+
+### Vendor Accreditation
+
+```mermaid
+%% handbook-flow: workflow=vendor-accreditation; view=overview; stages=Invite|Profile|Evidence|Review|Instrument|Decision|Renewal
+flowchart LR
+  I[Invite] --> P[Vendor profile] --> E[Evidence] --> R[Legal review] --> N[Required instruments] --> D[Accreditation decision] --> M[Renewal monitoring]
+```
+```mermaid
+%% handbook-flow: workflow=vendor-accreditation; view=role; stages=Invite|Profile|Evidence|Review|Instrument|Decision|Renewal
+flowchart LR
+  L[Legal Admin] --> V[Vendor representative]
+  V --> C[Legal and Compliance]
+  C --> T[Technology reviewer when required]
+  T --> L
+  L --> P[Procurement eligibility]
+```
+```mermaid
+%% handbook-flow: workflow=vendor-accreditation; view=decision; stages=Invite|Profile|Evidence|Review|Instrument|Decision|Renewal
+flowchart TD
+  E[Evidence received] --> C{Complete and current?}
+  C -->|No: correction request| E
+  C -->|Yes| T{Technology provider?}
+  T -->|Yes| Q[Technology qualification]
+  T -->|No| I[Instrument review]
+  Q --> I
+  I --> D{Approved?}
+  D -->|No: close or remediate| E
+  D -->|Yes| A[Accredit and monitor expiry]
+```
+
+**Completion criteria:** the vendor has an attributable invitation, current LGL004-aligned evidence, applicable technology qualification and executed instruments; Legal records a decision and Procurement sees only the resulting eligibility.
+
+### Receiving and Putaway
+
+```mermaid
+%% handbook-flow: workflow=receiving-putaway; view=overview; stages=PO|Delivery|Receive|Inspect|Putaway|Available
+flowchart LR
+  P[Receivable PO] --> D[Delivery] --> R[Receive line and serial or batch] --> I[Inspect] --> B[Put away] --> A[Available stock]
+```
+```mermaid
+%% handbook-flow: workflow=receiving-putaway; view=role; stages=PO|Delivery|Receive|Inspect|Putaway|Available
+flowchart LR
+  P[Procurement] --> L[Logistics supervisor]
+  L --> Q[Quality control]
+  Q --> O[Operations associate]
+  O --> F[Warehouse finance]
+```
+```mermaid
+%% handbook-flow: workflow=receiving-putaway; view=decision; stages=PO|Delivery|Receive|Inspect|Putaway|Available
+flowchart TD
+  R[Received line] --> M{PO, quantity and serial or batch match?}
+  M -->|No| V[Record variance and hold]
+  M -->|Yes| I{Inspection accepted?}
+  I -->|Yes| B[Scan valid bin and put away]
+  I -->|Hold or damaged| H[Evidence-backed quarantine]
+  I -->|Vendor return| X[Vendor-return custody]
+```
+
+**Completion criteria:** each receipt line has PO and delivery references, delivery date, required serial/batch evidence, a recorded disposition and a valid destination before it becomes available stock.
+
+### Ecommerce Fulfillment
+
+```mermaid
+%% handbook-flow: workflow=ecommerce-fulfillment; view=overview; stages=Order|Reserve|Pick|Pack|Waybill|Release|Delivery
+flowchart LR
+  O[Order intake] --> R[Reserve] --> P[Pick and scan] --> K[Pack and consume supplies] --> W[Waybill] --> H[Handover] --> D[Delivery outcome]
+```
+```mermaid
+%% handbook-flow: workflow=ecommerce-fulfillment; view=role; stages=Order|Reserve|Pick|Pack|Waybill|Release|Delivery
+flowchart LR
+  C[Commerce or Customer Service] --> O[Operations associate]
+  O --> L[Logistics supervisor]
+  L --> R[Courier]
+  R --> F[Finance and Product evidence]
+```
+```mermaid
+%% handbook-flow: workflow=ecommerce-fulfillment; view=decision; stages=Order|Reserve|Pick|Pack|Waybill|Release|Delivery
+flowchart TD
+  O[Order ready] --> B{Bundle item?}
+  B -->|Yes| S[Create and scan each set]
+  B -->|No| P[Pick serials]
+  S --> P
+  P --> L{Rack/bin and serial correct?}
+  L -->|No| P
+  L -->|Yes| W{Waybill and courier present?}
+  W -->|No| H[Do not release]
+  W -->|Yes| D[Handover and track delivery]
+```
+
+**Completion criteria:** an order has its controlled channel, address and payment fields, every required rack/bin and serialized scan, bundle-set evidence where applicable, packaging consumption, waybill/courier, attributable handover proof and a tracked delivery outcome.
+
+### Returns and Replacements
+
+```mermaid
+%% handbook-flow: workflow=returns-replacements; view=overview; stages=Intake|Serial lookup|Quarantine|Decision|RMA|Finance|Closure
+flowchart LR
+  I[Customer intake] --> S[Serial lookup] --> Q[Quarantine] --> D[Replacement or refund decision] --> R[Supplier RMA] --> F[Finance evidence] --> C[Customer closure]
+```
+```mermaid
+%% handbook-flow: workflow=returns-replacements; view=role; stages=Intake|Serial lookup|Quarantine|Decision|RMA|Finance|Closure
+flowchart LR
+  C[Customer Service] --> O[Operations]
+  O --> L[Logistics]
+  L --> P[Procurement and supplier]
+  P --> F[Finance]
+  F --> C
+```
+```mermaid
+%% handbook-flow: workflow=returns-replacements; view=decision; stages=Intake|Serial lookup|Quarantine|Decision|RMA|Finance|Closure
+flowchart TD
+  S[Scan serial] --> M{Original release found?}
+  M -->|No| Q[Keep unresolved in quarantine]
+  M -->|Yes| D{Defect and policy decision}
+  D -->|Replacement| R[Create replacement and supplier RMA]
+  D -->|Refund| F[Finance refund evidence]
+  D -->|Reject| C[Explain and close]
+```
+
+**Completion criteria:** the return is traced to its original release or remains explicitly unresolved, then retains defect evidence, custody location, supplier RMA/refund or replacement evidence and an attributable customer outcome.
+
+### Inventory Release
+
+```mermaid
+%% handbook-flow: workflow=inventory-release; view=overview; stages=Demand|Approval|Reserve|Issue|Use|Return|Reconcile
+flowchart LR
+  D[Department demand] --> A[Approval] --> R[Reserve] --> I[Issue custody] --> U[Use or giveaway] --> T[Return or loss] --> C[Reconcile]
+```
+```mermaid
+%% handbook-flow: workflow=inventory-release; view=role; stages=Demand|Approval|Reserve|Issue|Use|Return|Reconcile
+flowchart LR
+  B[Business unit or Marketing] --> A[Approver]
+  A --> O[Operations]
+  O --> W[Warehouse]
+  W --> F[Finance]
+```
+```mermaid
+%% handbook-flow: workflow=inventory-release; view=decision; stages=Demand|Approval|Reserve|Issue|Use|Return|Reconcile
+flowchart TD
+  D[Request] --> A{Authority and stock available?}
+  A -->|No| R[Return with reason or replenish]
+  A -->|Yes| I[Scan issue custody]
+  I --> O{Outcome recorded?}
+  O -->|Returned| C[Inspect and restock]
+  O -->|Consumed or giveaway| E[Post expense or usage]
+  O -->|Lost or damaged| X[Exception approval]
+```
+
+**Completion criteria:** all department requests have one or more line items, authority, issued custody evidence, a recorded outcome and reconciliation. Merchandise is treated as expense under the applicable cost center.
+
+### Event Custody
+
+```mermaid
+%% handbook-flow: workflow=event-custody; view=overview; stages=Demand|Approval|Transfer|Event|Outcome|Return|Settlement
+flowchart LR
+  D[Marketing demand] --> A[Approval] --> T[Event transfer] --> E[Event use] --> O[Sales or giveaway outcome] --> R[Return] --> S[Settlement]
+```
+```mermaid
+%% handbook-flow: workflow=event-custody; view=role; stages=Demand|Approval|Transfer|Event|Outcome|Return|Settlement
+flowchart LR
+  M[Marketing and Events] --> A[Approver]
+  A --> O[Operations]
+  O --> W[Warehouse]
+  W --> F[Finance]
+```
+```mermaid
+%% handbook-flow: workflow=event-custody; view=decision; stages=Demand|Approval|Transfer|Event|Outcome|Return|Settlement
+flowchart TD
+  T[Transferred stock] --> O{Event outcome}
+  O -->|Sold| S[Capture sale summary]
+  O -->|Given away| G[Record giveaway]
+  O -->|Returned| R[Inspect return]
+  O -->|Lost or damaged| X[Evidence and approval]
+  R --> K{Re-kit eligible?}
+  K -->|Yes| Q[Open-box re-kitting]
+  K -->|No| C[Controlled disposition]
+```
+
+**Completion criteria:** event demand, approval, transfer scans, sales/giveaway quantities, returned/lost/damaged evidence, re-kitting decision and Finance settlement reconcile to the final event balance.
+
+### Inventory Integrity
+
+```mermaid
+%% handbook-flow: workflow=inventory-integrity; view=overview; stages=Count|Variance|Approval|Adjust|Expiry|Recall|Reconcile
+flowchart LR
+  C[Cycle count] --> V[Variance] --> A[Adjustment approval] --> J[Post adjustment] --> E[Expiry control] --> R[Recall handling] --> F[Serialized reconciliation]
+```
+```mermaid
+%% handbook-flow: workflow=inventory-integrity; view=role; stages=Count|Variance|Approval|Adjust|Expiry|Recall|Reconcile
+flowchart LR
+  O[Operations] --> S[Logistics supervisor]
+  S --> F[Warehouse finance]
+  F --> P[Procurement or supplier]
+  P --> A[Platform audit]
+```
+```mermaid
+%% handbook-flow: workflow=inventory-integrity; view=decision; stages=Count|Variance|Approval|Adjust|Expiry|Recall|Reconcile
+flowchart TD
+  C[Physical count] --> V{Variance found?}
+  V -->|No| R[Reconcile serials]
+  V -->|Yes| E[Attach evidence]
+  E --> A{Adjustment approved?}
+  A -->|No| I[Investigate]
+  A -->|Yes| P[Post governed adjustment]
+  R --> X{Expired, recalled or damaged?}
+  X -->|Yes| Q[Quarantine and disposition]
+  X -->|No| K[Close count]
+```
+
+**Completion criteria:** the physical count, variance evidence, approval, stock adjustment, serialized reconciliation and any expiry/recall/damage disposition are all recorded; staff never edit quantity directly.
+
 ## Application Screen Reference
 
 The canonical standalone file is `docs/manual/index.html`. Screens below establish layout and control location; follow the written procedure and current field labels if a released screen has changed.
