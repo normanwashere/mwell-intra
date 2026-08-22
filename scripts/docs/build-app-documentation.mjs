@@ -191,6 +191,31 @@ function renderSource(source, sourceFile, sourceIds, sourceRoutes) {
     : renderMarkdown(source, sourceFile, sourceIds, sourceRoutes);
 }
 
+function disclosureDefaultOpen(document, heading, index, section) {
+  if (document.collapse === "reference") return index === 0;
+  if (document.collapse !== "workflow") return true;
+  return index === 0 ||
+    section.includes('class="diagram-shell"') ||
+    /overview|at a glance|completion|success criteria|done when|outcome/i.test(heading);
+}
+
+function decorateArticleHtml(document, html) {
+  const withDiagramIds = html.replace(/<figure class="diagram-shell">/g, (_, index) =>
+    `<figure class="diagram-shell" data-diagram-id="${escapeHtml(`${document.id}:diagram-${index + 1}`)}">`,
+  );
+  if (document.collapse === "none") return withDiagramIds;
+
+  let sectionIndex = 0;
+  return withDiagramIds.split(/(?=<h2\b)/).map((section) => {
+    const heading = section.match(/^<h2 id="([^"]+)">([\s\S]*?)<\/h2>/);
+    if (!heading) return section;
+    const [, headingId, headingHtml] = heading;
+    const open = disclosureDefaultOpen(document, plainMarkdownText(headingHtml), sectionIndex, section);
+    sectionIndex += 1;
+    return `<details class="article-section" data-section-id="${escapeHtml(`${document.id}:${headingId}`)}"${open ? " open" : ""}><summary id="${escapeHtml(headingId)}"><span role="heading" aria-level="2">${headingHtml}</span></summary><div class="article-section-content">${section.slice(heading[0].length)}</div></details>`;
+  }).join("");
+}
+
 function buildSearchIndex(documents) {
   return documents.flatMap((document) => {
     const records = [{
@@ -259,7 +284,7 @@ export function buildDocumentationHtml() {
       title: titleOf(source, file),
       category: tabById.get(metadata.primaryTab).label,
       sourceText: source,
-      html: renderSource(source, file, sourceIds, sourceRoutes),
+      html: decorateArticleHtml({ id: sourceIds.get(file), collapse: metadata.collapse }, renderSource(source, file, sourceIds, sourceRoutes)),
       hash: createHash("sha256").update(source).digest("hex").slice(0, 12),
     };
   });
@@ -293,6 +318,7 @@ export function buildDocumentationHtml() {
         .filter(Boolean);
       return `<article id="${document.id}" data-document data-tab="${escapeHtml(document.primaryTab)}" data-category="${escapeHtml(document.category)}" data-search="${escapeHtml(`${document.title} ${document.category} ${document.file} ${document.summary} ${document.keywords.join(" ")} ${document.audience.join(" ")}`.toLowerCase())}" hidden>
         <header class="article-header"><div><span class="category">${escapeHtml(document.category)}</span><h1>${escapeHtml(document.title)}</h1><p>${escapeHtml(document.file)}</p></div><span class="source-hash" title="Source checksum">${document.hash}</span></header>
+        <div class="article-disclosure-controls" data-article-disclosures aria-label="Article section controls"><button type="button" data-disclosure-action="expand">Expand all</button><button type="button" data-disclosure-action="collapse">Collapse all</button></div>
         <div class="article-body">${document.html}</div>
         <nav class="article-pagination" aria-label="Article navigation">${previous ? `<a href="${escapeHtml(routeHash({ tabId: previous.primaryTab, articleId: previous.id }))}" data-article-link data-previous-link data-tab="${escapeHtml(previous.primaryTab)}" data-article="${escapeHtml(previous.id)}" data-title="${escapeHtml(previous.title)}" data-summary="${escapeHtml(previous.summary)}" data-audience="${escapeHtml(previous.audience.join(", "))}" data-content-type="${escapeHtml(previous.contentType)}">Previous: ${escapeHtml(previous.title)}</a>` : ""}${next ? `<a href="${escapeHtml(routeHash({ tabId: next.primaryTab, articleId: next.id }))}" data-article-link data-next-link data-tab="${escapeHtml(next.primaryTab)}" data-article="${escapeHtml(next.id)}" data-title="${escapeHtml(next.title)}" data-summary="${escapeHtml(next.summary)}" data-audience="${escapeHtml(next.audience.join(", "))}" data-content-type="${escapeHtml(next.contentType)}">Next: ${escapeHtml(next.title)}</a>` : ""}</nav>
         ${related.length ? `<nav class="related-sources" aria-label="Related sources"><h2>Related sources</h2>${related.map((relatedDocument) => articleLink(relatedDocument, { related: true })).join("")}</nav>` : ""}
@@ -322,6 +348,7 @@ ${styles}
     <nav class="tab-rail" role="tablist" aria-label="Handbook sections">${HANDBOOK_TABS.map((tab, index) => `<button role="tab" id="tab-${tab.id}" aria-controls="panel-${tab.id}" aria-selected="${index === 0}" tabindex="${index === 0 ? 0 : -1}" type="button" data-tab-button data-tab="${tab.id}">${escapeHtml(tab.label)}</button>`).join("")}</nav>
     <aside class="contents-rail" aria-label="Selected tab contents"><div class="summary"><strong>${documents.length}</strong>maintained source documents<div class="result-count" id="result-count" aria-live="polite">Choose an article to read</div></div><section class="search-results" id="search-results" aria-label="Search results" hidden></section>${panels}</aside>
     <main class="reading-canvas" tabindex="-1">
+      <section class="route-notice" id="route-notice" role="status" hidden><span>This handbook link is no longer available. You are back at Start Here.</span><div><button type="button" data-recovery-search>Search</button><button type="button" data-dismiss-notice aria-label="Dismiss message">Dismiss</button></div></section>
       <section class="hero"><span class="category">Standalone operating handbook</span><h1>Mwell Intra</h1><p>One searchable, printable reference for users, trainers, developers, infrastructure teams, control owners, and release reviewers. It includes rendered process diagrams, application procedures, screenshots, governed reference extracts, technical specifications, and release controls.</p><div class="hero-meta"><span>${documents.length} maintained sources</span><span>Source-controlled release set</span><span>Self-contained HTML</span></div></section>
       <p class="empty" id="empty" hidden>No document matches this search and category.</p>
       ${articles}

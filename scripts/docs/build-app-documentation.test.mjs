@@ -76,6 +76,18 @@ test("renders primary article navigation and in-place route support", () => {
   assert.doesNotMatch(html, /location\.(?:href|reload)/);
 });
 
+test("renders progressive disclosures with stable state keys", () => {
+  const html = buildDocumentationHtml();
+
+  assert.match(html, /<details[^>]+data-section-id="doc-[^"]+:[^"]+"/);
+  assert.match(html, /<summary\b/);
+  assert.match(html, /data-article-disclosures/);
+  assert.match(html, /Expand all/);
+  assert.match(html, /Collapse all/);
+  assert.match(html, /mwell-intra-handbook:v2/);
+  assert.match(html, /data-section-id="doc-manual-mwell-intra-user-manual-md:doc-manual-mwell-intra-user-manual-md-start-here" open/);
+});
+
 test("embeds heading-level search records with match metadata", () => {
   const html = buildDocumentationHtml();
   const indexMatch = html.match(/window\.__HANDBOOK_INDEX__ = (\[[\s\S]*?\]);/);
@@ -120,6 +132,43 @@ test("renders scoped explainable search without navigation reloads", () => {
   assert.match(html, /params\.set\("scope", scope\)/);
   assert.match(html, /function openContainingDisclosure/);
   assert.doesNotMatch(html, /location\.(?:href|reload)/);
+});
+
+test("normalizes persisted handbook state without accepting malformed values", () => {
+  const normalizeStoredState = runtimeFunction("normalizeStoredState", "readStoredState");
+
+  assert.deepEqual(normalizeStoredState({
+    activeTab: "architecture",
+    activeArticle: "doc-technical-and-functional-specification-md",
+    query: "  tenant  ",
+    scope: "tab",
+    expandedIds: ["doc-technical-and-functional-specification-md:runtime-architecture", 4],
+    diagramViews: { "doc-technical-and-functional-specification-md:diagram-1": { left: 18, top: 32 } },
+    diagramZoom: { "doc-technical-and-functional-specification-md:diagram-1": 1.4, broken: "big" },
+    tabScroll: { architecture: 480, release: "bottom" },
+    theme: "dark",
+  }), {
+    activeTab: "architecture",
+    activeArticle: "doc-technical-and-functional-specification-md",
+    query: "tenant",
+    scope: "tab",
+    expandedIds: ["doc-technical-and-functional-specification-md:runtime-architecture"],
+    diagramViews: { "doc-technical-and-functional-specification-md:diagram-1": { left: 18, top: 32 } },
+    diagramZoom: { "doc-technical-and-functional-specification-md:diagram-1": 1.4 },
+    tabScroll: { architecture: 480 },
+    theme: "dark",
+  });
+  assert.deepEqual(normalizeStoredState(null), {
+    activeTab: "start",
+    activeArticle: null,
+    query: "",
+    scope: "all",
+    expandedIds: [],
+    diagramViews: {},
+    diagramZoom: {},
+    tabScroll: {},
+    theme: "light",
+  });
 });
 
 test("serializes a tab-only scope without a query and parses it on refresh", () => {
