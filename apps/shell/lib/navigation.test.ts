@@ -116,7 +116,7 @@ describe("authorized post-login destinations", () => {
     ).toBe("/");
   });
 
-  it("passes only a concrete variance request deep link to its server-governed route", () => {
+  it("passes through only a concrete variance request route; it does not authorize it", () => {
     const reviewerWithoutProcurementRole = memoryAccess({
       core: ["staff"],
     });

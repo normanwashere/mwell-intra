@@ -3,7 +3,7 @@ import type { BrowserContext, Route } from '@playwright/test';
 export const CONTROLLED_SUPABASE_URL = 'http://127.0.0.1:54321';
 export const CONTROLLED_ANON_KEY = 'controlled-rpc-anon-key';
 
-type ActorKey = 'procurement' | 'admin' | 'legal' | 'operations' | 'deptHead' | 'finance' | 'unrelated';
+type ActorKey = 'procurement' | 'admin' | 'legal' | 'operations' | 'deptHead' | 'finance' | 'financeNoCapability' | 'unrelated';
 type Actor = {
   id: string;
   email: string;
@@ -64,6 +64,11 @@ const ACTORS: Record<ActorKey, Actor> = {
   },
   finance: {
     id: 'controlled-finance', email: 'finance.controlled@mwell.test', name: 'Controlled Finance Controller', title: 'Finance Controller',
+    roles: { core: ['staff'], finance: ['controller'] },
+    capabilities: { core: ['view_directory', 'view_vendors'], procurement: ['view_finance'] },
+  },
+  financeNoCapability: {
+    id: 'controlled-finance-no-capability', email: 'finance.no-capability.controlled@mwell.test', name: 'Controlled Finance Without Capability', title: 'Finance Controller',
     roles: { core: ['staff'], finance: ['controller'] },
     capabilities: { core: ['view_directory', 'view_vendors'] },
   },
@@ -203,6 +208,11 @@ export class ControlledProcurementRpcFixture {
   technicalEvaluations: Array<Record<string, unknown>> = [];
   awardRecommendation: Record<string, unknown> | null = null;
   varianceDecisions: Array<Record<string, unknown>> = [];
+  private readonly varianceAssignments = [
+    { actorId: ACTORS.deptHead.id, stage: 'department_head' as const, assignmentId: 'controlled-department_head-assignment' },
+    { actorId: ACTORS.finance.id, stage: 'finance' as const, assignmentId: 'controlled-finance-assignment' },
+    { actorId: ACTORS.financeNoCapability.id, stage: 'finance' as const, assignmentId: 'controlled-finance-no-capability-assignment' },
+  ];
 
   constructor() {
     this.request = {
@@ -386,12 +396,29 @@ export class ControlledProcurementRpcFixture {
     };
   }
 
-  private evaluationWorkspace(actor: Actor) {
+  private hasCapability(actor: Actor, module: string, capability: string) {
+    return actor.capabilities[module]?.includes(capability) === true;
+  }
+
+  private varianceEligibility(actor: Actor) {
     const departmentApproved = this.varianceDecisions.some((decision) => decision.decisionType === 'department_head' && decision.decision === 'approved');
     const nextStage = this.awardRecommendation?.status === 'pending_variance' ? (departmentApproved ? 'finance' : 'department_head') : undefined;
-    const canReview = nextStage === 'department_head'
-      ? actor.id === ACTORS.deptHead.id
-      : nextStage === 'finance' && actor.id === ACTORS.finance.id;
+    const assignment = this.varianceAssignments.find((candidate) => candidate.actorId === actor.id && candidate.stage === nextStage);
+    const canReview = Boolean(
+      assignment &&
+      actor.id !== this.awardRecommendation?.createdBy &&
+      (nextStage !== 'finance' || this.hasCapability(actor, 'procurement', 'view_finance')),
+    );
+    return {
+      nextStage,
+      canReview,
+      doaMatrixId: assignment ? 'controlled-doa' : undefined,
+      doaMatrixVersion: assignment ? 'OPS-2026.08' : undefined,
+      doaAssignmentId: assignment?.assignmentId,
+    };
+  }
+
+  private evaluationWorkspace(eligibility: ReturnType<ControlledProcurementRpcFixture['varianceEligibility']>) {
     return {
       request: {
         id: this.requestId,
@@ -407,7 +434,7 @@ export class ControlledProcurementRpcFixture {
       technicalEvaluations: this.technicalEvaluations.map((item) => ({ ...item })),
       awardRecommendation: this.awardRecommendation ? { ...this.awardRecommendation } : null,
       varianceDecisions: this.varianceDecisions.map((item) => ({ ...item })),
-      varianceEligibility: { nextStage, canReview, doaMatrixId: 'controlled-doa', doaMatrixVersion: 'OPS-2026.08', doaAssignmentId: `controlled-${nextStage ?? 'none'}-assignment` },
+      varianceEligibility: eligibility,
     };
   }
 
@@ -499,10 +526,9 @@ export class ControlledProcurementRpcFixture {
     if (name === 'sourcing_workspace') return response(route, this.workspace());
     if (name === 'insufficient_bid_exception') return response(route, null);
     if (name === 'evaluation_workspace') {
-      const workspace = this.evaluationWorkspace(actor);
-      const canViewAssignedVariance = actor.id === ACTORS.deptHead.id || actor.id === ACTORS.finance.id;
-      if (payload.request_id !== this.requestId || !canViewAssignedVariance) return failure(route, 'No governed variance decision is assigned to this account for this request.', 403);
-      return response(route, workspace);
+      const eligibility = this.varianceEligibility(actor);
+      if (payload.request_id !== this.requestId || !eligibility.canReview) return failure(route, 'No governed variance decision is assigned to this account for this request.', 403);
+      return response(route, this.evaluationWorkspace(eligibility));
     }
     if (name === 'save_sourcing_event') {
       this.sourcing ??= { id: 'controlled-sourcing-event', status: 'draft', responses: [] };
@@ -600,9 +626,9 @@ export class ControlledProcurementRpcFixture {
     }
     if (name === 'review_recommendation_variance') {
       if (!this.awardRecommendation || this.awardRecommendation.status !== 'pending_variance') return failure(route, 'A pending variance recommendation is required');
-      const expectedStage = this.varianceDecisions.some((decision) => decision.decisionType === 'department_head' && decision.decision === 'approved') ? 'finance' : 'department_head';
-      const allowedActor = expectedStage === 'department_head' ? ACTORS.deptHead.id : ACTORS.finance.id;
-      if (actor.id !== allowedActor || actor.id === this.awardRecommendation.createdBy) return failure(route, 'The server did not find active independent variance authority', 403);
+      const eligibility = this.varianceEligibility(actor);
+      if (!eligibility.canReview || !eligibility.nextStage) return failure(route, 'The server did not find active independent variance authority', 403);
+      const expectedStage = eligibility.nextStage;
       if (Number(payload.expected_version) !== Number(this.awardRecommendation.version) || !String(payload.note ?? '').trim()) return failure(route, 'The variance recommendation has changed; refresh before deciding');
       this.varianceDecisions.push({ id: `controlled-variance-${expectedStage}`, awardRecommendationId: this.awardRecommendation.id, decisionType: expectedStage, decision: String(payload.decision), rationale: String(payload.note), decidedByName: actor.name, decidedAt: '2026-08-22T05:00:00.000Z', doaMatrixVersion: 'OPS-2026.08', doaAssignmentId: `controlled-${expectedStage}-assignment` });
       this.awardRecommendation.version = Number(this.awardRecommendation.version) + 1;

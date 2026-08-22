@@ -5,7 +5,7 @@ import {
   installControlledRpc,
 } from '../helpers/controlled-procurement-rpc';
 
-type ActorKey = 'deptHead' | 'finance' | 'unrelated';
+type ActorKey = 'deptHead' | 'finance' | 'financeNoCapability' | 'unrelated';
 
 async function signIn(page: Page, fixture: ControlledProcurementRpcFixture, actorKey: ActorKey, redirect: string) {
   await page.goto(`/login?redirect=${encodeURIComponent(redirect)}`);
@@ -23,10 +23,23 @@ async function expectRestrictedSurface(page: Page) {
   await expect(page.getByLabel('Read-only request summary')).toBeVisible();
 }
 
+async function expectNoScopedWorkspace(page: Page) {
+  await expect(page.getByRole('heading', { name: 'No procurement access' })).toBeVisible();
+  await expect(page.getByLabel('Read-only request summary')).toHaveCount(0);
+  await expect(page.getByText('Variance review:', { exact: false })).toHaveCount(0);
+}
+
 test('DOA variance reviewers enter only their exact governed request on desktop and mobile', async ({ browser }) => {
   const fixture = new ControlledProcurementRpcFixture();
   fixture.preparePendingVariance();
   const requestPath = `/procurement/requests/${fixture.requestId}`;
+
+  const outOfStageFinanceContext = await browser.newContext();
+  await installControlledRpc(outOfStageFinanceContext, fixture, 'finance');
+  const outOfStageFinancePage = await outOfStageFinanceContext.newPage();
+  await signIn(outOfStageFinancePage, fixture, 'finance', requestPath);
+  await expectNoScopedWorkspace(outOfStageFinancePage);
+  await outOfStageFinanceContext.close();
 
   const departmentContext = await browser.newContext();
   await installControlledRpc(departmentContext, fixture, 'deptHead');
@@ -35,14 +48,23 @@ test('DOA variance reviewers enter only their exact governed request on desktop 
   await expectRestrictedSurface(departmentPage);
   await expect(departmentPage.getByText('Variance review: Department Head')).toBeVisible();
   await departmentPage.goto('/procurement/requests/new');
-  await expect(departmentPage.getByRole('heading', { name: 'No procurement access' })).toBeVisible();
+  await expectNoScopedWorkspace(departmentPage);
+  await departmentPage.goto(`${requestPath}/sourcing`);
+  await expectNoScopedWorkspace(departmentPage);
   await departmentPage.goto('/admin/doa');
   await expect(departmentPage.getByRole('heading', { name: 'Procurement policy profiles' })).toHaveCount(0);
   await departmentPage.goto(requestPath);
   await departmentPage.getByLabel('Variance approval note').fill('Department Head confirms the documented operating variance.');
   await departmentPage.getByRole('button', { name: 'Record Department Head approval' }).click();
-  await expect(departmentPage.getByText('Variance Department Head decision recorded')).toBeVisible();
+  await expectNoScopedWorkspace(departmentPage);
   await departmentContext.close();
+
+  const financeWithoutCapabilityContext = await browser.newContext();
+  await installControlledRpc(financeWithoutCapabilityContext, fixture, 'financeNoCapability');
+  const financeWithoutCapabilityPage = await financeWithoutCapabilityContext.newPage();
+  await signIn(financeWithoutCapabilityPage, fixture, 'financeNoCapability', requestPath);
+  await expectNoScopedWorkspace(financeWithoutCapabilityPage);
+  await financeWithoutCapabilityContext.close();
 
   const financeContext = await browser.newContext();
   await installControlledRpc(financeContext, fixture, 'finance');
@@ -51,19 +73,20 @@ test('DOA variance reviewers enter only their exact governed request on desktop 
   await expectRestrictedSurface(financePage);
   await expect(financePage.getByText('Variance review: Finance')).toBeVisible();
   await financePage.goto('/procurement');
-  await expect(financePage.getByRole('heading', { name: 'No procurement access' })).toBeVisible();
+  await expectNoScopedWorkspace(financePage);
+  await financePage.goto(`${requestPath}/sourcing`);
+  await expectNoScopedWorkspace(financePage);
   await financePage.goto(requestPath);
   await financePage.getByLabel('Variance approval note').fill('Finance confirms the evidence and active authority.');
   await financePage.getByRole('button', { name: 'Record Finance approval' }).click();
-  await expect(financePage.getByText('Variance Finance decision recorded')).toBeVisible();
+  await expectNoScopedWorkspace(financePage);
   await financeContext.close();
 
   const unrelatedContext = await browser.newContext();
   await installControlledRpc(unrelatedContext, fixture, 'unrelated');
   const unrelatedPage = await unrelatedContext.newPage();
   await signIn(unrelatedPage, fixture, 'unrelated', requestPath);
-  await expect(unrelatedPage.getByRole('heading', { name: 'No procurement access' })).toBeVisible();
-  await expect(unrelatedPage.getByText('Variance review:')).toHaveCount(0);
+  await expectNoScopedWorkspace(unrelatedPage);
   await unrelatedContext.close();
 
   expect(fixture.callsNamed('review_recommendation_variance').map((call) => call.actor)).toEqual([
@@ -71,4 +94,6 @@ test('DOA variance reviewers enter only their exact governed request on desktop 
     'controlled-finance',
   ]);
   expect(fixture.callsNamed('evaluation_workspace').some((call) => call.actor === 'controlled-unrelated')).toBe(true);
+  expect(fixture.callsNamed('evaluation_workspace').some((call) => call.actor === 'controlled-finance-no-capability')).toBe(true);
+  expect(fixture.callsNamed('review_recommendation_variance').some((call) => call.actor === 'controlled-finance-no-capability')).toBe(false);
 });

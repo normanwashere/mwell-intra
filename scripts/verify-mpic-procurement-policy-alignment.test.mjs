@@ -251,20 +251,28 @@ async function seedActivePolicyProfiles(db) {
   `);
 }
 
-async function setPolicyActor(db, actor, canManage) {
+async function setPolicyActor(db, actor, canManage, procurementCapabilities = []) {
+  const capabilityArray = procurementCapabilities.length === 0
+    ? "ARRAY[]::text[]"
+    : `ARRAY[${procurementCapabilities.map((capability) => `'${capability.replaceAll("'", "''")}'`).join(", ")}]::text[]`;
   await db.exec(`
     create schema if not exists test;
     create table if not exists test.policy_actor_context (
       actor_id uuid not null,
-      can_manage boolean not null
+      can_manage boolean not null,
+      procurement_capabilities text[] not null default '{}'
     );
+    alter table test.policy_actor_context add column if not exists procurement_capabilities text[] not null default '{}';
     truncate test.policy_actor_context;
-    insert into test.policy_actor_context(actor_id, can_manage) values ('${actor}', ${canManage ? 'true' : 'false'});
+    insert into test.policy_actor_context(actor_id, can_manage, procurement_capabilities)
+    values ('${actor}', ${canManage ? 'true' : 'false'}, ${capabilityArray});
     create or replace function auth.uid() returns uuid language sql stable as $$
       select actor_id from test.policy_actor_context limit 1
     $$;
     create or replace function core.has_live_cap(text, text) returns boolean language sql stable as $$
-      select can_manage from test.policy_actor_context limit 1
+      select can_manage or ($1 = 'procurement' and $2 = any(procurement_capabilities))
+      from test.policy_actor_context
+      limit 1
     $$;
   `);
 }
@@ -1444,6 +1452,8 @@ test("executes versioned tabulation, technical best-value evidence, and independ
   ];
   const financeActorId = "74000000-0000-0000-0000-000000000014";
   const matrixId = "74000000-0000-0000-0000-000000000015";
+  const nonCurrentDepartmentHeadId = "74000000-0000-0000-0000-000000000016";
+  const financeWithoutCapabilityId = "74000000-0000-0000-0000-000000000017";
   const criteria = (score) => [
     "technicalCompliance", "quality", "leadTime", "totalLifecycleCost", "warranty",
     "support", "price", "paymentTerms", "training",
@@ -1453,13 +1463,20 @@ test("executes versioned tabulation, technical best-value evidence, and independ
     await seedActivePolicyProfiles(db);
     await db.exec(migrationTask6);
     await db.exec(`
-      insert into core.profiles(id, status) values ('${checkerId}', 'active'), ('${financeActorId}', 'active');
+      insert into core.profiles(id, status) values
+        ('${checkerId}', 'active'),
+        ('${financeActorId}', 'active'),
+        ('${nonCurrentDepartmentHeadId}', 'active'),
+        ('${financeWithoutCapabilityId}', 'active');
       insert into procurement.doa_matrices(id, version, department, status, active, effective_at)
       values ('${matrixId}', 'OPS-TEST-1', 'Operations', 'active', true, statement_timestamp() - interval '1 day');
       insert into procurement.doa_assignments(matrix_id, department, min_amount, max_amount, tier, approver_user_id, active) values
+        ('${matrixId}', 'Operations', 0, null, 'dept_head', '${actorId}', true),
         ('${matrixId}', 'Operations', 0, null, 'dept_head', '${checkerId}', true),
+        ('${matrixId}', 'Operations', 0, null, 'dept_head', '${nonCurrentDepartmentHeadId}', true),
         ('${matrixId}', 'Operations', 0, null, 'finance', '${checkerId}', true),
-        ('${matrixId}', 'Operations', 0, null, 'finance', '${financeActorId}', true);
+        ('${matrixId}', 'Operations', 0, null, 'finance', '${financeActorId}', true),
+        ('${matrixId}', 'Operations', 0, null, 'finance', '${financeWithoutCapabilityId}', true);
       insert into core.vendors(id, legal_name, accreditation_status) values
         ('${vendorIds[0]}', 'Best technical vendor', 'approved'),
         ('${vendorIds[1]}', 'Best value variance vendor', 'approved'),
@@ -1568,6 +1585,19 @@ test("executes versioned tabulation, technical best-value evidence, and independ
       () => db.query(`select procurement.transition_sourcing_event(${sqlJson({ id: eventId, action: "award", selected_vendor_id: vendorIds[1], closure_note: "Score must not award by itself." })})`),
       /approved best-value recommendation/i,
     );
+    const deniedWorkspace = (actor, capabilities = []) => setPolicyActor(db, actor, false, capabilities)
+      .then(() => assert.rejects(
+        () => db.query(`select procurement.evaluation_workspace(${sqlJson({ request_id: requestId })}) as workspace`),
+        /No governed variance decision is assigned to this account for this request/i,
+        'a denied workspace call must return no request, vendor, evidence, or decision payload',
+      ));
+    await deniedWorkspace(financeActorId, ['view_finance']);
+    await deniedWorkspace(actorId);
+    await setPolicyActor(db, checkerId, true);
+    const departmentWorkspace = await db.query(`select procurement.evaluation_workspace(${sqlJson({ request_id: requestId })}) as workspace`);
+    assert.equal(departmentWorkspace.rows[0].workspace.varianceEligibility.canReview, true);
+    assert.equal(departmentWorkspace.rows[0].workspace.varianceEligibility.nextStage, 'department_head');
+    await setPolicyActor(db, actorId, true);
     await assert.rejects(
       () => db.query(`select procurement.review_recommendation_variance(${sqlJson({ award_recommendation_id: recommendation.rows[0].recommendation.id, expected_version: 1, decision: "approved", note: "Self approval attempt." })})`),
       /cannot approve their own/i,
@@ -1580,10 +1610,17 @@ test("executes versioned tabulation, technical best-value evidence, and independ
       /independent from the Department Head/i,
       'a dual-assignment actor cannot complete both variance stages',
     );
-    await setPolicyActor(db, financeActorId, true);
+    await deniedWorkspace(nonCurrentDepartmentHeadId);
+    await deniedWorkspace(financeWithoutCapabilityId);
+    await setPolicyActor(db, financeActorId, false, ['view_finance']);
+    const financeWorkspace = await db.query(`select procurement.evaluation_workspace(${sqlJson({ request_id: requestId })}) as workspace`);
+    assert.equal(financeWorkspace.rows[0].workspace.varianceEligibility.canReview, true);
+    assert.equal(financeWorkspace.rows[0].workspace.varianceEligibility.nextStage, 'finance');
     const financeDecision = await db.query(`select procurement.review_recommendation_variance(${sqlJson({ award_recommendation_id: recommendation.rows[0].recommendation.id, expected_version: 2, decision: "approved", note: "Finance confirms the value and active delegated authority." })}) as recommendation`);
     assert.equal(financeDecision.rows[0].recommendation.status, 'approved');
     await setPolicyActor(db, actorId, true);
+    const sourcingManagerCapability = await db.query(`select core.has_live_cap('procurement', 'manage_rfp') as allowed`);
+    assert.equal(sourcingManagerCapability.rows[0].allowed, true, 'fixture must restore procurement sourcing authority before revising evidence');
     await db.query(`select procurement.submit_technical_evaluation(${sqlJson({
       sourcing_event_id: eventId,
       vendor_id: vendorIds[0],
@@ -1608,13 +1645,11 @@ test("executes versioned tabulation, technical best-value evidence, and independ
     })}) as recommendation`);
     await setPolicyActor(db, checkerId, true);
     await db.query(`select procurement.review_recommendation_variance(${sqlJson({ award_recommendation_id: refreshedRecommendation.rows[0].recommendation.id, expected_version: 1, decision: "approved", note: "Department Head approves the refreshed evidence." })})`);
-    await setPolicyActor(db, financeActorId, true);
+    await setPolicyActor(db, financeActorId, false, ['view_finance']);
     await db.query(`select procurement.review_recommendation_variance(${sqlJson({ award_recommendation_id: refreshedRecommendation.rows[0].recommendation.id, expected_version: 2, decision: "approved", note: "Finance approves the refreshed evidence." })})`);
+    await setPolicyActor(db, actorId, true);
     await db.query(`select procurement.transition_sourcing_event(${sqlJson({ id: eventId, action: "award", selected_vendor_id: vendorIds[1], closure_note: "Final award follows approved best-value recommendation." })}) as event`);
-    const workspace = await db.query(`select procurement.evaluation_workspace(${sqlJson({ request_id: requestId })}) as workspace`);
-    assert.equal(workspace.rows[0].workspace.commercialTabulations.length, 1);
-    assert.equal(workspace.rows[0].workspace.technicalEvaluations.length, 4);
-    assert.equal(workspace.rows[0].workspace.varianceDecisions.length, 2);
+    await deniedWorkspace(financeActorId, ['view_finance']);
   } finally {
     await db.close();
   }

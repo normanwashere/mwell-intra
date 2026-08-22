@@ -2389,7 +2389,7 @@ begin
     and matrix.effective_at <= statement_timestamp()
     and (matrix.expires_at is null or matrix.expires_at > statement_timestamp())
     and assignment.active and assignment.approver_user_id = v_actor
-    and assignment.tier = v_stage
+    and assignment.tier = case when v_stage = 'department_head' then 'dept_head' else 'finance' end
     and lower(assignment.department) = lower(v_department)
     and (assignment.category is null or assignment.category = v_category)
     and coalesce(v_amount, 0) >= assignment.min_amount
@@ -2596,19 +2596,25 @@ create or replace function procurement.evaluation_workspace(payload jsonb defaul
 returns jsonb language plpgsql stable security definer set search_path = '' as $$
 declare v_event procurement.sourcing_events; v_request procurement.requests; v_responses jsonb; v_tabulations jsonb; v_evaluations jsonb; v_recommendation jsonb; v_variances jsonb; v_recommendation_row procurement.award_recommendations; v_eligibility jsonb;
 begin
-  perform procurement.sourcing_workspace(payload);
   select * into v_request from procurement.requests request where request.id::text = payload->>'request_id';
+  if not found then
+    raise exception 'No governed variance decision is assigned to this account for this request.';
+  end if;
   select * into v_event from procurement.sourcing_events event where event.request_id = v_request.id and event.status <> 'cancelled' order by event.created_at desc limit 1;
   if not found then
-    return jsonb_build_object(
-      'request', jsonb_build_object('id', v_request.id, 'title', v_request.title, 'department', v_request.department, 'costCenter', v_request.cost_center, 'category', v_request.category, 'estimatedAmount', v_request.estimated_amount, 'status', v_request.status),
-      'event', null,
-      'commercialTabulations', '[]'::jsonb,
-      'technicalEvaluations', '[]'::jsonb,
-      'awardRecommendation', null,
-      'varianceDecisions', '[]'::jsonb,
-      'varianceEligibility', jsonb_build_object('canReview', false)
-    );
+    raise exception 'No governed variance decision is assigned to this account for this request.';
+  end if;
+  select * into v_recommendation_row
+    from procurement.award_recommendations recommendation
+    where recommendation.sourcing_event_id = v_event.id and recommendation.status <> 'superseded'
+    order by recommendation.created_at desc
+    limit 1;
+  if not found then
+    raise exception 'No governed variance decision is assigned to this account for this request.';
+  end if;
+  v_eligibility := private.policy_variance_review_eligibility(v_request, v_recommendation_row);
+  if not coalesce((v_eligibility->>'canReview')::boolean, false) then
+    raise exception 'No governed variance decision is assigned to this account for this request.';
   end if;
   select coalesce(jsonb_agg(jsonb_build_object('vendorId', response.vendor_id, 'vendorName', vendor.legal_name, 'receivedAt', response.received_at, 'deadlineCompliant', response.deadline_compliant, 'commercial', response.commercial) order by vendor.legal_name), '[]'::jsonb)
     into v_responses
@@ -2622,20 +2628,13 @@ begin
     into v_evaluations
     from procurement.technical_evaluations evaluation left join core.profiles reviewer on reviewer.id = evaluation.reviewer_id
     where evaluation.sourcing_event_id = v_event.id;
-  select * into v_recommendation_row from procurement.award_recommendations recommendation where recommendation.sourcing_event_id = v_event.id and recommendation.status <> 'superseded' order by recommendation.created_at desc limit 1;
-  if found then
-    v_recommendation := jsonb_build_object('id', v_recommendation_row.id, 'sourcingEventId', v_recommendation_row.sourcing_event_id, 'evaluatedVendorId', v_recommendation_row.evaluated_vendor_id, 'recommendedVendorId', v_recommendation_row.recommended_vendor_id, 'rationale', v_recommendation_row.rationale, 'commercialTabulationId', v_recommendation_row.commercial_tabulation_id, 'technicalEvaluationId', v_recommendation_row.technical_evaluation_id, 'riskEvidenceReference', v_recommendation_row.risk_evidence_reference, 'varianceJustification', v_recommendation_row.variance_justification, 'status', v_recommendation_row.status, 'version', v_recommendation_row.revision, 'createdAt', v_recommendation_row.created_at);
-    v_eligibility := private.policy_variance_review_eligibility(v_request, v_recommendation_row);
-  else
-    v_recommendation := null;
-    v_eligibility := jsonb_build_object('canReview', false);
-  end if;
+  v_recommendation := jsonb_build_object('id', v_recommendation_row.id, 'sourcingEventId', v_recommendation_row.sourcing_event_id, 'evaluatedVendorId', v_recommendation_row.evaluated_vendor_id, 'recommendedVendorId', v_recommendation_row.recommended_vendor_id, 'rationale', v_recommendation_row.rationale, 'commercialTabulationId', v_recommendation_row.commercial_tabulation_id, 'technicalEvaluationId', v_recommendation_row.technical_evaluation_id, 'riskEvidenceReference', v_recommendation_row.risk_evidence_reference, 'varianceJustification', v_recommendation_row.variance_justification, 'status', v_recommendation_row.status, 'version', v_recommendation_row.revision, 'createdAt', v_recommendation_row.created_at);
   select coalesce(jsonb_agg(jsonb_build_object('id', decision.id, 'awardRecommendationId', decision.award_recommendation_id, 'decisionType', decision.decision_type, 'decision', decision.decision, 'rationale', decision.rationale, 'decidedByName', coalesce(decider.full_name, decision.decided_by::text), 'decidedAt', decision.decided_at, 'doaMatrixId', decision.doa_matrix_id, 'doaMatrixVersion', matrix.version, 'doaAssignmentId', decision.doa_assignment_id) order by decision.decided_at), '[]'::jsonb)
     into v_variances
     from procurement.award_recommendation_variance_decisions decision
     left join core.profiles decider on decider.id = decision.decided_by
     left join procurement.doa_matrices matrix on matrix.id = decision.doa_matrix_id
-    where v_recommendation_row is not null and decision.award_recommendation_id = v_recommendation_row.id;
+    where decision.award_recommendation_id = v_recommendation_row.id;
   return jsonb_build_object(
     'request', jsonb_build_object('id', v_request.id, 'title', v_request.title, 'department', v_request.department, 'costCenter', v_request.cost_center, 'category', v_request.category, 'estimatedAmount', v_request.estimated_amount, 'status', v_request.status),
     'event', jsonb_build_object('id', v_event.id, 'status', v_event.status, 'responses', v_responses),

@@ -67,6 +67,11 @@ export function VarianceReviewPage() {
   const admittedRef = useRef(false);
 
   const load = useCallback(async () => {
+    // Every refresh is a fresh governed admission. Never leave an old evidence
+    // pack on screen while the server rechecks DOA authority and current stage.
+    admittedRef.current = false;
+    setWorkspace(null);
+    setDenied('');
     if (mode !== 'supabase' || !supabaseClient || !id) {
       setDenied('A governed live workspace is required for variance review.');
       setLoading(false);
@@ -79,12 +84,11 @@ export function VarianceReviewPage() {
         .rpc('evaluation_workspace', { payload: { request_id: id } });
       if (error) throw new Error(error.message);
       const next = (data ?? {}) as VarianceWorkspace;
-      if (next.varianceEligibility?.canReview) admittedRef.current = true;
-      if (!admittedRef.current) {
+      if (!next.varianceEligibility?.canReview) {
         setDenied('No governed variance decision is assigned to this account for this request.');
-        setWorkspace(null);
         return;
       }
+      admittedRef.current = true;
       setWorkspace({
         ...next,
         event: next.event
@@ -100,17 +104,15 @@ export function VarianceReviewPage() {
       });
       setDenied('');
     } catch {
-      if (!admittedRef.current) {
-        setDenied('No governed variance decision is assigned to this account for this request.');
-        setWorkspace(null);
-      }
+      admittedRef.current = false;
+      setWorkspace(null);
+      setDenied('No governed variance decision is assigned to this account for this request.');
     } finally {
       setLoading(false);
     }
   }, [id, mode, supabaseClient]);
 
   useEffect(() => {
-    admittedRef.current = false;
     void load();
   }, [load]);
 
