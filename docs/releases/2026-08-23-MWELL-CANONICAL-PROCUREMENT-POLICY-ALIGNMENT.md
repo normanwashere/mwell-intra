@@ -30,6 +30,7 @@ Status: Migration applied and schema-verified in UAT; application deployment and
 - Legacy `req_*` request and purchase-order identifiers remain text throughout new solicitation and SLA evidence tables.
 - Incomplete legacy drafts now fail closed into Procurement remediation instead of aborting policy migration.
 - Existing sourcing RPC parameter names are preserved so additive deployment does not break PostgreSQL function identity.
+- The terminal commitment-readiness boundary uses effective live capabilities; the UAT launch verifier reports zero raw capability boundaries and zero missing critical objects or read grants.
 
 ## Verification evidence
 

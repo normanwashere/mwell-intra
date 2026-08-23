@@ -2835,3 +2835,16 @@ test("new procurement foreign keys remain compatible with live text request iden
     /create table if not exists procurement\.policy_sla_events \([\s\S]*?request_id text references procurement\.requests\(id\)/,
   );
 });
+
+test("terminal commitment readiness uses effective live capabilities", () => {
+  const start = migration.lastIndexOf(
+    "create or replace function procurement.commitment_readiness(payload jsonb)",
+  );
+  const definition = migration.slice(start, migration.indexOf("$$;", start) + 3);
+
+  assert.ok(start >= 0);
+  assert.match(definition, /core\.has_live_cap\('procurement','view_dashboard'\)/);
+  assert.match(definition, /core\.has_live_cap\('procurement','author_po'\)/);
+  assert.match(definition, /core\.has_live_cap\('procurement','approve_award'\)/);
+  assert.doesNotMatch(definition, /core\.has_cap\(/);
+});
