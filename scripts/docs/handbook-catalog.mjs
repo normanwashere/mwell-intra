@@ -254,11 +254,15 @@ const CATALOG = [
     relatedTabs: ["workflows", "architecture"],
     contentType: "policy",
     audience: ["control-owner", "operator", "architect"],
-    summary: "MPIC February 2025 procurement policy extract and Mwell mapping.",
-    keywords: ["mpic", "procurement", "policy", "mapping"],
+    summary: "Authoritative MPIC source extract, direct requirements, Mwell mapping, activation status, and unresolved ownership conflicts.",
+    keywords: ["mpic", "procurement", "policy", "rfq", "rfp", "governance tier", "activation", "ownership"],
     sortOrder: 20,
     collapse: "reference",
-    relatedSources: ["docs/policy/VENDOR_TO_PAY_CONTROL_MATRIX.md"],
+    relatedSources: [
+      "docs/PROCESS_REFERENCE_LIBRARY.md",
+      "docs/TECHNICAL_AND_FUNCTIONAL_SPECIFICATION.md",
+      "docs/policy/VENDOR_TO_PAY_CONTROL_MATRIX.md",
+    ],
   },
   {
     source: "docs/policy/VENDOR_TO_PAY_CONTROL_MATRIX.md",

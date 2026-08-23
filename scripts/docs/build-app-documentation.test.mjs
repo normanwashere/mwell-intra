@@ -45,6 +45,16 @@ test("builds one self-contained handbook from every canonical source", () => {
   assert.deepEqual(sources.slice(2), [...sources.slice(2)].sort());
 });
 
+test("includes the exact MPIC source and separates the three route axes", () => {
+  const html = buildDocumentationHtml();
+  assert.match(html, /MPIC Procurement Policy February2025\.docx/);
+  assert.match(html, /Solicitation document/);
+  assert.match(html, /Procurement mode/);
+  assert.match(html, /Governance tier/);
+  assert.match(html, /three to four accredited vendors/i);
+  assert.match(html, /at least three usable responses/i);
+});
+
 test("embeds local manual screenshots as data URLs", () => {
   const html = buildDocumentationHtml();
   assert.match(html, /src="data:image\/(?:png|jpeg|webp);base64,/);

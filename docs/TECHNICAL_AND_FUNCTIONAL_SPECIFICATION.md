@@ -1,7 +1,8 @@
 # Mwell Intra Technical and Functional Specification
 
-**Reviewed:** August 21, 2026  
-**Current UAT application reference:** `f88c9916c253546ae6960bd19ffd608b99fdd791`
+**Reviewed:** August 23, 2026
+**Procurement application behavior baseline:** `0bf88e362acec9ee8f5c59dbda865a8d4767e4a2`
+**Evidence status:** local code and documentation baseline; not live/UAT certification
 
 ## Product boundary
 
@@ -15,6 +16,43 @@ Mwell Intra is the shared operating platform for cross-department workflows. War
 - PostgreSQL schemas, row-level security, guarded functions, and immutable activity records for live authority.
 - Role and capability resolution controls routes, commands, records, and onboarding curricula.
 - The standalone operating handbook is packaged with each certified release and maps guidance to current routes, roles, process diagrams and governing references.
+
+## Procurement policy contract
+
+### Source and activation
+
+- The authoritative supplied parent source is `MPIC Procurement Policy February2025.docx`, MPIC, February 2025. The maintained extract separates direct source requirements, local Mwell mappings, and unresolved ownership conflicts.
+- The MPIC source profile is a draft parent-source profile and has no Mwell-specific formal-bid amount.
+- The local Mwell operating profile attributes PHP 1,000,000 to the Mwell source as a formal-bid governance value. It does not treat amount as a solicitation-document switch.
+- The current effective department DOA is the sole source of named Mwell approval authority. MPIC titles, named people, cost-center annexes, and source approval tables are never projected into Mwell authority without an activated profile/DOA decision.
+- The additive procurement migration is intentionally unapplied at this baseline. Profile declarations, tests, or handbook output do not prove live database activation, deployment, or UAT certification.
+
+### Three-axis route model
+
+| Axis | Values | Derivation and enforcement |
+| --- | --- | --- |
+| Solicitation document | `rfq`, `rfp`, `none` | Materials derive RFQ; services derive RFP; an approved exception may derive none unless a policy owner requires supporting solicitation evidence |
+| Procurement mode | `competitive_bidding`, `sole_source`, `repeat_order`, `emergency_purchase`, `petty_cash`, approved other exception | Competition is default; each exception requires server-validated eligibility, evidence, owner review, and current DOA |
+| Governance tier | `standard`, `formal_bid`, `high_risk`, plus effective DOA route | Amount, complexity, technical/strategic risk, data sensitivity, category, active profile, and current DOA determine control depth independently from RFQ/RFP |
+
+A high-value material request remains RFQ under formal-bid controls. A low-value service request remains RFP under the tier justified by its facts. Compatibility projections such as legacy `sourcing_method` do not replace the three authoritative axes.
+
+### Sourcing and award controls
+
+- A versioned solicitation package is delivered equally to three to four accredited vendors, with recipient, package hash/version, deadline, acknowledgment, clarification, extension, and notification evidence.
+- Sealed-bid opening requires at least three usable responses. Failure creates an explicit failed-bid state; recovery is equal-notice extension/requote or an independently approved, evidence-backed insufficient-bids decision.
+- Source SLAs are represented through the active profile: at least seven working days for the standard bid window, no more than seven days of extension, 24-hour vendor RFQ acknowledgment, 48-hour clarification period, 48-hour tabulation, five-working-day technical evaluation, and 48-hour PO acknowledgment.
+- Commercial tabulation and technical evaluation are separately attributable. The system selects no automatic winner; Procurement records a best-value recommendation across the source criteria.
+- A recommendation variance requires written requester justification, Department Head approval under current Mwell authority, and an independent Controller decision. MPIC role names do not satisfy these checks.
+
+### Exception, commitment, receiving, and payment controls
+
+- Sole source, repeat order, emergency purchase, petty cash, and other exceptions are explicit procurement modes, not requester flags. Each denied eligibility check returns to competition or a documented correction path.
+- The represented source values are PHP 250,000 and one year for repeat-order eligibility, PHP 2,000 for petty cash, PHP 50,000 for source-policy invoice/PO support, and six months for vendor probation. These values are policy parameters, not Mwell approval limits.
+- PO/agreement creation is blocked until request, vendor eligibility, sourcing/recovery, award, protection, and current DOA evidence pass. Vendor acknowledgment and open delivery/acceptance obligations enter monitored queues.
+- Warehouse or the service owner creates receipt, QC, custody, and acceptance evidence. Non-conformance routes to rejection, quarantine, replacement, warranty, RMA/credit, and payment hold.
+- Procurement prepares a versioned payment-readiness pack. Finance recomputes invoice, approved commitment, accepted quantity/value, tax/withholding, foreign-vendor, variance, vendor-eligibility, and evidence-version checks before its decision.
+- File closure requires payment readiness, delivery closure, resolved quality/variance/warranty obligations, and retained evidence; payment alone does not close the procurement file.
 
 ## Warehouse fulfillment contract
 

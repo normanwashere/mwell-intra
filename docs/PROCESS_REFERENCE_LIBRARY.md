@@ -8,6 +8,7 @@
 
 | Reference document | Format and authority | Processes governed | Business owner | Handbook treatment |
 | --- | --- | --- | --- | --- |
+| `MPIC Procurement Policy February2025.docx` | Authoritative supplied binary; MPIC, February 2025 | Parent-source procurement requirements, source values, competition, exceptions, commitments, vendor controls and payment support | MPIC policy owner; Mwell mappings require Mwell owners | Direct requirements, local mappings and unresolved conflicts are separated in `MPIC_PROCUREMENT_POLICY_FEBRUARY_2025.md` |
 | `mWell Procurement Policy and Procedures - Revised Modern Visual Updated.docx` | Approved policy source | Request intake, sourcing route, exceptions, competition, approval, commitment, change control, receiving, acceptance and payment readiness | Procurement with Finance and Legal | Controlling rules and handoffs are reproduced below and mapped in the Vendor-to-Pay Control Matrix |
 | `LGL004-Vendor Accreditation Form 2.0 (3).pdf` | Approved vendor accreditation form, version 2.0 / 2025 baseline | Vendor identity, declarations, entity evidence, qualification and accreditation | Legal / Vendor Management | Required fields, entity branches and declarations are reproduced below |
 | `[MNDA]- Tech Service Provider.docx` | Controlled legal instrument template | Technology-provider confidentiality, privacy, execution, expiry and return/destruction | Legal | Operational clauses and lifecycle controls are reproduced below; the executed instrument controls the parties |
@@ -44,28 +45,227 @@ flowchart TD
 
 ## Procurement Policy Operating Extract
 
-### Intake and route
+Read the [maintained MPIC February 2025 extract](policy/MPIC_PROCUREMENT_POLICY_FEBRUARY_2025.md) before applying a source-policy value. The binary MPIC source remains authoritative. Mwell uses three separate route axes:
 
-- The requester records the need, line items, timing, budget context, business justification, alternatives, risk if not procured, technical scope and acceptance criteria.
-- Procurement owns the sourcing route. A requester preference is an input, not an approval.
-- A simple and comparable purchase below PHP 1,000,000 may use RFQ.
-- A purchase at or above PHP 1,000,000 uses RFP. A lower-value purchase also uses RFP when it is complex, technical, strategic, high-risk or data-sensitive.
-- Direct Award requires an allowed basis, named vendor, written justification, price support, accreditation or temporary-clearance path, Procurement review and current DOA approval.
-- Petty cash is limited to an eligible one-time low-value purchase, with Finance confirmation, no recurrence or splitting, and required OR/SI and liquidation evidence.
+| Route axis | Operating rule |
+| --- | --- |
+| Solicitation document | Goods or materials use RFQ; services use RFP; an approved exception may use none when the policy owner does not require a supporting solicitation |
+| Procurement mode | Competitive bidding is the default; sole source, repeat order, emergency purchase, petty cash, or another approved exception requires its own eligibility and evidence |
+| Governance tier | Standard, formal bid, high-risk/special control, and the current effective DOA are determined independently from the solicitation document |
 
-### Competition, approval and commitment
+The local PHP 1,000,000 value affects formal-bid governance. It does not convert a material RFQ into a service RFP. The MPIC source itself does not state that boundary. Mwell approval authority always comes from the current effective department DOA, never from an MPIC title, person, annex, or amount.
 
-- RFQ/RFP participants receive a common requirement and deadline. Technical and commercial evaluation evidence must remain attributable.
+### Exact 14-stage procurement-to-payment overview
+
+```mermaid
+flowchart TD
+  S1[1 Requester records need, category, goods or services, scope or specification, budget, cost center, required date, and acceptance criteria] --> S2[2 Procurement confirms solicitation document, procurement mode, governance tier, invited-vendor target, and reasons]
+  S2 --> S3[3 System validates active policy profile, effective DOA, accreditation, special-risk controls, and complete source package]
+  S3 --> S4[4 Procurement issues one versioned package to accredited vendors and records acknowledgments, clarifications, deadlines, and equal notices]
+  S4 --> S5[5 System evaluates response quorum and routes failed bid, extension or requote, or controlled insufficient-bids exception]
+  S5 --> S6[6 Procurement records commercial tabulation; requester or technical reviewer records technical evaluation]
+  S6 --> S7[7 Procurement records best-value recommendation and rationale; system selects no automatic winner]
+  S7 --> S8[8 Recommendation variance follows independent justification and approval]
+  S8 --> S9[9 Current Mwell DOA and separation of duty approve the award]
+  S9 --> S10[10 Procurement creates PO or agreement after vendor, sourcing, approval, and protection controls pass]
+  S10 --> S11[11 Vendor acknowledges commitment; outstanding delivery and acceptance enter monitored queues]
+  S11 --> S12[12 Warehouse or service owner records receipt and acceptance; quality issues route to rejection, replacement, warranty, or RMA]
+  S12 --> S13[13 Procurement prepares payment-readiness pack; Finance validates invoice, PO or agreement, receipt or acceptance, tax, and variance evidence]
+  S13 --> S14[14 Procurement file closes after payment readiness, delivery closure, open-issue resolution, and retained evidence are complete]
+```
+
+### Solicitation document and type classification
+
+```mermaid
+flowchart TD
+  A[Requester: classification, specification or scope, budget and acceptance evidence] --> B{System: goods or services classification complete?}
+  B -->|No| BX([Blocked: request cannot route])
+  BX --> BR[Requester recovery: correct classification and required evidence]
+  BR --> B
+  B -->|Yes| C{Procurement: material or goods requirement?}
+  C -->|Yes| D[Solicitation document: RFQ with quantity, UOM, delivery, payment, shipping, validity, deadline and attachments]
+  C -->|No| E{Procurement: service requirement?}
+  E -->|No| EX([Blocked: ambiguous requirement type])
+  EX --> ER[Requester and Procurement recovery: split or clarify the requirement]
+  ER --> B
+  E -->|Yes| F[Solicitation document: RFP with scope, evaluation approach and response deadline]
+  D --> G{Procurement: governed exception mode requested?}
+  F --> G
+  G -->|No| H[Route evidence: competitive bidding plus independently derived governance tier]
+  G -->|Yes| I{Policy owner: exception eligibility and evidence complete?}
+  I -->|No| IX([Blocked: exception cannot be used])
+  IX --> IR[Recovery: correct evidence or return to competitive bidding]
+  IR --> G
+  I -->|Yes| J[Route evidence: approved exception mode; solicitation none unless policy owner requires supporting RFQ or RFP]
+  H --> K{System: active profile and effective DOA resolved?}
+  J --> K
+  K -->|No| KX([Blocked: no authoritative route or approver])
+  KX --> KR[Platform Admin or policy owner recovery: correct configuration without granting approval authority]
+  KR --> K
+  K -->|Yes| L[Procurement completion evidence: solicitation document, mode, tier, profile, DOA, reasons and reviewer]
+```
+
+### Bid quorum and failed-bid recovery
+
+```mermaid
+flowchart TD
+  A[Procurement: versioned package, accredited-vendor list and common deadline] --> B{Procurement: three to four accredited vendors invited?}
+  B -->|No| BX([Blocked: sourcing issue incomplete])
+  BX --> BR[Recovery: source eligible vendors or record approved invitation-target exception]
+  BR --> B
+  B -->|Yes| C[Vendor representatives: attributable responses, acknowledgments and clarification evidence]
+  C --> D{System at deadline: at least three usable responses?}
+  D -->|Yes| E[Procurement: controlled bid opening and response register]
+  D -->|No| F[System: failed-bid state with reason and preserved submissions]
+  F --> G{Procurement: extension, additional sourcing or equal requote available?}
+  G -->|Yes| H[Recovery: notify every invitee, version the package and set revised deadline]
+  H --> D
+  G -->|No| I{Policy owner and effective DOA: evaluation with fewer than three justified and approved?}
+  I -->|No| IX([Blocked terminal: bids remain unopened and no award may proceed])
+  IX --> IR[Recovery: restart competition or close the request with reason]
+  IR --> B
+  I -->|Yes| J[Controlled exception evidence: reason, sourcing effort, usable responses, approvers and timestamps]
+  J --> E
+  E --> K[Completion evidence: response set, opening event, failed-bid recovery or approved insufficient-bids decision]
+```
+
+### Exception eligibility
+
+```mermaid
+flowchart TD
+  A[Requester: exception request, business facts, vendor and supporting evidence] --> B{Procurement: source-policy exception selected?}
+  B -->|No| C[Recovery route: competitive bidding with RFQ for materials or RFP for services]
+  B -->|Yes| D{Procurement: emergency basis?}
+  D -->|Yes| E{Life, safety, environment or serious disruption evidence complete?}
+  D -->|No| F{Procurement: sole-source basis?}
+  F -->|Yes| G{No acceptable alternative and compatibility, specialization, capability or authorized-source proof complete?}
+  F -->|No| H{Procurement: repeat-order basis?}
+  H -->|Yes| I{Same vendor, price, terms and considerations; prior competition; age at most one year; amount at most PHP 250,000?}
+  H -->|No| J{Finance: petty-cash basis?}
+  J -->|Yes| K{At most PHP 2,000 source value, eligible, one-time, not split, and receipt or liquidation evidence planned?}
+  J -->|No| L{Policy owner: another source exception specifically approved?}
+  E -->|No| X([Blocked: emergency exception ineligible])
+  G -->|No| X
+  I -->|No| X
+  K -->|No| X
+  L -->|No| X
+  X --> R[Recovery: correct facts or return to competitive bidding]
+  R --> B
+  E -->|Yes| M[Exception evidence pack and retrospective PO obligation]
+  G -->|Yes| M
+  I -->|Yes| M
+  K -->|Yes| M
+  L -->|Yes| M
+  M --> N{System: accredited vendor or approved scoped clearance, owner review and effective DOA complete?}
+  N -->|No| NX([Blocked: exception cannot authorize commitment])
+  NX --> NR[Recovery: complete Legal, Procurement, Finance or DOA handoff]
+  NR --> N
+  N -->|Yes| O[Completion evidence: exception type, eligibility facts, approvals, price support and audit trail]
+  C --> P[Completion evidence: competitive route restored]
+```
+
+### Best-value award and recommendation variance
+
+```mermaid
+flowchart TD
+  A[Procurement and technical reviewer: commercial tabulation, technical evaluation and source evidence] --> B{System: evaluation records complete and current?}
+  B -->|No| BX([Blocked: no award recommendation])
+  BX --> BR[Recovery: complete or correct attributed evaluation evidence]
+  BR --> B
+  B -->|Yes| C[Procurement: best-value rationale across technical, quality, delivery, total cost, warranty, support, price, payment and training]
+  C --> D{Procurement: recommended vendor matches evaluated best value?}
+  D -->|Yes| H{Effective DOA and separation of duty approve award?}
+  D -->|No| E{Requester: written variance justification complete?}
+  E -->|No| EX([Blocked: unexplained variance])
+  EX --> ER[Recovery: accept evaluated recommendation or write complete justification]
+  ER --> D
+  E -->|Yes| F{Department Head under effective DOA approves the variance?}
+  F -->|No| FX([Denied: variance rejected])
+  FX --> FR[Recovery: revise recommendation or sourcing evidence]
+  FR --> C
+  F -->|Yes| G{Independent Controller authority resolved and decision recorded?}
+  G -->|No| GX([Blocked: independent variance decision missing])
+  GX --> GR[Recovery: route to the current effective Mwell authority; do not substitute an MPIC title]
+  GR --> G
+  G -->|Yes| H
+  H -->|No| HX([Blocked or denied: no award commitment])
+  HX --> HR[Recovery: return for correction, re-evaluation or closure with reason]
+  HR --> B
+  H -->|Yes| I[Completion evidence: recommendation, rationale, variance decisions when applicable, DOA steps and immutable award]
+```
+
+### Receiving, quality and RMA
+
+```mermaid
+flowchart TD
+  A[Vendor: acknowledged PO or agreement and delivery notice evidence] --> B{Warehouse or service owner: delivery or milestone tied to approved commitment?}
+  B -->|No| BX([Blocked: do not accept or make payment-ready])
+  BX --> BR[Recovery: identify commitment or quarantine and investigate]
+  BR --> B
+  B -->|Yes| C{Warehouse: physical goods?}
+  C -->|No| D{Service owner: milestone and acceptance criteria satisfied?}
+  D -->|No| DX([Blocked: service acceptance withheld])
+  DX --> DR[Recovery: vendor corrects service or owner records approved exception]
+  DR --> D
+  D -->|Yes| J[Acceptance evidence: owner, scope, date and result]
+  C -->|Yes| E[Warehouse: quantity, identity, condition, serial or lot, custody and receipt evidence]
+  E --> F{Quality reviewer: accepted and conforming?}
+  F -->|Yes| J
+  F -->|No| G[Warehouse and Procurement: reject or quarantine; record vendor notice and payment hold]
+  G --> H{Procurement: replacement, warranty or RMA evidence issued?}
+  H -->|No| HX([Blocked: quality issue remains open])
+  HX --> HR[Recovery: issue notice, RMA, credit or replacement request]
+  HR --> H
+  H -->|Yes| I{Replacement, repair or credit completed and inspected?}
+  I -->|No| IX([Blocked: monitor open vendor obligation and retain payment hold])
+  IX --> IR[Recovery: escalate overdue obligation and update evidence]
+  IR --> I
+  I -->|Yes| E
+  J --> K[Completion evidence: receipt or service acceptance, QC disposition, RMA trail when applicable and resolved custody]
+```
+
+### Payment evidence and file closure
+
+```mermaid
+flowchart TD
+  A[Procurement: payment-readiness pack linked to request, sourcing, award and commitment] --> B{System: approved PO or agreement and itemized invoice or OR or SI present?}
+  B -->|No| BX([Blocked: Finance review cannot start])
+  BX --> BR[Recovery: Procurement obtains and links missing commitment or invoice evidence]
+  BR --> B
+  B -->|Yes| C{System: receipt or service acceptance complete and within accepted quantity or value?}
+  C -->|No| CX([Blocked: payment exceeds acceptance or acceptance is missing])
+  CX --> CR[Recovery: Warehouse or service owner corrects receipt or acceptance; Procurement refreshes pack]
+  CR --> C
+  C -->|Yes| D{Finance: invoice reconciles to PO or agreement, terms and approved variance?}
+  D -->|No| DX([Blocked: discrepancy queue and payment hold])
+  DX --> DR[Recovery: correct invoice, commitment, variance or acceptance evidence]
+  DR --> D
+  D -->|Yes| E{Finance: tax, withholding and foreign-vendor evidence complete when applicable?}
+  E -->|No| EX([Blocked: statutory or payment-control evidence missing])
+  EX --> ER[Recovery: obtain valid tax and foreign-payment support]
+  ER --> E
+  E -->|Yes| F{Finance Controller: payment readiness approved under current authority?}
+  F -->|No| FX([Denied or returned: no payment release])
+  FX --> FR[Recovery: address the recorded denial or correction reason and resubmit]
+  FR --> A
+  F -->|Yes| G[Payment-readiness evidence: Finance decision, pack version, accepted cap and audit trail]
+  G --> H{Procurement: delivery closed, open issues resolved and retention pack complete?}
+  H -->|No| HX([Blocked: procurement file remains open])
+  HX --> HR[Recovery: close delivery, quality, warranty, variance or evidence obligations]
+  HR --> H
+  H -->|Yes| I[Completion evidence: payment readiness plus governed procurement-file closure]
+```
+
+### Operating rules
+
+- The requester records the need, line items, timing, budget context, business justification, alternatives, risk if not procured, technical scope and acceptance criteria. Requester preference is not route approval.
+- Procurement confirms all three route axes and retains the applicable active-profile snapshot. Direct Award is a legacy label only where mapped to an approved exception mode; a checkbox is never approval.
+- Invitations target three to four accredited vendors. Sealed-bid opening requires at least three usable responses or an approved failed-bid recovery/insufficient-bids decision.
+- Every invitee receives the same versioned package, clarification and deadline notice. Technical and commercial evidence remains attributable.
 - The system resolves named approvers from the active department DOA by scope, amount, category, effective date and delegation. Self-approval is prohibited.
-- A PO, contract or written agreement is issued only after the request, sourcing decision, vendor eligibility, commercial evidence and required approvals are complete.
-- A material change to scope, price, vendor, delivery or terms creates a versioned amendment and returns to Procurement and DOA review.
-
-### Receipt, acceptance and payment
-
-- Warehouse records physical quantity, identity, condition, evidence, QC disposition and custody. Procurement cannot post a warehouse receipt.
-- The requesting or technical department confirms goods, service or milestone acceptance and records exceptions.
-- Finance payment readiness requires the approved PO/agreement, invoice or OR/SI, receiving or service acceptance, payment terms, tax/withholding support and resolved variance.
-- Accepted quantity and value cap payment readiness. A mismatch enters a correction queue; it is not silently overridden.
+- A PO, contract or written agreement is issued only after request, route, vendor eligibility, sourcing, commercial, protection and approval evidence is complete. Material change returns to Procurement and DOA review.
+- Warehouse records physical quantity, identity, condition, evidence, QC disposition and custody. The service owner records milestone acceptance. Procurement cannot manufacture either record.
+- Finance validates the approved commitment, invoice or OR/SI, receipt or service acceptance, payment terms, tax/withholding, foreign-vendor support and resolved variance. A mismatch remains blocked until corrected.
 
 ## LGL004 Vendor Accreditation Operating Extract
 

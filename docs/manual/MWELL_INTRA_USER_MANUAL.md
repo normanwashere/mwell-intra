@@ -4,7 +4,9 @@
 
 **Live app:** https://mwell-intra.vercel.app
 
-**Reviewed:** August 21, 2026
+**Reviewed:** August 23, 2026
+
+**Procurement application behavior baseline:** `0bf88e362acec9ee8f5c59dbda865a8d4767e4a2`; local documentation evidence only, not live/UAT certification
 
 **Release authority:** Use the commit-bound manifest packaged with this handbook.
 
@@ -90,32 +92,109 @@ flowchart TD
 
 ## Procurement Flow
 
-```mermaid
-flowchart TD
-  A[Requester drafts need and line items] --> B[Justification, budget context, evidence]
-  B --> C[Procurement confirms policy and sourcing route]
-  C --> D{Competition or exception evidence sufficient?}
-  D -->|no| B
-  D -->|yes| E[Resolve effective department DOA]
-  E --> F[Named approvers act in sequence]
-  F -->|return or reject| B
-  F -->|approved| G[Author and approve PO]
-  G --> H[Issue to accredited vendor]
-  H --> I[Receipt, inspection, and acceptance]
-  I --> J[Payment readiness]
-```
+Use the complete 14-stage **Procurement to Payment** flow later in this handbook. The route has three independent axes:
+
+| Axis | Operating decision |
+| --- | --- |
+| Solicitation document | Materials use RFQ; services use RFP; an approved exception may use none when no supporting solicitation is required |
+| Procurement mode | Competitive bidding is the default; each exception mode requires its own eligibility and evidence |
+| Governance tier | Standard, formal bid, high-risk/special control, and current effective DOA are derived independently |
+
+The local PHP 1,000,000 value controls formal-bid governance. It does not turn a high-value material RFQ into an RFP, and it does not turn a low-value service RFP into an RFQ. Only the current effective Mwell DOA names approval authority. MPIC role titles, people, limits, and annexes do not grant Mwell authority.
+
+## Procurement Role Procedures
+
+Each procedure is standalone. Stop when its denial check fails; never use another role's credentials or evidence to continue.
 
 ### Requester
 
-Use **Procurement -> New request**. Choose category, enter complete line items, explain need and alternatives, attach evidence, review the sourcing preview, save the draft, and submit only after route confirmation.
+- **Start condition:** A department need has an identified requester, budget context, cost center, required date, and business purpose.
+- **Permitted action:** Create or correct the request; classify goods/materials or services; enter line items, specification or scope, acceptance criteria, alternatives, risk, and attachments; submit the current version.
+- **Prohibited action:** Do not approve your own request, confirm the final route, choose an exception by preference, fabricate vendor competition, post a receipt, or assert Finance readiness.
+- **Handoff:** Send the complete current request to the Procurement Lead; provide technical evaluation when formally assigned.
+- **Denial check:** Stop if required facts or evidence are missing, the record is stale, the request is already submitted, or your identity is not the requester/authorized editor.
+- **Recovery:** Reload the current record, address each validation or return reason, replace stale evidence, and resubmit a new attributable version.
+- **Completion evidence:** Submitted request ID and version, requester identity, classification, budget/cost-center evidence, specification or scope, acceptance criteria, attachments, and submission timestamp.
 
-### Officer and Administrator
+### Department Head
 
-Confirm policy route, competition or exception pack, accreditation, and request completeness. Author a PO only from an approved eligible request. Preserve request, PO, receipt, and acceptance links.
+- **Start condition:** The current effective DOA assigns your identity an approval step, or a recommendation variance is routed to your authorized department decision.
+- **Permitted action:** Review the current request version, route axes, amount, budget, evidence, recommendation, variance rationale, and prior decisions; approve, reject, or return with a specific reason.
+- **Prohibited action:** Do not approve your own request or work, act from an expired/delegated-out assignment, substitute an MPIC title or annex for the Mwell DOA, or edit source evidence while deciding.
+- **Handoff:** Send an approval to the next effective DOA step or independent Controller decision; send a return/rejection to Requester and Procurement.
+- **Denial check:** Stop if the assignment, effective date, category/amount scope, record version, separation of duty, or required evidence does not match.
+- **Recovery:** Return the record with an actionable reason or ask an authorized DOA administrator to correct configuration; re-evaluate only the new current version.
+- **Completion evidence:** Immutable decision, acting identity, active DOA revision and step, request version, reason/comments, and timestamp.
 
-### Approver and Finance
+### Procurement Lead
 
-Act only on the step assigned to your identity. Review the current request version, amount, route, evidence, and comments. Approve, reject, or return with a specific reason.
+- **Start condition:** A submitted request is ready for route confirmation, sourcing, award, commitment, monitoring, payment-pack preparation, or file closure.
+- **Permitted action:** Confirm solicitation document, procurement mode, governance tier, active profile and reasons; issue equal versioned packages; monitor the three-to-four invite target and response quorum; record tabulation, best-value recommendation, exceptions, PO/agreement, vendor notices, payment pack, and closure request.
+- **Prohibited action:** Do not change requester facts, treat amount as the RFQ/RFP switch, open fewer than three sealed responses without governed recovery, select an automatic lowest-price winner, decide Legal eligibility, post Warehouse acceptance, approve your own award, or release payment.
+- **Handoff:** Route technical work to the assigned reviewer, authority decisions to current DOA approvers, accreditation issues to Legal/Compliance, receipts to Warehouse/Operations, and the complete payment pack to Finance Controller.
+- **Denial check:** Stop if the profile or DOA is unresolved, vendor eligibility is invalid, package/equal-notice evidence is incomplete, quorum recovery is unapproved, evaluation is stale, or separation of duty fails.
+- **Recovery:** Correct the package, source additional eligible vendors, run equal-notice extension/requote, obtain a controlled exception decision, refresh evaluations, or close/return with reason.
+- **Completion evidence:** Route decision with all three axes, policy/DOA snapshot, sourcing communications and responses, evaluations, recommendation/variance evidence, approved commitment, monitoring trail, payment pack, and closure event.
+
+### Legal/Compliance
+
+- **Start condition:** Vendor accreditation, probation, scoped temporary clearance, legal instrument, compliance evidence, or an exception requiring Legal review is assigned to your authority.
+- **Permitted action:** Review current commercial/legal evidence; request correction; make the authorized accreditation, probation, clearance, suspension/revocation, or instrument decision with evidence and notice.
+- **Prohibited action:** Do not award the procurement, map an MPIC approver into Mwell, approve a request outside current capability, decide a case you prepared when independent decision is required, or turn a client assertion into vendor eligibility.
+- **Handoff:** Publish the governed eligibility projection to Procurement; return deficiencies to the vendor representative; route financial or DOA questions to Finance or the department owner.
+- **Denial check:** Stop if evidence is missing/expired, clearance scope or dates do not match the request, maker-decider separation fails, revision is stale, or notice/evidence references are absent.
+- **Recovery:** Request exact corrections, assign an independent decision maker, revoke or expire invalid clearance, and issue a version-bound decision after evidence is complete.
+- **Completion evidence:** Case/revision, decision, effective/expiry dates and scope, evidence references, notice reference, acting identity, and audit timestamp.
+
+### Technical Reviewer
+
+- **Start condition:** Procurement assigns a current solicitation response set and evaluation criteria for technical review.
+- **Permitted action:** Evaluate compliance, quality/specification, delivery, warranty, support, training, security/privacy, and other assigned criteria; record comments and evidence within the five-working-day source SLA.
+- **Prohibited action:** Do not view or alter commercial data when the controlled evaluation separates it, change the solicitation after bids close, pick the final winner, approve your own request, or use undocumented criteria.
+- **Handoff:** Return the signed technical evaluation to Procurement; identify clarification or non-compliance without contacting one bidder privately.
+- **Denial check:** Stop if the package version, criteria, response identity, conflict-of-interest state, assignment, or evidence is incomplete.
+- **Recovery:** Ask Procurement for a common clarification, corrected assignment, or versioned package; re-evaluate every affected response consistently.
+- **Completion evidence:** Reviewer/assignment, package version, criteria and scores/disposition, evidence, comments, due/completion timestamps, and conflict declaration.
+
+### Warehouse/Operations
+
+- **Start condition:** An issued approved PO/agreement or service milestone is ready for delivery, receipt, inspection, custody, or acceptance.
+- **Permitted action:** Record actual quantity, identity, serial/lot, condition, evidence, custody and QC; accept conforming delivery; quarantine/reject non-conformance; record service/milestone acceptance when you are the authorized owner.
+- **Prohibited action:** Do not create missing PO authority, accept against an unrelated commitment, hide shortages/damage, release your own controlled hold, change commercial terms, or mark payment ready.
+- **Handoff:** Send accepted receipt/service evidence to Procurement; send quality, warranty, replacement, or RMA issues to Procurement and vendor; send resolved acceptance evidence into the Finance pack.
+- **Denial check:** Stop if the commitment is missing/ineligible, delivery identity does not match, required evidence is absent, destination/custody is invalid, or controlled exception separation fails.
+- **Recovery:** Quarantine and preserve evidence, correct the PO/receipt link, obtain Supervisor disposition, issue vendor-return custody, and re-inspect replacement/repair before acceptance.
+- **Completion evidence:** PO/agreement link, receipt or milestone record, quantity/value, serial/lot where applicable, evidence, QC/acceptance disposition, custody, RMA/replacement trail, actors, and timestamps.
+
+### Finance Controller
+
+- **Start condition:** Procurement submits a versioned payment-readiness pack or a source-policy petty-cash/financial exception requires Finance decision.
+- **Permitted action:** Validate itemized invoice/OR/SI, approved PO/agreement, accepted quantity/value, payment terms, tax/withholding, foreign-vendor evidence, variance, active threshold/profile and current authority; approve, return, or deny readiness.
+- **Prohibited action:** Do not manufacture receipt/acceptance, waive missing evidence without authority, exceed accepted value, rely on the source PHP 50,000 value as approval authority, decide your own conflicting variance, or release payment from stale evidence.
+- **Handoff:** Return corrections to Procurement and the evidence owner; send an approved readiness decision to the governed payment process; send authority conflicts to the effective DOA owner.
+- **Denial check:** Stop if pack/acceptance versions differ, invoice exceeds accepted unpaid value, PO/agreement or tax evidence is missing, vendor eligibility is invalid, variance is unresolved, or your authority/separation does not match.
+- **Recovery:** Record the discrepancy, maintain payment hold, require corrected invoice/acceptance/tax/variance evidence, and review a newly versioned pack.
+- **Completion evidence:** Finance decision, pack and acceptance versions, invoice and commitment references, match result, tax/withholding/foreign evidence, accepted cap, reason, identity, and timestamp.
+
+### Vendor Representative
+
+- **Start condition:** Your vendor organization receives an invitation, clarification, PO/agreement, delivery issue, correction request, accreditation task, or RMA notice.
+- **Permitted action:** Access only your organization; acknowledge the exact package/PO; submit attributable responses before the deadline; ask clarifications; provide current evidence; report delay; complete correction, replacement, warranty, RMA, credit, or delivery action.
+- **Prohibited action:** Do not view another vendor's response, reuse another recipient's acknowledgment, submit against a superseded package, bypass the deadline, alter Mwell decisions, or claim accreditation/award/payment status.
+- **Handoff:** Send sourcing responses to Procurement, accreditation evidence to Legal/Compliance, delivery/quality evidence to Warehouse/Operations and Procurement, and invoices/payment support through the governed channel.
+- **Denial check:** Stop if vendor identity/organization, notification group, package version, deadline, PO, or requested evidence does not match.
+- **Recovery:** Use the current invitation or correction link, ask Procurement for equal clarification/extension, replace expired evidence, or complete the documented RMA/credit path.
+- **Completion evidence:** Vendor identity, organization, package/PO version, acknowledgment, submission/clarification/delivery timestamps, response/evidence hashes, and correction or RMA outcome.
+
+### Platform Admin
+
+- **Start condition:** An authorized owner requests role, capability, policy-profile, holiday calendar, or DOA configuration/support, or a denial indicates configuration may be incomplete.
+- **Permitted action:** Administer approved effective-dated configuration, validate gaps/overlaps, grant minimum scoped access, preserve history, and provide audit/configuration evidence.
+- **Prohibited action:** Do not name yourself or another user as a business approver without owner authority, activate draft policy values by implication, edit immutable decisions, bypass separation of duty, apply the parked migration, or claim deployment/UAT certification from local docs.
+- **Handoff:** Return valid configuration to the business owner and affected role; route policy conflicts to Procurement/Finance/Legal and migration/deployment work to the separate controlled cutover.
+- **Denial check:** Stop if the request lacks owner approval, effective dates overlap, authority scope is unclear, the target is shared/unverified, or the change would rewrite transaction history.
+- **Recovery:** Keep the record draft, obtain owner/DOA approval, correct dates/scope, test locally, and use the controlled migration and release runbooks when authorized.
+- **Completion evidence:** Approved change request, before/after configuration version, effective dates, owner, acting admin, validation results, audit event, and explicit statement of whether activation/deployment occurred.
 
 ## Vendor Accreditation Flow
 
@@ -252,34 +331,66 @@ Read the overview before performing work. Use **By role** to confirm the handoff
 ### Procurement to Payment
 
 ```mermaid
-%% handbook-flow: workflow=procurement-to-payment; view=overview; stages=Request|Budget|DOA|Source|PO|Receive|Pay
+%% handbook-flow: workflow=procurement-to-payment; view=overview; stages=Request|Route|Validate|Solicit|Quorum|Evaluate|Recommend|Variance|Approve|Commit|Monitor|Receive|Payment|Close
 flowchart LR
-  R[Request] --> B[Budget check] --> D[DOA approval] --> S[Sourcing] --> P[Purchase order] --> G[Receive and inspect] --> Y[Three-way match and payment]
+  S1[1 Request facts and budget] --> S2[2 Confirm solicitation, mode and tier] --> S3[3 Validate profile, DOA, vendor and controls] --> S4[4 Issue versioned equal package] --> S5[5 Resolve response quorum] --> S6[6 Tabulate and technically evaluate] --> S7[7 Record best-value recommendation] --> S8[8 Decide recommendation variance] --> S9[9 Approve under current DOA] --> S10[10 Create PO or agreement] --> S11[11 Acknowledge and monitor commitment] --> S12[12 Receive, accept and resolve quality] --> S13[13 Three-way match and payment evidence] --> S14[14 Close complete file]
 ```
 ```mermaid
-%% handbook-flow: workflow=procurement-to-payment; view=role; stages=Request|Budget|DOA|Source|PO|Receive|Pay
+%% handbook-flow: workflow=procurement-to-payment; view=role; stages=Request|Route|Validate|Solicit|Quorum|Evaluate|Recommend|Variance|Approve|Commit|Monitor|Receive|Payment|Close
 flowchart LR
-  A[Requester] --> B[Procurement]
-  B --> C[Named approver]
-  C --> D[Procurement]
-  D --> E[Vendor]
-  E --> F[Warehouse]
-  F --> G[Finance]
+  R[Requester: need, classification and acceptance evidence] --> P[Procurement Lead: route and sourcing evidence]
+  P --> S[System: profile, DOA, accreditation, risk and quorum controls]
+  S --> V[Vendor representative: acknowledgment, response and delivery evidence]
+  V --> PT[Procurement and technical reviewer: tabulation and evaluation]
+  PT --> DH[Department Head and independent Controller: variance decision when needed]
+  DH --> A[Named current DOA approvers: award decision]
+  A --> PC[Procurement Lead: PO or agreement and monitoring]
+  PC --> W[Warehouse or service owner: receipt, QC and acceptance]
+  W --> F[Procurement and Finance Controller: payment-readiness evidence]
+  F --> C[Procurement Lead: issue resolution and file closure]
 ```
 ```mermaid
-%% handbook-flow: workflow=procurement-to-payment; view=decision; stages=Request|Budget|DOA|Source|PO|Receive|Pay
+%% handbook-flow: workflow=procurement-to-payment; view=decision; stages=Request|Route|Validate|Solicit|Quorum|Evaluate|Recommend|Variance|Approve|Commit|Monitor|Receive|Payment|Close
 flowchart TD
-  A[Route and evidence ready] --> B{DOA approved?}
-  B -->|No: return with reason| A
-  B -->|Yes| C{Vendor accredited?}
-  C -->|No: block award| D[Legal remediation]
-  C -->|Yes| E[Issue PO]
-  E --> F{Receipt and invoice match?}
-  F -->|No: resolve variance| G[Hold payment]
-  F -->|Yes| H[Release payment]
+  A[Requester and Procurement: current facts and three route axes] --> B{System: profile, effective DOA, eligible vendor and package complete?}
+  B -->|No| BX([Blocked: correct route, authority, eligibility or evidence])
+  BX --> BR[Recovery owner corrects current record]
+  BR --> B
+  B -->|Yes| C{System: at least three usable sealed-bid responses or approved recovery?}
+  C -->|No| CX([Blocked failed bid: bids remain unopened])
+  CX --> CR[Procurement recovery: source, extend or requote equally; otherwise obtain controlled insufficient-bids decision]
+  CR --> C
+  C -->|Yes| D{Procurement and technical reviewer: best-value evidence complete?}
+  D -->|No| DX([Blocked: complete tabulation and technical evaluation])
+  DX --> DR[Recovery: correct attributable evaluation evidence]
+  DR --> D
+  D -->|Yes| E{Recommendation differs from evaluated best value?}
+  E -->|Yes| F{Written justification, Department Head approval and independent Controller decision complete?}
+  F -->|No| FX([Blocked or denied variance])
+  FX --> FR[Recovery: revise recommendation or complete independent variance path]
+  FR --> E
+  F -->|Yes| G{Current DOA and separation of duty approve award?}
+  E -->|No| G
+  G -->|No| GX([Blocked or denied award])
+  GX --> GR[Recovery: return for correction, re-evaluation or closure with reason]
+  GR --> A
+  G -->|Yes| H[Procurement: issue approved PO or agreement; vendor acknowledgment enters monitoring]
+  H --> I{Warehouse or service owner: receipt, QC and acceptance complete?}
+  I -->|No| IX([Blocked: quarantine, rejection, replacement, warranty or RMA remains open])
+  IX --> IR[Recovery: resolve delivery and quality evidence, then re-inspect or re-accept]
+  IR --> I
+  I -->|Yes| J{Finance Controller: invoice, commitment, acceptance, tax and variance evidence match?}
+  J -->|No| JX([Blocked: payment hold and discrepancy correction])
+  JX --> JR[Recovery: submit a corrected versioned payment pack]
+  JR --> J
+  J -->|Yes| K{Procurement: delivery closed, issues resolved and evidence retained?}
+  K -->|No| KX([Blocked: procurement file remains open])
+  KX --> KR[Recovery: close outstanding delivery, quality, warranty, variance or evidence obligations]
+  KR --> K
+  K -->|Yes| L[Complete: governed payment readiness and procurement-file closure evidence]
 ```
 
-**Completion criteria:** the request, budget/DOA decision, sourcing evidence, active vendor accreditation, issued PO, receipt/inspection evidence, invoice and acceptance are linked before Finance releases payment.
+**Completion criteria:** all 14 stages are attributable and linked: request and budget facts; three-axis route and active profile; effective DOA; accredited-vendor sourcing and quorum/recovery; tabulation and technical evaluation; best-value and variance decisions; award approval; PO/agreement and vendor acknowledgment; receipt/QC/acceptance; payment evidence; resolved obligations; and retained closure evidence.
 
 ### Vendor Accreditation
 

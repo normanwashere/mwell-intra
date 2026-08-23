@@ -1,26 +1,28 @@
 # Vendor-to-Pay Control Matrix
 
-Date: 2026-07-15
-Status: Binding implementation and UAT traceability baseline
+Date: 2026-08-23
+Status: Binding code-baseline traceability; not live/UAT certification
 
 ## Governing sources
 
+- `MPIC Procurement Policy February2025.docx` (authoritative supplied MPIC binary; February 2025 parent source)
+- `MPIC_PROCUREMENT_POLICY_FEBRUARY_2025.md` (maintained extract separating direct requirements, Mwell mappings, and conflicts)
 - `mWell Procurement Policy and Procedures - Revised Modern Visual Updated.docx`
 - `LGL004-Vendor Accreditation Form 2.0 (3).pdf`
 - `[MNDA]- Tech Service Provider.docx`
 
-This matrix converts the supplied sources into application controls. It does not replace Legal, Finance, Procurement, or DOA approval and does not invent monetary authority.
+This matrix converts the supplied sources into application controls. It does not replace Legal, Finance, Procurement, or DOA approval and does not invent monetary authority. MPIC titles, named approvers, annexes, and source values have no Mwell approval authority unless an authorized Mwell profile and the effective department DOA activate them.
 
 ## Process controls
 
 | Stage | Source requirement | Authoritative owner | Required system control | Completion evidence |
 |---|---|---|---|---|
 | Intake | Requester owns need, budget, technical scope, timing, justification, and acceptance criteria | Requesting department | Required structured intake and attachments; requester cannot decide sourcing risk or accreditation | Submitted request with immutable requester facts |
-| Routing | RFQ below PHP 1,000,000 when simple/comparable; RFP at/above PHP 1,000,000 or complex, technical, strategic, high-risk, or data-sensitive | Procurement | Policy recommendation plus Procurement confirmation; amount alone cannot downgrade complex/high-risk work | Recorded route, reasons, reviewer, timestamp |
+| Routing | Materials use RFQ; services use RFP; competition is the default mode; solicitation document, procurement mode, governance tier, and effective DOA are independent | Procurement; named approval authority comes only from current Mwell DOA | Derive and display all three route axes. The local PHP 1,000,000 value raises formal-bid governance but never changes materials to RFP or services to RFQ | Requirement type, solicitation document, mode, tier, profile/version, reasons, reviewer, timestamp |
 | Direct Award | Allowed basis, requested vendor, justification, price support, accreditation/clearance path, Procurement Head review, DOA approval | Procurement and DOA approver | Block issue until every control is present; requester facts do not equal approval | Signed exception/award record and price evidence |
 | Petty cash | One-time low-value non-accredited purchase only when Finance confirms eligibility; no recurrence or splitting; OR/SI and liquidation required | Finance with Procurement visibility | Explicit one-time/non-split attestations and Finance decision; repeat use routes to accreditation | Eligibility decision, receipt, liquidation, audit trail |
 | Vendor eligibility | Vendor accredited before engagement unless temporary clearance is approved | VMO; until established, Legal coordinates with Procurement | PO award/issue checks current accreditation or scoped, unexpired temporary clearance | Accreditation/clearance ID, scope, effective/expiry dates |
-| Sourcing and evaluation | Fair comparable requirement/deadline; technical and commercial evaluation; understandable award recommendation | Procurement plus technical reviewer | Common RFQ/RFP package, proposal receipt controls, technical evaluation, commercial comparison | Proposals, tabulation, technical decision, AR |
+| Sourcing and evaluation | Three to four accredited vendors invited; equal package/deadline/clarifications; at least three usable sealed-bid responses or governed failed-bid recovery; technical and commercial evaluation; understandable best-value recommendation | Procurement plus technical reviewer | Versioned RFQ/RFP package, invitation delivery, acknowledgment/clarification timers, response quorum, failed-bid/requote/insufficient-bids paths, tabulation, technical evaluation, and no automatic winner | Invitations, communications, responses, failed-bid decision when applicable, tabulation, technical decision, award recommendation |
 | Approval | Final approval follows current DOA | Current approver tier | Resolve active matrix by department, category, amount, effective date, and delegation; prevent self-approval | Immutable step decisions and signatures |
 | Commitment | Approved PO, contract, or written agreement before work begins except documented emergency | Procurement / authorized owner | Issue only after source approval, vendor eligibility, commercial match, and required protection | Issued PO/agreement and vendor acknowledgment |
 | Change control | Material scope, price, vendor, delivery, or terms return for Procurement review and DOA | Procurement and DOA | Versioned amendment workflow; no silent overwrite of approved commitment | Approved amendment and before/after audit |
@@ -104,19 +106,21 @@ The supplied form requires applicable technology capability; it does not by itse
 
 Temporary delegation can replace an absent person but cannot let one account execute and approve the same controlled transaction.
 
-## Mandatory certification scenarios
+## Mandatory code-baseline scenarios
 
-1. RFQ below threshold and RFP at threshold.
-2. Low-value complex/data-sensitive RFP.
-3. Valid and invalid Direct Award.
-4. One-time petty cash and rejected split/recurring use.
-5. New, approved, provisional, expired, renewal-due, rejected, and suspended vendor.
-6. Sole proprietor, partnership, corporation, foreign vendor, and technology-service provider document branches.
-7. MNDA generation, execution, expiry, return/destruction due date, and template-defect prevention.
-8. Full, partial, excess, damaged, quarantined, rejected, and duplicate Warehouse receipt.
-9. Clean one-Operator receipt and every Supervisor-controlled exception.
-10. Self-approval denial for receipt override, hold release, variance, adjustment, and write-off.
-11. Goods and service acceptance, including accepted-with-exceptions.
-12. Payment readiness success, mismatch, missing evidence, returned correction, and release denial.
-13. Importation, down payment, manpower, construction, and equipment-installation controls.
-14. Cross-role visibility, unauthorized direct RPC, concurrency, idempotency, audit, and cleanup.
+1. Low-value material RFQ under standard governance.
+2. High-value material RFQ under local formal-bid governance and effective DOA.
+3. Low-value service RFP and high-risk/data-sensitive service RFP with additional controls.
+4. Three to four accredited invitees and at least three usable sealed-bid responses.
+5. Fewer than three responses causing a blocked failed bid, equal-notice extension/requote recovery, and separately approved insufficient-bids recovery.
+6. Valid and invalid sole-source, repeat-order, emergency, petty-cash, and other approved exception paths, including rejected split/recurring petty cash use.
+7. Best-value recommendation and independently approved recommendation variance; lowest price is never an automatic winner.
+8. New, approved, probation, provisional, expired, renewal-due, rejected, suspended, and exact-scope temporary-clearance vendor states.
+9. Sole proprietor, partnership, corporation, foreign vendor, and technology-service-provider document branches.
+10. MNDA generation, execution, expiry, return/destruction due date, and template-defect prevention.
+11. Full, partial, excess, damaged, quarantined, rejected, duplicate, warranty, replacement, and RMA receiving paths.
+12. Clean one-Operator receipt and every Supervisor-controlled exception, including self-approval denial.
+13. Goods and service acceptance plus payment-readiness success, mismatch, missing evidence, returned correction, and release denial.
+14. Importation, down payment, manpower, construction, equipment-installation, cross-role visibility, unauthorized direct RPC, concurrency, idempotency, audit, and cleanup.
+
+Passing local tests for these scenarios is implementation evidence only. Live database activation, migration status, deployed behavior, business UAT, and the parked controlled-fixture QC alias check remain separate gates.

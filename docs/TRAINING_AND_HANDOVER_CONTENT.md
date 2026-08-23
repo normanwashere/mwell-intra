@@ -1,7 +1,8 @@
 # Mwell Intra Training and Handover Content
 
-**Reviewed:** August 21, 2026  
-**Current UAT application reference:** `f88c9916c253546ae6960bd19ffd608b99fdd791`
+**Reviewed:** August 23, 2026
+**Procurement application behavior baseline:** `0bf88e362acec9ee8f5c59dbda865a8d4767e4a2`
+**Evidence status:** local code and documentation baseline; live/UAT certification remains a separate gate
 
 This is the maintained source for trainer, developer, and infrastructure handover materials. Presentation exports must use this content and the screenshots from the matching certification artifact.
 
@@ -26,8 +27,41 @@ Learners must be able to:
 7. Scan a returned serial and confirm its original release; quarantine an unmatched serial.
 8. Demonstrate pending-work badges on desktop and mobile.
 
+## Procurement-to-payment demonstration
+
+Use `MPIC Procurement Policy February2025.docx` as the authoritative supplied parent source and the maintained extract as the operating aid. The trainer must say which statement is a direct MPIC requirement, which is a local Mwell mapping, and which ownership/authority question remains unresolved.
+
+1. As Requester, create a low-value material request with specification, budget, cost center, acceptance criteria, and complete RFQ fields.
+2. As Procurement Lead, show **Solicitation document: RFQ**, **Procurement mode: Competitive bidding**, and **Governance tier: Standard** as separate decisions.
+3. Change the material amount above PHP 1,000,000 and show that it remains RFQ while local formal-bid governance and the effective DOA change.
+4. Create a low-value service request and show that it uses RFP; add risk/data-sensitivity facts and explain that they change control depth, not the service solicitation type.
+5. Validate the active profile/DOA projection without claiming that an MPIC named approver has Mwell authority.
+6. Issue one versioned package to three to four accredited vendors; demonstrate attributable acknowledgment, common clarification, equal deadline notice, and superseded-package denial.
+7. Close with fewer than three usable responses and show the blocked failed-bid state. Recover once through equal-notice extension/requote and once through the independently approved insufficient-bids path.
+8. Record commercial tabulation and an assigned technical evaluation. Show that lowest price does not create an automatic winner.
+9. Record a best-value recommendation, then demonstrate a differing recommendation that remains blocked until written justification, Department Head approval, and independent Controller decision are complete.
+10. Demonstrate valid and invalid sole-source, repeat-order, emergency, and petty-cash modes. For petty cash, show Finance eligibility and rejected split/recurring use.
+11. Approve the award through the current effective Mwell DOA and separation-of-duty checks, then create and issue the PO/agreement only after all commitment evidence passes.
+12. As vendor representative, acknowledge the exact PO version. As Warehouse/Operations or service owner, record receipt/QC/acceptance and demonstrate quarantine, rejection, replacement/warranty, RMA, and re-inspection recovery.
+13. As Procurement, prepare the versioned payment pack. As Finance Controller, demonstrate missing-evidence, mismatch, tax/foreign-vendor, stale-acceptance, returned-correction, and successful readiness decisions.
+14. Attempt file closure with an open delivery/quality issue, recover the issue, and close only when payment readiness, delivery closure, issue resolution, and retained evidence are complete.
+
+### Role procedure checks
+
+For Requester, Department Head, Procurement Lead, Legal/Compliance, technical reviewer, Warehouse/Operations, Finance Controller, vendor representative, and Platform Admin, the learner must state and demonstrate the role's start condition, permitted action, prohibited action, handoff, denial check, recovery, and completion evidence from the standalone manual.
+
 ## Negative scenarios
 
+- Amount incorrectly used to convert a material RFQ into RFP or a service RFP into RFQ.
+- Requester attempt to confirm route, approve an exception, or self-approve.
+- Missing active profile/DOA, MPIC named-role substitution, or overlapping authority.
+- Fewer than three usable sealed-bid responses without failed-bid recovery approval.
+- Unequal clarification/deadline notice, stale package acknowledgment, late response, or unaccredited vendor.
+- Automatic lowest-price selection, incomplete technical evaluation, or unsupported recommendation variance.
+- Ineligible sole source, changed/old/over-limit repeat order, unsupported emergency, or split/recurring petty cash.
+- PO/agreement attempt with incomplete sourcing, eligibility, protection, or DOA evidence.
+- Receipt/acceptance against the wrong commitment; unresolved QC, warranty, replacement, or RMA hold.
+- Payment pack with missing invoice/commitment/acceptance/tax evidence, accepted-value excess, or stale versions.
 - Invalid CSV headers or controlled values.
 - Missing PO/DR reference or receiving evidence.
 - Wrong rack/bin, duplicate serial, wrong product, or unavailable unit.
@@ -49,3 +83,5 @@ The release bundle must contain:
 - Cleanup evidence and declared residual blockers.
 
 Screenshots must come from the same deployed commit. Trainers must not use historical screenshots that show retired controls, incorrect labels, or resolved errors.
+
+The Task 11 handbook build and local tests are not a live/UAT certification artifact. The additive migration remains unapplied, and the controlled-fixture QC alias limitation remains parked for Task 12.
