@@ -351,11 +351,11 @@ const procedureArticles: KnowledgeArticle[] = [
     [
       [
         "Open active matrix",
-        "Review source, effective date, thresholds, and named approvers.",
+        "Confirm the controlled department label and code, then review source, effective date, thresholds, and named approvers.",
       ],
       [
         "Create revision",
-        "Load assignments, change version and owners, then save a draft.",
+        "Load assignments, select an active department from the directory, change version and owners, then save a draft.",
       ],
       [
         "Validate",

@@ -1,7 +1,7 @@
 # Mwell Intra Training and Handover Content
 
 **Reviewed:** August 23, 2026
-**Procurement application behavior baseline:** `81023ecc6b487ab8a935f675767d82d6869732e6`
+**Procurement application behavior baseline:** `32170e425e125c63597ea8e05c6287a7cd256f5b`
 **Evidence status:** deployed UAT behavior; commit-bound live certification remains the release gate
 
 This is the maintained source for trainer, developer, and infrastructure handover materials. Presentation exports must use this content and the screenshots from the matching certification artifact.
@@ -45,6 +45,7 @@ Use `mWell Procurement Policy and Procedures - Revised Modern Visual - Word Upda
 12. As vendor representative, acknowledge the exact PO version. As Warehouse/Operations or service owner, record receipt/QC/acceptance and demonstrate quarantine, rejection, replacement/warranty, RMA, and re-inspection recovery. Confirm that accepted goods value is derived from accepted quantity and governed PO-line unit price.
 13. As Procurement, prepare the versioned payment pack. As Finance Controller, demonstrate missing-evidence, mismatch, tax/foreign-vendor, stale-acceptance, returned-correction, and successful readiness decisions.
 14. Attempt file closure with an open delivery/quality issue, recover the issue, and close only when payment readiness, delivery closure, issue resolution, and retained evidence are complete.
+15. As Platform Admin or Legal, create a DOA revision by selecting an active controlled department. Confirm the stable code shown on the matrix, reject an unknown/inactive department, and prove that a different authorized checker performs activation.
 
 ### Role procedure checks
 
@@ -74,6 +75,7 @@ For Requester, Department Head, Procurement Lead, Legal/Compliance, technical re
 - Delivery update without permission.
 - Vendor invitation delayed or rate-limited.
 - External vendor email canary omitted, rate-limited, or missing persisted Auth identity, expiry, and generation evidence.
+- Free-text, inactive, or unmapped DOA department; matrix/assignment department drift; or maker self-activation.
 
 ## Handover evidence
 

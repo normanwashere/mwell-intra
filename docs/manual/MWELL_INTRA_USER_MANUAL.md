@@ -6,7 +6,7 @@
 
 **Reviewed:** August 23, 2026
 
-**Procurement application behavior baseline:** `81023ecc6b487ab8a935f675767d82d6869732e6`; deployed UAT behavior pending completion of commit-bound certification
+**Procurement application behavior baseline:** `32170e425e125c63597ea8e05c6287a7cd256f5b`; schema boundary verified on UAT and commit-bound browser certification pending
 
 **Release authority:** Use the commit-bound manifest packaged with this handbook.
 
@@ -34,28 +34,28 @@ Never share passwords, tokens, private keys, or confidential documents in suppor
 
 ## User Types and Responsibilities
 
-| User type                      | Primary responsibility                                       | Main handoff              |
-| ------------------------------ | ------------------------------------------------------------ | ------------------------- |
+| User type                      | Primary responsibility                                                    | Main handoff              |
+| ------------------------------ | ------------------------------------------------------------------------- | ------------------------- |
 | Core staff                     | Use this handbook to find the governed workflow and complete shared tasks | Platform Admin for access |
-| Platform Admin                 | Identities, scoped roles, audit review, DOA access           | Department owner          |
-| Vendor portal                  | Application, evidence, instruments, corrections, renewal     | Legal                     |
-| Warehouse Logistics Supervisor | Receiving, inspection, tagging, putaway                      | Operations / Finance      |
-| Warehouse Operations           | Allocation, issue, transfer, return, reconciliation          | Business unit / Finance   |
-| Warehouse Finance              | Valuation, variance, reconciliation, approvals               | Warehouse Admin           |
-| Warehouse BI Analyst           | Governed analysis and reports                                | Operational owners        |
-| Warehouse Business Unit        | Inventory demand and outcome confirmation                    | Operations                |
-| Warehouse Marketing            | Event demand, custody, usage, return                         | Operations                |
-| Warehouse Procurement          | Receivable PO and supplier coordination                      | Logistics Supervisor      |
-| Warehouse Pricing              | Landed cost and controlled price proposals                   | Finance                   |
-| Warehouse Admin                | Locations, areas, bins, routes, imports                      | Logistics Supervisor      |
-| Procurement Requester          | Need, justification, line items, evidence                    | Procurement Officer       |
-| Procurement Officer            | Sourcing route, competition, vendor readiness, PO            | Approver / Warehouse      |
-| Procurement Approver           | Named DOA decision                                           | Next approval tier        |
-| Procurement Finance            | Financial approval, acceptance, payment readiness            | Finance processing        |
-| Procurement Admin              | Procurement controls and exception oversight                 | Platform / Legal          |
-| Legal Reviewer                 | Evidence, instruments, risk, accreditation decision          | Vendor / Procurement      |
-| Legal Compliance               | Compliance disposition, expiry, renewal                      | Legal Admin               |
-| Legal Admin                    | Invitations, Legal workflow, department DOA                  | Vendor / Legal Reviewer   |
+| Platform Admin                 | Identities, scoped roles, audit review, DOA access                        | Department owner          |
+| Vendor portal                  | Application, evidence, instruments, corrections, renewal                  | Legal                     |
+| Warehouse Logistics Supervisor | Receiving, inspection, tagging, putaway                                   | Operations / Finance      |
+| Warehouse Operations           | Allocation, issue, transfer, return, reconciliation                       | Business unit / Finance   |
+| Warehouse Finance              | Valuation, variance, reconciliation, approvals                            | Warehouse Admin           |
+| Warehouse BI Analyst           | Governed analysis and reports                                             | Operational owners        |
+| Warehouse Business Unit        | Inventory demand and outcome confirmation                                 | Operations                |
+| Warehouse Marketing            | Event demand, custody, usage, return                                      | Operations                |
+| Warehouse Procurement          | Receivable PO and supplier coordination                                   | Logistics Supervisor      |
+| Warehouse Pricing              | Landed cost and controlled price proposals                                | Finance                   |
+| Warehouse Admin                | Locations, areas, bins, routes, imports                                   | Logistics Supervisor      |
+| Procurement Requester          | Need, justification, line items, evidence                                 | Procurement Officer       |
+| Procurement Officer            | Sourcing route, competition, vendor readiness, PO                         | Approver / Warehouse      |
+| Procurement Approver           | Named DOA decision                                                        | Next approval tier        |
+| Procurement Finance            | Financial approval, acceptance, payment readiness                         | Finance processing        |
+| Procurement Admin              | Procurement controls and exception oversight                              | Platform / Legal          |
+| Legal Reviewer                 | Evidence, instruments, risk, accreditation decision                       | Vendor / Procurement      |
+| Legal Compliance               | Compliance disposition, expiry, renewal                                   | Legal Admin               |
+| Legal Admin                    | Invitations, Legal workflow, department DOA                               | Vendor / Legal Reviewer   |
 
 ## Comprehensive Launch Flow
 
@@ -94,11 +94,11 @@ flowchart TD
 
 Use the canonical 13-step **Procurement to Payment** flow later in this handbook. The route has three independent axes:
 
-| Axis | Operating decision |
-| --- | --- |
+| Axis                  | Operating decision                                                                                                                                                                                                                             |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Solicitation document | RFQ below PHP 1,000,000 when clear and comparable; RFP at PHP 1,000,000 and above or for complex, technical, strategic, high-risk, data-sensitive or non-comparable work at any amount; an approved exception may use none when policy permits |
-| Procurement mode | Competitive bidding is the default; each exception mode requires its own eligibility and evidence |
-| Governance tier | Standard, formal bid, high-risk/special control, and current effective DOA are derived independently |
+| Procurement mode      | Competitive bidding is the default; each exception mode requires its own eligibility and evidence                                                                                                                                              |
+| Governance tier       | Standard, formal bid, high-risk/special control, and current effective DOA are derived independently                                                                                                                                           |
 
 Requirement kind determines scope, acceptance and reporting, not RFQ/RFP selection. Importation adds customs, landed-cost, logistics, currency and acceptance controls but does not automatically force RFP. Only the current effective Mwell DOA names approval authority. MPIC role titles, people, limits and annexes do not grant Mwell authority.
 
@@ -274,25 +274,25 @@ Create a count draft, record physical quantity and evidence, review variance, an
 
 ## DOA Administration
 
-Platform Admin or Legal Admin opens **Admin -> Delegation of Authority**. Select **Create revision** on the current department matrix, update version and named assignments, save a draft, validate gaps/overlaps/final approval, and activate deliberately. Active records are immutable; activation supersedes the prior revision and preserves history.
+Platform Admin or Legal Admin opens **Admin -> Delegation of Authority**. Select **Create revision** on the current department matrix, confirm the displayed department name and stable department code, choose only from the active department directory, update version and named assignments, save a draft, validate gaps/overlaps/final approval, and activate deliberately. Free-text departments are not accepted. Active records are immutable; a separate authorized checker activates the draft, supersedes the prior revision, and preserves history.
 
 ## Troubleshooting and Recovery
 
-| Situation                      | Action                                                                                  |
-| ------------------------------ | --------------------------------------------------------------------------------------- |
-| Sign-in remains on login       | Verify identity, request reset, or ask Platform Admin to confirm provisioning           |
-| Access denied                  | Confirm the role matrix in this handbook; request minimum-role review for the route      |
-| Loading skeleton remains       | Check connection, wait once, refresh, then capture route/time/role                      |
-| Validation prevents submit     | Correct every labeled field and required evidence; do not bypass the gate               |
-| Possible duplicate transaction | Refresh and search the record before retrying                                           |
-| Stale-state message            | Reload the current record and re-evaluate before acting                                 |
-| Vendor invitation not received | Legal checks delivery status and contact address before retrying                        |
-| Receipt variance or damage     | Use inspection/hold/vendor-return workflow with evidence                                |
-| Return serial has no source    | Quarantine the item, preserve the scanned serial, and investigate before replacement    |
-| Vendor invitation rate-limited | Do not repeatedly resend; verify delivery state and escalate SMTP capacity              |
+| Situation                      | Action                                                                               |
+| ------------------------------ | ------------------------------------------------------------------------------------ |
+| Sign-in remains on login       | Verify identity, request reset, or ask Platform Admin to confirm provisioning        |
+| Access denied                  | Confirm the role matrix in this handbook; request minimum-role review for the route  |
+| Loading skeleton remains       | Check connection, wait once, refresh, then capture route/time/role                   |
+| Validation prevents submit     | Correct every labeled field and required evidence; do not bypass the gate            |
+| Possible duplicate transaction | Refresh and search the record before retrying                                        |
+| Stale-state message            | Reload the current record and re-evaluate before acting                              |
+| Vendor invitation not received | Legal checks delivery status and contact address before retrying                     |
+| Receipt variance or damage     | Use inspection/hold/vendor-return workflow with evidence                             |
+| Return serial has no source    | Quarantine the item, preserve the scanned serial, and investigate before replacement |
+| Vendor invitation rate-limited | Do not repeatedly resend; verify delivery state and escalate SMTP capacity           |
 
 Routine UAT regression verifies invitation persistence, case linkage, expiry, replay denial, and access state. Actual external email delivery is a separate controlled desktop canary so repeated code pushes do not exhaust the shared mail quota; a canary passes only when the persisted invite is `sent` with Auth identity, expiry, and generation evidence.
-| Mobile control is obscured     | Scroll into the reserved safe area; report viewport and screenshot if still unreachable |
+| Mobile control is obscured | Scroll into the reserved safe area; report viewport and screenshot if still unreachable |
 
 Support evidence should contain route, time, role, safe record ID, expected outcome, visible error, and a redacted screenshot. Never include credentials or private document contents.
 
@@ -341,6 +341,7 @@ Read the overview before performing work. Use **By role** to confirm the handoff
 flowchart LR
   S1[1 Define the need] --> S2[2 Submit the request] --> S3[3 Confirm the procurement path] --> S4[4 Source vendors] --> S5[5 Check accreditation] --> S6[6 Evaluate offers] --> S7[7 Recommend award] --> S8[8 Approve under the active DOA] --> S9[9 Issue PO or contract] --> S10[10 Deliver and close obligations] --> S11[11 Prepare payment handoff] --> S12[12 Process vendor payment] --> S13[13 Close the procurement file]
 ```
+
 ```mermaid
 %% handbook-flow: workflow=procurement-to-payment; view=role; stages=Define need|Submit request|Confirm path|Source vendors|Check accreditation|Evaluate|Recommend award|Approve|Issue PO or contract|Deliver and close|Prepare payment handoff|Process payment|Close file
 flowchart LR
@@ -356,6 +357,7 @@ flowchart LR
   W --> F[Procurement and Finance Controller: payment-readiness evidence]
   F --> C[Procurement Lead: issue resolution and file closure]
 ```
+
 ```mermaid
 %% handbook-flow: workflow=procurement-to-payment; view=decision; stages=Define need|Submit request|Confirm path|Source vendors|Check accreditation|Evaluate|Recommend award|Approve|Issue PO or contract|Deliver and close|Prepare payment handoff|Process payment|Close file
 flowchart TD
@@ -406,6 +408,7 @@ flowchart TD
 flowchart LR
   I[Invite] --> P[Vendor profile] --> E[Evidence] --> R[Legal review] --> N[Required instruments] --> D[Accreditation decision] --> M[Renewal monitoring]
 ```
+
 ```mermaid
 %% handbook-flow: workflow=vendor-accreditation; view=role; stages=Invite|Profile|Evidence|Review|Instrument|Decision|Renewal
 flowchart LR
@@ -415,6 +418,7 @@ flowchart LR
   T --> L
   L --> P[Procurement eligibility]
 ```
+
 ```mermaid
 %% handbook-flow: workflow=vendor-accreditation; view=decision; stages=Invite|Profile|Evidence|Review|Instrument|Decision|Renewal
 flowchart TD
@@ -438,6 +442,7 @@ flowchart TD
 flowchart LR
   P[Receivable PO] --> D[Delivery] --> R[Receive line and serial or batch] --> I[Inspect] --> B[Put away] --> A[Available stock]
 ```
+
 ```mermaid
 %% handbook-flow: workflow=receiving-putaway; view=role; stages=PO|Delivery|Receive|Inspect|Putaway|Available
 flowchart LR
@@ -446,6 +451,7 @@ flowchart LR
   Q --> O[Operations associate]
   O --> F[Warehouse finance]
 ```
+
 ```mermaid
 %% handbook-flow: workflow=receiving-putaway; view=decision; stages=PO|Delivery|Receive|Inspect|Putaway|Available
 flowchart TD
@@ -466,6 +472,7 @@ flowchart TD
 flowchart LR
   O[Order intake] --> R[Reserve] --> P[Pick and scan] --> K[Pack and consume supplies] --> W[Waybill] --> H[Handover] --> D[Delivery outcome]
 ```
+
 ```mermaid
 %% handbook-flow: workflow=ecommerce-fulfillment; view=role; stages=Order|Reserve|Pick|Pack|Waybill|Release|Delivery
 flowchart LR
@@ -474,6 +481,7 @@ flowchart LR
   L --> R[Courier]
   R --> F[Finance and Product evidence]
 ```
+
 ```mermaid
 %% handbook-flow: workflow=ecommerce-fulfillment; view=decision; stages=Order|Reserve|Pick|Pack|Waybill|Release|Delivery
 flowchart TD
@@ -497,6 +505,7 @@ flowchart TD
 flowchart LR
   I[Customer intake] --> S[Serial lookup] --> Q[Quarantine] --> D[Replacement or refund decision] --> R[Supplier RMA] --> F[Finance evidence] --> C[Customer closure]
 ```
+
 ```mermaid
 %% handbook-flow: workflow=returns-replacements; view=role; stages=Intake|Serial lookup|Quarantine|Decision|RMA|Finance|Closure
 flowchart LR
@@ -506,6 +515,7 @@ flowchart LR
   P --> F[Finance]
   F --> C
 ```
+
 ```mermaid
 %% handbook-flow: workflow=returns-replacements; view=decision; stages=Intake|Serial lookup|Quarantine|Decision|RMA|Finance|Closure
 flowchart TD
@@ -526,6 +536,7 @@ flowchart TD
 flowchart LR
   D[Department demand] --> A[Approval] --> R[Reserve] --> I[Issue custody] --> U[Use or giveaway] --> T[Return or loss] --> C[Reconcile]
 ```
+
 ```mermaid
 %% handbook-flow: workflow=inventory-release; view=role; stages=Demand|Approval|Reserve|Issue|Use|Return|Reconcile
 flowchart LR
@@ -534,6 +545,7 @@ flowchart LR
   O --> W[Warehouse]
   W --> F[Finance]
 ```
+
 ```mermaid
 %% handbook-flow: workflow=inventory-release; view=decision; stages=Demand|Approval|Reserve|Issue|Use|Return|Reconcile
 flowchart TD
@@ -555,6 +567,7 @@ flowchart TD
 flowchart LR
   D[Marketing demand] --> A[Approval] --> T[Event transfer] --> E[Event use] --> O[Sales or giveaway outcome] --> R[Return] --> S[Settlement]
 ```
+
 ```mermaid
 %% handbook-flow: workflow=event-custody; view=role; stages=Demand|Approval|Transfer|Event|Outcome|Return|Settlement
 flowchart LR
@@ -563,6 +576,7 @@ flowchart LR
   O --> W[Warehouse]
   W --> F[Finance]
 ```
+
 ```mermaid
 %% handbook-flow: workflow=event-custody; view=decision; stages=Demand|Approval|Transfer|Event|Outcome|Return|Settlement
 flowchart TD
@@ -585,6 +599,7 @@ flowchart TD
 flowchart LR
   C[Cycle count] --> V[Variance] --> A[Adjustment approval] --> J[Post adjustment] --> E[Expiry control] --> R[Recall handling] --> F[Serialized reconciliation]
 ```
+
 ```mermaid
 %% handbook-flow: workflow=inventory-integrity; view=role; stages=Count|Variance|Approval|Adjust|Expiry|Recall|Reconcile
 flowchart LR
@@ -593,6 +608,7 @@ flowchart LR
   F --> P[Procurement or supplier]
   P --> A[Platform audit]
 ```
+
 ```mermaid
 %% handbook-flow: workflow=inventory-integrity; view=decision; stages=Count|Variance|Approval|Adjust|Expiry|Recall|Reconcile
 flowchart TD

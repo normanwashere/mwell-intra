@@ -1,8 +1,8 @@
 # Mwell Intra Technical and Functional Specification
 
 **Reviewed:** August 23, 2026
-**Procurement application behavior baseline:** `81023ecc6b487ab8a935f675767d82d6869732e6`
-**Evidence status:** local code and documentation baseline; not live/UAT certification
+**Procurement application behavior baseline:** `32170e425e125c63597ea8e05c6287a7cd256f5b`
+**Evidence status:** schema boundary verified on UAT; commit-bound browser certification remains the release gate
 
 ## Product boundary
 
@@ -32,11 +32,11 @@ Mwell Intra is the shared operating platform for cross-department workflows. War
 
 ### Three-axis route model
 
-| Axis | Values | Derivation and enforcement |
-| --- | --- | --- |
-| Solicitation document | `rfq`, `rfp`, `none` | RFQ derives below PHP 1,000,000 when clear and comparable. RFP derives at PHP 1,000,000 and above, or for complex, technical, strategic, high-risk, data-sensitive or non-comparable work at any amount. Importation alone does not force RFP. An approved exception may derive none when policy permits. |
-| Procurement mode | `competitive_bidding`, `sole_source`, `repeat_order`, `emergency_purchase`, `petty_cash`, approved other exception | Competition is default; each exception requires server-validated eligibility, evidence, owner review, and current DOA |
-| Governance tier | `standard`, `formal_bid`, `high_risk`, plus effective DOA route | Amount, complexity, technical/strategic risk, data sensitivity, category, active profile and current DOA determine control depth; route reasons preserve every triggering fact |
+| Axis                  | Values                                                                                                             | Derivation and enforcement                                                                                                                                                                                                                                                                                |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Solicitation document | `rfq`, `rfp`, `none`                                                                                               | RFQ derives below PHP 1,000,000 when clear and comparable. RFP derives at PHP 1,000,000 and above, or for complex, technical, strategic, high-risk, data-sensitive or non-comparable work at any amount. Importation alone does not force RFP. An approved exception may derive none when policy permits. |
+| Procurement mode      | `competitive_bidding`, `sole_source`, `repeat_order`, `emergency_purchase`, `petty_cash`, approved other exception | Competition is default; each exception requires server-validated eligibility, evidence, owner review, and current DOA                                                                                                                                                                                     |
+| Governance tier       | `standard`, `formal_bid`, `high_risk`, plus effective DOA route                                                    | Amount, complexity, technical/strategic risk, data sensitivity, category, active profile and current DOA determine control depth; route reasons preserve every triggering fact                                                                                                                            |
 
 A clear, comparable goods or service request below PHP 1,000,000 may use RFQ. Any request at or above PHP 1,000,000 uses RFP, and a lower-value request also uses RFP when a named complexity/risk trigger is present. Requirement kind still governs scope, acceptance and reporting. Compatibility projections such as legacy `sourcing_method` do not replace the three authoritative axes.
 
@@ -62,6 +62,7 @@ The policy process is: define need; submit request; confirm path; source vendors
 - Warehouse or the service owner creates receipt, QC, custody, and acceptance evidence. Non-conformance routes to rejection, quarantine, replacement, warranty, RMA/credit, and payment hold.
 - Procurement prepares a versioned payment-readiness pack. Finance recomputes invoice, approved commitment, accepted quantity/value, tax/withholding, foreign-vendor, variance, vendor-eligibility, and evidence-version checks before its decision.
 - Goods accepted value is server-derived from exact accepted PO-line quantities and governed PO-line unit prices. The request, active DOA matrix, and assignments use the canonical department identity; case drift cannot silently select another authority path.
+- `core.departments.code` is the canonical authority key. The DOA editor reads active directory entries instead of accepting free text. Database trigger boundaries canonicalize matrix values, synchronize every assignment to its parent matrix, reject unknown/inactive departments, and preserve the independent maker-checker activation contract.
 - File closure requires payment readiness, delivery closure, resolved quality/variance/warranty obligations, and retained evidence; payment alone does not close the procurement file.
 
 ## Warehouse fulfillment contract

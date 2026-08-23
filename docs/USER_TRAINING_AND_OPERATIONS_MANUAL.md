@@ -2,7 +2,7 @@
 
 **Reviewed:** August 23, 2026
 
-**Current UAT behavior reference:** `81023ecc6b487ab8a935f675767d82d6869732e6`
+**Current UAT behavior reference:** `32170e425e125c63597ea8e05c6287a7cd256f5b`
 
 ## Training Format
 
@@ -30,7 +30,9 @@ Use a role-specific test account and realistic test data. Each learner completes
 | Finance/BI/pricing       | Reconciliation, count variance, governed export evidence, review/correction, valuation and pricing controls                                                    |
 | Administrators           | Least-privilege role assignment, deprovisioning, test-account handling, audit review and escalation                                                            |
 
-For the Procurement drill, learners select the category through its named radio control and separately choose **Goods / materials** or **Services**. Goods PO lines must carry unit prices so receipt and QC quantities produce a server-derived accepted value for Finance matching. A missing active department DOA, differently cased department identity, unpriced PO line, or incomplete acceptance evidence must stop the handoff instead of being bypassed.
+For the Procurement drill, learners select the category through its named radio control and separately choose **Goods / materials** or **Services**. Goods PO lines must carry unit prices so receipt and QC quantities produce a server-derived accepted value for Finance matching. A missing active department DOA, unknown or inactive department identity, unpriced PO line, or incomplete acceptance evidence must stop the handoff instead of being bypassed. Department labels may vary in presentation, but every saved request, matrix, and assignment resolves to the same stable directory code.
+
+For the DOA administration drill, Platform Admin or Legal selects a department from the active directory, confirms its stable code, saves a new draft revision with named approvers, and hands activation to a different authorized checker. Attempt a free-text or inactive department and confirm it is rejected. Reopen the active matrix and verify that assignments carry the same department code as their parent matrix.
 
 ## Warehouse W1 Role Drills
 
