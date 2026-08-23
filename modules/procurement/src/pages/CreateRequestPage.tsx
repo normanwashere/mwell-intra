@@ -110,6 +110,8 @@ interface DepartmentCostCenterOption {
   cost_center_name: string;
 }
 
+type DepartmentDirectoryStatus = 'idle' | 'loading' | 'ready' | 'error';
+
 function blankLine(): LineDraft {
   return {
     key: globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2),
@@ -168,6 +170,8 @@ export function CreateRequestPage() {
   const [department, setDepartment] = useState('');
   const [costCenter, setCostCenter] = useState('');
   const [departmentOptions, setDepartmentOptions] = useState<DepartmentCostCenterOption[]>([]);
+  const [departmentDirectoryStatus, setDepartmentDirectoryStatus] =
+    useState<DepartmentDirectoryStatus>('idle');
   const [projectCode, setProjectCode] = useState('');
   const [budgetCode, setBudgetCode] = useState('');
   const [neededBy, setNeededBy] = useState('');
@@ -235,15 +239,25 @@ export function CreateRequestPage() {
     mode === 'supabase' ? (supabaseClient as RequestDraftClient | null) : null;
 
   useEffect(() => {
-    if (mode !== 'supabase' || !supabaseClient) return;
+    if (mode !== 'supabase' || !supabaseClient) {
+      setDepartmentDirectoryStatus('idle');
+      return;
+    }
     let active = true;
+    setDepartmentDirectoryStatus('loading');
     void supabaseClient
       .schema('warehouse')
       .from('department_request_options')
       .select('department_code,department_name,cost_center_code,cost_center_name')
       .then(({ data, error: queryError }) => {
-        if (!active || queryError) return;
+        if (!active) return;
+        if (queryError) {
+          setDepartmentOptions([]);
+          setDepartmentDirectoryStatus('error');
+          return;
+        }
         setDepartmentOptions((data ?? []) as DepartmentCostCenterOption[]);
+        setDepartmentDirectoryStatus('ready');
       });
     return () => {
       active = false;
@@ -1206,23 +1220,43 @@ export function CreateRequestPage() {
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Field label="Department" htmlFor="department">
-                    {departments.length > 0 ? (
-                      <select
-                        id="department"
-                        className="input"
-                        value={department}
-                        onChange={(e) => {
-                          setDepartment(e.target.value);
-                          setCostCenter('');
-                        }}
-                      >
-                        <option value="">Select department</option>
-                        {departments.map(([code, name]) => (
-                          <option key={code} value={code}>
-                            {name}
+                    {mode === 'supabase' ? (
+                      <>
+                        <select
+                          id="department"
+                          className="input"
+                          value={department}
+                          disabled={
+                            departmentDirectoryStatus !== 'ready' || departments.length === 0
+                          }
+                          aria-busy={departmentDirectoryStatus === 'loading'}
+                          onChange={(e) => {
+                            setDepartment(e.target.value);
+                            setCostCenter('');
+                          }}
+                        >
+                          <option value="">
+                            {departmentDirectoryStatus === 'loading'
+                              ? 'Loading departments...'
+                              : departmentDirectoryStatus === 'error'
+                                ? 'Departments unavailable'
+                                : departments.length === 0
+                                  ? 'No active departments'
+                                  : 'Select department'}
                           </option>
-                        ))}
-                      </select>
+                          {departments.map(([code, name]) => (
+                            <option key={code} value={code}>
+                              {name}
+                            </option>
+                          ))}
+                        </select>
+                        {departmentDirectoryStatus === 'error' && (
+                          <p role="alert" className="mt-2 text-sm font-semibold text-rose-600">
+                            The controlled department directory is unavailable. Refresh before
+                            continuing this request.
+                          </p>
+                        )}
+                      </>
                     ) : (
                       <Input
                         id="department"
@@ -1241,12 +1275,16 @@ export function CreateRequestPage() {
                     />
                   </Field>
                   <Field label="Cost center" htmlFor="costCenter">
-                    {departments.length > 0 ? (
+                    {mode === 'supabase' ? (
                       <select
                         id="costCenter"
                         className="input"
                         value={costCenter}
-                        disabled={!department}
+                        disabled={
+                          departmentDirectoryStatus !== 'ready' ||
+                          !department ||
+                          availableCostCenters.length === 0
+                        }
                         onChange={(e) => setCostCenter(e.target.value)}
                       >
                         <option value="">Select cost center</option>

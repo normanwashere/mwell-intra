@@ -1960,6 +1960,34 @@ test("DOA activation sends the governed signature and proves independent review"
   );
 });
 
+test("DOA save runtime uses executable SQL expressions and preserves its governed boundary", async () => {
+  const migration = await readFile(
+    new URL(
+      "../../supabase/migrations/20260823210000_repair_doa_save_runtime.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.match(
+    migration,
+    /create or replace function private\.policy_save_doa_matrix\(payload jsonb\)/,
+  );
+  const functionBody = migration.match(
+    /create or replace function private\.policy_save_doa_matrix\(payload jsonb\)[\s\S]*?as \$\$([\s\S]*?)\$\$;/,
+  )?.[1];
+  assert.ok(functionBody, "DOA save function body must be present");
+  assert.doesNotMatch(functionBody, /pg_catalog\.coalesce/i);
+  assert.match(
+    migration,
+    /revoke all on function private\.policy_save_doa_matrix\(jsonb\)[\s\S]*?public, anon, authenticated/,
+  );
+  assert.match(
+    migration,
+    /has_function_privilege\([\s\S]*?'authenticated'[\s\S]*?'procurement\.save_doa_matrix\(jsonb\)'[\s\S]*?'execute'/,
+  );
+  assert.match(migration, /notify pgrst, 'reload schema'/);
+});
+
 test("temporary UAT matrices cover every governed approval tier with named owners", async () => {
   const migration = await readFile(
     new URL(
@@ -1995,6 +2023,18 @@ test("procurement category cards expose a full hit surface and keyboard focus", 
   assert.match(
     source,
     /name="category"[\s\S]*?absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0/,
+  );
+  assert.match(
+    source,
+    /type DepartmentDirectoryStatus = ["']idle["'] \| ["']loading["'] \| ["']ready["'] \| ["']error["']/,
+  );
+  assert.match(
+    source,
+    /mode === ["']supabase["'][\s\S]*?id=["']department["'][\s\S]*?Loading departments\.\.\.[\s\S]*?Departments unavailable/,
+  );
+  assert.match(
+    source,
+    /controlled department directory is unavailable[\s\S]*?Refresh before[\s\S]*?continuing this request/i,
   );
   assert.match(
     source,
