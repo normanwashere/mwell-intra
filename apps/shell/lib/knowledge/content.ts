@@ -379,7 +379,7 @@ const procedureArticles: KnowledgeArticle[] = [
       ],
       [
         "Explain the need",
-        "Record alternatives, risk, budget context, and supporting evidence.",
+        "Wait for the controlled Department directory, select the Department and its Cost Center, then record alternatives, risk, budget context, and supporting evidence. On a directory error, refresh from the blocking recovery message; live authority fields never become free text.",
       ],
       [
         "Review route preview",
