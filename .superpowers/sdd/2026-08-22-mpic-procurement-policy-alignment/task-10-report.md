@@ -58,3 +58,22 @@ The shared-target migration-status ruling remains the Task 12 stop gate. This wo
 - Retained evidence: `docs/qa/evidence/task-10-controlled-authority-desktop-1440.png`, `docs/qa/evidence/task-10-controlled-authority-mobile-390.png`, and matching `.trace.json` traces.
 - Verification: `node scripts/verify-mpic-procurement-policy-alignment.mjs`; focused PGlite/parse test; Shell TypeScript; and `playwright ... task-10-controlled-authority-journey.spec.ts --project=desktop-1440 --project=mobile-390 --timeout=30000` all passed with Node `v22.17.0` and pinned Corepack.
 - The Task 12 linked-target status ruling above is unchanged. No migration was applied or deployed.
+
+## Fix Round 3
+
+- The controlled journey now uses the real sign-in UI and visible application controls for every handoff. It records Legal/VMO probation evidence and clearance, has an independent Legal decision activate the exact-scope clearance, records Procurement invitation and PO issue, requester acceptance, Procurement payment evidence, Finance acceptance/release, Procurement closure request, and independent governed closure approval.
+- `ProcurementApp` admits the existing `procurement.final_approve_po` RBAC capability for direct PO-detail work and renders that detail route for the independent approver. The controlled Department Head is assigned the established `procurement:approver` role, distinct from the Procurement closure requester.
+- Finance payment authority no longer causes an unrelated `review_open_purchase_orders` request during page load. The monitoring RPC is restricted client-side to Procurement PO authors or administrators; Finance still loads the governed PO and performs its public accept/release actions.
+- Browser diagnostics retain page errors, console errors, RPC status failures, and real transport errors. Only browser-cancelled in-flight background refreshes during an intentional context teardown (`net::ERR_ABORTED`) are excluded from the zero-error assertion.
+
+### Fix Round 3 Verification
+
+- Node `v22.17.0` and the pinned Corepack `dist\\pnpm.js` were used with the Node 22 directory prepended to child `PATH`.
+- Controlled signed-in Playwright journey: passed at `desktop-1440` (1.4m) and `mobile-390` (1.5m). Both runs asserted zero page errors, zero console errors, zero failed controlled RPC/transport requests, and all actor-specific public commands.
+- Retained screenshots: `docs/qa/evidence/task-10-legal-recovery-desktop-1440.png`, `docs/qa/evidence/task-10-governed-closure-desktop-1440.png`, `docs/qa/evidence/task-10-legal-recovery-mobile-390.png`, and `docs/qa/evidence/task-10-governed-closure-mobile-390.png`.
+- Retained traces: `docs/qa/evidence/task-10-legal-decider-{desktop-1440,mobile-390}.zip` and `docs/qa/evidence/task-10-closure-approver-{desktop-1440,mobile-390}.zip`.
+- Superseded fixture-only screenshots and traces were removed. No migration or deployment was applied.
+
+### Task 12 Status
+
+The linked-target migration-status ruling remains unchanged: `20260822110000_mpic_procurement_policy_alignment.sql` is unapplied in this workspace and no remote/shared target was queried. Task 12/UAT requires a read-only linked-target status artifact proving that it remains pending and that the remote chain has not drifted; stop UAT if it is already applied or drift is found.

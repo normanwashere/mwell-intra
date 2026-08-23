@@ -1196,6 +1196,8 @@ export interface PurchaseOrdersAPI {
 
 export function usePurchaseOrders(): PurchaseOrdersAPI {
   const live = useLiveClient();
+  const canAuthorPo = useCan('procurement', 'author_po');
+  const canAdmin = useCan('procurement', 'admin');
   const canViewFinance = useCan('procurement', 'view_finance');
   const [localRows, set, localLoading] = useTrackedRows<PurchaseOrder>(PO_KEY, !isLive(live));
   const [liveBaseRows, liveRowsLoading, refreshPos] = useLiveRows<LiveRow>(
@@ -1270,10 +1272,10 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
     setLiveLifecycle(lifecycle);
   }, [live, liveBaseRows]);
   const refreshMonitoring = useCallback(async () => {
-    if (!live) { setLiveMonitoring([]); return; }
+    if (!live || (!canAuthorPo && !canAdmin)) { setLiveMonitoring([]); return; }
     const monitoring = await liveRpc<OpenPurchaseOrderMonitoringItem[]>(live, 'procurement', 'review_open_purchase_orders', {});
     setLiveMonitoring(monitoring ?? []);
-  }, [live]);
+  }, [canAdmin, canAuthorPo, live]);
   useEffect(() => { void refreshLifecycle().catch(() => setLiveLifecycle([])); }, [refreshLifecycle]);
   useEffect(() => { void refreshMonitoring().catch(() => setLiveMonitoring([])); }, [refreshMonitoring]);
   const [livePaymentPacks, livePaymentPacksLoading, refreshPaymentPacks] =

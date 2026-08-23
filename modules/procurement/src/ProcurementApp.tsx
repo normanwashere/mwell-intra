@@ -84,14 +84,21 @@ export function ProcurementApp({
   const amendmentOnly = !canViewDashboard && myTiers.length === 0 && amendmentQueueDeepLink;
   const varianceReviewOnly =
     !canViewDashboard && myTiers.length === 0 && varianceReviewDeepLink;
+  const finalApprovalOnly = can(userRoles, "procurement", "final_approve_po");
   const hasAccess =
-    canViewDashboard || myTiers.length > 0 || acceptanceOnly || amendmentOnly || varianceReviewOnly;
+    canViewDashboard ||
+    myTiers.length > 0 ||
+    acceptanceOnly ||
+    amendmentOnly ||
+    varianceReviewOnly ||
+    finalApprovalOnly;
   const approvalsOnly = !canViewDashboard && myTiers.length > 0;
   const canApprove =
     can(userRoles, "procurement", "approve_request") || myTiers.length > 0;
   const canViewPurchaseOrders =
     can(userRoles, "procurement", "author_po") ||
     can(userRoles, "procurement", "approve_award") ||
+    can(userRoles, "procurement", "final_approve_po") ||
     can(userRoles, "procurement", "view_finance") ||
     can(userRoles, "procurement", "admin");
   if (loading) {

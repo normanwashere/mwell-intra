@@ -3254,6 +3254,29 @@ begin
 end;
 $$;
 
+create or replace function procurement.purchase_order_closure_work_items(payload jsonb default '{}'::jsonb)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+begin
+  if auth.uid() is null or not (core.has_live_cap('procurement','final_approve_po') or core.has_live_cap('procurement','admin')) then
+    raise exception 'Independent PO closure approver authority is required';
+  end if;
+  return coalesce((
+    select jsonb_agg(jsonb_build_object(
+      'closure_request_id', closure.id,
+      'purchase_order_id', closure.purchase_order_id,
+      'po_number', po.po_number,
+      'closure_reason', closure.closure_reason,
+      'requested_by_name', coalesce(profile.full_name, profile.email),
+      'requested_at', closure.requested_at
+    ) order by closure.requested_at asc)
+    from procurement.purchase_order_closure_requests closure
+    join procurement.purchase_orders po on po.id = closure.purchase_order_id
+    left join core.profiles profile on profile.id = closure.requested_by
+    where closure.status = 'pending'
+  ), '[]'::jsonb);
+end;
+$$;
+
 create or replace function procurement.close_purchase_order(payload jsonb)
 returns jsonb language plpgsql security definer set search_path = '' as $$ begin raise exception 'Direct closure is retired; request governed closure'; end; $$;
 revoke all on function procurement.close_purchase_order(jsonb) from public, anon, authenticated, service_role;
@@ -3393,8 +3416,8 @@ $$;
 create or replace function procurement.close_purchase_order(payload jsonb)
 returns jsonb language plpgsql security definer set search_path = '' as $$ begin raise exception 'Direct closure is retired; request governed closure'; end; $$;
 revoke all on function procurement.close_purchase_order(jsonb) from public, anon, authenticated, service_role;
-revoke all on function procurement.purchase_order_lifecycle(jsonb), procurement.review_open_purchase_orders(jsonb), procurement.request_purchase_order_closure(jsonb), procurement.approve_purchase_order_closure(jsonb) from public, anon;
-grant execute on function procurement.purchase_order_lifecycle(jsonb), procurement.review_open_purchase_orders(jsonb), procurement.request_purchase_order_closure(jsonb), procurement.approve_purchase_order_closure(jsonb) to authenticated;
+revoke all on function procurement.purchase_order_lifecycle(jsonb), procurement.review_open_purchase_orders(jsonb), procurement.request_purchase_order_closure(jsonb), procurement.approve_purchase_order_closure(jsonb), procurement.purchase_order_closure_work_items(jsonb) from public, anon;
+grant execute on function procurement.purchase_order_lifecycle(jsonb), procurement.review_open_purchase_orders(jsonb), procurement.request_purchase_order_closure(jsonb), procurement.approve_purchase_order_closure(jsonb), procurement.purchase_order_closure_work_items(jsonb) to authenticated;
 
 create or replace function procurement.commitment_readiness(payload jsonb)
 returns jsonb language plpgsql volatile security definer set search_path = '' as $$

@@ -2263,6 +2263,15 @@ test('executes the disposable public Task 10 vendor and payment authority matrix
     await db.exec(migrationTask10);
     await db.exec(migrationLegacyClearanceBackfill);
     await db.exec(`
+      create or replace function procurement.issue_purchase_order_pre_task_10(payload jsonb)
+      returns jsonb language plpgsql security definer set search_path = '' as $$
+      declare issued procurement.purchase_orders;
+      begin
+        update procurement.purchase_orders set status='issued', issued_at=statement_timestamp(), actor_id=auth.uid() where id=payload->>'id' and status='approved' returning * into issued;
+        if not found then raise exception 'Only approved POs may be issued'; end if;
+        return to_jsonb(issued);
+      end;
+      $$;
       grant usage on schema legal, procurement, core, auth, private to anon, authenticated, service_role;
       grant select on core.vendors, procurement.requests, procurement.purchase_orders, procurement.acceptance_packs, procurement.payment_readiness_packs, legal.accreditation_cases to authenticated;
       create policy task10_fixture_vendor_read on core.vendors for select to authenticated using (true);
@@ -2282,6 +2291,7 @@ test('executes the disposable public Task 10 vendor and payment authority matrix
       insert into procurement.route_decisions(id,request_id,status,request_version,policy_profile_id,policy_version,method,reasons,confirmed_by) values ('76000000-0000-0000-0000-000000000011','76000000-0000-0000-0000-000000000006','confirmed',1,'${operatingProfileId}','MWELL-OPS-1','rfq',ARRAY['controlled fixture'],'${procurement}');
       insert into procurement.sourcing_events(id,request_id,route_decision_id,status,intended_responses,submission_deadline,original_submission_deadline,package_version,package_hash,created_by) values ('76000000-0000-0000-0000-000000000012','76000000-0000-0000-0000-000000000006','76000000-0000-0000-0000-000000000011','draft',3,statement_timestamp()+interval '7 days',statement_timestamp()+interval '7 days','controlled-v1',repeat('a',32),'${procurement}');
       insert into procurement.purchase_orders(id,request_id,core_vendor_id,status,total,acceptance_evidence_version) values ('PO-TASK10','76000000-0000-0000-0000-000000000006','${vendorId}','issued',50000,1);
+      insert into procurement.purchase_orders(id,request_id,core_vendor_id,status,total,acceptance_evidence_version) values ('PO-TASK10-ISSUE','76000000-0000-0000-0000-000000000006','${vendorId}','approved',50000,1);
       insert into procurement.acceptance_packs(purchase_order_id,status,exceptions,accepted_amount) values ('PO-TASK10','accepted','[]'::jsonb,50000);
     `);
     await db.exec(migrationPaymentStalenessTrigger);
@@ -2447,6 +2457,7 @@ test('executes the disposable public Task 10 vendor and payment authority matrix
         );
       });
     }
+    await db.exec(`update core.vendors set accreditation_expires_at = current_date + 30 where id='${vendorId}'`);
     const clearanceId = await openClearance('goods', '2025-01-01T00:00:00.000Z', '2027-01-01T00:00:00.000Z');
     await approveClearance(clearanceId);
     await withRole('authenticated', procurement, ['author_po'], [], async () => {
@@ -2456,15 +2467,23 @@ test('executes the disposable public Task 10 vendor and payment authority matrix
       const prepared = await db.query(`select procurement.prepare_invoice_payment_readiness(${paymentPayload('INV-CLEARANCE-ACTIVE')}) as result`);
       assert.equal(prepared.rows[0].result.status, 'ready_for_finance');
     });
+    let invitationResult;
+    let issueResult;
     await withRole('authenticated', procurement, ['author_po', 'manage_rfp'], [], async () => {
-      const guardedEndpoints = [
-        () => db.query(`select procurement.invite_sourcing_vendors(${sqlJson({ sourcing_event_id: '76000000-0000-0000-0000-000000000012', vendor_ids: [vendorId] })})`),
-        () => db.query(`select procurement.issue_purchase_order(${sqlJson({ id: 'PO-TASK10' })})`),
-      ];
-      for (const invoke of guardedEndpoints) {
-        await invoke().catch((cause) => assert.doesNotMatch(String(cause), /vendor eligibility is not current/i, 'active exact clearance passes the shared invitation/issue eligibility guard'));
-      }
+      const invitation = await db.query(`select procurement.invite_sourcing_vendors(${sqlJson({ sourcing_event_id: '76000000-0000-0000-0000-000000000012', vendor_ids: [vendorId] })}) as result`);
+      assert.equal(invitation.rows[0].result.recipient_count, 1, 'active exact clearance permits a controlled Procurement invitation');
+      invitationResult = invitation.rows[0].result;
+
+      const issued = await db.query(`select procurement.issue_purchase_order(${sqlJson({ id: 'PO-TASK10-ISSUE' })}) as result`);
+      assert.equal(issued.rows[0].result.status, 'issued', 'active exact clearance permits issue of an independently approved PO');
+      issueResult = issued.rows[0].result;
     });
+    assert.equal(invitationResult.recipient_count, 1, 'the Procurement RPC returns its exact invitation recipient count');
+    assert.equal(issueResult.status, 'issued', 'the Procurement RPC returns its exact issued PO state');
+    const persistedInvitation = await db.query(`select vendor_id, invited_at is not null as invited from procurement.sourcing_responses where sourcing_event_id='76000000-0000-0000-0000-000000000012' and vendor_id='${vendorId}'`);
+    assert.deepEqual(persistedInvitation.rows[0], { vendor_id: vendorId, invited: true }, 'the successful invitation persists its governed recipient evidence');
+    const persistedIssue = await db.query(`select status from procurement.purchase_orders where id='PO-TASK10-ISSUE'`);
+    assert.equal(persistedIssue.rows[0].status, 'issued', 'the independently issued PO persists its governed issued state');
     const acceptedPack = await db.query(`select id from procurement.payment_readiness_packs where purchase_order_id='PO-TASK10' and invoice_number='INV-CLEARANCE-ACTIVE'`);
     await withRole('authenticated', finance, ['view_finance'], [], async () => {
       const accepted = await db.query(`select procurement.review_payment_readiness(${sqlJson({ id: acceptedPack.rows[0].id, status: 'accepted', note: 'Finance accepted the complete governed pack.' })}) as result`);

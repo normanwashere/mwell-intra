@@ -3,7 +3,7 @@ import type { BrowserContext, Route } from '@playwright/test';
 export const CONTROLLED_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'http://127.0.0.1:54321';
 export const CONTROLLED_ANON_KEY = 'controlled-rpc-anon-key';
 
-type ActorKey = 'procurement' | 'vendor' | 'unrelatedVendor' | 'admin' | 'legal' | 'legalMaker' | 'legalDecider' | 'operations' | 'deptHead' | 'finance' | 'financeNoCapability' | 'unrelated' | 'exceptionReviewer' | 'exceptionFinance' | 'exceptionDoa';
+export type ActorKey = 'procurement' | 'vendor' | 'unrelatedVendor' | 'admin' | 'legal' | 'legalMaker' | 'legalDecider' | 'operations' | 'deptHead' | 'finance' | 'financeNoCapability' | 'unrelated' | 'exceptionReviewer' | 'exceptionFinance' | 'exceptionDoa';
 type Actor = {
   id: string;
   email: string;
@@ -58,11 +58,11 @@ const ACTORS: Record<ActorKey, Actor> = {
   },
   legalMaker: {
     id: 'controlled-legal-maker', email: 'legal.maker.controlled@mwell.test', name: 'Controlled Legal Maker', title: 'Vendor Management Officer',
-    roles: { core: ['staff'], legal: ['reviewer'] }, capabilities: { core: ['view_directory', 'view_vendors'], legal: ['review_accreditation'] },
+    roles: { core: ['staff'], legal: ['reviewer'] }, capabilities: { core: ['view_directory', 'view_vendors'], legal: ['view_dashboard', 'review_accreditation'] },
   },
   legalDecider: {
     id: 'controlled-legal-decider', email: 'legal.decider.controlled@mwell.test', name: 'Controlled Legal Decider', title: 'Legal Approver',
-    roles: { core: ['staff'], legal: ['approver'] }, capabilities: { core: ['view_directory', 'view_vendors'], legal: ['approve_accreditation'] },
+    roles: { core: ['staff'], legal: ['approver'] }, capabilities: { core: ['view_directory', 'view_vendors'], legal: ['view_dashboard', 'approve_accreditation'] },
   },
   operations: {
     id: 'controlled-operations',
@@ -77,13 +77,13 @@ const ACTORS: Record<ActorKey, Actor> = {
   },
   deptHead: {
     id: 'controlled-department-head', email: 'department.head.controlled@mwell.test', name: 'Controlled Department Head', title: 'Operations Department Head',
-    roles: { core: ['staff'], operations: ['department_head'] },
-    capabilities: { core: ['view_directory', 'view_vendors'] },
+    roles: { core: ['staff'], procurement: ['approver'] },
+    capabilities: { core: ['view_directory', 'view_vendors'], procurement: ['final_approve_po'] },
   },
   finance: {
     id: 'controlled-finance', email: 'finance.controlled@mwell.test', name: 'Controlled Finance Controller', title: 'Finance Controller',
-    roles: { core: ['staff'], finance: ['controller'] },
-    capabilities: { core: ['view_directory', 'view_vendors'], procurement: ['view_finance'] },
+    roles: { core: ['staff'], finance: ['controller'], procurement: ['finance'] },
+    capabilities: { core: ['view_directory', 'view_vendors'], procurement: ['view_finance', 'accept_payment_readiness', 'release_payment'] },
   },
   financeNoCapability: {
     id: 'controlled-finance-no-capability', email: 'finance.no-capability.controlled@mwell.test', name: 'Controlled Finance Without Capability', title: 'Finance Controller',
@@ -266,7 +266,7 @@ export class ControlledProcurementRpcFixture {
   purchaseOrder: Record<string, unknown> | null = null;
   lifecycle: Record<string, unknown> | null = null;
   monitoring: Array<Record<string, unknown>> = [];
-  task10: { acceptance: boolean; prepared: boolean; accepted: boolean; released: boolean; closureRequested: boolean; closed: boolean; vendorCurrent: boolean; legalRevision: number } | null = null;
+  task10: { acceptance: boolean; prepared: boolean; accepted: boolean; released: boolean; closureRequested: boolean; closed: boolean; vendorCurrent: boolean; legalRevision: number; clearanceOpened: boolean } | null = null;
   private readonly varianceAssignments = [
     { actorId: ACTORS.deptHead.id, stage: 'department_head' as const, assignmentId: 'controlled-department_head-assignment' },
     { actorId: ACTORS.finance.id, stage: 'finance' as const, assignmentId: 'controlled-finance-assignment' },
@@ -449,11 +449,14 @@ export class ControlledProcurementRpcFixture {
   }
 
   prepareTask10PurchaseOrder() {
-    this.purchaseOrder = { id: 'controlled-po-task-10', po_number: 'PO-CONTROLLED-010', request_id: this.requestId, core_vendor_id: 'vendor-1', vendor_name: 'Acme Medical Supplies, Inc.', status: 'issued', total: 1000, lines: [{ id: 'line-1', description: 'Governed clinical supply', quantity: 1, receivedQuantity: 1 }], created_at: '2026-08-22T00:00:00.000Z', updated_at: '2026-08-22T00:00:00.000Z' };
+    this.sourcing = { id: 'controlled-sourcing-10', status: 'draft', submissionDeadline: '2026-09-30T04:00:00.000Z', intendedResponses: 3, packageVersion: 'RFQ-CONTROLLED-010-v1', packageHash: 'a'.repeat(64), responses: [] };
+    this.purchaseOrder = { id: 'controlled-po-task-10', po_number: 'PO-CONTROLLED-010', request_id: this.requestId, core_vendor_id: 'vendor-1', vendor_name: 'Acme Medical Supplies, Inc.', status: 'approved', total: 1000, origin: 'procurement', actor_email: ACTORS.procurement.email, expected_date: '2026-09-01', notes: 'Controlled issued PO evidence.', source_award_status: 'approved', lines: [{ id: 'line-1', description: 'Governed clinical supply', quantity: 1, receivedQuantity: 1, uom: 'ea', unitPrice: 1000 }], created_at: '2026-08-22T00:00:00.000Z', updated_at: '2026-08-22T00:00:00.000Z' };
     this.request.requester_id = ACTORS.operations.id;
     this.request.requester_email = ACTORS.operations.email;
-    this.lifecycle = { purchaseOrderId: 'controlled-po-task-10', revision: 4, issuedAt: '2026-08-22T00:00:00.000Z', acknowledgementStatus: 'acknowledged', deliveryNoticeStatus: 'recorded', qualityRecoveryStatus: 'resolved', closureStatus: 'ready' };
-    this.task10 = { acceptance: false, prepared: false, accepted: false, released: false, closureRequested: false, closed: false, vendorCurrent: false, legalRevision: 0 };
+    this.request.status = 'draft';
+    this.request.compliance = { routeConfirmed: true };
+    this.lifecycle = null;
+    this.task10 = { acceptance: false, prepared: false, accepted: false, released: false, closureRequested: false, closed: false, vendorCurrent: false, legalRevision: 0, clearanceOpened: false };
   }
 
   failNextExceptionSubmit() {
@@ -679,7 +682,11 @@ export class ControlledProcurementRpcFixture {
     };
     if (table === 'requests') return filtered([{ ...this.request }]);
     if (table === 'purchase_orders') return this.purchaseOrder ? filtered([{ ...this.purchaseOrder }]) : [];
-    if (table === 'approval_steps' || table === 'acceptance_packs') return [];
+    if (table === 'approval_steps') return [];
+    if (table === 'acceptance_packs') return this.task10?.acceptance ? [{ id: 'controlled-acceptance-10', purchase_order_id: 'controlled-po-task-10', request_id: this.requestId, acceptance_type: 'goods_receipt', accepted_scope: { summary: 'Warehouse receipt accepted against the governed PO.', lines: [{ po_line_id: 'line-1', quantity: 1 }] }, accepted_amount: 1000, exceptions: [], accepted_by_email: ACTORS.operations.email, accepted_at: '2026-08-23T00:00:00.000Z', status: 'accepted' }] : [];
+    if (table === 'payment_readiness_packs') return this.task10?.prepared ? [{ id: 'controlled-payment-10', purchase_order_id: 'controlled-po-task-10', acceptance_pack_id: 'controlled-acceptance-10', acceptance_pack_ids: ['controlled-acceptance-10'], accepted_quantity: 1, po_match: true, invoice_or_si_storage_path: 'private/invoice-10.pdf', milestone_support_storage_path: 'private/acceptance-10.pdf', tax_withholding_support_storage_path: 'private/tax-10.pdf', invoice_number: 'SI-CONTROLLED-010', invoice_date: '2026-08-23', due_date: '2026-09-23', invoice_amount: 1000, tax_amount: 100, withholding_amount: 20, purchase_order_amount: 1000, accepted_amount: 1000, released_amount: this.task10.released ? 1000 : 0, status: this.task10.released ? 'released' : this.task10.accepted ? 'accepted' : 'ready_for_finance', prepared_by_email: ACTORS.procurement.email, prepared_at: '2026-08-23T00:00:00.000Z', finance_reviewed_by_email: this.task10.accepted ? ACTORS.finance.email : undefined, finance_reviewed_at: this.task10.accepted ? '2026-08-23T00:00:00.000Z' : undefined, finance_note: this.task10.accepted ? 'Controlled three-way match accepted.' : undefined, evidence_stale: false }] : [];
+    if (table === 'vendor_lifecycle_reviews') return [];
+    if (table === 'vendor_probation_reviews') return this.task10 ? [{ id: 'controlled-review-10', vendor_id: 'vendor-1', revision: this.task10.legalRevision }] : [];
     if (table === 'vendors') return [
       { id: 'vendor-1', legal_name: 'Acme Medical Supplies, Inc.', accreditation_status: 'approved' },
       { id: 'vendor-2', legal_name: 'North Star Logistics Corp.', accreditation_status: 'approved' },
@@ -703,10 +710,21 @@ export class ControlledProcurementRpcFixture {
       return response(route, { curricula: [], progress: [], certifications: [], lockedCapabilities: [], refreshedAt: '2026-08-22T00:00:00.000Z' });
     }
     if (schema === 'legal' && this.task10) {
+      if (name === 'vendor_eligibility_projection') return response(route, [{ vendor_id: 'vendor-1', vendor_name: 'Acme Medical Supplies, Inc.', status: this.task10.vendorCurrent ? 'temporary_clearance' : 'expired', eligible: this.task10.vendorCurrent, authority: 'Legal/VMO', decision: this.task10.vendorCurrent ? 'temporary_clearance' : 'expired', review_due_at: '2026-08-22T00:00:00.000Z' }]);
       if (name === 'record_vendor_probation_review') {
         if (actor.id !== ACTORS.legalMaker.id || Number(payload.expected_revision) !== this.task10.legalRevision) return failure(route, 'Legal maker authority and current revision are required', 403);
         this.task10.legalRevision += 1;
         return response(route, { revision: this.task10.legalRevision, replayed: false, status: 'completed' });
+      }
+      if (name === 'open_vendor_temporary_clearance') {
+        if (actor.id !== ACTORS.legalMaker.id || Number(payload.expected_revision) !== 0 || payload.scope !== 'goods' || !String(payload.evidence_reference ?? '').trim() || !String(payload.notice_reference ?? '').trim()) return failure(route, 'Legal maker scope, evidence, notice, and current revision are required', 403);
+        this.task10.clearanceOpened = true;
+        return response(route, { id: 'controlled-clearance-10', revision: 1, status: 'pending', replayed: false });
+      }
+      if (name === 'decide_vendor_temporary_clearance') {
+        if (actor.id !== ACTORS.legalDecider.id || !this.task10.clearanceOpened || payload.clearance_id !== 'controlled-clearance-10' || Number(payload.expected_revision) !== 1 || payload.decision !== 'approve') return failure(route, 'Independent Legal clearance decision authority is required', 403);
+        this.task10.vendorCurrent = true;
+        return response(route, { id: 'controlled-clearance-10', revision: 2, status: 'approved', replayed: false });
       }
       if (name === 'record_vendor_eligibility_decision') {
         if (actor.id !== ACTORS.legalDecider.id || Number(payload.expected_revision) !== 0) return failure(route, 'Independent Legal decision authority is required', 403);
@@ -725,6 +743,42 @@ export class ControlledProcurementRpcFixture {
         this.task10.acceptance = true;
         return response(route, { id: 'controlled-acceptance-10', status: 'accepted', accepted_amount: 1000 });
       }
+      if (name === 'acceptance_work_items') {
+        if (this.purchaseOrder?.status !== 'issued' || actor.id !== ACTORS.operations.id) {
+          return response(route, []);
+        }
+        return response(route, [{
+          purchase_order_id: this.purchaseOrder.id,
+          po_number: this.purchaseOrder.po_number,
+          request_id: this.purchaseOrder.request_id,
+          status: this.purchaseOrder.status,
+          warehouse_receipt_reference: 'WRH-CONTROLLED-010',
+          qc_status: 'accepted',
+          lines: [{
+            poLineId: 'line-1',
+            description: 'Governed clinical supply',
+            uom: 'ea',
+            orderedQuantity: 1,
+            qcAcceptedQuantity: 1,
+            rejectedOrQuarantinedQuantity: 0,
+            warehouseReceiptId: 'WRH-CONTROLLED-010',
+            qcInspectionIds: ['QC-CONTROLLED-010'],
+          }],
+        }]);
+      }
+      if (name === 'purchase_order_receipt_status') return response(route, this.purchaseOrder?.status === 'issued' ? [{ purchase_order_id: this.purchaseOrder.id, ordered_quantity: 1, accepted_quantity: 1, rejected_or_quarantined_quantity: 0, outstanding_quantity: 0, latest_qc_status: 'accepted', latest_receipt_reference: 'WRH-CONTROLLED-010', accepted_lines: [{ po_line_id: 'line-1', accepted_quantity: 1 }] }] : []);
+      if (name === 'commitment_readiness') return response(route, {
+        ready: true,
+        phase: 'issue',
+        blockers: [],
+        evidence: [],
+        requirements: [],
+        protections: [],
+        canRecordAcceptance: actor.id === ACTORS.operations.id,
+      });
+      if (name === 'payment_readiness_staleness_work_items') return response(route, []);
+      if (name === 'purchase_order_closure_work_items') return response(route, actor.id === ACTORS.deptHead.id && this.task10.closureRequested && !this.task10.closed ? [{ closure_request_id: 'controlled-closure-10', purchase_order_id: 'controlled-po-task-10', po_number: 'PO-CONTROLLED-010', closure_reason: 'Controlled obligations complete.', requested_by_name: ACTORS.procurement.name, requested_at: '2026-08-23T00:00:00.000Z' }] : []);
+      if (name === 'evaluation_workspace') return response(route, { commercialTabulations: [], technicalEvaluations: [], awardRecommendation: null, varianceDecisions: [] });
       if (name === 'prepare_invoice_payment_readiness') {
         if (!isProcurement || !this.task10.acceptance || !this.task10.vendorCurrent) return failure(route, 'Current Legal eligibility and acceptance evidence are required', 403);
         this.task10.prepared = true;
@@ -751,9 +805,19 @@ export class ControlledProcurementRpcFixture {
         this.purchaseOrder = { ...this.purchaseOrder!, status: 'closed' };
         return response(route, { id: 'controlled-closure-10', status: 'approved', closureStatus: 'closed', replayed: false });
       }
-      if (name === 'invite_sourcing_vendors' || name === 'issue_purchase_order') {
-        if (!isProcurement || !this.task10.vendorCurrent) return failure(route, 'Legal/VMO vendor eligibility is not current', 403);
-        return response(route, { status: name === 'issue_purchase_order' ? 'issued' : 'invited' });
+      if (name === 'invite_sourcing_vendors') {
+        if (!isProcurement || !this.task10.vendorCurrent || !this.sourcing) return failure(route, 'Legal/VMO vendor eligibility is not current', 403);
+        const vendorId = String((Array.isArray(payload.vendor_ids) ? payload.vendor_ids : [])[0] ?? '');
+        if (vendorId !== 'vendor-1') return failure(route, 'Controlled vendor is required');
+        if (!this.sourcing.responses.some((item) => item.vendorId === vendorId)) this.sourcing.responses.push({ id: 'response-vendor-1', vendorId, vendorName: 'Acme Medical Supplies, Inc.', invitedAt: '2026-08-23T00:00:00.000Z' });
+        this.request.status = 'approved';
+        return response(route, { recipient_count: this.sourcing.responses.length });
+      }
+      if (name === 'issue_purchase_order') {
+        if (!isProcurement || !this.task10.vendorCurrent || payload.id !== this.purchaseOrder?.id || this.purchaseOrder.status !== 'approved') return failure(route, 'Legal/VMO vendor eligibility is not current', 403);
+        this.purchaseOrder = { ...this.purchaseOrder, status: 'issued', updated_at: '2026-08-23T00:00:00.000Z' };
+        this.lifecycle = { purchaseOrderId: this.purchaseOrder.id, revision: 4, issuedAt: '2026-08-23T00:00:00.000Z', acknowledgementStatus: 'acknowledged', deliveryNoticeStatus: 'recorded', qualityRecoveryStatus: 'resolved', closureStatus: 'ready' };
+        return response(route, { ...this.purchaseOrder });
       }
     }
 

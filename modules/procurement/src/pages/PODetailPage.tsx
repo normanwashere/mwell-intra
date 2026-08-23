@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router-dom';
 import {
   Badge,
@@ -77,6 +77,15 @@ const lineColumns: Column<PurchaseOrderLine>[] = [
   },
 ];
 
+type ClosureWorkItem = {
+  closure_request_id: string;
+  purchase_order_id: string;
+  po_number: string;
+  closure_reason: string;
+  requested_by_name?: string;
+  requested_at?: string;
+};
+
 export function PODetailPage() {
   const { id = '' } = useParams();
   const {
@@ -101,7 +110,7 @@ export function PODetailPage() {
   } = usePurchaseOrders();
   const { rows: requests } = useProcurementRequests();
   const vendors = useProcurementVendors();
-  const { profile } = useSession();
+  const { profile, mode, supabaseClient } = useSession();
   const { success, error } = useToast();
   const canApproveAward = useCan('procurement', 'approve_award');
   const canFinalApprovePo = useCan('procurement', 'final_approve_po');
@@ -112,6 +121,8 @@ export function PODetailPage() {
   const canAdmin = useCan('procurement', 'admin');
   const canVendorPortal = profile?.kind === 'vendor';
   const canReceiveInWarehouse = useCan('warehouse', 'receive_stock');
+  const [closureWorkItem, setClosureWorkItem] = useState<ClosureWorkItem | null>(null);
+  const [closureApproved, setClosureApproved] = useState(false);
   const po: PurchaseOrder | undefined = useMemo(() => rows.find((r) => r.id === id), [rows, id]);
   const vendor = useMemo(
     () => (po ? vendors.find((v) => v.id === po.vendorId) : undefined),
@@ -121,6 +132,45 @@ export function PODetailPage() {
     () => (po?.requestId ? requests.find((r) => r.id === po.requestId) : undefined),
     [po, requests],
   );
+
+  useEffect(() => {
+    if (!canFinalApprovePo || mode !== 'supabase' || !supabaseClient || !id) {
+      setClosureWorkItem(null);
+      return;
+    }
+    let active = true;
+    void supabaseClient
+      .schema('procurement')
+      .rpc('purchase_order_closure_work_items', { payload: {} })
+      .then(({ data, error: rpcError }) => {
+        if (!active) return;
+        if (rpcError) {
+          error(rpcError.message);
+          return;
+        }
+        const item = (Array.isArray(data) ? data : []).find(
+          (candidate) => (candidate as ClosureWorkItem).purchase_order_id === id,
+        );
+        setClosureWorkItem((item as ClosureWorkItem | undefined) ?? null);
+      });
+    return () => { active = false; };
+  }, [canFinalApprovePo, error, id, mode, supabaseClient]);
+
+  async function approveGovernedClosure() {
+    if (!supabaseClient || !closureWorkItem) return;
+    const { error: rpcError } = await supabaseClient
+      .schema('procurement')
+      .rpc('approve_purchase_order_closure', {
+        payload: { closure_request_id: closureWorkItem.closure_request_id },
+      });
+    if (rpcError) {
+      error(rpcError.message);
+      return;
+    }
+    setClosureApproved(true);
+    setClosureWorkItem(null);
+    success('Independent governed closure approved');
+  }
   const isSourceRequester = Boolean(
     profile &&
     sourceRequest &&
@@ -835,6 +885,10 @@ export function PODetailPage() {
             />
             {canAuthorPo && po.status === 'issued' && po.lifecycle?.closureStatus === 'ready' ? <div className="mt-3 flex flex-wrap gap-2 border-t border-line pt-3"><input className="input min-w-64 flex-1" value={closureReason} onChange={(event) => setClosureReason(event.target.value)} aria-label="Governed closure reason" /><button type="button" className="btn-outline" disabled={!closureReason.trim()} onClick={() => void requestPurchaseOrderClosure(po.id, closureReason.trim())}>Request governed closure</button></div> : null}
           </Card>
+          {canFinalApprovePo && (closureWorkItem || closureApproved) ? <Card className="mt-3 border-emerald-500/30 bg-emerald-500/5" role="region" aria-label="Independent closure approval">
+            <p className="font-semibold text-ink">Independent closure approval</p>
+            {closureApproved ? <p className="mt-1 text-sm text-emerald-700">Governed closure approved by an independent final approver.</p> : <><p className="mt-1 text-sm text-muted">{closureWorkItem?.closure_reason}</p><p className="mt-1 text-xs text-muted">Requested by {closureWorkItem?.requested_by_name ?? 'Procurement'}.</p><button type="button" className="btn-primary mt-3" onClick={() => void approveGovernedClosure()}>Approve governed closure</button></>}
+          </Card> : null}
         </div>
       )}
 
