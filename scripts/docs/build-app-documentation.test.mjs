@@ -7,6 +7,73 @@ import {
   documentationSources,
 } from "./build-app-documentation.mjs";
 
+const EXPECTED_PROCUREMENT_STAGE_LABELS = Object.freeze([
+  "Request",
+  "Route",
+  "Validate",
+  "Solicit",
+  "Quorum",
+  "Evaluate",
+  "Recommend",
+  "Variance",
+  "Approve",
+  "Commit",
+  "Monitor",
+  "Receive",
+  "Payment",
+  "Close",
+]);
+
+const PROCUREMENT_MERMAID_STAGE_LABELS = Object.freeze([
+  "Requester records need, category, goods or services, scope or specification, budget, cost center, required date, and acceptance criteria",
+  "Procurement confirms solicitation document, procurement mode, governance tier, invited-vendor target, and reasons",
+  "System validates active policy profile, effective DOA, accreditation, special-risk controls, and complete source package",
+  "Procurement issues one versioned package to accredited vendors and records acknowledgments, clarifications, deadlines, and equal notices",
+  "System evaluates response quorum and routes failed bid, extension or requote, or controlled insufficient-bids exception",
+  "Procurement records commercial tabulation; requester or technical reviewer records technical evaluation",
+  "Procurement records best-value recommendation and rationale; system selects no automatic winner",
+  "Recommendation variance follows independent justification and approval",
+  "Current Mwell DOA and separation of duty approve the award",
+  "Procurement creates PO or agreement after vendor, sourcing, approval, and protection controls pass",
+  "Vendor acknowledges commitment; outstanding delivery and acceptance enter monitored queues",
+  "Warehouse or service owner records receipt and acceptance; quality issues route to rejection, replacement, warranty, or RMA",
+  "Procurement prepares payment-readiness pack; Finance validates invoice, PO or agreement, receipt or acceptance, tax, and variance evidence",
+  "Procurement file closes after payment readiness, delivery closure, open-issue resolution, and retained evidence are complete",
+]);
+
+const EXPECTED_PROCUREMENT_OPERATING_H3 = Object.freeze([
+  "Exact 14-stage procurement-to-payment overview",
+  "Solicitation document and type classification",
+  "Bid quorum and failed-bid recovery",
+  "Exception eligibility",
+  "Best-value award and recommendation variance",
+  "Receiving, quality and RMA",
+  "Payment evidence and file closure",
+  "Operating rules",
+]);
+
+const EXPECTED_PROCUREMENT_ROLE_HEADINGS = Object.freeze([
+  "Requester",
+  "Department Head",
+  "Procurement Lead",
+  "Legal/Compliance",
+  "Technical Reviewer",
+  "Warehouse/Operations",
+  "Finance Controller",
+  "Vendor Representative",
+  "Platform Admin",
+]);
+
+const EXPECTED_PROCUREMENT_ROLE_FIELDS = Object.freeze([
+  "Start condition",
+  "Permitted action",
+  "Prohibited action",
+  "Handoff",
+  "Denial check",
+  "Recovery",
+  "Completion evidence",
+]);
+
 function repositoryFile(relativePath) {
   return readFileSync(new URL(`../../${relativePath}`, import.meta.url), "utf8");
 }
@@ -25,6 +92,96 @@ function markdownSection(markdown, level, heading) {
     }
   }
   return lines.slice(start, end).join("\n");
+}
+
+function normalizeWhitespace(value) {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+function parseProcurementOverviewStages(process) {
+  const overview = markdownSection(process, 3, "Exact 14-stage procurement-to-payment overview");
+  const nodes = [...overview.matchAll(/\bS(\d+)\[(\d+)\s+([^\]\r\n]+)\]/g)].map((match) => ({
+    nodeNumber: Number(match[1]),
+    displayedNumber: Number(match[2]),
+    mermaidLabel: normalizeWhitespace(match[3]),
+  }));
+  const sequence = Array.from({ length: EXPECTED_PROCUREMENT_STAGE_LABELS.length }, (_, index) => index + 1);
+
+  assert.deepEqual(nodes.map(({ nodeNumber }) => nodeNumber), sequence, "procurement overview stage nodes must be S1 through S14 in order");
+  assert.deepEqual(nodes.map(({ displayedNumber }) => displayedNumber), sequence, "procurement overview stage numbers must be 1 through 14 in order");
+
+  return nodes.map(({ displayedNumber, mermaidLabel }) => {
+    const sourceIndex = PROCUREMENT_MERMAID_STAGE_LABELS.indexOf(mermaidLabel);
+    assert.notEqual(sourceIndex, -1, `unrecognized procurement overview stage ${displayedNumber}: ${mermaidLabel}`);
+    assert.equal(sourceIndex, displayedNumber - 1, `procurement overview stage ${displayedNumber} has the wrong meaning`);
+    return EXPECTED_PROCUREMENT_STAGE_LABELS[sourceIndex];
+  });
+}
+
+function assertTask11Structure(process, manual) {
+  const operatingExtract = markdownSection(process, 2, "Procurement Policy Operating Extract");
+  const operatingH3 = [...operatingExtract.matchAll(/^### (.+)$/gm)].map((match) => match[1]);
+  assert.deepEqual(
+    operatingH3,
+    EXPECTED_PROCUREMENT_OPERATING_H3,
+    "procurement operating extract headings must match exactly",
+  );
+
+  const normalizedOverviewStages = parseProcurementOverviewStages(process);
+  assert.deepEqual(
+    normalizedOverviewStages,
+    EXPECTED_PROCUREMENT_STAGE_LABELS,
+    "procurement overview stage labels must match exactly",
+  );
+
+  const metadata = manual.match(/%% handbook-flow: workflow=procurement-to-payment; view=overview; stages=([^\n]+)/);
+  assert.ok(metadata, "missing procurement overview metadata");
+  assert.deepEqual(
+    metadata[1].split("|"),
+    EXPECTED_PROCUREMENT_STAGE_LABELS,
+    "procurement flow metadata must share the exact overview stage labels",
+  );
+
+  const roleSection = markdownSection(manual, 2, "Procurement Role Procedures");
+  const roleHeadings = [...roleSection.matchAll(/^### (.+)$/gm)].map((match) => match[1]);
+  assert.deepEqual(roleHeadings, EXPECTED_PROCUREMENT_ROLE_HEADINGS, "procurement role headings must match exactly");
+
+  for (const role of EXPECTED_PROCUREMENT_ROLE_HEADINGS) {
+    const procedure = markdownSection(roleSection, 3, role);
+    for (const field of EXPECTED_PROCUREMENT_ROLE_FIELDS) {
+      const escapedField = field.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const count = (procedure.match(new RegExp(`^- \\*\\*${escapedField}:\\*\\*`, "gm")) ?? []).length;
+      assert.equal(count, 1, `${role} ${field} must appear exactly once`);
+    }
+  }
+
+  return { operatingExtract, roleSection };
+}
+
+const AFFIRMATIVE_RELEASE_PATTERNS = Object.freeze([
+  /\b(?:live|uat)(?:\s*\/\s*(?:live|uat))?(?:\s+(?:approval|pass|certification|completion|deployment|activation))?\s+(?:(?:is|was|has been)\s+)?(?:approved|passed|certified|complete|completed|deployed|activated|successful|done)\b/i,
+  /\b(?:deployment|activation)\s+(?:to|in|on)\s+(?:live|uat)\s+(?:(?:is|was|has been)\s+)?(?:approved|passed|certified|complete|completed|successful|done)\b/i,
+  /\b(?:deployment|activation)\s+(?:(?:is|was|has been)\s+)?(?:approved|passed|certified|complete|completed|successful|done)\s+(?:in|to|on)\s+(?:live|uat)\b/i,
+  /\bmigration(?:\s+(?:is|was|has been))?[\s-]+applied(?:\s+(?:in|to|on)\s+(?:live|uat))?\b/i,
+  /\b(?:live|uat)\s+migration(?:\s+(?:is|was|has been))?[\s-]+applied\b/i,
+]);
+
+function assertNoAffirmativeReleaseClaims(markdown) {
+  const sentences = markdown
+    .replace(/\r/g, "")
+    .split(/(?<=[.!?])(?:\s+|$)|\n+/)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean);
+
+  for (const sentence of sentences) {
+    for (const pattern of AFFIRMATIVE_RELEASE_PATTERNS) {
+      const match = pattern.exec(sentence);
+      if (!match) continue;
+      const prefix = sentence.slice(Math.max(0, match.index - 24), match.index);
+      if (/\b(?:no|not|never|without)\s+[^.;:]{0,20}$/i.test(prefix)) continue;
+      assert.fail(`prohibited affirmative release claim: ${sentence}`);
+    }
+  }
 }
 
 function runtimeFunction(name, nextFunction, bindings = {}) {
@@ -99,27 +256,9 @@ test("keeps one canonical MPIC article with separated sections in required order
 test("locks the exact procurement stage order and six decision-tree semantics", () => {
   const manual = repositoryFile("docs/manual/MWELL_INTRA_USER_MANUAL.md");
   const process = repositoryFile("docs/PROCESS_REFERENCE_LIBRARY.md");
-  const expectedStages = "Request|Route|Validate|Solicit|Quorum|Evaluate|Recommend|Variance|Approve|Commit|Monitor|Receive|Payment|Close";
-  const overview = manual.match(/%% handbook-flow: workflow=procurement-to-payment; view=overview; stages=([^\n]+)/);
+  assertTask11Structure(process, manual);
 
-  assert.ok(overview, "missing procurement overview metadata");
-  assert.equal(overview[1], expectedStages);
-  const overviewDiagram = markdownSection(process, 3, "Exact 14-stage procurement-to-payment overview");
-  let prior = -1;
-  for (let stage = 1; stage <= 14; stage += 1) {
-    const position = overviewDiagram.indexOf(`${stage} `);
-    assert.ok(position > prior, `stage ${stage} is missing or out of order`);
-    prior = position;
-  }
-
-  const treeHeadings = [
-    "Solicitation document and type classification",
-    "Bid quorum and failed-bid recovery",
-    "Exception eligibility",
-    "Best-value award and recommendation variance",
-    "Receiving, quality and RMA",
-    "Payment evidence and file closure",
-  ];
+  const treeHeadings = EXPECTED_PROCUREMENT_OPERATING_H3.slice(1, -1);
   for (const heading of treeHeadings) {
     const tree = markdownSection(process, 3, heading);
     assert.match(tree, /```mermaid/);
@@ -138,31 +277,8 @@ test("locks the exact procurement stage order and six decision-tree semantics", 
 
 test("keeps all nine procurement role procedures complete", () => {
   const manual = repositoryFile("docs/manual/MWELL_INTRA_USER_MANUAL.md");
-  const roles = [
-    "Requester",
-    "Department Head",
-    "Procurement Lead",
-    "Legal/Compliance",
-    "Technical Reviewer",
-    "Warehouse/Operations",
-    "Finance Controller",
-    "Vendor Representative",
-    "Platform Admin",
-  ];
-  const fields = [
-    "Start condition",
-    "Permitted action",
-    "Prohibited action",
-    "Handoff",
-    "Denial check",
-    "Recovery",
-    "Completion evidence",
-  ];
-
-  for (const role of roles) {
-    const procedure = markdownSection(manual, 3, role);
-    for (const field of fields) assert.match(procedure, new RegExp(`\\*\\*${field}:\\*\\*`), `${role} missing ${field}`);
-  }
+  const process = repositoryFile("docs/PROCESS_REFERENCE_LIBRARY.md");
+  assertTask11Structure(process, manual);
 });
 
 test("blocks obsolete routing, certification, named variance authority, and extension inheritance claims", () => {
@@ -193,7 +309,7 @@ test("blocks obsolete routing, certification, named variance authority, and exte
     /1,000,000[^\n]{0,120}(?:switches|converts|uses)[^\n]{0,60}RFP/i,
   ]) assert.doesNotMatch(all, obsolete);
 
-  assert.doesNotMatch(all, /(?:status|evidence status|result)\s*:\s*(?:live|UAT)[ -](?:approved|certified|passed|complete)/i);
+  assertNoAffirmativeReleaseClaims(all);
   assert.doesNotMatch(operating, /(?:recommendation variance|recommendation differs|differing recommendation)[\s\S]{0,260}(?:Department Head|Group Controller|Finance Controller|independent Controller)/i);
   assert.match(operating, /first independent variance decision/i);
   assert.match(operating, /second independent variance decision/i);
@@ -207,6 +323,53 @@ test("blocks obsolete routing, certification, named variance authority, and exte
   assert.doesNotMatch(markdownSection(extract, 2, "Active profile"), /inherits[^\n]*all[^\n]*MPIC controls/i);
   assert.match(traceability, /`dept_head`[\s\S]*`finance`[\s\S]*unresolved/i);
   assert.match(traceability, /seven calendar days[\s\S]*working-day[\s\S]*activation blocked/i);
+});
+
+test("rejects representative Task 11 structural and certification mutations", () => {
+  const process = repositoryFile("docs/PROCESS_REFERENCE_LIBRARY.md");
+  const manual = repositoryFile("docs/manual/MWELL_INTRA_USER_MANUAL.md");
+
+  const alteredStage = process.replace(
+    "8 Recommendation variance follows independent justification and approval",
+    "8 Unrelated placeholder stage",
+  );
+  assert.throws(() => assertTask11Structure(alteredStage, manual), /overview stage/i);
+
+  const duplicateTree = process.replace(
+    "### Operating rules",
+    "### Bid quorum and failed-bid recovery\n\nDuplicate tree.\n\n### Operating rules",
+  );
+  assert.throws(() => assertTask11Structure(duplicateTree, manual), /operating extract headings/i);
+
+  const duplicateRole = manual.replace(
+    "### Department Head",
+    "### Requester\n\nDuplicate role.\n\n### Department Head",
+  );
+  assert.throws(() => assertTask11Structure(process, duplicateRole), /role headings/i);
+
+  const duplicateField = manual.replace(
+    /(- \*\*Start condition:\*\*[^\n]+)/,
+    "$1\n$1",
+  );
+  assert.throws(() => assertTask11Structure(process, duplicateField), /Requester Start condition/i);
+
+  for (const affirmativeClaim of [
+    "UAT passed.",
+    "UAT is complete.",
+    "The migration is applied in UAT.",
+    "Live deployment is complete.",
+    "Deployment completed in UAT.",
+  ]) {
+    assert.throws(() => assertNoAffirmativeReleaseClaims(`${process}\n${affirmativeClaim}`), /affirmative release claim/i);
+  }
+
+  assert.doesNotThrow(() => assertNoAffirmativeReleaseClaims([
+    "No live/UAT certification is claimed.",
+    "UAT has not passed and remains pending.",
+    "Live deployment is blocked.",
+    "The migration remains unapplied.",
+    "Local tests do not prove activation.",
+  ].join(" ")));
 });
 
 test("embeds local manual screenshots as data URLs", () => {
