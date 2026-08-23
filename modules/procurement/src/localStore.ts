@@ -1191,6 +1191,7 @@ export interface PurchaseOrdersAPI {
   acknowledgePurchaseOrder: (id: string, reference: string) => MaybePromise<PurchaseOrder | null>;
   recordVendorDeliveryNotice: (id: string, reference: string) => MaybePromise<PurchaseOrder | null>;
   requestPurchaseOrderClosure: (id: string, reason: string) => MaybePromise<PurchaseOrder | null>;
+  approvePurchaseOrderClosure: (closureRequestId: string) => Promise<void>;
   getById: (id: string) => PurchaseOrder | undefined;
 }
 
@@ -1268,7 +1269,7 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
   }, [refreshCommitmentReadiness]);
   const refreshLifecycle = useCallback(async () => {
     if (!live) { setLiveLifecycle([]); return; }
-    const lifecycle = await Promise.all(liveBaseRows.filter((row) => row.status === 'issued').map(async (row) => mapLifecycle({ ...(await liveRpc<LiveRow>(live, 'procurement', 'purchase_order_lifecycle', { purchase_order_id: row.id })), purchase_order_id: row.id })));
+    const lifecycle = await Promise.all(liveBaseRows.filter((row) => row.status === 'issued' || row.status === 'closed').map(async (row) => mapLifecycle({ ...(await liveRpc<LiveRow>(live, 'procurement', 'purchase_order_lifecycle', { purchase_order_id: row.id })), purchase_order_id: row.id })));
     setLiveLifecycle(lifecycle);
   }, [live, liveBaseRows]);
   const refreshMonitoring = useCallback(async () => {
@@ -1878,6 +1879,16 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
     return patch(id, { lifecycle: { ...current.lifecycle, revision: expectedRevision + 1, closureStatus: 'open' } });
   }, [live, patch, refreshLive, rows]);
 
+  const approvePurchaseOrderClosure = useCallback(async (closureRequestId: string) => {
+    if (!isLive(live)) {
+      throw new Error('Governed closure approval requires the live Procurement authority service.');
+    }
+    await liveRpc(live, 'procurement', 'approve_purchase_order_closure', {
+      closure_request_id: closureRequestId,
+    });
+    await refreshLive();
+  }, [live, refreshLive]);
+
   const getById = useCallback((id: string) => rows.find((r) => r.id === id), [rows]);
 
   return {
@@ -1900,6 +1911,7 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
     acknowledgePurchaseOrder,
     recordVendorDeliveryNotice,
     requestPurchaseOrderClosure,
+    approvePurchaseOrderClosure,
     getById,
   };
 }

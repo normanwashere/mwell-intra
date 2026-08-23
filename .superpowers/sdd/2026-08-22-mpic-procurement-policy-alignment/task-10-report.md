@@ -77,3 +77,19 @@ The shared-target migration-status ruling remains the Task 12 stop gate. This wo
 ### Task 12 Status
 
 The linked-target migration-status ruling remains unchanged: `20260822110000_mpic_procurement_policy_alignment.sql` is unapplied in this workspace and no remote/shared target was queried. Task 12/UAT requires a read-only linked-target status artifact proving that it remains pending and that the remote chain has not drifted; stop UAT if it is already applied or drift is found.
+
+## Fix Round 4
+
+- Independent closure approval now goes through `usePurchaseOrders.approvePurchaseOrderClosure`. After the governed public RPC succeeds, it refreshes the PO row, receipt/acceptance/payment projections, lifecycle, commitment projection, staleness history, and scoped monitoring before the success state is rendered.
+- Closed POs remain in the lifecycle refresh set, so the terminal `closureStatus: closed` is visible instead of disappearing after the PO status changes. The controlled fixture preserves receipt continuity and returns the authoritative closed lifecycle.
+- The signed-in browser regression now requires a visible `Closed` PO status, visible `Closure closed`, and removal of the pending approval button before capturing the closure screenshot. This preserves the existing actor-specific, zero-console/page/RPC-error assertions.
+
+### Fix Round 4 Verification
+
+- Pinned Node `v22.17.0` with Corepack `dist\\pnpm.js` and Node 22 prepended to child `PATH`.
+- `pnpm --filter @intra/procurement test -- PODetailPage.test.ts`: passed, 27 files / 187 tests.
+- Shell TypeScript: passed.
+- Disposable public Task 10 PGlite role matrix: passed, 1/1.
+- MPIC migration contract verifier: passed.
+- Controlled authenticated Playwright journey: passed 2/2 at `desktop-1440` and `mobile-390` (1.7m). Replacement closure evidence visibly shows `Status Closed`, `Closure closed`, and independent governed closure approval at both viewports; Legal recovery screenshots and decider/closure traces remain retained.
+- Migration remains unapplied. The Task 12 linked-target status ruling above remains unchanged.

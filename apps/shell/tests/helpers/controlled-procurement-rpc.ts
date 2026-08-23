@@ -766,7 +766,7 @@ export class ControlledProcurementRpcFixture {
           }],
         }]);
       }
-      if (name === 'purchase_order_receipt_status') return response(route, this.purchaseOrder?.status === 'issued' ? [{ purchase_order_id: this.purchaseOrder.id, ordered_quantity: 1, accepted_quantity: 1, rejected_or_quarantined_quantity: 0, outstanding_quantity: 0, latest_qc_status: 'accepted', latest_receipt_reference: 'WRH-CONTROLLED-010', accepted_lines: [{ po_line_id: 'line-1', accepted_quantity: 1 }] }] : []);
+      if (name === 'purchase_order_receipt_status') return response(route, this.purchaseOrder && ['issued', 'closed'].includes(String(this.purchaseOrder.status)) ? [{ purchase_order_id: this.purchaseOrder.id, ordered_quantity: 1, accepted_quantity: 1, rejected_or_quarantined_quantity: 0, outstanding_quantity: 0, latest_qc_status: 'accepted', latest_receipt_reference: 'WRH-CONTROLLED-010', accepted_lines: [{ po_line_id: 'line-1', accepted_quantity: 1 }] }] : []);
       if (name === 'commitment_readiness') return response(route, {
         ready: true,
         phase: 'issue',
@@ -803,6 +803,8 @@ export class ControlledProcurementRpcFixture {
         if (actor.id !== ACTORS.deptHead.id || !this.task10.closureRequested) return failure(route, 'Independent closure approver authority is required', 403);
         this.task10.closed = true;
         this.purchaseOrder = { ...this.purchaseOrder!, status: 'closed' };
+        this.lifecycle = { ...this.lifecycle!, closureStatus: 'closed' };
+        this.monitoring = [];
         return response(route, { id: 'controlled-closure-10', status: 'approved', closureStatus: 'closed', replayed: false });
       }
       if (name === 'invite_sourcing_vendors') {

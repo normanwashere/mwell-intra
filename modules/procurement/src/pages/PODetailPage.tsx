@@ -106,6 +106,7 @@ export function PODetailPage() {
     acknowledgePurchaseOrder,
     recordVendorDeliveryNotice,
     requestPurchaseOrderClosure,
+    approvePurchaseOrderClosure,
     loading,
   } = usePurchaseOrders();
   const { rows: requests } = useProcurementRequests();
@@ -157,14 +158,11 @@ export function PODetailPage() {
   }, [canFinalApprovePo, error, id, mode, supabaseClient]);
 
   async function approveGovernedClosure() {
-    if (!supabaseClient || !closureWorkItem) return;
-    const { error: rpcError } = await supabaseClient
-      .schema('procurement')
-      .rpc('approve_purchase_order_closure', {
-        payload: { closure_request_id: closureWorkItem.closure_request_id },
-      });
-    if (rpcError) {
-      error(rpcError.message);
+    if (!closureWorkItem) return;
+    try {
+      await approvePurchaseOrderClosure(closureWorkItem.closure_request_id);
+    } catch (cause) {
+      error(cause instanceof Error ? cause.message : 'Governed closure approval was rejected.');
       return;
     }
     setClosureApproved(true);

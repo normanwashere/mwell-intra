@@ -208,6 +208,9 @@ test('Task 10 controlled signed-in authority journey proves Legal recovery throu
   await approver.page.getByRole('button', { name: 'Approve governed closure' }).click();
   await expect(approver.page.getByText('Independent governed closure approved')).toBeVisible();
   await expect(approver.page.getByRole('region', { name: 'Independent closure approval' })).toContainText('Governed closure approved by an independent final approver.');
+  await expect(approver.page.getByText('Closed', { exact: true })).toBeVisible();
+  await expect(approver.page.getByText('Closure', { exact: true }).locator('..')).toContainText('closed');
+  await expect(approver.page.getByRole('button', { name: 'Approve governed closure' })).toHaveCount(0);
   await approver.page.screenshot({ path: resolve(evidenceDirectory, `task-10-governed-closure-${testInfo.project.name}.png`), fullPage: true });
   await approver.close();
   mark('independent approver completed closure');
