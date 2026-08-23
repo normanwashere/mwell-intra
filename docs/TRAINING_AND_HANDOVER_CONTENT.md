@@ -35,11 +35,11 @@ Use `MPIC Procurement Policy February2025.docx` as the authoritative supplied pa
 2. As Procurement Lead, show **Solicitation document: RFQ**, **Procurement mode: Competitive bidding**, and **Governance tier: Standard** as separate decisions.
 3. Change the material amount above PHP 1,000,000 and show that it remains RFQ while local formal-bid governance and the effective DOA change.
 4. Create a low-value service request and show that it uses RFP; add risk/data-sensitivity facts and explain that they change control depth, not the service solicitation type.
-5. Validate the active profile/DOA projection without claiming that an MPIC named approver has Mwell authority.
-6. Issue one versioned package to three to four accredited vendors; demonstrate attributable acknowledgment, common clarification, equal deadline notice, and superseded-package denial.
-7. Close with fewer than three usable responses and show the blocked failed-bid state. Recover once through equal-notice extension/requote and once through the independently approved insufficient-bids path.
+5. Inspect the code profile/DOA projection without calling it activated. Explain that the unresolved variance-stage authorization and extension-unit mismatch block policy-profile/migration activation.
+6. Issue one versioned package to three to four accredited vendors; demonstrate attributable acknowledgment, common clarification, equal deadline notice, and superseded-package denial. Also demonstrate fewer invitees: a current independently approved pre-issue invitation-target exception reaches the controlled package path, while denial remains blocked and returns to sourcing or closure.
+7. Close with fewer than three usable responses and show the blocked failed-bid state. Recover once through equal-notice extension/requote only after an authorized extension unit exists, and once through the independently approved insufficient-bids path. State that MPIC allows at most seven calendar days while current code's seven-working-day unit is unapproved.
 8. Record commercial tabulation and an assigned technical evaluation. Show that lowest price does not create an automatic winner.
-9. Record a best-value recommendation, then demonstrate a differing recommendation that remains blocked until written justification, Department Head approval, and independent Controller decision are complete.
+9. Record a best-value recommendation, then demonstrate a differing recommendation that remains blocked until written justification, a first independent variance decision, and a second independent variance decision are complete. Do not assign either neutral stage from an MPIC title or current code label; Mwell policy/DOA owners must authorize the stages first.
 10. Demonstrate valid and invalid sole-source, repeat-order, emergency, and petty-cash modes. For petty cash, show Finance eligibility and rejected split/recurring use.
 11. Approve the award through the current effective Mwell DOA and separation-of-duty checks, then create and issue the PO/agreement only after all commitment evidence passes.
 12. As vendor representative, acknowledge the exact PO version. As Warehouse/Operations or service owner, record receipt/QC/acceptance and demonstrate quarantine, rejection, replacement/warranty, RMA, and re-inspection recovery.
@@ -55,6 +55,8 @@ For Requester, Department Head, Procurement Lead, Legal/Compliance, technical re
 - Amount incorrectly used to convert a material RFQ into RFP or a service RFP into RFQ.
 - Requester attempt to confirm route, approve an exception, or self-approve.
 - Missing active profile/DOA, MPIC named-role substitution, or overlapping authority.
+- Attempt to activate the current seven-working-day extension control before the source-versus-local unit conflict is resolved.
+- Attempt to treat current `dept_head`/`finance` code stages as authorized variance approvers without Mwell policy/DOA approval.
 - Fewer than three usable sealed-bid responses without failed-bid recovery approval.
 - Unequal clarification/deadline notice, stale package acknowledgment, late response, or unaccredited vendor.
 - Automatic lowest-price selection, incomplete technical evaluation, or unsupported recommendation variance.

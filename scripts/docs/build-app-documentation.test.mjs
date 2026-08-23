@@ -7,6 +7,26 @@ import {
   documentationSources,
 } from "./build-app-documentation.mjs";
 
+function repositoryFile(relativePath) {
+  return readFileSync(new URL(`../../${relativePath}`, import.meta.url), "utf8");
+}
+
+function markdownSection(markdown, level, heading) {
+  const lines = markdown.split(/\r?\n/);
+  const marker = `${"#".repeat(level)} ${heading}`;
+  const start = lines.findIndex((line) => line === marker);
+  assert.notEqual(start, -1, `missing ${marker}`);
+  let end = lines.length;
+  for (let index = start + 1; index < lines.length; index += 1) {
+    const match = lines[index].match(/^(#+)\s/);
+    if (match && match[1].length <= level) {
+      end = index;
+      break;
+    }
+  }
+  return lines.slice(start, end).join("\n");
+}
+
 function runtimeFunction(name, nextFunction, bindings = {}) {
   const runtime = readFileSync(new URL("./handbook-runtime.js", import.meta.url), "utf8");
   const match = runtime.match(new RegExp(`function ${name}\\([\\s\\S]*?\\n    }\\n\\n    function ${nextFunction}`));
@@ -53,6 +73,140 @@ test("includes the exact MPIC source and separates the three route axes", () => 
   assert.match(html, /Governance tier/);
   assert.match(html, /three to four accredited vendors/i);
   assert.match(html, /at least three usable responses/i);
+});
+
+test("keeps one canonical MPIC article with separated sections in required order", () => {
+  const html = buildDocumentationHtml();
+  const source = repositoryFile("docs/policy/MPIC_PROCUREMENT_POLICY_FEBRUARY_2025.md");
+  const headings = [...source.matchAll(/^## (.+)$/gm)].map((match) => match[1]);
+
+  assert.equal((html.match(/<article id="doc-policy-mpic-procurement-policy-february-2025-md"/g) ?? []).length, 1);
+  assert.equal(documentationSources().filter((file) => file === "docs/policy/MPIC_PROCUREMENT_POLICY_FEBRUARY_2025.md").length, 1);
+  assert.deepEqual(headings, [
+    "Source identity",
+    "Scope",
+    "Direct requirements",
+    "Mwell mapping",
+    "Active profile",
+    "Conflicts",
+    "Ownership",
+    "Revision procedure",
+  ]);
+  assert.match(markdownSection(source, 2, "Direct requirements"), /Department Head[\s\S]*Group Controller/);
+  assert.match(markdownSection(source, 2, "Mwell mapping"), /Solicitation document[\s\S]*Procurement mode[\s\S]*Governance tier/);
+});
+
+test("locks the exact procurement stage order and six decision-tree semantics", () => {
+  const manual = repositoryFile("docs/manual/MWELL_INTRA_USER_MANUAL.md");
+  const process = repositoryFile("docs/PROCESS_REFERENCE_LIBRARY.md");
+  const expectedStages = "Request|Route|Validate|Solicit|Quorum|Evaluate|Recommend|Variance|Approve|Commit|Monitor|Receive|Payment|Close";
+  const overview = manual.match(/%% handbook-flow: workflow=procurement-to-payment; view=overview; stages=([^\n]+)/);
+
+  assert.ok(overview, "missing procurement overview metadata");
+  assert.equal(overview[1], expectedStages);
+  const overviewDiagram = markdownSection(process, 3, "Exact 14-stage procurement-to-payment overview");
+  let prior = -1;
+  for (let stage = 1; stage <= 14; stage += 1) {
+    const position = overviewDiagram.indexOf(`${stage} `);
+    assert.ok(position > prior, `stage ${stage} is missing or out of order`);
+    prior = position;
+  }
+
+  const treeHeadings = [
+    "Solicitation document and type classification",
+    "Bid quorum and failed-bid recovery",
+    "Exception eligibility",
+    "Best-value award and recommendation variance",
+    "Receiving, quality and RMA",
+    "Payment evidence and file closure",
+  ];
+  for (const heading of treeHeadings) {
+    const tree = markdownSection(process, 3, heading);
+    assert.match(tree, /```mermaid/);
+    assert.match(tree, /\|Yes\|/);
+    assert.match(tree, /\|No\|/);
+    assert.match(tree, /Blocked/i);
+    assert.match(tree, /Recovery/i);
+    assert.match(tree, /evidence/i);
+  }
+
+  const quorum = markdownSection(process, 3, "Bid quorum and failed-bid recovery");
+  assert.match(quorum, /current, independently approved pre-issue invitation-target exception/i);
+  assert.match(quorum, /\|Yes\|[^\n]*Controlled package path[^\n]*exception evidence/i);
+  assert.match(quorum, /\|No\|[^\n]*Blocked terminal/i);
+});
+
+test("keeps all nine procurement role procedures complete", () => {
+  const manual = repositoryFile("docs/manual/MWELL_INTRA_USER_MANUAL.md");
+  const roles = [
+    "Requester",
+    "Department Head",
+    "Procurement Lead",
+    "Legal/Compliance",
+    "Technical Reviewer",
+    "Warehouse/Operations",
+    "Finance Controller",
+    "Vendor Representative",
+    "Platform Admin",
+  ];
+  const fields = [
+    "Start condition",
+    "Permitted action",
+    "Prohibited action",
+    "Handoff",
+    "Denial check",
+    "Recovery",
+    "Completion evidence",
+  ];
+
+  for (const role of roles) {
+    const procedure = markdownSection(manual, 3, role);
+    for (const field of fields) assert.match(procedure, new RegExp(`\\*\\*${field}:\\*\\*`), `${role} missing ${field}`);
+  }
+});
+
+test("blocks obsolete routing, certification, named variance authority, and extension inheritance claims", () => {
+  const files = [
+    "docs/policy/MPIC_PROCUREMENT_POLICY_FEBRUARY_2025.md",
+    "docs/policy/VENDOR_TO_PAY_CONTROL_MATRIX.md",
+    "docs/PROCESS_REFERENCE_LIBRARY.md",
+    "docs/TECHNICAL_AND_FUNCTIONAL_SPECIFICATION.md",
+    "docs/TRAINING_AND_HANDOVER_CONTENT.md",
+    "docs/manual/MWELL_INTRA_USER_MANUAL.md",
+    "docs/REQUIREMENTS_TRACEABILITY_MATRIX.md",
+  ];
+  const byFile = Object.fromEntries(files.map((file) => [file, repositoryFile(file)]));
+  const all = Object.values(byFile).join("\n");
+  const operating = [
+    byFile["docs/policy/VENDOR_TO_PAY_CONTROL_MATRIX.md"],
+    byFile["docs/PROCESS_REFERENCE_LIBRARY.md"],
+    byFile["docs/TECHNICAL_AND_FUNCTIONAL_SPECIFICATION.md"],
+    byFile["docs/TRAINING_AND_HANDOVER_CONTENT.md"],
+    byFile["docs/manual/MWELL_INTRA_USER_MANUAL.md"],
+  ].join("\n");
+  const extract = byFile["docs/policy/MPIC_PROCUREMENT_POLICY_FEBRUARY_2025.md"];
+  const traceability = byFile["docs/REQUIREMENTS_TRACEABILITY_MATRIX.md"];
+
+  for (const obsolete of [
+    /RFQ[^\n]{0,100}(?:below|under)[^\n]{0,40}(?:PHP )?1,000,000/i,
+    /RFP[^\n]{0,100}(?:above|over|at or above)[^\n]{0,40}(?:PHP )?1,000,000/i,
+    /1,000,000[^\n]{0,120}(?:switches|converts|uses)[^\n]{0,60}RFP/i,
+  ]) assert.doesNotMatch(all, obsolete);
+
+  assert.doesNotMatch(all, /(?:status|evidence status|result)\s*:\s*(?:live|UAT)[ -](?:approved|certified|passed|complete)/i);
+  assert.doesNotMatch(operating, /(?:recommendation variance|recommendation differs|differing recommendation)[\s\S]{0,260}(?:Department Head|Group Controller|Finance Controller|independent Controller)/i);
+  assert.match(operating, /first independent variance decision/i);
+  assert.match(operating, /second independent variance decision/i);
+
+  const conflicts = markdownSection(extract, 2, "Conflicts");
+  assert.match(conflicts, /current Mwell code[\s\S]*`dept_head`[\s\S]*`finance`[\s\S]*unresolved/i);
+  assert.match(conflicts, /`maxExtensionWorkingDays`/i);
+  assert.match(conflicts, /seven working days/i);
+  assert.match(conflicts, /seven calendar days/i);
+  assert.match(conflicts, /block activation/i);
+  assert.doesNotMatch(markdownSection(extract, 2, "Active profile"), /inherits[^\n]*all[^\n]*MPIC controls/i);
+  assert.match(traceability, /`dept_head`[\s\S]*`finance`[\s\S]*unresolved/i);
+  assert.match(traceability, /seven calendar days[\s\S]*working-day[\s\S]*activation blocked/i);
 });
 
 test("embeds local manual screenshots as data URLs", () => {

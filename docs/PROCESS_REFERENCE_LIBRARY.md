@@ -55,6 +55,8 @@ Read the [maintained MPIC February 2025 extract](policy/MPIC_PROCUREMENT_POLICY_
 
 The local PHP 1,000,000 value affects formal-bid governance. It does not convert a material RFQ into a service RFP. The MPIC source itself does not state that boundary. Mwell approval authority always comes from the current effective department DOA, never from an MPIC title, person, annex, or amount.
 
+**Activation blocker:** the MPIC source sets the initial bid window at least seven working days and caps an extension at seven calendar days. Current Mwell code uses seven working days for the extension. That unit change is unapproved, is not an inherited MPIC control, and blocks policy-profile/migration activation until the Procurement policy owner approves an explicit local unit or the code is corrected to the source rule.
+
 ### Exact 14-stage procurement-to-payment overview
 
 ```mermaid
@@ -110,15 +112,24 @@ flowchart TD
 ```mermaid
 flowchart TD
   A[Procurement: versioned package, accredited-vendor list and common deadline] --> B{Procurement: three to four accredited vendors invited?}
-  B -->|No| BX([Blocked: sourcing issue incomplete])
-  BX --> BR[Recovery: source eligible vendors or record approved invitation-target exception]
+  B -->|Yes| PS[Controlled package path: standard invitation evidence]
+  B -->|No| BX([Blocked: invitation target not met; package cannot issue])
+  BX --> X{Policy owner: current, independently approved pre-issue invitation-target exception with evidence?}
+  X -->|Yes| PE[Controlled package path: exception evidence, approving owner, scope, expiry and timestamp]
+  X -->|No| BT([Blocked terminal: package cannot issue without target or current exception])
+  BT --> BR[Recovery: source eligible vendors or close the request with reason]
   BR --> B
-  B -->|Yes| C[Vendor representatives: attributable responses, acknowledgments and clarification evidence]
+  PS --> C[Vendor representatives: attributable responses, acknowledgments and clarification evidence]
+  PE --> C
   C --> D{System at deadline: at least three usable responses?}
   D -->|Yes| E[Procurement: controlled bid opening and response register]
   D -->|No| F[System: failed-bid state with reason and preserved submissions]
   F --> G{Procurement: extension, additional sourcing or equal requote available?}
-  G -->|Yes| H[Recovery: notify every invitee, version the package and set revised deadline]
+  G -->|Yes| U{Policy owner: extension unit conflict resolved in an authorized profile?}
+  U -->|No| UX([Blocked activation: current seven-working-day extension is unapproved])
+  UX --> UR[Recovery: approve a local unit or correct code to the seven-calendar-day source cap]
+  UR --> U
+  U -->|Yes| H[Recovery: notify every invitee, version the package and set the revised deadline within the authorized unit]
   H --> D
   G -->|No| I{Policy owner and effective DOA: evaluation with fewer than three justified and approved?}
   I -->|No| IX([Blocked terminal: bids remain unopened and no award may proceed])
@@ -179,13 +190,13 @@ flowchart TD
   E -->|No| EX([Blocked: unexplained variance])
   EX --> ER[Recovery: accept evaluated recommendation or write complete justification]
   ER --> D
-  E -->|Yes| F{Department Head under effective DOA approves the variance?}
+  E -->|Yes| F{First independent variance decision authorized and approved?}
   F -->|No| FX([Denied: variance rejected])
   FX --> FR[Recovery: revise recommendation or sourcing evidence]
   FR --> C
-  F -->|Yes| G{Independent Controller authority resolved and decision recorded?}
+  F -->|Yes| G{Second independent variance decision authorized and approved?}
   G -->|No| GX([Blocked: independent variance decision missing])
-  GX --> GR[Recovery: route to the current effective Mwell authority; do not substitute an MPIC title]
+  GX --> GR[Recovery: resolve the authorized local decision stage and effective DOA assignment; do not substitute an MPIC title]
   GR --> G
   G -->|Yes| H
   H -->|No| HX([Blocked or denied: no award commitment])
@@ -262,6 +273,8 @@ flowchart TD
 - Procurement confirms all three route axes and retains the applicable active-profile snapshot. Direct Award is a legacy label only where mapped to an approved exception mode; a checkbox is never approval.
 - Invitations target three to four accredited vendors. Sealed-bid opening requires at least three usable responses or an approved failed-bid recovery/insufficient-bids decision.
 - Every invitee receives the same versioned package, clarification and deadline notice. Technical and commercial evidence remains attributable.
+- A differing best-value recommendation requires written justification plus a first independent variance decision and a second independent variance decision. These neutral stages are usable only after Mwell policy/DOA owners authorize the stages and the effective DOA assigns the actors; current code names are not authority.
+- Do not activate the current seven-working-day extension control. The source cap is seven calendar days, and the unit conflict remains blocked pending owner resolution.
 - The system resolves named approvers from the active department DOA by scope, amount, category, effective date and delegation. Self-approval is prohibited.
 - A PO, contract or written agreement is issued only after request, route, vendor eligibility, sourcing, commercial, protection and approval evidence is complete. Material change returns to Procurement and DOA review.
 - Warehouse records physical quantity, identity, condition, evidence, QC disposition and custody. The service owner records milestone acceptance. Procurement cannot manufacture either record.

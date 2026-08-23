@@ -25,7 +25,9 @@ Mwell Intra is the shared operating platform for cross-department workflows. War
 - The MPIC source profile is a draft parent-source profile and has no Mwell-specific formal-bid amount.
 - The local Mwell operating profile attributes PHP 1,000,000 to the Mwell source as a formal-bid governance value. It does not treat amount as a solicitation-document switch.
 - The current effective department DOA is the sole source of named Mwell approval authority. MPIC titles, named people, cost-center annexes, and source approval tables are never projected into Mwell authority without an activated profile/DOA decision.
-- The additive procurement migration is intentionally unapplied at this baseline. Profile declarations, tests, or handbook output do not prove live database activation, deployment, or UAT certification.
+- The direct MPIC variance approvers, the current Mwell code stage labels, and authorized local decision stages are separate facts. Operating controls use neutral first and second independent variance decisions until Mwell policy/DOA owners authorize the local stages.
+- MPIC caps a bid extension at seven calendar days. Current Mwell code uses seven working days. This is an unapproved local mismatch, not an inherited MPIC control, and blocks policy-profile/migration activation pending owner resolution.
+- The additive procurement migration is intentionally unapplied at this baseline. The two unresolved conflicts above block activation. Profile declarations, tests, or handbook output do not prove live database activation, deployment, or UAT certification.
 
 ### Three-axis route model
 
@@ -41,9 +43,9 @@ A high-value material request remains RFQ under formal-bid controls. A low-value
 
 - A versioned solicitation package is delivered equally to three to four accredited vendors, with recipient, package hash/version, deadline, acknowledgment, clarification, extension, and notification evidence.
 - Sealed-bid opening requires at least three usable responses. Failure creates an explicit failed-bid state; recovery is equal-notice extension/requote or an independently approved, evidence-backed insufficient-bids decision.
-- Source SLAs are represented through the active profile: at least seven working days for the standard bid window, no more than seven days of extension, 24-hour vendor RFQ acknowledgment, 48-hour clarification period, 48-hour tabulation, five-working-day technical evaluation, and 48-hour PO acknowledgment.
+- Direct source SLAs are at least seven working days for the standard bid window, no more than seven calendar days for an extension, 24-hour vendor RFQ acknowledgment, 48-hour clarification, 48-hour tabulation, five-working-day technical evaluation, and 48-hour PO acknowledgment. The current working-day extension implementation must not be activated until resolved.
 - Commercial tabulation and technical evaluation are separately attributable. The system selects no automatic winner; Procurement records a best-value recommendation across the source criteria.
-- A recommendation variance requires written requester justification, Department Head approval under current Mwell authority, and an independent Controller decision. MPIC role names do not satisfy these checks.
+- A recommendation variance requires written requester justification, a first independent variance decision, and a second independent variance decision. Each neutral stage must be authorized by Mwell policy/DOA owners and assigned through the effective DOA before use; MPIC role names or current code labels do not provide that authorization.
 
 ### Exception, commitment, receiving, and payment controls
 

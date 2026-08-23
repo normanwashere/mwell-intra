@@ -37,7 +37,7 @@ The following statements summarize requirements stated directly in the February 
 
 - Competitive bidding is the default procurement mode for materials and services.
 - Only accredited vendors are invited. The Requestor and MPIC HR Admin select **three to four accredited vendors** for bidding.
-- The standard bid window is **at least seven working days**. An extension is limited to **seven days**, all invited vendors are notified, and vendors may revise and resubmit by the revised due date.
+- The standard bid window is **at least seven working days**. An extension is limited to **seven calendar days** because the accepted source says days, not working days; all invited vendors are notified, and vendors may revise and resubmit by the revised due date.
 - Vendors confirm RFQ receipt within **24 hours** and raise exceptions or clarification points within **48 hours**.
 - For sealed bids, at least **three competitive quotations** must be available before opening. Fewer than three, a non-compliant submission mode, all technically non-compliant bids, or bids believed implausibly high or low can result in a failed bid.
 - Failed-bid recovery may extend the deadline to source more vendors or allow a re-quote. Proceeding with fewer than three competitive quotations requires a justification; it is not an automatic pass.
@@ -71,7 +71,7 @@ The following statements summarize requirements stated directly in the February 
 | Accredited vendors selected for bidding | 3 to 4 | Invitation target |
 | Sealed-bid quotations before opening | At least 3 | Usable response quorum or failed-bid recovery |
 | Standard bid window | At least 7 working days | Normal response period |
-| Maximum extension | 7 days | Equal notice and revised deadline required |
+| Maximum extension | 7 calendar days | The accepted source says days, not working days; equal notice and a revised deadline are required |
 | Vendor RFQ acknowledgment | 24 hours | Receipt confirmation |
 | Vendor clarification exception period | 48 hours | Time to raise exceptions or questions |
 | Bid tabulation | 48 hours | MPIC HR Admin source SLA |
@@ -102,20 +102,25 @@ The local Mwell operating policy uses PHP 1,000,000 as a **formal-bid governance
 
 Mwell maps MPIC HR Admin operational work to Procurement workflows, technical comments to an assigned technical reviewer, receiving to Warehouse or the service owner, payment validation to Finance, and accreditation decisions to Legal/Vendor Management. These are local workflow responsibilities, not assertions that the named Mwell roles inherit MPIC approval authority.
 
+For recommendation variance, the direct MPIC rule names Department Head approval followed by a Group Controller decision. Current Mwell code maps those stages to `dept_head` and then `finance`. That code mapping is not an authorized Mwell policy decision. Until Mwell Procurement, Finance, department/DOA owners approve the local decision stages and their effective DOA scopes, operating instructions use **first independent variance decision** and **second independent variance decision**, and policy-alignment activation remains blocked.
+
 ## Active profile
 
 At application baseline `0bf88e362acec9ee8f5c59dbda865a8d4767e4a2`:
 
 - `MPIC-PROCUREMENT-2025-02` is represented as a **draft parent-source profile**. Its direct values are attributed to the exact MPIC filename, and its formal-bid amount is `null`.
-- `MWELL-PROCUREMENT-OPERATING` is represented in code as the **active local operating profile**, effective from January 1, 2026. It inherits the represented MPIC controls and attributes the PHP 1,000,000 formal-bid amount to the local Mwell source.
+- `MWELL-PROCUREMENT-OPERATING` is marked **active in code**, effective from January 1, 2026, and attributes the PHP 1,000,000 formal-bid amount to the local Mwell source. That code status is not cutover authority while the conflicts below remain unresolved.
+- Current code uses `maxExtensionWorkingDays: 7` and labels it with the MPIC source. The MPIC source caps an extension at seven calendar days. The working-day transformation is an unapproved local mismatch, must not be treated as inherited from MPIC, and blocks profile/migration activation pending owner resolution.
 - The current effective department DOA remains the only source of named Mwell approval authority.
-- The additive procurement migration is intentionally unapplied. This handbook records code-baseline behavior and must not be read as live-database activation, deployment evidence, UAT certification, or production certification.
+- The additive procurement migration is intentionally unapplied. This handbook records code-baseline behavior and must not be read as live-database activation, deployment evidence, UAT certification, or production certification. The variance-stage authorization and extension-unit conflicts block policy-alignment activation.
 
 ## Conflicts
 
 | Source statement or ambiguity | Mwell treatment | Status |
 | --- | --- | --- |
 | MPIC assigns operational steps to HR Admin, HR Head, Cost Center Head, Group Controller, CFO, CEO, and named annex approvers | Do not map those people or titles to Mwell approval authority; resolve the active department DOA | Ownership/authority mapping requires policy-owner and DOA approval |
+| MPIC directly requires written Requestor justification, Department Head approval, and a Group Controller decision for a differing recommendation; current Mwell code maps the stages to `dept_head` and `finance` | Treat `dept_head` then `finance` as a disclosed implementation mapping only. Use neutral first and second independent variance decisions in operating instructions | Authorization is unresolved; block activation until Mwell Procurement, Finance, department/DOA owners approve the stages and effective authority, or the code is changed |
+| MPIC caps an extension at seven calendar days; current Mwell code uses `maxExtensionWorkingDays` and can allow seven working days | Do not label the working-day unit as inherited. Retain the source calendar-day rule and require an explicit approved local decision or code correction | Unapproved local mismatch; block activation pending Procurement policy-owner resolution |
 | MPIC says the Requestor facilitates vendor accreditation; Mwell uses Legal/Vendor Management authority with technical review | Keep Legal/VMO as the governed Mwell decision boundary and Procurement as a read-only eligibility consumer | Local operating mapping; formal owner confirmation remains required where source ownership is disputed |
 | The source uses `RFP` for both Request for Proposal and Request for Payment | Use `RFP` only for service solicitation in procurement routing and spell out payment request elsewhere | Local terminology disambiguation |
 | The source procedure tables contain internal inconsistencies, including RFQ steps that refer to Request for Proposal | Follow the policy statements: services use RFP and materials use RFQ; do not copy the table error | Source drafting conflict retained for owner correction |
@@ -140,7 +145,8 @@ At application baseline `0bf88e362acec9ee8f5c59dbda865a8d4767e4a2`:
 2. Compare visible policy text, tables, annexes, comments, and metadata. Treat comments or drafting notes as unresolved unless the approved revision incorporates them.
 3. Record each change as a direct MPIC requirement, a local Mwell mapping, or an unresolved conflict. Do not merge these categories.
 4. Obtain Procurement, Finance, Legal/VMO, department-owner, and DOA decisions for affected ownership, values, and authority.
-5. Create a new versioned policy profile and effective date. Never overwrite the profile used by an existing transaction.
-6. Update workflow controls, diagrams, role procedures, tests, the Vendor-to-Pay Control Matrix, and the Requirements Traceability Matrix in the same change.
-7. Regenerate the standalone handbook only with `pnpm docs:build` and verify the source is classified and appears as one maintained article.
-8. Apply, deploy, or certify only through the separate controlled cutover and UAT process. A maintained extract or passing local documentation test is not activation evidence.
+5. Resolve every activation blocker, including the variance-stage authority and extension-unit mismatch. Record the approval source or correct the implementation; silence is not approval.
+6. Create a new versioned policy profile and effective date. Never overwrite the profile used by an existing transaction.
+7. Update workflow controls, diagrams, role procedures, tests, the Vendor-to-Pay Control Matrix, and the Requirements Traceability Matrix in the same change.
+8. Regenerate the standalone handbook only with `pnpm docs:build` and verify the source is classified and appears as one maintained article.
+9. Apply, deploy, or certify only through the separate controlled cutover and UAT process. A maintained extract or passing local documentation test is not activation evidence.

@@ -37,6 +37,16 @@ test("classifies every current maintained source without fallback metadata", () 
   assert.ok(sources.every((source) => classifiedSources.has(source)));
 });
 
+test("places the MPIC extract exactly in governance with workflow and architecture visibility", () => {
+  const policy = HANDBOOK_DOCUMENTS.find(({ source }) => source === "docs/policy/MPIC_PROCUREMENT_POLICY_FEBRUARY_2025.md");
+
+  assert.ok(policy, "the MPIC extract is cataloged");
+  assert.equal(HANDBOOK_DOCUMENTS.filter(({ source }) => source === policy.source).length, 1);
+  assert.equal(policy.primaryTab, "security");
+  assert.deepEqual(policy.relatedTabs, ["workflows", "architecture"]);
+  assert.equal(policy.contentType, "policy");
+});
+
 test("falls an unknown source back to release with an actionable warning", () => {
   const result = resolveHandbookCatalog(["docs/new-review.md"]);
   assert.equal(result.documents[0].primaryTab, "release");

@@ -102,6 +102,8 @@ Use the complete 14-stage **Procurement to Payment** flow later in this handbook
 
 The local PHP 1,000,000 value controls formal-bid governance. It does not turn a high-value material RFQ into an RFP, and it does not turn a low-value service RFP into an RFQ. Only the current effective Mwell DOA names approval authority. MPIC role titles, people, limits, and annexes do not grant Mwell authority.
 
+Two policy-alignment blockers remain. First, operating instructions use neutral **first independent variance decision** and **second independent variance decision** stages; current code stage labels do not authorize actors, and Mwell policy/DOA owners have not approved the local mapping. Second, MPIC caps bid extensions at seven calendar days while current code uses seven working days. Do not activate the policy profile/migration until both conflicts are resolved and recorded.
+
 ## Procurement Role Procedures
 
 Each procedure is standalone. Stop when its denial check fails; never use another role's credentials or evidence to continue.
@@ -118,10 +120,10 @@ Each procedure is standalone. Stop when its denial check fails; never use anothe
 
 ### Department Head
 
-- **Start condition:** The current effective DOA assigns your identity an approval step, or a recommendation variance is routed to your authorized department decision.
-- **Permitted action:** Review the current request version, route axes, amount, budget, evidence, recommendation, variance rationale, and prior decisions; approve, reject, or return with a specific reason.
-- **Prohibited action:** Do not approve your own request or work, act from an expired/delegated-out assignment, substitute an MPIC title or annex for the Mwell DOA, or edit source evidence while deciding.
-- **Handoff:** Send an approval to the next effective DOA step or independent Controller decision; send a return/rejection to Requester and Procurement.
+- **Start condition:** The current effective DOA assigns your identity a valid approval step. The Department Head title alone does not assign either neutral variance-decision stage.
+- **Permitted action:** Review the current request version, route axes, amount, budget, assigned decision evidence, recommendation, rationale, and prior decisions; approve, reject, or return with a specific reason within the assigned step.
+- **Prohibited action:** Do not approve your own request or work, act from an expired/delegated-out assignment, claim first or second independent variance-decision authority from your title, substitute an MPIC title or annex for the Mwell DOA, or edit source evidence while deciding.
+- **Handoff:** Send an approval to the next authorized decision owner under the effective DOA; send a return/rejection to Requester and Procurement.
 - **Denial check:** Stop if the assignment, effective date, category/amount scope, record version, separation of duty, or required evidence does not match.
 - **Recovery:** Return the record with an actionable reason or ask an authorized DOA administrator to correct configuration; re-evaluate only the new current version.
 - **Completion evidence:** Immutable decision, acting identity, active DOA revision and step, request version, reason/comments, and timestamp.
@@ -131,9 +133,9 @@ Each procedure is standalone. Stop when its denial check fails; never use anothe
 - **Start condition:** A submitted request is ready for route confirmation, sourcing, award, commitment, monitoring, payment-pack preparation, or file closure.
 - **Permitted action:** Confirm solicitation document, procurement mode, governance tier, active profile and reasons; issue equal versioned packages; monitor the three-to-four invite target and response quorum; record tabulation, best-value recommendation, exceptions, PO/agreement, vendor notices, payment pack, and closure request.
 - **Prohibited action:** Do not change requester facts, treat amount as the RFQ/RFP switch, open fewer than three sealed responses without governed recovery, select an automatic lowest-price winner, decide Legal eligibility, post Warehouse acceptance, approve your own award, or release payment.
-- **Handoff:** Route technical work to the assigned reviewer, authority decisions to current DOA approvers, accreditation issues to Legal/Compliance, receipts to Warehouse/Operations, and the complete payment pack to Finance Controller.
+- **Handoff:** Route technical work to the assigned reviewer; route a justified variance to the authorized first and second independent variance-decision owners only after Mwell approves those stages; route award authority to current DOA approvers, accreditation issues to Legal/Compliance, receipts to Warehouse/Operations, and the complete payment pack to Finance Controller.
 - **Denial check:** Stop if the profile or DOA is unresolved, vendor eligibility is invalid, package/equal-notice evidence is incomplete, quorum recovery is unapproved, evaluation is stale, or separation of duty fails.
-- **Recovery:** Correct the package, source additional eligible vendors, run equal-notice extension/requote, obtain a controlled exception decision, refresh evaluations, or close/return with reason.
+- **Recovery:** Correct the package, source additional eligible vendors, use a current independently approved pre-issue invitation-target exception, run equal-notice extension/requote only under an authorized extension unit, obtain a controlled insufficient-bids decision, refresh evaluations, or close/return with reason.
 - **Completion evidence:** Route decision with all three axes, policy/DOA snapshot, sourcing communications and responses, evaluations, recommendation/variance evidence, approved commitment, monitoring trail, payment pack, and closure event.
 
 ### Legal/Compliance
@@ -342,8 +344,9 @@ flowchart LR
   P --> S[System: profile, DOA, accreditation, risk and quorum controls]
   S --> V[Vendor representative: acknowledgment, response and delivery evidence]
   V --> PT[Procurement and technical reviewer: tabulation and evaluation]
-  PT --> DH[Department Head and independent Controller: variance decision when needed]
-  DH --> A[Named current DOA approvers: award decision]
+  PT --> V1[Authorized first independent variance decision owner when needed]
+  V1 --> V2[Authorized second independent variance decision owner when needed]
+  V2 --> A[Named current DOA approvers: award decision]
   A --> PC[Procurement Lead: PO or agreement and monitoring]
   PC --> W[Warehouse or service owner: receipt, QC and acceptance]
   W --> F[Procurement and Finance Controller: payment-readiness evidence]
@@ -365,7 +368,7 @@ flowchart TD
   DX --> DR[Recovery: correct attributable evaluation evidence]
   DR --> D
   D -->|Yes| E{Recommendation differs from evaluated best value?}
-  E -->|Yes| F{Written justification, Department Head approval and independent Controller decision complete?}
+  E -->|Yes| F{Written justification plus authorized first and second independent variance decisions complete?}
   F -->|No| FX([Blocked or denied variance])
   FX --> FR[Recovery: revise recommendation or complete independent variance path]
   FR --> E
