@@ -7765,15 +7765,86 @@ async function runWorkflow(browser, viewport, user, workflow) {
     .slice(0, 160);
   const screenshotPath = path.join(auditEvidenceDir, `${evidenceName}.jpg`);
 
-  async function captureEvidence() {
+  async function captureScrollableEvidence(targetPath) {
     await mkdir(auditEvidenceDir, { recursive: true });
-    await page.screenshot({
-      path: screenshotPath,
-      type: "jpeg",
-      quality: 72,
-      fullPage: true,
+    const scrollContext = await page.evaluate(() => {
+      const documentScroller = document.scrollingElement;
+      const main = document.querySelector("main");
+      const scrollElement =
+        main &&
+        main.scrollHeight > main.clientHeight + 8 &&
+        /auto|scroll/.test(getComputedStyle(main).overflowY)
+          ? main
+          : documentScroller;
+      if (!scrollElement) {
+        return { nested: false, originalTop: 0, maxScroll: 0, step: 1 };
+      }
+      return {
+        nested: scrollElement !== documentScroller,
+        originalTop: scrollElement.scrollTop,
+        maxScroll: Math.max(
+          0,
+          scrollElement.scrollHeight - scrollElement.clientHeight,
+        ),
+        step: Math.max(1, Math.floor(scrollElement.clientHeight * 0.8)),
+      };
     });
-    return path.relative(process.cwd(), screenshotPath).replaceAll("\\", "/");
+    const positions = [];
+    for (
+      let top = 0;
+      top < scrollContext.maxScroll && positions.length < 12;
+      top += scrollContext.step
+    ) {
+      positions.push(top);
+    }
+    if (
+      positions.length === 0 ||
+      positions.at(-1) !== scrollContext.maxScroll
+    ) {
+      positions.push(scrollContext.maxScroll);
+    }
+    const extension = path.extname(targetPath) || ".jpg";
+    const stem = targetPath.slice(0, targetPath.length - extension.length);
+    const screenshots = [];
+    for (const [index, top] of positions.entries()) {
+      await page.evaluate(
+        ({ nested, top }) => {
+          const scrollElement = nested
+            ? document.querySelector("main")
+            : document.scrollingElement;
+          scrollElement?.scrollTo(0, top);
+        },
+        { nested: scrollContext.nested, top },
+      );
+      await page.waitForTimeout(80);
+      const framePath =
+        positions.length === 1
+          ? targetPath
+          : `${stem}-${String(index + 1).padStart(2, "0")}${extension}`;
+      await page.screenshot({
+        path: framePath,
+        type: "jpeg",
+        quality: 72,
+        fullPage: false,
+      });
+      screenshots.push(
+        path.relative(process.cwd(), framePath).replaceAll("\\", "/"),
+      );
+    }
+    await page.evaluate(
+      ({ nested, top }) => {
+        const scrollElement = nested
+          ? document.querySelector("main")
+          : document.scrollingElement;
+        scrollElement?.scrollTo(0, top);
+      },
+      { nested: scrollContext.nested, top: scrollContext.originalTop },
+    );
+    return screenshots;
+  }
+
+  async function captureEvidence() {
+    return captureScrollableEvidence(screenshotPath);
   }
 
   async function auditInteractiveState() {
@@ -7885,17 +7956,12 @@ async function runWorkflow(browser, viewport, user, workflow) {
       auditEvidenceDir,
       `${evidenceName}-${stateLabel || "state"}.jpg`,
     );
-    await mkdir(auditEvidenceDir, { recursive: true });
-    await page.screenshot({
-      path: statePath,
-      type: "jpeg",
-      quality: 72,
-      fullPage: true,
-    });
+    const screenshots = await captureScrollableEvidence(statePath);
     const record = {
       label,
       url: page.url().replace(baseUrl, ""),
-      screenshot: path.relative(process.cwd(), statePath).replaceAll("\\", "/"),
+      screenshot: screenshots[0] ?? null,
+      screenshots,
       audit,
     };
     intermediateEvidence.push(record);
@@ -7916,7 +7982,8 @@ async function runWorkflow(browser, viewport, user, workflow) {
     }
     const result = await workflow.run(page, { captureState });
     const interactionAudit = await auditInteractiveState();
-    const evidenceScreenshot = await captureEvidence();
+    const evidenceScreenshots = await captureEvidence();
+    const evidenceScreenshot = evidenceScreenshots[0] ?? null;
     const interactionProblems = [
       interactionAudit.overflow ? "horizontal overflow" : null,
       interactionAudit.overlaps.length ? "overlapping controls" : null,
@@ -7947,11 +8014,13 @@ async function runWorkflow(browser, viewport, user, workflow) {
       intermediateEvidence,
       scenarioEvidence: workflowScenarioEvidence(workflow.name),
       evidenceScreenshot,
+      evidenceScreenshots,
       consoleErrors: Array.from(new Set(consoleErrors)).slice(0, 12),
       networkErrors: networkErrors.slice(0, 12),
     };
   } catch (error) {
-    const evidenceScreenshot = await captureEvidence().catch(() => null);
+    const evidenceScreenshots = await captureEvidence().catch(() => []);
+    const evidenceScreenshot = evidenceScreenshots[0] ?? null;
     return {
       viewport: viewport.name,
       user: user.email,
@@ -7962,6 +8031,7 @@ async function runWorkflow(browser, viewport, user, workflow) {
       intermediateEvidence,
       scenarioEvidence: workflowScenarioEvidence(workflow.name),
       evidenceScreenshot,
+      evidenceScreenshots,
       consoleErrors: Array.from(new Set(consoleErrors)).slice(0, 12),
       networkErrors: networkErrors.slice(0, 12),
     };

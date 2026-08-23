@@ -2,7 +2,7 @@
 
 Date: 2026-08-23
 
-Status: Local code and documentation baseline complete; migration unapplied; no live/UAT certification claimed
+Status: Migration applied and schema-verified in UAT; application deployment and commit-bound transaction certification in progress
 
 ## Canonical source
 
@@ -27,13 +27,18 @@ Status: Local code and documentation baseline complete; migration unapplied; no 
 - Draft-save readiness is separate from approval-submit readiness; the approval action remains disabled until the complete server-required evidence checklist is satisfied.
 - The process library, manual, specification, training content, traceability matrix, control matrix, in-app Knowledge workflow and generated standalone handbook use the canonical 13-step spine.
 - Finer-grained sourcing, failed-bid, acknowledgement, inspection, quality-recovery and Finance states are labelled as system-expanded states.
+- Legacy `req_*` request and purchase-order identifiers remain text throughout new solicitation and SLA evidence tables.
+- Incomplete legacy drafts now fail closed into Procurement remediation instead of aborting policy migration.
+- Existing sourcing RPC parameter names are preserved so additive deployment does not break PostgreSQL function identity.
 
 ## Verification evidence
 
 - Procurement module: 27 test files and 192 tests passed at the aligned code baseline.
 - Procurement and shell TypeScript checks passed at the aligned code baseline.
 - Standalone handbook contract: 21 tests passed, covering source identity, route rules, 13-step order, six decision trees, nine role procedures, search and self-contained output.
-- Disposable PostgreSQL migration matrix covers route parity, profile activation, exception review, sourcing, vendor/PO lifecycle, payment evidence, role denial, RLS, idempotency and recovery. The final full rerun is required before release sign-off.
+- Disposable PostgreSQL migration matrix covers route parity, profile activation, exception review, sourcing, vendor/PO lifecycle, payment evidence, role denial, RLS, idempotency and recovery. On 2026-08-23, 114 tests passed with one intentional live-only skip; lint, typecheck and production build passed.
+- UAT migration `20260822110000_mpic_procurement_policy_alignment` is recorded. Runtime read-back confirmed text request identifiers, the stable `save_sourcing_event(payload jsonb)` signature, and one incomplete draft routed to one remediation record.
+- Workflow screenshot evidence now traverses the app's nested `<main>` scroll surface on desktop and mobile instead of relying on document-level full-page capture.
 
 ## Remaining release gates
 
@@ -41,5 +46,6 @@ Status: Local code and documentation baseline complete; migration unapplied; no 
 - Mwell owners must authorize the named/effective DOA mapping for the two neutral recommendation-variance decisions.
 - Canonical planning SLA ranges require a versioned display/configuration control before production activation.
 - Supply/delivery, development warranty, third-party liability and contractor-equipment protection applicability require first-class evidence and issue gates before production activation.
-- The additive migration must remain unapplied until controlled Supabase rehearsal, rollback proof, role/RLS certification and business UAT.
-- Live deployment and production claims require commit-bound transaction evidence and independent database read-back.
+- Production activation remains blocked until Procurement approves the source/profile and the named DOA mappings are authorized.
+- UAT release sign-off still requires deployment of the exact tested commit followed by governed desktop/mobile transaction, cleanup, visual and accessibility certification.
+- Production claims require the same commit-bound evidence and independent database read-back against the production project; UAT evidence is not production evidence.

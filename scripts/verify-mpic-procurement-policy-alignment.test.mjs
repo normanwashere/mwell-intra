@@ -102,7 +102,7 @@ async function createGovernedRouteFixture() {
     create table legal.accreditation_cases (id text primary key, vendor_id uuid references core.vendors(id), jurisdiction text);
     create table legal.accreditation_dispositions (id uuid primary key default gen_random_uuid(), case_id text references legal.accreditation_cases(id), disposition text, reason text not null default 'fixture', conditions jsonb not null default '{}'::jsonb, follow_up_due_at timestamptz, decided_by uuid references core.profiles(id), decided_at timestamptz not null default statement_timestamp());
     create table procurement.requests (
-      id uuid primary key,
+      id text primary key,
       status text,
       estimated_amount numeric,
       requirement_kind text,
@@ -128,7 +128,7 @@ async function createGovernedRouteFixture() {
     );
     create table procurement.route_decisions (
       id uuid primary key default gen_random_uuid(),
-      request_id uuid not null references procurement.requests(id),
+      request_id text not null references procurement.requests(id),
       policy_version text not null,
       request_version integer not null default 1,
       method text not null,
@@ -141,7 +141,7 @@ async function createGovernedRouteFixture() {
     );
     create table procurement.exception_packs (
       id uuid primary key default gen_random_uuid(),
-      request_id uuid not null references procurement.requests(id),
+      request_id text not null references procurement.requests(id),
       exception_type text not null,
       justification text not null default 'fixture justification value',
       evidence jsonb not null default '{}'::jsonb,
@@ -152,7 +152,7 @@ async function createGovernedRouteFixture() {
     );
     create table procurement.purchase_orders (
       id text primary key,
-      request_id uuid references procurement.requests(id),
+      request_id text references procurement.requests(id),
       core_vendor_id uuid references core.vendors(id),
       po_number text,
       vendor_name text,
@@ -173,7 +173,7 @@ async function createGovernedRouteFixture() {
     create view procurement.v_purchase_order_receipt_status as select * from procurement.receipt_status_fixture;
     create table procurement.sourcing_events (
       id uuid primary key default gen_random_uuid(),
-      request_id uuid not null references procurement.requests(id),
+      request_id text not null references procurement.requests(id),
       route_decision_id uuid not null references procurement.route_decisions(id),
       issued_at timestamptz,
       submission_deadline timestamptz,
@@ -237,7 +237,7 @@ async function createGovernedRouteFixture() {
     returns jsonb
     language plpgsql
     as $$
-    declare v_id uuid := coalesce(nullif(payload->>'id', '')::uuid, gen_random_uuid());
+    declare v_id text := coalesce(nullif(payload->>'id', ''), gen_random_uuid()::text);
     begin
       if not core.has_cap('procurement', 'create_request') then
         raise exception 'Not authorized: procurement.create_request';
@@ -258,7 +258,7 @@ async function createGovernedRouteFixture() {
     returns jsonb
     language plpgsql
     as $$
-    declare v_id uuid := (payload->>'id')::uuid;
+    declare v_id text := payload->>'id';
     begin
       if not core.has_cap('procurement', 'create_request') then
         raise exception 'Not authorized: procurement.finalize_request_draft';
@@ -2555,13 +2555,14 @@ test("PGlite parse smoke loads the migration without a live database", async () 
       create function core.current_vendor_id() returns uuid language sql stable as $$ select null::uuid $$;
       create function private.policy_submit_procurement_request(jsonb) returns jsonb language sql as $$ select '{}'::jsonb $$;
       create function procurement.create_request(jsonb) returns jsonb language sql as $$ select $1 $$;
+      create function procurement.save_sourcing_event(payload jsonb) returns jsonb language sql as $$ select payload $$;
       create function procurement.insufficient_bid_exception(jsonb) returns jsonb language sql as $$ select null::jsonb $$;
       create table core.profiles (id uuid primary key, vendor_id uuid, full_name text, status text not null default 'active');
       create table core.vendors (id uuid primary key, legal_name text, accreditation_status text default 'approved', accreditation_expires_at timestamptz);
       create table legal.accreditation_cases (id text primary key, vendor_id uuid references core.vendors(id), jurisdiction text);
       create table legal.accreditation_dispositions (id uuid primary key default gen_random_uuid(), case_id text references legal.accreditation_cases(id), disposition text, reason text not null default 'fixture', conditions jsonb not null default '{}'::jsonb, follow_up_due_at timestamptz, decided_by uuid references core.profiles(id), decided_at timestamptz not null default statement_timestamp());
       create table procurement.requests (
-        id uuid primary key,
+        id text primary key,
         status text,
         estimated_amount numeric,
         requirement_kind text,
@@ -2584,7 +2585,7 @@ test("PGlite parse smoke loads the migration without a live database", async () 
       );
       create table procurement.purchase_orders (
         id text primary key,
-        request_id uuid references procurement.requests(id),
+        request_id text references procurement.requests(id),
         core_vendor_id uuid references core.vendors(id),
         status text not null default 'draft',
         issued_at timestamptz,
@@ -2626,7 +2627,7 @@ test("PGlite parse smoke loads the migration without a live database", async () 
         from procurement.v_purchase_order_receipt_status_fixture;
       create table procurement.route_decisions (
         id uuid primary key default gen_random_uuid(),
-        request_id uuid not null references procurement.requests(id),
+        request_id text not null references procurement.requests(id),
         policy_version text not null,
         request_version integer not null default 1,
         method text not null,
@@ -2639,7 +2640,7 @@ test("PGlite parse smoke loads the migration without a live database", async () 
       );
       create table procurement.exception_packs (
         id uuid primary key default gen_random_uuid(),
-        request_id uuid not null references procurement.requests(id),
+        request_id text not null references procurement.requests(id),
         exception_type text not null,
         justification text not null default 'fixture justification value',
         evidence jsonb not null default '{}'::jsonb,
@@ -2650,7 +2651,7 @@ test("PGlite parse smoke loads the migration without a live database", async () 
       );
       create table procurement.sourcing_events (
         id uuid primary key default gen_random_uuid(),
-        request_id uuid not null references procurement.requests(id),
+        request_id text not null references procurement.requests(id),
         route_decision_id uuid not null references procurement.route_decisions(id),
         issued_at timestamptz,
         submission_deadline timestamptz,
@@ -2720,6 +2721,15 @@ test("PGlite parse smoke loads the migration without a live database", async () 
       `);
       return result.rows[0].route;
     };
+
+    const incompleteLegacyRoute = await db.query(`
+      select private.policy_legacy_route_mapping(
+        null, null, '[]'::jsonb, null, null::numeric, null::numeric
+      ) as route
+    `);
+    assert.equal(incompleteLegacyRoute.rows[0].route.requires_review, true);
+    assert.equal(incompleteLegacyRoute.rows[0].route.requirement_kind, null);
+    assert.ok(incompleteLegacyRoute.rows[0].route.reasons.includes('legacy_mapping_requires_review'));
 
     for (const [riskKey, reason] of [
       ['complex', 'risk:complex'],
@@ -2813,4 +2823,15 @@ test("PGlite parse smoke loads the migration without a live database", async () 
   } finally {
     await db.close();
   }
+});
+
+test("new procurement foreign keys remain compatible with live text request identifiers", () => {
+  assert.match(
+    migration,
+    /create table if not exists procurement\.solicitation_communications \([\s\S]*?request_id text not null references procurement\.requests\(id\)/,
+  );
+  assert.match(
+    migration,
+    /create table if not exists procurement\.policy_sla_events \([\s\S]*?request_id text references procurement\.requests\(id\)/,
+  );
 });

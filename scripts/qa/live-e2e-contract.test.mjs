@@ -354,6 +354,19 @@ test("route failures preserve screenshot evidence in every visual shard", async 
   );
 });
 
+test("workflow evidence captures the real nested scroll surface", async () => {
+  const source = await readFile(
+    new URL("./full-intra-live-e2e.mjs", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(source, /async function captureScrollableEvidence/);
+  assert.match(source, /document\.querySelector\("main"\)/);
+  assert.match(source, /main\.scrollHeight\s*>\s*main\.clientHeight/);
+  assert.match(source, /fullPage:\s*false/);
+  assert.match(source, /evidenceScreenshots/);
+});
+
 test("the approval-group fixture has an explicit service-role grant", async () => {
   const migration = await readFile(
     new URL(

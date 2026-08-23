@@ -154,7 +154,7 @@ create table if not exists procurement.policy_conflicts (
 
 create table if not exists procurement.solicitation_communications (
   id uuid primary key default gen_random_uuid(),
-  request_id uuid not null references procurement.requests(id) on delete cascade,
+  request_id text not null references procurement.requests(id) on delete cascade,
   policy_profile_id uuid references procurement.policy_profiles(id) on delete restrict,
   communication_type text not null,
   sent_at timestamptz not null default pg_catalog.now(),
@@ -170,7 +170,7 @@ create table if not exists procurement.solicitation_communications (
 
 create table if not exists procurement.policy_sla_events (
   id uuid primary key default gen_random_uuid(),
-  request_id uuid references procurement.requests(id) on delete cascade,
+  request_id text references procurement.requests(id) on delete cascade,
   policy_profile_id uuid not null references procurement.policy_profiles(id) on delete restrict,
   sla_type text not null,
   owner_id uuid references core.profiles(id) on delete restrict,
@@ -885,6 +885,9 @@ begin
       elsif jsonb_typeof(coalesce(p_lines, '[]'::jsonb)) = 'array' and jsonb_array_length(coalesce(p_lines, '[]'::jsonb)) > 0 then
         v_kind := 'materials';
       end if;
+    else
+      v_kind := null;
+      v_requires_review := true;
   end case;
   return jsonb_build_object('requirement_kind', v_kind, 'requires_review', v_requires_review);
 end;
@@ -1641,17 +1644,17 @@ language sql stable security definer set search_path = '' as $$
   )
 $$;
 
-create or replace function procurement.save_sourcing_event(p_payload jsonb)
+create or replace function procurement.save_sourcing_event(payload jsonb)
 returns jsonb language plpgsql security definer set search_path = '' as $$
 declare v_route procurement.route_decisions; v_event procurement.sourcing_events; v_profile procurement.policy_profiles;
-  v_deadline timestamptz := nullif(jsonb_extract_path_text(p_payload, 'submission_deadline'), '')::timestamptz;
-  v_target integer := nullif(jsonb_extract_path_text(p_payload, 'intended_responses'), '')::integer;
-  v_request_id text := jsonb_extract_path_text(p_payload, 'request_id');
-  v_package_version text := jsonb_extract_path_text(p_payload, 'package_version');
-  v_package_hash text := jsonb_extract_path_text(p_payload, 'package_hash');
+  v_deadline timestamptz := nullif(jsonb_extract_path_text(payload, 'submission_deadline'), '')::timestamptz;
+  v_target integer := nullif(jsonb_extract_path_text(payload, 'intended_responses'), '')::integer;
+  v_request_id text := jsonb_extract_path_text(payload, 'request_id');
+  v_package_version text := jsonb_extract_path_text(payload, 'package_version');
+  v_package_hash text := jsonb_extract_path_text(payload, 'package_hash');
 begin
   if not private.policy_sourcing_can_manage() then raise exception 'Not authorized to manage sourcing'; end if;
-  if jsonb_typeof(p_payload) <> 'object' or nullif(btrim(v_request_id), '') is null then raise exception 'A request identity is required'; end if;
+  if jsonb_typeof(payload) <> 'object' or nullif(btrim(v_request_id), '') is null then raise exception 'A request identity is required'; end if;
   v_profile := private.policy_sourcing_profile(v_request_id);
   select * into v_route from procurement.route_decisions
     where request_id::text = v_request_id and status = 'confirmed'
