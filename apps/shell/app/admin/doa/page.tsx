@@ -29,6 +29,11 @@ interface ProfileRow {
   full_name: string | null;
   title: string | null;
 }
+interface DepartmentRow {
+  id: string;
+  code: string;
+  name: string;
+}
 interface AssignmentDraft {
   key: string;
   tier: Tier;
@@ -88,6 +93,7 @@ function DoaWorkspace({ canManagePolicy }: { canManagePolicy: boolean }) {
   );
   const [matrices, setMatrices] = useState<MatrixRow[]>([]);
   const [profiles, setProfiles] = useState<ProfileRow[]>([]);
+  const [departments, setDepartments] = useState<DepartmentRow[]>([]);
   const [department, setDepartment] = useState("");
   const [version, setVersion] = useState("");
   const [sourceDocument, setSourceDocument] = useState(
@@ -116,10 +122,13 @@ function DoaWorkspace({ canManagePolicy }: { canManagePolicy: boolean }) {
     setWorkspaceLoading(true);
     try {
       if (mode !== "supabase" || !procurement || !core) {
+        setDepartments([
+          { id: "preview-operations", code: "operations", name: "Operations" },
+        ]);
         setMatrices([
           {
             id: captureActivationDraft ? "evidence-draft" : "preview",
-            department: "Operations",
+            department: "operations",
             version: captureActivationDraft ? "OPS-DOA-2026.2" : "Preview 1",
             status: "draft",
             effective_at: new Date().toISOString().slice(0, 10),
@@ -129,30 +138,41 @@ function DoaWorkspace({ canManagePolicy }: { canManagePolicy: boolean }) {
         ]);
         return;
       }
-      const [matrixResult, profileResult] = await Promise.all([
-        procurement
-          .from("doa_matrices")
-          .select(
-            "id,department,version,status,effective_at,active,source_document",
-          )
-          .order("department"),
-        core
-          .from("profiles")
-          .select("id,full_name,title")
-          .eq("kind", "employee")
-          .eq("status", "active")
-          .order("full_name"),
-      ]);
-      if (matrixResult.error || profileResult.error) {
+      const [matrixResult, profileResult, departmentResult] = await Promise.all(
+        [
+          procurement
+            .from("doa_matrices")
+            .select(
+              "id,department,version,status,effective_at,active,source_document",
+            )
+            .order("department"),
+          core
+            .from("profiles")
+            .select("id,full_name,title")
+            .eq("kind", "employee")
+            .eq("status", "active")
+            .order("full_name"),
+          core
+            .from("departments")
+            .select("id,code,name")
+            .eq("is_active", true)
+            .order("name"),
+        ],
+      );
+      if (matrixResult.error || profileResult.error || departmentResult.error) {
         toast.error(
           matrixResult.error?.message ??
             profileResult.error?.message ??
+            departmentResult.error?.message ??
             "Unable to load DOA configuration",
         );
         return;
       }
       setMatrices((matrixResult.data ?? []) as unknown as MatrixRow[]);
       setProfiles((profileResult.data ?? []) as unknown as ProfileRow[]);
+      setDepartments(
+        (departmentResult.data ?? []) as unknown as DepartmentRow[],
+      );
     } finally {
       setWorkspaceLoading(false);
     }
@@ -166,9 +186,15 @@ function DoaWorkspace({ canManagePolicy }: { canManagePolicy: boolean }) {
       rows.map((row) => (row.key === key ? { ...row, ...patch } : row)),
     );
 
+  const departmentNameByCode = useMemo(
+    () => new Map(departments.map((item) => [item.code, item.name])),
+    [departments],
+  );
+
   const save = async () => {
-    if (!department.trim() || !version.trim())
-      return toast.error("Department and version are required.");
+    if (!department || !departments.some((item) => item.code === department))
+      return toast.error("Select an active department.");
+    if (!version.trim()) return toast.error("Version is required.");
     if (assignments.some((row) => !row.approverUserId))
       return toast.error("Select a named approver for every assignment.");
     if (!assignments.some((row) => row.tier === "final_approver"))
@@ -180,7 +206,7 @@ function DoaWorkspace({ canManagePolicy }: { canManagePolicy: boolean }) {
     setSaving(true);
     const { data, error } = await procurement.rpc("save_doa_matrix", {
       payload: {
-        department: department.trim(),
+        department,
         version: version.trim(),
         source_document: sourceDocument.trim(),
         effective_at: new Date(`${effectiveAt}T00:00:00+08:00`).toISOString(),
@@ -196,7 +222,9 @@ function DoaWorkspace({ canManagePolicy }: { canManagePolicy: boolean }) {
     setSaving(false);
     if (error) return toast.error(error.message);
     const saved = data as unknown as MatrixRow;
-    toast.success(`${saved.department} DOA saved as draft.`);
+    toast.success(
+      `${departmentNameByCode.get(saved.department) ?? saved.department} DOA saved as draft.`,
+    );
     await load();
   };
 
@@ -209,13 +237,15 @@ function DoaWorkspace({ canManagePolicy }: { canManagePolicy: boolean }) {
             : row,
         ),
       );
-      toast.success(`${matrix.department} DOA activated.`);
+      toast.success(
+        `${departmentNameByCode.get(matrix.department) ?? matrix.department} DOA activated.`,
+      );
       return;
     }
     if (!procurement || mode !== "supabase") return;
     if (
       !window.confirm(
-        `Activate ${matrix.version} for ${matrix.department}? The current active matrix will be superseded.`,
+        `Activate ${matrix.version} for ${departmentNameByCode.get(matrix.department) ?? matrix.department}? The current active matrix will be superseded.`,
       )
     )
       return;
@@ -238,7 +268,9 @@ function DoaWorkspace({ canManagePolicy }: { canManagePolicy: boolean }) {
       payload: { matrix_id: currentMatrix.id },
     });
     if (error) return toast.error(error.message);
-    toast.success(`${matrix.department} DOA activated.`);
+    toast.success(
+      `${departmentNameByCode.get(matrix.department) ?? matrix.department} DOA activated.`,
+    );
     await load();
   };
 
@@ -284,7 +316,7 @@ function DoaWorkspace({ canManagePolicy }: { canManagePolicy: boolean }) {
       .getElementById("doa-editor")
       ?.scrollIntoView({ behavior: "smooth", block: "start" });
     toast.toast(
-      `Loaded ${matrix.department}. Update the version and assignments, then save a new draft.`,
+      `Loaded ${departmentNameByCode.get(matrix.department) ?? matrix.department}. Update the version and assignments, then save a new draft.`,
     );
   };
 
@@ -309,11 +341,15 @@ function DoaWorkspace({ canManagePolicy }: { canManagePolicy: boolean }) {
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <h3 className="truncate font-semibold text-ink">
-                    {matrix.department}
+                    {departmentNameByCode.get(matrix.department) ??
+                      matrix.department}
                   </h3>
                   <p className="mt-1 break-words text-sm text-muted">
                     {matrix.version} · Effective{" "}
                     {new Date(matrix.effective_at).toLocaleDateString("en-PH")}
+                  </p>
+                  <p className="mt-1 break-all text-xs text-muted">
+                    Department code: {matrix.department}
                   </p>
                 </div>
                 <Badge tone={matrix.active ? "emerald" : "amber"}>
@@ -370,12 +406,20 @@ function DoaWorkspace({ canManagePolicy }: { canManagePolicy: boolean }) {
           </p>
           <div className="mt-5 grid gap-4 md:grid-cols-2">
             <Field label="Department" htmlFor="doa-department">
-              <Input
+              <select
                 id="doa-department"
+                className="input-base min-h-11 w-full min-w-0 max-w-full"
                 value={department}
                 onChange={(e) => setDepartment(e.target.value)}
-                placeholder="e.g. Operations"
-              />
+                disabled={workspaceLoading || departments.length === 0}
+              >
+                <option value="">Select an active department</option>
+                {departments.map((item) => (
+                  <option key={item.id} value={item.code}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
             </Field>
             <Field label="Version" htmlFor="doa-version">
               <Input

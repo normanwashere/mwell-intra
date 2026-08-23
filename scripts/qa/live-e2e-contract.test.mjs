@@ -385,6 +385,15 @@ test("route audit retries one transient navigation timeout", async () => {
   assert.match(source, /if \(!\/timeout\/i\.test/);
   assert.match(source, /timeout:\s*40_000/);
   assert.match(source, /await gotoAuditRoute\(/);
+  assert.match(source, /function hasOnlyTransientTransportRouteErrors/);
+  assert.match(source, /attempt <= 2/);
+  assert.match(source, /net::ERR_\(\?:FAILED\|HTTP2_SERVER_REFUSED_STREAM\)/);
+  assert.match(source, /item\.networkErrors\.length === 0/);
+  assert.match(
+    source,
+    /item\.routes\.every\(\(route\) => !routeNeedsFailureEvidence\(route\)\)/,
+  );
+  assert.match(source, /attempt === 1 && hasOnlyTransientTransportRouteErrors/);
 });
 
 test("the approval-group fixture has an explicit service-role grant", async () => {
@@ -846,11 +855,13 @@ test("governed procurement fixtures use canonical authority and commercial facts
     new URL("./full-intra-live-e2e.mjs", import.meta.url),
     "utf8",
   );
-  const fixtureStart = source.indexOf("async function createTask3ReceiptFixture");
+  const fixtureStart = source.indexOf(
+    "async function createTask3ReceiptFixture",
+  );
   const fixtureEnd = source.indexOf("async function task3", fixtureStart);
   const fixture = source.slice(fixtureStart, fixtureEnd);
-  assert.match(fixture, /department: "Operations"/);
-  assert.doesNotMatch(fixture, /department: "operations"/);
+  assert.match(fixture, /department: "operations"/);
+  assert.doesNotMatch(fixture, /department: "Operations"/);
   assert.match(fixture, /id: ids\.partialLine,[\s\S]*?unit_price: 100/);
   assert.match(fixture, /id: ids\.concurrentLine,[\s\S]*?unit_price: 100/);
   assert.match(
@@ -1883,6 +1894,41 @@ test("the DOA editor cannot submit while asynchronous workspace data shifts the 
   assert.match(page, /\.eq\("department", matrix\.department\)/);
   assert.match(page, /\.eq\("version", matrix\.version\)/);
   assert.match(page, /payload: \{ matrix_id: currentMatrix\.id \}/);
+  assert.match(page, /from\("departments"\)/);
+  assert.match(page, /\.eq\("is_active", true\)/);
+  assert.match(page, /Select an active department/);
+  assert.match(page, /value=\{item\.code\}/);
+  assert.doesNotMatch(page, /placeholder="e\.g\. Operations"/);
+});
+
+test("DOA storage canonicalizes controlled department codes and synchronizes assignments", async () => {
+  const migration = await readFile(
+    new URL(
+      "../../supabase/migrations/20260823190000_canonicalize_doa_department_codes.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+
+  assert.match(migration, /function private\.policy_resolve_department_code/);
+  assert.match(migration, /department\.is_active/);
+  assert.match(migration, /pg_catalog\.lower\(department\.code\)/);
+  assert.match(migration, /pg_catalog\.lower\(department\.name\)/);
+  assert.match(migration, /set department = 'legal_compliance'/);
+  assert.match(
+    migration,
+    /Every DOA matrix must use an active controlled department code/,
+  );
+  assert.match(migration, /trigger canonicalize_doa_matrix_department/);
+  assert.match(migration, /trigger synchronize_doa_assignment_department/);
+  assert.match(
+    migration,
+    /v_department := private\.policy_resolve_department_code\(payload->>'department'\)/,
+  );
+  assert.match(
+    migration,
+    /revoke all on function private\.policy_resolve_department_code\(text\)[\s\S]*?public, anon, authenticated/,
+  );
 });
 
 test("DOA activation sends the governed signature and proves independent review", async () => {

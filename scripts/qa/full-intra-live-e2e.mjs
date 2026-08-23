@@ -2684,7 +2684,7 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
       title: `${marker} ${method} negative`,
       status: "draft",
       requester_id: requesterProfiles[0].id,
-      department: "Operations",
+      department: "operations",
       cost_center: "CC-1100",
       needed_by: "2027-08-15",
       budget_code: `${marker}-BUDGET`,
@@ -8135,6 +8135,19 @@ async function runWorkflow(browser, viewport, user, workflow) {
   }
 }
 
+function hasOnlyTransientTransportRouteErrors(item) {
+  return (
+    item.login?.status === "signed-in" &&
+    item.routes.length > 0 &&
+    item.routes.every((route) => !routeNeedsFailureEvidence(route)) &&
+    item.networkErrors.length === 0 &&
+    item.consoleErrors.length > 0 &&
+    item.consoleErrors.every((message) =>
+      /net::ERR_(?:FAILED|HTTP2_SERVER_REFUSED_STREAM)\b/.test(message),
+    )
+  );
+}
+
 const browser = await chromium.launch({ headless: true });
 const results = [];
 
@@ -8153,164 +8166,180 @@ if (runRouteAudit) {
   }
   for (const viewport of selectedViewports) {
     for (const user of selectedUsers) {
-      const context = await browser.newContext({
-        viewport: viewport.viewport,
-        isMobile: viewport.isMobile,
-        hasTouch: viewport.isMobile,
-        reducedMotion: "reduce",
-      });
-      await installScopedProtectionBypass({
-        context,
-        appOrigin,
-        protectionBypass,
-      });
-      const page = await context.newPage();
-      const consoleErrors = [];
-      const networkErrors = [];
+      let item;
+      for (let attempt = 1; attempt <= 2; attempt += 1) {
+        const context = await browser.newContext({
+          viewport: viewport.viewport,
+          isMobile: viewport.isMobile,
+          hasTouch: viewport.isMobile,
+          reducedMotion: "reduce",
+        });
+        await installScopedProtectionBypass({
+          context,
+          appOrigin,
+          protectionBypass,
+        });
+        const page = await context.newPage();
+        const consoleErrors = [];
+        const networkErrors = [];
 
-      page.on("console", (message) => {
-        if (["error", "warning"].includes(message.type())) {
-          const loc = message.location();
-          const where = loc?.url
-            ? ` (${loc.url.split("/").slice(-2).join("/")}:${loc.lineNumber}:${loc.columnNumber})`
-            : "";
-          consoleErrors.push(
-            `${message.type()}${where}: ${message.text()}`.slice(0, 320),
-          );
-        }
-      });
-      page.on("pageerror", (error) => {
-        consoleErrors.push(`pageerror: ${error.message}`.slice(0, 240));
-      });
-      page.on("response", (response) => {
-        const url = response.url();
-        if (
-          (url.includes("supabase.co") || url.includes("/_next/")) &&
-          response.status() >= 400
-        ) {
-          networkErrors.push({
-            status: response.status(),
-            url: url
-              .replace(/apikey=[^&]+/g, "apikey=[redacted]")
-              .slice(0, 220),
-          });
-        }
-      });
+        page.on("console", (message) => {
+          if (["error", "warning"].includes(message.type())) {
+            const loc = message.location();
+            const where = loc?.url
+              ? ` (${loc.url.split("/").slice(-2).join("/")}:${loc.lineNumber}:${loc.columnNumber})`
+              : "";
+            consoleErrors.push(
+              `${message.type()}${where}: ${message.text()}`.slice(0, 320),
+            );
+          }
+        });
+        page.on("pageerror", (error) => {
+          consoleErrors.push(`pageerror: ${error.message}`.slice(0, 240));
+        });
+        page.on("response", (response) => {
+          const url = response.url();
+          if (
+            (url.includes("supabase.co") || url.includes("/_next/")) &&
+            response.status() >= 400
+          ) {
+            networkErrors.push({
+              status: response.status(),
+              url: url
+                .replace(/apikey=[^&]+/g, "apikey=[redacted]")
+                .slice(0, 220),
+            });
+          }
+        });
 
-      let loginResult;
-      const routeResults = [];
-      try {
-        loginResult = await login(page, user);
-        if (loginResult.status === "signed-in") {
-          const discoveredRoutes = await discoverVisibleNavigationRoutes(page);
-          const routeQueue = routesFor(user, discoveredRoutes);
-          const queuedPaths = new Set(routeQueue.map((route) => route.path));
-          const recursiveRouteLimit = 32;
-          let recursivelyDiscovered = 0;
-          while (routeQueue.length) {
-            const route = routeQueue.shift();
-            try {
-              const routeResult = await auditRoute(page, route);
-              if (routeNeedsFailureEvidence(routeResult)) {
-                routeResult.evidenceScreenshot =
-                  await captureRouteFailureEvidence(page, {
+        let loginResult;
+        const routeResults = [];
+        try {
+          loginResult = await login(page, user);
+          if (loginResult.status === "signed-in") {
+            const discoveredRoutes =
+              await discoverVisibleNavigationRoutes(page);
+            const routeQueue = routesFor(user, discoveredRoutes);
+            const queuedPaths = new Set(routeQueue.map((route) => route.path));
+            const recursiveRouteLimit = 32;
+            let recursivelyDiscovered = 0;
+            while (routeQueue.length) {
+              const route = routeQueue.shift();
+              try {
+                const routeResult = await auditRoute(page, route);
+                if (routeNeedsFailureEvidence(routeResult)) {
+                  routeResult.evidenceScreenshot =
+                    await captureRouteFailureEvidence(page, {
+                      viewport: viewport.name,
+                      role: user.role,
+                      route: route.path,
+                    }).catch(() => null);
+                }
+                routeResults.push(routeResult);
+                if (
+                  route.expectedAccess === "allowed" &&
+                  routeResult.class === "rendered" &&
+                  recursivelyDiscovered < recursiveRouteLimit
+                ) {
+                  for (const path of await discoverSafeDetailRoutes(page)) {
+                    if (queuedPaths.has(path)) continue;
+                    queuedPaths.add(path);
+                    routeQueue.push({
+                      path,
+                      expectedAccess: "allowed",
+                      source: "recursive-rendered-link",
+                    });
+                    recursivelyDiscovered += 1;
+                    if (recursivelyDiscovered >= recursiveRouteLimit) break;
+                  }
+                }
+              } catch (error) {
+                const evidenceScreenshot = await captureRouteFailureEvidence(
+                  page,
+                  {
                     viewport: viewport.name,
                     role: user.role,
                     route: route.path,
-                  }).catch(() => null);
-              }
-              routeResults.push(routeResult);
-              if (
-                route.expectedAccess === "allowed" &&
-                routeResult.class === "rendered" &&
-                recursivelyDiscovered < recursiveRouteLimit
-              ) {
-                for (const path of await discoverSafeDetailRoutes(page)) {
-                  if (queuedPaths.has(path)) continue;
-                  queuedPaths.add(path);
-                  routeQueue.push({
-                    path,
-                    expectedAccess: "allowed",
-                    source: "recursive-rendered-link",
-                  });
-                  recursivelyDiscovered += 1;
-                  if (recursivelyDiscovered >= recursiveRouteLimit) break;
-                }
-              }
-            } catch (error) {
-              const evidenceScreenshot = await captureRouteFailureEvidence(
-                page,
-                {
-                  viewport: viewport.name,
-                  role: user.role,
+                    state: "navigation-error",
+                  },
+                ).catch(() => null);
+                routeResults.push({
                   route: route.path,
-                  state: "navigation-error",
-                },
-              ).catch(() => null);
-              routeResults.push({
-                route: route.path,
-                class: "navigation-error",
-                expectationMet: false,
-                evidenceScreenshot,
-                error: String(error.message || error).slice(0, 220),
-              });
+                  class: "navigation-error",
+                  expectationMet: false,
+                  evidenceScreenshot,
+                  error: String(error.message || error).slice(0, 220),
+                });
+              }
             }
           }
+        } catch (error) {
+          loginResult = {
+            status: "login-error",
+            url: page.url().replace(baseUrl, ""),
+            text: String(error.message || error).slice(0, 300),
+          };
         }
-      } catch (error) {
-        loginResult = {
-          status: "login-error",
-          url: page.url().replace(baseUrl, ""),
-          text: String(error.message || error).slice(0, 300),
-        };
-      }
 
-      const item = {
-        viewport: viewport.name,
-        role: user.role,
-        email: user.email,
-        login: loginResult,
-        routes: routeResults,
-        networkErrors: Array.from(
-          new Map(
-            networkErrors.map((entry) => [
-              `${entry.status}:${entry.url}`,
-              entry,
-            ]),
-          ).values(),
-        ).slice(0, 24),
-        consoleErrors: Array.from(new Set(consoleErrors)).slice(0, 24),
-      };
+        item = {
+          viewport: viewport.name,
+          role: user.role,
+          email: user.email,
+          login: loginResult,
+          routes: routeResults,
+          networkErrors: Array.from(
+            new Map(
+              networkErrors.map((entry) => [
+                `${entry.status}:${entry.url}`,
+                entry,
+              ]),
+            ).values(),
+          ).slice(0, 24),
+          consoleErrors: Array.from(new Set(consoleErrors)).slice(0, 24),
+        };
+        await context.close();
+        if (attempt === 1 && hasOnlyTransientTransportRouteErrors(item)) {
+          console.log(
+            JSON.stringify({
+              viewport: item.viewport,
+              role: item.role,
+              retry: "transient-supabase-transport",
+            }),
+          );
+          await new Promise((resolve) => setTimeout(resolve, 2_000));
+          continue;
+        }
+        break;
+      }
+      if (!item) throw new Error("Route audit did not produce a result");
       results.push(item);
       console.log(
         JSON.stringify({
           viewport: item.viewport,
           role: item.role,
           login: item.login.status,
-          rendered: routeResults.filter((route) => route.class === "rendered")
+          rendered: item.routes.filter((route) => route.class === "rendered")
             .length,
-          denied: routeResults.filter(
-            (route) => route.class === "access-denied",
-          ).length,
-          problems: routeResults.filter(
+          denied: item.routes.filter((route) => route.class === "access-denied")
+            .length,
+          problems: item.routes.filter(
             (route) =>
               route.class !== "rendered" &&
               route.class !== "access-denied" &&
               route.class !== "redirected-login",
           ).length,
-          expectationMisses: routeResults.filter(
+          expectationMisses: item.routes.filter(
             (route) => route.expectationMet === false,
           ).length,
-          overflow: routeResults
+          overflow: item.routes
             .filter((route) => route.overflow)
             .map((route) => route.route),
-          overlaps: routeResults.filter((route) => route.overlaps?.length)
+          overlaps: item.routes.filter((route) => route.overlaps?.length)
             .length,
           networkErrors: item.networkErrors.length,
           consoleErrors: item.consoleErrors.length,
         }),
       );
-      await context.close();
     }
   }
 }
