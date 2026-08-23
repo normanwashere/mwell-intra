@@ -75,7 +75,9 @@ jobs:
       - name: Verify live audit contracts
         run: pnpm test:intra-live-contract
       - name: Verify release documentation is synchronized
-        run: pnpm verify:release-documentation -- --manifest test-results/documentation-sync-source.json
+        run: |
+          node scripts/qa/verify-release-documentation.mjs --manifest test-results/documentation-sync-source.json
+          pnpm verify:app-documentation-html
       - name: Verify CI resilience contracts
         run: node --test scripts/qa/uat-ci-resilience.test.mjs
       - name: Verify UAT persona provisioner contract

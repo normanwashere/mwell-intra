@@ -175,6 +175,15 @@ test("UAT certification workflow gates deployment and always certifies cleanup",
   assert.match(workflow, /Verify complete cross-shard certification evidence/);
   assert.match(
     workflow,
+    /verify-release-documentation\.mjs --manifest test-results\/documentation-sync-source\.json/,
+  );
+  assert.match(workflow, /pnpm verify:app-documentation-html/);
+  assert.doesNotMatch(
+    workflow,
+    /pnpm verify:release-documentation -- --manifest/,
+  );
+  assert.match(
+    workflow,
     /uat-ci-run-id\.mjs[\s\S]*--ordinal "\$\{\{ matrix\.ordinal \}\}"/,
   );
   assert.doesNotMatch(workflow, /SUPABASE_SERVICE_ROLE_KEY:\s*eyJ/);
