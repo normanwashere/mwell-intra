@@ -211,9 +211,10 @@ test("every scenario evidence workflow is registered by the live runner", async 
     const isRegisteredInsightsWorkflow =
       insightsRole &&
       CURRENT_LIVE_ROLES.some((role) => role.role === insightsRole) &&
-      source.includes('name: `${role} Insights governance`');
+      source.includes("name: `${role} Insights governance`");
     assert.ok(
-      source.includes(`name: "${item.workflow}"`) || isRegisteredInsightsWorkflow,
+      source.includes(`name: "${item.workflow}"`) ||
+        isRegisteredInsightsWorkflow,
       `Missing live workflow registration for scenario evidence: ${item.workflow}`,
     );
   }
@@ -260,8 +261,13 @@ test("event cleanup removes exact run-scoped fulfillment dependencies first", as
     new URL("./full-intra-live-e2e.mjs", import.meta.url),
     "utf8",
   );
-  const start = source.indexOf("async function cleanupEventWorkflowDependencies");
-  const end = source.indexOf("async function procurementReceiptAuthorityWorkflow", start);
+  const start = source.indexOf(
+    "async function cleanupEventWorkflowDependencies",
+  );
+  const end = source.indexOf(
+    "async function procurementReceiptAuthorityWorkflow",
+    start,
+  );
   const cleanup = source.slice(start, end);
   assert.match(cleanup, /purpose.*marker.*event fulfillment/i);
   assert.match(cleanup, /fulfillment_order_id/);
@@ -360,11 +366,25 @@ test("workflow evidence captures the real nested scroll surface", async () => {
     "utf8",
   );
 
+  assert.match(source, /async function captureScrollableEvidenceForPage/);
   assert.match(source, /async function captureScrollableEvidence/);
   assert.match(source, /document\.querySelector\("main"\)/);
   assert.match(source, /main\.scrollHeight\s*>\s*main\.clientHeight/);
   assert.match(source, /fullPage:\s*false/);
+  assert.doesNotMatch(source, /fullPage:\s*true/);
+  assert.match(source, /acceptanceScreenshots/);
   assert.match(source, /evidenceScreenshots/);
+});
+
+test("route audit retries one transient navigation timeout", async () => {
+  const source = await readFile(
+    new URL("./full-intra-live-e2e.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /async function gotoAuditRoute/);
+  assert.match(source, /if \(!\/timeout\/i\.test/);
+  assert.match(source, /timeout:\s*40_000/);
+  assert.match(source, /await gotoAuditRoute\(/);
 });
 
 test("the approval-group fixture has an explicit service-role grant", async () => {
@@ -420,10 +440,7 @@ test("shards UAT certification into bounded least-privilege jobs", async () => {
   assert.match(workflow, /AUDIT_PHASE: routes/);
   assert.match(workflow, /AUDIT_PHASE: transactions/);
   assert.match(workflow, /AUDIT_OUTPUT_PATH/);
-  assert.match(
-    workflow,
-    /routes:[\s\S]*?strategy:[\s\S]*?max-parallel: 1/,
-  );
+  assert.match(workflow, /routes:[\s\S]*?strategy:[\s\S]*?max-parallel: 1/);
   assert.match(
     workflow,
     /transactions:[\s\S]*?strategy:[\s\S]*?max-parallel: 1/,
@@ -781,7 +798,10 @@ test("Task 3 asserts current DOA, PNG signatures, exact held-stock issue denial,
   assert.match(harness, /revoked current DOA assignment denial/i);
   assert.match(harness, /held serialized unit issue denial/i);
   assert.match(harness, /held exact lot issue denial/i);
-  assert.match(harness, /const postReleaseAtp = await callRpcArgsAsBrowserUser/);
+  assert.match(
+    harness,
+    /const postReleaseAtp = await callRpcArgsAsBrowserUser/,
+  );
   assert.match(harness, /quantity: reservationQuantity/);
   assert.match(harness, /authoritative hold race readback expected zero ATP/i);
   assert.match(
@@ -1011,6 +1031,16 @@ test("Task 3 uses browser-role exception receipts and proves transactional clean
   assert.match(source, /authoritative hold race readback/i);
   assert.match(source, /accepted excess without approved amendment/i);
   assert.match(source, /cumulative payment acceptance binding/i);
+  assert.match(source, /policy_profile_id:\s*policyProfiles\[0\]\.id/);
+  assert.match(source, /kind:\s*"previous_cost"/);
+  assert.match(source, /kind:\s*"quote"/);
+  assert.match(
+    source,
+    /invoice_number:\s*`\$\{fixture\.marker\}-CUMULATIVE-INVOICE`/,
+  );
+  assert.match(source, /invoice_amount:\s*300/);
+  assert.match(source, /#doa-effective-date/);
+  assert.match(source, /Vendor invitation delivery retry failed/);
   assert.match(source, /referenced approval role rename\/deactivate denial/i);
   assert.match(source, /inactive approval role cannot authorize/i);
   assert.match(source, /Material stock change bypassed Finance handoff/);
@@ -1638,12 +1668,18 @@ test("the latest public quality boundary delegates exact PO-line inspection", as
     ),
     "utf8",
   );
-  assert.match(migration, /core\.has_live_cap\('warehouse', 'inspect_quality'\)/);
+  assert.match(
+    migration,
+    /core\.has_live_cap\('warehouse', 'inspect_quality'\)/,
+  );
   assert.match(
     migration,
     /return private\.warehouse_inspect_quality_v2\(payload\)/,
   );
-  assert.doesNotMatch(migration, /return private\.warehouse_inspect_quality\(payload\)/);
+  assert.doesNotMatch(
+    migration,
+    /return private\.warehouse_inspect_quality\(payload\)/,
+  );
 });
 
 test("multi-role Procurement collaborators are deduplicated before upsert", async () => {
@@ -1658,7 +1694,9 @@ test("multi-role Procurement collaborators are deduplicated before upsert", asyn
     "procurement.create_request",
     "procurement.submit_request",
   ]) {
-    const bodyStart = migration.indexOf(`create or replace function ${functionName}`);
+    const bodyStart = migration.indexOf(
+      `create or replace function ${functionName}`,
+    );
     const bodyEnd = migration.indexOf("$$;", bodyStart);
     assert.notEqual(bodyStart, -1, `${functionName} repair is missing`);
     assert.notEqual(bodyEnd, -1, `${functionName} repair is unterminated`);
@@ -1868,10 +1906,7 @@ test("quality acceptance and DOA activation converge their private contracts", a
     migration,
     /payload \|\| pg_catalog[.]jsonb_build_object\('id', v_matrix_id\)/,
   );
-  assert.match(
-    migration,
-    /A separate DOA checker must activate the matrix/,
-  );
+  assert.match(migration, /A separate DOA checker must activate the matrix/);
 });
 
 test("receipt quality validates exact PO-line identity before exception state", async () => {
@@ -1903,7 +1938,10 @@ test("cumulative acceptance certifies every received PO line before payment", as
   );
   assert.match(source, /concurrent-independent-qc/);
   assert.match(source, /source_id: fixture[.]ids[.]concurrentReceipt/);
-  assert.match(source, /procurement_po_line_id: fixture[.]ids[.]concurrentLine/);
+  assert.match(
+    source,
+    /procurement_po_line_id: fixture[.]ids[.]concurrentLine/,
+  );
   assert.match(source, /quantity: 2,[\s\S]*disposition: "accepted"/);
   assert.match(source, /accepted_quantity\) !== 3/);
   assert.match(source, /outstanding_quantity\) !== 0/);

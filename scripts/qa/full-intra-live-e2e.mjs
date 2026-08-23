@@ -1351,6 +1351,100 @@ function routeNeedsFailureEvidence(routeResult) {
   );
 }
 
+async function gotoAuditRoute(page, url) {
+  try {
+    await page.goto(url, {
+      waitUntil: "domcontentloaded",
+      timeout: 20_000,
+    });
+  } catch (error) {
+    if (!/timeout/i.test(String(error?.message ?? error))) throw error;
+    await page.waitForTimeout(750);
+    await page.goto(url, {
+      waitUntil: "domcontentloaded",
+      timeout: 40_000,
+    });
+  }
+}
+
+async function captureScrollableEvidenceForPage(
+  page,
+  targetPath,
+  quality = 72,
+) {
+  await mkdir(path.dirname(targetPath), { recursive: true });
+  const scrollContext = await page.evaluate(() => {
+    const documentScroller = document.scrollingElement;
+    const main = document.querySelector("main");
+    const scrollElement =
+      main &&
+      main.scrollHeight > main.clientHeight + 8 &&
+      /auto|scroll/.test(getComputedStyle(main).overflowY)
+        ? main
+        : documentScroller;
+    if (!scrollElement) {
+      return { nested: false, originalTop: 0, maxScroll: 0, step: 1 };
+    }
+    return {
+      nested: scrollElement !== documentScroller,
+      originalTop: scrollElement.scrollTop,
+      maxScroll: Math.max(
+        0,
+        scrollElement.scrollHeight - scrollElement.clientHeight,
+      ),
+      step: Math.max(1, Math.floor(scrollElement.clientHeight * 0.8)),
+    };
+  });
+  const offsets = [];
+  for (
+    let top = 0;
+    top < scrollContext.maxScroll && offsets.length < 12;
+    top += scrollContext.step
+  ) {
+    offsets.push(top);
+  }
+  offsets.push(scrollContext.maxScroll);
+  const uniqueOffsets = [...new Set(offsets)];
+  const extension = path.extname(targetPath);
+  const base = targetPath.slice(0, -extension.length);
+  const screenshots = [];
+  for (let index = 0; index < uniqueOffsets.length; index += 1) {
+    await page.evaluate(
+      ({ nested, top }) => {
+        const scrollElement = nested
+          ? document.querySelector("main")
+          : document.scrollingElement;
+        scrollElement?.scrollTo(0, top);
+      },
+      { nested: scrollContext.nested, top: uniqueOffsets[index] },
+    );
+    await page.waitForTimeout(120);
+    const framePath =
+      uniqueOffsets.length === 1
+        ? targetPath
+        : `${base}-frame-${String(index + 1).padStart(2, "0")}${extension}`;
+    await page.screenshot({
+      path: framePath,
+      type: "jpeg",
+      quality,
+      fullPage: false,
+    });
+    screenshots.push(
+      path.relative(process.cwd(), framePath).replaceAll("\\", "/"),
+    );
+  }
+  await page.evaluate(
+    ({ nested, top }) => {
+      const scrollElement = nested
+        ? document.querySelector("main")
+        : document.scrollingElement;
+      scrollElement?.scrollTo(0, top);
+    },
+    { nested: scrollContext.nested, top: scrollContext.originalTop },
+  );
+  return screenshots;
+}
+
 async function captureRouteFailureEvidence(
   page,
   { viewport, role, route, state = "failed" },
@@ -1360,21 +1454,19 @@ async function captureRouteFailureEvidence(
     .filter(Boolean)
     .join("-");
   const screenshotPath = path.join(auditEvidenceDir, `${filename}.jpg`);
-  await mkdir(auditEvidenceDir, { recursive: true });
-  await page.screenshot({
-    path: screenshotPath,
-    type: "jpeg",
-    quality: 70,
-    fullPage: true,
-  });
-  return path.relative(process.cwd(), screenshotPath).replaceAll("\\", "/");
+  const screenshots = await captureScrollableEvidenceForPage(
+    page,
+    screenshotPath,
+    70,
+  );
+  return screenshots[0] ?? null;
 }
 
 async function auditRoute(page, route) {
-  await page.goto(`${baseUrl}${route.path}?auditRoute=${Date.now()}`, {
-    waitUntil: "domcontentloaded",
-    timeout: 20_000,
-  });
+  await gotoAuditRoute(
+    page,
+    `${baseUrl}${route.path}?auditRoute=${Date.now()}`,
+  );
   let readinessError = null;
   try {
     await waitForMeaningfulRoute(page);
@@ -1464,9 +1556,10 @@ async function procurementCreateRequestWorkflow(page, marker) {
   await waitForMeaningfulRoute(page);
   await page
     .locator("label")
-    .filter({ hasText: /^Petty cash/i })
+    .filter({ hasText: /^Goods$/i })
     .first()
     .click();
+  await page.getByLabel("Goods / materials", { exact: true }).check();
   await page.getByLabel("Title").fill(title);
   await page.getByLabel("Line 1 description").fill("Audit workflow supplies");
   await page.getByLabel("Line 1 unit price").fill("1250");
@@ -1500,7 +1593,33 @@ async function procurementCreateRequestWorkflow(page, marker) {
   await page
     .getByLabel(`Document type for ${marker}-budget.pdf`)
     .selectOption("budget");
+  await attachmentInput.setInputFiles({
+    name: `${marker}-previous-cost.pdf`,
+    mimeType: "application/pdf",
+    buffer: Buffer.from("UAT previous purchase cost evidence"),
+  });
+  await page
+    .getByLabel(`Document type for ${marker}-previous-cost.pdf`)
+    .selectOption("previous_cost");
+  await attachmentInput.setInputFiles({
+    name: `${marker}-quote.pdf`,
+    mimeType: "application/pdf",
+    buffer: Buffer.from("UAT vendor quotation evidence"),
+  });
+  await page
+    .getByLabel(`Document type for ${marker}-quote.pdf`)
+    .selectOption("quote");
   await page.getByRole("button", { name: /continue/i }).click();
+  for (const [label, value] of [
+    ["Acceptance criteria", "Conforming goods accepted after inspection"],
+    ["Delivery terms", "Deliver to the designated Mwell warehouse"],
+    ["Payment terms", "Net 30 after accepted delivery and invoice"],
+    ["Shipping terms", "Vendor-arranged domestic delivery"],
+    ["Quotation validity", "30 calendar days"],
+    ["Response deadline", "Within five working days"],
+  ]) {
+    await page.getByLabel(label, { exact: true }).fill(value);
+  }
   await page.getByRole("button", { name: /save draft/i }).click();
   await page.waitForURL(
     (url) =>
@@ -1572,13 +1691,42 @@ async function legalInviteVendorWorkflow(page, marker) {
     select: "id,company_name,status,case_id",
   });
   const db = createAuditDatabaseClient();
-  const { data: deliveryRows, error: deliveryError } = await db
-    .schema("legal")
-    .from("vendor_invites")
-    .select("id,status,delivery_error,auth_user_id,expires_at,link_generation")
-    .eq("company_name", companyName);
-  if (deliveryError) throw new Error(deliveryError.message);
-  const deliveryStatus = deliveryRows?.[0]?.status;
+  async function readDelivery() {
+    const { data, error } = await db
+      .schema("legal")
+      .from("vendor_invites")
+      .select(
+        "id,status,delivery_error,auth_user_id,expires_at,link_generation",
+      )
+      .eq("company_name", companyName);
+    if (error) throw new Error(error.message);
+    return data?.[0] ?? null;
+  }
+  let delivery = await readDelivery();
+  if (
+    requireVendorDelivery &&
+    delivery?.status === "delivery_failed" &&
+    /rate limit/i.test(delivery.delivery_error ?? "")
+  ) {
+    await page.waitForTimeout(65_000);
+    const retry = await page.evaluate(async (inviteId) => {
+      const response = await fetch("/api/legal/vendor-invites", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ invite_id: inviteId }),
+      });
+      return { status: response.status, body: await response.text() };
+    }, delivery.id);
+    if (retry.status >= 400) {
+      throw new Error(
+        `Vendor invitation delivery retry failed (${retry.status}: ${retry.body}).`,
+      );
+    }
+    delivery = await readDelivery();
+  }
+  const deliveryRows = delivery ? [delivery] : [];
+  const deliveryStatus = delivery?.status;
   if (!["sent", "delivery_failed"].includes(deliveryStatus))
     throw new Error(
       `Unexpected vendor invite delivery status: ${deliveryStatus}`,
@@ -1703,16 +1851,11 @@ async function legalInviteVendorWorkflow(page, marker) {
         auditEvidenceDir,
         `${marker.toLowerCase()}-vendor-acceptance.jpg`,
       );
-      await mkdir(auditEvidenceDir, { recursive: true });
-      await vendorPage.screenshot({
-        path: acceptanceEvidencePath,
-        type: "jpeg",
-        quality: 72,
-        fullPage: true,
-      });
-      acceptanceEvidenceScreenshot = path
-        .relative(process.cwd(), acceptanceEvidencePath)
-        .replaceAll("\\", "/");
+      const acceptanceScreenshots = await captureScrollableEvidenceForPage(
+        vendorPage,
+        acceptanceEvidencePath,
+      );
+      acceptanceEvidenceScreenshot = acceptanceScreenshots[0] ?? null;
       acceptanceCheckpoint = await verifyCheckpoint({
         schema: "legal",
         table: "vendor_invites",
@@ -2017,7 +2160,7 @@ async function adminCreateDoaWorkflow(page, marker, { captureState }) {
   await page
     .getByLabel("Source document", { exact: true })
     .fill(`${marker} controlled test`);
-  await page.getByLabel("Effective date", { exact: true }).fill("2026-07-14");
+  await page.locator("#doa-effective-date").fill("2026-07-14");
   await page.getByLabel("Tier 1 minimum").fill("0");
   await page.getByLabel("Tier 1 maximum").fill("1000");
   const approvers = page.getByLabel(/Tier \d+ named approver/);
@@ -2243,6 +2386,19 @@ async function insertAuditRows(client, schema, table, rows) {
 
 async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
   const client = createAuditDatabaseClient();
+  const { data: policyProfiles, error: policyProfileError } = await client
+    .schema("procurement")
+    .from("policy_profiles")
+    .select("id")
+    .eq("relationship", "mwell_operating")
+    .eq("status", "active")
+    .lte("effective_from", new Date().toISOString())
+    .order("effective_from", { ascending: false })
+    .limit(1);
+  if (policyProfileError || !policyProfiles?.[0])
+    throw new Error(
+      `An active Mwell operating policy profile is required: ${policyProfileError?.message ?? "missing"}`,
+    );
   const { data: locations, error: locationError } = await client
     .schema("warehouse")
     .from("locations")
@@ -2509,7 +2665,10 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
       attachments: [
         { kind: "spec", filename: `${marker}-receipt-spec.pdf` },
         { kind: "budget", filename: `${marker}-receipt-budget.pdf` },
+        { kind: "previous_cost", filename: `${marker}-receipt-cost.pdf` },
+        { kind: "quote", filename: `${marker}-receipt-quote.pdf` },
       ],
+      policy_profile_id: policyProfiles[0].id,
       lines: [
         {
           description: `${marker} receipt authority line`,
@@ -2542,7 +2701,11 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
       attachments: [
         { kind: "spec", filename: `${marker}-spec.pdf` },
         { kind: "budget", filename: `${marker}-budget.pdf` },
+        { kind: "previous_cost", filename: `${marker}-previous-cost.pdf` },
+        { kind: "quote", filename: `${marker}-quote.pdf` },
+        { kind: "award_recommendation", filename: `${marker}-award.pdf` },
       ],
+      policy_profile_id: policyProfiles[0].id,
       lines: [
         {
           description: `${marker} governed test line`,
@@ -3757,9 +3920,7 @@ async function task3SupervisorTransactions(page, fixture) {
       procurement_po_line_id: fixture.ids.concurrentLine,
       quantity: 2,
       disposition: "accepted",
-      evidence_urls: [
-        `audit/${fixture.marker}/concurrent-independent-qc.jpg`,
-      ],
+      evidence_urls: [`audit/${fixture.marker}/concurrent-independent-qc.jpg`],
     },
   );
   if (!concurrentAccepted.ok)
@@ -5436,9 +5597,13 @@ async function task3CumulativePaymentAcceptanceBinding(page, fixture) {
     {
       purchase_order_id: fixture.ids.partialPo,
       po_match: true,
+      invoice_number: `${fixture.marker}-CUMULATIVE-INVOICE`,
+      invoice_amount: 300,
       invoice_or_si_storage_path: `audit/${fixture.marker}/cumulative-invoice.pdf`,
       milestone_support_storage_path: `audit/${fixture.marker}/cumulative-receipts.pdf`,
       tax_withholding_support_storage_path: `audit/${fixture.marker}/cumulative-tax.pdf`,
+      tax_amount: 0,
+      withholding_amount: 0,
     },
   );
   if (!readiness.ok)
@@ -6526,9 +6691,7 @@ async function cleanupEventWorkflowDependencies(marker) {
           `Event child fulfillment cleanup failed: ${error.message}`,
         );
     }
-    const parentOrderIds = orderIds.filter(
-      (id) => !childOrderIds.includes(id),
-    );
+    const parentOrderIds = orderIds.filter((id) => !childOrderIds.includes(id));
     if (parentOrderIds.length) {
       const { error: orderDeleteError } = await client
         .schema("warehouse")
@@ -7772,81 +7935,7 @@ async function runWorkflow(browser, viewport, user, workflow) {
   const screenshotPath = path.join(auditEvidenceDir, `${evidenceName}.jpg`);
 
   async function captureScrollableEvidence(targetPath) {
-    await mkdir(auditEvidenceDir, { recursive: true });
-    const scrollContext = await page.evaluate(() => {
-      const documentScroller = document.scrollingElement;
-      const main = document.querySelector("main");
-      const scrollElement =
-        main &&
-        main.scrollHeight > main.clientHeight + 8 &&
-        /auto|scroll/.test(getComputedStyle(main).overflowY)
-          ? main
-          : documentScroller;
-      if (!scrollElement) {
-        return { nested: false, originalTop: 0, maxScroll: 0, step: 1 };
-      }
-      return {
-        nested: scrollElement !== documentScroller,
-        originalTop: scrollElement.scrollTop,
-        maxScroll: Math.max(
-          0,
-          scrollElement.scrollHeight - scrollElement.clientHeight,
-        ),
-        step: Math.max(1, Math.floor(scrollElement.clientHeight * 0.8)),
-      };
-    });
-    const positions = [];
-    for (
-      let top = 0;
-      top < scrollContext.maxScroll && positions.length < 12;
-      top += scrollContext.step
-    ) {
-      positions.push(top);
-    }
-    if (
-      positions.length === 0 ||
-      positions.at(-1) !== scrollContext.maxScroll
-    ) {
-      positions.push(scrollContext.maxScroll);
-    }
-    const extension = path.extname(targetPath) || ".jpg";
-    const stem = targetPath.slice(0, targetPath.length - extension.length);
-    const screenshots = [];
-    for (const [index, top] of positions.entries()) {
-      await page.evaluate(
-        ({ nested, top }) => {
-          const scrollElement = nested
-            ? document.querySelector("main")
-            : document.scrollingElement;
-          scrollElement?.scrollTo(0, top);
-        },
-        { nested: scrollContext.nested, top },
-      );
-      await page.waitForTimeout(80);
-      const framePath =
-        positions.length === 1
-          ? targetPath
-          : `${stem}-${String(index + 1).padStart(2, "0")}${extension}`;
-      await page.screenshot({
-        path: framePath,
-        type: "jpeg",
-        quality: 72,
-        fullPage: false,
-      });
-      screenshots.push(
-        path.relative(process.cwd(), framePath).replaceAll("\\", "/"),
-      );
-    }
-    await page.evaluate(
-      ({ nested, top }) => {
-        const scrollElement = nested
-          ? document.querySelector("main")
-          : document.scrollingElement;
-        scrollElement?.scrollTo(0, top);
-      },
-      { nested: scrollContext.nested, top: scrollContext.originalTop },
-    );
-    return screenshots;
+    return captureScrollableEvidenceForPage(page, targetPath);
   }
 
   async function captureEvidence() {
