@@ -1,6 +1,7 @@
 # UAT Transaction Certification Remediation
 
-**Released:** August 23, 2026  
+**Released:** August 23, 2026
+
 **Scope:** P0-P2 failures isolated by live desktop and mobile transaction artifacts
 
 ## Corrected controls
