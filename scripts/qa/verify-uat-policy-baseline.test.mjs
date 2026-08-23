@@ -75,6 +75,24 @@ const parent = {
   document_hash: "538c6c7cd25449a55b1608559af83c2c7aaaafdd5e8be1cc2580392cf46ec996",
 };
 
+const temporaryMatrix = {
+  id: "10000000-0000-4000-8000-000000000005",
+  department: "operations",
+  version: "UAT-TEMP-OPS-1",
+  status: "active",
+  active: true,
+};
+const temporaryAssignments = ["dept_head", "procurement_head", "legal", "finance", "final_approver"]
+  .map((tier, index) => ({
+    matrix_id: temporaryMatrix.id,
+    tier,
+    category: null,
+    min_amount: 0,
+    max_amount: null,
+    approver_user_id: `10000000-0000-4000-8000-${String(index + 10).padStart(12, "0")}`,
+    active: true,
+  }));
+
 function response(body, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -88,10 +106,12 @@ function fixtureFetch({ profiles = [operating], activationEvents = [{
   profile_actor_id: maker,
   profile_revision: 1,
   event_at: "2026-08-22T00:00:00.000Z",
-}] } = {}) {
+}], matrices = [temporaryMatrix], assignments = temporaryAssignments } = {}) {
   return async (input) => {
     const url = new URL(input);
     if (url.pathname.endsWith("/policy_profile_events")) return response(activationEvents);
+    if (url.pathname.endsWith("/doa_matrices")) return response(matrices);
+    if (url.pathname.endsWith("/doa_assignments")) return response(assignments);
     if (url.searchParams.get("relationship") === "eq.mwell_operating") return response(profiles);
     return response([parent]);
   };
@@ -108,6 +128,7 @@ test("verifies the exact active UAT policy lineage, controls, and activation evi
   const result = await verifyUatPolicyBaseline({ ...valid, fetchImpl: fixtureFetch() });
   assert.equal(result.profileId, operatingId);
   assert.equal(result.parentProfileId, parentId);
+  assert.equal(result.temporaryDoaMatrixCount, 1);
 });
 
 test("fails closed when no effective Mwell profile exists", async () => {
@@ -121,5 +142,17 @@ test("fails closed when maker and checker are the same user", async () => {
   await assert.rejects(
     () => verifyUatPolicyBaseline({ ...valid, fetchImpl: fixtureFetch({ profiles: [{ ...operating, activated_by: maker }] }) }),
     /maker and checker/i,
+  );
+});
+
+test("fails closed when a temporary UAT matrix has an incomplete governed ladder", async () => {
+  await assert.rejects(
+    () => verifyUatPolicyBaseline({
+      ...valid,
+      fetchImpl: fixtureFetch({
+        assignments: temporaryAssignments.filter((assignment) => assignment.tier !== "finance"),
+      }),
+    }),
+    /exactly one open named finance assignment/i,
   );
 });

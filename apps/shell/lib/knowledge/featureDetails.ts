@@ -549,9 +549,9 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
       fields: [
         field(
           "Department",
-          "Names the department governed by this matrix revision.",
+          "Selects the active controlled department governed by this matrix revision.",
           true,
-          "A non-empty trimmed department name is required.",
+          "Choose an active directory department; free-text, unknown, and inactive department identities are rejected.",
         ),
         field(
           "Version",
@@ -2721,7 +2721,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
         field(
           "Category",
-          "Selects the procurement policy category.",
+          "Selects the procurement policy category through a full-tile radio control that works by pointer, touch, and keyboard.",
           true,
           "The category must match a supported policy value.",
         ),

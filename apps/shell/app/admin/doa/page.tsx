@@ -337,7 +337,12 @@ function DoaWorkspace({ canManagePolicy }: { canManagePolicy: boolean }) {
         </h2>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {matrices.map((matrix) => (
-            <Card key={matrix.id} className="min-w-0 overflow-hidden p-4">
+            <Card
+              key={matrix.id}
+              role="group"
+              aria-label={`${departmentNameByCode.get(matrix.department) ?? matrix.department} ${matrix.version} DOA matrix`}
+              className="min-w-0 overflow-hidden p-4"
+            >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <h3 className="truncate font-semibold text-ink">

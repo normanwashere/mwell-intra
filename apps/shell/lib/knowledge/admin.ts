@@ -140,6 +140,7 @@ export const ADMINISTRATOR_GUIDES: AdministratorGuide[] = [
       "No gaps or overlaps between amount bands",
       "Every active band has an active named approver",
       "Final authority covers the highest permitted value",
+      "The temporary UAT baseline contains one open named owner for Department Head, Procurement Head, Legal, Finance, and Final Approver in every active department matrix; replace it with the approved operating schedule before production",
     ],
     affectedUsers: [
       "Department requesters",

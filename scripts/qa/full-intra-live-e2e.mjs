@@ -2089,8 +2089,12 @@ async function warehouseCreateEventWorkflow(page, marker) {
   };
 }
 
-async function adminCreateDoaWorkflow(page, marker, { captureState }) {
-  const department = `${marker} Department`;
+async function adminCreateDoaWorkflow(
+  page,
+  marker,
+  { captureState },
+  { department, departmentName },
+) {
   const version = `${marker}-V1`;
   await page.goto(`${baseUrl}/admin/doa?workflow=${Date.now()}`, {
     waitUntil: "domcontentloaded",
@@ -2147,11 +2151,13 @@ async function adminCreateDoaWorkflow(page, marker, { captureState }) {
     await saveDraft.click();
   };
   await clickSaveDraft();
-  await page.getByText("Department and version are required.").waitFor({
+  await page.getByText("Select an active department.").waitFor({
     state: "visible",
   });
-  await captureState("DOA required-field validation");
-  await page.getByLabel("Department", { exact: true }).fill(department);
+  await page.getByLabel("Department", { exact: true }).selectOption(department);
+  await clickSaveDraft();
+  await page.getByText("Version is required.").waitFor({ state: "visible" });
+  await captureState("DOA controlled-department validation");
   await page.getByLabel("Version", { exact: true }).fill(version);
   await page
     .getByLabel("Source document", { exact: true })
@@ -2165,13 +2171,11 @@ async function adminCreateDoaWorkflow(page, marker, { captureState }) {
       .getByLabel(`Tier ${index + 1} named approver`)
       .selectOption({ index: 1 });
   await clickSaveDraft();
-  const departmentHeading = page.getByRole("heading", {
-    name: department,
+  const matrixCard = page.getByRole("group", {
+    name: `${departmentName} ${version} DOA matrix`,
     exact: true,
   });
-  await departmentHeading.waitFor({
-    state: "visible",
-  });
+  await matrixCard.waitFor({ state: "visible" });
   await captureState("DOA draft saved for independent review");
   const checkpoint = await verifyCheckpoint({
     schema: "procurement",
@@ -2188,26 +2192,27 @@ async function adminCreateDoaWorkflow(page, marker, { captureState }) {
   };
 }
 
-async function legalActivateDoaWorkflow(page, marker, { captureState }) {
-  const department = `${marker} Department`;
+async function legalActivateDoaWorkflow(
+  page,
+  marker,
+  { captureState },
+  { department, departmentName },
+) {
   const version = `${marker}-V1`;
   await page.goto(`${baseUrl}/admin/doa?workflow=${Date.now()}`, {
     waitUntil: "domcontentloaded",
     timeout: 20_000,
   });
   await waitForMeaningfulRoute(page);
-  const departmentHeading = page.getByRole("heading", {
-    name: department,
+  const card = page.getByRole("group", {
+    name: `${departmentName} ${version} DOA matrix`,
     exact: true,
   });
-  await departmentHeading.waitFor({ state: "visible" });
-  const card = departmentHeading.locator(
-    "xpath=ancestor::div[.//button[normalize-space()='Activate']][1]",
-  );
+  await card.waitFor({ state: "visible" });
   page.once("dialog", (dialog) => void dialog.accept());
   await card.getByRole("button", { name: "Activate", exact: true }).click();
   await page
-    .getByText(`${department} DOA activated.`)
+    .getByText(`${departmentName} DOA activated.`)
     .waitFor({ state: "visible", timeout: 30_000 });
   await captureState("DOA independently activated by Legal");
   const checkpoint = await verifyCheckpoint({
@@ -5754,7 +5759,7 @@ async function task3RejectStalePaymentReadiness(page, fixture) {
         note: `${fixture.marker} stale payment readiness invalidation denial`,
       },
     ),
-    /acceptance evidence version is stale|cannot transition from superseded/i,
+    /acceptance evidence version is stale|payment evidence is stale|cannot transition from superseded/i,
     "stale payment readiness invalidation",
   );
   return {
@@ -6426,12 +6431,28 @@ async function cleanupTask3ReceiptFixture(fixture) {
   await remove("procurement", "requests", (query) =>
     query.like("id", `${marker}%`),
   );
-  await remove("procurement", "doa_assignments", (query) =>
-    query.in("id", ids.amendmentDoaAssignments),
-  );
-  await remove("procurement", "doa_matrices", (query) =>
-    query.eq("id", ids.amendmentDoaMatrix),
-  );
+  const { data: departmentMatrices, error: departmentMatrixError } =
+    await client
+      .schema("procurement")
+      .from("doa_matrices")
+      .select("id")
+      .eq("department", ids.departmentCode);
+  if (departmentMatrixError)
+    throw new Error(
+      `Task 3 DOA cleanup lookup failed: ${departmentMatrixError.message}`,
+    );
+  const departmentMatrixIds = (departmentMatrices ?? []).map((row) => row.id);
+  if (departmentMatrixIds.length) {
+    await remove("core", "activity_log", (query) =>
+      query.in("entity_id", departmentMatrixIds),
+    );
+    await remove("procurement", "doa_assignments", (query) =>
+      query.in("matrix_id", departmentMatrixIds),
+    );
+    await remove("procurement", "doa_matrices", (query) =>
+      query.in("id", departmentMatrixIds),
+    );
+  }
   await remove("warehouse", "products", (query) =>
     query.in("id", [ids.product, ids.serializedIssueProduct]),
   );
@@ -8961,7 +8982,11 @@ try {
             {
               name: "department DOA creation",
               scenarioId: "admin-doa",
-              run: (page, hooks) => adminCreateDoaWorkflow(page, marker, hooks),
+              run: (page, hooks) =>
+                adminCreateDoaWorkflow(page, marker, hooks, {
+                  department: task3Fixture.ids.departmentCode,
+                  departmentName: `${marker} Receipt Department`,
+                }),
             },
           ),
         );
@@ -8974,7 +8999,10 @@ try {
               name: "department DOA role handoff",
               scenarioId: "admin-doa",
               run: (page, hooks) =>
-                legalActivateDoaWorkflow(page, marker, hooks),
+                legalActivateDoaWorkflow(page, marker, hooks, {
+                  department: task3Fixture.ids.departmentCode,
+                  departmentName: `${marker} Receipt Department`,
+                }),
             },
           ),
         );

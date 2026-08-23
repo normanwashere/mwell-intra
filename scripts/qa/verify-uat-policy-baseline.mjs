@@ -23,6 +23,14 @@ const CONTROL_KEYS = [
   "vendorProbationMonths",
 ];
 
+const REQUIRED_TEMPORARY_DOA_TIERS = [
+  "dept_head",
+  "procurement_head",
+  "legal",
+  "finance",
+  "final_approver",
+];
+
 const EXPECTED = {
   code: "MWELL-PROCUREMENT-OPERATING",
   version: "2026-08-UAT",
@@ -221,6 +229,46 @@ export async function verifyUatPolicyBaseline({
   assert(events[0].actor_id === operating.activated_by, "The activation event checker does not match the active profile.");
   assert(events[0].profile_actor_id === operating.last_modified_by, "The activation event maker does not match the active profile.");
 
+  const matricesUrl = new URL("/rest/v1/doa_matrices", url);
+  matricesUrl.searchParams.set("select", "id,department,version,status,active");
+  matricesUrl.searchParams.set("status", "eq.active");
+  matricesUrl.searchParams.set("active", "eq.true");
+  matricesUrl.searchParams.set("version", "like.UAT-TEMP-*");
+  const temporaryMatrices = await readJson(
+    await fetchImpl(matricesUrl, { headers: schemaHeaders(serviceKey), cache: "no-store" }),
+    "Temporary UAT DOA matrix query",
+  );
+  assert(temporaryMatrices.length > 0, "No active temporary UAT DOA matrices were found.");
+
+  const matrixIds = temporaryMatrices.map((matrix) => matrix.id);
+  const assignmentsUrl = new URL("/rest/v1/doa_assignments", url);
+  assignmentsUrl.searchParams.set(
+    "select",
+    "matrix_id,tier,category,min_amount,max_amount,approver_user_id,active",
+  );
+  assignmentsUrl.searchParams.set("matrix_id", `in.(${matrixIds.join(",")})`);
+  assignmentsUrl.searchParams.set("active", "eq.true");
+  const temporaryAssignments = await readJson(
+    await fetchImpl(assignmentsUrl, { headers: schemaHeaders(serviceKey), cache: "no-store" }),
+    "Temporary UAT DOA assignment query",
+  );
+
+  for (const matrix of temporaryMatrices) {
+    for (const tier of REQUIRED_TEMPORARY_DOA_TIERS) {
+      const matchingAssignments = temporaryAssignments.filter((assignment) =>
+        assignment.matrix_id === matrix.id &&
+        assignment.tier === tier &&
+        assignment.category === null &&
+        Number(assignment.min_amount) === 0 &&
+        assignment.max_amount === null &&
+        Boolean(assignment.approver_user_id));
+      assert(
+        matchingAssignments.length === 1,
+        `${matrix.department} ${matrix.version} must have exactly one open named ${tier} assignment; found ${matchingAssignments.length}.`,
+      );
+    }
+  }
+
   return {
     profileId: operating.id,
     code: operating.code,
@@ -228,6 +276,7 @@ export async function verifyUatPolicyBaseline({
     parentProfileId: parent.id,
     effectiveFrom: operating.effective_from,
     activatedAt: operating.activated_at,
+    temporaryDoaMatrixCount: temporaryMatrices.length,
   };
 }
 
@@ -239,7 +288,7 @@ async function main() {
     expectedProjectRef: process.env.SUPABASE_PROJECT_REF ?? "",
     productionProjectRef: process.env.PRODUCTION_SUPABASE_PROJECT_REF ?? "",
   });
-  console.log(`Verified active UAT procurement policy ${result.code} ${result.version}.`);
+  console.log(`Verified active UAT procurement policy ${result.code} ${result.version} and ${result.temporaryDoaMatrixCount} temporary DOA matrices.`);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

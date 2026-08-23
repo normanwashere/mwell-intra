@@ -841,7 +841,7 @@ export function CreateRequestPage() {
                         <label
                           key={c.code}
                           className={[
-                            'group flex min-h-11 cursor-pointer flex-col rounded-2xl border p-2.5 transition sm:p-3',
+                            'group relative flex min-h-11 cursor-pointer flex-col rounded-2xl border p-2.5 transition focus-within:ring-2 focus-within:ring-brand-500 focus-within:ring-offset-2 sm:p-3',
                             active
                               ? 'border-brand-500 bg-brand-500/10 ring-2 ring-brand-500/40'
                               : 'border-line bg-surface hover:border-brand-500/40',
@@ -855,7 +855,7 @@ export function CreateRequestPage() {
                             checked={active}
                             onChange={() => setCategory(c.code)}
                             aria-invalid={Boolean(fieldErrors.category)}
-                            className="sr-only"
+                            className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
                           />
                           <div className="flex min-w-0 flex-wrap items-center justify-between gap-1.5">
                             <span className="min-w-0 text-sm font-semibold leading-snug text-ink">
@@ -886,7 +886,7 @@ export function CreateRequestPage() {
                       ['materials', 'Goods / materials', 'Physical items, equipment, or supplies.'],
                       ['services', 'Services', 'Professional, subscription, project, or labor scope.'],
                     ] as const).map(([kind, label, helper]) => (
-                      <label key={kind} className={`cursor-pointer rounded-lg border p-3 ${requirementKind === kind ? 'border-brand-500 bg-brand-500/10 ring-1 ring-brand-500/40' : 'border-line bg-surface'}`}>
+                      <label key={kind} className={`relative cursor-pointer rounded-lg border p-3 focus-within:ring-2 focus-within:ring-brand-500 focus-within:ring-offset-2 ${requirementKind === kind ? 'border-brand-500 bg-brand-500/10 ring-1 ring-brand-500/40' : 'border-line bg-surface'}`}>
                         <input
                           type="radio"
                           name="requirement-kind"
@@ -894,7 +894,7 @@ export function CreateRequestPage() {
                           value={kind}
                           checked={requirementKind === kind}
                           onChange={() => { setRequirementKind(kind); setRouteConfirmed(false); }}
-                          className="sr-only"
+                          className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
                         />
                         <span className="block text-sm font-semibold text-ink">{label}</span>
                         <span className="mt-1 block text-xs text-muted">{helper}</span>

@@ -885,7 +885,7 @@ const definitions: FeatureDefinition[] = [
     statuses:
       "Draft, active, superseded, expired, loading revision, saving, or validation failed.",
     exception:
-      "Preview mode is read-only; resolve threshold gaps, missing owners, and ambiguous source authority before activation.",
+      "Preview mode is read-only; resolve threshold gaps, missing owners, and ambiguous source authority before activation. UAT-TEMP matrices are broad launch-test coverage, not approved production authority schedules.",
     completionEvidence:
       "The department card shows the intended version as active and the previous version as superseded.",
   },

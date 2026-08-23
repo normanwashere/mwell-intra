@@ -768,6 +768,9 @@ test("the mutating harness waits for quality data and uses unambiguous DOA contr
     "utf8",
   );
   assert.match(source, /getByLabel\("Department", \{ exact: true \}\)/);
+  assert.match(source, /selectOption\(department\)/);
+  assert.match(source, /task3Fixture\.ids\.departmentCode/);
+  assert.match(source, /DOA controlled-department validation/);
   assert.doesNotMatch(
     source,
     /getByLabel\("Tier 1", \{ exact: true \}\)\s*\.selectOption\("final_approver"\)/,
@@ -1102,6 +1105,7 @@ test("Task 3 uses browser-role exception receipts and proves transactional clean
   assert.match(source, /Supervisor excess custody final disposition/i);
   assert.match(source, /distinct active acceptance packs/i);
   assert.match(source, /stale payment readiness invalidation/i);
+  assert.match(source, /payment evidence is stale/i);
   assert.match(source, /same-product PO-line quality isolation/i);
   assert.match(source, /atomic hold rejection vendor return/i);
   assert.match(source, /authoritative hold race readback/i);
@@ -1800,8 +1804,8 @@ test("mobile transaction checks target visible records and unobstructed actions"
   assert.match(audit, /const clickSaveDraft = async \(\) =>/);
   assert.equal(
     (audit.match(/await clickSaveDraft\(\);/g) ?? []).length,
-    2,
-    "both DOA save attempts use the unobstructed mobile action",
+    3,
+    "every DOA validation and save attempt uses the unobstructed mobile action",
   );
   assert.match(audit, /name: "Primary mobile"/);
   assert.match(audit, /Save draft remains obstructed/);
@@ -1944,6 +1948,8 @@ test("DOA activation sends the governed signature and proves independent review"
     pageSource,
     /rpc\("activate_doa_matrix"[\s\S]*?payload: \{ matrix_id: currentMatrix\.id \}/,
   );
+  assert.match(pageSource, /role="group"/);
+  assert.match(pageSource, /\$\{matrix\.version\} DOA matrix/);
   assert.match(
     auditSource,
     /DOA draft saved for independent review[\s\S]*?status: "draft", active: false/,
@@ -1951,6 +1957,59 @@ test("DOA activation sends the governed signature and proves independent review"
   assert.match(
     auditSource,
     /legalActivateDoaWorkflow[\s\S]*?DOA independently activated by Legal[\s\S]*?status: "active", active: true/,
+  );
+});
+
+test("temporary UAT matrices cover every governed approval tier with named owners", async () => {
+  const migration = await readFile(
+    new URL(
+      "../../supabase/migrations/20260823203000_complete_temporary_uat_doa_ladders.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  for (const tier of [
+    "dept_head",
+    "procurement_head",
+    "legal",
+    "finance",
+    "final_approver",
+  ]) {
+    assert.match(migration, new RegExp(`['\"]${tier}['\"]`));
+  }
+  assert.match(migration, /intra\.test\.procurement\.lead@mwell\.com\.ph/);
+  assert.match(migration, /intra\.test\.legal\.lead@mwell\.com\.ph/);
+  assert.match(migration, /intra\.test\.finance@mwell\.com\.ph/);
+  assert.match(migration, /exactly one open named assignment/i);
+});
+
+test("procurement category cards expose a full hit surface and keyboard focus", async () => {
+  const source = await readFile(
+    new URL(
+      "../../modules/procurement/src/pages/CreateRequestPage.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.match(source, /focus-within:ring-2 focus-within:ring-brand-500/);
+  assert.match(
+    source,
+    /name="category"[\s\S]*?absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0/,
+  );
+  assert.match(
+    source,
+    /name="requirement-kind"[\s\S]*?absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0/,
+  );
+});
+
+test("Task 3 cleanup removes every run-scoped controlled-department matrix", async () => {
+  const source = await readFile(
+    new URL("./full-intra-live-e2e.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    source,
+    /\.eq\("department", ids\.departmentCode\)[\s\S]*?query\.in\("entity_id", departmentMatrixIds\)[\s\S]*?query\.in\("matrix_id", departmentMatrixIds\)[\s\S]*?query\.in\("id", departmentMatrixIds\)/,
   );
 });
 

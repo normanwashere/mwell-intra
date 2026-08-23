@@ -45,7 +45,7 @@ Use `mWell Procurement Policy and Procedures - Revised Modern Visual - Word Upda
 12. As vendor representative, acknowledge the exact PO version. As Warehouse/Operations or service owner, record receipt/QC/acceptance and demonstrate quarantine, rejection, replacement/warranty, RMA, and re-inspection recovery. Confirm that accepted goods value is derived from accepted quantity and governed PO-line unit price.
 13. As Procurement, prepare the versioned payment pack. As Finance Controller, demonstrate missing-evidence, mismatch, tax/foreign-vendor, stale-acceptance, returned-correction, and successful readiness decisions.
 14. Attempt file closure with an open delivery/quality issue, recover the issue, and close only when payment readiness, delivery closure, issue resolution, and retained evidence are complete.
-15. As Platform Admin or Legal, create a DOA revision by selecting an active controlled department. Confirm the stable code shown on the matrix, reject an unknown/inactive department, and prove that a different authorized checker performs activation.
+15. As Platform Admin or Legal, create a DOA revision by selecting an active controlled department. Confirm the stable code shown on the matrix, reject an unknown/inactive department, and prove that a different authorized checker performs activation. During UAT, inspect all five temporary named tiers and explain that the broad `UAT-TEMP-*` ladder is replaceable certification data, not the approved production schedule.
 
 ### Role procedure checks
 
