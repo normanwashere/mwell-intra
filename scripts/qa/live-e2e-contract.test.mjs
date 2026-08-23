@@ -452,7 +452,11 @@ test("shards UAT certification into bounded least-privilege jobs", async () => {
     workflow,
     /secrets\.AUDIT_PASSWORD \|\| secrets\.UAT_AUDIT_MASTER_PASSWORD/g,
   );
-  assert.match(workflow, /AUDIT_REQUIRE_VENDOR_DELIVERY: "true"/);
+  assert.match(workflow, /certify_vendor_email_delivery:/);
+  assert.match(
+    workflow,
+    /AUDIT_REQUIRE_VENDOR_DELIVERY:.*workflow_dispatch.*certify_vendor_email_delivery.*desktop-1440/,
+  );
   assert.match(workflow, /AUDIT_VENDOR_DELIVERY_VIEWPORT: desktop-1440/);
   assert.match(
     workflow,
@@ -835,6 +839,24 @@ test("the invite workflow verifies the persisted delivery state", async () => {
   assert.match(source, /acceptanceEvidenceScreenshot/);
   assert.match(source, /table: "vendor_invites"/);
   assert.match(source, /filters: \{ company_name: companyName \}/);
+});
+
+test("governed procurement fixtures use canonical authority and commercial facts", async () => {
+  const source = await readFile(
+    new URL("./full-intra-live-e2e.mjs", import.meta.url),
+    "utf8",
+  );
+  const fixtureStart = source.indexOf("async function createTask3ReceiptFixture");
+  const fixtureEnd = source.indexOf("async function task3", fixtureStart);
+  const fixture = source.slice(fixtureStart, fixtureEnd);
+  assert.match(fixture, /department: "Operations"/);
+  assert.doesNotMatch(fixture, /department: "operations"/);
+  assert.match(fixture, /id: ids\.partialLine,[\s\S]*?unit_price: 100/);
+  assert.match(fixture, /id: ids\.concurrentLine,[\s\S]*?unit_price: 100/);
+  assert.match(
+    source,
+    /getByRole\("radio", \{ name: "Goods", exact: true \}\)\.check\(\)/,
+  );
 });
 
 test("governed transactions retain visual and accessibility evidence", async () => {

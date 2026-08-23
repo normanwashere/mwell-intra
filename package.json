@@ -26,6 +26,8 @@
     "provision:test:warehouse-w1": "pnpm provision:test:uat",
     "provision:test:uat": "node scripts/qa/provision-uat-intra-test-users.mjs",
     "test:provision:uat": "node --test scripts/qa/provision-uat-intra-test-users.test.mjs",
+    "verify:uat-policy-baseline": "node scripts/qa/verify-uat-policy-baseline.mjs",
+    "test:uat-policy-baseline": "node --test scripts/qa/verify-uat-policy-baseline.test.mjs",
     "verify:procurement-contract": "node scripts/verify-effective-procurement-contract.mjs",
     "verify:advisor-hardening": "node scripts/verify-current-function-advisor-hardening.mjs",
     "verify:policy-alignment-schema": "node scripts/verify-policy-alignment-schema.mjs",

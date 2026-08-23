@@ -41,7 +41,11 @@ Status: Migration applied and schema-verified in UAT; application deployment and
 - DOA certification targets the department-matrix effective-date control by stable identity, eliminating ambiguity with the policy-profile effective-date editor.
 - Route navigation retries one transient timeout with a bounded second attempt; repeated failures still fail the shard.
 - Vendor delivery certification performs one bounded retry after the Supabase email rate-limit window and still fails closed unless the persisted invite reaches `sent` with Auth identity, expiry and generation evidence.
+- Push certification now exercises vendor invitation persistence and lifecycle controls without consuming the shared Supabase email quota. Actual external delivery remains a fail-closed, explicitly requested desktop canary through the `certify_vendor_email_delivery` workflow input.
 - Route failures, workflow checkpoints and vendor acceptance evidence now all use viewport frames over the app's real nested scroll surface; no audit screenshot relies on document-level full-page capture.
+- UAT preparation verifies the exact active Mwell operating profile, MPIC parent lineage, approved source identities and hashes, all 16 control values and provenance entries, activation evidence, and independent maker/checker identities before browser work begins.
+- Governed transaction fixtures now use the canonical `Operations` department identity and priced PO lines, allowing live DOA lookup and server-derived acceptance value to exercise the actual three-way payment gate.
+- Procurement category inputs expose stable accessible names, and the live draft journey selects the Goods category through its radio semantics instead of presentation text.
 
 ## Verification evidence
 
@@ -51,7 +55,7 @@ Status: Migration applied and schema-verified in UAT; application deployment and
 - Disposable PostgreSQL migration matrix covers route parity, profile activation, exception review, sourcing, vendor/PO lifecycle, payment evidence, role denial, RLS, idempotency and recovery. On 2026-08-23, 114 tests passed with one intentional live-only skip; lint, typecheck and production build passed.
 - UAT migration `20260822110000_mpic_procurement_policy_alignment` is recorded. Runtime read-back confirmed text request identifiers, the stable `save_sourcing_event(payload jsonb)` signature, and one incomplete draft routed to one remediation record.
 - Workflow screenshot evidence now traverses the app's nested `<main>` scroll surface on desktop and mobile instead of relying on document-level full-page capture.
-- Live-audit contracts now total 94 tests: 93 passed and one intentional live-only mutation test was skipped locally. The added contracts cover policy-bound fixtures, invoice evidence, unambiguous DOA targeting, bounded navigation retry, vendor-delivery retry and the absence of full-page audit capture.
+- Live-audit and UAT-policy contracts now total 99 tests: 98 passed and one intentional live-only mutation test was skipped locally. The added contracts cover policy-bound fixtures, exact policy lineage, invoice evidence, canonical DOA identity, priced acceptance, accessible request controls, bounded navigation retry, explicit vendor-delivery canary behavior and the absence of full-page audit capture.
 - Repository lint and the shell TypeScript check passed after the certification correction; the existing Procurement lint baseline remains three warnings and zero errors.
 
 ## Remaining release gates

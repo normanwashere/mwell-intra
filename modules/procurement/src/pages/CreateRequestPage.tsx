@@ -850,6 +850,7 @@ export function CreateRequestPage() {
                           <input
                             type="radio"
                             name="category"
+                            aria-label={c.label}
                             value={c.code}
                             checked={active}
                             onChange={() => setCategory(c.code)}

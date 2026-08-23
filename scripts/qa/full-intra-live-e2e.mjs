@@ -1554,11 +1554,7 @@ async function procurementCreateRequestWorkflow(page, marker) {
     },
   );
   await waitForMeaningfulRoute(page);
-  await page
-    .locator("label")
-    .filter({ hasText: /^Goods$/i })
-    .first()
-    .click();
+  await page.getByRole("radio", { name: "Goods", exact: true }).check();
   await page.getByLabel("Goods / materials", { exact: true }).check();
   await page.getByLabel("Title").fill(title);
   await page.getByLabel("Line 1 description").fill("Audit workflow supplies");
@@ -2688,7 +2684,7 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
       title: `${marker} ${method} negative`,
       status: "draft",
       requester_id: requesterProfiles[0].id,
-      department: "operations",
+      department: "Operations",
       cost_center: "CC-1100",
       needed_by: "2027-08-15",
       budget_code: `${marker}-BUDGET`,
@@ -2948,6 +2944,7 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
         line_no: 1,
         description: `${marker} clean receipt`,
         quantity: 1,
+        unit_price: 100,
         warehouse_product_id: ids.product,
       },
       {
@@ -2956,6 +2953,7 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
         line_no: 1,
         description: `${marker} partial PO first receipt`,
         quantity: 1,
+        unit_price: 100,
         warehouse_product_id: ids.product,
       },
       {
@@ -2964,6 +2962,7 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
         line_no: 2,
         description: `${marker} concurrent balance`,
         quantity: 2,
+        unit_price: 100,
         warehouse_product_id: ids.product,
       },
       {
@@ -2972,6 +2971,7 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
         line_no: 3,
         description: `${marker} cancelled line`,
         quantity: 1,
+        unit_price: 100,
         warehouse_product_id: ids.product,
         receiving_status: "cancelled",
       },
