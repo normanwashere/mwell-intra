@@ -375,7 +375,7 @@ const procedureArticles: KnowledgeArticle[] = [
     [
       [
         "Describe the requirement",
-        "Select category, title, line items, quantities, and required date.",
+        "Choose the named category control, classify the requirement as Goods / materials or Services, then enter title, priced line items, quantities, and required date.",
       ],
       [
         "Explain the need",
@@ -435,7 +435,7 @@ const procedureArticles: KnowledgeArticle[] = [
       ],
       [
         "Record acceptance",
-        "For goods, confirm Warehouse receipt and inspection against PO lines. For non-stock work, record accepted service or milestone scope and value.",
+        "For goods, confirm Warehouse receipt and inspection against priced PO lines; Intra derives accepted value from the accepted quantities and PO prices. For non-stock work, record accepted service or milestone scope and value.",
       ],
       [
         "Register and match invoice",

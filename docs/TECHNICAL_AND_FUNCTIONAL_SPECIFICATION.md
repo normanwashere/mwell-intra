@@ -1,7 +1,7 @@
 # Mwell Intra Technical and Functional Specification
 
 **Reviewed:** August 23, 2026
-**Procurement application behavior baseline:** `0bf88e362acec9ee8f5c59dbda865a8d4767e4a2`
+**Procurement application behavior baseline:** `81023ecc6b487ab8a935f675767d82d6869732e6`
 **Evidence status:** local code and documentation baseline; not live/UAT certification
 
 ## Product boundary
@@ -61,6 +61,7 @@ The policy process is: define need; submit request; confirm path; source vendors
 - Financial-protection assessment records down-payment, supply/delivery performance, development performance and warranty, third-party liability, contractor-equipment and project-specific insurance requirements. The general source references 30% performance and 10% warranty values where applicable; the system must not invent a guarantee, percentage or waiver without the approved profile/contract basis.
 - Warehouse or the service owner creates receipt, QC, custody, and acceptance evidence. Non-conformance routes to rejection, quarantine, replacement, warranty, RMA/credit, and payment hold.
 - Procurement prepares a versioned payment-readiness pack. Finance recomputes invoice, approved commitment, accepted quantity/value, tax/withholding, foreign-vendor, variance, vendor-eligibility, and evidence-version checks before its decision.
+- Goods accepted value is server-derived from exact accepted PO-line quantities and governed PO-line unit prices. The request, active DOA matrix, and assignments use the canonical department identity; case drift cannot silently select another authority path.
 - File closure requires payment readiness, delivery closure, resolved quality/variance/warranty obligations, and retained evidence; payment alone does not close the procurement file.
 
 ## Warehouse fulfillment contract
@@ -108,6 +109,8 @@ The policy process is: define need; submit request; confirm path; source vendors
 - Test mutations are restricted to the approved UAT project and deterministic run IDs.
 - Audit automation independently verifies persistence, handoff state, and cleanup.
 - Vendor invitation delivery requires production-grade custom SMTP and monitored rate limits.
+- Push certification exercises invitation persistence, case linkage, expiry, replay denial, and access-state controls without requiring external delivery. A manually requested desktop canary sets the fail-closed external-delivery gate and must persist `sent`, Auth identity, expiry, and link-generation evidence.
+- UAT preparation fails before browser testing unless the exact active Mwell profile, MPIC parent lineage, approved filenames and SHA-256 identities, 16 control values and sources, activation event, and independent maker/checker identities match the controlled baseline.
 
 ## Release and documentation controls
 

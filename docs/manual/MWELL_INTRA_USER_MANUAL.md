@@ -6,7 +6,7 @@
 
 **Reviewed:** August 23, 2026
 
-**Procurement application behavior baseline:** `0bf88e362acec9ee8f5c59dbda865a8d4767e4a2`; local documentation evidence only, not live/UAT certification
+**Procurement application behavior baseline:** `81023ecc6b487ab8a935f675767d82d6869732e6`; deployed UAT behavior pending completion of commit-bound certification
 
 **Release authority:** Use the commit-bound manifest packaged with this handbook.
 
@@ -101,6 +101,8 @@ Use the canonical 13-step **Procurement to Payment** flow later in this handbook
 | Governance tier | Standard, formal bid, high-risk/special control, and current effective DOA are derived independently |
 
 Requirement kind determines scope, acceptance and reporting, not RFQ/RFP selection. Importation adds customs, landed-cost, logistics, currency and acceptance controls but does not automatically force RFP. Only the current effective Mwell DOA names approval authority. MPIC role titles, people, limits and annexes do not grant Mwell authority.
+
+When creating a request, choose the named category first, then explicitly classify it as **Goods / materials** or **Services**. Every PO line used for goods acceptance must retain its governed unit price. After Warehouse receipt and QC, Intra computes accepted value from accepted quantity multiplied by the PO-line price; Finance does not rely on a user-entered acceptance total.
 
 The canonical source is `mWell Procurement Policy and Procedures - Revised Modern Visual - Word Updated.docx`. It identifies itself as an updated visual draft, so its application profile remains draft until Procurement records the source as approved. Operating instructions also use neutral **first independent variance decision** and **second independent variance decision** stages until Mwell policy/DOA owners authorize the local mapping. The inherited extension cap is modeled as seven calendar days.
 
@@ -288,6 +290,8 @@ Platform Admin or Legal Admin opens **Admin -> Delegation of Authority**. Select
 | Receipt variance or damage     | Use inspection/hold/vendor-return workflow with evidence                                |
 | Return serial has no source    | Quarantine the item, preserve the scanned serial, and investigate before replacement    |
 | Vendor invitation rate-limited | Do not repeatedly resend; verify delivery state and escalate SMTP capacity              |
+
+Routine UAT regression verifies invitation persistence, case linkage, expiry, replay denial, and access state. Actual external email delivery is a separate controlled desktop canary so repeated code pushes do not exhaust the shared mail quota; a canary passes only when the persisted invite is `sent` with Auth identity, expiry, and generation evidence.
 | Mobile control is obscured     | Scroll into the reserved safe area; report viewport and screenshot if still unreachable |
 
 Support evidence should contain route, time, role, safe record ID, expected outcome, visible error, and a redacted screenshot. Never include credentials or private document contents.

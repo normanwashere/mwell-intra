@@ -1,8 +1,8 @@
 # Mwell Intra Training and Handover Content
 
 **Reviewed:** August 23, 2026
-**Procurement application behavior baseline:** `0bf88e362acec9ee8f5c59dbda865a8d4767e4a2`
-**Evidence status:** local code and documentation baseline; live/UAT certification remains a separate gate
+**Procurement application behavior baseline:** `81023ecc6b487ab8a935f675767d82d6869732e6`
+**Evidence status:** deployed UAT behavior; commit-bound live certification remains the release gate
 
 This is the maintained source for trainer, developer, and infrastructure handover materials. Presentation exports must use this content and the screenshots from the matching certification artifact.
 
@@ -31,7 +31,7 @@ Learners must be able to:
 
 Use `mWell Procurement Policy and Procedures - Revised Modern Visual - Word Updated.docx` as the canonical operating source. State that it identifies itself as an updated visual draft and therefore cannot back an active profile until Procurement records approval. Use the MPIC extract only for visibly inherited controls that the canonical source does not replace.
 
-1. As Requester, create a clear, comparable request below PHP 1,000,000 with specification or scope, budget, cost center, acceptance criteria, route facts and target date.
+1. As Requester, choose the named category control, separately classify **Goods / materials** or **Services**, and create a clear, comparable request below PHP 1,000,000 with specification or scope, budget, cost center, priced lines, acceptance criteria, route facts and target date.
 2. As Procurement Lead, show **Solicitation document: RFQ**, **Procurement mode: Competitive bidding**, and **Governance tier: Standard** as separate decisions.
 3. Change the amount to PHP 1,000,000 and show that the route changes to RFP regardless of goods/service classification.
 4. Return below PHP 1,000,000 and add complexity, technical, strategic, high-risk, data-sensitive or non-comparable facts; show RFP. Then use importation alone on a simple/comparable request and show that it remains RFQ while import controls are added.
@@ -42,7 +42,7 @@ Use `mWell Procurement Policy and Procedures - Revised Modern Visual - Word Upda
 9. Record a best-value recommendation, then demonstrate a differing recommendation that remains blocked until written justification, a first independent variance decision, and a second independent variance decision are complete. Do not assign either neutral stage from an MPIC title or current code label; Mwell policy/DOA owners must authorize the stages first.
 10. Demonstrate valid and invalid sole-source, repeat-order, emergency, and petty-cash modes. For petty cash, show Finance eligibility and rejected split/recurring use.
 11. Approve the award through the current effective Mwell DOA and separation-of-duty checks, then create and issue the PO/agreement only after all commitment evidence passes.
-12. As vendor representative, acknowledge the exact PO version. As Warehouse/Operations or service owner, record receipt/QC/acceptance and demonstrate quarantine, rejection, replacement/warranty, RMA, and re-inspection recovery.
+12. As vendor representative, acknowledge the exact PO version. As Warehouse/Operations or service owner, record receipt/QC/acceptance and demonstrate quarantine, rejection, replacement/warranty, RMA, and re-inspection recovery. Confirm that accepted goods value is derived from accepted quantity and governed PO-line unit price.
 13. As Procurement, prepare the versioned payment pack. As Finance Controller, demonstrate missing-evidence, mismatch, tax/foreign-vendor, stale-acceptance, returned-correction, and successful readiness decisions.
 14. Attempt file closure with an open delivery/quality issue, recover the issue, and close only when payment readiness, delivery closure, issue resolution, and retained evidence are complete.
 
@@ -73,6 +73,7 @@ For Requester, Department Head, Procurement Lead, Legal/Compliance, technical re
 - Return serial with no original release.
 - Delivery update without permission.
 - Vendor invitation delayed or rate-limited.
+- External vendor email canary omitted, rate-limited, or missing persisted Auth identity, expiry, and generation evidence.
 
 ## Handover evidence
 
@@ -87,4 +88,4 @@ The release bundle must contain:
 
 Screenshots must come from the same deployed commit. Trainers must not use historical screenshots that show retired controls, incorrect labels, or resolved errors.
 
-The Task 11 handbook build and local tests are not a live/UAT certification artifact. The additive migration remains unapplied, and the controlled-fixture QC alias limitation remains parked for Task 12.
+Local handbook and unit-test results are supporting evidence, not live certification. Release sign-off requires the exact deployed commit, UAT policy-baseline preflight, desktop/mobile route and transaction artifacts, successful cleanup, and a separately requested external vendor-email canary when delivery is in scope.

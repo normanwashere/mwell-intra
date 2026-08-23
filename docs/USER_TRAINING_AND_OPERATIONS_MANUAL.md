@@ -1,8 +1,8 @@
 # User Training And Operations Manual
 
-**Reviewed:** August 21, 2026
+**Reviewed:** August 23, 2026
 
-**Current UAT reference:** `f88c9916c253546ae6960bd19ffd608b99fdd791`
+**Current UAT behavior reference:** `81023ecc6b487ab8a935f675767d82d6869732e6`
 
 ## Training Format
 
@@ -29,6 +29,8 @@ Use a role-specific test account and realistic test data. Each learner completes
 | Customer Service/returns | Camera or manual serial lookup, original-release confirmation, unmatched-serial quarantine, replacement/refund handoff and closure evidence                    |
 | Finance/BI/pricing       | Reconciliation, count variance, governed export evidence, review/correction, valuation and pricing controls                                                    |
 | Administrators           | Least-privilege role assignment, deprovisioning, test-account handling, audit review and escalation                                                            |
+
+For the Procurement drill, learners select the category through its named radio control and separately choose **Goods / materials** or **Services**. Goods PO lines must carry unit prices so receipt and QC quantities produce a server-derived accepted value for Finance matching. A missing active department DOA, differently cased department identity, unpriced PO line, or incomplete acceptance evidence must stop the handoff instead of being bypassed.
 
 ## Warehouse W1 Role Drills
 
@@ -75,4 +77,5 @@ For scan work, teach camera denial recovery, manual entry, duplicate-read feedba
 - Review failed invitations, pending approvals, stale vendor cases, low stock, unresolved count variances, unmatched return serials, failed imports, and failed exports.
 - Verify `/api/health` reports Supabase reachable, assets reachable, live auth configured, invite delivery configured, and service worker configured.
 - Reconcile high-risk mutations against activity history and resolve conflicts before end of shift.
+- Treat vendor email delivery as a controlled canary: routine regression verifies invitation persistence and lifecycle controls, while an explicit desktop canary verifies the external send. Do not repeatedly resend after a rate-limit response.
 - At shift change, reconcile receiving staging, quality holds, unassigned-bin stock, open count approvals, P1 exceptions, failed imports and queued/offline commands. Do not hand over an unexplained balance variance.
