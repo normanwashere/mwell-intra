@@ -3693,4 +3693,22 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
       ],
     },
+    "vendor-purchase-orders": {
+      controls: [
+        control(
+          "Acknowledge purchase order",
+          "Submits the vendor reference for the displayed issued purchase order and refreshes its lifecycle state.",
+          "The order must belong to the authenticated vendor, remain pending, and include a non-empty reference for the current revision.",
+          "The acknowledgement becomes attributable evidence and the order no longer appears as pending or overdue.",
+        ),
+      ],
+      fields: [
+        field(
+          "Acknowledgement reference",
+          "Records the vendor's traceable confirmation reference for the issued purchase order.",
+          true,
+          "A non-empty reference is required and is accepted only for the current vendor-scoped lifecycle revision.",
+        ),
+      ],
+    },
   };

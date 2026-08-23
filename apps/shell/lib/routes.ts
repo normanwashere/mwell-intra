@@ -160,4 +160,11 @@ export const SHELL_PAGE_ROUTE_CONTRACTS: ShellPageRouteContract[] = [
     minimumControls: 3,
     minimumFields: 0,
   },
+  {
+    route: "/vendor/purchase-orders",
+    module: "vendor",
+    capabilityIds: [],
+    minimumControls: 1,
+    minimumFields: 1,
+  },
 ];

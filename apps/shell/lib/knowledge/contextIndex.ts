@@ -125,6 +125,11 @@ export const CONTEXTUAL_FEATURE_GUIDES: ContextualFeatureGuide[] = [
   ),
   guide("legal-invite-vendor", "Invite vendor", "/legal/invites/new"),
   guide("vendor-cases", "Vendor portal cases", "/vendor"),
+  guide(
+    "vendor-purchase-orders",
+    "Vendor purchase order acknowledgements",
+    "/vendor/purchase-orders",
+  ),
   guide("vendor-case-detail", "Vendor portal case detail", "/vendor/cases/:id"),
   guide(
     "vendor-application",

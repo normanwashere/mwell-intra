@@ -77,6 +77,10 @@ const FEATURE_RELATIONSHIPS: Record<string, FeatureRelationship> = {
     policyBasis: [POLICY.identity, POLICY.accreditation, POLICY.vendorScope],
     relatedFlowIds: ["vendor-accreditation"],
   },
+  "vendor-purchase-orders": {
+    policyBasis: [POLICY.identity, POLICY.procurement, POLICY.vendorScope],
+    relatedFlowIds: ["procure-to-pay"],
+  },
   "offline-status": {
     policyBasis: [POLICY.resilience],
     relatedFlowIds: ["exception-and-recovery"],
@@ -1617,6 +1621,25 @@ const definitions: FeatureDefinition[] = [
       "Sign out and contact the Mwell account manager if the company or case shown is not the vendor's own.",
     completionEvidence:
       "The vendor sees its case status and opens the exact outstanding action without access to another vendor.",
+  },
+  {
+    id: "vendor-purchase-orders",
+    title: "Vendor purchase order acknowledgements",
+    module: "vendor",
+    route: "/vendor/purchase-orders",
+    roleIds: ["vendor_portal"],
+    purpose:
+      "Shows an enrolled vendor only purchase orders awarded to its organization and records an attributable acknowledgement against the current issued revision.",
+    reads:
+      "Vendor-scoped issued purchase orders, lifecycle revision, acknowledgement status, and acknowledgement due time.",
+    writes:
+      "Records the vendor acknowledgement reference through the governed lifecycle RPC without changing commercial terms or another vendor's order.",
+    statuses:
+      "No issued orders, pending acknowledgement, overdue acknowledgement, acknowledged, refreshing, or submission failed.",
+    exception:
+      "Do not acknowledge an unfamiliar or incorrect purchase order; contact Procurement with the PO number and leave the order pending until corrected.",
+    completionEvidence:
+      "The order shows acknowledged with the vendor actor, reference, timestamp, and resulting lifecycle revision preserved in audit history.",
   },
   {
     id: "vendor-case-detail",

@@ -62,6 +62,7 @@ const ROLE_OPERATING_DETAILS: Record<string, RoleOperatingDetails> = {
     dailyTasks: [
       "Complete outstanding company, risk, and declaration sections for the vendor's own case.",
       "Upload requested evidence and respond to Legal correction notices.",
+      "Review purchase orders awarded to the vendor and record a traceable acknowledgement before the due time.",
     ],
     responsibilityStages: [
       stage(
@@ -73,6 +74,11 @@ const ROLE_OPERATING_DETAILS: Record<string, RoleOperatingDetails> = {
         "Submit and remediate",
         "Submit the governed snapshot, monitor status, and correct only returned items.",
         "Legal receives a complete attributable submission or correction response.",
+      ),
+      stage(
+        "Acknowledge awarded orders",
+        "Review the issued purchase order and record the vendor's own confirmation reference.",
+        "Procurement receives attributable acknowledgement evidence against the current order revision.",
       ),
     ],
   },
@@ -956,10 +962,11 @@ export const LIVE_KNOWLEDGE_ROLES: KnowledgeRole[] = [
     purpose:
       "Complete the vendor-owned accreditation application, submit supporting documents, respond to corrections, and monitor the vendor's own status.",
     authority: {
-      accessibleRoutes: ["/vendor"],
+      accessibleRoutes: ["/vendor", "/vendor/purchase-orders"],
       canDo: [
         "Submit accreditation information and documents for the vendor identity linked to the signed-in account.",
         "View the vendor's own accreditation status, requests for correction, and next required action.",
+        "View and acknowledge only purchase orders awarded to the vendor identity linked to the signed-in account.",
       ],
       cannotDo: [
         "Do not view, submit for, or act on another vendor's records.",
@@ -967,6 +974,7 @@ export const LIVE_KNOWLEDGE_ROLES: KnowledgeRole[] = [
       ],
       decisions: [
         "Decide whether the vendor submission is complete enough to submit; Legal retains every accreditation disposition.",
+        "Decide whether an awarded purchase order is correct to acknowledge or must be returned to Procurement for clarification.",
       ],
       upstreamRoleIds: ["legal_admin"],
       downstreamRoleIds: ["legal_reviewer", "legal_compliance"],
