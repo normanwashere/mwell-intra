@@ -16,8 +16,10 @@ describe('governed profile refresh adapter', () => {
       code: 'MWELL-UAT-POLICY-REV',
       version: '2026.08.22',
       name: 'Mwell operating policy revision',
-      source_filename: 'mWell Procurement Policy and Procedures - Revised Modern Visual Updated.docx',
+      source_filename: 'mWell Procurement Policy and Procedures - Revised Modern Visual - Word Updated.docx',
       source_organization: 'Mwell',
+      source_document_status: 'approved',
+      status: 'active',
       effective_from: '2026-08-01T00:00:00+08:00',
       control_sources: {},
     });

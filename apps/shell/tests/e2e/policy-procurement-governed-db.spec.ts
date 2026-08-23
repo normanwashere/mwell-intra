@@ -42,8 +42,8 @@ test('disposable governed database executes sourcing controls through browser ac
     expect((await call('vendor', 'acknowledge_sourcing_invitation', initialAcknowledgement)).result).toMatchObject({ replayed: true });
     expect((await call('procurement', 'transition_sourcing_event', { id: eventId, action: 'issue' })).ok).toBe(true);
     expect((await call('procurement', 'transition_sourcing_event', { id: eventId, action: 'award', selected_vendor_id: database.vendorIds[0], closure_note: 'Too early' })).ok).toBe(false);
-    expect((await call('procurement', 'record_solicitation_communication', { sourcing_event_id: eventId, communication_type: 'extension', extension_working_days: 7 })).ok).toBe(true);
-    expect((await call('procurement', 'record_solicitation_communication', { sourcing_event_id: eventId, communication_type: 'extension', extension_working_days: 4 })).ok).toBe(false);
+    expect((await call('procurement', 'record_solicitation_communication', { sourcing_event_id: eventId, communication_type: 'extension', extension_calendar_days: 7 })).ok).toBe(true);
+    expect((await call('procurement', 'record_solicitation_communication', { sourcing_event_id: eventId, communication_type: 'extension', extension_calendar_days: 4 })).ok).toBe(false);
     expect((await call('procurement', 'transition_sourcing_event', { id: eventId, action: 'cancel', closure_note: 'Close extension-boundary case.' })).ok).toBe(true);
     const requotePlan = await call('procurement', 'save_sourcing_event', { ...plan, package_version: 'DB-RFQ-v2', package_hash: 'b'.repeat(64) });
     const requoteEventId = (requotePlan.result as { id: string }).id;

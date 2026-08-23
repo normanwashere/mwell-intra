@@ -37,14 +37,14 @@ describe('sourcing policy', () => {
     expect(suggestSourcingMethod({ category: 'goods', amount: 99_999 })).toBe('rfq');
   });
 
-  it('keeps material requests on RFQ at the formal-bid threshold', () => {
+  it('uses the inclusive PHP 1M boundary for RFP regardless of requirement kind', () => {
     expect(
       suggestSourcingMethod({
         category: 'goods',
         amount: RFP_THRESHOLD - 0.01,
       }),
     ).toBe('rfq');
-    expect(suggestSourcingMethod({ category: 'goods', amount: RFP_THRESHOLD })).toBe('rfq');
+    expect(suggestSourcingMethod({ category: 'goods', amount: RFP_THRESHOLD })).toBe('rfp');
   });
 
   it('escalates complex and data-sensitive work regardless of amount', () => {
@@ -57,7 +57,16 @@ describe('sourcing policy', () => {
         comparable: true,
         dataSensitive: true,
       }),
-    ).toMatchObject({ method: 'rfp', reasons: ['service_requirement', 'risk:data_sensitive', 'mode:competitive_bidding', 'tier:high_risk'] });
+    ).toMatchObject({
+      method: 'rfp',
+      reasons: expect.arrayContaining([
+        'service_requirement',
+        'solicitation:rfp',
+        'risk:data_sensitive',
+        'mode:competitive_bidding',
+        'tier:high_risk',
+      ]),
+    });
   });
 
   it('defaults incomplete intake to an RFQ recommendation pending Procurement confirmation', () => {
@@ -120,8 +129,10 @@ describe('binding vendor-to-pay controls', () => {
       { requirementKind: 'materials', category: 'goods', amount: RFP_THRESHOLD - 0.01, comparable: true },
       'rfq',
     ],
-    ['formal-bid material', { requirementKind: 'materials', category: 'goods', amount: RFP_THRESHOLD, comparable: true }, 'rfq'],
-    ['low-value complex material', { requirementKind: 'materials', category: 'goods', amount: 25_000, comparable: true, complex: true }, 'rfq'],
+    ['formal-bid material', { requirementKind: 'materials', category: 'goods', amount: RFP_THRESHOLD, comparable: true }, 'rfp'],
+    ['low-value complex material', { requirementKind: 'materials', category: 'goods', amount: 25_000, comparable: true, complex: true }, 'rfp'],
+    ['low-value comparable service', { requirementKind: 'services', category: 'services', amount: 25_000, comparable: true }, 'rfq'],
+    ['low-value importation-only material', { requirementKind: 'materials', category: 'goods', amount: 25_000, comparable: true, importation: true }, 'rfq'],
     ['low-value technical service', { requirementKind: 'services', category: 'services', amount: 25_000, comparable: true, technical: true }, 'rfp'],
     ['low-value high-risk service', { requirementKind: 'services', category: 'services', amount: 25_000, comparable: true, highRisk: true }, 'rfp'],
     [

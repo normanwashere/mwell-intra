@@ -30,6 +30,7 @@ type PolicyProfileHistory = {
   created_by: string;
   activated_by: string | null;
   source_filename?: string;
+  source_document_status?: string;
 };
 
 type PolicyConflict = {
@@ -56,7 +57,7 @@ const CONTROL_LABELS: Record<keyof ProcurementPolicyControls, string> = {
   inviteTargetMax: 'Competitive invite maximum',
   sealedBidMinimumResponses: 'Sealed-bid usable responses',
   bidWindowWorkingDays: 'Bid window (working days)',
-  maxExtensionWorkingDays: 'Maximum extension (working days)',
+  maxExtensionCalendarDays: 'Maximum extension (calendar days)',
   vendorAcknowledgementHours: 'Vendor acknowledgement (hours)',
   clarificationHours: 'Clarification response (hours)',
   tabulationHours: 'Commercial tabulation (hours)',
@@ -89,6 +90,7 @@ export function PolicyProfileSection({
   const [draftId, setDraftId] = useState<string | null>(null);
   const [documentHash, setDocumentHash] = useState('');
   const [parentProfileId, setParentProfileId] = useState('');
+  const [sourceDocumentStatus, setSourceDocumentStatus] = useState<'draft_for_review' | 'approved'>('draft_for_review');
   const [profileHistory, setProfileHistory] = useState<PolicyProfileHistory[]>([]);
   const [openConflicts, setOpenConflicts] = useState<PolicyConflict[]>([]);
   const [events, setEvents] = useState<PolicyEvent[]>([]);
@@ -107,7 +109,7 @@ export function PolicyProfileSection({
       const procurement = client.schema('procurement');
       if (!procurement.from) return;
       const [profiles, conflicts, profileEvents, effective] = await Promise.all([
-        procurement.from('policy_profiles').select('id,code,version,status,relationship,effective_from,created_by,activated_by,source_filename').order('effective_from', { ascending: false }),
+        procurement.from('policy_profiles').select('id,code,version,status,relationship,effective_from,created_by,activated_by,source_filename,source_document_status').order('effective_from', { ascending: false }),
         procurement.from('policy_conflicts').select('id,parent_rule,local_rule,impact,status,created_at').order('created_at', { ascending: false }),
         procurement.from('policy_profile_events').select('id,policy_profile_id,event_type,actor_id,profile_actor_id,event_at').order('event_at', { ascending: false }),
         procurement.rpc('get_effective_policy_profile', { as_of: null }),
@@ -161,6 +163,7 @@ export function PolicyProfileSection({
         source_profile_id: parentProfileId,
         source_filename: activeMapping.sourceFilename,
         source_organization: 'Mwell',
+        source_document_status: sourceDocumentStatus,
         control_sources: activeMapping.controlSources,
         controls,
         effective_from: new Date(`${effectiveFrom}T00:00:00+08:00`).toISOString(),
@@ -208,17 +211,17 @@ export function PolicyProfileSection({
           <h2 id="procurement-policy-heading" className="text-lg font-semibold text-ink">Procurement policy profiles</h2>
           <p className="mt-1 text-sm text-muted">Separate from DOA. This controls route thresholds and operating timeframes, while DOA assigns approval authority.</p>
         </div>
-        <Badge tone="emerald">Governed active mapping</Badge>
+        <Badge tone="emerald">Governed policy mapping</Badge>
       </div>
 
       <div className="grid gap-3 lg:grid-cols-2">
         <Card className="p-4">
-          <h3 className="font-semibold text-ink">Parent source</h3>
+          <h3 className="font-semibold text-ink">Incorporated reference source</h3>
           <p className="mt-2 text-sm text-muted">{MPIC_SOURCE_PROFILE.sourceFilename} · {MPIC_SOURCE_PROFILE.sourceOrganization}</p>
-          <p className="mt-1 text-xs text-faint">Source controls are inherited unless a documented Mwell operating mapping states otherwise.</p>
+          <p className="mt-1 text-xs text-faint">Only non-conflicting controls may be inherited. The canonical Mwell source remains the operating authority.</p>
         </Card>
         <Card className="p-4">
-          <h3 className="font-semibold text-ink">Active Mwell mapping</h3>
+          <h3 className="font-semibold text-ink">Canonical Mwell mapping</h3>
           <p className="mt-2 text-sm text-muted">{activeMapping.code} {activeMapping.version} · effective {activeMapping.effectiveFrom}</p>
           <p className="mt-1 text-xs text-faint">Maker: policy author. Checker: a different authorized Admin or Legal user.</p>
         </Card>
@@ -251,12 +254,25 @@ export function PolicyProfileSection({
             <Input id="policy-document-hash" disabled={!canManage} value={documentHash} onChange={(event) => setDocumentHash(event.target.value.trim())} placeholder="64-character document hash" />
             <p className="mt-1 text-xs text-faint">Required before a policy revision can be saved for independent review.</p>
           </Field>
+          <Field label="Source document status" htmlFor="policy-source-status">
+            <select
+              id="policy-source-status"
+              className="input"
+              disabled={!canManage}
+              value={sourceDocumentStatus}
+              onChange={(event) => setSourceDocumentStatus(event.target.value as 'draft_for_review' | 'approved')}
+            >
+              <option value="draft_for_review">Updated visual draft for review</option>
+              <option value="approved">Approved by accountable policy owners</option>
+            </select>
+            <p className="mt-1 text-xs text-faint">Activation is blocked until a separate checker reviews a profile whose controlled source is marked approved.</p>
+          </Field>
           <Field label="Governed parent source profile" htmlFor="policy-parent-profile">
             <select id="policy-parent-profile" className="input" disabled={!canManage} value={parentProfileId} onChange={(event) => setParentProfileId(event.target.value)}>
               <option value="">Select a governed parent source</option>
               {profileHistory.filter((profile) => profile.relationship === 'parent_source').map((profile) => <option key={profile.id} value={profile.id}>{profile.code} {profile.version}</option>)}
             </select>
-            <p className="mt-1 text-xs text-faint">{profileHistory.find((profile) => profile.id === parentProfileId) ? `${profileHistory.find((profile) => profile.id === parentProfileId)?.code} ${profileHistory.find((profile) => profile.id === parentProfileId)?.version} · ${profileHistory.find((profile) => profile.id === parentProfileId)?.source_filename ?? 'controlled source'} ` : 'The canonical MPIC source must already be governed before an Mwell mapping can be saved.'}</p>
+            <p className="mt-1 text-xs text-faint">{profileHistory.find((profile) => profile.id === parentProfileId) ? `${profileHistory.find((profile) => profile.id === parentProfileId)?.code} ${profileHistory.find((profile) => profile.id === parentProfileId)?.version} · ${profileHistory.find((profile) => profile.id === parentProfileId)?.source_filename ?? 'controlled source'} ` : 'Select the governed MPIC reference incorporated by the canonical Mwell policy.'}</p>
           </Field>
         </div>
         <div className="mt-5 flex flex-wrap gap-2">
@@ -271,7 +287,7 @@ export function PolicyProfileSection({
         <p className="mt-1 text-sm text-muted">Activation history, draft author, checker, and unresolved policy conflicts are read from the governed profile records. A conflict needs a documented mapping and rationale before activation.</p>
         {historyError ? <p role="alert" className="mt-3 text-sm text-danger">Could not load policy history: {historyError}</p> : null}
         <div className="mt-4 grid gap-3 lg:grid-cols-3">
-          <div><h4 className="text-sm font-semibold text-ink">Profiles</h4><ul className="mt-2 space-y-2 text-sm text-muted">{profileHistory.length ? profileHistory.slice(0, 4).map((profile) => <li key={profile.id}><strong className="text-ink">{profile.code} {profile.version}</strong><br />{profile.status} · effective {policyEffectiveDate(profile.effective_from)}<br />Maker {profile.created_by} · checker {profile.activated_by ?? 'Pending'}{profile.status === 'draft' && canManage ? <button type="button" className="mt-1 text-link underline disabled:opacity-50" disabled={busy} onClick={() => void activateDraft(profile.id)}>Activate this draft as checker</button> : null}</li>) : <li>No governed profile history is available yet.</li>}</ul></div>
+          <div><h4 className="text-sm font-semibold text-ink">Profiles</h4><ul className="mt-2 space-y-2 text-sm text-muted">{profileHistory.length ? profileHistory.slice(0, 4).map((profile) => <li key={profile.id}><strong className="text-ink">{profile.code} {profile.version}</strong><br />{profile.status} · source {profile.source_document_status?.replaceAll('_', ' ') ?? 'status unavailable'} · effective {policyEffectiveDate(profile.effective_from)}<br />Maker {profile.created_by} · checker {profile.activated_by ?? 'Pending'}{profile.status === 'draft' && profile.source_document_status === 'approved' && canManage ? <button type="button" className="mt-1 text-link underline disabled:opacity-50" disabled={busy} onClick={() => void activateDraft(profile.id)}>Activate this approved draft as checker</button> : null}</li>) : <li>No governed profile history is available yet.</li>}</ul></div>
           <div><h4 className="text-sm font-semibold text-ink">Open conflicts</h4><ul className="mt-2 space-y-2 text-sm text-muted">{openConflicts.length ? openConflicts.slice(0, 4).map((conflict) => <li key={conflict.id}><strong className="text-ink">{conflict.parent_rule}</strong><br />{conflict.impact}<br /><button type="button" className="mt-1 text-link underline" onClick={() => { setConflictId(conflict.id); setConflictOpen(true); }}>Resolve this conflict</button></li>) : <li>No unresolved policy conflicts.</li>}</ul></div>
           <div><h4 className="text-sm font-semibold text-ink">Activation events</h4><ul className="mt-2 space-y-2 text-sm text-muted">{events.length ? events.slice(0, 4).map((event) => <li key={event.id}><strong className="text-ink">{event.event_type.replaceAll('_', ' ')}</strong><br />{event.event_at.slice(0, 10)} · actor {event.actor_id}</li>) : <li>No activation events are available yet.</li>}</ul></div>
         </div>

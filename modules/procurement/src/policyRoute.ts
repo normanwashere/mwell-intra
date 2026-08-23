@@ -8,10 +8,12 @@ import type {
 } from './types';
 
 export interface ProcurementRouteInput {
-  /** Required for new requests. Category is not a safe substitute. */
+  /** Required for scope, acceptance, and reporting on new requests. */
   requirementKind: RequirementKind;
   category?: RequestCategory;
   amount?: number;
+  /** RFQ is available below the boundary only when offers are clear and comparable. */
+  comparable?: boolean;
   requestedMode?: ProcurementMode;
   complex?: boolean;
   technical?: boolean;
@@ -78,6 +80,19 @@ function governanceTier(
   return (input.amount ?? 0) >= formalBidAmount ? 'formal_bid' : 'standard';
 }
 
+function requiresRfp(
+  input: Pick<ProcurementRouteInput, 'amount' | 'comparable' | 'complex' | 'technical' | 'strategic' | 'highRisk' | 'dataSensitive'>,
+  profile: ProcurementPolicyProfile,
+): boolean {
+  const rfpAmount = profile.controls.formalBidAmount;
+  if (rfpAmount === null) {
+    throw new Error('An active Mwell RFQ/RFP amount boundary is required.');
+  }
+  return (input.amount ?? 0) >= rfpAmount
+    || input.comparable === false
+    || Boolean(input.complex || input.technical || input.strategic || input.highRisk || input.dataSensitive);
+}
+
 function normalizedRiskReasons(
   input: Pick<ProcurementRouteInput, 'complex' | 'technical' | 'strategic' | 'highRisk' | 'dataSensitive' | 'importation'>,
 ): string[] {
@@ -92,22 +107,27 @@ function normalizedRiskReasons(
   return triggers.filter(([key]) => input[key]).map(([, reason]) => reason);
 }
 
-function assertActiveMwellOperatingProfile(profile: ProcurementPolicyProfile): void {
-  if (profile.relationship !== 'mwell_operating' || profile.status !== 'active') {
-    throw new Error('An active Mwell operating policy profile is required.');
+function assertMwellOperatingProfile(profile: ProcurementPolicyProfile): void {
+  if (
+    profile.relationship !== 'mwell_operating'
+    || !['active', 'draft'].includes(profile.status)
+  ) {
+    throw new Error('An active or draft Mwell operating policy profile is required.');
   }
 }
 
 /**
- * Derives the three independent route axes for a new request. Requirement
- * kind controls RFQ/RFP; procurement mode controls whether a solicitation is
- * needed; amount and risk controls governance. None may stand in for another.
+ * Derives the three route axes for a new request. The canonical Mwell policy
+ * selects RFP at PHP 1M and above or for complex, technical, strategic,
+ * high-risk, data-sensitive, or non-comparable work. Importation adds controls
+ * but does not by itself change RFQ to RFP. Procurement mode controls whether
+ * a solicitation document is required at all.
  */
 export function deriveProcurementRoute(
   input: ProcurementRouteInput,
   profile: ProcurementPolicyProfile,
 ): ProcurementRouteRecommendation {
-  assertActiveMwellOperatingProfile(profile);
+  assertMwellOperatingProfile(profile);
   if (input.requirementKind !== 'materials' && input.requirementKind !== 'services') {
     throw new Error('A requirement kind is required before Procurement can derive a route.');
   }
@@ -116,7 +136,7 @@ export function deriveProcurementRoute(
   const tier = governanceTier(input, profile);
   const riskReasons = normalizedRiskReasons(input);
   const solicitationType = procurementMode === 'competitive_bidding'
-    ? input.requirementKind === 'services' ? 'rfp' : 'rfq'
+    ? requiresRfp(input, profile) ? 'rfp' : 'rfq'
     : 'none';
 
   return {
@@ -127,6 +147,8 @@ export function deriveProcurementRoute(
       policyProfileId: profile.id,
       reasons: [
         input.requirementKind === 'services' ? 'service_requirement' : 'material_requirement',
+        ...(input.comparable === false ? ['scope:not_comparable'] : []),
+        `solicitation:${solicitationType}`,
         ...riskReasons,
         `mode:${procurementMode}`,
         `tier:${tier}`,
@@ -182,7 +204,7 @@ export function routeFromLegacy(
   amount: number | undefined,
   profile: ProcurementPolicyProfile,
 ): ProcurementRoute {
-  assertActiveMwellOperatingProfile(profile);
+  assertMwellOperatingProfile(profile);
   const inferredRequirementKind = inferLegacyRequirementKind(category);
   const procurementMode = legacyMode(method);
   const special = category === 'construction' || category === 'manpower';

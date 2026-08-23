@@ -8,9 +8,9 @@ import {
 
 describe('three-axis procurement routing', () => {
   it.each([
-    ['low-value material', { requirementKind: 'materials', category: 'goods', amount: 50_000 }, 'rfq', 'competitive_bidding', 'standard'],
-    ['high-value material', { requirementKind: 'materials', category: 'goods', amount: 1_500_000 }, 'rfq', 'competitive_bidding', 'formal_bid'],
-    ['low-value service', { requirementKind: 'services', category: 'services', amount: 50_000 }, 'rfp', 'competitive_bidding', 'standard'],
+    ['low-value comparable material', { requirementKind: 'materials', category: 'goods', amount: 50_000, comparable: true }, 'rfq', 'competitive_bidding', 'standard'],
+    ['high-value material', { requirementKind: 'materials', category: 'goods', amount: 1_500_000, comparable: true }, 'rfp', 'competitive_bidding', 'formal_bid'],
+    ['low-value comparable service', { requirementKind: 'services', category: 'services', amount: 50_000, comparable: true }, 'rfq', 'competitive_bidding', 'standard'],
     ['high-risk service', { requirementKind: 'services', category: 'services', amount: 50_000, highRisk: true }, 'rfp', 'competitive_bidding', 'high_risk'],
   ] as const)('%s', (_name, input, solicitationType, procurementMode, governanceTier) => {
     expect(deriveProcurementRoute(input, MWELL_OPERATING_PROFILE).route).toMatchObject({
@@ -40,19 +40,19 @@ describe('three-axis procurement routing', () => {
     } as never, MWELL_OPERATING_PROFILE)).toThrow(/requirement kind/i);
   });
 
-  it('requires an active Mwell operating profile for a new or legacy route', () => {
+  it('allows draft previews but rejects suspended or non-Mwell route profiles', () => {
     expect(() => deriveProcurementRoute({
       requirementKind: 'materials',
-    }, { ...MWELL_OPERATING_PROFILE, status: 'draft' })).toThrow(/active Mwell operating/i);
+    }, { ...MWELL_OPERATING_PROFILE, status: 'suspended' })).toThrow(/active or draft Mwell operating/i);
     expect(() => routeFromLegacy(
       'rfq',
       'goods',
       10_000,
       { ...MWELL_OPERATING_PROFILE, relationship: 'parent_source' },
-    )).toThrow(/active Mwell operating/i);
+    )).toThrow(/active or draft Mwell operating/i);
   });
 
-  it('keeps legacy projections deterministic without using amount as an RFQ/RFP switch', () => {
+  it('preserves the stored solicitation on legacy projections for remediation safety', () => {
     const route = routeFromLegacy('rfq', 'goods', 1_500_000, MWELL_OPERATING_PROFILE);
     expect(route).toMatchObject({
       solicitationType: 'rfq',
@@ -111,6 +111,28 @@ describe('three-axis procurement routing', () => {
       'risk:data_sensitive',
       'risk:importation',
     ]));
+  });
+
+  it('keeps importation-only work on RFQ below the boundary when it is comparable', () => {
+    const route = deriveProcurementRoute({
+      requirementKind: 'materials',
+      amount: 50_000,
+      comparable: true,
+      importation: true,
+    }, MWELL_OPERATING_PROFILE).route;
+    expect(route).toMatchObject({ solicitationType: 'rfq', governanceTier: 'high_risk' });
+    expect(route.reasons).toContain('risk:importation');
+  });
+
+  it('uses RFP below the boundary when offers are not comparable', () => {
+    expect(deriveProcurementRoute({
+      requirementKind: 'materials',
+      amount: 50_000,
+      comparable: false,
+    }, MWELL_OPERATING_PROFILE).route).toMatchObject({
+      solicitationType: 'rfp',
+      governanceTier: 'standard',
+    });
   });
 
   it.each(['marketing', 'medical', 'capex', 'other'] as const)(

@@ -41,12 +41,12 @@ export type RequestCategory =
   | 'petty_cash'
   | 'other';
 
-/** The business nature of the requirement. It determines the solicitation
- * document and remains separate from procurement mode and governance tier. */
+/** The business nature of the requirement. It informs scope, acceptance, and
+ * reporting, but the canonical Mwell amount/risk rule selects RFQ or RFP. */
 export type RequirementKind = 'materials' | 'services';
 
-/** The document used to solicit suppliers. Materials use RFQ; services use
- * RFP. Approved exception modes may use no solicitation document. */
+/** The document used to solicit suppliers. Approved exception modes may use
+ * no solicitation document. */
 export type SolicitationType = 'rfq' | 'rfp' | 'none';
 
 /** The governed way a purchase is made, independent of its solicitation. */
@@ -94,7 +94,7 @@ export interface ProcurementPolicyControls {
   inviteTargetMax: number;
   sealedBidMinimumResponses: number;
   bidWindowWorkingDays: number;
-  maxExtensionWorkingDays: number;
+  maxExtensionCalendarDays: number;
   vendorAcknowledgementHours: number;
   clarificationHours: number;
   tabulationHours: number;
@@ -114,6 +114,8 @@ export interface ProcurementPolicyProfile {
   version: string;
   name: string;
   sourceFilename: string;
+  /** Status printed inside the source document, separate from profile activation. */
+  sourceDocumentStatus: 'updated_visual_draft' | 'approved';
   sourceOrganization: string;
   relationship: 'parent_source' | 'mwell_operating';
   inheritedFromProfileId?: string;

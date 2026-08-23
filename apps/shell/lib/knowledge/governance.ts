@@ -38,7 +38,7 @@ export const GOVERNANCE_GUIDES: GovernanceGuide[] = [
     summary:
       "Apply the approved route, competition, exception, budget, and authority controls before commitment.",
     source:
-      "mWell Procurement Policy and Procedures - Revised Modern Visual Updated",
+      "mWell Procurement Policy and Procedures - Revised Modern Visual - Word Updated",
     sourceControl: {
       reference: "Procurement policy and procedures",
       version: "Version number requires owner confirmation",

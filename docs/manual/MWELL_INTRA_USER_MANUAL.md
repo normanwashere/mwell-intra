@@ -92,17 +92,17 @@ flowchart TD
 
 ## Procurement Flow
 
-Use the complete 14-stage **Procurement to Payment** flow later in this handbook. The route has three independent axes:
+Use the canonical 13-step **Procurement to Payment** flow later in this handbook. The route has three independent axes:
 
 | Axis | Operating decision |
 | --- | --- |
-| Solicitation document | Materials use RFQ; services use RFP; an approved exception may use none when no supporting solicitation is required |
+| Solicitation document | RFQ below PHP 1,000,000 when clear and comparable; RFP at PHP 1,000,000 and above or for complex, technical, strategic, high-risk, data-sensitive or non-comparable work at any amount; an approved exception may use none when policy permits |
 | Procurement mode | Competitive bidding is the default; each exception mode requires its own eligibility and evidence |
 | Governance tier | Standard, formal bid, high-risk/special control, and current effective DOA are derived independently |
 
-The local PHP 1,000,000 value controls formal-bid governance. It does not turn a high-value material RFQ into an RFP, and it does not turn a low-value service RFP into an RFQ. Only the current effective Mwell DOA names approval authority. MPIC role titles, people, limits, and annexes do not grant Mwell authority.
+Requirement kind determines scope, acceptance and reporting, not RFQ/RFP selection. Importation adds customs, landed-cost, logistics, currency and acceptance controls but does not automatically force RFP. Only the current effective Mwell DOA names approval authority. MPIC role titles, people, limits and annexes do not grant Mwell authority.
 
-Two policy-alignment blockers remain. First, operating instructions use neutral **first independent variance decision** and **second independent variance decision** stages; current code stage labels do not authorize actors, and Mwell policy/DOA owners have not approved the local mapping. Second, MPIC caps bid extensions at seven calendar days while current code uses seven working days. Do not activate the policy profile/migration until both conflicts are resolved and recorded.
+The canonical source is `mWell Procurement Policy and Procedures - Revised Modern Visual - Word Updated.docx`. It identifies itself as an updated visual draft, so its application profile remains draft until Procurement records the source as approved. Operating instructions also use neutral **first independent variance decision** and **second independent variance decision** stages until Mwell policy/DOA owners authorize the local mapping. The inherited extension cap is modeled as seven calendar days.
 
 ## Procurement Role Procedures
 
@@ -333,12 +333,12 @@ Read the overview before performing work. Use **By role** to confirm the handoff
 ### Procurement to Payment
 
 ```mermaid
-%% handbook-flow: workflow=procurement-to-payment; view=overview; stages=Request|Route|Validate|Solicit|Quorum|Evaluate|Recommend|Variance|Approve|Commit|Monitor|Receive|Payment|Close
+%% handbook-flow: workflow=procurement-to-payment; view=overview; stages=Define need|Submit request|Confirm path|Source vendors|Check accreditation|Evaluate|Recommend award|Approve|Issue PO or contract|Deliver and close|Prepare payment handoff|Process payment|Close file
 flowchart LR
-  S1[1 Request facts and budget] --> S2[2 Confirm solicitation, mode and tier] --> S3[3 Validate profile, DOA, vendor and controls] --> S4[4 Issue versioned equal package] --> S5[5 Resolve response quorum] --> S6[6 Tabulate and technically evaluate] --> S7[7 Record best-value recommendation] --> S8[8 Decide recommendation variance] --> S9[9 Approve under current DOA] --> S10[10 Create PO or agreement] --> S11[11 Acknowledge and monitor commitment] --> S12[12 Receive, accept and resolve quality] --> S13[13 Three-way match and payment evidence] --> S14[14 Close complete file]
+  S1[1 Define the need] --> S2[2 Submit the request] --> S3[3 Confirm the procurement path] --> S4[4 Source vendors] --> S5[5 Check accreditation] --> S6[6 Evaluate offers] --> S7[7 Recommend award] --> S8[8 Approve under the active DOA] --> S9[9 Issue PO or contract] --> S10[10 Deliver and close obligations] --> S11[11 Prepare payment handoff] --> S12[12 Process vendor payment] --> S13[13 Close the procurement file]
 ```
 ```mermaid
-%% handbook-flow: workflow=procurement-to-payment; view=role; stages=Request|Route|Validate|Solicit|Quorum|Evaluate|Recommend|Variance|Approve|Commit|Monitor|Receive|Payment|Close
+%% handbook-flow: workflow=procurement-to-payment; view=role; stages=Define need|Submit request|Confirm path|Source vendors|Check accreditation|Evaluate|Recommend award|Approve|Issue PO or contract|Deliver and close|Prepare payment handoff|Process payment|Close file
 flowchart LR
   R[Requester: need, classification and acceptance evidence] --> P[Procurement Lead: route and sourcing evidence]
   P --> S[System: profile, DOA, accreditation, risk and quorum controls]
@@ -353,7 +353,7 @@ flowchart LR
   F --> C[Procurement Lead: issue resolution and file closure]
 ```
 ```mermaid
-%% handbook-flow: workflow=procurement-to-payment; view=decision; stages=Request|Route|Validate|Solicit|Quorum|Evaluate|Recommend|Variance|Approve|Commit|Monitor|Receive|Payment|Close
+%% handbook-flow: workflow=procurement-to-payment; view=decision; stages=Define need|Submit request|Confirm path|Source vendors|Check accreditation|Evaluate|Recommend award|Approve|Issue PO or contract|Deliver and close|Prepare payment handoff|Process payment|Close file
 flowchart TD
   A[Requester and Procurement: current facts and three route axes] --> B{System: profile, effective DOA, eligible vendor and package complete?}
   B -->|No| BX([Blocked: correct route, authority, eligibility or evidence])
@@ -393,7 +393,7 @@ flowchart TD
   K -->|Yes| L[Complete: governed payment readiness and procurement-file closure evidence]
 ```
 
-**Completion criteria:** all 14 stages are attributable and linked: request and budget facts; three-axis route and active profile; effective DOA; accredited-vendor sourcing and quorum/recovery; tabulation and technical evaluation; best-value and variance decisions; award approval; PO/agreement and vendor acknowledgment; receipt/QC/acceptance; payment evidence; resolved obligations; and retained closure evidence.
+**Completion criteria:** all 13 policy steps are attributable and linked: need and request facts; Procurement-confirmed route; vendor sourcing and accreditation; technical/commercial evaluation; award recommendation; current-DOA approval; PO/contract; delivery and obligation closure; payment handoff; Finance processing; and retained file-closure evidence. The application exposes extra controlled states for failed-bid recovery, acknowledgement, inspection, quality recovery and Finance review; these are system-expanded states, not extra policy steps.
 
 ### Vendor Accreditation
 

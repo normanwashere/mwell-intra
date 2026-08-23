@@ -21,29 +21,35 @@ Mwell Intra is the shared operating platform for cross-department workflows. War
 
 ### Source and activation
 
-- The authoritative supplied parent source is `MPIC Procurement Policy February2025.docx`, MPIC, February 2025. The maintained extract separates direct source requirements, local Mwell mappings, and unresolved ownership conflicts.
-- The MPIC source profile is a draft parent-source profile and has no Mwell-specific formal-bid amount.
-- The local Mwell operating profile attributes PHP 1,000,000 to the Mwell source as a formal-bid governance value. It does not treat amount as a solicitation-document switch.
+- The canonical operating source is `mWell Procurement Policy and Procedures - Revised Modern Visual - Word Updated.docx`, SHA-256 `51F4E381CF7DEC6A1950867C4839750078DB08D603A5DE8AA54B63D12F6D1239`. The source identifies itself as an updated visual draft for management, Legal, Procurement, Finance and requester review.
+- `MPIC Procurement Policy February2025.docx` is an incorporated reference. Its controls may be inherited only where the canonical mWell source does not replace them, and inherited values must retain visible provenance.
+- The mWell operating profile stays in draft while the source document status is draft. Server and client validation reject activation until Procurement records the source as approved.
+- PHP 1,000,000 is the solicitation boundary in the canonical mWell source: RFQ below it when clear and comparable; RFP at or above it, or at any amount for named complexity and risk triggers.
 - The current effective department DOA is the sole source of named Mwell approval authority. MPIC titles, named people, cost-center annexes, and source approval tables are never projected into Mwell authority without an activated profile/DOA decision.
 - The direct MPIC variance approvers, the current Mwell code stage labels, and authorized local decision stages are separate facts. Operating controls use neutral first and second independent variance decisions until Mwell policy/DOA owners authorize the local stages.
-- MPIC caps a bid extension at seven calendar days. Current Mwell code uses seven working days. This is an unapproved local mismatch, not an inherited MPIC control, and blocks policy-profile/migration activation pending owner resolution.
-- The additive procurement migration is intentionally unapplied at this baseline. The two unresolved conflicts above block activation. Profile declarations, tests, or handbook output do not prove live database activation, deployment, or UAT certification.
+- The incorporated MPIC reference caps a bid extension at seven calendar days. The application and migration use calendar-day semantics and expose the inherited source.
+- The additive procurement migration is intentionally unapplied at this baseline. Source approval, authorized local variance-stage mapping, controlled migration rehearsal and UAT certification remain release gates. Profile declarations, tests or handbook output do not prove live database activation, deployment or UAT certification.
 
 ### Three-axis route model
 
 | Axis | Values | Derivation and enforcement |
 | --- | --- | --- |
-| Solicitation document | `rfq`, `rfp`, `none` | Materials derive RFQ; services derive RFP; an approved exception may derive none unless a policy owner requires supporting solicitation evidence |
+| Solicitation document | `rfq`, `rfp`, `none` | RFQ derives below PHP 1,000,000 when clear and comparable. RFP derives at PHP 1,000,000 and above, or for complex, technical, strategic, high-risk, data-sensitive or non-comparable work at any amount. Importation alone does not force RFP. An approved exception may derive none when policy permits. |
 | Procurement mode | `competitive_bidding`, `sole_source`, `repeat_order`, `emergency_purchase`, `petty_cash`, approved other exception | Competition is default; each exception requires server-validated eligibility, evidence, owner review, and current DOA |
-| Governance tier | `standard`, `formal_bid`, `high_risk`, plus effective DOA route | Amount, complexity, technical/strategic risk, data sensitivity, category, active profile, and current DOA determine control depth independently from RFQ/RFP |
+| Governance tier | `standard`, `formal_bid`, `high_risk`, plus effective DOA route | Amount, complexity, technical/strategic risk, data sensitivity, category, active profile and current DOA determine control depth; route reasons preserve every triggering fact |
 
-A high-value material request remains RFQ under formal-bid controls. A low-value service request remains RFP under the tier justified by its facts. Compatibility projections such as legacy `sourcing_method` do not replace the three authoritative axes.
+A clear, comparable goods or service request below PHP 1,000,000 may use RFQ. Any request at or above PHP 1,000,000 uses RFP, and a lower-value request also uses RFP when a named complexity/risk trigger is present. Requirement kind still governs scope, acceptance and reporting. Compatibility projections such as legacy `sourcing_method` do not replace the three authoritative axes.
+
+### Canonical process spine
+
+The policy process is: define need; submit request; confirm path; source vendors; check accreditation; evaluate; recommend award; approve; issue PO/contract; deliver and close obligations; prepare payment handoff; process payment; close file. The application may expose more granular state transitions for package issue, failed-bid recovery, acknowledgement, inspection, quality recovery and Finance review. Those are system-expanded states mapped to the canonical 13 steps.
 
 ### Sourcing and award controls
 
 - A versioned solicitation package is delivered equally to three to four accredited vendors, with recipient, package hash/version, deadline, acknowledgment, clarification, extension, and notification evidence.
 - Sealed-bid opening requires at least three usable responses. Failure creates an explicit failed-bid state; recovery is equal-notice extension/requote or an independently approved, evidence-backed insufficient-bids decision.
-- Direct source SLAs are at least seven working days for the standard bid window, no more than seven calendar days for an extension, 24-hour vendor RFQ acknowledgment, 48-hour clarification, 48-hour tabulation, five-working-day technical evaluation, and 48-hour PO acknowledgment. The current working-day extension implementation must not be activated until resolved.
+- Planning SLA ranges from the canonical mWell source are operating targets, not silent approval authority: petty cash 1-3 working days, RFQ 5-7, RFP 15-25, Direct Award 5-10, accreditation 5-10, importation adds 10-30 and payment readiness 3-5. Their start conditions and any inherited MPIC timers must be versioned and shown with source provenance.
+- The incorporated MPIC timing controls represented by the current profile include at least seven working days for the standard bid window, no more than seven calendar days for an extension, 24-hour RFQ acknowledgment, 48-hour clarification, 48-hour tabulation, five-working-day technical evaluation and 48-hour PO acknowledgment.
 - Commercial tabulation and technical evaluation are separately attributable. The system selects no automatic winner; Procurement records a best-value recommendation across the source criteria.
 - A recommendation variance requires written requester justification, a first independent variance decision, and a second independent variance decision. Each neutral stage must be authorized by Mwell policy/DOA owners and assigned through the effective DOA before use; MPIC role names or current code labels do not provide that authorization.
 
@@ -52,6 +58,7 @@ A high-value material request remains RFQ under formal-bid controls. A low-value
 - Sole source, repeat order, emergency purchase, petty cash, and other exceptions are explicit procurement modes, not requester flags. Each denied eligibility check returns to competition or a documented correction path.
 - The represented source values are PHP 250,000 and one year for repeat-order eligibility, PHP 2,000 for petty cash, PHP 50,000 for source-policy invoice/PO support, and six months for vendor probation. These values are policy parameters, not Mwell approval limits.
 - PO/agreement creation is blocked until request, vendor eligibility, sourcing/recovery, award, protection, and current DOA evidence pass. Vendor acknowledgment and open delivery/acceptance obligations enter monitored queues.
+- Financial-protection assessment records down-payment, supply/delivery performance, development performance and warranty, third-party liability, contractor-equipment and project-specific insurance requirements. The general source references 30% performance and 10% warranty values where applicable; the system must not invent a guarantee, percentage or waiver without the approved profile/contract basis.
 - Warehouse or the service owner creates receipt, QC, custody, and acceptance evidence. Non-conformance routes to rejection, quarantine, replacement, warranty, RMA/credit, and payment hold.
 - Procurement prepares a versioned payment-readiness pack. Finance recomputes invoice, approved commitment, accepted quantity/value, tax/withholding, foreign-vendor, variance, vendor-eligibility, and evidence-version checks before its decision.
 - File closure requires payment readiness, delivery closure, resolved quality/variance/warranty obligations, and retained evidence; payment alone does not close the procurement file.

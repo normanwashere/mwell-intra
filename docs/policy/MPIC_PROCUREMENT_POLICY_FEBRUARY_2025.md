@@ -1,6 +1,6 @@
 # MPIC Procurement Policy February 2025 - Maintained Extract
 
-This plain-language extract supports Mwell Intra operations and search. It does not replace the supplied binary policy, an approved Mwell policy, or the effective department Delegation of Authority (DOA).
+This plain-language extract supports Mwell Intra operations and search as an incorporated reference. It does not replace the canonical mWell source, the supplied MPIC binary, an approved mWell policy, or the effective department Delegation of Authority (DOA). When this extract differs from `mWell Procurement Policy and Procedures - Revised Modern Visual - Word Updated.docx`, the canonical mWell source controls the mWell operating workflow.
 
 ## Source identity
 
@@ -13,7 +13,7 @@ This plain-language extract supports Mwell Intra operations and search. It does 
 | Binary SHA-256 | `538C6C7CD25449A55B1608559AF83C2C7AAAAFDD5E8BE1CC2580392CF46EC996` |
 | Maintained extract status | Derived operating reference; not a replacement policy or approval instrument |
 
-The binary DOCX is the authoritative supplied artifact. It is a 23-page Word document created and last modified on February 11, 2025. The visible document has no tracked insertions or deletions, but it contains unresolved reviewer comments. Those comments are not treated as approved policy requirements in this extract.
+The binary DOCX is authoritative for what the MPIC reference says, not for mWell operating authority. It is a 23-page Word document created and last modified on February 11, 2025. The visible document has no tracked insertions or deletions, but it contains unresolved reviewer comments. Those comments are not treated as approved requirements in this extract.
 
 ## Scope
 
@@ -90,14 +90,16 @@ Mwell separates three route axes so a document label cannot silently decide mode
 
 | Axis | Mwell values | Mapping rule |
 | --- | --- | --- |
-| Solicitation document | RFQ, RFP, or none | Materials use RFQ; services use RFP; an approved exception may use none unless a policy owner requires a supporting solicitation |
+| Solicitation document | RFQ, RFP, or none | The canonical mWell source overrides the MPIC goods/services convention: RFQ below PHP 1,000,000 when clear and comparable; RFP at or above PHP 1,000,000 or for complex, technical, strategic, high-risk, data-sensitive or non-comparable work at any amount; an approved exception may use none when policy permits |
 | Procurement mode | Competitive bidding, sole source, repeat order, emergency purchase, petty cash, or another approved exception | Competition is the default; an exception requires eligibility, evidence, owner review, and DOA approval |
 | Governance tier | Standard, formal bid, high-risk/special control, and effective DOA route | Amount, complexity, risk, data sensitivity, category, and the current effective DOA determine control depth and authority |
 
-The local Mwell operating policy uses PHP 1,000,000 as a **formal-bid governance** boundary. It does not turn high-value materials into an RFP or low-value services into an RFQ. Examples:
+The canonical Mwell operating source uses PHP 1,000,000 as a solicitation boundary and names additional RFP risk triggers. Examples:
 
-- A high-value material requirement remains an RFQ and follows formal-bid and effective-DOA controls.
-- A low-value service requirement remains an RFP and follows the governance tier justified by its facts.
+- A clear, comparable goods or service requirement below PHP 1,000,000 may use RFQ.
+- A goods or service requirement at or above PHP 1,000,000 uses RFP.
+- A lower-value complex, technical, strategic, high-risk, data-sensitive or non-comparable requirement uses RFP.
+- Importation alone does not force RFP, but it adds landed-cost, customs, logistics, currency and acceptance controls.
 - A sole-source, repeat-order, emergency, or petty-cash request uses an exception mode only after the stated conditions and evidence pass.
 
 Mwell maps MPIC HR Admin operational work to Procurement workflows, technical comments to an assigned technical reviewer, receiving to Warehouse or the service owner, payment validation to Finance, and accreditation decisions to Legal/Vendor Management. These are local workflow responsibilities, not assertions that the named Mwell roles inherit MPIC approval authority.
@@ -108,11 +110,11 @@ For recommendation variance, the direct MPIC rule names Department Head approval
 
 At application baseline `0bf88e362acec9ee8f5c59dbda865a8d4767e4a2`:
 
-- `MPIC-PROCUREMENT-2025-02` is represented as a **draft parent-source profile**. Its direct values are attributed to the exact MPIC filename, and its formal-bid amount is `null`.
-- `MWELL-PROCUREMENT-OPERATING` is marked **active in code**, effective from January 1, 2026, and attributes the PHP 1,000,000 formal-bid amount to the local Mwell source. That code status is not cutover authority while the conflicts below remain unresolved.
-- Current code uses `maxExtensionWorkingDays: 7` and labels it with the MPIC source. The MPIC source caps an extension at seven calendar days. The working-day transformation is an unapproved local mismatch, must not be treated as inherited from MPIC, and blocks profile/migration activation pending owner resolution.
+- `MPIC-PROCUREMENT-2025-02` is represented as an **approved incorporated-reference profile**. Its direct values are attributed to the exact MPIC filename, and it does not determine the mWell solicitation boundary.
+- `MWELL-PROCUREMENT-OPERATING` is represented as **draft**, effective from January 1, 2026 for preview only, and points to the exact canonical mWell source. Its `sourceDocumentStatus` is `updated_visual_draft`; validation rejects activation until Procurement records source approval.
+- The application uses `maxExtensionCalendarDays: 7` for the incorporated MPIC extension cap and labels the inherited source.
 - The current effective department DOA remains the only source of named Mwell approval authority.
-- The additive procurement migration is intentionally unapplied. This handbook records code-baseline behavior and must not be read as live-database activation, deployment evidence, UAT certification, or production certification. The variance-stage authorization and extension-unit conflicts block policy-alignment activation.
+- The additive procurement migration is intentionally unapplied. This handbook records code-baseline behavior and must not be read as live-database activation, deployment evidence, UAT certification, or production certification. Canonical-source approval and variance-stage authorization remain policy-alignment gates.
 
 ## Conflicts
 
@@ -120,13 +122,13 @@ At application baseline `0bf88e362acec9ee8f5c59dbda865a8d4767e4a2`:
 | --- | --- | --- |
 | MPIC assigns operational steps to HR Admin, HR Head, Cost Center Head, Group Controller, CFO, CEO, and named annex approvers | Do not map those people or titles to Mwell approval authority; resolve the active department DOA | Ownership/authority mapping requires policy-owner and DOA approval |
 | MPIC directly requires written Requestor justification, Department Head approval, and a Group Controller decision for a differing recommendation; current Mwell code maps the stages to `dept_head` and `finance` | Treat `dept_head` then `finance` as a disclosed implementation mapping only. Use neutral first and second independent variance decisions in operating instructions | Authorization is unresolved; block activation until Mwell Procurement, Finance, department/DOA owners approve the stages and effective authority, or the code is changed |
-| MPIC caps an extension at seven calendar days; current Mwell code uses `maxExtensionWorkingDays` and can allow seven working days | Do not label the working-day unit as inherited. Retain the source calendar-day rule and require an explicit approved local decision or code correction | Unapproved local mismatch; block activation pending Procurement policy-owner resolution |
+| MPIC caps an extension at seven calendar days | Retain calendar-day semantics in the versioned profile and display MPIC provenance | Implemented in code/migration; live activation remains separately gated |
 | MPIC says the Requestor facilitates vendor accreditation; Mwell uses Legal/Vendor Management authority with technical review | Keep Legal/VMO as the governed Mwell decision boundary and Procurement as a read-only eligibility consumer | Local operating mapping; formal owner confirmation remains required where source ownership is disputed |
-| The source uses `RFP` for both Request for Proposal and Request for Payment | Use `RFP` only for service solicitation in procurement routing and spell out payment request elsewhere | Local terminology disambiguation |
-| The source procedure tables contain internal inconsistencies, including RFQ steps that refer to Request for Proposal | Follow the policy statements: services use RFP and materials use RFQ; do not copy the table error | Source drafting conflict retained for owner correction |
+| The source uses `RFP` for both Request for Proposal and Request for Payment | Use `RFP` only for solicitation in procurement routing and spell out payment request elsewhere | Local terminology disambiguation |
+| The MPIC source uses a goods/services solicitation convention, while the canonical mWell source routes by PHP 1,000,000 and named complexity/risk triggers | Follow the canonical mWell routing rule; retain requirement kind for scope, acceptance and reporting | Resolved by source hierarchy; covered by shared TypeScript/SQL route tests |
 | Reviewer comments suggest alternate timing, repeat-order, sourcing, and ownership ideas | Do not activate comments as requirements without an approved source revision | Unresolved source comments |
 | MPIC includes a PO approval table and named cost-center approvers | Do not import these limits or names into Mwell | Unresolved and inactive for Mwell authority |
-| Mwell has a PHP 1,000,000 formal-bid boundary that is absent from the MPIC source | Attribute it only to the local operating source and keep it separate from solicitation type | Active local code mapping; live activation remains unverified while migration is unapplied |
+| Mwell has a PHP 1,000,000 solicitation boundary that is absent from the MPIC source | Attribute it only to the canonical mWell operating source | Implemented in draft profile; live activation remains unverified while migration is unapplied |
 
 ## Ownership
 
@@ -145,7 +147,7 @@ At application baseline `0bf88e362acec9ee8f5c59dbda865a8d4767e4a2`:
 2. Compare visible policy text, tables, annexes, comments, and metadata. Treat comments or drafting notes as unresolved unless the approved revision incorporates them.
 3. Record each change as a direct MPIC requirement, a local Mwell mapping, or an unresolved conflict. Do not merge these categories.
 4. Obtain Procurement, Finance, Legal/VMO, department-owner, and DOA decisions for affected ownership, values, and authority.
-5. Resolve every activation blocker, including the variance-stage authority and extension-unit mismatch. Record the approval source or correct the implementation; silence is not approval.
+5. Resolve every activation blocker, including canonical-source approval and variance-stage authority. Record the approval source or correct the implementation; silence is not approval.
 6. Create a new versioned policy profile and effective date. Never overwrite the profile used by an existing transaction.
 7. Update workflow controls, diagrams, role procedures, tests, the Vendor-to-Pay Control Matrix, and the Requirements Traceability Matrix in the same change.
 8. Regenerate the standalone handbook only with `pnpm docs:build` and verify the source is classified and appears as one maintained article.

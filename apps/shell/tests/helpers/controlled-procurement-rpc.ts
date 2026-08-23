@@ -154,7 +154,7 @@ type FixtureProfile = {
 
 const CONTROL_SOURCES = Object.fromEntries([
   'formalBidAmount', 'inviteTargetMin', 'inviteTargetMax', 'sealedBidMinimumResponses',
-  'bidWindowWorkingDays', 'maxExtensionWorkingDays', 'vendorAcknowledgementHours',
+  'bidWindowWorkingDays', 'maxExtensionCalendarDays', 'vendorAcknowledgementHours',
   'clarificationHours', 'tabulationHours', 'technicalEvaluationWorkingDays',
   'poAcknowledgementHours', 'repeatOrderMaxAmount', 'repeatOrderMaxAgeDays',
   'pettyCashMaxAmount', 'poInvoiceThreshold', 'vendorProbationMonths',
@@ -167,7 +167,7 @@ function controls(): Record<string, number> {
     invite_target_max: 4,
     sealed_bid_minimum_responses: 3,
     bid_window_working_days: 7,
-    max_extension_working_days: 7,
+    max_extension_calendar_days: 7,
     vendor_acknowledgement_hours: 24,
     clarification_hours: 48,
     tabulation_hours: 48,
@@ -341,7 +341,7 @@ export class ControlledProcurementRpcFixture {
         name: 'Mwell controlled operating policy',
         relationship: 'mwell_operating',
         source_profile_id: this.parentProfileId,
-        source_filename: 'mWell Procurement Policy and Procedures - Revised Modern Visual Updated.docx',
+        source_filename: 'mWell Procurement Policy and Procedures - Revised Modern Visual - Word Updated.docx',
         source_organization: 'Mwell',
         control_sources: CONTROL_SOURCES,
         status: 'active',

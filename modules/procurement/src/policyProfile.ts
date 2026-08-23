@@ -5,10 +5,10 @@ import type {
 
 export const MPIC_SOURCE_FILENAME = 'MPIC Procurement Policy February2025.docx';
 export const MWELL_OPERATING_SOURCE_FILENAME =
-  'mWell Procurement Policy and Procedures - Revised Modern Visual Updated.docx';
+  'mWell Procurement Policy and Procedures - Revised Modern Visual - Word Updated.docx';
 
 const MPIC_CONTROL_SOURCE = `${MPIC_SOURCE_FILENAME} (February 2025)`;
-const MWELL_CONTROL_SOURCE = `${MWELL_OPERATING_SOURCE_FILENAME} (local operating policy)`;
+const MWELL_CONTROL_SOURCE = `${MWELL_OPERATING_SOURCE_FILENAME} (canonical Mwell requirements source)`;
 
 const CONTROL_KEYS: Array<keyof ProcurementPolicyControls> = [
   'formalBidAmount',
@@ -16,7 +16,7 @@ const CONTROL_KEYS: Array<keyof ProcurementPolicyControls> = [
   'inviteTargetMax',
   'sealedBidMinimumResponses',
   'bidWindowWorkingDays',
-  'maxExtensionWorkingDays',
+  'maxExtensionCalendarDays',
   'vendorAcknowledgementHours',
   'clarificationHours',
   'tabulationHours',
@@ -34,7 +34,7 @@ const POSITIVE_INTEGER_CONTROLS: Array<keyof ProcurementPolicyControls> = [
   'inviteTargetMax',
   'sealedBidMinimumResponses',
   'bidWindowWorkingDays',
-  'maxExtensionWorkingDays',
+  'maxExtensionCalendarDays',
   'vendorAcknowledgementHours',
   'clarificationHours',
   'tabulationHours',
@@ -51,7 +51,7 @@ const MPIC_CONTROLS: ProcurementPolicyControls = {
   inviteTargetMax: 4,
   sealedBidMinimumResponses: 3,
   bidWindowWorkingDays: 7,
-  maxExtensionWorkingDays: 7,
+  maxExtensionCalendarDays: 7,
   vendorAcknowledgementHours: 24,
   clarificationHours: 48,
   tabulationHours: 48,
@@ -80,6 +80,7 @@ export const MPIC_SOURCE_PROFILE: ProcurementPolicyProfile = {
   version: '2025-02',
   name: 'MPIC Procurement Policy February 2025',
   sourceFilename: MPIC_SOURCE_FILENAME,
+  sourceDocumentStatus: 'approved',
   sourceOrganization: 'MPIC',
   relationship: 'parent_source',
   controlSources: Object.fromEntries(
@@ -101,6 +102,7 @@ export const MWELL_OPERATING_PROFILE: ProcurementPolicyProfile = {
   version: '2026-08',
   name: 'Mwell Procurement Operating Policy',
   sourceFilename: MWELL_OPERATING_SOURCE_FILENAME,
+  sourceDocumentStatus: 'updated_visual_draft',
   sourceOrganization: 'Mwell',
   relationship: 'mwell_operating',
   inheritedFromProfileId: MPIC_SOURCE_PROFILE.id,
@@ -108,7 +110,7 @@ export const MWELL_OPERATING_PROFILE: ProcurementPolicyProfile = {
     ...inheritedControlSources,
     formalBidAmount: MWELL_CONTROL_SOURCE,
   },
-  status: 'active',
+  status: 'draft',
   effectiveFrom: '2026-01-01',
   controls: {
     ...MPIC_CONTROLS,
@@ -149,6 +151,10 @@ function assertOperatingProfileProvenance(profile: ProcurementPolicyProfile): vo
     throw new Error('Mwell operating profiles must identify their inherited parent profile.');
   }
   if (profile.status !== 'active') return;
+
+  if (profile.sourceDocumentStatus !== 'approved') {
+    throw new Error('An approved source document status is required before profile activation.');
+  }
 
   for (const control of CONTROL_KEYS) {
     if (!profile.controlSources[control]?.trim()) {

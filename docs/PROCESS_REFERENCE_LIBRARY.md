@@ -8,8 +8,8 @@
 
 | Reference document | Format and authority | Processes governed | Business owner | Handbook treatment |
 | --- | --- | --- | --- | --- |
-| `MPIC Procurement Policy February2025.docx` | Authoritative supplied binary; MPIC, February 2025 | Parent-source procurement requirements, source values, competition, exceptions, commitments, vendor controls and payment support | MPIC policy owner; Mwell mappings require Mwell owners | Direct requirements, local mappings and unresolved conflicts are separated in `MPIC_PROCUREMENT_POLICY_FEBRUARY_2025.md` |
-| `mWell Procurement Policy and Procedures - Revised Modern Visual Updated.docx` | Approved policy source | Request intake, sourcing route, exceptions, competition, approval, commitment, change control, receiving, acceptance and payment readiness | Procurement with Finance and Legal | Controlling rules and handoffs are reproduced below and mapped in the Vendor-to-Pay Control Matrix |
+| `mWell Procurement Policy and Procedures - Revised Modern Visual - Word Updated.docx` | Canonical mWell operating source supplied for alignment; the document identifies itself as an updated visual draft for review | Request intake, route selection, exceptions, competition, accreditation, approval, commitment, acceptance and payment readiness | Procurement, with Legal, Finance and the active department DOA owners | Primary operating basis. The app must not activate a profile derived from this source until its document status is approved. SHA-256: `51F4E381CF7DEC6A1950867C4839750078DB08D603A5DE8AA54B63D12F6D1239` |
+| `MPIC Procurement Policy February2025.docx` | Incorporated reference named by the canonical mWell source | Numeric thresholds, timing and control practices that mWell has not replaced | MPIC source owner; mWell Procurement decides whether a control is inherited | Reference-only extract in `MPIC_PROCUREMENT_POLICY_FEBRUARY_2025.md`; inherited controls must retain visible provenance and cannot override the canonical mWell source or active DOA |
 | `LGL004-Vendor Accreditation Form 2.0 (3).pdf` | Approved vendor accreditation form, version 2.0 / 2025 baseline | Vendor identity, declarations, entity evidence, qualification and accreditation | Legal / Vendor Management | Required fields, entity branches and declarations are reproduced below |
 | `[MNDA]- Tech Service Provider.docx` | Controlled legal instrument template | Technology-provider confidentiality, privacy, execution, expiry and return/destruction | Legal | Operational clauses and lifecycle controls are reproduced below; the executed instrument controls the parties |
 | `Ecomm-Order Page.xlsx` | Warehouse operating tracker supplied by stakeholders | Ecommerce order intake, customer/address data, payment, product lines, dispatch and reconciliation | Operations / Warehouse | Tracker fields are mapped to Intra fields and exports below so the spreadsheet is not re-entered |
@@ -45,52 +45,49 @@ flowchart TD
 
 ## Procurement Policy Operating Extract
 
-Read the [maintained MPIC February 2025 extract](policy/MPIC_PROCUREMENT_POLICY_FEBRUARY_2025.md) before applying a source-policy value. The binary MPIC source remains authoritative. Mwell uses three separate route axes:
+Start with [Mwell Canonical Procurement Policy Alignment](policy/MWELL_CANONICAL_POLICY_ALIGNMENT.md). Consult the [maintained MPIC February 2025 extract](policy/MPIC_PROCUREMENT_POLICY_FEBRUARY_2025.md) only for an incorporated control that the canonical mWell source does not replace. Mwell uses three separate route axes:
 
 | Route axis | Operating rule |
 | --- | --- |
-| Solicitation document | Goods or materials use RFQ; services use RFP; an approved exception may use none when the policy owner does not require a supporting solicitation |
+| Solicitation document | Use RFQ below PHP 1,000,000 when the requirement is clear and comparable. Use RFP at PHP 1,000,000 and above, or at any amount for complex, technical, strategic, high-risk or data-sensitive work. Importation adds controls but does not automatically force RFP. An approved exception may use none when policy permits. |
 | Procurement mode | Competitive bidding is the default; sole source, repeat order, emergency purchase, petty cash, or another approved exception requires its own eligibility and evidence |
 | Governance tier | Standard, formal bid, high-risk/special control, and the current effective DOA are determined independently from the solicitation document |
 
-The local PHP 1,000,000 value affects formal-bid governance. It does not convert a material RFQ into a service RFP. The MPIC source itself does not state that boundary. Mwell approval authority always comes from the current effective department DOA, never from an MPIC title, person, annex, or amount.
+Requirement kind remains important for scope, acceptance and reporting, but it does not select RFQ or RFP. Mwell approval authority always comes from the current effective department DOA, never from an MPIC title, person, annex or amount.
 
-**Activation blocker:** the MPIC source sets the initial bid window at least seven working days and caps an extension at seven calendar days. Current Mwell code uses seven working days for the extension. That unit change is unapproved, is not an inherited MPIC control, and blocks policy-profile/migration activation until the Procurement policy owner approves an explicit local unit or the code is corrected to the source rule.
+**Activation blocker:** the canonical source identifies itself as an updated visual draft. The app stores that document status and refuses to activate a policy profile until Procurement records the source as approved. The incorporated MPIC timing control is represented as at least seven working days for the initial bid window and no more than seven calendar days for an extension, with visible inherited-source provenance.
 
-### Exact 14-stage procurement-to-payment overview
+### Canonical 13-step procurement-to-payment overview
 
 ```mermaid
 flowchart TD
-  S1[1 Requester records need, category, goods or services, scope or specification, budget, cost center, required date, and acceptance criteria] --> S2[2 Procurement confirms solicitation document, procurement mode, governance tier, invited-vendor target, and reasons]
-  S2 --> S3[3 System validates active policy profile, effective DOA, accreditation, special-risk controls, and complete source package]
-  S3 --> S4[4 Procurement issues one versioned package to accredited vendors and records acknowledgments, clarifications, deadlines, and equal notices]
-  S4 --> S5[5 System evaluates response quorum and routes failed bid, extension or requote, or controlled insufficient-bids exception]
-  S5 --> S6[6 Procurement records commercial tabulation; requester or technical reviewer records technical evaluation]
-  S6 --> S7[7 Procurement records best-value recommendation and rationale; system selects no automatic winner]
-  S7 --> S8[8 Recommendation variance follows independent justification and approval]
-  S8 --> S9[9 Current Mwell DOA and separation of duty approve the award]
-  S9 --> S10[10 Procurement creates PO or agreement after vendor, sourcing, approval, and protection controls pass]
-  S10 --> S11[11 Vendor acknowledges commitment; outstanding delivery and acceptance enter monitored queues]
-  S11 --> S12[12 Warehouse or service owner records receipt and acceptance; quality issues route to rejection, replacement, warranty, or RMA]
-  S12 --> S13[13 Procurement prepares payment-readiness pack; Finance validates invoice, PO or agreement, receipt or acceptance, tax, and variance evidence]
-  S13 --> S14[14 Procurement file closes after payment readiness, delivery closure, open-issue resolution, and retained evidence are complete]
+  S1[1 Define the need] --> S2[2 Submit the request]
+  S2 --> S3[3 Confirm the procurement path]
+  S3 --> S4[4 Source vendors]
+  S4 --> S5[5 Check accreditation]
+  S5 --> S6[6 Evaluate offers]
+  S6 --> S7[7 Recommend award]
+  S7 --> S8[8 Approve under the active DOA]
+  S8 --> S9[9 Issue PO or contract]
+  S9 --> S10[10 Deliver and close delivery or service obligations]
+  S10 --> S11[11 Prepare payment handoff]
+  S11 --> S12[12 Process vendor payment]
+  S12 --> S13[13 Close the procurement file]
 ```
+
+The application may show additional controlled states for package issuance, failed-bid recovery, vendor acknowledgement, inspection, quality recovery and Finance review. These are system-expanded states mapped to the 13 policy steps; they are not extra policy stages.
 
 ### Solicitation document and type classification
 
 ```mermaid
 flowchart TD
-  A[Requester: classification, specification or scope, budget and acceptance evidence] --> B{System: goods or services classification complete?}
+  A[Requester: classification, specification or scope, budget and acceptance evidence] --> B{System: amount and route facts complete?}
   B -->|No| BX([Blocked: request cannot route])
   BX --> BR[Requester recovery: correct classification and required evidence]
   BR --> B
-  B -->|Yes| C{Procurement: material or goods requirement?}
-  C -->|Yes| D[Solicitation document: RFQ with quantity, UOM, delivery, payment, shipping, validity, deadline and attachments]
-  C -->|No| E{Procurement: service requirement?}
-  E -->|No| EX([Blocked: ambiguous requirement type])
-  EX --> ER[Requester and Procurement recovery: split or clarify the requirement]
-  ER --> B
-  E -->|Yes| F[Solicitation document: RFP with scope, evaluation approach and response deadline]
+  B -->|Yes| C{At least PHP 1M, or complex, technical, strategic, high-risk, data-sensitive, or not comparable?}
+  C -->|No| D[Solicitation document: RFQ with scope or specification, commercial terms, deadline and attachments]
+  C -->|Yes| F[Solicitation document: RFP with evaluation approach, technical and commercial requirements, response deadline and attachments]
   D --> G{Procurement: governed exception mode requested?}
   F --> G
   G -->|No| H[Route evidence: competitive bidding plus independently derived governance tier]
@@ -125,11 +122,7 @@ flowchart TD
   D -->|Yes| E[Procurement: controlled bid opening and response register]
   D -->|No| F[System: failed-bid state with reason and preserved submissions]
   F --> G{Procurement: extension, additional sourcing or equal requote available?}
-  G -->|Yes| U{Policy owner: extension unit conflict resolved in an authorized profile?}
-  U -->|No| UX([Blocked activation: current seven-working-day extension is unapproved])
-  UX --> UR[Recovery: approve a local unit or correct code to the seven-calendar-day source cap]
-  UR --> U
-  U -->|Yes| H[Recovery: notify every invitee, version the package and set the revised deadline within the authorized unit]
+  G -->|Yes| H[Recovery: notify every invitee, version the package and set the revised deadline within the inherited seven-calendar-day cap]
   H --> D
   G -->|No| I{Policy owner and effective DOA: evaluation with fewer than three justified and approved?}
   I -->|No| IX([Blocked terminal: bids remain unopened and no award may proceed])
@@ -274,7 +267,7 @@ flowchart TD
 - Invitations target three to four accredited vendors. Sealed-bid opening requires at least three usable responses or an approved failed-bid recovery/insufficient-bids decision.
 - Every invitee receives the same versioned package, clarification and deadline notice. Technical and commercial evidence remains attributable.
 - A differing best-value recommendation requires written justification plus a first independent variance decision and a second independent variance decision. These neutral stages are usable only after Mwell policy/DOA owners authorize the stages and the effective DOA assigns the actors; current code names are not authority.
-- Do not activate the current seven-working-day extension control. The source cap is seven calendar days, and the unit conflict remains blocked pending owner resolution.
+- Do not activate a profile derived from the canonical mWell draft until Procurement records the source document as approved. The extension control is already modeled in calendar days and remains visibly attributed to the incorporated MPIC reference.
 - The system resolves named approvers from the active department DOA by scope, amount, category, effective date and delegation. Self-approval is prohibited.
 - A PO, contract or written agreement is issued only after request, route, vendor eligibility, sourcing, commercial, protection and approval evidence is complete. Material change returns to Procurement and DOA review.
 - Warehouse records physical quantity, identity, condition, evidence, QC disposition and custody. The service owner records milestone acceptance. Procurement cannot manufacture either record.

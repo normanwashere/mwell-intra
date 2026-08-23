@@ -1,4 +1,4 @@
--- MPIC Procurement Policy February 2025 alignment.
+-- Canonical Mwell procurement policy alignment with incorporated MPIC controls.
 --
 -- This is additive and deliberately leaves request route fields nullable until
 -- the deterministic backfill in the next migration. Policy activation is the
@@ -13,13 +13,14 @@ create table if not exists procurement.policy_profiles (
   source_profile_id uuid references procurement.policy_profiles(id) on delete restrict,
   source_filename text not null,
   source_organization text not null,
+  source_document_status text not null default 'draft_for_review',
   control_sources jsonb not null default '{}'::jsonb,
   formal_bid_amount numeric(14, 2),
   invite_target_min integer not null,
   invite_target_max integer not null,
   sealed_bid_minimum_responses integer not null,
   bid_window_working_days integer not null,
-  max_extension_working_days integer not null,
+  max_extension_calendar_days integer not null,
   vendor_acknowledgement_hours integer not null,
   clarification_hours integer not null,
   tabulation_hours integer not null,
@@ -48,6 +49,12 @@ create table if not exists procurement.policy_profiles (
   constraint policy_profiles_status_check check (
     status in ('draft', 'active', 'superseded', 'suspended')
   ),
+  constraint policy_profiles_source_document_status_check check (
+    source_document_status in ('draft_for_review', 'approved')
+  ),
+  constraint policy_profiles_active_source_approved_check check (
+    status <> 'active' or source_document_status = 'approved'
+  ),
   constraint policy_profiles_effective_window_check check (
     effective_to is null or effective_to > effective_from
   ),
@@ -58,7 +65,7 @@ create table if not exists procurement.policy_profiles (
     and sealed_bid_minimum_responses > 0
     and sealed_bid_minimum_responses <= invite_target_max
     and bid_window_working_days > 0
-    and max_extension_working_days > 0
+    and max_extension_calendar_days > 0
     and vendor_acknowledgement_hours > 0
     and clarification_hours > 0
     and tabulation_hours > 0
@@ -77,7 +84,7 @@ create table if not exists procurement.policy_profiles (
     jsonb_typeof(control_sources) = 'object'
     and control_sources ?& array[
       'formalBidAmount', 'inviteTargetMin', 'inviteTargetMax',
-      'sealedBidMinimumResponses', 'bidWindowWorkingDays', 'maxExtensionWorkingDays',
+      'sealedBidMinimumResponses', 'bidWindowWorkingDays', 'maxExtensionCalendarDays',
       'vendorAcknowledgementHours', 'clarificationHours', 'tabulationHours',
       'technicalEvaluationWorkingDays', 'poAcknowledgementHours', 'repeatOrderMaxAmount',
       'repeatOrderMaxAgeDays', 'pettyCashMaxAmount', 'poInvoiceThreshold',
@@ -372,7 +379,7 @@ as $$
     and p_profile.sealed_bid_minimum_responses > 0
     and p_profile.sealed_bid_minimum_responses <= p_profile.invite_target_max
     and p_profile.bid_window_working_days > 0
-    and p_profile.max_extension_working_days > 0
+    and p_profile.max_extension_calendar_days > 0
     and p_profile.vendor_acknowledgement_hours > 0
     and p_profile.clarification_hours > 0
     and p_profile.tabulation_hours > 0
@@ -405,12 +412,12 @@ as $$
 declare
   v_source text;
   v_mpic_source constant text := 'MPIC Procurement Policy February2025.docx (February 2025)';
-  v_mwell_source constant text := 'mWell Procurement Policy and Procedures - Revised Modern Visual Updated.docx (local operating policy)';
+  v_mwell_source constant text := 'mWell Procurement Policy and Procedures - Revised Modern Visual - Word Updated.docx (canonical Mwell requirements source)';
 begin
   if jsonb_object_length(p_profile.control_sources) <> 16 or not (
     p_profile.control_sources ?& array[
       'formalBidAmount', 'inviteTargetMin', 'inviteTargetMax',
-      'sealedBidMinimumResponses', 'bidWindowWorkingDays', 'maxExtensionWorkingDays',
+      'sealedBidMinimumResponses', 'bidWindowWorkingDays', 'maxExtensionCalendarDays',
       'vendorAcknowledgementHours', 'clarificationHours', 'tabulationHours',
       'technicalEvaluationWorkingDays', 'poAcknowledgementHours', 'repeatOrderMaxAmount',
       'repeatOrderMaxAgeDays', 'pettyCashMaxAmount', 'poInvoiceThreshold',
@@ -454,7 +461,7 @@ begin
   end if;
   if p_profile.relationship <> 'mwell_operating'
     or p_profile.source_profile_id is null
-    or p_profile.source_filename <> 'mWell Procurement Policy and Procedures - Revised Modern Visual Updated.docx'
+    or p_profile.source_filename <> 'mWell Procurement Policy and Procedures - Revised Modern Visual - Word Updated.docx'
     or p_profile.source_organization <> 'Mwell' then
     return false;
   end if;
@@ -550,9 +557,9 @@ begin
   if v_profile_id is null then
     insert into procurement.policy_profiles (
       code, version, name, relationship, source_profile_id, source_filename,
-      source_organization, control_sources, formal_bid_amount, invite_target_min,
+      source_organization, source_document_status, control_sources, formal_bid_amount, invite_target_min,
       invite_target_max, sealed_bid_minimum_responses, bid_window_working_days,
-      max_extension_working_days, vendor_acknowledgement_hours, clarification_hours,
+      max_extension_calendar_days, vendor_acknowledgement_hours, clarification_hours,
       tabulation_hours, technical_evaluation_working_days, po_acknowledgement_hours,
       repeat_order_max_amount, repeat_order_max_age_days, petty_cash_max_amount,
       po_invoice_threshold, vendor_probation_months, effective_from, effective_to,
@@ -561,11 +568,11 @@ begin
       pg_catalog.btrim(payload->>'code'), pg_catalog.btrim(payload->>'version'),
       pg_catalog.btrim(payload->>'name'), payload->>'relationship',
       nullif(payload->>'source_profile_id', '')::uuid, pg_catalog.btrim(payload->>'source_filename'),
-      pg_catalog.btrim(payload->>'source_organization'), coalesce(payload->'control_sources', '{}'::jsonb),
+      pg_catalog.btrim(payload->>'source_organization'), coalesce(nullif(payload->>'source_document_status', ''), 'draft_for_review'), coalesce(payload->'control_sources', '{}'::jsonb),
       nullif(v_controls->>'formalBidAmount', '')::numeric,
       (v_controls->>'inviteTargetMin')::integer, (v_controls->>'inviteTargetMax')::integer,
       (v_controls->>'sealedBidMinimumResponses')::integer, (v_controls->>'bidWindowWorkingDays')::integer,
-      (v_controls->>'maxExtensionWorkingDays')::integer, (v_controls->>'vendorAcknowledgementHours')::integer,
+      (v_controls->>'maxExtensionCalendarDays')::integer, (v_controls->>'vendorAcknowledgementHours')::integer,
       (v_controls->>'clarificationHours')::integer, (v_controls->>'tabulationHours')::integer,
       (v_controls->>'technicalEvaluationWorkingDays')::integer, (v_controls->>'poAcknowledgementHours')::integer,
       (v_controls->>'repeatOrderMaxAmount')::numeric, (v_controls->>'repeatOrderMaxAgeDays')::integer,
@@ -581,13 +588,14 @@ begin
       source_profile_id = nullif(payload->>'source_profile_id', '')::uuid,
       source_filename = pg_catalog.btrim(payload->>'source_filename'),
       source_organization = pg_catalog.btrim(payload->>'source_organization'),
+      source_document_status = coalesce(nullif(payload->>'source_document_status', ''), 'draft_for_review'),
       control_sources = coalesce(payload->'control_sources', '{}'::jsonb),
       formal_bid_amount = nullif(v_controls->>'formalBidAmount', '')::numeric,
       invite_target_min = (v_controls->>'inviteTargetMin')::integer,
       invite_target_max = (v_controls->>'inviteTargetMax')::integer,
       sealed_bid_minimum_responses = (v_controls->>'sealedBidMinimumResponses')::integer,
       bid_window_working_days = (v_controls->>'bidWindowWorkingDays')::integer,
-      max_extension_working_days = (v_controls->>'maxExtensionWorkingDays')::integer,
+      max_extension_calendar_days = (v_controls->>'maxExtensionCalendarDays')::integer,
       vendor_acknowledgement_hours = (v_controls->>'vendorAcknowledgementHours')::integer,
       clarification_hours = (v_controls->>'clarificationHours')::integer,
       tabulation_hours = (v_controls->>'tabulationHours')::integer,
@@ -687,6 +695,9 @@ begin
   select * into v_profile from procurement.policy_profiles where id = v_profile_id for update;
   if not found then raise exception 'Policy profile not found'; end if;
   if v_profile.status <> 'draft' then raise exception 'Only draft policy profiles can be activated'; end if;
+  if v_profile.source_document_status <> 'approved' then
+    raise exception 'The controlled source document must be approved before profile activation';
+  end if;
   if v_profile.last_modified_by is not distinct from v_actor then
     raise exception 'A separate policy checker must activate the profile';
   end if;
@@ -892,6 +903,7 @@ declare
 begin
   if jsonb_typeof(v_source) <> 'object' then v_source := '{}'::jsonb; end if;
   return jsonb_build_object(
+    'comparable', lower(coalesce(v_source->>'comparable', 'true')) = any(v_true_values),
     'complex', lower(coalesce(v_source->>'complex', 'false')) = any(v_true_values),
     'technical', lower(coalesce(v_source->>'technical', 'false')) = any(v_true_values),
     'strategic', lower(coalesce(v_source->>'strategic', 'false')) = any(v_true_values),
@@ -976,8 +988,10 @@ begin
     when 'petty_cash' then 'petty_cash'
     else 'competitive_bidding'
   end;
+  -- Historical records preserve their stored RFQ/RFP projection. Requirement
+  -- kind must not retroactively rewrite an auditable solicitation decision.
   v_solicitation := case when v_mode = 'competitive_bidding'
-    then case when v_requirement_kind = 'services' then 'rfp' else 'rfq' end
+    then case when p_method = 'rfp' then 'rfp' else 'rfq' end
     else 'none' end;
   v_tier := case
     when cardinality(v_risk_reasons) > 0 then 'high_risk'
@@ -1165,8 +1179,16 @@ begin
 
   v_risk := private.policy_normalized_risk_facts(v_request.compliance);
   v_risk_reasons := private.policy_normalized_risk_reasons(v_request.compliance);
-  v_solicitation := case when v_mode = 'competitive_bidding'
-    then case when v_requirement_kind = 'services' then 'rfp' else 'rfq' end
+  v_solicitation := case when v_mode = 'competitive_bidding' then
+    case when
+      v_request.estimated_amount >= v_profile.formal_bid_amount
+      or not coalesce((v_risk->>'comparable')::boolean, true)
+      or coalesce((v_risk->>'complex')::boolean, false)
+      or coalesce((v_risk->>'technical')::boolean, false)
+      or coalesce((v_risk->>'strategic')::boolean, false)
+      or coalesce((v_risk->>'highRisk')::boolean, false)
+      or coalesce((v_risk->>'dataSensitive')::boolean, false)
+    then 'rfp' else 'rfq' end
     else 'none' end;
   if cardinality(v_risk_reasons) > 0 then
     v_tier := 'high_risk';
@@ -1180,6 +1202,10 @@ begin
     return jsonb_build_object('status', 'blocked', 'blockers', to_jsonb(v_blockers));
   end if;
   v_reasons := array_append(v_reasons, case when v_requirement_kind = 'services' then 'service_requirement' else 'material_requirement' end);
+  if not coalesce((v_risk->>'comparable')::boolean, true) then
+    v_reasons := array_append(v_reasons, 'scope:not_comparable');
+  end if;
+  v_reasons := array_append(v_reasons, 'solicitation:' || v_solicitation);
   v_reasons := v_reasons || v_risk_reasons;
   v_reasons := array_append(v_reasons, 'mode:' || v_mode);
   v_reasons := array_append(v_reasons, 'tier:' || v_tier);
@@ -1410,6 +1436,8 @@ declare
   v_requirement_kind text := nullif(pg_catalog.btrim(payload->>'requirement_kind'), '');
   v_requested_mode text := coalesce(nullif(pg_catalog.btrim(payload->>'requested_mode'), ''), 'competitive_bidding');
   v_solicitation_type text;
+  v_profile procurement.policy_profiles;
+  v_risk jsonb;
   v_requirements jsonb;
   v_created jsonb;
   v_request procurement.requests;
@@ -1423,11 +1451,6 @@ begin
   if v_requested_mode not in ('competitive_bidding', 'sole_source', 'repeat_order', 'emergency_purchase', 'petty_cash', 'approved_exception') then
     raise exception 'Unsupported procurement mode';
   end if;
-  v_solicitation_type := case when v_requested_mode = 'competitive_bidding'
-    then case when v_requirement_kind = 'services' then 'rfp' else 'rfq' end
-    else 'none' end;
-  v_requirements := private.policy_normalize_solicitation_requirements(payload->'solicitation_requirements', v_solicitation_type);
-
   v_created := procurement.create_request_pre_policy_route(payload);
   select * into v_request
   from procurement.requests
@@ -1436,6 +1459,28 @@ begin
   if not found then
     raise exception 'Created request could not be loaded for route classification';
   end if;
+
+  select * into v_profile
+  from procurement.policy_profiles
+  where relationship = 'mwell_operating' and status = 'active'
+    and effective_from <= pg_catalog.statement_timestamp()
+    and (effective_to is null or effective_to > pg_catalog.statement_timestamp())
+  order by effective_from desc
+  limit 1;
+  if not found then raise exception 'An effective Mwell policy profile is required'; end if;
+  v_risk := private.policy_normalized_risk_facts(v_request.compliance);
+  v_solicitation_type := case when v_requested_mode = 'competitive_bidding' then
+    case when
+      v_request.estimated_amount >= v_profile.formal_bid_amount
+      or not coalesce((v_risk->>'comparable')::boolean, true)
+      or coalesce((v_risk->>'complex')::boolean, false)
+      or coalesce((v_risk->>'technical')::boolean, false)
+      or coalesce((v_risk->>'strategic')::boolean, false)
+      or coalesce((v_risk->>'highRisk')::boolean, false)
+      or coalesce((v_risk->>'dataSensitive')::boolean, false)
+    then 'rfp' else 'rfq' end
+    else 'none' end;
+  v_requirements := private.policy_normalize_solicitation_requirements(payload->'solicitation_requirements', v_solicitation_type);
 
   update procurement.requests
   set requirement_kind = v_requirement_kind,
@@ -1747,7 +1792,7 @@ $$;
 create or replace function procurement.record_solicitation_communication(payload jsonb)
 returns jsonb language plpgsql security definer set search_path = '' as $$
 declare v_event procurement.sourcing_events; v_profile procurement.policy_profiles; v_type text := payload->>'communication_type';
-  v_group uuid := gen_random_uuid(); v_extension integer := coalesce((payload->>'extension_working_days')::integer, 0);
+  v_group uuid := gen_random_uuid(); v_extension integer := coalesce((payload->>'extension_calendar_days')::integer, 0);
   v_new_deadline timestamptz; v_extension_cap timestamptz; v_count integer;
 begin
   if not private.policy_sourcing_can_manage() then raise exception 'Not authorized to manage sourcing'; end if;
@@ -1759,10 +1804,10 @@ begin
   if v_type = 'clarification' then
     if nullif(btrim(payload->>'question'), '') is null or nullif(btrim(payload->>'answer'), '') is null then raise exception 'Clarification question and answer are required'; end if;
   elsif v_type = 'extension' then
-    if v_extension < 1 or v_extension > v_profile.max_extension_working_days then raise exception 'Extension must be between 1 and % working days', v_profile.max_extension_working_days; end if;
-    v_new_deadline := private.policy_add_working_days(v_event.submission_deadline, v_extension);
-    v_extension_cap := private.policy_add_working_days(v_event.original_submission_deadline, v_profile.max_extension_working_days);
-    if v_new_deadline > v_extension_cap then raise exception 'Cumulative extension cannot exceed % working days from the original submission deadline', v_profile.max_extension_working_days; end if;
+    if v_extension < 1 or v_extension > v_profile.max_extension_calendar_days then raise exception 'Extension must be between 1 and % calendar days', v_profile.max_extension_calendar_days; end if;
+    v_new_deadline := v_event.submission_deadline + pg_catalog.make_interval(days => v_extension);
+    v_extension_cap := v_event.original_submission_deadline + pg_catalog.make_interval(days => v_profile.max_extension_calendar_days);
+    if v_new_deadline > v_extension_cap then raise exception 'Cumulative extension cannot exceed % calendar days from the original submission deadline', v_profile.max_extension_calendar_days; end if;
     update procurement.sourcing_events set submission_deadline = v_new_deadline, status = 'issued', failed_bid_reason = null where id = v_event.id;
   else raise exception 'Unsupported solicitation communication'; end if;
   insert into procurement.solicitation_communications(
@@ -1771,7 +1816,7 @@ begin
     encode(extensions.digest(convert_to(jsonb_build_object('type', v_type, 'question', payload->>'question', 'answer', payload->>'answer', 'deadline', v_new_deadline)::text, 'UTF8'), 'sha256'), 'hex'),
     jsonb_build_object('notificationGroupId', v_group, 'recipientVendorId', response.vendor_id,
       'question', nullif(btrim(payload->>'question'), ''), 'answer', nullif(btrim(payload->>'answer'), ''),
-      'extensionWorkingDays', case when v_type = 'extension' then v_extension else null end,
+      'extensionCalendarDays', case when v_type = 'extension' then v_extension else null end,
       'submissionDeadline', v_new_deadline, 'packageVersion', v_event.package_version, 'packageHash', v_event.package_hash)
   from procurement.sourcing_responses response where response.sourcing_event_id = v_event.id and response.invited_at is not null;
   return jsonb_build_object('notification_group_id', v_group, 'recipient_count', v_count, 'submission_deadline', v_new_deadline);
@@ -1819,8 +1864,8 @@ begin
     if exists(select 1 from procurement.sourcing_responses response where response.sourcing_event_id = v_event.id and response.vendor_id = v_vendor.id) then raise exception 'Select an additional vendor who has not already been invited'; end if;
     v_requote_deadline := nullif(payload->>'submission_deadline', '')::timestamptz;
     if v_requote_deadline is null or v_requote_deadline <= v_event.submission_deadline then raise exception 'A later requote deadline is required'; end if;
-    v_extension_cap := private.policy_add_working_days(v_event.original_submission_deadline, v_profile.max_extension_working_days);
-    if v_requote_deadline > v_extension_cap then raise exception 'Requote deadline cannot exceed % working days from the original submission deadline', v_profile.max_extension_working_days; end if;
+    v_extension_cap := v_event.original_submission_deadline + pg_catalog.make_interval(days => v_profile.max_extension_calendar_days);
+    if v_requote_deadline > v_extension_cap then raise exception 'Requote deadline cannot exceed % calendar days from the original submission deadline', v_profile.max_extension_calendar_days; end if;
     if nullif(btrim(payload->>'package_version'), '') is null or nullif(btrim(payload->>'package_hash'), '') is null or (btrim(payload->>'package_version') = v_event.package_version and btrim(payload->>'package_hash') = v_event.package_hash) then raise exception 'A new controlled package version or hash is required for requote'; end if;
     insert into procurement.sourcing_responses(sourcing_event_id, vendor_id, invited_at, invitation_delivered_at) values(v_event.id, v_vendor.id, statement_timestamp(), statement_timestamp());
     update procurement.sourcing_events set status = 'issued', failed_bid_reason = null, submission_deadline = v_requote_deadline, package_version = btrim(payload->>'package_version'), package_hash = btrim(payload->>'package_hash') where id = v_event.id returning * into v_event;
@@ -2018,7 +2063,7 @@ begin
   ) acknowledgement on true
   where communication.request_id = v_request.id
     and communication.communication_type <> 'invitation_acknowledgement';
-  return jsonb_build_object('requestId', v_request.id, 'event', jsonb_build_object('id', v_event.id, 'status', v_event.status, 'submissionDeadline', v_event.submission_deadline, 'originalSubmissionDeadline', v_event.original_submission_deadline, 'intendedResponses', v_event.intended_responses, 'packageVersion', v_event.package_version, 'packageHash', v_event.package_hash, 'failedBidReason', v_event.failed_bid_reason, 'selectedVendorId', v_event.selected_vendor_id, 'closureNote', v_event.closure_note, 'responses', v_responses, 'communications', v_comms, 'policyControls', jsonb_build_object('formalBidAmount', v_profile.formal_bid_amount, 'inviteTargetMin', v_profile.invite_target_min, 'inviteTargetMax', v_profile.invite_target_max, 'sealedBidMinimumResponses', v_profile.sealed_bid_minimum_responses, 'bidWindowWorkingDays', v_profile.bid_window_working_days, 'maxExtensionWorkingDays', v_profile.max_extension_working_days, 'vendorAcknowledgementHours', v_profile.vendor_acknowledgement_hours, 'clarificationHours', v_profile.clarification_hours, 'tabulationHours', v_profile.tabulation_hours, 'technicalEvaluationWorkingDays', v_profile.technical_evaluation_working_days, 'poAcknowledgementHours', v_profile.po_acknowledgement_hours, 'repeatOrderMaxAmount', v_profile.repeat_order_max_amount, 'repeatOrderMaxAgeDays', v_profile.repeat_order_max_age_days, 'pettyCashMaxAmount', v_profile.petty_cash_max_amount, 'poInvoiceThreshold', v_profile.po_invoice_threshold, 'vendorProbationMonths', v_profile.vendor_probation_months)));
+  return jsonb_build_object('requestId', v_request.id, 'event', jsonb_build_object('id', v_event.id, 'status', v_event.status, 'submissionDeadline', v_event.submission_deadline, 'originalSubmissionDeadline', v_event.original_submission_deadline, 'intendedResponses', v_event.intended_responses, 'packageVersion', v_event.package_version, 'packageHash', v_event.package_hash, 'failedBidReason', v_event.failed_bid_reason, 'selectedVendorId', v_event.selected_vendor_id, 'closureNote', v_event.closure_note, 'responses', v_responses, 'communications', v_comms, 'policyControlSources', coalesce(v_profile.control_sources,'{}'::jsonb), 'policyControls', jsonb_build_object('formalBidAmount', v_profile.formal_bid_amount, 'inviteTargetMin', v_profile.invite_target_min, 'inviteTargetMax', v_profile.invite_target_max, 'sealedBidMinimumResponses', v_profile.sealed_bid_minimum_responses, 'bidWindowWorkingDays', v_profile.bid_window_working_days, 'maxExtensionCalendarDays', v_profile.max_extension_calendar_days, 'vendorAcknowledgementHours', v_profile.vendor_acknowledgement_hours, 'clarificationHours', v_profile.clarification_hours, 'tabulationHours', v_profile.tabulation_hours, 'technicalEvaluationWorkingDays', v_profile.technical_evaluation_working_days, 'poAcknowledgementHours', v_profile.po_acknowledgement_hours, 'repeatOrderMaxAmount', v_profile.repeat_order_max_amount, 'repeatOrderMaxAgeDays', v_profile.repeat_order_max_age_days, 'pettyCashMaxAmount', v_profile.petty_cash_max_amount, 'poInvoiceThreshold', v_profile.po_invoice_threshold, 'vendorProbationMonths', v_profile.vendor_probation_months)));
 end;
 $$;
 
@@ -4153,7 +4198,7 @@ begin
     order by acknowledgement.sent_at desc limit 1
   ) acknowledgement on true
   where communication.request_id = v_request.id and communication.communication_type <> 'invitation_acknowledgement';
-  return jsonb_build_object('requestId', v_request.id, 'event', jsonb_build_object('id', v_event.id, 'status', v_event.status, 'submissionDeadline', v_event.submission_deadline, 'originalSubmissionDeadline', v_event.original_submission_deadline, 'intendedResponses', v_event.intended_responses, 'packageVersion', v_event.package_version, 'packageHash', v_event.package_hash, 'failedBidReason', v_event.failed_bid_reason, 'selectedVendorId', v_event.selected_vendor_id, 'closureNote', v_event.closure_note, 'responses', v_responses, 'communications', v_comms, 'policyControls', jsonb_build_object('formalBidAmount', v_profile.formal_bid_amount, 'inviteTargetMin', v_profile.invite_target_min, 'inviteTargetMax', v_profile.invite_target_max, 'sealedBidMinimumResponses', v_profile.sealed_bid_minimum_responses, 'bidWindowWorkingDays', v_profile.bid_window_working_days, 'maxExtensionWorkingDays', v_profile.max_extension_working_days, 'vendorAcknowledgementHours', v_profile.vendor_acknowledgement_hours, 'clarificationHours', v_profile.clarification_hours, 'tabulationHours', v_profile.tabulation_hours, 'technicalEvaluationWorkingDays', v_profile.technical_evaluation_working_days, 'poAcknowledgementHours', v_profile.po_acknowledgement_hours, 'repeatOrderMaxAmount', v_profile.repeat_order_max_amount, 'repeatOrderMaxAgeDays', v_profile.repeat_order_max_age_days, 'pettyCashMaxAmount', v_profile.petty_cash_max_amount, 'poInvoiceThreshold', v_profile.po_invoice_threshold, 'vendorProbationMonths', v_profile.vendor_probation_months)));
+  return jsonb_build_object('requestId', v_request.id, 'event', jsonb_build_object('id', v_event.id, 'status', v_event.status, 'submissionDeadline', v_event.submission_deadline, 'originalSubmissionDeadline', v_event.original_submission_deadline, 'intendedResponses', v_event.intended_responses, 'packageVersion', v_event.package_version, 'packageHash', v_event.package_hash, 'failedBidReason', v_event.failed_bid_reason, 'selectedVendorId', v_event.selected_vendor_id, 'closureNote', v_event.closure_note, 'responses', v_responses, 'communications', v_comms, 'policyControlSources', coalesce(v_profile.control_sources,'{}'::jsonb), 'policyControls', jsonb_build_object('formalBidAmount', v_profile.formal_bid_amount, 'inviteTargetMin', v_profile.invite_target_min, 'inviteTargetMax', v_profile.invite_target_max, 'sealedBidMinimumResponses', v_profile.sealed_bid_minimum_responses, 'bidWindowWorkingDays', v_profile.bid_window_working_days, 'maxExtensionCalendarDays', v_profile.max_extension_calendar_days, 'vendorAcknowledgementHours', v_profile.vendor_acknowledgement_hours, 'clarificationHours', v_profile.clarification_hours, 'tabulationHours', v_profile.tabulation_hours, 'technicalEvaluationWorkingDays', v_profile.technical_evaluation_working_days, 'poAcknowledgementHours', v_profile.po_acknowledgement_hours, 'repeatOrderMaxAmount', v_profile.repeat_order_max_amount, 'repeatOrderMaxAgeDays', v_profile.repeat_order_max_age_days, 'pettyCashMaxAmount', v_profile.petty_cash_max_amount, 'poInvoiceThreshold', v_profile.po_invoice_threshold, 'vendorProbationMonths', v_profile.vendor_probation_months)));
 end;
 $$;
 

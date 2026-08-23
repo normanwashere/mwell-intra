@@ -15,7 +15,7 @@ describe('procurement policy profile', () => {
       inviteTargetMax: 4,
       sealedBidMinimumResponses: 3,
       bidWindowWorkingDays: 7,
-      maxExtensionWorkingDays: 7,
+      maxExtensionCalendarDays: 7,
       vendorAcknowledgementHours: 24,
       clarificationHours: 48,
       tabulationHours: 48,
@@ -45,12 +45,20 @@ describe('procurement policy profile', () => {
       expect(MWELL_OPERATING_PROFILE.controlSources[control]?.trim()).toBeTruthy();
     }
     expect(MWELL_OPERATING_PROFILE.controls.formalBidAmount).toBe(1_000_000);
+    expect(MWELL_OPERATING_PROFILE.sourceDocumentStatus).toBe('updated_visual_draft');
+  });
+
+  it('blocks activation when the controlled Mwell source remains a draft for review', () => {
+    expect(() => validatePolicyProfile({
+      ...MWELL_OPERATING_PROFILE,
+      status: 'active',
+    })).toThrow(/approved source document status/i);
   });
 
   it('selects the latest active profile effective on the transaction date', () => {
     const selected = selectEffectivePolicyProfile([
       { ...MWELL_OPERATING_PROFILE, id: 'old', effectiveFrom: '2025-01-01', status: 'superseded' },
-      { ...MWELL_OPERATING_PROFILE, id: 'active', effectiveFrom: '2026-08-01', status: 'active' },
+      { ...MWELL_OPERATING_PROFILE, id: 'active', effectiveFrom: '2026-08-01', status: 'active', sourceDocumentStatus: 'approved' },
     ], '2026-08-22');
     expect(selected.id).toBe('active');
   });
@@ -65,7 +73,7 @@ describe('procurement policy profile', () => {
   it.each([
     ['a non-canonical Mwell source filename', { sourceFilename: 'policy.docx' }, /source profile/i],
     ['a missing inherited MPIC profile', { inheritedFromProfileId: undefined }, /inherited/i],
-    ['a blank control source', { controlSources: { ...MWELL_OPERATING_PROFILE.controlSources, inviteTargetMin: '  ' } }, /source attribution/i],
+    ['a blank control source', { status: 'active' as const, sourceDocumentStatus: 'approved' as const, controlSources: { ...MWELL_OPERATING_PROFILE.controlSources, inviteTargetMin: '  ' } }, /source attribution/i],
   ])('rejects %s before an operating profile can activate', (_name, patch, message) => {
     expect(() => validatePolicyProfile({
       ...MWELL_OPERATING_PROFILE,
@@ -101,8 +109,8 @@ describe('procurement policy profile', () => {
 
   it('rejects overlapping active Mwell operating profiles', () => {
     expect(() => selectEffectivePolicyProfile([
-      { ...MWELL_OPERATING_PROFILE, id: 'a', effectiveFrom: '2026-08-01' },
-      { ...MWELL_OPERATING_PROFILE, id: 'b', effectiveFrom: '2026-08-15' },
+      { ...MWELL_OPERATING_PROFILE, id: 'a', effectiveFrom: '2026-08-01', status: 'active', sourceDocumentStatus: 'approved' },
+      { ...MWELL_OPERATING_PROFILE, id: 'b', effectiveFrom: '2026-08-15', status: 'active', sourceDocumentStatus: 'approved' },
     ], '2026-08-22')).toThrow(/overlapping/i);
   });
 
@@ -119,6 +127,8 @@ describe('procurement policy profile', () => {
   it('treats effective date boundaries as inclusive and rejects invalid transaction dates', () => {
     const bounded = {
       ...MWELL_OPERATING_PROFILE,
+      status: 'active' as const,
+      sourceDocumentStatus: 'approved' as const,
       effectiveFrom: '2026-08-22',
       effectiveTo: '2026-08-24',
     };

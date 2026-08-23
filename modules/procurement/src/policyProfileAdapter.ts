@@ -25,6 +25,8 @@ export function mapLivePolicyProfile(row: Record<string, unknown>): ProcurementP
     typeof row.name !== 'string' ||
     typeof row.source_filename !== 'string' ||
     typeof row.source_organization !== 'string' ||
+    !['draft_for_review', 'approved'].includes(String(row.source_document_status)) ||
+    !['draft', 'active', 'superseded', 'suspended'].includes(String(row.status)) ||
     (typeof row.effective_from !== 'string' && !(row.effective_from instanceof Date))
   ) return null;
 
@@ -36,6 +38,8 @@ export function mapLivePolicyProfile(row: Record<string, unknown>): ProcurementP
     name: row.name,
     sourceFilename: row.source_filename,
     sourceOrganization: row.source_organization,
+    sourceDocumentStatus: row.source_document_status === 'approved' ? 'approved' : 'updated_visual_draft',
+    status: row.status as ProcurementPolicyProfile['status'],
     effectiveFrom: policyEffectiveDate(row.effective_from),
     controlSources:
       row.control_sources && typeof row.control_sources === 'object'

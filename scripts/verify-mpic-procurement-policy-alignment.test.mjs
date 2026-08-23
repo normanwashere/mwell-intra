@@ -160,13 +160,14 @@ async function createGovernedRouteFixture() {
       total numeric not null default 0,
       lines jsonb not null default '[]'::jsonb,
       issued_at timestamptz,
+      acceptance_evidence_version integer not null default 1,
       actor_id uuid references core.profiles(id),
       updated_at timestamptz not null default now()
     );
     create table procurement.purchase_order_lifecycle_state (purchase_order_id text primary key references procurement.purchase_orders(id), revision integer not null default 1, sent_at timestamptz, acknowledged_at timestamptz, acknowledgement_due_at timestamptz, acknowledgement_reference text, delivery_notice_at timestamptz, delivery_notice_reference text, quality_recovery_status text not null default 'none', closure_status text not null default 'open', closed_at timestamptz, closed_by uuid, closure_reason text, updated_at timestamptz default now());
     create table procurement.purchase_order_lifecycle_events (id uuid primary key default gen_random_uuid(), purchase_order_id text not null references procurement.purchase_orders(id), event_type text not null, expected_revision integer not null, resulting_revision integer not null, actor_id uuid not null references core.profiles(id), evidence_reference text, payload jsonb not null default '{}'::jsonb, recorded_at timestamptz default now());
-    create table procurement.acceptance_packs (id uuid primary key default gen_random_uuid(), purchase_order_id text, status text, exceptions jsonb default '[]'::jsonb);
-    create table procurement.payment_readiness_packs (id uuid primary key default gen_random_uuid(), purchase_order_id text, status text, invoice_amount numeric default 0, released_amount numeric default 0, accepted_amount numeric default 0, purchase_order_amount numeric default 0);
+    create table procurement.acceptance_packs (id uuid primary key default gen_random_uuid(), purchase_order_id text, status text, exceptions jsonb default '[]'::jsonb, accepted_at timestamptz default statement_timestamp());
+    create table procurement.payment_readiness_packs (id uuid primary key default gen_random_uuid(), purchase_order_id text, status text, invoice_amount numeric default 0, released_amount numeric default 0, accepted_amount numeric default 0, purchase_order_amount numeric default 0, acceptance_pack_ids uuid[], acceptance_evidence_version integer, evidence_stale boolean not null default false);
     create table procurement.payment_releases (id uuid primary key default gen_random_uuid(), payment_readiness_pack_id uuid, purchase_order_id text, amount numeric, payment_reference text unique, payment_method text, paid_at date, status text default 'posted');
     create table procurement.receipt_status_fixture (purchase_order_id text primary key, outstanding_quantity numeric default 0, rejected_or_quarantined_quantity numeric default 0);
     create view procurement.v_purchase_order_receipt_status as select * from procurement.receipt_status_fixture;
@@ -278,26 +279,26 @@ async function createGovernedRouteFixture() {
 async function seedActivePolicyProfiles(db) {
   const controlSources = Object.fromEntries([
     "formalBidAmount", "inviteTargetMin", "inviteTargetMax", "sealedBidMinimumResponses",
-    "bidWindowWorkingDays", "maxExtensionWorkingDays", "vendorAcknowledgementHours",
+    "bidWindowWorkingDays", "maxExtensionCalendarDays", "vendorAcknowledgementHours",
     "clarificationHours", "tabulationHours", "technicalEvaluationWorkingDays",
     "poAcknowledgementHours", "repeatOrderMaxAmount", "repeatOrderMaxAgeDays",
     "pettyCashMaxAmount", "poInvoiceThreshold", "vendorProbationMonths",
   ].map((key) => [key, "fixture control source"]));
   await db.exec(`
     insert into procurement.policy_profiles (
-      id, code, version, name, relationship, source_profile_id, source_filename, source_organization,
+      id, code, version, name, relationship, source_profile_id, source_filename, source_organization, source_document_status,
       control_sources, formal_bid_amount, invite_target_min, invite_target_max, sealed_bid_minimum_responses,
-      bid_window_working_days, max_extension_working_days, vendor_acknowledgement_hours,
+      bid_window_working_days, max_extension_calendar_days, vendor_acknowledgement_hours,
       clarification_hours, tabulation_hours, technical_evaluation_working_days, po_acknowledgement_hours,
       repeat_order_max_amount, repeat_order_max_age_days, petty_cash_max_amount, po_invoice_threshold,
       vendor_probation_months, status, effective_from, document_hash, created_by, last_modified_by
     ) values
       ('${parentProfileId}', 'MPIC-FIXTURE', '2025.02', 'MPIC fixture', 'parent_source', null,
-       'MPIC Procurement Policy February2025.docx', 'MPIC', ${sqlJson(controlSources)}, null,
+       'MPIC Procurement Policy February2025.docx', 'MPIC', 'approved', ${sqlJson(controlSources)}, null,
        3, 4, 3, 7, 7, 24, 48, 48, 5, 48, 250000, 365, 2000, 50000, 6,
        'active', now() - interval '1 day', repeat('a', 32), '${actorId}', '${actorId}'),
       ('${operatingProfileId}', 'MWELL-FIXTURE', '2026.01', 'Mwell fixture', 'mwell_operating', '${parentProfileId}',
-       'mWell Procurement Policy and Procedures - Revised Modern Visual Updated.docx', 'Mwell', ${sqlJson(controlSources)}, 1000000,
+       'mWell Procurement Policy and Procedures - Revised Modern Visual - Word Updated.docx', 'Mwell', 'approved', ${sqlJson(controlSources)}, 1000000,
        3, 4, 3, 7, 7, 24, 48, 48, 5, 48, 250000, 365, 2000, 50000, 6,
        'active', now() - interval '1 day', repeat('b', 32), '${actorId}', '${actorId}');
   `);
@@ -342,10 +343,10 @@ async function setPolicyActor(db, actor, canManage, procurementCapabilities = []
 
 function policyControlSources(relationship) {
   const mpic = "MPIC Procurement Policy February2025.docx (February 2025)";
-  const mwell = "mWell Procurement Policy and Procedures - Revised Modern Visual Updated.docx (local operating policy)";
+  const mwell = "mWell Procurement Policy and Procedures - Revised Modern Visual - Word Updated.docx (canonical Mwell requirements source)";
   return Object.fromEntries([
     "formalBidAmount", "inviteTargetMin", "inviteTargetMax", "sealedBidMinimumResponses",
-    "bidWindowWorkingDays", "maxExtensionWorkingDays", "vendorAcknowledgementHours",
+    "bidWindowWorkingDays", "maxExtensionCalendarDays", "vendorAcknowledgementHours",
     "clarificationHours", "tabulationHours", "technicalEvaluationWorkingDays",
     "poAcknowledgementHours", "repeatOrderMaxAmount", "repeatOrderMaxAgeDays",
     "pettyCashMaxAmount", "poInvoiceThreshold", "vendorProbationMonths",
@@ -359,7 +360,7 @@ function policyControls() {
     inviteTargetMax: 4,
     sealedBidMinimumResponses: 3,
     bidWindowWorkingDays: 7,
-    maxExtensionWorkingDays: 7,
+    maxExtensionCalendarDays: 7,
     vendorAcknowledgementHours: 24,
     clarificationHours: 48,
     tabulationHours: 48,
@@ -415,7 +416,7 @@ async function insertConfirmedDecision(db, requestId) {
   `);
 }
 
-test("accepts the hardened MPIC procurement policy migration", () => {
+test("accepts the hardened canonical Mwell procurement policy migration", () => {
   assert.deepEqual(verifyMigrationText(migration).failures, []);
 });
 
@@ -672,7 +673,7 @@ test("executes public create and draft finalization with normalized RFQ and RFP 
       insert into procurement.requests(
         id, status, estimated_amount, sourcing_method, category, lines, compliance, requester_id, draft_payload
       ) values (
-        '${rfpDraftId}', 'draft', 350000, 'rfp', 'services',
+        '${rfpDraftId}', 'draft', 1500000, 'rfp', 'services',
         ${sqlJson([{ description: "Managed service" }])}, '{}'::jsonb, '${actorId}',
         ${sqlJson({ id: rfpDraftId, requirement_kind: "services", solicitation_requirements: rfpRequirements })}
       )
@@ -682,7 +683,7 @@ test("executes public create and draft finalization with normalized RFQ and RFP 
         id: rfpDraftId,
         requirement_kind: "services",
         requested_mode: "competitive_bidding",
-        estimated_amount: 350000,
+        estimated_amount: 1500000,
         category: "services",
         lines: [{ description: "Managed service" }],
         solicitation_requirements: rfpRequirements,
@@ -712,7 +713,7 @@ test("executes public create and draft finalization with normalized RFQ and RFP 
             id: invalidId,
             requirement_kind: solicitation === "rfq" ? "materials" : "services",
             requested_mode: "competitive_bidding",
-            estimated_amount: 1,
+            estimated_amount: solicitation === "rfp" ? 1000000 : 1,
             category: solicitation === "rfq" ? "goods" : "services",
             lines: [{ description: "Validation fixture" }],
             solicitation_requirements: invalid,
@@ -728,6 +729,7 @@ test("executes public create and draft finalization with normalized RFQ and RFP 
         name: "RFQ finalization missing delivery terms",
         id: "31000000-0000-0000-0000-000000000020",
         requirementKind: "materials",
+        amount: 1,
         category: "goods",
         requirements: Object.fromEntries(
           Object.entries(rfqRequirements).filter(([key]) => key !== "deliveryTerms" && key !== "ignoredNull"),
@@ -738,6 +740,7 @@ test("executes public create and draft finalization with normalized RFQ and RFP 
         name: "RFP finalization missing scope of work",
         id: "31000000-0000-0000-0000-000000000021",
         requirementKind: "services",
+        amount: 1000000,
         category: "services",
         requirements: Object.fromEntries(
           Object.entries(rfpRequirements).filter(([key]) => key !== "scopeOfWork"),
@@ -755,7 +758,7 @@ test("executes public create and draft finalization with normalized RFQ and RFP 
         insert into procurement.requests(
           id, status, estimated_amount, sourcing_method, category, lines, compliance, requester_id, draft_payload
         ) values (
-          '${scenario.id}', 'draft', 1, '${scenario.requirementKind === "materials" ? "rfq" : "rfp"}', '${scenario.category}',
+          '${scenario.id}', 'draft', ${scenario.amount}, '${scenario.requirementKind === "materials" ? "rfq" : "rfp"}', '${scenario.category}',
           ${sqlJson([{ description: "Rollback fixture" }])}, '{}'::jsonb, '${actorId}', ${sqlJson(originalDraft)}
         )
       `);
@@ -764,7 +767,7 @@ test("executes public create and draft finalization with normalized RFQ and RFP 
           id: scenario.id,
           requirement_kind: scenario.requirementKind,
           requested_mode: "competitive_bidding",
-          estimated_amount: 1,
+          estimated_amount: scenario.amount,
           category: scenario.category,
           lines: [{ description: "Rollback fixture" }],
           solicitation_requirements: scenario.requirements,
@@ -803,15 +806,15 @@ test("executes governed policy-profile hydration, conflict resolution, independe
     parentControls.formalBidAmount = null;
     await db.exec(`
       insert into procurement.policy_profiles (
-        id, code, version, name, relationship, source_profile_id, source_filename, source_organization,
+        id, code, version, name, relationship, source_profile_id, source_filename, source_organization, source_document_status,
         control_sources, formal_bid_amount, invite_target_min, invite_target_max, sealed_bid_minimum_responses,
-        bid_window_working_days, max_extension_working_days, vendor_acknowledgement_hours,
+        bid_window_working_days, max_extension_calendar_days, vendor_acknowledgement_hours,
         clarification_hours, tabulation_hours, technical_evaluation_working_days, po_acknowledgement_hours,
         repeat_order_max_amount, repeat_order_max_age_days, petty_cash_max_amount, po_invoice_threshold,
         vendor_probation_months, status, effective_from, document_hash, created_by, last_modified_by
       ) values (
         '${parentProfileId}', 'MPIC-PROCUREMENT-2025-02', '2025.02', 'MPIC parent source', 'parent_source', null,
-        'MPIC Procurement Policy February2025.docx', 'MPIC', ${sqlJson(policyControlSources('parent_source'))}, null,
+        'MPIC Procurement Policy February2025.docx', 'MPIC', 'approved', ${sqlJson(policyControlSources('parent_source'))}, null,
         3, 4, 3, 7, 7, 24, 48, 48, 5, 48, 250000, 365, 2000, 50000, 6,
         'active', now() - interval '1 day', repeat('c', 64), '${actorId}', '${actorId}'
       )
@@ -823,8 +826,9 @@ test("executes governed policy-profile hydration, conflict resolution, independe
       name: "Mwell operating policy revision",
       relationship: "mwell_operating",
       source_profile_id: parentProfileId,
-      source_filename: "mWell Procurement Policy and Procedures - Revised Modern Visual Updated.docx",
+      source_filename: "mWell Procurement Policy and Procedures - Revised Modern Visual - Word Updated.docx",
       source_organization: "Mwell",
+      source_document_status: "approved",
       control_sources: policyControlSources("mwell_operating"),
       controls: policyControls(),
       effective_from: "2026-08-01T00:00:00+08:00",
@@ -1362,15 +1366,15 @@ test("executes the public exception lifecycle matrix without actor, evidence, or
     await db.exec(`
       update procurement.policy_profiles set status='superseded' where id='${operatingProfileId}';
       insert into procurement.policy_profiles(
-        id,code,version,name,relationship,source_profile_id,source_filename,source_organization,control_sources,
+        id,code,version,name,relationship,source_profile_id,source_filename,source_organization,source_document_status,control_sources,
         formal_bid_amount,invite_target_min,invite_target_max,sealed_bid_minimum_responses,bid_window_working_days,
-        max_extension_working_days,vendor_acknowledgement_hours,clarification_hours,tabulation_hours,
+        max_extension_calendar_days,vendor_acknowledgement_hours,clarification_hours,tabulation_hours,
         technical_evaluation_working_days,po_acknowledgement_hours,repeat_order_max_amount,repeat_order_max_age_days,
         petty_cash_max_amount,po_invoice_threshold,vendor_probation_months,status,effective_from,document_hash,created_by,last_modified_by
       ) select
-        '${nextProfileId}',code,'2026.02',name,relationship,source_profile_id,source_filename,source_organization,control_sources,
+        '${nextProfileId}',code,'2026.02',name,relationship,source_profile_id,source_filename,source_organization,'approved',control_sources,
         formal_bid_amount,invite_target_min,invite_target_max,sealed_bid_minimum_responses,bid_window_working_days,
-        max_extension_working_days,vendor_acknowledgement_hours,clarification_hours,tabulation_hours,
+        max_extension_calendar_days,vendor_acknowledgement_hours,clarification_hours,tabulation_hours,
         technical_evaluation_working_days,po_acknowledgement_hours,repeat_order_max_amount,repeat_order_max_age_days,
         petty_cash_max_amount,po_invoice_threshold,vendor_probation_months,'active',statement_timestamp(),repeat('c',32),'${submitter}','${submitter}'
       from procurement.policy_profiles where id='${operatingProfileId}';
@@ -1548,10 +1552,10 @@ test("executes public governed sourcing controls and independent failed-bid reco
       /Controlled evaluation is required/i,
       'award must be denied before controlled evaluation',
     );
-    await db.query(`select procurement.record_solicitation_communication(${sqlJson({ sourcing_event_id: eventId, communication_type: "extension", extension_working_days: 7 })})`);
+    await db.query(`select procurement.record_solicitation_communication(${sqlJson({ sourcing_event_id: eventId, communication_type: "extension", extension_calendar_days: 7 })})`);
     await assert.rejects(
-      () => db.query(`select procurement.record_solicitation_communication(${sqlJson({ sourcing_event_id: eventId, communication_type: "extension", extension_working_days: 8 })})`),
-      /between 1 and 7 working days/i,
+      () => db.query(`select procurement.record_solicitation_communication(${sqlJson({ sourcing_event_id: eventId, communication_type: "extension", extension_calendar_days: 8 })})`),
+      /between 1 and 7 calendar days/i,
     );
     await db.query(`select procurement.record_solicitation_communication(${sqlJson({
       sourcing_event_id: eventId, communication_type: "clarification", question: "Confirm warranty coverage.", answer: "Warranty must be 12 months.",
@@ -1596,11 +1600,11 @@ test("executes public governed sourcing controls and independent failed-bid reco
     const requoteEventId = requote.rows[0].event.id;
     await db.query(`select procurement.invite_sourcing_vendors(${sqlJson({ sourcing_event_id: requoteEventId, vendor_ids: vendorIds })})`);
     await db.query(`select procurement.transition_sourcing_event(${sqlJson({ id: requoteEventId, action: "issue" })})`);
-    await db.query(`select procurement.record_solicitation_communication(${sqlJson({ sourcing_event_id: requoteEventId, communication_type: "extension", extension_working_days: 4 })})`);
+    await db.query(`select procurement.record_solicitation_communication(${sqlJson({ sourcing_event_id: requoteEventId, communication_type: "extension", extension_calendar_days: 4 })})`);
     await assert.rejects(
-      () => db.query(`select procurement.record_solicitation_communication(${sqlJson({ sourcing_event_id: requoteEventId, communication_type: "extension", extension_working_days: 4 })})`),
+      () => db.query(`select procurement.record_solicitation_communication(${sqlJson({ sourcing_event_id: requoteEventId, communication_type: "extension", extension_calendar_days: 4 })})`),
       /Cumulative extension/i,
-      'repeated 4 + 4 working-day extensions must not exceed the profile cap',
+      'repeated 4 + 4 calendar-day extensions must not exceed the profile cap',
     );
     await db.query(`select procurement.transition_sourcing_event(${sqlJson({ id: requoteEventId, action: "failed_bid", failed_bid_reason: "insufficient_responses" })})`);
     const requoteSuccess = await db.query(`select procurement.transition_sourcing_event(${sqlJson({ id: requoteEventId, action: "source_additional_and_requote", vendor_id: additionalVendorId, submission_deadline: "2030-01-22T00:00:00.000Z", package_version: "RFQ-2030-v3", package_hash: "d".repeat(64) })}) as event`);
@@ -1829,7 +1833,7 @@ test("executes Task 9 public contracts under disposable database roles", async (
     await withRole('authenticated', approverActor, ['final_approve_po'], null, async () => {
       await assert.rejects(() => db.query(`select procurement.approve_purchase_order_closure(${sqlJson({ closure_request_id: closureRequestId })})`), /Closure is blocked/i, 'quarantine, RMA, credit, and payment-hold recovery block closure');
     });
-    await db.exec(`update procurement.receipt_status_fixture set rejected_or_quarantined_quantity=0 where purchase_order_id='${poId}'; update procurement.purchase_order_lifecycle_state set quality_recovery_status='resolved' where purchase_order_id='${poId}'; insert into procurement.payment_readiness_packs(purchase_order_id,status,invoice_amount,released_amount,accepted_amount,purchase_order_amount) values ('${poId}','accepted',100,0,100,100);`);
+    await db.exec(`update procurement.receipt_status_fixture set rejected_or_quarantined_quantity=0 where purchase_order_id='${poId}'; update procurement.purchase_order_lifecycle_state set quality_recovery_status='resolved' where purchase_order_id='${poId}'; insert into procurement.payment_readiness_packs(purchase_order_id,status,invoice_amount,released_amount,accepted_amount,purchase_order_amount,acceptance_pack_ids,acceptance_evidence_version) select '${poId}','accepted',100,0,100,100,array_agg(id order by accepted_at,id),1 from procurement.acceptance_packs where purchase_order_id='${poId}' and status='accepted';`);
     const paymentPack = await db.query(`select id from procurement.payment_readiness_packs where purchase_order_id='${poId}'`);
     await withRole('authenticated', financeActor, ['view_finance'], null, async () => {
       const released = await db.query(`select procurement.release_payment(${sqlJson({ payment_readiness_pack_id: paymentPack.rows[0].id, amount: 100, payment_reference: 'ROLE-PAYMENT-1', payment_method: 'bank_transfer', paid_at: '2026-08-23' })}) as result`);
@@ -1913,19 +1917,19 @@ test("backfills legacy sourcing deadlines before enforcing cumulative extension 
       assert.equal(new Date(event.original_submission_deadline).toISOString(), new Date(baseline).toISOString(), 'legacy baseline must be backfilled before public RPC exposure');
     }
     await setPolicyActor(db, actorId, true);
-    await db.query(`select procurement.record_solicitation_communication(${sqlJson({ sourcing_event_id: issuedSevenId, communication_type: "extension", extension_working_days: 7 })})`);
+    await db.query(`select procurement.record_solicitation_communication(${sqlJson({ sourcing_event_id: issuedSevenId, communication_type: "extension", extension_calendar_days: 7 })})`);
     await assert.rejects(
-      () => db.query(`select procurement.record_solicitation_communication(${sqlJson({ sourcing_event_id: issuedEightId, communication_type: "extension", extension_working_days: 8 })})`),
-      /between 1 and 7 working days/i,
-      'an eight-working-day legacy extension must be denied',
+      () => db.query(`select procurement.record_solicitation_communication(${sqlJson({ sourcing_event_id: issuedEightId, communication_type: "extension", extension_calendar_days: 8 })})`),
+      /between 1 and 7 calendar days/i,
+      'an eight-calendar-day legacy extension must be denied',
     );
-    await db.query(`select procurement.record_solicitation_communication(${sqlJson({ sourcing_event_id: issuedFourId, communication_type: "extension", extension_working_days: 4 })})`);
+    await db.query(`select procurement.record_solicitation_communication(${sqlJson({ sourcing_event_id: issuedFourId, communication_type: "extension", extension_calendar_days: 4 })})`);
     await assert.rejects(
-      () => db.query(`select procurement.record_solicitation_communication(${sqlJson({ sourcing_event_id: issuedFourId, communication_type: "extension", extension_working_days: 4 })})`),
+      () => db.query(`select procurement.record_solicitation_communication(${sqlJson({ sourcing_event_id: issuedFourId, communication_type: "extension", extension_calendar_days: 4 })})`),
       /Cumulative extension/i,
       'legacy 4 + 4 must be capped from the original deadline rather than the latest deadline',
     );
-    const requoteOverflow = await db.query(`select private.policy_add_working_days('${baseline}'::timestamptz, 8) as deadline`);
+    const requoteOverflow = await db.query(`select '${baseline}'::timestamptz + interval '8 days' as deadline`);
     await assert.rejects(
       () => db.query(`select procurement.transition_sourcing_event(${sqlJson({
         id: failedBidId,
@@ -2275,9 +2279,9 @@ test('executes the disposable public Task 10 vendor and payment authority matrix
       grant usage on schema legal, procurement, core, auth, private to anon, authenticated, service_role;
       grant select on core.vendors, procurement.requests, procurement.purchase_orders, procurement.acceptance_packs, procurement.payment_readiness_packs, legal.accreditation_cases to authenticated;
       create policy task10_fixture_vendor_read on core.vendors for select to authenticated using (true);
-      alter table procurement.purchase_orders add column acceptance_evidence_version integer not null default 1;
-      alter table procurement.acceptance_packs add column accepted_amount numeric, add column accepted_at timestamptz default statement_timestamp(), add column accepted_scope jsonb default '{}'::jsonb;
-      alter table procurement.payment_readiness_packs add column acceptance_pack_id uuid, add column acceptance_pack_ids uuid[], add column accepted_quantity numeric default 0, add column acceptance_evidence_version integer, add column policy_version text, add column po_match boolean, add column invoice_or_si_storage_path text, add column milestone_support_storage_path text, add column tax_withholding_support_storage_path text, add column invoice_number text, add column invoice_date date, add column due_date date, add column tax_amount numeric default 0, add column withholding_amount numeric default 0, add column variance_amount numeric default 0, add column corrected_from uuid, add column evidence_stale boolean not null default false, add column evidence_stale_at timestamptz, add column finance_reviewed_by uuid, add column finance_reviewed_at timestamptz, add column finance_note text;
+      alter table procurement.purchase_orders add column if not exists acceptance_evidence_version integer not null default 1;
+      alter table procurement.acceptance_packs add column accepted_amount numeric, add column if not exists accepted_at timestamptz default statement_timestamp(), add column accepted_scope jsonb default '{}'::jsonb;
+      alter table procurement.payment_readiness_packs add column acceptance_pack_id uuid, add column if not exists acceptance_pack_ids uuid[], add column accepted_quantity numeric default 0, add column if not exists acceptance_evidence_version integer, add column policy_version text, add column po_match boolean, add column invoice_or_si_storage_path text, add column milestone_support_storage_path text, add column tax_withholding_support_storage_path text, add column invoice_number text, add column invoice_date date, add column due_date date, add column tax_amount numeric default 0, add column withholding_amount numeric default 0, add column variance_amount numeric default 0, add column corrected_from uuid, add column if not exists evidence_stale boolean not null default false, add column evidence_stale_at timestamptz, add column finance_reviewed_by uuid, add column finance_reviewed_at timestamptz, add column finance_note text;
       create table procurement.payment_readiness_staleness_events(id uuid primary key default gen_random_uuid(),payment_readiness_pack_id uuid not null,purchase_order_id text not null,prior_status text not null,prior_acceptance_evidence_version bigint not null,acceptance_evidence_version bigint not null,reason text not null,recorded_at timestamptz not null default now(),unique(payment_readiness_pack_id,acceptance_evidence_version));
       insert into core.profiles(id,status) values ('${maker}','active'),('${legalDecider}','active'),('${unrelated}','active'),('${procurement}','active'),('${finance}','active'),('${vendorActor}','active') on conflict (id) do nothing;
       insert into core.vendors(id,legal_name,accreditation_status) values ('${vendorId}','Task 10 vendor','approved');

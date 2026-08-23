@@ -188,8 +188,8 @@ export function CreateRequestPage() {
   const [alternatives, setAlternatives] = useState('');
   const [riskIfNot, setRiskIfNot] = useState('');
 
-  // Requirement kind is explicit for every new write. Category is a reporting
-  // label and must never infer RFQ/RFP in a live request.
+  // Requirement kind is explicit for every new write, but amount and risk
+  // determine RFQ/RFP under the canonical Mwell policy.
   const [requirementKind, setRequirementKind] = useState<RequirementKind | ''>('');
   const [requestedMode, setRequestedMode] = useState<ProcurementMode>('competitive_bidding');
   const [routeConfirmed, setRouteConfirmed] = useState(false);
@@ -481,9 +481,6 @@ export function CreateRequestPage() {
   const step1Valid =
     title.trim().length > 0 && category !== '' && lines.some((l) => l.description.trim());
   const step2Valid = needDesc.trim().length > 0;
-  const minimumEvidenceReady = ['spec', 'budget'].every((kind) =>
-    attachments.some((attachment) => attachment.kind === kind),
-  );
   const governedContextReady =
     department.trim().length > 0 &&
     costCenter.trim().length > 0 &&
@@ -501,7 +498,8 @@ export function CreateRequestPage() {
     : route?.solicitationType === 'rfp'
       ? ['scopeOfWork', 'evaluationApproach', 'responseDeadline'].every((key) => solicitationRequirements[key as keyof SolicitationRequirements]?.trim())
       : true;
-  const canSubmit = step1Valid && step2Valid && governedContextReady && minimumEvidenceReady && Boolean(route) && solicitationReady && routeEvidenceReady;
+  const canSaveDraft = step1Valid && step2Valid && governedContextReady && Boolean(route) && solicitationReady && routeEvidenceReady;
+  const canSubmit = canSaveDraft && missingDocs.length === 0;
 
   function updateLine(key: string, patch: Partial<LineDraft>) {
     setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l)));
@@ -613,7 +611,8 @@ export function CreateRequestPage() {
 
   async function handleSubmit(event: FormEvent, andSubmit = false) {
     event.preventDefault();
-    if (!canSubmit) {
+    const ready = andSubmit ? canSubmit : canSaveDraft;
+    if (!ready) {
       const invalidStep: StepN = step1Valid ? 2 : 1;
       const validation = validateRequestStep(invalidStep, {
         title,
@@ -624,7 +623,9 @@ export function CreateRequestPage() {
       setStep(invalidStep);
       setFieldErrors(validation.fieldErrors);
       focusFirstInvalid(validation.firstInvalidSelector);
-      error('Give the request a title, category, need description, and at least one line item.');
+      error(andSubmit && missingDocs.length > 0
+        ? `Complete the approval evidence: ${missingDocs.map((item) => item.label).join(', ')}.`
+        : 'Give the request a title, category, need description, governed context, and at least one line item.');
       return;
     }
     if (!route || !requirementKind) {
@@ -878,11 +879,11 @@ export function CreateRequestPage() {
                 )}
                 <fieldset className="border-t border-line pt-4">
                   <legend className="text-sm font-semibold text-ink">Requirement classification</legend>
-                  <p className="mt-1 text-xs text-muted">This determines the solicitation document. Choose it explicitly; category does not decide RFQ versus RFP.</p>
+                  <p className="mt-1 text-xs text-muted">Choose the nature of the requirement for scope, acceptance, and reporting. Amount and complexity determine RFQ versus RFP.</p>
                   <div className="mt-3 grid gap-2 sm:grid-cols-2">
                     {([
-                      ['materials', 'Goods / materials', 'Uses an RFQ when competitively sourced.'],
-                      ['services', 'Services', 'Uses an RFP when competitively sourced.'],
+                      ['materials', 'Goods / materials', 'Physical items, equipment, or supplies.'],
+                      ['services', 'Services', 'Professional, subscription, project, or labor scope.'],
                     ] as const).map(([kind, label, helper]) => (
                       <label key={kind} className={`cursor-pointer rounded-lg border p-3 ${requirementKind === kind ? 'border-brand-500 bg-brand-500/10 ring-1 ring-brand-500/40' : 'border-line bg-surface'}`}>
                         <input
@@ -1408,7 +1409,7 @@ export function CreateRequestPage() {
                   <div>
                     <h2 className="font-display text-base font-bold text-ink">Procurement route</h2>
                     <p className="text-xs text-muted">
-                      Requirement type determines RFQ or RFP. Mode and control tier are separately governed.
+                      RFQ applies below PHP 1,000,000 when the requirement is clear and comparable. RFP applies at PHP 1,000,000 and above or when complexity or risk requires it. Procurement confirms the final path.
                     </p>
                   </div>
                 </div>
@@ -1447,7 +1448,18 @@ export function CreateRequestPage() {
                 )}
                 <fieldset>
                   <legend className="text-sm font-semibold text-ink">Risk and delivery facts</legend>
-                  <p className="mt-1 text-xs text-muted">These facts can raise governance controls but cannot change a goods RFQ into an RFP.</p>
+                  <p className="mt-1 text-xs text-muted">Complexity and risk can require RFP at any amount. Importation adds controls but does not automatically require RFP.</p>
+                  <label className="mt-3 flex min-h-11 items-center gap-2 rounded-md border border-line bg-surface px-3 text-sm text-ink">
+                    <input
+                      type="checkbox"
+                      checked={riskFacts.comparable}
+                      onChange={(event) => {
+                        setRiskFacts({ ...riskFacts, comparable: event.target.checked });
+                        setRouteConfirmed(false);
+                      }}
+                    />
+                    Requirements are clear and supplier offers can be compared consistently
+                  </label>
                   <div className="mt-2 grid gap-2 sm:grid-cols-2">
                     {([
                       ['complex', 'Complex scope or delivery'], ['technical', 'Technical evaluation required'],
@@ -1709,7 +1721,7 @@ export function CreateRequestPage() {
               </Button>
             ) : (
               <div className="flex flex-wrap items-center gap-2">
-                <Button type="submit" variant="outline" disabled={submitting || !canSubmit}>
+                <Button type="submit" variant="outline" disabled={submitting || !canSaveDraft}>
                   {submitting ? 'Saving…' : 'Save draft'}
                 </Button>
                 <Button

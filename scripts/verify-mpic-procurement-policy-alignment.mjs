@@ -164,6 +164,10 @@ export function verifyMigrationText(sql) {
       failures.push(`missing profile control ${control}`);
   }
 
+  if (!text.includes("'policycontrolsources'")) {
+    failures.push('sourcing workspace does not expose request-bound control provenance');
+  }
+
   for (const {
     name,
     parameterType,
@@ -239,6 +243,13 @@ export function verifyMigrationText(sql) {
     failures.push("missing latest-modifier maker-checker control");
   }
   if (
+    !text.includes("source_document_status text not null default 'draft_for_review'") ||
+    !text.includes("status <> 'active' or source_document_status = 'approved'") ||
+    !text.includes("v_profile.source_document_status <> 'approved'")
+  ) {
+    failures.push("missing draft-source activation gate");
+  }
+  if (
     !text.includes("formal_bid_amount is not null and formal_bid_amount > 0") ||
     !text.includes("source_profile_id is not null")
   ) {
@@ -259,7 +270,7 @@ export function verifyMigrationText(sql) {
     !text.includes("private.policy_profile_control_sources_are_complete") ||
     !text.includes("mpic procurement policy february2025.docx") ||
     !text.includes(
-      "mwell procurement policy and procedures - revised modern visual updated.docx",
+      "mwell procurement policy and procedures - revised modern visual - word updated.docx",
     ) ||
     !text.includes("v_parent.status = 'active'")
   ) {
@@ -326,9 +337,6 @@ export function verifyMigrationText(sql) {
   ) {
     failures.push("private binding helper revocation must immediately follow its final definition");
   }
-  if (/estimated_amount[^;]{0,500}then\s*'rfp'/.test(text)) {
-    failures.push("amount-driven RFP route logic is forbidden");
-  }
   const deriveStart = text.indexOf(
     "create or replace function private.policy_derive_procurement_route(",
   );
@@ -342,6 +350,13 @@ export function verifyMigrationText(sql) {
     "effective_policy_profile_required",
     "requirement_kind_required",
     "private.policy_route_exception_is_eligible",
+    "v_request.estimated_amount >= v_profile.formal_bid_amount",
+    "not coalesce((v_risk->>'comparable')::boolean, true)",
+    "coalesce((v_risk->>'complex')::boolean, false)",
+    "coalesce((v_risk->>'technical')::boolean, false)",
+    "coalesce((v_risk->>'strategic')::boolean, false)",
+    "coalesce((v_risk->>'highrisk')::boolean, false)",
+    "coalesce((v_risk->>'datasensitive')::boolean, false)",
     "solicitation_type",
     "procurement_mode",
     "governance_tier",
@@ -350,6 +365,9 @@ export function verifyMigrationText(sql) {
   }
   if (!text.includes("legacy_mapping_requires_review")) {
     failures.push("missing legacy route remediation marker");
+  }
+  if (/coalesce\(\(v_risk->>'importation'\)::boolean, false\)[^;]{0,200}then\s*'rfp'/.test(deriveDefinition)) {
+    failures.push("importation alone must not force RFP");
   }
   const confirmationStart = text.indexOf(
     "create or replace function private.policy_route_confirmation_input(",
@@ -397,7 +415,7 @@ export function verifyMigrationText(sql) {
     "acknowledgedcommunicationid",
     "revoke insert, update, delete on procurement.sourcing_events",
     "bid_window_working_days",
-    "max_extension_working_days",
+    "max_extension_calendar_days",
     "failed_bid_reason",
     "notificationgroupid",
     "vendor_acknowledgement_hours",
@@ -517,7 +535,7 @@ function main() {
     process.exitCode = 1;
     return;
   }
-  console.log("MPIC procurement policy alignment migration contract verified.");
+  console.log("Canonical Mwell procurement policy alignment migration contract verified.");
 }
 
 if (

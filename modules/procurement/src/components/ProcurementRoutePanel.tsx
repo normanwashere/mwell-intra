@@ -38,6 +38,10 @@ const REASON_LABELS: Record<string, string> = {
   'risk:high_risk': 'High operational, financial, or legal risk',
   'risk:data_sensitive': 'Sensitive data involved',
   'risk:importation': 'Importation or offshore shipment/payment',
+  'scope:not_comparable': 'Requirements are not clear or consistently comparable',
+  'solicitation:rfq': 'RFQ selected by the amount and complexity rule',
+  'solicitation:rfp': 'RFP selected by the amount and complexity rule',
+  'solicitation:none': 'No solicitation document for this supported exception mode',
 };
 
 const EXCEPTION_MODES: ProcurementMode[] = [
@@ -112,7 +116,8 @@ export function ProcurementRoutePanel({
       <details className="rounded-md border border-line bg-surface p-3">
         <summary className="cursor-pointer text-sm font-semibold text-ink">Why this route and policy profile</summary>
         <div className="mt-3 space-y-2 text-xs text-muted">
-          <p><strong className="text-ink">Active profile:</strong> {profile.name} ({profile.code} {profile.version})</p>
+          <p><strong className="text-ink">Profile:</strong> {profile.name} ({profile.code} {profile.version}) · {profile.status === 'active' ? 'active' : 'draft preview'}</p>
+          <p><strong className="text-ink">Source document:</strong> {profile.sourceDocumentStatus === 'approved' ? 'approved' : 'updated visual draft for review'}</p>
           <p><strong className="text-ink">Effective from:</strong> {profile.effectiveFrom}</p>
           <ul className="list-disc space-y-1 pl-5">
             {value.reasons.map((reason) => <li key={reason}>{reasonLabel(reason)}</li>)}

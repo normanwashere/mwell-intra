@@ -8,41 +8,39 @@ import {
 } from "./build-app-documentation.mjs";
 
 const EXPECTED_PROCUREMENT_STAGE_LABELS = Object.freeze([
-  "Request",
-  "Route",
-  "Validate",
-  "Solicit",
-  "Quorum",
+  "Define need",
+  "Submit request",
+  "Confirm path",
+  "Source vendors",
+  "Check accreditation",
   "Evaluate",
-  "Recommend",
-  "Variance",
+  "Recommend award",
   "Approve",
-  "Commit",
-  "Monitor",
-  "Receive",
-  "Payment",
-  "Close",
+  "Issue PO or contract",
+  "Deliver and close",
+  "Prepare payment handoff",
+  "Process payment",
+  "Close file",
 ]);
 
 const PROCUREMENT_MERMAID_STAGE_LABELS = Object.freeze([
-  "Requester records need, category, goods or services, scope or specification, budget, cost center, required date, and acceptance criteria",
-  "Procurement confirms solicitation document, procurement mode, governance tier, invited-vendor target, and reasons",
-  "System validates active policy profile, effective DOA, accreditation, special-risk controls, and complete source package",
-  "Procurement issues one versioned package to accredited vendors and records acknowledgments, clarifications, deadlines, and equal notices",
-  "System evaluates response quorum and routes failed bid, extension or requote, or controlled insufficient-bids exception",
-  "Procurement records commercial tabulation; requester or technical reviewer records technical evaluation",
-  "Procurement records best-value recommendation and rationale; system selects no automatic winner",
-  "Recommendation variance follows independent justification and approval",
-  "Current Mwell DOA and separation of duty approve the award",
-  "Procurement creates PO or agreement after vendor, sourcing, approval, and protection controls pass",
-  "Vendor acknowledges commitment; outstanding delivery and acceptance enter monitored queues",
-  "Warehouse or service owner records receipt and acceptance; quality issues route to rejection, replacement, warranty, or RMA",
-  "Procurement prepares payment-readiness pack; Finance validates invoice, PO or agreement, receipt or acceptance, tax, and variance evidence",
-  "Procurement file closes after payment readiness, delivery closure, open-issue resolution, and retained evidence are complete",
+  "Define the need",
+  "Submit the request",
+  "Confirm the procurement path",
+  "Source vendors",
+  "Check accreditation",
+  "Evaluate offers",
+  "Recommend award",
+  "Approve under the active DOA",
+  "Issue PO or contract",
+  "Deliver and close delivery or service obligations",
+  "Prepare payment handoff",
+  "Process vendor payment",
+  "Close the procurement file",
 ]);
 
 const EXPECTED_PROCUREMENT_OPERATING_H3 = Object.freeze([
-  "Exact 14-stage procurement-to-payment overview",
+  "Canonical 13-step procurement-to-payment overview",
   "Solicitation document and type classification",
   "Bid quorum and failed-bid recovery",
   "Exception eligibility",
@@ -99,7 +97,7 @@ function normalizeWhitespace(value) {
 }
 
 function parseProcurementOverviewStages(process) {
-  const overview = markdownSection(process, 3, "Exact 14-stage procurement-to-payment overview");
+  const overview = markdownSection(process, 3, "Canonical 13-step procurement-to-payment overview");
   const nodes = [...overview.matchAll(/\bS(\d+)\[(\d+)\s+([^\]\r\n]+)\]/g)].map((match) => ({
     nodeNumber: Number(match[1]),
     displayedNumber: Number(match[2]),
@@ -107,8 +105,8 @@ function parseProcurementOverviewStages(process) {
   }));
   const sequence = Array.from({ length: EXPECTED_PROCUREMENT_STAGE_LABELS.length }, (_, index) => index + 1);
 
-  assert.deepEqual(nodes.map(({ nodeNumber }) => nodeNumber), sequence, "procurement overview stage nodes must be S1 through S14 in order");
-  assert.deepEqual(nodes.map(({ displayedNumber }) => displayedNumber), sequence, "procurement overview stage numbers must be 1 through 14 in order");
+  assert.deepEqual(nodes.map(({ nodeNumber }) => nodeNumber), sequence, "procurement overview step nodes must be sequential");
+  assert.deepEqual(nodes.map(({ displayedNumber }) => displayedNumber), sequence, "procurement overview step numbers must be sequential");
 
   return nodes.map(({ displayedNumber, mermaidLabel }) => {
     const sourceIndex = PROCUREMENT_MERMAID_STAGE_LABELS.indexOf(mermaidLabel);
@@ -229,8 +227,10 @@ test("builds one self-contained handbook from every canonical source", () => {
   assert.deepEqual(sources.slice(2), [...sources.slice(2)].sort());
 });
 
-test("includes the exact MPIC source and separates the three route axes", () => {
+test("includes the canonical mWell source, incorporated MPIC reference, and three route axes", () => {
   const html = buildDocumentationHtml();
+  assert.match(html, /mWell Procurement Policy and Procedures - Revised Modern Visual - Word Updated\.docx/);
+  assert.match(html, /51F4E381CF7DEC6A1950867C4839750078DB08D603A5DE8AA54B63D12F6D1239/);
   assert.match(html, /MPIC Procurement Policy February2025\.docx/);
   assert.match(html, /Solicitation document/);
   assert.match(html, /Procurement mode/);
@@ -239,7 +239,7 @@ test("includes the exact MPIC source and separates the three route axes", () => 
   assert.match(html, /at least three usable responses/i);
 });
 
-test("keeps one canonical MPIC article with separated sections in required order", () => {
+test("keeps one incorporated MPIC reference article with separated sections in required order", () => {
   const html = buildDocumentationHtml();
   const source = repositoryFile("docs/policy/MPIC_PROCUREMENT_POLICY_FEBRUARY_2025.md");
   const headings = [...source.matchAll(/^## (.+)$/gm)].map((match) => match[1]);
@@ -288,7 +288,7 @@ test("keeps all nine procurement role procedures complete", () => {
   assertTask11Structure(process, manual);
 });
 
-test("blocks obsolete routing, certification, named variance authority, and extension inheritance claims", () => {
+test("blocks obsolete routing, certification, named variance authority, and working-day extension claims", () => {
   const files = [
     "docs/policy/MPIC_PROCUREMENT_POLICY_FEBRUARY_2025.md",
     "docs/policy/VENDOR_TO_PAY_CONTROL_MATRIX.md",
@@ -310,11 +310,12 @@ test("blocks obsolete routing, certification, named variance authority, and exte
   const extract = byFile["docs/policy/MPIC_PROCUREMENT_POLICY_FEBRUARY_2025.md"];
   const traceability = byFile["docs/REQUIREMENTS_TRACEABILITY_MATRIX.md"];
 
-  for (const obsolete of [
-    /RFQ[^\n]{0,100}(?:below|under)[^\n]{0,40}(?:PHP )?1,000,000/i,
-    /RFP[^\n]{0,100}(?:above|over|at or above)[^\n]{0,40}(?:PHP )?1,000,000/i,
-    /1,000,000[^\n]{0,120}(?:switches|converts|uses)[^\n]{0,60}RFP/i,
-  ]) assert.doesNotMatch(all, obsolete);
+  assert.match(operating, /RFQ[^\n]{0,120}(?:below|under)[^\n]{0,40}(?:PHP )?1,000,000/i);
+  assert.match(operating, /RFP[^\n]{0,120}(?:at or above|at PHP 1,000,000|PHP 1,000,000 and above)/i);
+  assert.match(operating, /Importation[^\n]{0,120}does not automatically force RFP/i);
+  assert.doesNotMatch(operating, /(?:Materials|Goods)[^\n]{0,40}(?:use|derive)[^\n]{0,20}RFQ/i);
+  assert.doesNotMatch(operating, /Services[^\n]{0,40}(?:use|derive)[^\n]{0,20}RFP/i);
+  assert.doesNotMatch(operating, /maxExtensionWorkingDays/i);
 
   assertNoAffirmativeReleaseClaims(all);
   assert.doesNotMatch(operating, /(?:recommendation variance|recommendation differs|differing recommendation)[\s\S]{0,260}(?:Department Head|Group Controller|Finance Controller|independent Controller)/i);
@@ -323,13 +324,11 @@ test("blocks obsolete routing, certification, named variance authority, and exte
 
   const conflicts = markdownSection(extract, 2, "Conflicts");
   assert.match(conflicts, /current Mwell code[\s\S]*`dept_head`[\s\S]*`finance`[\s\S]*unresolved/i);
-  assert.match(conflicts, /`maxExtensionWorkingDays`/i);
-  assert.match(conflicts, /seven working days/i);
   assert.match(conflicts, /seven calendar days/i);
-  assert.match(conflicts, /block activation/i);
+  assert.match(extract, /sourceDocumentStatus[\s\S]*updated_visual_draft/i);
   assert.doesNotMatch(markdownSection(extract, 2, "Active profile"), /inherits[^\n]*all[^\n]*MPIC controls/i);
-  assert.match(traceability, /`dept_head`[\s\S]*`finance`[\s\S]*unresolved/i);
-  assert.match(traceability, /seven calendar days[\s\S]*working-day[\s\S]*activation blocked/i);
+  assert.match(traceability, /Neutral recommendation-variance decisions[\s\S]*Unresolved local authority mapping/i);
+  assert.match(traceability, /maxExtensionCalendarDays/i);
 });
 
 test("rejects representative Task 11 structural and certification mutations", () => {
@@ -337,7 +336,7 @@ test("rejects representative Task 11 structural and certification mutations", ()
   const manual = repositoryFile("docs/manual/MWELL_INTRA_USER_MANUAL.md");
 
   const alteredStage = process.replace(
-    "8 Recommendation variance follows independent justification and approval",
+    "8 Approve under the active DOA",
     "8 Unrelated placeholder stage",
   );
   assert.throws(() => assertTask11Structure(alteredStage, manual), /overview stage/i);
@@ -466,7 +465,7 @@ test("embeds heading-level search records with match metadata", () => {
     "searchText",
   ]);
   assert.ok(heading.text.length <= 240);
-  assert.ok(index.some((record) => record.tabIds.includes("workflows") && /three-way match/i.test(record.searchText)), "workflow diagram labels remain searchable without exposing source fences");
+  assert.ok(index.some((record) => record.tabIds.includes("workflows") && /prepare payment handoff/i.test(record.searchText)), "workflow diagram labels remain searchable without exposing source fences");
   assert.match(html, /"scope":"all"/);
   assert.match(html, /aria-live="polite"/);
   assert.doesNotMatch(indexMatch[1], /<\/script/i);

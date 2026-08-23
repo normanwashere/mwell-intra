@@ -305,9 +305,9 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
         "p2p-threshold",
         "Which value threshold applies?",
         ["procurement_officer"],
-        "Use the total estimated PHP value to select RFQ or quotation work below the threshold and RFP or competitive bidding at PHP 1,000,000 and above.",
+        "Use the total estimated PHP value to select RFQ below PHP 1,000,000 when the requirement is clear and comparable, or RFP at PHP 1,000,000 and above. Competition is decided separately.",
         "procurement_officer",
-        "Procurement Policy section 5: below-threshold comparable purchases follow RFQ or quotation; RFP or bidding applies at PHP 1,000,000 and above.",
+        "Procurement Policy section 5: below-threshold clear and comparable requirements follow RFQ; RFP applies at PHP 1,000,000 and above.",
       ),
       decision(
         "p2p-risk",

@@ -18,6 +18,7 @@ describe('SourcingWorkspace', () => {
     }));
 
     expect(html).toContain('Connect to the live database to operate governed sourcing.');
+    expect(html).toContain('MPIC Procurement Policy February2025.docx');
     expect(html).not.toContain('Approved insufficient-bids exception is attached');
   });
 });

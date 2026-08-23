@@ -7,10 +7,10 @@ const NOW = new Date('2026-07-06T12:00:00.000Z');
 describe('buildProcurementSeed', () => {
   const seed = buildProcurementSeed(NOW);
 
-  it('seeds high-value goods as RFQ under formal bidding', () => {
+  it('seeds high-value goods as RFP under formal bidding', () => {
     const request = seed.requests.find(({ id }) => id === 'procurement-formal-goods');
     expect(request?.route).toMatchObject({
-      solicitationType: 'rfq',
+      solicitationType: 'rfp',
       procurementMode: 'competitive_bidding',
       governanceTier: 'formal_bid',
     });

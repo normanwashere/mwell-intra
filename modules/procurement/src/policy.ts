@@ -86,8 +86,8 @@ export function validateAwardRecommendation(input: AwardRecommendationValidation
 // ---------------------------------------------------------------------------
 
 /**
- * @deprecated Amount is a formal-bid governance threshold, not an RFQ/RFP
- * boundary. New route derivation reads the active policy profile instead.
+ * @deprecated New route derivation reads the active policy profile. The
+ * canonical Mwell policy uses this inclusive amount as the RFQ/RFP boundary.
  */
 export const RFP_THRESHOLD = 1_000_000;
 
@@ -251,7 +251,7 @@ export interface SourcingRecommendation {
 /**
  * @deprecated New request intake must call deriveProcurementRoute with an
  * explicit requirementKind. This compatibility wrapper projects the route for
- * legacy screens and reads; it never treats amount as an RFQ/RFP boundary.
+ * legacy screens and reads.
  */
 export function deriveSourcingRecommendation(input: SuggestSourcingInput): SourcingRecommendation {
   const requestedMode = input.emergency
