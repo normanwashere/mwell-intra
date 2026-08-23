@@ -34,6 +34,7 @@ Status: Migration applied and schema-verified in UAT; application deployment and
 - Policy-workspace RLS evaluates effective capabilities directly while private mutation helpers remain non-executable to browser roles.
 - Before controlled activation, effective-policy lookup returns a valid empty state instead of an HTTP error; Platform Admin and Legal workspace crawls are clean on desktop and mobile.
 - Vendor purchase-order acknowledgement is now represented in the authoritative route and Knowledge Base coverage contracts, including vendor scope, current-revision validation, recovery guidance, and completion evidence.
+- The live Vendor Representative audit now renders the purchase-order acknowledgement page on both desktop and mobile instead of certifying the vendor landing page alone.
 
 ## Verification evidence
 

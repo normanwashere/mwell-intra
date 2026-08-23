@@ -303,7 +303,13 @@ const roleRoutes = {
   platform_admin: [
     { path: "/admin/users", text: /Users & Roles|Access matrix/i },
   ],
-  vendor_portal: [{ path: "/vendor", text: /Vendor|accreditation|Acme/i }],
+  vendor_portal: [
+    { path: "/vendor", text: /Vendor|accreditation|Acme/i },
+    {
+      path: "/vendor/purchase-orders",
+      text: /Purchase order acknowledgements|No issued purchase orders|Acknowledgement reference/i,
+    },
+  ],
   warehouse_logistics_supervisor: [
     { path: "/warehouse/receiving", text: /Receiving|Receive/i },
     { path: "/warehouse/quality", text: /Controlled exception disposition/i },
