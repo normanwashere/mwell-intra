@@ -158,12 +158,19 @@ function assertTask11Structure(process, manual) {
   return { operatingExtract, roleSection };
 }
 
-const AFFIRMATIVE_RELEASE_PATTERNS = Object.freeze([
-  /\b(?:live|uat)(?:\s*\/\s*(?:live|uat))?(?:\s+(?:approval|pass|certification|completion|deployment|activation))?\s+(?:(?:is|was|has been)\s+)?(?:approved|passed|certified|complete|completed|deployed|activated|successful|done)\b/i,
-  /\b(?:deployment|activation)\s+(?:to|in|on)\s+(?:live|uat)\s+(?:(?:is|was|has been)\s+)?(?:approved|passed|certified|complete|completed|successful|done)\b/i,
-  /\b(?:deployment|activation)\s+(?:(?:is|was|has been)\s+)?(?:approved|passed|certified|complete|completed|successful|done)\s+(?:in|to|on)\s+(?:live|uat)\b/i,
-  /\bmigration(?:\s+(?:is|was|has been))?[\s-]+applied(?:\s+(?:in|to|on)\s+(?:live|uat))?\b/i,
-  /\b(?:live|uat)\s+migration(?:\s+(?:is|was|has been))?[\s-]+applied\b/i,
+const AFFIRMATIVE_RELEASE_CLAIMS = Object.freeze([
+  {
+    name: "live/UAT status",
+    pattern: /\b(?:live|uat)(?:\s*\/\s*(?:live|uat))?(?:\s+(?:testing|approval|pass|certification|completion|deployment|activation))?\s+(?:(?:is|are|was|were|has|have|had|been|now|already|successfully|fully|formally)\s+)*(?:approved|passed|certified|complete|completed|deployed|activated|successful|done|claimed)\b/i,
+  },
+  {
+    name: "deployment/activation status",
+    pattern: /\b(?:deployment|activation)\s+(?:(?:to|in|on)\s+(?:live|uat)\s+)?(?:(?:is|are|was|were|has|have|had|been|now|already|successfully|fully|formally)\s+)*(?:approved|passed|certified|complete|completed|successful|done)(?:\s+(?:in|to|on)\s+(?:live|uat))?\b/i,
+  },
+  {
+    name: "migration-applied status",
+    pattern: /\b(?:(?:live|uat)\s+)?migration\s+(?:(?:is|are|was|were|has|have|had|been|now|already|successfully|fully|formally)\s+)*applied(?:\s+(?:in|to|on)\s+(?:live|uat))?\b/i,
+  },
 ]);
 
 function assertNoAffirmativeReleaseClaims(markdown) {
@@ -174,12 +181,12 @@ function assertNoAffirmativeReleaseClaims(markdown) {
     .filter(Boolean);
 
   for (const sentence of sentences) {
-    for (const pattern of AFFIRMATIVE_RELEASE_PATTERNS) {
-      const match = pattern.exec(sentence);
+    for (const claim of AFFIRMATIVE_RELEASE_CLAIMS) {
+      const match = claim.pattern.exec(sentence);
       if (!match) continue;
       const prefix = sentence.slice(Math.max(0, match.index - 24), match.index);
       if (/\b(?:no|not|never|without)\s+[^.;:]{0,20}$/i.test(prefix)) continue;
-      assert.fail(`prohibited affirmative release claim: ${sentence}`);
+      assert.fail(`prohibited affirmative release claim (${claim.name}): ${sentence}`);
     }
   }
 }
@@ -355,8 +362,13 @@ test("rejects representative Task 11 structural and certification mutations", ()
 
   for (const affirmativeClaim of [
     "UAT passed.",
+    "UAT has passed.",
+    "UAT testing passed.",
     "UAT is complete.",
     "The migration is applied in UAT.",
+    "The migration is now applied.",
+    "The migration was successfully applied.",
+    "The migration has now been applied.",
     "Live deployment is complete.",
     "Deployment completed in UAT.",
   ]) {
