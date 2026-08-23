@@ -1901,6 +1901,18 @@ test("the DOA editor cannot submit while asynchronous workspace data shifts the 
   assert.match(page, /from\("departments"\)/);
   assert.match(page, /\.eq\("is_active", true\)/);
   assert.match(page, /Select an active department/);
+  assert.match(page, /const \[fieldErrors, setFieldErrors\]/);
+  assert.match(page, /error=\{fieldErrors\.department\}/);
+  assert.match(page, /aria-invalid=\{Boolean\(fieldErrors\.department\)\}/);
+  assert.match(page, /error=\{fieldErrors\.version\}/);
+  assert.match(
+    page,
+    /scrollIntoView\(\{ behavior: "smooth", block: "center" \}\)/,
+  );
+  assert.doesNotMatch(
+    page,
+    /return toast\.error\("Select an active department\."\)/,
+  );
   assert.match(page, /value=\{item\.code\}/);
   assert.doesNotMatch(page, /placeholder="e\.g\. Operations"/);
 });

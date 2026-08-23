@@ -359,7 +359,7 @@ const procedureArticles: KnowledgeArticle[] = [
       ],
       [
         "Validate",
-        "Resolve gaps, overlaps, missing owners, and missing final approval.",
+        "Save the draft. Intra focuses the first invalid field and shows its inline message; resolve missing department, version, owners, gaps, overlaps, and final approval before saving again.",
       ],
       ["Activate", "Confirm activation; the prior matrix becomes superseded."],
     ],

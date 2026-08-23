@@ -18,6 +18,8 @@
 
 Certification run 131 passed all route and visual shards at desktop, tablet, and mobile widths. Its governed transaction artifacts then exposed the incomplete temporary Operations ladder, intercepted category radio hit target, and stale DOA/payment test expectations. Certification run 132 again passed every route and visual shard, then isolated an invalid SQL expression in DOA draft creation on both desktop and mobile. Both runs' independent cleanup jobs completed with zero governed residue.
 
+Certification run 134 passed preparation, all six route/visual shards, and all 45 desktop transactions. Its mobile artifact isolated a toast-only DOA validation message that was not reliably visible inside the long editor with sticky mobile action and navigation bars. The editor now renders field-level accessible errors, focuses and scrolls the first invalid control into view, and retains governed RPC errors as global notifications. Run 134 cleanup completed with zero residue; a new exact-commit live certification is required after deployment.
+
 ## Launch condition
 
 The temporary UAT ladders exist only to exercise every derived approval route. Platform Admin and Legal must replace them with approved department owners, amount bands, category scope, effective dates, and source documents before production approval.

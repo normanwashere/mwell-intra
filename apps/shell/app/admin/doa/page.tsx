@@ -108,6 +108,7 @@ function DoaWorkspace({ canManagePolicy }: { canManagePolicy: boolean }) {
   ]);
   const [workspaceLoading, setWorkspaceLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [loadingRevision, setLoadingRevision] = useState<string | null>(null);
   const [captureActivationDraft, setCaptureActivationDraft] = useState(false);
 
@@ -191,18 +192,58 @@ function DoaWorkspace({ canManagePolicy }: { canManagePolicy: boolean }) {
     [departments],
   );
 
+  const revealFieldError = (key: string, fieldId: string, message: string) => {
+    setFieldErrors({ [key]: message });
+    requestAnimationFrame(() => {
+      const field = document.getElementById(fieldId);
+      field?.focus({ preventScroll: true });
+      field?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  };
+
+  const clearFieldError = (key: string) =>
+    setFieldErrors((current) => {
+      if (!current[key]) return current;
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+
   const save = async () => {
-    if (!department || !departments.some((item) => item.code === department))
-      return toast.error("Select an active department.");
-    if (!version.trim()) return toast.error("Version is required.");
-    if (assignments.some((row) => !row.approverUserId))
-      return toast.error("Select a named approver for every assignment.");
-    if (!assignments.some((row) => row.tier === "final_approver"))
-      return toast.error("Add at least one final approver.");
+    if (!department || !departments.some((item) => item.code === department)) {
+      revealFieldError(
+        "department",
+        "doa-department",
+        "Select an active department.",
+      );
+      return;
+    }
+    if (!version.trim()) {
+      revealFieldError("version", "doa-version", "Version is required.");
+      return;
+    }
+    const missingApprover = assignments.find((row) => !row.approverUserId);
+    if (missingApprover) {
+      revealFieldError(
+        "assignments",
+        `doa-approver-${missingApprover.key}`,
+        "Select a named approver for every assignment.",
+      );
+      return;
+    }
+    if (!assignments.some((row) => row.tier === "final_approver")) {
+      revealFieldError(
+        "assignments",
+        "doa-assignments",
+        "Add at least one final approver.",
+      );
+      return;
+    }
     if (mode !== "supabase" || !procurement)
       return toast.toast(
         "Preview mode is read-only. Connect Supabase to save a matrix.",
       );
+    setFieldErrors({});
     setSaving(true);
     const { data, error } = await procurement.rpc("save_doa_matrix", {
       payload: {
@@ -410,12 +451,20 @@ function DoaWorkspace({ canManagePolicy }: { canManagePolicy: boolean }) {
             deliberately.
           </p>
           <div className="mt-5 grid gap-4 md:grid-cols-2">
-            <Field label="Department" htmlFor="doa-department">
+            <Field
+              label="Department"
+              htmlFor="doa-department"
+              error={fieldErrors.department}
+            >
               <select
                 id="doa-department"
                 className="input-base min-h-11 w-full min-w-0 max-w-full"
                 value={department}
-                onChange={(e) => setDepartment(e.target.value)}
+                aria-invalid={Boolean(fieldErrors.department)}
+                onChange={(e) => {
+                  setDepartment(e.target.value);
+                  clearFieldError("department");
+                }}
                 disabled={workspaceLoading || departments.length === 0}
               >
                 <option value="">Select an active department</option>
@@ -426,11 +475,19 @@ function DoaWorkspace({ canManagePolicy }: { canManagePolicy: boolean }) {
                 ))}
               </select>
             </Field>
-            <Field label="Version" htmlFor="doa-version">
+            <Field
+              label="Version"
+              htmlFor="doa-version"
+              error={fieldErrors.version}
+            >
               <Input
                 id="doa-version"
                 value={version}
-                onChange={(e) => setVersion(e.target.value)}
+                invalid={Boolean(fieldErrors.version)}
+                onChange={(e) => {
+                  setVersion(e.target.value);
+                  clearFieldError("version");
+                }}
                 placeholder="e.g. OPS-DOA-2026.1"
               />
             </Field>
@@ -450,7 +507,7 @@ function DoaWorkspace({ canManagePolicy }: { canManagePolicy: boolean }) {
               />
             </Field>
           </div>
-          <div className="mt-6 space-y-3">
+          <div id="doa-assignments" className="mt-6 space-y-3" tabIndex={-1}>
             <div className="flex items-center justify-between gap-3">
               <h3 className="font-semibold text-ink">Named assignments</h3>
               <Button
@@ -464,6 +521,11 @@ function DoaWorkspace({ canManagePolicy }: { canManagePolicy: boolean }) {
                 Add tier
               </Button>
             </div>
+            {fieldErrors.assignments ? (
+              <p role="alert" className="text-sm font-semibold text-rose-600">
+                {fieldErrors.assignments}
+              </p>
+            ) : null}
             {assignments.map((row, index) => (
               <div
                 key={row.key}
@@ -536,11 +598,15 @@ function DoaWorkspace({ canManagePolicy }: { canManagePolicy: boolean }) {
                     aria-label={`Tier ${index + 1} named approver`}
                     className="input-base min-h-11 w-full min-w-0 max-w-full"
                     value={row.approverUserId}
-                    onChange={(e) =>
+                    aria-invalid={Boolean(
+                      fieldErrors.assignments && !row.approverUserId,
+                    )}
+                    onChange={(e) => {
                       updateAssignment(row.key, {
                         approverUserId: e.target.value,
-                      })
-                    }
+                      });
+                      clearFieldError("assignments");
+                    }}
                   >
                     <option value="">Select employee</option>
                     {profiles.map((profile) => (

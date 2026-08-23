@@ -151,7 +151,7 @@ export const ADMINISTRATOR_GUIDES: AdministratorGuide[] = [
     auditEffect:
       "Creates a new immutable version; transactions retain the DOA version and approver used at decision time.",
     recovery:
-      "If draft save fails, confirm that no matrix was created, retain the displayed reference, and escalate the error instead of switching departments. Supersede an incorrect saved version with a corrected reviewed version. Do not edit or delete a ladder already used by a transaction.",
+      "If draft validation fails, Intra moves focus to the first invalid field and shows an inline message beside it on desktop and mobile. Correct that field and save again. If the governed save still fails, confirm that no matrix was created, retain the displayed reference, and escalate the error instead of switching departments. Supersede an incorrect saved version with a corrected reviewed version. Do not edit or delete a ladder already used by a transaction.",
     requiredReview:
       "Legal or Platform governance review before activation and after any material change; Procurement may review the operational effect but cannot configure or activate the ladder.",
     flowIds: ["doa-governance", "procure-to-pay"],
