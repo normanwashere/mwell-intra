@@ -425,7 +425,7 @@ test("rejects unsafe policy-governance migration variants", () => {
     {
       name: "permissive governed RLS write policy",
       sql: migration.replace(
-        "with check (private.policy_profile_can_manage());",
+        "with check (\n    core.has_live_cap('core', 'manage_rbac')\n    or core.has_live_cap('legal', 'manage_doa')\n  );",
         "with check (true);",
       ),
       failure: "permissive governed write RLS policy",
@@ -2847,4 +2847,31 @@ test("terminal commitment readiness uses effective live capabilities", () => {
   assert.match(definition, /core\.has_live_cap\('procurement','author_po'\)/);
   assert.match(definition, /core\.has_live_cap\('procurement','approve_award'\)/);
   assert.doesNotMatch(definition, /core\.has_cap\(/);
+});
+
+test("policy profile RLS does not depend on a revoked private helper", () => {
+  const policyStart = migration.indexOf(
+    "create policy policy_profiles_active_read",
+  );
+  const policyEnd = migration.indexOf(
+    "grant select on procurement.policy_profiles",
+    policyStart,
+  );
+  const policies = migration.slice(policyStart, policyEnd);
+
+  assert.ok(policyStart >= 0 && policyEnd > policyStart);
+  assert.doesNotMatch(policies, /private\.policy_profile_can_manage\(\)/);
+  assert.match(policies, /core\.has_live_cap\('core', 'manage_rbac'\)/);
+  assert.match(policies, /core\.has_live_cap\('legal', 'manage_doa'\)/);
+});
+
+test("effective policy lookup has a valid pre-activation empty state", () => {
+  const start = migration.indexOf(
+    "create or replace function procurement.get_effective_policy_profile(as_of timestamptz)",
+  );
+  const definition = migration.slice(start, migration.indexOf("$$;", start) + 3);
+
+  assert.ok(start >= 0);
+  assert.match(definition, /if not found then return null; end if;/);
+  assert.doesNotMatch(definition, /No effective Mwell operating policy profile exists/);
 });

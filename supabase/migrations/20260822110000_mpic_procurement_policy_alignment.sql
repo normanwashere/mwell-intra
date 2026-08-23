@@ -307,38 +307,68 @@ $$;
 
 create policy policy_profiles_active_read on procurement.policy_profiles
   for select to authenticated
-  using (status = 'active' or private.policy_profile_can_manage());
+  using (
+    status = 'active'
+    or core.has_live_cap('core', 'manage_rbac')
+    or core.has_live_cap('legal', 'manage_doa')
+  );
 create policy policy_profiles_governed_insert on procurement.policy_profiles
   for insert to authenticated
-  with check (private.policy_profile_can_manage());
+  with check (
+    core.has_live_cap('core', 'manage_rbac')
+    or core.has_live_cap('legal', 'manage_doa')
+  );
 create policy policy_profiles_governed_update on procurement.policy_profiles
   for update to authenticated
-  using (private.policy_profile_can_manage())
-  with check (private.policy_profile_can_manage());
+  using (
+    core.has_live_cap('core', 'manage_rbac')
+    or core.has_live_cap('legal', 'manage_doa')
+  )
+  with check (
+    core.has_live_cap('core', 'manage_rbac')
+    or core.has_live_cap('legal', 'manage_doa')
+  );
 create policy policy_profile_events_manage_read on procurement.policy_profile_events
   for select to authenticated
-  using (private.policy_profile_can_manage());
+  using (
+    core.has_live_cap('core', 'manage_rbac')
+    or core.has_live_cap('legal', 'manage_doa')
+  );
 create policy policy_profile_events_governed_insert on procurement.policy_profile_events
   for insert to authenticated
-  with check (private.policy_profile_can_manage());
+  with check (
+    core.has_live_cap('core', 'manage_rbac')
+    or core.has_live_cap('legal', 'manage_doa')
+  );
 create policy policy_conflicts_manage_read on procurement.policy_conflicts
   for select to authenticated
-  using (private.policy_profile_can_manage());
+  using (
+    core.has_live_cap('core', 'manage_rbac')
+    or core.has_live_cap('legal', 'manage_doa')
+  );
 create policy policy_conflicts_governed_update on procurement.policy_conflicts
   for update to authenticated
-  using (private.policy_profile_can_manage())
-  with check (private.policy_profile_can_manage());
+  using (
+    core.has_live_cap('core', 'manage_rbac')
+    or core.has_live_cap('legal', 'manage_doa')
+  )
+  with check (
+    core.has_live_cap('core', 'manage_rbac')
+    or core.has_live_cap('legal', 'manage_doa')
+  );
 create policy solicitation_communications_read on procurement.solicitation_communications
   for select to authenticated
   using (
     core.has_live_cap('procurement', 'view_dashboard')
-    or private.policy_profile_can_manage()
+    or core.has_live_cap('core', 'manage_rbac')
+    or core.has_live_cap('legal', 'manage_doa')
   );
 create policy policy_sla_events_read on procurement.policy_sla_events
   for select to authenticated
   using (
     core.has_live_cap('procurement', 'view_dashboard')
-    or private.policy_profile_can_manage()
+    or core.has_live_cap('core', 'manage_rbac')
+    or core.has_live_cap('legal', 'manage_doa')
   );
 create policy vendor_probation_reviews_read on legal.vendor_probation_reviews
   for select to authenticated
@@ -782,7 +812,7 @@ begin
     and (effective_to is null or effective_to > coalesce(as_of, pg_catalog.statement_timestamp()))
   order by effective_from desc
   limit 1;
-  if not found then raise exception 'No effective Mwell operating policy profile exists'; end if;
+  if not found then return null; end if;
   return to_jsonb(v_profile);
 end;
 $$;
@@ -2419,7 +2449,11 @@ alter table procurement.award_recommendations force row level security;
 alter table procurement.award_recommendation_variance_decisions enable row level security;
 alter table procurement.award_recommendation_variance_decisions force row level security;
 
-create policy policy_holidays_read on procurement.policy_holidays for select to authenticated using (private.policy_profile_can_manage() or core.has_live_cap('procurement', 'view_dashboard'));
+create policy policy_holidays_read on procurement.policy_holidays for select to authenticated using (
+  core.has_live_cap('core', 'manage_rbac')
+  or core.has_live_cap('legal', 'manage_doa')
+  or core.has_live_cap('procurement', 'view_dashboard')
+);
 create policy commercial_tabulations_read on procurement.commercial_tabulations for select to authenticated using (private.policy_sourcing_can_manage() or private.policy_sourcing_can_review() or core.has_live_cap('procurement', 'view_dashboard'));
 create policy technical_evaluations_read on procurement.technical_evaluations for select to authenticated using (private.policy_sourcing_can_manage() or private.policy_sourcing_can_review() or core.has_live_cap('procurement', 'view_dashboard'));
 create policy award_recommendations_read on procurement.award_recommendations for select to authenticated using (private.policy_sourcing_can_manage() or private.policy_sourcing_can_review() or core.has_live_cap('procurement', 'view_dashboard'));

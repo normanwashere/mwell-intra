@@ -214,7 +214,9 @@ export function verifyMigrationText(sql) {
       break;
     }
     if (
-      !statement.includes("private.policy_profile_can_manage()") ||
+      !statement.includes("core.has_live_cap('core', 'manage_rbac')") ||
+      !statement.includes("core.has_live_cap('legal', 'manage_doa')") ||
+      statement.includes("private.policy_profile_can_manage()") ||
       /(?:using|with check)\s*\(\s*true\s*\)/.test(statement)
     ) {
       failures.push("permissive governed write RLS policy");
