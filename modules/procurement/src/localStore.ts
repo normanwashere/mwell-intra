@@ -457,7 +457,7 @@ function mapReceiptStatus(row: LiveRow): PurchaseOrderReceiptStatus & { purchase
     rejectedOrQuarantinedQuantity: Number(row.rejected_or_quarantined_quantity ?? 0),
     outstandingQuantity: Number(row.outstanding_quantity ?? 0),
     latestReceiptReference: row.latest_warehouse_receipt_reference ?? undefined,
-    latestQcStatus: row.qc_status,
+    latestQcStatus: row.latest_qc_status ?? row.qc_status ?? 'not_received',
     lastReceiptAt: row.last_received_at ?? undefined,
     acceptedLines: Array.isArray(row.accepted_lines) ? row.accepted_lines : [],
   } as unknown as PurchaseOrderReceiptStatus & { purchaseOrderId: string };
@@ -1254,6 +1254,7 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
                   row.status === 'draft' || row.status === 'pending_approval' ? 'award' : 'issue',
               },
             )),
+            phase: (row.status === 'closed' ? 'closed' : row.status === 'draft' || row.status === 'pending_approval' ? 'award' : 'issue') as NonNullable<PurchaseOrder['commitmentReadiness']>['phase'],
             purchaseOrderId: String(row.id),
           })),
       );

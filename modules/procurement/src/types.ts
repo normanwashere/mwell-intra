@@ -579,7 +579,7 @@ export interface FinancialProtectionRecord {
 
 export interface CommitmentReadiness {
   ready: boolean;
-  phase: 'submit' | 'award' | 'issue';
+  phase: 'submit' | 'award' | 'issue' | 'closed';
   requestId: string;
   vendorId?: string;
   route?: SourcingMethod;

@@ -93,3 +93,14 @@ The linked-target migration-status ruling remains unchanged: `20260822110000_mpi
 - MPIC migration contract verifier: passed.
 - Controlled authenticated Playwright journey: passed 2/2 at `desktop-1440` and `mobile-390` (1.7m). Replacement closure evidence visibly shows `Status Closed`, `Closure closed`, and independent governed closure approval at both viewports; Legal recovery screenshots and decider/closure traces remain retained.
 - Migration remains unapplied. The Task 12 linked-target status ruling above remains unchanged.
+
+## Fix Round 5
+
+- Closed PO commitment projections normalize to terminal `closed` rather than actionable `issue`; the detail page now renders `Issue controls satisfied before closure` and `Package closed` for terminal records while retaining existing nonterminal readiness behavior.
+- Receipt projection mapping now consumes the authoritative `latest_qc_status` and preserves a completed accepted QC state. The controlled closed-PO fixture returns the matching public fields.
+- Final desktop/mobile closure assertions reject `Ready to commit`, `issue`, and `not_received`, and require terminal commitment wording plus `QC: accepted`.
+
+### Fix Round 5 Verification
+
+- Pinned Node 22 Procurement tests: 187 passed; Shell TypeScript passed; disposable Task 10 PGlite matrix passed 1/1.
+- The authenticated desktop/mobile browser journey was rerun to replace closure evidence/traces with the terminal-label assertions above. Migration remains unapplied and the Task 12 ruling is unchanged.

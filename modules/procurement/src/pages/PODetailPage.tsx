@@ -630,16 +630,16 @@ export function PODetailPage() {
           <Card>
             <div className="flex items-center justify-between gap-3">
               <span className="font-semibold text-ink">
-                {po.commitmentReadiness.ready ? 'Ready to commit' : 'Commitment blocked'}
+                {po.status === 'closed' ? 'Issue controls satisfied before closure' : po.commitmentReadiness.ready ? 'Ready to commit' : 'Commitment blocked'}
               </span>
               <span
                 className={
-                  po.commitmentReadiness.ready
+                  po.status === 'closed' || po.commitmentReadiness.ready
                     ? 'chip bg-emerald-500/15 text-emerald-700'
                     : 'chip bg-rose-500/15 text-rose-700'
                 }
               >
-                {po.commitmentReadiness.phase}
+                {po.status === 'closed' ? 'closed' : po.commitmentReadiness.phase}
               </span>
             </div>
             {po.commitmentReadiness.blockers.length ? (
@@ -876,6 +876,7 @@ export function PODetailPage() {
               } : { ready: issueBlockers.length === 0, blockers: issueBlockers, requiredEvidence: [] }}
               lifecycle={po.lifecycle}
               monitoring={po.openMonitoringItems}
+              terminal={po.status === 'closed'}
               canAcknowledge={canVendorPortal && profile?.vendorId === po.vendorId && po.status === 'issued'}
               canRecordDeliveryNotice={canAuthorPo && po.status === 'issued'}
               onAcknowledge={async (reference) => { const next = await acknowledgePurchaseOrder(po.id, reference); if (next) success('Vendor acknowledgement recorded'); else error('Acknowledgement was rejected; refresh the PO.'); }}

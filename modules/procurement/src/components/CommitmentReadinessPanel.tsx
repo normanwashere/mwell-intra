@@ -32,6 +32,7 @@ export function CommitmentReadinessPanel({
   canRecordDeliveryNotice,
   onAcknowledge,
   onRecordDeliveryNotice,
+  terminal = false,
 }: {
   readiness: { ready: boolean; blockers: string[]; requiredEvidence: CommitmentEvidenceRequirement[] };
   lifecycle?: PurchaseOrderLifecycleProjection;
@@ -40,6 +41,7 @@ export function CommitmentReadinessPanel({
   canRecordDeliveryNotice: boolean;
   onAcknowledge: (reference: string) => Promise<void>;
   onRecordDeliveryNotice: (reference: string) => Promise<void>;
+  terminal?: boolean;
 }) {
   const [acknowledgementReference, setAcknowledgementReference] = useState('');
   const [deliveryReference, setDeliveryReference] = useState('');
@@ -52,7 +54,7 @@ export function CommitmentReadinessPanel({
           <h3 className="font-semibold text-ink">PO commitment and delivery control</h3>
           <p className="text-xs text-muted">The server owns issue, acceptance, quality recovery, and closure decisions.</p>
         </div>
-        <Badge tone={readiness.ready ? 'emerald' : 'amber'}>{readiness.ready ? 'Package ready' : `${readiness.blockers.length} package blocker${readiness.blockers.length === 1 ? '' : 's'}`}</Badge>
+        <Badge tone={terminal || readiness.ready ? 'emerald' : 'amber'}>{terminal ? 'Package closed' : readiness.ready ? 'Package ready' : `${readiness.blockers.length} package blocker${readiness.blockers.length === 1 ? '' : 's'}`}</Badge>
       </div>
 
       <div className="grid gap-2 sm:grid-cols-2">
