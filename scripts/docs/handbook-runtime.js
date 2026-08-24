@@ -18,6 +18,9 @@
     const drawers = { contents: document.querySelector('#contents-rail'), toc: document.querySelector('#page-toc') };
     const printTrigger = document.querySelector('[data-print-trigger]');
     const printMenu = document.querySelector('#print-menu');
+    const screenshotViewer = document.querySelector('[data-screenshot-surface]');
+    const screenshotViewerImage = screenshotViewer?.querySelector('[data-screenshot-viewer-image]');
+    const screenshotViewerCaption = screenshotViewer?.querySelector('[data-screenshot-viewer-caption]');
     const modeIds = new Set(tabs.map((tab) => tab.dataset.mode));
     const handbookIndex = Array.isArray(window.__HANDBOOK_INDEX__) ? window.__HANDBOOK_INDEX__ : [];
     const systemSearchIntentTerms = Array.isArray(window.__HANDBOOK_SYSTEM_INTENTS__) ? window.__HANDBOOK_SYSTEM_INTENTS__.map(normalizeSearchText).filter(Boolean) : [];
@@ -39,6 +42,8 @@
     let activeDrawer = null;
     let activeCompactSurface = null;
     let compactSurfaceReturnFocus = null;
+    let compactSurfaceParent = null;
+    let compactSurfaceParentReturnFocus = null;
     let compactModalInertState = new Map();
     let printScope = 'guide';
 
@@ -160,7 +165,8 @@
       if (name === 'search' || name === 'contents') return drawers.contents;
       if (name === 'toc') return drawers.toc;
       if (name === 'print') return printMenu;
-      return document.querySelector(`[data-screenshot-surface="${CSS.escape(String(name || '').replace(/^screenshot:/, ''))}"]`);
+      if (String(name || '').startsWith('screenshot:')) return screenshotViewer;
+      return null;
     }
 
     function compactSurfaceTrigger(name) {
@@ -171,9 +177,22 @@
     }
 
     function setCompactSurfaceExpanded(name, expanded) {
+      if (name === 'toc') drawerTriggers.filter((button) => button.dataset.openDrawer === 'toc').forEach((button) => button.setAttribute('aria-expanded', String(expanded)));
       const trigger = compactSurfaceTrigger(name);
-      if (trigger && name !== 'search') trigger.setAttribute('aria-expanded', String(expanded));
+      if (trigger && name !== 'search' && name !== 'toc') trigger.setAttribute('aria-expanded', String(expanded));
       if (name === 'search') drawerTriggers.filter((button) => button.dataset.openDrawer === 'contents').forEach((button) => button.setAttribute('aria-expanded', String(expanded)));
+    }
+
+    function prepareScreenshotViewer(name) {
+      const id = String(name || '').replace(/^screenshot:/, '');
+      const trigger = document.querySelector(`[data-open-screenshot-surface="${CSS.escape(id)}"]`);
+      const sourceImage = trigger?.querySelector('img');
+      const caption = trigger?.closest('figure')?.querySelector('figcaption');
+      if (!trigger || !sourceImage || !screenshotViewerImage || !screenshotViewerCaption) return false;
+      screenshotViewerImage.src = sourceImage.currentSrc || sourceImage.src;
+      screenshotViewerImage.alt = sourceImage.alt;
+      screenshotViewerCaption.textContent = caption?.textContent?.trim() || sourceImage.alt;
+      return true;
     }
 
     function clearCompactModalIsolation() {
@@ -198,8 +217,12 @@
       const name = activeCompactSurface;
       const surface = compactSurfaceElement(name);
       const returnFocus = compactSurfaceReturnFocus;
+      const parentSurface = compactSurfaceParent;
+      const parentReturnFocus = compactSurfaceParentReturnFocus;
       activeCompactSurface = null;
       compactSurfaceReturnFocus = null;
+      compactSurfaceParent = null;
+      compactSurfaceParentReturnFocus = null;
       clearCompactModalIsolation();
       document.body.classList.remove('drawer-open');
       if (surface) {
@@ -210,17 +233,29 @@
       }
       setCompactSurfaceExpanded(name, false);
       if (name === 'contents' || name === 'toc') activeDrawer = null;
+      if (restoreFocus && parentSurface && isDrawerViewport()) {
+        openCompactSurface(parentSurface, { focusSurface: false });
+        compactSurfaceReturnFocus = parentReturnFocus;
+        if (returnFocus?.isConnected) returnFocus.focus();
+        return;
+      }
       if (restoreFocus && returnFocus?.isConnected) returnFocus.focus();
     }
 
     function openCompactSurface(name, { focusSurface = true } = {}) {
       const surface = compactSurfaceElement(name);
-      if (!surface || !isDrawerViewport()) return false;
+      const globallyModal = name === 'toc' || String(name || '').startsWith('screenshot:');
+      if (!surface || (!isDrawerViewport() && !globallyModal)) return false;
+      if (String(name || '').startsWith('screenshot:') && !prepareScreenshotViewer(name)) return false;
       const previousSurface = activeCompactSurface;
       if (previousSurface === name) return true;
+      const parentSurface = name === 'print' && ['contents', 'search'].includes(previousSurface) ? previousSurface : null;
+      const parentReturnFocus = parentSurface ? compactSurfaceReturnFocus : null;
       closeCompactSurface({ restoreFocus: false });
       activeCompactSurface = name;
       compactSurfaceReturnFocus = name === 'search' ? search : (document.activeElement instanceof HTMLElement ? document.activeElement : compactSurfaceTrigger(name));
+      compactSurfaceParent = parentSurface;
+      compactSurfaceParentReturnFocus = parentReturnFocus;
       surface.hidden = false;
       setCompactSurfaceExpanded(name, true);
       if (name === 'search') {
@@ -254,7 +289,7 @@
 
     function setDrawerVisible(name, visible, { restoreFocus = true } = {}) {
       const drawer = drawers[name];
-      if (!drawer || !isDrawerViewport()) return;
+      if (!drawer || (name === 'contents' && !isDrawerViewport())) return;
       if (!visible) {
         if (activeCompactSurface === name || (name === 'contents' && activeCompactSurface === 'search')) closeCompactSurface({ restoreFocus });
         return;
@@ -266,8 +301,8 @@
       Object.entries(drawers).forEach(([name, drawer]) => {
         if (!drawer) return;
         drawer.removeAttribute('data-search-surface');
-        if (isDrawerViewport()) drawer.hidden = true;
-        else { drawer.hidden = false; drawer.removeAttribute('role'); drawer.removeAttribute('aria-modal'); }
+        drawer.hidden = name === 'toc' || isDrawerViewport();
+        if (!drawer.hidden) { drawer.removeAttribute('role'); drawer.removeAttribute('aria-modal'); }
       });
       activeDrawer = null; document.body.classList.remove('drawer-open');
       drawerTriggers.forEach((button) => button.setAttribute('aria-expanded', 'false'));
@@ -473,8 +508,7 @@
         pageToc.append(link);
       });
       const pageTocDrawer = pageToc.parentElement;
-      if (headings.length === 0) pageTocDrawer.hidden = true;
-      else if (!isDrawerViewport() || activeDrawer === 'toc') pageTocDrawer.hidden = false;
+      pageTocDrawer.hidden = headings.length === 0 || activeDrawer !== 'toc';
     }
 
     function routeAnchor({ guideId, headingId }) {
@@ -732,7 +766,7 @@
     document.querySelector('[data-dismiss-notice]').addEventListener('click', () => { routeNotice.hidden = true; });
     window.addEventListener('scroll', () => { if (activeRoute.guideId) guideScroll = { ...guideScroll, [activeRoute.guideId]: window.scrollY }; schedulePersistence(); }, { passive: true });
     document.addEventListener('keydown', (event) => {
-      if (isDrawerViewport() && activeCompactSurface && activeCompactSurface !== 'search') {
+      if (activeCompactSurface && activeCompactSurface !== 'search') {
         const surface = compactSurfaceElement(activeCompactSurface);
         if (event.key === '/') { event.preventDefault(); return; }
         if (event.key === 'Escape') { event.preventDefault(); closeCompactSurface(); return; }

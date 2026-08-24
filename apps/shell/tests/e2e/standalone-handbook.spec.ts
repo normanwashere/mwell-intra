@@ -149,10 +149,10 @@ test('compact search keeps focus coherent across typing restore activation and E
   await expect(contents).toBeHidden();
   await expect(searchbox).toBeFocused();
 
-  const contentsTrigger = page.getByRole('button', { name: 'Contents', exact: true });
+  const contentsTrigger = page.getByRole('button', { name: 'Menu', exact: true });
   await contentsTrigger.click();
   await expect(contents).toHaveAttribute('aria-modal', 'true');
-  await expect(contents.getByRole('button', { name: /close contents/i })).toBeFocused();
+  await expect(contents.getByRole('button', { name: /close menu/i })).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(contents).toBeHidden();
   await expect(contentsTrigger).toBeFocused();
@@ -179,9 +179,9 @@ test('compact search and modal surfaces coordinate visibility focus and shortcut
   const contents = page.locator('#contents-rail');
   const toc = page.locator('#page-toc');
   const printMenu = page.locator('#print-menu');
-  const contentsTrigger = page.getByRole('button', { name: 'Contents', exact: true });
-  const tocTrigger = page.getByRole('button', { name: 'On this page', exact: true });
-  const printTrigger = page.getByRole('button', { name: 'Print', exact: true });
+  const contentsTrigger = page.getByRole('button', { name: 'Menu', exact: true });
+  const tocTrigger = page.getByRole('button', { name: 'In this guide', exact: true });
+  const printTrigger = page.locator('[data-print-trigger]');
   const compactSurfaces = page.locator('#contents-rail, #page-toc, #print-menu, [data-screenshot-surface]');
   const expectOneVisibleSurfaceWithoutOverlap = async (expected: ReturnType<typeof page.locator>) => {
     await expect(expected).toBeVisible();
@@ -204,6 +204,8 @@ test('compact search and modal surfaces coordinate visibility focus and shortcut
   await expect(contents).not.toHaveAttribute('aria-modal');
   await expect(contentsTrigger).toHaveAttribute('aria-expanded', 'true');
 
+  await page.keyboard.press('Escape');
+  await expect(contents).toBeHidden();
   await tocTrigger.click();
   await expectOneVisibleSurfaceWithoutOverlap(toc);
   await expect(contents).toBeHidden();
@@ -344,7 +346,7 @@ test('navigates canonical and legacy routes, restores per-guide state, and recov
   expect(migrated.disclosures['procurement-request-approval']).toContain('procurement-request-approval:policy-basis');
 
   await page.goto('/#mode=roles&guide=operations_associate');
-  await expect(page.getByRole('tab', { name: 'Roles' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('#mode-roles')).toHaveAttribute('aria-selected', 'true');
   await expectFocusedBelowStickyChrome(page.locator('article[data-guide-id="operations_associate"] h1'));
 
   await page.goto('/#mode=tasks&guide=stock-receiving-putaway&heading=steps');
@@ -455,9 +457,86 @@ test('restores v3 query scope and representative diagram state', async ({ page }
 });
 
 test('never creates page-level horizontal overflow', async ({ page }) => {
+  for (const route of [
+    '/#mode=home&guide=home',
+    '/#mode=tasks&guide=stock-receiving-putaway',
+    '/#mode=roles&guide=operations_associate',
+    '/#mode=system&guide=source-references&heading=source-user-manual',
+  ]) {
+    await page.goto(route);
+    const layout = await page.evaluate(() => {
+      const richContent = [...document.querySelectorAll('.diagram-viewport, .article-body table, .article-body pre')]
+        .filter((element) => element.getClientRects().length > 0)
+        .map((element) => {
+          const rect = element.getBoundingClientRect();
+          return {
+            left: rect.left,
+            right: rect.right,
+            overflowX: getComputedStyle(element).overflowX,
+          };
+        });
+      return {
+        pageOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        viewportWidth: document.documentElement.clientWidth,
+        richContent,
+      };
+    });
+    expect(layout.pageOverflow, `${route} must not create page-level horizontal overflow`).toBeLessThanOrEqual(1);
+    for (const content of layout.richContent) {
+      expect(content.left, `${route} rich content must stay inside the viewport`).toBeGreaterThanOrEqual(-1);
+      expect(content.right, `${route} rich content must stay inside the viewport`).toBeLessThanOrEqual(layout.viewportWidth + 1);
+      expect(content.overflowX, `${route} rich content must provide a bounded horizontal viewport`).toMatch(/auto|scroll/);
+    }
+  }
+});
+
+test('desktop uses only header contextual navigation and reading regions', async ({ page }, testInfo) => {
+  if (!['desktop-1440', 'desktop-1280'].includes(testInfo.project.name)) test.skip();
   await page.goto('/#mode=tasks&guide=stock-receiving-putaway');
-  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-  expect(overflow).toBeLessThanOrEqual(1);
+
+  const stableRegions = page.locator('[data-stable-region]');
+  await expect(stableRegions).toHaveCount(3);
+  expect(await stableRegions.evaluateAll((regions) => regions.map((region) => region.getAttribute('data-stable-region'))))
+    .toEqual(['header', 'navigation', 'reading']);
+  await expect(page.locator('#contents-rail')).toBeVisible();
+  await expect(page.locator('#page-toc')).toBeHidden();
+  await expect(page.getByRole('button', { name: 'In this guide', exact: true })).toBeVisible();
+  expect(await page.locator('.handbook-shell').evaluate((shell) => getComputedStyle(shell).gridTemplateColumns.split(' ').length))
+    .toBeLessThanOrEqual(2);
+});
+
+test('mobile starts with a compact brand search menu row and vertical modes', async ({ page }, testInfo) => {
+  if (!['mobile-430', 'mobile-390', 'mobile-360', 'mobile-320'].includes(testInfo.project.name)) test.skip();
+  await page.goto('/#mode=tasks&guide=stock-receiving-putaway');
+
+  const firstRow = page.locator('.topbar-first-row');
+  await expect(firstRow.getByText('mwell', { exact: true })).toBeVisible();
+  await expect(firstRow.getByRole('searchbox')).toBeVisible();
+  const menu = firstRow.getByRole('button', { name: 'Menu', exact: true });
+  await expect(menu).toBeVisible();
+  await expect(page.locator('.tab-rail')).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Toggle color theme' })).toBeHidden();
+
+  const firstRowGeometry = await firstRow.locator(':scope > .brand, :scope > .search-wrap, :scope > [data-open-drawer="contents"]').evaluateAll((elements) =>
+    elements.map((element) => {
+      const rect = element.getBoundingClientRect();
+      return { top: rect.top, bottom: rect.bottom };
+    }));
+  expect(Math.max(...firstRowGeometry.map(({ top }) => top)) - Math.min(...firstRowGeometry.map(({ top }) => top))).toBeLessThanOrEqual(2);
+  expect(Math.max(...firstRowGeometry.map(({ bottom }) => bottom)) - Math.min(...firstRowGeometry.map(({ bottom }) => bottom))).toBeLessThanOrEqual(2);
+
+  const activeTaskTop = await page.locator('article[data-guide-id="stock-receiving-putaway"] .article-header h1').evaluate((element) => element.getBoundingClientRect().top);
+  expect(activeTaskTop, 'persistent chrome must leave the active task or first action within 180px').toBeLessThanOrEqual(180);
+
+  await menu.click();
+  const modes = page.locator('#contents-rail [role="tab"]');
+  await expect(modes).toHaveCount(4);
+  const modeGeometry = await modes.evaluateAll((buttons) => buttons.map((button) => {
+    const rect = button.getBoundingClientRect();
+    return { left: rect.left, right: rect.right, top: rect.top };
+  }));
+  expect(new Set(modeGeometry.map(({ left }) => Math.round(left))).size, 'modes must use one-column navigation').toBe(1);
+  expect(modeGeometry.every((button, index) => index === 0 || button.top > modeGeometry[index - 1].top)).toBe(true);
 });
 
 test('keeps contents and table of contents reachable through the 1180px boundary', async ({ page }, testInfo) => {
@@ -466,8 +545,8 @@ test('keeps contents and table of contents reachable through the 1180px boundary
   for (const width of [1024, 1180]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/#mode=tasks&guide=stock-receiving-putaway');
-    const contents = page.getByRole('button', { name: 'Contents', exact: true });
-    const toc = page.getByRole('button', { name: 'On this page', exact: true });
+    const contents = page.getByRole('button', { name: 'Menu', exact: true });
+    const toc = page.getByRole('button', { name: 'In this guide', exact: true });
     await expect(contents).toBeVisible();
     await expect(toc).toBeVisible();
     await toc.focus();
@@ -482,9 +561,12 @@ test('keeps every mobile toolbar control touch-safe', async ({ page }, testInfo)
   if (!['mobile-430', 'mobile-390', 'mobile-360', 'mobile-320'].includes(testInfo.project.name)) test.skip();
 
   await page.goto('/#mode=tasks&guide=stock-receiving-putaway');
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
   const viewportWidth = page.viewportSize()?.width ?? 0;
-  const controls = await Promise.all(['Contents', 'On this page', 'Toggle color theme', 'Print'].map(async (name) => {
-    const control = page.getByRole('button', { name, exact: true });
+  const controls = await Promise.all(['Close menu', 'Home', 'Tasks', 'Roles', 'System', 'Toggle color theme', 'Print'].map(async (name) => {
+    const control = name === 'Home' || name === 'Tasks' || name === 'Roles' || name === 'System'
+      ? page.getByRole('tab', { name, exact: true })
+      : page.getByRole('button', { name, exact: true });
     await expect(control).toBeVisible();
     const box = await control.boundingBox();
     expect(box, `${name} needs a rendered touch target`).not.toBeNull();
@@ -505,31 +587,93 @@ test('keeps every mobile toolbar control touch-safe', async ({ page }, testInfo)
   }
 });
 
+test('mobile task controls expose stable stage navigation without covering content', async ({ page }, testInfo) => {
+  if (!['mobile-430', 'mobile-390', 'mobile-360', 'mobile-320'].includes(testInfo.project.name)) test.skip();
+  await page.goto('/#mode=tasks&guide=stock-receiving-putaway');
+
+  const guideControls = page.locator('article[data-guide-id="stock-receiving-putaway"] .guide-jump-controls');
+  await expect(guideControls.getByRole('link', { name: 'Steps', exact: true })).toBeVisible();
+  await expect(guideControls.getByRole('button', { name: 'In this guide', exact: true })).toBeVisible();
+  const firstStage = page.locator('article[data-guide-id="stock-receiving-putaway"] [data-task-stage]').first();
+  const nextStage = firstStage.getByRole('link', { name: /^Next:/ });
+  await expect(nextStage).toBeVisible();
+  await nextStage.click();
+  await expect(page).toHaveURL(/heading=step-2/);
+  await expectFocusedBelowStickyChrome(page.locator('#stock-receiving-putaway-step-2 h3'));
+
+  const overlap = await guideControls.evaluate((controls) => {
+    const controlsRect = controls.getBoundingClientRect();
+    const articleHeader = controls.parentElement?.querySelector('.article-header')?.getBoundingClientRect();
+    return articleHeader ? Math.max(0, Math.min(controlsRect.right, articleHeader.right) - Math.max(controlsRect.left, articleHeader.left))
+      * Math.max(0, Math.min(controlsRect.bottom, articleHeader.bottom) - Math.max(controlsRect.top, articleHeader.top)) : 0;
+  });
+  expect(overlap, 'sticky guide controls must not cover the article header').toBe(0);
+});
+
+test('mobile and desktop screenshot viewer traps focus returns focus and ignores pending evidence', async ({ page }, testInfo) => {
+  if (!['desktop-1440', 'mobile-320'].includes(testInfo.project.name)) test.skip();
+  await page.goto('/#mode=system&guide=source-references&heading=source-user-manual');
+  await page.locator('details:has(.doc-image)').first().evaluate((details: HTMLDetailsElement) => { details.open = true; });
+  const trigger = page.locator('[data-open-screenshot-surface]').first();
+  await expect(trigger).toBeVisible();
+  await trigger.scrollIntoViewIfNeeded();
+  await trigger.click();
+
+  const viewer = page.getByRole('dialog', { name: /screenshot viewer/i });
+  await expect(viewer).toBeVisible();
+  await expect(viewer.getByRole('img')).toHaveAttribute('src', /^data:image\//);
+  await expect(viewer.getByRole('img')).not.toHaveAttribute('alt', '');
+  const close = viewer.getByRole('button', { name: /close screenshot/i });
+  await expect(close).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  expect(await viewer.evaluate((element) => element.contains(document.activeElement))).toBe(true);
+  await page.keyboard.press('Tab');
+  expect(await viewer.evaluate((element) => element.contains(document.activeElement))).toBe(true);
+  await page.keyboard.press('Escape');
+  await expect(viewer).toBeHidden();
+  await expect(trigger).toBeFocused();
+
+  await page.goto('/#mode=tasks&guide=stock-receiving-putaway&heading=steps');
+  const pendingEvidence = page.locator('article[data-guide-id="stock-receiving-putaway"] [data-screen-evidence="pending"]').first();
+  await expect(pendingEvidence).toBeVisible();
+  await expect(pendingEvidence.locator('button, [data-open-screenshot-surface]')).toHaveCount(0);
+});
+
 test('completes the keyboard-only handbook journey without drawer or diagram traps', async ({ page }, testInfo) => {
   test.setTimeout(60_000);
   await page.goto('/#mode=tasks&guide=procurement-request-approval');
-  await page.getByRole('tab', { name: 'Tasks' }).focus();
-  await page.keyboard.press('ArrowRight');
-  await expect(page.getByRole('tab', { name: 'Roles' })).toBeFocused();
-  await expect(page.getByRole('tab', { name: 'Roles' })).toHaveAttribute('aria-selected', 'true');
-  await page.keyboard.press('ArrowLeft');
-  await expect(page.getByRole('tab', { name: 'Tasks' })).toBeFocused();
-  await expect(page.getByRole('tab', { name: 'Tasks' })).toHaveAttribute('aria-selected', 'true');
-  await page.keyboard.press('End');
-  await expect(page.getByRole('tab', { name: 'System' })).toBeFocused();
-  await page.keyboard.press('Home');
-  await expect(page.getByRole('tab', { name: 'Home' })).toBeFocused();
+  const compact = (page.viewportSize()?.width ?? 1440) <= 1180;
+  if (compact) {
+    await page.getByRole('button', { name: 'Menu', exact: true }).click();
+    await page.getByRole('tab', { name: 'Tasks' }).focus();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#mode-tasks')).toHaveAttribute('aria-selected', 'true');
+  } else {
+    await page.getByRole('tab', { name: 'Tasks' }).focus();
+    await page.keyboard.press('ArrowRight');
+    await expect(page.getByRole('tab', { name: 'Roles' })).toBeFocused();
+    await expect(page.getByRole('tab', { name: 'Roles' })).toHaveAttribute('aria-selected', 'true');
+    await page.keyboard.press('ArrowLeft');
+    await expect(page.getByRole('tab', { name: 'Tasks' })).toBeFocused();
+    await expect(page.getByRole('tab', { name: 'Tasks' })).toHaveAttribute('aria-selected', 'true');
+    await page.keyboard.press('End');
+    await expect(page.getByRole('tab', { name: 'System' })).toBeFocused();
+    await page.keyboard.press('Home');
+    await expect(page.getByRole('tab', { name: 'Home' })).toBeFocused();
+  }
   await page.keyboard.press('/');
   await expect(page.getByRole('searchbox')).toBeFocused();
 
-  const tasksTab = page.getByRole('tab', { name: 'Tasks' });
-  await tasksTab.focus();
-  await page.keyboard.press('Enter');
-  if ((page.viewportSize()?.width ?? 1440) <= 1180) {
-    const contentsTrigger = page.getByRole('button', { name: 'Contents', exact: true });
+  const tasksTab = compact ? page.locator('#mode-tasks') : page.getByRole('tab', { name: 'Tasks' });
+  if (!compact) {
+    await tasksTab.focus();
+    await page.keyboard.press('Enter');
+  }
+  if (compact) {
+    const contentsTrigger = page.getByRole('button', { name: 'Menu', exact: true });
     await contentsTrigger.focus();
     await page.keyboard.press('Enter');
-    await expect(page.getByRole('dialog', { name: 'Contents' })).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Menu' })).toBeVisible();
   }
   const procurementGuide = page.locator('#panel-workflows a[data-guide-id="procurement-request-approval"]');
   await procurementGuide.focus();
@@ -543,8 +687,8 @@ test('completes the keyboard-only handbook journey without drawer or diagram tra
   await page.keyboard.press('Enter');
   await expect(policyDisclosure).toHaveAttribute('open', '');
 
-  if ((page.viewportSize()?.width ?? 1440) <= 1180) {
-    for (const [triggerName, dialogName] of [['Contents', 'Contents'], ['On this page', 'On this page']] as const) {
+  if (compact) {
+    for (const [triggerName, dialogName] of [['Menu', 'Menu'], ['In this guide', 'On this page']] as const) {
       const trigger = page.getByRole('button', { name: triggerName, exact: true });
       await trigger.focus();
       await page.keyboard.press('Enter');
@@ -589,13 +733,19 @@ test('completes the keyboard-only handbook journey without drawer or diagram tra
 
 test('limits every print scope without mutating disclosures', async ({ page }) => {
   await page.goto('/#mode=tasks&guide=procurement-request-approval');
+  const compact = (page.viewportSize()?.width ?? 1440) <= 1180;
   const activeArticle = page.locator('article[data-document]:not([hidden])');
   const closedDetails = activeArticle.locator('details:not([open])').first();
   const wasClosed = await closedDetails.count().then(Boolean);
   const articles = page.locator('article[data-document]');
   const articleCount = await articles.count();
   const taskGuideCount = await articles.evaluateAll((elements) => elements.filter((article) => article.dataset.mode === 'tasks').length);
-  const printButton = page.getByRole('button', { name: 'Print' });
+  const printButton = page.locator('[data-print-trigger]');
+  const revealPrintButton = async () => {
+    if (compact && !await printButton.isVisible()) await page.getByRole('button', { name: 'Menu', exact: true }).click();
+    await expect(printButton).toBeVisible();
+  };
+  await revealPrintButton();
   await printButton.focus();
   await page.keyboard.press('ArrowDown');
   await expect(printButton).toHaveAttribute('aria-haspopup', 'dialog');
@@ -609,6 +759,7 @@ test('limits every print scope without mutating disclosures', async ({ page }) =
     ['Current mode', 'mode', taskGuideCount],
     ['Complete handbook', 'all', articleCount],
   ] as const) {
+    await revealPrintButton();
     await printButton.focus();
     await page.keyboard.press('ArrowDown');
     const option = page.getByRole('button', { name: buttonName, exact: true });
@@ -623,6 +774,7 @@ test('limits every print scope without mutating disclosures', async ({ page }) =
   }
 
   await page.emulateMedia({ media: 'screen' });
+  await revealPrintButton();
   await printButton.focus();
   await page.keyboard.press('ArrowDown');
   await page.getByRole('button', { name: 'Current guide', exact: true }).focus();
@@ -638,16 +790,32 @@ test('limits every print scope without mutating disclosures', async ({ page }) =
 });
 
 test('captures desktop, tablet, and mobile visual review evidence when requested', async ({ page }, testInfo) => {
+  test.setTimeout(90_000);
   if (process.env.HANDBOOK_CAPTURE !== '1' || !['desktop-1440', 'tablet-768', 'mobile-430', 'mobile-320'].includes(testInfo.project.name)) test.skip();
 
   const captureDir = fileURLToPath(new URL('../../../../outputs/handbook-visual-review/', import.meta.url));
   await mkdir(captureDir, { recursive: true });
   await page.goto('/#mode=tasks&guide=procurement-request-approval');
-  await expect(page.getByRole('region', { name: /workflow stages/i }).first()).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Task flow diagram' })).toBeVisible();
+  const compact = (page.viewportSize()?.width ?? 1440) <= 1180;
+  const toggleTheme = async () => {
+    if (compact) await page.getByRole('button', { name: 'Menu', exact: true }).click();
+    await page.getByRole('button', { name: 'Toggle color theme' }).click();
+    if (compact) await page.keyboard.press('Escape');
+  };
+  const settleDiagramViewport = async () => {
+    await page.getByRole('region', { name: 'Task flow diagram' }).evaluate((viewport) => {
+      viewport.scrollLeft = 0;
+      viewport.scrollTop = 0;
+    });
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  };
+  await settleDiagramViewport();
   await page.screenshot({ path: `${captureDir}${testInfo.project.name}-light.png`, fullPage: true });
-  await page.getByRole('button', { name: 'Toggle color theme' }).click();
+  await toggleTheme();
+  await settleDiagramViewport();
   await page.screenshot({ path: `${captureDir}${testInfo.project.name}-dark.png`, fullPage: true });
-  await page.getByRole('button', { name: 'Toggle color theme' }).click();
+  await toggleTheme();
   await page.evaluate(() => document.documentElement.dataset.printScope = 'guide');
   await page.emulateMedia({ media: 'print' });
   await page.screenshot({ path: `${captureDir}${testInfo.project.name}-print.png`, fullPage: true });
