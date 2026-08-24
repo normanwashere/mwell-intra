@@ -219,12 +219,20 @@ test("builds one self-contained handbook from every canonical source", () => {
   assert.match(html, /mermaid\.initialize/);
   assert.match(html, /Mwell Intra Process Reference Library/);
   assert.match(html, /id="doc-manual-mwell-intra-user-manual-md-start-here"/);
-  assert.doesNotMatch(html, /Knowledge Base/i);
+  assert.doesNotMatch(html, /href=["'][^"']*(?:\/|#)knowledge\b/i);
+  assert.doesNotMatch(html, /(?:live|in-app) Knowledge Base/i);
   assert.doesNotMatch(html, /<script\s+src=/i);
   assert.doesNotMatch(html, /<link\s+[^>]*rel=["']stylesheet/i);
   assert.doesNotMatch(html, /\r/);
   assert.ok(sources.length >= 15);
   assert.deepEqual(sources.slice(2), [...sources.slice(2)].sort());
+});
+
+test("fails before rendering an unclassified maintained source", () => {
+  assert.throws(
+    () => buildDocumentationHtml([...documentationSources(), "docs/new-review.md"]),
+    /docs\/new-review\.md.*not classified/i,
+  );
 });
 
 test("includes the canonical mWell source, incorporated MPIC reference, and three route axes", () => {

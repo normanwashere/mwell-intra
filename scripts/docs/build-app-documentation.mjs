@@ -324,19 +324,21 @@ function buildSearchIndex(documents) {
   });
 }
 
-export function buildDocumentationHtml() {
+export function buildDocumentationHtml(sourceFiles = documentationSources()) {
   const mermaidBundle = readFileSync(mermaidBundleFile, "utf8").replace(/[ \t]+$/gm, "");
   const styles = normalizeText(readFileSync(handbookStylesFile, "utf8")).replace(/[ \t]+$/gm, "");
   const runtime = normalizeText(readFileSync(handbookRuntimeFile, "utf8"))
     .replace(/[ \t]+$/gm, "")
     .replaceAll("</script", "<\\/script");
-  const sources = documentationSources();
+  const sources = sourceFiles;
   const sourceIds = new Map(sources.map((file) => [file, `doc-${slug(file.replace(/^docs\//, ""))}`]));
-  const { documents: catalogDocuments, warnings } = resolveHandbookCatalog(sources);
+  const { documents: catalogDocuments, errors } = resolveHandbookCatalog(sources);
+  if (errors.length) {
+    throw new Error(`Handbook source registry validation failed:\n${errors.join("\n")}`);
+  }
   const catalogBySource = new Map(catalogDocuments.map((document) => [document.source, document]));
   const sourceRoutes = new Map(catalogDocuments.map((document) => [document.source, document]));
   const tabById = new Map(HANDBOOK_TABS.map((tab) => [tab.id, tab]));
-  for (const warning of warnings) console.warn(warning);
   const documents = sources.map((file) => {
     const source = normalizeText(readFileSync(path.join(root, file), "utf8"));
     const catalog = catalogBySource.get(file);

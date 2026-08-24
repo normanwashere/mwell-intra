@@ -308,17 +308,20 @@ const CATALOG = [
     relatedSources: ["docs/WAREHOUSE_W1_RELEASE_EVIDENCE.md"],
   },
   {
-    source: "docs/releases/2026-08-22-MPIC-PROCUREMENT-POLICY-ALIGNMENT.md",
-    id: "mpic-procurement-policy-alignment-release",
+    source: "docs/releases/2026-08-23-CANONICAL-DEPARTMENT-AUTHORITY.md",
+    id: "canonical-department-authority-remediation-release",
     primaryTab: "release",
-    relatedTabs: ["workflows"],
+    relatedTabs: ["roles", "security"],
     contentType: "release-note",
     audience: ["release-reviewer", "control-owner", "operator"],
-    summary: "MPIC procurement policy alignment release evidence and activation notes.",
-    keywords: ["mpic", "procurement", "policy", "release"],
+    summary: "Canonical department authority remediation and release verification evidence.",
+    keywords: ["department", "authority", "doa", "remediation", "release"],
     sortOrder: 60,
     collapse: "reference",
-    relatedSources: ["docs/policy/MPIC_PROCUREMENT_POLICY_FEBRUARY_2025.md"],
+    relatedSources: [
+      "docs/TECHNICAL_AND_FUNCTIONAL_SPECIFICATION.md",
+      "docs/runbooks/UAT-LIVE-CERTIFICATION.md",
+    ],
   },
   {
     source: "docs/releases/2026-08-23-MWELL-CANONICAL-PROCUREMENT-POLICY-ALIGNMENT.md",
@@ -334,6 +337,22 @@ const CATALOG = [
     relatedSources: [
       "docs/policy/MWELL_CANONICAL_POLICY_ALIGNMENT.md",
       "docs/policy/VENDOR_TO_PAY_CONTROL_MATRIX.md",
+    ],
+  },
+  {
+    source: "docs/releases/2026-08-23-UAT-TRANSACTION-CERTIFICATION-REMEDIATION.md",
+    id: "uat-transaction-certification-remediation-release",
+    primaryTab: "release",
+    relatedTabs: ["workflows", "roles", "security"],
+    contentType: "release-note",
+    audience: ["release-reviewer", "control-owner", "operator", "tester"],
+    summary: "UAT transaction certification remediation, live evidence, and remaining launch conditions.",
+    keywords: ["uat", "transaction", "certification", "remediation", "release"],
+    sortOrder: 62,
+    collapse: "reference",
+    relatedSources: [
+      "docs/TECHNICAL_AND_FUNCTIONAL_SPECIFICATION.md",
+      "docs/runbooks/UAT-LIVE-CERTIFICATION.md",
     ],
   },
   {
@@ -381,26 +400,39 @@ export const HANDBOOK_DOCUMENTS = Object.freeze(CATALOG);
 
 export function resolveHandbookCatalog(sourceFiles) {
   const bySource = new Map(CATALOG.map((entry) => [entry.source, entry]));
-  const warnings = [];
-  const documents = sourceFiles.map((source, index) => {
+  const sourceCounts = new Map();
+  const catalogSourceCounts = new Map();
+  const catalogIdCounts = new Map();
+
+  for (const source of sourceFiles) {
+    sourceCounts.set(source, (sourceCounts.get(source) ?? 0) + 1);
+  }
+  for (const { source, id } of CATALOG) {
+    catalogSourceCounts.set(source, (catalogSourceCounts.get(source) ?? 0) + 1);
+    catalogIdCounts.set(id, (catalogIdCounts.get(id) ?? 0) + 1);
+  }
+
+  const errors = [
+    ...sourceFiles
+      .filter((source) => !bySource.has(source))
+      .map((source) => `Handbook source registry drift: ${source} is not classified. Add an explicit catalog entry before generating the handbook.`),
+    ...CATALOG
+      .filter(({ source }) => !sourceCounts.has(source))
+      .map(({ source, id }) => `Handbook source registry drift: ${source} is classified as ${id} but is missing from maintained documentation. Restore the source or remove its catalog entry.`),
+    ...[...sourceCounts]
+      .filter(([, count]) => count > 1)
+      .map(([source]) => `Handbook source registry drift: ${source} appears more than once in maintained documentation.`),
+    ...[...catalogSourceCounts]
+      .filter(([, count]) => count > 1)
+      .map(([source]) => `Handbook source registry drift: ${source} has duplicate catalog entries.`),
+    ...[...catalogIdCounts]
+      .filter(([, count]) => count > 1)
+      .map(([id]) => `Handbook source registry drift: catalog ID ${id} is duplicated.`),
+  ];
+  const documents = sourceFiles.flatMap((source) => {
     const entry = bySource.get(source);
     if (entry) return { ...entry };
-    warnings.push(`${source} is not classified; using Release & QA fallback.`);
-    return {
-      source,
-      id: `release-${source.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`,
-      primaryTab: "release",
-      relatedTabs: [],
-      contentType: "evidence",
-      audience: ["release-reviewer"],
-      summary: "Unclassified maintained source; classify this file in the handbook catalog.",
-      keywords: ["release", "unclassified"],
-      sortOrder: 9000 + index,
-      collapse: "reference",
-      relatedSources: [],
-    };
+    return [];
   });
-  const ids = documents.map(({ id }) => id);
-  if (new Set(ids).size !== ids.length) throw new Error("Handbook document IDs must be unique.");
-  return { documents, warnings };
+  return { documents, errors };
 }
