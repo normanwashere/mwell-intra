@@ -1,9 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { LEGACY_ROUTES } from "../docs/handbook-guides.mjs";
 import {
+  LEGACY_ROUTE_COUNT_DOCUMENTS,
   isOperationalSource,
+  validateLegacyRouteDocumentation,
   validateDocumentationSync,
 } from "./verify-release-documentation.mjs";
+
+const root = path.resolve(fileURLToPath(new URL("../../", import.meta.url)));
 
 test("classifies rendered application source but not tests or handbook content", () => {
   assert.equal(
@@ -50,4 +58,33 @@ test("accepts operational releases with the complete documentation set", () => {
     "docs/releases/2026-08-21-fulfillment.md",
   ]);
   assert.equal(result.ready, true);
+});
+
+test("derives the certified legacy-route count and rejects any declared count drift", () => {
+  assert.equal(LEGACY_ROUTES.length, 309);
+  const documents = Object.fromEntries(
+    LEGACY_ROUTE_COUNT_DOCUMENTS.map(({ file }) => [
+      file,
+      readFileSync(path.join(root, file), "utf8"),
+    ]),
+  );
+  const result = validateLegacyRouteDocumentation(documents);
+  assert.equal(result.expectedCount, LEGACY_ROUTES.length);
+  assert.equal(result.ready, true, result.failures.join("\n"));
+  assert.deepEqual(result.failures, []);
+});
+
+test("rejects a stale legacy-route declaration even when every document has a count", () => {
+  const documents = Object.fromEntries(
+    LEGACY_ROUTE_COUNT_DOCUMENTS.map(({ file, prefix, suffix }) => [
+      file,
+      `${prefix}${LEGACY_ROUTES.length}${suffix}`,
+    ]),
+  );
+  const staleDocument = LEGACY_ROUTE_COUNT_DOCUMENTS[0];
+  documents[staleDocument.file] = `${staleDocument.prefix}${LEGACY_ROUTES.length - 1}${staleDocument.suffix}`;
+
+  const result = validateLegacyRouteDocumentation(documents);
+  assert.equal(result.ready, false);
+  assert.match(result.failures.join("\n"), new RegExp(`${staleDocument.file}.*${LEGACY_ROUTES.length - 1}.*${LEGACY_ROUTES.length}`));
 });

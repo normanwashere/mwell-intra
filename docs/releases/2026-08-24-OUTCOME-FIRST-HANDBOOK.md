@@ -14,7 +14,7 @@ The certified source lineage begins with Task 7 evidence remediation at `27eb9b9
 
 - Four public modes: Home, Tasks, Roles, and System.
 - Canonical five-field route state: mode, guide, heading, query, and scope.
-- Exhaustive migration from all 307 maintained legacy tab, article, and heading routes.
+- Exhaustive migration from all 309 maintained legacy tab, article, and heading routes.
 - Separate governed source registry and user-facing guide model.
 - Typed, ranked search for tasks, steps, decisions, roles, troubleshooting, and System references.
 - One self-contained HTML artifact with embedded styles, runtime, Mermaid diagrams, search data, and responsive screenshots.
@@ -26,7 +26,7 @@ The certified source lineage begins with Task 7 evidence remediation at `27eb9b9
 - All 11 canonical role guides, including the Leadership / Insights read-only simulation at `/insights`.
 - All 48 decisions, 96 branches, and 27 terminal outcomes.
 - Governed source controls and every generated legacy deep link.
-- Search ranking and no-result recovery.
+- Search ranking and no-result recovery, including the eight literal first-use prompts at desktop 1440 and mobile 320 with the correct first-ranked title, match explanation, canonical destination, reload restoration, and zero serious or critical Axe findings.
 - Reload, per-guide position, Back, Forward, keyboard-only operation, and focus restoration.
 - Print scopes for current guide, current mode, and complete handbook.
 - Mermaid fit, zoom, overview, role-lane, and decision perspectives.

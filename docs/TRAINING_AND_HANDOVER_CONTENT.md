@@ -29,7 +29,7 @@ Do not train learners to browse source filenames first. Policy basis, capability
 
 ### Guided discovery drill
 
-Each learner must find a named task, role, and troubleshooting answer using Home or search in no more than three deliberate interactions. Search practice includes `receive stock`, `pick and pack`, `approve request`, `renew vendor`, `cycle count`, `report damaged item`, `reset password`, `three-way match`, and `DOA`. The learner must explain the result type, applicable role/module, match reason, and exact destination before opening it.
+Each learner must find a named task, role, and troubleshooting answer using Home or search in no more than three deliberate interactions. First-use certification uses these exact prompts without paraphrasing: `Receive and inspect a delivery.`, `Pick and pack an ecommerce order.`, `Submit a vendor accreditation application.`, `Create a purchase request.`, `Process an unknown returned serial.`, `Resolve an inventory variance.`, `Learn what an Operations Associate may do.`, and `Find the current infrastructure and recovery guidance.` Search practice also includes `receive stock`, `pick and pack`, `approve request`, `renew vendor`, `cycle count`, `report damaged item`, `reset password`, `three-way match`, and `DOA`. The learner must explain the first-ranked title, result type, applicable role/module, match reason, and exact destination before opening it.
 
 ### Role simulation drill
 
@@ -49,7 +49,7 @@ Use only screenshots from `docs/manual/assets/knowledge-base/` whose binding app
 
 ### Certified training baseline
 
-Training sign-off uses the Task 8 certified baseline: 13 task guides, 52 stage screenshots, 11 role simulations, 48 decisions, 96 branches, 27 terminal outcomes, and 307 migrated legacy links. The source-model unit trio passed 81 of 81 tests, strict evidence coverage and provenance produced zero warnings and zero errors, and CI attestation verified. Browser acceptance passed 116 tests with 100 project-conditional skips and zero failures across all eight responsive projects in 19.6 minutes. The 24 visual-review captures cover light, dark, and print at every certified width.
+Training sign-off uses the Task 8 certified baseline: 13 task guides, 52 stage screenshots, 11 role simulations, 48 decisions, 96 branches, 27 terminal outcomes, and 309 migrated legacy links. The source-model unit trio passed 81 of 81 tests, strict evidence coverage and provenance produced zero warnings and zero errors, and CI attestation verified. Browser acceptance passed 116 tests with 100 project-conditional skips and zero failures across all eight responsive projects in 19.6 minutes. The 24 visual-review captures cover light, dark, and print at every certified width.
 
 Trainers and handover reviewers must use `docs/manual/index.html` generated from the same 29-source set and may inspect `outputs/handbook-visual-review/` for the responsive evidence. Lint, typecheck, generated-documentation, and release-documentation gates passed. The release record retains the three unrelated existing Procurement lint warnings and the local Node/pnpm engine warning; neither warning changes the learner procedure or grants production approval.
 

@@ -44,7 +44,7 @@ Every maintained legacy `tab`, `article`, and heading deep link is generated int
 
 ### Search and discovery
 
-Search indexes Task, Step, Decision, Role, Troubleshooting, and System-reference records. Exact operational intent, action, and synonym matches rank before governance and release evidence for ordinary user queries. Results show type, role/module context, excerpt, match reason, and an exact same-document destination. Controlled no-result recovery offers common task terms, role browsing, and the System filter without leaving an empty panel.
+Search indexes Task, Step, Decision, Role, Troubleshooting, and System-reference records. Exact operational intent, action, and governed synonym matches rank before governance and release evidence for ordinary user queries. The controlled synonym model includes the eight literal first-use prompts for receiving, ecommerce fulfillment, vendor accreditation, purchase requests, unknown returned serials, inventory variance, Operations Associate authority, and infrastructure/recovery guidance. Results show type, role/module context, excerpt, match reason, and an exact same-document destination. Controlled no-result recovery offers common task terms, role browsing, and the System filter without leaving an empty panel.
 
 ### Responsive, accessibility, and print contract
 
@@ -70,7 +70,7 @@ The strict model rejects wrong hosts, routes, roles, targets, contexts, paths, h
 
 ### Task 8 certification result
 
-The final model contains 29 maintained sources, four public modes, 13 task guides with 52 stages, 11 role guides, 48 decisions, 96 branches, 27 terminal outcomes, and 307 legacy-route migrations. The unit trio passed 81 of 81 tests. Strict evidence coverage and provenance returned zero warnings and zero errors, and the independent CI attestation verified. The eight-project browser suite passed 116 tests with 100 project-conditional skips and zero failures in 19.6 minutes. Its 24 captures cover light, dark, and print at 1440, 1280, 1024, 768, 430, 390, 360, and 320 CSS pixels.
+The final model contains 29 maintained sources, four public modes, 13 task guides with 52 stages, 11 role guides, 48 decisions, 96 branches, 27 terminal outcomes, and 309 legacy-route migrations. The unit trio passed 81 of 81 tests. Strict evidence coverage and provenance returned zero warnings and zero errors, and the independent CI attestation verified. The eight-project browser suite passed 116 tests with 100 project-conditional skips and zero failures in 19.6 minutes. Its 24 captures cover light, dark, and print at 1440, 1280, 1024, 768, 430, 390, 360, and 320 CSS pixels.
 
 Repository verification passed: documentation build/check from all 29 sources, lint with 15 of 15 Turbo tasks and no errors, typecheck with 15 of 15 Turbo tasks, and release-documentation verification with no operational source changed. The three existing lint warnings are recorded by exact file and line in the release record. Local pnpm commands emitted the declared-engine warning because certification ran on Node `v20.18.1` and pnpm `9.15.9` while the repository requires Node 22 or newer and pnpm 10.
 

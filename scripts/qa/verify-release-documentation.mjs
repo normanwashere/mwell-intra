@@ -10,6 +10,7 @@ import {
 } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { LEGACY_ROUTES } from "../docs/handbook-guides.mjs";
 
 const root = path.resolve(fileURLToPath(new URL("../../", import.meta.url)));
 
@@ -20,6 +21,58 @@ export const REQUIRED_DOCUMENTS = [
   "docs/TRAINING_AND_HANDOVER_CONTENT.md",
   "docs/manual/index.html",
 ];
+
+export const LEGACY_ROUTE_COUNT_DOCUMENTS = [
+  {
+    file: "docs/releases/2026-08-24-OUTCOME-FIRST-HANDBOOK.md",
+    prefix: "Exhaustive migration from all ",
+    suffix: " maintained legacy tab, article, and heading routes",
+  },
+  {
+    file: "docs/TECHNICAL_AND_FUNCTIONAL_SPECIFICATION.md",
+    prefix: "and ",
+    suffix: " legacy-route migrations",
+  },
+  {
+    file: "docs/TRAINING_AND_HANDOVER_CONTENT.md",
+    prefix: "and ",
+    suffix: " migrated legacy links",
+  },
+];
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export function validateLegacyRouteDocumentation(documents, expectedCount = LEGACY_ROUTES.length) {
+  const failures = [];
+  for (const { file, prefix, suffix } of LEGACY_ROUTE_COUNT_DOCUMENTS) {
+    const contents = documents[file];
+    if (typeof contents !== "string") {
+      failures.push(`${file} is unavailable for legacy-route count verification.`);
+      continue;
+    }
+    const declaration = new RegExp(`${escapeRegExp(prefix)}(\\d+)${escapeRegExp(suffix)}`, "i").exec(contents);
+    if (!declaration) {
+      failures.push(`${file} does not declare its certified legacy-route count.`);
+      continue;
+    }
+    const declaredCount = Number(declaration[1]);
+    if (declaredCount !== expectedCount) {
+      failures.push(`${file} declares ${declaredCount} legacy routes; generated LEGACY_ROUTES contains ${expectedCount}.`);
+    }
+  }
+  return { ready: failures.length === 0, expectedCount, failures };
+}
+
+function readLegacyRouteCountDocuments() {
+  return Object.fromEntries(
+    LEGACY_ROUTE_COUNT_DOCUMENTS.map(({ file }) => [
+      file,
+      existsSync(path.join(root, file)) ? readFileSync(path.join(root, file), "utf8") : null,
+    ]),
+  );
+}
 
 function normalized(file) {
   return file.replaceAll("\\", "/");
@@ -161,19 +214,26 @@ export function runDocumentationVerification() {
   const base = resolveComparisonBase(argument("--base"));
   const files = changedFiles(base, head);
   const result = validateDocumentationSync(files);
+  const legacyRouteResult = validateLegacyRouteDocumentation(
+    readLegacyRouteCountDocuments(),
+  );
+  const failures = [...result.failures, ...legacyRouteResult.failures];
   const payload = {
     base,
     head: git("rev-parse", head),
     changedFiles: files,
     ...result,
+    ready: failures.length === 0,
+    failures,
+    legacyRouteCount: legacyRouteResult.expectedCount,
   };
 
   const manifest = argument("--manifest");
   if (manifest) writeManifest(manifest, payload, argument("--evidence-dir"));
 
-  if (!result.ready) {
+  if (failures.length > 0) {
     throw new Error(
-      `Release documentation is stale:\n- ${result.failures.join("\n- ")}`,
+      `Release documentation is stale:\n- ${failures.join("\n- ")}`,
     );
   }
 

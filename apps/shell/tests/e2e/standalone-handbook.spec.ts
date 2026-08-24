@@ -60,6 +60,73 @@ const operationalSearchCases = [
   ['cycle count variance', 'inventory-count-variance'],
 ] as const;
 
+const firstTimeUsabilityCases = [
+  {
+    prompt: 'Receive and inspect a delivery.',
+    modeId: 'tasks',
+    guideId: 'stock-receiving-putaway',
+    rankedTitle: 'Receive, inspect, and put away stock',
+    resultType: 'Task',
+    why: 'Task outcome, module, role, or keyword',
+  },
+  {
+    prompt: 'Pick and pack an ecommerce order.',
+    modeId: 'tasks',
+    guideId: 'ecommerce-fulfillment-delivery',
+    rankedTitle: 'Pick, pack, dispatch, and confirm delivery',
+    resultType: 'Task',
+    why: 'Task outcome, module, role, or keyword',
+  },
+  {
+    prompt: 'Submit a vendor accreditation application.',
+    modeId: 'tasks',
+    guideId: 'vendor-accreditation-renewal',
+    rankedTitle: 'Accredit or renew a vendor',
+    resultType: 'Task',
+    why: 'Task outcome, module, role, or keyword',
+  },
+  {
+    prompt: 'Create a purchase request.',
+    modeId: 'tasks',
+    guideId: 'procurement-request-approval',
+    rankedTitle: 'Create and approve a procurement request',
+    resultType: 'Task',
+    why: 'Task outcome, module, role, or keyword',
+  },
+  {
+    prompt: 'Process an unknown returned serial.',
+    modeId: 'tasks',
+    guideId: 'returns-replacements-refunds-rma',
+    rankedTitle: 'Process a return, replacement, refund, or supplier RMA',
+    resultType: 'Task',
+    why: 'Task outcome, module, role, or keyword',
+  },
+  {
+    prompt: 'Resolve an inventory variance.',
+    modeId: 'tasks',
+    guideId: 'inventory-count-variance',
+    rankedTitle: 'Count inventory and resolve a variance',
+    resultType: 'Task',
+    why: 'Task outcome, module, role, or keyword',
+  },
+  {
+    prompt: 'Learn what an Operations Associate may do.',
+    modeId: 'roles',
+    guideId: 'operations_associate',
+    rankedTitle: 'Operations Associate',
+    resultType: 'Role',
+    why: 'Role name, alias, module, or permitted work',
+  },
+  {
+    prompt: 'Find the current infrastructure and recovery guidance.',
+    modeId: 'system',
+    guideId: 'infrastructure-continuity',
+    rankedTitle: 'Infrastructure and continuity',
+    resultType: 'System reference',
+    why: 'System responsibility, audience, or keyword',
+  },
+] as const;
+
 const canonicalTaskGuides = [
   ['procurement-request-approval', 4, 1],
   ['vendor-accreditation-renewal', 4, 1],
@@ -269,9 +336,54 @@ test('every legacy deep link migrates to an existing canonical destination', asy
     return { count: routes.length, failures };
   });
 
-  expect(failures.count).toBeGreaterThanOrEqual(283);
+  expect(failures.count).toBe(309);
   expect(failures.failures).toEqual([]);
   await expect(page.locator('#route-notice')).toContainText(/link has moved/i);
+});
+
+test('all exact first-time prompts reach their correct first-ranked guide within three interactions', async ({ page }, testInfo) => {
+  test.setTimeout(180_000);
+  if (!['desktop-1440', 'mobile-320'].includes(testInfo.project.name)) test.skip();
+
+  for (const searchCase of firstTimeUsabilityCases) {
+    await page.goto('/#mode=home&guide=home');
+    await page.evaluate(() => localStorage.clear());
+    await page.reload();
+    await expect(page).toHaveURL(/#mode=home&guide=home$/);
+
+    let deliberateInteractions = 0;
+    const searchbox = page.getByRole('searchbox');
+    await searchbox.fill(searchCase.prompt);
+    deliberateInteractions += 1;
+
+    const firstResult = page.locator('#search-results [data-search-result]').first();
+    await expect(firstResult, `${searchCase.prompt} should return a first-ranked result`).toBeVisible();
+    await expect(firstResult).toHaveAttribute('data-guide-id', searchCase.guideId);
+    await expect(firstResult).toHaveAttribute('data-mode', searchCase.modeId);
+    await expect(firstResult).toHaveAttribute('data-result-type', searchCase.resultType);
+    await expect(firstResult.locator('.search-result-location')).toHaveText(new RegExp(` / ${searchCase.rankedTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`));
+    await expect(firstResult.locator('.search-result-context')).not.toHaveText('');
+    await expect(firstResult.locator('.search-result-reason')).toContainText(`Matched ${searchCase.prompt}: ${searchCase.why}`);
+    await expect(firstResult).toHaveAttribute('href', new RegExp(`^#mode=${searchCase.modeId}&guide=${searchCase.guideId}&heading=[^&]+&q=`));
+
+    await firstResult.click();
+    deliberateInteractions += 1;
+    expect(deliberateInteractions).toBeLessThanOrEqual(3);
+    await expect(page).toHaveURL(new RegExp(`#mode=${searchCase.modeId}&guide=${searchCase.guideId}&heading=[^&]+&q=`));
+    await expect(page.locator(`[data-guide][data-guide-id="${searchCase.guideId}"]`)).toHaveCount(1);
+
+    const destinationUrl = page.url();
+    await page.reload();
+    await expect(page).toHaveURL(destinationUrl);
+    await expect(page.getByRole('searchbox')).toHaveValue(searchCase.prompt);
+    await expect(page.locator('#search-results [data-search-result]').first()).toHaveAttribute('data-guide-id', searchCase.guideId);
+
+    const accessibility = await new AxeBuilder({ page }).analyze();
+    expect(
+      accessibility.violations.filter(({ impact }) => impact === 'critical' || impact === 'serious'),
+      `${testInfo.project.name}: ${searchCase.prompt} must have no serious or critical Axe violations`,
+    ).toEqual([]);
+  }
 });
 
 test('search certifies operational answers and canonical destinations', async ({ page }) => {

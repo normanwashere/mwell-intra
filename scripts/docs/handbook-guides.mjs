@@ -186,6 +186,7 @@ const TASK_DEFINITIONS = [
     evidence: ["Request identifier", "Approval decisions", "Attachments and route evidence"],
     related: ["vendor-accreditation-renewal", "department-doa-activation", "stock-receiving-putaway", "finance-readiness-evidence"],
     keywords: ["procurement", "request", "approval", "route", "purchase order"],
+    searchSynonyms: ["Create a purchase request."],
     sources: [
       section("procure-to-payment", "docs/manual/MWELL_INTRA_USER_MANUAL.md", "Procurement to Payment"),
       section("procurement-policy-extract", "docs/PROCESS_REFERENCE_LIBRARY.md", "Procurement Policy Operating Extract", "policy-basis"),
@@ -216,6 +217,7 @@ const TASK_DEFINITIONS = [
     evidence: ["Case identifier", "Submitted files and declarations", "Reviewer decision and validity dates"],
     related: ["procurement-request-approval"],
     keywords: ["vendor", "accreditation", "renewal", "legal", "compliance"],
+    searchSynonyms: ["Submit a vendor accreditation application."],
     sources: [
       section("vendor-accreditation", "docs/manual/MWELL_INTRA_USER_MANUAL.md", "Vendor Accreditation"),
       section("vendor-operating-extract", "docs/PROCESS_REFERENCE_LIBRARY.md", "LGL004 Vendor Accreditation Operating Extract", "policy-basis"),
@@ -271,6 +273,7 @@ const TASK_DEFINITIONS = [
     evidence: ["Receipt identifier", "Inspection result", "Movement ledger entry", "Putaway destination"],
     related: ["warehouse-location-bin-setup", "returns-replacements-refunds-rma", "inventory-count-variance"],
     keywords: ["warehouse", "receive", "inspect", "putaway", "quality"],
+    searchSynonyms: ["Receive and inspect a delivery."],
     sources: [
       section("receiving-putaway", "docs/manual/MWELL_INTRA_USER_MANUAL.md", "Receiving and Putaway"),
       section("receiving-contract", "docs/TECHNICAL_AND_FUNCTIONAL_SPECIFICATION.md", "Receiving", "system-record"),
@@ -327,6 +330,7 @@ const TASK_DEFINITIONS = [
     evidence: ["Pick and pack records", "Dispatch record", "Delivery confirmation or failure reason"],
     related: ["ecommerce-order-intake", "returns-replacements-refunds-rma"],
     keywords: ["pick", "pack", "dispatch", "delivery", "ecommerce"],
+    searchSynonyms: ["Pick and pack an ecommerce order."],
     sources: [
       section("pick-pack-dispatch", "docs/TECHNICAL_AND_FUNCTIONAL_SPECIFICATION.md", "Pick, pack, and dispatch"),
       section("fulfillment-drill", "docs/USER_TRAINING_AND_OPERATIONS_MANUAL.md", "Ecommerce Fulfillment Drill", "role-summary"),
@@ -352,6 +356,7 @@ const TASK_DEFINITIONS = [
     evidence: ["Return identifier", "Original release link", "Inspection", "Disposition and financial evidence"],
     related: ["ecommerce-fulfillment-delivery", "stock-receiving-putaway"],
     keywords: ["return", "replacement", "refund", "RMA", "reconcile"],
+    searchSynonyms: ["Process an unknown returned serial."],
     sources: [
       section("returns-replacements", "docs/manual/MWELL_INTRA_USER_MANUAL.md", "Returns and Replacements"),
       section("returns-contract", "docs/TECHNICAL_AND_FUNCTIONAL_SPECIFICATION.md", "Returns", "system-record"),
@@ -428,6 +433,7 @@ const TASK_DEFINITIONS = [
     evidence: ["Count record", "Observed quantities", "Decision", "Movement ledger entry"],
     related: ["stock-receiving-putaway", "department-inventory-release", "event-stock-custody", "finance-readiness-evidence"],
     keywords: ["inventory", "count", "variance", "recount", "adjustment"],
+    searchSynonyms: ["Resolve an inventory variance."],
     sources: [
       section("inventory-integrity", "docs/manual/MWELL_INTRA_USER_MANUAL.md", "Inventory Integrity"),
       section("counts-adjustments", "docs/manual/MWELL_INTRA_USER_MANUAL.md", "Counts and Adjustments"),
@@ -814,7 +820,7 @@ function taskGuide(definition) {
     governingSources: unique(definition.sources.map(({ source }) => source)),
     relatedTasks: definition.related.filter((id) => id !== "imports"),
     relatedGuides: definition.related,
-    keywords: definition.keywords,
+    keywords: unique([...definition.keywords, ...(definition.searchSynonyms ?? [])]),
     owner: OWNER,
     effectiveDate: EFFECTIVE_DATE,
     lastReviewedDate: EFFECTIVE_DATE,
@@ -859,6 +865,7 @@ const ROLE_DEFINITIONS = [
   },
   {
     id: "operations_associate", name: "Operations Associate", aliases: ["Warehouse Operator"],
+    searchSynonyms: ["Learn what an Operations Associate may do."],
     purpose: "Execute physical warehouse transactions and preserve accurate custody and ledger evidence.", department: "Operations, Warehouse and Logistics; operator scope.", owner: "Operations Lead",
     access: ["Warehouse operator workspace"], queue: ["Inbound receipts", "Fulfillment", "Counts", "Allocations, events, and returns"],
     tasks: ["warehouse-location-bin-setup", "stock-receiving-putaway", "ecommerce-order-intake", "ecommerce-fulfillment-delivery", "returns-replacements-refunds-rma", "event-stock-custody", "inventory-count-variance"],
@@ -1051,7 +1058,7 @@ function roleGuide(definition) {
     sourceSections: ROLE_SOURCE_SECTIONS,
     screenshotReferences: [],
     sections: guideSections(ROLE_SECTION_IDS),
-    keywords: unique([definition.name, ...definition.aliases, ...definition.tasks]),
+    keywords: unique([definition.name, ...definition.aliases, ...definition.tasks, ...(definition.searchSynonyms ?? [])]),
   };
 }
 
@@ -1149,6 +1156,7 @@ const SYSTEM_GUIDES = [
       section("policy-rollback", "docs/runbooks/POLICY-ALIGNMENT-CUTOVER.md", "Rollback"),
     ],
     keywords: ["infrastructure", "migration", "cutover", "rollback", "hypercare"],
+    searchSynonyms: ["Find the current infrastructure and recovery guidance."],
   },
   {
     id: "security-governance",
@@ -1224,7 +1232,7 @@ function systemGuide(definition) {
     sourceSections: definition.sources,
     governingSources: unique(definition.sources.map(({ source }) => source)),
     screenshotReferences: [],
-    keywords: definition.keywords,
+    keywords: unique([...definition.keywords, ...(definition.searchSynonyms ?? [])]),
     owner: OWNER,
     effectiveDate: EFFECTIVE_DATE,
     lastReviewedDate: EFFECTIVE_DATE,
