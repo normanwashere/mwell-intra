@@ -6,6 +6,7 @@
     const search = document.querySelector('#search');
     const searchResults = document.querySelector('#search-results');
     const searchScopeButtons = [...document.querySelectorAll('[data-search-scope]')];
+    const currentModeLabel = document.querySelector('[data-current-mode-label]');
     const empty = document.querySelector('#empty');
     const noResultSystemLink = document.querySelector('[data-no-result-system]');
     const count = document.querySelector('#result-count');
@@ -542,9 +543,23 @@
         : guide?.querySelector('h1');
       if (!target) return;
       target.tabIndex = -1;
-      target.scrollIntoView({ block: 'start', behavior: 'auto' });
-      target.focus({ preventScroll: true });
-      positionTargetBelowStickyChrome(target);
+      const scrollTarget = route.headingId ? target : (guide?.querySelector('.article-header') || guide);
+      withoutSmoothScroll(() => {
+        scrollTarget.scrollIntoView({ block: 'start', behavior: 'auto' });
+        target.focus({ preventScroll: true });
+        positionTargetBelowStickyChrome(scrollTarget);
+      });
+    }
+
+    function withoutSmoothScroll(action) {
+      const root = document.documentElement;
+      const previousScrollBehavior = root.style.scrollBehavior;
+      root.style.scrollBehavior = 'auto';
+      try {
+        action();
+      } finally {
+        root.style.scrollBehavior = previousScrollBehavior;
+      }
     }
 
     function visibleStickyChromeBottom(target) {
@@ -595,6 +610,7 @@
       const guide = guides.find((candidate) => candidate.dataset.guideId === guideId) || null;
       const article = guide?.matches('article[data-document]') ? guide : null;
       activeRoute = { modeId, guideId: guide?.dataset.guideId || null, headingId: headingId || null, query: String(query || '').trim(), scope: scope === 'mode' || scope === 'tab' ? 'mode' : 'all' };
+      if (currentModeLabel) currentModeLabel.textContent = tabs.find((tab) => tab.dataset.mode === activeRoute.modeId)?.textContent?.trim() || 'Home';
       search.value = activeRoute.query;
       searchScopeButtons.forEach((button) => button.setAttribute('aria-pressed', String((button.dataset.searchScope === 'tab' ? 'mode' : button.dataset.searchScope) === activeRoute.scope)));
       applyPrintScope(printScope);
@@ -620,7 +636,7 @@
     function restoreStoredPosition(route) {
       const heading = route.headingId ? document.getElementById(`${route.guideId}-${route.headingId}`) : null;
       if (heading) { openContainingDisclosure(heading); focusRouteTarget(route); return; }
-      window.scrollTo({ left: 0, top: guideScroll[route.guideId] || 0, behavior: 'auto' });
+      withoutSmoothScroll(() => window.scrollTo({ left: 0, top: guideScroll[route.guideId] || 0, behavior: 'auto' }));
     }
 
     function activateLinkedRoute(link, restoreScroll) {
@@ -662,18 +678,29 @@
       const availableWidth = Math.max(1, viewport.clientWidth - 48);
       const availableHeight = Math.max(1, viewport.clientHeight - 48);
       const resolvedScale = scale === 'fit'
-        ? Math.min(1.8, Math.max(.6, Math.min(availableWidth / width, availableHeight / height)))
-        : Math.min(1.8, Math.max(.6, scale));
+        ? Math.min(1.8, availableWidth / width, availableHeight / height)
+        : Math.min(1.8, Math.max(.25, scale));
+      const scaledWidth = width * resolvedScale;
+      const scaledHeight = height * resolvedScale;
+      const canvasWidth = Math.max(viewport.clientWidth, Math.ceil(scaledWidth + 48));
+      const canvasHeight = Math.max(viewport.clientHeight, Math.ceil(scaledHeight + 48));
+      const offsetX = Math.max(24, (canvasWidth - scaledWidth) / 2);
+      const offsetY = Math.max(24, (canvasHeight - scaledHeight) / 2);
       shell.dataset.diagramScale = scale === 'fit' ? 'fit' : String(resolvedScale);
       shell.dataset.diagramRenderedScale = String(resolvedScale);
-      canvas.style.width = `${Math.ceil(width * resolvedScale + 48)}px`;
-      canvas.style.height = `${Math.ceil(height * resolvedScale + 48)}px`;
+      canvas.style.width = `${canvasWidth}px`;
+      canvas.style.height = `${canvasHeight}px`;
       diagram.style.width = `${width}px`;
       diagram.style.height = `${height}px`;
-      diagram.style.transform = `translate(24px, 24px) scale(${resolvedScale})`;
+      diagram.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${resolvedScale})`;
       svg.style.width = `${width}px`;
       svg.style.height = `${height}px`;
       svg.style.maxWidth = 'none';
+      if (scale === 'fit') {
+        viewport.scrollLeft = 0;
+        viewport.scrollTop = 0;
+        diagramViews = { ...diagramViews, [shell.dataset.diagramId]: { left: 0, top: 0 } };
+      }
       return true;
     }
 
@@ -689,10 +716,11 @@
       document.querySelectorAll('.diagram-shell[data-diagram-id]').forEach((shell) => {
         if (shell.closest('[hidden]')) return;
         const id = shell.dataset.diagramId;
-        if (!applyDiagramZoom(shell, diagramZoom[id] || 'fit')) return;
+        const scale = diagramZoom[id] || 'fit';
+        if (!applyDiagramZoom(shell, scale)) return;
         const view = diagramViews[id];
         const viewport = shell.querySelector('[data-diagram-viewport]');
-        if (view) { viewport.scrollLeft = view.left; viewport.scrollTop = view.top; }
+        if (scale !== 'fit' && view) { viewport.scrollLeft = view.left; viewport.scrollTop = view.top; }
       });
     }
 
@@ -804,7 +832,7 @@
       const id = shell.dataset.diagramId; const viewport = shell.querySelector('[data-diagram-viewport]'); let scale = diagramZoom[id] || 'fit';
       viewport.addEventListener('scroll', () => { diagramViews = { ...diagramViews, [id]: { left: viewport.scrollLeft, top: viewport.scrollTop } }; schedulePersistence(); });
       shell.querySelector('[data-diagram-fit]')?.addEventListener('click', () => { scale = 'fit'; diagramZoom = { ...diagramZoom, [id]: scale }; applyDiagramZoom(shell, scale); schedulePersistence(); });
-      shell.querySelectorAll('[data-diagram-zoom]').forEach((button) => button.addEventListener('click', () => { const action = button.dataset.diagramZoom; const current = typeof scale === 'number' ? scale : 1; scale = action === 'reset' ? 1 : Math.min(1.8, Math.max(.6, current + (action === 'in' ? .1 : -.1))); diagramZoom = { ...diagramZoom, [id]: scale }; applyDiagramZoom(shell, scale); schedulePersistence(); }));
+      shell.querySelectorAll('[data-diagram-zoom]').forEach((button) => button.addEventListener('click', () => { const action = button.dataset.diagramZoom; const current = typeof scale === 'number' ? scale : 1; scale = action === 'reset' ? 1 : Math.min(1.8, Math.max(.25, current + (action === 'in' ? .1 : -.1))); diagramZoom = { ...diagramZoom, [id]: scale }; applyDiagramZoom(shell, scale); schedulePersistence(); }));
     });
     const restoreMermaidLayout = prepareMermaidLayout();
     mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'base', flowchart: { htmlLabels: true, useMaxWidth: true }, themeVariables: { primaryColor: '#e7f2fb', primaryTextColor: '#17233b', primaryBorderColor: '#0875bd', lineColor: '#506681', secondaryColor: '#e8faf5', tertiaryColor: '#fff4e8', fontFamily: 'Inter, Segoe UI, Arial, sans-serif' } });

@@ -22,6 +22,24 @@ async function expectFocusedBelowStickyChrome(target: Locator) {
   expect(metrics.targetTop, `target must clear sticky chrome ending at ${metrics.occlusionBottom}px`).toBeGreaterThanOrEqual(metrics.occlusionBottom + 12);
 }
 
+async function expectTouchSafeGroup(controls: Locator[], label: string) {
+  const boxes = await Promise.all(controls.map(async (control, index) => {
+    await expect(control, `${label} control ${index + 1} must be visible`).toBeVisible();
+    const box = await control.boundingBox();
+    expect(box, `${label} control ${index + 1} needs a rendered touch target`).not.toBeNull();
+    expect(box?.width, `${label} control ${index + 1} width`).toBeGreaterThanOrEqual(44);
+    expect(box?.height, `${label} control ${index + 1} height`).toBeGreaterThanOrEqual(44);
+    return box!;
+  }));
+  for (let index = 1; index < boxes.length; index += 1) {
+    const previous = boxes[index - 1];
+    const current = boxes[index];
+    const horizontalGap = Math.max(0, Math.max(previous.x, current.x) - Math.min(previous.x + previous.width, current.x + current.width));
+    const verticalGap = Math.max(0, Math.max(previous.y, current.y) - Math.min(previous.y + previous.height, current.y + current.height));
+    expect(horizontalGap >= 6 || verticalGap >= 6, `${label} adjacent controls need a 6px gap`).toBe(true);
+  }
+}
+
 const operationalSearchCases = [
   ['three-way match', 'finance-readiness-evidence'],
   ['approve request', 'procurement-request-approval'],
@@ -376,6 +394,13 @@ test('navigates canonical and legacy routes, restores per-guide state, and recov
   await expect(page).toHaveURL(relatedUrl);
   await page.goBack();
   await expect(page).toHaveURL(/#mode=tasks&guide=stock-receiving-putaway$/);
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(300);
+  await expect.poll(async () => {
+    const before = await page.evaluate(() => window.scrollY);
+    await page.waitForTimeout(100);
+    const after = await page.evaluate(() => window.scrollY);
+    return Math.abs(after - before);
+  }).toBeLessThan(2);
   const scrollBeforeLifecycle = await page.evaluate(() => window.scrollY);
   const lifecyclePage = await page.context().newPage();
   await lifecyclePage.goto('about:blank');
@@ -399,6 +424,7 @@ test('navigates canonical and legacy routes, restores per-guide state, and recov
   await page.goto('/#foo=bar');
   await expect(page).toHaveURL(/#mode=home&guide=home$/);
   await expect(page.locator('#route-notice')).toContainText(/could not find/i);
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('mwell-intra-handbook:v3') ?? '{}').activeRoute)).toMatchObject({ modeId: 'home', guideId: 'home' });
   await page.goto('/');
   await expect(page).toHaveURL(/#mode=home&guide=home$/);
   await expect(page.locator('#route-notice')).toBeHidden();
@@ -454,6 +480,120 @@ test('restores v3 query scope and representative diagram state', async ({ page }
   await expect(diagram).toBeVisible();
   await expect(diagram).toHaveAttribute('data-diagram-rendered-scale', '1.2');
   await expect.poll(() => diagram.locator('[data-diagram-viewport]').evaluate((viewport) => ({ left: viewport.scrollLeft, top: viewport.scrollTop }))).toEqual({ left: 24, top: 18 });
+});
+
+test('keeps the current mode label synchronized across activation history recovery and restore', async ({ page }, testInfo) => {
+  if (testInfo.project.name !== 'desktop-1440') test.skip();
+  const label = page.locator('[data-current-mode-label]');
+
+  await page.goto('/#mode=home&guide=home');
+  await expect(label).toHaveText('Home');
+  await page.getByRole('tab', { name: 'Tasks', exact: true }).click();
+  await expect(label).toHaveText('Tasks');
+  await page.getByRole('button', { name: 'This mode', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'This mode', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(label).toHaveText('Tasks');
+  await page.getByRole('tab', { name: 'Roles', exact: true }).click();
+  await expect(label).toHaveText('Roles');
+  await page.getByRole('tab', { name: 'System', exact: true }).click();
+  await expect(label).toHaveText('System');
+  await page.goBack();
+  await expect(label).toHaveText('Roles');
+  await page.goForward();
+  await expect(label).toHaveText('System');
+
+  await page.goto('/#mode=missing&guide=missing');
+  await expect(label).toHaveText('Home');
+  await page.evaluate(() => {
+    localStorage.setItem('mwell-intra-handbook:v3', JSON.stringify({
+      activeRoute: { modeId: 'roles', guideId: 'operations_associate', headingId: null, query: '', scope: 'mode' },
+      recentGuides: [], guideScroll: {}, disclosures: {}, diagramViews: {}, diagramZoom: {}, diagramModes: {}, theme: 'light',
+    }));
+    history.replaceState({}, '', location.pathname);
+  });
+  await page.reload();
+  await expect(label).toHaveText('Roles');
+  await expect(page.getByRole('button', { name: 'This mode', exact: true })).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('fits visible Mermaid content inside its viewport and preserves dark contrast', async ({ page }, testInfo) => {
+  if (!['desktop-1440', 'tablet-768', 'mobile-430', 'mobile-320'].includes(testInfo.project.name)) test.skip();
+  await page.goto('/#mode=tasks&guide=procurement-request-approval');
+  const shell = page.locator('article[data-guide-id="procurement-request-approval"] .diagram-shell').first();
+  await expect(shell).toHaveAttribute('data-diagram-scale', 'fit');
+
+  const diagramMetrics = async () => shell.evaluate((element) => {
+    const viewport = element.querySelector('[data-diagram-viewport]') as HTMLElement;
+    const diagram = element.querySelector('.mermaid') as HTMLElement;
+    const svg = element.querySelector('svg') as SVGSVGElement;
+    const viewportRect = viewport.getBoundingClientRect();
+    const diagramRect = diagram.getBoundingClientRect();
+    const intersectionArea = (first: DOMRect, second: DOMRect) => Math.max(0, Math.min(first.right, second.right) - Math.max(first.left, second.left))
+      * Math.max(0, Math.min(first.bottom, second.bottom) - Math.max(first.top, second.top));
+    const visibleElements = (selector: string) => [...svg.querySelectorAll(selector)].filter((candidate) => {
+      const rect = candidate.getBoundingClientRect();
+      const style = getComputedStyle(candidate);
+      return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.opacity !== '0' && intersectionArea(rect, viewportRect) > 1;
+    });
+    return {
+      viewport: { left: viewportRect.left, top: viewportRect.top, right: viewportRect.right, bottom: viewportRect.bottom },
+      diagram: { left: diagramRect.left, top: diagramRect.top, right: diagramRect.right, bottom: diagramRect.bottom, width: diagramRect.width, height: diagramRect.height },
+      scroll: { left: viewport.scrollLeft, top: viewport.scrollTop },
+      visibleLabels: visibleElements('text, foreignObject').length,
+      visibleNodes: visibleElements('.node').length,
+      svgIntersection: intersectionArea(svg.getBoundingClientRect(), viewportRect),
+    };
+  });
+  const assertFit = async () => {
+    const metrics = await diagramMetrics();
+    expect(metrics.diagram.left).toBeGreaterThanOrEqual(metrics.viewport.left - 1);
+    expect(metrics.diagram.top).toBeGreaterThanOrEqual(metrics.viewport.top - 1);
+    expect(metrics.diagram.right).toBeLessThanOrEqual(metrics.viewport.right + 1);
+    expect(metrics.diagram.bottom).toBeLessThanOrEqual(metrics.viewport.bottom + 1);
+    expect(Math.abs((metrics.diagram.left + metrics.diagram.right) / 2 - (metrics.viewport.left + metrics.viewport.right) / 2)).toBeLessThanOrEqual(10);
+    expect(Math.abs((metrics.diagram.top + metrics.diagram.bottom) / 2 - (metrics.viewport.top + metrics.viewport.bottom) / 2)).toBeLessThanOrEqual(10);
+    expect(metrics.diagram.width).toBeGreaterThan(40);
+    expect(metrics.diagram.height).toBeGreaterThan(40);
+    expect(metrics.scroll).toEqual({ left: 0, top: 0 });
+    expect(metrics.visibleLabels).toBeGreaterThanOrEqual(4);
+    expect(metrics.visibleNodes).toBeGreaterThanOrEqual(4);
+    expect(metrics.svgIntersection).toBeGreaterThan(1_000);
+  };
+
+  await assertFit();
+  const compact = (page.viewportSize()?.width ?? 1440) <= 1180;
+  if (compact) await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  await page.getByRole('button', { name: 'Toggle color theme' }).click();
+  if (compact) await page.keyboard.press('Escape');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await assertFit();
+
+  const contrast = await shell.evaluate((element) => {
+    const parse = (value: string) => (value.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number);
+    const luminance = ([red, green, blue]: number[]) => [red, green, blue].map((channel) => {
+      const normalized = channel / 255;
+      return normalized <= 0.03928 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4;
+    }).reduce((sum, channel, index) => sum + channel * [0.2126, 0.7152, 0.0722][index], 0);
+    const ratio = (foreground: string, background: string) => {
+      const first = luminance(parse(foreground));
+      const second = luminance(parse(background));
+      return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05);
+    };
+    const controls = [...element.querySelectorAll('.diagram-toolbar button, figcaption')].map((control) => {
+      const style = getComputedStyle(control);
+      return ratio(style.color, style.backgroundColor);
+    });
+    const node = element.querySelector('.node');
+    const nodeLabel = node?.querySelector('.nodeLabel') as HTMLElement | null;
+    const nodeShape = node?.querySelector('rect, polygon, path') as SVGElement | null;
+    return {
+      controls,
+      nodeLabelContrast: nodeLabel && nodeShape ? ratio(getComputedStyle(nodeLabel).color, getComputedStyle(nodeShape).fill) : 0,
+    };
+  });
+  expect(contrast.controls.length).toBeGreaterThanOrEqual(5);
+  expect(Math.min(...contrast.controls)).toBeGreaterThanOrEqual(4.5);
+  expect(contrast.nodeLabelContrast).toBeGreaterThanOrEqual(4.5);
 });
 
 test('never creates page-level horizontal overflow', async ({ page }) => {
@@ -563,7 +703,7 @@ test('keeps every mobile toolbar control touch-safe', async ({ page }, testInfo)
   await page.goto('/#mode=tasks&guide=stock-receiving-putaway');
   await page.getByRole('button', { name: 'Menu', exact: true }).click();
   const viewportWidth = page.viewportSize()?.width ?? 0;
-  const controls = await Promise.all(['Close menu', 'Home', 'Tasks', 'Roles', 'System', 'Toggle color theme', 'Print'].map(async (name) => {
+  const controls = await Promise.all(['Close menu', 'Home', 'Tasks', 'Roles', 'System', 'Toggle color theme', 'Print', 'This mode', 'All guides'].map(async (name) => {
     const control = name === 'Home' || name === 'Tasks' || name === 'Roles' || name === 'System'
       ? page.getByRole('tab', { name, exact: true })
       : page.getByRole('button', { name, exact: true });
@@ -585,6 +725,26 @@ test('keeps every mobile toolbar control touch-safe', async ({ page }, testInfo)
       expect(horizontalGap >= 6 || verticalGap >= 6, 'toolbar controls need a usable gap').toBe(true);
     }
   }
+
+  await page.keyboard.press('Escape');
+  await expectTouchSafeGroup([
+    page.getByRole('link', { name: 'Steps', exact: true }),
+    page.getByRole('button', { name: 'In this guide', exact: true }),
+  ], 'guide jump');
+  await expectTouchSafeGroup([
+    page.getByRole('button', { name: 'Fit diagram to available space' }),
+    page.getByRole('button', { name: 'Show diagram at 100 percent' }),
+    page.getByRole('button', { name: 'Zoom diagram out' }),
+    page.getByRole('button', { name: 'Zoom diagram in' }),
+  ], 'diagram toolbar');
+
+  await page.goto('/#mode=system&guide=source-references&heading=source-user-manual');
+  const workflow = page.locator('[data-workflow-id="procurement-to-payment"]').first();
+  await expectTouchSafeGroup([
+    workflow.getByRole('button', { name: 'Overview', exact: true }),
+    workflow.getByRole('button', { name: 'By role', exact: true }),
+    workflow.getByRole('button', { name: 'Decisions', exact: true }),
+  ], 'diagram perspective');
 });
 
 test('mobile task controls expose stable stage navigation without covering content', async ({ page }, testInfo) => {
@@ -592,8 +752,35 @@ test('mobile task controls expose stable stage navigation without covering conte
   await page.goto('/#mode=tasks&guide=stock-receiving-putaway');
 
   const guideControls = page.locator('article[data-guide-id="stock-receiving-putaway"] .guide-jump-controls');
+  const guideHeader = page.locator('article[data-guide-id="stock-receiving-putaway"] .article-header');
+  const category = guideHeader.locator('.category');
+  const title = guideHeader.locator('h1');
+  await expect(title).toBeFocused();
   await expect(guideControls.getByRole('link', { name: 'Steps', exact: true })).toBeVisible();
   await expect(guideControls.getByRole('button', { name: 'In this guide', exact: true })).toBeVisible();
+  const guideGeometry = await page.evaluate(() => {
+    const header = document.querySelector('article[data-guide-id="stock-receiving-putaway"] .article-header') as HTMLElement;
+    const badge = header.querySelector('.category') as HTMLElement;
+    const heading = header.querySelector('h1') as HTMLElement;
+    const jumps = header.parentElement?.querySelector('.guide-jump-controls') as HTMLElement;
+    const stickyBottom = [...document.querySelectorAll('body *')].reduce((bottom, candidate) => {
+      if ([header, badge, heading, jumps].some((element) => candidate === element || candidate.contains(element))) return bottom;
+      const style = getComputedStyle(candidate);
+      if (!['fixed', 'sticky'].includes(style.position) || style.visibility === 'hidden' || style.display === 'none') return bottom;
+      const rect = candidate.getBoundingClientRect();
+      const declaredTop = Number.parseFloat(style.top);
+      return Number.isFinite(declaredTop) && rect.top <= declaredTop + 1 && rect.bottom > 0 ? Math.max(bottom, rect.bottom) : bottom;
+    }, 0);
+    const rect = (element: HTMLElement) => {
+      const bounds = element.getBoundingClientRect();
+      return { top: bounds.top, bottom: bounds.bottom };
+    };
+    return { stickyBottom, header: rect(header), badge: rect(badge), heading: rect(heading), jumps: rect(jumps), viewportHeight: innerHeight };
+  });
+  expect(guideGeometry.badge.top).toBeGreaterThanOrEqual(guideGeometry.stickyBottom + 12);
+  expect(guideGeometry.heading.top).toBeGreaterThanOrEqual(guideGeometry.badge.bottom);
+  expect(guideGeometry.jumps.top).toBeGreaterThanOrEqual(guideGeometry.header.bottom - 1);
+  expect(guideGeometry.jumps.bottom).toBeLessThanOrEqual(guideGeometry.viewportHeight);
   const firstStage = page.locator('article[data-guide-id="stock-receiving-putaway"] [data-task-stage]').first();
   const nextStage = firstStage.getByRole('link', { name: /^Next:/ });
   await expect(nextStage).toBeVisible();

@@ -813,6 +813,7 @@ test("publishes the maintained governance search intent vocabulary", () => {
 test("renders scoped explainable search without navigation reloads", () => {
   const html = buildDocumentationHtml();
 
+  assert.match(html, /data-current-mode-label/);
   assert.match(html, /data-search-scope="tab"/);
   assert.match(html, /data-search-scope="all"/);
   assert.match(html, /data-search-result/);
@@ -956,16 +957,20 @@ test("keeps semantic diagram state IDs stable when diagrams are inserted or reor
 
 test("restores a saved per-guide position through the document viewport", () => {
   const calls = [];
+  const document = { documentElement: { style: { scrollBehavior: "smooth" } }, getElementById: () => null };
+  const withoutSmoothScroll = runtimeFunction("withoutSmoothScroll", "visibleStickyChromeBottom", { document });
   const restoreStoredPosition = runtimeFunction("restoreStoredPosition", "activateLinkedRoute", {
-    document: { getElementById: () => null },
+    document,
     openContainingDisclosure: () => {},
     guideScroll: { "technical-architecture": 480 },
     window: { scrollTo: (options) => calls.push(options) },
+    withoutSmoothScroll,
   });
 
   restoreStoredPosition({ guideId: "technical-architecture", headingId: null });
 
   assert.deepEqual(calls, [{ left: 0, top: 480, behavior: "auto" }]);
+  assert.equal(document.documentElement.style.scrollBehavior, "smooth");
 });
 
 test("uses window as the handbook reading scroll owner", () => {
