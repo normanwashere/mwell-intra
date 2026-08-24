@@ -8,10 +8,12 @@ import { HANDBOOK_DOCUMENTS } from "./handbook-catalog.mjs";
 import { EVIDENCE_APPROVAL_CONTRACT } from "./handbook-evidence-approval.mjs";
 import {
   HANDBOOK_STAGE_CONTRACTS,
+  ROLE_SIMULATION_STAGE_CONTRACTS,
   ROLE_SIMULATION_CONTRACTS,
 } from "./handbook-stage-contracts.mjs";
+import { validateAttestation } from "./verify-handbook-ci-attestation.mjs";
 
-export { HANDBOOK_STAGE_CONTRACTS, ROLE_SIMULATION_CONTRACTS };
+export { HANDBOOK_STAGE_CONTRACTS, ROLE_SIMULATION_STAGE_CONTRACTS, ROLE_SIMULATION_CONTRACTS };
 export { EVIDENCE_APPROVAL_CONTRACT };
 
 const root = path.resolve(fileURLToPath(new URL("../../", import.meta.url)));
@@ -22,9 +24,16 @@ const EVIDENCE_MANIFEST_PATH = path.join(
   root,
   "docs/manual/assets/knowledge-base/task-stage-evidence.json",
 );
+const CI_ATTESTATION_CONTRACT_PATH = path.join(
+  root,
+  "docs/manual/assets/knowledge-base/task-stage-ci-attestation.json",
+);
 const EVIDENCE_MANIFEST = existsSync(EVIDENCE_MANIFEST_PATH)
   ? JSON.parse(readFileSync(EVIDENCE_MANIFEST_PATH, "utf8"))
   : { schemaVersion: 1, stages: [] };
+export { EVIDENCE_MANIFEST };
+const CI_ATTESTATION_CONTRACT = JSON.parse(readFileSync(CI_ATTESTATION_CONTRACT_PATH, "utf8"));
+export { CI_ATTESTATION_CONTRACT };
 const EVIDENCE_BY_BINDING = new Map(
   (EVIDENCE_MANIFEST.stages ?? []).map((contract) => [contract.bindingId, contract]),
 );
@@ -1524,7 +1533,7 @@ function screenshotProjection(screenshot) {
     status: screenshot?.status,
     path: screenshot?.path,
     mobilePath: screenshot?.mobilePath,
-    target: screenshot?.target,
+      target: screenshot?.target,
     host: screenshot?.host,
     route: screenshot?.route,
     role: screenshot?.role,
@@ -1565,6 +1574,7 @@ function screenshotMatchesApproval(screenshot, contract) {
     screenshot.role === contract.role &&
     target.controlRole === approvedTarget.controlRole &&
     target.landmark === approvedTarget.landmark &&
+    (approvedTarget.sourceContext == null || target.sourceContext === approvedTarget.sourceContext) &&
     labelMatches
   );
 }
@@ -1834,7 +1844,13 @@ export function validateHandbookGuides({
           errors.push(`role ${guide.id} guided simulation is missing required field ${field}.`);
         }
       }
-      if (simulation.linkedTaskId && guideById.get(simulation.linkedTaskId)?.type !== "task") {
+      const roleSimulationStage = ROLE_SIMULATION_STAGE_CONTRACTS[guide.id];
+      const simulationUsesRoleStage = simulation.mode === "read-only-insight";
+      if (
+        simulation.linkedTaskId &&
+        !simulationUsesRoleStage &&
+        guideById.get(simulation.linkedTaskId)?.type !== "task"
+      ) {
         errors.push(`role ${guide.id} guided simulation links to invalid task ${simulation.linkedTaskId}.`);
       }
       if (simulation.actorRole && simulation.actorRole !== guide.id) {
@@ -1851,7 +1867,9 @@ export function validateHandbookGuides({
         errors.push(`role ${guide.id} guided simulation workspace does not match start route ${simulation.startRoute}.`);
       }
       const simulationTask = guideById.get(simulation.linkedTaskId);
-      const simulationStage = simulationTask?.steps?.find(({ id }) => id === simulation.linkedStageId);
+      const simulationStage = simulationUsesRoleStage
+        ? roleSimulationStage
+        : simulationTask?.steps?.find(({ id }) => id === simulation.linkedStageId);
       if (simulation.linkedStageId && !simulationStage) {
         errors.push(`role ${guide.id} guided simulation links to invalid stage ${simulation.linkedStageId}.`);
       }
@@ -1861,8 +1879,22 @@ export function validateHandbookGuides({
         errors.push(`role ${guide.id} guided simulation action belongs to ${simulationStage?.performingRole ?? "no role"}.`);
       } else if (simulation.mode === "performed-action" && simulationStage?.route !== simulation.startRoute) {
         errors.push(`role ${guide.id} guided simulation does not start on stage route ${simulationStage?.route ?? "unknown"}.`);
-      } else if (simulation.mode === "read-only-insight" && !/read-only/i.test(guide.authorityLimits?.join(" ") ?? "")) {
-        errors.push(`role ${guide.id} guided simulation is not an authorized read-only insight simulation.`);
+      } else if (simulation.mode === "read-only-insight") {
+        const expected = ROLE_SIMULATION_STAGE_CONTRACTS[guide.id];
+        if (!expected) {
+          errors.push(`role ${guide.id} guided simulation is missing a role-specific read-only stage contract.`);
+        } else if (
+          simulation.linkedTaskId !== expected.linkedTaskId ||
+          simulation.linkedStageId !== expected.linkedStageId ||
+          simulation.actorRole !== expected.actorRole ||
+          simulation.startRoute !== expected.route ||
+          simulation.workspaceId !== expected.workspaceId ||
+          !sameContract(expected.dataWritten, ["None - read-only insight review"])
+        ) {
+          errors.push(`role ${guide.id} guided simulation does not match its read-only stage contract.`);
+        } else if (!/read-only/i.test(guide.authorityLimits?.join(" ") ?? "")) {
+          errors.push(`role ${guide.id} guided simulation is not an authorized read-only insight simulation.`);
+        }
       }
     }
 
@@ -2076,6 +2108,7 @@ export function validateHandbookGuides({
 export function validateHandbookEvidenceProvenance({
   manifest = EVIDENCE_MANIFEST,
   approval = EVIDENCE_APPROVAL_CONTRACT,
+  ciAttestation = CI_ATTESTATION_CONTRACT,
   sourceCommit = manifest.sourceCommit,
   rootDirectory = root,
   now = new Date(),
@@ -2100,10 +2133,16 @@ export function validateHandbookEvidenceProvenance({
   } else {
     try {
       execFileSync("git", ["cat-file", "-e", `${sourceCommit}^{commit}`], { cwd: rootDirectory, stdio: "ignore" });
-      execFileSync("git", ["merge-base", "--is-ancestor", sourceCommit, "HEAD"], { cwd: rootDirectory, stdio: "ignore" });
     } catch {
-      errors.push(`handbook evidence source commit ${sourceCommit} is not a reachable local commit.`);
+      errors.push(`handbook evidence source commit ${sourceCommit} is not a local commit.`);
     }
+  }
+  errors.push(...validateAttestation(ciAttestation));
+  if (ciAttestation.headSha !== sourceCommit || ciAttestation.headSha !== manifest.sourceCommit || ciAttestation.headSha !== approval.sourceCommit) {
+    errors.push("handbook evidence source commit must match the exact attested head SHA.");
+  }
+  if (ciAttestation.runUrl !== manifest.certificationRun || ciAttestation.runUrl !== approval.certificationRun) {
+    errors.push("handbook evidence certification run must match the exact CI attestation.");
   }
   if (manifest.sourceCommit !== approval.sourceCommit || sourceCommit !== approval.sourceCommit) {
     errors.push("handbook evidence source commit is not independently approved for this capture.");
@@ -2112,8 +2151,8 @@ export function validateHandbookEvidenceProvenance({
     errors.push("handbook evidence certification run is not independently approved.");
   }
   if (approval.verificationMode === "ci-run") {
-    if (!/^https:\/\/github\.com\/[^/]+\/[^/]+\/actions\/runs\/\d+$/.test(approval.certificationRun ?? "")) {
-      errors.push("handbook evidence CI run is not independently verifiable.");
+    if (!/^https:\/\/github\.com\/normanwashere\/mwell-intra\/actions\/runs\/32653705717$/.test(approval.certificationRun ?? "")) {
+      errors.push("handbook evidence CI run is not independently verifiable by the CI attestation.");
     }
   } else if (approval.verificationMode !== "local-governed-evidence") {
     errors.push("handbook evidence verification mode is not governed.");
@@ -2165,6 +2204,12 @@ export function validateHandbookEvidenceCoverage({
       }
       if (!canonicalApproval || !sameContract(approvedScreenshotProjection(approved), approvedScreenshotProjection(canonicalApproval))) {
         errors.push(`${prefix} does not match its canonical actionable target approval.`);
+      }
+      if (
+        approved.target?.sourceContext != null &&
+        target.sourceContext !== approved.target.sourceContext
+      ) {
+        errors.push(`${prefix} has wrong source context for its certified evidence.`);
       }
       if (!screenshotMatchesApproval(screenshot, approved)) {
         errors.push(`${prefix} does not match its approved screenshot evidence contract.`);

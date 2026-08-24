@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "repository": "normanwashere/mwell-intra",
+  "runId": 32653705717,
+  "runUrl": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+  "apiUrl": "https://api.github.com/repos/normanwashere/mwell-intra/actions/runs/32653705717",
+  "status": "completed",
+  "conclusion": "success",
+  "headSha": "138e326f05d016d26393841cbf57695787cfe226",
+  "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+  "runAttempt": 1,
+  "workflowName": "UAT Live Certification",
+  "workflowPath": ".github/workflows/uat-live-certification.yml",
+  "event": "push",
+  "headBranch": "codex/uat-launch-blockers",
+  "fetchedAt": "2026-08-25T04:10:00.000Z",
+  "responseDigest": "5325f75aa82234a5b3816f51b2cd216aacf0233d58263e28100b66dc2e707f9c"
+}

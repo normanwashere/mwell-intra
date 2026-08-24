@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -1037,7 +1038,7 @@ test("all personas have an explicit task, stage, workspace, and simulation mode"
     legal_compliance_lead: ["vendor-accreditation-renewal", "step-3", "workspace-1", "performed-action"],
     marketing_events_lead: ["event-stock-custody", "step-3", "workspace-1", "performed-action"],
     product_owner: ["product-readiness-pricing-go-live", "step-3", "workspace-1", "performed-action"],
-    leadership_insights: ["finance-readiness-evidence", "step-2", "workspace-1", "read-only-insight"],
+    leadership_insights: ["leadership-insights-read-only", "step-1", "workspace-1", "read-only-insight"],
     vendor_representative: ["vendor-accreditation-renewal", "step-2", "workspace-1", "performed-action"],
   };
   assert.deepEqual(Object.keys(handbookGuideModel.ROLE_SIMULATION_CONTRACTS ?? {}).sort(), Object.keys(expected).sort());
@@ -1050,14 +1051,25 @@ test("all personas have an explicit task, stage, workspace, and simulation mode"
     );
     const workspace = role.workspaceMap.find(({ id }) => id === simulation.workspaceId);
     assert.equal(workspace?.landingRoute, simulation.startRoute, role.id);
-    const stage = HANDBOOK_GUIDES.find(({ id }) => id === simulation.linkedTaskId)
-      ?.steps.find(({ id }) => id === simulation.linkedStageId);
+    const stage = simulation.mode === "read-only-insight"
+      ? handbookGuideModel.ROLE_SIMULATION_STAGE_CONTRACTS[role.id]
+      : HANDBOOK_GUIDES.find(({ id }) => id === simulation.linkedTaskId)
+        ?.steps.find(({ id }) => id === simulation.linkedStageId);
     assert.ok(stage, role.id);
     if (simulation.mode === "performed-action") {
       assert.equal(stage.performingRole, role.id, role.id);
       assert.equal(stage.route, simulation.startRoute, `${role.id} starts on its simulation stage route`);
     }
-    else assert.equal(simulation.mode, "read-only-insight", role.id);
+    else {
+      assert.equal(simulation.mode, "read-only-insight", role.id);
+      assert.equal(simulation.actorRole, role.id, role.id);
+      assert.equal(stage.performingRole, role.id, `${role.id} must own its read-only simulation stage`);
+      assert.equal(stage.route, "/insights", `${role.id} must simulate from the Insights workspace`);
+      assert.equal(stage.linkedTaskId, simulation.linkedTaskId, role.id);
+      assert.equal(stage.linkedStageId, simulation.linkedStageId, role.id);
+      assert.deepEqual(stage.dataWritten, ["None - read-only insight review"], role.id);
+      assert.match(stage.evidenceRetained.join(" "), /snapshot|source|freshness/i);
+    }
   }
 });
 
@@ -1107,8 +1119,52 @@ test("capture provenance rejects future, stale, unreachable, and jointly-mutated
 
   assert.match(
     handbookGuideModel.validateHandbookEvidenceProvenance({ sourceCommit: "0".repeat(40) }).errors.join("\n"),
-    /not a reachable local commit/,
+    /not a local commit/,
   );
+
+  const jointFakeRunManifest = structuredClone(handbookGuideModel.EVIDENCE_MANIFEST);
+  const jointFakeRunApproval = structuredClone(handbookGuideModel.EVIDENCE_APPROVAL_CONTRACT);
+  jointFakeRunManifest.certificationRun = "https://github.com/normanwashere/mwell-intra/actions/runs/1";
+  jointFakeRunApproval.certificationRun = jointFakeRunManifest.certificationRun;
+  assert.match(
+    handbookGuideModel.validateHandbookEvidenceProvenance({
+      manifest: jointFakeRunManifest,
+      approval: jointFakeRunApproval,
+    }).errors.join("\n"),
+    /CI attestation/,
+    "jointly mutated approval and manifest must not bless a fake run URL",
+  );
+
+  const wrongHeadManifest = structuredClone(handbookGuideModel.EVIDENCE_MANIFEST);
+  const wrongHeadApproval = structuredClone(handbookGuideModel.EVIDENCE_APPROVAL_CONTRACT);
+  const currentHead = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
+  wrongHeadManifest.sourceCommit = currentHead;
+  wrongHeadApproval.sourceCommit = currentHead;
+  assert.notEqual(currentHead, handbookGuideModel.EVIDENCE_APPROVAL_CONTRACT.sourceCommit);
+  assert.match(
+    handbookGuideModel.validateHandbookEvidenceProvenance({
+      manifest: wrongHeadManifest,
+      approval: wrongHeadApproval,
+      sourceCommit: currentHead,
+    }).errors.join("\n"),
+    /exact attested head SHA/,
+    "a reachable descendant or ancestor is not acceptable evidence provenance",
+  );
+
+  for (const [label, mutate, expected] of [
+    ["wrong repo", (attestation) => { attestation.repository = "someone-else/mwell-intra"; }, /repository/],
+    ["wrong conclusion", (attestation) => { attestation.conclusion = "failure"; }, /successful conclusion/],
+    ["wrong head", (attestation) => { attestation.headSha = "0".repeat(40); }, /head SHA/],
+    ["wrong response digest", (attestation) => { attestation.responseDigest = "0".repeat(64); }, /digest/],
+  ]) {
+    const attestation = structuredClone(handbookGuideModel.CI_ATTESTATION_CONTRACT);
+    mutate(attestation);
+    assert.match(
+      handbookGuideModel.validateHandbookEvidenceProvenance({ ciAttestation: attestation }).errors.join("\n"),
+      expected,
+      label,
+    );
+  }
 });
 
 test("capture helper cannot certify headings, empty states, ignored frames, or asserted constants", () => {
@@ -1135,6 +1191,28 @@ test("reviewed evidence targets select the workflow action rather than adjacent 
   assert.equal(targets["vendor-accreditation-renewal:step-3"].nameMode, undefined);
   assert.deepEqual(targets["finance-readiness-evidence:step-1"].names, ["Review next payment pack"]);
   assert.equal(targets["finance-readiness-evidence:step-1"].controlRole, "link");
+  assert.match(targets["ecommerce-order-intake:step-4"].selector, /orders-title/);
+  assert.match(targets["ecommerce-order-intake:step-4"].selector, /ecommerce/i);
+  assert.equal(targets["ecommerce-order-intake:step-4"].sourceContext, "ecommerce");
+});
+
+test("ecommerce order intake evidence rejects a department request details row", async () => {
+  const { HANDBOOK_EVIDENCE_TARGETS: targets } = await import("../qa/handbook-evidence-targets.mjs");
+  const target = targets["ecommerce-order-intake:step-4"];
+  assert.equal(target.controlRole, "button");
+  assert.notEqual(target.selector, undefined);
+  assert.doesNotMatch(target.selector, /requests-title|Department requests/i);
+
+  const guides = cloneGuides();
+  const stage = guides.find(({ id }) => id === "ecommerce-order-intake").steps[3];
+  stage.screenshot.target = {
+    ...stage.screenshot.target,
+    sourceContext: "department_request",
+  };
+  assert.match(
+    handbookGuideModel.validateHandbookEvidenceCoverage({ guides }).errors.join("\n"),
+    /wrong source context/,
+  );
 });
 
 test("targeted evidence recapture replaces only selected stages", async () => {

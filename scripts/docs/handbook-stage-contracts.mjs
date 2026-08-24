@@ -397,6 +397,24 @@ export const ROLE_SIMULATION_CONTRACTS = Object.freeze({
   legal_compliance_lead: Object.freeze({ linkedTaskId: "vendor-accreditation-renewal", linkedStageId: "step-3", workspaceId: "workspace-1", mode: "performed-action", scenario: "Review a submitted vendor case, record a precise deficiency or eligibility finding, and preserve case history." }),
   marketing_events_lead: Object.freeze({ linkedTaskId: "event-stock-custody", linkedStageId: "step-3", workspaceId: "workspace-1", mode: "performed-action", scenario: "Record event use and return outcomes, then recover an unresolved custody quantity before reconciliation." }),
   product_owner: Object.freeze({ linkedTaskId: "product-readiness-pricing-go-live", linkedStageId: "step-3", workspaceId: "workspace-1", mode: "performed-action", scenario: "Decide the current Product readiness package and prove stale or duplicate decisions are rejected." }),
-  leadership_insights: Object.freeze({ linkedTaskId: "finance-readiness-evidence", linkedStageId: "step-2", workspaceId: "workspace-1", mode: "read-only-insight", scenario: "Trace an authorized insight to its source reference, verify freshness, and prove that operational mutation controls are absent." }),
+  leadership_insights: Object.freeze({ linkedTaskId: "leadership-insights-read-only", linkedStageId: "step-1", workspaceId: "workspace-1", mode: "read-only-insight", scenario: "Open governed Insights, trace a source-linked indicator, verify freshness, and prove that operational mutation controls are absent." }),
   vendor_representative: Object.freeze({ linkedTaskId: "vendor-accreditation-renewal", linkedStageId: "step-2", workspaceId: "workspace-1", mode: "performed-action", scenario: "Continue the assigned vendor application, submit the applicable evidence branch, and recover a specific returned correction." }),
+});
+
+export const ROLE_SIMULATION_STAGE_CONTRACTS = Object.freeze({
+  leadership_insights: Object.freeze({
+    id: "leadership-insights-read-only:step-1",
+    linkedTaskId: "leadership-insights-read-only",
+    linkedStageId: "step-1",
+    performingRole: "leadership_insights",
+    actorRole: "leadership_insights",
+    workspaceId: "workspace-1",
+    module: "insights",
+    route: "/insights",
+    expectedResult: "Leadership reviews a governed Insights snapshot, identifies its source link and freshness, and makes no operational write.",
+    dataRead: Object.freeze(["Role-scoped Insights snapshot", "Source module link", "Metric freshness and sample metadata"]),
+    dataWritten: Object.freeze(["None - read-only insight review"]),
+    evidenceRetained: Object.freeze(["Snapshot identity", "Source link", "Freshness indicator", "Data-quality escalation context when needed"]),
+    nextHandoff: "Leadership sends questions or data-quality concerns to the accountable source owner without changing source records.",
+  }),
 });

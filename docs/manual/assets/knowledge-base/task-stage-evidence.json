@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-08-24T19:45:34.675Z",
+  "generatedAt": "2026-08-24T20:27:31.625Z",
   "host": "https://mwell-intra-uat.vercel.app",
   "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
   "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
@@ -1156,9 +1156,10 @@
       "target": {
         "label": "View order details",
         "landmark": "fulfillment queue record",
-        "controlRole": "button"
+        "controlRole": "button",
+        "sourceContext": "ecommerce"
       },
-      "capturedAt": "2026-08-24T19:33:11.560Z",
+      "capturedAt": "2026-08-24T20:27:31.625Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -1179,10 +1180,10 @@
           "observedRoute": "/warehouse/fulfillment",
           "width": 1440,
           "height": 900,
-          "sha256": "d6f1667d3c5d03029dec38bb893ae141c616120f756e6132235d4c7da0e235c5",
+          "sha256": "fe98b3eb381915f420b749785d0f833f53301c782090a59c212abedd11d6e940",
           "targetBox": {
             "x": 313,
-            "y": 372,
+            "y": 521,
             "width": 184,
             "height": 44
           },
@@ -1194,7 +1195,7 @@
           "observedRoute": "/warehouse/fulfillment",
           "width": 390,
           "height": 844,
-          "sha256": "8b35ac9c7b65e8617f964c594bd76e7df06db6bfdb27767f38234cbd559d53a4",
+          "sha256": "63b7372d2769ff53e86cd57fe04b0122132a0b9b1c2f4caa42be9b9366b14636",
           "targetBox": {
             "x": 33,
             "y": 361,

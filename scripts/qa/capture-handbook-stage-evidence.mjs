@@ -459,6 +459,7 @@ async function captureViewport(browser, viewport) {
         targetBox: { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height) },
         targetLabel: found.label,
         targetLandmark: TARGETS[stage.bindingId].landmark,
+        targetSourceContext: TARGETS[stage.bindingId].sourceContext,
         controlRole: TARGETS[stage.bindingId].controlRole,
         observations: {
           hostMatched: observedCurrent.origin === baseUrl,
@@ -511,6 +512,7 @@ const buildStages = (sourceStages) => sourceStages.map((stage) => {
   if (variants.length !== viewports.length) throw new Error(`${stage.bindingId} has ${variants.length} variants.`);
   const labels = new Set(variants.map(({ targetLabel }) => targetLabel));
   const landmarks = new Set(variants.map(({ targetLandmark }) => targetLandmark));
+  const sourceContexts = new Set(variants.map(({ targetSourceContext }) => targetSourceContext).filter(Boolean));
   const controlRoles = new Set(variants.map(({ controlRole }) => controlRole));
   if (landmarks.size !== 1 || controlRoles.size !== 1) throw new Error(`${stage.bindingId} target semantics changed by viewport.`);
   const observations = variants.map(({ observations }) => observations);
@@ -539,12 +541,17 @@ const buildStages = (sourceStages) => sourceStages.map((stage) => {
     host: baseUrl,
     route: stage.route,
     role: stage.performingRole,
-    target: { label: [...labels].join(" / "), landmark: [...landmarks][0], controlRole: [...controlRoles][0] },
+    target: {
+      label: [...labels].join(" / "),
+      landmark: [...landmarks][0],
+      controlRole: [...controlRoles][0],
+      ...(sourceContexts.size ? { sourceContext: [...sourceContexts][0] } : {}),
+    },
     capturedAt,
     sourceCommit,
     certificationRun,
     assertions,
-    variants: variants.map(({ bindingId: _, targetLandmark: __, controlRole: ___, observations: ____, ...variant }) => variant)
+    variants: variants.map(({ bindingId: _, targetLandmark: __, targetSourceContext: ___, controlRole: ____, observations: _____, ...variant }) => variant)
       .sort((a, b) => a.viewport.localeCompare(b.viewport)),
   };
 });

@@ -1,11 +1,11 @@
-const REVIEWED_AT = "2026-08-24T19:54:33.704Z";
+const REVIEWED_AT = "2026-08-24T20:27:45.000Z";
 const UAT_HOST = "https://mwell-intra-uat.vercel.app";
 
 function evidenceSlug(value) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
-function approval(bindingId, route, role, controlRole, label, labelPattern, landmark) {
+function approval(bindingId, route, role, controlRole, label, labelPattern, landmark, options = {}) {
   const [taskId, stageId] = bindingId.split(":");
   const fileStem = `${evidenceSlug(taskId)}-${stageId}`;
   return Object.freeze({
@@ -17,7 +17,7 @@ function approval(bindingId, route, role, controlRole, label, labelPattern, land
     host: UAT_HOST,
     route,
     role,
-    target: Object.freeze({ controlRole, label, labelPattern, landmark }),
+    target: Object.freeze({ controlRole, label, labelPattern, landmark, ...options }),
     reviewedAt: REVIEWED_AT,
   });
 }
@@ -30,7 +30,7 @@ export const EVIDENCE_APPROVAL_CONTRACT = Object.freeze({
   verificationMode: "ci-run",
   sourceCommit: "138e326f05d016d26393841cbf57695787cfe226",
   certificationRun: "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
-  manifestSha256: "b487ab1ec8bc5cbff7f2dfddf58e2b08c7434fc4215aeeb357beca710b647c6a",
+  manifestSha256: "fa1ea1b93e58df7040fe89b4eed1bb0aea0544eb398208e6d6fc805920aadf55",
   stages: Object.freeze([
     approval("procurement-request-approval:step-1", "/procurement/requests/new", "general_employee", "button", "Continue", "^Continue$", "request validation action"),
     approval("procurement-request-approval:step-2", "/procurement/requests", "general_employee", "link", "New request", "^New request$", "request submission entry"),
@@ -55,7 +55,7 @@ export const EVIDENCE_APPROVAL_CONTRACT = Object.freeze({
     approval("ecommerce-order-intake:step-1", "/warehouse/fulfillment", "operations_associate", "button", "New order or import", "^(New order / demand|Import existing tracker)$", "order intake choice"),
     approval("ecommerce-order-intake:step-2", "/warehouse/fulfillment", "operations_associate", "textbox", "Order reference", "^Order reference$", "required order identity field"),
     approval("ecommerce-order-intake:step-3", "/warehouse/fulfillment", "operations_associate", "button", "Import existing tracker", "^Import existing tracker$", "tracker validation entry"),
-    approval("ecommerce-order-intake:step-4", "/warehouse/fulfillment", "operations_associate", "button", "View order details", "^View order details$", "fulfillment queue record"),
+    approval("ecommerce-order-intake:step-4", "/warehouse/fulfillment", "operations_associate", "button", "View order details", "^View order details$", "fulfillment queue record", { sourceContext: "ecommerce" }),
 
     approval("ecommerce-fulfillment-delivery:step-1", "/warehouse/fulfillment", "operations_associate", "button", "Allocate or start picking", "^(Allocate stock|Start picking)$", "allocation and pick action"),
     approval("ecommerce-fulfillment-delivery:step-2", "/warehouse/fulfillment", "operations_associate", "button", "Scan and pack", "^(Confirm scanned pick|Pack and add waybill|Prepare accountable handover)$", "actual scan-and-pack action"),

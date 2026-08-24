@@ -26,7 +26,10 @@ export const HANDBOOK_EVIDENCE_TARGETS = Object.freeze({
   "ecommerce-order-intake:step-1": target("button", ["New order / demand", "Import existing tracker"], "order intake choice"),
   "ecommerce-order-intake:step-2": target("textbox", ["Order reference"], "required order identity field", { prepare: "open-new-order" }),
   "ecommerce-order-intake:step-3": target("button", ["Import existing tracker"], "tracker validation entry"),
-  "ecommerce-order-intake:step-4": target("button", ["View order details"], "fulfillment queue record"),
+  "ecommerce-order-intake:step-4": target("button", [], "fulfillment queue record", {
+    selector: "section[aria-labelledby='orders-title'] li:has-text('Ecommerce') button:has-text('View order details')",
+    sourceContext: "ecommerce",
+  }),
 
   "ecommerce-fulfillment-delivery:step-1": target("button", ["Allocate stock", "Start picking"], "allocation and pick action"),
   "ecommerce-fulfillment-delivery:step-2": target("button", ["Confirm scanned pick", "Pack and add waybill", "Prepare accountable handover"], "actual scan-and-pack action"),
