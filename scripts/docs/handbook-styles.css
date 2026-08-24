@@ -901,7 +901,7 @@ pre code {
   max-width: 100%;
   height: clamp(280px, 46vh, 520px);
   padding: 0;
-  overflow: scroll;
+  overflow: auto;
   overscroll-behavior: contain;
   isolation: isolate;
   background: #ffffff;
@@ -938,25 +938,47 @@ pre code {
 }
 
 html[data-theme="dark"] .diagram-shell {
+  background: #111b1f;
   border-color: #71838a;
 }
 
 html[data-theme="dark"] .diagram-toolbar {
-  color: #172329;
-  background: #e8eeee;
+  color: #f3f7f7;
+  background: #1b292e;
   border-color: #71838a;
 }
 
 html[data-theme="dark"] .diagram-toolbar button {
-  color: #172329;
-  background: #ffffff;
-  border-color: #71838a;
+  color: #f7fbfb;
+  background: #26383e;
+  border-color: #7f969e;
+}
+
+html[data-theme="dark"] .diagram-viewport {
+  background: #10181c;
+  scrollbar-color: #7f969e #1b292e;
+}
+
+html[data-theme="dark"] .diagram-canvas .flowchart-link,
+html[data-theme="dark"] .diagram-canvas .edgePath path {
+  stroke: #a8bec6 !important;
+}
+
+html[data-theme="dark"] .diagram-canvas marker path {
+  fill: #a8bec6 !important;
+  stroke: #a8bec6 !important;
+}
+
+html[data-theme="dark"] .diagram-canvas .edgeLabel,
+html[data-theme="dark"] .diagram-canvas .edgeLabel p {
+  color: #f2f7f7 !important;
+  background: #172329 !important;
 }
 
 html[data-theme="dark"] .diagram-shell figcaption {
-  color: #33454c;
-  background: #f7f8f8;
-  border-color: #87979d;
+  color: #dce8e9;
+  background: #182429;
+  border-color: #71838a;
 }
 
 .diagram-shell figcaption {

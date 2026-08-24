@@ -910,7 +910,7 @@ pre code {
   max-width: 100%;
   height: clamp(280px, 46vh, 520px);
   padding: 0;
-  overflow: scroll;
+  overflow: auto;
   overscroll-behavior: contain;
   isolation: isolate;
   background: #ffffff;
@@ -947,25 +947,47 @@ pre code {
 }
 
 html[data-theme="dark"] .diagram-shell {
+  background: #111b1f;
   border-color: #71838a;
 }
 
 html[data-theme="dark"] .diagram-toolbar {
-  color: #172329;
-  background: #e8eeee;
+  color: #f3f7f7;
+  background: #1b292e;
   border-color: #71838a;
 }
 
 html[data-theme="dark"] .diagram-toolbar button {
-  color: #172329;
-  background: #ffffff;
-  border-color: #71838a;
+  color: #f7fbfb;
+  background: #26383e;
+  border-color: #7f969e;
+}
+
+html[data-theme="dark"] .diagram-viewport {
+  background: #10181c;
+  scrollbar-color: #7f969e #1b292e;
+}
+
+html[data-theme="dark"] .diagram-canvas .flowchart-link,
+html[data-theme="dark"] .diagram-canvas .edgePath path {
+  stroke: #a8bec6 !important;
+}
+
+html[data-theme="dark"] .diagram-canvas marker path {
+  fill: #a8bec6 !important;
+  stroke: #a8bec6 !important;
+}
+
+html[data-theme="dark"] .diagram-canvas .edgeLabel,
+html[data-theme="dark"] .diagram-canvas .edgeLabel p {
+  color: #f2f7f7 !important;
+  background: #172329 !important;
 }
 
 html[data-theme="dark"] .diagram-shell figcaption {
-  color: #33454c;
-  background: #f7f8f8;
-  border-color: #87979d;
+  color: #dce8e9;
+  background: #182429;
+  border-color: #71838a;
 }
 
 .diagram-shell figcaption {
@@ -11415,17 +11437,23 @@ globalThis["mermaid"] = globalThis.__esbuild_esm_mermaid_nm["mermaid"].default;
       if (!viewport || !canvas || !diagram || !svg || !width || !height) return false;
       shell.dataset.diagramWidth = String(width);
       shell.dataset.diagramHeight = String(height);
-      const availableWidth = Math.max(1, viewport.clientWidth - 48);
-      const availableHeight = Math.max(1, viewport.clientHeight - 48);
+      const fitPadding = 32;
+      if (scale === 'fit') {
+        const widthFitScale = Math.max(1, viewport.clientWidth - fitPadding) / width;
+        const readableFitScale = Math.min(.56, widthFitScale);
+        viewport.style.height = `${Math.min(1240, Math.max(320, Math.ceil(height * readableFitScale + fitPadding)))}px`;
+      } else viewport.style.height = '';
+      const availableWidth = Math.max(1, viewport.clientWidth - fitPadding);
+      const availableHeight = Math.max(1, viewport.clientHeight - fitPadding);
       const resolvedScale = scale === 'fit'
         ? Math.min(1.8, availableWidth / width, availableHeight / height)
         : Math.min(1.8, Math.max(.25, scale));
       const scaledWidth = width * resolvedScale;
       const scaledHeight = height * resolvedScale;
-      const canvasWidth = Math.max(viewport.clientWidth, Math.ceil(scaledWidth + 48));
-      const canvasHeight = Math.max(viewport.clientHeight, Math.ceil(scaledHeight + 48));
-      const offsetX = Math.max(24, (canvasWidth - scaledWidth) / 2);
-      const offsetY = Math.max(24, (canvasHeight - scaledHeight) / 2);
+      const canvasWidth = Math.max(viewport.clientWidth, Math.ceil(scaledWidth + fitPadding));
+      const canvasHeight = Math.max(viewport.clientHeight, Math.ceil(scaledHeight + fitPadding));
+      const offsetX = Math.max(fitPadding / 2, (canvasWidth - scaledWidth) / 2);
+      const offsetY = Math.max(fitPadding / 2, (canvasHeight - scaledHeight) / 2);
       shell.dataset.diagramScale = scale === 'fit' ? 'fit' : String(resolvedScale);
       shell.dataset.diagramRenderedScale = String(resolvedScale);
       canvas.style.width = `${canvasWidth}px`;

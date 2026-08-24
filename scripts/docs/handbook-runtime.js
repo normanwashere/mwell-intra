@@ -675,17 +675,23 @@
       if (!viewport || !canvas || !diagram || !svg || !width || !height) return false;
       shell.dataset.diagramWidth = String(width);
       shell.dataset.diagramHeight = String(height);
-      const availableWidth = Math.max(1, viewport.clientWidth - 48);
-      const availableHeight = Math.max(1, viewport.clientHeight - 48);
+      const fitPadding = 32;
+      if (scale === 'fit') {
+        const widthFitScale = Math.max(1, viewport.clientWidth - fitPadding) / width;
+        const readableFitScale = Math.min(.56, widthFitScale);
+        viewport.style.height = `${Math.min(1240, Math.max(320, Math.ceil(height * readableFitScale + fitPadding)))}px`;
+      } else viewport.style.height = '';
+      const availableWidth = Math.max(1, viewport.clientWidth - fitPadding);
+      const availableHeight = Math.max(1, viewport.clientHeight - fitPadding);
       const resolvedScale = scale === 'fit'
         ? Math.min(1.8, availableWidth / width, availableHeight / height)
         : Math.min(1.8, Math.max(.25, scale));
       const scaledWidth = width * resolvedScale;
       const scaledHeight = height * resolvedScale;
-      const canvasWidth = Math.max(viewport.clientWidth, Math.ceil(scaledWidth + 48));
-      const canvasHeight = Math.max(viewport.clientHeight, Math.ceil(scaledHeight + 48));
-      const offsetX = Math.max(24, (canvasWidth - scaledWidth) / 2);
-      const offsetY = Math.max(24, (canvasHeight - scaledHeight) / 2);
+      const canvasWidth = Math.max(viewport.clientWidth, Math.ceil(scaledWidth + fitPadding));
+      const canvasHeight = Math.max(viewport.clientHeight, Math.ceil(scaledHeight + fitPadding));
+      const offsetX = Math.max(fitPadding / 2, (canvasWidth - scaledWidth) / 2);
+      const offsetY = Math.max(fitPadding / 2, (canvasHeight - scaledHeight) / 2);
       shell.dataset.diagramScale = scale === 'fit' ? 'fit' : String(resolvedScale);
       shell.dataset.diagramRenderedScale = String(resolvedScale);
       canvas.style.width = `${canvasWidth}px`;

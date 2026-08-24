@@ -984,26 +984,114 @@ test('captures desktop, tablet, and mobile visual review evidence when requested
   await mkdir(captureDir, { recursive: true });
   await page.goto('/#mode=tasks&guide=procurement-request-approval');
   await expect(page.getByRole('region', { name: 'Task flow diagram' })).toBeVisible();
+  const projectViewport = page.viewportSize()!;
+  const shell = page.locator('article[data-guide-id="procurement-request-approval"] .diagram-shell').first();
+  const fitControl = shell.getByRole('button', { name: 'Fit diagram to available space' });
   const compact = (page.viewportSize()?.width ?? 1440) <= 1180;
   const toggleTheme = async () => {
     if (compact) await page.getByRole('button', { name: 'Menu', exact: true }).click();
     await page.getByRole('button', { name: 'Toggle color theme' }).click();
     if (compact) await page.keyboard.press('Escape');
   };
-  const settleDiagramViewport = async () => {
-    await page.getByRole('region', { name: 'Task flow diagram' }).evaluate((viewport) => {
-      viewport.scrollLeft = 0;
-      viewport.scrollTop = 0;
-    });
-    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const settleLayout = () => page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const expandToFullPageViewport = async () => {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const fullHeight = await page.evaluate(() => Math.ceil(Math.max(document.body.scrollHeight, document.documentElement.scrollHeight)));
+      if (page.viewportSize()?.height === fullHeight) break;
+      await page.setViewportSize({ width: projectViewport.width, height: fullHeight });
+      await settleLayout();
+    }
+    await page.evaluate(() => window.scrollTo(0, 0));
   };
-  await settleDiagramViewport();
-  await page.screenshot({ path: `${captureDir}${testInfo.project.name}-light.png`, fullPage: true });
+  const diagramCaptureMetrics = () => shell.evaluate((element) => {
+    const viewport = element.querySelector('[data-diagram-viewport]') as HTMLElement;
+    const diagram = element.querySelector('.mermaid') as HTMLElement;
+    const svg = diagram.querySelector('svg') as SVGSVGElement;
+    const viewportRect = viewport.getBoundingClientRect();
+    const diagramRect = diagram.getBoundingClientRect();
+    const intersectionArea = (first: DOMRect, second: DOMRect) => Math.max(0, Math.min(first.right, second.right) - Math.max(first.left, second.left))
+      * Math.max(0, Math.min(first.bottom, second.bottom) - Math.max(first.top, second.top));
+    const visibleRects = (selector: string) => [...svg.querySelectorAll(selector)].map((candidate) => candidate.getBoundingClientRect())
+      .filter((rect) => rect.width > 0 && rect.height > 0 && intersectionArea(rect, viewportRect) > 1);
+    const labelHeights = visibleRects('.nodeLabel, .edgeLabel').map((rect) => rect.height).sort((first, second) => first - second);
+    const background = getComputedStyle(viewport).backgroundColor;
+    const luminance = (color: string) => (color.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number).map((channel) => {
+      const normalized = channel / 255;
+      return normalized <= 0.03928 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4;
+    }).reduce((sum, channel, index) => sum + channel * [0.2126, 0.7152, 0.0722][index], 0);
+    const contrast = (first: string, second: string) => {
+      const firstLuminance = luminance(first);
+      const secondLuminance = luminance(second);
+      return (Math.max(firstLuminance, secondLuminance) + 0.05) / (Math.min(firstLuminance, secondLuminance) + 0.05);
+    };
+    const edge = svg.querySelector('.flowchart-link, .edgePath path') as SVGElement | null;
+    const nodeShape = svg.querySelector('.node rect, .node polygon, .node path') as SVGElement | null;
+    const nodeLabel = svg.querySelector('.nodeLabel') as HTMLElement | null;
+    const edgeColor = edge ? getComputedStyle(edge).stroke : '';
+    const nodeColor = nodeShape ? getComputedStyle(nodeShape).fill : '';
+    const nodeLabelColor = nodeLabel ? getComputedStyle(nodeLabel).color : '';
+    return {
+      viewport: { left: viewportRect.left, top: viewportRect.top, right: viewportRect.right, bottom: viewportRect.bottom, area: viewportRect.width * viewportRect.height },
+      diagram: { left: diagramRect.left, top: diagramRect.top, right: diagramRect.right, bottom: diagramRect.bottom },
+      renderedScale: Number(element.getAttribute('data-diagram-rendered-scale')),
+      scroll: { left: viewport.scrollLeft, top: viewport.scrollTop },
+      visibleLabels: labelHeights.length,
+      medianLabelHeight: labelHeights[Math.floor(labelHeights.length / 2)] ?? 0,
+      visibleNodes: visibleRects('.node').length,
+      visibleEdges: visibleRects('.flowchart-link, .edgePath path').length,
+      svgOccupancy: intersectionArea(svg.getBoundingClientRect(), viewportRect) / (viewportRect.width * viewportRect.height),
+      canvasLuminance: luminance(background),
+      edgeContrast: contrast(edgeColor, background),
+      nodeSurfaceContrast: contrast(nodeColor, background),
+      nodeLabelContrast: contrast(nodeLabelColor, nodeColor),
+    };
+  });
+  const refitAndAssertDiagram = async (theme: 'light' | 'dark') => {
+    await fitControl.click();
+    await settleLayout();
+    await expect.poll(diagramCaptureMetrics).toMatchObject({ scroll: { left: 0, top: 0 } });
+    const metrics = await diagramCaptureMetrics();
+    expect(metrics.diagram.left).toBeGreaterThanOrEqual(metrics.viewport.left - 1);
+    expect(metrics.diagram.top).toBeGreaterThanOrEqual(metrics.viewport.top - 1);
+    expect(metrics.diagram.right).toBeLessThanOrEqual(metrics.viewport.right + 1);
+    expect(metrics.diagram.bottom).toBeLessThanOrEqual(metrics.viewport.bottom + 1);
+    const isNarrowMobile = projectViewport.width <= 360;
+    const minimumReadableScale = isNarrowMobile ? 0.34 : projectViewport.width <= 430 ? 0.49 : 0.5;
+    expect(metrics.renderedScale, JSON.stringify(metrics)).toBeGreaterThanOrEqual(minimumReadableScale);
+    expect(metrics.visibleLabels).toBeGreaterThanOrEqual(8);
+    expect(metrics.medianLabelHeight).toBeGreaterThanOrEqual(isNarrowMobile ? 8 : 11);
+    expect(metrics.visibleNodes).toBeGreaterThanOrEqual(8);
+    expect(metrics.visibleEdges).toBeGreaterThanOrEqual(6);
+    expect(metrics.svgOccupancy).toBeGreaterThanOrEqual(0.08);
+    if (theme === 'dark') {
+      expect(metrics.canvasLuminance).toBeLessThanOrEqual(0.12);
+      expect(metrics.edgeContrast).toBeGreaterThanOrEqual(3);
+      expect(metrics.nodeSurfaceContrast).toBeGreaterThanOrEqual(3);
+      expect(metrics.nodeLabelContrast).toBeGreaterThanOrEqual(4.5);
+    }
+  };
+  const captureScreenTheme = async (theme: 'light' | 'dark') => {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await expandToFullPageViewport();
+      await refitAndAssertDiagram(theme);
+      const fullHeight = await page.evaluate(() => Math.ceil(Math.max(document.body.scrollHeight, document.documentElement.scrollHeight)));
+      if ((page.viewportSize()?.height ?? 0) >= fullHeight) break;
+    }
+    await page.screenshot({ path: `${captureDir}${testInfo.project.name}-${theme}.png`, fullPage: true });
+    await refitAndAssertDiagram(theme);
+  };
+
+  await captureScreenTheme('light');
   await toggleTheme();
-  await settleDiagramViewport();
-  await page.screenshot({ path: `${captureDir}${testInfo.project.name}-dark.png`, fullPage: true });
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await captureScreenTheme('dark');
+  await page.setViewportSize(projectViewport);
+  await settleLayout();
   await toggleTheme();
-  await page.evaluate(() => document.documentElement.dataset.printScope = 'guide');
+  await page.evaluate(() => {
+    document.documentElement.dataset.printScope = 'guide';
+    window.scrollTo(0, 0);
+  });
   await page.emulateMedia({ media: 'print' });
   await page.screenshot({ path: `${captureDir}${testInfo.project.name}-print.png`, fullPage: true });
 });
