@@ -22,6 +22,94 @@ async function expectFocusedBelowStickyChrome(target: Locator) {
   expect(metrics.targetTop, `target must clear sticky chrome ending at ${metrics.occlusionBottom}px`).toBeGreaterThanOrEqual(metrics.occlusionBottom + 12);
 }
 
+const operationalSearchCases = [
+  ['three-way match', 'finance-readiness-evidence'],
+  ['approve request', 'procurement-request-approval'],
+  ['report damaged item', 'stock-receiving-putaway'],
+  ['reset password', 'platform_administrator'],
+  ['cycle count', 'inventory-count-variance'],
+  ['DOA', 'department-doa-activation'],
+  ['receive stock', 'stock-receiving-putaway'],
+  ['pick and pack', 'ecommerce-fulfillment-delivery'],
+  ['invalid login', 'platform_administrator'],
+  ['access denied', 'platform_administrator'],
+  ['vendor renewal', 'vendor-accreditation-renewal'],
+  ['renew vendor', 'vendor-accreditation-renewal'],
+  ['RFQ', 'procurement-request-approval'],
+  ['refund', 'returns-replacements-refunds-rma'],
+  ['lost event stock', 'event-stock-custody'],
+  ['cycle count variance', 'inventory-count-variance'],
+] as const;
+
+test('search certifies operational answers and canonical destinations', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.goto('/');
+  const searchbox = page.getByRole('searchbox');
+
+  for (const [query, guideId] of operationalSearchCases) {
+    await searchbox.fill(query);
+    await expect(page).toHaveURL(new RegExp(`[?&]q=${encodeURIComponent(query).replaceAll('%20', '\\+')}|q=${encodeURIComponent(query)}`));
+    const results = page.locator('#search-results [data-search-result]');
+    await expect(results.first(), `${query} should return a result`).toBeVisible();
+    const topThreeGuideIds = await results.evaluateAll((links) => links.slice(0, 3).map((link) => (link as HTMLElement).dataset.guideId));
+    expect(topThreeGuideIds, `${query} should surface ${guideId} in the first three results`).toContain(guideId);
+
+    const destination = page.locator(`#search-results [data-search-result][data-guide-id="${guideId}"]`).first();
+    await expect(destination).toHaveAttribute('data-result-type', /^(Task|Step|Decision|Role|Troubleshooting)$/);
+    await expect(destination.locator('.search-result-context')).not.toHaveText('');
+    await expect(destination.locator('.search-result-reason')).not.toHaveText('');
+    await expect(destination.locator('.search-result-excerpt')).not.toHaveText('');
+    await expect(destination).toHaveAttribute('href', new RegExp(`^#mode=(?:tasks|roles)&guide=${guideId}&heading=`));
+
+    const rankedResults = await results.evaluateAll((links) => links.map((link) => ({
+      guideId: (link as HTMLElement).dataset.guideId,
+      type: (link as HTMLElement).dataset.resultType,
+    })));
+    const expectedIndex = rankedResults.findIndex((result) => result.guideId === guideId);
+    const firstSystemIndex = rankedResults.findIndex((result) => result.type === 'System reference');
+    expect(rankedResults[0]?.type, `${query} should start with an operational record`).not.toBe('System reference');
+    if (firstSystemIndex >= 0) expect(expectedIndex, `${query} should rank its operational answer ahead of System evidence`).toBeLessThan(firstSystemIndex);
+  }
+
+  await page.reload();
+  await expect(searchbox).toHaveValue('cycle count variance');
+  await expect(page.locator('#search-results [data-guide-id="inventory-count-variance"]').first()).toBeVisible();
+
+  await searchbox.fill('DOA');
+  const doaResults = page.locator('#search-results [data-search-result]');
+  expect(await doaResults.count(), 'DOA results should be logically deduplicated').toBeLessThanOrEqual(8);
+  expect(await doaResults.evaluateAll((links) => new Set(links.map((link) => `${(link as HTMLElement).dataset.resultType}:${(link as HTMLElement).dataset.guideId}:${(link as HTMLElement).dataset.heading}`)).size)).toBe(await doaResults.count());
+
+  await searchbox.fill('report damaged item');
+  const destination = page.locator('#search-results [data-guide-id="stock-receiving-putaway"]').first();
+  await page.evaluate(() => { (window as typeof window & { __sameDocument?: string }).__sameDocument = 'preserved'; });
+  await destination.click();
+  expect(await page.evaluate(() => (window as typeof window & { __sameDocument?: string }).__sameDocument)).toBe('preserved');
+  await expect(page).toHaveURL(/#mode=tasks&guide=stock-receiving-putaway&heading=[^&]+&q=report\+damaged\+item&scope=all$/);
+  const headingId = new URL(page.url()).hash.match(/heading=([^&]+)/)?.[1];
+  expect(headingId).toBeTruthy();
+  await expectFocusedBelowStickyChrome(page.locator(`#stock-receiving-putaway-${headingId} h3`));
+});
+
+test('search offers accessible no-result recovery', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('searchbox').fill('zzzz no handbook answer');
+  const recovery = page.locator('#empty');
+  await expect(recovery).toBeVisible();
+  await expect(recovery.getByRole('status')).toHaveAttribute('aria-live', 'polite');
+  await expect(recovery).toContainText(/try a related term/i);
+  await expect(recovery.getByRole('link', { name: /receive stock/i })).toBeVisible();
+  await expect(recovery.getByRole('link', { name: /role guides/i })).toBeVisible();
+  await expect(recovery.getByRole('link', { name: /system/i })).toBeVisible();
+  expect(await recovery.evaluate((element) => element.parentElement?.id)).toBe('contents-rail');
+  if ((page.viewportSize()?.width ?? 1440) <= 1180) {
+    await expect(page.getByRole('dialog', { name: 'Contents' })).toContainText(/no direct answer found/i);
+  }
+  await recovery.getByRole('link', { name: /receive stock/i }).click();
+  await expect(page.getByRole('searchbox')).toHaveValue('receive stock');
+  await expect(page.locator('#search-results [data-guide-id="stock-receiving-putaway"]').first()).toBeVisible();
+});
+
 test('navigates canonical and legacy routes, restores per-guide state, and recovers invalid links', async ({ page }) => {
   test.setTimeout(60_000);
   await page.goto('/');

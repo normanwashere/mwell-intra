@@ -436,6 +436,20 @@ export function composeHandbookGuides(model) {
   });
 }
 
+const CONTROLLED_SEARCH_TERMS = Object.freeze({
+  "finance-readiness-evidence:Step:step-2": ["three-way match", "match purchase order receipt invoice"],
+  "procurement-request-approval:Task:outcome": ["approve request", "RFQ", "request for quotation"],
+  "stock-receiving-putaway:Task:outcome": ["receive stock", "receiving", "receipt"],
+  "stock-receiving-putaway:Step:step-3": ["report damaged item", "damaged stock", "quarantine"],
+  "platform_administrator:Troubleshooting:negative-and-recovery-scenario": ["reset password", "invalid login", "access denied", "password recovery", "sign in blocked"],
+  "vendor-accreditation-renewal:Task:outcome": ["vendor renewal", "renew vendor"],
+  "ecommerce-fulfillment-delivery:Task:outcome": ["pick and pack"],
+  "returns-replacements-refunds-rma:Task:outcome": ["refund"],
+  "event-stock-custody:Decision:decision-2": ["lost event stock", "damaged event stock"],
+  "inventory-count-variance:Task:outcome": ["cycle count", "cycle count variance"],
+  "department-doa-activation:Task:outcome": ["DOA", "delegation of authority"],
+});
+
 function guideSearchRecord({
   type,
   guide,
@@ -454,6 +468,7 @@ function guideSearchRecord({
   const modeId = guide.modeId;
   const tabId = MODE_TAB_ALIASES[modeId];
   const compactExcerpt = searchExcerpt(plainMarkdownText(excerpt));
+  const controlledTerms = CONTROLLED_SEARCH_TERMS[`${guide.id}:${type}:${headingId}`] ?? [];
   return {
     type,
     modeId,
@@ -466,8 +481,8 @@ function guideSearchRecord({
     excerpt: compactExcerpt,
     whyMatched,
     href: canonicalGuideHash({ modeId, guideId: guide.id, headingId }),
-    keywords,
-    searchText: plainMarkdownText(searchText),
+    keywords: [...keywords, ...controlledTerms],
+    searchText: plainMarkdownText([searchText, controlledTerms].flat().join(" ")),
     tabId,
     tabIds: [tabId],
     articleId: `guide-${guide.id}`,
@@ -831,11 +846,10 @@ ${styles}
   </header>
   <div class="handbook-shell">
     <nav class="tab-rail" role="tablist" aria-label="Handbook modes">${model.modes.map((mode, index) => `<button role="tab" id="mode-${escapeHtml(mode.id)}" aria-controls="panel-${escapeHtml(MODE_TAB_ALIASES[mode.id])}" aria-selected="${index === 0}" tabindex="${index === 0 ? 0 : -1}" type="button" data-mode-button data-mode="${escapeHtml(mode.id)}" data-tab-button data-tab="${escapeHtml(MODE_TAB_ALIASES[mode.id])}">${escapeHtml(mode.label)}</button>`).join("")}</nav>
-    <aside id="contents-rail" class="contents-rail" aria-labelledby="contents-title"><div class="drawer-heading"><h2 id="contents-title">Contents</h2><button type="button" data-close-drawer="contents" aria-label="Close contents">Close</button></div><div class="summary"><strong>Find a guide</strong><div class="result-count" id="result-count" aria-live="polite">Choose a task, role, or system guide</div></div><section class="search-results" id="search-results" aria-label="Search results" hidden></section>${model.modes.map((mode) => modePanel(mode, guides)).join("")}</aside>
+    <aside id="contents-rail" class="contents-rail" aria-labelledby="contents-title"><div class="drawer-heading"><h2 id="contents-title">Contents</h2><button type="button" data-close-drawer="contents" aria-label="Close contents">Close</button></div><div class="summary"><strong>Find a guide</strong><div class="result-count" id="result-count" aria-live="polite">Choose a task, role, or system guide</div></div><section class="search-results" id="search-results" aria-label="Search results" hidden></section><section class="empty" id="empty" aria-labelledby="empty-title" hidden><h2 id="empty-title">No direct answer found</h2><p role="status" aria-live="polite">Try a related term or start from a frequent task.</p><div class="article-list" aria-label="Controlled search suggestions"><a href="#mode=home&amp;guide=home&amp;q=receive+stock&amp;scope=all" data-route-link data-search-suggestion="receive stock"><span>Receive stock</span><small>Frequent task</small></a><a href="#mode=home&amp;guide=home&amp;q=approve+request&amp;scope=all" data-route-link data-search-suggestion="approve request"><span>Approve a request</span><small>Frequent task</small></a><a href="#mode=home&amp;guide=home&amp;q=cycle+count&amp;scope=all" data-route-link data-search-suggestion="cycle count"><span>Cycle count</span><small>Frequent task</small></a></div><div class="article-list" aria-label="Other handbook paths"><a href="#mode=roles&amp;guide=platform_administrator" data-route-link>Browse role guides</a><a href="#mode=system&amp;guide=source-references&amp;scope=mode" data-route-link data-no-result-system>Search System references</a></div></section>${model.modes.map((mode) => modePanel(mode, guides)).join("")}</aside>
     <main class="reading-canvas" tabindex="-1">
       <section class="route-notice" id="route-notice" role="status" hidden><span>This handbook link has moved. The nearest current guide is open.</span><div><button type="button" data-recovery-search>Search</button><button type="button" data-dismiss-notice aria-label="Dismiss message">Dismiss</button></div></section>
       ${homeGuide(home, guides, guideById)}
-      <p class="empty" id="empty" hidden>No guide matches this search and mode.</p>
       ${articles}
     </main>
     <aside id="page-toc" class="page-toc" aria-labelledby="page-toc-title"><div class="drawer-heading"><h2 id="page-toc-title">On this page</h2><button type="button" data-close-drawer="toc" aria-label="Close table of contents">Close</button></div><nav data-page-toc aria-label="On this page"></nav></aside>

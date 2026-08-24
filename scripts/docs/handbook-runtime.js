@@ -7,6 +7,7 @@
     const searchResults = document.querySelector('#search-results');
     const searchScopeButtons = [...document.querySelectorAll('[data-search-scope]')];
     const empty = document.querySelector('#empty');
+    const noResultSystemLink = document.querySelector('[data-no-result-system]');
     const count = document.querySelector('#result-count');
     const hero = document.querySelector('.hero');
     const readingCanvas = document.querySelector('.reading-canvas');
@@ -246,14 +247,19 @@
 
     function describeMatch(record, query) {
       const fields = { title: normalizeSearchText(record.title), heading: normalizeSearchText(record.heading), keywords: normalizeSearchText((record.keywords || []).join(' ')), summary: normalizeSearchText(record.summary), audience: normalizeSearchText((record.audience || []).join(' ')), source: normalizeSearchText(record.source), text: normalizeSearchText(record.searchText || record.text) };
-      if (fields.title === query) return { rank: 0, reason: 'Exact article title match' };
-      if (fields.title.startsWith(query)) return { rank: 1, reason: 'Article title starts with your search' };
-      if (fields.heading.includes(query)) return { rank: 2, reason: 'Matching section heading' };
-      if (fields.keywords.includes(query)) return { rank: 3, reason: 'Matching handbook keyword' };
-      if (fields.summary.includes(query)) return { rank: 4, reason: 'Matching article summary' };
-      if (fields.audience.includes(query)) return { rank: 4, reason: 'Matching intended audience' };
-      if (fields.source.includes(query)) return { rank: 4, reason: 'Matching source path' };
-      if (fields.text.includes(query)) return { rank: 5, reason: 'Matching section text' };
+      const typePriority = { Task: 0, Step: 1, Decision: 2, Role: 3, Troubleshooting: 4, 'System reference': 50 }[record.type] ?? 25;
+      const combined = Object.values(fields).join(' ');
+      const queryWords = query.split(' ').filter(Boolean);
+      if (fields.title === query) return { rank: typePriority, reason: `Exact ${record.type.toLowerCase()} title` };
+      if (fields.heading === query) return { rank: 1 + typePriority, reason: `Exact ${record.type.toLowerCase()} destination` };
+      if (fields.keywords.includes(query)) return { rank: 2 + typePriority, reason: record.whyMatched || 'Controlled handbook term' };
+      if (fields.title.includes(query)) return { rank: 4 + typePriority, reason: `${record.type} title` };
+      if (fields.heading.includes(query)) return { rank: 5 + typePriority, reason: `${record.type} destination heading` };
+      if (fields.summary.includes(query)) return { rank: 7 + typePriority, reason: `${record.type} action excerpt` };
+      if (fields.audience.includes(query)) return { rank: 8 + typePriority, reason: 'Applicable role' };
+      if (fields.text.includes(query)) return { rank: 9 + typePriority, reason: record.whyMatched || `${record.type} guidance` };
+      if (queryWords.length > 1 && queryWords.every((word) => combined.includes(word))) return { rank: 14 + typePriority, reason: `Related ${record.type.toLowerCase()} terms` };
+      if (fields.source.includes(query)) return { rank: 30 + typePriority, reason: 'Governed source path' };
       return null;
     }
 
@@ -270,7 +276,24 @@
     function rankSearchResults() {
       const query = normalizeSearchText(activeRoute.query);
       if (!query) return [];
-      return handbookIndex.filter((record) => activeRoute.scope === 'all' || record.modeId === activeRoute.modeId).map((record, index) => ({ record, index, match: describeMatch(record, query) })).filter(({ match }) => match).sort((left, right) => left.match.rank - right.match.rank || left.index - right.index);
+      const systemIntent = activeRoute.modeId === 'system' || /\b(system|technical|architecture|schema|release|audit|governance|security|infrastructure|continuity|backup|retention|source|uat|qa|login|password|access)\b/.test(query);
+      const ranked = handbookIndex
+        .filter((record) => (activeRoute.scope === 'all' || record.modeId === activeRoute.modeId) && (record.modeId !== 'system' || systemIntent))
+        .map((record, index) => ({ record, index, match: describeMatch(record, query) }))
+        .filter(({ match }) => match)
+        .sort((left, right) => left.match.rank - right.match.rank || left.index - right.index);
+      const seen = new Set();
+      const perGuide = new Map();
+      return ranked.filter(({ record }) => {
+        const logicalKey = record.type === 'System reference'
+          ? `${record.type}:${record.guideId}`
+          : `${record.type}:${record.guideId}:${record.headingId}`;
+        const guideCount = perGuide.get(record.guideId) || 0;
+        if (seen.has(logicalKey) || guideCount >= 3) return false;
+        seen.add(logicalKey);
+        perGuide.set(record.guideId, guideCount + 1);
+        return true;
+      });
     }
 
     function openSearchMatches() {
@@ -285,6 +308,7 @@
       panels.forEach((panel) => { panel.hidden = searching || panel.dataset.mode !== activeRoute.modeId; });
       empty.hidden = !searching || results.length !== 0;
       count.textContent = searching ? `${results.length} ${results.length === 1 ? 'result' : 'results'} in ${activeRoute.scope === 'all' ? 'all guides' : 'this mode'}` : 'Choose a guide to read';
+      if (noResultSystemLink) noResultSystemLink.href = routeHash({ modeId: 'system', guideId: 'source-references', headingId: null, query: activeRoute.query, scope: 'mode' });
       if (!searching) return;
       results.forEach(({ record, match }) => {
         const result = document.createElement('a');
@@ -294,14 +318,18 @@
         result.dataset.guideId = record.guideId;
         result.dataset.tab = record.tabId;
         result.dataset.article = record.articleId;
+        result.dataset.resultType = record.type;
         if (record.headingId) result.dataset.heading = `${record.guideId}-${record.headingId}`;
         const location = document.createElement('span');
         location.className = 'search-result-location';
         location.textContent = `${tabs.find((tab) => tab.dataset.mode === record.modeId)?.textContent || record.modeId} / ${record.title}`;
         const heading = document.createElement('strong'); heading.textContent = record.heading;
-        const reason = document.createElement('small'); reason.className = 'search-result-reason'; reason.textContent = match.reason;
-        const excerpt = document.createElement('small'); excerpt.className = 'search-result-excerpt'; excerpt.textContent = searchExcerptForQuery(record.searchText || record.text, activeRoute.query);
-        result.append(location, heading, reason, excerpt);
+        const context = document.createElement('small'); context.className = 'search-result-context'; context.textContent = [record.type, record.role ? `Role: ${record.role}` : '', record.module ? `Module: ${record.module}` : ''].filter(Boolean).join(' | ');
+        const reason = document.createElement('small'); reason.className = 'search-result-reason';
+        const matched = document.createElement('mark'); matched.textContent = activeRoute.query;
+        reason.append('Matched ', matched, `: ${match.reason}`);
+        const excerpt = document.createElement('small'); excerpt.className = 'search-result-excerpt'; excerpt.textContent = record.excerpt || record.text;
+        result.append(location, heading, context, reason, excerpt);
         searchResults.append(result);
       });
     }
@@ -378,7 +406,7 @@
       openContainingDisclosure(anchor);
       if (anchor?.matches('details')) anchor.open = true;
       const target = route.headingId
-        ? (anchor?.matches('summary, h1, h2, h3, h4, h5, h6') ? anchor : anchor?.querySelector(':scope > summary, :scope > h1, :scope > h2, :scope > h3, :scope > h4'))
+        ? (anchor?.matches('summary, h1, h2, h3, h4, h5, h6') ? anchor : anchor?.querySelector(':scope > summary, :scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > header > h3'))
         : guide?.querySelector('h1');
       if (!target) return;
       target.tabIndex = -1;
@@ -567,6 +595,13 @@
       const disclosureAction = event.target.closest('button[data-disclosure-action]');
       if (disclosureAction) { const article = disclosureAction.closest('article[data-document]'); article.querySelectorAll('details[data-section-id]').forEach((details) => { details.open = disclosureAction.dataset.disclosureAction === 'expand'; }); syncDisclosureState(); return; }
       if (printMenu && !printMenu.hidden && !event.target.closest('.print-control')) setPrintMenuVisible(false);
+      const suggestion = event.target.closest('a[data-search-suggestion]');
+      if (suggestion && !event.defaultPrevented && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
+        event.preventDefault();
+        setSearchState(parseRoute(suggestion.getAttribute('href')), { writeHash: true });
+        searchResults.querySelector('[data-search-result]')?.focus();
+        return;
+      }
       const link = event.target.closest('a[data-search-result], a[data-guide-link], a[data-article-link], a[data-heading-link], a[data-route-link]');
       if (!link || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       event.preventDefault();
@@ -660,6 +695,7 @@
       const hasSavedPosition = recoveredInitialRoute.guideId && Object.prototype.hasOwnProperty.call(guideScroll, recoveredInitialRoute.guideId);
       const focusTarget = Boolean(recoveredInitialRoute.headingId) || Boolean(recoveredInitialRoute.guideId && !hasSavedPosition);
       activateRoute({ ...recoveredInitialRoute, historyMode: 'replace', restoreScroll: hasSavedPosition ? 'stored' : false, focusTarget });
+      if (recoveredInitialRoute.query && isDrawerViewport()) setDrawerVisible('contents', true);
       lastHandledHash = location.hash;
       window.requestAnimationFrame(refreshDiagramCanvases);
     });

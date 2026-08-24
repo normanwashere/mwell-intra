@@ -414,7 +414,7 @@ test("renders governed source bodies once and links every other source control t
 
   for (const guide of HANDBOOK_GUIDES.filter(({ id }) => id !== "source-references")) {
     const rendered = guide.type === "home"
-      ? html.match(/<section class="hero home-guide"[\s\S]*?<\/section>\s*<p class="empty"/)?.[0] ?? ""
+      ? html.match(/<section class="hero home-guide"[\s\S]*?<\/section>\s*<article id="guide-/)?.[0] ?? ""
       : articleHtml(html, guide.id);
     assert.doesNotMatch(rendered, /source-reference-content/, guide.id);
     if (guide.sourceSections.length) {
@@ -752,6 +752,48 @@ test("embeds guide-level typed search records with match metadata", () => {
   assert.match(html, /"scope":"all"/);
   assert.match(html, /aria-live="polite"/);
   assert.doesNotMatch(indexMatch[1], /<\/script/i);
+});
+
+test("indexes operational language against canonical task and role destinations", () => {
+  const sources = documentationGenerator.loadDocumentationSources(documentationSources());
+  const model = documentationGenerator.resolveHandbookModel(sources);
+  const index = documentationGenerator.buildGuideSearchIndex(documentationGenerator.composeHandbookGuides(model));
+  const searchableText = (record) => normalizeWhitespace([
+    record.title,
+    record.heading,
+    record.keywords,
+    record.searchText,
+  ].flat().join(" ")).toLowerCase();
+  const cases = [
+    ["three-way match", "finance-readiness-evidence"],
+    ["approve request", "procurement-request-approval"],
+    ["report damaged item", "stock-receiving-putaway"],
+    ["reset password", "platform_administrator"],
+    ["cycle count", "inventory-count-variance"],
+    ["DOA", "department-doa-activation"],
+    ["receive stock", "stock-receiving-putaway"],
+    ["pick and pack", "ecommerce-fulfillment-delivery"],
+    ["invalid login", "platform_administrator"],
+    ["access denied", "platform_administrator"],
+    ["vendor renewal", "vendor-accreditation-renewal"],
+    ["renew vendor", "vendor-accreditation-renewal"],
+    ["RFQ", "procurement-request-approval"],
+    ["refund", "returns-replacements-refunds-rma"],
+    ["lost event stock", "event-stock-custody"],
+    ["cycle count variance", "inventory-count-variance"],
+  ];
+
+  assert.deepEqual(
+    [...new Set(index.map(({ type }) => type))],
+    ["Task", "Step", "Decision", "Troubleshooting", "Role", "System reference"],
+  );
+  for (const [query, guideId] of cases) {
+    const match = index.find((record) => record.guideId === guideId && searchableText(record).includes(query.toLowerCase()));
+    assert.ok(match, `${query} must index an operational answer in ${guideId}`);
+    assert.match(match.href, new RegExp(`^#mode=(?:tasks|roles)&guide=${guideId}&heading=`));
+    assert.ok(match.role || match.module, `${query} must expose role or module context`);
+    assert.ok(match.excerpt.length > 20, `${query} must expose an actionable excerpt`);
+  }
 });
 
 test("renders scoped explainable search without navigation reloads", () => {
