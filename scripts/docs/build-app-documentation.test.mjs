@@ -235,6 +235,16 @@ test("fails before rendering an unclassified maintained source", () => {
   );
 });
 
+test("fails before rendering duplicate maintained sources", () => {
+  const sources = documentationSources();
+  const duplicateSource = "docs/releases/2026-08-21-WMS-FEEDBACK-RELEASE.md";
+
+  assert.throws(
+    () => buildDocumentationHtml([...sources, duplicateSource]),
+    new RegExp(`${duplicateSource}.*appears more than once`, "i"),
+  );
+});
+
 test("includes the canonical mWell source, incorporated MPIC reference, and three route axes", () => {
   const html = buildDocumentationHtml();
   assert.match(html, /mWell Procurement Policy and Procedures - Revised Modern Visual - Word Updated\.docx/);
