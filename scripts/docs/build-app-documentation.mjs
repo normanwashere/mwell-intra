@@ -388,16 +388,31 @@ export function resolveHandbookModel(sourceInput, options = {}) {
 }
 
 export function composeHandbookGuides(model) {
+  const sourceLibrary = model.guideById.get("source-references");
+  const librarySectionByFile = new Map(
+    sourceLibrary.sourceSections.map((sourceSection) => [sourceSection.source, sourceSection]),
+  );
   return model.guides.map((guide) => {
-    const contextualSourceIds = new Map(model.sources.map((source) => [
-      source.file,
-      guide.id === "source-references" ? source.legacyArticleId : `${guide.id}-${source.legacyArticleId}`,
-    ]));
+    const ownsGovernedBodies = guide.id === "source-references";
+    const sourceIds = new Map(model.sources.map((source) => [source.file, source.legacyArticleId]));
     const sourceReferences = guide.sourceSections.map((sourceSection) => {
       const source = model.sourceByFile.get(sourceSection.source);
       if (!source) throw new Error(`${guide.id} references unavailable source ${sourceSection.source}.`);
       const sourceText = extractSourceFragment(source, sourceSection.heading);
-      const rendered = renderSource(sourceText, source.file, contextualSourceIds, model.sourceRoutes);
+      const librarySection = librarySectionByFile.get(source.file);
+      if (!librarySection) throw new Error(`${source.file} has no canonical System source-library section.`);
+      const rootHeading = source.sourceText.match(/^#\s+(.+)$/m)?.[1]?.trim();
+      const canonicalTargetId = sourceSection.heading && sourceSection.heading !== rootHeading
+        ? `${source.legacyArticleId}-${slug(sourceSection.heading)}`
+        : `source-references-${librarySection.id}`;
+      const canonicalSourceHref = routeHash({
+        tabId: MODE_TAB_ALIASES.system,
+        articleId: "guide-source-references",
+        headingId: canonicalTargetId,
+      });
+      const rendered = ownsGovernedBodies
+        ? renderSource(sourceText, source.file, sourceIds, model.sourceRoutes)
+        : null;
       return {
         ...sourceSection,
         file: source.file,
@@ -409,8 +424,10 @@ export function composeHandbookGuides(model) {
         releaseIdentity: guide.applicableBuild ?? "Current generated handbook",
         hash: source.hash,
         sourceText,
-        html: decorateArticleHtml({
-          id: contextualSourceIds.get(source.file),
+        canonicalTargetId,
+        canonicalSourceHref,
+        html: rendered == null ? null : decorateArticleHtml({
+          id: source.legacyArticleId,
           collapse: "none",
         }, rendered),
       };
@@ -506,16 +523,26 @@ export function buildGuideSearchIndex(guides) {
       records.push(guideSearchRecord({
         type: "Decision",
         guide,
-        headingId: "decisions-and-exceptions",
+        headingId: decision.id,
         title: guide.title,
-        heading: decision.label,
-        role: roles.join(", "),
+        heading: decision.question,
+        role: roleLabel(decision.ownerRole),
         module: guide.module,
-        excerpt: `${decision.label} ${guide.recovery}`,
+        excerpt: `${decision.question} ${decision.noBranch.outcome} ${decision.noBranch.recoveryAction}`,
         whyMatched: "Decision, denial, exception, or recovery",
         keywords: [...guide.keywords, "decision", "exception"],
-        searchText: [decision.label, guide.denialChecks, guide.recovery, guide.keywords].flat().join(" "),
-        audience: roles,
+        searchText: [
+          decision.question,
+          decision.yesBranch.label,
+          decision.yesBranch.condition,
+          decision.yesBranch.outcome,
+          decision.noBranch.label,
+          decision.noBranch.condition,
+          decision.noBranch.outcome,
+          decision.noBranch.recoveryAction,
+          guide.keywords,
+        ].flat().join(" "),
+        audience: [roleLabel(decision.ownerRole)],
         source: sources,
       }));
     }
@@ -584,7 +611,7 @@ export function buildGuideSearchIndex(guides) {
       audience: guide.audience,
       source: guide.governingSources.join(" "),
     }));
-    for (const reference of guide.sourceReferences) {
+    for (const reference of guide.id === "source-references" ? guide.sourceReferences : []) {
       records.push(guideSearchRecord({
         type: "System reference",
         guide,
@@ -614,16 +641,24 @@ function guideLink(guide, { label = guide.title, summary = guide.summary, headin
   return `<a href="${escapeHtml(compatibilityGuideHash({ modeId: guide.modeId, guideId: guide.id, headingId }))}" data-guide-link data-article-link${related ? " data-related-link" : ""} data-mode="${escapeHtml(guide.modeId)}" data-guide-id="${escapeHtml(guide.id)}" data-tab="${escapeHtml(tabId)}" data-article="guide-${escapeHtml(guide.id)}"${headingId ? ` data-heading="${escapeHtml(`${guide.id}-${headingId}`)}"` : ""} data-title="${escapeHtml(guide.title)}" data-summary="${escapeHtml(guide.summary)}" data-audience="${escapeHtml((guide.audience ?? guide.participatingRoles ?? []).join(", "))}" data-content-type="${escapeHtml(guide.type)}"><span>${escapeHtml(label)}</span>${summary ? `<small>${escapeHtml(summary)}</small>` : ""}</a>`;
 }
 
-function sourceReference(reference) {
-  return `<details class="source-reference" data-source-reference="${escapeHtml(reference.id)}" data-source-file="${escapeHtml(reference.file)}" data-section-id="source:${escapeHtml(reference.file)}:${escapeHtml(reference.id)}"><summary id="${escapeHtml(reference.id)}-source-reference"><span>${escapeHtml(reference.heading ?? reference.title)}</span><small>${escapeHtml(reference.file)}</small></summary><div class="source-reference-content">${reference.html}</div></details>`;
+function canonicalSourceLink(reference) {
+  return `<a href="${escapeHtml(reference.canonicalSourceHref)}" data-canonical-source-link data-article-link data-tab="system" data-article="guide-source-references" data-heading="${escapeHtml(reference.canonicalTargetId)}">Open governed source in the System library</a>`;
 }
 
-function sourceControlRows(references) {
-  return references.map((reference) => `<section class="source-control" data-source-control="${escapeHtml(reference.id)}"><h3>${escapeHtml(reference.heading ?? reference.title)}</h3><dl><dt>Source filename</dt><dd>${escapeHtml(reference.file)}</dd><dt>Owner</dt><dd>${escapeHtml(reference.owner)}</dd><dt>Version</dt><dd>${escapeHtml(reference.version)}</dd><dt>Source checksum</dt><dd><code>${escapeHtml(reference.hash)}</code></dd><dt>Release identity</dt><dd>${escapeHtml(reference.releaseIdentity)}</dd><dt>Review date</dt><dd>${escapeHtml(reference.reviewDate)}</dd></dl></section>`).join("");
+function sourceReferenceBody(guide, reference) {
+  return `<details id="${escapeHtml(`${guide.id}-${reference.id}`)}" class="source-reference" data-source-reference="${escapeHtml(reference.id)}" data-source-body data-source-file="${escapeHtml(reference.file)}" data-section-id="${escapeHtml(`${guide.id}:source:${reference.id}`)}"><summary id="${escapeHtml(`${guide.id}-${reference.id}-summary`)}"><span>${escapeHtml(reference.heading ?? reference.title)}</span><small>${escapeHtml(reference.file)}</small></summary><div class="source-reference-content">${reference.html}</div></details>`;
 }
 
-function documentControls(guide, references, { includeReferences = true, sectionId = "document-controls", label = "Document controls" } = {}) {
-  return `<details class="guide-support document-controls" data-guide-section="${escapeHtml(sectionId)}" data-section-id="${escapeHtml(`${guide.id}:${sectionId}`)}"><summary id="${escapeHtml(`${guide.id}-${sectionId}`)}"><span role="heading" aria-level="2">${escapeHtml(label)}</span></summary><div class="guide-support-content">${sourceControlRows(guide.sourceReferences)}${includeReferences && references.length ? `<section class="guide-source-references" aria-label="Source references"><h3>Source references</h3>${references.map(sourceReference).join("")}</section>` : ""}</div></details>`;
+function sourceReferenceLink(guide, reference) {
+  return `<section id="${escapeHtml(`${guide.id}-${reference.id}`)}" class="source-reference-link" data-source-reference="${escapeHtml(reference.id)}" data-source-file="${escapeHtml(reference.file)}"><h3>${escapeHtml(reference.heading ?? reference.title)}</h3><p><code>${escapeHtml(reference.file)}</code></p>${canonicalSourceLink(reference)}</section>`;
+}
+
+function sourceControlRows(guide, references, { addressable = false } = {}) {
+  return references.map((reference) => `<section${addressable ? ` id="${escapeHtml(`${guide.id}-${reference.id}`)}"` : ""} class="source-control" data-source-control="${escapeHtml(`${guide.id}:${reference.id}`)}"><h3>${escapeHtml(reference.heading ?? reference.title)}</h3><dl><dt>Source filename</dt><dd>${escapeHtml(reference.file)}</dd><dt>Owner</dt><dd>${escapeHtml(reference.owner)}</dd><dt>Version</dt><dd>${escapeHtml(reference.version)}</dd><dt>Source checksum</dt><dd><code>${escapeHtml(reference.hash)}</code></dd><dt>Release identity</dt><dd>${escapeHtml(reference.releaseIdentity)}</dd><dt>Review date</dt><dd>${escapeHtml(reference.reviewDate)}</dd></dl>${canonicalSourceLink(reference)}</section>`).join("");
+}
+
+function documentControls(guide, references, { sectionId = "document-controls", label = "Document controls", addressableReferences = true } = {}) {
+  return `<details class="guide-support document-controls" data-guide-section="${escapeHtml(sectionId)}" data-section-id="${escapeHtml(`${guide.id}:${sectionId}`)}"><summary id="${escapeHtml(`${guide.id}-${sectionId}`)}"><span role="heading" aria-level="2">${escapeHtml(label)}</span></summary><div class="guide-support-content">${sourceControlRows(guide, references, { addressable: addressableReferences })}</div></details>`;
 }
 
 function guideSection(guide, id, label, content, attributes = "") {
@@ -634,32 +669,83 @@ function mermaidLabel(value) {
   return String(value).replace(/[\[\]{}"\n]/g, " ").replace(/\s+/g, " ").trim();
 }
 
+function decisionTargetNode(target, stageNodes, decisionNodes) {
+  if (target.type === "stage") return stageNodes.get(target.id);
+  if (target.type === "decision") return decisionNodes.get(target.id);
+  return `O_${target.id.replace(/[^a-z0-9]+/gi, "_").toUpperCase()}`;
+}
+
 function taskFlow(guide) {
   const lines = ["flowchart TD", `START([${mermaidLabel(guide.startCondition)}])`];
+  const stageNodes = new Map(guide.steps.map((stage, index) => [stage.id, `S${index + 1}`]));
+  const decisionNodes = new Map(guide.decisionPoints.map((decision, index) => [decision.id, `D${index + 1}`]));
+  const decisionIdsWithInboundBranches = new Set(
+    guide.decisionPoints.flatMap((decision) => [decision.yesBranch, decision.noBranch])
+      .filter(({ target }) => target.type === "decision")
+      .map(({ target }) => target.id),
+  );
+  const decisionsAt = (position, stageId) => guide.decisionPoints.filter((decision) =>
+    decision.placement.position === position &&
+    decision.placement.stageId === stageId &&
+    !decisionIdsWithInboundBranches.has(decision.id));
+  const outcomes = new Set();
+
   guide.steps.forEach((stage, index) => lines.push(`S${index + 1}["${index + 1}. ${mermaidLabel(stage.label)}"]`));
-  if (guide.steps.length) {
-    lines.push("START --> S1");
-    for (let index = 1; index < guide.steps.length; index += 1) lines.push(`S${index} --> S${index + 1}`);
+  guide.decisionPoints.forEach((decision, index) => lines.push(`D${index + 1}{"${mermaidLabel(decision.question)}"}`));
+
+  const firstStage = guide.steps[0];
+  if (firstStage) {
+    const beforeFirst = decisionsAt("before", firstStage.id);
+    lines.push(`START --> ${beforeFirst.length ? decisionNodes.get(beforeFirst[0].id) : stageNodes.get(firstStage.id)}`);
   }
-  guide.decisionPoints.forEach((decision, index) => lines.push(`D${index + 1}{"${mermaidLabel(decision.label)}"}`));
-  const lastStep = `S${guide.steps.length}`;
-  if (guide.decisionPoints.length) {
-    lines.push(`${lastStep} --> D1`);
-    guide.decisionPoints.forEach((_, index) => {
-      const current = `D${index + 1}`;
-      const next = index + 1 < guide.decisionPoints.length ? `D${index + 2}` : "COMPLETE";
-      lines.push(`${current} -->|Yes| ${next}`);
-      lines.push(`${current} -->|No| RECOVERY`);
-    });
-  } else {
-    lines.push(`${lastStep} --> COMPLETE`);
+  for (const [index, stage] of guide.steps.entries()) {
+    const stageNode = stageNodes.get(stage.id);
+    const after = decisionsAt("after", stage.id);
+    if (after.length) {
+      for (const decision of after) lines.push(`${stageNode} --> ${decisionNodes.get(decision.id)}`);
+    } else if (index + 1 < guide.steps.length) {
+      const nextStage = guide.steps[index + 1];
+      const beforeNext = decisionsAt("before", nextStage.id);
+      lines.push(`${stageNode} --> ${beforeNext.length ? decisionNodes.get(beforeNext[0].id) : stageNodes.get(nextStage.id)}`);
+    } else {
+      outcomes.add("completion");
+      lines.push(`${stageNode} --> O_COMPLETION`);
+    }
   }
-  lines.push("RECOVERY[Correction or recovery] --> HOLD([Controlled hold or escalation])");
-  lines.push("COMPLETE([Completion criteria met])");
+  for (const decision of guide.decisionPoints) {
+    for (const branch of [decision.yesBranch, decision.noBranch]) {
+      if (branch.target.type === "outcome") outcomes.add(branch.target.id);
+      lines.push(`${decisionNodes.get(decision.id)} -->|${mermaidLabel(branch.label)}| ${decisionTargetNode(branch.target, stageNodes, decisionNodes)}`);
+    }
+  }
+  for (const outcome of outcomes) {
+    const label = outcome.replaceAll("-", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+    lines.push(`O_${outcome.replace(/[^a-z0-9]+/gi, "_").toUpperCase()}([${label}])`);
+  }
   const source = lines.join("\n");
   const stages = guide.steps.map(({ label }) => label).join("|");
-  const textEquivalent = `<div class="flow-text-equivalent"><h3>Flow text equivalent</h3><ol>${guide.steps.map((stage, index) => `<li>${index + 1}. ${escapeHtml(stage.label)} by ${escapeHtml(stage.performingRole)}.</li>`).join("")}</ol><p><strong>Decisions:</strong> ${escapeHtml(guide.decisionPoints.map(({ label }) => label).join(" "))}</p><p><strong>Terminal outcomes:</strong> Completion criteria met, or controlled hold and escalation after recovery.</p></div>`;
+  const textEquivalent = `<div class="flow-text-equivalent"><h3>Flow text equivalent</h3><ol>${guide.steps.map((stage, index) => `<li>${index + 1}. ${escapeHtml(stage.label)} by ${escapeHtml(stage.performingRole)}.${guide.decisionPoints.filter(({ placement }) => placement.stageId === stage.id).map((decision) => ` Decision: ${decision.question}`).join("")}</li>`).join("")}</ol><p><strong>Branches:</strong> ${escapeHtml(guide.decisionPoints.flatMap((decision) => [decision.yesBranch, decision.noBranch]).map((branch) => `${branch.label}: ${branch.outcome}`).join(" "))}</p></div>`;
   return `<figure class="diagram-shell" data-diagram-id="${escapeHtml(`${guide.id}:flow:overview`)}" data-flow-workflow="${escapeHtml(guide.id)}" data-flow-view="overview" data-flow-stages="${escapeHtml(stages)}"><div class="diagram-toolbar" aria-label="Diagram zoom controls"><button type="button" data-diagram-fit aria-label="Fit diagram to available space">Fit</button><button type="button" data-diagram-zoom="reset" aria-label="Show diagram at 100 percent">100%</button><button type="button" data-diagram-zoom="out" aria-label="Zoom diagram out">−</button><button type="button" data-diagram-zoom="in" aria-label="Zoom diagram in">+</button></div><div class="diagram-viewport" data-diagram-viewport role="region" tabindex="0" aria-label="Task flow diagram"><div class="diagram-canvas"><div class="mermaid">${escapeHtml(source)}</div></div></div><figcaption>Complete task flow with decision and terminal outcomes.</figcaption></figure>${textEquivalent}`;
+}
+
+function decisionDestination(guide, decisionById, branch) {
+  if (branch.target.type === "stage") {
+    const index = guide.steps.findIndex(({ id }) => id === branch.target.id);
+    return `Resume at Step ${index + 1}: ${guide.steps[index].label}.`;
+  }
+  if (branch.target.type === "decision") {
+    return `Continue to decision: ${decisionById.get(branch.target.id).question}`;
+  }
+  return `Terminal ${branch.target.id.replaceAll("-", " ")} outcome.`;
+}
+
+function decisionRecords(guide, roleName) {
+  const decisionById = new Map(guide.decisionPoints.map((decision) => [decision.id, decision]));
+  return guide.decisionPoints.map((decision) => {
+    const stageIndex = guide.steps.findIndex(({ id }) => id === decision.placement.stageId);
+    const branchRecord = (branch, failed) => `<section class="decision-branch" data-decision-branch="${failed ? "no" : "yes"}"><h4>${escapeHtml(branch.label)} branch</h4><dl><dt>${failed ? "Failed condition" : "Branch condition"}</dt><dd>${escapeHtml(branch.condition)}</dd><dt>Outcome</dt><dd>${escapeHtml(branch.outcome)}</dd><dt>Recovery action</dt><dd>${escapeHtml(branch.recoveryAction)}</dd><dt>Destination</dt><dd>${escapeHtml(decisionDestination(guide, decisionById, branch))}</dd><dt>Semantics</dt><dd>${branch.terminal ? "Terminal outcome; this task instance does not resume." : "Recovery or continuation; resume at the named destination."}</dd></dl></section>`;
+    return `<section id="${escapeHtml(`${guide.id}-${decision.id}`)}" class="decision-record" data-task-decision="${escapeHtml(decision.id)}"><h3>${escapeHtml(decision.question)}</h3><p><strong>Placement:</strong> ${escapeHtml(`${decision.placement.position === "before" ? "Before" : "After"} Step ${stageIndex + 1}: ${guide.steps[stageIndex].label}`)}</p><p><strong>Owner:</strong> ${escapeHtml(roleName(decision.ownerRole))}</p>${branchRecord(decision.yesBranch, false)}${branchRecord(decision.noBranch, true)}</section>`;
+  }).join("");
 }
 
 function taskArticle(guide, guideById) {
@@ -672,10 +758,10 @@ function taskArticle(guide, guideById) {
   }).join("");
   const prerequisites = `<h3>Required access</h3>${renderItems(guide.requiredAccess)}<h3>Inputs and evidence</h3>${renderItems(guide.inputsAndEvidence)}<h3>Start condition</h3><p>${escapeHtml(guide.startCondition)}</p>`;
   const stages = `<ol class="task-stages">${guide.steps.map((stage, index) => `<li id="${escapeHtml(`${guide.id}-${stage.id}`)}" data-task-stage="${escapeHtml(stage.id)}"><header><span>Step ${index + 1}</span><h3>${escapeHtml(stage.label)}</h3><p>${escapeHtml(roleName(stage.performingRole))} | ${escapeHtml(stage.module)} | <code>${escapeHtml(stage.route)}</code></p></header><p>${escapeHtml(stage.instruction)}</p><aside class="screen-evidence-pending" data-screen-evidence="pending" data-screenshot-binding="${escapeHtml(stage.screenshot.bindingId)}" role="status"><strong>Screen evidence pending review</strong><p>The procedure remains usable while the stage-specific application evidence is reviewed.</p></aside><dl><dt>Expected visible result</dt><dd>${escapeHtml(stage.expectedResult)}</dd><dt>Data read</dt><dd>${escapeHtml(stage.dataRead.join("; "))}</dd><dt>Data written</dt><dd>${escapeHtml(stage.dataWritten.join("; "))}</dd><dt>Evidence retained</dt><dd>${escapeHtml(stage.evidenceRetained.join("; "))}</dd><dt>Next handoff</dt><dd>${escapeHtml(roleName(stage.nextHandoff))}</dd></dl></li>`).join("")}</ol>`;
-  const decisions = `<h3>Decision points</h3>${renderItems(guide.decisionPoints.map(({ label }) => label))}<h3>Denial checks</h3>${renderItems(guide.denialChecks)}<h3>Recovery</h3><p>${escapeHtml(guide.recovery)}</p><h3>Task handoff</h3><p>${escapeHtml(guide.handoff)}</p>`;
+  const decisions = `${decisionRecords(guide, roleName)}<h3>Denial checks</h3>${renderItems(guide.denialChecks)}<h3>Shared recovery control</h3><p>${escapeHtml(guide.recovery)}</p><h3>Task handoff</h3><p>${escapeHtml(guide.handoff)}</p>`;
   const completion = `<h3>Observable application state</h3>${renderItems(guide.completionCriteria)}<h3>Retained evidence</h3>${renderItems(guide.completionEvidence)}<h3>Downstream owner and unfinished states</h3><p>${escapeHtml(guide.handoff)}</p>${renderItems(guide.denialChecks)}`;
   const related = guide.relatedTasks.map((id) => guideById.get(id)).filter(Boolean);
-  const policy = `<details class="guide-support policy-basis" data-guide-section="policy-basis" data-section-id="${escapeHtml(`${guide.id}:policy-basis`)}"><summary id="${escapeHtml(`${guide.id}-policy-basis`)}"><span role="heading" aria-level="2">Why this rule exists</span></summary><div class="guide-support-content">${policyReferences.length ? policyReferences.map(sourceReference).join("") : "<p>No separate policy extract is mapped to this guide.</p>"}</div></details>`;
+  const policy = `<details class="guide-support policy-basis" data-guide-section="policy-basis" data-section-id="${escapeHtml(`${guide.id}:policy-basis`)}"><summary id="${escapeHtml(`${guide.id}-policy-basis`)}"><span role="heading" aria-level="2">Why this rule exists</span></summary><div class="guide-support-content">${policyReferences.length ? sourceControlRows(guide, policyReferences, { addressable: true }) : "<p>No separate policy extract is mapped to this guide.</p>"}</div></details>`;
   return `<article id="guide-${escapeHtml(guide.id)}" data-guide data-document data-guide-id="${escapeHtml(guide.id)}" data-guide-type="task" data-mode="tasks" data-tab="workflows" data-related-tabs="" data-category="Tasks" data-search="${escapeHtml([guide.title, guide.summary, guide.keywords].flat().join(" ").toLowerCase())}" hidden><header class="article-header"><div><span class="category">Task</span><h1>${escapeHtml(guide.title)}</h1><p>${escapeHtml(guide.summary)}</p></div></header><div class="article-body">${guideSection(guide, "outcome", "Outcome", `<p>${escapeHtml(guide.outcome)}</p>`)}${guideSection(guide, "flow", "Flow", taskFlow(guide))}${guideSection(guide, "who-is-involved", "Who is involved", `<ul>${involved}</ul><p><strong>Accountable closer:</strong> ${escapeHtml(roleName(guide.steps.at(-1)?.performingRole ?? guide.participatingRoles.at(-1)))}</p>`)}${guideSection(guide, "before-you-start", "Before you start", prerequisites)}${guideSection(guide, "steps", "Steps", stages)}${guideSection(guide, "decisions-and-exceptions", "Decisions and exceptions", decisions)}${guideSection(guide, "completion-checklist", "Completion checklist", completion)}${guideSection(guide, "related-tasks", "Related tasks", related.length ? `<div class="article-list">${related.map((item) => guideLink(item, { related: true })).join("")}</div>` : "<p>No direct continuation or recovery guide.</p>")}${policy}${documentControls(guide, supportReferences)}</div></article>`;
 }
 
@@ -689,8 +775,11 @@ function roleArticle(guide, guideById) {
 }
 
 function systemArticle(guide) {
-  const references = guide.sourceReferences.map(sourceReference).join("");
-  return `<article id="guide-${escapeHtml(guide.id)}" data-guide data-document data-guide-id="${escapeHtml(guide.id)}" data-guide-type="system" data-mode="system" data-tab="system" data-related-tabs="" data-category="System" data-search="${escapeHtml([guide.title, guide.summary, guide.keywords].flat().join(" ").toLowerCase())}" hidden><header class="article-header"><div><span class="category">System</span><h1>${escapeHtml(guide.title)}</h1><p>${escapeHtml(guide.summary)}</p></div></header><div class="article-body">${guideSection(guide, "overview", "Overview", `<p>${escapeHtml(guide.summary)}</p><p><strong>Audience:</strong> ${escapeHtml(guide.audience.join(", "))}</p>`)}${guideSection(guide, "source-references", "Source references", references || "<p>No governed reference is mapped.</p>")}${documentControls(guide, [], { includeReferences: false })}</div></article>`;
+  const ownsGovernedBodies = guide.id === "source-references";
+  const references = guide.sourceReferences.map((reference) => ownsGovernedBodies
+    ? sourceReferenceBody(guide, reference)
+    : sourceReferenceLink(guide, reference)).join("");
+  return `<article id="guide-${escapeHtml(guide.id)}" data-guide data-document data-guide-id="${escapeHtml(guide.id)}" data-guide-type="system" data-mode="system" data-tab="system" data-related-tabs="" data-category="System" data-search="${escapeHtml([guide.title, guide.summary, guide.keywords].flat().join(" ").toLowerCase())}" hidden><header class="article-header"><div><span class="category">System</span><h1>${escapeHtml(guide.title)}</h1><p>${escapeHtml(guide.summary)}</p></div></header><div class="article-body">${guideSection(guide, "overview", "Overview", `<p>${escapeHtml(guide.summary)}</p><p><strong>Audience:</strong> ${escapeHtml(guide.audience.join(", "))}</p>`)}${guideSection(guide, "source-references", "Source references", references || "<p>No governed reference is mapped.</p>")}${documentControls(guide, guide.sourceReferences, { addressableReferences: false })}</div></article>`;
 }
 
 function homeGuide(guide, guides, guideById) {
@@ -741,7 +830,7 @@ ${styles}
     <div class="toolbar"><span data-current-mode>Home</span><button class="drawer-trigger" type="button" data-open-drawer="contents" aria-controls="contents-rail" aria-expanded="false">Contents</button><button class="drawer-trigger" type="button" data-open-drawer="toc" aria-controls="page-toc" aria-expanded="false">On this page</button><button id="theme" type="button" aria-label="Toggle color theme">Theme</button><div class="print-control"><button type="button" data-print-trigger aria-controls="print-menu" aria-expanded="false" aria-haspopup="dialog">Print</button><div id="print-menu" class="print-menu" role="dialog" aria-label="Print options" tabindex="-1" hidden><button type="button" data-print-scope="article">Current guide</button><button type="button" data-print-scope="tab">Current mode</button><button type="button" data-print-scope="all">Complete handbook</button></div></div></div>
   </header>
   <div class="handbook-shell">
-    <nav class="tab-rail" role="tablist" aria-label="Handbook modes">${model.modes.map((mode, index) => `<button role="tab" id="mode-${escapeHtml(mode.id)}" aria-controls="mode-panel-${escapeHtml(mode.id)}" aria-selected="${index === 0}" tabindex="${index === 0 ? 0 : -1}" type="button" data-mode-button data-mode="${escapeHtml(mode.id)}" data-tab-button data-tab="${escapeHtml(MODE_TAB_ALIASES[mode.id])}">${escapeHtml(mode.label)}</button>`).join("")}</nav>
+    <nav class="tab-rail" role="tablist" aria-label="Handbook modes">${model.modes.map((mode, index) => `<button role="tab" id="mode-${escapeHtml(mode.id)}" aria-controls="panel-${escapeHtml(MODE_TAB_ALIASES[mode.id])}" aria-selected="${index === 0}" tabindex="${index === 0 ? 0 : -1}" type="button" data-mode-button data-mode="${escapeHtml(mode.id)}" data-tab-button data-tab="${escapeHtml(MODE_TAB_ALIASES[mode.id])}">${escapeHtml(mode.label)}</button>`).join("")}</nav>
     <aside id="contents-rail" class="contents-rail" aria-labelledby="contents-title"><div class="drawer-heading"><h2 id="contents-title">Contents</h2><button type="button" data-close-drawer="contents" aria-label="Close contents">Close</button></div><div class="summary"><strong>Find a guide</strong><div class="result-count" id="result-count" aria-live="polite">Choose a task, role, or system guide</div></div><section class="search-results" id="search-results" aria-label="Search results" hidden></section>${model.modes.map((mode) => modePanel(mode, guides)).join("")}</aside>
     <main class="reading-canvas" tabindex="-1">
       <section class="route-notice" id="route-notice" role="status" hidden><span>This handbook link has moved. The nearest current guide is open.</span><div><button type="button" data-recovery-search>Search</button><button type="button" data-dismiss-notice aria-label="Dismiss message">Dismiss</button></div></section>

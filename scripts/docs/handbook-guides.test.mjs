@@ -118,6 +118,26 @@ const STAGE_FIELDS = [
   "nextHandoff",
 ];
 
+const DECISION_FIELDS = [
+  "id",
+  "placement",
+  "ownerRole",
+  "question",
+  "yesBranch",
+  "noBranch",
+];
+
+const DECISION_PLACEMENT_FIELDS = ["position", "stageId"];
+const DECISION_BRANCH_FIELDS = [
+  "label",
+  "condition",
+  "target",
+  "outcome",
+  "recoveryAction",
+  "terminal",
+];
+const DECISION_TARGET_FIELDS = ["type", "id"];
+
 const SIMULATION_FIELDS = [
   "id",
   "title",
@@ -417,6 +437,35 @@ test("task and role guides contain every required structured field", () => {
       assert.equal(stage.screenshot.path, null);
       assert.equal(stage.screenshot.target, null);
     }
+    for (const decision of guide.decisionPoints) {
+      for (const field of DECISION_FIELDS) {
+        assert.equal(isPopulated(decision[field]), true, `${guide.id}.${decision.id}.${field}`);
+      }
+      for (const field of DECISION_PLACEMENT_FIELDS) {
+        assert.equal(
+          isPopulated(decision.placement[field]),
+          true,
+          `${guide.id}.${decision.id}.placement.${field}`,
+        );
+      }
+      for (const branchName of ["yesBranch", "noBranch"]) {
+        const branch = decision[branchName];
+        for (const field of DECISION_BRANCH_FIELDS) {
+          assert.equal(
+            isPopulated(branch[field]),
+            true,
+            `${guide.id}.${decision.id}.${branchName}.${field}`,
+          );
+        }
+        for (const field of DECISION_TARGET_FIELDS) {
+          assert.equal(
+            isPopulated(branch.target[field]),
+            true,
+            `${guide.id}.${decision.id}.${branchName}.target.${field}`,
+          );
+        }
+      }
+    }
   }
 
   for (const guide of HANDBOOK_GUIDES.filter(({ type }) => type === "role")) {
@@ -430,6 +479,37 @@ test("task and role guides contain every required structured field", () => {
         `${guide.id}.guidedSimulation.${field}`,
       );
     }
+  }
+});
+
+test("validation rejects missing or invalid decision placement and branch targets", () => {
+  const cases = [
+    ["missing placement stage", (decision) => {
+      delete decision.placement.stageId;
+    }, /decision decision-1 placement is missing required field stageId/],
+    ["invalid placement stage", (decision) => {
+      decision.placement.stageId = "step-99";
+    }, /decision decision-1 uses missing placement stage step-99/],
+    ["invalid placement position", (decision) => {
+      decision.placement.position = "during";
+    }, /decision decision-1 has invalid placement position during/],
+    ["missing stage branch target", (decision) => {
+      decision.yesBranch.target = { type: "stage", id: "step-99" };
+    }, /decision decision-1 yesBranch targets missing stage step-99/],
+    ["missing decision branch target", (decision) => {
+      decision.noBranch.target = { type: "decision", id: "decision-99" };
+    }, /decision decision-1 noBranch targets missing decision decision-99/],
+    ["invalid terminal outcome", (decision) => {
+      decision.noBranch.target = { type: "outcome", id: "pretend-success" };
+      decision.noBranch.terminal = true;
+    }, /decision decision-1 noBranch targets invalid outcome pretend-success/],
+  ];
+
+  for (const [label, mutate, expected] of cases) {
+    const guides = cloneGuides();
+    const decision = guides.find(({ id }) => id === "procurement-request-approval").decisionPoints[0];
+    mutate(decision);
+    assert.match(validateHandbookGuides({ guides }).errors.join("\n"), expected, label);
   }
 });
 

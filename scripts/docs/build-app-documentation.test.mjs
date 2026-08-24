@@ -248,6 +248,12 @@ function articleHtml(html, guideId) {
   return match[0];
 }
 
+function tagAttributes(tag) {
+  return Object.fromEntries(
+    [...tag.matchAll(/([\w:-]+)="([^"]*)"/g)].map((match) => [match[1], match[2]]),
+  );
+}
+
 test("exports deterministic outcome-first generator phases", () => {
   for (const helper of [
     "loadDocumentationSources",
@@ -356,6 +362,83 @@ test("collapses policy, source, capability, and document controls while preservi
   }
   assert.match(sourceLibrary, /Mwell Intra Process Reference Library/);
   assert.match(sourceLibrary, /user@example\.com/);
+});
+
+test("renders decisions at their true stage with explicit recovery and terminal destinations", () => {
+  const html = buildDocumentationHtml();
+  const procurement = articleHtml(html, "procurement-request-approval");
+  const receiving = articleHtml(html, "stock-receiving-putaway");
+  const fulfillment = articleHtml(html, "ecommerce-fulfillment-delivery");
+
+  assert.match(procurement, /S1 --&gt; D1/);
+  assert.match(procurement, /D1 --&gt;\|Complete\| S2/);
+  assert.match(procurement, /S3 --&gt; D3/);
+  assert.match(procurement, /D3 --&gt;\|Approved\| S4/);
+  assert.match(procurement, /D3 --&gt;\|Not approved\| D4/);
+  assert.match(procurement, /D4 --&gt;\|Correctable\| S1/);
+  assert.match(procurement, /D4 --&gt;\|Rejected\| O_REJECTION/);
+  assert.ok(procurement.indexOf("S1 --&gt; D1") < procurement.indexOf("S3 --&gt; D3"));
+  assert.doesNotMatch(procurement, /RECOVERY\[|\|No\| RECOVERY/);
+
+  assert.match(receiving, /D1 --&gt;\|Mismatch\| S1/);
+  assert.match(fulfillment, /D1 --&gt;\|Insufficient or held\| O_CONTROLLED_HOLD/);
+  for (const label of ["Owner", "Failed condition", "Recovery action", "Destination"]) {
+    assert.match(procurement, new RegExp(label));
+  }
+  for (const guide of HANDBOOK_GUIDES.filter(({ type }) => type === "task")) {
+    const rendered = articleHtml(html, guide.id);
+    assert.equal(
+      (rendered.match(/data-task-decision=/g) ?? []).length,
+      guide.decisionPoints.length,
+      `${guide.id} renders every decision`,
+    );
+    assert.equal(
+      (rendered.match(/data-decision-branch=/g) ?? []).length,
+      guide.decisionPoints.length * 2,
+      `${guide.id} renders both branches`,
+    );
+  }
+});
+
+test("renders governed source bodies once and links every other source control to the library", () => {
+  const html = buildDocumentationHtml();
+  const sourceLibrary = articleHtml(html, "source-references");
+  const sourceFiles = documentationSources();
+
+  assert.equal((html.match(/data-source-body/g) ?? []).length, sourceFiles.length);
+  assert.equal((sourceLibrary.match(/data-source-body/g) ?? []).length, sourceFiles.length);
+  for (const source of sourceFiles) {
+    const escaped = source.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    assert.equal((html.match(new RegExp(`data-source-body[^>]+data-source-file="${escaped}"`, "g")) ?? []).length, 1, source);
+  }
+
+  for (const guide of HANDBOOK_GUIDES.filter(({ id }) => id !== "source-references")) {
+    const rendered = guide.type === "home"
+      ? html.match(/<section class="hero home-guide"[\s\S]*?<\/section>\s*<p class="empty"/)?.[0] ?? ""
+      : articleHtml(html, guide.id);
+    assert.doesNotMatch(rendered, /source-reference-content/, guide.id);
+    if (guide.sourceSections.length) {
+      assert.match(rendered, /data-canonical-source-link/, guide.id);
+    }
+  }
+  const ids = new Set([...html.matchAll(/\sid="([^"]+)"/g)].map((match) => match[1]));
+  for (const linkTag of html.matchAll(/<a[^>]+data-canonical-source-link[^>]*>/g)) {
+    const targetId = tagAttributes(linkTag[0])["data-heading"];
+    assert.ok(ids.has(targetId), `canonical source link targets addressable #${targetId}`);
+  }
+});
+
+test("gives disclosures and DOM IDs globally unique keys and renders every legacy target", () => {
+  const html = buildDocumentationHtml();
+  const ids = [...html.matchAll(/\sid="([^"]+)"/g)].map((match) => match[1]);
+  const disclosureKeys = [...html.matchAll(/data-section-id="([^"]+)"/g)].map((match) => match[1]);
+
+  assert.equal(new Set(ids).size, ids.length, "every DOM ID is globally unique");
+  assert.equal(new Set(disclosureKeys).size, disclosureKeys.length, "every disclosure state key is globally unique");
+  for (const route of LEGACY_ROUTES) {
+    const targetId = `${route.guideId}-${route.headingId}`;
+    assert.ok(ids.includes(targetId), `${route.legacyArticleId} targets addressable #${targetId}`);
+  }
 });
 
 test("embeds typed search records and every legacy route", () => {
@@ -592,6 +675,14 @@ test("renders four accessible mode tabs and every canonical guide once", () => {
   for (const id of ["home", "tasks", "roles", "system"]) {
     assert.match(html, new RegExp(`id="mode-${id}"`));
     assert.match(html, new RegExp(`id="mode-panel-${id}"`));
+  }
+  const controls = [...html.matchAll(/<button[^>]+data-mode-button[^>]*>/g)].map((match) => tagAttributes(match[0]));
+  for (const control of controls) {
+    const panelTag = html.match(new RegExp(`<[^>]+id="${control["aria-controls"]}"[^>]*>`))?.[0];
+    assert.ok(panelTag, `${control.id} controls an existing element`);
+    const panel = tagAttributes(panelTag);
+    assert.equal(panel.role, "tabpanel", `${control.id} controls a tabpanel`);
+    assert.equal(panel["aria-labelledby"], control.id, `${control.id} is the panel label`);
   }
   assert.equal((html.match(/data-guide(?:\s|>)/g) ?? []).length, HANDBOOK_GUIDES.length);
 });

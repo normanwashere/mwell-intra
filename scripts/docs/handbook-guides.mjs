@@ -35,6 +35,18 @@ const TASK_STAGE_FIELDS = [
   "evidenceRetained", "nextHandoff",
 ];
 
+const TASK_DECISION_FIELDS = [
+  "id", "placement", "ownerRole", "question", "yesBranch", "noBranch",
+];
+const TASK_DECISION_PLACEMENT_FIELDS = ["position", "stageId"];
+const TASK_DECISION_BRANCH_FIELDS = [
+  "label", "condition", "target", "outcome", "recoveryAction", "terminal",
+];
+const TASK_DECISION_TARGET_FIELDS = ["type", "id"];
+const TASK_DECISION_OUTCOMES = new Set([
+  "completion", "rejection", "cancellation", "escalation", "controlled-hold",
+]);
+
 const ROLE_WORKSPACE_FIELDS = ["id", "module", "landingRoute"];
 const ROLE_SIMULATION_FIELDS = [
   "id", "title", "linkedTaskId", "startRoute", "actorRole", "scenario",
@@ -504,6 +516,201 @@ const TASK_STAGE_ROUTES = {
   "product-readiness-pricing-go-live": ["/product", "/product", "/product", "/product"],
 };
 
+function decisionBranch(label, condition, targetType, targetId, outcome, recoveryAction, terminal = false) {
+  return {
+    label,
+    condition,
+    target: { type: targetType, id: targetId },
+    outcome,
+    recoveryAction,
+    terminal,
+  };
+}
+
+function taskDecision(id, position, stageId, ownerRole, question, yesBranch, noBranch) {
+  return {
+    id,
+    placement: { position, stageId },
+    ownerRole,
+    question,
+    yesBranch,
+    noBranch,
+  };
+}
+
+const TASK_DECISION_TREES = {
+  "procurement-request-approval": [
+    taskDecision("decision-1", "after", "step-1", "general_employee", "Is the request complete and eligible for submission?",
+      decisionBranch("Complete", "Required data, justification, and evidence are present.", "stage", "step-2", "The request can enter the effective route.", "Continue without correction."),
+      decisionBranch("Incomplete", "Required data, eligibility, or evidence is missing.", "stage", "step-1", "The request remains a draft and cannot be submitted.", "Correct the missing or ineligible request content, then repeat validation.")),
+    taskDecision("decision-2", "after", "step-2", "operations_lead", "Is the derived approval route valid and ready for decisions?",
+      decisionBranch("Route valid", "The current route, assignments, and required evidence resolve without a blocker.", "stage", "step-3", "Assigned approvers can decide the request.", "Continue without correction."),
+      decisionBranch("Route blocked", "The route is stale, incomplete, conflicting, or requires an unresolved exception.", "stage", "step-1", "Approval cannot begin on the invalid route.", "Return the request for correction or resolve the exception, then derive the route again.")),
+    taskDecision("decision-3", "after", "step-3", "operations_lead", "Has every required approver approved the current request?",
+      decisionBranch("Approved", "Every required current-route decision is an approval.", "stage", "step-4", "The approved record can be confirmed for Procurement.", "Continue without recovery."),
+      decisionBranch("Not approved", "A required decision is rejected, returned, stale, or still unresolved.", "decision", "decision-4", "The request cannot be completed as approved.", "Classify whether correction and resubmission remain allowed.")),
+    taskDecision("decision-4", "after", "step-3", "operations_lead", "Can the failed approval condition be corrected and resubmitted through the current effective route?",
+      decisionBranch("Correctable", "The rejection, return, or stale decision has an actionable correction path.", "stage", "step-1", "The request returns to draft correction with history retained.", "Correct the cited issue and resubmit through a newly derived current route."),
+      decisionBranch("Rejected", "The decision is terminal or the request is no longer eligible.", "outcome", "rejection", "The request ends rejected and is not handed to Procurement.", "Retain the terminal reason and start a new request only if a new eligible need exists.", true)),
+  ],
+  "vendor-accreditation-renewal": [
+    taskDecision("decision-1", "after", "step-1", "legal_compliance_lead", "Is the case a renewal of an existing vendor record?",
+      decisionBranch("Renewal", "An existing accreditation is approaching or has reached renewal.", "decision", "decision-2", "Use the renewal evidence and validity branch.", "Retain the existing vendor identity and continue to evidence scoping."),
+      decisionBranch("New application", "No existing accreditation is being renewed.", "decision", "decision-2", "Use the new-application identity and evidence branch.", "Continue to evidence scoping with the new case identity.")),
+    taskDecision("decision-2", "before", "step-2", "legal_compliance_lead", "Does the technology-provider qualification branch apply?",
+      decisionBranch("Technology branch", "The vendor will process, host, integrate, or otherwise provide covered technology services.", "stage", "step-2", "Technology qualification evidence is required with the entity evidence.", "Request the technology evidence set before submission."),
+      decisionBranch("Standard branch", "The covered technology-provider conditions do not apply.", "stage", "step-2", "Only the applicable entity and common declaration evidence is required.", "Continue with the standard evidence set.")),
+    taskDecision("decision-3", "after", "step-3", "legal_compliance_lead", "Is the submitted evidence complete, current, and eligible?",
+      decisionBranch("Eligible", "All applicable declarations, entity evidence, and qualifications pass review.", "stage", "step-4", "Legal and Compliance can record the accreditation decision.", "Continue without correction."),
+      decisionBranch("Deficient", "Evidence is missing, expired, contradictory, or ineligible.", "decision", "decision-4", "Approval is blocked pending correction or rejection.", "Determine whether the deficiency can be corrected.")),
+    taskDecision("decision-4", "after", "step-3", "legal_compliance_lead", "Can the evidence deficiency be corrected within the case?",
+      decisionBranch("Correction allowed", "The deficiency is specific and the case remains eligible for correction.", "stage", "step-2", "The case returns to the vendor with retained review history.", "Request the exact correction and resume review after resubmission."),
+      decisionBranch("Reject or expire", "The case is ineligible, abandoned, or cannot be corrected within validity rules.", "outcome", "rejection", "The application ends rejected or expired.", "Retain the reason and require a new eligible application when appropriate.", true)),
+  ],
+  "warehouse-location-bin-setup": [
+    taskDecision("decision-1", "after", "step-1", "operations_lead", "Should the approved storage hierarchy be created by governed import?",
+      decisionBranch("Import", "The approved setup is available in the current versioned template.", "stage", "step-2", "Create the records through the validated import path.", "Validate the template before submission."),
+      decisionBranch("Manual", "The setup is small or no governed import is required.", "stage", "step-2", "Create the records through the manual setup path.", "Enter each approved identifier directly.")),
+    taskDecision("decision-2", "after", "step-3", "operations_lead", "Are all location and bin codes unique, valid, and correctly scoped?",
+      decisionBranch("Valid", "Every identifier is unique and belongs to the intended warehouse hierarchy.", "stage", "step-4", "The storage structure can be exposed to receiving.", "Continue without correction."),
+      decisionBranch("Invalid", "A duplicate, malformed, or cross-warehouse identifier exists.", "stage", "step-2", "Activation remains blocked.", "Correct the hierarchy or rejected import rows, then validate again.")),
+  ],
+  "stock-receiving-putaway": [
+    taskDecision("decision-1", "after", "step-1", "operations_associate", "Does the delivery match an authorized inbound record?",
+      decisionBranch("Authorized", "The supplier, purchase order, lines, and open quantities support receipt.", "stage", "step-2", "Physical receipt can be recorded.", "Continue without correction."),
+      decisionBranch("Mismatch", "The delivery lacks authority or differs from the eligible inbound record.", "stage", "step-1", "Receipt posting remains blocked while custody is controlled.", "Hold the delivery, obtain corrected authority or resolve the mismatch, then verify again.")),
+    taskDecision("decision-2", "after", "step-3", "operations_lead", "Is the inspected stock acceptable for inventory custody?",
+      decisionBranch("Acceptable", "Inspection supports acceptance, including any approved disposition.", "decision", "decision-3", "The receipt may proceed toward posting and putaway.", "Confirm whether supervisor disposition is still required."),
+      decisionBranch("Held or rejected", "Damage, quantity, quality, or compliance exceptions prevent acceptance.", "decision", "decision-4", "The stock remains held, rejected, or return-bound.", "Determine whether the exception can be resolved within this receipt.")),
+    taskDecision("decision-3", "after", "step-3", "operations_lead", "Has every required supervisor disposition been recorded?",
+      decisionBranch("Disposition complete", "All required exception decisions are attributable and current.", "stage", "step-4", "Accepted stock can be posted and put away.", "Continue without correction."),
+      decisionBranch("Disposition pending", "A required supervisor decision is absent or stale.", "stage", "step-3", "Posting remains blocked.", "Obtain and retain the current disposition before reclassification.")),
+    taskDecision("decision-4", "after", "step-3", "operations_lead", "Can the held or rejected stock be resolved within the current receipt?",
+      decisionBranch("Resolvable", "Correction, recount, or an authorized disposition can resolve the exception.", "stage", "step-3", "The exception returns to inspection and classification.", "Apply the correction or disposition and inspect the controlled stock again."),
+      decisionBranch("Escalate or return", "The stock cannot be accepted or resolved under current authority.", "outcome", "escalation", "The receipt ends in controlled hold, rejection, or supplier-return escalation.", "Retain custody and discrepancy evidence for the accountable owner.", true)),
+  ],
+  "ecommerce-order-intake": [
+    taskDecision("decision-1", "after", "step-1", "operations_associate", "Is the external order identity new?",
+      decisionBranch("New", "No existing order uses the governed external identity.", "stage", "step-2", "The order can be validated for intake.", "Continue without correction."),
+      decisionBranch("Existing", "The external identity already exists.", "decision", "decision-2", "The intake must be classified as corrective or duplicate.", "Inspect the existing record before any retry.")),
+    taskDecision("decision-2", "after", "step-1", "operations_associate", "Is the existing order a permitted corrective retry?",
+      decisionBranch("Corrective retry", "The retained rejected intake is eligible for correction under the same identity.", "stage", "step-2", "The corrected order can be revalidated without duplication.", "Apply only the rejected corrections and preserve the external identity."),
+      decisionBranch("Duplicate", "A current or completed order already owns the identity.", "outcome", "rejection", "The duplicate intake is rejected without creating another order.", "Use the existing order or raise an identity correction outside duplicate intake.", true)),
+    taskDecision("decision-3", "after", "step-2", "operations_associate", "Are all products, quantities, and delivery fields valid for fulfillment?",
+      decisionBranch("Valid", "Every required field and line passes intake validation.", "stage", "step-4", "The order can enter the fulfillment queue.", "Continue without correction."),
+      decisionBranch("Invalid", "One or more rows, products, quantities, or delivery fields fail validation.", "stage", "step-3", "The order remains outside fulfillment.", "Correct or remove the rejected data before revalidation.")),
+    taskDecision("decision-4", "after", "step-3", "operations_associate", "Can every rejected line be corrected from governed source data?",
+      decisionBranch("Corrected", "The source order now supplies valid replacement data.", "stage", "step-2", "The order returns to validation.", "Revalidate the complete corrected order."),
+      decisionBranch("Unresolved", "Required valid source data is unavailable.", "outcome", "controlled-hold", "The intake remains rejected and controlled outside fulfillment.", "Retain rejected-row evidence and return the issue to the source owner.", true)),
+  ],
+  "ecommerce-fulfillment-delivery": [
+    taskDecision("decision-1", "after", "step-1", "operations_associate", "Is sufficient releasable stock allocated to the order?",
+      decisionBranch("Sufficient", "All required stock is available, releasable, and correctly allocated.", "stage", "step-2", "Packing validation can begin.", "Continue without correction."),
+      decisionBranch("Insufficient or held", "Stock is short, held, stale, or otherwise unavailable.", "outcome", "controlled-hold", "Fulfillment stops before packing or dispatch.", "Release invalid allocations and route shortage resolution to the accountable owner.", true)),
+    taskDecision("decision-2", "after", "step-2", "operations_associate", "Did packing validation pass?",
+      decisionBranch("Pass", "Picked lines, quantities, package, and labels match the order.", "stage", "step-3", "The package can be dispatched.", "Continue without correction."),
+      decisionBranch("Fail", "The package or picked stock does not match the validated order.", "stage", "step-2", "Dispatch remains blocked.", "Correct the pick or package and repeat packing validation.")),
+    taskDecision("decision-3", "after", "step-4", "operations_lead", "Was delivery completed with acceptable evidence?",
+      decisionBranch("Delivered", "The carrier or recipient evidence supports completed delivery.", "outcome", "completion", "The order reaches delivered completion and stock remains reconciled.", "Retain delivery evidence.", true),
+      decisionBranch("Not delivered", "Delivery failed, was refused, or returned.", "decision", "decision-4", "The order cannot close as delivered.", "Classify the failed or returned package.")),
+    taskDecision("decision-4", "after", "step-4", "operations_lead", "Was the undelivered package returned to controlled warehouse custody?",
+      decisionBranch("Returned", "Warehouse custody and reverse movement are recorded.", "outcome", "controlled-hold", "The order moves to the returns or redelivery process.", "Open the related return or controlled redelivery action.", true),
+      decisionBranch("Missing or failed", "Custody or final carrier disposition is unresolved.", "outcome", "escalation", "The delivery remains failed with an accountable exception owner.", "Escalate carrier, custody, and customer resolution with retained evidence.", true)),
+  ],
+  "returns-replacements-refunds-rma": [
+    taskDecision("decision-1", "after", "step-1", "operations_associate", "Does the returned item match an original governed release?",
+      decisionBranch("Matched", "The serial, product, quantity, and recipient trace to an original release.", "stage", "step-2", "The return can be received and inspected.", "Continue without correction."),
+      decisionBranch("Unmatched", "No reliable original release can be established.", "outcome", "controlled-hold", "The item remains controlled and cannot post as reusable stock.", "Hold the item and obtain the missing release evidence or escalate ownership.", true)),
+    taskDecision("decision-2", "after", "step-2", "operations_lead", "Is the returned stock reusable without a controlled commercial disposition?",
+      decisionBranch("Reusable", "Inspection supports return to usable inventory under current authority.", "stage", "step-3", "Select the governed restock resolution.", "Continue to the resolution branch."),
+      decisionBranch("Not reusable", "Damage, quality, customer, or supplier conditions require another disposition.", "decision", "decision-3", "Refund, replacement, write-off, hold, or supplier RMA authority is required.", "Confirm accountable disposition authority.")),
+    taskDecision("decision-3", "after", "step-2", "operations_lead", "Is the required refund, replacement, write-off, or supplier RMA authority available?",
+      decisionBranch("Authorized", "The accountable commercial or control owner has approved the selected disposition.", "stage", "step-3", "The governed resolution can be selected and evidenced.", "Continue with the authorized branch."),
+      decisionBranch("Authority missing", "Required Finance, Procurement, or supervisor authority is absent.", "outcome", "escalation", "The return remains held with no unsupported posting.", "Escalate to the required owner while retaining physical custody.", true)),
+    taskDecision("decision-4", "after", "step-3", "operations_lead", "Is the selected resolution fully approved and evidenced?",
+      decisionBranch("Ready", "The branch, authority, financial evidence, and physical disposition agree.", "stage", "step-4", "The final reverse movement and disposition can post.", "Continue without correction."),
+      decisionBranch("Incomplete", "The selected branch lacks evidence, authority, or a consistent disposition.", "stage", "step-3", "Final posting remains blocked.", "Correct the resolution package and repeat the branch check.")),
+  ],
+  "department-inventory-release": [
+    taskDecision("decision-1", "after", "step-2", "operations_lead", "Is department authority sufficient for the requested release?",
+      decisionBranch("Authorized", "The requester, department, purpose, and approvals satisfy the release rule.", "decision", "decision-2", "Availability can be evaluated.", "Continue without correction."),
+      decisionBranch("Unauthorized", "Required department authority or approval is missing.", "stage", "step-1", "The request returns without allocation.", "Correct the requester, department, quantity, or approval evidence and resubmit.")),
+    taskDecision("decision-2", "after", "step-2", "operations_lead", "Is sufficient releasable stock available?",
+      decisionBranch("Available", "Eligible stock can satisfy the authorized quantity.", "stage", "step-3", "Warehouse can allocate and release stock.", "Continue without correction."),
+      decisionBranch("Unavailable", "Stock is short, held, or already committed.", "outcome", "controlled-hold", "The request remains queued or is cancelled without stale allocation.", "Release invalid allocations and return shortage ownership to the requester and Operations Lead.", true)),
+    taskDecision("decision-3", "after", "step-4", "general_employee", "Did the authorized recipient accept custody?",
+      decisionBranch("Accepted", "Recipient identity and custody acknowledgement are retained.", "outcome", "completion", "The department release is complete.", "Retain recipient evidence.", true),
+      decisionBranch("Not accepted", "The recipient refused, was unavailable, or custody evidence is missing.", "stage", "step-3", "The release must be reversed or reassigned before closure.", "Restore controlled custody, correct the recipient handoff, and repeat release confirmation.")),
+  ],
+  "event-stock-custody": [
+    taskDecision("decision-1", "after", "step-1", "operations_lead", "Is the event need authorized and non-duplicate?",
+      decisionBranch("Authorized", "The event, requester, quantity, dates, and approval are current and unique.", "stage", "step-2", "Warehouse can transfer stock to event custody.", "Continue without correction."),
+      decisionBranch("Denied or duplicate", "Authority is missing, stale, or a duplicate event request exists.", "outcome", "cancellation", "No stock transfers and the event request ends cancelled or returned.", "Correct and submit a new valid request only when an authorized need remains.", true)),
+    taskDecision("decision-2", "after", "step-3", "marketing_events_lead", "Does every issued quantity have a recorded use, return, damage, loss, or unresolved state?",
+      decisionBranch("Recorded", "All event custody quantities have attributable disposition records.", "stage", "step-4", "Operations can reconcile the event stock.", "Continue without correction."),
+      decisionBranch("Missing disposition", "One or more issued quantities lack a current custody outcome.", "stage", "step-3", "Reconciliation remains blocked.", "Recover or document the missing custody outcome, then submit the event return again.")),
+    taskDecision("decision-3", "after", "step-4", "operations_lead", "Is every event variance resolved or assigned to an accountable owner?",
+      decisionBranch("Resolved", "Returned, used, damaged, and lost quantities reconcile with evidence and ownership.", "outcome", "completion", "The event custody record reaches explainable completion.", "Retain the custody and variance evidence.", true),
+      decisionBranch("Unresolved", "A quantity or custody discrepancy has no accepted disposition or owner.", "outcome", "escalation", "The event remains open under variance escalation.", "Retain custody history and escalate the discrepancy before closure.", true)),
+  ],
+  "inventory-count-variance": [
+    taskDecision("decision-1", "after", "step-2", "operations_associate", "Does the observed count match the recorded stock position?",
+      decisionBranch("Match", "Observed and recorded quantities agree with no unresolved exception.", "outcome", "completion", "The count closes with no adjustment.", "Retain the completed count evidence.", true),
+      decisionBranch("Variance", "Observed quantity differs from the recorded position.", "stage", "step-3", "A separate supervisor must review the variance.", "Submit the variance without overwriting the original count.")),
+    taskDecision("decision-2", "after", "step-3", "operations_lead", "Is the variance supported by evidence and within assigned authority?",
+      decisionBranch("Supported", "Recount, movement history, cause, and authority support the proposed result.", "stage", "step-4", "The approved result can be posted or corrected.", "Continue without correction."),
+      decisionBranch("Unsupported", "Evidence, recount, cause, or authority is insufficient.", "decision", "decision-3", "Posting remains blocked.", "Determine whether recount or correction can resolve the variance.")),
+    taskDecision("decision-3", "after", "step-3", "operations_lead", "Can recount or evidence correction resolve the rejected variance?",
+      decisionBranch("Recoverable", "A controlled recount or evidence correction is available.", "stage", "step-1", "A new retained count cycle begins.", "Recount or correct the evidence and resubmit for independent review."),
+      decisionBranch("Escalate", "The variance cannot be resolved under current authority or evidence.", "outcome", "escalation", "The count remains controlled under accountable escalation.", "Escalate to the required operational or Finance owner.", true)),
+    taskDecision("decision-4", "after", "step-4", "operations_lead", "Would the approved posting create an invalid negative-stock result?",
+      decisionBranch("Invalid result", "The proposed movement would violate the negative-stock control.", "outcome", "controlled-hold", "Posting is denied and the count remains unresolved.", "Correct the source movement or escalate the stock integrity issue.", true),
+      decisionBranch("Valid result", "The approved movement preserves a valid stock position.", "outcome", "completion", "The movement posts once and the count closes.", "Retain approval and movement evidence.", true)),
+  ],
+  "department-doa-activation": [
+    taskDecision("decision-1", "after", "step-2", "platform_administrator", "Is the draft matrix complete, non-overlapping, and internally valid?",
+      decisionBranch("Valid", "All tiers, ranges, assignments, and effective rules validate without gaps or overlap.", "stage", "step-3", "The draft can proceed to controlled activation.", "Continue without correction."),
+      decisionBranch("Invalid", "A gap, overlap, missing assignment, or malformed tier exists.", "stage", "step-1", "The prior effective matrix remains active.", "Correct the versioned draft and validate every tier again.")),
+    taskDecision("decision-2", "after", "step-3", "legal_compliance_lead", "Is activation authorized and effective for the intended department and date?",
+      decisionBranch("Authorized", "Approval, scope, version, and effective date support activation.", "stage", "step-4", "The new matrix can be checked through Procurement readback.", "Continue without correction."),
+      decisionBranch("Unauthorized", "Approval, scope, date, or activation evidence is missing or invalid.", "stage", "step-1", "Activation is rejected and the prior matrix remains effective.", "Correct the draft or authority package before another activation attempt.")),
+    taskDecision("decision-3", "after", "step-4", "platform_administrator", "Does Procurement resolve exactly the activated tiers and assignments?",
+      decisionBranch("Readback matches", "Procurement derives the same effective matrix version and tier results.", "outcome", "completion", "The matrix activation is complete and traceable.", "Retain activation and readback evidence.", true),
+      decisionBranch("Readback mismatch", "Procurement resolves a different version, tier, or assignment.", "stage", "step-1", "The new activation is not accepted as operationally effective.", "Restore or retain the prior effective version, correct the draft, and repeat controlled activation.")),
+  ],
+  "finance-readiness-evidence": [
+    taskDecision("decision-1", "after", "step-2", "finance_controller", "Is operational acceptance complete in every applicable source record?",
+      decisionBranch("Accepted", "Warehouse, Procurement, Events, or other source owners have completed required acceptance.", "decision", "decision-2", "Finance can evaluate evidence sufficiency.", "Continue without correction."),
+      decisionBranch("Acceptance missing", "A required operational acceptance is absent, stale, or unresolved.", "stage", "step-3", "Financial readiness is blocked.", "Record the blocker and return it to the operational source owner.")),
+    taskDecision("decision-2", "after", "step-2", "finance_controller", "Is the cross-module evidence sufficient and internally consistent?",
+      decisionBranch("Sufficient", "Amounts, source links, acceptance, valuation, and supporting evidence reconcile.", "stage", "step-4", "Finance can record the readiness decision.", "Continue without correction."),
+      decisionBranch("Insufficient", "Evidence is missing, contradictory, or cannot be traced to its source.", "stage", "step-3", "Readiness remains blocked.", "Identify the exact missing or inconsistent source evidence.")),
+    taskDecision("decision-3", "after", "step-3", "finance_controller", "Does a source owner need to correct the blocked record?",
+      decisionBranch("Source correction", "The blocker originates in an operational source record or acceptance.", "stage", "step-4", "Finance records a blocked handoff to the source owner.", "Assign the correction, then refresh evidence after the source owner completes it."),
+      decisionBranch("No source correction", "The evidence is current and the remaining issue is a Finance decision or escalation.", "decision", "decision-4", "Finance determines whether it can decide within authority.", "Review Finance authority and unresolved control conflicts.")),
+    taskDecision("decision-4", "after", "step-3", "finance_controller", "Can Finance resolve the remaining issue without substituting for source authority?",
+      decisionBranch("Within Finance authority", "The issue is an assigned Finance readiness decision supported by complete source evidence.", "stage", "step-4", "Finance can record the decision.", "Continue without correction."),
+      decisionBranch("Outside authority", "Resolution would replace operational, Legal, Procurement, or other source authority.", "outcome", "escalation", "The readiness review ends escalated with the blocker retained.", "Escalate to the accountable control owner without mutating source evidence.", true)),
+    taskDecision("decision-5", "after", "step-4", "finance_controller", "Is the recorded readiness result approved rather than blocked?",
+      decisionBranch("Ready", "The retained decision confirms complete and consistent readiness evidence.", "outcome", "completion", "Finance readiness is complete.", "Retain the source-linked decision evidence.", true),
+      decisionBranch("Blocked handoff", "The retained decision identifies an owned source correction or unresolved blocker.", "outcome", "controlled-hold", "The review completes as blocked with an accountable next owner.", "Resume a new readiness review after governed correction.", true)),
+  ],
+  "product-readiness-pricing-go-live": [
+    taskDecision("decision-1", "after", "step-2", "product_owner", "Is the submitted readiness and pricing package complete and current?",
+      decisionBranch("Complete", "The package version, evidence, pricing, and readiness inputs are current and complete.", "stage", "step-3", "The Product Owner can make the decision.", "Continue without correction."),
+      decisionBranch("Incomplete or stale", "Required inputs are missing, stale, duplicated, or superseded.", "stage", "step-1", "No owner decision is recorded on the invalid package.", "Correct and resubmit a new current package with history retained.")),
+    taskDecision("decision-2", "after", "step-3", "product_owner", "Are readiness and pricing approved for Operations handoff?",
+      decisionBranch("Approved", "The current package satisfies Product readiness and pricing authority.", "stage", "step-4", "Operations can review and acknowledge go-live handoff.", "Continue without correction."),
+      decisionBranch("Not approved", "The owner returned or rejected one or both decisions.", "decision", "decision-3", "The package cannot proceed to Operations.", "Classify correction versus terminal rejection.")),
+    taskDecision("decision-3", "after", "step-3", "product_owner", "Was the package returned for correction rather than rejected?",
+      decisionBranch("Return for correction", "The owner identified an actionable package correction.", "stage", "step-1", "The contributor can prepare a new current package.", "Correct the cited issue and resubmit without overwriting history."),
+      decisionBranch("Rejected", "The current package has a terminal Product decision.", "outcome", "rejection", "Readiness or pricing ends rejected with no go-live handoff.", "Retain the decision reason and submit a new package only for a materially new proposal.", true)),
+    taskDecision("decision-4", "after", "step-4", "operations_lead", "Has Operations acknowledged the approved go-live handoff?",
+      decisionBranch("Acknowledged", "Operations accepted the current approved readiness and pricing handoff.", "outcome", "completion", "The go-live state is complete and explainable.", "Retain Product decisions and Operations acknowledgement.", true),
+      decisionBranch("Not acknowledged", "Operations identified an unresolved dependency or has not accepted the handoff.", "outcome", "controlled-hold", "Go-live remains blocked with Operations ownership visible.", "Resolve the dependency and repeat acknowledgement against the current approved package.", true)),
+  ],
+};
+
 function taskStage(definition, label, index) {
   const roles = TASK_STAGE_ROLES[definition.id];
   const routes = TASK_STAGE_ROUTES[definition.id];
@@ -530,7 +737,8 @@ function taskStage(definition, label, index) {
 }
 
 function taskGuide(definition) {
-  const decisionLabels = definition.decisions;
+  const decisionPoints = TASK_DECISION_TREES[definition.id];
+  const decisionLabels = decisionPoints.map(({ question }) => question);
   return {
     id: definition.id,
     type: "task",
@@ -551,7 +759,7 @@ function taskGuide(definition) {
     },
     steps: definition.steps.map((label, index) => taskStage(definition, label, index)),
     decisionLabels,
-    decisionPoints: decisionLabels.map((label, index) => ({ id: `decision-${index + 1}`, label })),
+    decisionPoints,
     denialChecks: definition.denial,
     recovery: definition.recovery,
     handoff: definition.handoff,
@@ -1028,6 +1236,28 @@ function stepInvariant(step) {
   };
 }
 
+function decisionBranchInvariant(branch) {
+  return {
+    label: branch.label,
+    condition: branch.condition,
+    target: { ...branch.target },
+    outcome: branch.outcome,
+    recoveryAction: branch.recoveryAction,
+    terminal: branch.terminal,
+  };
+}
+
+function decisionInvariant(decision) {
+  return {
+    id: decision.id,
+    placement: { ...decision.placement },
+    ownerRole: decision.ownerRole,
+    question: decision.question,
+    yesBranch: decisionBranchInvariant(decision.yesBranch),
+    noBranch: decisionBranchInvariant(decision.noBranch),
+  };
+}
+
 function invariantProjection(guide) {
   return {
     id: guide.id,
@@ -1043,6 +1273,7 @@ function invariantProjection(guide) {
     ),
     screenshotReferences: [...guide.screenshotReferences],
     steps: (guide.steps ?? []).map(stepInvariant),
+    decisionPoints: (guide.decisionPoints ?? []).map(decisionInvariant),
     workspaceMap: (guide.workspaceMap ?? []).map(
       ({ id, module, landingRoute }) => ({ id, module, landingRoute }),
     ),
@@ -1392,6 +1623,71 @@ export function validateHandbookGuides({
           }
         }
       }
+
+      const stageIds = new Set((guide.steps ?? []).map(({ id }) => id));
+      const decisions = guide.decisionPoints ?? [];
+      const decisionIds = new Set(decisions.map(({ id }) => id));
+      for (const decisionId of duplicateValues(decisions.map(({ id }) => id))) {
+        errors.push(`task ${guide.id} has duplicate decision ID ${decisionId}.`);
+      }
+      for (const [index, decision] of decisions.entries()) {
+        const decisionId = decision.id ?? `decision-${index + 1}`;
+        for (const field of TASK_DECISION_FIELDS) {
+          if (!isPopulated(decision[field])) {
+            errors.push(`task ${guide.id} decision ${decisionId} is missing required field ${field}.`);
+          }
+        }
+
+        const placement = decision.placement ?? {};
+        for (const field of TASK_DECISION_PLACEMENT_FIELDS) {
+          if (!isPopulated(placement[field])) {
+            errors.push(`task ${guide.id} decision ${decisionId} placement is missing required field ${field}.`);
+          }
+        }
+        if (placement.position && !["before", "after"].includes(placement.position)) {
+          errors.push(`task ${guide.id} decision ${decisionId} has invalid placement position ${placement.position}.`);
+        }
+        if (placement.stageId && !stageIds.has(placement.stageId)) {
+          errors.push(`task ${guide.id} decision ${decisionId} uses missing placement stage ${placement.stageId}.`);
+        }
+
+        const ownerGuide = guideById.get(decision.ownerRole);
+        if (decision.ownerRole && ownerGuide?.type !== "role") {
+          errors.push(`task ${guide.id} decision ${decisionId} references invalid owner role ${decision.ownerRole}.`);
+        } else if (decision.ownerRole && !(guide.participatingRoles ?? []).includes(decision.ownerRole)) {
+          errors.push(`task ${guide.id} decision ${decisionId} owner ${decision.ownerRole} is not a participating role.`);
+        }
+
+        for (const branchName of ["yesBranch", "noBranch"]) {
+          const branch = decision[branchName] ?? {};
+          for (const field of TASK_DECISION_BRANCH_FIELDS) {
+            if (!isPopulated(branch[field])) {
+              errors.push(`task ${guide.id} decision ${decisionId} ${branchName} is missing required field ${field}.`);
+            }
+          }
+          const target = branch.target ?? {};
+          for (const field of TASK_DECISION_TARGET_FIELDS) {
+            if (!isPopulated(target[field])) {
+              errors.push(`task ${guide.id} decision ${decisionId} ${branchName} target is missing required field ${field}.`);
+            }
+          }
+          if (target.type && !["stage", "decision", "outcome"].includes(target.type)) {
+            errors.push(`task ${guide.id} decision ${decisionId} ${branchName} has invalid target type ${target.type}.`);
+          } else if (target.type === "stage" && target.id && !stageIds.has(target.id)) {
+            errors.push(`task ${guide.id} decision ${decisionId} ${branchName} targets missing stage ${target.id}.`);
+          } else if (target.type === "decision" && target.id && !decisionIds.has(target.id)) {
+            errors.push(`task ${guide.id} decision ${decisionId} ${branchName} targets missing decision ${target.id}.`);
+          } else if (target.type === "outcome" && target.id && !TASK_DECISION_OUTCOMES.has(target.id)) {
+            errors.push(`task ${guide.id} decision ${decisionId} ${branchName} targets invalid outcome ${target.id}.`);
+          }
+          if (target.type === "outcome" && branch.terminal !== true) {
+            errors.push(`task ${guide.id} decision ${decisionId} ${branchName} outcome target must be terminal.`);
+          }
+          if (["stage", "decision"].includes(target.type) && branch.terminal !== false) {
+            errors.push(`task ${guide.id} decision ${decisionId} ${branchName} resume target cannot be terminal.`);
+          }
+        }
+      }
     }
     if (guide.type === "role") {
       for (const taskId of guide.linkedTasks ?? []) {
@@ -1552,6 +1848,10 @@ export function validateHandbookGuides({
       const stepContract = (guide.steps ?? []).map(stepInvariant);
       if (!sameContract(stepContract, invariant.steps)) {
         errors.push(`${guide.id} violates its step contract.`);
+      }
+      const decisionContract = (guide.decisionPoints ?? []).map(decisionInvariant);
+      if (!sameContract(decisionContract, invariant.decisionPoints)) {
+        errors.push(`${guide.id} violates its decision contract.`);
       }
       if (!sameContract(guide.workspaceMap ?? [], invariant.workspaceMap)) {
         errors.push(`${guide.id} violates its workspace map contract.`);
