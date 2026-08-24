@@ -1,6 +1,6 @@
 {
-  "schemaVersion": 1,
-  "generatedAt": "2026-08-24T16:15:39.504Z",
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-24T19:45:34.675Z",
   "host": "https://mwell-intra-uat.vercel.app",
   "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
   "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
@@ -15,9 +15,10 @@
       "role": "general_employee",
       "target": {
         "label": "Continue",
-        "landmark": "request validation and next-step control"
+        "landmark": "request validation action",
+        "controlRole": "button"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:33:11.560Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -35,9 +36,10 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/procurement-request-approval-step-1-desktop.png",
+          "observedRoute": "/procurement/requests/new",
           "width": 1440,
           "height": 900,
-          "sha256": "9f586fb667d27bdd8157141b4b5c27605d73592810f2f66970256a6e2dbdd3f1",
+          "sha256": "c3551e5f82afb4b88f9c99240bcb208ebea67d8e964fb6bb3fc8ac50607858c6",
           "targetBox": {
             "x": 1167,
             "y": 844,
@@ -49,9 +51,10 @@
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/procurement-request-approval-step-1-mobile.png",
+          "observedRoute": "/procurement/requests/new",
           "width": 390,
           "height": 844,
-          "sha256": "18511aa846cf27e8c34ae7d729d46e6326466dba6e497f45b230edc09f5245ae",
+          "sha256": "b361fa3084eea4bc780f57d93c8f1fef0bc2f7e7564f83523e2959d60231c3f5",
           "targetBox": {
             "x": 253,
             "y": 660,
@@ -72,9 +75,10 @@
       "role": "general_employee",
       "target": {
         "label": "New request",
-        "landmark": "request queue and submission entry"
+        "landmark": "request submission entry",
+        "controlRole": "link"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:33:11.560Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -92,9 +96,10 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/procurement-request-approval-step-2-desktop.png",
+          "observedRoute": "/procurement/requests",
           "width": 1440,
           "height": 900,
-          "sha256": "06fe1bb8b3ce53b8fe7c55769d70e8f37243ce10532669f034bfc4049481bc98",
+          "sha256": "cf281abcc2d61ab9ae3a96efcdb6f9e4ab43e8887a4dd6225c6cb0e8b4a5f1de",
           "targetBox": {
             "x": 296,
             "y": 275,
@@ -106,9 +111,10 @@
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/procurement-request-approval-step-2-mobile.png",
+          "observedRoute": "/procurement/requests",
           "width": 390,
           "height": 844,
-          "sha256": "8f0fa03db8d225f42e6efffcb92f2f84cab8f112f27d91cd008eb2edc34778bd",
+          "sha256": "b82c02806540e647f4325a7475cf6b765d0d7c39177fd6fa5746043cb5c4eea2",
           "targetBox": {
             "x": 32,
             "y": 315,
@@ -128,10 +134,11 @@
       "route": "/procurement/approvals",
       "role": "operations_lead",
       "target": {
-        "label": "Approvals",
-        "landmark": "assigned approval action"
+        "label": "Approve",
+        "landmark": "assigned approval decision",
+        "controlRole": "button"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:33:11.560Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -149,30 +156,32 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/procurement-request-approval-step-3-desktop.png",
+          "observedRoute": "/procurement/approvals",
           "width": 1440,
           "height": 900,
-          "sha256": "017365deb9cbb0a8b217409895e79a3155a7d83336e031ff2fd4d00d0f1e8f28",
+          "sha256": "7e7885b0a375d09865d7a129dfd698b5b5c45ac5e9d1fdd0ae86ce4be4bd2a64",
           "targetBox": {
-            "x": 394,
-            "y": 89,
-            "width": 121,
+            "x": 1283,
+            "y": 470,
+            "width": 104,
             "height": 44
           },
-          "targetLabel": "Approvals"
+          "targetLabel": "Approve"
         },
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/procurement-request-approval-step-3-mobile.png",
+          "observedRoute": "/procurement/approvals",
           "width": 390,
           "height": 844,
-          "sha256": "25a378e518328b6442f09de466cd72e1aba6d9b50187cfce0e97526ef5ae160e",
+          "sha256": "4b39a8d3032baf8ce0a604ee1fb6c071c14af911137eff548e604e628cb3bdca",
           "targetBox": {
-            "x": 135,
-            "y": 118,
-            "width": 119,
+            "x": 132,
+            "y": 655,
+            "width": 104,
             "height": 44
           },
-          "targetLabel": "Approvals"
+          "targetLabel": "Approve"
         }
       ]
     },
@@ -182,13 +191,14 @@
       "bindingId": "procurement-request-approval:step-4",
       "status": "certified",
       "host": "https://mwell-intra-uat.vercel.app",
-      "route": "/procurement/requests",
+      "route": "/procurement/purchase-orders",
       "role": "procurement_lead",
       "target": {
-        "label": "Purchase requests",
-        "landmark": "approved request evidence"
+        "label": "Open HANDBOOK-T7-R1-PO",
+        "landmark": "governed purchase-order handoff",
+        "controlRole": "button"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:42:20.153Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -206,30 +216,32 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/procurement-request-approval-step-4-desktop.png",
+          "observedRoute": "/procurement/purchase-orders",
           "width": 1440,
           "height": 900,
-          "sha256": "a46b7d944f93403bbb2fd99dc2aed582eec8ac04a72c0142d007cebd07716a2f",
+          "sha256": "338c806a8b50b113da614ef62c772fd0d42c4385566c5e59b09f4a5decbc4390",
           "targetBox": {
-            "x": 296,
-            "y": 195,
-            "width": 1004,
-            "height": 35
+            "x": 1355,
+            "y": 683,
+            "width": 44,
+            "height": 44
           },
-          "targetLabel": "Purchase requests"
+          "targetLabel": "Open HANDBOOK-T7-R1-PO"
         },
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/procurement-request-approval-step-4-mobile.png",
+          "observedRoute": "/procurement/purchase-orders",
           "width": 390,
           "height": 844,
-          "sha256": "11afe103768c1789bb5e85bde651f0b64d604dd043b3adacdbac37863334024e",
+          "sha256": "f5af134332b3e87497a8dc7d03c621dec71925d0e0b0d47f3bd6b9af85356225",
           "targetBox": {
-            "x": 32,
-            "y": 220,
-            "width": 270,
-            "height": 29
+            "x": 323,
+            "y": 304,
+            "width": 44,
+            "height": 44
           },
-          "targetLabel": "Purchase requests"
+          "targetLabel": "Open HANDBOOK-T7-R1-PO"
         }
       ]
     },
@@ -243,9 +255,10 @@
       "role": "legal_compliance_lead",
       "target": {
         "label": "Continue",
-        "landmark": "vendor identity and risk-scope progression"
+        "landmark": "vendor invitation progression",
+        "controlRole": "button"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:33:11.560Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -263,9 +276,10 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/vendor-accreditation-renewal-step-1-desktop.png",
+          "observedRoute": "/legal/invites/new",
           "width": 1440,
           "height": 900,
-          "sha256": "ca4967a7f91192ca32f198a6a829bc13260ddd4b2c868e65ea0b825d3218e0cf",
+          "sha256": "81a2ad8e8a37d72d351615bdc2a94faf53f4983696da78330e706fcc3495bae4",
           "targetBox": {
             "x": 1042,
             "y": 803,
@@ -277,9 +291,10 @@
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/vendor-accreditation-renewal-step-1-mobile.png",
+          "observedRoute": "/legal/invites/new",
           "width": 390,
           "height": 844,
-          "sha256": "a2496f8b4b0926b364a2c5ece0bdb0c0c6ecd984ce19118a9d823737d22cfedb",
+          "sha256": "16623b671081c6681947fa16d26e2578ebb4bdd240514f6b75477f9642fcdfac",
           "targetBox": {
             "x": 29,
             "y": 607,
@@ -299,10 +314,11 @@
       "route": "/vendor/",
       "role": "vendor_representative",
       "target": {
-        "label": "Your application",
-        "landmark": "vendor evidence submission"
+        "label": "Continue application",
+        "landmark": "vendor application continuation",
+        "controlRole": "link"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:33:11.560Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -320,30 +336,32 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/vendor-accreditation-renewal-step-2-desktop.png",
+          "observedRoute": "/vendor/",
           "width": 1440,
           "height": 900,
-          "sha256": "3546fe71c35c57770df31e3a866ee52bc68fe3c008dd7c6c584f580f414e536e",
+          "sha256": "ce95dc4d014589e4c7d0b726bad11effaa23d2d29a2bdd12cddd3bc1b33f711d",
           "targetBox": {
-            "x": 440,
-            "y": 227,
-            "width": 154,
-            "height": 28
+            "x": 461,
+            "y": 576,
+            "width": 518,
+            "height": 44
           },
-          "targetLabel": "Your application"
+          "targetLabel": "Continue application"
         },
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/vendor-accreditation-renewal-step-2-mobile.png",
+          "observedRoute": "/vendor/",
           "width": 390,
           "height": 844,
-          "sha256": "9d562cec37d45a4f30e8716fbc262ec6bc0d249bab383f6838a1ecc7b81c15ee",
+          "sha256": "3058190af38077c6542454c48d407740b847d942744a3285f8c25f3148eb5fd5",
           "targetBox": {
-            "x": 16,
-            "y": 237,
-            "width": 137,
-            "height": 22
+            "x": 33,
+            "y": 664,
+            "width": 324,
+            "height": 44
           },
-          "targetLabel": "Your application"
+          "targetLabel": "Continue application"
         }
       ]
     },
@@ -356,10 +374,11 @@
       "route": "/legal/",
       "role": "legal_compliance_lead",
       "target": {
-        "label": "Accreditation cases",
-        "landmark": "accreditation review action"
+        "label": "Open review",
+        "landmark": "accreditation case review",
+        "controlRole": "button"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:42:33.971Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -377,30 +396,32 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/vendor-accreditation-renewal-step-3-desktop.png",
+          "observedRoute": "/legal/",
           "width": 1440,
           "height": 900,
-          "sha256": "66e9d045e2a35f1c0b3fb39c0300a8f78382a6f70ab26093ece5bec9e3b22fbe",
+          "sha256": "ded041b464ff468514855eaf98aa7e7973a3fa09aeb12c38bb8e2c824102ef3c",
           "targetBox": {
-            "x": 272,
-            "y": 704,
-            "width": 185,
-            "height": 28
+            "x": 1263,
+            "y": 523,
+            "width": 145,
+            "height": 44
           },
-          "targetLabel": "Accreditation cases"
+          "targetLabel": "Open review"
         },
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/vendor-accreditation-renewal-step-3-mobile.png",
+          "observedRoute": "/legal/",
           "width": 390,
           "height": 844,
-          "sha256": "2fb290f0e3e2871eb4fb8281394144d4cf482e91f70ed2b5ceb5ef1e3703cddf",
+          "sha256": "6229f5ffb5a84cbc740a71828d3cda9bad9a09c9fb5aa451f2e700f1f9d98c78",
           "targetBox": {
             "x": 16,
-            "y": 407,
-            "width": 165,
-            "height": 22
+            "y": 304,
+            "width": 358,
+            "height": 44
           },
-          "targetLabel": "Accreditation cases"
+          "targetLabel": "Open review"
         }
       ]
     },
@@ -414,9 +435,10 @@
       "role": "legal_compliance_lead",
       "target": {
         "label": "Record governed decision",
-        "landmark": "accreditation decision control"
+        "landmark": "accreditation decision action",
+        "controlRole": "button"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:33:11.560Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -434,9 +456,10 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/vendor-accreditation-renewal-step-4-desktop.png",
+          "observedRoute": "/legal/",
           "width": 1440,
           "height": 900,
-          "sha256": "15498c73d50097a02c0f0c607691413ac8532d0120a886727859056bbef568f2",
+          "sha256": "42dd86a45825da65610d9c0a5113ea3b92aaae5b8b279245dc12d8cbaf310c18",
           "targetBox": {
             "x": 285,
             "y": 380,
@@ -448,9 +471,10 @@
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/vendor-accreditation-renewal-step-4-mobile.png",
+          "observedRoute": "/legal/",
           "width": 390,
           "height": 844,
-          "sha256": "73b952618be534857a92f05af1c8016d4590eac8d9052a9c200ee47bfcf57099",
+          "sha256": "a39571629ac6192330be755ca672bfdefb3de2c5d8ec47cd788e9d078f519c1f",
           "targetBox": {
             "x": 29,
             "y": 304,
@@ -470,10 +494,11 @@
       "route": "/warehouse/storage",
       "role": "operations_lead",
       "target": {
-        "label": "Storage",
-        "landmark": "storage area setup"
+        "label": "Bin code",
+        "landmark": "storage-area bin identity",
+        "controlRole": "textbox"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:33:11.560Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -491,30 +516,32 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/warehouse-location-bin-setup-step-1-desktop.png",
+          "observedRoute": "/warehouse/storage",
           "width": 1440,
           "height": 900,
-          "sha256": "a78aa95902f593b3f7f4fde90fa66f9b947baa4ad7b19f59bf87bd7ea9833bae",
+          "sha256": "fe890bdd9e3b4ff814e25cbd682d347b95f6302ef37e69a41025753e9fcf5a87",
           "targetBox": {
-            "x": 56,
-            "y": 416,
-            "width": 175,
-            "height": 20
+            "x": 456,
+            "y": 338,
+            "width": 440,
+            "height": 44
           },
-          "targetLabel": "Storage"
+          "targetLabel": "Bin code"
         },
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/warehouse-location-bin-setup-step-1-mobile.png",
+          "observedRoute": "/warehouse/storage",
           "width": 390,
           "height": 844,
-          "sha256": "b405a41bea085d502b2043708b49c73d0640658df40bf27cc580abbf3c5f04ad",
+          "sha256": "360231674271ee7dfc2988f06df328e8d409e1c9a333f7f07f50d09aed5a4f68",
           "targetBox": {
-            "x": 68,
-            "y": 106,
-            "width": 175,
-            "height": 29
+            "x": 20,
+            "y": 493,
+            "width": 262,
+            "height": 44
           },
-          "targetLabel": "Storage"
+          "targetLabel": "Bin code"
         }
       ]
     },
@@ -528,9 +555,10 @@
       "role": "operations_lead",
       "target": {
         "label": "Add location",
-        "landmark": "location creation control"
+        "landmark": "location and bin creation action",
+        "controlRole": "button"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:33:11.560Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -548,9 +576,10 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/warehouse-location-bin-setup-step-2-desktop.png",
+          "observedRoute": "/warehouse/locations",
           "width": 1440,
           "height": 900,
-          "sha256": "696ad0366c98bf2e1f116b25cacee780c89ef96df8a6cc4613d870bec93e7666",
+          "sha256": "d884634df9feb31d3e1f23e0af60e2fa95931a1edc66d8cb042221a03f62fd5a",
           "targetBox": {
             "x": 1264,
             "y": 110,
@@ -562,9 +591,10 @@
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/warehouse-location-bin-setup-step-2-mobile.png",
+          "observedRoute": "/warehouse/locations",
           "width": 390,
           "height": 844,
-          "sha256": "d570790b2608f55180a7161060d81c89c72de77a32a4e637dfd0567b4c0d160e",
+          "sha256": "d5b0bb656eac7bb7403fe97259d4b1956caf68ec70cca101bdbc24c0b9618285",
           "targetBox": {
             "x": 16,
             "y": 175,
@@ -581,13 +611,14 @@
       "bindingId": "warehouse-location-bin-setup:step-3",
       "status": "certified",
       "host": "https://mwell-intra-uat.vercel.app",
-      "route": "/warehouse/locations",
+      "route": "/warehouse/operation-routes",
       "role": "operations_lead",
       "target": {
-        "label": "Locations",
-        "landmark": "location and bin validation"
+        "label": "Edit route",
+        "landmark": "location route validation action",
+        "controlRole": "button"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:33:11.560Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -605,30 +636,32 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/warehouse-location-bin-setup-step-3-desktop.png",
+          "observedRoute": "/warehouse/operation-routes",
           "width": 1440,
           "height": 900,
-          "sha256": "c38afc7891139cd9764611b0e150fe987fadbedf8866c6043b5915653ba3018b",
+          "sha256": "89f8a4f50040b0f96f1dd2b75554aef730cf5597c16e2b1c4bc3a84096faaae8",
           "targetBox": {
-            "x": 56,
-            "y": 272,
-            "width": 143,
-            "height": 20
+            "x": 1296,
+            "y": 227,
+            "width": 87,
+            "height": 44
           },
-          "targetLabel": "Locations"
+          "targetLabel": "Edit route"
         },
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/warehouse-location-bin-setup-step-3-mobile.png",
+          "observedRoute": "/warehouse/operation-routes",
           "width": 390,
           "height": 844,
-          "sha256": "ac1199915b3d956616bf05ed1193e2305dba366f8b257a99aae4614087bd37a7",
+          "sha256": "ea7ebd0645376fa8c6f89ca34b3589e8645d23fadc726d77dd455507d72a98bc",
           "targetBox": {
-            "x": 68,
-            "y": 106,
-            "width": 121,
-            "height": 29
+            "x": 33,
+            "y": 371,
+            "width": 324,
+            "height": 44
           },
-          "targetLabel": "Locations"
+          "targetLabel": "Edit route"
         }
       ]
     },
@@ -641,10 +674,11 @@
       "route": "/warehouse/purchase-orders",
       "role": "operations_associate",
       "target": {
-        "label": "Purchase Orders",
-        "landmark": "receiving-ready purchase order"
+        "label": "HANDBOOK-T7-R1-PO",
+        "landmark": "receiving-ready inbound purchase order",
+        "controlRole": "link"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:33:11.560Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -662,30 +696,32 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/warehouse-location-bin-setup-step-4-desktop.png",
+          "observedRoute": "/warehouse/purchase-orders",
           "width": 1440,
           "height": 900,
-          "sha256": "4a4f0a7d5c5be2dee05c8eeaa6e468c5f2f8e214cee8223ac5192273606ac0bb",
+          "sha256": "d4c61011cfb7ea3d68bab121891a19734bfda655efb12cbfdc1337ffc83d39df",
           "targetBox": {
-            "x": 348,
-            "y": 106,
-            "width": 208,
-            "height": 29
+            "x": 317,
+            "y": 517,
+            "width": 225,
+            "height": 44
           },
-          "targetLabel": "Purchase Orders"
+          "targetLabel": "HANDBOOK-T7-R1-PO"
         },
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/warehouse-location-bin-setup-step-4-mobile.png",
+          "observedRoute": "/warehouse/purchase-orders",
           "width": 390,
           "height": 844,
-          "sha256": "dccdcd7da9af8acd8292bd84277a2503f6f6993a5bcdf53ab0bcc8b08c5d100d",
+          "sha256": "88c4dcd553b0466ac06654bd6710372f3bfacb26c6b764abd33e9c496eb48ee3",
           "targetBox": {
-            "x": 68,
-            "y": 106,
-            "width": 208,
-            "height": 29
+            "x": 33,
+            "y": 458,
+            "width": 179,
+            "height": 44
           },
-          "targetLabel": "Purchase Orders"
+          "targetLabel": "HANDBOOK-T7-R1-PO"
         }
       ]
     },
@@ -698,10 +734,11 @@
       "route": "/warehouse/purchase-orders",
       "role": "operations_associate",
       "target": {
-        "label": "No purchase orders",
-        "landmark": "authorized inbound receipt"
+        "label": "HANDBOOK-T7-R1-PO",
+        "landmark": "eligible inbound purchase-order receipt",
+        "controlRole": "link"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:33:11.560Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -719,30 +756,32 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/stock-receiving-putaway-step-1-desktop.png",
+          "observedRoute": "/warehouse/purchase-orders",
           "width": 1440,
           "height": 900,
-          "sha256": "79aa54a9c879b8b7e95e5e8a51ebef493575ed59522fb654f9c17121372b7eef",
+          "sha256": "3231e19f274f97bb31d805fa5f8443353a19882d591bec5b48c4a04797081522",
           "targetBox": {
-            "x": 768,
-            "y": 537,
-            "width": 160,
-            "height": 24
+            "x": 317,
+            "y": 517,
+            "width": 225,
+            "height": 44
           },
-          "targetLabel": "No purchase orders"
+          "targetLabel": "HANDBOOK-T7-R1-PO"
         },
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/stock-receiving-putaway-step-1-mobile.png",
+          "observedRoute": "/warehouse/purchase-orders",
           "width": 390,
           "height": 844,
-          "sha256": "abd6adac8198bba2b3cf3ad9a18e8e7627b18f309bc384e248f188c2a661e870",
+          "sha256": "4a9096fd94d45cee444a1c53b258dcf5b3309b6d70ea9b4cdecbc8889280f3b6",
           "targetBox": {
-            "x": 115,
-            "y": 500,
-            "width": 160,
-            "height": 24
+            "x": 33,
+            "y": 458,
+            "width": 179,
+            "height": 44
           },
-          "targetLabel": "No purchase orders"
+          "targetLabel": "HANDBOOK-T7-R1-PO"
         }
       ]
     },
@@ -756,9 +795,10 @@
       "role": "operations_associate",
       "target": {
         "label": "Add to receipt",
-        "landmark": "receipt line control"
+        "landmark": "physical receipt-line action",
+        "controlRole": "button"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:33:11.560Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -776,9 +816,10 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/stock-receiving-putaway-step-2-desktop.png",
+          "observedRoute": "/warehouse/receiving",
           "width": 1440,
           "height": 900,
-          "sha256": "f3e2d9278d591b0e757d7130803764fae2b31ee08a3334bcdf25665b93f8c65c",
+          "sha256": "3d2cf3b60397f6f7c8c6a9fe3482a232f529904a470e4f1eec7e111b74200d88",
           "targetBox": {
             "x": 485,
             "y": 372,
@@ -790,9 +831,10 @@
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/stock-receiving-putaway-step-2-mobile.png",
+          "observedRoute": "/warehouse/receiving",
           "width": 390,
           "height": 844,
-          "sha256": "ee177080232a47fdf6583aa452f978cedb486b54272f58e2eca5d9fefd889527",
+          "sha256": "5246a5fa2983e6ca82ba70f3a7c3c993b3b667995e7945a9d44d521fbef20402",
           "targetBox": {
             "x": 33,
             "y": 361,
@@ -813,9 +855,10 @@
       "role": "operations_lead",
       "target": {
         "label": "Inspect",
-        "landmark": "quality inspection action"
+        "landmark": "quality inspection action",
+        "controlRole": "button"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:33:11.560Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -833,9 +876,10 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/stock-receiving-putaway-step-3-desktop.png",
+          "observedRoute": "/warehouse/quality",
           "width": 1440,
           "height": 900,
-          "sha256": "dfbf7eafae044e692c63405c73d1f71a0582bc68981ae3a6a9a13bd7fc1cf5c4",
+          "sha256": "c99b9ccf1314e1964e0b5238bd479b5fe58a4a04d7ca84f3fcdff5c64eea05d9",
           "targetBox": {
             "x": 1310,
             "y": 361,
@@ -847,9 +891,10 @@
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/stock-receiving-putaway-step-3-mobile.png",
+          "observedRoute": "/warehouse/quality",
           "width": 390,
           "height": 844,
-          "sha256": "22077176a06d74179879648abf47765a49ff5ed60a0376fe4af5d994512d25e0",
+          "sha256": "f9a85288ef3b834b041450584427216d24f33ee0af2b48d9bb47c61089ac0f3d",
           "targetBox": {
             "x": 33,
             "y": 461,
@@ -870,9 +915,10 @@
       "role": "operations_associate",
       "target": {
         "label": "Put away",
-        "landmark": "putaway action"
+        "landmark": "putaway action",
+        "controlRole": "button"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:33:11.560Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -890,9 +936,10 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/stock-receiving-putaway-step-4-desktop.png",
+          "observedRoute": "/warehouse/storage",
           "width": 1440,
           "height": 900,
-          "sha256": "37a31562d277199f5d03a07846cbaa1d0db08a91c5c365c3149ebfd2aef85617",
+          "sha256": "47bdb86ce56f2caafa0ba55cf6969897042ffb37c2e56bbaae851dad5a94e241",
           "targetBox": {
             "x": 1192,
             "y": 110,
@@ -904,9 +951,10 @@
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/stock-receiving-putaway-step-4-mobile.png",
+          "observedRoute": "/warehouse/storage",
           "width": 390,
           "height": 844,
-          "sha256": "1ed8e4cf7afa59fcdb363d76f3b0c378c3612e014757941a9a1782395dbdf003",
+          "sha256": "96a5d6433b34e10c2dea64b6097909f3538fcb4ea0f937a7b563d3d742d7c38e",
           "targetBox": {
             "x": 16,
             "y": 175,
@@ -927,9 +975,10 @@
       "role": "operations_associate",
       "target": {
         "label": "New order / demand",
-        "landmark": "order intake choice"
+        "landmark": "order intake choice",
+        "controlRole": "button"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:33:11.560Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -947,9 +996,10 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/ecommerce-order-intake-step-1-desktop.png",
+          "observedRoute": "/warehouse/fulfillment",
           "width": 1440,
           "height": 900,
-          "sha256": "7ab9ad7dfdf74a231a9769eccd8c653abba549fd5cbea8c678f7fac203656dc0",
+          "sha256": "a7f9fa68f59a3fc86ddedb05c66707deebd9ca7c0ea44de7b2bd5041a113b0ab",
           "targetBox": {
             "x": 1224,
             "y": 372,
@@ -961,9 +1011,10 @@
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/ecommerce-order-intake-step-1-mobile.png",
+          "observedRoute": "/warehouse/fulfillment",
           "width": 390,
           "height": 844,
-          "sha256": "afd8b37e61a1ac75c2abe6c0345669e556953360e0389260746f2fefdc343f03",
+          "sha256": "54bca21d98ed44f9b12027f6c40ed0bc85e241e26f3b27acbf5028e4e9e469cb",
           "targetBox": {
             "x": 16,
             "y": 642,
@@ -983,10 +1034,11 @@
       "route": "/warehouse/fulfillment",
       "role": "operations_associate",
       "target": {
-        "label": "Orders and event demand",
-        "landmark": "order data entry"
+        "label": "Order reference",
+        "landmark": "required order identity field",
+        "controlRole": "textbox"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:33:11.560Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -1004,30 +1056,32 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/ecommerce-order-intake-step-2-desktop.png",
+          "observedRoute": "/warehouse/fulfillment",
           "width": 1440,
           "height": 900,
-          "sha256": "dc47f1451b7c80f33c5b1497184fb26a0d2ab14f6eb4465cc3cc13f2bb7945a4",
+          "sha256": "2954fda2e3acbff7eec76b5c9132033f205184c86c08f72ef36b556682a358e1",
           "targetBox": {
-            "x": 296,
-            "y": 366,
-            "width": 539,
-            "height": 28
+            "x": 456,
+            "y": 358,
+            "width": 256,
+            "height": 44
           },
-          "targetLabel": "Orders and event demand"
+          "targetLabel": "Order reference"
         },
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/ecommerce-order-intake-step-2-mobile.png",
+          "observedRoute": "/warehouse/fulfillment",
           "width": 390,
           "height": 844,
-          "sha256": "d49e1289aab338c79332a448286523915902e86677f9e429560c006f1876005b",
+          "sha256": "ae7131264d5597b6e3b892038ccb366ab665deacad294f600fe0df14e8d45ab6",
           "targetBox": {
-            "x": 16,
-            "y": 458,
-            "width": 358,
-            "height": 28
+            "x": 20,
+            "y": 430,
+            "width": 350,
+            "height": 44
           },
-          "targetLabel": "Orders and event demand"
+          "targetLabel": "Order reference"
         }
       ]
     },
@@ -1041,9 +1095,10 @@
       "role": "operations_associate",
       "target": {
         "label": "Import existing tracker",
-        "landmark": "tracker validation and duplicate handling"
+        "landmark": "tracker validation entry",
+        "controlRole": "button"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:33:11.560Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -1061,9 +1116,10 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/ecommerce-order-intake-step-3-desktop.png",
+          "observedRoute": "/warehouse/fulfillment",
           "width": 1440,
           "height": 900,
-          "sha256": "c1287a51470299680d74630b48682b3d249a3717dbb6501b38af64ea5cabdad9",
+          "sha256": "50e8fd262594adc777637b2901c3b7540b203a9d0da349a1a35ab0161f80c9dd",
           "targetBox": {
             "x": 1024,
             "y": 372,
@@ -1075,9 +1131,10 @@
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/ecommerce-order-intake-step-3-mobile.png",
+          "observedRoute": "/warehouse/fulfillment",
           "width": 390,
           "height": 844,
-          "sha256": "6e8000e07d78f3ab84742e18c409865734fab980d53631863a1bf2f4f03a569a",
+          "sha256": "c191068211bd4ddd86d2283980f49e5fcaa0c72c82473608641655bfc7aedbb6",
           "targetBox": {
             "x": 16,
             "y": 590,
@@ -1098,9 +1155,10 @@
       "role": "operations_associate",
       "target": {
         "label": "View order details",
-        "landmark": "fulfillment queue record"
+        "landmark": "fulfillment queue record",
+        "controlRole": "button"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:33:11.560Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -1118,9 +1176,10 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/ecommerce-order-intake-step-4-desktop.png",
+          "observedRoute": "/warehouse/fulfillment",
           "width": 1440,
           "height": 900,
-          "sha256": "c86bf09359428e6d31b286721bc8227a6c45723e6822e89bd2f52c73f6cdc3b6",
+          "sha256": "d6f1667d3c5d03029dec38bb893ae141c616120f756e6132235d4c7da0e235c5",
           "targetBox": {
             "x": 313,
             "y": 372,
@@ -1132,9 +1191,10 @@
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/ecommerce-order-intake-step-4-mobile.png",
+          "observedRoute": "/warehouse/fulfillment",
           "width": 390,
           "height": 844,
-          "sha256": "642d62aa7e0d0f9b05cc8bcc09bdac9247ae8bea6de82cd5a722de0baae18c7f",
+          "sha256": "8b35ac9c7b65e8617f964c594bd76e7df06db6bfdb27767f38234cbd559d53a4",
           "targetBox": {
             "x": 33,
             "y": 361,
@@ -1155,9 +1215,10 @@
       "role": "operations_associate",
       "target": {
         "label": "Allocate stock",
-        "landmark": "allocation and picking action"
+        "landmark": "allocation and pick action",
+        "controlRole": "button"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:33:11.560Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -1175,9 +1236,10 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/ecommerce-fulfillment-delivery-step-1-desktop.png",
+          "observedRoute": "/warehouse/fulfillment",
           "width": 1440,
           "height": 900,
-          "sha256": "fee8b5c57b2bd0525776ab551ec5911767b0227c58b43e8c37394b9fb7fbb719",
+          "sha256": "d18e823113c36971f916314a7ed58d6613c06c2d689ab7c3b6f285c04b12223c",
           "targetBox": {
             "x": 313,
             "y": 372,
@@ -1189,9 +1251,10 @@
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/ecommerce-fulfillment-delivery-step-1-mobile.png",
+          "observedRoute": "/warehouse/fulfillment",
           "width": 390,
           "height": 844,
-          "sha256": "37cd4121d428fa29a60eee467b3234e710c94458f3d61da7f96fdb0ce977416b",
+          "sha256": "827d1dc8c9717c7da90ca1cf42cdc5fab4d58bb0e55c42d7454078d2d8be4607",
           "targetBox": {
             "x": 33,
             "y": 352,
@@ -1211,10 +1274,11 @@
       "route": "/warehouse/fulfillment",
       "role": "operations_associate",
       "target": {
-        "label": "View order details",
-        "landmark": "scan and pack action"
+        "label": "Confirm scanned pick",
+        "landmark": "actual scan-and-pack action",
+        "controlRole": "button"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:33:11.560Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -1232,30 +1296,32 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/ecommerce-fulfillment-delivery-step-2-desktop.png",
+          "observedRoute": "/warehouse/fulfillment",
           "width": 1440,
           "height": 900,
-          "sha256": "8d80ad2fdda4852b28b0c61cc41ce33a061fde4260f271803910d9c964ba1762",
+          "sha256": "89e45068a337fc3bca9aab823c575f370431d0a0c0dba01af07dbd5a679b9c25",
           "targetBox": {
             "x": 313,
             "y": 372,
-            "width": 184,
+            "width": 189,
             "height": 44
           },
-          "targetLabel": "View order details"
+          "targetLabel": "Confirm scanned pick"
         },
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/ecommerce-fulfillment-delivery-step-2-mobile.png",
+          "observedRoute": "/warehouse/fulfillment",
           "width": 390,
           "height": 844,
-          "sha256": "ad4b4da9aa9cfa14090bfd3e3a644d609744de6d480f1158c67c2bac8cb297cb",
+          "sha256": "f0b7658f7f8ea6d7f1db6b436f366ff441784444b61bd228e98ae83e51425fd4",
           "targetBox": {
             "x": 33,
-            "y": 361,
-            "width": 324,
-            "height": 44
+            "y": 353,
+            "width": 157,
+            "height": 60
           },
-          "targetLabel": "View order details"
+          "targetLabel": "Confirm scanned pick"
         }
       ]
     },
@@ -1268,10 +1334,11 @@
       "route": "/warehouse/fulfillment",
       "role": "operations_associate",
       "target": {
-        "label": "Update delivery",
-        "landmark": "dispatch action"
+        "label": "Release shipment",
+        "landmark": "dispatch action",
+        "controlRole": "button"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:33:11.560Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -1289,30 +1356,32 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/ecommerce-fulfillment-delivery-step-3-desktop.png",
+          "observedRoute": "/warehouse/fulfillment",
           "width": 1440,
           "height": 900,
-          "sha256": "b8820adeebf2702a4ea678d7c4231b755092f1e4346701a372ea20d924ccaa8b",
+          "sha256": "90643e37b85ed4077fbbb350e36e6c96dc844538bd3195e4de34db5a38371fc6",
           "targetBox": {
-            "x": 497,
+            "x": 313,
             "y": 372,
-            "width": 145,
+            "width": 160,
             "height": 44
           },
-          "targetLabel": "Update delivery"
+          "targetLabel": "Release shipment"
         },
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/ecommerce-fulfillment-delivery-step-3-mobile.png",
+          "observedRoute": "/warehouse/fulfillment",
           "width": 390,
           "height": 844,
-          "sha256": "27bd2e4520b08a1a3d1de7d992282addf9d794f6497ae83c166eaa650d3bf388",
+          "sha256": "118820f20ac91ef6361bde515b5630bc04be6dddf2fffe96d1b72d81643c278a",
           "targetBox": {
             "x": 33,
-            "y": 361,
-            "width": 324,
-            "height": 44
+            "y": 353,
+            "width": 157,
+            "height": 60
           },
-          "targetLabel": "Update delivery"
+          "targetLabel": "Release shipment"
         }
       ]
     },
@@ -1326,9 +1395,10 @@
       "role": "operations_lead",
       "target": {
         "label": "Update delivery",
-        "landmark": "delivery outcome control"
+        "landmark": "delivery outcome action",
+        "controlRole": "button"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:33:11.560Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -1346,9 +1416,10 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/ecommerce-fulfillment-delivery-step-4-desktop.png",
+          "observedRoute": "/warehouse/fulfillment",
           "width": 1440,
           "height": 900,
-          "sha256": "af1c47337f96cde2c6d426bb8fe2b9ee26f93aca29f5691ec4d7d45db6348ce4",
+          "sha256": "78a069f9dedd1149d67eba8c2113b668950d64994b372a6cfcce9fc21aa25c7f",
           "targetBox": {
             "x": 1055,
             "y": 372,
@@ -1360,9 +1431,10 @@
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/ecommerce-fulfillment-delivery-step-4-mobile.png",
+          "observedRoute": "/warehouse/fulfillment",
           "width": 390,
           "height": 844,
-          "sha256": "92f1330ca2b85e029e92bf0f241f0bd06e33fd6a817c21b7c892a895e18c0f71",
+          "sha256": "d81bb0dfe8b47490e18cbab1bbb3e4e5aa040010934fe1aa3207127d42de23da",
           "targetBox": {
             "x": 33,
             "y": 361,
@@ -1382,10 +1454,11 @@
       "route": "/warehouse/returns",
       "role": "operations_associate",
       "target": {
-        "label": "Returns",
-        "landmark": "original release lookup"
+        "label": "Serial number",
+        "landmark": "serial-to-original-release lookup",
+        "controlRole": "textbox"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:33:11.560Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -1403,30 +1476,32 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/returns-replacements-refunds-rma-step-1-desktop.png",
+          "observedRoute": "/warehouse/returns",
           "width": 1440,
           "height": 900,
-          "sha256": "275c4d882856b2d6b4fbb006a499aaa905a3584b46397c692c270c0b9b6acc0f",
+          "sha256": "0809566f464b809e6ea016f940216e817a302e2369b9d7063d0722de322a0647",
           "targetBox": {
-            "x": 56,
-            "y": 320,
-            "width": 175,
-            "height": 20
+            "x": 317,
+            "y": 686,
+            "width": 502,
+            "height": 44
           },
-          "targetLabel": "Returns"
+          "targetLabel": "Serial number"
         },
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/returns-replacements-refunds-rma-step-1-mobile.png",
+          "observedRoute": "/warehouse/returns",
           "width": 390,
           "height": 844,
-          "sha256": "8bcde427a04e46d5ff226b61d68c0190b87efef145605edd614ad302fed03b12",
+          "sha256": "67079b2e72c876049bf1a50c3cf7d41198e21db662589e237dc52f0ae287b0ba",
           "targetBox": {
-            "x": 68,
-            "y": 106,
-            "width": 221,
-            "height": 29
+            "x": 33,
+            "y": 361,
+            "width": 324,
+            "height": 44
           },
-          "targetLabel": "Returns"
+          "targetLabel": "Serial number"
         }
       ]
     },
@@ -1439,10 +1514,11 @@
       "route": "/warehouse/returns",
       "role": "operations_associate",
       "target": {
-        "label": "Returns",
-        "landmark": "return receipt and inspection"
+        "label": "Record return",
+        "landmark": "controlled return receipt action",
+        "controlRole": "button"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:33:11.560Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -1460,30 +1536,32 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/returns-replacements-refunds-rma-step-2-desktop.png",
+          "observedRoute": "/warehouse/returns",
           "width": 1440,
           "height": 900,
-          "sha256": "bfdcbecfd953acf4e3c1eb071b1a17896b00fd822359cc656a6c2c786aacd921",
+          "sha256": "0848af336c8d3515095375cf7bd0a6788f4589dc15d8359f0b65e0837cf67e1a",
           "targetBox": {
-            "x": 56,
-            "y": 320,
-            "width": 175,
-            "height": 20
+            "x": 317,
+            "y": 795,
+            "width": 502,
+            "height": 44
           },
-          "targetLabel": "Returns"
+          "targetLabel": "Record return"
         },
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/returns-replacements-refunds-rma-step-2-mobile.png",
+          "observedRoute": "/warehouse/returns",
           "width": 390,
           "height": 844,
-          "sha256": "095f79dc9fd0a3f5795c9bc8a9b4a782097aa099eb4ad7a88bd7b6f74bc49b12",
+          "sha256": "527881f5744c42dea0f0a414c7d64b7d1e1957df615b56ca29d54ec8296160f9",
           "targetBox": {
-            "x": 68,
-            "y": 106,
-            "width": 221,
-            "height": 29
+            "x": 33,
+            "y": 361,
+            "width": 324,
+            "height": 44
           },
-          "targetLabel": "Returns"
+          "targetLabel": "Record return"
         }
       ]
     },
@@ -1496,10 +1574,11 @@
       "route": "/warehouse/quality",
       "role": "operations_lead",
       "target": {
-        "label": "Inspect",
-        "landmark": "governed quality resolution"
+        "label": "Disposition",
+        "landmark": "governed return disposition",
+        "controlRole": "combobox"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:44:14.644Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -1517,30 +1596,32 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/returns-replacements-refunds-rma-step-3-desktop.png",
+          "observedRoute": "/warehouse/quality",
           "width": 1440,
           "height": 900,
-          "sha256": "dfbf7eafae044e692c63405c73d1f71a0582bc68981ae3a6a9a13bd7fc1cf5c4",
+          "sha256": "a6de7f1ef5d66a1cf3839559e19c55271330d735451b666dc69c299c86266ecb",
           "targetBox": {
-            "x": 1310,
-            "y": 361,
-            "width": 73,
+            "x": 456,
+            "y": 388,
+            "width": 528,
             "height": 44
           },
-          "targetLabel": "Inspect"
+          "targetLabel": "Disposition"
         },
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/returns-replacements-refunds-rma-step-3-mobile.png",
+          "observedRoute": "/warehouse/quality",
           "width": 390,
           "height": 844,
-          "sha256": "22077176a06d74179879648abf47765a49ff5ed60a0376fe4af5d994512d25e0",
+          "sha256": "5790925e362eb7d61c24f0591ace1c5e2eab84e3c9c39117bccdd780e83ab670",
           "targetBox": {
-            "x": 33,
-            "y": 461,
-            "width": 324,
+            "x": 20,
+            "y": 587,
+            "width": 350,
             "height": 44
           },
-          "targetLabel": "Inspect"
+          "targetLabel": "Disposition"
         }
       ]
     },
@@ -1550,13 +1631,14 @@
       "bindingId": "returns-replacements-refunds-rma:step-4",
       "status": "certified",
       "host": "https://mwell-intra-uat.vercel.app",
-      "route": "/warehouse/returns",
-      "role": "operations_associate",
+      "route": "/warehouse/quality",
+      "role": "operations_lead",
       "target": {
-        "label": "Returns",
-        "landmark": "final return disposition"
+        "label": "Submit inspection",
+        "landmark": "final return disposition action",
+        "controlRole": "button"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:33:11.560Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -1574,30 +1656,32 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/returns-replacements-refunds-rma-step-4-desktop.png",
+          "observedRoute": "/warehouse/quality",
           "width": 1440,
           "height": 900,
-          "sha256": "6f944dfa3dbe6a844c9dd4f80eaec2bc260fab61bf948c3a88f2e1e212d61c9f",
+          "sha256": "122bb7d4ccee7cdd616cd7769d2e08a0b92394d517ecfb8ff01628d3134b2536",
           "targetBox": {
-            "x": 56,
-            "y": 320,
-            "width": 175,
-            "height": 20
+            "x": 823,
+            "y": 640,
+            "width": 161,
+            "height": 44
           },
-          "targetLabel": "Returns"
+          "targetLabel": "Submit inspection"
         },
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/returns-replacements-refunds-rma-step-4-mobile.png",
+          "observedRoute": "/warehouse/quality",
           "width": 390,
           "height": 844,
-          "sha256": "fa47bcb6cdf66f94e821e2380c02815e037aba7c065743c2102cace1471168a0",
+          "sha256": "7c2519994b2fd67a263f4213c32d4496660fc8afefda16c69eb05efba420d69a",
           "targetBox": {
-            "x": 68,
-            "y": 106,
-            "width": 221,
-            "height": 29
+            "x": 20,
+            "y": 772,
+            "width": 350,
+            "height": 44
           },
-          "targetLabel": "Returns"
+          "targetLabel": "Submit inspection"
         }
       ]
     },
@@ -1611,9 +1695,10 @@
       "role": "general_employee",
       "target": {
         "label": "New stock request",
-        "landmark": "department stock request"
+        "landmark": "department stock request action",
+        "controlRole": "button"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:33:11.560Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -1631,9 +1716,10 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/department-inventory-release-step-1-desktop.png",
+          "observedRoute": "/warehouse/fulfillment",
           "width": 1440,
           "height": 900,
-          "sha256": "700f541adf78bb9d7424c83c5d1c3f47601b4311d7a1b1e51bec87886d8b20b7",
+          "sha256": "424d729ea880d0baa5b37deff8a32b8a2fadc861fa3242343e602d947683c5ea",
           "targetBox": {
             "x": 1213,
             "y": 370,
@@ -1645,9 +1731,10 @@
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/department-inventory-release-step-1-mobile.png",
+          "observedRoute": "/warehouse/fulfillment",
           "width": 390,
           "height": 844,
-          "sha256": "87f39ec6cc08372a0f4860a65d2590f49e60d5c67c5d1fa87810be7c2935e7f3",
+          "sha256": "28d14f67b1fcb87bbd01dbf529a66f0fddfc5071a37bcbcc7e2f2711cb404d7e",
           "targetBox": {
             "x": 16,
             "y": 602,
@@ -1664,13 +1751,14 @@
       "bindingId": "department-inventory-release:step-2",
       "status": "certified",
       "host": "https://mwell-intra-uat.vercel.app",
-      "route": "/warehouse/approvals",
+      "route": "/warehouse/fulfillment",
       "role": "operations_lead",
       "target": {
-        "label": "Stock approvals",
-        "landmark": "stock request approval"
+        "label": "Approve",
+        "landmark": "actual department release approval",
+        "controlRole": "button"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:33:11.560Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -1688,30 +1776,32 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/department-inventory-release-step-2-desktop.png",
+          "observedRoute": "/warehouse/fulfillment",
           "width": 1440,
           "height": 900,
-          "sha256": "ff3f85aad2a369fdde3181f17fef64cddf0d26d73e42e9e022363e883f18651c",
+          "sha256": "9793c2fef8753b473257bb8b05c67f7917bce1427b6955d1d00367e8da530afc",
           "targetBox": {
-            "x": 56,
-            "y": 784,
-            "width": 175,
-            "height": 20
+            "x": 573,
+            "y": 681,
+            "width": 252,
+            "height": 44
           },
-          "targetLabel": "Stock approvals"
+          "targetLabel": "Approve"
         },
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/department-inventory-release-step-2-mobile.png",
+          "observedRoute": "/warehouse/fulfillment",
           "width": 390,
           "height": 844,
-          "sha256": "c72f7a705d4a31f3e6c0cf0e5366090ef7973fe3eb47fdc97bc92698c7d3f258",
+          "sha256": "9a8519ea6cc5d5b87f4c4b884aa969ca36c1b4ca147e95ee2e561cae67fa6578",
           "targetBox": {
-            "x": 68,
-            "y": 106,
-            "width": 203,
-            "height": 29
+            "x": 199,
+            "y": 361,
+            "width": 158,
+            "height": 44
           },
-          "targetLabel": "Stock approvals"
+          "targetLabel": "Approve"
         }
       ]
     },
@@ -1724,10 +1814,11 @@
       "route": "/warehouse/fulfillment",
       "role": "operations_lead",
       "target": {
-        "label": "Department requests",
-        "landmark": "department request allocation queue"
+        "label": "Allocate stock",
+        "landmark": "department release execution",
+        "controlRole": "button"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:33:11.560Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -1745,30 +1836,32 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/department-inventory-release-step-3-desktop.png",
+          "observedRoute": "/warehouse/fulfillment",
           "width": 1440,
           "height": 900,
-          "sha256": "9f5356163dfcd0fd776cbdc704100a6a6106cf258eb970decb69560bb6a104b3",
+          "sha256": "afcc4b8310c6cc46766f504ad3d619a9b8a3fd13842b10148341055689d1018d",
           "targetBox": {
-            "x": 575,
-            "y": 298,
-            "width": 271,
+            "x": 871,
+            "y": 372,
+            "width": 133,
             "height": 44
           },
-          "targetLabel": "Department requests"
+          "targetLabel": "Allocate stock"
         },
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/department-inventory-release-step-3-mobile.png",
+          "observedRoute": "/warehouse/fulfillment",
           "width": 390,
           "height": 844,
-          "sha256": "f2924d8abbb70ae3e9e7bd1757dd6ed7b32b6b8b6d531ae1439ac14dd8170119",
+          "sha256": "00624d3808c00b761280be2718304594e9199adf4712d86e4e86fea67010e06e",
           "targetBox": {
-            "x": 197,
-            "y": 406,
-            "width": 173,
-            "height": 44
+            "x": 33,
+            "y": 352,
+            "width": 101,
+            "height": 62
           },
-          "targetLabel": "Department requests"
+          "targetLabel": "Allocate stock"
         }
       ]
     },
@@ -1782,9 +1875,10 @@
       "role": "general_employee",
       "target": {
         "label": "Acknowledge receipt",
-        "landmark": "recipient custody acknowledgement"
+        "landmark": "recipient custody acknowledgement",
+        "controlRole": "button"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:33:11.560Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -1802,11 +1896,12 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/department-inventory-release-step-4-desktop.png",
+          "observedRoute": "/warehouse/fulfillment",
           "width": 1440,
           "height": 900,
-          "sha256": "6da4f78f8fc2d88169da62357ba8692a97e7216f69b8b819300c11a27c08646e",
+          "sha256": "4317b8dedef6a45b2e8731a54484372de441a6610cbea112a69345cf8069a9be",
           "targetBox": {
-            "x": 1055,
+            "x": 497,
             "y": 372,
             "width": 182,
             "height": 44
@@ -1816,9 +1911,10 @@
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/department-inventory-release-step-4-mobile.png",
+          "observedRoute": "/warehouse/fulfillment",
           "width": 390,
           "height": 844,
-          "sha256": "ef4fc48ac3749755cab9b03e56d4d8de2dcd67f296dd9c1161938e3e27299bd5",
+          "sha256": "41ca475dfd4942fd310464c9b03583265134d8f26ce7d96e40cd0d4c485d228e",
           "targetBox": {
             "x": 33,
             "y": 361,
@@ -1839,9 +1935,10 @@
       "role": "general_employee",
       "target": {
         "label": "New event",
-        "landmark": "event request action"
+        "landmark": "event demand creation",
+        "controlRole": "button"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:33:11.560Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -1859,9 +1956,10 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/event-stock-custody-step-1-desktop.png",
+          "observedRoute": "/events",
           "width": 1440,
           "height": 900,
-          "sha256": "6181bfa62c0fdb50ea48e24d04ff8c4f79376b2b8309fcc63518398bb8b3066d",
+          "sha256": "b96481dd1953306259def690de96abfba154b5bbca8d356a0367c22635a705f1",
           "targetBox": {
             "x": 296,
             "y": 236,
@@ -1873,9 +1971,10 @@
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/event-stock-custody-step-1-mobile.png",
+          "observedRoute": "/events",
           "width": 390,
           "height": 844,
-          "sha256": "cc03449a910703daf49361f56cb160f9cd319b982f522d75b6baf567b16564bb",
+          "sha256": "fa499453360a264587e796f1dc71ebce06401b294791c48f01760860c6121619",
           "targetBox": {
             "x": 32,
             "y": 325,
@@ -1896,9 +1995,10 @@
       "role": "operations_associate",
       "target": {
         "label": "Allocate stock",
-        "landmark": "event stock transfer"
+        "landmark": "event stock transfer action",
+        "controlRole": "button"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:33:11.560Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -1916,9 +2016,10 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/event-stock-custody-step-2-desktop.png",
+          "observedRoute": "/warehouse/fulfillment",
           "width": 1440,
           "height": 900,
-          "sha256": "e6e8f1d7e92dfe3718f139f3cd497cf17a9e6aaa798d22c9101d555642ca913b",
+          "sha256": "b6164e172c758179aa115793070dcc6c44c897d7a2d8ebd44690fec3bb13f207",
           "targetBox": {
             "x": 313,
             "y": 372,
@@ -1930,9 +2031,10 @@
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/event-stock-custody-step-2-mobile.png",
+          "observedRoute": "/warehouse/fulfillment",
           "width": 390,
           "height": 844,
-          "sha256": "fa28b398d90b044cb08777e9564b8a39c41f48730f5848de4c9bff02ca4ade9f",
+          "sha256": "e7560514730c99704992ee22dcb358cefdd67f048e265f6bebe0565c0d4cd412",
           "targetBox": {
             "x": 33,
             "y": 352,
@@ -1952,10 +2054,11 @@
       "route": "/events",
       "role": "marketing_events_lead",
       "target": {
-        "label": "Event readiness and fulfillment",
-        "landmark": "event use and return record"
+        "label": "Edit outcomes",
+        "landmark": "event outcome and return action",
+        "controlRole": "button"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:33:11.560Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -1973,30 +2076,32 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/event-stock-custody-step-3-desktop.png",
+          "observedRoute": "/events/HANDBOOK-T7-R1-EVENT",
           "width": 1440,
           "height": 900,
-          "sha256": "c1320a8d2e36c920c5120762e123bd87273d8da5fc9b3ca43610e08a2d815037",
+          "sha256": "2a42252fc4e65f1198248b045dcdb0c2d27434483ea8e49a67526917a2f5b177",
           "targetBox": {
-            "x": 272,
-            "y": 482,
-            "width": 661,
-            "height": 28
+            "x": 293,
+            "y": 744,
+            "width": 136,
+            "height": 44
           },
-          "targetLabel": "Event readiness and fulfillment"
+          "targetLabel": "Edit outcomes"
         },
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/event-stock-custody-step-3-mobile.png",
+          "observedRoute": "/events/HANDBOOK-T7-R1-EVENT",
           "width": 390,
           "height": 844,
-          "sha256": "4acadf0772b6addb4f0138e7a1cc8b62e37bf26a6a3b36d428246df0cdb5b565",
+          "sha256": "23204db67fb1f403515a81eb52e7755459e889820b43f2d61a22b2b283e1227f",
           "targetBox": {
-            "x": 16,
-            "y": 635,
-            "width": 358,
-            "height": 22
+            "x": 33,
+            "y": 325,
+            "width": 136,
+            "height": 44
           },
-          "targetLabel": "Event readiness and fulfillment"
+          "targetLabel": "Edit outcomes"
         }
       ]
     },
@@ -2009,10 +2114,11 @@
       "route": "/events",
       "role": "finance_controller",
       "target": {
-        "label": "Event readiness and fulfillment",
-        "landmark": "event reconciliation decision"
+        "label": "Approve settlement",
+        "landmark": "event reconciliation decision",
+        "controlRole": "button"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:33:11.560Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -2030,30 +2136,32 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/event-stock-custody-step-4-desktop.png",
+          "observedRoute": "/events/HANDBOOK-T7-R1-EVENT",
           "width": 1440,
           "height": 900,
-          "sha256": "59e097d8ef90e82846a22bc2e1bf9776512c15f5acdb232d09132ea5ed65d672",
+          "sha256": "6be528fa40669150d19729cbe8532e9d551d8026dd370ed668a118b5d6504112",
           "targetBox": {
-            "x": 272,
-            "y": 482,
-            "width": 661,
-            "height": 28
+            "x": 293,
+            "y": 744,
+            "width": 174,
+            "height": 44
           },
-          "targetLabel": "Event readiness and fulfillment"
+          "targetLabel": "Approve settlement"
         },
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/event-stock-custody-step-4-mobile.png",
+          "observedRoute": "/events/HANDBOOK-T7-R1-EVENT",
           "width": 390,
           "height": 844,
-          "sha256": "a5aec0720948ed6bafd2c86ebfd0a77ca43ef13214e7d0b6f0e74d7756d62bfb",
+          "sha256": "f2a0013339b7f7d2a2d9ad2a043b87550062e8617f0304fde162bbcbaa436773",
           "targetBox": {
-            "x": 16,
-            "y": 635,
-            "width": 358,
-            "height": 22
+            "x": 33,
+            "y": 421,
+            "width": 174,
+            "height": 44
           },
-          "targetLabel": "Event readiness and fulfillment"
+          "targetLabel": "Approve settlement"
         }
       ]
     },
@@ -2066,10 +2174,11 @@
       "route": "/warehouse/cycle-counts",
       "role": "operations_associate",
       "target": {
-        "label": "Cycle Counts",
-        "landmark": "cycle count start"
+        "label": "Location",
+        "landmark": "cycle-count scope control",
+        "controlRole": "combobox"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:44:30.070Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -2087,30 +2196,32 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/inventory-count-variance-step-1-desktop.png",
+          "observedRoute": "/warehouse/cycle-counts",
           "width": 1440,
           "height": 900,
-          "sha256": "62058c0ee36e4476c98608f23f9aef2121c77c47a779040c14bd88c268e84d95",
+          "sha256": "83df3f82027d78aee4ae9fc1b752dc8858e71cb2f472d8b3b42c9081a6906021",
           "targetBox": {
-            "x": 56,
-            "y": 624,
-            "width": 175,
-            "height": 20
+            "x": 317,
+            "y": 328,
+            "width": 525,
+            "height": 44
           },
-          "targetLabel": "Cycle Counts"
+          "targetLabel": "Location"
         },
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/inventory-count-variance-step-1-mobile.png",
+          "observedRoute": "/warehouse/cycle-counts",
           "width": 390,
           "height": 844,
-          "sha256": "e8947bb922e696f5285cebbdab42ac1ce921c88f213080f9192104314d9f51a4",
+          "sha256": "0270754eb749039ae52a7c3171f18828b40b9bdd297d4ced9ba5f54d23679273",
           "targetBox": {
-            "x": 68,
-            "y": 106,
-            "width": 165,
-            "height": 29
+            "x": 33,
+            "y": 356,
+            "width": 324,
+            "height": 44
           },
-          "targetLabel": "Cycle Counts"
+          "targetLabel": "Location"
         }
       ]
     },
@@ -2123,10 +2234,11 @@
       "route": "/warehouse/cycle-counts",
       "role": "operations_associate",
       "target": {
-        "label": "Submit count",
-        "landmark": "observed quantity submission"
+        "label": "Submit count (1/14)",
+        "landmark": "observed quantity submission",
+        "controlRole": "button"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:33:11.560Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -2144,30 +2256,32 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/inventory-count-variance-step-2-desktop.png",
+          "observedRoute": "/warehouse/cycle-counts",
           "width": 1440,
           "height": 900,
-          "sha256": "b8c6954512dfe78a736c42027accf0526fd67672e0da93376111a141a0fa2cba",
+          "sha256": "4f2bb245de8b7af711d4894d5f78bdd0acb952e1d534146a0d9f7b054e796c93",
           "targetBox": {
             "x": 296,
             "y": 816,
             "width": 1104,
             "height": 44
           },
-          "targetLabel": "Submit count"
+          "targetLabel": "Submit count (1/14)"
         },
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/inventory-count-variance-step-2-mobile.png",
+          "observedRoute": "/warehouse/cycle-counts",
           "width": 390,
           "height": 844,
-          "sha256": "604e8afb720e3f4344220a26e478acb5c2aa45636a583d540ce06d44b189036d",
+          "sha256": "99bd8f2152dbaf94fe62253e35a745476f68cda820ebe14021f4981520bca829",
           "targetBox": {
             "x": 16,
             "y": 613,
             "width": 358,
             "height": 44
           },
-          "targetLabel": "Submit count"
+          "targetLabel": "Submit count (1/14)"
         }
       ]
     },
@@ -2180,10 +2294,11 @@
       "route": "/warehouse/approvals",
       "role": "operations_lead",
       "target": {
-        "label": "Stock approvals",
-        "landmark": "variance approval decision"
+        "label": "Review",
+        "landmark": "variance decision action",
+        "controlRole": "button"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:33:11.560Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -2201,30 +2316,32 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/inventory-count-variance-step-3-desktop.png",
+          "observedRoute": "/warehouse/approvals",
           "width": 1440,
           "height": 900,
-          "sha256": "fa29cdc1c6e8b79bd8882d4a54752791f5b07aee14c73b0632cc705449d17593",
+          "sha256": "7b59b54fb7c5042da3156bd267d0dd9614e2474f5dea1ca56e8efdacc8ceaa3b",
           "targetBox": {
-            "x": 56,
-            "y": 784,
-            "width": 175,
-            "height": 20
+            "x": 1312,
+            "y": 372,
+            "width": 71,
+            "height": 44
           },
-          "targetLabel": "Stock approvals"
+          "targetLabel": "Review"
         },
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/inventory-count-variance-step-3-mobile.png",
+          "observedRoute": "/warehouse/approvals",
           "width": 390,
           "height": 844,
-          "sha256": "eb5e860e15b0372952e8c7175215e8564f3cb2f7cf9f65110e6d84f1d56dfc25",
+          "sha256": "6004a288a04c370b8e548dfaf61461f7af5d89608c0403b1ea465a999cf5bb3c",
           "targetBox": {
-            "x": 68,
-            "y": 106,
-            "width": 203,
-            "height": 29
+            "x": 33,
+            "y": 531,
+            "width": 324,
+            "height": 44
           },
-          "targetLabel": "Stock approvals"
+          "targetLabel": "Review"
         }
       ]
     },
@@ -2234,13 +2351,14 @@
       "bindingId": "inventory-count-variance:step-4",
       "status": "certified",
       "host": "https://mwell-intra-uat.vercel.app",
-      "route": "/warehouse/cycle-counts",
+      "route": "/warehouse/approvals",
       "role": "operations_lead",
       "target": {
-        "label": "Cycle Counts",
-        "landmark": "approved count result"
+        "label": "Recently decided",
+        "landmark": "posted count readback action",
+        "controlRole": "tab"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:33:11.560Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -2258,30 +2376,32 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/inventory-count-variance-step-4-desktop.png",
+          "observedRoute": "/warehouse/approvals",
           "width": 1440,
           "height": 900,
-          "sha256": "a6ba2f4c2b1974071d91a4b33b7e1218bc02956ff1beff540d2908f7dfa29e4b",
+          "sha256": "a233716e03f4e43466c3fae283f83120c26ba4f4b195c89dd27c4b2e72a7864b",
           "targetBox": {
-            "x": 56,
-            "y": 688,
-            "width": 175,
-            "height": 20
+            "x": 1033,
+            "y": 284,
+            "width": 363,
+            "height": 44
           },
-          "targetLabel": "Cycle Counts"
+          "targetLabel": "Recently decided"
         },
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/inventory-count-variance-step-4-mobile.png",
+          "observedRoute": "/warehouse/approvals",
           "width": 390,
           "height": 844,
-          "sha256": "ad776211bacb93caef7dffc5dfeb51eaebdd615556da609c01344fa815c203ca",
+          "sha256": "876fadac169f28b6e44afb6fed105091ed6994949267f87f03fd5d046260e349",
           "targetBox": {
-            "x": 68,
-            "y": 106,
-            "width": 165,
-            "height": 29
+            "x": 256,
+            "y": 320,
+            "width": 114,
+            "height": 56
           },
-          "targetLabel": "Cycle Counts"
+          "targetLabel": "Recently decided"
         }
       ]
     },
@@ -2295,9 +2415,10 @@
       "role": "platform_administrator",
       "target": {
         "label": "Create revision",
-        "landmark": "versioned DOA draft"
+        "landmark": "versioned DOA draft action",
+        "controlRole": "button"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:33:11.560Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -2315,9 +2436,10 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/department-doa-activation-step-1-desktop.png",
+          "observedRoute": "/admin/doa",
           "width": 1440,
           "height": 900,
-          "sha256": "bf70cdcb74ace75bce035ebd9300aaf3db031580c4b5c4be3a6c91acee80a40f",
+          "sha256": "f5c4caba26a600a2391d50427e0922250ac3159275a6809c3a8f7cb11aa24993",
           "targetBox": {
             "x": 293,
             "y": 434,
@@ -2329,9 +2451,10 @@
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/department-doa-activation-step-1-mobile.png",
+          "observedRoute": "/admin/doa",
           "width": 390,
           "height": 844,
-          "sha256": "05e38bc14bfbb1654205d5b6ad2fdebe87931fdd6c59d43e22f70f59d39efd62",
+          "sha256": "68f4078993b5aa20116c53325dda136677ce65987305f812ebabbd2eea0fcb82",
           "targetBox": {
             "x": 33,
             "y": 515,
@@ -2352,9 +2475,10 @@
       "role": "platform_administrator",
       "target": {
         "label": "Add tier",
-        "landmark": "DOA tier definition"
+        "landmark": "DOA tier definition action",
+        "controlRole": "button"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:33:11.560Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -2372,9 +2496,10 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/department-doa-activation-step-2-desktop.png",
+          "observedRoute": "/admin/doa",
           "width": 1440,
           "height": 900,
-          "sha256": "4cea32a8a7b052ec4bd156e28d2a8d48f45a0ef1e2894885697d77579a289f4b",
+          "sha256": "84b86dd2dd1f5c68175a5207d4f26d1bc3c9ec7db67e73cf6343fd36e751b70a",
           "targetBox": {
             "x": 1285,
             "y": 481,
@@ -2386,9 +2511,10 @@
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/department-doa-activation-step-2-mobile.png",
+          "observedRoute": "/admin/doa",
           "width": 390,
           "height": 844,
-          "sha256": "22dda7b3578094809a67ed33dbeca59241f90d85d370d444782770ed3d0c4055",
+          "sha256": "44b055259ad771380c7a97ceb05ee73d397c356d5a241b2edda80d03498cd229",
           "targetBox": {
             "x": 255,
             "y": 304,
@@ -2409,9 +2535,10 @@
       "role": "legal_compliance_lead",
       "target": {
         "label": "Activate",
-        "landmark": "DOA activation action"
+        "landmark": "DOA activation action",
+        "controlRole": "button"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:33:11.560Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -2429,9 +2556,10 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/department-doa-activation-step-3-desktop.png",
+          "observedRoute": "/admin/doa",
           "width": 1440,
           "height": 900,
-          "sha256": "920fbbe19c6889f56d164004ad69fef362d7a5200b6998d1a26ca95437061af5",
+          "sha256": "0ae8f07243c6866b16df523d430d111e4ab5fd37ae976f0c7a3e82883b8df329",
           "targetBox": {
             "x": 428,
             "y": 434,
@@ -2443,9 +2571,10 @@
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/department-doa-activation-step-3-mobile.png",
+          "observedRoute": "/admin/doa",
           "width": 390,
           "height": 844,
-          "sha256": "8ba8d3322949ff8be6d0109cc5122f076f9bc720b79a64e71fe226f1b9d5a2bb",
+          "sha256": "024492c652d9e48f34f697e7a21ed58826257686f2426490f65cf5b33210a8a3",
           "targetBox": {
             "x": 33,
             "y": 567,
@@ -2462,13 +2591,14 @@
       "bindingId": "department-doa-activation:step-4",
       "status": "certified",
       "host": "https://mwell-intra-uat.vercel.app",
-      "route": "/admin/doa",
-      "role": "platform_administrator",
+      "route": "/procurement/requests/new",
+      "role": "procurement_lead",
       "target": {
-        "label": "Department coverage",
-        "landmark": "procurement DOA readback"
+        "label": "Department",
+        "landmark": "Procurement DOA readback control",
+        "controlRole": "combobox"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:45:34.675Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -2486,30 +2616,32 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/department-doa-activation-step-4-desktop.png",
+          "observedRoute": "/procurement/requests/new",
           "width": 1440,
           "height": 900,
-          "sha256": "3d7c55bc573b5f785a0df3630c0eca8dbcc44f4c986d32f4056575fe6a175ba5",
+          "sha256": "37eb2484fba48545de41de254a8123326a1c5ba86d0be0cf9b1cacff16d6ce7e",
           "targetBox": {
-            "x": 272,
-            "y": 269,
-            "width": 1136,
-            "height": 28
+            "x": 413,
+            "y": 540,
+            "width": 419,
+            "height": 44
           },
-          "targetLabel": "Department coverage"
+          "targetLabel": "Department"
         },
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/department-doa-activation-step-4-mobile.png",
+          "observedRoute": "/procurement/requests/new",
           "width": 390,
           "height": 844,
-          "sha256": "9af71fcfd94c8bb477201951d753e18b4871db75dec79932eed1e4c0c3712d55",
+          "sha256": "22285e4989b3089b804c5ffef05da4e5a86b9f72d475a5994758c8faeb27dd08",
           "targetBox": {
-            "x": 16,
-            "y": 354,
-            "width": 358,
-            "height": 28
+            "x": 33,
+            "y": 304,
+            "width": 324,
+            "height": 44
           },
-          "targetLabel": "Department coverage"
+          "targetLabel": "Department"
         }
       ]
     },
@@ -2522,10 +2654,11 @@
       "route": "/finance",
       "role": "finance_controller",
       "target": {
-        "label": "Finance",
-        "landmark": "Finance control center"
+        "label": "Review next payment pack",
+        "landmark": "Finance control-center next-work action",
+        "controlRole": "link"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:43:55.788Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -2543,30 +2676,32 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/finance-readiness-evidence-step-1-desktop.png",
+          "observedRoute": "/finance",
           "width": 1440,
           "height": 900,
-          "sha256": "196e8dc9cc354bfe075fac7fd94055a3075d84746873bbb0ba1f1eec9e1422aa",
+          "sha256": "9735edc16f71e176c69ce510e046e279ec729f9e9b5869b959bc7ad04f0f91bd",
           "targetBox": {
-            "x": 12,
-            "y": 324,
+            "x": 296,
+            "y": 236,
             "width": 215,
             "height": 44
           },
-          "targetLabel": "Finance"
+          "targetLabel": "Review next payment pack"
         },
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/finance-readiness-evidence-step-1-mobile.png",
+          "observedRoute": "/finance",
           "width": 390,
           "height": 844,
-          "sha256": "ac602646378633290fe703be757a5d8bc91de43b0fb3dd9fde57c2840aa6a70d",
+          "sha256": "cabd04d7824a96942921d008216e70f5750867aa24909d968fe7898a643587c7",
           "targetBox": {
-            "x": 83,
-            "y": 773,
-            "width": 75,
-            "height": 64
+            "x": 32,
+            "y": 325,
+            "width": 215,
+            "height": 44
           },
-          "targetLabel": "Finance"
+          "targetLabel": "Review next payment pack"
         }
       ]
     },
@@ -2579,10 +2714,11 @@
       "route": "/finance",
       "role": "finance_controller",
       "target": {
-        "label": "Open / Cross-module activity",
-        "landmark": "source record trace"
+        "label": "HANDBOOK-T7-R1-PO",
+        "landmark": "source-record trace with financial context",
+        "controlRole": "link"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:33:11.560Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -2600,30 +2736,32 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/finance-readiness-evidence-step-2-desktop.png",
+          "observedRoute": "/finance",
           "width": 1440,
           "height": 900,
-          "sha256": "c31112420609bdb909f13207c35da0bce7c084ed68aec53d0be390e25d0c71e7",
+          "sha256": "224f3acc0cc45119213658ac7d37da892c333c2e9d1c07db2a4c12a43833814a",
           "targetBox": {
-            "x": 12,
-            "y": 840,
-            "width": 215,
+            "x": 274,
+            "y": 524,
+            "width": 154,
             "height": 44
           },
-          "targetLabel": "Open"
+          "targetLabel": "HANDBOOK-T7-R1-PO"
         },
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/finance-readiness-evidence-step-2-mobile.png",
+          "observedRoute": "/finance",
           "width": 390,
           "height": 844,
-          "sha256": "7217f0aa611913c0d126eb4e7c363d1809b962455f03590bfa5abc08acbdfb00",
+          "sha256": "6d2f5641333dd78cd894d7bed45c486986e1f9611d15e90d7cd82d2d0e272b45",
           "targetBox": {
-            "x": 16,
-            "y": 363,
-            "width": 358,
-            "height": 22
+            "x": 31,
+            "y": 304,
+            "width": 177,
+            "height": 44
           },
-          "targetLabel": "Cross-module activity"
+          "targetLabel": "HANDBOOK-T7-R1-PO"
         }
       ]
     },
@@ -2636,10 +2774,11 @@
       "route": "/finance",
       "role": "finance_controller",
       "target": {
-        "label": "Payment readiness",
-        "landmark": "readiness blocker review"
+        "label": "HANDBOOK-T7-R1-PO",
+        "landmark": "payment-readiness source action",
+        "controlRole": "link"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:33:11.560Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -2657,30 +2796,32 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/finance-readiness-evidence-step-3-desktop.png",
+          "observedRoute": "/finance",
           "width": 1440,
           "height": 900,
-          "sha256": "6c031ddba5f14a8883515a516462613bf3a298175bcb47bedbaeac9259d96bad",
+          "sha256": "3a0d90edb68fe5a3c8ae80507cac8c6dc867da95f37a373a49dc41f5be170e7d",
           "targetBox": {
-            "x": 296,
-            "y": 178,
-            "width": 672,
-            "height": 42
+            "x": 274,
+            "y": 636,
+            "width": 154,
+            "height": 44
           },
-          "targetLabel": "Payment readiness"
+          "targetLabel": "HANDBOOK-T7-R1-PO"
         },
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/finance-readiness-evidence-step-3-mobile.png",
+          "observedRoute": "/finance",
           "width": 390,
           "height": 844,
-          "sha256": "85e646025965ec8ce84428b48619c96c53d5b0ea726d57dd95a669ad5385610f",
+          "sha256": "fff534f0472fa6e6e6a77e1ffc7a73128d48a9c3f89fe14a0f43faed354b1953",
           "targetBox": {
-            "x": 32,
-            "y": 225,
-            "width": 270,
-            "height": 84
+            "x": 31,
+            "y": 304,
+            "width": 177,
+            "height": 44
           },
-          "targetLabel": "Payment readiness"
+          "targetLabel": "HANDBOOK-T7-R1-PO"
         }
       ]
     },
@@ -2693,10 +2834,11 @@
       "route": "/finance",
       "role": "finance_controller",
       "target": {
-        "label": "Payment readiness",
-        "landmark": "Finance readiness decision"
+        "label": "Prepare close entry",
+        "landmark": "governed Finance close preparation",
+        "controlRole": "button"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:33:11.560Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -2714,30 +2856,32 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/finance-readiness-evidence-step-4-desktop.png",
+          "observedRoute": "/finance",
           "width": 1440,
           "height": 900,
-          "sha256": "fbbb35cbac997435ab55eb524b58316ea3c6be5751794769d3f87af8ff882f46",
+          "sha256": "fa0a3e86bf3fca637f2bc16e4a8e38b33262e43364312c71ad8e724d8cfa42e3",
           "targetBox": {
-            "x": 296,
-            "y": 178,
-            "width": 672,
-            "height": 42
+            "x": 1214,
+            "y": 380,
+            "width": 194,
+            "height": 44
           },
-          "targetLabel": "Payment readiness"
+          "targetLabel": "Prepare close entry"
         },
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/finance-readiness-evidence-step-4-mobile.png",
+          "observedRoute": "/finance",
           "width": 390,
           "height": 844,
-          "sha256": "96b5f77ac6d360dd2f681a66f0b419f3b3605bdf542cd78372b3d4e064c51321",
+          "sha256": "ee82e596173cd7d99848edb6c906e7a3591c70baba299d1de371dbacada0c8d9",
           "targetBox": {
-            "x": 32,
-            "y": 225,
-            "width": 270,
-            "height": 84
+            "x": 16,
+            "y": 304,
+            "width": 358,
+            "height": 44
           },
-          "targetLabel": "Payment readiness"
+          "targetLabel": "Prepare close entry"
         }
       ]
     },
@@ -2751,9 +2895,10 @@
       "role": "general_employee",
       "target": {
         "label": "New readiness package",
-        "landmark": "readiness and pricing submission"
+        "landmark": "readiness package submission",
+        "controlRole": "button"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:33:11.560Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -2771,9 +2916,10 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/product-readiness-pricing-go-live-step-1-desktop.png",
+          "observedRoute": "/product",
           "width": 1440,
           "height": 900,
-          "sha256": "c1eba2f16ab9a49a54281865e1dc7cd3a427724e2569700a8de36c7ecc66333b",
+          "sha256": "78beb6082bfdaa4c882b6e86999d3b7813afe0f497d2e5930e844b34f4c3dd7a",
           "targetBox": {
             "x": 296,
             "y": 236,
@@ -2785,9 +2931,10 @@
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/product-readiness-pricing-go-live-step-1-mobile.png",
+          "observedRoute": "/product",
           "width": 390,
           "height": 844,
-          "sha256": "f52175297e8e6f79cb5328d2786dbc4cf27c1b155fdd6088319bab8007bd6687",
+          "sha256": "b6ed12532c964fab82dc2cc48914109273126709f9e466507fa878e804c404b3",
           "targetBox": {
             "x": 32,
             "y": 276,
@@ -2808,9 +2955,10 @@
       "role": "product_owner",
       "target": {
         "label": "Approve go-live",
-        "landmark": "Product Owner review"
+        "landmark": "current Product package review action",
+        "controlRole": "button"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:33:11.560Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -2828,28 +2976,30 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/product-readiness-pricing-go-live-step-2-desktop.png",
+          "observedRoute": "/product",
           "width": 1440,
           "height": 900,
-          "sha256": "70f7e8eab524f73d8b24cf4c2e039a2c661857a95879c5e68f54ae670e237060",
+          "sha256": "05af293fd7daa4b46a1cc91e131ada3fa1b2fbcfa3ac29ca42460df60904a1a9",
           "targetBox": {
-            "x": 430,
-            "y": 262,
-            "width": 578,
-            "height": 375
+            "x": 293,
+            "y": 624,
+            "width": 147,
+            "height": 44
           },
           "targetLabel": "Approve go-live"
         },
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/product-readiness-pricing-go-live-step-2-mobile.png",
+          "observedRoute": "/product",
           "width": 390,
           "height": 844,
-          "sha256": "bf82b4eaffb1fb7443fd8380b5bd0c6c7aea797170e2474d5d882473eaccbf3d",
+          "sha256": "4c0d6eeca7672e0d45ec713d48725998de8930f82fca84e08d5f52bb37b46e58",
           "targetBox": {
-            "x": 4,
-            "y": 444,
-            "width": 382,
-            "height": 390
+            "x": 33,
+            "y": 304,
+            "width": 147,
+            "height": 44
           },
           "targetLabel": "Approve go-live"
         }
@@ -2865,9 +3015,10 @@
       "role": "product_owner",
       "target": {
         "label": "Approve go-live",
-        "landmark": "Product Owner decision"
+        "landmark": "actual Product go-live decision",
+        "controlRole": "button"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:33:11.560Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -2885,13 +3036,14 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/product-readiness-pricing-go-live-step-3-desktop.png",
+          "observedRoute": "/product",
           "width": 1440,
           "height": 900,
-          "sha256": "96f22a4fe355e011c36fbaef1d256ec3ac1c1169f09a212cd15d215000d83747",
+          "sha256": "d3914a321f911ed033741defbd131f7ffae3920c1bf03880d9d1677e4402df09",
           "targetBox": {
-            "x": 840,
+            "x": 837,
             "y": 577,
-            "width": 144,
+            "width": 147,
             "height": 44
           },
           "targetLabel": "Approve go-live"
@@ -2899,9 +3051,10 @@
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/product-readiness-pricing-go-live-step-3-mobile.png",
+          "observedRoute": "/product",
           "width": 390,
           "height": 844,
-          "sha256": "1c97980015ef09acc01aed4885fd01d739ec7eabce4b8b16373cb1050d3f8c49",
+          "sha256": "13b18e71e398100e5080f3f364a30ff65e5e3b853f027fa287da406d8fd9c9a6",
           "targetBox": {
             "x": 20,
             "y": 772,
@@ -2922,9 +3075,10 @@
       "role": "operations_lead",
       "target": {
         "label": "Acknowledge Operations handoff",
-        "landmark": "Operations handoff acknowledgement"
+        "landmark": "Operations handoff acknowledgement",
+        "controlRole": "button"
       },
-      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "capturedAt": "2026-08-24T19:33:11.560Z",
       "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
       "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
       "assertions": {
@@ -2942,26 +3096,28 @@
         {
           "viewport": "desktop",
           "path": "docs/manual/assets/knowledge-base/product-readiness-pricing-go-live-step-4-desktop.png",
+          "observedRoute": "/product",
           "width": 1440,
           "height": 900,
-          "sha256": "ac2ef4b9ffbc02d699c7542993026268647e030061a4ad8bdcd124fbb6a19f2e",
+          "sha256": "2269d61324947c227970bf0d03796080a220ec96e5dda484ac417c8321432428",
           "targetBox": {
-            "x": 293,
-            "y": 648,
+            "x": 867,
+            "y": 624,
             "width": 520,
-            "height": 45
+            "height": 44
           },
           "targetLabel": "Acknowledge Operations handoff"
         },
         {
           "viewport": "mobile",
           "path": "docs/manual/assets/knowledge-base/product-readiness-pricing-go-live-step-4-mobile.png",
+          "observedRoute": "/product",
           "width": 390,
           "height": 844,
-          "sha256": "39ccfd8fb0e714cac5147130864b2ad967fc58e2d6bde1ad150998d76394550a",
+          "sha256": "025fe2b232fcf0a1989e6c006510390e428d53c12efa2c4c139c406e80d5d27a",
           "targetBox": {
             "x": 33,
-            "y": 656,
+            "y": 655,
             "width": 324,
             "height": 44
           },

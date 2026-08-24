@@ -160,8 +160,11 @@ const SIMULATION_FIELDS = [
   "id",
   "title",
   "linkedTaskId",
+  "linkedStageId",
   "startRoute",
+  "workspaceId",
   "actorRole",
+  "mode",
   "scenario",
   "successCriteria",
   "negativeScenario",
@@ -977,4 +980,190 @@ test("evidence certification fails closed on host, route, role, currency, assert
       label,
     );
   }
+});
+
+test("every task stage uses an explicit truthful operating contract", () => {
+  assert.equal(Object.keys(handbookGuideModel.HANDBOOK_STAGE_CONTRACTS ?? {}).length, 52);
+  for (const guide of HANDBOOK_GUIDES.filter(({ type }) => type === "task")) {
+    for (const stage of guide.steps) {
+      const bindingId = `${guide.id}:${stage.id}`;
+      const contract = handbookGuideModel.HANDBOOK_STAGE_CONTRACTS[bindingId];
+      assert.ok(contract, bindingId);
+      assert.deepEqual(
+        {
+          expectedResult: stage.expectedResult,
+          dataRead: stage.dataRead,
+          dataWritten: stage.dataWritten,
+          evidenceRetained: stage.evidenceRetained,
+          nextHandoff: stage.nextHandoff,
+        },
+        contract,
+        bindingId,
+      );
+      for (const [field, values] of Object.entries({
+        dataRead: stage.dataRead,
+        dataWritten: stage.dataWritten,
+        evidenceRetained: stage.evidenceRetained,
+      })) {
+        assert.ok(Array.isArray(values) && values.length > 0, `${bindingId} ${field}`);
+        assert.equal(values.some((value) => / state$/i.test(value)), false, `${bindingId} ${field}`);
+      }
+      assert.equal(/^Task accountable closer$/i.test(stage.nextHandoff), false, bindingId);
+    }
+  }
+});
+
+test("stage semantic drift is rejected even when a guide mutation remains structurally valid", () => {
+  const guides = cloneGuides();
+  const stage = guides.find(({ id }) => id === "finance-readiness-evidence").steps[1];
+  stage.dataRead = ["Finance state"];
+  stage.dataWritten = ["Trace source record state"];
+  stage.evidenceRetained = ["Generic evidence"];
+  stage.nextHandoff = "Task accountable closer";
+  assert.match(
+    validateHandbookGuides({ guides }).errors.join("\n"),
+    /stage semantic contract/,
+  );
+});
+
+test("all personas have an explicit task, stage, workspace, and simulation mode", () => {
+  const expected = {
+    platform_administrator: ["department-doa-activation", "step-2", "workspace-3", "performed-action"],
+    general_employee: ["procurement-request-approval", "step-1", "workspace-1", "performed-action"],
+    operations_associate: ["stock-receiving-putaway", "step-2", "workspace-2", "performed-action"],
+    operations_lead: ["inventory-count-variance", "step-3", "workspace-2", "performed-action"],
+    procurement_lead: ["procurement-request-approval", "step-4", "workspace-3", "performed-action"],
+    finance_controller: ["finance-readiness-evidence", "step-2", "workspace-1", "performed-action"],
+    legal_compliance_lead: ["vendor-accreditation-renewal", "step-3", "workspace-1", "performed-action"],
+    marketing_events_lead: ["event-stock-custody", "step-3", "workspace-1", "performed-action"],
+    product_owner: ["product-readiness-pricing-go-live", "step-3", "workspace-1", "performed-action"],
+    leadership_insights: ["finance-readiness-evidence", "step-2", "workspace-1", "read-only-insight"],
+    vendor_representative: ["vendor-accreditation-renewal", "step-2", "workspace-1", "performed-action"],
+  };
+  assert.deepEqual(Object.keys(handbookGuideModel.ROLE_SIMULATION_CONTRACTS ?? {}).sort(), Object.keys(expected).sort());
+  for (const role of HANDBOOK_GUIDES.filter(({ type }) => type === "role")) {
+    const simulation = role.guidedSimulation;
+    assert.deepEqual(
+      [simulation.linkedTaskId, simulation.linkedStageId, simulation.workspaceId, simulation.mode],
+      expected[role.id],
+      role.id,
+    );
+    const workspace = role.workspaceMap.find(({ id }) => id === simulation.workspaceId);
+    assert.equal(workspace?.landingRoute, simulation.startRoute, role.id);
+    const stage = HANDBOOK_GUIDES.find(({ id }) => id === simulation.linkedTaskId)
+      ?.steps.find(({ id }) => id === simulation.linkedStageId);
+    assert.ok(stage, role.id);
+    if (simulation.mode === "performed-action") {
+      assert.equal(stage.performingRole, role.id, role.id);
+      assert.equal(stage.route, simulation.startRoute, `${role.id} starts on its simulation stage route`);
+    }
+    else assert.equal(simulation.mode, "read-only-insight", role.id);
+  }
+});
+
+test("screenshot evidence approval is independent, actionable, and fails joint self-attestation", () => {
+  assert.equal(handbookGuideModel.EVIDENCE_APPROVAL_CONTRACT?.schemaVersion, 1);
+  assert.equal(handbookGuideModel.EVIDENCE_APPROVAL_CONTRACT?.stages?.length, 52);
+  for (const approved of handbookGuideModel.EVIDENCE_APPROVAL_CONTRACT.stages) {
+    assert.equal(approved.host, "https://mwell-intra-uat.vercel.app");
+    assert.match(approved.target.controlRole, /^(button|link|tab|textbox|combobox|checkbox|radio)$/);
+    assert.doesNotMatch(approved.target.label, /^(Approvals|Events|Finance|Storage|Returns|Cycle Counts|No .*)$/i);
+    assert.match(approved.reviewedAt, /^\d{4}-\d{2}-\d{2}T/);
+  }
+
+  const guides = cloneGuides();
+  const approvals = structuredClone(handbookGuideModel.EVIDENCE_APPROVAL_CONTRACT.stages);
+  const stage = guides.find(({ id }) => id === "procurement-request-approval").steps[2];
+  const approval = approvals.find(({ bindingId }) => bindingId === stage.screenshot.bindingId);
+  stage.screenshot.target = { label: "Approvals", landmark: "page heading", controlRole: "button" };
+  approval.target = structuredClone(stage.screenshot.target);
+  assert.match(
+    handbookGuideModel.validateHandbookEvidenceCoverage({
+      guides,
+      approvedScreenshotContracts: approvals,
+    }).errors.join("\n"),
+    /canonical actionable target/,
+  );
+});
+
+test("capture provenance rejects future, stale, unreachable, and jointly-mutated records", () => {
+  const valid = handbookGuideModel.validateHandbookEvidenceProvenance();
+  assert.deepEqual(valid.errors, []);
+
+  const guides = cloneGuides();
+  const approvals = structuredClone(handbookGuideModel.EVIDENCE_APPROVAL_CONTRACT.stages);
+  const future = "2099-01-01T00:00:00.000Z";
+  guides.filter(({ type }) => type === "task").forEach((guide) => guide.steps.forEach((stage) => {
+    stage.screenshot.capturedAt = future;
+  }));
+  approvals.forEach((stage) => {
+    stage.capturedAt = future;
+    stage.reviewedAt = future;
+  });
+  assert.match(
+    handbookGuideModel.validateHandbookEvidenceCoverage({ guides, approvedScreenshotContracts: approvals }).errors.join("\n"),
+    /future or stale capture metadata/,
+  );
+
+  assert.match(
+    handbookGuideModel.validateHandbookEvidenceProvenance({ sourceCommit: "0".repeat(40) }).errors.join("\n"),
+    /not a reachable local commit/,
+  );
+});
+
+test("capture helper cannot certify headings, empty states, ignored frames, or asserted constants", () => {
+  const source = readFileSync(path.join(root, "scripts/qa/capture-handbook-stage-evidence.mjs"), "utf8");
+  assert.doesNotMatch(source, /fallback\s*:/);
+  assert.doesNotMatch(source, /CERTIFIED_SOURCE_FRAMES|renderCertifiedSourceFrame|\.codex-tmp/);
+  assert.doesNotMatch(source, /hostMatched:\s*true|routeMatched:\s*true|roleMatched:\s*true|targetVisible:\s*true/);
+  const countPreparation = source.match(/"prepare-count-entry": async \(\) => \{([\s\S]*?)\n\s*\},\n\s*"open-doa-draft"/)?.[1] ?? "";
+  assert.match(countPreparation, /setInputFiles/);
+  assert.doesNotMatch(source, /Promise\.all\(viewports\.map/);
+  assert.match(source, /for \(const viewport of viewports\)/);
+  assert.match(source, /async function findStableTarget/);
+  assert.match(source, /const found = await findStableTarget\(page, TARGETS\[stage\.bindingId\]\)/);
+  assert.doesNotMatch(source, /const visibleText =/);
+  assert.match(source, /Evidence badge obscures target/);
+  assert.match(source, /Draft discarded\./);
+});
+
+test("reviewed evidence targets select the workflow action rather than adjacent global controls", async () => {
+  const { HANDBOOK_EVIDENCE_TARGETS: targets } = await import("../qa/handbook-evidence-targets.mjs");
+  assert.deepEqual(targets["procurement-request-approval:step-4"].names, ["Open HANDBOOK-T7-R1-PO"]);
+  assert.equal(targets["procurement-request-approval:step-4"].controlRole, "button");
+  assert.deepEqual(targets["vendor-accreditation-renewal:step-3"].names, ["Open review"]);
+  assert.equal(targets["vendor-accreditation-renewal:step-3"].nameMode, undefined);
+  assert.deepEqual(targets["finance-readiness-evidence:step-1"].names, ["Review next payment pack"]);
+  assert.equal(targets["finance-readiness-evidence:step-1"].controlRole, "link");
+});
+
+test("targeted evidence recapture replaces only selected stages", async () => {
+  const { mergeStageEvidenceManifest } = await import("../qa/handbook-evidence-manifest.mjs");
+  const existing = {
+    schemaVersion: 2,
+    generatedAt: "2026-08-24T00:00:00.000Z",
+    host: "https://mwell-intra-uat.vercel.app",
+    sourceCommit: "a".repeat(40),
+    certificationRun: "https://github.com/example/repo/actions/runs/1",
+    stages: [
+      { bindingId: "task-a:step-1", capturedAt: "2026-08-24T00:00:00.000Z" },
+      { bindingId: "task-b:step-1", capturedAt: "2026-08-24T00:00:00.000Z" },
+    ],
+  };
+  const replacement = {
+    bindingId: "task-b:step-1",
+    capturedAt: "2026-08-25T00:00:00.000Z",
+  };
+  const merged = mergeStageEvidenceManifest(existing, [replacement], {
+    generatedAt: "2026-08-25T00:00:00.000Z",
+    host: existing.host,
+    sourceCommit: existing.sourceCommit,
+    certificationRun: existing.certificationRun,
+  });
+  assert.deepEqual(merged.stages, [existing.stages[0], replacement]);
+  assert.equal(merged.generatedAt, "2026-08-25T00:00:00.000Z");
+  assert.deepEqual(existing.stages[1], {
+    bindingId: "task-b:step-1",
+    capturedAt: "2026-08-24T00:00:00.000Z",
+  });
 });

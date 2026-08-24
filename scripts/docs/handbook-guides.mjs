@@ -1,9 +1,18 @@
+import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { HANDBOOK_DOCUMENTS } from "./handbook-catalog.mjs";
+import { EVIDENCE_APPROVAL_CONTRACT } from "./handbook-evidence-approval.mjs";
+import {
+  HANDBOOK_STAGE_CONTRACTS,
+  ROLE_SIMULATION_CONTRACTS,
+} from "./handbook-stage-contracts.mjs";
+
+export { HANDBOOK_STAGE_CONTRACTS, ROLE_SIMULATION_CONTRACTS };
+export { EVIDENCE_APPROVAL_CONTRACT };
 
 const root = path.resolve(fileURLToPath(new URL("../../", import.meta.url)));
 const OWNER = "Mwell Intra Product and Operations";
@@ -60,8 +69,9 @@ const TASK_DECISION_OUTCOMES = new Set([
 
 const ROLE_WORKSPACE_FIELDS = ["id", "module", "landingRoute"];
 const ROLE_SIMULATION_FIELDS = [
-  "id", "title", "linkedTaskId", "startRoute", "actorRole", "scenario",
-  "successCriteria", "negativeScenario", "recovery",
+  "id", "title", "linkedTaskId", "linkedStageId", "startRoute",
+  "workspaceId", "actorRole", "mode", "scenario", "successCriteria",
+  "negativeScenario", "recovery",
 ];
 
 const PRESENTATION_PURPOSES = new Set([
@@ -158,7 +168,7 @@ const TASK_DEFINITIONS = [
     start: "A requester has a defined business need, department, budget context, and supporting evidence.",
     access: ["Procurement requester access", "Department approval access where assigned"],
     inputs: ["Business justification", "Line items and estimates", "Required attachments", "Department and cost context"],
-    steps: ["Create and validate the request", "Submit for the derived route", "Complete each approval handoff", "Confirm the approved record and evidence"],
+    steps: ["Create and validate the request", "Submit for the derived route", "Complete each approval handoff", "Open the governed purchase-order handoff"],
     decisions: ["Is the request complete and eligible?", "Does the route require correction, competition, exception, or escalation?", "Has every required approver decided?"],
     denial: ["A requester cannot approve their own request", "Missing route evidence blocks progression"],
     recovery: "Correct the rejected or stale record, retain the reason, and resubmit through the current effective route.",
@@ -218,7 +228,7 @@ const TASK_DEFINITIONS = [
     start: "A warehouse or storage area has been approved for operational use.",
     access: ["Warehouse setup administration"],
     inputs: ["Location codes", "Bin labels", "Storage attributes", "Import template when used"],
-    steps: ["Define the storage area", "Create or import locations and bins", "Validate uniqueness and status", "Confirm availability for receiving"],
+    steps: ["Define the scannable storage bin", "Create or import warehouse locations", "Validate the active operation route", "Confirm availability for receiving"],
     decisions: ["Should setup be manual or imported?", "Are codes unique and correctly scoped?"],
     denial: ["Duplicate or cross-warehouse identifiers are rejected"],
     recovery: "Correct the invalid hierarchy or template row and rerun validation before activation.",
@@ -400,7 +410,7 @@ const TASK_DEFINITIONS = [
     start: "A scheduled or exception count is ready and stock movement is controlled for the count scope.",
     access: ["Warehouse count access", "Supervisor variance authority"],
     inputs: ["Count scope", "Observed quantities", "Variance reason", "Approval and Finance evidence where applicable"],
-    steps: ["Open and perform the count", "Submit observed quantities", "Review and decide the variance", "Post or correct the approved result"],
+    steps: ["Define scope and begin the count", "Submit observed quantities", "Review and decide the variance", "Post or correct the approved result"],
     decisions: ["Does observed stock match the position?", "Is recount, rejection, supervisor approval, or Finance review required?"],
     denial: ["The counter cannot self-approve a governed variance", "Negative-stock outcomes are denied"],
     recovery: "Recount or correct the evidence, retain the rejection reason, and resubmit without overwriting history.",
@@ -452,7 +462,7 @@ const TASK_DEFINITIONS = [
     start: "A governed cross-module record requires Finance review or readiness confirmation.",
     access: ["Finance controller access", "Authorized source-record read access"],
     inputs: ["Procurement commitment", "Warehouse acceptance and valuation", "Event evidence", "Payment readiness evidence"],
-    steps: ["Open the Finance control center", "Trace each source record", "Identify blockers or missing evidence", "Record the readiness decision or handoff"],
+    steps: ["Open the Finance control center", "Trace each source record", "Review payment-readiness blockers", "Prepare a governed close entry or correction handoff"],
     decisions: ["Is operational acceptance complete?", "Is evidence sufficient and internally consistent?", "Does a source owner need to correct the record?"],
     denial: ["Finance cannot substitute for Warehouse receipt authority", "Readiness cannot bypass missing acceptance evidence"],
     recovery: "Return the blocker to the source owner and refresh the read model after the governed correction.",
@@ -502,27 +512,27 @@ const TASK_STAGE_ROLES = {
   "stock-receiving-putaway": ["operations_associate", "operations_associate", "operations_lead", "operations_associate"],
   "ecommerce-order-intake": ["operations_associate", "operations_associate", "operations_associate", "operations_associate"],
   "ecommerce-fulfillment-delivery": ["operations_associate", "operations_associate", "operations_associate", "operations_lead"],
-  "returns-replacements-refunds-rma": ["operations_associate", "operations_associate", "operations_lead", "operations_associate"],
+  "returns-replacements-refunds-rma": ["operations_associate", "operations_associate", "operations_lead", "operations_lead"],
   "department-inventory-release": ["general_employee", "operations_lead", "operations_lead", "general_employee"],
   "event-stock-custody": ["general_employee", "operations_associate", "marketing_events_lead", "finance_controller"],
   "inventory-count-variance": ["operations_associate", "operations_associate", "operations_lead", "operations_lead"],
-  "department-doa-activation": ["platform_administrator", "platform_administrator", "legal_compliance_lead", "platform_administrator"],
+  "department-doa-activation": ["platform_administrator", "platform_administrator", "legal_compliance_lead", "procurement_lead"],
   "finance-readiness-evidence": ["finance_controller", "finance_controller", "finance_controller", "finance_controller"],
   "product-readiness-pricing-go-live": ["general_employee", "product_owner", "product_owner", "operations_lead"],
 };
 
 const TASK_STAGE_ROUTES = {
-  "procurement-request-approval": ["/procurement/requests/new", "/procurement/requests", "/procurement/approvals", "/procurement/requests"],
+  "procurement-request-approval": ["/procurement/requests/new", "/procurement/requests", "/procurement/approvals", "/procurement/purchase-orders"],
   "vendor-accreditation-renewal": ["/legal/invites/new", "/vendor/", "/legal/", "/legal/"],
-  "warehouse-location-bin-setup": ["/warehouse/storage", "/warehouse/locations", "/warehouse/locations", "/warehouse/purchase-orders"],
+  "warehouse-location-bin-setup": ["/warehouse/storage", "/warehouse/locations", "/warehouse/operation-routes", "/warehouse/purchase-orders"],
   "stock-receiving-putaway": ["/warehouse/purchase-orders", "/warehouse/receiving", "/warehouse/quality", "/warehouse/storage"],
   "ecommerce-order-intake": ["/warehouse/fulfillment", "/warehouse/fulfillment", "/warehouse/fulfillment", "/warehouse/fulfillment"],
   "ecommerce-fulfillment-delivery": ["/warehouse/fulfillment", "/warehouse/fulfillment", "/warehouse/fulfillment", "/warehouse/fulfillment"],
-  "returns-replacements-refunds-rma": ["/warehouse/returns", "/warehouse/returns", "/warehouse/quality", "/warehouse/returns"],
-  "department-inventory-release": ["/warehouse/fulfillment", "/warehouse/approvals", "/warehouse/fulfillment", "/warehouse/fulfillment"],
+  "returns-replacements-refunds-rma": ["/warehouse/returns", "/warehouse/returns", "/warehouse/quality", "/warehouse/quality"],
+  "department-inventory-release": ["/warehouse/fulfillment", "/warehouse/fulfillment", "/warehouse/fulfillment", "/warehouse/fulfillment"],
   "event-stock-custody": ["/events", "/warehouse/fulfillment", "/events", "/events"],
-  "inventory-count-variance": ["/warehouse/cycle-counts", "/warehouse/cycle-counts", "/warehouse/approvals", "/warehouse/cycle-counts"],
-  "department-doa-activation": ["/admin/doa", "/admin/doa", "/admin/doa", "/admin/doa"],
+  "inventory-count-variance": ["/warehouse/cycle-counts", "/warehouse/cycle-counts", "/warehouse/approvals", "/warehouse/approvals"],
+  "department-doa-activation": ["/admin/doa", "/admin/doa", "/admin/doa", "/procurement/requests/new"],
   "finance-readiness-evidence": ["/finance", "/finance", "/finance", "/finance"],
   "product-readiness-pricing-go-live": ["/product", "/product", "/product", "/product"],
 };
@@ -727,6 +737,8 @@ function taskStage(definition, label, index) {
   const routes = TASK_STAGE_ROUTES[definition.id];
   const performingRole = roles[index];
   const bindingId = `${definition.id}:step-${index + 1}`;
+  const operatingContract = HANDBOOK_STAGE_CONTRACTS[bindingId];
+  if (!operatingContract) throw new Error(`Missing stage operating contract for ${bindingId}.`);
   const evidence = EVIDENCE_BY_BINDING.get(bindingId);
   const desktop = evidence?.variants?.find(({ viewport }) => viewport === "desktop");
   const mobile = evidence?.variants?.find(({ viewport }) => viewport === "mobile");
@@ -752,11 +764,11 @@ function taskStage(definition, label, index) {
       assertions: evidence?.assertions ?? null,
       variants: evidence?.variants ?? [],
     },
-    expectedResult: `${label} is recorded and visible in ${definition.module}.`,
-    dataRead: definition.inputs,
-    dataWritten: [`${label} state`, "Attributable actor and timestamp"],
-    evidenceRetained: definition.evidence,
-    nextHandoff: roles[index + 1] ?? "Task accountable closer",
+    expectedResult: operatingContract.expectedResult,
+    dataRead: operatingContract.dataRead,
+    dataWritten: operatingContract.dataWritten,
+    evidenceRetained: operatingContract.evidenceRetained,
+    nextHandoff: operatingContract.nextHandoff,
   };
 }
 
@@ -931,15 +943,15 @@ const ROLE_DEFINITIONS = [
 const ROLE_WORKSPACE_ROUTES = {
   platform_administrator: ["/admin/users", "/admin/departments", "/admin/doa", "/admin/audit"],
   general_employee: ["/procurement/requests/new", "/warehouse/fulfillment", "/events", "/work"],
-  operations_associate: ["/warehouse/purchase-orders", "/warehouse/quality", "/warehouse/storage", "/warehouse/fulfillment", "/warehouse/returns", "/warehouse/cycle-counts"],
+  operations_associate: ["/warehouse/purchase-orders", "/warehouse/receiving", "/warehouse/quality", "/warehouse/storage", "/warehouse/fulfillment", "/warehouse/returns", "/warehouse/cycle-counts"],
   operations_lead: ["/warehouse/quality", "/warehouse/approvals", "/warehouse/exceptions", "/warehouse/locations", "/procurement/approvals", "/product"],
   procurement_lead: ["/procurement/requests", "/procurement/approvals", "/procurement/purchase-orders", "/warehouse/procurement"],
   finance_controller: ["/finance", "/procurement/purchase-orders", "/events"],
-  legal_compliance_lead: ["/legal/cases", "/legal/invites/new", "/admin/doa"],
+  legal_compliance_lead: ["/legal/", "/legal/invites/new", "/admin/doa"],
   marketing_events_lead: ["/events"],
   product_owner: ["/product", "/events"],
   leadership_insights: ["/insights", "/work"],
-  vendor_representative: ["/vendor"],
+  vendor_representative: ["/vendor/"],
 };
 
 const WORKSPACE_MODULE_LABELS = {
@@ -967,13 +979,20 @@ function roleWorkspaceMap(roleId) {
 }
 
 function guidedSimulation(definition, workspaceMap) {
+  const simulation = ROLE_SIMULATION_CONTRACTS[definition.id];
+  if (!simulation) throw new Error(`Missing role simulation contract for ${definition.id}.`);
+  const workspace = workspaceMap.find(({ id }) => id === simulation.workspaceId);
+  if (!workspace) throw new Error(`Missing simulation workspace ${simulation.workspaceId} for ${definition.id}.`);
   return {
     id: `${definition.id}-guided-simulation`,
     title: `${definition.name} guided practice`,
-    linkedTaskId: definition.tasks[0],
-    startRoute: workspaceMap[0].landingRoute,
+    linkedTaskId: simulation.linkedTaskId,
+    linkedStageId: simulation.linkedStageId,
+    startRoute: workspace.landingRoute,
+    workspaceId: simulation.workspaceId,
     actorRole: definition.id,
-    scenario: `Complete the first assigned ${definition.name} work item through its governed handoff.`,
+    mode: simulation.mode,
+    scenario: simulation.scenario,
     successCriteria: definition.training,
     negativeScenario: definition.denial[0],
     recovery: definition.escalation,
@@ -1241,7 +1260,7 @@ export const HANDBOOK_GUIDES = deepFreeze([
 ]);
 
 export const APPROVED_SCREENSHOT_CONTRACTS = deepFreeze(
-  (EVIDENCE_MANIFEST.stages ?? []).map((contract) => ({ ...contract })),
+  EVIDENCE_APPROVAL_CONTRACT.stages.map((contract) => ({ ...contract })),
 );
 
 function stepInvariant(step) {
@@ -1518,13 +1537,36 @@ function screenshotProjection(screenshot) {
 }
 
 function approvedScreenshotProjection(contract) {
-  const desktop = contract?.variants?.find(({ viewport }) => viewport === "desktop");
-  const mobile = contract?.variants?.find(({ viewport }) => viewport === "mobile");
-  return screenshotProjection({
-    ...contract,
-    path: desktop?.path,
-    mobilePath: mobile?.path,
-  });
+  return {
+    bindingId: contract?.bindingId,
+    path: contract?.path,
+    mobilePath: contract?.mobilePath,
+    route: contract?.route,
+    role: contract?.role,
+    target: contract?.target,
+  };
+}
+
+function screenshotMatchesApproval(screenshot, contract) {
+  if (!screenshot || !contract) return false;
+  const target = screenshot.target ?? {};
+  const approvedTarget = contract.target ?? {};
+  let labelMatches = false;
+  try {
+    labelMatches = new RegExp(approvedTarget.labelPattern, "i").test(target.label ?? "");
+  } catch {
+    labelMatches = false;
+  }
+  return (
+    screenshot.bindingId === contract.bindingId &&
+    screenshot.path === contract.path &&
+    screenshot.mobilePath === contract.mobilePath &&
+    screenshot.route === contract.route &&
+    screenshot.role === contract.role &&
+    target.controlRole === approvedTarget.controlRole &&
+    target.landmark === approvedTarget.landmark &&
+    labelMatches
+  );
 }
 
 function fileSha256(absolutePath) {
@@ -1635,6 +1677,7 @@ export function validateHandbookGuides({
       }
       for (const [index, stage] of (guide.steps ?? []).entries()) {
         const stageId = stage.id ?? `step-${index + 1}`;
+        const stageContract = HANDBOOK_STAGE_CONTRACTS[`${guide.id}:${stageId}`];
         for (const field of TASK_STAGE_FIELDS) {
           if (!isPopulated(stage[field])) {
             errors.push(`task ${guide.id} stage ${stageId} is missing required field ${field}.`);
@@ -1646,6 +1689,15 @@ export function validateHandbookGuides({
         }
         if (stage.route && !stage.route.startsWith("/")) {
           errors.push(`task ${guide.id} stage ${stageId} has invalid route ${stage.route}.`);
+        }
+        if (!stageContract || !sameContract({
+          expectedResult: stage.expectedResult,
+          dataRead: stage.dataRead,
+          dataWritten: stage.dataWritten,
+          evidenceRetained: stage.evidenceRetained,
+          nextHandoff: stage.nextHandoff,
+        }, stageContract)) {
+          errors.push(`task ${guide.id} stage ${stageId} violates its stage semantic contract.`);
         }
         if (stage.screenshot) {
           for (const field of ["bindingId", "status", "path", "mobilePath", "target", "host", "route", "role", "capturedAt", "sourceCommit", "certificationRun", "assertions", "variants"]) {
@@ -1674,12 +1726,8 @@ export function validateHandbookGuides({
             );
             if (!approved) {
               errors.push(`task ${guide.id} stage ${stageId} has no approved screenshot contract.`);
-            } else {
-              const actual = screenshotProjection(stage.screenshot);
-              const expected = approvedScreenshotProjection(approved);
-              if (!sameContract(actual, expected)) {
-                errors.push(`task ${guide.id} stage ${stageId} does not match its approved screenshot contract.`);
-              }
+            } else if (!screenshotMatchesApproval(stage.screenshot, approved)) {
+              errors.push(`task ${guide.id} stage ${stageId} does not match its approved screenshot contract.`);
             }
             if (!guide.screenshotReferences.includes(stage.screenshot.path)) {
               errors.push(`task ${guide.id} stage ${stageId} certified screenshot is not bound to the guide.`);
@@ -1795,6 +1843,26 @@ export function validateHandbookGuides({
       const workspaceRoutes = new Set((guide.workspaceMap ?? []).map(({ landingRoute }) => landingRoute));
       if (simulation.startRoute && !workspaceRoutes.has(simulation.startRoute)) {
         errors.push(`role ${guide.id} guided simulation starts outside its workspace map at ${simulation.startRoute}.`);
+      }
+      const simulationWorkspace = (guide.workspaceMap ?? []).find(({ id }) => id === simulation.workspaceId);
+      if (simulation.workspaceId && !simulationWorkspace) {
+        errors.push(`role ${guide.id} guided simulation references missing workspace ${simulation.workspaceId}.`);
+      } else if (simulationWorkspace && simulationWorkspace.landingRoute !== simulation.startRoute) {
+        errors.push(`role ${guide.id} guided simulation workspace does not match start route ${simulation.startRoute}.`);
+      }
+      const simulationTask = guideById.get(simulation.linkedTaskId);
+      const simulationStage = simulationTask?.steps?.find(({ id }) => id === simulation.linkedStageId);
+      if (simulation.linkedStageId && !simulationStage) {
+        errors.push(`role ${guide.id} guided simulation links to invalid stage ${simulation.linkedStageId}.`);
+      }
+      if (!['performed-action', 'read-only-insight'].includes(simulation.mode)) {
+        errors.push(`role ${guide.id} guided simulation has invalid mode ${simulation.mode}.`);
+      } else if (simulation.mode === "performed-action" && simulationStage?.performingRole !== guide.id) {
+        errors.push(`role ${guide.id} guided simulation action belongs to ${simulationStage?.performingRole ?? "no role"}.`);
+      } else if (simulation.mode === "performed-action" && simulationStage?.route !== simulation.startRoute) {
+        errors.push(`role ${guide.id} guided simulation does not start on stage route ${simulationStage?.route ?? "unknown"}.`);
+      } else if (simulation.mode === "read-only-insight" && !/read-only/i.test(guide.authorityLimits?.join(" ") ?? "")) {
+        errors.push(`role ${guide.id} guided simulation is not an authorized read-only insight simulation.`);
       }
     }
 
@@ -2005,6 +2073,58 @@ export function validateHandbookGuides({
   return { warnings, errors };
 }
 
+export function validateHandbookEvidenceProvenance({
+  manifest = EVIDENCE_MANIFEST,
+  approval = EVIDENCE_APPROVAL_CONTRACT,
+  sourceCommit = manifest.sourceCommit,
+  rootDirectory = root,
+  now = new Date(),
+} = {}) {
+  const errors = [];
+  const captureTime = Date.parse(manifest.generatedAt ?? "");
+  const reviewTime = Date.parse(approval.reviewedAt ?? "");
+  const currentTime = now instanceof Date ? now.getTime() : Date.parse(now);
+  const maximumAgeMs = 7 * 24 * 60 * 60 * 1000;
+  const futureToleranceMs = 5 * 60 * 1000;
+  if (
+    !Number.isFinite(captureTime) || !Number.isFinite(currentTime) ||
+    captureTime > currentTime + futureToleranceMs || currentTime - captureTime > maximumAgeMs
+  ) {
+    errors.push("handbook evidence has future or stale capture metadata.");
+  }
+  if (!Number.isFinite(reviewTime) || reviewTime < captureTime || reviewTime > currentTime + futureToleranceMs) {
+    errors.push("handbook evidence approval timestamp is missing, pre-capture, or future-dated.");
+  }
+  if (!/^[a-f0-9]{40}$/.test(sourceCommit ?? "")) {
+    errors.push("handbook evidence source commit metadata is invalid.");
+  } else {
+    try {
+      execFileSync("git", ["cat-file", "-e", `${sourceCommit}^{commit}`], { cwd: rootDirectory, stdio: "ignore" });
+      execFileSync("git", ["merge-base", "--is-ancestor", sourceCommit, "HEAD"], { cwd: rootDirectory, stdio: "ignore" });
+    } catch {
+      errors.push(`handbook evidence source commit ${sourceCommit} is not a reachable local commit.`);
+    }
+  }
+  if (manifest.sourceCommit !== approval.sourceCommit || sourceCommit !== approval.sourceCommit) {
+    errors.push("handbook evidence source commit is not independently approved for this capture.");
+  }
+  if (manifest.certificationRun !== approval.certificationRun) {
+    errors.push("handbook evidence certification run is not independently approved.");
+  }
+  if (approval.verificationMode === "ci-run") {
+    if (!/^https:\/\/github\.com\/[^/]+\/[^/]+\/actions\/runs\/\d+$/.test(approval.certificationRun ?? "")) {
+      errors.push("handbook evidence CI run is not independently verifiable.");
+    }
+  } else if (approval.verificationMode !== "local-governed-evidence") {
+    errors.push("handbook evidence verification mode is not governed.");
+  }
+  const manifestAbsolute = path.join(rootDirectory, "docs/manual/assets/knowledge-base/task-stage-evidence.json");
+  if (!existsSync(manifestAbsolute) || fileSha256(manifestAbsolute) !== approval.manifestSha256) {
+    errors.push("handbook evidence manifest does not match the independently reviewed digest.");
+  }
+  return { warnings: [], errors };
+}
+
 export function validateHandbookEvidenceCoverage({
   guides = HANDBOOK_GUIDES,
   approvedScreenshotContracts = APPROVED_SCREENSHOT_CONTRACTS,
@@ -2021,6 +2141,11 @@ export function validateHandbookEvidenceCoverage({
       contract,
     ]),
   );
+  const canonicalApprovalByStage = new Map(
+    EVIDENCE_APPROVAL_CONTRACT.stages.map((contract) => [contract.bindingId, contract]),
+  );
+
+  errors.push(...validateHandbookEvidenceProvenance({ rootDirectory }).errors);
 
   for (const guide of guides.filter(({ type }) => type === "task")) {
     const references = new Set(guide.screenshotReferences ?? []);
@@ -2030,6 +2155,7 @@ export function validateHandbookEvidenceCoverage({
       const approved = approvedScreenshotByStage.get(
         screenshotContractKey(guide.id, stage.id),
       );
+      const canonicalApproval = canonicalApprovalByStage.get(screenshot.bindingId);
       const prefix = `task ${guide.id} stage ${stage.id}`;
       if (screenshot.status !== "certified" || !approved) {
         errors.push(
@@ -2037,7 +2163,10 @@ export function validateHandbookEvidenceCoverage({
         );
         continue;
       }
-      if (!sameContract(screenshotProjection(screenshot), approvedScreenshotProjection(approved))) {
+      if (!canonicalApproval || !sameContract(approvedScreenshotProjection(approved), approvedScreenshotProjection(canonicalApproval))) {
+        errors.push(`${prefix} does not match its canonical actionable target approval.`);
+      }
+      if (!screenshotMatchesApproval(screenshot, approved)) {
         errors.push(`${prefix} does not match its approved screenshot evidence contract.`);
       }
       if (
@@ -2059,15 +2188,18 @@ export function validateHandbookEvidenceCoverage({
       if (
         !isPopulated(target.label) ||
         !isPopulated(target.landmark) ||
-        !sameContract(target, approved.target)
+        !isPopulated(target.controlRole) ||
+        !screenshotMatchesApproval(screenshot, approved)
       ) {
         errors.push(`${prefix} has invalid target evidence.`);
       }
+      const screenshotTime = Date.parse(screenshot.capturedAt);
+      const currentTime = Date.now();
       if (
-        !Number.isFinite(Date.parse(screenshot.capturedAt)) ||
-        Date.parse(screenshot.capturedAt) < earliestCapture
+        !Number.isFinite(screenshotTime) || screenshotTime < earliestCapture ||
+        screenshotTime > currentTime + 5 * 60 * 1000 || currentTime - screenshotTime > 7 * 24 * 60 * 60 * 1000
       ) {
-        errors.push(`${prefix} has stale or invalid capture metadata.`);
+        errors.push(`${prefix} has future or stale capture metadata; stale or invalid capture metadata is rejected.`);
       }
       if (!/^[a-f0-9]{40}$/.test(screenshot.sourceCommit ?? "")) {
         errors.push(`${prefix} has invalid source commit metadata.`);
