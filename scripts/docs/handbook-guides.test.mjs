@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -205,6 +206,11 @@ function assertDeepFrozen(value, seen = new Set()) {
   seen.add(value);
   assert.equal(Object.isFrozen(value), true);
   for (const child of Object.values(value)) assertDeepFrozen(child, seen);
+}
+
+function attestationDigest(payload) {
+  const { responseDigest: _ignored, ...unsigned } = payload;
+  return createHash("sha256").update(JSON.stringify(unsigned)).digest("hex");
 }
 
 function cloneGuides() {
@@ -1156,6 +1162,26 @@ test("capture provenance rejects future, stale, unreachable, and jointly-mutated
     ["wrong conclusion", (attestation) => { attestation.conclusion = "failure"; }, /successful conclusion/],
     ["wrong head", (attestation) => { attestation.headSha = "0".repeat(40); }, /head SHA/],
     ["wrong response digest", (attestation) => { attestation.responseDigest = "0".repeat(64); }, /digest/],
+    ["future fetchedAt with recomputed digest", (attestation) => {
+      attestation.fetchedAt = "2099-01-01T00:00:00.000Z";
+      attestation.responseDigest = attestationDigest(attestation);
+    }, /fetchedAt/],
+    ["missing fetchedAt with recomputed digest", (attestation) => {
+      delete attestation.fetchedAt;
+      attestation.responseDigest = attestationDigest(attestation);
+    }, /fetchedAt/],
+    ["changed workflowName with recomputed digest", (attestation) => {
+      attestation.workflowName = "Another workflow";
+      attestation.responseDigest = attestationDigest(attestation);
+    }, /workflowName/],
+    ["missing runAttempt with recomputed digest", (attestation) => {
+      delete attestation.runAttempt;
+      attestation.responseDigest = attestationDigest(attestation);
+    }, /runAttempt/],
+    ["extra semantic field with recomputed digest", (attestation) => {
+      attestation.actor = "someone";
+      attestation.responseDigest = attestationDigest(attestation);
+    }, /unexpected field actor/],
   ]) {
     const attestation = structuredClone(handbookGuideModel.CI_ATTESTATION_CONTRACT);
     mutate(attestation);
